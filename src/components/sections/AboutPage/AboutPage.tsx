@@ -15,7 +15,7 @@ import { BeliefCycle, BeliefMotif, PaperCard, ResonanceSketch, type Belief } fro
 import styles from './AboutPage.module.css';
 
 const BELIEFS: Belief[] = ['resonance', 'depth', 'insight'];
-const STEPS = ['write', 'read', 'resonate'] as const;
+const STEPS = ['write', 'read', 'resonate', 'connect'] as const;
 const SHIFTS = ['fatigue', 'depth', 'warmth'] as const;
 const CONTRASTS = ['traffic', 'algorithm', 'performance', 'roles', 'followers', 'likes'] as const;
 

@@ -94,11 +94,11 @@ object L10n {
     object About {
         /** About us */
         val metaTitle: String get() = Strings.string("about.metaTitle")
-        /** We believe in the power of stories. On Resonance, when a story moves you, you don't answer with a like: you write a card */
+        /** We believe everyone has a story to share. On Resonance, when a story moves you, you don't answer with a like: you write  */
         val metaDescription: String get() = Strings.string("about.metaDescription")
         /** ✦ About us */
         val tag: String get() = Strings.string("about.tag")
-        /** We believe in the power of stories */
+        /** We believe everyone has a story to share */
         val title: String get() = Strings.string("about.title")
         /** Every one of us is born whole and singular, carrying experiences no one else has lived — and stories are the best way to */
         val lead: String get() = Strings.string("about.lead")
@@ -130,7 +130,7 @@ object L10n {
                 val name: String get() = Strings.string("about.cycle.resonance.name")
                 /** Different stories, the same insight */
                 val motto: String get() = Strings.string("about.cycle.resonance.motto")
-                /** When someone speaks the thought we never finished, that is the moment resonance happens */
+                /** When we hear ourselves in someone else's story, that is the moment resonance happens */
                 val body: String get() = Strings.string("about.cycle.resonance.body")
             }
             object Depth {
@@ -166,7 +166,7 @@ object L10n {
             object Read {
                 /** Read what moves you */
                 val title: String get() = Strings.string("about.how.read.title")
-                /** Meet the people on your wavelength in life stories from all over */
+                /** Meet people on your wavelength in the stories of their lives */
                 val body: String get() = Strings.string("about.how.read.body")
             }
             object Resonate {
@@ -174,6 +174,12 @@ object L10n {
                 val title: String get() = Strings.string("about.how.resonate.title")
                 /** Answer with your own story, and the two cards stay linked */
                 val body: String get() = Strings.string("about.how.resonate.body")
+            }
+            object Connect {
+                /** Let them know it's you */
+                val title: String get() = Strings.string("about.how.connect.title")
+                /** When your card is public and under your pen name, they're notified and the two of you are linked too, free to message ea */
+                val body: String get() = Strings.string("about.how.connect.body")
             }
         }
         object Shift {
@@ -255,7 +261,7 @@ object L10n {
             val body: String get() = Strings.string("about.team.body")
         }
         object Closing {
-            /** Everyone has a story to share */
+            /** Your story deserves to be heard */
             val title: String get() = Strings.string("about.closing.title")
             /** Someone as singular as you is bound to send ripples out into the world */
             val body: String get() = Strings.string("about.closing.body")

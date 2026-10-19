@@ -92,11 +92,11 @@ public enum L10n {
     public enum About {
         /// About us
         public static var metaTitle: String { Strings.shared.string("about.metaTitle") }
-        /// We believe in the power of stories. On Resonance, when a story moves you, you don't answer with a like: you write a card
+        /// We believe everyone has a story to share. On Resonance, when a story moves you, you don't answer with a like: you write 
         public static var metaDescription: String { Strings.shared.string("about.metaDescription") }
         /// ✦ About us
         public static var tag: String { Strings.shared.string("about.tag") }
-        /// We believe in the power of stories
+        /// We believe everyone has a story to share
         public static var title: String { Strings.shared.string("about.title") }
         /// Every one of us is born whole and singular, carrying experiences no one else has lived — and stories are the best way to
         public static var lead: String { Strings.shared.string("about.lead") }
@@ -128,7 +128,7 @@ public enum L10n {
                 public static var name: String { Strings.shared.string("about.cycle.resonance.name") }
                 /// Different stories, the same insight
                 public static var motto: String { Strings.shared.string("about.cycle.resonance.motto") }
-                /// When someone speaks the thought we never finished, that is the moment resonance happens
+                /// When we hear ourselves in someone else's story, that is the moment resonance happens
                 public static var body: String { Strings.shared.string("about.cycle.resonance.body") }
             }
             public enum Depth {
@@ -164,7 +164,7 @@ public enum L10n {
             public enum Read {
                 /// Read what moves you
                 public static var title: String { Strings.shared.string("about.how.read.title") }
-                /// Meet the people on your wavelength in life stories from all over
+                /// Meet people on your wavelength in the stories of their lives
                 public static var body: String { Strings.shared.string("about.how.read.body") }
             }
             public enum Resonate {
@@ -172,6 +172,12 @@ public enum L10n {
                 public static var title: String { Strings.shared.string("about.how.resonate.title") }
                 /// Answer with your own story, and the two cards stay linked
                 public static var body: String { Strings.shared.string("about.how.resonate.body") }
+            }
+            public enum Connect {
+                /// Let them know it's you
+                public static var title: String { Strings.shared.string("about.how.connect.title") }
+                /// When your card is public and under your pen name, they're notified and the two of you are linked too, free to message ea
+                public static var body: String { Strings.shared.string("about.how.connect.body") }
             }
         }
         public enum Shift {
@@ -253,7 +259,7 @@ public enum L10n {
             public static var body: String { Strings.shared.string("about.team.body") }
         }
         public enum Closing {
-            /// Everyone has a story to share
+            /// Your story deserves to be heard
             public static var title: String { Strings.shared.string("about.closing.title") }
             /// Someone as singular as you is bound to send ripples out into the world
             public static var body: String { Strings.shared.string("about.closing.body") }

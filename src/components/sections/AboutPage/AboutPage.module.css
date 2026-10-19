@@ -54,6 +54,11 @@
   letter-spacing: -0.02em;
   margin: 0;
   text-wrap: balance;
+  /* As the section titles: its own line break, and a Chinese title breaks between phrases (a
+     zero-width space marks where one may), never mid-phrase (and anywhere, rather than overflow). */
+  white-space: pre-line;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .lead {

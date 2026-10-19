@@ -51,10 +51,10 @@
   },
   "about": {
     "metaTitle": "About us",
-    "metaDescription": "We believe in the power of stories. On Resonance, when a story moves you, you don't answer with a like: you write a card of your own that resonates with it.",
+    "metaDescription": "We believe everyone has a story to share. On Resonance, when a story moves you, you don't answer with a like: you write a card of your own that resonates with it.",
     "tag": "✦ About us",
-    "title": "We believe in the power of stories",
-    "lead": "Every one of us is born whole and singular, carrying experiences no one else has lived — and stories are the best way to connect one person to another and to make a difference. That's why we built Resonance.",
+    "title": "We believe everyone has a story to share",
+    "lead": "Every one of us is born whole and singular, carrying experiences and insights all our own — and stories are the best way to connect one person to another and to let lives influence lives. That's why we built Resonance.",
     "belief": {
       "kicker": "Our mission",
       "title": "Let every person, in all their dimensions,\nmeet one another through real stories",
@@ -71,7 +71,7 @@
       "resonance": {
         "name": "Resonance",
         "motto": "Different stories, the same insight",
-        "body": "When someone speaks the thought we never finished, that is the moment resonance happens"
+        "body": "When we hear ourselves in someone else's story, that is the moment resonance happens"
       },
       "depth": {
         "name": "Depth",
@@ -94,11 +94,15 @@
       },
       "read": {
         "title": "Read what moves you",
-        "body": "Meet the people on your wavelength in life stories from all over"
+        "body": "Meet people on your wavelength in the stories of their lives"
       },
       "resonate": {
         "title": "Resonate with a card of your own",
         "body": "Answer with your own story, and the two cards stay linked"
+      },
+      "connect": {
+        "title": "Let them know it's you",
+        "body": "When your card is public and under your pen name, they're notified and the two of you are linked too, free to message each other"
       }
     },
     "shift": {
@@ -153,7 +157,7 @@
       "body": "A group of people who met in the <wmm>What Matters Most</wmm> class"
     },
     "closing": {
-      "title": "Everyone has a story to share",
+      "title": "Your story deserves to be heard",
       "body": "Someone as singular as you is bound to send ripples out into the world",
       "start": "Write your story"
     }
