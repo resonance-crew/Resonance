@@ -13,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
+import com.google.firebase.firestore.FirebaseFirestore
 import com.resonance.app.ui.KeyShortcuts
 import com.resonance.app.ui.ResonanceRoot
 import com.resonance.kit.chat.ChatPush
@@ -29,6 +30,7 @@ import kotlinx.coroutines.launch
  *   --es pushToken …               registers that stand-in push token under the signed-in account
  *   --es pushTitle … [--es pushBody … --es pushRoute … --es pushId … --es pushFromUserId … --es pushType pick|new_card --es pushCardId …]   posts the notification a push received while open shows
  *   --ez avifDecoder true          reads AVIF with the app's own decoder (Android 10–11's path) on any version
+ *   --ez firestoreLog true         Firestore's own debug log in Logcat (tag Firestore: its streams, connectivity, targets)
  */
 class MainActivity : ComponentActivity() {
     private val incomingRoute = mutableStateOf<String?>(null)
@@ -58,6 +60,7 @@ class MainActivity : ComponentActivity() {
                 emulatorApiPort = port("emulatorApiPort", 3100),
             )
         }
+        if (BuildConfig.DEBUG && intent.getBooleanExtra("firestoreLog", false)) FirebaseFirestore.setLoggingEnabled(true)
         AppFirebase.configure(this, config)
         val session = (application as ResonanceApp).session(config)
         this.session = session
@@ -136,6 +139,12 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         // Back after a while: the screens read again in the background (what they show stays meanwhile).
         session?.enteredForeground()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Off the screen (the app is one activity), not just recreated: when Firestore reconnects on the way back.
+        if (!isChangingConfigurations) session?.enteredBackground()
     }
 
     override fun onNewIntent(intent: Intent) {

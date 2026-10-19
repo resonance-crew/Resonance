@@ -50,6 +50,12 @@ native/fixtures/            golden files the web and both apps' tests read alike
   installation id is tied to the phone (`identifierForVendor`), so a restored backup gets its own.
 - **Live lists** use `LiveListeners`: a failed listener re-attaches on the next foreground or a retry
   button; only permission-denied / not-found means "gone". With nothing loaded yet, a screen shows a retry.
+  They all ride Firestore's one watch stream. iOS's SDK restarts it on every return to the foreground;
+  Android's only when the network already reads as usable as the activity starts, so a return that beats
+  Android lifting the app's background block would wait out the SDK's retry backoff (up to 90 s: the
+  thread, the Messages list, the badges and the bell all stale). Android therefore restarts Firestore's
+  streams itself when the app is back after 20 s or more away (`ForegroundReconnect` →
+  `AppFirebase.reconnect()`: disable + enable network — listeners resume from their tokens, unsent writes stay queued).
 - **The writer** reports a change only when it wrote something (iOS `WriteLauncher.Change`, Android
   `Session.CardChange` / `takeWriterChange`), naming the card and the card it answers. A card page reads
   again only for a change that `concerns` it — its card, or a resonance to it; a change naming no card (a
@@ -258,7 +264,8 @@ Firebase at the emulators (`10.0.2.2`) and the API at `http://10.0.2.2:3100`,
 `--es pushCardId …`) posts the notification such a push shows while the app is open,
 `--es route /me/thought-map` opens the thought map (the seed gives alice one: a region, three cards, a
 labelled arrow; `npx tsx scripts/seed-thought-map-bench.ts` swaps in a 100-card one, `seed-emulator.ts` puts hers back),
-and `--es pushToken <any>` registers a stand-in push token under the signed-in account
+`--ez firestoreLog true` turns on Firestore's own debug log (Logcat tag `Firestore`: its streams, the
+foreground hook, retries), and `--es pushToken <any>` registers a stand-in push token under the signed-in account
 (`devices/*` in the emulator; it lasts until the process ends, and emulator builds never touch FCM):
 
 ```bash

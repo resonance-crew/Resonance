@@ -73,6 +73,23 @@ object AppFirebase {
     }
 
     /**
+     * Firestore's watch and write streams start afresh, and its wait between retries with them
+     * ([ForegroundReconnect] asks for it back in the foreground). Every listener listens again from
+     * where it was (its resume token: only what changed since is read), and writes not yet
+     * acknowledged stay queued and go out on the new write stream — nothing is lost or sent twice.
+     * Listeners see nothing of the moment offline (none asks for metadata changes). It never makes
+     * an instance: signed out, or signing out while [clearLocalData] ends this one, there is nothing
+     * to reconnect.
+     */
+    fun reconnect() {
+        val db = current ?: return
+        android.util.Log.i("AppFirebase", "Firestore's streams start afresh")
+        // Both go onto Firestore's own queue, in this order: nothing to wait for between them.
+        db.disableNetwork()
+        db.enableNetwork()
+    }
+
+    /**
      * Signed out: what Firestore keeps on the device of the account — its cache of messages,
      * notifications, drafts, and writes not yet sent — is deleted. The instance ends (terminate,
      * which takes it out of the SDK's registry at once, so the next use makes a new one) and its

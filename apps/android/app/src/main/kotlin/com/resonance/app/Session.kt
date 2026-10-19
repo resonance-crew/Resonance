@@ -2,6 +2,7 @@ package com.resonance.app
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.SystemClock
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
@@ -332,9 +333,20 @@ class Session(
         return scope.launch { withContext(NonCancellable) { AppFirebase.clearLocalData() } }
     }
 
-    /** The app came back to the foreground: a profile read long ago is read again (it stays on screen meanwhile). */
-    fun enteredForeground(now: Long = System.currentTimeMillis()) {
+    /** Firestore's connection, started afresh on a return after a while away (every live list at once). */
+    private val reconnects = ForegroundReconnect(reconnect = AppFirebase::reconnect)
+
+    /** The app left the screen (`at`: elapsed time, sleep counted); how long it stays away decides what [enteredForeground] does. */
+    fun enteredBackground(at: Long = SystemClock.elapsedRealtime()) = reconnects.left(at)
+
+    /**
+     * The app came back to the foreground: after a while away Firestore's streams start afresh, so the
+     * thread on screen, the Messages list, the badges and the bell catch up at once ([ForegroundReconnect]);
+     * a profile read long ago is read again (it stays on screen meanwhile).
+     */
+    fun enteredForeground(now: Long = System.currentTimeMillis(), at: Long = SystemClock.elapsedRealtime()) {
         _foregrounded.value = now
+        reconnects.cameBack(at, signedIn = _phase.value == Phase.SignedIn)
         // Live lists whose listener failed (or whose people couldn't be read) listen again.
         if (_phase.value == Phase.SignedIn) {
             notifications.resume()
