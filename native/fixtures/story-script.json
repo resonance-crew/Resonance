@@ -1,5 +1,5 @@
 {
-  "note": "How a story is set by its script (src/lib/text/script.ts; read by script.test.ts on the web and by the apps' twins of the rule). Only the prose counts — Markdown, link targets and bare addresses are left out — and only the first 4000 characters of title + \"\\n\\n\" + story. `script`: cjk when Han, kana and Hangul characters (C) are at least the words of every other script (W), latin otherwise; a text with no letters at all (empty, digits or marks alone) takes `fallback` (cjk when absent; the writer passes its UI locale's, see `emptyByLocale`). `lang`: zh-TW for Han, ja when kana are a tenth or more of C, ko when Hangul outnumber the rest, en for a Latin-script text, null for no letters or a script we can't name. `latinMarks`: the UTF-16 indices of each U+2018 / U+2019 with a Latin letter immediately before and after it, which a CJK story sets in its Latin face.",
+  "note": "How a story is set by its script (src/lib/text/script.ts; read by script.test.ts on the web and by the apps' twins of the rule). Only the prose counts — Markdown, link targets and bare addresses are left out — and only the first 4000 characters of title + \"\\n\\n\" + story. `script`: cjk when Han, kana and Hangul characters (C) are at least the words of every other script (W), latin otherwise; a text with no letters at all (empty, digits or marks alone) takes `fallback` (cjk when absent; the writer passes its UI locale's, see `emptyByLocale`). `lang`: zh-TW for Han, ja when kana are a tenth or more of C, ko when Hangul outnumber the rest, en for a Latin-script text, null for no letters or a script we can't name. `latinMarks`: the UTF-16 indices of each U+2018 / U+2019 with a Latin letter immediately before and after it, which a CJK story sets in its Latin face. `writer`: how the writer re-sets a draft as it is written (writerScript): it starts in `current` (a new draft in its UI locale's type, emptyByLocale) and changes only once the draft holds 15 units (CJK characters and other words together, the mirror's MIN_DRAFT_UNITS) and CJK characters are at most 40% of them (set as CJK) or at least 60% (set as Latin); between the two, and under the floor, it keeps `current`.",
   "cases": [
     {
       "id": "zh",
@@ -113,6 +113,16 @@
   "emptyByLocale": [
     { "locale": "en", "script": "latin" },
     { "locale": "zh-TW", "script": "cjk" }
+  ],
+  "writer": [
+    { "id": "english-writer-first-chinese-words", "current": "latin", "title": "", "story": "第一個早晨", "script": "latin" },
+    { "id": "english-writer-a-chinese-paragraph", "current": "latin", "title": "第一個早晨", "story": "那天早上下著小雨，我站在操場邊，看著跑道上的水窪。", "script": "cjk" },
+    { "id": "chinese-writer-first-english-words", "current": "cjk", "title": "", "story": "The first morning I woke up alone", "script": "cjk" },
+    { "id": "chinese-writer-an-english-paragraph", "current": "cjk", "title": "The first morning", "story": "The water was too hot and the grind too fine, but it was the first morning that felt like mine.", "script": "latin" },
+    { "id": "cjk-a-little-short-of-even-stays-cjk", "current": "cjk", "title": "", "story": "那天早上下著小雨我 The water was too hot and the grind too fine", "script": "cjk" },
+    { "id": "latin-a-little-past-even-stays-latin", "current": "latin", "title": "Morning", "story": "The water was too hot and the grind 那天早上下著小雨我站", "script": "latin" },
+    { "id": "cjk-leaning-clearly-latin-turns", "current": "cjk", "title": "", "story": "那天早上 The water was too hot and the grind too fine but mine", "script": "latin" },
+    { "id": "digits-keep-what-they-have", "current": "latin", "title": "2400", "story": "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16", "script": "latin" }
   ],
   "latinMarks": [
     { "text": "don’t", "indices": [3] },

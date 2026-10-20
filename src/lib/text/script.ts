@@ -127,6 +127,40 @@ export function localeScript(locale: string): StoryScript {
   return /^(zh|ja|ko)\b/i.test(locale) ? 'cjk' : 'latin';
 }
 
+/**
+ * How much a draft must hold — CJK characters and other words together, as
+ * the mirror counts them (lib/ai/mirror MIN_DRAFT_UNITS, which a test keeps
+ * equal) — before the writer re-sets it by what it reads: under it, a draft
+ * stays in the type it started in (its UI locale's, or what it was opened in).
+ */
+export const WRITER_SCRIPT_FLOOR = 15;
+
+/**
+ * How far past even a draft must lean before the writer changes its type:
+ * set as CJK, it turns Latin once CJK characters are at most this share of
+ * what it holds; set as Latin, it turns CJK once they are at least 1 − this.
+ * Between the two it keeps the type it has, so a draft mixing the two about
+ * evenly never flips back and forth under the caret.
+ */
+export const WRITER_SCRIPT_LEAN = 0.4;
+
+/**
+ * The type a story being written is set in, re-read as it is written (the
+ * writer asks on its autosave tick, never per keystroke). `current` is what it
+ * is set in now — for a new draft its UI locale's (`localeScript`), for a
+ * draft opened again `storyType`'s reading of it. The draft changes type only
+ * once it holds WRITER_SCRIPT_FLOOR units and leans clearly the other way
+ * (WRITER_SCRIPT_LEAN); a draft with no letters keeps what it has.
+ */
+export function writerScript(current: StoryScript, title: string, story: string): StoryScript {
+  const m = measure(readableProse(title, story));
+  const units = m.cjk + m.words;
+  if (units < WRITER_SCRIPT_FLOOR || (m.cjk === 0 && m.letterWords === 0)) return current;
+  const share = m.cjk / units;
+  if (current === 'cjk') return share <= WRITER_SCRIPT_LEAN ? 'latin' : 'cjk';
+  return share >= 1 - WRITER_SCRIPT_LEAN ? 'cjk' : 'latin';
+}
+
 /** ‘ or ’ with a Latin letter immediately before and after it. */
 const LATIN_MARK = /(?<=\p{sc=Latn})[‘’](?=\p{sc=Latn})/gu;
 

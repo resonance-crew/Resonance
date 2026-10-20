@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import fixture from '../../../native/fixtures/story-script.json';
-import { draftScript } from '@/lib/ai/mirror';
-import { latinMarks, localeScript, SCRIPT_READ_CHARS, storyLang, storyScript, storyType, type StoryScript } from './script';
+import { draftScript, MIN_DRAFT_UNITS } from '@/lib/ai/mirror';
+import {
+  latinMarks,
+  localeScript,
+  SCRIPT_READ_CHARS,
+  storyLang,
+  storyScript,
+  storyType,
+  WRITER_SCRIPT_FLOOR,
+  writerScript,
+  type StoryScript,
+} from './script';
 
 // How a story is set by its script — the rule the reader, the writer and both
 // apps share (native/fixtures/story-script.json is read by the apps' twins too).
@@ -45,6 +55,51 @@ describe('storyType', () => {
     const started = performance.now();
     expect(storyScript('', '[a]('.repeat(250_000))).toBe('latin');
     expect(performance.now() - started).toBeLessThan(1_000);
+  });
+});
+
+// The writer re-reads a draft on its autosave tick: an English writer's first
+// Chinese words (or a Chinese writer's first English ones) don't re-set the
+// column under the caret, a draft only changes type once there is enough of
+// it and it leans clearly the other way, and a draft written in both about
+// evenly keeps the type it has.
+describe('writerScript', () => {
+  for (const c of fixture.writer) {
+    it(`keeps "${c.id}" in ${c.script}`, () => {
+      expect(writerScript(c.current as StoryScript, c.title, c.story)).toBe(c.script);
+    });
+  }
+
+  it('starts each locale’s empty draft in its own type and keeps it there while nothing is written', () => {
+    for (const { locale, script } of fixture.emptyByLocale) {
+      const start = localeScript(locale);
+      expect(start).toBe(script);
+      expect(writerScript(start, '', '')).toBe(script);
+      expect(writerScript(start, '2400', '……')).toBe(script);
+    }
+  });
+
+  it('waits for as much as the mirror needs before it reads a draft', () => {
+    expect(WRITER_SCRIPT_FLOOR).toBe(MIN_DRAFT_UNITS);
+    const words = (n: number) => Array.from({ length: n }, () => 'word').join(' ');
+    expect(writerScript('cjk', '', words(WRITER_SCRIPT_FLOOR - 1))).toBe('cjk');
+    expect(writerScript('cjk', '', words(WRITER_SCRIPT_FLOOR))).toBe('latin');
+    expect(writerScript('latin', '', '字'.repeat(WRITER_SCRIPT_FLOOR - 1))).toBe('latin');
+    expect(writerScript('latin', '', '字'.repeat(WRITER_SCRIPT_FLOOR))).toBe('cjk');
+  });
+
+  it('does not flip back and forth while a draft mixes the two about evenly', () => {
+    let script: StoryScript = 'cjk';
+    let story = '那天早上下著小雨';
+    const readings = new Set<StoryScript>();
+    for (const more of [' The water was too hot', '我站在', ' and the grind was far too fine for me', '操場邊看著', ' but it was mine anyway']) {
+      story += more;
+      readings.add(storyScript('', story));
+      script = writerScript(script, '', story);
+      expect(script).toBe('cjk');
+    }
+    // Read on its own, the draft crossed even both ways.
+    expect([...readings].sort()).toEqual(['cjk', 'latin']);
   });
 });
 
