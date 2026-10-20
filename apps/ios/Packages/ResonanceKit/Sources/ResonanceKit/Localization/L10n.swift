@@ -606,6 +606,24 @@ public enum L10n {
         public static func postTextAnonymous(title: String) -> String { Strings.shared.format("share.postTextAnonymous", ["title": title]) }
         /// Sharing it from your account may tell people it’s yours
         public static var anonymousHint: String { Strings.shared.string("share.anonymousHint") }
+        /// Instagram Stories
+        public static var toStories: String { Strings.shared.string("share.toStories") }
+        /// Share an anonymous card
+        public static var anonymousTitle: String { Strings.shared.string("share.anonymousTitle") }
+        public enum Image {
+            /// Couldn’t open Instagram
+            public static var storiesFailed: String { Strings.shared.string("share.image.storiesFailed") }
+            /// Save image
+            public static var save: String { Strings.shared.string("share.image.save") }
+            /// Image saved
+            public static var saved: String { Strings.shared.string("share.image.saved") }
+            /// Couldn’t save the image
+            public static var saveFailed: String { Strings.shared.string("share.image.saveFailed") }
+            /// Allow Resonance to add photos in Settings
+            public static var saveDenied: String { Strings.shared.string("share.image.saveDenied") }
+            /// Saves share images to your photo library
+            public static var photoAccess: String { Strings.shared.string("share.image.photoAccess") }
+        }
     }
     public enum Messages {
         /// Messages

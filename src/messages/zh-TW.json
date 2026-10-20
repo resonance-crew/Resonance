@@ -352,7 +352,17 @@
     "more": "更多分享方式",
     "postText": "「{title}」｜{handle}",
     "postTextAnonymous": "「{title}」",
-    "anonymousHint": "從你的帳號分享，別人可能猜到是你寫的"
+    "anonymousHint": "從你的帳號分享，別人可能猜到是你寫的",
+    "toStories": "Instagram 限時動態",
+    "anonymousTitle": "分享匿名卡片",
+    "image": {
+      "storiesFailed": "無法開啟 Instagram",
+      "save": "儲存圖片",
+      "saved": "已儲存圖片",
+      "saveFailed": "無法儲存圖片",
+      "saveDenied": "請到設定允許 Resonance 加入照片",
+      "photoAccess": "把分享圖片存進你的相簿"
+    }
   },
   "messages": {
     "title": "私訊",
