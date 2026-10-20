@@ -246,6 +246,8 @@ struct CardBoxScreen: View {
         case .resonated: L10n.Me.Tabs.resonated
         case .linked: L10n.Me.Tabs.linked
         case .bookmarks: L10n.Me.Tabs.bookmarks
+        // The web's trash shelf (not in `order` until the app's own trash ships).
+        case .trash: L10n.Me.Tabs.trash
         }
     }
 
@@ -258,6 +260,7 @@ struct CardBoxScreen: View {
         case .resonated: "resonated"
         case .linked: "linked"
         case .bookmarks: "bookmarks"
+        case .trash: "trash"
         }
     }
 
@@ -269,6 +272,7 @@ struct CardBoxScreen: View {
         case .resonated: L10n.Me.emptyResonated
         case .linked: L10n.Me.emptyLinked
         case .bookmarks: L10n.Me.emptyBookmarks
+        case .trash: L10n.Me.emptyTrash
         }
     }
 }

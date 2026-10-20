@@ -46,6 +46,7 @@ const EN_DIALOG_BODIES: Record<string, string> = {
   'app.signOutConfirm.body': 'the sign-out confirm dialog',
   'write.leaveBodyRevision': "the writer's leave dialog, for a published card",
   'me.actions.deleteConfirmBody': 'the delete-card confirm dialog',
+  'me.actions.restoredAloneBody': "the notice when a restored resonance comes back on its own",
   'safety.report.doneBlocked': "the report dialog's thanks, under its two-sentence body",
 };
 

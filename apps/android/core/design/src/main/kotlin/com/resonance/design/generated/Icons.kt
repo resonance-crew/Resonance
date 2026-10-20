@@ -44,6 +44,7 @@ enum class IconName(val key: String) {
     Sliders("sliders"),
     Send("send"),
     Reply("reply"),
+    Restore("restore"),
     Copy("copy"),
     Link("link"),
     CollapseRight("collapse-right"),
@@ -233,6 +234,10 @@ enum class IconName(val key: String) {
             Reply -> IconGlyph(24f, fillable = false, strokes = listOf(
                 IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 19.7f, 18.7f, 2f, 19.9f, 14.7f, 18.4f, 11.5f, 14.7f, 10.5f, 2f, 12.4f, 9.9f, 9.6f, 9.9f, 5.6f, 10.1f)),
                 IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 9.6f, 5.6f, 2f, 8.1f, 7.2f, 6.6f, 8.6f, 5.1f, 10.1f, 2f, 6.6f, 11.7f, 8.1f, 13.1f, 9.8f, 14.7f)),
+            ))
+            Restore -> IconGlyph(24f, fillable = false, strokes = listOf(
+                IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 5.1f, 11.6f, 2f, 5.3f, 7.9f, 8.4f, 5f, 12.2f, 5.1f, 2f, 16.1f, 5.2f, 19.1f, 8.3f, 19f, 12.2f, 2f, 18.9f, 16f, 15.8f, 19.1f, 12f, 19f, 2f, 10.1f, 19f, 8.4f, 18.2f, 7.2f, 16.9f)),
+                IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 2.8f, 9.3f, 2f, 3.6f, 10.1f, 4.4f, 11f, 5.1f, 11.9f, 2f, 5.9f, 11.1f, 6.7f, 10.4f, 7.7f, 9.8f)),
             ))
             Copy -> IconGlyph(24f, fillable = false, strokes = listOf(
                 IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 9f, 5.7f, 2f, 9f, 5f, 9.3f, 4.4f, 9.8f, 3.9f, 2f, 13f, 3.4f, 16.4f, 3.6f, 19.6f, 4.2f, 2f, 20f, 7.6f, 19.9f, 11.1f, 19.5f, 14.6f, 2f, 18.9f, 14.9f, 18.2f, 15f, 17.5f, 15f)),

@@ -578,6 +578,14 @@ public enum L10n {
         public static var anonymousAuthor: String { Strings.shared.string("card.anonymousAuthor") }
         /// This card was published anonymously — your pen name isn't shown on it or on your profile
         public static var anonymousOwnerNote: String { Strings.shared.string("card.anonymousOwnerNote") }
+        public enum Trashed {
+            /// This card is in the trash
+            public static var title: String { Strings.shared.string("card.trashed.title") }
+            /// Only you can see it
+            public static var onlyYou: String { Strings.shared.string("card.trashed.onlyYou") }
+            /// The notes left on this anonymous card have been deleted
+            public static var notesGone: String { Strings.shared.string("card.trashed.notesGone") }
+        }
     }
     public enum Messages {
         /// Messages
@@ -964,6 +972,14 @@ public enum L10n {
         }
         /// Remove tag
         public static var removeTag: String { Strings.shared.string("write.removeTag") }
+        public enum Trashed {
+            /// Restore it to keep writing
+            public static var line: String { Strings.shared.string("write.trashed.line") }
+            /// Restore and keep writing
+            public static var restore: String { Strings.shared.string("write.trashed.restore") }
+            /// This card is in the trash — restore it to save
+            public static var status: String { Strings.shared.string("write.trashed.status") }
+        }
     }
     public enum Me {
         /// Joined {date}
@@ -987,6 +1003,8 @@ public enum L10n {
             public static var linked: String { Strings.shared.string("me.tabs.linked") }
             /// Bookmarks
             public static var bookmarks: String { Strings.shared.string("me.tabs.bookmarks") }
+            /// Trash
+            public static var trash: String { Strings.shared.string("me.tabs.trash") }
             /// Thought map
             public static var thoughtMap: String { Strings.shared.string("me.tabs.thoughtMap") }
         }
@@ -1046,6 +1064,28 @@ public enum L10n {
         public static var emptyResonated: String { Strings.shared.string("me.emptyResonated") }
         /// When a story is too good to forget, press the bookmark — it will wait here quietly, only for you
         public static var emptyBookmarks: String { Strings.shared.string("me.emptyBookmarks") }
+        /// Cards stay in the trash for {days} days, then they're deleted forever
+        public static func trashHint(days: Int) -> String { Strings.shared.format("me.trashHint", ["days": days]) }
+        /// When an anonymous card goes to the trash, the notes left on it are deleted
+        public static var trashAnonymousNotes: String { Strings.shared.string("me.trashAnonymousNotes") }
+        /// The trash is empty
+        public static var emptyTrash: String { Strings.shared.string("me.emptyTrash") }
+        /// Cards you delete wait here for {days} days
+        public static func emptyTrashLine(days: Int) -> String { Strings.shared.format("me.emptyTrashLine", ["days": days]) }
+        public enum TrashFrom {
+            /// Draft
+            public static var draft: String { Strings.shared.string("me.trashFrom.draft") }
+            /// Private
+            public static var `private`: String { Strings.shared.string("me.trashFrom.private") }
+            /// Public again when restored
+            public static var `public`: String { Strings.shared.string("me.trashFrom.public") }
+            /// Connections only when restored
+            public static var connections: String { Strings.shared.string("me.trashFrom.connections") }
+        }
+        /// Deleted forever in {count, plural, one {# day} other {# days}}
+        public static func trashDaysLeft(count: Int) -> String { Strings.shared.format("me.trashDaysLeft", ["count": count]) }
+        /// Deleted forever within a day
+        public static var trashLastDay: String { Strings.shared.string("me.trashLastDay") }
         public enum Actions {
             /// Manage card
             public static var menuLabel: String { Strings.shared.string("me.actions.menuLabel") }
@@ -1073,6 +1113,44 @@ public enum L10n {
             public static var unresonateConfirmBody: String { Strings.shared.string("me.actions.unresonateConfirmBody") }
             /// Stop resonating
             public static var unresonateConfirm: String { Strings.shared.string("me.actions.unresonateConfirm") }
+            /// Moved to the trash
+            public static var trashed: String { Strings.shared.string("me.actions.trashed") }
+            /// Undo
+            public static var undo: String { Strings.shared.string("me.actions.undo") }
+            /// Moved to the trash · Undo
+            public static var undoTrash: String { Strings.shared.string("me.actions.undoTrash") }
+            /// Moved to the trash · Undo \"{title}\"
+            public static func undoTrashLabel(title: String) -> String { Strings.shared.format("me.actions.undoTrashLabel", ["title": title]) }
+            /// \"{title}\" moved to the trash
+            public static func movedToTrash(title: String) -> String { Strings.shared.format("me.actions.movedToTrash", ["title": title]) }
+            /// Couldn't restore it — try again from the trash
+            public static var undoFailed: String { Strings.shared.string("me.actions.undoFailed") }
+            /// Restore
+            public static var restore: String { Strings.shared.string("me.actions.restore") }
+            /// Restored
+            public static var restored: String { Strings.shared.string("me.actions.restored") }
+            /// This card is back, but it no longer resonates with the card it answered.
+            public static var restoredAloneBody: String { Strings.shared.string("me.actions.restoredAloneBody") }
+            /// Delete forever
+            public static var deleteForever: String { Strings.shared.string("me.actions.deleteForever") }
+            /// Delete this card forever?
+            public static var deleteForeverConfirmTitle: String { Strings.shared.string("me.actions.deleteForeverConfirmTitle") }
+            /// Deleted forever
+            public static var deletedForever: String { Strings.shared.string("me.actions.deletedForever") }
+            /// This card isn't in the trash any more
+            public static var notInTrash: String { Strings.shared.string("me.actions.notInTrash") }
+            /// Delete this resonance?
+            public static var trashResonanceTitle: String { Strings.shared.string("me.actions.trashResonanceTitle") }
+            /// The card moves to the trash, where you can restore it for {days} days. If this resonance is what connected you two and t
+            public static func trashResonanceBody(days: Int) -> String { Strings.shared.format("me.actions.trashResonanceBody", ["days": days]) }
+            /// Move to trash
+            public static var trashResonanceConfirm: String { Strings.shared.string("me.actions.trashResonanceConfirm") }
+            /// Empty trash
+            public static var emptyTrash: String { Strings.shared.string("me.actions.emptyTrash") }
+            /// Empty the trash?
+            public static var emptyTrashTitle: String { Strings.shared.string("me.actions.emptyTrashTitle") }
+            /// Every card in the trash will be deleted forever. This can't be undone.
+            public static var emptyTrashBody: String { Strings.shared.string("me.actions.emptyTrashBody") }
         }
         /// Anonymous
         public static var anonymousBadge: String { Strings.shared.string("me.anonymousBadge") }

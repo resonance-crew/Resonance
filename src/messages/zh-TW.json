@@ -336,7 +336,12 @@
       "back": "回到首頁"
     },
     "anonymousAuthor": "匿名",
-    "anonymousOwnerNote": "這張卡以匿名發布——卡片和你的個人頁都不會顯示你的筆名"
+    "anonymousOwnerNote": "這張卡以匿名發布——卡片和你的個人頁都不會顯示你的筆名",
+    "trashed": {
+      "title": "這張卡片在垃圾桶裡",
+      "onlyYou": "只有你看得到",
+      "notesGone": "留在這張匿名卡片上的紙條已經刪除"
+    }
   },
   "messages": {
     "title": "私訊",
@@ -537,7 +542,12 @@
       "q2": "有沒有一句話，你很想說給過去的自己聽？",
       "q3": "哪一次失敗，教會了你一件別人沒教過的事？"
     },
-    "removeTag": "移除標籤"
+    "removeTag": "移除標籤",
+    "trashed": {
+      "line": "還原之後就能繼續寫",
+      "restore": "還原並繼續寫",
+      "status": "這張卡片在垃圾桶裡，還原後才會儲存"
+    }
   },
   "me": {
     "joined": "{date} 加入",
@@ -551,6 +561,7 @@
       "resonated": "我共振過的",
       "linked": "被連結",
       "bookmarks": "收藏",
+      "trash": "垃圾桶",
       "thoughtMap": "思想地圖"
     },
     "thoughtMap": {
@@ -582,6 +593,18 @@
     "emptyResonated": "還沒共振過別人的卡片",
     "emptyLinked": "還沒有人用卡片連結你",
     "emptyBookmarks": "讀到捨不得忘記的故事時，按下書籤——它們會安靜地待在這裡，只有你看得到",
+    "trashHint": "卡片會在垃圾桶保留 {days} 天，之後永久刪除",
+    "trashAnonymousNotes": "匿名卡片移到垃圾桶時，留在上面的紙條會一併刪除",
+    "emptyTrash": "垃圾桶是空的",
+    "emptyTrashLine": "刪除的卡片會在這裡保留 {days} 天",
+    "trashFrom": {
+      "draft": "草稿",
+      "private": "私人卡",
+      "public": "還原後公開",
+      "connections": "還原後只給連結看"
+    },
+    "trashDaysLeft": "{count} 天後永久刪除",
+    "trashLastDay": "一天內永久刪除",
     "actions": {
       "menuLabel": "管理卡片",
       "edit": "編輯",
@@ -595,7 +618,26 @@
       "unresonate": "取消共振",
       "unresonateConfirmTitle": "不再與〈{title}〉共振？",
       "unresonateConfirmBody": "卡片會留著。如果是這次共振讓你們連結、對方也還沒寫信給你，你們的連結會一併收回。",
-      "unresonateConfirm": "取消共振"
+      "unresonateConfirm": "取消共振",
+      "trashed": "已移到垃圾桶",
+      "undo": "復原",
+      "undoTrash": "已移到垃圾桶 · 復原",
+      "undoTrashLabel": "已移到垃圾桶 · 復原〈{title}〉",
+      "movedToTrash": "〈{title}〉已移到垃圾桶",
+      "undoFailed": "沒能還原，可以到垃圾桶再試一次",
+      "restore": "還原",
+      "restored": "已還原",
+      "restoredAloneBody": "這張卡片回來了，但不再與原本那張卡片共振",
+      "deleteForever": "永久刪除",
+      "deleteForeverConfirmTitle": "永久刪除這張卡片？",
+      "deletedForever": "已永久刪除",
+      "notInTrash": "這張卡片已經不在垃圾桶裡",
+      "trashResonanceTitle": "刪除這張共振卡？",
+      "trashResonanceBody": "卡片會移到垃圾桶，{days} 天內都能還原。如果是這次共振讓你們連結、對方也還沒寫信給你，你們的連結會一併收回，還原後也不會回來。",
+      "trashResonanceConfirm": "移到垃圾桶",
+      "emptyTrash": "清空垃圾桶",
+      "emptyTrashTitle": "清空垃圾桶？",
+      "emptyTrashBody": "垃圾桶裡的卡片都會永久刪除，無法復原"
     },
     "anonymousBadge": "匿名發布",
     "emptyPublishedCta": "寫下一個故事",
