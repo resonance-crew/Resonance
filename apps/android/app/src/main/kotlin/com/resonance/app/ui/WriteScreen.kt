@@ -352,7 +352,8 @@ private fun WriteForm(
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { model.setCover(context, it) } }
     val inlinePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { model.insertImage(context, it) } }
     val images = PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-    var confirmingLeave by remember(model) { mutableStateOf(false) }
+    // The leave question showing (null: none), as it was asked: its words don't change under the person reading them.
+    var confirmingLeave by remember(model) { mutableStateOf<LeaveQuestion?>(null) }
     // What confirming the leave does when the workspace asked it (its Leave over the map); null: this writer's own leave.
     var leaveThen by remember(model) { mutableStateOf<(() -> Unit)?>(null) }
     // The arrow, the system back and the buttons can land twice before the page has gone: it closes once.
@@ -368,15 +369,14 @@ private fun WriteForm(
         }
     }
     // Back while writing (the bar's arrow, the system's key or swipe) with something written asks first; with nothing, it leaves at once.
+    // A card in the trash keeps nothing: it asks only for words it holds nowhere, and says so ([WriteModel.leaveQuestion]).
     val goBack: () -> Unit = {
-        when {
-            leaving -> {}
-            model.back() -> {}
-            model.hasWork -> {
+        if (!leaving && !model.back()) {
+            val question = model.leaveQuestion
+            if (question != null) {
                 bridge.releaseKeyboard()
-                confirmingLeave = true
-            }
-            else -> leave()
+                confirmingLeave = question
+            } else leave()
         }
     }
     // A tap beside the fields puts the keyboard away, whichever field held it.
@@ -390,13 +390,17 @@ private fun WriteForm(
     BackHandler(enabled = step == WriterStep.Publish) { model.back() }
     SideEffect {
         pane?.attach(
-            hasWork = { model.hasWork },
+            hasWork = { model.leaveQuestion != null },
             saveNow = { model.saveNow() },
             releaseKeyboard = { bridge.releaseKeyboard() },
             askToLeave = { then ->
-                bridge.releaseKeyboard()
-                leaveThen = then
-                confirmingLeave = true
+                val question = model.leaveQuestion
+                if (question == null) then()
+                else {
+                    bridge.releaseKeyboard()
+                    leaveThen = then
+                    confirmingLeave = question
+                }
             },
         )
     }
@@ -564,22 +568,22 @@ private fun WriteForm(
         }
     }
 
-    if (confirmingLeave) OrganicConfirmDialog(
+    confirmingLeave?.let { question -> OrganicConfirmDialog(
         title = L10n.Write.leaveTitle,
-        body = if (model.isPublished) L10n.Write.leaveBodyRevision else L10n.Write.leaveBody,
+        body = leaveBody(question),
         cancelLabel = L10n.Write.leaveStay,
         confirmLabel = L10n.Write.leaveConfirm,
         onCancel = {
-            confirmingLeave = false
+            confirmingLeave = null
             leaveThen = null
         },
         onConfirm = {
-            confirmingLeave = false
+            confirmingLeave = null
             val then = leaveThen
             leaveThen = null
             if (then != null) then() else leave()
         },
-    )
+    ) }
 
     if (pickingCard) OrganicModal(
         { pickingCard = false }, L10n.Write.Editor.CardModal.title,

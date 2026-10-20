@@ -32,8 +32,15 @@ data class DraftValues(
  * author's own writes ([DraftService] on Firestore; a stand-in under test).
  */
 interface DraftStore {
-    /** A new, unpublished card; returns its id. */
-    suspend fun create(v: DraftValues, locale: String, referenceCardId: String?): String
+    /** The id a new draft will have (Firestore makes ids on the device): the writer holds it from the moment its create is issued. */
+    fun newDraftId(): String
+
+    /**
+     * A new, unpublished card under [id] (from [newDraftId]). The write is on the device as soon as
+     * it is issued; this returns once the server has taken it — which, offline, is never until the
+     * network comes back (Firestore neither fails nor finishes a write it can't send).
+     */
+    suspend fun create(id: String, v: DraftValues, locale: String, referenceCardId: String?)
 
     suspend fun update(id: String, v: DraftValues)
 
@@ -74,8 +81,10 @@ class DraftService(private val uid: String) : DraftStore {
 
     private fun media(v: DraftValues): Map<String, String>? = v.imageUrl?.let { mapOf("type" to "image", "url" to it, "label" to (v.imageLabel ?: "")) }
 
+    override fun newDraftId(): String = cards.document().id
+
     /** createCardDraft: a new, unpublished card with zeroed counters. */
-    override suspend fun create(v: DraftValues, locale: String, referenceCardId: String?): String {
+    override suspend fun create(id: String, v: DraftValues, locale: String, referenceCardId: String?) {
         val data = fields(v)
         media(v)?.let { data["media"] = it }
         v.accentHue?.let { data["accentHue"] = it }
@@ -91,9 +100,7 @@ class DraftService(private val uid: String) : DraftStore {
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp(),
         )
-        val ref = cards.document()
-        ref.set(data).await()
-        return ref.id
+        cards.document(id).set(data).await()
     }
 
     /** updateCardDraft: the fields as they are now (a removed cover clears media and its hue). */

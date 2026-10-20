@@ -22,6 +22,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -32,12 +33,13 @@ import org.junit.Test
 
 /**
  * The writer's two steps (writer.spec), driven through its model the way the screen drives it:
- * 下一步 asks for a title and waits for a new card's first save before the publish step opens; the
- * step's choices are the draft's own values, autosaved and kept on the way back to writing, never
- * anonymous and for connections only in any write; the mirror is asked once per text and never
- * for a live card; 發布 and 儲存修改 save first; and a card moved to the trash while it is open
- * (its saves refused, its publish 409) goes back to writing and says so, keeping what was typed,
- * until 還原 writes it.
+ * 下一步 asks for a title and waits a moment for a new card's first save before the publish step
+ * opens (never longer: offline, the server's yes never comes until the network does); the step's
+ * choices are the draft's own values, autosaved and kept on the way back to writing, never
+ * anonymous and for connections only in any write — a draft stored that way goes out public; the
+ * mirror is asked once per text and never for a live card; 發布 and 儲存修改 save first; and a card
+ * moved to the trash while it is open (its saves refused, its publish 409) goes back to writing and
+ * says so, keeping what was typed, until 還原 writes it — and leaving never says that was kept.
  */
 class WriterStepsTest {
     private val language = Strings.language
@@ -58,9 +60,13 @@ class WriterStepsTest {
         scope.cancel()
     }
 
-    private fun model(opened: DraftService.OpenedCard? = null, referenceCardId: String? = null, initialStep: WriterStep = WriterStep.Write) =
-        WriteModel(store, calls, referenceCardId, editor, opened, initialStep, scope, reachedOut = { reachedOut++ }, locale = { "zh-TW" })
-            .apply { onWrote = { wrote += it } }
+    private fun model(
+        opened: DraftService.OpenedCard? = null,
+        referenceCardId: String? = null,
+        initialStep: WriterStep = WriterStep.Write,
+        nextWait: Long = WriteModel.NEXT_WAIT_MS,
+    ) = WriteModel(store, calls, referenceCardId, editor, opened, initialStep, scope, reachedOut = { reachedOut++ }, locale = { "zh-TW" }, nextWait = nextWait)
+        .apply { onWrote = { wrote += it } }
 
     private fun draft(values: DraftValues, id: String = "d1") =
         DraftService.OpenedCard(id, values, isPublished = false, slug = null, referenceCardId = null, hasPendingEdit = false)
@@ -79,10 +85,11 @@ class WriterStepsTest {
         val gate = CompletableDeferred<Unit>()
         store.createGate = gate
         val next = async { m.next() }
-        // The save is on its way: still writing, no draft yet — and past 300 ms the pill shows its loader.
+        // The save is on its way: still writing — the draft's id issued already, the server's yes not
+        // in yet — and past 300 ms the pill shows its loader.
         delay(WriteModel.NEXT_LOADER_MS + 150)
         assertEquals(WriterStep.Write, m.step)
-        assertNull(m.draftId)
+        assertEquals("d-new", m.draftId)
         assertTrue(m.nextLoading)
         gate.complete(Unit)
         assertTrue(next.await())
@@ -90,6 +97,31 @@ class WriterStepsTest {
         assertEquals("d-new", m.draftId)
         assertFalse(m.nextLoading)
         assertEquals(listOf(DraftValues(title = "雨中散步", story = "那天下午雨停了。")), store.created)
+    }
+
+    @Test fun offlineNextOpensTheStepOnTheDraftOnTheDeviceAfterAMoment() = runBlocking {
+        // Firestore neither fails nor finishes a write it can't send: the create's answer never comes.
+        val m = model(nextWait = 600)
+        val created = mutableListOf<String>()
+        m.onCreated = { created += it }
+        m.setTitle("雨中散步")
+        val gate = CompletableDeferred<Unit>()
+        store.createGate = gate
+        val next = async { m.next() }
+        delay(WriteModel.NEXT_LOADER_MS + 150)
+        assertEquals(WriterStep.Write, m.step)
+        assertTrue(m.nextLoading)
+        // Past the wait the step opens on the draft's issued id, no loader and no error.
+        assertTrue(withTimeout(5_000) { next.await() })
+        assertEquals(WriterStep.Publish, m.step)
+        assertEquals("d-new", m.draftId)
+        assertEquals(listOf("d-new"), created)
+        assertFalse(m.nextLoading)
+        assertNull(m.saveError)
+        // The network comes back: the write lands as it was issued.
+        gate.complete(Unit)
+        assertEquals(listOf(DraftValues(title = "雨中散步")), store.created)
+        assertEquals(listOf("d-new"), store.createdIds)
     }
 
     @Test fun withoutATitleNextStaysOnWritingAsksForOneAndCostsNoMirror() = runBlocking {
@@ -124,6 +156,8 @@ class WriterStepsTest {
         assertFalse(m.next())
         assertEquals(WriterStep.Write, m.step)
         assertEquals("沒存成，再試一次", m.saveError)
+        // A refused create leaves no draft behind it.
+        assertNull(m.draftId)
     }
 
     @Test fun aKeptDraftOpensTheStepAtOnceAndSavesOnItsWay() = runBlocking {
@@ -164,6 +198,33 @@ class WriterStepsTest {
         assertEquals(1, store.updates.size)
         assertEquals(written.copy(visibility = "public", anonymous = true), store.updates.single().second)
         assertTrue(store.updates.none { (_, v) -> v.anonymous && v.visibility == "connections" })
+    }
+
+    @Test fun aDraftKeptAnonymousForConnectionsGoesOutPublic() = runBlocking {
+        // The rules let a draft hold the pair (the builds before letters kept it); the server's first publish refuses it.
+        val stored = written.copy(visibility = "connections", anonymous = true)
+        val m = model(draft(stored))
+        assertTrue(m.next())
+        // The step shows 公開 chosen, and the draft says so in the write on the way.
+        assertEquals("public", m.values.visibility)
+        assertTrue(m.values.anonymous)
+        assertEquals("rain-walk", m.publish())
+        assertEquals(stored.copy(visibility = "public"), store.updates.last().second)
+        assertTrue(store.updates.none { (_, v) -> v.anonymous && v.visibility == "connections" })
+
+        // Opened on the step itself (a restored process): 發布 settles it all the same.
+        store.updates.clear()
+        val restored = model(draft(stored, id = "d2"), initialStep = WriterStep.Publish)
+        assertEquals("rain-walk", restored.publish())
+        assertEquals("d2" to stored.copy(visibility = "public"), store.updates.last())
+    }
+
+    @Test fun aLiveCardAlreadyAnonymousForConnectionsKeepsBoth() = runBlocking {
+        val m = model(live(written.copy(visibility = "connections", anonymous = true)))
+        assertTrue(m.next())
+        assertEquals("connections", m.values.visibility)
+        assertEquals("a-walk", m.applyEdit())
+        assertEquals("connections", store.edits.last().second.visibility)
     }
 
     @Test fun theMirrorIsAskedOncePerTextAndNeverForALiveCard() = runBlocking {
@@ -356,6 +417,39 @@ class WriterStepsTest {
         assertTrue(m.showsNext)
     }
 
+    @Test fun leavingACardInTheTrashNeverSaysTheWritingWasKept() = runBlocking {
+        val m = model(draft(written))
+        store.failWith = Refused()
+        store.trashed = true
+        m.update { copy(story = "垃圾桶裡寫的。") }
+        m.flush()
+        assertTrue(m.trashed)
+        // Typed since the last save it took, and held nowhere: the question says the card keeps nothing until restored.
+        assertEquals(LeaveQuestion.Trashed, m.leaveQuestion)
+        assertEquals("這張卡片在垃圾桶裡，還原後才會儲存", leaveBody(m.leaveQuestion))
+        // Restored, the words are written, and it asks as any draft does.
+        store.failWith = null
+        m.restore()
+        assertEquals(LeaveQuestion.Draft, m.leaveQuestion)
+
+        // In the trash with everything on screen in the card (its publish refused): nothing to ask.
+        val untouched = model(draft(written, id = "d2"))
+        untouched.next()
+        calls.publishFails = ApiFailure("conflict", ApiFailure.IN_TRASH_MESSAGE, 409)
+        untouched.publish()
+        assertTrue(untouched.trashed)
+        assertNull(untouched.leaveQuestion)
+    }
+
+    @Test fun leavingAsksAsTheWritingIsKept() {
+        assertNull(model().leaveQuestion)
+        assertEquals(LeaveQuestion.Draft, model(draft(written)).leaveQuestion)
+        assertNull(model(live(written)).leaveQuestion)
+        assertEquals(LeaveQuestion.Revision, model(live(written, pendingEdit = true)).leaveQuestion)
+        assertEquals("寫下的內容已經存成草稿，之後可以在「我的卡片盒」接著寫", leaveBody(LeaveQuestion.Draft))
+        assertEquals("你的修改已經存起來了，還沒套用到已發布的卡片", leaveBody(LeaveQuestion.Revision))
+    }
+
     @Test fun aRestoreThatFailsSaysSoAndStaysInTheTrash() = runBlocking {
         val m = model(draft(written))
         store.failWith = Refused()
@@ -399,6 +493,7 @@ class WriterStepsTest {
 
     private class FakeStore : DraftStore {
         val created = mutableListOf<DraftValues>()
+        val createdIds = mutableListOf<String>()
         val updates = mutableListOf<Pair<String, DraftValues>>()
         val edits = mutableListOf<Pair<String, DraftValues>>()
         var discarded = 0
@@ -407,11 +502,13 @@ class WriterStepsTest {
         var trashed = false
         var readFails = false
 
-        override suspend fun create(v: DraftValues, locale: String, referenceCardId: String?): String {
+        override fun newDraftId() = "d-new"
+
+        override suspend fun create(id: String, v: DraftValues, locale: String, referenceCardId: String?) {
             createGate?.await()
             failWith?.let { throw it }
             created += v
-            return "d-new"
+            createdIds += id
         }
 
         override suspend fun update(id: String, v: DraftValues) {

@@ -41,6 +41,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** The writer's two steps (writer.spec §0): writing the title and the story, then 發布這張卡片 / 更新這張卡片. */
 enum class WriterStep { Write, Publish }
@@ -57,6 +58,19 @@ sealed interface Mirror {
 
 /** Whether the publish step tells a resonance's writer their card reaches its original's author. */
 enum class ResonanceLine { Reaches, Quiet }
+
+/** What going back asks before the writer goes ([WriteModel.leaveQuestion]; its words: [leaveBody]). */
+enum class LeaveQuestion {
+    /** 「寫下的內容已經存成草稿…」: a draft, kept on the way out. */
+    Draft,
+    /** 「你的修改已經存起來了…」: a live card's revision, kept in its buffer. */
+    Revision,
+    /**
+     * The card is in the trash, where nothing is written until it is restored: what was typed since
+     * the last save it took goes with the page (「這張卡片在垃圾桶裡，還原後才會儲存」).
+     */
+    Trashed,
+}
 
 /** What the writer asks of the server ([WritingApi] on screen; a stand-in under test). */
 interface WriterCalls {
@@ -112,6 +126,8 @@ class WriteModel(
     private val reachedOut: () -> Unit = { PushCenter.reachedOut() },
     /** The UI's language, a new card's. */
     private val locale: () -> String = { Strings.language.tag },
+    /** How long 下一步 waits for the server to take a new draft ([NEXT_WAIT_MS]; shorter under test). */
+    private val nextWait: Long = NEXT_WAIT_MS,
 ) {
     /** The card this one resonates with, if any (a response card). */
     val referenceCardId: String? = opened?.referenceCardId ?: referenceCardId
@@ -233,6 +249,19 @@ class WriteModel(
     /** Whether going back leaves something written behind (it is kept; the person is asked first): see [holdsWork]. */
     val hasWork: Boolean get() = holdsWork(isPublished, values, lastSaved, draftId != null, hasPendingEdit)
 
+    /**
+     * Whether — and what — going back asks before the writer goes (null: it goes at once), never
+     * saying writing is kept that the trash refuses: a card in the trash asks only for words it holds
+     * nowhere ([LeaveQuestion.Trashed]); anything else as [hasWork] says.
+     */
+    val leaveQuestion: LeaveQuestion?
+        get() = when {
+            trashed -> if (needsSave) LeaveQuestion.Trashed else null
+            !hasWork -> null
+            isPublished -> LeaveQuestion.Revision
+            else -> LeaveQuestion.Draft
+        }
+
     /** What is on screen differs from what was last written, and is worth writing (a blank new card isn't). */
     val needsSave: Boolean get() = values != lastSaved && !(draftId == null && values.isEmpty)
 
@@ -314,7 +343,18 @@ class WriteModel(
             } else if (id != null) {
                 drafts.update(id, v)
             } else {
-                draftId = drafts.create(v, locale(), referenceCardId).also(onCreated)
+                // The id is the writer's from the moment the create is issued (the draft is on the device
+                // then), so 下一步 can open the step while the server's yes is still on its way.
+                val created = drafts.newDraftId()
+                draftId = created
+                onCreated(created)
+                try {
+                    drafts.create(created, v, locale(), referenceCardId)
+                } catch (e: Exception) {
+                    // Refused: no document under that id, and the next save creates one afresh.
+                    if (draftId == created) draftId = null
+                    throw e
+                }
             }
             lastSaved = v
             lastFailure = null
@@ -379,8 +419,11 @@ class WriteModel(
 
     /**
      * 下一步: asks for a title, makes sure a new card is saved as a draft first (its writer is then a
-     * draft's, as a reload or the system's back must find it), and opens the publish step. A draft
-     * kept already saves on its way, and the step opens at once. Returns whether the step opened.
+     * draft's, as a reload or the system's back must find it), and opens the publish step. A new
+     * draft's create is issued and the server's answer waited on at most [nextWait] — a refusal keeps
+     * the writer here and says so; past it (offline: Firestore holds the write until the network
+     * comes back) the step opens on the draft on the device. A draft kept already saves on its way,
+     * and the step opens at once. Returns whether the step opened.
      */
     suspend fun next(): Boolean {
         if (nextBusy || pending || trashed || step != WriterStep.Write || !nextEnabled) return false
@@ -389,6 +432,7 @@ class WriteModel(
             return false
         }
         saveError = null
+        settleAudience()
         if (draftId == null) {
             nextBusy = true
             val loader = scope.launch {
@@ -396,7 +440,11 @@ class WriteModel(
                 nextLoading = true
             }
             try {
-                if (saveNow() == null) {
+                saveJob?.cancel()
+                // In the model's scope, so the write goes on past the wait.
+                val saving = scope.launch { save() }
+                withTimeoutOrNull(nextWait) { saving.join() }
+                if (draftId == null) {
                     saveError = L10n.Native.saveError
                     return false
                 }
@@ -463,6 +511,19 @@ class WriteModel(
         reflecting = null
     }
 
+    /**
+     * A card about to be first published keeps no audience the server refuses: a draft stored
+     * anonymous and for connections only (the rules let a draft hold the pair, and the builds before
+     * letters kept a web draft's audience beside their anonymous switch) goes public, as making it
+     * anonymous here would have — so the step shows 公開 chosen and 發布 is never a 400 however often
+     * it is tried. A live card already that way keeps both (the server lets it).
+     */
+    private fun settleAudience() {
+        if (isPublished) return
+        val audience = anonymousVisibility(values.visibility, values.anonymous)
+        if (audience != values.visibility) update { copy(visibility = audience) }
+    }
+
     // The publish step's verbs
 
     /** Saves the draft, then publishes it; returns where the card lives (null: it didn't, and [publishError] or [trashed] says why). */
@@ -472,6 +533,7 @@ class WriteModel(
             askForTitle()
             return null
         }
+        settleAudience()
         return working(BusyVerb.Publish, L10n.Write.PublishPanel.failed) {
             val id = saveNow()
             if (id == null || values != lastSaved) return@working saveFailed(L10n.Write.PublishPanel.failed)
@@ -766,6 +828,11 @@ class WriteModel(
         const val TITLE_MAX = 60
         /** How long 下一步 waits on a new draft's first save before it shows its loader. */
         const val NEXT_LOADER_MS = 300L
+        /**
+         * How long 下一步 waits for the server to take a new draft (iOS's nextWait): the draft is on the
+         * device either way, so past this the step opens, and publishing waits for the network as it always has.
+         */
+        const val NEXT_WAIT_MS = 3000L
     }
 }
 
@@ -798,6 +865,13 @@ internal fun holdsWork(isPublished: Boolean, values: DraftValues, lastSaved: Dra
  */
 internal fun anonymousVisibility(visibility: String, anonymous: Boolean): String =
     if (anonymous && visibility == "connections") "public" else visibility
+
+/** What the leave question says: that the writing is kept — or, for a card in the trash, that nothing is kept until it is restored. */
+internal fun leaveBody(question: LeaveQuestion?): String = when (question) {
+    LeaveQuestion.Trashed -> L10n.Write.Trashed.status
+    LeaveQuestion.Revision -> L10n.Write.leaveBodyRevision
+    LeaveQuestion.Draft, null -> L10n.Write.leaveBody
+}
 
 /** Whether a card in this audience reaches the card it answers: public and under its author's name. */
 internal fun reachesOriginal(visibility: String, anonymous: Boolean): Boolean = visibility == "public" && !anonymous
