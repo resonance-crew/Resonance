@@ -314,6 +314,13 @@
   right: var(--page-pad-x);
 }
 
+/* A finger needs 44px to land on (the small pill is about 38px). */
+@media (pointer: coarse) {
+  .paneAction > button {
+    min-height: 44px;
+  }
+}
+
 /* The pane's column: below the split the thought map's pane has its header
    row (PaneHeader) over a body that scrolls on its own, so what the pane
    shows (the editor with its sticky toolbar, or the reading panel with its

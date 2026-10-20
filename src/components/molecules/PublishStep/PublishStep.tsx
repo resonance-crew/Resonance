@@ -150,6 +150,7 @@ export function PublishStep({
   const { thoughtCore, story, tags, visibility, anonymous, media, accentHue } = values;
   const captionId = useId();
   const tagsId = useId();
+  const headingId = useId();
 
   // ── The mirror: asked once per text, never for an update or an untitled draft ──
   const reflections = useRef<Reflection | null>(null);
@@ -252,7 +253,12 @@ export function PublishStep({
   const title = updating ? tPanel('updateTitle') : tPanel('title');
 
   return (
-    <section className={styles.step} aria-label={inlineHeading ? undefined : title} data-step-pending={pending || undefined}>
+    <section
+      className={styles.step}
+      aria-label={inlineHeading ? undefined : title}
+      aria-labelledby={inlineHeading ? headingId : undefined}
+      data-step-pending={pending || undefined}
+    >
       {inlineHeading && (
         <div className={styles.headingRow}>
           <BareIconButton
@@ -268,7 +274,7 @@ export function PublishStep({
             disabled={pending}
             onClick={onBack}
           />
-          <h2 ref={headingRef} tabIndex={-1} className={styles.heading}>
+          <h2 id={headingId} ref={headingRef} tabIndex={-1} className={styles.heading}>
             {title}
           </h2>
         </div>
