@@ -24,6 +24,26 @@
  */
 import { CARD_HUES, cardHueIndex, hueDistance, nearestCardHue } from './dominantHue';
 
+/** The fills of the six palette families, in CARD_HUES order (a shared card's band in a thread draws with them too). */
+export const CARD_FILLS = [
+  'oklch(90% 0.065 55)',
+  'oklch(94% 0.032 290)',
+  'oklch(93% 0.042 140)',
+  'oklch(92% 0.075 88)',
+  'oklch(92% 0.033 215)',
+  'oklch(89% 0.047 18)',
+];
+
+/** Each family's pen: the card's outline, then its deeper twin. */
+export const CARD_BORDERS = [
+  ['oklch(52% 0.13 55)',  'oklch(38% 0.11 55)'],
+  ['oklch(54% 0.10 290)', 'oklch(42% 0.09 290)'],
+  ['oklch(50% 0.12 140)', 'oklch(38% 0.11 140)'],
+  ['oklch(58% 0.14 88)',  'oklch(44% 0.12 88)'],
+  ['oklch(50% 0.10 215)', 'oklch(38% 0.09 215)'],
+  ['oklch(52% 0.09 18)',  'oklch(40% 0.08 18)'],
+];
+
 /** How many cards before a card its family must differ from. */
 export const CARD_COLOUR_WINDOW = 3;
 

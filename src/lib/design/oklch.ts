@@ -1,8 +1,11 @@
 /**
- * OKLCH colour math for the native pipelines — the generated app tokens
- * (./tokens.ts) and the editor island's :root (./islandRoot.ts) resolve the
- * web's colours with it, the way CSS does, so neither the apps nor the island
- * needs oklch() or color-mix() at runtime. Pure: no files, no side effects.
+ * OKLCH colour math, the way CSS does it — for whatever draws the web's
+ * colours without a browser: the native pipelines (the generated app tokens,
+ * scripts/native/tokens.ts, and the editor island's :root,
+ * scripts/native/islandRoot.ts, so neither the apps nor the island needs
+ * oklch() or color-mix() at runtime) and the link-preview image
+ * (/api/og/card, whose renderer reads no oklch()). Pure: no files, no side
+ * effects.
  */
 
 export type Oklch = { L: number; C: number; H: number; alpha: number };
