@@ -76,6 +76,15 @@ body  { font-family: var(--font-body); background: var(--color-cream); color: va
 | Author name | `--font-body` | `13px` | 600 | — | — |
 | Read time / captions | `--font-body` | `12–13px` | 400 | — | — |
 
+### Story reader — a story's type, set once
+
+A story (its title and its prose) is set by its own rules, not the UI's table above, and those rules are written **once** for every surface that shows or edits one:
+
+- **Tokens** — `src/styles/tokens.css`, "A story's type": `--font-story-serif` (Noto Serif TC → Playfair) and `--font-story-sans` (Noto Sans TC → DM Sans), `--measure` (680, the column), and the `--story-*` numbers — body `--story-size` / `--story-leading` / `--story-tracking` (and `-latin`, `-compact` variants), `--story-para-gap`, `--story-list-indent`, `--story-item-gap`, `--story-bold`, `--story-code`, the title `--story-title*`, headings `--story-heading-*`, `--story-h2`, `--story-h3`, `--story-h2-below`, `--story-h3-below`, blocks `--story-block-gap`, `--story-rule-gap`, and the card page's head and foot `--story-cover-gap`, `--story-meta-gap`, `--story-lead-gap`, `--story-end-gap`, `--story-meta-size`, `--story-byline-avatar`, `--story-rail-gap`. Every one is plain px or a unitless ratio (CSS multiplies it by `1em`, the apps by the size), so `scripts/native/tokens.ts` carries them all to `Tokens.swift` / `Tokens.kt`; never write one as a `clamp()`.
+- **Rules** — `src/styles/story.css`, the single source for the card page's reader (`StoryMarkdown`), the web writer (`MarkdownEditor`), policy pages (`LegalDocument`) and the apps' editor island (`native/editor`, whose build inlines it under a `:root` of the tokens resolved to hex). It is a global stylesheet keyed on hook classes — `.story-prose` (the root, with `data-script="latin"` and `data-density="compact"`), `.story-title`, `.story-link`, `.story-picture`, `.story-embed`, `.story-latin-mark` — because the three DOMs differ; a consumer's own module keeps only its layout (a picture's width, a quote's rail, the editor's frame).
+- **Script** — `src/lib/text/script.ts` decides how a story is set (`storyType(title, story, fallback)` → `{ script: 'cjk' | 'latin', lang }`; `native/fixtures/story-script.json` pins it for the apps). A CJK story (the default) is a Ming title and headings (600, +0.02em) over a Hei body (+0.03em), justified, `line-break: strict`; a Latin-script story keeps Playfair 700 over DM Sans, ragged. `lang` goes on the title and the prose only — never on the page around them, which is in the reader's own language. An empty draft takes the writer's UI locale (`localeScript`).
+- Links in a story wear the pen wave in `--button-on-tonal`, its padding set per face from the fonts' own descents (story.css explains the numbers). Headings never take negative tracking; titles and headings take lining figures.
+
 ---
 
 ## 4. Color Usage Map
@@ -554,6 +563,9 @@ Circular avatar with initials, wobbled border via `HandDrawnBorder`.
 | Layer | z-index |
 |---|---|
 | Header | 100 (fixed) |
+| Floating menus | 120 |
+| Toast (`useToast`, molecules/Toast) | 950 (fixed) |
+| Modal | 1000 |
 | Tweaks panel | 9999 |
 | Section content | 1–4 |
 | Decorative blobs | 0 |

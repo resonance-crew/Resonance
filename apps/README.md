@@ -81,7 +81,7 @@ npm run apps:generate   # tokens, string accessors, icons, openapi.json, editor 
 
 | Output | From | Script |
 | --- | --- | --- |
-| `DesignSystem/.../Generated/Tokens.swift` | `src/styles/tokens.css`, StoryCard palette, strokes | `scripts/native/tokens.ts` |
+| `DesignSystem/.../Generated/Tokens.swift` | `src/styles/tokens.css` (with a story's type: `--story-*` → `Tokens.story*`, the numbers the readers take), StoryCard palette, strokes | `scripts/native/tokens.ts` |
 | `ResonanceKit/.../Localization/L10n.swift` | `src/messages/*.json` (bundled as-is, read at runtime) | `scripts/apps/l10n.ts` |
 | `DesignSystem/.../Generated/Icons.swift` | the hand-drawn icons in `src/components/atoms/Icon` | `scripts/apps/icons.ts` |
 | the same three for Android (`core/design/.../generated/Tokens.kt`, `Icons.kt`, `core/kit/.../l10n/L10n.kt`) | as above | as above |
@@ -91,7 +91,9 @@ npm run apps:generate   # tokens, string accessors, icons, openapi.json, editor 
 | `DesignSystem/.../Resources/Flags/flag-*.png`, `core/design/.../drawable-nodpi/flag_*.png` | `public/flags/*.svg` (the art the web's SquareFlag crops) | `scripts/apps/flags.ts` (by hand when a flag is added; not in `apps:generate`, not checked by CI) |
 
 Both apps also bundle the story editor island, `native/editor/dist/editor.html`
-(the writing screen's story field). It is built, not committed: run
+(the writing screen's story field), which sets a story with the web's own
+`src/styles/story.css` under the web's tokens (`scripts/native/islandRoot.ts`).
+It is built, not committed: run
 `npm run native:editor` (or `apps:generate`) before the first app build. An
 Android build without it installs and runs, but the writer's story field says
 "Webpage not available", so the builds check: the iOS build and Android release
