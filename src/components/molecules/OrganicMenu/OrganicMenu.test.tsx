@@ -267,3 +267,73 @@ describe('floating panel', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 });
+
+describe('rows that say more than an icon and a word (the share menu)', () => {
+  it('draws an element as it is in the icon slot, and names a row by its own label when it has one', async () => {
+    const items: OrganicMenuItem[] = [
+      { key: 'copy', icon: 'copy', label: 'Copy link' },
+      { key: 'line', icon: <svg data-testid="brand-line" aria-hidden="true" />, label: 'LINE', ariaLabel: 'Share on LINE' },
+    ];
+    const onChoose = vi.fn();
+    render(<OrganicMenu items={items} onChoose={onChoose} label="Share" bare triggerIcon="share" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Share' }));
+
+    const line = screen.getByRole('menuitem', { name: 'Share on LINE' });
+    expect(line).toHaveTextContent('LINE');
+    expect(line).toContainElement(screen.getByTestId('brand-line'));
+    // A row without its own label is named by its words.
+    expect(screen.getByRole('menuitem', { name: 'Copy link' })).not.toHaveAttribute('aria-label');
+    await userEvent.click(line);
+    expect(onChoose).toHaveBeenCalledWith('line');
+  });
+
+  it('lets the host answer the click itself: the panel stays closed when it says so', async () => {
+    const handled = vi.fn(() => true);
+    const { rerender } = render(<OrganicMenu items={ITEMS} onChoose={vi.fn()} label="Share" bare triggerIcon="share" onTriggerClick={handled} />);
+    const trigger = screen.getByRole('button', { name: 'Share' });
+    await userEvent.click(trigger);
+    expect(handled).toHaveBeenCalledTimes(1);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+
+    // Not handled: the menu opens as ever — and closing it again asks nothing.
+    const notHandled = vi.fn(() => false);
+    rerender(<OrganicMenu items={ITEMS} onChoose={vi.fn()} label="Share" bare triggerIcon="share" onTriggerClick={notHandled} />);
+    await userEvent.click(trigger);
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    await userEvent.click(trigger);
+    expect(notHandled).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  // The rule meant for the ⋯'s dots filled every bare glyph: the share tray came out a solid blob.
+  it('fills the dots of a bare ⋯ only, never another bare glyph', () => {
+    render(
+      <>
+        <OrganicMenu items={ITEMS} onChoose={vi.fn()} label="More" bare />
+        <OrganicMenu items={ITEMS} onChoose={vi.fn()} label="Share" bare triggerIcon="share" />
+      </>,
+    );
+    expect(screen.getByRole('button', { name: 'More' })).toHaveAttribute('data-icon', 'dots');
+    expect(screen.getByRole('button', { name: 'Share' })).toHaveAttribute('data-icon', 'share');
+    const css = readFileSync(join(process.cwd(), 'src/components/molecules/OrganicMenu/OrganicMenu.module.css'), 'utf8');
+    const rules = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const fills = [...rules.matchAll(/([^{}]+)\{[^}]*fill:\s*currentColor/g)].map((m) => m[1].trim());
+    expect(fills).toEqual([".bare[data-icon='dots'] .triggerIcon path"]);
+  });
+
+  it('lets a hint under the rows wrap, the panel as tall as its lines', async () => {
+    const layout = stubRowLayout({ width: 220, rowHeight: 42 });
+    const footerHeight = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      if (this.textContent === 'A hint long enough to take two lines') return 52;
+      return this.querySelectorAll('[role="menuitem"]').length * 42;
+    });
+    render(<OrganicMenu items={ITEMS} onChoose={vi.fn()} label="Share" bare footer="A hint long enough to take two lines" footerWrap />);
+    await userEvent.click(screen.getByRole('button', { name: 'Share' }));
+    expect(screen.getByRole('menu').parentElement).toHaveStyle({ height: `${3 * 42 + 52}px` });
+    footerHeight.mockRestore();
+    layout.restore();
+    const css = readFileSync(join(process.cwd(), 'src/components/molecules/OrganicMenu/OrganicMenu.module.css'), 'utf8');
+    expect(css).toMatch(/\.footerWrap\s*\{[^}]*max-width: 256px;[^}]*white-space: normal/);
+  });
+});

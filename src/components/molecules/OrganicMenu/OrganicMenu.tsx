@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ReactElement,
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -24,8 +25,11 @@ import styles from './OrganicMenu.module.css';
 
 export interface OrganicMenuItem {
   key: string;
-  icon: IconName;
+  /** A hand-drawn icon by name, or an element drawn as it is in the row's 17px icon slot (a brand's mark). */
+  icon: IconName | ReactElement;
   label: ReactNode;
+  /** The row's accessible name, when it says more than its label (「分享到 LINE」 for a row reading LINE). */
+  ariaLabel?: string;
   /** Destructive rows get the warning wash (the card menu's delete-row language). */
   danger?: boolean;
 }
@@ -60,6 +64,19 @@ export interface OrganicMenuProps {
   tip?: 'above' | 'below';
   /** A quiet line under the rows (a message's full time), parted from them by one more divider. */
   footer?: ReactNode;
+  /**
+   * The footer may run to more than one line (a hint, not a time): it adds
+   * no width of its own past 256px and wraps there, and the panel grows
+   * with it.
+   */
+  footerWrap?: boolean;
+  /**
+   * Asked first when a click would open the menu: returning true says the
+   * host has handled the click itself (a share sheet opened in its place),
+   * and the panel stays closed. Called inside the click, so whatever it
+   * starts keeps the click's user activation.
+   */
+  onTriggerClick?: () => boolean;
   /**
    * The panel floats over the page (a portal, `position: fixed`) instead of
    * hanging in the trigger's box — for a trigger inside something that
@@ -122,6 +139,8 @@ export function OrganicMenu({
   tone = 'muted',
   tip = 'above',
   footer,
+  footerWrap = false,
+  onTriggerClick,
   floating = false,
   align = 'end',
   onOpenChange,
@@ -210,6 +229,7 @@ export function OrganicMenu({
         style={bare ? undefined : { width: triggerSize, height: triggerSize }}
         data-open={open || undefined}
         data-tone={bare ? tone : undefined}
+        data-icon={triggerIcon}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={`${uid}-menu`}
@@ -220,6 +240,8 @@ export function OrganicMenu({
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
+          // The host may answer a click that would open the menu itself.
+          if (!open && onTriggerClick?.()) return;
           if (floating) setPlaced(place(e.currentTarget));
           // Enter or Space on the trigger is a click with no pointer behind it.
           setByKeyboard(e.detail === 0);
@@ -267,6 +289,7 @@ export function OrganicMenu({
                 items={items}
                 busy={busy}
                 footer={footer}
+                footerWrap={footerWrap}
                 placed
                 // Laid at the end of the page, the panel is out of the trigger's tab order: it takes the focus
                 // (its first row, from the keyboard), and Tab out of it closes it, back on the trigger.
@@ -288,6 +311,7 @@ export function OrganicMenu({
             items={items}
             busy={busy}
             footer={footer}
+            footerWrap={footerWrap}
             autoFocus={byKeyboard ? 'row' : null}
             onChoose={(key) => {
               closeMenu();
@@ -350,6 +374,8 @@ interface MenuPanelProps {
   items: OrganicMenuItem[];
   busy: boolean;
   footer?: ReactNode;
+  /** The footer wraps (OrganicMenu's `footerWrap`), and the panel takes its measured height. */
+  footerWrap?: boolean;
   /** Placed by its host (or a floating wrapper) rather than hung under the trigger. */
   placed?: boolean;
   /** Where the focus goes as it opens: its first row, the panel itself (Tab then walks its rows), or nowhere. */
@@ -360,7 +386,19 @@ interface MenuPanelProps {
   ref?: React.Ref<HTMLDivElement>;
 }
 
-function MenuPanel({ uid, seed, items, busy, footer, placed = false, autoFocus = null, onTabOut, onChoose, ref: outerRef }: MenuPanelProps) {
+function MenuPanel({
+  uid,
+  seed,
+  items,
+  busy,
+  footer,
+  footerWrap = false,
+  placed = false,
+  autoFocus = null,
+  onTabOut,
+  onChoose,
+  ref: outerRef,
+}: MenuPanelProps) {
   const ref = useRef<HTMLDivElement | null>(null);
   // The panel's own ref (it measures itself) and the host's (whose outside-click test needs it).
   const setRef = (el: HTMLDivElement | null) => {
@@ -371,8 +409,21 @@ function MenuPanel({ uid, seed, items, busy, footer, placed = false, autoFocus =
   const hasFooter = footer != null;
   // The footer is one more band under the rows: a divider above it, and no ink in it.
   const bands = items.length + (hasFooter ? 1 : 0);
-  const h = menuPanelHeight(items.length, hasFooter);
+  // A footer that wraps is as tall as its lines (never shorter than one line's band).
+  const footerRef = useRef<HTMLDivElement>(null);
+  const [footerH, setFooterH] = useState(FOOTER_H);
+  const h = items.length * ROW_H + (hasFooter ? footerH : 0);
   const [w, setW] = useState(0);
+
+  useLayoutEffect(() => {
+    const el = footerRef.current;
+    if (!el || !footerWrap) return;
+    const recompute = () => setFooterH(Math.max(FOOTER_H, Math.ceil(el.offsetHeight)));
+    recompute();
+    const ro = new ResizeObserver(recompute);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [footerWrap]);
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -529,14 +580,19 @@ function MenuPanel({ uid, seed, items, busy, footer, placed = false, autoFocus =
             onFocus={() => setKeyRow(byKeys.current ? i : null)}
             onBlur={() => setKeyRow((cur) => (cur === i ? null : cur))}
             onClick={() => onChoose(it.key)}
+            aria-label={it.ariaLabel}
           >
             <span className={styles.optionIcon}>
-              <Icon name={it.icon} size={17} strokeWidth={INK} />
+              {typeof it.icon === 'string' ? <Icon name={it.icon} size={17} strokeWidth={INK} /> : it.icon}
             </span>
             {it.label}
           </button>
         ))}
-        {hasFooter && <div className={styles.footer}>{footer}</div>}
+        {hasFooter && (
+          <div ref={footerRef} className={footerWrap ? `${styles.footer} ${styles.footerWrap}` : styles.footer}>
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

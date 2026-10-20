@@ -45,9 +45,10 @@
     height: 44px;
   }
 }
-/* The glyph's pen rings filled in: on bare paper, hollow rings this small
-   read as a faint "ooo"; solid dots read as "more". */
-.bare .triggerIcon path {
+/* The「⋯」glyph's pen rings filled in: on bare paper, hollow rings this
+   small read as a faint "ooo"; solid dots read as "more". The dots only —
+   any other bare glyph (the share tray) keeps its open pen line. */
+.bare[data-icon='dots'] .triggerIcon path {
   fill: currentColor;
 }
 .bare:hover,
@@ -244,6 +245,19 @@
   color: var(--color-text-muted);
   white-space: nowrap;
   cursor: default;
+}
+/* A hint rather than a time: it adds no width past 256px, wraps there in
+   balanced lines, and the panel takes its height (MenuPanel measures it). */
+.footerWrap {
+  height: auto;
+  min-height: 38px;
+  max-width: 256px;
+  box-sizing: border-box;
+  padding-top: 11px;
+  padding-bottom: 11px;
+  line-height: 1.45;
+  white-space: normal;
+  text-wrap: balance;
 }
 
 .optionIcon {
