@@ -84,6 +84,7 @@ npm run apps:generate   # tokens, string accessors, icons, openapi.json, editor 
 | `DesignSystem/.../Generated/Tokens.swift` | `src/styles/tokens.css` (with a story's type: `--story-*` → `Tokens.story*`, the numbers the readers take), StoryCard palette, strokes | `scripts/native/tokens.ts` |
 | `ResonanceKit/.../Localization/L10n.swift` | `src/messages/*.json` (bundled as-is, read at runtime) | `scripts/apps/l10n.ts` |
 | `DesignSystem/.../Generated/Icons.swift` | the hand-drawn icons in `src/components/atoms/Icon` | `scripts/apps/icons.ts` |
+| `Resonance/Resources/{en,zh-Hant}.lproj/InfoPlist.strings` | the purpose strings the system shows itself (`share.image.photoAccess` for the photo prompt); project.yml keeps the English one, checked against the catalog | `scripts/apps/l10n.ts` |
 | the same three for Android (`core/design/.../generated/Tokens.kt`, `Icons.kt`, `core/kit/.../l10n/L10n.kt`) | as above | as above |
 | the Swift API client (at build time) | `openapi/v1/openapi.json` | swift-openapi-generator |
 | the Kotlin API client (at build time) | `openapi/v1/openapi.json` | openapi-generator (`jvm-okhttp4`) |
@@ -183,6 +184,33 @@ and on any block change) as the card page's placeholder — the page always
 refetches. `Route.thread(handle:uid:note:)` takes the uid whenever the caller
 knows it; threads listen by pair id, and PERMISSION_DENIED means "no
 conversation yet".
+
+The story reader sets a card's title and story in the reading design's type, by
+the story's script (`CardModel.storyType`, ScriptRule) and the window: every
+number comes from DesignSystem's `StoryTypography` (the generated
+`Tokens.story*`) — `StoryTitle` (balanced, a CJK title's clauses kept whole),
+`ProseStyle` (each block's face, size, tracking, alignment, colour), its
+`rhythm()` for `ProseMetrics`' collapsing margins, and `CardPageLayout` (the
+680 column, the rail 48 past it). Justified Chinese is spread by
+`StoryJustification` (between characters, as a browser does — TextKit's own
+`.justified` widens only spaces); TextKit keeps a Chinese word whole where a
+browser breaks between any two characters, so a line can end a character
+earlier than the web's. A story's words grow with the system's text size up
+to 2× (`TextScale.readingFactor`); the byline and the rest stay under 1.25×.
+
+Share: a card's bar shows the share glyph only for a published, public card
+not in the trash (`CardShareGate`). It opens the system sheet with the link
+(`LinkSource`, with its `LPLinkMetadata`) and the 1080 × 1920 picture drawn
+on the phone (`CardImageSource`; DesignSystem's `ShareCardView` /
+`ShareCardRenderer`, pure SwiftUI through `ImageRenderer`): Instagram's share
+extension and Save Image take the picture, everyone else the link. With
+`AppConfig.metaAppID` and an Instagram that opens `instagram-stories://`,
+the sheet adds Instagram 限時動態 (`InstagramStoriesActivity`: sticker and
+backdrop on the pasteboard for five minutes). Its glyph is the asset
+`InstagramGlyph` when the app carries one (Meta's official file, unmodified),
+else a plain tile. The owner of an anonymous card confirms first. A profile
+shares its link through `ShareLink`. `-debugShare YES` opens a card's share
+at launch, to check the sheet on screen.
 
 Caches: `APICache` (ResonanceKit, Caches/APICache/<sha256(uid)>) keeps the
 account's latest feed page, today's picks (UTC day only), Me, the published

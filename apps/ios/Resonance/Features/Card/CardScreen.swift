@@ -154,11 +154,11 @@ struct CardScreen: View {
                 if let detail = model?.detail {
                     let card = detail.card
                     let hue = card.accentHue ?? 55
-                    ShareLink(item: session.config.origin.appending(path: "card/\(card.routeKey)")) {
-                        OrganicChipFace(.share, seed: hue + 5, trigger: .bare)
+                    // Only a published, public card can be opened by whoever gets its link (share.spec §1):
+                    // the system's sheet, with the card's link and its picture.
+                    if CardShareGate.offered(detail) {
+                        CardShareButton(detail: detail, seed: hue + 5)
                     }
-                    .buttonStyle(OrganicPressStyle())
-                    .accessibilityLabel(L10n.Card.share)
                     // The ⋯ lives in the bar, as phone apps keep a page's actions: the owner's, or the reader's safety menu —
                     // anonymous cards included (App Store 1.2), whose author only the server knows: Report alone.
                     if detail.isOwner {

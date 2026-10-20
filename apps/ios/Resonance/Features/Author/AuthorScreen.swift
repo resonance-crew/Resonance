@@ -51,6 +51,17 @@ struct AuthorScreen: View {
                     HeaderContextTitle(profile.author.handle, shown: nameGone && model?.phase == .loaded)
                 }
             } trailing: {
+                // Their page's link, straight to the system's sheet (nothing to choose between): before the
+                // ⋯, or alone on your own page; not while you have them blocked.
+                if let profile = model?.profile, !profile.isBlocked {
+                    let handle = profile.author.handle
+                    ShareLink(item: ShareLinks.profileURL(handle: handle, origin: session.config.origin),
+                              preview: SharePreview(L10n.Profile.shareTitle(handle: handle))) {
+                        OrganicChipFace(.share, seed: Double(seedFromString(profile.author.id)) + 5, trigger: .bare)
+                    }
+                    .buttonStyle(OrganicPressStyle())
+                    .accessibilityLabel(L10n.Share.profile)
+                }
                 if let profile = model?.profile, !profile.isSelf {
                     SafetyMenu(target: .user(id: profile.author.id), handle: profile.author.handle, isBlocked: profile.isBlocked,
                                seed: Double(seedFromString(profile.author.id)), triggerSize: 36) {

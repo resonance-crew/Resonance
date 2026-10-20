@@ -161,7 +161,7 @@ import Testing
         // 1392: the first width where it is exactly centred (both sides 308 + 48).
         let w1392 = CardPageLayout.of(width: 1392, window: 1392)
         #expect(near(text(w1392), 356...1036))
-        #expect(w1392.railX + Tokens.cardRailW == 1392 - 48)
+        #expect(abs(w1392.railX + Tokens.cardRailW - (1392 - 48)) < 0.01, "\(w1392)")
         // 1280: it slides left so the rail still fits beside it.
         #expect(near(text(CardPageLayout.of(width: 1280, window: 1280)), 244...924))
         // 1024: the text narrows to what the rail leaves (41–675), the rail 723–983.
