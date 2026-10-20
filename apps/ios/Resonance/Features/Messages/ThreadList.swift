@@ -182,7 +182,8 @@ struct MessageList: View {
             // Over the messages, under the pill: what scrolls down to the foot dissolves into the paper.
             FootEdge()
             if pillVisible && (unseen > 0 || farUp) && !atBottom {
-                ThreadPill(icon: .chevronDown, text: unseen > 0 ? L10n.Messages.newMessages : L10n.Messages.jumpToLatest) {
+                // The small pill over the composer: the way back to the latest message (DesignSystem's OrganicPill).
+                OrganicPill(icon: .chevronDown, text: unseen > 0 ? L10n.Messages.newMessages : L10n.Messages.jumpToLatest) {
                     unseen = 0
                     toLatest()
                 }
@@ -370,33 +371,6 @@ private struct OlderRow: View {
 
     private func note(_ text: String) -> some View {
         Text(text).font(AppFonts.body(12)).foregroundStyle(Tokens.textMuted).multilineTextAlignment(.center)
-    }
-}
-
-/// The small pill over the composer: the way back to the latest message — or, without an action,
-/// a word that something was done ("Copied"). Organic, terracotta-light, no outline.
-struct ThreadPill: View {
-    let icon: IconName
-    let text: String
-    var action: (() -> Void)?
-
-    var body: some View {
-        let face = HStack(spacing: 6) {
-            OrganicIcon(icon, size: 14, color: Tokens.terracottaInk)
-            Text(text).font(AppFonts.body(12.5, weight: .semibold)).foregroundStyle(Tokens.terracottaInk)
-        }
-        .padding(.horizontal, 16).padding(.vertical, 9)
-        .background {
-            let shape = WobRectShape(radius: 18, seed: 41, mag: 1.2)
-            shape.fill(Tokens.cream)
-            shape.fill(Tokens.terracottaLight.opacity(0.9))
-        }
-        .contentShape(Rectangle())
-        if let action {
-            Button(action: action) { face }.buttonStyle(.plain)
-        } else {
-            face.accessibilityAddTraits(.updatesFrequently)
-        }
     }
 }
 

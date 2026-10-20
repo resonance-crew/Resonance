@@ -220,7 +220,8 @@ struct ThreadScreen: View {
                 ThreadSearchResults(model: model, query: query, topMargin: barHeight, underBar: $resultsUnderBar) { pick($0) }
             }
             if let toast {
-                ThreadPill(icon: .check, text: toast)
+                // Without an action, a word that something was done (「已複製」), said aloud as it shows (`say`).
+                OrganicPill(icon: .check, text: toast)
                     .padding(.bottom, 10)
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
