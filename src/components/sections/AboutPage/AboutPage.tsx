@@ -32,7 +32,7 @@ const TEAM: { zh: string; en: string; src?: string; initials?: string; seed: num
   { zh: '蕭力文', en: 'Li-Wen Hsiao', src: '/team/hsiao.webp', seed: 37 },
   { zh: '方昱晴', en: 'Yu-Ching Fang', src: '/team/fang.webp', seed: 61 },
   { zh: '鄭義信', en: 'Yi-Hsin Cheng', src: '/team/cheng.webp', seed: 83 },
-  { zh: '薛惠馨', en: 'Winnie Xue', initials: '惠馨', seed: 107 },
+  { zh: '薛惠馨', en: 'Winnie Xue', src: '/team/xue.webp', seed: 107 },
 ];
 
 /** The course where the team met. */
