@@ -1,6 +1,7 @@
 package com.resonance.app.ui
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -10,10 +11,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.navigation3.scene.SinglePaneSceneStrategy
 import com.resonance.design.HeaderChrome
+import com.resonance.design.HeaderEdgeHeight
 import com.resonance.design.InlineBarHeight
 import com.resonance.design.LayoutClass
 import com.resonance.design.LocalHeaderChrome
 import com.resonance.design.LocalInlineBarHeight
+import com.resonance.design.LocalToasts
 import com.resonance.design.LocalWindowLayout
 import com.resonance.design.TopBarRow
 import com.resonance.design.TopPen
@@ -48,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -63,6 +67,9 @@ import com.resonance.app.PushCenter
 import com.resonance.app.Session
 import com.resonance.design.OrganicTabBar
 import com.resonance.design.OrganicTabItem
+import com.resonance.design.TabBarHeight
+import com.resonance.design.ToastHost
+import com.resonance.design.Toasts
 import com.resonance.design.cream
 import com.resonance.design.generated.IconName
 import com.resonance.kit.api.MessagingApi
@@ -261,6 +268,17 @@ internal fun MutableList<Route>.reselect(): Boolean {
 internal fun headerTabsShown(stack: List<Route>, expanded: Boolean): Boolean =
     (stack.size == 1 && stack.first() is Route.Root) || (expanded && stack.size > 1 && drawsAsPanes(stack))
 
+/**
+ * How far above the navigation bar (or the keyboard) the shell's toast sits: clear of the tab bar's
+ * wavy edge by 12 while the bar shows (a phone, on a tab's root); else the web's 16 on a phone and
+ * 24 on a wider window, whose tabs are in the header.
+ */
+internal fun toastClearance(cls: LayoutClass, tabBarShown: Boolean): Dp = when {
+    tabBarShown -> TabBarHeight + HeaderEdgeHeight + 12.dp
+    cls == LayoutClass.Compact -> 16.dp
+    else -> 24.dp
+}
+
 /** The tab shown chosen again while at its root ([reselect]): its root page's list scrolls to the top. */
 internal val LocalRootTaps = staticCompositionLocalOf<Flow<Tab>> { emptyFlow() }
 
@@ -426,8 +444,12 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
     val tabWidths = if (labels) labelled else topTabWidths(tabs.map { it.value.title }, labels = false)
     val chrome = if (topTabs) HeaderChrome(windowWidth, TopTabsFit.groupWidth(tabWidths.map { it.value }).dp, pad, labels) else null
     val panes = remember(expanded, session) { listOf(MessagesPanesStrategy(expanded, session), SinglePaneSceneStrategy()) }
+    // The shell's one toast (trash.spec §6): the account's, like the tabs — a new account starts without one.
+    val toasts = remember { Toasts() }
+    // It moves with the tab bar as a page is pushed over a tab's root or popped back to it.
+    val toastBottom by animateDpAsState(toastClearance(cls, tabBarShown = !topTabs && stack.size == 1), label = "toastBottom")
 
-    CompositionLocalProvider(LocalWindowLayout provides WindowLayout(windowWidth), LocalRootTaps provides rootTaps) {
+    CompositionLocalProvider(LocalWindowLayout provides WindowLayout(windowWidth), LocalRootTaps provides rootTaps, LocalToasts provides toasts) {
         Box(Modifier.fillMaxSize().cream()) {
             key(languageEpoch) {
                 val entries: Map<Tab, List<NavEntry<Route>>> = Tab.entries.associateWith { t ->
@@ -457,6 +479,8 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
             if (!topTabs) TabBarSlot(stack.size == 1, Modifier.align(Alignment.BottomCenter)) {
                 OrganicTabBar(tabItems, selection = tab, onSelect = select)
             }
+            // Over every page and the bars, under any dialog (a window of its own).
+            ToastHost(toasts, Modifier.align(Alignment.BottomCenter), bottom = toastBottom)
         }
     }
 }

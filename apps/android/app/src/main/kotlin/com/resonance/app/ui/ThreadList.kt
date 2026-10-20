@@ -53,9 +53,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -84,6 +82,8 @@ import com.resonance.design.MessageBubble
 import com.resonance.design.OklchColor
 import com.resonance.design.OrganicButton
 import com.resonance.design.OrganicIcon
+import com.resonance.design.OrganicPill
+import com.resonance.design.PillSize
 import com.resonance.design.QuoteBubble
 import com.resonance.design.REPLY_OVERLAP
 import com.resonance.design.SharedCardSection
@@ -91,7 +91,6 @@ import com.resonance.design.BubblePictureBleed
 import com.resonance.design.SharedCardSkeleton
 import com.resonance.design.Skeleton
 import com.resonance.design.SketchLoader
-import com.resonance.design.WobRectShape
 import com.resonance.design.fade
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
@@ -413,27 +412,10 @@ private fun OlderRow(model: ThreadModel) {
     }
 }
 
-/** The small pill over the composer: the way back to the latest message. */
+/** The small pill over the composer: the way back to the latest message (the design system's ink pill, as it always looked). */
 @Composable
 private fun JumpPill(text: String, onClick: () -> Unit) {
-    Box(
-        Modifier
-            .drawWithCache {
-                val o = WobRectShape(18.0, 41.0, mag = 1.2).createOutline(size, layoutDirection, this)
-                onDrawBehind {
-                    drawOutline(o, Tokens.Cream)
-                    drawOutline(o, Tokens.TerracottaLight, alpha = 0.9f)
-                }
-            }
-            .plainClickable(role = Role.Button, onClickLabel = text, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 9.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OrganicIcon(IconName.ChevronDown, size = 14.dp, color = Tokens.TerracottaInk)
-            BasicText(text, style = AppFonts.body(12.5f, 600, lineHeight = 1.3f, color = Tokens.TerracottaInk))
-        }
-    }
+    OrganicPill(text, icon = IconName.ChevronDown, size = PillSize.Small, onClickLabel = text, onClick = onClick)
 }
 
 // One message
