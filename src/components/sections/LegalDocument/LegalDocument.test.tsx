@@ -28,4 +28,15 @@ describe('LegalDocument', () => {
     expect(external).toHaveAttribute('target', '_blank');
     expect(external).toHaveAttribute('rel', 'noopener noreferrer');
   });
+
+  // The stories' prose (src/styles/story.css), set by the document's own script.
+  it('sets a Chinese policy as a CJK story and an English one as a Latin-script story', () => {
+    const zh = render(<LegalDocument doc={doc} updatedLabel="u" />);
+    expect(zh.container.querySelector('.story-prose')).toHaveAttribute('data-script', 'cjk');
+    zh.unmount();
+    const en = render(
+      <LegalDocument doc={{ ...doc, title: 'Support', body: 'Write to **support@resonance.channel**, or read the [privacy policy](/en/privacy).' }} updatedLabel="u" />,
+    );
+    expect(en.container.querySelector('.story-prose')).toHaveAttribute('data-script', 'latin');
+  });
 });

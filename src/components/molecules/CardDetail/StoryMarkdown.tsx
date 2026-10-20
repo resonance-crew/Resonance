@@ -15,6 +15,8 @@ import { isBlankParagraph } from '@/lib/markdown/blankLines';
 import { SITE_HOSTS, soleLinkParagraphs } from '@/lib/links/storyLinks';
 import { seedFromString } from '@/lib/design/prng';
 import { storyLinkWaveVars } from '@/lib/design/storyLinkWave';
+import { storyType, type StoryScript } from '@/lib/text/script';
+import '@/styles/story.css';
 import styles from './StoryMarkdown.module.css';
 
 /**
@@ -80,7 +82,7 @@ const components: Components = {
         {...rest}
         href={href}
         {...(toOtherSite(href) ? AWAY : {})}
-        className={styles.link}
+        className="story-link"
         style={storyLinkWaveVars(href ?? '') as CSSProperties}
       >
         {children}
@@ -95,8 +97,8 @@ const components: Components = {
     </blockquote>
   ),
   // Replace the default flat rule with the theme's thin wavy pen line, with
-  // generous breathing room above and below.
-  hr: () => <Divider seed={23} spacing="clamp(28px, 4vw, 40px)" />,
+  // the story's rule gap above and below (story.css --s-rule).
+  hr: () => <Divider seed={23} spacing="var(--s-rule)" />,
   // Story images get the same hand-drawn curved clip as the cover, hugging
   // the photo's natural size. Spans only, so it stays valid inside <p>.
   img: ({ src, alt }) => (
@@ -126,7 +128,7 @@ function StoryParagraph({ node, children }: { children?: ReactNode } & ExtraProp
     const href = String(sole.properties?.href ?? '');
     if (href.startsWith('/card/')) {
       return (
-        <div className={styles.embedBlock}>
+        <div className={`${styles.embedBlock} story-embed`}>
           <CardEmbedLink href={href} title={hastText(sole)} />
         </div>
       );
@@ -140,13 +142,13 @@ function StoryParagraph({ node, children }: { children?: ReactNode } & ExtraProp
   const preview = key ? cards!.previews.get(key) : undefined;
   if (preview) {
     return (
-      <div className={styles.embedBlock}>
+      <div className={`${styles.embedBlock} story-embed`}>
         <StoryLinkCard preview={preview} />
       </div>
     );
   }
   if (sole?.tagName === 'img') {
-    return <div className={styles.imageBlock}>{children}</div>;
+    return <div className={`${styles.imageBlock} story-picture`}>{children}</div>;
   }
   if (node && isBlankParagraph(node.children.map(hastText).join(''))) {
     return <div className={styles.blankLine} aria-hidden="true" />;
@@ -154,13 +156,30 @@ function StoryParagraph({ node, children }: { children?: ReactNode } & ExtraProp
   return <p>{children}</p>;
 }
 
+export interface StoryMarkdownProps {
+  source: string;
+  /**
+   * How the story is set (src/styles/story.css): its script and the language
+   * of its words. The card page passes both, read off the title and story
+   * together (lib/text/script storyType); without them they are read off the
+   * story alone. `lang` goes on this root only — never on what is around the
+   * story, which is in the reader's own language.
+   */
+  script?: StoryScript;
+  lang?: string;
+  /** The phone's numbers at any width — a side panel (the writer's original card). */
+  density?: 'compact';
+}
+
 /**
- * Renders a card's story (stored as Markdown) into prose. `rehype-slug` adds
- * `id`s to headings so the Table of Contents can anchor-scroll to them. The
- * page may provide its card's link previews (StoryLinkPreviewsContext); a
- * standalone link with one is drawn as its link card.
+ * Renders a card's story (stored as Markdown) into prose, set by
+ * src/styles/story.css (.story-prose — the writer and the apps' editor set a
+ * story with the same rules). `rehype-slug` adds `id`s to headings so the
+ * Table of Contents can anchor-scroll to them. The page may provide its
+ * card's link previews (StoryLinkPreviewsContext); a standalone link with one
+ * is drawn as its link card.
  */
-export function StoryMarkdown({ source }: { source: string }) {
+export function StoryMarkdown({ source, script, lang, density }: StoryMarkdownProps) {
   const previews = useContext(StoryLinkPreviewsContext);
   // Parsed again (as CommonMark, like the server) only when there is a preview to place.
   const cards = useMemo<StoryLinkCards | null>(
@@ -170,8 +189,15 @@ export function StoryMarkdown({ source }: { source: string }) {
         : null,
     [source, previews],
   );
+  // The same in the server's render and the browser's: a pure reading of the source.
+  const read = useMemo(() => (script && lang ? null : storyType('', source)), [script, lang, source]);
   return (
-    <div className={styles.prose}>
+    <div
+      className="story-prose"
+      data-script={script ?? read?.script}
+      data-density={density}
+      lang={lang ?? read?.lang}
+    >
       <StoryLinkCardsContext.Provider value={cards}>
         <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSlug]} components={components}>
           {source}

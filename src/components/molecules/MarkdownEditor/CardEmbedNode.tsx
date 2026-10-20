@@ -15,7 +15,7 @@ function CardEmbedView({ node, selected, deleteNode }: NodeViewProps) {
   const data = useCardEmbed(href);
   const ready = data.status === 'ready';
   return (
-    <NodeViewWrapper className={styles.cardEmbedNode} data-selected={selected || undefined}>
+    <NodeViewWrapper className={`${styles.cardEmbedNode} story-embed`} data-selected={selected || undefined}>
       <EmbedStoryCard
         title={ready ? data.card.thoughtCore : String(node.attrs.title ?? '')}
         author={ready ? data.author?.handle : undefined}

@@ -12,7 +12,7 @@ function ImageView({ node, selected, deleteNode }: NodeViewProps) {
   const t = useTranslations('write.editor');
   const src = String(node.attrs.src ?? '');
   return (
-    <NodeViewWrapper className={styles.imageNode}>
+    <NodeViewWrapper className={`${styles.imageNode} story-picture`}>
       {/* Same curved clip as the published article; selection draws a
           hand-drawn stroke along that same curve instead of a rectangle. */}
       <OrganicStoryImage

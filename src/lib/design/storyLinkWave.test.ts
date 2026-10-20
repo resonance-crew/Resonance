@@ -51,27 +51,43 @@ describe('storyLinkWave', () => {
   });
 });
 
-// jsdom lays nothing out, so the placement lives in the stylesheets: every surface that shows a story's links
-// (the reader, the web editor, the apps' editor island) draws the wave the same way.
-describe('the wave’s placement in each stylesheet', () => {
+// jsdom lays nothing out, so the placement lives in the stylesheet: every surface that shows a story's links
+// (the reader, the web editor, the apps' editor island) sets them with the one src/styles/story.css.
+describe('the wave’s placement in the story stylesheet', () => {
   const root = resolve(__dirname, '../../..');
-  const sheets = {
-    reader: ['src/components/molecules/CardDetail/StoryMarkdown.module.css', '.prose .link {'],
-    editor: ['src/components/molecules/MarkdownEditor/MarkdownEditor.module.css', '.content a {'],
-    island: ['native/editor/src/island.css', '.ProseMirror a {'],
-  } as const;
-
-  it.each(Object.entries(sheets))('%s: the tile sits inside the link’s box, its centre WAVE_DEPTH_EM under the baseline', (_name, [file, selector]) => {
-    const css = readFileSync(resolve(root, file), 'utf8');
+  const css = readFileSync(resolve(root, 'src/styles/story.css'), 'utf8');
+  const ruleAt = (selector: string) => {
     const at = css.indexOf(selector);
-    expect(at).toBeGreaterThanOrEqual(0);
-    const rule = css.slice(at, css.indexOf('}', at));
+    expect(at, selector).toBeGreaterThanOrEqual(0);
+    return css.slice(at, css.indexOf('}', at));
+  };
+
+  it('is the stylesheet of the reader, the web editor and the island', () => {
+    for (const file of ['src/components/molecules/CardDetail/StoryMarkdown.tsx', 'src/components/molecules/MarkdownEditor/MarkdownEditor.tsx']) {
+      expect(readFileSync(resolve(root, file), 'utf8')).toContain("import '@/styles/story.css';");
+    }
+    expect(readFileSync(resolve(root, 'scripts/native/build-editor.mjs'), 'utf8')).toContain("'src/styles/story.css'");
+  });
+
+  it('puts the tile inside the link’s box, on its bottom edge', () => {
+    const rule = ruleAt('.story-prose a:is(.story-link, :not([class])) {');
     expect(rule).toMatch(/text-decoration:\s*none/);
     expect(rule).toMatch(/background-image:\s*var\(--wave\)/);
     expect(rule).toMatch(/background-size:\s*var\(--wave-size\)/);
     // On the box's bottom edge, never past it: an inline box paints its background only inside itself.
     expect(rule).toMatch(/background-position:\s*0 100%/);
-    expect(rule).toContain(`padding-bottom: calc(${WAVE_DEPTH_EM}em + ${WAVE_TILE_H / 2}px - round(0.31em, 1px))`);
-    expect(css).toContain(`padding-bottom: calc(${WAVE_DEPTH_EM}em + ${WAVE_TILE_H / 2}px - round(0.251em, 1px))`);
+  });
+
+  // The content area ends at each face's descent (hhea, read from the web's own font files).
+  it.each([
+    ['a CJK story', '.story-prose a:is(.story-link, :not([class])) {', 0.288],
+    ['a CJK heading', '.story-prose :is(h1, h2, h3, h4, h5, h6) a:is(.story-link, :not([class])) {', 0.286],
+    ['a Latin story', ".story-prose[data-script='latin'] a:is(.story-link, :not([class])) {", 0.31],
+    ['a Latin heading', ".story-prose[data-script='latin'] :is(h1, h2, h3, h4, h5, h6) a:is(.story-link, :not([class])) {", 0.251],
+  ])('%s: the tile’s centre WAVE_DEPTH_EM under the baseline, with a fallback that needs no round()', (_name, selector, descent) => {
+    const rule = ruleAt(selector);
+    expect(rule).toContain(`padding-bottom: calc(${WAVE_DEPTH_EM}em + ${WAVE_TILE_H / 2}px - round(${descent}em, 1px))`);
+    const fallback = /padding-bottom: calc\(3px ([+-]) ([\d.]+)em\)/.exec(rule)!;
+    expect(Number(`${fallback[1]}${fallback[2]}`)).toBeCloseTo(WAVE_DEPTH_EM - descent, 6);
   });
 });

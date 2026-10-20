@@ -293,8 +293,8 @@
   white-space: normal;
 }
 
-/* A link in a bubble wears the story's pen wave (StoryMarkdown's .prose
-   .link recipe: --wave / --wave-size from lib/design/storyLinkWave, set per
+/* A link in a bubble wears the story's pen wave (src/styles/story.css's
+   story-link recipe: --wave / --wave-size from lib/design/storyLinkWave, set per
    link), at the same depth under the baseline; its words in the buttons'
    deep terracotta, which clears 4.5:1 on both bubbles' washes (plain
    terracotta is 3.45:1). The tiles fit whole along each line fragment

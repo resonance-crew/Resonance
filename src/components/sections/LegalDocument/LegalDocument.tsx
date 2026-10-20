@@ -2,8 +2,9 @@ import Markdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Divider } from '@/components/atoms/Divider/Divider';
 import { OrganicLink } from '@/components/atoms/OrganicLink/OrganicLink';
-import prose from '@/components/molecules/CardDetail/StoryMarkdown.module.css';
 import type { LegalDoc } from '@/lib/legal/legalDocs';
+import { storyScript } from '@/lib/text/script';
+import '@/styles/story.css';
 import styles from './LegalDocument.module.css';
 
 const components: Components = {
@@ -13,7 +14,9 @@ const components: Components = {
 
 /**
  * A policy page (privacy, terms, support) from docs/legal: its title, when it
- * last changed, and the Markdown in the stories' prose, with hand-drawn links.
+ * last changed, and the Markdown in the stories' prose (src/styles/story.css,
+ * set by the document's own script: the English policies as a Latin-script
+ * story), with hand-drawn links.
  */
 export function LegalDocument({ doc, updatedLabel }: { doc: LegalDoc; updatedLabel: string }) {
   return (
@@ -24,7 +27,7 @@ export function LegalDocument({ doc, updatedLabel }: { doc: LegalDoc; updatedLab
           <p className={styles.updated}>{updatedLabel}</p>
         </header>
         <Divider seed={41} spacing="clamp(20px, 3vw, 28px)" />
-        <div className={prose.prose}>
+        <div className="story-prose" data-script={storyScript(doc.title, doc.body)}>
           <Markdown remarkPlugins={[remarkGfm]} components={components}>
             {doc.body}
           </Markdown>

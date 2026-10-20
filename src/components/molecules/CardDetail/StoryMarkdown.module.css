@@ -1,155 +1,51 @@
-.prose {
-  font-family: var(--font-body);
-  font-size: 17px;
-  line-height: 1.8;
-  color: var(--color-text);
-}
-
-.prose > :first-child {
-  margin-top: 0;
-}
-
-.prose p {
-  margin: 0 0 1.1em;
-}
-
-.prose h2 {
-  font-family: var(--font-heading);
-  font-size: clamp(22px, 2.4vw, 26px);
-  font-weight: 700;
-  line-height: 1.3;
-  letter-spacing: -0.01em;
-  margin: 1.6em 0 0.6em;
-  scroll-margin-top: calc(var(--app-header-h) + 16px);
-}
-
-.prose h3 {
-  font-family: var(--font-heading);
-  font-size: clamp(18px, 2vw, 21px);
-  font-weight: 700;
-  line-height: 1.35;
-  margin: 1.4em 0 0.5em;
-  scroll-margin-top: calc(var(--app-header-h) + 16px);
-}
-
-.prose strong {
-  font-weight: 700;
-}
-
-.prose ul,
-.prose ol {
-  margin: 0 0 1.1em;
-  padding-left: 1.5em;
-}
-
-.prose li {
-  margin: 0.3em 0;
-}
-
-.prose blockquote {
-  display: flex;
-  align-items: stretch;
-  gap: 1em;
-  margin: 0 0 1.1em;
-  color: var(--color-text-muted);
-  font-style: italic;
-}
-
-.prose .blockquoteBody > :last-child {
-  margin-bottom: 0;
-}
-
-.prose .link {
-  color: var(--color-terracotta);
-  text-decoration: none;
-  /* The pen's wave repeats along the foot of every line fragment of the link
-     (--wave / --wave-size: lib/design/storyLinkWave, set per link). An inline
-     box paints its background only inside its own box, so the whole tile sits
-     inside it, on its bottom edge — never past it, or the wave's lower crests
-     are cut off. The padding puts the tile's centre WAVE_DEPTH_EM (0.29em)
-     under the baseline: the content area ends at the face's descent (DM Sans
-     0.31em, which the browser rounds to whole pixels), the padding reaches on
-     to 0.29em + 3px, and the centre is half the 6px tile above that. It fits
-     in the line's lower half-leading, so the line keeps its height. */
-  background-image: var(--wave);
-  background-repeat: repeat-x;
-  /* Whole tiles along each line fragment: the wave ends on a crest at both
-     ends of the link, never cut mid-stroke. */
-  background-repeat: round no-repeat;
-  background-size: var(--wave-size);
-  background-position: 0 100%;
-  padding-bottom: calc(3px - 0.02em);
-  padding-bottom: calc(0.29em + 3px - round(0.31em, 1px));
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
-  transition: background-image 160ms ease;
-}
-
-/* A heading's face (Playfair Display) descends less (0.251em): more
-   padding keeps the same depth under its baseline. */
-.prose h2 .link,
-.prose h3 .link {
-  padding-bottom: calc(3px + 0.039em);
-  padding-bottom: calc(0.29em + 3px - round(0.251em, 1px));
-}
-
-.prose .link:hover,
-.prose .link:focus-visible,
-.prose .link:active {
-  background-image: var(--wave-strong);
-}
-
-.prose .link:focus-visible {
-  outline: 2px solid var(--color-terracotta-light);
-  outline-offset: 3px;
-  border-radius: 4px;
-}
+/* A story's type — the body, headings, quotes, lists, code, links, and the
+   space around pictures and cards — is src/styles/story.css (.story-prose),
+   which the writer and the apps' editor island share. Here only the reader's
+   own blocks: how a picture and a card sit in the column, and the quote's body. */
 
 /* Story images render through OrganicStoryImage (curved clip, natural size).
-   A photo on its own line is its own beat in the text, so it gets more air
-   than the paragraph rhythm and sits centered in the column — no blank lines
-   needed in the Markdown. Tall shots are capped by --story-image-max-h in
-   OrganicStoryImage so a portrait photo can't run off the screen. */
-.prose .imageBlock {
-  margin: var(--story-image-gap) auto;
+   A photo on its own line is its own beat in the text (story.css gives it the
+   block gap above and below) and sits centered in the column — no blank
+   lines needed in the Markdown. Tall shots are capped by --story-image-max-h
+   in OrganicStoryImage so a portrait photo can't run off the screen. */
+.imageBlock {
+  margin-left: auto;
+  margin-right: auto;
   width: fit-content;
   max-width: 100%;
 }
 
-.prose > .imageBlock:first-child {
-  margin-top: 0;
-}
-
-.prose > .imageBlock:last-child {
-  margin-bottom: 0;
-}
-
 /* An image sharing a paragraph with text still keeps its distance. */
-.prose p > .storyImage {
+p > .storyImage {
   margin: 0.5em 0;
 }
 
 /* A line the writer deliberately left blank (see lib/markdown/blankLines). */
-.prose .blankLine {
+.blankLine {
   height: var(--story-blank-line);
 }
 
-/* A standalone card link or web link, drawn as its block (CardEmbedLink, StoryLinkCard). */
-.prose .embedBlock {
-  margin: 0 0 1.1em;
-}
-
-/* A link's card or an embedded card is narrower than the column (at most
-   520px): centred in it, as a picture is — a block of its own, not a line of
-   the text. The apps lay them out the same. */
-.prose .embedBlock > * {
+/* A standalone card link or web link, drawn as its block (CardEmbedLink,
+   StoryLinkCard). A link's card or an embedded card is narrower than the
+   column (at most 520px): centred in it, as a picture is — a block of its
+   own, not a line of the text. The apps lay them out the same. */
+.embedBlock > * {
   margin-left: auto;
   margin-right: auto;
 }
 
+.blockquoteBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.blockquoteBody > :last-child {
+  margin-bottom: 0;
+}
+
 /* Inside a quote they belong to the quoted words: at the quote's edge, beside its rail. */
-.prose .blockquoteBody .imageBlock,
-.prose .blockquoteBody .embedBlock > * {
+.blockquoteBody .imageBlock,
+.blockquoteBody .embedBlock > * {
   margin-left: 0;
   margin-right: 0;
 }

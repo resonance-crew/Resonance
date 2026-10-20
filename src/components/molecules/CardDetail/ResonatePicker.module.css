@@ -29,7 +29,7 @@
   font-family: var(--font-body);
   font-size: 15px;
   font-weight: 600;
-  /* The story link's pen wave (StoryMarkdown's .prose .link: --wave-size and
+  /* The story link's pen wave (src/styles/story.css's story link: --wave-size and
      the depth under the baseline), shown only under the pointer. */
   background-repeat: repeat-x;
   background-repeat: round no-repeat;

@@ -4,12 +4,18 @@
  * inlined — the page loads them from `?fonts=<base>` next to it in the app
  * bundle (iOS: fonts/, Android: the asset root).
  *
- *   node scripts/native/build-editor.mjs
+ * Its stylesheet is a story's type as the web sets it — src/styles/story.css,
+ * the reader's and the web writer's own rules — under a :root of the web's
+ * tokens resolved for a WebView (./islandRoot.ts), then the island's own frame
+ * and node views (native/editor/src/island.css).
+ *
+ *   npx tsx scripts/native/build-editor.mjs   (npm run native:editor)
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { islandRoot } from './islandRoot.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const src = resolve(root, 'native/editor/src');
@@ -25,7 +31,11 @@ const result = await build({
   legalComments: 'none',
 });
 const js = result.outputFiles[0].text;
-const css = readFileSync(resolve(src, 'island.css'), 'utf8');
+const css = [
+  islandRoot(readFileSync(resolve(root, 'src/styles/tokens.css'), 'utf8')),
+  readFileSync(resolve(root, 'src/styles/story.css'), 'utf8'),
+  readFileSync(resolve(src, 'island.css'), 'utf8'),
+].join('\n');
 const faces = [
   ['Playfair Display', 'PlayfairDisplay.ttf', '400 900'],
   ['DM Sans', 'DMSans.ttf', '100 1000'],

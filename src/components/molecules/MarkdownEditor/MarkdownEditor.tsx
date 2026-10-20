@@ -16,6 +16,8 @@ import { useElementSize } from '@/lib/hooks/useElementSize';
 import { UnsupportedImage, uploadImageFile } from '@/lib/images/upload';
 import type { Card } from '@/lib/db/types';
 import { getMarkdown, storyExtensions } from '@/lib/markdown/editorSchema';
+import type { StoryScript } from '@/lib/text/script';
+import '@/styles/story.css';
 import { OrganicImageNode } from './OrganicImageNode';
 import { CardEmbedNode } from './CardEmbedNode';
 import { CurvedBlockquoteNode } from './CurvedBlockquoteNode';
@@ -69,6 +71,13 @@ export interface MarkdownEditorProps {
   placeholder?: string;
   ariaLabel?: string;
   seed?: number;
+  /**
+   * How the story is set (src/styles/story.css, as the reader sets it): its
+   * script and the language of its words, on the editable root. Absent, the
+   * story is set as CJK with no `lang` of its own.
+   */
+  script?: StoryScript;
+  lang?: string;
 }
 
 /**
@@ -86,6 +95,8 @@ export function MarkdownEditor({
   placeholder,
   ariaLabel,
   seed = 17,
+  script,
+  lang,
 }: MarkdownEditorProps) {
   const t = useTranslations('write.editor');
   const [hover, setHover] = useState(false);
@@ -114,8 +125,11 @@ export function MarkdownEditor({
     ],
     content: value,
     editorProps: {
+      // Re-read on every render (useEditor applies changed options), so a new script re-sets the story at once.
       attributes: {
-        class: styles.content,
+        class: `${styles.content} story-prose`,
+        ...(script ? { 'data-script': script } : {}),
+        ...(lang ? { lang } : {}),
         // The pen wave every link in the story wears (one for all of them here; the reader seeds one per link).
         style: storyLinkWaveStyle('editor'),
         role: 'textbox',

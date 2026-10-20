@@ -75,6 +75,50 @@ describe('StoryMarkdown', () => {
   });
 });
 
+// A story is set by src/styles/story.css, which the writer and the apps' editor share:
+// the root says how (its script, its density) and in which language its words are,
+// and its blocks carry the hooks the shared rules space and set.
+describe('StoryMarkdown type', () => {
+  const root = (container: HTMLElement) => container.querySelector('.story-prose')!;
+
+  it('sets the story by its own script, its language on the story alone', () => {
+    const zh = renderWithIntl(<StoryMarkdown source={'那天早上下著小雨，我站在操場邊，看著跑道上的水窪。'} />);
+    expect(root(zh.container)).toHaveAttribute('data-script', 'cjk');
+    expect(root(zh.container)).toHaveAttribute('lang', 'zh-TW');
+    expect(root(zh.container)).not.toHaveAttribute('data-density');
+    zh.unmount();
+
+    const en = renderWithIntl(<StoryMarkdown source={'The water was too hot, but it was the first morning that felt like mine. 阿嬤 said nothing.'} />);
+    expect(root(en.container)).toHaveAttribute('data-script', 'latin');
+    expect(root(en.container)).toHaveAttribute('lang', 'en');
+  });
+
+  it('takes the script, language and density the page read off the title and story together', () => {
+    const { container } = renderWithIntl(<StoryMarkdown source={'雨'} script="latin" lang="en" density="compact" />);
+    expect(root(container)).toHaveAttribute('data-script', 'latin');
+    expect(root(container)).toHaveAttribute('lang', 'en');
+    expect(root(container)).toHaveAttribute('data-density', 'compact');
+    // The language is the story's alone: nothing outside the root claims it.
+    expect(container.querySelectorAll('[lang]')).toHaveLength(1);
+  });
+
+  it('marks its links, pictures and cards for the shared rules', () => {
+    const { container } = renderWithIntl(
+      <StoryLinkPreviewsContext.Provider value={[previewOf('https://example.com/rain')]}>
+        <StoryMarkdown source={'see [here](https://example.com/a)\n\n![postbox](https://cdn/x.webp)\n\n[A card](/card/a-quiet-night)\n\nhttps://example.com/rain'} />
+      </StoryLinkPreviewsContext.Provider>,
+    );
+    expect(screen.getByRole('link', { name: 'here' })).toHaveClass('story-link');
+    expect(screen.getByAltText('postbox').closest('.story-picture')).not.toBeNull();
+    expect(screen.getByTestId('card-embed').closest('.story-embed')).not.toBeNull();
+    // A link card is a block the prose's type stops at, not a story link.
+    const card = screen.getByRole('link', { name: 'Open link: example.com' });
+    expect(card.closest('.story-embed')).not.toBeNull();
+    expect(card).not.toHaveClass('story-link');
+    expect(container.querySelectorAll('.story-embed')).toHaveLength(2);
+  });
+});
+
 const previewOf = (url: string, extra: Partial<LinkPreview> = {}): LinkPreview => ({ url, title: `Title of ${url}`, ...extra });
 
 function renderStory(source: string, previews: LinkPreview[] | null) {

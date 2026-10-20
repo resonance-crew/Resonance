@@ -1,0 +1,373 @@
+/* ── A story's type, written once ─────────────────────────────────────
+   Every surface that sets a story sets it with these rules: the card page's
+   reader (StoryMarkdown), the web writer (MarkdownEditor) and the apps'
+   editor island (native/editor: scripts/native/build-editor.mjs inlines this
+   file before island.css, under a :root of the web's tokens resolved for a
+   WebView — scripts/native/islandRoot.ts). So the writer sees what the
+   reader will, on every platform, and there is no second copy to drift.
+
+   Why a global stylesheet: the three DOMs are different (react-markdown's
+   output, Tiptap's React node views, the island's plain-DOM node views) and
+   one of them isn't built by Next at all, so a CSS Module's hashed names
+   can't reach them all. The rules are keyed on a few global hook classes
+   instead, each consumer putting them on its own elements; everything else
+   about a block (a picture's width, a quote's rail, an embed's centring, the
+   editor's frame) stays in the consumer's own module. Import it where a
+   story is set (`import '@/styles/story.css'`); Next keeps one copy.
+
+   The hooks:
+   - .story-prose: the story's root — the reader's prose, an editor's
+     contenteditable. `data-script="latin"` sets a Latin-script story
+     (absent: CJK; lib/text/script decides, `lang` beside it);
+     `data-density="compact"` sets the phone's numbers at any width.
+   - .story-title: a story's title (the card page's h1, the writer's field),
+     taking data-script / data-density on itself as the prose does.
+   - .story-link: a text link in the reader's story. The editors' links
+     (Tiptap's Link mark) carry no class and are taken as such; every other
+     anchor in a story (a link card, an embedded card, a policy page's
+     OrganicLink) has a class of its own and is left alone.
+   - .story-picture: a picture block. .story-embed: a link card or an
+     embedded card — the prose's tracking, justification and breaking stop
+     at its edge, since it sets its own (UI) type.
+   - .story-latin-mark: an apostrophe inside a Latin word in a CJK story
+     (lib/text/script latinMarks), set in the Latin face of its element.
+
+   The numbers are tokens.css's (A story's type). Each script and each
+   density picks its set into the --s-* variables first, so a rule below
+   names its value once. Specificity stays low and flat (one class, an
+   attribute, elements) and nothing here sets a block's inline margins, so
+   the consumers' modules never fight these rules for a property. */
+
+/* ── The numbers, by script and by width ─────────────────────────────── */
+
+.story-prose,
+.story-title {
+  /* CJK, the default: a Ming title and headings over a Hei body, both CJK-first. */
+  --s-size-regular: var(--story-size);
+  --s-size-compact: var(--story-size-compact);
+  --s-leading-regular: var(--story-leading);
+  --s-leading-compact: var(--story-leading-compact);
+  --s-title-regular: var(--story-title);
+  --s-title-compact: var(--story-title-compact);
+  --s-title-leading: var(--story-title-leading);
+  --s-track: var(--story-tracking);
+  --s-body-face: var(--font-story-sans);
+  --s-heading-face: var(--font-story-serif);
+  --s-heading-weight: var(--story-heading-weight);
+  --s-heading-track: var(--story-heading-tracking);
+  /* Justified, as Chinese is printed (clreq); the line already breaks between characters. */
+  --s-align: justify;
+
+  /* A window wider than a phone takes the regular numbers. */
+  --s-size: var(--s-size-regular);
+  --s-leading: var(--s-leading-regular);
+  --s-title: var(--s-title-regular);
+  --s-block: var(--story-block-gap);
+  --s-rule: var(--story-rule-gap);
+}
+
+/* A Latin-script story: Playfair over DM Sans, its own sizes, no tracking, ragged (WCAG 1.4.8). */
+:is(.story-prose, .story-title)[data-script='latin'] {
+  --s-size-regular: var(--story-size-latin);
+  --s-size-compact: var(--story-size-latin-compact);
+  --s-leading-regular: var(--story-leading-latin);
+  --s-leading-compact: var(--story-leading-latin-compact);
+  --s-title-regular: var(--story-title-latin);
+  --s-title-compact: var(--story-title-latin-compact);
+  --s-title-leading: var(--story-title-leading-latin);
+  --s-track: 0;
+  --s-body-face: var(--font-body);
+  --s-heading-face: var(--font-heading);
+  --s-heading-weight: var(--story-heading-weight-latin);
+  --s-heading-track: 0;
+  --s-align: start;
+}
+
+/* A phone (the web's 640 literal: a media query can't read a token), and a
+   compact panel at any width (the writer's original card), take the compact numbers. */
+@media (max-width: 640px) {
+  .story-prose,
+  .story-title {
+    --s-size: var(--s-size-compact);
+    --s-leading: var(--s-leading-compact);
+    --s-title: var(--s-title-compact);
+    --s-block: var(--story-block-gap-compact);
+    --s-rule: var(--story-rule-gap-compact);
+  }
+}
+
+:is(.story-prose, .story-title)[data-density='compact'] {
+  --s-size: var(--s-size-compact);
+  --s-leading: var(--s-leading-compact);
+  --s-title: var(--s-title-compact);
+  --s-block: var(--story-block-gap-compact);
+  --s-rule: var(--story-rule-gap-compact);
+}
+
+/* ── The title ───────────────────────────────────────────────────────── */
+
+/* Never negative tracking; lining figures, so 「2400 公尺」 stands level. */
+.story-title {
+  font-family: var(--s-heading-face);
+  font-weight: var(--s-heading-weight);
+  font-size: var(--s-title);
+  line-height: var(--s-title-leading);
+  letter-spacing: calc(var(--s-heading-track) * 1em);
+  color: var(--color-text);
+  font-variant-numeric: lining-nums;
+  text-wrap: balance;
+  text-autospace: normal;
+  line-break: strict;
+  overflow-wrap: anywhere;
+}
+
+/* ── The body ────────────────────────────────────────────────────────── */
+
+/* text-justify stays auto (inter-character would space out English words in a
+   Chinese line), hanging punctuation off and text-spacing-trim initial (clreq:
+   Traditional Chinese doesn't hang). */
+.story-prose {
+  font-family: var(--s-body-face);
+  font-size: var(--s-size);
+  line-height: var(--s-leading);
+  letter-spacing: calc(var(--s-track) * 1em);
+  color: var(--color-text);
+  text-align: var(--s-align);
+  line-break: strict;
+  overflow-wrap: anywhere;
+  text-autospace: normal;
+}
+
+.story-prose :is(p, ul, ol, blockquote, pre, table) {
+  margin: 0 0 calc(var(--story-para-gap) * 1em);
+}
+
+/* No paragraph ends on a single character. */
+.story-prose :is(p, li) {
+  text-wrap: pretty;
+}
+
+.story-prose :is(strong, b) {
+  font-weight: var(--story-bold);
+}
+
+/* em stays the oblique the writer chose (synthesized for a CJK face). */
+
+/* ── Headings ────────────────────────────────────────────────────────── */
+
+/* h2–h6 by size relative to the body, margins in the heading's own em: they
+   cut the story into sections and bind to the text after them. A story's
+   `#` is an h1 in the editors and is drawn as the reader's h2 (the reader
+   renders it as an h2 element, so the page keeps one h1). */
+.story-prose :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--s-heading-face);
+  font-weight: var(--s-heading-weight);
+  line-height: var(--story-heading-leading);
+  letter-spacing: calc(var(--s-heading-track) * 1em);
+  text-align: start;
+  text-wrap: balance;
+  font-variant-numeric: lining-nums;
+  scroll-margin-top: calc(var(--app-header-h) + 16px);
+}
+
+.story-prose :is(h1, h2) {
+  font-size: calc(var(--story-h2) * 1em);
+  margin: calc(var(--story-heading-above) * 1em) 0 calc(var(--story-h2-below) * 1em);
+}
+
+.story-prose :is(h3, h4, h5, h6) {
+  font-size: calc(var(--story-h3) * 1em);
+  margin: calc(var(--story-heading-above) * 1em) 0 calc(var(--story-h3-below) * 1em);
+}
+
+/* First in the story, a quote or a list item: nothing above it to part from. */
+.story-prose :is(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
+}
+
+/* ── Quotes ──────────────────────────────────────────────────────────── */
+
+/* Upright and muted (no synthetic slanted Chinese), at the body's size, beside
+   the pen's vertical rail each consumer draws as the quote's first child.
+   Headings inside take the quote's muted ink. */
+.story-prose blockquote {
+  display: flex;
+  align-items: stretch;
+  gap: 1em;
+  color: var(--color-text-muted);
+  font-style: normal;
+}
+
+/* ── Lists ───────────────────────────────────────────────────────────── */
+
+.story-prose :is(ul, ol) {
+  padding-left: calc(var(--story-list-indent) * 1em);
+}
+
+.story-prose li {
+  margin: calc(var(--story-item-gap) * 1em) 0;
+}
+
+.story-prose li > p:last-child {
+  margin-bottom: 0;
+}
+
+.story-prose li::marker {
+  color: var(--color-text-muted);
+}
+
+/* ── Code ────────────────────────────────────────────────────────────── */
+
+.story-prose code {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: calc(var(--story-code) * 1em);
+  letter-spacing: 0;
+  padding: 0.1em 0.3em;
+  border-radius: 6px;
+  background: var(--story-code-tint);
+}
+
+.story-prose pre {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 1em;
+  line-height: 1.6;
+  letter-spacing: 0;
+  text-align: start;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--story-code-tint);
+  overflow-x: auto;
+}
+
+.story-prose pre code {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+}
+
+/* ── Tables (GFM, read only: the editor can't write one) — a guard, not a design ── */
+
+.story-prose table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  text-align: start;
+}
+
+.story-prose :is(th, td) {
+  padding: 6px 12px;
+}
+
+.story-prose th {
+  font-weight: var(--story-bold);
+}
+
+/* ── The pen rule (the editors'; the reader draws a Divider at --s-rule) ── */
+
+.story-prose hr {
+  border: none;
+  border-top: 1.2px solid var(--color-text-muted);
+  opacity: 0.5;
+  margin: var(--s-rule) 0;
+}
+
+/* ── Blocks: pictures, link cards, card embeds ──────────────────────── */
+
+/* Their own beat in the text, with air above and below; the consumer centres
+   them (or keeps them at a quote's edge) with its own inline margins. */
+.story-prose .story-picture {
+  margin-top: var(--s-block);
+  margin-bottom: var(--s-block);
+}
+
+/* A card sets its own type: the prose's tracking, justification and
+   breaking stop at its edge. */
+.story-prose .story-embed {
+  margin-top: var(--s-block);
+  margin-bottom: var(--s-block);
+  letter-spacing: normal;
+  text-align: start;
+  line-break: auto;
+  overflow-wrap: normal;
+}
+
+/* The story's own edges: nothing above its first block or below its last. */
+.story-prose > :first-child {
+  margin-top: 0;
+}
+
+.story-prose > :last-child {
+  margin-bottom: 0;
+}
+
+/* ── Links ───────────────────────────────────────────────────────────── */
+
+/* The words in the deep terracotta every label on paper wears (6.1:1; plain
+   terracotta is 3.5:1); the pen's wave in terracotta repeats along the foot of
+   every line fragment (--wave / --wave-strong / --wave-size:
+   lib/design/storyLinkWave, set per link in the reader and once on an
+   editor's root). An inline box paints its background only inside its own
+   box, so the whole 6px tile sits inside it, on its bottom edge — never past
+   it, or the wave's lower crests are cut. The padding puts the tile's centre
+   WAVE_DEPTH_EM (0.29em) under the baseline: the content area ends at the
+   face's descent (hhea, which the browser rounds to whole pixels — read from
+   the web's own font files: Noto Sans TC 0.288em, Noto Serif TC 0.286, DM
+   Sans 0.31, Playfair Display 0.251), the padding reaches on to
+   0.29em + 3px, and the centre is half the tile above that. It fits in the
+   line's lower half-leading, so the line keeps its height. Each face has its
+   own pair of declarations: the first is the fallback for a browser without
+   round() (a var() inside would void it), the second the exact one. */
+.story-prose a:is(.story-link, :not([class])) {
+  color: var(--button-on-tonal);
+  text-decoration: none;
+  background-image: var(--wave);
+  background-repeat: repeat-x;
+  /* Whole tiles along each line fragment: the wave ends on a crest at both
+     ends of the link, never cut mid-stroke. */
+  background-repeat: round no-repeat;
+  background-size: var(--wave-size);
+  background-position: 0 100%;
+  padding-bottom: calc(3px + 0.002em);
+  padding-bottom: calc(0.29em + 3px - round(0.288em, 1px));
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: background-image 160ms ease;
+}
+
+.story-prose :is(h1, h2, h3, h4, h5, h6) a:is(.story-link, :not([class])) {
+  padding-bottom: calc(3px + 0.004em);
+  padding-bottom: calc(0.29em + 3px - round(0.286em, 1px));
+}
+
+.story-prose[data-script='latin'] a:is(.story-link, :not([class])) {
+  padding-bottom: calc(3px - 0.02em);
+  padding-bottom: calc(0.29em + 3px - round(0.31em, 1px));
+}
+
+.story-prose[data-script='latin'] :is(h1, h2, h3, h4, h5, h6) a:is(.story-link, :not([class])) {
+  padding-bottom: calc(3px + 0.039em);
+  padding-bottom: calc(0.29em + 3px - round(0.251em, 1px));
+}
+
+.story-prose a:is(.story-link, :not([class])):is(:hover, :focus-visible, :active) {
+  background-image: var(--wave-strong);
+}
+
+.story-prose a:is(.story-link, :not([class])):focus-visible {
+  outline: 2px solid var(--color-terracotta-light);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ── An apostrophe inside a Latin word, in a CJK story ──────────────── */
+
+/* A CJK face draws ‘ ’ full-width, a half-em hole inside don’t. */
+.story-prose:not([data-script='latin']) .story-latin-mark {
+  font-family: var(--font-dm-sans, 'DM Sans'), var(--s-body-face);
+}
+
+.story-prose:not([data-script='latin']) :is(h1, h2, h3, h4, h5, h6) .story-latin-mark,
+.story-title:not([data-script='latin']) .story-latin-mark {
+  font-family: var(--font-playfair, 'Playfair Display'), var(--s-heading-face);
+}

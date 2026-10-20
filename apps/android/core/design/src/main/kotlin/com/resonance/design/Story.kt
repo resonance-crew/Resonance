@@ -73,7 +73,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** How a run of story text looks: the reader's `.prose` styles (StoryMarkdown.module.css). */
+/** How a run of story text looks: the reader's `.story-prose` styles (src/styles/story.css). */
 data class ProseStyle(
     val family: AppFonts.Family,
     val size: Float,

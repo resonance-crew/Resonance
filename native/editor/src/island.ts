@@ -98,7 +98,7 @@ const IslandImage = BlockImage.extend({
   addNodeView() {
     return ({ node }) => {
       const dom = document.createElement('figure');
-      dom.className = 'image';
+      dom.className = 'image story-picture';
       const img = document.createElement('img');
       img.src = String(node.attrs.src ?? '');
       img.alt = String(node.attrs.alt ?? '');
@@ -120,7 +120,7 @@ const IslandCardEmbed = CardEmbed.extend({
   addNodeView() {
     return ({ node }) => {
       const dom = document.createElement('div');
-      dom.className = 'card-embed';
+      dom.className = 'card-embed story-embed';
       dom.contentEditable = 'false';
       const title = document.createElement('span');
       title.textContent = String(node.attrs.title ?? '');
@@ -148,6 +148,8 @@ const editor = new Editor({
   element: document.getElementById('editor')!,
   extensions,
   content: '',
+  // A story's type is the web's src/styles/story.css, keyed on this class (island.css).
+  editorProps: { attributes: { class: 'story-prose' } },
   onUpdate: () => {
     clearTimeout(timer);
     timer = setTimeout(() => send({ type: 'change', markdown: getMarkdown(editor) }), 150);

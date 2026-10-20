@@ -7,7 +7,7 @@ import styles from './MarkdownEditor.module.css';
 
 function BlockquoteView() {
   return (
-    <NodeViewWrapper as="blockquote" className={styles.blockquoteNode}>
+    <NodeViewWrapper as="blockquote">
       <Divider orientation="vertical" seed={5} color="var(--color-terracotta-light)" spacing={0} />
       <NodeViewContent className={styles.blockquoteBody} />
     </NodeViewWrapper>
