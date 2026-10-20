@@ -38,6 +38,10 @@ final class ThoughtMapStore {
     private(set) var cards: [String: MapCard] = [:]
     private(set) var cardOrder: [String] = []
     private(set) var resonated: Set<String> = []
+    /// The places of cards that are gone for now (in the trash, made private): out of view, kept, so
+    /// a card that comes back — a restore — returns to where it was, its arrows and region with it,
+    /// and is never offered in the tray as a card not on the map yet. A fresh load reads them again.
+    @ObservationIgnored private(set) var parked: [String: MapNode] = [:]
 
     var camera = MapCamera(x: 0, y: 0, s: 1)
     private(set) var viewport: CGSize = .zero
@@ -148,12 +152,18 @@ final class ThoughtMapStore {
             let missing = m.nodes.map(\.cardId).filter { byId[$0] == nil }
             for card in await service.cards(ids: missing) { byId[card.id] = card }
             applyCards(byId, resonated: c.resonated)
-            // A card that's gone (deleted, or an original I can no longer read) drops out of view.
+            // A card that's gone (deleted, in the trash, an original I can no longer read) drops out of
+            // view; its place is kept, for a card that comes back (a restore).
             nodes = [:]
             nodeOrder = []
-            for n in m.nodes where cards[n.cardId] != nil {
-                nodes[n.cardId] = n
-                nodeOrder.append(n.cardId)
+            parked = [:]
+            for n in m.nodes {
+                if cards[n.cardId] != nil {
+                    nodes[n.cardId] = n
+                    nodeOrder.append(n.cardId)
+                } else {
+                    parked[n.cardId] = n
+                }
             }
             edges = Dictionary(uniqueKeysWithValues: m.edges.map { ($0.id, $0) })
             edgeOrder = m.edges.map(\.id)
@@ -169,18 +179,34 @@ final class ThoughtMapStore {
         }
     }
 
-    /// Titles and tags may have changed in the writer: refresh the cards, keep the map.
+    /// Titles and tags may have changed in the writer: refresh the cards, keep the map — a card that
+    /// went (the trash) out of view, one that came back (a restore) where it was.
     func refreshCards() async {
         guard let service, let c = try? await service.cards() else { return }
         var byId = c.cards
-        let missing = nodeOrder.filter { byId[$0] == nil }
+        let missing = (nodeOrder + parked.keys.sorted()).filter { byId[$0] == nil }
         for card in await service.cards(ids: missing) { byId[card.id] = card }
         applyCards(byId, resonated: c.resonated)
+        Self.parkNodes(&nodes, order: &nodeOrder, parked: &parked) { cards[$0] != nil }
     }
 
-    /// Just these cards, as they are now: one that's gone (deleted, or an original I can no
-    /// longer read) drops out of view, as a fresh load would leave it; one that couldn't be read
-    /// for now stays as it was.
+    /// Out of view, the nodes whose card is gone (`known` false), into `parked`; back in view, the
+    /// parked ones whose card is known again, where they were (at the end of the drawing order).
+    static func parkNodes(_ nodes: inout [String: MapNode], order: inout [String], parked: inout [String: MapNode],
+                          known: (String) -> Bool) {
+        for id in order where !known(id) {
+            if let node = nodes.removeValue(forKey: id) { parked[id] = node }
+        }
+        order.removeAll { !known($0) }
+        for id in parked.keys.sorted() where known(id) && nodes[id] == nil {
+            nodes[id] = parked.removeValue(forKey: id)
+            order.append(id)
+        }
+    }
+
+    /// Just these cards, as they are now: one that's gone (deleted, in the trash, or an original I
+    /// can no longer read) drops out of view, as a fresh load would leave it, its place kept; one that
+    /// came back takes its place again; one that couldn't be read for now stays as it was.
     func refreshCards(_ ids: [String]) async {
         guard let service else { return }
         var byId = cards
@@ -195,10 +221,10 @@ final class ThoughtMapStore {
             } else {
                 byId[id] = nil
                 resonated.remove(id)
-                if nodes.removeValue(forKey: id) != nil { nodeOrder.removeAll { $0 == id } }
             }
         }
         applyCards(byId, resonated: resonated)
+        Self.parkNodes(&nodes, order: &nodeOrder, parked: &parked) { cards[$0] != nil }
     }
 
     private func applyCards(_ byId: [String: MapCard], resonated: Set<String>) {
@@ -718,6 +744,7 @@ final class ThoughtMapStore {
         groups[id] = nil
         groupOrder.removeAll { $0 == id }
         for nid in nodeOrder where nodes[nid]?.groupId == id { nodes[nid]?.groupId = nil }
+        for nid in parked.keys where parked[nid]?.groupId == id { parked[nid]?.groupId = nil }
         if selection == .group(id) { selection = nil }
         persist { try await $0.removeGroup(id) }
     }

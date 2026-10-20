@@ -1,3 +1,4 @@
+import DesignSystem
 import FirebaseFirestore
 import Foundation
 import ResonanceKit
@@ -121,5 +122,126 @@ import Testing
         inTrash["trashedAt"] = Timestamp(date: Date(timeIntervalSince1970: 1_800_000_000))
         inTrash["visibility"] = "private"
         #expect(ThoughtMapService.card(id: "c", data: inTrash) == nil)
+    }
+}
+
+/// The trash's moves when the card is already gone (emptied on another device, purged after its 30
+/// days): deleting it for good is what was asked for, and a restore that couldn't happen still has
+/// what showed the card read again — never the same failure at every try with the card still listed.
+private let goneCard = APIFailure(code: "not_found", message: "Card not found.", status: 404)
+
+@MainActor @Suite struct TrashMovesTests {
+    private func host(restore: @escaping (String) async throws -> RestoredCard = { _ in throw goneCard },
+                      delete: @escaping (String) async throws -> Void = { _ in }, toasts: ToastCenter) -> TrashMoves.Host {
+        TrashMoves.Host(restoreCard: restore, deleteCard: delete, toasts: toasts)
+    }
+
+    private func toasts() -> ToastCenter {
+        ToastCenter(sleep: { _ in try await Task.sleep(for: .seconds(60)) }, assistive: { false }, announce: { _ in })
+    }
+
+    @Test func deletingACardAlreadyGoneIsDeletedAndTheListsReadAgain() async throws {
+        let writer = WriteLauncher()
+        let toasts = toasts()
+        let result = try await TrashMoves.deleteForever("c1", host: host(delete: { _ in throw goneCard }, toasts: toasts), writer: writer)
+        #expect(result == .deleted)
+        #expect(writer.changes == 1)
+        #expect(writer.lastChange?.cardId == "c1")
+        #expect(toasts.current?.message == L10n.Me.Actions.deletedForever)
+    }
+
+    @Test func aCardRestoredMeanwhileStaysAndAnyOtherFailureIsTheQuestions() async {
+        let writer = WriteLauncher()
+        let toasts = toasts()
+        let restored = APIFailure(code: "conflict", message: "This card is not in the trash.", status: 409)
+        let kept = try? await TrashMoves.deleteForever("c1", host: host(delete: { _ in throw restored }, toasts: toasts), writer: writer)
+        #expect(kept == .notInTrash)
+        #expect(writer.changes == 1)
+        await #expect(throws: APIFailure.self) {
+            try await TrashMoves.deleteForever("c1", host: host(delete: { _ in throw APIFailure.unexpected(status: 502) }, toasts: toasts),
+                                               writer: writer)
+        }
+        // A refusal the question says: nothing moved, nothing to read again.
+        #expect(writer.changes == 1)
+    }
+
+    @Test func aRestoreThatFailsStillHasWhatShowedTheCardReadAgain() async {
+        let writer = WriteLauncher()
+        let toasts = toasts()
+        let came = await TrashMoves.restore("c1", answering: "original", host: host(toasts: toasts), writer: writer)
+        #expect(!came)
+        #expect(toasts.current?.message == L10n.Me.Actions.undoFailed)
+        #expect(writer.changes == 1)
+        #expect(writer.lastChange == .init(cardId: "c1", referenceCardId: "original"))
+    }
+}
+
+/// 清空垃圾桶's question (trash.spec §5.3) lives with the card box, not the shelf: the shelves all read
+/// again after an emptying, and a failure is said in the question, which stays to try once more.
+@MainActor @Suite struct EmptyTrashQuestionTests {
+    struct Refused: Error {}
+
+    @Test func aFailedEmptyingKeepsAskingWithItsErrorAndTheShelvesReadAgain() async {
+        let question = EmptyTrashQuestion()
+        question.ask()
+        var reads = 0
+        await question.confirm(empty: { throw Refused() }, changed: { reads += 1 })
+        #expect(question.asking)
+        #expect(question.failed)
+        #expect(!question.busy)
+        #expect(reads == 1)
+        // Tried again, it goes.
+        await question.confirm(empty: {}, changed: { reads += 1 })
+        #expect(!question.asking)
+        #expect(!question.failed)
+        #expect(reads == 2)
+        // Asked again later: no old error.
+        question.ask()
+        #expect(question.asking && !question.failed)
+    }
+}
+
+/// A card box shelf takes only the answer of the latest read that asked for it: 刪除 and its 復原 a
+/// second later each read the shelves again, and the first answer landing last must not put the
+/// shelf back as it was before the undo.
+@MainActor @Suite struct ShelfReadsTests {
+    @Test func anAnswerANewerReadTookOverIsDropped() {
+        let reads = ShelfReads()
+        let first = reads.begin([.published, ._private, .draft])
+        let second = reads.begin([.published])
+        #expect(!reads.current(.published, first))
+        #expect(reads.current(.published, second))
+        // What only the first asked for is still the first's.
+        #expect(reads.current(._private, first))
+        #expect(!reads.current(.trash, first))
+    }
+
+    @Test func aChangeLeavesNoReadOnItsWayCurrent() {
+        let reads = ShelfReads()
+        let before = reads.begin([.trash])
+        reads.supersedeAll()
+        #expect(!reads.current(.trash, before))
+        let after = reads.begin([.trash])
+        #expect(reads.current(.trash, after))
+    }
+}
+
+/// The thought map keeps the place of a card that went to the trash (its node out of view, never in
+/// the tray), and puts it back where it was — its region too — when the card comes back.
+@MainActor @Suite struct ThoughtMapParkingTests {
+    @Test func aTrashedCardsPlaceIsKeptAndARestoreBringsItBack() {
+        var nodes = ["a": MapNode(cardId: "a", x: 10, y: 20, groupId: nil), "b": MapNode(cardId: "b", x: 300, y: 40, groupId: "g1")]
+        var order = ["a", "b"]
+        var parked: [String: MapNode] = [:]
+        // b went to the trash: out of view, its place kept.
+        ThoughtMapStore.parkNodes(&nodes, order: &order, parked: &parked) { $0 == "a" }
+        #expect(order == ["a"])
+        #expect(nodes["b"] == nil)
+        #expect(Set(parked.keys) == ["b"])
+        // Restored: back where it was, in its region.
+        ThoughtMapStore.parkNodes(&nodes, order: &order, parked: &parked) { _ in true }
+        #expect(order == ["a", "b"])
+        #expect(nodes["b"] == MapNode(cardId: "b", x: 300, y: 40, groupId: "g1"))
+        #expect(parked.isEmpty)
     }
 }

@@ -21,6 +21,11 @@ struct CardBoxScreen: View {
     /// A pull to refresh that brought nothing back, and the shelf it was for: that shelf stayed (and
     /// a quiet line over it says why) — over that shelf only, never one chosen while it was on its way.
     @State private var refreshFailure: ShelfFailure?
+    /// The read each shelf waits for: an answer from one a newer read took over is dropped.
+    @State private var reads = ShelfReads()
+    /// 清空垃圾桶's question, here rather than on the trash shelf: the shelves read again after an
+    /// emptying (they all go to their skeletons), and the question — with what went wrong — stays.
+    @State private var emptying = EmptyTrashQuestion()
 
     /// The shelves in the strip's order: the trash always last (trash.spec §4), shown even while empty —
     /// it is read only when chosen, never to decide whether it shows.
@@ -68,8 +73,10 @@ struct CardBoxScreen: View {
             failed = false
             await load(shelf)
         }
-        // The writer or a card's ⋯ changed something: every shelf may have moved.
+        // The writer or a card's ⋯ changed something: every shelf may have moved — and no read begun
+        // before it (one on its way may hold the shelf from before) is what they show.
         .onChange(of: writer.changes) {
+            reads.supersedeAll()
             shelves = [:]
             unconfirmed = []
             Task { await load(shelf) }
@@ -78,6 +85,17 @@ struct CardBoxScreen: View {
         .onChange(of: session.awayRefreshes) {
             unconfirmed = Set(shelves.keys)
             Task { await load(shelf) }
+        }
+        // For good, every card here: the verb in red; busy through the whole emptying; a failure said
+        // in the question, which stays to try again.
+        .organicConfirm(isPresented: $emptying.asking, title: L10n.Me.Actions.emptyTrashTitle, message: L10n.Me.Actions.emptyTrashBody,
+                        cancelLabel: L10n.Me.Actions.deleteCancel, confirmLabel: L10n.Me.Actions.emptyTrash,
+                        closeLabel: L10n.Me.Actions.deleteCancel, busy: emptying.busy,
+                        error: emptying.failed ? L10n.Safety.actionError : nil, destructive: true, seed: 67) {
+            Task {
+                await emptying.confirm(empty: { _ = try await session.writing.emptyTrash() },
+                                       changed: { writer.noteChange(.init()) })
+            }
         }
     }
 
@@ -182,7 +200,7 @@ struct CardBoxScreen: View {
                     OrganicEmptyState(title: Self.empty(shelf), icon: .cards, seed: 53)
                 }
             } else if shelf == .trash {
-                TrashShelf(cards: cards)
+                TrashShelf(cards: cards) { emptying.ask() }
             } else if shelf == .linked {
                 MiniCardList(cards: cards)
             } else if Self.owned.contains(shelf) {
@@ -213,22 +231,28 @@ struct CardBoxScreen: View {
         }
         guard force || shelves[s] == nil || unconfirmed.contains(s) else { return nil }
         let asked = Self.asked(with: s, force: force, known: Set(shelves.keys), unconfirmed: unconfirmed)
+        let read = reads.begin(asked)
         do {
             let answered = try await session.reading.cardBox(shelves: asked)
-            for (shelf, cards) in answered {
+            // A shelf a newer read asked for since (a change, an undo a moment later) waits for that one's answer.
+            for (shelf, cards) in answered where reads.current(shelf, read) {
                 shelves[shelf] = cards
                 unconfirmed.remove(shelf)
             }
             // The kept published shelf is the server's latest, whichever shelf asked for it.
-            if let published = answered[.published], let uid = session.uid { session.kept.save(published, as: .published, uid: uid) }
+            if let published = answered[.published], reads.current(.published, read), let uid = session.uid {
+                session.kept.save(published, as: .published, uid: uid)
+            }
+            // Taken over: the newer read says what there is to say about this shelf.
+            guard reads.current(s, read) else { return nil }
             let missing = answered[s] == nil
             // The page-wide state is the shelf on screen's: a shelf left behind can't turn another's skeleton into an error.
             if s == shelf { failed = missing }
             if !missing, s == shelf { refreshFailure = nil }
             return missing ? .failed : nil
         } catch {
-            // Left for another shelf (its task cancelled): not a failure to show.
-            guard !Task.isCancelled else { return nil }
+            // Left for another shelf (its task cancelled), or taken over by a newer read: not a failure to show.
+            guard !Task.isCancelled, reads.current(s, read) else { return nil }
             if s == shelf { failed = true }
             return RefreshFailure(error)
         }
@@ -351,24 +375,14 @@ private struct ManagedCardList: View {
 /// keeps them — and, while an anonymous card is here, that the notes left on it went with it.
 private struct TrashShelf: View {
     let cards: [FeedCard]
-    @Environment(WriteLauncher.self) private var writer
-    @Environment(SessionStore.self) private var session
+    /// 清空垃圾桶: the question is the card box's (it outlives the shelf reading again).
+    let onEmpty: () -> Void
     @Environment(\.window) private var window
-    @State private var emptying = false
-    @State private var busy = false
-    @State private var failed = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             header.alignedWithCardGrid()
             TrashCardList(cards: cards)
-        }
-        // For good, every card here: the verb in red; busy through the whole emptying.
-        .organicConfirm(isPresented: $emptying, title: L10n.Me.Actions.emptyTrashTitle, message: L10n.Me.Actions.emptyTrashBody,
-                        cancelLabel: L10n.Me.Actions.deleteCancel, confirmLabel: L10n.Me.Actions.emptyTrash,
-                        closeLabel: L10n.Me.Actions.deleteCancel, busy: busy, error: failed ? L10n.Safety.actionError : nil,
-                        destructive: true, seed: 67) {
-            Task { await empty() }
         }
     }
 
@@ -381,10 +395,7 @@ private struct TrashShelf: View {
         .foregroundStyle(Tokens.textMuted)
         .fixedSize(horizontal: false, vertical: true)
         // It only opens a question, which is red: the tonal red, as Settings' 刪除帳號.
-        let button = OrganicButton(L10n.Me.Actions.emptyTrash, variant: .dangerTonal, size: .sm) {
-            failed = false
-            emptying = true
-        }
+        let button = OrganicButton(L10n.Me.Actions.emptyTrash, variant: .dangerTonal, size: .sm) { onEmpty() }
         .fixedSize()
         if window.layoutClass == .compact {
             // A phone: the button under the lines, at their start.
@@ -399,21 +410,57 @@ private struct TrashShelf: View {
             }
         }
     }
+}
 
-    private func empty() async {
+/// 清空垃圾桶's question (trash.spec §5.3): asked first, busy through the whole emptying, then gone —
+/// or, when it didn't all go, still asking with the error, to try once more. What is left is read
+/// again either way (`changed`), under the question.
+@MainActor @Observable
+final class EmptyTrashQuestion {
+    var asking = false
+    private(set) var busy = false
+    private(set) var failed = false
+
+    func ask() {
+        failed = false
+        asking = true
+    }
+
+    func confirm(empty: () async throws -> Void, changed: () -> Void) async {
         guard !busy else { return }
         busy = true
         failed = false
         defer { busy = false }
         do {
-            _ = try await session.writing.emptyTrash()
-            emptying = false
+            try await empty()
+            asking = false
         } catch {
-            // What is left is read again, and the question stays to try once more.
             failed = true
         }
-        writer.noteChange(.init())
+        changed()
     }
+}
+
+/// Which read each card-box shelf waits for (Android's `readBy`): the shelves change under reads on
+/// their way — a card moved to the trash and its undo a second later each read them again — and an
+/// answer from a read a newer one took over (or begun before a change) must not put back the shelf
+/// as it was before.
+final class ShelfReads {
+    private var count = 0
+    private var by: [ReadingAPI.CardBoxShelf: Int] = [:]
+
+    /// A read of `shelves` begins: it is the one they wait for now.
+    func begin(_ shelves: Set<ReadingAPI.CardBoxShelf>) -> Int {
+        count += 1
+        for shelf in shelves { by[shelf] = count }
+        return count
+    }
+
+    /// Whether `read`'s answer is still what `shelf` waits for.
+    func current(_ shelf: ReadingAPI.CardBoxShelf, _ read: Int) -> Bool { by[shelf] == read }
+
+    /// Something changed: no read on its way is what any shelf waits for.
+    func supersedeAll() { by = [:] }
 }
 
 /// The trash's cards (ProfileTabs' trash shelf): each with its caption under the byline and the

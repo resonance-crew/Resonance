@@ -9,6 +9,35 @@ import SwiftUI
 /// is said about it — the toast, the banner, the notice — outlives whatever asked: it belongs to the
 /// session (the toast host, the shell's notice). The web's lib/data/trash.
 @MainActor enum TrashMoves {
+    /// What the moves ask of the server and where they say how it went: the session's, or a test's.
+    struct Host {
+        var restoreCard: (String) async throws -> RestoredCard
+        /// Deletes for good, only while the card is still in the trash (`onlyIfTrashed`).
+        var deleteCard: (String) async throws -> Void
+        var toasts: ToastCenter
+        /// A card's preview the lists remembered, gone with the move.
+        var forget: (String) -> Void
+        /// A restored resonance came back on its own: the shell's notice says so.
+        var restoredAlone: () -> Void
+
+        init(restoreCard: @escaping (String) async throws -> RestoredCard, deleteCard: @escaping (String) async throws -> Void,
+             toasts: ToastCenter, forget: @escaping (String) -> Void = { _ in }, restoredAlone: @escaping () -> Void = {}) {
+            self.restoreCard = restoreCard
+            self.deleteCard = deleteCard
+            self.toasts = toasts
+            self.forget = forget
+            self.restoredAlone = restoredAlone
+        }
+
+        init(session: SessionStore) {
+            let writing = session.writing
+            self.init(restoreCard: { try await writing.restoreCard($0) },
+                      deleteCard: { try await writing.deleteCard($0, onlyIfTrashed: true) },
+                      toasts: session.toasts, forget: { [weak session] in session?.cardPreviews.forget($0) },
+                      restoredAlone: { [weak session] in session?.restoredAloneNotice = true })
+        }
+    }
+
     /// 「已移到垃圾桶 · 復原」: the toast after 刪除, whose 復原 brings the card back — even once the
     /// ⋯ that trashed it has left with its card.
     static func announceTrashed(cardId: String, title: String, answering: String?, session: SessionStore, writer: WriteLauncher) {
@@ -27,19 +56,27 @@ import SwiftUI
     /// shell's notice; a failure says so (the trash is the way to try again). True when it came back.
     @discardableResult
     static func restore(_ cardId: String, answering: String?, session: SessionStore, writer: WriteLauncher) async -> Bool {
+        await restore(cardId, answering: answering, host: Host(session: session), writer: writer)
+    }
+
+    @discardableResult
+    static func restore(_ cardId: String, answering: String?, host: Host, writer: WriteLauncher) async -> Bool {
         do {
-            let restored = try await session.writing.restoreCard(cardId)
-            session.cardPreviews.forget(cardId)
+            let restored = try await host.restoreCard(cardId)
+            host.forget(cardId)
             // Coming back as a resonance, it shows the link again where the original shows it.
             writer.noteChange(.init(cardId: cardId, referenceCardId: restored.card.referenceCardId ?? answering))
             if restored.droppedResonance {
-                session.restoredAloneNotice = true
+                host.restoredAlone()
             } else {
-                session.toasts.show(L10n.Me.Actions.restored)
+                host.toasts.show(L10n.Me.Actions.restored)
             }
             return true
         } catch {
-            session.toasts.show(L10n.Me.Actions.undoFailed)
+            // What showed the card reads again all the same: one gone meanwhile (emptied on another device,
+            // purged) leaves the shelf and its page, rather than failing the same way at every try.
+            writer.noteChange(.init(cardId: cardId, referenceCardId: answering))
+            host.toasts.show(L10n.Me.Actions.undoFailed)
             return false
         }
     }
@@ -52,19 +89,26 @@ import SwiftUI
         case notInTrash
     }
 
-    /// Deletes the card for good — only while it is still in the trash (`onlyIfTrashed`). Any other
-    /// failure throws, for the question to say so and stay.
+    /// Deletes the card for good — only while it is still in the trash (`onlyIfTrashed`). A card already
+    /// gone (404: emptied on another device, purged after its 30 days) is deleted as far as the trash
+    /// goes. Any other failure throws, for the question to say so and stay.
     static func deleteForever(_ cardId: String, session: SessionStore, writer: WriteLauncher) async throws -> Forever {
+        try await deleteForever(cardId, host: Host(session: session), writer: writer)
+    }
+
+    static func deleteForever(_ cardId: String, host: Host, writer: WriteLauncher) async throws -> Forever {
         do {
-            try await session.writing.deleteCard(cardId, onlyIfTrashed: true)
+            try await host.deleteCard(cardId)
         } catch let failure as APIFailure where failure.status == 409 || failure.isConflict {
             writer.noteChange(.init(cardId: cardId))
-            session.toasts.show(L10n.Me.Actions.notInTrash)
+            host.toasts.show(L10n.Me.Actions.notInTrash)
             return .notInTrash
+        } catch let failure as APIFailure where failure.status == 404 || failure.isNotFound {
+            // Gone already: what showed it reads again, and it is what was asked for.
         }
-        session.cardPreviews.forget(cardId)
+        host.forget(cardId)
         writer.noteChange(.init(cardId: cardId))
-        session.toasts.show(L10n.Me.Actions.deletedForever)
+        host.toasts.show(L10n.Me.Actions.deletedForever)
         return .deleted
     }
 }
