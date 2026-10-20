@@ -37,6 +37,15 @@ export const BRAND_PATHS: Record<BrandName, string> = {
     'M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z',
 };
 
+/**
+ * Room kept round each mark inside its box, in grid units: the marks fill
+ * their 24 grid edge to edge, while the hand-drawn icons beside them leave
+ * most of theirs to the paper, so at the same box a mark read twice their
+ * size. Padded, a mark draws about 14 px of a 17 px slot; X's thin strokes
+ * span the corners, so it keeps a little more room.
+ */
+const INSET: Record<BrandName, number> = { line: 2, threads: 2, facebook: 2, x: 3 };
+
 export interface BrandMarkProps {
   name: BrandName;
   /** Its box, in px (the menu's icon slot is 17). */
@@ -50,7 +59,7 @@ export function BrandMark({ name, size = 17 }: BrandMarkProps) {
       className={styles.mark}
       width={size}
       height={size}
-      viewBox="0 0 24 24"
+      viewBox={`${-INSET[name]} ${-INSET[name]} ${24 + 2 * INSET[name]} ${24 + 2 * INSET[name]}`}
       fill="currentColor"
       aria-hidden="true"
       focusable="false"
