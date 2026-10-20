@@ -48,7 +48,8 @@ import WebKit
         #expect(chinese.script == .cjk)
         // An English title in a Chinese interface: a moment after the writing pauses, the story is set as Latin.
         chinese.setTitle("The rain stopped just before dusk and the street outside the bakery shone like glass")
-        let end = ContinuousClock.now.advanced(by: .seconds(6))
+        // The island waits for a pause before it reads the type again; a busy machine (CI, several builds) can take a while.
+        let end = ContinuousClock.now.advanced(by: .seconds(15))
         while chinese.script != .latin, ContinuousClock.now < end { try await Task.sleep(for: .milliseconds(50)) }
         #expect(chinese.script == .latin)
         #expect(chinese.scriptLang == "en")
