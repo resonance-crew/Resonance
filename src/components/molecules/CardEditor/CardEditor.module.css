@@ -20,6 +20,13 @@
   flex-direction: column;
 }
 
+/* The step not shown stays mounted (the story keeps its undo history and
+   selection), out of sight and of the tab order. */
+.write[hidden],
+.publish[hidden] {
+  display: none;
+}
+
 /* The steps cross by sliding a little toward their side (writing on the
    left, publishing on the right); with reduced motion, a short fade. Nothing
    moves the first time the page shows. */
@@ -104,9 +111,9 @@
   justify-content: flex-start;
 }
 
-/* 下一步's save didn't go through: under the story, in the writer's words. */
+/* 下一步's save didn't go through: at the top, under the save line, in the writer's words. */
 .saveError {
-  margin: 16px 0 0;
+  margin: 0 0 clamp(16px, 2.4vw, 24px);
   font-family: var(--font-body);
   font-size: 13px;
   line-height: 1.5;

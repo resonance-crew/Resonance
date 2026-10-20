@@ -789,6 +789,12 @@ export function CardEditor({
             </div>
           )}
 
+          {saveError && (
+            <p className={styles.saveError} role="alert">
+              {saveError}
+            </p>
+          )}
+
           {/* The title: one line of intent, in the card page's own title type. */}
           <div className={styles.titleBlock}>
             <div className={`${styles.title} story-title`} data-script={type.script}>
@@ -844,11 +850,6 @@ export function CardEditor({
             onFocusChange={(focused) => focused && (lastField.current = 'story')}
           />
 
-          {saveError && (
-            <p className={styles.saveError} role="alert">
-              {saveError}
-            </p>
-          )}
         </div>
 
         {publishLoaded && (
