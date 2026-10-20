@@ -11,6 +11,7 @@ they are in git history before 2026-10-11.
 | `fixtures/geometry.json` | golden geometry from the TypeScript (`scripts/native/geometry-fixtures.ts`) | the geometry packages' and apps' tests |
 | `fixtures/markdown-corpus*.json` | how each kind of story content round-trips through the editor | `editorSchema.test.ts`, both apps' story parsers |
 | `fixtures/story-link-cards.json` | which links stand alone and get a preview card | the web, the server, both apps |
+| `fixtures/story-script.json` | how a story is set by its script (CJK or Latin), its `lang`, and the apostrophes a CJK story sets in its Latin face (`src/lib/text/script.ts`) | the web, both apps' readers and the editor |
 | `fixtures/card-colours.json` | the cards' palette | the web and both apps |
 | `fonts/` (not committed) | the full font files `scripts/native/fetch-fonts.sh` downloads, which `subset-fonts.py` cuts into `apps/shared/fonts` | rarely, when the fonts change |
 

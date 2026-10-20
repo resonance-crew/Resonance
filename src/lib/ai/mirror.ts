@@ -1,4 +1,4 @@
-import { plainText } from '@/lib/markdown/plainText';
+import { draftScript, measure, readableProse, SCRIPT_READ_CHARS, type DraftScript } from '@/lib/text/script';
 
 /**
  * The pre-publish "mirror moment" (POST /api/cards/insight): one sentence
@@ -13,6 +13,10 @@ import { plainText } from '@/lib/markdown/plainText';
  * then shows no line at all.
  */
 
+// The draft's script is lib/text/script's — the same rule that sets a story's type — so the
+// mirror never answers in one language while the page sets the draft in the other's type.
+export { draftScript, type DraftScript };
+
 /** Less than this — CJK characters and other words together — is too little to reflect: no model call. */
 export const MIN_DRAFT_UNITS = 15;
 /** The longest line the panel shows; longer is commentary, not a mirror. */
@@ -25,56 +29,14 @@ export const MAX_INSIGHT_CHARS = 160;
  * answers; and a story may be 200 000 characters, which nothing here should
  * read through before the author's budget is spent (or at all).
  */
-export const DRAFT_READ_CHARS = 4_000;
+export const DRAFT_READ_CHARS = SCRIPT_READ_CHARS;
 
-export type DraftScript = 'han' | 'kana' | 'hangul' | 'latin' | 'other';
-
-const HAN = /\p{scx=Han}/gu;
-const KANA = /[\p{scx=Hira}\p{scx=Kana}]/gu;
-const HANGUL = /\p{scx=Hang}/gu;
-/** A run of letters in a script that spaces its words (Latin, Cyrillic, Greek…). */
-const SPACED_WORD = /[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu;
 const CJK_CHAR = /[\p{scx=Han}\p{scx=Hira}\p{scx=Kana}\p{scx=Hang}]/u;
-const LATIN = /\p{scx=Latn}/u;
-
-function count(text: string, pattern: RegExp): number {
-  return text.match(pattern)?.length ?? 0;
-}
-
-/** CJK characters and the other words of a text. */
-function measure(text: string) {
-  const han = count(text, HAN);
-  const kana = count(text, KANA);
-  const hangul = count(text, HANGUL);
-  const words = (text.replace(/[\p{scx=Han}\p{scx=Hira}\p{scx=Kana}\p{scx=Hang}]/gu, ' ').match(SPACED_WORD) ?? []);
-  const latinWords = words.filter((w) => LATIN.test(w)).length;
-  return { han, kana, hangul, cjk: han + kana + hangul, words: words.length, latinWords };
-}
-
-/** The prose of the draft's first DRAFT_READ_CHARS characters. */
-function draftProse(title: string, story: string): string {
-  return plainText(`${title}\n\n${story}`.slice(0, DRAFT_READ_CHARS));
-}
 
 /** How much there is to read: CJK characters and other words, as the read time counts them (of the first DRAFT_READ_CHARS). */
 export function draftUnits(title: string, story: string): number {
-  const m = measure(draftProse(title, story));
+  const m = measure(readableProse(title, story));
   return m.cjk + m.words;
-}
-
-/**
- * The script the draft is mostly written in, by what a reader reads most of:
- * a CJK character against a word. Kana make Han Japanese; a Latin-script draft
- * may hold a Chinese name and stays Latin.
- */
-export function draftScript(title: string, story: string): DraftScript {
-  const m = measure(draftProse(title, story));
-  if (m.cjk === 0 && m.words === 0) return 'other';
-  if (m.cjk >= m.words) {
-    if (m.hangul > m.han + m.kana) return 'hangul';
-    return m.kana * 10 >= m.cjk ? 'kana' : 'han';
-  }
-  return m.latinWords * 2 >= m.words ? 'latin' : 'other';
 }
 
 /** The language instruction the model is given for a draft in this script. */

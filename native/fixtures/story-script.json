@@ -1,0 +1,130 @@
+{
+  "note": "How a story is set by its script (src/lib/text/script.ts; read by script.test.ts on the web and by the apps' twins of the rule). Only the prose counts — Markdown, link targets and bare addresses are left out — and only the first 4000 characters of title + \"\\n\\n\" + story. `script`: cjk when Han, kana and Hangul characters (C) are at least the words of every other script (W), latin otherwise; a text with no letters at all (empty, digits or marks alone) takes `fallback` (cjk when absent; the writer passes its UI locale's, see `emptyByLocale`). `lang`: zh-TW for Han, ja when kana are a tenth or more of C, ko when Hangul outnumber the rest, en for a Latin-script text, null for no letters or a script we can't name. `latinMarks`: the UTF-16 indices of each U+2018 / U+2019 with a Latin letter immediately before and after it, which a CJK story sets in its Latin face.",
+  "cases": [
+    {
+      "id": "zh",
+      "title": "跑完 2400 公尺那天，我才懂得慢下來",
+      "story": "那天早上下著小雨，我站在操場邊，看著跑道上的水窪。\n\n## 0 公尺：出發之前\n\n教練什麼都沒說，只是點點頭。",
+      "script": "cjk",
+      "lang": "zh-TW"
+    },
+    {
+      "id": "zh-with-english-and-an-address",
+      "title": "配速",
+      "story": "那年我用 iPhone 記下每一次配速……教練只說：don’t rush. 我把紀錄放在 https://example.com/my-running-log-with-a-very-long-english-address-in-it 上面——直到終點。",
+      "script": "cjk",
+      "lang": "zh-TW"
+    },
+    {
+      "id": "en-with-a-chinese-name",
+      "title": "Grandma",
+      "story": "The water was too hot and the grind too fine, but it was the first morning that felt like mine. 阿嬤 said nothing, and poured me another cup.",
+      "script": "latin",
+      "lang": "en"
+    },
+    {
+      "id": "en-under-a-chinese-title",
+      "title": "外婆",
+      "story": "She never told me how she learned to cook. I only remember the kitchen, the radio, and the rain on the window.",
+      "script": "latin",
+      "lang": "en"
+    },
+    {
+      "id": "markdown-links-are-not-counted",
+      "title": "",
+      "story": "[今天下雨](https://example.com/the/whole/story/of/the/rainy/day/in/many/english/words) <https://example.org/another/long/english/address> 我出門散步。",
+      "script": "cjk",
+      "lang": "zh-TW"
+    },
+    {
+      "id": "markdown-around-english",
+      "title": "What 2,400 meters taught me",
+      "story": "![the track](https://cdn.example.com/track.webp)\n\n**Slow down**, the coach said. I didn’t, not that year.",
+      "script": "latin",
+      "lang": "en"
+    },
+    {
+      "id": "japanese",
+      "title": "朝",
+      "story": "はじめての朝、コーヒーを淹れた。自分だけの時間だと思った。",
+      "script": "cjk",
+      "lang": "ja"
+    },
+    {
+      "id": "korean",
+      "title": "아침",
+      "story": "처음으로 혼자 맞는 아침이었다. 커피를 내리며 생각했다.",
+      "script": "cjk",
+      "lang": "ko"
+    },
+    {
+      "id": "evenly-mixed-is-cjk",
+      "title": "",
+      "story": "雨 rain",
+      "script": "cjk",
+      "lang": "zh-TW"
+    },
+    {
+      "id": "cyrillic-is-latin-type-without-a-tag",
+      "title": "Утро",
+      "story": "Я впервые проснулся один и сварил себе кофе.",
+      "script": "latin",
+      "lang": null
+    },
+    {
+      "id": "empty",
+      "title": "",
+      "story": "",
+      "script": "cjk",
+      "lang": null
+    },
+    {
+      "id": "empty-for-an-english-writer",
+      "title": "",
+      "story": "",
+      "fallback": "latin",
+      "script": "latin",
+      "lang": null
+    },
+    {
+      "id": "digits-only",
+      "title": "2400",
+      "story": "1, 2, 3……",
+      "script": "cjk",
+      "lang": null
+    },
+    {
+      "id": "digits-only-for-an-english-writer",
+      "title": "2400",
+      "story": "1, 2, 3……",
+      "fallback": "latin",
+      "script": "latin",
+      "lang": null
+    },
+    {
+      "id": "a-picture-alone",
+      "title": "",
+      "story": "![](https://cdn.example.com/rain.webp)",
+      "fallback": "latin",
+      "script": "latin",
+      "lang": null
+    }
+  ],
+  "emptyByLocale": [
+    { "locale": "en", "script": "latin" },
+    { "locale": "zh-TW", "script": "cjk" }
+  ],
+  "latinMarks": [
+    { "text": "don’t", "indices": [3] },
+    { "text": "it’s", "indices": [2] },
+    { "text": "rock’n’roll", "indices": [4, 6] },
+    { "text": "教練只說：don’t rush.", "indices": [8] },
+    { "text": "Ça m’a plu", "indices": [4] },
+    { "text": "l‘amour", "indices": [1] },
+    { "text": "他’s", "indices": [] },
+    { "text": "‘OK’", "indices": [] },
+    { "text": "James’ book", "indices": [] },
+    { "text": "don't", "indices": [] },
+    { "text": "", "indices": [] }
+  ]
+}
