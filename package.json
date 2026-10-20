@@ -25,6 +25,8 @@
     "@aws-sdk/client-s3": "^3.1055.0",
     "@aws-sdk/s3-request-presigner": "^3.1055.0",
     "@tiptap/extension-blockquote": "^3.25.0",
+    "@tiptap/extension-bubble-menu": "^3.27.3",
+    "@tiptap/extension-floating-menu": "^3.27.3",
     "@tiptap/extension-image": "^3.25.0",
     "@tiptap/extension-paragraph": "^3.27.3",
     "@tiptap/extension-placeholder": "^3.24.0",
