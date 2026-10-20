@@ -17,6 +17,8 @@ import com.resonance.design.PullThreshold
 import com.resonance.design.firstContentGap
 import com.resonance.design.pullScale
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -206,6 +208,8 @@ internal fun LazyListScope.borderedCards(
     keyPrefix: String = "",
     /** Laid over a card's top-end corner (the owner's ⋯ on their shelves). */
     overlay: (@Composable BoxScope.(FeedCard, Int) -> Unit)? = null,
+    /** Under each card (the trash shelf's where-from and when). */
+    caption: (@Composable (FeedCard) -> Unit)? = null,
 ) {
     val n = layout.columns
     val blocks = cards.indices.chunked(n * GridBlockRows)
@@ -224,9 +228,12 @@ internal fun LazyListScope.borderedCards(
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(gap)) {
                     for (i in block) if (i % n == c) {
                         val card = cards[i]
-                        Box {
-                            BorderedStoryCard(card.story(), i, Modifier.plainClickable { open(tap(card)) }, palette = palettes[i])
-                            overlay?.invoke(this, card, i)
+                        Column {
+                            Box {
+                                BorderedStoryCard(card.story(), i, Modifier.plainClickable { open(tap(card)) }, palette = palettes[i])
+                                overlay?.invoke(this, card, i)
+                            }
+                            caption?.invoke(card)
                         }
                     }
                 }
@@ -454,3 +461,21 @@ private fun rememberQuickReturn(list: LazyListState): QuickReturn {
     return q
 }
 
+/**
+ * A strip that scrolls sideways fades out at an edge with more beyond it, so a tab (or a tool) cut
+ * by the screen's edge reads as "more this way" rather than as broken.
+ */
+internal fun Modifier.fadingEdges(scroll: androidx.compose.foundation.ScrollState, width: Dp = 32.dp): Modifier =
+    graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }.drawWithContent {
+        drawContent()
+        val w = width.toPx()
+        if (scroll.canScrollForward) drawRect(
+            androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color.Transparent, Color.Black), startX = size.width - w, endX = size.width),
+            topLeft = androidx.compose.ui.geometry.Offset(size.width - w, 0f), size = androidx.compose.ui.geometry.Size(w, size.height),
+            blendMode = androidx.compose.ui.graphics.BlendMode.DstOut,
+        )
+        if (scroll.canScrollBackward) drawRect(
+            androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color.Black, Color.Transparent), startX = 0f, endX = w),
+            size = androidx.compose.ui.geometry.Size(w, size.height), blendMode = androidx.compose.ui.graphics.BlendMode.DstOut,
+        )
+    }

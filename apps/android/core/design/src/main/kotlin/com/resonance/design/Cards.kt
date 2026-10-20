@@ -19,6 +19,7 @@ import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -35,6 +36,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import com.resonance.design.generated.IconName
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -293,19 +295,54 @@ fun StoryCard(
     content: StoryCardContent, position: Int, isLast: Boolean = false, modifier: Modifier = Modifier, isFirst: Boolean = false, inset: Dp = BandInset,
     /** The family its list gives it (CardPalette.palettes); null: its own preference. */
     palette: Int? = null,
+    /**
+     * Drawn in the picture's place, at its 0.62 ratio (the writer's preview, whose picture is the
+     * cover editor: StoryCard.tsx's `coverSlot`); null draws the card's cover as every list does.
+     */
+    cover: (@Composable BoxScope.(CoverFrame) -> Unit)? = null,
+    /** A picture of the card, not a way into it (the writer's preview): no arrow, no hover. */
+    preview: Boolean = false,
 ) {
     val palette = cardPalette(palette, content.accentHue, position)
     val seed = position * 77.0 + 13
     // A cover on its way shimmers in the card's own hue, as its skeleton does (StoryCard.tsx's --skeleton-highlight).
     WithSkeletonHue(palette.hue) {
-        StoryBand(palette, seed + 17, isLast, 32.dp, 14.dp, modifier, isFirst, inset) { StoryCardBody(content, palette, seed) }
+        StoryBand(palette, seed + 17, isLast, 32.dp, 14.dp, modifier, isFirst, inset) { StoryCardBody(content, palette, seed, cover, preview) }
+    }
+}
+
+/**
+ * What a card's picture frame hands a cover drawn in its place ([StoryCard]'s `cover`): the seed its
+ * clip wobbles by, and the card's own stripes and label for "no picture" ([StoryCardCover] draws
+ * them as the card would).
+ */
+@Immutable
+data class CoverFrame(val seed: Double, val fill: Color, val stripe: Color, val label: String)
+
+/**
+ * A card's cover as the card draws it — the picture at [url] in the organic clip under its light
+ * grain, the card's stripes while there is none — with [overlay] inside the same clip: for a slot
+ * ([StoryCard]'s `cover`) that edits the picture where it will be.
+ */
+@Composable
+fun StoryCardCover(url: String?, frame: CoverFrame, modifier: Modifier = Modifier, overlay: (@Composable () -> Unit)? = null) {
+    OrganicImage(url, frame.seed, modifier.fillMaxSize(), grain = StoryGrain.Cover, overlay = overlay) {
+        StoryImagePlaceholder(frame.fill, frame.stripe, frame.label)
     }
 }
 
 /** What a story card holds, band or bordered: cover, tags, title, excerpt, rule, byline (and the margin note). */
 @Composable
-private fun ColumnScope.StoryCardBody(content: StoryCardContent, palette: CardPalette, seed: Double) {
-    OrganicImage(content.imageUrl, seed + 5, Modifier.fillMaxWidth().aspectRatio(1 / 0.62f), grain = StoryGrain.Cover) {
+private fun ColumnScope.StoryCardBody(
+    content: StoryCardContent,
+    palette: CardPalette,
+    seed: Double,
+    cover: (@Composable BoxScope.(CoverFrame) -> Unit)? = null,
+    preview: Boolean = false,
+) {
+    if (cover != null) {
+        Box(Modifier.fillMaxWidth().aspectRatio(1 / 0.62f)) { cover(CoverFrame(seed + 5, palette.fill, palette.stripe, content.imageLabel)) }
+    } else OrganicImage(content.imageUrl, seed + 5, Modifier.fillMaxWidth().aspectRatio(1 / 0.62f), grain = StoryGrain.Cover) {
         StoryImagePlaceholder(palette.fill, palette.stripe, content.imageLabel)
     }
     // The web renders the tag row even when empty (its 8px margin still counts).
@@ -321,7 +358,7 @@ private fun ColumnScope.StoryCardBody(content: StoryCardContent, palette: CardPa
             BasicText(content.authorName, style = AppFonts.body(13f, 600, lineHeight = 1.4f))
             BasicText(content.readTime, style = AppFonts.body(12f, lineHeight = 1.4f, color = Tokens.TextMuted))
         }
-        OrganicIcon(IconName.ArrowRight, size = 18.dp, color = Tokens.Text.copy(alpha = 0.28f), strokeWidth = Tokens.Ink.value)
+        if (!preview) OrganicIcon(IconName.ArrowRight, size = 18.dp, color = Tokens.Text.copy(alpha = 0.28f), strokeWidth = Tokens.Ink.value)
     }
     if (!content.reason.isNullOrEmpty()) {
         Row(Modifier.marginTop((-4).dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -381,11 +418,17 @@ private fun ColumnScope.StoryCardSkeletonBody(palette: CardPalette, seed: Double
  * inside, 22 in. A pointer over it washes the paper a shade deeper (320 ms), as BrushWash does.
  */
 @Composable
-fun BorderedStoryCard(content: StoryCardContent, position: Int, modifier: Modifier = Modifier, palette: Int? = null) {
+fun BorderedStoryCard(
+    content: StoryCardContent, position: Int, modifier: Modifier = Modifier, palette: Int? = null,
+    /** As [StoryCard]'s: drawn in the picture's place (the writer's preview). */
+    cover: (@Composable BoxScope.(CoverFrame) -> Unit)? = null,
+    /** As [StoryCard]'s: no arrow, and no wash under a pointer. */
+    preview: Boolean = false,
+) {
     val palette = cardPalette(palette, content.accentHue, position)
     val seed = position * 77.0 + 13
     WithSkeletonHue(palette.hue) {
-        BorderedCardFrame(palette, seed, modifier) { StoryCardBody(content, palette, seed) }
+        BorderedCardFrame(palette, seed, modifier, hover = !preview) { StoryCardBody(content, palette, seed, cover, preview) }
     }
 }
 

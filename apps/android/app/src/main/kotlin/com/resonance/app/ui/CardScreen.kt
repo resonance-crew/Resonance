@@ -344,6 +344,8 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     // A tablet's article starts 32 under the header's pen line; its lists' headings have more air (round 5 E2).
     val cls = LocalWindowLayout.current.cls
     val articleTop = cls.firstContentGap(16.dp)
+    // Moved to the trash on this page a moment ago: the banner's title takes the focus as it comes.
+    var trashedHere by remember { mutableIntStateOf(0) }
     Box(Modifier.fillMaxSize().cream().onGloballyPositioned { progress.page = it }) {
     Column(Modifier.fillMaxSize().padding(top = if (phase == "loaded") 0.dp else top)) {
         when (phase) {
@@ -358,7 +360,9 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
             "failed" -> OrganicEmptyState(L10n.Native.loadError, L10n.Native.retry, { model.refresh(changes, session.lastCardChange, retry = true) }, action = EmptyAction.Outline)
             else -> detail?.let { d ->
                 val card = d.card
-                val resonance = (listOfNotNull(d.referenceCard) + resonances).distinctBy { it.id }
+                // The owner's card in the trash (trash.spec §5.4): the banner first, no share, no ⋯, no lists.
+                val trashedOwn = ownTrashed(d)
+                val resonance = if (trashedOwn) emptyList() else (listOfNotNull(d.referenceCard) + resonances).distinctBy { it.id }
                 // Related cards are the feed's kind of list: bands, or the bordered grid when expanded;
                 // the page's other lists follow it.
                 val relatedLayout = cardListLayout()
@@ -368,6 +372,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                         val text = remember(card.title, d.story) { StoryScripts.storyType(card.title, d.story) }
                         val type = StoryType.of(text.script, cls)
                         Column(heading.onItem.then(byline.onItem).onPlaced { articleCoords = it }.padding(start = columns.start, end = columns.end).padding(top = articleTop)) {
+                            if (trashedOwn) TrashedCardBanner(card, d.anonymous, compact = cls == LayoutClass.Compact, focusTicket = trashedHere, onDeleted = popToRoot)
                             ArticleHead(card, d.anonymous, type, text.lang, showsAuthor = !railed, titleModifier = heading.onHeading, bylineModifier = byline.onHeading) { open(Route.Author(it)) }
                             // The story alone is what the bar's progress measures (not the cover, title or lists).
                             Box(Modifier.onGloballyPositioned(progress::story)) {
@@ -392,7 +397,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                         }
                     }
                     // The owner's linked cards and the resonances take the related list's layout (round 5 D3).
-                    if (d.isOwner && linked.isNotEmpty()) {
+                    if (d.isOwner && !trashedOwn && linked.isNotEmpty()) {
                         val air = cardSectionAir(cls, phoneTop = 0, phoneBelow = 24)
                         item {
                             BasicText(
@@ -409,7 +414,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                         answerCards(resonance, open, keyPrefix = "resonance:", related = relatedLayout)
                         item { Spacer(Modifier.height(16.dp)) }
                     }
-                    if (related.isNotEmpty()) {
+                    if (related.isNotEmpty() && !trashedOwn) {
                         sectionHeading(L10n.Card.related, cardSectionAir(cls, phoneBelow = 56))
                         storyCards(related, open, layout = relatedLayout)
                         item { Spacer(Modifier.height(16.dp)) }
@@ -435,7 +440,8 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
         leading = { if (chrome == null) detail?.let { d -> BarAuthor(d.card, d.anonymous, visible = phase == "loaded" && bylineGone && !railed) { open(Route.Author(it)) } } },
         progress = if (phase == "loaded") progress::shown else null,
     ) {
-        detail?.let { d ->
+        // The owner's card in the trash has neither: its banner holds the way back (and nothing is shared from it).
+        detail?.takeUnless(::ownTrashed)?.let { d ->
             val card = d.card
             val hue = card.accentHue ?: 55.0
             // Only a card whoever gets its link can open: published, public, not in the trash.
@@ -448,9 +454,13 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
             // The ⋯ lives in the bar, as phone apps keep a page's actions: the owner's, or the reader's safety menu.
             if (d.isOwner) {
                 // Its own page is underneath the writer, so the card isn't opened again on the way out.
+                // 刪除 leaves the page where it is: it reads the card again and shows the trash banner.
                 CardActionsMenu(
-                    session, card.id, card.visibility.value, open, seed = hue + 3, showsCard = false, onDeleted = popToRoot, trigger = MenuTrigger.Bare,
+                    session, card.id, card.visibility.value, open, seed = hue + 3, showsCard = false, trigger = MenuTrigger.Bare,
                     referenceCardId = card.referenceCardId, referenceTitle = d.referenceCard?.title,
+                    referenceAnonymous = d.referenceCard?.anonymous,
+                    published = card.publishedAt != null, anonymous = d.anonymous, title = card.title,
+                    trashFeedback = TrashFeedback.Page, onTrashed = { trashedHere++ },
                 )
             } else {
                 // An anonymous card hides its author: the menu only reports it (the server knows who wrote it).

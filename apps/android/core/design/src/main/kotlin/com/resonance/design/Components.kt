@@ -781,6 +781,8 @@ fun OrganicEmptyState(
     seed: Double = 23.0,
     fill: Boolean = false,
     modifier: Modifier = Modifier,
+    /** The action is working on its last tap: its loader shows and it takes no other ([OrganicButton]'s `loading`). */
+    actionLoading: Boolean = false,
 ) {
     val content: @Composable () -> Unit = {
         Column(
@@ -809,8 +811,8 @@ fun OrganicEmptyState(
             if (actionTitle != null && onAction != null) {
                 Box(Modifier.height(20.dp))
                 when (action) {
-                    EmptyAction.Primary -> OrganicButton(actionTitle, small = icon != null, onClick = onAction)
-                    EmptyAction.Outline -> OrganicButton(actionTitle, variant = ButtonVariant.Tonal, small = icon != null, onClick = onAction)
+                    EmptyAction.Primary -> OrganicButton(actionTitle, small = icon != null, loading = actionLoading, onClick = onAction)
+                    EmptyAction.Outline -> OrganicButton(actionTitle, variant = ButtonVariant.Tonal, small = icon != null, loading = actionLoading, onClick = onAction)
                 }
             }
         }

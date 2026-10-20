@@ -185,6 +185,9 @@ object StoryScripts {
         return marks
     }
 
+    /** `[\p{scx=Han}\p{scx=Hira}\p{scx=Kana}\p{scx=Hang}]`: a character CJK text is read by (ReadTime counts these one by one). */
+    internal fun isHanKanaOrHangul(cp: Int): Boolean = inRanges(HAN, cp) || inRanges(KANA, cp) || inRanges(HANGUL, cp)
+
     private fun isLatinScript(cp: Int): Boolean = Character.UnicodeScript.of(cp) == Character.UnicodeScript.LATIN
 
     private fun inRanges(ranges: IntArray, cp: Int): Boolean {
