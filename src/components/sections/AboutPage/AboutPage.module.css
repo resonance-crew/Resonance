@@ -370,21 +370,27 @@
 
 /* ── The team ────────────────────────────────────────────────────── */
 
+/* Five abreast, three or two a row on narrower screens, a short last row centred. */
 .team {
+  --team-gap: 20px;
+  --team-per-row: 5;
   list-style: none;
   margin: 0 auto;
   padding: 0;
-  max-width: 760px;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 32px 20px;
+  max-width: 800px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 32px var(--team-gap);
 }
 
 .member {
+  flex: 0 0 calc((100% - (var(--team-per-row) - 1) * var(--team-gap)) / var(--team-per-row));
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 14px;
+  text-align: center;
 }
 
 .memberName {
@@ -468,11 +474,15 @@
   .shifts {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .team {
+    --team-per-row: 3;
+  }
 }
 
 @media (max-width: 640px) {
   .team {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    --team-per-row: 2;
   }
 
   /* The comparison reads row by row: what others do, then ours under it. */

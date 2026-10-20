@@ -22,14 +22,15 @@ const CONTRASTS = ['traffic', 'algorithm', 'performance', 'roles', 'followers', 
 /**
  * The team, by name and face only: no school, major, year or title — we'd
  * rather be met as whole people, as the page says. The pictures are square
- * crops of the pitch deck's photos; the English names as their passports
- * spell them.
+ * crops of the pitch deck's photos (one not taken yet is an empty frame);
+ * the English names as each of us gives them.
  */
-const TEAM = [
+const TEAM: { zh: string; en: string; src?: string; seed: number }[] = [
   { zh: '陳念誠', en: 'Nian-Cheng Chen', src: '/team/chen.webp', seed: 11 },
   { zh: '蕭力文', en: 'Li-Wen Hsiao', src: '/team/hsiao.webp', seed: 37 },
   { zh: '方昱晴', en: 'Yu-Ching Fang', src: '/team/fang.webp', seed: 61 },
   { zh: '鄭義信', en: 'Yi-Hsin Cheng', src: '/team/cheng.webp', seed: 83 },
+  { zh: '薛惠馨', en: 'Winnie Xue', seed: 107 },
 ];
 
 /** The course where the team met. */
@@ -233,7 +234,13 @@ export function AboutPage() {
           <ul className={styles.team}>
             {TEAM.map((m) => (
               <li key={m.zh} className={styles.member}>
-                <HandDrawnAvatar src={m.src} initials={latin ? m.en : m.zh} size={112} seed={m.seed} />
+                <HandDrawnAvatar
+                  src={m.src}
+                  initials={m.src ? (latin ? m.en : m.zh) : ''}
+                  color={m.src ? undefined : 'var(--color-cream)'}
+                  size={112}
+                  seed={m.seed}
+                />
                 <span className={styles.memberName}>{latin ? m.en : m.zh}</span>
               </li>
             ))}
