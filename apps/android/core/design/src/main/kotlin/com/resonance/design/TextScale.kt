@@ -44,6 +44,37 @@ fun CappedTextScale(content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalDensity provides scaled, content = content)
 }
 
+/** The most a story's own words — its title and its body — grow with the system's text size. */
+const val MAX_READING_SCALE = 2f
+
+/**
+ * How much of the system's text size setting a story's title and words follow
+ * (the owner's call, reading-type §8: "the reading curve"): all of it, up to
+ * twice the normal size — at 2× a phone's column still holds about ten CJK
+ * characters a line, clreq's floor — while everything around the story (its
+ * byline and meta, buttons, tabs, the cards it embeds) keeps [textScale]'s
+ * 1.25 cap. Smaller text stays smaller, as there. Android's own non-linear
+ * curve (API 34+) still grows large sizes less than small ones, so a story's
+ * headings keep their place above its words. iOS follows the same numbers.
+ */
+fun readingTextScale(systemScale: Float): Float = minOf(systemScale, MAX_READING_SCALE)
+
+/**
+ * A story's title and words at [readingTextScale] of the system's setting —
+ * put around them alone, never around the screen: inside, Compose's `sp`, the
+ * story's CSS line boxes ([RichCssText], [cssFontPx]) and the em-based gaps
+ * between its blocks all grow with it. Like [CappedTextScale] it starts from
+ * the setting itself, not from the density in force, so it lands on the same
+ * scale under the root's cap or anywhere else.
+ */
+@Composable
+fun ReadingTextScale(content: @Composable () -> Unit) {
+    val d = LocalDensity.current
+    val system = LocalConfiguration.current.fontScale
+    val scaled = remember(d.density, system) { Density(d.density, readingTextScale(system)) }
+    CompositionLocalProvider(LocalDensity provides scaled, content = content)
+}
+
 /**
  * A CSS font size (the web's px, which these screens count in `sp`) in device
  * pixels with the text scale in force: what a Compose `Text` of that many `sp`
