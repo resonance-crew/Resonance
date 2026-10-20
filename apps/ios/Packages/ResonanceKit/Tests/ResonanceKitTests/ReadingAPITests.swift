@@ -244,6 +244,50 @@ extension HTTPRequest {
         #expect(shelves[.linked] == nil)
     }
 
+    @Test func theTrashIsAShelfOfItsOwnInTheSameRequest() async throws {
+        let trashed = WritingAPITests.trashed
+        let transport = StubTransport(body: #"{"published":{"cards":[\#(Self.card("p1"))]},"trash":{"cards":[\#(trashed)]}}"#)
+        let shelves = try await api(transport).cardBox(shelves: [.trash, .published])
+        #expect(transport.requests.first?.query("shelves") == "published,trash")
+        #expect(shelves[.published]?.map(\.id) == ["p1"])
+        let card = try #require(shelves[.trash]?.first)
+        #expect(card.isTrashed)
+        #expect(card.restoresTo == ._public)
+        #expect(card.purgeDate == ISO8601.date("2026-10-31T08:00:00.000Z"))
+
+        let one = StubTransport(body: #"{"cards":[\#(trashed)]}"#)
+        #expect(try await api(one).cardBox(.trash).map(\.isTrashed) == [true])
+        #expect(one.requests.first?.bare == "/me/cards")
+        #expect(one.requests.first?.query("tab") == "trash")
+    }
+
+    /// A live card says nothing of the trash; a trashed one when it goes, the server's date first.
+    @Test func aCardInTheTrashSaysWhenItGoes() throws {
+        let live = try JSONDecoder().decode(FeedCard.self, from: Data(Self.card.utf8))
+        #expect(!live.isTrashed && live.trashedDate == nil && live.purgeDate == nil && live.restoresTo == nil)
+        // An answer without `purgeAt` (it is optional): 30 days after it went in.
+        let noPurge = Self.card.replacingOccurrences(of: #""reason":null"#, with: #""reason":null,"trashedAt":"2026-10-01T08:00:00.000Z""#)
+        let card = try JSONDecoder().decode(FeedCard.self, from: Data(noPurge.utf8))
+        #expect(card.purgeDate == ISO8601.date("2026-10-31T08:00:00.000Z"))
+        // An unknown audience to come back to reads as private (OpenEnums), never as public.
+        #expect(OpenEnums.normalize(Data(noPurge.replacingOccurrences(of: #""trashedAt""#, with: #""restoresTo":"friends","trashedAt""#).utf8))
+            .range(of: Data(#""restoresTo":"private""#.utf8)) != nil)
+    }
+
+    /// The trash's clock (src/lib/cards/trash.ts): whole days left, rounded up, never fewer than
+    /// one; within its last day it says so.
+    @Test func theTrashCountsWholeDaysAndThenItsLastDay() {
+        let went = ISO8601.date("2026-10-01T08:00:00.000Z")!
+        let purge = CardTrash.purgeAt(trashedAt: went)
+        #expect(purge == ISO8601.date("2026-10-31T08:00:00.000Z"))
+        #expect(CardTrash.daysLeft(purgeAt: purge, now: went) == (false, 30))
+        #expect(CardTrash.daysLeft(purgeAt: purge, now: went.addingTimeInterval(60)) == (false, 30))
+        #expect(CardTrash.daysLeft(purgeAt: purge, now: purge.addingTimeInterval(-CardTrash.day - 1)) == (false, 2))
+        #expect(CardTrash.daysLeft(purgeAt: purge, now: purge.addingTimeInterval(-CardTrash.day)) == (true, 1))
+        #expect(CardTrash.daysLeft(purgeAt: purge, now: purge.addingTimeInterval(-60)) == (true, 1))
+        #expect(CardTrash.daysLeft(purgeAt: purge, now: purge.addingTimeInterval(60)) == (true, 1))
+    }
+
     @Test func aStoryLinkNamesItsCard() {
         #expect(CardKey.of(href: "/card/a-walk") == "a-walk")
         #expect(CardKey.of(href: "/card/a-walk?from=story#top") == "a-walk")

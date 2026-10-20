@@ -102,7 +102,8 @@ public struct ReadingAPI: Sendable {
 
     public typealias CardBoxShelf = Operations.GetCardBox.Input.Query.TabPayload
 
-    /// One shelf of the signed-in person's card box.
+    /// One shelf of the signed-in person's card box. `.trash` is the owner's cards in the trash,
+    /// the latest moved there first (at most 100), each with its `trashedAt`, `purgeAt` and `restoresTo`.
     public func cardBox(_ shelf: CardBoxShelf) async throws -> [FeedCard] {
         switch try await client.getCardBox(query: .init(tab: shelf)) {
         case let .ok(r): return try r.body.json.cards
@@ -123,6 +124,7 @@ public struct ReadingAPI: Sendable {
             let lists: [(CardBoxShelf, Components.Schemas.CardList?)] = [
                 (.published, box.published), (._private, box._private), (.draft, box.draft),
                 (.resonated, box.resonated), (.linked, box.linked), (.bookmarks, box.bookmarks),
+                (.trash, box.trash),
             ]
             var answered: [CardBoxShelf: [FeedCard]] = [:]
             for (shelf, list) in lists where shelves.contains(shelf) {

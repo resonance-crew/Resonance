@@ -22,6 +22,10 @@ final class CardModel {
     private(set) var placeholder: FeedCard?
     /// The story, parsed once when it arrives, its bare web addresses made links.
     private(set) var blocks: [StoryBlock] = []
+    /// How the title and story are set and the language they are in, read off both together once the
+    /// card arrives (`ScriptRule.storyType`, the web's storyType); from a list's copy, its title and
+    /// excerpt until then.
+    private(set) var storyType = StoryType(script: .cjk, lang: nil)
     /// The story's h2 and h3, for a wide page's table of contents.
     private(set) var toc: [TocEntry] = []
     private(set) var resonances: [FeedCard] = []
@@ -49,6 +53,7 @@ final class CardModel {
         self.placeholder = placeholder
         self.origin = origin
         self.fetch = fetch
+        if let placeholder { storyType = ScriptRule.storyType(title: placeholder.title, story: placeholder.excerpt) }
     }
 
     convenience init(key: String, api: ReadingAPI, origin: URL, placeholder: FeedCard? = nil) {
@@ -83,6 +88,7 @@ final class CardModel {
         do {
             let detail = try await fetch(key)
             self.detail = detail
+            storyType = ScriptRule.storyType(title: detail.card.title, story: detail.story)
             // Addresses written bare are links, as on the web (where the link rules find one).
             blocks = StoryBlock.linkingAddresses(StoryParser.parse(detail.story)) { words in
                 ChatLinks.links(in: words).map { (range: $0.range, url: $0.url.absoluteString) }

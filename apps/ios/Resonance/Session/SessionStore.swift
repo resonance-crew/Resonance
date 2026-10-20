@@ -1,3 +1,4 @@
+import DesignSystem
 import FirebaseAuth
 import GoogleSignIn
 import Observation
@@ -91,6 +92,9 @@ final class SessionStore {
     let conversations = ConversationsStore()
     /// Cards seen in lists, drawn while a card's page loads (this account's only).
     let cardPreviews = CardPreviewCache()
+    /// The app's one toast (「已移到垃圾桶 · 復原」, 「已還原」): shown over the tabs' foot by the shell
+    /// (`MainTabView`'s ToastHost), so it outlives the page that asked for it.
+    let toasts = ToastCenter()
     /// The messages this account sent that are still on their way, one queue per conversation
     /// (they outlive the thread that sent them; emptied when the account changes).
     let outboxes: ChatOutboxes
@@ -300,8 +304,9 @@ final class SessionStore {
         // Drawn until the API answers (the card box's header on a cold start).
         me = newUID.flatMap { kept.value(.me, uid: $0) }
         cardPreviews.clear()
-        // Messages still on their way were the last account's.
+        // Messages still on their way were the last account's; so was a toast's undo.
         outboxes.clear()
+        toasts.dismiss()
         push.signedIn = newUID
         // The thought map belongs to the account too (kept between visits while it is signed in).
         thoughtMap = ThoughtMapStore(api: reading)

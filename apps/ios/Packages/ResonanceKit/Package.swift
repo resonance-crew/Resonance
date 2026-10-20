@@ -2,8 +2,10 @@
 import PackageDescription
 
 // The app's non-UI core: the generated /api/v1 client (ResonanceAPI), the
-// pieces around it (auth middleware, error mapping), localization, and the
-// story format (StoryFormat: Markdown → the reader's blocks).
+// pieces around it (auth middleware, error mapping), localization, a story's
+// prose and script (ResonanceKit/Story: plain text, the script rule, what a
+// share card quotes), and the story format (StoryFormat: Markdown → the
+// reader's blocks).
 // Builds for macOS too, so `swift test` runs without a simulator.
 let package = Package(
     name: "ResonanceKit",
@@ -30,13 +32,17 @@ let package = Package(
             name: "ResonanceKit",
             dependencies: [
                 "ResonanceAPI",
+                // The story model (a story's script is StoryFormat's `StoryScript`; the rule that reads it is here).
+                "StoryFormat",
                 .product(name: "OpenAPIRuntime", package: "swift-openapi-runtime"),
                 .product(name: "OpenAPIURLSession", package: "swift-openapi-urlsession"),
+                // What a share card quotes is read block by block, as CommonMark reads the story (SharePassages).
+                .product(name: "Markdown", package: "swift-markdown"),
             ]
         ),
         // A story's Markdown as the reader's blocks (no UI, so it tests on the Mac).
         .target(name: "StoryFormat", dependencies: [.product(name: "Markdown", package: "swift-markdown")]),
-        .testTarget(name: "ResonanceKitTests", dependencies: ["ResonanceKit"]),
+        .testTarget(name: "ResonanceKitTests", dependencies: ["ResonanceKit", "StoryFormat"]),
         // The story-link fixture is read with the link rules the reader keys previews by (ResonanceKit's).
         .testTarget(name: "StoryFormatTests", dependencies: ["StoryFormat", "ResonanceKit"]),
     ]

@@ -53,6 +53,16 @@ enum TabChrome {
     }
 }
 
+/// Where the shell's toast sits (trash.spec §6): 12 above a phone's tab bar on a tab's root, 16
+/// above the home indicator on a page pushed over it (the web's phone), 24 from the foot of the
+/// window when the tabs are in the header (a tablet).
+enum ToastPlacement {
+    static func bottom(_ layout: LayoutClass, tabBar: Bool) -> CGFloat {
+        if tabBar { return OrganicTabBar<AppTab>.height + HeaderEdge.height + 12 }
+        return layout.topTabs ? 24 : 16
+    }
+}
+
 /// Where a conversation opened from a page goes (round 5 E3). On a tablet a conversation belongs to
 /// the Messages tab wherever it is opened from (a bell row, a profile's message action, any `thread`
 /// route): that tab is chosen and shows it — beside the list in two panes, or pushed over the list —
@@ -142,6 +152,12 @@ struct MainTabView: View {
                 if topTabs { headerTabs.transition(.opacity) }
             }
             .animation(.easeOut(duration: 0.16), value: topTabs)
+            // The app's one toast, over whichever page asked for it and the ones after it.
+            .overlay(alignment: .bottom) {
+                ToastHost(session.toasts)
+                    .padding(.bottom, ToastPlacement.bottom(window.layoutClass, tabBar: bottomBar))
+                    .animation(.easeOut(duration: 0.12), value: bottomBar)
+            }
         // The window's width: the root's own plus the safe areas at its sides (a landscape iPhone's notch).
         .onGeometryChange(for: WindowLayout.self) { geo in
             WindowLayout(width: geo.size.width + geo.safeAreaInsets.leading + geo.safeAreaInsets.trailing,
@@ -262,6 +278,18 @@ struct MainTabView: View {
             }
         }
         #if DEBUG
+        // `-debugToast "…"` shows the shell's toast at launch (screen checks), with `-debugToastVerb "…"`
+        // as an undo that shows 「已還原」 when tapped.
+        .task {
+            guard let message = UserDefaults.standard.string(forKey: "debugToast") else { return }
+            let verb = UserDefaults.standard.string(forKey: "debugToastVerb")
+            let toasts = session.toasts
+            toasts.show(message, action: verb.map { verb in
+                ToastCenter.Action(label: verb, accessibilityLabel: "\(message) · \(verb)", icon: .restore) {
+                    toasts.show(L10n.Me.Actions.restored)
+                }
+            })
+        }
         // `-route /card/<slug>` or `-route /u/<handle>` opens that page at launch (screen checks); a query
         // comes along (`/messages/<handle>?note=…&card=…`, a bell's link).
         .task {

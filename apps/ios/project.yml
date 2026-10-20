@@ -122,6 +122,12 @@ targets:
           - CFBundleURLSchemes: [com.googleusercontent.apps.1090298219401-pgd3sh80h9ukvf4l564dpvegebi2s8o7]
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        # A card's share sheet offers Save Image (its 1080 × 1920 picture): the system's add-only
+        # photo prompt. The words are share.image.photoAccess, localized by Resources/*.lproj/
+        # InfoPlist.strings (scripts/apps/l10n.ts, which checks this English one against the catalog).
+        NSPhotoLibraryAddUsageDescription: "Saves share images to your photo library"
+        # Instagram Stories (InstagramStories.swift): asked whether instagram-stories:// opens.
+        LSApplicationQueriesSchemes: [instagram-stories]
   ResonanceTests:
     type: bundle.unit-test
     platform: iOS

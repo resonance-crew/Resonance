@@ -608,6 +608,24 @@ object L10n {
         fun postTextAnonymous(title: String): String = Strings.format("share.postTextAnonymous", mapOf("title" to title))
         /** Sharing it from your account may tell people it’s yours */
         val anonymousHint: String get() = Strings.string("share.anonymousHint")
+        /** Instagram Stories */
+        val toStories: String get() = Strings.string("share.toStories")
+        /** Share an anonymous card */
+        val anonymousTitle: String get() = Strings.string("share.anonymousTitle")
+        object Image {
+            /** Couldn’t open Instagram */
+            val storiesFailed: String get() = Strings.string("share.image.storiesFailed")
+            /** Save image */
+            val save: String get() = Strings.string("share.image.save")
+            /** Image saved */
+            val saved: String get() = Strings.string("share.image.saved")
+            /** Couldn’t save the image */
+            val saveFailed: String get() = Strings.string("share.image.saveFailed")
+            /** Allow Resonance to add photos in Settings */
+            val saveDenied: String get() = Strings.string("share.image.saveDenied")
+            /** Saves share images to your photo library */
+            val photoAccess: String get() = Strings.string("share.image.photoAccess")
+        }
     }
     object Messages {
         /** Messages */

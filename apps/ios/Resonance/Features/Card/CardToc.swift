@@ -11,14 +11,15 @@ struct TocEntry: Equatable, Identifiable {
 
     var id: Int { index }
 
-    /// The story's h2 and h3 in order, as the web's ToC reads them from the rendered story (`h2, h3`):
-    /// a heading with no words is left out (rehype-slug gives it no id), and so is any other level.
+    /// The story's headings in order, as the web's ToC reads them from the rendered story (`h2, h3,
+    /// h4, h5, h6` — a story's `#` is drawn as an h2): an h1 or h2 at the first level, every smaller
+    /// one at the second. A heading with no words is left out (rehype-slug gives it no id).
     static func entries(_ blocks: [StoryBlock]) -> [TocEntry] {
         blocks.enumerated().compactMap { i, block in
-            guard case let .heading(level, _) = block, level == 2 || level == 3,
+            guard case let .heading(level, _) = block,
                   let text = block.headingText?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty
             else { return nil }
-            return TocEntry(index: i, level: level, text: text)
+            return TocEntry(index: i, level: level <= 2 ? 2 : 3, text: text)
         }
     }
 }

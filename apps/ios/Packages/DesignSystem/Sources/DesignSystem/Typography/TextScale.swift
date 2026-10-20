@@ -13,8 +13,10 @@ import UIKit
 /// to its font scale (`textScale`), so the two apps agree.
 ///
 /// Every text the person reads takes the factor of its own text style — the
-/// platform fonts (`AppFonts.font`) and the CSS-line-box text (`CSSText`, the
-/// story prose) alike, so a card's title grows exactly as much as the rest.
+/// platform fonts (`AppFonts.font`) and the CSS-line-box text (`CSSText`)
+/// alike, so a card's title grows exactly as much as the rest. A story's own
+/// words — its title, headings and body on the card page and in the writer —
+/// follow the reading curve instead (`reading`, up to 2×).
 public nonisolated enum TextScale {
     /// The most any text grows beyond its drawn size.
     public static let ceiling: CGFloat = 1.25
@@ -37,6 +39,25 @@ public nonisolated enum TextScale {
     /// a view's body makes the view re-run when the size changes.
     @MainActor public static func factor(relativeTo style: UIFont.TextStyle) -> CGFloat {
         effective(system: system(relativeTo: style, in: TextSizeSetting.shared.category))
+    }
+
+    // MARK: The reading curve
+
+    /// The most a story's own words — its title, headings and body — grow beyond their drawn size.
+    public static let readingCeiling: CGFloat = 2
+
+    /// The curve a story's own words follow (the owner's call, reading-type §8): the system's
+    /// factor as it is, up to 2× — one for one to AX2, where a phone's line still holds about ten
+    /// CJK characters (clreq's floor) — while the interface around the story, its byline and its
+    /// buttons included, keeps `effective`'s 1.25×. A size below the default is followed as it is.
+    /// Android applies the same numbers.
+    public static func reading(system: CGFloat) -> CGFloat {
+        min(system, readingCeiling)
+    }
+
+    /// The reading factor for `style` at the person's current text size (re-run on a change, as `factor`).
+    @MainActor public static func readingFactor(relativeTo style: UIFont.TextStyle) -> CGFloat {
+        reading(system: system(relativeTo: style, in: TextSizeSetting.shared.category))
     }
 }
 

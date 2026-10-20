@@ -59,6 +59,41 @@ import UIKit
         #expect(close(TextScale.effective(system: TextScale.system(relativeTo: .body, in: .accessibilityMedium)), TextScale.ceiling))
     }
 
+    /// The owner's call for a story's own words (reading-type §8): the system's size one for one up to
+    /// 2× — to AX2, where a phone's line still holds about ten CJK characters — never past it; a
+    /// smaller size followed as it is. The interface keeps its 1.25×.
+    @Test func aStorysWordsFollowTheSystemUpToTwiceTheirSize() {
+        #expect(close(TextScale.reading(system: 0.8), 0.8))
+        #expect(close(TextScale.reading(system: 1), 1))
+        #expect(close(TextScale.reading(system: 1.3), 1.3))
+        #expect(close(TextScale.reading(system: 1.94), 1.94))
+        #expect(close(TextScale.reading(system: 2), 2))
+        #expect(close(TextScale.reading(system: 3.1), TextScale.readingCeiling))
+        #expect(TextScale.readingCeiling == 2)
+        // At AX2 a story's body follows the system; at AX3 it stops at 2; the interface stopped at 1.25 long before.
+        let ax2 = TextScale.system(relativeTo: .body, in: .accessibilityLarge)
+        #expect(ax2 > 1.8 && ax2 < 2)
+        #expect(close(TextScale.reading(system: ax2), ax2))
+        #expect(close(TextScale.effective(system: ax2), TextScale.ceiling))
+        let ax3 = TextScale.system(relativeTo: .body, in: .accessibilityExtraLarge)
+        #expect(close(TextScale.reading(system: ax3), 2))
+        // Headings grow like .title3 and the title like .title1: less than the body, so the hierarchy holds.
+        for category: UIContentSizeCategory in [.extraExtraExtraLarge, .accessibilityLarge] {
+            let body = TextScale.reading(system: TextScale.system(relativeTo: .body, in: category))
+            let heading = TextScale.reading(system: TextScale.system(relativeTo: .title3, in: category))
+            let title = TextScale.reading(system: TextScale.system(relativeTo: .title1, in: category))
+            #expect(title <= heading && heading <= body)
+            #expect(18 * 1.3 * heading > 18 * body)
+        }
+    }
+
+    /// A story's own words take the reading factor; at the current size the two agree up to 1.25.
+    @Test func storyFontsTakeTheReadingFactor() {
+        let reading = TextScale.readingFactor(relativeTo: .body)
+        #expect(close(AppFonts.storyUIFont(.bodyCJK, size: 17, relativeTo: .body).pointSize, 17 * reading))
+        #expect(reading >= TextScale.factor(relativeTo: .body))
+    }
+
     /// CSS-line-box text takes the same factor as the platform fonts.
     @Test func scaledFontsFollowTheCurrentTextSize() {
         let factor = TextScale.factor(relativeTo: .body)
