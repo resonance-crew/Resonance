@@ -1,0 +1,53 @@
+/* The card page's skeleton (CardDetailSkeleton): plain blocks at the real
+   page's sizes — its gaps are page.module.css's own classes. */
+
+/* The cover at the real one's ratio (OrganicImage ratio 0.52). */
+.cover {
+  display: block;
+  aspect-ratio: 100 / 52;
+}
+
+/* Lines of text as tall as the type's x-height band, parted so they keep the
+   real lines' pitch: the title 36 tall with 14 between (28 / 11 on a phone),
+   the story 18 with 15 between (17 / 13.6). */
+.lines {
+  display: flex;
+  flex-direction: column;
+}
+.lines[data-kind='title'] {
+  --sk-line: var(--story-title);
+  gap: 14px;
+}
+.lines[data-kind='body'] {
+  --sk-line: var(--story-size);
+  gap: 15px;
+}
+@media (max-width: 640px) {
+  .lines[data-kind='title'] {
+    --sk-line: var(--story-title-compact);
+    gap: 11px;
+  }
+  .lines[data-kind='body'] {
+    --sk-line: var(--story-size-compact);
+    gap: 13.6px;
+  }
+}
+
+/* The byline row: avatar and pen name up to 900px, the meta line alone after. */
+.byline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+}
+.bylineText {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+@media (min-width: 901px) {
+  .avatar,
+  .name {
+    display: none;
+  }
+}

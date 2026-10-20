@@ -2,17 +2,20 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { HandDrawnAvatar } from '@/components/atoms/HandDrawnAvatar/HandDrawnAvatar';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
-import { HandDrawnCheckmark } from '@/components/atoms/HandDrawnCheckmark/HandDrawnCheckmark';
 import { TagPill } from '@/components/atoms/TagPill/TagPill';
 import { CardDetailSkeleton } from '@/components/molecules/CardDetail/CardDetailSkeleton';
 import { LoadError } from '@/components/molecules/LoadError/LoadError';
 import { CardLinkGrid } from '@/components/molecules/CardLinkGrid/CardLinkGrid';
 import { MiniCardGrid } from '@/components/molecules/MiniStoryCard/MiniCardGrid';
-import { AuthorRegionFlag, CardAuthorAside, CardPublishedDate } from '@/components/molecules/CardDetail/CardAuthorAside';
+import { CardAuthorAside } from '@/components/molecules/CardDetail/CardAuthorAside';
 import { publishedDate } from '@/lib/publishedDate';
-import { CardToc, type TocHeading } from '@/components/molecules/CardDetail/CardToc';
+import { readMinutes } from '@/lib/readTime';
+import { storyType } from '@/lib/text/script';
+import { CardToc, tocHeadings, type TocHeading } from '@/components/molecules/CardDetail/CardToc';
+import { LatinMarkText } from '@/components/molecules/CardDetail/LatinMarkText';
+import { StoryByline } from '@/components/molecules/CardDetail/StoryByline';
+import { ShareMenu } from '@/components/molecules/ShareMenu/ShareMenu';
 import { CardActionsMenu } from '@/components/molecules/CardActionsMenu/CardActionsMenu';
 import { CardSafetyMenu } from '@/components/molecules/CardDetail/CardSafetyMenu';
 import { ReadAfterArea } from '@/components/molecules/CardDetail/ReadAfterArea';
@@ -23,7 +26,7 @@ import { ReadingProgress } from '@/components/molecules/CardDetail/ReadingProgre
 import { CardEmbedSourceContext } from '@/components/molecules/EmbedStoryCard/useCardEmbed';
 import { StoryLinkPreviewsContext } from '@/components/molecules/StoryLinkCard/StoryLinkPreviews';
 import { useSWRConfig } from 'swr';
-import { Link, useRouter } from '@/i18n/navigation';
+import { useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { hasSessionMark } from '@/lib/auth/firebase/client';
 import { cardKey } from '@/lib/data/cardPrefill';
@@ -38,6 +41,16 @@ const wrapStyle = {
   margin: '0 auto',
   padding:
     'calc(var(--app-header-h) + var(--page-pad-top)) var(--page-pad-x) var(--page-pad-bottom)',
+} as const;
+
+/**
+ * The article's own box: the window's width less the page's gutters, no
+ * 1200 cap — the grid inside it (page.module.css .layout) centres the
+ * story's column and keeps the rail beside it. The sections under it keep
+ * their 1200 box.
+ */
+const articleWrapStyle = {
+  padding: 'calc(var(--app-header-h) + var(--page-pad-top)) var(--page-pad-x) clamp(40px, 6vw, 80px)',
 } as const;
 
 /**
@@ -102,6 +115,7 @@ export interface CardDetailClientProps {
 export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   const locale = useLocale();
   const t = useTranslations('card');
+  const tShare = useTranslations('share');
 
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -139,17 +153,12 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
       setHeadings([]);
       return;
     }
-    const found = Array.from(root.querySelectorAll<HTMLHeadingElement>('h2, h3')).map((el) => ({
-      id: el.id,
-      text: el.textContent ?? '',
-      level: el.tagName === 'H2' ? (2 as const) : (3 as const),
-    }));
-    setHeadings(found.filter((h) => h.id));
+    setHeadings(tocHeadings(root));
   }, [story]);
 
   if (isLoading) {
     return (
-      <div style={wrapStyle}>
+      <div style={articleWrapStyle}>
         <CardDetailSkeleton />
       </div>
     );
@@ -190,13 +199,12 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
 
   const resonances = lists.resonances ?? { cards: [], authors: {} };
   const hasResonance = resonances.cards.length > 0;
-
-  const mainContainerStyle = {
-    maxWidth: 'var(--page-max-w-wide)',
-    margin: '0 auto',
-    padding:
-      'calc(var(--app-header-h) + var(--page-pad-top)) var(--page-pad-x) clamp(40px, 6vw, 80px)',
-  } as const;
+  // How the title and story are set (src/styles/story.css), read off both together, the same on the server and here.
+  const type = storyType(card.thoughtCore, card.story);
+  // Only a published, public card can be opened by whoever gets its link; an
+  // anonymous one as well (its link names no one). Never by the viewer, a
+  // connection or a block: sharing must not tell anyone anything.
+  const shareable = !!card.publishedAt && card.visibility === 'public';
 
   const held = gate === 'hold';
   return (
@@ -209,61 +217,9 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
       aria-busy={held || undefined}
     >
       <ReadingProgress targetRef={storyRef} />
-      <div style={mainContainerStyle}>
+      <div style={articleWrapStyle}>
         <div className={styles.layout}>
           <article className={styles.article}>
-            {/* Compact author header — shown inline only on mobile (the rail is
-                hidden there). */}
-            <header className={styles.mobileAuthor}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                {card.anonymous ? (
-                  <HandDrawnAvatar initials="·" size={44} color="var(--color-cream-dark)" seed={97} />
-                ) : (
-                  <HandDrawnAvatar
-                    src={author.avatarUrl}
-                    initials={author.initials}
-                    size={44}
-                    color={author.accentColor}
-                    seed={Number(author.avatarSeed)}
-                  />
-                )}
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {card.anonymous ? (
-                      <span
-                        style={{
-                          fontFamily: 'var(--font-body)',
-                          fontWeight: 600,
-                          color: 'var(--color-text-muted)',
-                        }}
-                      >
-                        {t('anonymousAuthor')}
-                      </span>
-                    ) : (
-                      <Link
-                        href={`/u/${author.handle}`}
-                        style={{
-                          fontFamily: 'var(--font-body)',
-                          fontWeight: 600,
-                          color: 'var(--color-text)',
-                          textDecoration: 'none',
-                        }}
-                      >
-                        {author.handle}
-                      </Link>
-                    )}
-                    {!card.anonymous && <AuthorRegionFlag region={author.region} size={14} />}
-                    {!card.anonymous && author.verified && (
-                      <HandDrawnCheckmark size={13} title={t('verified')} />
-                    )}
-                  </div>
-                  <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-                    <CardPublishedDate published={published} />
-                  </div>
-                </div>
-              </div>
-            </header>
-
             {card.media?.url && (
               <OrganicImage
                 src={card.media.url}
@@ -275,38 +231,64 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
               />
             )}
 
-            <div className={styles.titleRow}>
-              <h1 className={styles.title}>
-                {card.thoughtCore}
-              </h1>
-              {isOwner && (
-                <CardActionsMenu
-                  card={{ id: card.id, visibility: card.visibility, slug: card.slug, referenceCardId: card.referenceCardId }}
-                  // The card it resonates with heads the resonance list, when the viewer may read it.
-                  referenceTitle={resonances.cards.find((c) => c.id === card.referenceCardId)?.thoughtCore}
-                  seed={hue + 3}
-                  bare
-                  // Re-read this card so the visibility chip/state reflects the change.
-                  onChanged={() => void mutate(cardKey(slug, user!.id))}
-                  onDeleted={() => router.replace('/me')}
-                />
-              )}
-              {/* Someone else's anonymous card names no author: it can be reported, not its author blocked. */}
-              {user && !isOwner && (card.authorId || (card.anonymous && !fromServer)) && (
-                <CardSafetyMenu
-                  card={{ id: card.id, authorId: card.authorId, anonymous: card.anonymous }}
-                  authorHandle={author.handle}
-                  seed={hue + 3}
-                  bare
-                />
-              )}
-            </div>
+            {/* The title has the column to itself; its language is the story's (never the page's around it). */}
+            <h1 className={`story-title ${styles.title}`} data-script={type.script} lang={type.lang}>
+              {type.script === 'cjk' ? <LatinMarkText text={card.thoughtCore} /> : card.thoughtCore}
+            </h1>
 
-            <div ref={storyRef} style={{ marginBottom: 32 }}>
+            <StoryByline
+              className={styles.byline}
+              author={author}
+              anonymous={card.anonymous}
+              minutes={readMinutes(card.story)}
+              published={published}
+              actions={
+                <>
+                  {shareable && (
+                    <ShareMenu
+                      target={{
+                        kind: 'card',
+                        id: card.id,
+                        slug: card.slug,
+                        title: card.thoughtCore,
+                        anonymous: !!card.anonymous,
+                        handle: card.anonymous ? undefined : author.handle,
+                      }}
+                      seed={hue + 5}
+                      // Its owner, sharing it from their own account, may give away that it is theirs.
+                      hint={isOwner && card.anonymous ? tShare('anonymousHint') : undefined}
+                    />
+                  )}
+                  {isOwner && (
+                    <CardActionsMenu
+                      card={{ id: card.id, visibility: card.visibility, slug: card.slug, referenceCardId: card.referenceCardId }}
+                      // The card it resonates with heads the resonance list, when the viewer may read it.
+                      referenceTitle={resonances.cards.find((c) => c.id === card.referenceCardId)?.thoughtCore}
+                      seed={hue + 3}
+                      bare
+                      // Re-read this card so the visibility chip/state reflects the change.
+                      onChanged={() => void mutate(cardKey(slug, user!.id))}
+                      onDeleted={() => router.replace('/me')}
+                    />
+                  )}
+                  {/* Someone else's anonymous card names no author: it can be reported, not its author blocked. */}
+                  {user && !isOwner && (card.authorId || (card.anonymous && !fromServer)) && (
+                    <CardSafetyMenu
+                      card={{ id: card.id, authorId: card.authorId, anonymous: card.anonymous }}
+                      authorHandle={author.handle}
+                      seed={hue + 3}
+                      bare
+                    />
+                  )}
+                </>
+              }
+            />
+
+            <div ref={storyRef} className={styles.story}>
               {/* Signed in, the embedded cards came with the lists; the link previews come with the card. */}
               <CardEmbedSourceContext.Provider value={lists.embeds}>
                 <StoryLinkPreviewsContext.Provider value={card.linkPreviews ?? null}>
-                  <StoryMarkdown source={card.story} />
+                  <StoryMarkdown source={card.story} script={type.script} lang={type.lang} />
                 </StoryLinkPreviewsContext.Provider>
               </CardEmbedSourceContext.Provider>
             </div>
@@ -349,7 +331,6 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
               verifiedLabel={t('verified')}
               anonymous={card.anonymous}
               isOwner={isOwner}
-              published={published}
             />
             <CardToc headings={headings} title={t('toc')} />
           </aside>

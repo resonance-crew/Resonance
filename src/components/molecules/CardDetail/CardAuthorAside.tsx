@@ -20,8 +20,6 @@ export interface CardAuthorAsideProps {
   anonymous?: boolean;
   /** The viewer is the (hidden) author — show the owner-only note. */
   isOwner?: boolean;
-  /** When the card was published, as the page formats it (CardDetailClient's `publishedDate`). */
-  published?: CardPublished | null;
 }
 
 export interface CardPublished {
@@ -48,7 +46,7 @@ export function AuthorRegionFlag({ region, size = 15 }: { region?: string | null
   );
 }
 
-/** The card's published date under the byline. */
+/** The card's published date, as the meta line under its title shows it (StoryByline). */
 export function CardPublishedDate({ published, className }: { published?: CardPublished | null; className?: string }) {
   if (!published) return null;
   return (
@@ -59,12 +57,14 @@ export function CardPublishedDate({ published, className }: { published?: CardPu
 }
 
 /**
- * Author intro block for the card reading page (top of the right sidebar).
- * It offers no「傳訊息」: a card page is for reading and answering the card
- * (a note, a resonance) — a conversation starts from the person's profile or
- * the Messages tab, for a connected reader as for anyone.
+ * Author intro block for the card reading page (top of the right sidebar):
+ * the person, not the card — when it was published is in the meta line under
+ * the title (StoryByline). It offers no「傳訊息」: a card page is for reading
+ * and answering the card (a note, a resonance) — a conversation starts from
+ * the person's profile or the Messages tab, for a connected reader as for
+ * anyone.
  */
-export function CardAuthorAside({ author, verifiedLabel, anonymous, isOwner, published }: CardAuthorAsideProps) {
+export function CardAuthorAside({ author, verifiedLabel, anonymous, isOwner }: CardAuthorAsideProps) {
   const t = useTranslations('card');
 
   if (anonymous) {
@@ -76,7 +76,6 @@ export function CardAuthorAside({ author, verifiedLabel, anonymous, isOwner, pub
             <span className={styles.handle}>{t('anonymousAuthor')}</span>
           </div>
           {isOwner && <p className={styles.bio}>{t('anonymousOwnerNote')}</p>}
-          <CardPublishedDate published={published} className={styles.date} />
         </div>
       </div>
     );
@@ -102,8 +101,6 @@ export function CardAuthorAside({ author, verifiedLabel, anonymous, isOwner, pub
           {author.verified && <HandDrawnCheckmark size={14} title={verifiedLabel} />}
         </div>
         {author.bio && <p className={styles.bio}>{author.bio}</p>}
-        {/* The person first, then when they wrote this. */}
-        <CardPublishedDate published={published} className={styles.date} />
       </div>
     </div>
   );

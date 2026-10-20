@@ -7,7 +7,7 @@ import { hydrateRoot } from 'react-dom/client';
 import { NextIntlClientProvider } from 'next-intl';
 import { SWRConfig } from 'swr';
 import enMessages from '@/messages/en.json';
-import { renderWithIntl, screen, userEvent, waitFor } from '@/../test/render';
+import { renderWithIntl, screen, userEvent, waitFor, within } from '@/../test/render';
 import type { CardSeed } from '@/lib/data/cardSeed';
 import type { Card, User } from '@/lib/db/types';
 
@@ -602,6 +602,134 @@ describe('its pictures', () => {
       expect(avatar).toHaveAttribute('loading', 'lazy');
     }
     await waitFor(() => expect(getCardById).toHaveBeenCalled());
+  });
+});
+
+describe('the head: title, byline and actions', () => {
+  const env = process.env.NEXT_PUBLIC_SITE_URL;
+  beforeEach(() => {
+    process.env.NEXT_PUBLIC_SITE_URL = 'https://resonance.channel';
+  });
+  afterEach(() => {
+    process.env.NEXT_PUBLIC_SITE_URL = env;
+    delete (navigator as { clipboard?: unknown }).clipboard;
+  });
+
+  /** The row under the title: the byline, its meta line, the actions. */
+  const bylineRow = () => screen.getByRole('heading', { level: 1 }).nextElementSibling as HTMLElement;
+  /** What the meta line reads. */
+  const metaLine = () => bylineRow().querySelector('p')!;
+  const asOwner = () => {
+    signIn();
+    mockUseAuth.mockReturnValue({ user: { id: 'a1' }, loading: false });
+    vi.mocked(callApi).mockResolvedValue(detail({ isOwner: true }));
+  };
+
+  it('sets the title by the story’s script, over a byline with the read time and the date — which the rail no longer shows', async () => {
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1'));
+    const { container } = renderPage({ slug: 'c1' });
+
+    const title = await screen.findByRole('heading', { level: 1, name: 'The core thought of this card' });
+    expect(title).toHaveClass('story-title');
+    expect(title).toHaveAttribute('data-script', 'latin');
+    expect(metaLine()).toHaveTextContent('1 min · Jan 1, 2026');
+    // Under the title, before the story.
+    expect(title.compareDocumentPosition(metaLine()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(metaLine().compareDocumentPosition(screen.getByText('The longer story body of this card.')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The byline names the author (up to 900px; CSS hides it beside the rail), linking to their profile.
+    expect(within(bylineRow()).getByRole('link', { name: '@author' })).toHaveAttribute('href', '/u/@author');
+    // The rail is about the person: no date there.
+    expect(container.querySelector('aside time')).toBeNull();
+    expect(container.querySelectorAll('time')).toHaveLength(1);
+  });
+
+  it('puts the story’s language on the title and the story alone, never on the page around them', async () => {
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(
+      card('c1', { thoughtCore: '跑完 2400 公尺那天，教練說 don’t rush', story: '那年我用 iPhone 記下每一次配速……直到終點。' }),
+    );
+    const { container } = renderPage({ slug: 'c1' });
+    const title = await screen.findByRole('heading', { level: 1 });
+    expect(Array.from(container.querySelectorAll('[lang]')).map((el) => [el.tagName, el.getAttribute('lang')])).toEqual([
+      ['H1', 'zh-TW'],
+      ['DIV', 'zh-TW'],
+    ]);
+    expect(container.querySelector('.story-prose')).toHaveAttribute('data-script', 'cjk');
+    expect(title).toHaveAttribute('data-script', 'cjk');
+    // The apostrophe in don’t is set apart for the title's Latin face; the words read as written.
+    expect(title.querySelectorAll('.story-latin-mark')).toHaveLength(1);
+    expect(title).toHaveTextContent('跑完 2400 公尺那天，教練說 don’t rush');
+  });
+
+  it('gives a signed-out reader of a public card the share glyph alone', async () => {
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1'));
+    renderPage({ slug: 'c1' });
+    await screen.findByRole('heading', { level: 1 });
+    expect(within(bylineRow()).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Share']);
+  });
+
+  it('gives the owner share, then their ⋯, in the byline row', async () => {
+    asOwner();
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1'));
+    renderPage({ slug: 'c1' });
+    await screen.findByRole('heading', { level: 1 });
+    expect(within(bylineRow()).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Share', 'Manage card']);
+  });
+
+  it.each([
+    ['a private card', { visibility: 'private' as const }],
+    ['a connections-only card', { visibility: 'connections' as const }],
+    ['a draft', { publishedAt: null }],
+  ])('offers no share on %s — whoever got the link could not open it', async (_, extra) => {
+    asOwner();
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1', extra));
+    renderPage({ slug: 'c1' });
+    await screen.findByRole('heading', { level: 1 });
+    expect(within(bylineRow()).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Manage card']);
+  });
+
+  it('a draft’s meta line is its read time alone', async () => {
+    asOwner();
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1', { publishedAt: null }));
+    renderPage({ slug: 'c1' });
+    await screen.findByRole('heading', { level: 1 });
+    expect(metaLine().textContent).toBe('1 min');
+  });
+
+  it('shows its owner an anonymous card under the anonymous byline, shared by its id with a word on what sharing it may say', async () => {
+    asOwner();
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1', { anonymous: true, slug: 'a-quiet-morning-author' }));
+    renderPage({ slug: 'c1' });
+    await screen.findByRole('heading', { level: 1 });
+
+    const row = bylineRow();
+    expect(within(row).getByText('Anonymous')).toBeInTheDocument();
+    expect(within(row).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(row).queryByText('@author')).not.toBeInTheDocument();
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    // After the setup, which puts a clipboard of its own in place.
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    await user.click(within(row).getByRole('button', { name: 'Share' }));
+    expect(screen.getByText('Sharing it from your account may tell people it’s yours')).toBeInTheDocument();
+    await user.click(screen.getByRole('menuitem', { name: 'Copy link' }));
+    expect(writeText).toHaveBeenCalledWith('https://resonance.channel/card/c1');
+  });
+
+  it('gives a reader of someone else’s anonymous card no hint, and its link no slug', async () => {
+    vi.mocked(getCardById).mockResolvedValue(null);
+    vi.mocked(resolveCardId).mockResolvedValue('pub1');
+    vi.mocked(getPublicCardView).mockResolvedValue(seed({ anonymous: true }));
+    renderPage({ seed: seed({ anonymous: true }) });
+    await screen.findByRole('heading', { level: 1 });
+
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    await user.click(within(bylineRow()).getByRole('button', { name: 'Share' }));
+    expect(screen.queryByText(/may tell people/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('menuitem', { name: 'Copy link' }));
+    expect(writeText).toHaveBeenCalledWith('https://resonance.channel/card/pub1');
   });
 });
 

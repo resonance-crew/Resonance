@@ -37,15 +37,6 @@
   text-decoration: none;
 }
 
-.date {
-  font-size: 13px;
-  color: var(--color-text-muted);
-}
-
-.bio + .date {
-  margin-top: 4px;
-}
-
 .bio {
   margin-top: 4px;
   font-size: 14px;
