@@ -24,13 +24,17 @@ struct WriterCalls {
     var insight: (String, String) async throws -> String?
     /// Out of the trash (POST …/restore): whether it came back on its own, no longer answering its original.
     var restore: (String) async throws -> Bool
+    /// A card went out: the moment to ask whether notifications may show (`PushCenter.reachedOut`).
+    var reachedOut: () -> Void
 
     init(publish: @escaping (String) async throws -> String, applyEdit: @escaping (String) async throws -> String?,
-         insight: @escaping (String, String) async throws -> String?, restore: @escaping (String) async throws -> Bool) {
+         insight: @escaping (String, String) async throws -> String?, restore: @escaping (String) async throws -> Bool,
+         reachedOut: @escaping () -> Void = {}) {
         self.publish = publish
         self.applyEdit = applyEdit
         self.insight = insight
         self.restore = restore
+        self.reachedOut = reachedOut
     }
 
     init(_ writing: WritingAPI) {
@@ -43,7 +47,7 @@ struct WriterCalls {
             try await writing.insight(title: title, story: story)
         }, restore: { id in
             try await writing.restoreCard(id).droppedResonance
-        })
+        }, reachedOut: { PushCenter.shared.reachedOut() })
     }
 }
 
@@ -639,7 +643,7 @@ final class WriteModel {
             guard let id = await saveNow() else { throw APIFailure(code: "invalid_request", message: "Nothing to publish.", status: nil) }
             let key = try await calls.publish(id)
             wrote = true
-            PushCenter.shared.reachedOut()
+            calls.reachedOut()
             return key
         } catch {
             if await confirmTrashed(error) { return nil }
