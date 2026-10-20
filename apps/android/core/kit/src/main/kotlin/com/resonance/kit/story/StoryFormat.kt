@@ -179,20 +179,78 @@ object StoryParser {
 }
 
 /**
- * CSS margins (top, bottom) of each block at the reader's 17px, and the gap
- * between two blocks: the larger of the facing margins, as CSS collapses them.
+ * The room a story's blocks keep around them — src/styles/story.css's margins, in dp at the normal
+ * text size, as the story's type resolves them (the design layer's `StoryType.spacing()`, from the
+ * generated tokens; this module sees no tokens): [paragraph] after a paragraph, a list, a quote, a
+ * code block (1.3em of the body); a heading's room above and below in its own em (`#` and `##`
+ * as the reader's h2, `###` and below as its h3); [block] around a picture, a link card or an
+ * embedded card; [rule] around the pen rule; [blank] a blank line's own height (1.6em); [item]
+ * above and below each list item.
+ */
+data class ProseSpacing(
+    val paragraph: Float,
+    val h2Above: Float,
+    val h2Below: Float,
+    val h3Above: Float,
+    val h3Below: Float,
+    val block: Float,
+    val rule: Float,
+    val blank: Float,
+    val item: Float,
+)
+
+/**
+ * The CSS margins (top, bottom) of each block, and the gap between two blocks: the larger of the
+ * facing margins, as CSS collapses them (story.css). Nothing above a story's first block or below
+ * its last (`.story-prose > :first-child` / `:last-child`); inside a quote — its own formatting
+ * context — a first heading has none above it (`:first-child`) while a picture or a card keeps its
+ * room. A standalone link is a paragraph unless it is drawn as its page's card ([drawnAsCard]).
  */
 object ProseMetrics {
-    const val EM = 17f
-
-    fun margins(block: StoryBlock): Pair<Float, Float> = when (block) {
-        is StoryBlock.Heading -> if (block.level <= 2) 1.6f * 22 to 0.6f * 22 else 1.4f * 18 to 0.5f * 18
+    fun margins(block: StoryBlock, spacing: ProseSpacing, drawnAsCard: (StoryBlock.SoleLink) -> Boolean = { false }): Pair<Float, Float> = when (block) {
+        is StoryBlock.Heading -> if (block.level <= 2) spacing.h2Above to spacing.h2Below else spacing.h3Above to spacing.h3Below
         StoryBlock.Blank -> 0f to 0f
-        is StoryBlock.Image -> 22f to 22f
-        StoryBlock.Rule -> 28f to 28f
-        else -> 0f to 1.1f * EM
+        is StoryBlock.Image, is StoryBlock.CardEmbed -> spacing.block to spacing.block
+        is StoryBlock.SoleLink -> if (drawnAsCard(block)) spacing.block to spacing.block else 0f to spacing.paragraph
+        StoryBlock.Rule -> spacing.rule to spacing.rule
+        // A list's first item's room collapses through the list's own top (it has no border or padding there).
+        is StoryBlock.ListBlock -> spacing.item to spacing.paragraph
+        is StoryBlock.Paragraph, is StoryBlock.Quote, is StoryBlock.CodeBlock -> 0f to spacing.paragraph
     }
 
-    fun gaps(blocks: List<StoryBlock>): List<Float> =
-        blocks.indices.map { i -> if (i == 0) 0f else maxOf(margins(blocks[i - 1]).second, margins(blocks[i]).first) }
+    /**
+     * The room above each block of a column: the story's own ([nested] false: none above the
+     * first), or a quote's ([nested]: its first block keeps its own top margin, unless it is a
+     * heading or text).
+     */
+    fun gaps(
+        blocks: List<StoryBlock>,
+        spacing: ProseSpacing,
+        nested: Boolean = false,
+        drawnAsCard: (StoryBlock.SoleLink) -> Boolean = { false },
+    ): List<Float> = blocks.indices.map { i ->
+        val top = margins(blocks[i], spacing, drawnAsCard).first
+        if (i == 0) {
+            if (!nested || blocks[i] is StoryBlock.Heading) 0f else top
+        } else {
+            maxOf(margins(blocks[i - 1], spacing, drawnAsCard).second, top)
+        }
+    }
+
+    /**
+     * The room above each item of a list after the first: the items' own room (0.3em each side,
+     * collapsing to one), or more when an item ends on a block that keeps room below it (a nested
+     * list) — never a paragraph's, which an item's last paragraph gives up (`li > p:last-child`).
+     */
+    fun itemGaps(items: List<List<StoryBlock>>, spacing: ProseSpacing, drawnAsCard: (StoryBlock.SoleLink) -> Boolean = { false }): List<Float> =
+        items.indices.map { i ->
+            if (i == 0) return@map 0f
+            val last = items[i - 1].lastOrNull()
+            val below = when (last) {
+                null, is StoryBlock.Paragraph -> 0f
+                is StoryBlock.SoleLink -> if (drawnAsCard(last)) spacing.block else 0f
+                else -> margins(last, spacing, drawnAsCard).second
+            }
+            maxOf(spacing.item, below)
+        }
 }

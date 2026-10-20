@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.em
 import com.resonance.design.generated.Tokens
+import com.resonance.kit.story.ProseSpacing
 import com.resonance.kit.story.StoryScript
 
 /**
@@ -138,17 +139,45 @@ data class StoryType(val script: StoryScript, val compact: Boolean) {
     fun strictLineBreaks(sdk: Int = Build.VERSION.SDK_INT): Boolean = sdk >= 33
 
     /** [justificationMode] and [strictLineBreaks] on a story paragraph's layout. */
-    fun applyBreaking(builder: StaticLayout.Builder, sdk: Int = Build.VERSION.SDK_INT): StaticLayout.Builder {
-        builder.setJustificationMode(justificationMode(sdk))
-        if (strictLineBreaks(sdk) && Build.VERSION.SDK_INT >= 33) {
-            builder.setLineBreakConfig(LineBreakConfig.Builder().setLineBreakStyle(LineBreakConfig.LINE_BREAK_STYLE_STRICT).build())
-        }
-        return builder
-    }
+    fun applyBreaking(builder: StaticLayout.Builder, sdk: Int = Build.VERSION.SDK_INT): StaticLayout.Builder =
+        applyBreaking(builder, justified, sdk)
+
+    // The room between a story's blocks
+
+    /** story.css's margins in this type (dp at the normal text size), for [ProseMetrics][com.resonance.kit.story.ProseMetrics]. */
+    fun spacing(): ProseSpacing = ProseSpacing(
+        paragraph = paragraphGap,
+        h2Above = headingAbove(2),
+        h2Below = headingBelow(2),
+        h3Above = headingAbove(3),
+        h3Below = headingBelow(3),
+        block = blockGap,
+        rule = ruleGap,
+        blank = bodySize * BLANK_LINE,
+        item = itemGap,
+    )
 
     companion object {
         /** `font-variant-numeric: lining-nums`. */
         const val LINING_FIGURES = "lnum"
+
+        /** A line the writer left blank (`--story-blank-line: 1.6em`, an em the token exporter doesn't carry). */
+        const val BLANK_LINE = 1.6f
+
+        /**
+         * A story's breaking on a layout of its text: [justified] (a CJK story's words) between
+         * characters on API 35 and up, ragged before; strict CJK line breaks on API 33 and up.
+         */
+        @SuppressLint("InlinedApi")
+        fun applyBreaking(builder: StaticLayout.Builder, justified: Boolean, sdk: Int = Build.VERSION.SDK_INT): StaticLayout.Builder {
+            builder.setJustificationMode(
+                if (justified && sdk >= 35) LineBreaker.JUSTIFICATION_MODE_INTER_CHARACTER else LineBreaker.JUSTIFICATION_MODE_NONE,
+            )
+            if (sdk >= 33 && Build.VERSION.SDK_INT >= 33) {
+                builder.setLineBreakConfig(LineBreakConfig.Builder().setLineBreakStyle(LineBreakConfig.LINE_BREAK_STYLE_STRICT).build())
+            }
+            return builder
+        }
 
         /** A story's type in a window of this class (compact: a phone's numbers). */
         fun of(script: StoryScript, layout: LayoutClass): StoryType = StoryType(script, compact = layout == LayoutClass.Compact)

@@ -13,7 +13,9 @@ import android.text.style.CharacterStyle
 import android.text.style.ForegroundColorSpan
 import android.text.style.MetricAffectingSpan
 import android.text.style.StrikethroughSpan
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -56,6 +58,8 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -68,12 +72,18 @@ import com.resonance.kit.chat.LinkPreview
 import com.resonance.kit.story.InlineRun
 import com.resonance.kit.story.ProseMetrics
 import com.resonance.kit.story.StoryBlock
+import com.resonance.kit.story.StoryScripts
+import java.util.Locale
 import com.resonance.geometry.seedFromString
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** How a run of story text looks: the reader's `.story-prose` styles (src/styles/story.css). */
+/**
+ * How a run of story text looks — the reader's `.story-prose` (src/styles/story.css), from the
+ * story's type ([StoryType]: by its script and the window): [body] for its words, quotes and
+ * lists, [heading] for its h2–h6, [title] for the card's title.
+ */
 data class ProseStyle(
     val family: AppFonts.Family,
     val size: Float,
@@ -85,25 +95,71 @@ data class ProseStyle(
     val tracking: Float = 0f,
     /** Inside a quote: its pictures and cards keep to the quote's edge instead of centring in the column. */
     val inQuote: Boolean = false,
+    /** Justified between characters where the device can (a CJK story's words: [StoryType.justificationMode]); else ragged. */
+    val justified: Boolean = false,
+    /** Lines evened out (`text-wrap: balance`): the title and the headings. */
+    val balanced: Boolean = false,
+    /** `**bold**`'s weight (`--story-bold`). */
+    val boldWeight: Int = 700,
+    /** Lining figures (`font-variant-numeric: lining-nums`): 「2400 公尺」 stands level in a Playfair title. */
+    val lining: Boolean = false,
+    /** A CJK story's apostrophe inside a Latin word (don’t) in [AppFonts.Family.latin] (story.css `.story-latin-mark`). */
+    val latinMarks: Boolean = false,
+    /** The story's language (a BCP 47 tag, or none): its line breaking, its glyphs' regional forms and TalkBack's voice. */
+    val lang: String? = null,
+    /** Inline code's size, × the text around it (`--story-code`). */
+    val codeScale: Float = 1f,
 ) {
-    val quoted get() = copy(color = Tokens.TextMuted, italic = true, inQuote = true)
+    /** A quote's words: muted and upright (no slanted Chinese), still the body's size and type. */
+    val quoted get() = copy(color = Tokens.TextMuted, italic = false, inQuote = true)
 
     companion object {
-        val Body = ProseStyle(AppFonts.Family.Body, 17f, 400, 1.8f, Tokens.Text)
-        val H2 = ProseStyle(AppFonts.Family.Heading, 22f, 700, 1.3f, Tokens.Text, tracking = -0.01f)
-        val H3 = ProseStyle(AppFonts.Family.Heading, 18f, 700, 1.35f, Tokens.Text)
+        /** The story's words in [type], in [lang]. */
+        fun body(type: StoryType, lang: String? = null) = ProseStyle(
+            type.bodyFamily, type.bodySize, type.bodyWeight, type.bodyLeading, Tokens.Text,
+            tracking = type.bodyTracking, justified = type.justified, boldWeight = type.boldWeight,
+            latinMarks = type.cjk, lang = lang, codeScale = Tokens.StoryCode,
+        )
+
+        /** A heading of the story (`#` and `##` as the reader's h2, the rest as its h3), in the ink of what holds it. */
+        fun heading(type: StoryType, level: Int, lang: String? = null, color: Color = Tokens.Text) = ProseStyle(
+            type.headingFamily, type.headingSize(level), type.headingWeight, type.headingLeading, color,
+            tracking = type.headingTracking, balanced = true, boldWeight = type.boldWeight, lining = true,
+            latinMarks = type.cjk, lang = lang, codeScale = Tokens.StoryCode,
+        )
+
+        /** The card's title over its story. */
+        fun title(type: StoryType, lang: String? = null) = ProseStyle(
+            type.headingFamily, type.titleSize, type.headingWeight, type.titleLeading, Tokens.Text,
+            tracking = type.headingTracking, balanced = true, boldWeight = type.headingWeight, lining = true,
+            latinMarks = type.cjk, lang = lang,
+        )
     }
 }
 
-/** Browsers slant upright glyphs for italics when a face has none (the site loads none). */
+/** Browsers slant upright glyphs for italics when a face has none (the site loads none): AppFonts' one shear. */
 private class SyntheticItalicSpan : MetricAffectingSpan() {
-    override fun updateDrawState(tp: TextPaint) { tp.textSkewX = -0.2f }
-    override fun updateMeasureState(tp: TextPaint) { tp.textSkewX = -0.2f }
+    override fun updateDrawState(tp: TextPaint) { tp.textSkewX = -ITALIC_SHEAR }
+    override fun updateMeasureState(tp: TextPaint) { tp.textSkewX = -ITALIC_SHEAR }
 }
+
+/** The shear of a synthetic italic: AppFonts.oblique's, iOS's and the browser's. */
+private const val ITALIC_SHEAR = 0.25f
 
 private class TypefaceWeightSpan(private val typeface: Typeface) : MetricAffectingSpan() {
     override fun updateDrawState(tp: TextPaint) { tp.typeface = typeface }
     override fun updateMeasureState(tp: TextPaint) { tp.typeface = typeface }
+}
+
+/** Inline code: monospace at [scale] of the text around it, never tracked (story.css `code`). */
+private class CodeSpan(private val scale: Float) : MetricAffectingSpan() {
+    private fun apply(tp: TextPaint) {
+        tp.typeface = Typeface.MONOSPACE
+        tp.textSize *= scale
+        tp.letterSpacing = 0f
+    }
+    override fun updateDrawState(tp: TextPaint) = apply(tp)
+    override fun updateMeasureState(tp: TextPaint) = apply(tp)
 }
 
 /**
@@ -177,15 +233,15 @@ private fun linkStrokes(layout: Layout, spanned: Spanned, sizePx: Float, density
         }
     }
 
-private fun buildRichLayout(runs: List<InlineRun>, style: ProseStyle, widthPx: Int, density: Density): Pair<StaticLayout, Spanned> {
-    val base = AppFonts.typeface(style.family, style.weight)
-    val sizePx = density.cssFontPx(style.size)
-    val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = base
-        textSize = sizePx
-        color = style.color.toArgb()
-        letterSpacing = style.tracking
-    }
+/**
+ * A run of story text as a StaticLayout in exact CSS line boxes: its marks as spans (bold at the
+ * story's weight, the synthetic italic, strikethrough, inline code, links in the deep terracotta
+ * labels wear), a CJK story's apostrophes inside Latin words in the Latin face, the story's
+ * language on the paint (line breaking, regional glyph forms), and its breaking — justified CJK on
+ * API 35+, strict CJK breaks on API 33+, balanced lines for a title or a heading — as story.css
+ * sets them. [breakAt] are offsets a line must start at (a title's clauses, [TitleClauses]).
+ */
+internal fun buildRichLayout(runs: List<InlineRun>, style: ProseStyle, widthPx: Int, density: Density): Pair<StaticLayout, Spanned> {
     val text = SpannableStringBuilder()
     for (run in runs) {
         val start = text.length
@@ -193,26 +249,71 @@ private fun buildRichLayout(runs: List<InlineRun>, style: ProseStyle, widthPx: I
         val end = text.length
         if (start == end) continue
         val face = when {
-            run.code -> Typeface.MONOSPACE
-            run.bold -> AppFonts.typeface(style.family, 700)
+            run.code -> null
+            run.bold -> AppFonts.typeface(style.family, style.boldWeight)
             else -> null
         }
         face?.let { text.setSpan(TypefaceWeightSpan(it), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
+        if (run.code) text.setSpan(CodeSpan(style.codeScale), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         if (style.italic || run.italic) text.setSpan(SyntheticItalicSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         if (run.strikethrough) text.setSpan(StrikethroughSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        run.link?.let { text.setSpan(LinkSpan(it, Tokens.Terracotta.toArgb()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
+        run.link?.let { text.setSpan(LinkSpan(it, Mixes.ButtonOnTonal.toArgb()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
         if (run.code) text.setSpan(ForegroundColorSpan(style.color.toArgb()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
-    text.setSpan(CssLineHeightSpan(sizePx * style.lineHeight, paint.fontMetrics), 0, text.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+    return layoutProse(text, runs, style, widthPx, density)
+}
+
+/** [text] (with its runs' spans already on it) laid out in [style]'s CSS line boxes and breaking. */
+private fun layoutProse(text: SpannableStringBuilder, runs: List<InlineRun>, style: ProseStyle, widthPx: Int, density: Density): Pair<StaticLayout, Spanned> {
+    val paint = prosePaint(style, density)
+    if (style.latinMarks) markLatin(text, runs, style)
+    text.setSpan(CssLineHeightSpan(paint.textSize * style.lineHeight, paint.fontMetrics), 0, text.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
     val b = StaticLayout.Builder.obtain(text, 0, text.length, paint, max(1, widthPx))
         .setAlignment(Layout.Alignment.ALIGN_NORMAL)
         .setIncludePad(false)
         .setUseLineSpacingFromFallbacks(false)
-        .setBreakStrategy(LineBreaker.BREAK_STRATEGY_SIMPLE)
+        .setBreakStrategy(if (style.balanced) LineBreaker.BREAK_STRATEGY_BALANCED else LineBreaker.BREAK_STRATEGY_SIMPLE)
         .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
+    StoryType.applyBreaking(b, justified = style.justified)
     if (Build.VERSION.SDK_INT >= 35) b.setUseBoundsForWidth(false)
     return b.build() to text
 }
+
+/** The paint a story's text in [style] starts from: its face, size, ink, tracking, figures and language. */
+internal fun prosePaint(style: ProseStyle, density: Density): TextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+    typeface = AppFonts.typeface(style.family, style.weight)
+    textSize = density.cssFontPx(style.size)
+    color = style.color.toArgb()
+    letterSpacing = style.tracking
+    if (style.lining) fontFeatureSettings = "'${StoryType.LINING_FIGURES}'"
+    style.lang?.let { textLocale = Locale.forLanguageTag(it) }
+}
+
+/**
+ * A CJK story's apostrophes inside Latin words (don’t, rock’n’roll — StoryScripts.latinMarks) set
+ * in the Latin face of the text they sit in (DM Sans in the words, Playfair in a heading or the
+ * title), at the weight of their run: the CJK face draws ‘ ’ full-width, a half-em hole inside a
+ * word. Code keeps its own face.
+ */
+private fun markLatin(text: SpannableStringBuilder, runs: List<InlineRun>, style: ProseStyle) {
+    val marks = StoryScripts.latinMarks(text.toString())
+    if (marks.isEmpty()) return
+    // Where each run starts in the text, to find the run a mark is in.
+    val starts = IntArray(runs.size)
+    var at = 0
+    runs.forEachIndexed { i, r -> starts[i] = at; at += r.text.length }
+    for (m in marks) {
+        val run = runs.getOrNull(starts.indexOfLast { it <= m }) ?: continue
+        if (run.code) continue
+        val weight = if (run.bold) style.boldWeight else style.weight
+        text.setSpan(TypefaceWeightSpan(AppFonts.typeface(style.family.latin, weight)), m, m + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+}
+
+/** What TalkBack reads for a run of story text: its words, in the story's language when it has one. */
+internal fun proseSemantics(plain: String, lang: String?): AnnotatedString =
+    if (lang == null || plain.isEmpty()) AnnotatedString(plain)
+    else AnnotatedString(plain, listOf(AnnotatedString.Range(SpanStyle(localeList = LocaleList(lang)), 0, plain.length)))
 
 /** Rich story text in exact CSS line boxes, with tappable links. */
 @Composable
@@ -222,7 +323,7 @@ fun RichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl: (String) ->
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val widthPx = constraints.maxWidth
         val (layout, spanned) = remember(runs, style, widthPx, density, scaled.fontScale) { buildRichLayout(runs, style, widthPx, scaled) }
-        val plain = remember(runs) { runs.joinToString("") { it.text } }
+        val plain = remember(runs, style.lang) { proseSemantics(runs.joinToString("") { it.text }, style.lang) }
         val sizePx = scaled.cssFontPx(style.size)
         val strokes = remember(layout, spanned, sizePx, density) { linkStrokes(layout, spanned, sizePx, density) }
         var pressedUrl by remember { mutableStateOf<String?>(null) }
@@ -230,8 +331,8 @@ fun RichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl: (String) ->
             Modifier
                 .width(Dp(layout.width / density))
                 .height(Dp(layout.height / density))
-                .semantics { this.text = AnnotatedString(plain) }
-                .pointerInput(layout) {
+                .semantics { this.text = plain }
+                .then(if (strokes.isEmpty()) Modifier else Modifier.pointerInput(layout) {
                     fun linkAt(p: androidx.compose.ui.geometry.Offset): LinkSpan? {
                         val line = layout.getLineForVertical(p.y.roundToInt())
                         val offset = layout.getOffsetForHorizontal(line, p.x)
@@ -245,7 +346,7 @@ fun RichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl: (String) ->
                             pressedUrl = null
                         },
                     ) { p -> linkAt(p)?.let { onOpenUrl(it.url) } }
-                }
+                })
                 .drawBehind {
                     // The waves first, under the letters (the web paints them as the link's background):
                     // a descender's foot rests in its arch rather than being crossed by it.
@@ -257,6 +358,101 @@ fun RichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl: (String) ->
                 },
         )
     }
+}
+
+/**
+ * Where a title breaks between its clauses (LatinMarkText on the web): Chinese breaks between any
+ * two characters, so a balanced title wraps mid-phrase (「湖中央，我看／見了知行合一」). A CJK title
+ * of two or more clauses — each ending just after a full-width stop or pause — keeps each clause
+ * whole on a line when it fits, its lines as even as the clauses allow (the browser's
+ * `text-wrap: balance` over the clauses' inline blocks), so it breaks after its punctuation
+ * (「湖中央，／我看見了知行合一」). Pure, on widths: the layout measures the clauses.
+ */
+object TitleClauses {
+    private val ClauseEnd = Regex("(?<=[，、；：。！？…—）」』》])")
+
+    /** The title's clauses, in order (one: a title with no stop or pause inside, or only at its end). */
+    fun split(title: String): List<String> = title.split(ClauseEnd).filter { it.isNotEmpty() }
+
+    /**
+     * The clauses that start a line after the first (indices into [widths]), for clauses
+     * [widths] wide in a line [width] wide: as few lines as the clauses fit in, then the narrowest
+     * widest line among those breaks (the browser's balance: the least width at which that many
+     * lines still hold them, filled greedily). Null when a clause is wider than the line — it
+     * wraps inside itself, and the whole title is balanced as one text.
+     */
+    fun breaks(widths: List<Float>, width: Float): List<Int>? {
+        if (widths.size < 2 || widths.any { it > width }) return if (widths.size < 2) emptyList() else null
+        val lines = greedy(widths, width).size + 1
+        if (lines == 1) return emptyList()
+        // The least line width that still holds the clauses in that many lines: some run of whole clauses is exactly it.
+        val candidates = widths.indices.flatMap { i -> (i until widths.size).map { j -> widths.subList(i, j + 1).sum() } }
+            .filter { it <= width }.distinct().sorted()
+        val fit = candidates.firstOrNull { greedy(widths, it).size + 1 == lines } ?: width
+        return greedy(widths, fit)
+    }
+
+    /** Clauses filled into lines [width] wide, each line taking what fits: where each line after the first starts. */
+    private fun greedy(widths: List<Float>, width: Float): List<Int> {
+        val starts = ArrayList<Int>()
+        var line = 0f
+        widths.forEachIndexed { i, w ->
+            if (i > 0 && line + w > width + 0.5f) {
+                starts += i
+                line = w
+            } else {
+                line += w
+            }
+        }
+        return starts
+    }
+}
+
+/**
+ * A card's title over its story (story.css `.story-title`): the story's title type — a CJK story's
+ * Noto Serif TC 600 at +0.02em, a Latin story's Playfair 700, lining figures both — in exact CSS
+ * line boxes, balanced, a CJK title kept whole clause by clause where it fits ([TitleClauses]),
+ * its apostrophes inside Latin words in Playfair, and read out in the story's language. Put it
+ * inside [ReadingTextScale] (the title follows the system's text size up to 2×).
+ */
+@Composable
+fun StoryTitle(text: String, type: StoryType, lang: String?, modifier: Modifier = Modifier) {
+    val scaled = LocalDensity.current
+    val density = scaled.density
+    val style = remember(type, lang) { ProseStyle.title(type, lang) }
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val widthPx = constraints.maxWidth
+        val layout = remember(text, style, widthPx, density, scaled.fontScale, AppFonts.useBundledCJK) {
+            titleLayout(text, style, widthPx, scaled, clauses = type.cjk)
+        }
+        val read = remember(text, lang) { proseSemantics(text, lang) }
+        Box(
+            Modifier
+                .width(Dp(layout.width / density))
+                .height(Dp(layout.height / density))
+                .semantics { this.text = read }
+                .drawBehind { drawIntoCanvas { layout.draw(it.nativeCanvas) } },
+        )
+    }
+}
+
+/** The title's layout: broken between its clauses when [clauses] and they all fit their lines, else balanced as one text. */
+internal fun titleLayout(title: String, style: ProseStyle, widthPx: Int, density: Density, clauses: Boolean): StaticLayout {
+    val parts = if (clauses) TitleClauses.split(title) else listOf(title)
+    val starts = if (parts.size < 2) null else {
+        val paint = prosePaint(style, density)
+        // Each clause as it is drawn (its apostrophes in the Latin face): a clause's width carries its tracking.
+        val widths = parts.map { part ->
+            val t = SpannableStringBuilder(part)
+            if (style.latinMarks) markLatin(t, listOf(InlineRun(part)), style)
+            Layout.getDesiredWidth(t, paint)
+        }
+        TitleClauses.breaks(widths, widthPx.toFloat())
+    }
+    val text = if (starts.isNullOrEmpty()) title else parts.mapIndexed { i, p -> if (i in starts) "\n$p" else p }.joinToString("")
+    // Lines already chosen are kept as they are; a title left to the breaker is balanced.
+    val shaped = if (starts.isNullOrEmpty()) style else style.copy(balanced = false)
+    return layoutProse(SpannableStringBuilder(text), listOf(InlineRun(text)), shaped, widthPx, density).first
 }
 
 /**
@@ -273,45 +469,63 @@ class StoryLinkCards(
 )
 
 /**
- * A story, laid out like the web reader's `.prose`: 17sp DM Sans on a 1.8
- * line box, Playfair headings, the curved quote rail, photos in organic
- * clips, card links as embedded cards, a link standing alone as its page's
- * card when [links] has a preview for it, blank-line markers as air; vertical
- * rhythm from CSS margins, collapsing between blocks. The twin of iOS's
- * StoryMarkdownView.
+ * A story, laid out like the web reader's `.story-prose` (src/styles/story.css) in its [type] —
+ * by its script and the window: a CJK story's Noto Sans TC words, tracked and justified, under Noto
+ * Serif TC headings; a Latin story's DM Sans under Playfair — headings h2–h6 (`#` drawn as h2),
+ * the curved quote rail beside upright muted words, lists in a 1.6em gutter, photos in organic
+ * clips, card links as embedded cards, a link standing alone as its page's card when [links] has
+ * a preview for it, blank-line markers as air; vertical rhythm from story.css's margins,
+ * collapsing between blocks ([ProseMetrics]). [lang] is the story's language (StoryScripts).
+ *
+ * Put it inside [ReadingTextScale]: its words, and the room between them, follow the system's
+ * text size up to 2×, while the cards it embeds keep the interface's 1.25 ([CappedTextScale]).
+ * The twin of iOS's StoryMarkdownView.
  */
 @Composable
 fun StoryMarkdown(
     blocks: List<StoryBlock>,
+    type: StoryType,
+    lang: String?,
     onOpenUrl: (String) -> Unit,
     links: StoryLinkCards? = null,
     /** On each heading (in a quote or a list too): where the table of contents finds it ([StoryAnchors]). */
     headingAnchor: ((StoryBlock.Heading) -> Modifier)? = null,
-    embed: @Composable (href: String, title: String) -> Unit,
+    /** A card link standing alone, drawn by the page in the story's [ProseStyle] (for when it has no card to show). */
+    embed: @Composable (href: String, title: String, style: ProseStyle) -> Unit,
 ) {
-    BlockColumn(blocks, ProseStyle.Body, Story(onOpenUrl, links, embed, headingAnchor))
+    val story = remember(type, lang, onOpenUrl, links, embed, headingAnchor) { Story(type, lang, onOpenUrl, links, embed, headingAnchor) }
+    BlockColumn(blocks, story.body, story, nested = false)
 }
 
-/** What every block of one story is drawn with: its taps, its link cards, its card embeds and its headings' anchors. */
+/** What every block of one story is drawn with: its type, its taps, its link cards, its card embeds and its headings' anchors. */
 private class Story(
+    val type: StoryType,
+    val lang: String?,
     val onOpenUrl: (String) -> Unit,
     val links: StoryLinkCards?,
-    val embed: @Composable (String, String) -> Unit,
+    val embed: @Composable (String, String, ProseStyle) -> Unit,
     val headingAnchor: ((StoryBlock.Heading) -> Modifier)?,
-)
+) {
+    val body = ProseStyle.body(type, lang)
+    val spacing = type.spacing()
+
+    /** Whether a standalone link is drawn as its page's card (a preview came with the page), for the room around it. */
+    fun drawnAsCard(link: StoryBlock.SoleLink): Boolean = links?.previews?.containsKey(link.key) == true
+}
 
 /**
- * The reader's 1em in dp: 17 at the system's normal text size, more when the
- * text scale grows the body, so the margins, indents and list markers the web
- * measures in ems stay in proportion to the words they sit beside.
+ * How much the story's text size has grown the room between its blocks: the body's size in dp at
+ * the text scale in force over its size at the normal one (1 at the system's normal size, up to 2
+ * inside [ReadingTextScale]) — so margins, indents and gaps the web measures in ems, and the px
+ * ones around pictures and cards, stay in proportion to the words they sit beside.
  */
 @Composable
-private fun readerEm(): Dp = with(LocalDensity.current) { cssFontPx(ProseMetrics.EM).toDp() }
+private fun grown(type: StoryType): Float = with(LocalDensity.current) { cssFontPx(type.bodySize) / density } / type.bodySize
 
 @Composable
-private fun BlockColumn(blocks: List<StoryBlock>, style: ProseStyle, story: Story) {
-    val gaps = remember(blocks) { ProseMetrics.gaps(blocks) }
-    val grown = readerEm().value / ProseMetrics.EM
+private fun BlockColumn(blocks: List<StoryBlock>, style: ProseStyle, story: Story, nested: Boolean) {
+    val gaps = remember(blocks, story) { ProseMetrics.gaps(blocks, story.spacing, nested, story::drawnAsCard) }
+    val grown = grown(story.type)
     Column(Modifier.fillMaxWidth()) {
         blocks.forEachIndexed { i, block ->
             if (gaps[i] > 0) Spacer(Modifier.height((gaps[i] * grown).dp))
@@ -322,24 +536,27 @@ private fun BlockColumn(blocks: List<StoryBlock>, style: ProseStyle, story: Stor
 
 @Composable
 private fun Block(block: StoryBlock, style: ProseStyle, story: Story) {
-    val em = readerEm()
+    val grown = grown(story.type)
+    val em = (story.type.bodySize * grown).dp
     val onOpenUrl = story.onOpenUrl
     when (block) {
         is StoryBlock.Paragraph -> RichCssText(block.runs, style, onOpenUrl)
+        // h2–h6 at their start, balanced; inside a quote in its muted ink.
         is StoryBlock.Heading -> RichCssText(
-            block.runs, if (block.level <= 2) ProseStyle.H2 else ProseStyle.H3, onOpenUrl,
+            block.runs, ProseStyle.heading(story.type, block.level, story.lang, style.color).copy(inQuote = style.inQuote), onOpenUrl,
             Modifier.semantics { heading() }.then(story.headingAnchor?.invoke(block) ?: Modifier),
         )
-        StoryBlock.Blank -> Spacer(Modifier.height(em * 1.6f).clearAndSetSemantics { })
+        StoryBlock.Blank -> Spacer(Modifier.height((story.spacing.blank * grown).dp).clearAndSetSemantics { })
         is StoryBlock.Image -> StoryImage(block.url, block.alt, atStart = style.inQuote)
-        is StoryBlock.CardEmbed -> Centred(style.inQuote) { story.embed(block.href, block.title) }
+        // A card sets its own type: the interface's text size, not the story's.
+        is StoryBlock.CardEmbed -> Centred(style.inQuote) { story.embed(block.href, block.title, style) }
         // The page's card when the server made one for this link; otherwise the paragraph as written.
         is StoryBlock.SoleLink -> {
             val links = story.links
             val preview = links?.previews?.get(block.key)
             if (links != null && preview != null) {
                 val host = links.host(preview)
-                Centred(style.inQuote) { StoryLinkCard(preview, host, links.label(host), onOpen = { links.open(preview) }) }
+                Centred(style.inQuote) { CappedTextScale { StoryLinkCard(preview, host, links.label(host), onOpen = { links.open(preview) }) } }
             } else {
                 RichCssText(block.runs, style, onOpenUrl)
             }
@@ -362,21 +579,42 @@ private fun Block(block: StoryBlock, style: ProseStyle, story: Story) {
                     drawPath(path, Tokens.TerracottaLight, style = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round))
                 }
                 .padding(start = QuoteRailWidth + em),
-        ) { BlockColumn(block.children, style.quoted, story) }
-        is StoryBlock.ListBlock -> Column(verticalArrangement = Arrangement.spacedBy(em * 0.3f)) {
-            block.items.forEachIndexed { i, item ->
-                Row {
-                    Box(Modifier.width(em * 1.5f)) {
-                        RichCssText(listOf(InlineRun(if (block.ordered) "${block.start + i}." else "•")), style, onOpenUrl, Modifier.clearAndSetSemantics { })
+        ) { BlockColumn(block.children, style.quoted, story, nested = true) }
+        // Each item's marker in the muted ink at the start of the 1.6em gutter, the items 0.3em apart.
+        is StoryBlock.ListBlock -> {
+            val itemGaps = remember(block, story) { ProseMetrics.itemGaps(block.items, story.spacing, story::drawnAsCard) }
+            val marker = style.copy(color = Tokens.TextMuted, justified = false, latinMarks = false)
+            Column {
+                block.items.forEachIndexed { i, item ->
+                    if (itemGaps[i] > 0) Spacer(Modifier.height((itemGaps[i] * grown).dp))
+                    Row {
+                        Box(Modifier.width((story.type.listIndent * grown).dp)) {
+                            RichCssText(listOf(InlineRun(if (block.ordered) "${block.start + i}." else "•")), marker, onOpenUrl, Modifier.clearAndSetSemantics { })
+                        }
+                        Box(Modifier.weight(1f)) { BlockColumn(item, style, story, nested = false) }
                     }
-                    Box(Modifier.weight(1f)) { BlockColumn(item, style, story) }
                 }
             }
         }
         StoryBlock.Rule -> WavyDivider(seed = 23.0)
-        is StoryBlock.CodeBlock -> BasicText(block.code, style = AppFonts.body(15f, color = Tokens.Text).copy(fontFamily = FontFamily.Monospace))
+        // A block of code: monospace at the inline code's size, 1.6 apart, on the code tint, never justified or tracked.
+        is StoryBlock.CodeBlock -> BasicText(
+            block.code,
+            style = AppFonts.style(story.type.bodyFamily, story.type.codeSize, lineHeight = CODE_LEADING, color = style.color)
+                .copy(fontFamily = FontFamily.Monospace),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(CodeTint, RoundedCornerShape(Tokens.RadiusSm.dp))
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        )
     }
 }
+
+/** A code block's line height (story.css `pre`). */
+private const val CODE_LEADING = 1.6f
+
+/** `--story-code-tint`: the text's ink at 6 %. */
+private val CodeTint = Tokens.Text.copy(alpha = 0.06f)
 
 /**
  * OrganicStoryImage: a photo at its own proportions (≤ 520dp or 62% of the
