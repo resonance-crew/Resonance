@@ -40,7 +40,15 @@ export async function assignSlug(
   });
 
   // Not `updatedAt`: publishing stamped it (with the card's list summary,
-  // lib/api/v1/summary), and naming the card changes nothing it shows.
-  await ref.set({ slug }, { merge: true });
+  // lib/api/v1/summary), and naming the card changes nothing it shows. An
+  // update, never a merge: a card deleted for good while its slug was being
+  // made (publish, then 永久刪除 a moment later) stays deleted — a merge
+  // would bring back a stub of it, holding the slug for good.
+  try {
+    await ref.update({ slug });
+  } catch (e) {
+    // Firestore's NOT_FOUND: nothing left to name — done.
+    if ((e as { code?: unknown } | null)?.code !== 5) throw e;
+  }
   return slug;
 }

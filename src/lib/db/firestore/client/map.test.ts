@@ -10,6 +10,24 @@ const base = {
 };
 
 describe('mapCard (client)', () => {
+  // Its author's read of their own card in the trash (no one else can read it).
+  it('says when a card went into the trash and what restoring brings back — nothing for a card not there', () => {
+    const at = new Date('2026-10-01T08:00:00Z');
+    expect(mapCard('c1', { ...base, visibility: 'private', trashedAt: at, trashedFrom: { visibility: 'connections', referenceCardId: 'orig' } })).toMatchObject({
+      visibility: 'private',
+      trashedAt: at,
+      trashedFrom: { visibility: 'connections', referenceCardId: 'orig' },
+    });
+    // What it holds is checked: an unknown visibility comes back private, a stray reference none.
+    expect(mapCard('c1', { ...base, trashedAt: at, trashedFrom: { visibility: 'everyone', referenceCardId: 7 } }).trashedFrom).toEqual({
+      visibility: 'private',
+      referenceCardId: null,
+    });
+    const live = mapCard('c1', base);
+    expect(live).not.toHaveProperty('trashedAt');
+    expect(live).not.toHaveProperty('trashedFrom');
+  });
+
   it('keeps a numeric accentHue', () => {
     expect(mapCard('c1', { ...base, accentHue: 215 }).accentHue).toBe(215);
   });

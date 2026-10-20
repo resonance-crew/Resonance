@@ -31,6 +31,7 @@ import { getMyBlockedIds } from '@/lib/db/firestore/client/blocks';
 import { ApiError, callApi } from '@/lib/db/firestore/client/api';
 import { hasSessionMark } from '@/lib/auth/firebase/client';
 import { linkPreviewsOf } from '@/lib/links/previewShape';
+import { trashExpired } from '@/lib/cards/trash';
 import type { CardBoxTabName, CardDetailBody, CardListBody, FeedPageBody, ProfileBody } from '@/lib/api/v1/schemas';
 import type { Conversation, Notification } from '@/lib/db/types';
 import { useLive, type LiveState } from './live';
@@ -234,7 +235,10 @@ const serverCardIds = new Map<string, string>();
  * document names its author): when the rules refuse, the server is asked —
  * GET /api/v1/cards/{key} signed in (which applies the viewer's blocks to it
  * too), the card page's public seed signed out — and answers it without its
- * author (`authorId` empty).
+ * author (`authorId` empty). The viewer's own card in their trash is found
+ * the same way: the server render and the slug lookup, which answer anyone,
+ * know no card there (it is gone to everyone else), but GET /api/v1/cards/{key}
+ * knows its author.
  *
  * `knownId` is the id the page's server render found for the segment (by
  * default, whatever {@link useCard} was handed for it): it is read directly,
@@ -258,6 +262,8 @@ export async function fetchCardView(
   } else {
     card = await getCardBySlugOrId(key);
   }
+  // Its author's own card past its 30 days in the trash is gone to them too, before the purge reaches it.
+  if (card?.trashedAt && trashExpired(card.trashedAt)) return null;
   if (!card) return serverCardView(key, viewerId);
   if (card.anonymous && card.authorId !== viewerId) return { card, author: anonymousAuthor(card) };
   return { card, author: await getUserById(card.authorId) };
@@ -270,7 +276,25 @@ async function serverCardView(key: string, viewerId: string | undefined): Promis
     return seed?.view ? seedCardView(seed.view) : null;
   }
   const body = await getOrNull<CardDetailBody>(`/api/v1/cards/${encodeURIComponent(key)}`);
-  return body ? detailCardView(body, viewerId) : null;
+  if (!body) return null;
+  if (body.isOwner) {
+    // The viewer's own card, which the slug lookup didn't name: one in their
+    // trash, gone to everyone else (/api/cards/resolve answers it as a miss).
+    // The server knows whose it is; the card itself is read whole through the
+    // rules by the id it answered — which then stands for the key, so the
+    // next read goes straight to it.
+    let own: Card | null = null;
+    try {
+      own = await getCardById(body.card.id);
+    } catch {
+      // Not read here: the server's answer will do.
+    }
+    if (own) {
+      serverCardIds.set(key, own.id);
+      return { card: own, author: await getUserById(viewerId) };
+    }
+  }
+  return detailCardView(body, viewerId);
 }
 
 /** GET /api/v1/cards/{key}'s answer as the card page's card and byline. */
@@ -436,9 +460,10 @@ export function useMyProfile() {
 /**
  * A shelf of the card box: the viewer's own published / private / draft
  * cards, the originals they resonated with, cards other people linked to
- * theirs ("link with a card"), and their bookmarks (private, visible only here).
+ * theirs ("link with a card"), their bookmarks (private, visible only here),
+ * and their trash.
  */
-export type CardBoxShelf = CardBoxTab | 'linked' | 'bookmarks';
+export type CardBoxShelf = CardBoxTab | 'linked' | 'bookmarks' | 'trash';
 
 /** One shelf's cards with their bylines. */
 export type CardBoxShelfData = CardsWithAuthors;
@@ -454,10 +479,16 @@ async function othersShelf(tab: Extract<CardBoxTabName, 'resonated' | 'linked' |
   return summaryList(await callApi<CardListBody>(`/api/v1/me/cards?tab=${tab}`));
 }
 
-/** A shelf: the viewer's own cards read through the rules, the others' from the server. */
+/**
+ * A shelf: the viewer's own cards read through the rules, the others' from
+ * the server — and the trash from the server too: its list summaries (never a
+ * hundred whole stories through the rules), each saying when it went in and
+ * what restoring brings back. A summary never prefills a card page.
+ */
 async function readShelf(uid: string, shelf: CardBoxShelf): Promise<CardBoxShelfData> {
   // A bookmarked card that has since gone private simply drops out.
   if (shelf === 'resonated' || shelf === 'linked' || shelf === 'bookmarks') return othersShelf(shelf);
+  if (shelf === 'trash') return summaryList(await callApi<CardListBody>('/api/v1/me/cards?tab=trash'));
   const cards = await getCardsByAuthor(uid, shelf);
   return { cards, authors: await getUsersByIds(bylineAuthorIds(cards, uid)) };
 }
@@ -495,7 +526,8 @@ export function useMyThoughtMap() {
       getCardsByAuthor(uid, 'private'),
       getCardsByAuthor(uid, 'draft'),
     ]);
-    const own = [...published, ...priv, ...draft];
+    // (Cards in the trash are on none of these shelves: see getCardsByAuthor.)
+    const own = [...published, ...priv, ...draft].filter((c) => !c.trashedAt);
     const ownIds = new Set(own.map((c) => c.id));
     // The originals the viewer resonated with, named by their own resonance
     // cards just read — not a second scan of the same cards (the card box's
@@ -508,7 +540,10 @@ export function useMyThoughtMap() {
     const missing = [...new Set(map.nodes.map((n) => n.cardId))].filter((id) => !ownIds.has(id) && !refIds.includes(id));
     const wanted = [...refIds, ...missing];
     const found = new Map<string, Card>();
-    for (const c of await Promise.all(wanted.map((id) => getCardById(id)))) if (c) found.set(c.id, c);
+    // One of the viewer's own cards in the trash is read here (the rules let
+    // its author read it) but is not drawn: its node, arrows and group stay
+    // stored, so a restore puts it back where it was.
+    for (const c of await Promise.all(wanted.map((id) => getCardById(id)))) if (c && !c.trashedAt) found.set(c.id, c);
     const unread = wanted.filter((id) => !found.has(id));
     if (unread.length) for (const c of (await fetchCardSummaries(unread).catch(() => EMPTY)).cards) found.set(c.id, c);
     const resonated = refIds.flatMap((id) => found.get(id) ?? []);

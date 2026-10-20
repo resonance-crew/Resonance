@@ -10,6 +10,9 @@ import {
 } from '@/lib/account/deletion';
 import { exportAccountData, exportAccountJson } from '@/lib/account/export';
 import { sendNote } from '@/lib/api/v1/conversations';
+import { trashCard } from '@/lib/api/v1/trash';
+import { readCardForPage } from '@/app/[locale]/(app)/card/[slug]/cardPageData';
+import { GET as resolveCard } from '@/app/api/cards/resolve/route';
 
 // Account purge against the real Firestore emulator. Alice is deleted; Bob is
 // connected to her, resonated with her card, and messaged her. Everything that
@@ -19,11 +22,15 @@ import { sendNote } from '@/lib/api/v1/conversations';
 const PROJECT = 'demo-resonance-test';
 let app: App;
 let db: Firestore;
+// The public lookup (/api/cards/resolve) reads the app's admin database.
+const mocks = vi.hoisted(() => ({ db: null as Firestore | null }));
+vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => mocks.db }));
 
 beforeAll(() => {
   process.env.FIRESTORE_EMULATOR_HOST ??= '127.0.0.1:8080';
   app = initializeApp({ projectId: PROJECT }, 'account-purge-test');
   db = getFirestore(app);
+  mocks.db = db;
 });
 
 afterAll(async () => {
@@ -294,6 +301,25 @@ describe('purgeAccount', () => {
     expect(await exists(`notes/${withheld.id}`)).toBe(false);
   });
 
+  // A card in the trash is still its author's card (cards by authorId): the
+  // account takes it, with what is under it and the notes a named one kept.
+  it('removes the cards in its trash, with their pending edits and notes', async () => {
+    await seedWorld();
+    const at = Timestamp.fromDate(new Date('2026-09-30T00:00:00Z'));
+    const trash = { visibility: 'private', trashedAt: at, trashedFrom: { visibility: 'public', referenceCardId: null } };
+    await Promise.all([
+      db.doc('cards/alice-trashed').set({ authorId: 'alice', thoughtCore: 'T', story: 's', anonymous: false, publishedAt: at, ...trash }),
+      db.doc('cards/alice-trashed/edits/current').set({ story: 'half' }),
+      db.doc('cards/alice-trashed-draft').set({ authorId: 'alice', thoughtCore: 'D', story: 's', publishedAt: null, ...trash }),
+      db.doc('notes/on-trashed').set({ cardId: 'alice-trashed', fromUserId: 'bob', toUserId: 'alice', text: 'hi', readAt: null, createdAt: at }),
+    ]);
+    await purgeAccount({ db, deleteAuthUser: vi.fn(async () => {}) }, 'alice');
+    expect(await exists('cards/alice-trashed')).toBe(false);
+    expect(await exists('cards/alice-trashed/edits/current')).toBe(false);
+    expect(await exists('cards/alice-trashed-draft')).toBe(false);
+    expect(await exists('notes/on-trashed')).toBe(false);
+  });
+
   it('removes the notes on a card before the card, so a purge cut short leaves none its next run could no longer find', async () => {
     const at = Timestamp.fromDate(new Date('2026-09-30T00:00:00Z'));
     const writer = db.bulkWriter();
@@ -347,6 +373,33 @@ describe('the pages that showed the account', () => {
     // public card may be on the landing page.
     expect(report.pages).toEqual(['/card/alice-card', '/card/a-card', '/u/alice', '/']);
     expect(revalidate).toHaveBeenCalledWith(report.pages);
+  });
+
+  // The trash, then the account: what anyone can ask of an anonymous card
+  // in the trash must not turn in the purge's minute, beside the profile's
+  // page, or it would say whose card it was. To anyone it was gone at the
+  // trash (a deleted card's answer), and the purge names no page of it.
+  it("name no card in the trash: it was gone to everyone when it went in, and the purge doesn't revalidate it beside the profile", async () => {
+    await seedWorld();
+    await db.doc('cards/alice-card').update({ slug: 'a-card', publishedAt: new Date() });
+    await db.doc('cards/alice-masked').set({
+      authorId: 'alice', thoughtCore: 'M', story: 's', visibility: 'public', anonymous: true, slug: 'a-masked-night', publishedAt: new Date(),
+    });
+    await trashCard(db, 'alice', 'alice-masked', { vectors: { setVisibility: async () => {} } });
+    const asked = async (key: string) => {
+      const resolved = await resolveCard(new Request(`http://localhost/api/cards/resolve?key=${key}`));
+      return { page: await readCardForPage(db, key), resolved: await resolved.json(), cache: resolved.headers.get('cache-control') };
+    };
+    const missing = await asked('never-was');
+    expect(missing).toEqual({ page: { id: null, card: null, author: null }, resolved: { id: null }, cache: 'no-store' });
+    for (const key of ['a-masked-night', 'alice-masked']) expect(await asked(key), key).toEqual(missing);
+
+    const revalidate = vi.fn();
+    const report = await purgeAccount({ db, deleteAuthUser: vi.fn(async () => {}), revalidate }, 'alice');
+    expect(await exists('cards/alice-masked')).toBe(false);
+    // Its pages were revalidated when it went in, and show nothing since.
+    expect(report.pages).toEqual(['/card/alice-card', '/card/a-card', '/u/alice', '/']);
+    for (const key of ['a-masked-night', 'alice-masked']) expect(await asked(key), key).toEqual(missing);
   });
 
   it('never keep the account from being deleted when revalidating fails', async () => {

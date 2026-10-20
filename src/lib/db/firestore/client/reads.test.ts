@@ -31,6 +31,7 @@ import { getDoc, getDocs } from 'firebase/firestore/lite';
 import {
   forgetCachedUser,
   getCardById,
+  getCardsByAuthor,
   getCurrentUserProfile,
   getLatestPublishedFeed,
   getPublicCardsByAuthor,
@@ -238,5 +239,40 @@ describe('getUserByHandle', () => {
     await expect(getUserByHandle('BOB')).resolves.toMatchObject({ id: 'bob' });
     const q = vi.mocked(getDocs).mock.calls[0][0] as unknown as { filters: unknown[] };
     expect(q.filters).toEqual([{ field: 'handleLower', op: '==', value: 'bob' }, { limit: 1 }]);
+  });
+});
+
+describe('getCardsByAuthor: the card box shelves read through the rules', () => {
+  beforeEach(() => vi.clearAllMocks());
+  const published = new Date('2026-09-01T08:00:00Z');
+  const doc = (id: string, data: Record<string, unknown>) => ({ id, data: () => ({ authorId: 'me', thoughtCore: id, story: '', ...data }) });
+  const trashed = { trashedAt: new Date('2026-10-01T08:00:00Z'), trashedFrom: { visibility: 'public', referenceCardId: null } };
+
+  // A card in the trash is private while there, and its query is the private shelf's own: read past it.
+  it('leaves cards in the trash off the private shelf before it is cut to forty, however many newer ones there are', async () => {
+    const docs = [
+      ...Array.from({ length: 45 }, (_, i) => doc(`t${i}`, { visibility: 'private', publishedAt: published, ...trashed })),
+      doc('kept', { visibility: 'private', publishedAt: published }),
+    ];
+    vi.mocked(getDocs).mockResolvedValue({ docs } as never);
+    const cards = await getCardsByAuthor('me', 'private');
+    expect(cards.map((c) => c.id)).toEqual(['kept']);
+    const asked = vi.mocked(getDocs).mock.calls[0][0] as unknown as { filters: unknown[] };
+    expect(asked.filters).toContainEqual({ limit: 80 });
+  });
+
+  it('leaves them off the drafts before the newest forty are taken', async () => {
+    const docs = [
+      ...Array.from({ length: 45 }, (_, i) => doc(`t${i}`, { visibility: 'private', publishedAt: null, ...trashed })),
+      doc('draft', { visibility: 'public', publishedAt: null }),
+    ];
+    vi.mocked(getDocs).mockResolvedValue({ docs } as never);
+    expect((await getCardsByAuthor('me', 'draft')).map((c) => c.id)).toEqual(['draft']);
+  });
+
+  it('still shows forty of the cards not in the trash', async () => {
+    const docs = Array.from({ length: 60 }, (_, i) => doc(`p${i}`, { visibility: 'private', publishedAt: published }));
+    vi.mocked(getDocs).mockResolvedValue({ docs } as never);
+    expect(await getCardsByAuthor('me', 'private')).toHaveLength(40);
   });
 });

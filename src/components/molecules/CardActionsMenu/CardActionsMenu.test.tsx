@@ -3,6 +3,9 @@ import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest'
 import type { ReactNode } from 'react';
 import useSWR, { SWRConfig } from 'swr';
 import { renderWithIntl, screen, userEvent, waitFor } from '@/../test/render';
+import { ToastProvider } from '@/components/providers/ToastProvider';
+import { RestoredAloneNotice } from '@/components/molecules/TrashActionsMenu/RestoredAloneNotice';
+import { closeRestoredAlone } from '@/lib/data/trash';
 import { CardActionsMenu } from './CardActionsMenu';
 
 // The owner's「⋯」on a card, on the real client card writes: the v1 API call
@@ -20,7 +23,8 @@ vi.mock('@/lib/auth/firebase/client', () => ({
 }));
 
 const mockCallApi = vi.fn();
-vi.mock('@/lib/db/firestore/client/api', () => ({
+vi.mock('@/lib/db/firestore/client/api', async (orig) => ({
+  ...(await orig<typeof import('@/lib/db/firestore/client/api')>()),
   callApi: (...args: unknown[]) => mockCallApi(...args),
 }));
 
@@ -52,22 +56,40 @@ function OwnLists() {
   useSWR('connected:orig-author_u1', connectionReads.connected);
   useSWR('conversation:orig-author_u1', connectionReads.conversation);
   useSWR('conversations:u1', connectionReads.people);
+  useSWR('cardbox:u1:trash', trashShelfReads);
+  useSWR('thoughtmap:u1', thoughtMapReads);
   return null;
 }
+const trashShelfReads = vi.fn(async () => []);
+const thoughtMapReads = vi.fn(async () => ({}));
 
 function renderMenu(menu: ReactNode) {
   return renderWithIntl(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-      <OwnLists />
-      {menu}
+      <ToastProvider>
+        <OwnLists />
+        {menu}
+        <RestoredAloneNotice />
+      </ToastProvider>
     </SWRConfig>,
   );
 }
+
+/** A v1 card summary of the card a resonance answers (GET /cards?keys=). */
+const originalSummary = (anonymous: boolean) => ({
+  id: 'orig', slug: 'orig', title: 'Rain on the way home', excerpt: '', tags: [], publishedAt: null,
+  author: anonymous ? null : { id: 'orig-author', handle: 'o', initials: 'O', accentColor: 'c', avatarUrl: null, avatarSeed: null, verified: false, region: null },
+  anonymous, visibility: 'public', imageUrl: null, imageLabel: null, accentHue: null, readMinutes: 1, referenceCardId: null, reason: null,
+});
+/** A published, public resonance under the viewer's name: the trash takes back what it reached. */
+const reaching = { id: 'c5', visibility: 'public' as const, referenceCardId: 'orig', published: true, anonymous: false, title: 'My answer' };
+const trashCalls = () => mockCallApi.mock.calls.filter(([path]) => String(path).endsWith('/trash'));
 
 describe('CardActionsMenu', () => {
   let fetchSpy: MockInstance<typeof fetch>;
   beforeEach(() => {
     vi.clearAllMocks();
+    closeRestoredAlone();
     mockCallApi.mockResolvedValue({});
     fetchSpy = vi.spyOn(globalThis, 'fetch');
     return () => fetchSpy.mockRestore();
@@ -119,32 +141,134 @@ describe('CardActionsMenu', () => {
     );
   });
 
-  it('asks for confirmation before deleting, and deletes through the server on confirm', async () => {
-    const onDeleted = vi.fn();
-    renderMenu(<CardActionsMenu card={{ id: 'c3', visibility: 'public' }} onDeleted={onDeleted} />);
+  it("moves a card to the trash at once — no question — reads its lists again, and the toast's Undo brings it back", async () => {
+    const onTrashed = vi.fn();
+    const onRestored = vi.fn();
+    mockCallApi.mockImplementation(async (path: string) =>
+      path.endsWith('/restore') ? { card: { id: 'c3' }, changed: true, droppedResonance: false } : { card: { id: 'c3' }, changed: true },
+    );
+    renderMenu(<CardActionsMenu card={{ id: 'c3', visibility: 'public', published: true, title: 'A walk' }} onTrashed={onTrashed} onRestored={onRestored} />);
     await waitFor(() => expect(boxReads).toHaveBeenCalledTimes(1));
 
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
     await userEvent.click(screen.getByText('Delete'));
 
-    // Nothing deleted yet — the confirm dialog is showing instead.
-    expect(mockCallApi).not.toHaveBeenCalled();
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText('Delete this card?')).toBeInTheDocument();
-
-    // Deleting can't be undone: the verb is red and rightmost, "keep it" the
-    // tonal pill before it — the one confirm dialog's row.
-    const verb = screen.getByRole('button', { name: 'Delete card' });
-    const keep = screen.getByRole('button', { name: 'Keep it' });
-    expect(verb).toHaveAttribute('data-variant', 'danger');
-    expect(keep).toHaveAttribute('data-variant', 'tonal');
-    expect(Array.from(verb.parentElement!.children)).toEqual([keep, verb]);
-
-    await userEvent.click(screen.getByText('Delete card'));
-    await waitFor(() => expect(mockCallApi).toHaveBeenCalledWith('/api/v1/cards/c3', { method: 'DELETE' }));
-    expect(onDeleted).toHaveBeenCalled();
+    await waitFor(() => expect(mockCallApi).toHaveBeenCalledWith('/api/v1/cards/c3/trash', { method: 'POST' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onTrashed).toHaveBeenCalledWith('c3');
     await waitFor(() => expect(boxReads).toHaveBeenCalledTimes(2));
-    expect(fetchSpy).not.toHaveBeenCalled();
+    await waitFor(() => expect(trashShelfReads).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(thoughtMapReads).toHaveBeenCalledTimes(2));
+    expect(profileReads).toHaveBeenCalledTimes(2);
+    // The live region says which card; the pill is one button, named with its own words first.
+    expect(screen.getByRole('status')).toHaveTextContent('"A walk" moved to the trash');
+    const undo = screen.getByRole('button', { name: 'Moved to the trash · Undo "A walk"' });
+    expect(undo).toHaveTextContent('Moved to the trash · Undo');
+
+    await userEvent.click(undo);
+    await waitFor(() => expect(mockCallApi).toHaveBeenCalledWith('/api/v1/cards/c3/restore', { method: 'POST' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Restored'));
+    expect(onRestored).toHaveBeenCalledWith(expect.objectContaining({ id: 'c3' }));
+    await waitFor(() => expect(boxReads).toHaveBeenCalledTimes(3));
+  });
+
+  it.each([
+    ['a draft resonance', { ...reaching, published: false }],
+    ['a private one', { ...reaching, visibility: 'private' as const }],
+    ['one for connections only', { ...reaching, visibility: 'connections' as const }],
+    ['an anonymous one', { ...reaching, anonymous: true }],
+    ['a card that answers nothing', { ...reaching, referenceCardId: undefined }],
+  ])('asks nothing before trashing %s: it reached no one the trash could disconnect', async (_what, card) => {
+    renderMenu(<CardActionsMenu card={card} referenceTitle="A walk" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
+    await userEvent.click(screen.getByText('Delete'));
+    await waitFor(() => expect(trashCalls()).toHaveLength(1));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it("asks nothing before trashing a resonance to an anonymous card, looking it up when the page can't say", async () => {
+    mockCallApi.mockImplementation(async (path: string) => (path.startsWith('/api/v1/cards?keys=') ? { cards: [originalSummary(true)] } : {}));
+    renderMenu(<CardActionsMenu card={reaching} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
+    await userEvent.click(screen.getByText('Delete'));
+    await waitFor(() => expect(trashCalls()).toHaveLength(1));
+    expect(mockCallApi).toHaveBeenCalledWith('/api/v1/cards?keys=orig');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it.each([
+    ['the page says its original is named', { referenceAnonymous: false }, { cards: [] }],
+    ['the original, looked up, is named', {}, { cards: [originalSummary(false)] }],
+    ["the original can't be read (a connection can outlive it going private)", {}, { cards: [] }],
+  ])('asks first, in the plain colour, before trashing a resonance that reached its original — when %s', async (_when, props, keys) => {
+    mockCallApi.mockImplementation(async (path: string) => (path.startsWith('/api/v1/cards?keys=') ? keys : { card: { id: 'c5' }, changed: true }));
+    renderMenu(<CardActionsMenu card={reaching} {...props} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
+    await userEvent.click(screen.getByText('Delete'));
+
+    expect(await screen.findByText('Delete this resonance?')).toBeInTheDocument();
+    expect(trashCalls()).toHaveLength(0);
+    expect(
+      screen.getByText(
+        "The card moves to the trash, where you can restore it for 30 days. If this resonance is what connected you two and they haven't written to you, you won't be connected any more, even after you restore it.",
+      ),
+    ).toBeInTheDocument();
+    const verb = screen.getByRole('button', { name: 'Move to trash' });
+    expect(verb).toHaveAttribute('data-variant', 'solid');
+    expect(screen.getByRole('button', { name: 'Keep it' })).toHaveAttribute('data-variant', 'tonal');
+
+    await userEvent.click(verb);
+    await waitFor(() => expect(trashCalls()).toHaveLength(1));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('says so in a notice of its own when the trash refuses, leaving the card in its lists', async () => {
+    const onTrashed = vi.fn();
+    mockCallApi.mockRejectedValue(new Error('offline'));
+    renderMenu(<CardActionsMenu card={{ id: 'c3', visibility: 'public' }} onTrashed={onTrashed} />);
+    await waitFor(() => expect(boxReads).toHaveBeenCalledTimes(1));
+    await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
+    await userEvent.click(screen.getByText('Delete'));
+
+    const notice = await screen.findByRole('dialog', { name: 'Delete' });
+    expect(notice).toHaveTextContent("That didn't work — try again");
+    expect(onTrashed).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it("says when the Undo didn't go through, pointing at the trash", async () => {
+    mockCallApi.mockImplementation(async (path: string) => {
+      if (path.endsWith('/restore')) throw new Error('offline');
+      return { card: { id: 'c3' }, changed: true };
+    });
+    renderMenu(<CardActionsMenu card={{ id: 'c3', visibility: 'public', title: 'A walk' }} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
+    await userEvent.click(screen.getByText('Delete'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Moved to the trash · Undo "A walk"' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent("Couldn't restore it — try again from the trash"));
+  });
+
+  it('says a resonance came back on its own, in a notice with one way out', async () => {
+    mockCallApi.mockImplementation(async (path: string) =>
+      path.endsWith('/restore') ? { card: { id: 'c5' }, changed: true, droppedResonance: true } : { card: { id: 'c5' }, changed: true },
+    );
+    renderMenu(<CardActionsMenu card={{ ...reaching, published: false }} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
+    await userEvent.click(screen.getByText('Delete'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Moved to the trash · Undo "My answer"' }));
+    const notice = await screen.findByRole('dialog', { name: 'Restored' });
+    expect(notice).toHaveTextContent('This card is back, but it no longer resonates with the card it answered.');
+  });
+
+  it('shows no toast on the card\'s own page, which shows its banner instead', async () => {
+    const onTrashed = vi.fn();
+    mockCallApi.mockResolvedValue({ card: { id: 'c3' }, changed: true });
+    renderMenu(<CardActionsMenu card={{ id: 'c3', visibility: 'public', title: 'A walk' }} trashFeedback="page" onTrashed={onTrashed} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
+    await userEvent.click(screen.getByText('Delete'));
+    await waitFor(() => expect(onTrashed).toHaveBeenCalledWith('c3'));
+    expect(screen.queryByRole('button', { name: /Undo/ })).toBeNull();
   });
 
   it('offers 取消共振 only on a card that resonates with another', async () => {
@@ -234,9 +358,9 @@ describe('CardActionsMenu', () => {
   // A take-back by another way: hiding or deleting a resonance can end the connection with the original's author.
   it.each([
     ['making it private', 'Make private', null],
-    ['deleting it', 'Delete', 'Delete card'],
+    ['moving it to the trash', 'Delete', 'Move to trash'],
   ])('reads again what turns on the viewer’s connections after %s', async (_how, item, confirm) => {
-    renderMenu(<CardActionsMenu card={{ id: 'c5', visibility: 'public', referenceCardId: 'orig' }} referenceTitle="A walk" />);
+    renderMenu(<CardActionsMenu card={reaching} referenceTitle="A walk" referenceAnonymous={false} />);
     await waitFor(() => expect(connectionReads.people).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(connectionReads.connected).toHaveBeenCalledTimes(1));
 
@@ -260,20 +384,14 @@ describe('CardActionsMenu', () => {
     expect(connectionReads.people).toHaveBeenCalledTimes(1);
   });
 
-  // An older path, or a rule, refusing: the card stays where it was, and the viewer is told.
-  it('keeps the question open and says so when the server refuses the delete, leaving the card in its lists', async () => {
-    const onDeleted = vi.fn();
-    mockCallApi.mockRejectedValue(Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' }));
-    renderMenu(<CardActionsMenu card={{ id: 'c3', visibility: 'public' }} onDeleted={onDeleted} />);
-    await waitFor(() => expect(boxReads).toHaveBeenCalledTimes(1));
+  it('keeps the question open and says so when the trash refuses a resonance it asked about', async () => {
+    mockCallApi.mockRejectedValue(new Error('offline'));
+    renderMenu(<CardActionsMenu card={reaching} referenceAnonymous={false} />);
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
     await userEvent.click(screen.getByText('Delete'));
-    await userEvent.click(screen.getByRole('button', { name: 'Delete card' }));
-
+    await userEvent.click(await screen.findByRole('button', { name: 'Move to trash' }));
     expect(await screen.findByRole('alert')).toHaveTextContent("That didn't work — try again");
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(onDeleted).not.toHaveBeenCalled();
-    expect(boxReads).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('dialog', { name: 'Delete this resonance?' })).toBeInTheDocument();
   });
 
   it('says so when the server refuses a visibility change, and leaves the card as it was', async () => {
@@ -292,12 +410,12 @@ describe('CardActionsMenu', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
-  it('keeps the card when the confirm dialog is cancelled', async () => {
-    renderMenu(<CardActionsMenu card={{ id: 'c4', visibility: 'public' }} />);
+  it('keeps the card when the question is answered Keep it', async () => {
+    renderMenu(<CardActionsMenu card={reaching} referenceAnonymous={false} />);
 
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
     await userEvent.click(screen.getByText('Delete'));
-    await userEvent.click(screen.getByText('Keep it'));
+    await userEvent.click(await screen.findByText('Keep it'));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(mockCallApi).not.toHaveBeenCalled();

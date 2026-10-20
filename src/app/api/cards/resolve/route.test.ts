@@ -13,6 +13,14 @@ beforeEach(() => {
   fake = fakeAdminDb({
     'cards/doc1': { slug: 'a-quiet-morning', visibility: 'public', publishedAt: Timestamp.fromMillis(1_000) },
     'cards/secret': { slug: 'hidden-thoughts', visibility: 'private', publishedAt: Timestamp.fromMillis(2_000) },
+    'cards/binned': {
+      slug: 'a-binned-night',
+      visibility: 'private',
+      anonymous: true,
+      publishedAt: Timestamp.fromMillis(3_000),
+      trashedAt: Timestamp.fromMillis(4_000),
+      trashedFrom: { visibility: 'public', referenceCardId: null },
+    },
   });
 });
 
@@ -35,6 +43,17 @@ describe('GET /api/cards/resolve', () => {
   it('gives the id of a private card too — and nothing else of it', async () => {
     const res = await resolve('hidden-thoughts');
     expect(await res.json()).toEqual({ id: 'secret' });
+  });
+
+  // A private card's id says its document is there; a card in its author's
+  // trash must not, or the moment it went for good (30 days on, or with its
+  // author's account) would be seen — the same answer as a deleted card's.
+  it("knows no card in its author's trash, by slug or id — a deleted card's answer, never cached", async () => {
+    for (const key of ['a-binned-night', 'binned']) {
+      const res = await resolve(key);
+      expect(await res.json(), key).toEqual({ id: null });
+      expect(res.headers.get('cache-control'), key).toBe('no-store');
+    }
   });
 
   it('never lets a miss be cached (the slug may be assigned a moment later)', async () => {

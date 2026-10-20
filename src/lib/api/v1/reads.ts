@@ -1,4 +1,5 @@
 import { Timestamp, type DocumentData, type Firestore, type QueryDocumentSnapshot, type QuerySnapshot } from 'firebase-admin/firestore';
+import { trashExpired } from '@/lib/cards/trash';
 import { cardByKey, slugHolder } from '@/lib/db/firestore/cardKey';
 import { uidForHandle } from '@/lib/db/firestore/handles';
 import { mapCard } from '@/lib/db/firestore/mapper';
@@ -9,7 +10,7 @@ import { ApiFailure } from './http';
 import { pageEnd, pageQuery, type PageStart } from './paging';
 import { pairOf } from './conversations';
 import { letterReadsAsConnection } from './preLetter';
-import { blockedByViewer, blockHides, canView, connected, loadAuthors, presentLinkPreviews, toAuthor, toFeedCard, visibilityOf, visibleTo } from './present';
+import { blockedByViewer, blockHides, canView, connected, loadAuthors, presentLinkPreviews, toAuthor, toFeedCard, trashedAtOf, visibilityOf, visibleTo } from './present';
 import { properlyPublished } from './service';
 import {
   CARD_KEYS_MAX,
@@ -90,7 +91,10 @@ interface PresentOptions {
  * read once for all of them.
  */
 async function presentAll(db: Firestore, viewerId: string, lists: ListCard[][], blocked: Set<string>, reasons?: Map<string, string>): Promise<FeedCardBody[][]> {
-  const unblocked = lists.map((cards) => cards.filter((c) => !blockHides(c, blocked)));
+  // A card in the trash is in no list but the trash shelf — not even its
+  // author's (a thought map falling back to ?keys=, a thread's shared card
+  // read the same by both people); to everyone else it is private anyway.
+  const unblocked = lists.map((cards) => cards.filter((c) => !blockHides(c, blocked) && !inTrash(c)));
   const visible = new Set(await visibleTo(db, viewerId, unblocked.flat()));
   const [authors] = await Promise.all([loadAuthors(db, [...visible]), withStories(db, [...visible])]);
   // An empty reason (a quick first pass has none) is no reason.
@@ -106,6 +110,9 @@ async function present(db: Firestore, viewerId: string, cards: ListCard[], opts:
 }
 
 const toCards = (snap: QuerySnapshot) => snap.docs.map((d) => listCard(d.id, d.data()));
+
+/** A card in the trash (any stored `trashedAt`, however odd: such a card is no list's but the trash shelf's). */
+const inTrash = (c: Pick<Card, 'trashedAt'>) => c.trashedAt != null;
 
 /** Cards by id, for a list: in the order given, each once, missing ones left out — read without their stories. */
 async function cardsByIds(db: Firestore, ids: string[]): Promise<ListCard[]> {
@@ -155,7 +162,9 @@ async function cardsByKeys(db: Firestore, keys: string[]): Promise<ListCard[]> {
  * GET /cards?keys= — summaries of the cards named (slugs or ids), in the
  * order asked, for previews: those the viewer may read, minus the named
  * cards of people they blocked; anonymous ones without a byline (and never
- * left out for a block, see blockHides).
+ * left out for a block, see blockHides). A card in the trash is left out for
+ * everyone, its author too (presentAll): its slug still names it, so the key
+ * names nothing else.
  */
 export async function getCardsByKeys(db: Firestore, viewerId: string, keys: string[]): Promise<CardListBody> {
   const [cards, blocked] = await Promise.all([cardsByKeys(db, keys), blockedByViewer(db, viewerId)]);
@@ -206,7 +215,13 @@ export async function getCardDetail(
   include: ReadonlySet<CardInclude> = new Set(),
 ): Promise<CardDetailBody> {
   const card = await visibleCard(db, viewerId, key);
-  const ownerLinks = include.has('links') && card.authorId === viewerId;
+  const isOwner = card.authorId === viewerId;
+  // Your own card in the trash (no one else's to read): the card and its
+  // story, the cards it embeds — and none of the lists around it, which a
+  // card in the trash stands in none of (it answers nothing while there).
+  const trashed = isOwner && trashedAtOf(card) != null;
+  const lists = trashed ? new Set<CardInclude>([...include].filter((i) => i === 'embeds')) : include;
+  const ownerLinks = lists.has('links') && isOwner;
   const embedKeys = include.has('embeds') ? embeddedCardKeys(String(card.story ?? '')) : [];
   // The card itself is never kept from the viewer by their blocks: a named
   // one by someone they blocked is the client's to hide (its page knows the
@@ -216,8 +231,8 @@ export async function getCardDetail(
     card.anonymous ? null : db.doc(`users/${card.authorId}`).get(),
     card.referenceCardId ? cardsByIds(db, [card.referenceCardId]) : [],
     card.referenceCardId || include.size ? blockedByViewer(db, viewerId) : new Set<string>(),
-    include.has('resonances') ? resonancesOf(db, card.id).get().then(toCards) : [],
-    include.has('related') ? recentPublic(db).get().then(toCards) : [],
+    lists.has('resonances') ? resonancesOf(db, card.id).get().then(toCards) : [],
+    lists.has('related') ? recentPublic(db).get().then(toCards) : [],
     ownerLinks ? cardsLinkingTo(db, card.id) : [],
     embedKeys.length ? cardsByKeys(db, embedKeys) : [],
   ]);
@@ -228,13 +243,13 @@ export async function getCardDetail(
     blocked,
   );
   return {
-    card: toFeedCard(card, authorSnap?.exists ? authorSnap.data() : undefined),
+    card: toFeedCard(card, authorSnap?.exists ? authorSnap.data() : undefined, { own: isOwner }),
     story: String(card.story ?? ''),
     visibility: visibilityOf(card.visibility),
     anonymous: card.anonymous === true,
     resonanceCount: Number(card.resonanceCount ?? 0),
     coreInsight: card.signature?.coreInsight || null,
-    isOwner: card.authorId === viewerId,
+    isOwner,
     referenceCard: referenceCard[0] ?? null,
     ...(include.has('resonances') ? { resonances: { cards: resonanceCards } } : {}),
     ...(include.has('related') ? { related: { cards: relatedCards.slice(0, RELATED_LIMIT) } } : {}),
@@ -443,10 +458,12 @@ export async function getProfileLinks(db: Firestore, viewerId: string, handle: s
 const BOX_LIMIT = 40;
 /** How many drafts are read to find the most recently edited ones. */
 const DRAFT_SCAN = 200;
+/** The trash shelf shows the newest this many (emptying it takes them all). */
+export const TRASH_SHELF_LIMIT = 100;
 
-type OwnShelf = 'published' | 'private' | 'draft';
+type OwnShelf = 'published' | 'private' | 'draft' | 'trash';
 type OthersShelf = Exclude<CardBoxTabName, OwnShelf>;
-const OWN_SHELVES: readonly OwnShelf[] = ['published', 'private', 'draft'];
+const OWN_SHELVES: readonly OwnShelf[] = ['published', 'private', 'draft', 'trash'];
 const OTHERS_SHELVES: readonly OthersShelf[] = ['resonated', 'linked', 'bookmarks'];
 
 /**
@@ -454,8 +471,14 @@ const OTHERS_SHELVES: readonly OthersShelf[] = ['resonated', 'linked', 'bookmark
  * 40" query, an author's 41st published card pushed every draft (publishedAt
  * null sorts last) out of the box, and private cards crowded out public ones.
  */
-async function ownShelf(db: Firestore, viewerId: string, shelf: OwnShelf): Promise<ListCard[]> {
+async function ownShelf(db: Firestore, viewerId: string, shelf: OwnShelf, now: number): Promise<ListCard[]> {
   const own = db.collection('cards').where('authorId', '==', viewerId);
+  // A card in the trash is on the trash shelf alone. It is private while
+  // there, so the published shelf's query leaves it out on its own; the
+  // private and draft shelves leave it out before they are cut to size, so
+  // a trash full of newer cards never crowds out the ones still in use.
+  const kept = (d: QueryDocumentSnapshot) => d.get('trashedAt') == null;
+  if (shelf === 'trash') return trashShelf(db, viewerId, now);
   if (shelf === 'draft') {
     // A draft has no stored summary (it is made at publish): its story comes along.
     const snap = await own.where('publishedAt', '==', null).select(...LIST_FIELDS, 'story').limit(DRAFT_SCAN).get();
@@ -464,15 +487,44 @@ async function ownShelf(db: Firestore, viewerId: string, shelf: OwnShelf): Promi
       return at instanceof Timestamp ? at.toMillis() : 0;
     };
     // Most recently edited first (sorted here: drafts are few, and this needs no composite index).
-    return [...snap.docs].sort((a, b) => edited(b) - edited(a)).slice(0, BOX_LIMIT).map((d) => listCard(d.id, d.data()));
+    return snap.docs.filter(kept).sort((a, b) => edited(b) - edited(a)).slice(0, BOX_LIMIT).map((d) => listCard(d.id, d.data()));
   }
+  const isPrivate = shelf === 'private';
   const snap = await own
-    .where('visibility', 'in', shelf === 'private' ? ['private'] : ['public', 'connections'])
+    .where('visibility', 'in', isPrivate ? ['private'] : ['public', 'connections'])
     .orderBy('publishedAt', 'desc')
     .select(...LIST_FIELDS)
-    .limit(BOX_LIMIT)
+    // Private cards share their query with the trash's (private while there): read past them.
+    .limit(isPrivate ? BOX_LIMIT * 2 : BOX_LIMIT)
     .get();
-  return snap.docs.map((d) => listCard(d.id, d.data())).filter((c) => c.publishedAt);
+  return snap.docs
+    .filter(kept)
+    .map((d) => listCard(d.id, d.data()))
+    .filter((c) => c.publishedAt)
+    .slice(0, BOX_LIMIT);
+}
+
+/**
+ * The trash shelf: the viewer's cards in the trash, the latest in first, up
+ * to TRASH_SHELF_LIMIT — minus any past its purge date, which is gone to its
+ * owner too before the cron reaches it (lib/cards/trash). Read without their
+ * stories (a draft's comes in withStories: it has no summary).
+ */
+async function trashShelf(db: Firestore, viewerId: string, now: number): Promise<ListCard[]> {
+  const snap = await db
+    .collection('cards')
+    .where('authorId', '==', viewerId)
+    .where('trashedAt', '!=', null)
+    .orderBy('trashedAt', 'desc')
+    .select(...LIST_FIELDS)
+    .limit(TRASH_SHELF_LIMIT)
+    .get();
+  return snap.docs
+    .map((d) => listCard(d.id, d.data()))
+    .filter((c) => {
+      const at = trashedAtOf(c);
+      return at != null && !trashExpired(at, now);
+    });
 }
 
 /** The ids on a shelf of others' cards, in shelf order. */
@@ -494,17 +546,22 @@ async function othersShelfIds(db: Firestore, viewerId: string, shelf: OthersShel
  * Shelves of the viewer's card box (the web's useMyCardBox), each exactly as
  * GET /me/cards?tab= answers it: their own published, private and draft
  * cards (keeping their byline even when published anonymously, marked
- * `anonymous`); the originals they wrote a resonance for; cards linking to
- * theirs; their bookmarks. Everything the shelves need is read side by side,
+ * `anonymous`) and their trash; the originals they wrote a resonance for;
+ * cards linking to theirs; their bookmarks. Everything the shelves need is read side by side,
  * once: the shelves' queries, the viewer's profile and blocks, one batched
  * read of the others' cards, and the stories a summary can't stand in for.
  */
-export async function getCardBoxShelves(db: Firestore, viewerId: string, shelves: ReadonlySet<CardBoxTabName>): Promise<CardBoxBody> {
+export async function getCardBoxShelves(
+  db: Firestore,
+  viewerId: string,
+  shelves: ReadonlySet<CardBoxTabName>,
+  now = Date.now(),
+): Promise<CardBoxBody> {
   const own = OWN_SHELVES.filter((s) => shelves.has(s));
   const others = OTHERS_SHELVES.filter((s) => shelves.has(s));
   const [me, ownCards, blocked, otherIds] = await Promise.all([
     own.length ? db.doc(`users/${viewerId}`).get() : null,
-    Promise.all(own.map((s) => ownShelf(db, viewerId, s))),
+    Promise.all(own.map((s) => ownShelf(db, viewerId, s, now))),
     others.length ? blockedByViewer(db, viewerId) : new Set<string>(),
     Promise.all(others.map((s) => othersShelfIds(db, viewerId, s))),
   ]);
@@ -514,7 +571,8 @@ export async function getCardBoxShelves(db: Firestore, viewerId: string, shelves
 
   const box: CardBoxBody = {};
   own.forEach((s, i) => {
-    box[s] = { cards: ownCards[i].map((c) => toFeedCard(c, me?.data(), { deanonymize: true })) };
+    // The trash shelf's cards say when they went in, when they go and what restoring brings back.
+    box[s] = { cards: ownCards[i].map((c) => toFeedCard(c, me?.data(), { deanonymize: true, own: s === 'trash' })) };
   });
   others.forEach((s, i) => {
     box[s] = { cards: presented[i] };
@@ -523,6 +581,6 @@ export async function getCardBoxShelves(db: Firestore, viewerId: string, shelves
 }
 
 /** One shelf of the viewer's card box (GET /me/cards?tab=): getCardBoxShelves for that shelf alone. */
-export async function getCardBox(db: Firestore, viewerId: string, tab: CardBoxTabName): Promise<CardListBody> {
-  return (await getCardBoxShelves(db, viewerId, new Set([tab])))[tab] ?? { cards: [] };
+export async function getCardBox(db: Firestore, viewerId: string, tab: CardBoxTabName, now = Date.now()): Promise<CardListBody> {
+  return (await getCardBoxShelves(db, viewerId, new Set([tab]), now))[tab] ?? { cards: [] };
 }

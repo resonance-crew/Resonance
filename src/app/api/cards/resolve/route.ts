@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/db/firestore/admin';
-import { cardByKey } from '@/lib/db/firestore/cardKey';
+import { cardByKeyForAnyone } from '@/lib/db/firestore/cardKey';
 
 export const runtime = 'nodejs';
 
@@ -22,10 +22,14 @@ const RESOLVE_MISS_CACHE = 'no-store';
  * `get` rule, which is what actually gates access. The card page itself gets
  * the id from its server render and only comes here when that id no longer
  * reads; embedded cards and shared-card rows come here first.
+ *
+ * A card in its author's trash is a miss, as a deleted card is (see
+ * cardByKeyForAnyone): an id here would say its document is still there.
+ * Its author's browser then asks GET /api/v1/cards/{key}, which knows them.
  */
 export async function GET(req: Request) {
   const key = new URL(req.url).searchParams.get('key')?.trim();
-  const card = key ? await cardByKey(getAdminDb(), key) : null;
+  const card = key ? await cardByKeyForAnyone(getAdminDb(), key) : null;
   return NextResponse.json(
     { id: card?.id ?? null },
     { headers: { 'Cache-Control': card ? RESOLVE_HIT_CACHE : RESOLVE_MISS_CACHE } },

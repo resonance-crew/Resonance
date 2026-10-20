@@ -244,5 +244,6 @@ private fun CardBox.shelf(shelf: DefaultApi.TabGetCardBox) = when (shelf) {
     DefaultApi.TabGetCardBox.resonated -> resonated
     DefaultApi.TabGetCardBox.linked -> linked
     DefaultApi.TabGetCardBox.bookmarks -> bookmarks
+    DefaultApi.TabGetCardBox.trash -> trash
     DefaultApi.TabGetCardBox.unknownDefaultOpenApi -> null
 }

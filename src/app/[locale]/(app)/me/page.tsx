@@ -16,7 +16,7 @@ import styles from './page.module.css';
 // Answering an older invite — none are sent any more — loads after the page.
 const InvitesInbox = dynamic(() => import('@/components/molecules/InvitesInbox/InvitesInbox').then((m) => m.InvitesInbox));
 
-const tabs: TabKey[] = ['published', 'private', 'draft', 'resonated', 'linked', 'bookmarks', 'thoughtMap'];
+const tabs: TabKey[] = ['published', 'private', 'draft', 'resonated', 'linked', 'bookmarks', 'trash', 'thoughtMap'];
 
 export default function MyCardBoxPage() {
   const locale = useLocale();

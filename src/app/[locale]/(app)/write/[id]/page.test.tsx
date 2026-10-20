@@ -39,6 +39,13 @@ vi.mock('@/components/sections/WriteWorkspace/WriteWorkspace', () => ({
   },
 }));
 
+// The trash's restore goes through the server: the boundary here.
+const mockRestore = vi.fn();
+vi.mock('@/lib/db/firestore/client/cards', async (orig) => ({
+  ...(await orig<typeof import('@/lib/db/firestore/client/cards')>()),
+  restoreCard: (...a: unknown[]) => mockRestore(...a),
+}));
+
 import { getCardById } from '@/lib/db/firestore/client/reads';
 import { getPendingCardEdit } from '@/lib/db/firestore/client/cardEdits';
 import EditCardPage from './page';
@@ -227,5 +234,37 @@ describe('EditCardPage (client-fetched)', () => {
     const stories = workspaceSpy.mock.calls.map(([props]) => (props as { initial: { story: string } }).initial.story);
     expect(stories[0]).toBe('v2');
     expect(stories).not.toContain('v1');
+  });
+});
+
+describe('a card in the trash', () => {
+  const trashed = (days = 2): Card => ({
+    ...card('me'),
+    trashedAt: new Date(Date.now() - days * 86_400_000),
+    trashedFrom: { visibility: 'public', referenceCardId: null },
+  });
+
+  it('opens no editor — nothing can be saved into it — but offers to restore it, then opens it', async () => {
+    vi.mocked(getCardById).mockResolvedValueOnce(trashed()).mockResolvedValueOnce(card('me'));
+    mockRestore.mockResolvedValue({ card: { id: 'card-1' }, changed: true, droppedResonance: false });
+    renderPage();
+
+    expect(await screen.findByText('This card is in the trash')).toBeInTheDocument();
+    expect(screen.getByText('Restore it to keep writing')).toBeInTheDocument();
+    expect(screen.queryByTestId('write-workspace')).toBeNull();
+    const restore = screen.getByRole('button', { name: 'Restore and keep writing' });
+    expect(restore).toHaveAttribute('data-variant', 'solid');
+
+    restore.click();
+    await waitFor(() => expect(mockRestore).toHaveBeenCalledWith('card-1'));
+    expect(await screen.findByTestId('write-workspace')).toBeInTheDocument();
+    expect(getCardById).toHaveBeenCalledTimes(2);
+  });
+
+  it('is not found once its 30 days are up', async () => {
+    vi.mocked(getCardById).mockResolvedValue(trashed(31));
+    renderPage();
+    expect(await screen.findByText("This card can't be found")).toBeInTheDocument();
+    expect(screen.queryByText('This card is in the trash')).toBeNull();
   });
 });

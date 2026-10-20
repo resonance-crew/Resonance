@@ -21,7 +21,7 @@ vi.mock('firebase/firestore/lite', () => ({
 }));
 
 import { getDoc, setDoc } from 'firebase/firestore/lite';
-import { publishCard, resonateWith, unresonate, updateCardDraft } from './cards';
+import { deleteCardForever, emptyTrash, publishCard, resonateWith, restoreCard, trashCard, unresonate, updateCardDraft } from './cards';
 import { ApiError } from './api';
 
 function snapshot(publishedAt: unknown) {
@@ -142,6 +142,75 @@ describe('resonateWith / unresonate', () => {
       await expect(resonateWith('orig', 'mine')).rejects.toThrow('Not signed in');
       await expect(unresonate('orig', 'mine')).rejects.toThrow('Not signed in');
       expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('the trash', () => {
+  const calls = (fetchMock: ReturnType<typeof vi.fn>) =>
+    fetchMock.mock.calls.map(([url, init]) => `${(init as RequestInit).method} ${url as string}`);
+  const answering = (...bodies: unknown[]) => {
+    const queue = [...bodies];
+    return vi.fn(async () => new Response(JSON.stringify(queue.shift() ?? null), { status: 200 }));
+  };
+
+  it('moves a card to the trash and back through the server, never writing it from the browser', async () => {
+    const fetchMock = answering({ card: { id: 'c1' }, changed: true }, { card: { id: 'c1' }, changed: true, droppedResonance: false });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await expect(trashCard('c1')).resolves.toEqual({ card: { id: 'c1' }, changed: true });
+      await expect(restoreCard('c1')).resolves.toMatchObject({ droppedResonance: false });
+      expect(calls(fetchMock)).toEqual(['POST /api/v1/cards/c1/trash', 'POST /api/v1/cards/c1/restore']);
+      expect(setDoc).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("deletes for good only what is still in the trash when the trash's own delete asks so", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await deleteCardForever('c1', { onlyIfTrashed: true });
+      await deleteCardForever('c2');
+      expect(calls(fetchMock)).toEqual(['DELETE /api/v1/cards/c1?onlyIfTrashed=true', 'DELETE /api/v1/cards/c2']);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('empties a page at a time, keeping to the first cut-off, until nothing is left', async () => {
+    const before = '2026-10-20T08:00:00.000Z';
+    const fetchMock = answering({ deleted: 50, remaining: 7, before }, { deleted: 7, remaining: 0, before });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await expect(emptyTrash()).resolves.toEqual({ deleted: 57, remaining: 0 });
+      expect(calls(fetchMock)).toEqual(['DELETE /api/v1/me/trash', `DELETE /api/v1/me/trash?before=${encodeURIComponent(before)}`]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('stops when a call deletes nothing, however many are left (a card that keeps failing)', async () => {
+    const before = '2026-10-20T08:00:00.000Z';
+    const fetchMock = answering({ deleted: 50, remaining: 3, before }, { deleted: 0, remaining: 3, before }, { deleted: 3, remaining: 0, before });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await expect(emptyTrash()).resolves.toEqual({ deleted: 50, remaining: 3 });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('says a refusal as the API error it is (a card restored meanwhile: 409)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { code: 'conflict', message: 'This card is not in the trash.' } }), { status: 409 })));
+    try {
+      const e = await deleteCardForever('c1', { onlyIfTrashed: true }).catch((err: unknown) => err);
+      expect(e).toBeInstanceOf(ApiError);
+      expect(e).toMatchObject({ status: 409, code: 'conflict' });
     } finally {
       vi.unstubAllGlobals();
     }

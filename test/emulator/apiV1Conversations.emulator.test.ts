@@ -387,7 +387,7 @@ describe('sendNote', () => {
     // finds no note and no card — the 404 of any note to a missing card, writing and ringing nothing.
     it('answers a resend after the card was deleted, its notes with it, as a note to a missing card', async () => {
       await sendNote(db, 'alice', { cardId: 'walk', text: 'original words', clientId });
-      await deleteCard(db, 'bob', 'walk', { deleteByCard: async () => {} });
+      await deleteCard(db, 'bob', 'walk', { vectors: { deleteByCard: async () => {} } });
       expect((await db.doc(`notes/${clientId}`).get()).exists).toBe(false);
       const [messagesBefore, letterBefore] = [await docs('conversations/alice_bob/messages'), await letter()];
       const again = await failure(sendNote(db, 'alice', { cardId: 'walk', text: 'original words', clientId }));
@@ -882,7 +882,7 @@ describe('sendMessage', () => {
       it('is answered all the same, without its noteRef — and the answer is still the one that connects the two', async () => {
         await db.doc('connections/alice_bob').delete();
         const { id } = await sendNote(db, 'alice', { cardId: 'walk', text: 'a letter on your walk' });
-        await deleteCard(db, 'bob', 'walk', noVectors);
+        await deleteCard(db, 'bob', 'walk', { vectors: noVectors });
         expect((await db.doc(`notes/${id}`).get()).exists).toBe(false);
         // Bob answers from the note's bell, the note attached, as every client does.
         const sent = await sendMessage(db, 'bob', { to: 'alice', text: 'thank you', noteRef: { cardId: 'walk', noteId: id } });
@@ -896,13 +896,13 @@ describe('sendMessage', () => {
 
       it('between two people connected too', async () => {
         const { id } = await sendNote(db, 'alice', { cardId: 'walk', text: 'about your walk' });
-        await deleteCard(db, 'bob', 'walk', noVectors);
+        await deleteCard(db, 'bob', 'walk', { vectors: noVectors });
         const sent = await sendMessage(db, 'bob', { to: 'alice', text: 'thanks', noteRef: { cardId: 'walk', noteId: id } });
         expect((await db.doc(`conversations/alice_bob/messages/${sent.id}`).get()).get('noteRef')).toBeUndefined();
       });
 
       it('still refuses a note that is there and is not theirs, its card gone or not', async () => {
-        await deleteCard(db, 'bob', 'walk', noVectors);
+        await deleteCard(db, 'bob', 'walk', { vectors: noVectors });
         // A stray an older build left behind: Carol's, not Alice's.
         await db.doc('notes/stray').set({ cardId: 'walk', fromUserId: 'carol', toUserId: 'bob', text: 'x' });
         const e = await failure(sendMessage(db, 'bob', { to: 'alice', text: 'x', noteRef: { cardId: 'walk', noteId: 'stray' } }));

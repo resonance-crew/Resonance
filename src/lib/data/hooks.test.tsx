@@ -418,6 +418,36 @@ describe('useCard on a card the rules keep from the browser', () => {
     expect(result.current.data!.author!.id).toBe('me');
   });
 
+  // The slug lookup and the server render answer anyone, so a card in its
+  // author's trash is a miss there, as a deleted one; GET /api/v1/cards/{key}
+  // knows the author, and the card is then read whole through the rules.
+  it("finds the viewer's own card in their trash through the server, then reads it whole by the id it answered", async () => {
+    const binned = card('binned', 'me', {
+      slug: 'a-binned-night',
+      visibility: 'private',
+      originalLocale: 'zh-TW',
+      trashedAt: new Date('2026-10-01'),
+      trashedFrom: { visibility: 'public', referenceCardId: null },
+    });
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(null);
+    vi.mocked(getCardById).mockImplementation(async (id) => (id === 'binned' ? binned : null));
+    vi.mocked(getUserById).mockResolvedValue(user('me'));
+    api({
+      '/api/v1/cards/a-binned-night': anonDetail({
+        card: summary('binned', null, { slug: 'a-binned-night', trashedAt: '2026-10-01T00:00:00.000Z', restoresTo: 'public' }),
+        visibility: 'private',
+        anonymous: false,
+        isOwner: true,
+      }),
+    });
+    const { result } = renderHook(() => useCard('a-binned-night'), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    // The whole card (its locale, its trash state), not the answer's summary of it.
+    expect(result.current.data!.card).toBe(binned);
+    expect(result.current.data!.author!.id).toBe('me');
+    expect(getCardById).toHaveBeenCalledWith('binned');
+  });
+
   it("carries the story's link previews the server answered, each checked, absent fields absent", async () => {
     vi.mocked(getCardBySlugOrId).mockResolvedValue(null);
     api({
@@ -621,6 +651,35 @@ describe('useMyCardBox', () => {
     expect(getCardById).not.toHaveBeenCalled();
   });
 
+  // A hundred whole stories through the rules is what the trash would cost
+  // read like the other own shelves: it is the server's list summaries.
+  it('reads the trash from the server, each card saying when it went in and what restoring brings back', async () => {
+    api({
+      '/api/v1/me/cards?tab=trash': {
+        cards: [
+          summary('gone-public', 'me', {
+            visibility: 'private',
+            trashedAt: '2026-10-01T08:00:00.000Z',
+            purgeAt: '2026-10-31T08:00:00.000Z',
+            restoresTo: 'public',
+          }),
+        ],
+      },
+    });
+    const { result } = renderHook(() => useMyCardBox('trash').data, { wrapper });
+    await waitFor(() => expect(result.current).toBeDefined());
+    expect(result.current!.cards).toHaveLength(1);
+    expect(result.current!.cards[0]).toMatchObject({
+      id: 'gone-public',
+      visibility: 'private',
+      trashedAt: new Date('2026-10-01T08:00:00.000Z'),
+      trashedFrom: { visibility: 'public' },
+      summary: { readMinutes: 1 },
+    });
+    expect(callApi).toHaveBeenCalledWith('/api/v1/me/cards?tab=trash');
+    expect(getCardsByAuthor).not.toHaveBeenCalled();
+  });
+
   it('stays idle (no fetch) until a shelf is chosen, and when no viewer is signed in', async () => {
     const before = renderHook(() => useMyCardBox(null), { wrapper });
     mockUseAuth.mockReturnValue({ user: null, loading: false });
@@ -697,6 +756,23 @@ describe('useMyThoughtMap', () => {
     expect(map.cards.old?.id).toBe('old');
     expect(getCardById).toHaveBeenCalledWith('old');
     expect(getCardById).toHaveBeenCalledWith('gone');
+  });
+
+  // Its node, arrows and group stay stored (thoughtMaps/*): a restore puts it back where it was.
+  it("draws none of the viewer's cards in the trash, nor offers them, though the rules read them", async () => {
+    const trashed = { visibility: 'private' as const, trashedAt: new Date('2026-10-01'), trashedFrom: { visibility: 'public' as const, referenceCardId: null } };
+    vi.mocked(getCardsByAuthor).mockImplementation(async (_uid, tab) => (tab === 'published' ? [card('live', 'me')] : []));
+    // Placed long ago (older than the newest 40), now in the trash: the rules still read it for its author.
+    vi.mocked(getCardById).mockImplementation(async (id) => (id === 'binned' ? card('binned', 'me', trashed) : null));
+    // ?keys= leaves a card in the trash out for everyone, its author too.
+    api({ '/api/v1/cards?keys=': { cards: [] } });
+    const node = (cardId: string) => ({ id: cardId, cardId, x: 0, y: 0, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01') });
+    vi.mocked(loadMyThoughtMap).mockResolvedValue({ nodes: [node('live'), node('binned')], edges: [], groups: [] });
+
+    const { result } = renderHook(() => useMyThoughtMap(), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(Object.keys(result.current.data!.cards)).toEqual(['live']);
+    expect(result.current.data!.nodes.map((n) => n.cardId)).toEqual(['live']);
   });
 
   it("asks the server for a placed card the rules won't read here (someone else's anonymous card)", async () => {

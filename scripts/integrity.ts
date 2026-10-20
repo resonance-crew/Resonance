@@ -4,8 +4,10 @@
  * or mismatched pen names, self-granted badges, card links pointing at the
  * wrong author, bells pinned to the future — and content past the limits the
  * rules now hold writes to (an older card past them can't be edited through
- * those fields until trimmed), and cards (or pending edits) anonymous and for
- * connections only, which nothing may make a card now. It changes nothing —
+ * those fields until trimmed), cards (or pending edits) anonymous and for
+ * connections only, which nothing may make a card now, and cards in the trash
+ * the server left half done (not private, still pointing, past the purge,
+ * an anonymous one still holding notes). It changes nothing —
  * it lists what to look at, and each finding says what fixing it means.
  *
  *   npx tsx scripts/integrity.ts               production (credentials from .env)
@@ -17,6 +19,7 @@ import 'dotenv/config';
 import { emulatorEnv, EMULATOR_PROJECT_ID } from './emulator-env.mjs';
 import { formerPublicBases, publicBases, storageKeyOf } from '../src/lib/storage/publicUrl';
 import { anonymousForConnections, editedAudience } from '../src/lib/db/firestore/cardContent';
+import { DAY_MS, TRASH_DAYS } from '../src/lib/cards/trash';
 
 const useEmulator = process.argv.includes('--emulator');
 /** A publish date or bell this far ahead of now can only have been written by hand. */
@@ -55,7 +58,7 @@ async function main() {
   // --- cards ---
   const cards = await db
     .collection('cards')
-    .select('authorId', 'slug', 'publishedAt', 'anonymous', 'visibility', 'referenceCardId', 'readCount', 'resonanceCount', 'thoughtCore', 'story', 'tags', 'media')
+    .select('authorId', 'slug', 'publishedAt', 'anonymous', 'visibility', 'referenceCardId', 'readCount', 'resonanceCount', 'thoughtCore', 'story', 'tags', 'media', 'trashedAt', 'trashedFrom')
     .get();
   const card = new Map(cards.docs.map((d) => [d.id, d]));
   const badDate: string[] = [];
@@ -95,8 +98,11 @@ async function main() {
     if (at != null && !(at instanceof Timestamp)) badDate.push(d.id);
     else if (at instanceof Timestamp && at.toMillis() > now + FUTURE_SLACK_MS) futureDate.push(d.id);
     if (typeof d.get('anonymous') !== 'boolean') noAnonymous.push(d.id);
-    // A draft may be (the rules let one become so; publishing refuses it): only a published one counts.
-    if (anonymousForConnections(d.data()) && at != null) anonymousConnections.push(d.id);
+    // A draft may be (the rules let one become so; publishing refuses it): only a published one counts —
+    // one in the trash as what restoring brings back (it is private while there).
+    const restoresTo = d.get('trashedFrom.visibility');
+    const audience = d.get('trashedAt') != null && typeof restoresTo === 'string' ? { ...d.data(), visibility: restoresTo } : d.data();
+    if (anonymousForConnections(audience) && at != null) anonymousConnections.push(d.id);
     if (!/^[A-Za-z0-9]{20}$/.test(d.id)) oddId.push(d.id);
     const slug = d.get('slug');
     if (typeof slug === 'string' && slug) bySlug.set(slug, [...(bySlug.get(slug) ?? []), d.id]);
@@ -114,6 +120,30 @@ async function main() {
   // No card becomes one now (the rules, publish, PATCH, an applied edit); these are from before, and are left as they are.
   add('cards: anonymous and for connections only (a block would show who wrote it)',
     'ask its author to make it public or private, or to take the byline back; never change it for them', anonymousConnections);
+
+  // --- the trash (written by the server alone: POST /api/v1/cards/{id}/trash) ---
+  const trashed = cards.docs.filter((d) => d.get('trashedAt') != null);
+  const restorable = ['public', 'connections', 'private'];
+  add('cards: in the trash but not private (others could read it)', 'set visibility private (trashedFrom keeps what restoring brings back)',
+    trashed.filter((d) => d.get('visibility') !== 'private').map((d) => d.id));
+  add('cards: in the trash and still answering a card (its resonance should be parked in trashedFrom)',
+    'move referenceCardId into trashedFrom.referenceCardId', trashed.filter((d) => typeof d.get('referenceCardId') === 'string').map((d) => d.id));
+  add('cards: in the trash without what restoring brings back (trashedFrom missing, or its visibility unknown)',
+    'look at it: restoring it brings it back private', trashed.filter((d) => !restorable.includes(d.get('trashedFrom.visibility'))).map((d) => d.id));
+  add('cards: trashedFrom without trashedAt (out of the trash, half restored)', 'remove trashedFrom',
+    cards.docs.filter((d) => d.get('trashedAt') == null && d.get('trashedFrom') != null).map((d) => d.id));
+  add(`cards: in the trash for over ${TRASH_DAYS + 2} days (the daily purge is behind)`, 'look at the /api/cron/purge-trash logs',
+    trashed.filter((d) => {
+      const t = d.get('trashedAt');
+      return t instanceof Timestamp && t.toMillis() < now - (TRASH_DAYS + 2) * DAY_MS;
+    }).map((d) => d.id));
+  // An anonymous card's notes go as it goes in (as they go when it is deleted); a clean-up that failed left them.
+  const anonymousTrashed = trashed.filter((d) => d.get('anonymous') === true);
+  const notesKept = await Promise.all(
+    anonymousTrashed.map(async (d) => ((await db.collection('notes').where('cardId', '==', d.id).select().limit(1).get()).empty ? [] : [d.id])),
+  );
+  add('cards: anonymous, in the trash, still holding notes (they should have gone with it)',
+    'npx tsx scripts/backfill.ts orphan-notes --apply (a production run is the owner\'s call)', notesKept.flat());
 
   // --- pending edits ---
   // What applying each would leave its card as (editedAudience, as lib/api/v1/edits applies it); applying one so is refused.

@@ -35,6 +35,7 @@ import { ShareIcon } from './icons/share';
 import { SlidersIcon } from './icons/sliders';
 import { SendIcon } from './icons/send';
 import { ReplyIcon } from './icons/reply';
+import { RestoreIcon } from './icons/restore';
 import { CopyIcon } from './icons/copy';
 import { LinkIcon } from './icons/link';
 import { CollapseRightIcon } from './icons/collapse-right';
@@ -92,6 +93,7 @@ export const ICONS = {
   sliders: SlidersIcon,
   send: SendIcon,
   reply: ReplyIcon,
+  restore: RestoreIcon,
   copy: CopyIcon,
   link: LinkIcon,
   'collapse-right': CollapseRightIcon,

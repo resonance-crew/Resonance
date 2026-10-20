@@ -61,6 +61,9 @@ export const LIST_FIELDS = [
   'excerpt',
   'readMinutes',
   'excerptAt',
+  // A card in the trash: left out of lists by code (the owner's shelves, ?keys=), shown on the trash shelf.
+  'trashedAt',
+  'trashedFrom',
 ] as const;
 
 /** a > b, to the nanosecond (Date would drop the microseconds). */

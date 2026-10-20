@@ -4,7 +4,13 @@ import { useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
 import { SketchLoader } from '@/components/atoms/SketchLoader/SketchLoader';
+import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
+import { EmptyState } from '@/components/molecules/EmptyState/EmptyState';
 import { LoadError } from '@/components/molecules/LoadError/LoadError';
+import { RestoredAloneNotice } from '@/components/molecules/TrashActionsMenu/RestoredAloneNotice';
+import { useToast } from '@/components/providers/ToastProvider';
+import { trashExpired } from '@/lib/cards/trash';
+import { announceRestoredAlone, useTrashActions } from '@/lib/data/trash';
 import { HeaderBar } from '@/components/sections/AppHeader/HeaderBar';
 import { WriteWorkspace } from '@/components/sections/WriteWorkspace/WriteWorkspace';
 import { useLeaveWriter } from '@/lib/hooks/useLeaveWriter';
@@ -39,6 +45,10 @@ export default function EditCardPage() {
   const leaveWriter = useLeaveWriter('/me');
   const locale = useLocale() as Locale;
   const { user, loading } = useAuth();
+  const tActions = useTranslations('me.actions');
+  const toast = useToast();
+  const trash = useTrashActions();
+  const [restoring, setRestoring] = useState(false);
 
   // Wait for auth to settle: fetching during restoration would read as an
   // anonymous viewer and "not found" the owner's own draft.
@@ -104,8 +114,8 @@ export default function EditCardPage() {
     );
   }
 
-  // Missing, deleted, or not the viewer's card (rules deny → null).
-  if (!card || !user || card.authorId !== user.id) {
+  // Missing, deleted, or not the viewer's card (rules deny → null) — or in the trash past its 30 days.
+  if (!card || !user || card.authorId !== user.id || (card.trashedAt && trashExpired(card.trashedAt))) {
     return (
       <>
         {bar}
@@ -122,6 +132,52 @@ export default function EditCardPage() {
             <span style={{ color: 'var(--color-terracotta)' }}>{tCard('notFound.back')}</span>
           </Link>
         </div>
+      </>
+    );
+  }
+
+  // In the trash: nothing is written into it until it is restored (the rules
+  // refuse it) — restored, it is read again and opens in the editor.
+  if (card.trashedAt) {
+    const restore = async () => {
+      setRestoring(true);
+      try {
+        const { droppedResonance } = await trash.restore({ id: card.id, slug: card.slug, referenceCardId: card.trashedFrom?.referenceCardId ?? undefined });
+        if (droppedResonance) announceRestoredAlone();
+        setOpened(null);
+        setAttempt((n) => n + 1);
+      } catch {
+        toast.show({ message: tActions('undoFailed') });
+      } finally {
+        setRestoring(false);
+      }
+    };
+    return (
+      <>
+        {bar}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            boxSizing: 'border-box',
+            minHeight: '100dvh',
+            padding: 'calc(var(--app-header-h) + var(--page-pad-top)) var(--page-pad-x) var(--page-pad-bottom)',
+          }}
+        >
+          <EmptyState
+            fills
+            icon="trash"
+            seed={61}
+            title={tCard('trashed.title')}
+            line={t('trashed.line')}
+            action={
+              <OrganicButton variant="solid" size="sm" loading={restoring} onClick={() => void restore()}>
+                {t('trashed.restore')}
+              </OrganicButton>
+            }
+          />
+        </div>
+        <RestoredAloneNotice />
       </>
     );
   }

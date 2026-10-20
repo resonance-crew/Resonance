@@ -119,6 +119,19 @@ export const FeedCard = named(
     referenceCardId: z.string().nullable(),
     /** Recommended feed only: why this card was picked for the reader. */
     reason: z.string().nullable(),
+    /**
+     * Your own card in the trash only (the trash shelf, your card's page,
+     * what trashing and restoring it answer): when it went in (ISO 8601).
+     * Absent everywhere else — a card in the trash is no one else's to see.
+     */
+    trashedAt: z.string().nullable().optional(),
+    /** Beside `trashedAt`: when it is deleted for good (ISO 8601), 30 days after it went in. */
+    purgeAt: z.string().nullable().optional(),
+    /**
+     * Beside `trashedAt`: the visibility restoring it brings back (it is
+     * private while in the trash) — say so before a restore republishes it.
+     */
+    restoresTo: z.enum(['public', 'connections', 'private']).nullable().optional(),
   }),
   'FeedCard',
 );
@@ -152,6 +165,7 @@ export const CardBox = named(
     resonated: CardList.optional(),
     linked: CardList.optional(),
     bookmarks: CardList.optional(),
+    trash: CardList.optional(),
   }),
   'CardBox',
   'Shelves of your card box, each one asked for (and only those) exactly as GET /me/cards?tab= answers it.',
@@ -340,6 +354,44 @@ export const ApplyEditResponse = named(
     applied: z.boolean(),
   }),
   'ApplyEditResponse',
+);
+
+export const TrashedCard = named(
+  z.object({
+    /** Your card as the trash shelf shows it (with `trashedAt`, `purgeAt`, `restoresTo`). */
+    card: FeedCard,
+    /** False when it was in the trash already: nothing was written, and its 30 days run from when it first went in. */
+    changed: z.boolean(),
+  }),
+  'TrashedCard',
+);
+
+export const RestoredCard = named(
+  z.object({
+    /** Your card as your card box shows it, out of the trash. */
+    card: FeedCard,
+    /** False when it wasn't in the trash: nothing was written. */
+    changed: z.boolean(),
+    /**
+     * A resonance that came back on its own: it no longer answers the card it
+     * answered (another of your cards answers that one now, or that card
+     * answers this one). Say so; there is nothing to do about it.
+     */
+    droppedResonance: z.boolean(),
+  }),
+  'RestoredCard',
+);
+
+export const EmptiedTrash = named(
+  z.object({
+    /** Cards deleted for good by this call. */
+    deleted: z.number().int(),
+    /** Cards still in the trash from before `before`: call again with `before` while this and `deleted` are both above 0. */
+    remaining: z.number().int(),
+    /** What this emptying takes (cards moved to the trash up to this moment, ISO 8601): send it back on the next call. */
+    before: z.string(),
+  }),
+  'EmptiedTrash',
 );
 
 export const ResonateRequest = named(
@@ -541,7 +593,7 @@ export const PROFILE_INCLUDES = ['cards', 'links'] as const;
 export const ProfileQuery = z.object({ include: includeList(PROFILE_INCLUDES), limit: FeedQuery.shape.limit });
 
 /** The card box's shelves (the web's me page). */
-export const CardBoxTab = z.enum(['published', 'private', 'draft', 'resonated', 'linked', 'bookmarks']);
+export const CardBoxTab = z.enum(['published', 'private', 'draft', 'resonated', 'linked', 'bookmarks', 'trash']);
 export const CardBoxQuery = z.object({ tab: CardBoxTab });
 /** GET /me/cardbox?shelves=: the shelves asked for, comma-separated CardBoxTab names (required); unknown names are ignored. */
 export const CardBoxShelvesQuery = z.object({
@@ -558,6 +610,11 @@ export const CardBoxShelvesQuery = z.object({
         ),
     ),
 });
+
+/** DELETE /me/trash?before=: take only cards moved to the trash up to this moment (the first call's answer); absent, now. */
+export const EmptyTrashQuery = z.object({ before: z.iso.datetime({ offset: true }).nullish() });
+/** DELETE /cards/{id}?onlyIfTrashed=true: refuse (409) a card no longer in the trash. */
+export const DeleteCardQuery = z.object({ onlyIfTrashed: z.enum(['true', 'false']).nullish() });
 
 /** A card's URL segment: its English slug or (older cards) its document id. */
 export const CardKey = z.string().regex(/^[A-Za-z0-9_-]{1,160}$/, 'Not a valid card.');
@@ -596,6 +653,9 @@ export type ReportCardInput = z.infer<typeof ReportCardRequest>;
 export type CreateReportInput = z.infer<typeof CreateReportRequest>;
 export type UpdateCardInput = z.infer<typeof UpdateCardRequest>;
 export type ResonateResponseBody = z.infer<typeof ResonateResponse>;
+export type TrashedCardBody = z.infer<typeof TrashedCard>;
+export type RestoredCardBody = z.infer<typeof RestoredCard>;
+export type EmptiedTrashBody = z.infer<typeof EmptiedTrash>;
 export type CardListBody = z.infer<typeof CardList>;
 export type CardInclude = (typeof CARD_INCLUDES)[number];
 export type ProfileInclude = (typeof PROFILE_INCLUDES)[number];

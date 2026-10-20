@@ -236,6 +236,67 @@
         }
       }
     },
+    "/me/trash": {
+      "delete": {
+        "operationId": "emptyTrash",
+        "summary": "Empty your trash: every card in it is deleted for good, a page at a time",
+        "description": "The first call sends no `before`; call again with the answer's `before` while `remaining` and `deleted` are both above 0. Only cards still in the trash from before `before` are taken: one restored meanwhile, or moved there since, stays. `deleted` counts the cards this call deleted.",
+        "parameters": [
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "description": "The first call's answer's `before` (ISO 8601); absent: now.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmptiedTrash"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/me/cards": {
       "get": {
         "operationId": "getCardBox",
@@ -253,7 +314,8 @@
                 "draft",
                 "resonated",
                 "linked",
-                "bookmarks"
+                "bookmarks",
+                "trash"
               ]
             }
           }
@@ -302,7 +364,7 @@
             "name": "shelves",
             "in": "query",
             "required": true,
-            "description": "Shelves, comma-separated (e.g. `published,private,draft`): published, private, draft, resonated, linked, bookmarks. Unknown names are ignored.",
+            "description": "Shelves, comma-separated (e.g. `published,private,draft`): published, private, draft, resonated, linked, bookmarks, trash. Unknown names are ignored.",
             "schema": {
               "type": "string",
               "maxLength": 200
@@ -565,7 +627,7 @@
       "patch": {
         "operationId": "updateCard",
         "summary": "Change your card's visibility and/or anonymity (only the fields sent)",
-        "description": "A published resonance made public under your name — published private, connections-only or anonymous, it reached no one — reaches the original's author after the response, as publishing it so would have: you two connected (not when the original is anonymous), their bell rung — once per reader and card, whatever path rang it first; never across a block, nor without a pen name. The answer never waits on it. One made private, connections-only or anonymous is at once no longer a reason you two are connected, and the connection goes when no reason is left (see `DELETE /cards/{key}/resonances/{cardId}`); the card still answers the original (listed under it while public, without your name when anonymous). An anonymous card is public or private: a change that would leave it anonymous and for connections only is `400 invalid_request` (\"An anonymous card is public or private.\"); a card already that way stays so until either field changes.",
+        "description": "A published resonance made public under your name — published private, connections-only or anonymous, it reached no one — reaches the original's author after the response, as publishing it so would have: you two connected (not when the original is anonymous), their bell rung — once per reader and card, whatever path rang it first; never across a block, nor without a pen name. The answer never waits on it. One made private, connections-only or anonymous is at once no longer a reason you two are connected, and the connection goes when no reason is left (see `DELETE /cards/{key}/resonances/{cardId}`); the card still answers the original (listed under it while public, without your name when anonymous). An anonymous card is public or private: a change that would leave it anonymous and for connections only is `400 invalid_request` (\"An anonymous card is public or private.\"); a card already that way stays so until either field changes. A card in the trash changes only by a restore: `409 conflict` (\"This card is in the trash.\").",
         "parameters": [
           {
             "name": "key",
@@ -627,13 +689,23 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       },
       "delete": {
         "operationId": "deleteCard",
-        "summary": "Delete your card, draft or published (a retry after success is 404)",
-        "description": "A resonance is taken back with it, as `DELETE /cards/{key}/resonances/{cardId}` takes it back. The notes left on the card go with it. The only way a published card is deleted: a client may delete its own draft straight from Firestore, never a published card.",
+        "summary": "Delete your card for good, draft or published (a retry after success is 404)",
+        "description": "Clients with a trash move cards there first (`POST /cards/{key}/trash`) and delete for good only from it, sending `onlyIfTrashed=true`: a card no longer in the trash (restored on another device) is then `409 conflict` (\"This card is not in the trash.\") and stays. A resonance is taken back with it, as `DELETE /cards/{key}/resonances/{cardId}` takes it back. The notes left on the card go with it. The only way a published card is deleted: a client may delete its own draft straight from Firestore, never a published card.",
         "parameters": [
           {
             "name": "key",
@@ -642,6 +714,19 @@
             "description": "The card id",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "onlyIfTrashed",
+            "in": "query",
+            "required": false,
+            "description": "`true`: refuse (409) a card that is not in the trash.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
             }
           }
         ],
@@ -670,6 +755,156 @@
             }
           },
           "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cards/{key}/trash": {
+      "post": {
+        "operationId": "trashCard",
+        "summary": "Move your card to the trash: private to everyone until you restore it, deleted for good after 30 days",
+        "description": "Where a card goes when you delete it. While there it is private (nobody else can read, list or answer it: it is absent to them as a missing card is) and answers nothing (`referenceCardId` is parked); it keeps its slug, dates, story and place. A resonance is taken back at once, as hiding it is: no longer a reason you are connected, and the connection goes when no reason is left — restoring it never brings that back. The notes left on an anonymous card are deleted (they do not come back); a named card keeps its notes. It is changed by nothing but a restore (PATCH, publish, edits/apply and resonating with it are `409 conflict`, \"This card is in the trash.\"). A card in the trash already is `changed: false`, its 30 days running from when it first went in. Someone else's card, or one past its purge date, is `404`.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "The card id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrashedCard"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cards/{key}/restore": {
+      "post": {
+        "operationId": "restoreCard",
+        "summary": "Bring your card back from the trash as it was (its visibility, slug and place)",
+        "description": "A resonance answers its original again, as making a hidden one public again does — unless another of your cards answers that original now, or the original answers this card: then it comes back on its own (`droppedResonance`). Its original's author is rung only if this resonance never reached them before (once ever per reader and card). A card not in the trash is `changed: false`; one past its purge date (30 days in) is `404`.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "The card id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoredCard"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
             "description": "Error",
             "content": {
               "application/json": {
@@ -743,7 +978,7 @@
       "post": {
         "operationId": "resonateWithCard",
         "summary": "Make one of your published public cards a resonance of this one (connects you and rings its author, as publishing one does)",
-        "description": "A card answers one card, and you answer a card with one of yours: `409 conflict` when the card already answers another, or another of your cards already answers this one. Asking again with the same card is `changed: false` and rings no one. An anonymous card connects no one and rings no one; an anonymous original rings its author but connects no one (that bell carries `payload.anonymous`: its push opens the card). A block either way is `403 blocked` for a named original; an anonymous one is answered all the same, and the block keeps it from reaching anyone. A card public under your name needs your pen name (`403 forbidden`). While it stands it is a reason you two are connected (one more, when you already are), and the original's author writing to you while it stands (a message, or a note in your thread) answers it: a reason for good. A letter waiting between you is left as it is — only its recipient answers it.",
+        "description": "A card answers one card, and you answer a card with one of yours: `409 conflict` when the card already answers another, or another of your cards already answers this one — and when yours is in the trash (\"This card is in the trash.\"). Asking again with the same card is `changed: false` and rings no one. An anonymous card connects no one and rings no one; an anonymous original rings its author but connects no one (that bell carries `payload.anonymous`: its push opens the card). A block either way is `403 blocked` for a named original; an anonymous one is answered all the same, and the block keeps it from reaching anyone. A card public under your name needs your pen name (`403 forbidden`). While it stands it is a reason you two are connected (one more, when you already are), and the original's author writing to you while it stands (a message, or a note in your thread) answers it: a reason for good. A letter waiting between you is left as it is — only its recipient answers it.",
         "parameters": [
           {
             "name": "key",
@@ -964,7 +1199,7 @@
       "post": {
         "operationId": "publishCard",
         "summary": "Publish your card: stamps it once, gives it its slug, and lets a resonance reach its original",
-        "description": "A resonance published public under your name reaches the original's author, the first time only: you two connected (not when the original is anonymous) and their bell rung — once per reader and card, whatever path rang it first; never across a block, nor without a pen name. A private, connections-only or anonymous one reaches no one. Either way the card is published: reaching out never fails it. An anonymous card is public or private: a draft set to be anonymous and for connections only is `400 invalid_request` (\"An anonymous card is public or private.\") and stays a draft.",
+        "description": "A resonance published public under your name reaches the original's author, the first time only: you two connected (not when the original is anonymous) and their bell rung — once per reader and card, whatever path rang it first; never across a block, nor without a pen name. A private, connections-only or anonymous one reaches no one. Either way the card is published: reaching out never fails it. An anonymous card is public or private: a draft set to be anonymous and for connections only is `400 invalid_request` (\"An anonymous card is public or private.\") and stays a draft. A card in the trash is `409 conflict` (\"This card is in the trash.\") until it is restored.",
         "parameters": [
           {
             "name": "key",
@@ -1016,6 +1251,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       }
@@ -1024,7 +1269,7 @@
       "post": {
         "operationId": "applyCardEdit",
         "summary": "Apply your pending edit (cards/{id}/edits/current) to your published card, and clear it",
-        "description": "An edit that makes a published resonance public under your name reaches the original's author after the response, as a PATCH doing so would (see updateCard); one that leaves it private, connections-only or anonymous takes it back, as that PATCH would. An edit that would leave the card anonymous and for connections only is `400 invalid_request` (\"An anonymous card is public or private.\"), the card and the edit left as they were — unless the card already is so and the edit keeps both.",
+        "description": "An edit that makes a published resonance public under your name reaches the original's author after the response, as a PATCH doing so would (see updateCard); one that leaves it private, connections-only or anonymous takes it back, as that PATCH would. An edit that would leave the card anonymous and for connections only is `400 invalid_request` (\"An anonymous card is public or private.\"), the card and the edit left as they were — unless the card already is so and the edit keeps both. A card in the trash is `409 conflict` (\"This card is in the trash.\").",
         "parameters": [
           {
             "name": "key",
@@ -1068,6 +1313,16 @@
             }
           },
           "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "Error",
             "content": {
               "application/json": {
@@ -2150,6 +2405,23 @@
           "reason": {
             "nullable": true,
             "type": "string"
+          },
+          "trashedAt": {
+            "nullable": true,
+            "type": "string"
+          },
+          "purgeAt": {
+            "nullable": true,
+            "type": "string"
+          },
+          "restoresTo": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "public",
+              "connections",
+              "private"
+            ]
           }
         },
         "required": [
@@ -2226,6 +2498,9 @@
             "$ref": "#/components/schemas/CardList"
           },
           "bookmarks": {
+            "$ref": "#/components/schemas/CardList"
+          },
+          "trash": {
             "$ref": "#/components/schemas/CardList"
           }
         },
@@ -2520,6 +2795,63 @@
           "id",
           "slug",
           "applied"
+        ]
+      },
+      "TrashedCard": {
+        "type": "object",
+        "properties": {
+          "card": {
+            "$ref": "#/components/schemas/FeedCard"
+          },
+          "changed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "card",
+          "changed"
+        ]
+      },
+      "RestoredCard": {
+        "type": "object",
+        "properties": {
+          "card": {
+            "$ref": "#/components/schemas/FeedCard"
+          },
+          "changed": {
+            "type": "boolean"
+          },
+          "droppedResonance": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "card",
+          "changed",
+          "droppedResonance"
+        ]
+      },
+      "EmptiedTrash": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "remaining": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "before": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deleted",
+          "remaining",
+          "before"
         ]
       },
       "ResonateRequest": {

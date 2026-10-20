@@ -16,6 +16,7 @@ import type { Card, User } from '@/lib/db/types';
 // boundary. Covers how it takes over from the server's HTML (CardSeed).
 const mockUseAuth = vi.fn();
 const mockPush = vi.fn();
+const mockReplace = vi.fn();
 vi.mock('@/components/providers/AuthProvider', () => ({ useAuth: () => mockUseAuth() }));
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children, className }: { href: string; children: ReactNode; className?: string }) => (
@@ -23,7 +24,7 @@ vi.mock('@/i18n/navigation', () => ({
       {children}
     </a>
   ),
-  useRouter: () => ({ push: mockPush, replace: vi.fn() }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
 }));
 vi.mock('@/lib/db/firestore/client/reads', () => ({
   getCardById: vi.fn(),
@@ -53,6 +54,12 @@ vi.mock('@/lib/db/firestore/client/api', () => ({
       super(message);
     }
   },
+}));
+// The trash's own writes (the banner's 還原 / 永久刪除) go through the server; here they are the boundary.
+const mockDeleteForever = vi.fn(async (..._a: unknown[]) => {});
+vi.mock('@/lib/db/firestore/client/cards', async (orig) => ({
+  ...(await orig<typeof import('@/lib/db/firestore/client/cards')>()),
+  deleteCardForever: (...a: unknown[]) => mockDeleteForever(...a),
 }));
 // Leaf components with reads of their own (bookmarks, notes) aren't the subject.
 vi.mock('@/components/molecules/CardDetail/ReadAfterArea', () => ({
@@ -564,6 +571,86 @@ describe('the lists around the card and its embedded cards', () => {
     expect(await screen.findByText('The walk, read by itself')).toBeInTheDocument();
     expect(getResonanceCards).toHaveBeenCalledWith('pub1');
     expect(callApi).not.toHaveBeenCalled();
+  });
+});
+
+describe("the owner's card in the trash", () => {
+  const DAY = 86_400_000;
+  const inTrash = (extra: Partial<Card> = {}) =>
+    card('pub1', {
+      authorId: 'a1',
+      visibility: 'private',
+      trashedAt: new Date(Date.now() - 2 * DAY),
+      trashedFrom: { visibility: 'public', referenceCardId: null },
+      ...extra,
+    });
+  const owner = () => {
+    signIn();
+    mockUseAuth.mockReturnValue({ user: { id: 'a1' }, loading: false });
+  };
+
+  it('heads the article with its banner, and shows nothing around the card — no ⋯, no lists', async () => {
+    owner();
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(inTrash());
+    // Lists from before it went in (a stale cache): never drawn while it is in the trash.
+    vi.mocked(callApi).mockResolvedValue(detail({ isOwner: true }));
+    renderPage({ slug: 'pub1' });
+
+    const banner = await screen.findByText('This card is in the trash');
+    expect(screen.getByText('Deleted forever in 28 days · Only you can see it')).toBeInTheDocument();
+    // The article's first block, at every width.
+    const article = banner.closest('article')!;
+    expect(article.firstElementChild!.contains(banner)).toBe(true);
+    expect(screen.getByText('The core thought of this card')).toBeInTheDocument();
+    expect(screen.getByText('The longer story body of this card.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Manage card' })).toBeNull();
+    expect(screen.queryByText('Cards resonating with this')).toBeNull();
+    expect(screen.queryByText('Extended cards')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Restore' })).toHaveAttribute('data-variant', 'solid');
+    expect(screen.getByRole('button', { name: 'Delete forever' })).toHaveAttribute('data-variant', 'dangerTonal');
+    // Its story's notes are a named card's: no word of them.
+    expect(screen.queryByText('The notes left on this anonymous card have been deleted')).toBeNull();
+  });
+
+  it('says an anonymous card went in without its notes', async () => {
+    owner();
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(inTrash({ anonymous: true }));
+    vi.mocked(callApi).mockResolvedValue(detail({ isOwner: true, resonances: { cards: [] }, related: { cards: [] } }));
+    renderPage({ slug: 'pub1' });
+    expect(await screen.findByText('The notes left on this anonymous card have been deleted')).toBeInTheDocument();
+  });
+
+  it('deletes it for good from the banner, asked first in red, then goes back to the card box', async () => {
+    owner();
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(inTrash());
+    vi.mocked(callApi).mockImplementation((async (path: string) => (path.includes('include=') ? detail({ isOwner: true }) : null)) as never);
+    renderPage({ slug: 'pub1' });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete forever' }));
+    expect(screen.getByText('Delete this card forever?')).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog');
+    const verb = Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'Delete forever')!;
+    expect(verb).toHaveAttribute('data-variant', 'danger');
+    await userEvent.click(verb);
+    await waitFor(() => expect(mockDeleteForever).toHaveBeenCalledWith('pub1', { onlyIfTrashed: true }));
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/me'));
+  });
+
+  it("is a missing card to everyone else, and to its owner too once its 30 days are up", async () => {
+    signIn();
+    mockUseAuth.mockReturnValue({ user: { id: 'me' }, loading: false });
+    // The rules read it to its author alone, and the server answers anyone else as for a missing card.
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(null);
+    vi.mocked(callApi).mockRejectedValue(new ApiError(404, 'not_found', 'No such card.'));
+    const { unmount } = renderPage({ slug: 'pub1' });
+    expect(await screen.findByText("This card can't be found")).toBeInTheDocument();
+    unmount();
+
+    owner();
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(inTrash({ trashedAt: new Date(Date.now() - 31 * DAY) }));
+    renderPage({ slug: 'pub1' });
+    expect(await screen.findByText("This card can't be found")).toBeInTheDocument();
+    expect(screen.queryByText('This card is in the trash')).toBeNull();
   });
 });
 

@@ -228,7 +228,7 @@ describe('pushPick', () => {
     expect(sent.length).toBeGreaterThan(0);
   });
 
-  it("skips their own card, one they answered, and one no longer public and published — a draft answer doesn't count", async () => {
+  it("skips their own card, one they answered, and one no longer public and published (in the trash too) — a draft answer doesn't count", async () => {
     await aliceOptedIn();
     await Promise.all([
       card('own', 'alice'),
@@ -237,9 +237,10 @@ describe('pushPick', () => {
       card('private', 'bob', { visibility: 'private' }),
       card('connections', 'bob', { visibility: 'connections' }),
       card('draft', 'bob', { publishedAt: null }),
+      card('trashed', 'bob', { visibility: 'private', trashedAt: new Date(), trashedFrom: { visibility: 'public', referenceCardId: null } }),
       card('drafted', 'carol'),
       db.doc('cards/myDraftReply').set({ authorId: 'alice', thoughtCore: 'D', story: '', visibility: 'public', publishedAt: null, referenceCardId: 'drafted' }),
-      picks('alice', ['own', 'answered', 'private', 'connections', 'draft', 'deleted', 'drafted']),
+      picks('alice', ['own', 'answered', 'private', 'connections', 'draft', 'trashed', 'deleted', 'drafted']),
     ]);
     const { sender } = fakeFcm();
     expect(await pushPick(db, 'alice', sender, { now: NOW })).toMatchObject({ outcome: 'sent', cardId: 'drafted' });

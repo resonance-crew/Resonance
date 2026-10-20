@@ -198,6 +198,31 @@ describe('card page server render', () => {
     });
   });
 
+  // Cached HTML is everyone's: a card in its author's trash is a deleted
+  // card's page there — not a private card's id, which would say its
+  // document is still there until the trash or the author's account goes.
+  it.each([
+    ['a named card', {}],
+    ['an anonymous card', { anonymous: true }],
+  ])("hands over nothing of %s in its author's trash — not even its id, as for a URL that names none", async (_, extra) => {
+    fake.docs['cards/binned'] = card({
+      ...extra,
+      slug: 'a-binned-night',
+      story: 'Thrown away for now.',
+      visibility: 'private',
+      trashedAt: at('2026-10-01T00:00:00Z'),
+      trashedFrom: { visibility: 'public', referenceCardId: null },
+    });
+    const missing = (await renderPage('never-was')).seed;
+    for (const key of ['a-binned-night', 'binned']) {
+      const { seed, html, payload } = await renderPage(key);
+      expect(seed, key).toEqual(missing);
+      expect(seed, key).toEqual({ id: null, view: null });
+      expect(html).not.toContain('Thrown away for now.');
+      expect(payload).not.toContain('Thrown away for now.');
+    }
+  });
+
   it('says there is no card for a URL that names none, and nothing when the server read fails', async () => {
     expect((await renderPage('never-was')).seed).toEqual({ id: null, view: null });
 

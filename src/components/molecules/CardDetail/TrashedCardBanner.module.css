@@ -1,0 +1,60 @@
+/* ── The owner's card in the trash ───────────────────────────────────
+   The article's first block, above the cover (or the title without one):
+   what this is, for how long, and the two ways out. */
+.banner {
+  margin-bottom: 24px;
+}
+/* The soft panel's room, tighter than a section's: a notice, not a form. */
+.banner > div {
+  padding: 14px 18px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.glyph {
+  flex: none;
+  color: var(--color-text-muted);
+}
+.text {
+  flex: 1;
+  min-width: 0;
+}
+.title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-text);
+}
+.title:focus {
+  outline: none;
+}
+.caption {
+  margin: 2px 0 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+.actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* A phone: the two buttons wrap under the words, in one row at their start. */
+@media (max-width: 640px) {
+  .row {
+    flex-wrap: wrap;
+  }
+  .text {
+    flex-basis: calc(100% - 34px);
+  }
+  .actions {
+    flex-basis: 100%;
+    padding-left: 34px;
+  }
+}

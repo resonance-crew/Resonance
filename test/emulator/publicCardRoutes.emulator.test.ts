@@ -95,6 +95,27 @@ describe('GET /api/cards/view', () => {
       expect(res.headers.get('cache-control')).toBe('no-store');
     }
   });
+
+  // Polled (every answer is fresh), a private card's id would say its
+  // document is still there — and a card in the trash stays there until its
+  // 30 days or its author's account run out, so the answer turning would say
+  // when the account went. It is a deleted card's answer from the start.
+  it("knows no card in its author's trash, by slug or id — the answer for a key that names none", async () => {
+    await card('binned', {
+      anonymous: true,
+      slug: 'a-binned-night',
+      visibility: 'private',
+      trashedAt: minutesAgo(1),
+      trashedFrom: { visibility: 'public', referenceCardId: null },
+    });
+    const missing = (await (await get('nothing-here')).json()) as CardSeed;
+    expect(missing).toEqual({ id: null, view: null });
+    for (const key of ['a-binned-night', 'binned']) {
+      const res = await get(key);
+      expect((await res.json()) as CardSeed, key).toEqual(missing);
+      expect(res.headers.get('cache-control')).toBe('no-store');
+    }
+  });
 });
 
 describe('GET /api/cards/latest', () => {

@@ -6,7 +6,7 @@ const CARDS_AT_ONCE = 100;
 
 export interface OrphanNotesReport {
   notes: number;
-  /** Notes whose card no longer exists: deleted (or that would be, without `apply`). */
+  /** Notes whose card no longer exists, or is an anonymous card in the trash: deleted (or that would be, without `apply`). */
   orphans: number;
   /** Notes naming no card at all: reported, never deleted — nothing says whose they are to judge. */
   malformed: number;
@@ -20,7 +20,9 @@ export interface OrphanNotesReport {
  * behind: words about a card nobody can open, still in their writers'
  * backups — where the day they vanish, with an account's purge, would point
  * at whose card it was. Delivered and withheld notes alike; a note's message
- * in a thread (`kind: 'note'`) is the conversation's and stays.
+ * in a thread (`kind: 'note'`) is the conversation's and stays. The notes on
+ * an anonymous card in the trash count too: they go as it goes in
+ * (POST /api/v1/cards/{id}/trash), and only a clean-up that failed leaves one.
  *
  * Idempotent; with `apply: false` it only counts.
  */
@@ -50,11 +52,12 @@ export async function deleteOrphanNotes(
   const ids = [...new Set(rows.map((r) => r.cardId))];
   const present = new Set<string>();
   for (let i = 0; i < ids.length; i += CARDS_AT_ONCE) {
-    const cards = await db.getAll(...ids.slice(i, i + CARDS_AT_ONCE).map((id) => db.doc(`cards/${id}`)), { fieldMask: [] });
-    for (const c of cards) if (c.exists) present.add(c.id);
+    const cards = await db.getAll(...ids.slice(i, i + CARDS_AT_ONCE).map((id) => db.doc(`cards/${id}`)), { fieldMask: ['anonymous', 'trashedAt'] });
+    // An anonymous card in the trash holds no notes: as good as gone for them.
+    for (const c of cards) if (c.exists && !(c.get('anonymous') === true && c.get('trashedAt') != null)) present.add(c.id);
   }
   const orphans = rows.filter((r) => !present.has(r.cardId));
-  log(`notes: ${notes}; whose card is gone: ${orphans.length}; naming no card: ${malformed}`);
+  log(`notes: ${notes}; whose card is gone (or anonymous and in the trash): ${orphans.length}; naming no card: ${malformed}`);
   const gone = [...new Set(orphans.map((r) => r.cardId))];
   for (const id of gone.slice(0, 20)) log(`  card ${id}: ${orphans.filter((r) => r.cardId === id).length} note(s)`);
   if (gone.length > 20) log(`  … and ${gone.length - 20} more cards`);

@@ -336,7 +336,12 @@
       "back": "Back to home"
     },
     "anonymousAuthor": "Anonymous",
-    "anonymousOwnerNote": "This card was published anonymously — your pen name isn't shown on it or on your profile"
+    "anonymousOwnerNote": "This card was published anonymously — your pen name isn't shown on it or on your profile",
+    "trashed": {
+      "title": "This card is in the trash",
+      "onlyYou": "Only you can see it",
+      "notesGone": "The notes left on this anonymous card have been deleted"
+    }
   },
   "messages": {
     "title": "Messages",
@@ -537,7 +542,12 @@
       "q2": "What is one thing you wish you could tell your past self?",
       "q3": "Which failure taught you something nobody else ever did?"
     },
-    "removeTag": "Remove tag"
+    "removeTag": "Remove tag",
+    "trashed": {
+      "line": "Restore it to keep writing",
+      "restore": "Restore and keep writing",
+      "status": "This card is in the trash — restore it to save"
+    }
   },
   "me": {
     "joined": "Joined {date}",
@@ -551,6 +561,7 @@
       "resonated": "Resonated",
       "linked": "Linked",
       "bookmarks": "Bookmarks",
+      "trash": "Trash",
       "thoughtMap": "Thought map"
     },
     "thoughtMap": {
@@ -582,6 +593,18 @@
     "emptyLinked": "No one has linked a card to you yet",
     "emptyResonated": "No resonances yet",
     "emptyBookmarks": "When a story is too good to forget, press the bookmark — it will wait here quietly, only for you",
+    "trashHint": "Cards stay in the trash for {days} days, then they're deleted forever",
+    "trashAnonymousNotes": "When an anonymous card goes to the trash, the notes left on it are deleted",
+    "emptyTrash": "The trash is empty",
+    "emptyTrashLine": "Cards you delete wait here for {days} days",
+    "trashFrom": {
+      "draft": "Draft",
+      "private": "Private",
+      "public": "Public again when restored",
+      "connections": "Connections only when restored"
+    },
+    "trashDaysLeft": "Deleted forever in {count, plural, one {# day} other {# days}}",
+    "trashLastDay": "Deleted forever within a day",
     "actions": {
       "menuLabel": "Manage card",
       "edit": "Edit",
@@ -595,7 +618,26 @@
       "unresonate": "Stop resonating",
       "unresonateConfirmTitle": "Stop resonating with \"{title}\"?",
       "unresonateConfirmBody": "Your card stays. If this resonance is what connected you two and they haven't written to you, you won't be connected any more.",
-      "unresonateConfirm": "Stop resonating"
+      "unresonateConfirm": "Stop resonating",
+      "trashed": "Moved to the trash",
+      "undo": "Undo",
+      "undoTrash": "Moved to the trash · Undo",
+      "undoTrashLabel": "Moved to the trash · Undo \"{title}\"",
+      "movedToTrash": "\"{title}\" moved to the trash",
+      "undoFailed": "Couldn't restore it — try again from the trash",
+      "restore": "Restore",
+      "restored": "Restored",
+      "restoredAloneBody": "This card is back, but it no longer resonates with the card it answered.",
+      "deleteForever": "Delete forever",
+      "deleteForeverConfirmTitle": "Delete this card forever?",
+      "deletedForever": "Deleted forever",
+      "notInTrash": "This card isn't in the trash any more",
+      "trashResonanceTitle": "Delete this resonance?",
+      "trashResonanceBody": "The card moves to the trash, where you can restore it for {days} days. If this resonance is what connected you two and they haven't written to you, you won't be connected any more, even after you restore it.",
+      "trashResonanceConfirm": "Move to trash",
+      "emptyTrash": "Empty trash",
+      "emptyTrashTitle": "Empty the trash?",
+      "emptyTrashBody": "Every card in the trash will be deleted forever. This can't be undone."
     },
     "anonymousBadge": "Anonymous",
     "emptyPublishedCta": "Write a story",

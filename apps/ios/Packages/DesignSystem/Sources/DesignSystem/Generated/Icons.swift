@@ -40,6 +40,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case sliders
     case send
     case reply
+    case restore
     case copy
     case link
     case collapseRight = "collapse-right"
@@ -230,6 +231,10 @@ extension IconName {
         case .reply: IconGlyph(viewBox: 24, fillable: false, strokes: [
             IconStroke(filled: false, width: 1, commands: [0, 19.7, 18.7, 2, 19.9, 14.7, 18.4, 11.5, 14.7, 10.5, 2, 12.4, 9.9, 9.6, 9.9, 5.6, 10.1]),
             IconStroke(filled: false, width: 1, commands: [0, 9.6, 5.6, 2, 8.1, 7.2, 6.6, 8.6, 5.1, 10.1, 2, 6.6, 11.7, 8.1, 13.1, 9.8, 14.7]),
+        ])
+        case .restore: IconGlyph(viewBox: 24, fillable: false, strokes: [
+            IconStroke(filled: false, width: 1, commands: [0, 5.1, 11.6, 2, 5.3, 7.9, 8.4, 5, 12.2, 5.1, 2, 16.1, 5.2, 19.1, 8.3, 19, 12.2, 2, 18.9, 16, 15.8, 19.1, 12, 19, 2, 10.1, 19, 8.4, 18.2, 7.2, 16.9]),
+            IconStroke(filled: false, width: 1, commands: [0, 2.8, 9.3, 2, 3.6, 10.1, 4.4, 11, 5.1, 11.9, 2, 5.9, 11.1, 6.7, 10.4, 7.7, 9.8]),
         ])
         case .copy: IconGlyph(viewBox: 24, fillable: false, strokes: [
             IconStroke(filled: false, width: 1, commands: [0, 9, 5.7, 2, 9, 5, 9.3, 4.4, 9.8, 3.9, 2, 13, 3.4, 16.4, 3.6, 19.6, 4.2, 2, 20, 7.6, 19.9, 11.1, 19.5, 14.6, 2, 18.9, 14.9, 18.2, 15, 17.5, 15]),

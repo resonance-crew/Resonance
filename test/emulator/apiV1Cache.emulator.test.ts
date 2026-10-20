@@ -18,6 +18,8 @@ vi.mock('next/server', async (orig) => ({ ...(await orig<typeof import('next/ser
 const profileRoute = await import('@/app/api/v1/users/[handle]/route');
 const cardRoute = await import('@/app/api/v1/cards/[key]/route');
 const meRoute = await import('@/app/api/v1/me/route');
+const myCardsRoute = await import('@/app/api/v1/me/cards/route');
+const myBoxRoute = await import('@/app/api/v1/me/cardbox/route');
 const feedRoute = await import('@/app/api/v1/feed/route');
 const recommendedRoute = await import('@/app/api/v1/feed/recommended/route');
 const { recommendationDay } = await import('@/lib/recommend/daily');
@@ -120,6 +122,9 @@ describe('a v1 read', () => {
     expect((await cardDetail('a1', OPT_IN)).headers.get('cache-control')).toBe('private, no-cache');
     const me = await meRoute.GET(request('/api/v1/me', OPT_IN));
     expect(me.headers.get('cache-control')).toBe('private, no-cache');
+    // Their trash too: a card moved there or restored a moment ago changes it.
+    expect((await myCardsRoute.GET(request('/api/v1/me/cards?tab=trash', OPT_IN))).headers.get('cache-control')).toBe('private, no-cache');
+    expect((await myBoxRoute.GET(request('/api/v1/me/cardbox?shelves=draft,trash', OPT_IN))).headers.get('cache-control')).toBe('private, no-cache');
     expect((await meRoute.GET(request('/api/v1/me', { 'If-None-Match': me.headers.get('etag')! }))).status).toBe(304);
   });
 

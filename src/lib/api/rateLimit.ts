@@ -42,6 +42,17 @@ export const LIMITS = {
   invite: { max: 60, windowMs: HOUR },
   /** /api/account/export: reads everything the account ever wrote. */
   export: { max: 20, windowMs: DAY },
+  /**
+   * Moving a card to the trash (each POST …/trash) and each call emptying it
+   * (DELETE /me/trash): a take-back, notes deleted, pages revalidated.
+   */
+  trash: { max: 200, windowMs: DAY },
+  /**
+   * Restoring a card from the trash — a budget of its own, so someone
+   * clearing many cards never spends what their undo needs. A restore rings
+   * at most once ever per reader and card, so it is no way to reach anyone.
+   */
+  restore: { max: 200, windowMs: DAY },
 } as const satisfies Record<string, { max: number; windowMs: number }>;
 
 export type Bucket = keyof typeof LIMITS;

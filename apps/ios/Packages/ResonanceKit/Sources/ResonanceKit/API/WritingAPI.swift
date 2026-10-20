@@ -30,6 +30,8 @@ public struct WritingAPI: Sendable {
         case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
         case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
         case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
+        // A card in the trash (409 'This card is in the trash.'), until the app's own trash ships.
+        case let .conflict(r): throw APIFailure(try r.body.json, status: 409)
         case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
         }
     }
@@ -42,6 +44,8 @@ public struct WritingAPI: Sendable {
         case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
         case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
         case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
+        // A card in the trash (409 'This card is in the trash.'), until the app's own trash ships.
+        case let .conflict(r): throw APIFailure(try r.body.json, status: 409)
         case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
         }
     }
@@ -59,6 +63,8 @@ public struct WritingAPI: Sendable {
         case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
         case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
         case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
+        // A card in the trash (409 'This card is in the trash.'), until the app's own trash ships.
+        case let .conflict(r): throw APIFailure(try r.body.json, status: 409)
         case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
         }
     }
@@ -71,6 +77,7 @@ public struct WritingAPI: Sendable {
         case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
         case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
         case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
+        case let .conflict(r): throw APIFailure(try r.body.json, status: 409)
         case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
         }
     }

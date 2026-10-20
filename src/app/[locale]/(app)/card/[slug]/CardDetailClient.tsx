@@ -14,6 +14,8 @@ import { AuthorRegionFlag, CardAuthorAside, CardPublishedDate } from '@/componen
 import { publishedDate } from '@/lib/publishedDate';
 import { CardToc, type TocHeading } from '@/components/molecules/CardDetail/CardToc';
 import { CardActionsMenu } from '@/components/molecules/CardActionsMenu/CardActionsMenu';
+import { TrashedCardBanner } from '@/components/molecules/CardDetail/TrashedCardBanner';
+import { RestoredAloneNotice } from '@/components/molecules/TrashActionsMenu/RestoredAloneNotice';
 import { CardSafetyMenu } from '@/components/molecules/CardDetail/CardSafetyMenu';
 import { ReadAfterArea } from '@/components/molecules/CardDetail/ReadAfterArea';
 import { ResonanceCards } from '@/components/molecules/CardDetail/ResonanceCards';
@@ -121,6 +123,9 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
     answered: !!data && !fromServer,
   });
   const isOwner = !!user && !!data?.card && user.id === data.card.authorId;
+  // The owner's card in the trash: its banner heads the article, and nothing around the card shows.
+  const trashed = isOwner && !!data?.card?.trashedAt;
+  const [trashedHere, setTrashedHere] = useState(false);
   // The lists around the card (resonances, related, the author's linking
   // cards) and its story's embedded cards: signed in, one request beside the
   // card's own read, keyed by the id the server render found; signed out,
@@ -212,6 +217,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
       <div style={mainContainerStyle}>
         <div className={styles.layout}>
           <article className={styles.article}>
+            {trashed && <TrashedCardBanner card={card} focusTitle={trashedHere} />}
             {/* Compact author header — shown inline only on mobile (the rail is
                 hidden there). */}
             <header className={styles.mobileAuthor}>
@@ -279,16 +285,30 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
               <h1 className={styles.title}>
                 {card.thoughtCore}
               </h1>
-              {isOwner && (
+              {isOwner && !trashed && (
                 <CardActionsMenu
-                  card={{ id: card.id, visibility: card.visibility, slug: card.slug, referenceCardId: card.referenceCardId }}
+                  card={{
+                    id: card.id,
+                    visibility: card.visibility,
+                    slug: card.slug,
+                    referenceCardId: card.referenceCardId,
+                    title: card.thoughtCore,
+                    published: !!card.publishedAt,
+                    anonymous: card.anonymous === true,
+                  }}
                   // The card it resonates with heads the resonance list, when the viewer may read it.
                   referenceTitle={resonances.cards.find((c) => c.id === card.referenceCardId)?.thoughtCore}
+                  referenceAnonymous={resonances.cards.find((c) => c.id === card.referenceCardId)?.anonymous}
                   seed={hue + 3}
                   bare
                   // Re-read this card so the visibility chip/state reflects the change.
                   onChanged={() => void mutate(cardKey(slug, user!.id))}
-                  onDeleted={() => router.replace('/me')}
+                  // Moved to the trash: the page stays, and shows its banner (the card read again).
+                  trashFeedback="page"
+                  onTrashed={() => {
+                    setTrashedHere(true);
+                    void mutate(cardKey(slug, user!.id));
+                  }}
                 />
               )}
               {/* Someone else's anonymous card names no author: it can be reported, not its author blocked. */}
@@ -334,7 +354,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
               coreInsight={card.signature?.coreInsight}
             />
 
-            {linked && linked.cards.length > 0 && (
+            {!trashed && linked && linked.cards.length > 0 && (
               <section style={{ marginBottom: 40 }}>
                 <h3 className={styles.linkedHeading}>{t('linkedCards')}</h3>
                 <MiniCardGrid cards={linked.cards} authors={linked.authors} />
@@ -355,8 +375,9 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
           </aside>
         </div>
       </div>
+      {isOwner && <RestoredAloneNotice />}
 
-      {hasResonance && (
+      {hasResonance && !trashed && (
         <section className={styles.resonanceSection}>
           <div className={styles.sectionEdgeDesktop}>
             <SectionEdge
@@ -375,7 +396,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
         </section>
       )}
 
-      {related.length > 0 && (
+      {related.length > 0 && !trashed && (
         <section className={hasResonance ? styles.relatedSectionSecondary : styles.relatedSectionPrimary}>
           <div className={styles.sectionEdgeDesktop}>
             <SectionEdge

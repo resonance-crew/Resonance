@@ -580,6 +580,14 @@ object L10n {
         val anonymousAuthor: String get() = Strings.string("card.anonymousAuthor")
         /** This card was published anonymously — your pen name isn't shown on it or on your profile */
         val anonymousOwnerNote: String get() = Strings.string("card.anonymousOwnerNote")
+        object Trashed {
+            /** This card is in the trash */
+            val title: String get() = Strings.string("card.trashed.title")
+            /** Only you can see it */
+            val onlyYou: String get() = Strings.string("card.trashed.onlyYou")
+            /** The notes left on this anonymous card have been deleted */
+            val notesGone: String get() = Strings.string("card.trashed.notesGone")
+        }
     }
     object Messages {
         /** Messages */
@@ -966,6 +974,14 @@ object L10n {
         }
         /** Remove tag */
         val removeTag: String get() = Strings.string("write.removeTag")
+        object Trashed {
+            /** Restore it to keep writing */
+            val line: String get() = Strings.string("write.trashed.line")
+            /** Restore and keep writing */
+            val restore: String get() = Strings.string("write.trashed.restore")
+            /** This card is in the trash — restore it to save */
+            val status: String get() = Strings.string("write.trashed.status")
+        }
     }
     object Me {
         /** Joined {date} */
@@ -989,6 +1005,8 @@ object L10n {
             val linked: String get() = Strings.string("me.tabs.linked")
             /** Bookmarks */
             val bookmarks: String get() = Strings.string("me.tabs.bookmarks")
+            /** Trash */
+            val trash: String get() = Strings.string("me.tabs.trash")
             /** Thought map */
             val thoughtMap: String get() = Strings.string("me.tabs.thoughtMap")
         }
@@ -1048,6 +1066,28 @@ object L10n {
         val emptyResonated: String get() = Strings.string("me.emptyResonated")
         /** When a story is too good to forget, press the bookmark — it will wait here quietly, only for you */
         val emptyBookmarks: String get() = Strings.string("me.emptyBookmarks")
+        /** Cards stay in the trash for {days} days, then they're deleted forever */
+        fun trashHint(days: Int): String = Strings.format("me.trashHint", mapOf("days" to days))
+        /** When an anonymous card goes to the trash, the notes left on it are deleted */
+        val trashAnonymousNotes: String get() = Strings.string("me.trashAnonymousNotes")
+        /** The trash is empty */
+        val emptyTrash: String get() = Strings.string("me.emptyTrash")
+        /** Cards you delete wait here for {days} days */
+        fun emptyTrashLine(days: Int): String = Strings.format("me.emptyTrashLine", mapOf("days" to days))
+        object TrashFrom {
+            /** Draft */
+            val draft: String get() = Strings.string("me.trashFrom.draft")
+            /** Private */
+            val private: String get() = Strings.string("me.trashFrom.private")
+            /** Public again when restored */
+            val public: String get() = Strings.string("me.trashFrom.public")
+            /** Connections only when restored */
+            val connections: String get() = Strings.string("me.trashFrom.connections")
+        }
+        /** Deleted forever in {count, plural, one {# day} other {# days}} */
+        fun trashDaysLeft(count: Int): String = Strings.format("me.trashDaysLeft", mapOf("count" to count))
+        /** Deleted forever within a day */
+        val trashLastDay: String get() = Strings.string("me.trashLastDay")
         object Actions {
             /** Manage card */
             val menuLabel: String get() = Strings.string("me.actions.menuLabel")
@@ -1075,6 +1115,44 @@ object L10n {
             val unresonateConfirmBody: String get() = Strings.string("me.actions.unresonateConfirmBody")
             /** Stop resonating */
             val unresonateConfirm: String get() = Strings.string("me.actions.unresonateConfirm")
+            /** Moved to the trash */
+            val trashed: String get() = Strings.string("me.actions.trashed")
+            /** Undo */
+            val undo: String get() = Strings.string("me.actions.undo")
+            /** Moved to the trash · Undo */
+            val undoTrash: String get() = Strings.string("me.actions.undoTrash")
+            /** Moved to the trash · Undo \"{title}\" */
+            fun undoTrashLabel(title: String): String = Strings.format("me.actions.undoTrashLabel", mapOf("title" to title))
+            /** \"{title}\" moved to the trash */
+            fun movedToTrash(title: String): String = Strings.format("me.actions.movedToTrash", mapOf("title" to title))
+            /** Couldn't restore it — try again from the trash */
+            val undoFailed: String get() = Strings.string("me.actions.undoFailed")
+            /** Restore */
+            val restore: String get() = Strings.string("me.actions.restore")
+            /** Restored */
+            val restored: String get() = Strings.string("me.actions.restored")
+            /** This card is back, but it no longer resonates with the card it answered. */
+            val restoredAloneBody: String get() = Strings.string("me.actions.restoredAloneBody")
+            /** Delete forever */
+            val deleteForever: String get() = Strings.string("me.actions.deleteForever")
+            /** Delete this card forever? */
+            val deleteForeverConfirmTitle: String get() = Strings.string("me.actions.deleteForeverConfirmTitle")
+            /** Deleted forever */
+            val deletedForever: String get() = Strings.string("me.actions.deletedForever")
+            /** This card isn't in the trash any more */
+            val notInTrash: String get() = Strings.string("me.actions.notInTrash")
+            /** Delete this resonance? */
+            val trashResonanceTitle: String get() = Strings.string("me.actions.trashResonanceTitle")
+            /** The card moves to the trash, where you can restore it for {days} days. If this resonance is what connected you two and t */
+            fun trashResonanceBody(days: Int): String = Strings.format("me.actions.trashResonanceBody", mapOf("days" to days))
+            /** Move to trash */
+            val trashResonanceConfirm: String get() = Strings.string("me.actions.trashResonanceConfirm")
+            /** Empty trash */
+            val emptyTrash: String get() = Strings.string("me.actions.emptyTrash")
+            /** Empty the trash? */
+            val emptyTrashTitle: String get() = Strings.string("me.actions.emptyTrashTitle")
+            /** Every card in the trash will be deleted forever. This can't be undone. */
+            val emptyTrashBody: String get() = Strings.string("me.actions.emptyTrashBody")
         }
         /** Anonymous */
         val anonymousBadge: String get() = Strings.string("me.anonymousBadge")

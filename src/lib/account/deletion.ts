@@ -79,7 +79,8 @@ export interface PurgeReport {
   documents: number;
   /**
    * The cached pages that showed the account (logical paths): its published
-   * cards, by id and slug, its profile, and the landing page when a public
+   * cards (not those in its trash, whose pages went with the trash), by id
+   * and slug, its profile, and the landing page when a public
    * card could be on it. They must be revalidated, or the site would keep
    * serving the deleted writing.
    */
@@ -131,13 +132,18 @@ async function collectAccountData(db: Firestore, uid: string) {
   ];
 
   const [cards, conversations, profile] = await Promise.all([
-    db.collection('cards').where('authorId', '==', uid).select('slug', 'publishedAt', 'visibility').get(),
+    db.collection('cards').where('authorId', '==', uid).select('slug', 'publishedAt', 'visibility', 'trashedAt').get(),
     db.collection('conversations').where('participants', 'array-contains', uid).select().get(),
     db.collection('users').doc(uid).get(),
   ]);
   // Only a published card ever had a page someone could have cached; a
-  // public one may be on the landing page too.
-  const published = cards.docs.filter((d) => d.get('publishedAt') != null);
+  // public one may be on the landing page too. One in the trash has none
+  // left: its pages were revalidated when it went in, and show nothing
+  // since. Revalidating them now, beside the profile, would tie an
+  // anonymous one to it — the moment its cache starts again would be the
+  // account's (no outsider learns from its going: it was gone to them at
+  // the trash, see cardByKeyForAnyone).
+  const published = cards.docs.filter((d) => d.get('publishedAt') != null && d.get('trashedAt') == null);
   const pages = [
     ...published.flatMap((d) => cardPagePaths({ id: d.id, slug: typeof d.get('slug') === 'string' ? d.get('slug') : null })),
     ...profilePagePaths(profile.get('handle')),

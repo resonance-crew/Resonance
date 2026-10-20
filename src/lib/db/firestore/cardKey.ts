@@ -30,3 +30,18 @@ export async function cardByKey(db: Firestore, key: string) {
   const byId = await db.collection('cards').doc(key).get();
   return byId.exists ? byId : null;
 }
+
+/**
+ * {@link cardByKey} for an answer that goes to anyone — a page's server
+ * render (cached HTML), /api/cards/view, /api/cards/resolve — where no viewer
+ * is known: a card in its author's trash names nothing there, exactly as a
+ * deleted one. "Private" would say the document is still there, and it stays
+ * there until the trash's 30 days run out or its author's account is purged
+ * — whichever comes first, so an anonymous card that turned from "there" to
+ * "gone" in the purge's minute would tell whose it was. Its author reads it
+ * through the rules or GET /api/v1/cards/{key} (cardByKey, then canView).
+ */
+export async function cardByKeyForAnyone(db: Firestore, key: string) {
+  const snap = await cardByKey(db, key);
+  return snap && snap.get('trashedAt') == null ? snap : null;
+}

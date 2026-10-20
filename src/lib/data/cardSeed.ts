@@ -16,7 +16,8 @@ export interface CardSeed {
   /**
    * The card's document id, whatever its visibility (an id reveals nothing:
    * the browser's read of it is what the rules gate), or null when the URL
-   * names no card.
+   * names no card — or one in its author's trash, which is gone to everyone
+   * else (its author's browser finds it through GET /api/v1/cards/{key}).
    */
   id: string | null;
   /** A public, published card's page content; null for anything else. */

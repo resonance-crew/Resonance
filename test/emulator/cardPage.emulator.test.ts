@@ -105,6 +105,29 @@ describe('card page server read', () => {
     expect(toCardSeed(loaded.id, loaded.card, loaded.author)).toEqual({ id: key, view: null });
   });
 
+  // A card in the trash is gone to everyone but its author — its page is a
+  // deleted card's, not a private one's, whose id would say the document is
+  // still there (until the trash's 30 days or its author's account run out:
+  // an anonymous card going in the purge's minute would say whose it was).
+  it.each([
+    ['in-the-trash', {}],
+    ['anon-in-the-trash', { anonymous: true }],
+  ] as const)('knows no card for %s, by slug or id, as for a key that names none', async (key, extra) => {
+    await card(`${key}-doc`, {
+      ...extra,
+      slug: key,
+      visibility: 'private',
+      trashedAt: at(5_000_000),
+      trashedFrom: { visibility: 'public', referenceCardId: null },
+    });
+    const missing = await readCardForPage(db, 'never-was');
+    for (const k of [key, `${key}-doc`]) {
+      const loaded = await readCardForPage(db, k);
+      expect(loaded, k).toEqual(missing);
+      expect(toCardSeed(loaded.id, loaded.card, loaded.author), k).toEqual({ id: null, view: null });
+    }
+  });
+
   it('resolves a slug to the card that holds it, like every other resolver', async () => {
     const loaded = await readCardForPage(db, 'shared-slug');
     expect(loaded.id).toBe('first-holder');

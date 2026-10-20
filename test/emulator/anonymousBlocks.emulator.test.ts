@@ -15,8 +15,13 @@ import {
   getResonances,
 } from '@/lib/api/v1/reads';
 import { resonateWith, unresonate } from '@/lib/api/v1/resonate';
+import { reportCard } from '@/lib/api/v1/safety';
 import { CardBoxTab } from '@/lib/api/v1/schemas';
 import { getFeed } from '@/lib/api/v1/service';
+import { restoreCard, trashCard } from '@/lib/api/v1/trash';
+import { exportAccountData } from '@/lib/account/export';
+import { readCardForPage } from '@/app/[locale]/(app)/card/[slug]/cardPageData';
+import { toCardSeed } from '@/lib/data/cardSeed';
 
 // Blocks never apply to anonymous cards. A reader keeps their own block list,
 // so any answer about an anonymous card that changed when they blocked
@@ -271,5 +276,97 @@ describe('an older anonymous card for connections only', () => {
     // Its author still reads it.
     expect((await getCardDetail(db, 'bob', 'maskedCircle')).card.id).toBe('maskedCircle');
     expect(await db.collection('notes').get()).toHaveProperty('size', 0);
+  });
+});
+
+// The trash makes a card private, so a card in it must answer every probe
+// exactly as a private anonymous card does — with no block and across one
+// either way. Two differences: its page is a missing card's, not even its id
+// handed out (a private card's id would say the document is still there);
+// and the notes: they leave an anonymous card
+// as it goes in (as they leave a deleted one), so their writer's resend is a
+// missing card's 404 and their export lacks them — never later, with its
+// author's account.
+describe('an anonymous card in the trash', () => {
+  beforeEach(async () => {
+    await card('maskedTrash', 'bob', 0, { anonymous: true, slug: 'a-night-in-the-trash' });
+    await card('maskedPrivate', 'bob', 0, { anonymous: true, visibility: 'private', slug: 'a-private-night' });
+  });
+
+  /** An answer as the client sees it: what the call returns, or the error's code and message. */
+  const outcome = (p: Promise<unknown>) =>
+    p.then(
+      (value) => ({ ok: true as const, value }),
+      (e: unknown) => ({ ok: false as const, error: e instanceof ApiFailure ? [e.code, e.message] : String(e) }),
+    );
+  const vectors = { setVisibility: async () => {} };
+  const probe = async (id: string, slug: string) => {
+    const page = await readCardForPage(db, slug);
+    return [
+      await outcome(getCardDetail(db, 'alice', id, ALL)),
+      await outcome(getCardDetail(db, 'alice', slug)),
+      ids(await getCardsByKeys(db, 'alice', [id, slug])),
+      ids(await getFeed(db, 'alice', 30)).includes(id),
+      ids(await getFeed(db, null, 30)).includes(id),
+      { ...toCardSeed(page.id, page.card, page.author), id: 'the card' },
+      await outcome(sendNote(db, 'alice', { cardId: id, text: 'whose is this?' })),
+      await outcome(resonateWith(db, 'alice', id, 'aliceCard')),
+      await outcome(reportCard(db, 'alice', id, { reason: 'spam' })),
+    ];
+  };
+
+  it('answers every probe as a private anonymous card does, block or not', async () => {
+    await trashCard(db, 'bob', 'maskedTrash', { vectors });
+    const [trashed, privately] = await sameInEveryState(() =>
+      Promise.all([probe('maskedTrash', 'a-night-in-the-trash'), probe('maskedPrivate', 'a-private-night')]),
+    );
+    expect(trashed).toEqual(privately);
+    expect(trashed[0]).toEqual({ ok: false, error: ['not_found', 'No such card.'] });
+    expect((await db.collection('notes').get()).empty).toBe(true);
+  });
+
+  // Not even a private card's id: the document outlives the trash's moment
+  // (until its 30 days or its author's account run out), so its page — the
+  // card page's HTML and /api/cards/view, which anyone can poll — is a
+  // missing card's from the moment it goes in.
+  it("gives its page a missing card's seed, block or not — not a private card's id", async () => {
+    await trashCard(db, 'bob', 'maskedTrash', { vectors });
+    const seeds = await sameInEveryState(async () => {
+      const seed = async (key: string) => {
+        const page = await readCardForPage(db, key);
+        return toCardSeed(page.id, page.card, page.author);
+      };
+      return { bySlug: await seed('a-night-in-the-trash'), byId: await seed('maskedTrash'), missing: await seed('never-was') };
+    });
+    expect(seeds.bySlug).toEqual(seeds.missing);
+    expect(seeds.byId).toEqual(seeds.missing);
+    expect(seeds.missing).toEqual({ id: null, view: null });
+  });
+
+  it("takes its notes with it as it goes in: their writer's resend is a missing card's 404, their export lacks them", async () => {
+    const answers = await sameInEveryState(async () => {
+      await card('maskedTrash', 'bob', 0, { anonymous: true, slug: 'a-night-in-the-trash' });
+      const sent = await sendNote(db, 'alice', { cardId: 'maskedTrash', text: 'whose is this?', clientId: 'alices-note-000001' });
+      const trashed = await trashCard(db, 'bob', 'maskedTrash', { vectors });
+      const resend = await outcome(sendNote(db, 'alice', { cardId: 'maskedTrash', text: 'whose is this?', clientId: 'alices-note-000001' }));
+      const exported = await exportAccountData(db, 'alice');
+      const restored = await restoreCard(db, 'bob', 'maskedTrash', { vectors });
+      return {
+        sent: sent.id,
+        resend,
+        exported: exported.notesSent.map((n) => n.cardId),
+        // The owner is answered the same either way too.
+        trashed: { changed: trashed.changed, stale: trashed.stale, visibility: trashed.card.visibility, restoresTo: trashed.card.restoresTo },
+        restored: { changed: restored.changed, droppedResonance: restored.droppedResonance, visibility: restored.card.visibility },
+      };
+    });
+    expect(answers).toMatchObject({
+      sent: 'alices-note-000001',
+      resend: { ok: false, error: ['not_found', 'No such card.'] },
+      exported: [],
+      trashed: { changed: true, visibility: 'private', restoresTo: 'public' },
+      restored: { changed: true, droppedResonance: false, visibility: 'public' },
+    });
+    expect((await db.collection('notes').get()).empty).toBe(true);
   });
 });
