@@ -15,6 +15,8 @@
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="https" />
         </intent>
+        <!-- A card's share offers Instagram 限時動態 when Instagram's Stories composer is installed (ui/share). -->
+        <package android:name="com.instagram.android" />
     </queries>
 
     <application
@@ -73,6 +75,26 @@
                 <data android:pathPrefix="/zh-TW/me/thought-map" />
             </intent-filter>
         </activity>
+
+        <!-- The share sheet's own actions (Instagram 限時動態, 儲存圖片): started only by the app's own
+             PendingIntents and the sheet's LabeledIntents, so not exported; never drawn (it finishes at once). -->
+        <activity
+            android:name=".ui.share.ShareActionActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- The share's pictures (cacheDir/share, res/xml/share_paths.xml), handed to the app a person shares to by content URI. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.share"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/share_paths" />
+        </provider>
 
         <!-- Push: a new FCM token, and messages that arrive while the app is open (see PushCenter). -->
         <service android:name=".ResonancePushService" android:exported="false">

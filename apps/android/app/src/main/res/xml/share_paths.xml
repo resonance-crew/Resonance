@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the share FileProvider (AndroidManifest, `{applicationId}.share`) may hand another app: the
+     share folder of the cache (ui/share/ShareFiles, emptied before each share and on sign-out), nothing else. -->
+<paths>
+    <cache-path name="share" path="share/" />
+</paths>
