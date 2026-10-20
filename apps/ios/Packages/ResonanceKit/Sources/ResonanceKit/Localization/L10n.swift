@@ -98,7 +98,7 @@ public enum L10n {
         public static var tag: String { Strings.shared.string("about.tag") }
         /// We believe everyone has a story to share
         public static var title: String { Strings.shared.string("about.title") }
-        /// Every one of us is born whole and singular, carrying experiences no one else has lived — and stories are the best way to
+        /// Every one of us is born whole and singular, carrying experiences and insights all our own — and stories are the best way
         public static var lead: String { Strings.shared.string("about.lead") }
         public enum Belief {
             /// Our mission

@@ -100,7 +100,7 @@ object L10n {
         val tag: String get() = Strings.string("about.tag")
         /** We believe everyone has a story to share */
         val title: String get() = Strings.string("about.title")
-        /** Every one of us is born whole and singular, carrying experiences no one else has lived — and stories are the best way to */
+        /** Every one of us is born whole and singular, carrying experiences and insights all our own — and stories are the best way */
         val lead: String get() = Strings.string("about.lead")
         object Belief {
             /** Our mission */
