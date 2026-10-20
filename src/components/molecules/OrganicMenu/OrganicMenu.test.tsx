@@ -334,6 +334,6 @@ describe('rows that say more than an icon and a word (the share menu)', () => {
     footerHeight.mockRestore();
     layout.restore();
     const css = readFileSync(join(process.cwd(), 'src/components/molecules/OrganicMenu/OrganicMenu.module.css'), 'utf8');
-    expect(css).toMatch(/\.footerWrap\s*\{[^}]*max-width: 256px;[^}]*white-space: normal/);
+    expect(css).toMatch(/\.footerWrap\s*\{[^}]*max-width: min\(256px, calc\(100vw - 96px\)\);[^}]*white-space: normal/);
   });
 });
