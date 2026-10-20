@@ -154,6 +154,7 @@ class StoryEditorBridge(
         private set
     private var pendingMarkdown: String? = null
     private var pendingTitle: String? = null
+    private var minHeight: Int? = null
 
     val webView: WebView = WebView(context).apply {
         settings.javaScriptEnabled = true
@@ -207,6 +208,22 @@ class StoryEditorBridge(
             return
         }
         webView.evaluateJavascript("ResonanceEditor.setTitle(${JsonPrimitive(title)})", null)
+    }
+
+    /**
+     * The story's own least height, in CSS px (dp): the canvas's editable root fills the rest of the
+     * page, so a tap anywhere under the words lands in the story with the caret at its end, and its
+     * placeholder has the room to wrap (the web canvas's min-height). Host styling only: the island's
+     * own sheet keeps `min-height: 0` for hosts that don't ask.
+     */
+    fun setMinHeight(px: Int) {
+        if (px == minHeight) return
+        minHeight = px
+        if (ready) applyMinHeight(px)
+    }
+
+    private fun applyMinHeight(px: Int) {
+        webView.evaluateJavascript("(function(){var e=document.querySelector('#editor .ProseMirror');if(e)e.style.minHeight='${px}px';})()", null)
     }
 
     /** Puts the caret in the story, at its end (a tap under the words, the title's Next). */
@@ -283,6 +300,7 @@ class StoryEditorBridge(
                 pendingTitle = null
                 pendingMarkdown?.let(::setMarkdown)
                 pendingMarkdown = null
+                minHeight?.let(::applyMinHeight)
             }
             is IslandMessage.Change -> onChange(m.markdown)
             is IslandMessage.Height -> height = maxOf(if (canvas) 0 else FIELD_MIN_HEIGHT, m.px)
@@ -370,9 +388,9 @@ sealed interface IslandMessage {
 
 /**
  * The story on the writer's bare page (writer.spec §1.4): no frame, no toolbar of its own — the
- * island as tall as its words, set in the story's type at the reading scale (up to 2× of the
- * system's text size, as the card page reads it), and under it the rest of the page, whose tap puts
- * the caret in the story. Formatting is the keyboard's [StoryFormatBar].
+ * island as tall as its words, at least [minHeight] (its editable root fills that, so a tap anywhere
+ * under the words lands in the story), set in the story's type at the reading scale (up to 2× of
+ * the system's text size, as the card page reads it). Formatting is the keyboard's [StoryFormatBar].
  */
 @Composable
 fun StoryCanvas(bridge: StoryEditorBridge, minHeight: Dp, modifier: Modifier = Modifier) {
@@ -380,19 +398,11 @@ fun StoryCanvas(bridge: StoryEditorBridge, minHeight: Dp, modifier: Modifier = M
         val fontScale = LocalDensity.current.fontScale
         SideEffect { bridge.setTextScale(fontScale) }
     }
-    Column(modifier.fillMaxWidth()) {
-        AndroidView(
-            factory = { bridge.webView },
-            modifier = Modifier.fillMaxWidth().height(bridge.height.dp).semantics { contentDescription = L10n.Write.storyLabel },
-        )
-        // A tap anywhere under the words lands in the story.
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = (minHeight - bridge.height.dp).coerceAtLeast(0.dp))
-                .pointerInput(bridge) { detectTapGestures { bridge.focus() } },
-        )
-    }
+    SideEffect { bridge.setMinHeight(minHeight.value.roundToInt()) }
+    AndroidView(
+        factory = { bridge.webView },
+        modifier = modifier.fillMaxWidth().height(bridge.height.dp).semantics { contentDescription = L10n.Write.storyLabel },
+    )
 }
 
 /**

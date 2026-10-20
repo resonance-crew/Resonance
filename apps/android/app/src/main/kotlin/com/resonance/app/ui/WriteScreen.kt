@@ -66,6 +66,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -476,10 +477,14 @@ private fun WriteForm(
         Box(
             Modifier
                 .fillMaxSize()
-                .graphicsLayer {
-                    alpha = 1f - shown
-                    translationX = if (reduced) 0f else -shift * shown
-                }
+                // A layer only while the steps cross: the story's WebView, drawn inside a standing layer,
+                // kept the size it had when the layer was made (its words cut off as they grew).
+                .then(
+                    if (shown > 0f) Modifier.graphicsLayer {
+                        alpha = 1f - shown
+                        translationX = if (reduced) 0f else -shift * shown
+                    } else Modifier,
+                )
                 .then(if (step == WriterStep.Publish) Modifier.clearAndSetSemantics { } else Modifier),
         ) {
             WritingStep(
@@ -883,9 +888,11 @@ private val SPLIT_ROW_HEIGHT = 38.dp
 private fun StepHeading(model: WriteModel) {
     Row(Modifier.heightIn(min = SPLIT_ROW_HEIGHT).padding(start = 0.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.layout { measurable, constraints ->
-            // The arrow's 48 hit box hangs into the pad, its glyph on the column's edge.
+            // The arrow's 48 hit box hangs into the pad and over the row's 38 (its glyph on the column's
+            // edge, level with the Leave's), the row keeping the Leave's height.
             val p = measurable.measure(constraints)
-            layout(p.width - 15.dp.roundToPx(), p.height) { p.place(-15.dp.roundToPx(), 0) }
+            val row = SPLIT_ROW_HEIGHT.roundToPx()
+            layout(p.width - 15.dp.roundToPx(), row) { p.place(-15.dp.roundToPx(), (row - p.height) / 2) }
         }) {
             OrganicIconButton(IconName.ArrowRight, L10n.Write.leaveStay, mirrored = true) { model.back() }
         }
@@ -989,7 +996,8 @@ private fun BoxScope.CoverSlot(frame: CoverFrame, model: WriteModel, pickCover: 
     val partial = model.partialPreview
     val busy = model.mediaBusy
     StoryCardCover(
-        if (model.generating) null else url, frame,
+        // Under the two pills the card's stripes say nothing of their own.
+        if (model.generating) null else url, if (url == null) frame.copy(label = "") else frame,
         overlay = {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 when {
@@ -1097,7 +1105,12 @@ private fun Audience(model: WriteModel) {
             fill = Tokens.CreamDark,
             enabled = !model.pending,
         )
-        if (anonymous) BasicText(L10n.Write.PublishPanel.anonymousVisibility, style = AppFonts.body(Tokens.HintSize, color = Tokens.TextMuted))
+        // Its room is kept while it isn't said, so flipping the switch below never moves the switch under the finger.
+        BasicText(
+            L10n.Write.PublishPanel.anonymousVisibility,
+            style = AppFonts.body(Tokens.HintSize, color = Tokens.TextMuted),
+            modifier = if (anonymous) Modifier else Modifier.drawWithContent { }.clearAndSetSemantics { },
+        )
     }
 }
 
