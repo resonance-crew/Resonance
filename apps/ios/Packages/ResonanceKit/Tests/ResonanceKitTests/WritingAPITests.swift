@@ -112,6 +112,123 @@ actor TokenLog {
         #expect(request.headerFields[.authorization] == "Bearer stale-token")
     }
 
+    /// A card in the trash as its owner is told of it (trash shelf, trash and restore answers).
+    static let trashed = ReadingAPITests.card.replacingOccurrences(of: #""visibility":"public""#, with: #""visibility":"private""#)
+        .replacingOccurrences(of: #""reason":null"#,
+                              with: #""reason":null,"trashedAt":"2026-10-01T08:00:00.000Z","purgeAt":"2026-10-31T08:00:00.000Z","restoresTo":"public""#)
+
+    @Test func movesACardToTheTrashThroughTheContract() async throws {
+        let transport = StubTransport(body: #"{"card":\#(Self.trashed),"changed":true}"#)
+        let result = try await api(transport).trashCard("c1")
+        #expect(result.changed)
+        #expect(result.card.isTrashed)
+        #expect(result.card.visibility == ._private)
+        #expect(result.card.restoresTo == ._public)
+        #expect(result.card.trashedDate == ISO8601.date("2026-10-01T08:00:00.000Z"))
+        #expect(result.card.purgeDate == ISO8601.date("2026-10-31T08:00:00.000Z"))
+        let request = try #require(transport.requests.first)
+        #expect(request.method == .post)
+        #expect(request.path == "/cards/c1/trash")
+        #expect(request.headerFields[.authorization] == "Bearer stale-token")
+        #expect(transport.sentJSON.first! == nil)
+    }
+
+    @Test func restoresACardThroughTheContract() async throws {
+        let transport = StubTransport(body: #"{"card":\#(ReadingAPITests.card),"changed":true,"droppedResonance":true}"#)
+        let result = try await api(transport).restoreCard("c1")
+        #expect(result.changed)
+        #expect(result.droppedResonance)
+        #expect(!result.card.isTrashed)
+        #expect(result.card.purgeDate == nil)
+        let request = try #require(transport.requests.first)
+        #expect(request.method == .post)
+        #expect(request.path == "/cards/c1/restore")
+    }
+
+    @Test func theTrashSaysWhyItWasRefused() async throws {
+        for (status, code) in [(HTTPResponse.Status.notFound, "not_found"), (.tooManyRequests, "rate_limited"),
+                               (.badRequest, "invalid_request"), (.unauthorized, "unauthenticated")] {
+            let transport = StubTransport(status: status, body: #"{"error":{"code":"\#(code)","message":"No."}}"#)
+            await #expect(throws: APIFailure(code: code, message: "No.", status: status.code)) {
+                try await api(transport).trashCard("c1")
+            }
+            await #expect(throws: APIFailure(code: code, message: "No.", status: status.code)) {
+                try await api(transport).restoreCard("c1")
+            }
+        }
+    }
+
+    /// The trash's 永久刪除 deletes only what is still in the trash: one restored on another device
+    /// meanwhile is refused (409) and stays. Older calls delete as they always did.
+    @Test func deletesForGoodOnlyFromTheTrashWhenAsked() async throws {
+        let transport = StubTransport(status: .noContent, body: "")
+        try await api(transport).deleteCard("c1", onlyIfTrashed: true)
+        let request = try #require(transport.requests.first)
+        #expect(request.method == .delete)
+        #expect(request.bare == "/cards/c1")
+        #expect(request.query("onlyIfTrashed") == "true")
+        try await api(transport).deleteCard("c1")
+        #expect(transport.requests.last?.path == "/cards/c1")
+
+        let restored = StubTransport(status: .conflict, body: #"{"error":{"code":"conflict","message":"This card is not in the trash."}}"#)
+        await #expect(throws: APIFailure(code: "conflict", message: "This card is not in the trash.", status: 409)) {
+            try await api(restored).deleteCard("c1", onlyIfTrashed: true)
+        }
+    }
+
+    /// The client the app builds (`ResonanceClient.make`), so the cut-off goes back as the server
+    /// wrote it, to the millisecond.
+    func appAPI(_ transport: StubTransport) -> WritingAPI {
+        let configuration = APIConfiguration(origin: URL(string: "https://example.test")!) { _ in "token" }
+        let client = ResonanceClient.make(configuration, transport: transport,
+                                          middlewares: [BearerAuthMiddleware(idToken: configuration.idToken)])
+        return WritingAPI(client: client, configuration: configuration)
+    }
+
+    /// Answers the trash's pages in turn (the last one again once they run out).
+    final class Pages: @unchecked Sendable {
+        private let lock = NSLock()
+        private var answers: [String]
+        init(_ answers: [String]) { self.answers = answers }
+        func next() -> String { lock.withLock { answers.count > 1 ? answers.removeFirst() : answers[0] } }
+    }
+
+    @Test func emptiesTheTrashAPageAtATimeUpToTheFirstCallsCutOff() async throws {
+        let transport = StubTransport(body: "")
+        let pages = Pages([#"{"deleted":50,"remaining":30,"before":"2026-10-20T10:00:00.123Z"}"#,
+                           #"{"deleted":30,"remaining":0,"before":"2026-10-20T10:00:00.123Z"}"#])
+        transport.reply = { _ in pages.next() }
+        let result = try await appAPI(transport).emptyTrash()
+        #expect(result == WritingAPI.EmptiedTrash(deleted: 80, remaining: 0))
+        #expect(transport.requests.count == 2)
+        #expect(transport.requests.allSatisfy { $0.method == .delete && $0.bare == "/me/trash" })
+        // The first call fixes the cut-off (now); the next sends it back as the server wrote it, so a
+        // card moved to the trash meanwhile is never taken.
+        #expect(transport.requests[0].query("before") == nil)
+        #expect(transport.requests[1].query("before") == "2026-10-20T10:00:00.123Z")
+    }
+
+    @Test func emptyingStopsOnceACallDeletesNothing() async throws {
+        let transport = StubTransport(body: "")
+        let pages = Pages([#"{"deleted":50,"remaining":5,"before":"2026-10-20T10:00:00.000Z"}"#,
+                           #"{"deleted":0,"remaining":5,"before":"2026-10-20T10:00:00.000Z"}"#])
+        transport.reply = { _ in pages.next() }
+        // A card that keeps failing must not keep it going: what is left is said.
+        #expect(try await appAPI(transport).emptyTrash() == WritingAPI.EmptiedTrash(deleted: 50, remaining: 5))
+        #expect(transport.requests.count == 2)
+    }
+
+    @Test func emptyingMakesAtMostTwentyCalls() async throws {
+        let transport = StubTransport(body: #"{"deleted":1,"remaining":100,"before":"2026-10-20T10:00:00.000Z"}"#)
+        let result = try await appAPI(transport).emptyTrash()
+        #expect(transport.requests.count == WritingAPI.emptyTrashCalls)
+        #expect(result == WritingAPI.EmptiedTrash(deleted: WritingAPI.emptyTrashCalls, remaining: 100))
+        let refused = StubTransport(status: .tooManyRequests, body: #"{"error":{"code":"rate_limited","message":"Later."}}"#)
+        await #expect(throws: APIFailure(code: "rate_limited", message: "Later.", status: 429)) {
+            try await appAPI(refused).emptyTrash()
+        }
+    }
+
     @Test func resonatesWithAnExistingCardThroughTheContract() async throws {
         let transport = StubTransport(body: #"{"card":\#(ReadingAPITests.card),"changed":true}"#)
         let result = try await api(transport).resonate(with: "target", cardId: "c1")

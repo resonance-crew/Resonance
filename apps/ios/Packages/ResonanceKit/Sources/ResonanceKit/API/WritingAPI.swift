@@ -4,9 +4,11 @@ import ResonanceAPI
 public typealias PublishResult = Components.Schemas.PublishResponse
 public typealias ApplyEditResult = Components.Schemas.ApplyEditResponse
 public typealias ResonateResult = Components.Schemas.ResonateResponse
+public typealias TrashedCard = Components.Schemas.TrashedCard
+public typealias RestoredCard = Components.Schemas.RestoredCard
 
 /// What the writing screen asks of the server: publishing, a card's
-/// visibility, byline and deletion from its ⋯, and resonating with a card by
+/// visibility, byline, trash and deletion from its ⋯, and resonating with a card by
 /// one already written (the v1 contract); and the web
 /// editor's helpers it shares as they are — AI tag suggestions, the publish
 /// panel's insight echo, and photo uploads. Drafts themselves are the
@@ -30,7 +32,7 @@ public struct WritingAPI: Sendable {
         case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
         case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
         case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
-        // A card in the trash (409 'This card is in the trash.'), until the app's own trash ships.
+        // A card in the trash: 409 'This card is in the trash.' until it is restored.
         case let .conflict(r): throw APIFailure(try r.body.json, status: 409)
         case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
         }
@@ -44,7 +46,7 @@ public struct WritingAPI: Sendable {
         case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
         case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
         case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
-        // A card in the trash (409 'This card is in the trash.'), until the app's own trash ships.
+        // A card in the trash: 409 'This card is in the trash.' until it is restored.
         case let .conflict(r): throw APIFailure(try r.body.json, status: 409)
         case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
         }
@@ -63,16 +65,20 @@ public struct WritingAPI: Sendable {
         case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
         case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
         case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
-        // A card in the trash (409 'This card is in the trash.'), until the app's own trash ships.
+        // A card in the trash: 409 'This card is in the trash.' until it is restored.
         case let .conflict(r): throw APIFailure(try r.body.json, status: 409)
         case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
         }
     }
 
-    /// Deletes your card, draft or published, with its pending edit
-    /// (DELETE /api/v1/cards/{id}); the server refreshes the site's cached pages.
-    public func deleteCard(_ cardId: String) async throws {
-        switch try await client.deleteCard(path: .init(key: cardId)) {
+    /// Deletes your card for good, draft or published, with its pending edit, the notes left on it
+    /// and its place in the recommender (DELETE /api/v1/cards/{id}); the server refreshes the
+    /// site's cached pages. A build with the trash moves a card there first (`trashCard`) and
+    /// deletes for good only from it, with `onlyIfTrashed`: a card restored meanwhile (on another
+    /// device) is then `conflict` (409, "This card is not in the trash.") and stays.
+    public func deleteCard(_ cardId: String, onlyIfTrashed: Bool = false) async throws {
+        let query = Operations.DeleteCard.Input.Query(onlyIfTrashed: onlyIfTrashed ? ._true : nil)
+        switch try await client.deleteCard(path: .init(key: cardId), query: query) {
         case .noContent: return
         case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
         case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
@@ -80,6 +86,81 @@ public struct WritingAPI: Sendable {
         case let .conflict(r): throw APIFailure(try r.body.json, status: 409)
         case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
         }
+    }
+
+    /// Moves your card to the trash (POST /api/v1/cards/{id}/trash) — what 刪除 does: private to
+    /// everyone but you until you restore it, deleted for good after 30 days (`TrashClock`). A
+    /// resonance is taken back at once; the notes on an anonymous card are deleted. Answers the
+    /// card as the trash shelf shows it (`trashedAt`, `purgeAt`, `restoresTo`), and whether it
+    /// changed (`false`: it was there already, its 30 days running from then). `not_found` when it
+    /// isn't yours or is past its 30 days; `rate_limited` past the day's budget.
+    @discardableResult
+    public func trashCard(_ cardId: String) async throws -> TrashedCard {
+        switch try await client.trashCard(path: .init(key: cardId)) {
+        case let .ok(r): return try r.body.json
+        case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
+        case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
+        case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
+        case let .tooManyRequests(r): throw APIFailure(try r.body.json, status: 429)
+        case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
+        }
+    }
+
+    /// Brings your card back from the trash as it was — its visibility, slug and place
+    /// (POST /api/v1/cards/{id}/restore). `droppedResonance`: a resonance that came back on its own,
+    /// no longer answering the card it answered (another of yours answers it now, or it answers
+    /// this one). A card not in the trash is `changed: false`; one past its 30 days `not_found`.
+    @discardableResult
+    public func restoreCard(_ cardId: String) async throws -> RestoredCard {
+        switch try await client.restoreCard(path: .init(key: cardId)) {
+        case let .ok(r): return try r.body.json
+        case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
+        case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
+        case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
+        case let .tooManyRequests(r): throw APIFailure(try r.body.json, status: 429)
+        case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
+        }
+    }
+
+    /// How many calls one emptying makes at most (each deletes a page of up to 50 cards), as the web's.
+    public static let emptyTrashCalls = 20
+
+    /// What emptying the trash did: how many cards went, and how many of those in it before it
+    /// began are left (a page that failed, or more than `emptyTrashCalls` pages).
+    public struct EmptiedTrash: Equatable, Sendable {
+        public var deleted: Int
+        public var remaining: Int
+
+        public init(deleted: Int, remaining: Int) {
+            self.deleted = deleted
+            self.remaining = remaining
+        }
+    }
+
+    /// Empties your trash for good (DELETE /api/v1/me/trash), a page at a time: the first call fixes
+    /// the cut-off (now) and the next ones send it back, so a card moved to the trash meanwhile is
+    /// never taken; it stops once nothing is left, or once a call deleted nothing (a card that keeps
+    /// failing must not keep it going) — the web's `emptyTrash`, call for call.
+    public func emptyTrash() async throws -> EmptiedTrash {
+        var before: Date?
+        var result = EmptiedTrash(deleted: 0, remaining: 0)
+        for _ in 0..<Self.emptyTrashCalls {
+            let page: Components.Schemas.EmptiedTrash
+            switch try await client.emptyTrash(query: .init(before: before)) {
+            case let .ok(r): page = try r.body.json
+            case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
+            case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
+            case let .tooManyRequests(r): throw APIFailure(try r.body.json, status: 429)
+            case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
+            }
+            result.deleted += page.deleted
+            result.remaining = page.remaining
+            // The server's own cut-off, sent back as it gave it (to the millisecond; one it didn't write
+            // as a time can't be sent back, and what was deleted stays said).
+            guard page.remaining > 0, page.deleted > 0, let cutoff = ISO8601.date(page.before) else { break }
+            before = cutoff
+        }
+        return result
     }
 
     /// Makes your published public card `cardId` a resonance of the card `targetId` — instead of
