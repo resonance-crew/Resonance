@@ -89,7 +89,7 @@ public struct WritingAPI: Sendable {
     }
 
     /// Moves your card to the trash (POST /api/v1/cards/{id}/trash) — what 刪除 does: private to
-    /// everyone but you until you restore it, deleted for good after 30 days (`TrashClock`). A
+    /// everyone but you until you restore it, deleted for good after 30 days (`CardTrash`). A
     /// resonance is taken back at once; the notes on an anonymous card are deleted. Answers the
     /// card as the trash shelf shows it (`trashedAt`, `purgeAt`, `restoresTo`), and whether it
     /// changed (`false`: it was there already, its 30 days running from then). `not_found` when it
