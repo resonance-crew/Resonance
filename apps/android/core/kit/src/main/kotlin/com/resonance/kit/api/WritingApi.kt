@@ -6,6 +6,8 @@ import com.resonance.api.models.FeedCard
 import com.resonance.api.models.PublishResponse
 import com.resonance.api.models.ResonateRequest
 import com.resonance.api.models.ResonateResponse
+import com.resonance.api.models.RestoredCard
+import com.resonance.api.models.TrashedCard
 import com.resonance.api.models.UpdateCardRequest
 import kotlinx.coroutines.channels.trySendBlocking
 import kotlinx.coroutines.flow.Flow
@@ -18,6 +20,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.time.OffsetDateTime
 import java.util.Base64
 import java.util.concurrent.TimeUnit
 
@@ -56,16 +59,63 @@ class WritingApi(private val configuration: ApiConfiguration, http: OkHttpClient
     }
 
     /**
-     * Deletes one of your cards, draft or published, with its pending edit (DELETE
-     * /api/v1/cards/{id}); the server refreshes the site's cached pages. A card already gone
+     * Deletes one of your cards for good, draft or published, with its pending edit and its notes
+     * (DELETE /api/v1/cards/{id}); the server refreshes the site's cached pages. A card already gone
      * counts as deleted — a retry after a lost answer is the server's 404.
+     *
+     * The trash's 永久刪除 passes [onlyIfTrashed] (`?onlyIfTrashed=true`): a card restored meanwhile
+     * — on another device, from a stale shelf — is then refused with `conflict` ('This card is not in
+     * the trash.') instead of deleted. Without it this is the delete builds before the trash had.
      */
-    suspend fun deleteCard(cardId: String) {
+    suspend fun deleteCard(cardId: String, onlyIfTrashed: Boolean = false) {
         try {
-            call { api.deleteCard(cardId) }
+            call { api.deleteCard(cardId, if (onlyIfTrashed) DefaultApi.OnlyIfTrashedDeleteCard.`true` else null) }
         } catch (e: ApiFailure) {
             if (!e.isNotFound) throw e
         }
+    }
+
+    /**
+     * Moves one of your cards to the trash (POST /api/v1/cards/{id}/trash): it turns private at
+     * once — off the feeds, your profile, its links and resonance lists — and is deleted for good
+     * [Trash.DAYS] days later unless restored. A resonance stops being a reason you and its
+     * original's author are connected, as hiding it does. Answers the card as your trash shows it
+     * (`trashedAt`, `purgeAt`, `restoresTo`), and whether anything changed: `false` when it was
+     * already there (its first date stands). Someone else's card, or one gone, is `not_found`.
+     */
+    suspend fun trashCard(cardId: String): TrashedCard = call { api.trashCard(cardId) }
+
+    /**
+     * Brings one of your cards back from the trash (POST /api/v1/cards/{id}/restore): with the
+     * visibility it had (`restoresTo`), answering the card it answered when it can —
+     * `droppedResonance` when it comes back standing alone instead. `changed: false` when it wasn't
+     * in the trash (restored already, elsewhere); a card past its purge date is `not_found`.
+     */
+    suspend fun restoreCard(cardId: String): RestoredCard = call { api.restoreCard(cardId) }
+
+    /** What emptying the trash did: the cards deleted for good, and those still there when it stopped. */
+    data class EmptiedTrash(val deleted: Int, val remaining: Int)
+
+    /**
+     * Empties your trash (DELETE /api/v1/me/trash), a page at a time: the first call takes what was
+     * in the trash at that moment (its answer's `before`), each next one passes that `before` on, so
+     * a card trashed while it runs stays. It asks again while cards remain and the last call
+     * deleted some, at most [EMPTY_TRASH_CALLS] times; the shelf is then read again by the caller.
+     * Every call spends the `trash` budget (429 `rate_limited` stops it, and is thrown).
+     */
+    suspend fun emptyTrash(): EmptiedTrash {
+        var deleted = 0
+        var remaining = 0
+        var before: OffsetDateTime? = null
+        for (page in 1..EMPTY_TRASH_CALLS) {
+            val answer = call { api.emptyTrash(before) }
+            deleted += answer.deleted
+            remaining = answer.remaining.coerceAtLeast(0)
+            // Every next page is the first one's moment, never "now" again.
+            before = before ?: runCatching { OffsetDateTime.parse(answer.before) }.getOrNull()
+            if (remaining == 0 || answer.deleted <= 0 || before == null) break
+        }
+        return EmptiedTrash(deleted, remaining)
     }
 
     /**
@@ -173,8 +223,11 @@ class WritingApi(private val configuration: ApiConfiguration, http: OkHttpClient
         }
     }
 
-    private companion object {
-        val json = Json { ignoreUnknownKeys = true }
-        val JSON = "application/json".toMediaType()
+    companion object {
+        /** How many pages [emptyTrash] asks for at most before it leaves the rest to a later try. */
+        const val EMPTY_TRASH_CALLS = 20
+
+        private val json = Json { ignoreUnknownKeys = true }
+        private val JSON = "application/json".toMediaType()
     }
 }

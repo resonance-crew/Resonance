@@ -62,6 +62,27 @@ data class ApiFailure(val code: String, override val message: String, val status
     val isUnauthenticated get() = code == "unauthenticated"
     /** A pen name someone else took (onboarding, a rename). */
     val isConflict get() = code == "conflict"
+
+    /**
+     * A write to your card refused because it is in the trash — moved there elsewhere (another
+     * device, the web) while it was open here: PATCH, publish, edits/apply and resonating with it
+     * answer 409 'This card is in the trash.' ([IN_TRASH_MESSAGE]; read by its words, as the web's
+     * isTrashRefusal does). Read the card again and offer to restore it.
+     */
+    val isInTrash get() = status == 409 && isConflict && message.contains("in the trash", ignoreCase = true) && !isNotInTrash
+
+    /**
+     * 永久刪除 refused because the card is no longer in the trash — restored meanwhile, on another
+     * device or from a stale shelf (DELETE …?onlyIfTrashed=true, 409 'This card is not in the trash.').
+     */
+    val isNotInTrash get() = status == 409 && isConflict && message.contains("not in the trash", ignoreCase = true)
+
+    companion object {
+        /** The server's 409 message for a write to a card in the trash (src/lib/api/v1/inTrash.ts). */
+        const val IN_TRASH_MESSAGE = "This card is in the trash."
+        /** The server's 409 message for 永久刪除 of a card no longer in the trash (src/lib/api/v1/cards.ts). */
+        const val NOT_IN_TRASH_MESSAGE = "This card is not in the trash."
+    }
 }
 
 private val json = Json { ignoreUnknownKeys = true }
