@@ -39,6 +39,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.NonCancellable
+import java.io.File
+import com.resonance.app.ui.share.ShareFiles
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -67,6 +69,8 @@ class Session(
     http: OkHttpClient = OkHttpClient(),
     private val httpCaching: HttpCaching = HttpCaching(null),
     private val kept: ApiCache? = null,
+    /** Where a card's share pictures are written (cacheDir/share, ui/share/ShareFiles): emptied with the account. */
+    private val shareFiles: File? = null,
 ) {
     enum class Phase { Restoring, SignedOut, SignedIn }
     sealed interface Profile {
@@ -324,6 +328,8 @@ class Session(
         scope.launch(NonCancellable + Dispatchers.IO) {
             httpCaching.evict()
             kept?.clear(who)
+            // The last share's pictures (a card picture names its author).
+            shareFiles?.let(ShareFiles::clear)
         }
         // The pushes it got, still in the shade, what this install told the server, and the mark that it has a profile.
         PushCenter.clearDelivered()

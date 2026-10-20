@@ -47,6 +47,11 @@ import com.resonance.design.AppFonts
 import com.resonance.design.HandDrawnAvatar
 import com.resonance.design.OrganicEmptyState
 import com.resonance.design.OrganicInlineBar
+import com.resonance.design.OrganicMenuChip
+import com.resonance.design.MenuTrigger
+import com.resonance.app.ui.share.ShareIntents
+import com.resonance.app.ui.share.ShareLinks
+import androidx.compose.ui.platform.LocalContext
 import com.resonance.design.SquareFlag
 import com.resonance.design.inlineBarTop
 import com.resonance.design.LocalWindowLayout
@@ -145,6 +150,7 @@ fun AuthorScreen(session: Session, handle: String, open: (Route) -> Unit, back: 
     val reload: () -> Unit = { model.refresh(changes) }
     val retry: () -> Unit = { model.refresh(changes, force = true) }
 
+    val context = LocalContext.current
     val list = rememberLazyListState()
     // On a tablet the bar's middle takes the person's name once the page's own has gone up under it (round 5, part C).
     val chrome = LocalHeaderChrome.current
@@ -237,6 +243,14 @@ fun AuthorScreen(session: Session, handle: String, open: (Route) -> Unit, back: 
         title = if (chrome != null) profile?.author?.handle else null,
         titleShown = nameGone,
     ) {
+        // Their page's link, straight to the system sheet (nothing to choose between): before the ⋯,
+        // alone on your own page, and not while you've blocked them.
+        profile?.takeIf { !it.isBlocked }?.let { p ->
+            val handle = p.author.handle
+            OrganicMenuChip(IconName.Share, L10n.Share.profile, seed = seedFromString(p.author.id) + 5.0, trigger = MenuTrigger.Bare) {
+                runCatching { context.startActivity(ShareIntents.profileChooser(ShareLinks.profile(session.config.origin, handle), L10n.Profile.shareTitle(handle))) }
+            }
+        }
         profile?.takeIf { !it.isSelf }?.let { p ->
             SafetyMenu(session, SafetyService.Target.User(p.author.id), p.author.handle, p.isBlocked, seed = seedFromString(p.author.id).toDouble(), onChange = reload)
         }

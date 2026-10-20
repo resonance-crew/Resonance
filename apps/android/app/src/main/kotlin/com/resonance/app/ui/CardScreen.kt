@@ -123,6 +123,13 @@ import com.resonance.kit.story.InlineRun
 import com.resonance.kit.story.StoryScripts
 import androidx.compose.foundation.layout.heightIn
 import com.resonance.design.TagPill
+import com.resonance.design.LocalToasts
+import com.resonance.design.OrganicConfirmDialog
+import com.resonance.app.ui.share.CardSharing
+import com.resonance.app.ui.share.ShareCardRenderer
+import com.resonance.app.ui.share.ShareCardRendererHost
+import com.resonance.app.ui.share.ShareFeedback
+import com.resonance.app.ui.share.ShareLinks
 import com.resonance.design.cream
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
@@ -268,6 +275,15 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
 
     // A story's link leads where its scheme says (StoryLink); any other scheme isn't even tappable.
     val openUrl: (String) -> Unit = { href -> openStoryLink(context, session.config.origin, href, open) }
+
+    // The share: one glyph, straight to the system sheet with the link and the card's picture
+    // (share.spec, Owner revision); the owner of an anonymous card is asked first.
+    val sharing = remember(context, session.config) { CardSharing(context, session.config, ShareCardRenderer()) }
+    var askAnonymousShare by remember { mutableStateOf(false) }
+    val toasts = LocalToasts.current
+    // What the sheet's own actions had to say (saved, couldn't open Instagram), shown once the page is back.
+    val shareWord by ShareFeedback.pending.collectAsStateWithLifecycle()
+    LaunchedEffect(shareWord) { if (shareWord != null) ShareFeedback.take()?.let { toasts.show(it) } }
 
     // The bar lies over the page, so the story scrolls right up to its pen line.
     val top = inlineBarTop()
@@ -422,9 +438,12 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
         detail?.let { d ->
             val card = d.card
             val hue = card.accentHue ?: 55.0
-            OrganicMenuChip(IconName.Share, L10n.Card.share, seed = hue + 5, trigger = MenuTrigger.Bare) {
-                val link = "${session.config.origin}/card/${card.routeKey}"
-                context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link), null))
+            // Only a card whoever gets its link can open: published, public, not in the trash.
+            if (ShareLinks.canShare(d)) {
+                OrganicMenuChip(IconName.Share, L10n.Card.share, seed = hue + 5, trigger = MenuTrigger.Bare, busy = sharing.busy) {
+                    if (d.isOwner && d.anonymous) askAnonymousShare = true
+                    else scope.launch { sharing.share(d) }
+                }
             }
             // The ⋯ lives in the bar, as phone apps keep a page's actions: the owner's, or the reader's safety menu.
             if (d.isOwner) {
@@ -440,6 +459,22 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
             }
         }
     }
+    // Where the share card is drawn into its pictures: out of sight, taking no room.
+    ShareCardRendererHost(sharing.renderer)
+    }
+    // Sharing their own anonymous card from their own account may give its owner away: said once, before the sheet.
+    detail?.takeIf { askAnonymousShare }?.let { d ->
+        OrganicConfirmDialog(
+            title = L10n.Share.anonymousTitle,
+            body = L10n.Share.anonymousHint,
+            cancelLabel = L10n.Safety.cancel,
+            confirmLabel = L10n.Card.share,
+            onCancel = { askAnonymousShare = false },
+            onConfirm = {
+                askAnonymousShare = false
+                scope.launch { sharing.share(d) }
+            },
+        )
     }
     LinkDialogs(links)
 }
@@ -561,7 +596,7 @@ private fun CardPreview(card: FeedCard, columns: CardPageColumns, openAuthor: (S
  * nowhere — to its owner too. At least 44 tall, growing with large text and a wrapping meta line.
  */
 @Composable
-private fun StoryByline(card: FeedCard, anonymous: Boolean, showsAuthor: Boolean, modifier: Modifier, openAuthor: (String) -> Unit) {
+private fun StoryByline(card: FeedCard, anonymous: Boolean, showsAuthor: Boolean, modifier: Modifier = Modifier, openAuthor: (String) -> Unit) {
     val author = card.author
     val named = author != null && !anonymous
     Row(
