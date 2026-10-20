@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithIntl, screen } from '@/../test/render';
 import { Textarea } from './Field';
@@ -29,4 +31,12 @@ describe('Textarea', () => {
     expect(screen.getByRole('textbox', { name: 'Bio' })).not.toHaveAttribute('data-variant');
     expect(container.firstElementChild).not.toBe(screen.getByRole('textbox', { name: 'Bio' }));
   });
+
+  it('sets a bare field’s hint upright in the field’s own type, not the global italic body face', () => {
+    const css = readFileSync(join(process.cwd(), 'src/components/atoms/Field/Field.module.css'), 'utf8');
+    const rule = css.match(/\.field\[data-variant='bare'\]::placeholder\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toMatch(/font:\s*inherit/);
+    expect(rule).toMatch(/font-style:\s*normal/);
+  });
 });
+

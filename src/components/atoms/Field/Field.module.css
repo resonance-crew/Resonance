@@ -241,6 +241,15 @@ textarea.field[data-variant='bare'] {
   min-height: 0;
 }
 
+/* Its hint is set as its words will be: the global placeholder rule's body
+   face and italic (globals.css) would show 「一句話標題」 slanted in another
+   face — a synthetic oblique, which Chinese has none of. Only the colour stays. */
+.field[data-variant='bare']::placeholder {
+  font: inherit;
+  letter-spacing: inherit;
+  font-style: normal;
+}
+
 .fieldGroup {
   display: flex;
   flex-direction: column;
