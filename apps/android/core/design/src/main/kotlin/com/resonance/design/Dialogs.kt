@@ -481,7 +481,9 @@ enum class MenuTrigger { Chip, Bare }
  * OrganicMenu's trigger (and the header's other actions, share): the glyph in
  * the menu's pen (or a card's hue) at 0.53 of the chip, or bare at 20dp in the
  * text ink. A press washes an organic squircle — never a rectangle. Not [enabled], it looks the
- * same and takes no tap (a thread's ⋯ while the conversation is still being read).
+ * same and takes no tap (a thread's ⋯ while the conversation is still being read). [busy]: the
+ * pen loop draws itself in the glyph's place and taps wait (the card's share while its picture is
+ * made).
  */
 @Composable
 fun OrganicMenuChip(
@@ -493,6 +495,7 @@ fun OrganicMenuChip(
     hue: Double? = null,
     trigger: MenuTrigger = MenuTrigger.Chip,
     enabled: Boolean = true,
+    busy: Boolean = false,
     onClick: () -> Unit,
 ) {
     val colors = remember(hue) { MenuColors(hue) }
@@ -500,17 +503,20 @@ fun OrganicMenuChip(
         Box(
             Modifier
                 .size(BareHitBox)
-                .clickable(interactionSource = null, indication = OrganicIndication(inset = BareWashInset), enabled = enabled, role = Role.Button, onClickLabel = label, onClick = onClick)
+                .clickable(interactionSource = null, indication = OrganicIndication(inset = BareWashInset), enabled = enabled && !busy, role = Role.Button, onClickLabel = label, onClick = onClick)
                 .semantics { contentDescription = label },
             contentAlignment = Alignment.Center,
-        ) { OrganicIcon(icon, size = 20.dp, color = if (expanded) Tokens.Terracotta else Tokens.Text) }
+        ) {
+            if (busy) SketchLoader(20.dp, Tokens.Text)
+            else OrganicIcon(icon, size = 20.dp, color = if (expanded) Tokens.Terracotta else Tokens.Text)
+        }
         return
     }
     val ink = if (expanded) colors.borderHover else colors.border
     Box(
         Modifier
             .size(MenuHitBox)
-            .clickable(interactionSource = null, indication = OrganicIndication(inset = (MenuHitBox - size) / 2), enabled = enabled, role = Role.Button, onClickLabel = label, onClick = onClick)
+            .clickable(interactionSource = null, indication = OrganicIndication(inset = (MenuHitBox - size) / 2), enabled = enabled && !busy, role = Role.Button, onClickLabel = label, onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
@@ -523,7 +529,10 @@ fun OrganicMenuChip(
                 onDrawBehind { drawOutline(o, colors.cream.copy(alpha = 0.94f)) }
             },
             contentAlignment = Alignment.Center,
-        ) { OrganicIcon(icon, size = (size.value * 0.53f).roundToInt().dp, color = ink, strokeWidth = Tokens.Ink.value) }
+        ) {
+            if (busy) SketchLoader((size.value * 0.53f).roundToInt().dp, ink)
+            else OrganicIcon(icon, size = (size.value * 0.53f).roundToInt().dp, color = ink, strokeWidth = Tokens.Ink.value)
+        }
     }
 }
 
