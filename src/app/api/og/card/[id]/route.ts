@@ -3,10 +3,11 @@ import { isReservedId } from '@/lib/db/firestore/reservedId';
 import { mapCard, mapUser } from '@/lib/db/firestore/mapper';
 import {
   readStoredPicture,
+  serveShareImage,
   shareImageFallback,
   shareImageRedirect,
   shareImageResponse,
-  shareJpegResponse,
+  shareImageUrl,
 } from '@/lib/api/shareImage';
 import { LINK_IMAGE_SIZE, coverVersion, drawnCard, drawnCardVersion } from '@/lib/linkImage/model';
 import { renderDrawnCard } from '@/lib/linkImage/render';
@@ -27,14 +28,18 @@ const AUTHOR_FIELDS = ['handle', 'initials', 'avatarSeed', 'avatarUrl'];
  * reader sees it; anything else gets the platform cover. A card with a cover
  * is its cover, cropped to that size (lib/api/shareImage); one without is the
  * card drawn (lib/linkImage) — its author's pen name and photo only when the
- * card is named: an anonymous card's author is never read. Only the current
- * version (`v`, which the page's metadata names) is drawn; any other is sent
- * on to it, so a made-up URL can't make the server draw over and over.
+ * card is named: an anonymous card's author is never read. Only its one URL
+ * — the current version (`v`, which the page's metadata names), nothing else
+ * in the query — is drawn; any other is sent on to it, and what was drawn is
+ * remembered by that URL (lib/api/shareImage), so a made-up URL can't make the
+ * server draw over and over. A drawing that names its author is kept by caches
+ * five minutes, not a day: a card made anonymous stops showing its pen name.
  */
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   // An id Firestore keeps for itself (`__x__`) would make the read throw: it is no such card.
   if (!DOC_ID.test(id) || isReservedId(id)) return shareImageFallback();
+  const path = `/api/og/card/${id}`;
   const db = getAdminDb();
   const [snap] = await db.getAll(db.doc(`cards/${id}`), { fieldMask: CARD_FIELDS });
   const data = snap?.data();
@@ -42,7 +47,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   // A cover is shared as itself (lib/og's cardImage names the same one).
   const media = data.media as { type?: unknown; url?: unknown } | undefined;
   if (media?.type === 'image' && typeof media.url === 'string' && media.url) {
-    return shareImageResponse(req, media.url, { version: coverVersion, crop: LINK_IMAGE_SIZE });
+    return shareImageResponse(req, path, media.url, { version: coverVersion, crop: LINK_IMAGE_SIZE });
   }
 
   const card = mapCard(id, data);
@@ -53,15 +58,18 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     if (user?.exists) author = mapUser(user.id, user.data() ?? {});
   }
   const drawn = drawnCard(card, author);
-  const redirect = shareImageRedirect(req, drawnCardVersion(drawn));
+  const version = drawnCardVersion(drawn);
+  const redirect = shareImageRedirect(req, path, version);
   if (redirect) return redirect;
 
-  try {
-    const photoKey = drawn.byline.anonymous ? null : storageKeyOf(drawn.byline.avatarUrl);
-    const photo = photoKey ? await readStoredPicture(photoKey).catch(() => null) : null;
-    return shareJpegResponse(await renderDrawnCard(drawn, photo));
-  } catch (e) {
-    console.error('[og] drawn card', id, e);
-    return shareImageFallback();
-  }
+  const named = !drawn.byline.anonymous;
+  return serveShareImage(
+    shareImageUrl(path, version),
+    async () => {
+      const photoKey = drawn.byline.anonymous ? null : storageKeyOf(drawn.byline.avatarUrl);
+      const photo = photoKey ? await readStoredPicture(photoKey).catch(() => null) : null;
+      return renderDrawnCard(drawn, photo);
+    },
+    { named, label: `[og] drawn card ${id}` },
+  );
 }

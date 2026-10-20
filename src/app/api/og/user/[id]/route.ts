@@ -16,5 +16,5 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   // An id Firestore keeps for itself (`__x__`) would make the read throw: it is no such person.
   if (!DOC_ID.test(id) || isReservedId(id)) return shareImageFallback();
   const avatarUrl = (await getAdminDb().doc(`users/${id}`).get()).data()?.avatarUrl;
-  return shareImageResponse(req, typeof avatarUrl === 'string' ? avatarUrl : null);
+  return shareImageResponse(req, `/api/og/user/${id}`, typeof avatarUrl === 'string' ? avatarUrl : null);
 }
