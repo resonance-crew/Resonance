@@ -17,6 +17,8 @@ import { useAuth } from '@/components/providers/AuthProvider';
 import { BlockedNotice, ProfileSafetyMenu } from './ProfileSafety';
 import { regionDisplayName } from '@/lib/regionName';
 import { EmptyState } from '@/components/molecules/EmptyState/EmptyState';
+import { ShareMenu } from '@/components/molecules/ShareMenu/ShareMenu';
+import { seedFromString } from '@/lib/design/prng';
 import styles from './page.module.css';
 
 /** Route segments arrive percent-encoded (e.g. a CJK handle like `念誠` →
@@ -137,14 +139,16 @@ export default function PublicProfilePage() {
 
         {/* Relationships grow from stories (design principle 3): connections
             start from a resonance/note notification, never from the profile
-            page — so visitors see no connect button here. */}
-        {!isBlocked && (isSelf || isConnected) && (
+            page — so visitors see no connect button here. The page itself
+            can be shared by anyone (signed out, or their own), last in the
+            row; not someone the viewer blocked. */}
+        {!isBlocked && (
           <div className={styles.actions}>
             {isSelf ? (
               <Link href="/settings" style={{ textDecoration: 'none' }}>
                 <OrganicButton variant="ghost">{t('editProfile')}</OrganicButton>
               </Link>
-            ) : (
+            ) : isConnected ? (
               /* The connection is live — the conversation is one click away. */
               <Link href={`/messages/${user.handle}`} style={{ textDecoration: 'none' }}>
                 <OrganicButton variant="ghost" size="sm">
@@ -152,7 +156,8 @@ export default function PublicProfilePage() {
                   {tMsg('messageLink')}
                 </OrganicButton>
               </Link>
-            )}
+            ) : null}
+            <ShareMenu target={{ kind: 'profile', handle: user.handle }} seed={seedFromString(user.id) + 5} />
           </div>
         )}
       </header>

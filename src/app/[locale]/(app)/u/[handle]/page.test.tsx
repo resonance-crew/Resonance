@@ -266,3 +266,45 @@ describe('public profile page, signed in', () => {
     window.localStorage.clear();
   });
 });
+
+describe('sharing a profile', () => {
+  /** The hero's actions row: the buttons and links in it, by name, in order. */
+  async function actionsRow() {
+    const share = await screen.findByRole('button', { name: 'Share profile' });
+    return Array.from(share.closest('header')!.querySelectorAll(':scope > div:last-child a, :scope > div:last-child button[aria-haspopup]'), (el) =>
+      el.getAttribute('aria-label') ?? el.textContent,
+    );
+  }
+
+  it('lets a signed-out visitor share it, the glyph alone in the row', async () => {
+    renderPage();
+    expect(await actionsRow()).toEqual(['Share profile']);
+  });
+
+  it('puts it after the owner’s edit button', async () => {
+    mockUseAuth.mockReturnValue({ user: { id: 'me' }, loading: false });
+    vi.mocked(callApi).mockResolvedValue(profile({ isSelf: true, isConnected: false }));
+    renderPage();
+    expect(await actionsRow()).toEqual(['Edit profile', 'Share profile']);
+  });
+
+  it('puts it after the message link for a connection, and alone for anyone else', async () => {
+    mockUseAuth.mockReturnValue({ user: { id: 'me' }, loading: false });
+    vi.mocked(callApi).mockResolvedValue(profile());
+    const connected = renderPage();
+    expect(await actionsRow()).toEqual(['Message', 'Share profile']);
+    connected.unmount();
+
+    vi.mocked(callApi).mockResolvedValue(profile({ isConnected: false }));
+    renderPage();
+    expect(await actionsRow()).toEqual(['Share profile']);
+  });
+
+  it('offers no share of someone the viewer blocked', async () => {
+    mockUseAuth.mockReturnValue({ user: { id: 'me' }, loading: false });
+    vi.mocked(callApi).mockResolvedValue(profile({ isBlocked: true, isConnected: false, cardCount: 0, cards: { cards: [], nextCursor: null } }));
+    renderPage();
+    expect(await screen.findByText('You blocked bob')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Share profile' })).not.toBeInTheDocument();
+  });
+});
