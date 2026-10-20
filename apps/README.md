@@ -358,3 +358,17 @@ one, and the full time); a drag toward the middle replies. Search lists the matc
 (`SearchResults`, the snippet cut by `SearchSnippet`); choosing one takes the thread to that message with the words
 marked, and the bar steps through the matches. Words are drawn by `ChatText` (CSS line boxes with spans: links,
 highlights), so a bubble keeps the web's metrics.
+
+Toasts, story type and text size (the 2026-10-20 redesign's foundation): the shell has one toast
+(`Toasts` in `core/design`, drawn once by `ToastHost` in `MainTabs` over every page and bar, under dialogs);
+a page shows one with `LocalToasts.current.show(message, announce, action)` — 4 s, 8 s with an action, longer
+when the accessibility timeout asks for it, held under a finger, a mouse or a keyboard's focus — and TalkBack
+hears each through one polite live region. Its face is `OrganicPill` (`PillSize.Toast`; the thread's pill is
+`PillSize.Small`). A story is set by its script (`StoryScripts` in `core/kit`, the twin of
+`src/lib/text/script.ts`, pinned by `native/fixtures/story-script.json`) through `StoryType`, which reads the
+generated `Tokens.Story*` in one place: a CJK story in `AppFonts.Family.HeadingCJK` / `BodyCJK` (Noto TC first,
+then the Latin face per glyph), a Latin one in Playfair over DM Sans. A story's title and words sit inside
+`ReadingTextScale` (the system's text size up to 2×); everything else stays under `CappedTextScale`'s 1.25.
+The share image's numbers are `ShareCardRecipe` (`native/fixtures/share-card.json`), its words
+`SharePassages.opening` (`share-passages.json`), and the trash's calls `WritingApi.trashCard` / `restoreCard` /
+`deleteCard(onlyIfTrashed)` / `emptyTrash`, with `Trash`'s clock over `FeedCard.trashedAt` / `purgeAt`.
