@@ -81,7 +81,7 @@ export function CardLinkGrid({ cards, authors, cardHref, renderActions, renderCa
       ? cardToStory(card, author, { anonymousLabel: t('anonymousAuthor') })
       : { title: card.thoughtCore, excerpt: '', author: '—', authorInitials: '?', readTime: '—', tags: card.tags };
     return (
-      <div key={card.id} className={styles.item} style={{ position: 'relative' }}>
+      <div key={card.id} data-card-id={card.id} className={styles.item} style={{ position: 'relative' }}>
         <Link
           href={cardHref ? cardHref(card) : `/card/${card.slug ?? card.id}`}
           // The card page opens on what the list already has (see usePrefillCard).

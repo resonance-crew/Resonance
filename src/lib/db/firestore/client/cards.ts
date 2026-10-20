@@ -9,7 +9,7 @@ import {
   serverTimestamp,
   setDoc,
 } from './sdk';
-import type { FeedCardBody, ResonateResponseBody } from '@/lib/api/v1/schemas';
+import type { EmptiedTrashBody, FeedCardBody, ResonateResponseBody, RestoredCardBody, TrashedCardBody } from '@/lib/api/v1/schemas';
 import type { Card, CardMedia, Locale, NewCard, Visibility } from '@/lib/db/types';
 import { getFirebaseClientAuth } from '@/lib/auth/firebase/client';
 import { getClientDb } from './init';
@@ -135,13 +135,67 @@ export async function updateCardSettings(
 }
 
 /**
- * Delete one of your cards, draft or published, through the server (DELETE
- * /api/v1/cards/{id}): with its pending edit and its recommendation vectors,
- * and the cached pages that showed it dropped.
+ * Move one of your cards to the trash through the server (POST
+ * /api/v1/cards/{id}/trash) — what 刪除 does now: private to everyone but
+ * you until you restore it, deleted for good after 30 days. A resonance is
+ * taken back at once; the notes on an anonymous card are deleted. Answers
+ * the card as the trash shelf shows it, and whether it changed (false: it
+ * was there already).
  */
-export async function deleteCard(id: string): Promise<void> {
+export async function trashCard(id: string): Promise<TrashedCardBody> {
   requireUid();
-  await callApi<null>(`/api/v1/cards/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  return callApi<TrashedCardBody>(`/api/v1/cards/${encodeURIComponent(id)}/trash`, { method: 'POST' });
+}
+
+/**
+ * Bring one of your cards back from the trash as it was (POST
+ * /api/v1/cards/{id}/restore). `droppedResonance`: a resonance that came back
+ * on its own, no longer answering the card it answered.
+ */
+export async function restoreCard(id: string): Promise<RestoredCardBody> {
+  requireUid();
+  return callApi<RestoredCardBody>(`/api/v1/cards/${encodeURIComponent(id)}/restore`, { method: 'POST' });
+}
+
+/**
+ * Delete one of your cards for good, draft or published, through the server
+ * (DELETE /api/v1/cards/{id}): with its pending edit, the notes on it and its
+ * recommendation vectors, and the cached pages that showed it dropped. The
+ * trash's own 永久刪除 sends `onlyIfTrashed`: a card restored meanwhile (on
+ * another device) is refused with 409 (`ApiError.code === 'conflict'`) and stays.
+ */
+export async function deleteCardForever(id: string, opts: { onlyIfTrashed?: boolean } = {}): Promise<void> {
+  requireUid();
+  const query = opts.onlyIfTrashed ? '?onlyIfTrashed=true' : '';
+  await callApi<null>(`/api/v1/cards/${encodeURIComponent(id)}${query}`, { method: 'DELETE' });
+}
+
+/** How many calls one emptying makes at most (each deletes a page of 50). */
+const EMPTY_TRASH_CALLS = 20;
+
+/**
+ * Empty your trash (DELETE /api/v1/me/trash), a page at a time: the first
+ * call fixes the cut-off (now), the next ones send it back, so a card moved
+ * to the trash meanwhile is never taken — and it stops once nothing is left,
+ * or once a call deleted nothing (a card that keeps failing must not keep it
+ * going). Answers how many went, and how many are left from before it began.
+ */
+export async function emptyTrash(): Promise<{ deleted: number; remaining: number }> {
+  requireUid();
+  let before: string | null = null;
+  let deleted = 0;
+  let remaining = 0;
+  for (let call = 0; call < EMPTY_TRASH_CALLS; call++) {
+    const page: EmptiedTrashBody = await callApi<EmptiedTrashBody>(
+      `/api/v1/me/trash${before ? `?before=${encodeURIComponent(before)}` : ''}`,
+      { method: 'DELETE' },
+    );
+    before = page.before;
+    deleted += page.deleted;
+    remaining = page.remaining;
+    if (page.remaining <= 0 || page.deleted <= 0) break;
+  }
+  return { deleted, remaining };
 }
 
 /**

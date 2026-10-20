@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { CardActionsMenu } from '@/components/molecules/CardActionsMenu/CardActionsMenu';
 import { CardLinkGrid } from '@/components/molecules/CardLinkGrid/CardLinkGrid';
@@ -14,7 +14,9 @@ import { useIsMobile } from '@/lib/hooks/useIsMobile';
 import { Link, useRouter } from '@/i18n/navigation';
 import { FeedSkeleton } from '@/components/atoms/CardSkeleton/CardSkeleton';
 import { CARD_HUES } from '@/components/molecules/StoryCard/StoryCard';
+import { RestoredAloneNotice } from '@/components/molecules/TrashActionsMenu/RestoredAloneNotice';
 import type { Card, User } from '@/lib/db/types';
+import { TrashShelf } from './TrashShelf';
 
 export type TabKey =
   | 'published'
@@ -23,6 +25,7 @@ export type TabKey =
   | 'resonated'
   | 'linked'
   | 'bookmarks'
+  | 'trash'
   | 'thoughtMap';
 
 /** Tabs whose cards belong to the viewer and therefore carry the「⋯」menu. */
@@ -104,8 +107,34 @@ export function ProfileTabs({
     }
   };
 
-  const list = data[active] ?? [];
+  const shown = data[active];
+  const list = useMemo(() => shown ?? [], [shown]);
   const managed = manageable && OWNED_TABS.has(active);
+
+  // Focus after a card leaves the shelf on screen (to the trash, restored
+  // from it, deleted for good): on to the next card, else the one before it,
+  // else the shelf's own control — and onto a card the toast's 復原 brought
+  // back. Only when focus went with what left (never into the toast, never
+  // away from wherever the viewer has gone since).
+  const controls = useRef<HTMLDivElement>(null);
+  const [refocus, setRefocus] = useState<{ gone: string; next: string | null } | { back: string } | null>(null);
+  const leave = (id: string) => {
+    const i = list.findIndex((c) => c.id === id);
+    setRefocus({ gone: id, next: list[i + 1]?.id ?? list[i - 1]?.id ?? null });
+  };
+  useEffect(() => {
+    if (!refocus) return;
+    const waiting = 'gone' in refocus ? list.some((c) => c.id === refocus.gone) : !list.some((c) => c.id === refocus.back);
+    if (waiting) return;
+    setRefocus(null);
+    const lost = !document.activeElement || document.activeElement === document.body;
+    if (!lost) return;
+    const id = 'gone' in refocus ? refocus.next : refocus.back;
+    const target = id
+      ? document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(id)}"] a`)
+      : controls.current?.querySelector<HTMLElement>('[aria-selected="true"], select, button');
+    target?.focus();
+  }, [list, refocus]);
 
   // The thought map opens as its own full-screen editor; selecting that tab is
   // a jump, not an in-place panel switch, so the active tab never lands on it.
@@ -117,9 +146,9 @@ export function ProfileTabs({
     setActive(key);
   };
 
-  // The tabs are two different kinds of control: six *filters* over the card
-  // box, and the thought map, which is a jump to its own page. On phones a flat
-  // strip of seven hid that difference and left the off-screen filters
+  // The tabs are two different kinds of control: *filters* over the card box
+  // (the trash last among them), and the thought map, which is a jump to its
+  // own page. On phones a flat strip of them all hid that difference and left the off-screen filters
   // undiscoverable — so there the filters collapse into one dropdown and the
   // thought map sits beside it as its own button.
   const filterKeys = tabs.filter((k) => k !== 'thoughtMap');
@@ -127,6 +156,7 @@ export function ProfileTabs({
 
   return (
     <div>
+      <div ref={controls}>
       {isMobile ? (
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -166,9 +196,12 @@ export function ProfileTabs({
           scrollable
         />
       )}
+      </div>
       <div style={{ marginBottom: 28 }} />
       {loading ? (
         <FeedSkeleton count={6} />
+      ) : active === 'trash' ? (
+        <TrashShelf cards={list} authors={authors} onLeft={leave} />
       ) : list.length === 0 ? (
         active === 'bookmarks' ? (
           <EmptyState icon="bookmark" seed={59} line={t('emptyBookmarks')} />
@@ -215,9 +248,19 @@ export function ProfileTabs({
                   const cardHue = CARD_HUES[palette];
                   return (
                     <CardActionsMenu
-                      card={{ id: c.id, visibility: c.visibility, slug: c.slug, referenceCardId: c.referenceCardId }}
+                      card={{
+                        id: c.id,
+                        visibility: c.visibility,
+                        slug: c.slug,
+                        referenceCardId: c.referenceCardId,
+                        title: c.thoughtCore,
+                        published: !!c.publishedAt,
+                        anonymous: c.anonymous === true,
+                      }}
                       seed={cardHue}
                       hue={cardHue}
+                      onTrashed={leave}
+                      onRestored={(r) => setRefocus({ back: r.id })}
                     />
                   );
                 }
@@ -225,6 +268,8 @@ export function ProfileTabs({
           }
         />
       )}
+      {/* A resonance the toast's 復原 (or the trash's 還原) brought back on its own says so here. */}
+      {manageable && <RestoredAloneNotice />}
     </div>
   );
 }

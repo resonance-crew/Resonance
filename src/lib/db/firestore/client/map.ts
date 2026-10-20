@@ -3,6 +3,7 @@
 import { Timestamp } from './sdk';
 import type { Card, CardMedia, InsightSignature, Locale, User } from '@/lib/db/types';
 import { linkPreviewsOf } from '@/lib/links/previewShape';
+import { restorableVisibility } from '@/lib/cards/trash';
 
 type Raw = Record<string, unknown>;
 
@@ -43,6 +44,20 @@ export function mapCard(id: string, data: Raw): Card {
     anonymous: data.anonymous === true,
     // The server's previews of the story's standalone links, each checked before it is drawn.
     ...withPreviews(data.linkPreviews),
+    // In the trash (its author's read alone: the card is private while there).
+    ...withTrash(data.trashedAt, data.trashedFrom),
+  };
+}
+
+function withTrash(at: unknown, from: unknown): Pick<Card, 'trashedAt' | 'trashedFrom'> {
+  if (at == null) return {};
+  const f = from && typeof from === 'object' ? (from as Raw) : {};
+  return {
+    trashedAt: toDate(at),
+    trashedFrom: {
+      visibility: restorableVisibility(f.visibility),
+      referenceCardId: typeof f.referenceCardId === 'string' && f.referenceCardId ? f.referenceCardId : null,
+    },
   };
 }
 

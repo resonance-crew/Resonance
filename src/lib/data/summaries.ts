@@ -53,6 +53,10 @@ export function summaryCard(c: FeedCardBody): Card {
     ...(c.accentHue != null ? { accentHue: c.accentHue } : {}),
     anonymous: c.anonymous,
     summary: { readMinutes: c.readMinutes },
+    // Your own card in the trash (the trash shelf): when it went in, and what restoring brings back.
+    ...(c.trashedAt
+      ? { trashedAt: new Date(c.trashedAt), trashedFrom: { visibility: c.restoresTo ?? 'private', referenceCardId: null } }
+      : {}),
   };
 }
 

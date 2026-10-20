@@ -14,8 +14,28 @@ vi.mock('@/i18n/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 // The owner's「⋯」menu talks to Firestore; it isn't what's under test.
+// The card a stand-in toast's 復原 brings back (its own ⋯ left the shelf with it).
+const undone = vi.hoisted(() => ({ id: '' }));
 vi.mock('@/components/molecules/CardActionsMenu/CardActionsMenu', () => ({
-  CardActionsMenu: () => null,
+  // Stands in for the ⋯: its 刪除 says the card went to the trash, a toast's 復原 that one came back.
+  CardActionsMenu: (props: { card: { id: string }; onTrashed?: (id: string) => void; onRestored?: (c: { id: string }) => void }) => (
+    <>
+      <button type="button" onClick={() => props.onTrashed?.(props.card.id)}>{`trash ${props.card.id}`}</button>
+      <button type="button" onClick={() => props.onRestored?.({ id: undone.id })}>{`undo from ${props.card.id}`}</button>
+    </>
+  ),
+}));
+// The trash's ⋯ and its emptying talk to the server: the boundary here.
+const trashMenus = vi.fn();
+vi.mock('@/components/molecules/TrashActionsMenu/TrashActionsMenu', () => ({
+  TrashActionsMenu: (props: { card: { id: string } }) => (trashMenus(props), null),
+}));
+const mockEmptyTrash = vi.fn(async () => ({ deleted: 2, remaining: 0 }));
+vi.mock('@/lib/db/firestore/client/cards', () => ({
+  emptyTrash: () => mockEmptyTrash(),
+  trashCard: vi.fn(),
+  restoreCard: vi.fn(),
+  deleteCardForever: vi.fn(),
 }));
 
 import { ProfileTabs } from './ProfileTabs';
@@ -125,5 +145,107 @@ describe('ProfileTabs — the card box shelves', () => {
     const title = screen.getByRole('heading', { level: 2 });
     expect(title.textContent).toMatch(/first card/i);
     expect(screen.getByRole('link', { name: /story/i })).toHaveAttribute('href', '/write');
+  });
+});
+
+describe('ProfileTabs — focus as a card leaves the shelf', () => {
+  const shelf = (cards: Card[]) => <ProfileTabs manageable tabs={['published', 'private']} authors={{ me }} data={{ published: cards }} />;
+
+  it('moves on to the next card, else the one before it, else the shelf control — never left on nothing', async () => {
+    const { rerender } = renderWithIntl(shelf([card('a'), card('b'), card('c')]));
+    await userEvent.click(screen.getByRole('button', { name: 'trash b' }));
+    // The shelf is read again without it.
+    rerender(shelf([card('a'), card('c')]));
+    expect(document.activeElement).toBe(screen.getAllByText('Thought c')[0].closest('a'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'trash c' }));
+    rerender(shelf([card('a')]));
+    expect(document.activeElement).toBe(screen.getAllByText('Thought a')[0].closest('a'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'trash a' }));
+    rerender(shelf([]));
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Published' }));
+  });
+
+  it("lands on a card the toast's Undo brought back, once it is on the shelf again", async () => {
+    // b went to the trash; its toast's 復原 brings it back.
+    undone.id = 'b';
+    const { rerender } = renderWithIntl(shelf([card('a'), card('c')]));
+    await userEvent.click(screen.getByRole('button', { name: 'undo from a' }));
+    // The toast that held focus is gone; the shelf, read again, has the card back.
+    (document.activeElement as HTMLElement).blur();
+    rerender(shelf([card('a'), card('b'), card('c')]));
+    expect(document.activeElement).toBe(screen.getAllByText('Thought b')[0].closest('a'));
+  });
+});
+
+describe('ProfileTabs — the trash', () => {
+  const DAY = 86_400_000;
+  const inTrash = (id: string, extra: Partial<Card> = {}, daysIn = 7) =>
+    card(id, {
+      visibility: 'private',
+      trashedAt: new Date(Date.now() - daysIn * DAY),
+      trashedFrom: { visibility: 'public', referenceCardId: null },
+      ...extra,
+    });
+  const TABS = ['published', 'private', 'draft', 'resonated', 'linked', 'bookmarks', 'trash', 'thoughtMap'] as const;
+
+  it('is a shelf of its own, always there, last before the thought map', () => {
+    renderWithIntl(<ProfileTabs manageable loading tabs={[...TABS]} thoughtMapHref="/me/thought-map" />);
+    const names = screen.getAllByRole('tab').map((t) => t.textContent);
+    expect(names.slice(-2)).toEqual(['Trash', 'Thought map']);
+  });
+
+  it('says what the trash keeps and for how long, and under each card where it came from and when it goes', async () => {
+    renderWithIntl(
+      <ProfileTabs
+        manageable
+        tabs={['trash']}
+        authors={{ me }}
+        data={{
+          trash: [
+            inTrash('public-one'),
+            inTrash('draft-one', { publishedAt: null }, 1),
+            inTrash('private-one', { trashedFrom: { visibility: 'private', referenceCardId: null } }, 29.5),
+            inTrash('circle-one', { trashedFrom: { visibility: 'connections', referenceCardId: null } }),
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByText("Cards stay in the trash for 30 days, then they're deleted forever")).toBeInTheDocument();
+    // No anonymous card here: no word of notes.
+    expect(screen.queryByText('When an anonymous card goes to the trash, the notes left on it are deleted')).toBeNull();
+    expect(screen.getByText('Public again when restored · Deleted forever in 23 days')).toBeInTheDocument();
+    expect(screen.getByText('Draft · Deleted forever in 29 days')).toBeInTheDocument();
+    expect(screen.getByText('Private · Deleted forever within a day')).toBeInTheDocument();
+    expect(screen.getByText('Connections only when restored · Deleted forever in 23 days')).toBeInTheDocument();
+    // A published card opens its page (its banner), a draft the writer (its notice).
+    expect(screen.getAllByText('Thought public-one')[0].closest('a')).toHaveAttribute('href', '/card/public-one');
+    expect(screen.getAllByText('Thought draft-one')[0].closest('a')).toHaveAttribute('href', '/write/draft-one');
+    // Each card's ⋯ is the trash's own.
+    expect(trashMenus.mock.calls.map(([p]) => p.card.id)).toEqual(expect.arrayContaining(['public-one', 'draft-one', 'private-one', 'circle-one']));
+
+    // 清空垃圾桶: the tonal red, which opens a question in red.
+    const empty = screen.getByRole('button', { name: 'Empty trash' });
+    expect(empty).toHaveAttribute('data-variant', 'dangerTonal');
+    await userEvent.click(empty);
+    expect(screen.getByText('Empty the trash?')).toBeInTheDocument();
+    expect(screen.getByText("Every card in the trash will be deleted forever. This can't be undone.")).toBeInTheDocument();
+    const verb = Array.from(screen.getByRole('dialog').querySelectorAll('button')).find((b) => b.textContent === 'Empty trash')!;
+    expect(verb).toHaveAttribute('data-variant', 'danger');
+    await userEvent.click(verb);
+    expect(mockEmptyTrash).toHaveBeenCalledTimes(1);
+  });
+
+  it('says the notes on an anonymous card went with it, while one is there', () => {
+    renderWithIntl(<ProfileTabs manageable tabs={['trash']} authors={{ me }} data={{ trash: [inTrash('masked', { anonymous: true })] }} />);
+    expect(screen.getByText('When an anonymous card goes to the trash, the notes left on it are deleted')).toBeInTheDocument();
+  });
+
+  it('says an empty trash with the shared empty state, and offers nothing to empty', () => {
+    renderWithIntl(<ProfileTabs manageable tabs={['trash']} data={{ trash: [] }} />);
+    expect(screen.getByRole('heading', { level: 2, name: 'The trash is empty' })).toBeInTheDocument();
+    expect(screen.getByText('Cards you delete wait here for 30 days')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Empty trash' })).toBeNull();
   });
 });

@@ -1,0 +1,42 @@
+/* ── The trash shelf ─────────────────────────────────────────────────
+   What the trash keeps and for how long, the way to empty it, and under
+   each card where it came from and when it goes. */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 20px;
+}
+.lines {
+  flex: 1;
+  min-width: 0;
+}
+.hint {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+.hint + .hint {
+  margin-top: 2px;
+}
+/* A phone: the button wraps under the lines, at their start. */
+@media (max-width: 640px) {
+  .header {
+    flex-wrap: wrap;
+  }
+  .lines {
+    flex-basis: 100%;
+  }
+}
+/* Under each card: where it came from and when it goes (the grid's caption box, 8px under the card, holds it). */
+.caption {
+  display: block;
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  line-height: 1.4;
+  font-style: normal;
+  color: var(--color-text-muted);
+}

@@ -204,6 +204,11 @@ export async function getCardsByAuthor(authorId: string, tab: CardBoxTab): Promi
   // published card pushed every draft (publishedAt null sorts last) out of
   // the box, and private cards crowded out public ones.
   const own = [collection(db, 'cards'), where('authorId', '==', authorId)] as const;
+  // A card in the trash is on the trash shelf alone (read from the server).
+  // It is private while there, so the published shelf's query leaves it out
+  // on its own; the private and draft shelves leave it out before they are
+  // cut to size, so a trash full of newer cards never crowds out the rest.
+  const kept = (d: { data: () => Record<string, unknown> }) => d.data().trashedAt == null;
   if (tab === 'draft') {
     const snap = await getDocs(query(...own, where('publishedAt', '==', null), fbLimit(DRAFT_SCAN)));
     // Most recently edited first (sorted here: drafts are few, and this needs no composite index).
@@ -211,20 +216,27 @@ export async function getCardsByAuthor(authorId: string, tab: CardBoxTab): Promi
       const at = d.data().updatedAt;
       return at instanceof Timestamp ? at.toMillis() : 0;
     };
-    return [...snap.docs]
+    return snap.docs
+      .filter(kept)
       .sort((a, b) => edited(b) - edited(a))
       .slice(0, BOX_LIMIT)
       .map((d) => mapCard(d.id, d.data()));
   }
+  const isPrivate = tab === 'private';
   const snap = await getDocs(
     query(
       ...own,
-      where('visibility', 'in', tab === 'private' ? ['private'] : ['public', 'connections']),
+      where('visibility', 'in', isPrivate ? ['private'] : ['public', 'connections']),
       orderBy('publishedAt', 'desc'),
-      fbLimit(BOX_LIMIT)
+      // Private cards share their query with the trash's (private while there): read past them.
+      fbLimit(isPrivate ? BOX_LIMIT * 2 : BOX_LIMIT)
     )
   );
-  return snap.docs.map((d) => mapCard(d.id, d.data())).filter((c) => c.publishedAt);
+  return snap.docs
+    .filter(kept)
+    .map((d) => mapCard(d.id, d.data()))
+    .filter((c) => c.publishedAt)
+    .slice(0, BOX_LIMIT);
 }
 
 /** A card box shelf's size, and how many drafts are read to find the latest ones. */
