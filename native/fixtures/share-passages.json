@@ -1,0 +1,116 @@
+{
+  "note": "What a share card quotes from a story (src/lib/markdown/sharePassages.ts; read by sharePassages.test.ts on the web and by the apps' share-card twins). The story's first `limits.readChars` UTF-16 units (one less when the last would split a surrogate pair) are read as CommonMark without GFM, block by block in reading order: every paragraph, at the top level and inside quotes and list items. Headings, code, thematic breaks and HTML are skipped, and so is a paragraph that is only pictures, a standalone link (soleLinkParagraphs: it gets a link card) or an embedded card ([title](/card/…) alone in its paragraph). A block's text is plainText; a block under `limits.minGraphemes` graphemes is dropped; at most `limits.max` blocks are read. `opening`: the blocks joined by \\n, cut at `limits.maxGraphemes` graphemes with \"…\". `UPDATE_SHARE_PASSAGES=1 npx vitest run src/lib/markdown/sharePassages.test.ts` writes each case's opening.",
+  "limits": {
+    "readChars": 20000,
+    "minGraphemes": 6,
+    "max": 40,
+    "maxGraphemes": 600
+  },
+  "cases": [
+    {
+      "id": "cjk-prose",
+      "story": "每年五月，外婆都會把青梅一顆顆擦乾，排在竹篩上曬。\n\n她說梅子要曬過太陽才會甜，人也是。",
+      "opening": "每年五月，外婆都會把青梅一顆顆擦乾，排在竹篩上曬。\n她說梅子要曬過太陽才會甜，人也是。"
+    },
+    {
+      "id": "emphasis",
+      "story": "那天我**終於**明白，*原來*慢下來也是一種~~前進~~。",
+      "opening": "那天我終於明白，原來慢下來也是一種前進。"
+    },
+    {
+      "id": "link-text-kept",
+      "story": "我在[那篇文章](https://example.com/essay)裡讀到這句話，從此記得。",
+      "opening": "我在那篇文章裡讀到這句話，從此記得。"
+    },
+    {
+      "id": "character-reference",
+      "story": "從台北 -&gt; 台中，再 -&gt; 高雄，一路向南。",
+      "opening": "從台北 -> 台中，再 -> 高雄，一路向南。"
+    },
+    {
+      "id": "escaped-marks",
+      "story": "我給自己打了 5\\* 的分數，然後笑了出來。",
+      "opening": "我給自己打了 5* 的分數，然後笑了出來。"
+    },
+    {
+      "id": "bare-address-dropped",
+      "story": "資料都在 https://example.com/notes 裡面，有空可以看看。",
+      "opening": "資料都在 裡面，有空可以看看。"
+    },
+    {
+      "id": "standalone-link-skipped",
+      "story": "雨停了，我出門散步。\n\nhttps://example.com/rain\n\n[一篇關於雨的文章](https://example.com/essay)\n\n回家的路上，鞋子都濕了。",
+      "opening": "雨停了，我出門散步。\n回家的路上，鞋子都濕了。"
+    },
+    {
+      "id": "card-embed-skipped",
+      "story": "這張卡片說得比我好：\n\n[外婆的醃梅子](/card/grandmas-plums)\n\n我讀了三次。",
+      "opening": "這張卡片說得比我好：\n我讀了三次。"
+    },
+    {
+      "id": "picture-skipped",
+      "story": "![竹篩上的青梅](https://img.example/plums.webp)\n\n曬過太陽的梅子，顏色會變得比較深。\n\n[![罐子](https://img.example/jar.webp)](https://img.example/jar-large.webp)",
+      "opening": "曬過太陽的梅子，顏色會變得比較深。"
+    },
+    {
+      "id": "heading-skipped",
+      "story": "# 第一章：出發之前\n\n跑完 2400 公尺那天，我才懂得慢下來。\n\n## 0 公尺\n\n起跑線上，大家都很安靜。",
+      "opening": "跑完 2400 公尺那天，我才懂得慢下來。\n起跑線上，大家都很安靜。"
+    },
+    {
+      "id": "list-items",
+      "story": "那年夏天學會的事：\n\n- 梅子要先用鹽搓過\n- 罐子一定要擦乾\n- 等待比動手更難\n\n1. 第一年失敗了\n2. 第二年才成功",
+      "opening": "那年夏天學會的事：\n梅子要先用鹽搓過\n罐子一定要擦乾\n等待比動手更難\n第一年失敗了\n第二年才成功"
+    },
+    {
+      "id": "blockquote",
+      "story": "> 人要曬過太陽才會甜，\n> 外婆這樣說。\n>\n> 我到現在還記得。\n\n那是很久以前的事了。",
+      "opening": "人要曬過太陽才會甜， 外婆這樣說。\n我到現在還記得。\n那是很久以前的事了。"
+    },
+    {
+      "id": "fence-skipped",
+      "story": "我寫了一段程式：\n\n```js\nconsole.log('hello, plums')\n```\n\n    indented code is code too\n\n它印出了問候。",
+      "opening": "我寫了一段程式：\n它印出了問候。"
+    },
+    {
+      "id": "short-line-dropped",
+      "story": "嗯。\n\n好吧，我承認我錯了，而且錯得很徹底。\n\n再見！",
+      "opening": "好吧，我承認我錯了，而且錯得很徹底。"
+    },
+    {
+      "id": "thematic-break-and-html",
+      "story": "上半場結束了，比分落後。\n\n---\n\n<div>not prose</div>\n\n下半場我們追了回來。",
+      "opening": "上半場結束了，比分落後。\n下半場我們追了回來。"
+    },
+    {
+      "id": "latin-prose",
+      "story": "Every May my grandmother dried the green plums one by one.\n\nShe said plums need the sun to turn sweet, and so do people.",
+      "opening": "Every May my grandmother dried the green plums one by one.\nShe said plums need the sun to turn sweet, and so do people."
+    },
+    {
+      "id": "hard-break",
+      "story": "第一行  \n第二行接著寫下去，\\\n第三行也是。",
+      "opening": "第一行 第二行接著寫下去， 第三行也是。"
+    },
+    {
+      "id": "graphemes-counted-not-units",
+      "story": "👨‍👩‍👧‍👦👨‍👩‍👧‍👦👨‍👩‍👧‍👦👨‍👩‍👧‍👦👨‍👩‍👧‍👦\n\n🇹🇼🇹🇼🇹🇼🇹🇼🇹🇼🇹🇼",
+      "opening": "🇹🇼🇹🇼🇹🇼🇹🇼🇹🇼🇹🇼"
+    },
+    {
+      "id": "nothing-to-quote",
+      "story": "## 只有標題\n\n![](https://img.example/a.webp)\n\nhttps://example.com/only-a-link",
+      "opening": ""
+    },
+    {
+      "id": "empty",
+      "story": "",
+      "opening": ""
+    },
+    {
+      "id": "long-cut-at-600",
+      "story": "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n\n第二段不會出現。",
+      "opening": "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十…"
+    }
+  ]
+}
