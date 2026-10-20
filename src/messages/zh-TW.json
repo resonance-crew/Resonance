@@ -338,6 +338,17 @@
     "anonymousAuthor": "匿名",
     "anonymousOwnerNote": "這張卡以匿名發布——卡片和你的個人頁都不會顯示你的筆名"
   },
+  "share": {
+    "profile": "分享個人頁",
+    "copyLink": "複製連結",
+    "copied": "已複製連結",
+    "copyFailed": "無法複製連結",
+    "on": "分享到 {platform}",
+    "more": "更多分享方式",
+    "postText": "「{title}」｜{handle}",
+    "postTextAnonymous": "「{title}」",
+    "anonymousHint": "從你的帳號分享，別人可能猜到是你寫的"
+  },
   "messages": {
     "title": "私訊",
     "subtitle": "與你連結的人，安靜地把話說下去",

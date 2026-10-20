@@ -579,6 +579,26 @@ public enum L10n {
         /// This card was published anonymously — your pen name isn't shown on it or on your profile
         public static var anonymousOwnerNote: String { Strings.shared.string("card.anonymousOwnerNote") }
     }
+    public enum Share {
+        /// Share profile
+        public static var profile: String { Strings.shared.string("share.profile") }
+        /// Copy link
+        public static var copyLink: String { Strings.shared.string("share.copyLink") }
+        /// Link copied
+        public static var copied: String { Strings.shared.string("share.copied") }
+        /// Couldn’t copy the link
+        public static var copyFailed: String { Strings.shared.string("share.copyFailed") }
+        /// Share on {platform}
+        public static func on(platform: String) -> String { Strings.shared.format("share.on", ["platform": platform]) }
+        /// More ways to share
+        public static var more: String { Strings.shared.string("share.more") }
+        /// “{title}” by {handle}
+        public static func postText(title: String, handle: String) -> String { Strings.shared.format("share.postText", ["title": title, "handle": handle]) }
+        /// “{title}”
+        public static func postTextAnonymous(title: String) -> String { Strings.shared.format("share.postTextAnonymous", ["title": title]) }
+        /// Sharing it from your account may tell people it’s yours
+        public static var anonymousHint: String { Strings.shared.string("share.anonymousHint") }
+    }
     public enum Messages {
         /// Messages
         public static var title: String { Strings.shared.string("messages.title") }

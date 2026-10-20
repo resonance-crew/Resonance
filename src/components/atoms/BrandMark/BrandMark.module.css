@@ -1,0 +1,7 @@
+/* A brand's mark in the page's near-black ink, at rest and while its row takes
+   the ink alike: a brand is never recoloured (no terracotta, no accent). */
+.mark {
+  display: block;
+  flex-shrink: 0;
+  color: var(--color-text);
+}
