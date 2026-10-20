@@ -71,18 +71,46 @@ class LayoutClassTest {
         assertEquals(0f, WindowLayout.Phone.columnInset().value, 1e-4f)
     }
 
+    /** The story's column (x from the content area's start to its end) and the rail's start, as reading-type §4 works them out. */
+    private fun columns(width: Float): Triple<Float, Float, Float?> {
+        val c = WindowLayout(width.dp).cardPage()
+        return Triple(c.start.value, width - c.end.value, c.railStart?.value)
+    }
+
     @Test fun theCardPageHasItsRailOnlyWhenExpanded() {
+        // A phone: 20 a side, the column all the rest (390 − 40).
         assertEquals(CardPageColumns(20.dp, 20.dp, null), WindowLayout(390.dp).cardPage())
-        // 800: a 760 column doesn't fit in 800 − 2 × 32, so the pad's 32 each side.
-        assertEquals(CardPageColumns(32.dp, 32.dp, null), WindowLayout(800.dp).cardPage())
-        // 1280: a 1200 box from 40, the pad 48 in it; the article 720 from 88, the rail at the box's end (88 + 1104 − 260).
-        val wide = WindowLayout(1280.dp).cardPage()
-        assertEquals(88f, wide.start.value, 1e-3f)
-        assertEquals(1280f - 88f - 720f, wide.end.value, 1e-3f)
-        assertEquals(932f, wide.railStart!!.value, 1e-3f)
-        // Just expanded (900): the article gives way to the rail and its 48.
-        val narrow = WindowLayout(900.dp).cardPage()
-        assertEquals(900f - 2 * 36f - 260f - 48f, 900f - narrow.start.value - narrow.end.value, 1e-2f)
+        // Medium (800, pad 32): the 680 measure centred — 60 a side.
+        assertEquals(CardPageColumns(60.dp, 60.dp, null), WindowLayout(800.dp).cardPage())
+        // Medium (640, pad 25.6): narrower than the measure, so the pad each side.
+        assertEquals(25.6f, WindowLayout(640.dp).cardPage().start.value, 1e-3f)
+    }
+
+    @Test fun anExpandedCardPageCentresTheStoryAndKeepsTheRail48PastIt() {
+        // 1440 (pad 48): the text from 380 to 1060, centred; the rail from 1108 (to 1368).
+        val (a, b, rail) = columns(1440f)
+        assertEquals(380f, a, 1e-3f)
+        assertEquals(1060f, b, 1e-3f)
+        assertEquals(1108f, rail!!, 1e-3f)
+        assertEquals(Tokens.Measure, b - a, 1e-3f)
+        assertEquals(Tokens.StoryRailGap, rail - b, 1e-3f)
+        // 1392: the narrowest window that still centres it exactly (308 left over on each side of the text).
+        val (c, d, _) = columns(1392f)
+        assertEquals(1392f - d, c, 1e-3f)
+        // 1280: the rail would no longer fit centred: the text slides to 244–924.
+        val (e, f, rail2) = columns(1280f)
+        assertEquals(244f, e, 1e-3f)
+        assertEquals(924f, f, 1e-3f)
+        assertEquals(972f, rail2!!, 1e-3f)
+        // 1024 (pad 40.96): the text gives way to the rail — 41 to 675, the rail 723 to 983.
+        val (g, h, rail3) = columns(1024f)
+        assertEquals(40.96f, g, 1e-2f)
+        assertEquals(675.04f, h, 1e-2f)
+        assertEquals(723.04f, rail3!!, 1e-2f)
+        assertEquals(1024f - 40.96f, rail3 + Tokens.CardRailW, 1e-2f)
+        // Just expanded (900, pad 36): what is left beside the rail and its 48.
+        val (i, j, _) = columns(900f)
+        assertEquals(900f - 2 * 36f - Tokens.CardRailW - Tokens.StoryRailGap, j - i, 1e-2f)
     }
 
     @Test fun aTabletsPagesStart32UnderTheHeadersPenLineAndAPhonesKeepTheirOwn() {

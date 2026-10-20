@@ -85,7 +85,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -114,6 +113,15 @@ import com.resonance.design.StoryLinkCardFrame
 import com.resonance.design.StoryLinkCardLook
 import com.resonance.design.StoryMarkdown
 import com.resonance.design.StorySkeleton
+import com.resonance.design.StoryTitle
+import com.resonance.design.StoryType
+import com.resonance.design.ReadingTextScale
+import com.resonance.design.CappedTextScale
+import com.resonance.design.RichCssText
+import com.resonance.design.ProseStyle
+import com.resonance.kit.story.InlineRun
+import com.resonance.kit.story.StoryScripts
+import androidx.compose.foundation.layout.heightIn
 import com.resonance.design.TagPill
 import com.resonance.design.cream
 import com.resonance.design.generated.IconName
@@ -263,10 +271,10 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
 
     // The bar lies over the page, so the story scrolls right up to its pen line.
     val top = inlineBarTop()
-    // Once the byline has scrolled under the bar, the bar names the author (Threads' header, in the byline's language).
-    val bylinePx = with(LocalDensity.current) { BylineBottom.toPx() }
-    val bylineGone by remember(list, bylinePx) {
-        derivedStateOf { list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > bylinePx }
+    // Once the byline under the title has scrolled under the bar, the bar names the author (Threads' header, in the byline's language).
+    val byline = remember { HeadingUnderBar() }
+    val bylineGone by remember(list) {
+        derivedStateOf { scrolledUnderBar(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset, byline.bottom) }
     }
     val progress = rememberReadingProgress(list, top)
     // On a tablet the bar's middle takes the card's title once the article's own has gone up under
@@ -326,7 +334,10 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
             // The card as the list drew it, the story still shimmering below; or, knowing nothing yet,
             // CardDetailSkeleton: the article's own layout in shimmering blocks.
             "loading" -> if (placeholder != null) CardPreview(placeholder, columns) { open(Route.Author(it)) }
-                else CardDetailSkeleton(Modifier.padding(start = columns.start, end = columns.end).padding(top = articleTop))
+                else CardDetailSkeleton(
+                    Modifier.padding(start = columns.start, end = columns.end).padding(top = articleTop),
+                    compact = cls == LayoutClass.Compact, byline = !railed,
+                )
             "notFound" -> OrganicEmptyState(title = L10n.Card.NotFound.title, titleSize = 24f, actionTitle = L10n.Card.NotFound.back, onAction = back, action = EmptyAction.Outline)
             "failed" -> OrganicEmptyState(L10n.Native.loadError, L10n.Native.retry, { model.refresh(changes, session.lastCardChange, retry = true) }, action = EmptyAction.Outline)
             else -> detail?.let { d ->
@@ -337,15 +348,21 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                 val relatedLayout = cardListLayout()
                 LazyColumn(Modifier.fillMaxSize().onPlaced { listCoords = it }, state = list, contentPadding = PaddingValues(top = top, bottom = 40.dp)) {
                     item(key = "article") {
-                        Column(heading.onItem.onPlaced { articleCoords = it }.padding(start = columns.start, end = columns.end).padding(top = articleTop)) {
-                            ArticleHead(card, d.anonymous, byline = !railed, titleModifier = heading.onHeading) { open(Route.Author(it)) }
+                        // The story's type, read off its title and words together (StoryScripts), in this window's numbers.
+                        val text = remember(card.title, d.story) { StoryScripts.storyType(card.title, d.story) }
+                        val type = StoryType.of(text.script, cls)
+                        Column(heading.onItem.then(byline.onItem).onPlaced { articleCoords = it }.padding(start = columns.start, end = columns.end).padding(top = articleTop)) {
+                            ArticleHead(card, d.anonymous, type, text.lang, showsAuthor = !railed, titleModifier = heading.onHeading, bylineModifier = byline.onHeading) { open(Route.Author(it)) }
                             // The story alone is what the bar's progress measures (not the cover, title or lists).
                             Box(Modifier.onGloballyPositioned(progress::story)) {
-                                StoryMarkdown(blocks, openUrl, linkCards, headingAnchor = if (railed && headings.isNotEmpty()) anchors::anchor else null) { href, title ->
-                                    CardEmbed(embeds.embedFor(href), href, title, open)
+                                // Its words follow the system's text size up to 2× (the cards in it keep the interface's).
+                                ReadingTextScale {
+                                    StoryMarkdown(blocks, type, text.lang, openUrl, linkCards, headingAnchor = if (railed && headings.isNotEmpty()) anchors::anchor else null) { href, title, style ->
+                                        CardEmbed(embeds.embedFor(href), href, title, style, open)
+                                    }
                                 }
                             }
-                            FlowRow(Modifier.padding(top = 32.dp, bottom = 40.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FlowRow(Modifier.padding(top = type.endGap.dp, bottom = 40.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 card.tags.forEach { TagPill(it, fill = Tokens.TerracottaLight) }
                             }
                             if (!d.isOwner) CardViewerActions(
@@ -364,7 +381,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                         item {
                             BasicText(
                                 L10n.Card.linkedCards,
-                                style = AppFonts.heading(20f, lineHeight = 1.3f).copy(letterSpacing = (-0.01).em),
+                                style = AppFonts.heading(20f, lineHeight = 1.3f),
                                 modifier = Modifier.padding(start = relatedLayout.headerInset, end = 20.dp, top = air.top.dp, bottom = air.below.dp).semantics { heading() },
                             )
                         }
@@ -436,7 +453,7 @@ private fun LazyListScope.sectionHeading(title: String, air: SectionAir) {
     item {
         BasicText(
             title,
-            style = AppFonts.heading(22f, lineHeight = 1.3f).copy(textAlign = TextAlign.Center, letterSpacing = (-0.01).em),
+            style = AppFonts.heading(22f, lineHeight = 1.3f).copy(textAlign = TextAlign.Center),
             modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = air.top.dp, bottom = air.below.dp).semantics { heading() },
         )
     }
@@ -452,9 +469,6 @@ internal data class SectionAir(val top: Int, val below: Int)
  */
 internal fun cardSectionAir(cls: LayoutClass, phoneTop: Int = 32, phoneBelow: Int): SectionAir =
     if (cls == LayoutClass.Compact) SectionAir(phoneTop, phoneBelow) else SectionAir(64, 56)
-
-/** Where the byline ends under the bar: its 16 of air and the 44 avatar. */
-private val BylineBottom = 60.dp
 
 /**
  * The author in the bar once the byline has scrolled away: the avatar small
@@ -487,23 +501,26 @@ private fun BarAuthor(card: FeedCard, anonymous: Boolean, visible: Boolean, open
 }
 
 /**
- * The article's head: the byline 28 above the cover (or the title), the cover at its 0.52 ratio
- * and 20 below, then the title (the page's actions live in the bar).
+ * The article's head (reading-type §5): the cover at its 0.52 ratio, then the title alone in the
+ * column in the story's own type (the title follows the system's text size up to 2×), then the
+ * byline under it — the author's avatar and pen name over the meta line, or, beside the author's
+ * rail, the meta line alone — and the room before the story. The page's actions (share, the ⋯)
+ * live in the bar.
  */
 @Composable
 private fun ArticleHead(
     card: FeedCard,
     anonymous: Boolean,
-    byline: Boolean = true,
+    type: StoryType,
+    lang: String?,
+    /** No rail beside the article: the byline names the author. */
+    showsAuthor: Boolean = true,
     /** On the title: a tablet's bar takes it once it has gone up under the bar. */
     titleModifier: Modifier = Modifier,
+    /** On the byline: the bar names the author once it has gone up under it. */
+    bylineModifier: Modifier = Modifier,
     openAuthor: (String) -> Unit,
 ) {
-    // Beside the author's rail the byline isn't drawn: the rail carries it.
-    if (byline) {
-        Byline(card, anonymous, openAuthor)
-        Spacer(Modifier.height(28.dp))
-    }
     if (card.imageUrl != null) {
         // While it is on its way the cover shimmers in the card's own hue (CardDetailClient's `hue`).
         WithSkeletonHue(card.accentHue ?: 55.0) {
@@ -511,50 +528,79 @@ private fun ArticleHead(
                 Box(Modifier.fillMaxSize().background(Tokens.CreamDark))
             }
         }
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(type.coverGap.dp))
     }
-    CssText(
-        card.title, AppFonts.Family.Heading, 28f, 700, lineHeight = 1.2f, letterSpacing = -0.015f,
-        modifier = Modifier
-            .padding(bottom = 28.dp)
-            .then(titleModifier)
-            .semantics { heading() },
-    )
+    ReadingTextScale {
+        StoryTitle(card.title, type, lang, titleModifier.semantics { heading() })
+    }
+    Spacer(Modifier.height(type.metaGap.dp))
+    StoryByline(card, anonymous, showsAuthor, bylineModifier, openAuthor)
+    Spacer(Modifier.height(type.leadGap.dp))
 }
 
 /**
  * The page while the card is read, drawn from the list it was tapped in: the same head the page
- * will have, and the story and tags still shimmering under it.
+ * will have (its type read off the title and the excerpt), and the story and tags still
+ * shimmering under it.
  */
 @Composable
 private fun CardPreview(card: FeedCard, columns: CardPageColumns, openAuthor: (String) -> Unit) {
-    Column(Modifier.fillMaxSize().padding(start = columns.start, end = columns.end).padding(top = LocalWindowLayout.current.cls.firstContentGap(16.dp))) {
-        ArticleHead(card, card.anonymous, byline = columns.railStart == null, openAuthor = openAuthor)
-        StorySkeleton(Modifier.semantics { contentDescription = L10n.Home.moreLoading })
+    val cls = LocalWindowLayout.current.cls
+    val text = remember(card.title, card.excerpt) { StoryScripts.storyType(card.title, card.excerpt) }
+    Column(Modifier.fillMaxSize().padding(start = columns.start, end = columns.end).padding(top = cls.firstContentGap(16.dp))) {
+        ArticleHead(card, card.anonymous, StoryType.of(text.script, cls), text.lang, showsAuthor = columns.railStart == null, openAuthor = openAuthor)
+        StorySkeleton(Modifier.semantics { contentDescription = L10n.Home.moreLoading }, compact = cls == LayoutClass.Compact)
     }
 }
 
-/** The phone byline: avatar, pen name (→ their page), region flag, verified mark; the published date under them. */
+/**
+ * The line under the title (StoryByline.tsx): with no rail beside the article, the author's avatar
+ * (40), pen name (→ their page; one line, an ellipsis), region flag and verified mark over the
+ * meta line — 「6 分鐘 · 2026年10月10日」, 13 muted; beside the rail, which names the author, the
+ * meta line alone at 14. An anonymous card shows the neutral「·」and 匿名 in muted ink, linking
+ * nowhere — to its owner too. At least 44 tall, growing with large text and a wrapping meta line.
+ */
 @Composable
-private fun Byline(card: FeedCard, anonymous: Boolean, openAuthor: (String) -> Unit) {
+private fun StoryByline(card: FeedCard, anonymous: Boolean, showsAuthor: Boolean, modifier: Modifier, openAuthor: (String) -> Unit) {
     val author = card.author
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (author != null && !anonymous) HandDrawnAvatar(author.initials, author.avatarUrl, author.accent(), 44.dp, author.avatarSeedValue())
-        else HandDrawnAvatar("·", color = Tokens.CreamDark, size = 44.dp, seed = 97.0)
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (author != null && !anonymous) {
-                    BasicText(author.handle, style = AppFonts.body(16f, 600), modifier = Modifier.plainClickable { openAuthor(author.handle) })
+    val named = author != null && !anonymous
+    Row(
+        modifier.fillMaxWidth().heightIn(min = 44.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        val avatar = Tokens.StoryBylineAvatar.dp
+        if (showsAuthor) {
+            if (named) Box(Modifier.plainClickable(onClickLabel = author.handle) { openAuthor(author.handle) }) {
+                HandDrawnAvatar(author.initials, author.avatarUrl, author.accent(), avatar, author.avatarSeedValue())
+            }
+            else HandDrawnAvatar("·", color = Tokens.CreamDark, size = avatar, seed = 97.0)
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            if (showsAuthor) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (named) {
+                    BasicText(
+                        author.handle, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        style = AppFonts.body(15f, 600, lineHeight = 1.35f),
+                        modifier = Modifier.weight(1f, fill = false).plainClickable { openAuthor(author.handle) },
+                    )
                     AuthorRegionFlag(author.region, 14.dp)
-                    if (author.verified) OrganicIcon(IconName.Verified, Modifier.semantics { contentDescription = L10n.Card.verified }, size = 14.dp, color = Tokens.Sage, strokeWidth = 1.8f)
+                    if (author.verified) OrganicIcon(IconName.Verified, Modifier.semantics { contentDescription = L10n.Card.verified }, size = 13.dp, color = Tokens.Sage, strokeWidth = 1.8f)
                 } else {
-                    BasicText(L10n.Card.anonymousAuthor, style = AppFonts.body(16f, 600, color = Tokens.TextMuted))
+                    BasicText(L10n.Card.anonymousAuthor, maxLines = 1, style = AppFonts.body(15f, 600, lineHeight = 1.35f, color = Tokens.TextMuted))
                 }
             }
-            mediumDate(card.publishedAt)?.let { BasicText(it, style = AppFonts.body(13f, color = Tokens.TextMuted)) }
+            BasicText(
+                metaLine(card.readMinutes, card.publishedAt),
+                style = AppFonts.body(if (showsAuthor) Tokens.StoryMetaSizeCompact else Tokens.StoryMetaSize, lineHeight = 1.4f, color = Tokens.TextMuted),
+            )
         }
     }
 }
+
+/** 「6 分鐘 · 2026年10月10日」 / "6 min · Oct 10, 2026": the read time, then the published day (a draft's read time alone). */
+internal fun metaLine(minutes: Int, publishedAt: String?): String =
+    listOfNotNull(L10n.App.readMinutes(minutes), mediumDate(publishedAt)).joinToString(" · ")
 
 /**
  * The author's region as a small square flag right after the pen name (the web's AuthorRegionFlag):
@@ -626,7 +672,7 @@ private fun AuthorRail(
                 BasicText(L10n.Card.anonymousAuthor, style = AppFonts.body(16f, 600, color = Tokens.TextMuted))
             }
         }
-        mediumDate(card.publishedAt)?.let { BasicText(it, style = AppFonts.body(13f, color = Tokens.TextMuted)) }
+        // The date is under the title now (StoryByline), not here.
         if (anonymous && isOwner) BasicText(L10n.Card.anonymousOwnerNote, style = AppFonts.body(14f, lineHeight = 1.6f, color = Tokens.TextMuted))
         if (headings.isNotEmpty()) {
             // The aside's 28 between the two (the column's own 4 on either side of it).
@@ -655,20 +701,21 @@ private val ReadingLine = 96.dp
  * is the plain link.
  */
 @Composable
-private fun CardEmbed(card: FeedCard?, href: String, title: String, open: (Route) -> Unit) {
+private fun CardEmbed(card: FeedCard?, href: String, title: String, style: ProseStyle, open: (Route) -> Unit) {
     if (card != null) {
-        StoryLinkCardFrame(href, card.title, onOpen = { open(Route.Card(card.routeKey, card)) }) {
-            // One element: the block says the card's title, not each of its lines again.
-            Column(Modifier.fillMaxWidth().clearAndSetSemantics { }) {
-                SharedCard(card, onClick = null, onLongPress = null, pictureBleed = StoryLinkCardLook.BLEED.dp)
+        // A card sets its own type, at the interface's text size, not the story's.
+        CappedTextScale {
+            StoryLinkCardFrame(href, card.title, onOpen = { open(Route.Card(card.routeKey, card)) }) {
+                // One element: the block says the card's title, not each of its lines again.
+                Column(Modifier.fillMaxWidth().clearAndSetSemantics { }) {
+                    SharedCard(card, onClick = null, onLongPress = null, pictureBleed = StoryLinkCardLook.BLEED.dp)
+                }
             }
         }
     } else {
+        // The link as the story's words draw one: the deep terracotta and the pen's wave.
         val key = cardKeyOf(href) ?: href.substringAfterLast('/')
-        BasicText(
-            title, style = AppFonts.body(17f, lineHeight = 1.8f, color = Tokens.Terracotta).copy(textDecoration = TextDecoration.Underline),
-            modifier = Modifier.plainClickable(onClickLabel = title) { open(Route.Card(key)) },
-        )
+        RichCssText(listOf(InlineRun(title, link = href)), style, onOpenUrl = { open(Route.Card(key)) })
     }
 }
 
