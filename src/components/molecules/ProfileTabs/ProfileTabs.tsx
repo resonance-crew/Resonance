@@ -148,54 +148,55 @@ export function ProfileTabs({
 
   // The tabs are two different kinds of control: *filters* over the card box
   // (the trash last among them), and the thought map, which is a jump to its
-  // own page. On phones a flat strip of them all hid that difference and left the off-screen filters
-  // undiscoverable — so there the filters collapse into one dropdown and the
-  // thought map sits beside it as its own button.
+  // own page. On phones a flat strip of them all hid that difference and left
+  // the off-screen filters undiscoverable — so there the filters collapse into
+  // one dropdown and the thought map sits beside it as its own button.
   const filterKeys = tabs.filter((k) => k !== 'thoughtMap');
   const showThoughtMap = tabs.includes('thoughtMap') && Boolean(thoughtMapHref);
 
   return (
     <div>
+      {/* The shelf's own control: where focus goes when the last card leaves it. */}
       <div ref={controls}>
-      {isMobile ? (
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <Select
-              seed={23}
-              value={active}
-              onChange={(v) => setActive(v as TabKey)}
-              ariaLabel={t('filterLabel')}
-            >
-              {filterKeys.map((key) => (
-                <option key={key} value={key}>
-                  {t(`tabs.${key}`)}
-                </option>
-              ))}
-            </Select>
+        {isMobile ? (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Select
+                seed={23}
+                value={active}
+                onChange={(v) => setActive(v as TabKey)}
+                ariaLabel={t('filterLabel')}
+              >
+                {filterKeys.map((key) => (
+                  <option key={key} value={key}>
+                    {t(`tabs.${key}`)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            {showThoughtMap && (
+              <Link href={thoughtMapHref!} style={{ textDecoration: 'none', flexShrink: 0 }}>
+                <OrganicButton variant="outline">
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <Icon name="frame" size={16} ariaLabel={t('tabs.thoughtMap')} />
+                    {t('tabs.thoughtMap')}
+                  </span>
+                </OrganicButton>
+              </Link>
+            )}
           </div>
-          {showThoughtMap && (
-            <Link href={thoughtMapHref!} style={{ textDecoration: 'none', flexShrink: 0 }}>
-              <OrganicButton variant="outline">
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <Icon name="frame" size={16} ariaLabel={t('tabs.thoughtMap')} />
-                  {t('tabs.thoughtMap')}
-                </span>
-              </OrganicButton>
-            </Link>
-          )}
-        </div>
-      ) : (
-        <OrganicTabs
-          aria-label={t('tabs.published')}
-          seed={23}
-          tabs={tabs.map((key) => ({ key, label: t(`tabs.${key}`) }))}
-          active={active}
-          onChange={handleChange}
-          className="profile-tabs"
-          variant="surface"
-          scrollable
-        />
-      )}
+        ) : (
+          <OrganicTabs
+            aria-label={t('tabs.published')}
+            seed={23}
+            tabs={tabs.map((key) => ({ key, label: t(`tabs.${key}`) }))}
+            active={active}
+            onChange={handleChange}
+            className="profile-tabs"
+            variant="surface"
+            scrollable
+          />
+        )}
       </div>
       <div style={{ marginBottom: 28 }} />
       {loading ? (
