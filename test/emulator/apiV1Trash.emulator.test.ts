@@ -203,7 +203,9 @@ describe("someone else's card in the trash is a missing card", () => {
     expect(ids(await getRelated(db, 'bob', 'orig'))).not.toContain('live');
     expect(answer(await failure(getCardDetail(db, 'bob', 'slug-live')))).toEqual(MISSING);
     expect(ids((await getCardDetail(db, 'bob', 'host', new Set(['embeds']))).embeds!)).toEqual([]);
-    expect(await readCardForPage(db, 'slug-live')).toEqual({ id: 'live', card: null, author: null });
+    // Its page answers as for a deleted card — not even its id, which would say it is still there.
+    expect(await readCardForPage(db, 'slug-live')).toEqual({ id: null, card: null, author: null });
+    expect(await readCardForPage(db, 'live')).toEqual({ id: null, card: null, author: null });
     // ?keys=, its author included: its slug still names it, and so names nothing.
     expect(ids(await getCardsByKeys(db, 'bob', ['live', 'slug-live']))).toEqual([]);
     expect(ids(await getCardsByKeys(db, 'alice', ['live', 'slug-live', 'mine']))).toEqual(['mine']);

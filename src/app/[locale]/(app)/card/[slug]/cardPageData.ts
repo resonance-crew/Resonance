@@ -1,14 +1,18 @@
 import { cache } from 'react';
 import type { Firestore } from 'firebase-admin/firestore';
 import { getAdminDb } from '@/lib/db/firestore/admin';
-import { cardByKey } from '@/lib/db/firestore/cardKey';
+import { cardByKeyForAnyone } from '@/lib/db/firestore/cardKey';
 import { mapCard, mapUser } from '@/lib/db/firestore/mapper';
 import { toCardSeed, type CardSeed } from '@/lib/data/cardSeed';
 import type { Card, User } from '@/lib/db/types';
 
 /** A card page's server read. */
 export interface LoadedCard {
-  /** The document the URL segment names (any visibility), or null. */
+  /**
+   * The document the URL segment names (any visibility), or null — null for
+   * a card in its author's trash too, which is gone to everyone else
+   * (cardByKeyForAnyone).
+   */
   id: string | null;
   /** The card, only when a signed-out reader may read it (public and published). */
   card: Card | null;
@@ -24,7 +28,7 @@ export interface LoadedCard {
  * blocks, their own or connections-only cards) is left to the browser.
  */
 export async function readCardForPage(db: Firestore, key: string): Promise<LoadedCard> {
-  const snap = await cardByKey(db, key);
+  const snap = await cardByKeyForAnyone(db, key);
   if (!snap) return { id: null, card: null, author: null };
   const data = snap.data() ?? {};
   const card = mapCard(snap.id, data);

@@ -281,7 +281,9 @@ describe('an older anonymous card for connections only', () => {
 
 // The trash makes a card private, so a card in it must answer every probe
 // exactly as a private anonymous card does — with no block and across one
-// either way. The one difference is the notes: they leave an anonymous card
+// either way. Two differences: its page is a missing card's, not even its id
+// handed out (a private card's id would say the document is still there);
+// and the notes: they leave an anonymous card
 // as it goes in (as they leave a deleted one), so their writer's resend is a
 // missing card's 404 and their export lacks them — never later, with its
 // author's account.
@@ -321,6 +323,24 @@ describe('an anonymous card in the trash', () => {
     expect(trashed).toEqual(privately);
     expect(trashed[0]).toEqual({ ok: false, error: ['not_found', 'No such card.'] });
     expect((await db.collection('notes').get()).empty).toBe(true);
+  });
+
+  // Not even a private card's id: the document outlives the trash's moment
+  // (until its 30 days or its author's account run out), so its page — the
+  // card page's HTML and /api/cards/view, which anyone can poll — is a
+  // missing card's from the moment it goes in.
+  it("gives its page a missing card's seed, block or not — not a private card's id", async () => {
+    await trashCard(db, 'bob', 'maskedTrash', { vectors });
+    const seeds = await sameInEveryState(async () => {
+      const seed = async (key: string) => {
+        const page = await readCardForPage(db, key);
+        return toCardSeed(page.id, page.card, page.author);
+      };
+      return { bySlug: await seed('a-night-in-the-trash'), byId: await seed('maskedTrash'), missing: await seed('never-was') };
+    });
+    expect(seeds.bySlug).toEqual(seeds.missing);
+    expect(seeds.byId).toEqual(seeds.missing);
+    expect(seeds.missing).toEqual({ id: null, view: null });
   });
 
   it("takes its notes with it as it goes in: their writer's resend is a missing card's 404, their export lacks them", async () => {

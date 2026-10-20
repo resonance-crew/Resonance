@@ -235,7 +235,10 @@ const serverCardIds = new Map<string, string>();
  * document names its author): when the rules refuse, the server is asked —
  * GET /api/v1/cards/{key} signed in (which applies the viewer's blocks to it
  * too), the card page's public seed signed out — and answers it without its
- * author (`authorId` empty).
+ * author (`authorId` empty). The viewer's own card in their trash is found
+ * the same way: the server render and the slug lookup, which answer anyone,
+ * know no card there (it is gone to everyone else), but GET /api/v1/cards/{key}
+ * knows its author.
  *
  * `knownId` is the id the page's server render found for the segment (by
  * default, whatever {@link useCard} was handed for it): it is read directly,
@@ -273,7 +276,25 @@ async function serverCardView(key: string, viewerId: string | undefined): Promis
     return seed?.view ? seedCardView(seed.view) : null;
   }
   const body = await getOrNull<CardDetailBody>(`/api/v1/cards/${encodeURIComponent(key)}`);
-  return body ? detailCardView(body, viewerId) : null;
+  if (!body) return null;
+  if (body.isOwner) {
+    // The viewer's own card, which the slug lookup didn't name: one in their
+    // trash, gone to everyone else (/api/cards/resolve answers it as a miss).
+    // The server knows whose it is; the card itself is read whole through the
+    // rules by the id it answered — which then stands for the key, so the
+    // next read goes straight to it.
+    let own: Card | null = null;
+    try {
+      own = await getCardById(body.card.id);
+    } catch {
+      // Not read here: the server's answer will do.
+    }
+    if (own) {
+      serverCardIds.set(key, own.id);
+      return { card: own, author: await getUserById(viewerId) };
+    }
+  }
+  return detailCardView(body, viewerId);
 }
 
 /** GET /api/v1/cards/{key}'s answer as the card page's card and byline. */

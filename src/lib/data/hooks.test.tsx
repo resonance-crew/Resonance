@@ -418,6 +418,36 @@ describe('useCard on a card the rules keep from the browser', () => {
     expect(result.current.data!.author!.id).toBe('me');
   });
 
+  // The slug lookup and the server render answer anyone, so a card in its
+  // author's trash is a miss there, as a deleted one; GET /api/v1/cards/{key}
+  // knows the author, and the card is then read whole through the rules.
+  it("finds the viewer's own card in their trash through the server, then reads it whole by the id it answered", async () => {
+    const binned = card('binned', 'me', {
+      slug: 'a-binned-night',
+      visibility: 'private',
+      originalLocale: 'zh-TW',
+      trashedAt: new Date('2026-10-01'),
+      trashedFrom: { visibility: 'public', referenceCardId: null },
+    });
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(null);
+    vi.mocked(getCardById).mockImplementation(async (id) => (id === 'binned' ? binned : null));
+    vi.mocked(getUserById).mockResolvedValue(user('me'));
+    api({
+      '/api/v1/cards/a-binned-night': anonDetail({
+        card: summary('binned', null, { slug: 'a-binned-night', trashedAt: '2026-10-01T00:00:00.000Z', restoresTo: 'public' }),
+        visibility: 'private',
+        anonymous: false,
+        isOwner: true,
+      }),
+    });
+    const { result } = renderHook(() => useCard('a-binned-night'), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    // The whole card (its locale, its trash state), not the answer's summary of it.
+    expect(result.current.data!.card).toBe(binned);
+    expect(result.current.data!.author!.id).toBe('me');
+    expect(getCardById).toHaveBeenCalledWith('binned');
+  });
+
   it("carries the story's link previews the server answered, each checked, absent fields absent", async () => {
     vi.mocked(getCardBySlugOrId).mockResolvedValue(null);
     api({
