@@ -23,7 +23,8 @@ public nonisolated struct StoryType: Hashable, Sendable {
 
 /// Which script a text is written in — src/lib/text/script.ts, line for line: one rule for how a
 /// story is set (the reader, the writer, a share card) and for the publish panel's mirror, on the
-/// web and in both apps, pinned case by case by native/fixtures/story-script.json.
+/// web and in both apps, pinned case by case by native/fixtures/story-script.json (its
+/// `latinMarks` are StoryFormat's `StoryScript.latinMarks`: they need no prose read).
 ///
 /// A text is read as a reader reads it: a CJK character against a word. Only its prose counts —
 /// Markdown, link targets and bare addresses are left out (`StoryProse.plainText`, as the web's
@@ -67,8 +68,6 @@ public nonisolated enum ScriptRule {
     private static let spacedWord = regex("[\\p{L}\\p{N}][\\p{L}\\p{N}'’-]*")
     private static let latin = regex("\\p{scx=Latn}")
     private static let letter = regex("\\p{L}")
-    /// ‘ or ’ with a Latin letter immediately before and after it.
-    private static let latinMark = regex("(?<=\\p{sc=Latn})[‘’](?=\\p{sc=Latn})")
     private static let cjkLocale = try! NSRegularExpression(pattern: "^(zh|ja|ko)\\b", options: [.caseInsensitive])
 
     private static func regex(_ pattern: String) -> NSRegularExpression { try! NSRegularExpression(pattern: pattern) }
@@ -173,14 +172,5 @@ public nonisolated enum ScriptRule {
         let share = Double(m.cjk) / Double(units)
         if current == .cjk { return share <= writerLean ? .latin : .cjk }
         return share >= 1 - writerLean ? .cjk : .latin
-    }
-
-    /// Where an apostrophe stands inside a Latin word (don’t, it’s, rock’n’roll): the UTF-16
-    /// offsets of each U+2018 / U+2019 with a Latin letter on both sides. A CJK face draws these
-    /// marks full-width, which would open a half-em hole inside the word, so a CJK story sets them
-    /// in its Latin face (`StoryTypography.latinMarkFamily`). A mark beside anything else — 他’s,
-    /// James’ book, ‘OK’ — keeps the CJK form, as CJK typesetting wants.
-    public static func latinMarks(_ text: String) -> [Int] {
-        latinMark.matches(in: text, range: NSRange(location: 0, length: (text as NSString).length)).map(\.range.location)
     }
 }

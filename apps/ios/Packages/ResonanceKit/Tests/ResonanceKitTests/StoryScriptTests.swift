@@ -95,10 +95,10 @@ import Testing
 
     @Test func anApostropheInsideALatinWordIsFoundByItsUTF16Offset() {
         for m in Self.fixture.latinMarks {
-            #expect(ScriptRule.latinMarks(m.text) == m.indices, "\(m.text)")
+            #expect(StoryScript.latinMarks(m.text) == m.indices, "\(m.text)")
         }
         // Offsets are UTF-16 units, as NSAttributedString counts them: an emoji before counts two.
-        #expect(ScriptRule.latinMarks("😀don’t") == [5])
+        #expect(StoryScript.latinMarks("😀don’t") == [5])
     }
 
     @Test func onlyTheStorysStartIsReadAndQuicklyWhateverFollows() {
