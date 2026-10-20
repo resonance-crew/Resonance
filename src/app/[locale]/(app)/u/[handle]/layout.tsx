@@ -3,7 +3,7 @@ import { getTranslations } from 'next-intl/server';
 import { FirestoreUserRepository } from '@/lib/db/firestore/user';
 import type { Locale } from '@/lib/db/types';
 import { smartAppBanner } from '@/lib/appStores';
-import { buildProfileMetadata } from '@/lib/og';
+import { buildProfileMetadata, metaAppId } from '@/lib/og';
 import { siteUrl } from '@/lib/site';
 import { publicBases } from '@/lib/storage/publicUrl';
 
@@ -62,6 +62,7 @@ export async function generateMetadata({
       title,
       description,
       storageBases: publicBases(),
+      metaAppId: metaAppId(),
     }),
     itunes,
   };

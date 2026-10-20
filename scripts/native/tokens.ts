@@ -44,8 +44,8 @@ for (const m of css.matchAll(/--([\w-]+):\s*(oklch\([^)]*\))/g)) cssVars[m[1]] =
 const camel = (s: string) => s.replace(/^color-/, '').replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
 for (const [name, value] of Object.entries(cssVars)) tokens.push(token(camel(name), value, `--${name}`));
 
-// --- StoryCard palette --------------------------------------------------------
-const storyCard = read('src/components/molecules/StoryCard/StoryCard.tsx');
+// --- StoryCard palette (kept in lib/design/cardColours, re-exported by StoryCard) ---
+const storyCard = read('src/lib/design/cardColours.ts');
 const listOf = (name: string) => {
   const block = new RegExp(`const ${name} = \\[([\\s\\S]*?)\\];`).exec(storyCard)?.[1] ?? '';
   return [...block.matchAll(/oklch\([^)]*\)/g)].map((m) => parseOklch(m[0]));

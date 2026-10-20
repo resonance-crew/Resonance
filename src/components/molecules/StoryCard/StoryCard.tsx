@@ -16,7 +16,7 @@ import { useElementSize } from '@/lib/hooks/useElementSize';
 import { wobRect } from '@/lib/design/wobRect';
 import { wavyLine } from '@/lib/design/wavyPath';
 import { CARD_HUES } from '@/lib/design/dominantHue';
-import { preferredPalette } from '@/lib/design/cardColours';
+import { CARD_BORDERS, CARD_FILLS, preferredPalette } from '@/lib/design/cardColours';
 import styles from './StoryCard.module.css';
 
 export interface Story {
@@ -34,24 +34,9 @@ export interface Story {
   accentHue?: number;
 }
 
-/** The fills of the six palette families, in CARD_HUES order (a shared card's band in a thread draws with them too). */
-export const CARD_FILLS = [
-  'oklch(90% 0.065 55)',
-  'oklch(94% 0.032 290)',
-  'oklch(93% 0.042 140)',
-  'oklch(92% 0.075 88)',
-  'oklch(92% 0.033 215)',
-  'oklch(89% 0.047 18)',
-];
-
-export const CARD_BORDERS = [
-  ['oklch(52% 0.13 55)',  'oklch(38% 0.11 55)'],
-  ['oklch(54% 0.10 290)', 'oklch(42% 0.09 290)'],
-  ['oklch(50% 0.12 140)', 'oklch(38% 0.11 140)'],
-  ['oklch(58% 0.14 88)',  'oklch(44% 0.12 88)'],
-  ['oklch(50% 0.10 215)', 'oklch(38% 0.09 215)'],
-  ['oklch(52% 0.09 18)',  'oklch(40% 0.08 18)'],
-];
+// The six families' fills and pens live in lib/design/cardColours (server code
+// draws with them too: the link-preview image); re-exported for the cards.
+export { CARD_FILLS, CARD_BORDERS };
 
 // Canonical hue list lives in lib/design/dominantHue (shared with the
 // cover-image dominant-colour extraction); re-exported for existing consumers.

@@ -1,0 +1,199 @@
+{
+  "note": "The 9:16 share image both apps draw (src/lib/share/shareCard.ts SHARE_CARD; UPDATE_SHARE_CARD=1 npx vitest run src/lib/share/shareCard.test.ts writes this file). Lengths are points on the canvas before `scale`. Type names the story tokens (tokens.css \"A story's type\", the apps' Tokens.story*) and faces by their CSS variables (--font-story-serif = Noto Serif TC, --font-story-sans = Noto Sans TC, --font-heading = Playfair Display, --font-body = DM Sans); `type.cjk` or `type.latin` by the story's script (story-script.json); `figures: lining` = lnum. `cardFill` / `cardBorder` are the card's family p = preferredPalette(accentHue, seedFromId(card id)) (Tokens.cardFill{p} / cardBorder{p}); paper and rule are oklch(lightness% chroma CARD_HUES[p]). The outline is wobRect(w, h, radius, seedFromId(card id), min(w, h) × magnitude, options); the rule is wavyLine(width, seed + seedOffset, amplitude, steps). The words are share-passages.json's `opening`. An anonymous card draws `anonymous` in place of the photo, pen name and initials — never them, nor a region or verified mark.",
+  "canvas": {
+    "width": 360,
+    "height": 640,
+    "scale": 3,
+    "jpegQuality": 0.9
+  },
+  "safeZone": {
+    "top": 84,
+    "bottom": 527
+  },
+  "backdrop": {
+    "fill": "cardFill",
+    "grain": 0.045,
+    "grainTile": "grain-overlay"
+  },
+  "card": {
+    "width": 300,
+    "maxHeight": 443,
+    "padding": 22,
+    "paddingBottom": 22,
+    "radius": 22,
+    "outline": {
+      "magnitude": 0.025,
+      "segmentsH": [
+        3,
+        4
+      ],
+      "segmentsV": [
+        5,
+        6
+      ],
+      "curve": 0.55,
+      "cornerJitter": 0.7,
+      "cornerOffset": 4
+    },
+    "paper": {
+      "lightness": 97.5,
+      "chroma": 0.012,
+      "grain": 0.2,
+      "grainTile": "grain-card"
+    },
+    "pen": {
+      "colour": "cardBorder",
+      "width": 1.8
+    }
+  },
+  "cover": {
+    "ratio": 0.5,
+    "seedOffset": 5,
+    "grain": 0.03,
+    "gapBelow": 16
+  },
+  "title": {
+    "withCover": {
+      "size": 22,
+      "maxLines": 2
+    },
+    "withoutCover": {
+      "size": 26,
+      "maxLines": 3
+    },
+    "colour": "--color-text",
+    "gapBelow": 12,
+    "type": {
+      "cjk": {
+        "face": "--font-story-serif",
+        "weight": "--story-heading-weight",
+        "tracking": "--story-heading-tracking",
+        "leading": "--story-title-leading",
+        "figures": "lining"
+      },
+      "latin": {
+        "face": "--font-heading",
+        "weight": "--story-heading-weight-latin",
+        "tracking": 0,
+        "leading": "--story-title-leading-latin",
+        "figures": "lining"
+      }
+    }
+  },
+  "words": {
+    "size": 14,
+    "withCover": {
+      "maxLines": 4
+    },
+    "withoutCover": {
+      "maxLines": 8
+    },
+    "colour": "--color-text",
+    "gapBelow": 16,
+    "text": "opening",
+    "type": {
+      "cjk": {
+        "face": "--font-story-sans",
+        "weight": 400,
+        "tracking": "--story-tracking",
+        "leading": "--story-leading",
+        "align": "justify"
+      },
+      "latin": {
+        "face": "--font-body",
+        "weight": 400,
+        "tracking": 0,
+        "leading": "--story-leading-latin",
+        "align": "start"
+      }
+    }
+  },
+  "rule": {
+    "height": 6,
+    "colour": {
+      "lightness": 55,
+      "chroma": 0.04,
+      "alpha": 0.4
+    },
+    "width": 1.2,
+    "seedOffset": 91,
+    "amplitude": 1.2,
+    "steps": 6,
+    "gapBelow": 14
+  },
+  "byline": {
+    "height": 32,
+    "avatar": {
+      "size": 30,
+      "outline": "oklch(36% 0.06 60 / 0.55)",
+      "width": 1.8,
+      "fill": "cardFill"
+    },
+    "gap": 10,
+    "name": {
+      "size": 13,
+      "weight": 600,
+      "leading": 1.3,
+      "colour": "--color-text",
+      "face": "--font-body"
+    },
+    "verifiedMark": {
+      "size": 12,
+      "gap": 4
+    },
+    "date": {
+      "size": 11.5,
+      "weight": 400,
+      "colour": "--color-text-muted",
+      "face": "--font-body",
+      "style": "medium"
+    },
+    "minSpace": 8
+  },
+  "anonymous": {
+    "avatar": {
+      "initials": "·",
+      "fill": "--color-cream-dark",
+      "seed": 97
+    },
+    "name": {
+      "message": "card.anonymousAuthor",
+      "colour": "--color-text-muted"
+    }
+  },
+  "lockup": {
+    "wave": {
+      "icon": "wave",
+      "size": 16,
+      "colour": "--color-terracotta",
+      "width": 1.8
+    },
+    "gap": 4,
+    "wordmark": {
+      "text": "Resonance",
+      "size": 13,
+      "weight": 700,
+      "tracking": -0.02,
+      "face": "--font-heading",
+      "colour": "--color-text"
+    },
+    "domain": {
+      "text": "resonance.channel",
+      "size": 10.5,
+      "weight": 400,
+      "tracking": 0.01,
+      "face": "--font-body",
+      "colour": "--color-text-muted"
+    }
+  },
+  "sticker": {
+    "margin": 6,
+    "scale": 2,
+    "format": "png"
+  },
+  "storiesBackground": {
+    "width": 1080,
+    "height": 1920,
+    "format": "jpeg"
+  }
+}

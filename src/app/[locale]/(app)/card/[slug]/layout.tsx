@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
 import type { Locale } from '@/lib/db/types';
 import { smartAppBanner } from '@/lib/appStores';
-import { buildCardMetadata } from '@/lib/og';
+import { buildCardMetadata, metaAppId } from '@/lib/og';
 import { siteUrl } from '@/lib/site';
 import { publicBases } from '@/lib/storage/publicUrl';
 import { loadCard } from './cardPageData';
@@ -60,6 +60,7 @@ export async function generateMetadata({
       base,
       anonymousLabel: t('anonymousAuthor'),
       storageBases: publicBases(),
+      metaAppId: metaAppId(),
     }),
     itunes,
   };

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildCardMetadata, buildProfileMetadata, imageVersion } from './og';
+import { buildCardMetadata, buildProfileMetadata, imageVersion, metaAppId } from './og';
+import { coverVersion, drawnCard, drawnCardVersion } from '@/lib/linkImage/model';
 import type { Card, User } from '@/lib/db/types';
 
 const baseCard: Card = {
@@ -52,12 +53,15 @@ describe('buildCardMetadata', () => {
     expect(meta.alternates?.canonical).toBe('https://resonance.example/en/card/a-quiet-turning-point');
   });
 
-  it("shares a stored cover as a JPEG from /api/og, under the cover's version (the AVIF itself isn't shown everywhere)", () => {
+  it("shares a stored cover as a 1200 × 630 JPEG from /api/og, under the cropped cover's version (the AVIF itself isn't shown everywhere)", () => {
     const url = 'https://cdn.r2.dev/image/user1/2026-10/pic.avif';
     const card: Card = { ...baseCard, media: { type: 'image', url } };
     const meta = buildCardMetadata({ card, author, locale: 'en', base, anonymousLabel: 'Anonymous', storageBases: STORAGE });
-    const image = `https://resonance.example/api/og/card/card1?v=${imageVersion(url)}`;
-    expect((meta.openGraph?.images as { url: string }[])[0].url).toBe(image);
+    const image = `https://resonance.example/api/og/card/card1?v=${coverVersion(url)}`;
+    // Sized, so a platform draws the first share before it has fetched the picture.
+    expect((meta.openGraph?.images as { url: string }[])[0]).toEqual({ url: image, width: 1200, height: 630, alt: 'A quiet turning point' });
+    // Another address than before covers were cropped, so platforms fetch the new size.
+    expect(coverVersion(url)).not.toBe(imageVersion(url));
     expect((meta.twitter as { images?: string[] }).images).toEqual([image]);
     // The storage path (which names the author's uid) is nowhere in the share card.
     expect(JSON.stringify(meta)).not.toContain('image/user1');
@@ -74,15 +78,49 @@ describe('buildCardMetadata', () => {
     expect((meta.openGraph?.images as { url: string }[])[0].url).toMatch(/^https:\/\/resonance\.example\/api\/og\/card\/card1\?v=/);
   });
 
-  it('shares a picture hosted elsewhere as it is', () => {
+  it('shares a picture hosted elsewhere as it is, its size unknown', () => {
     const card: Card = { ...baseCard, media: { type: 'image', url: 'https://images.example/pic.jpg' } };
     const meta = buildCardMetadata({ card, author, locale: 'en', base, anonymousLabel: 'Anonymous', storageBases: STORAGE });
-    expect((meta.openGraph?.images as { url: string }[])[0].url).toBe('https://images.example/pic.jpg');
+    expect((meta.openGraph?.images as { url: string }[])[0]).toEqual({ url: 'https://images.example/pic.jpg', alt: 'A quiet turning point' });
   });
 
-  it('falls back to the platform cover when the card has no image', () => {
+  it('shares a card without a cover as the card itself, drawn at 1200 × 630 under its drawing\'s version', () => {
     const meta = buildCardMetadata({ card: baseCard, author, locale: 'en', base, anonymousLabel: 'Anonymous' });
-    expect((meta.openGraph?.images as { url: string }[])[0].url).toBe('https://resonance.example/og-cover.jpg');
+    const image = `https://resonance.example/api/og/card/card1?v=${drawnCardVersion(drawnCard(baseCard, author))}`;
+    expect((meta.openGraph?.images as { url: string }[])[0]).toEqual({ url: image, width: 1200, height: 630, alt: 'A quiet turning point' });
+    expect((meta.twitter as { images?: string[] }).images).toEqual([image]);
+    // A card with a video has no picture to share either.
+    const video: Card = { ...baseCard, media: { type: 'video', url: 'https://img.resonance.example/v.mp4' } };
+    const videoMeta = buildCardMetadata({ card: video, author, locale: 'en', base, anonymousLabel: 'Anonymous', storageBases: STORAGE });
+    expect((videoMeta.openGraph?.images as { url: string }[])[0].url).toBe(image);
+  });
+
+  it('gives the drawing a new address when what it shows changes — the pen name, the title, the story', () => {
+    const v = (card: Card, who: User | null) => drawnCardVersion(drawnCard(card, who));
+    const before = v(baseCard, author);
+    expect(v(baseCard, { ...author, handle: 'mira2' })).not.toBe(before);
+    expect(v({ ...baseCard, thoughtCore: 'Another title' }, author)).not.toBe(before);
+    expect(v({ ...baseCard, story: 'Another story altogether.' }, author)).not.toBe(before);
+    // A translation isn't drawn (the picture quotes the story as written), so it changes nothing.
+    expect(v({ ...baseCard, translations: { 'zh-TW': { title: '轉捩點', thoughtCore: '轉捩點', story: '譯文', aiGenerated: true } } }, author)).toBe(before);
+  });
+
+  it("draws an anonymous card's picture from the card alone, whatever author it is handed", () => {
+    const card: Card = { ...baseCard, anonymous: true };
+    const meta = buildCardMetadata({ card, author, locale: 'en', base, anonymousLabel: 'Anonymous' });
+    const image = (meta.openGraph?.images as { url: string }[])[0].url;
+    expect(image).toBe(`https://resonance.example/api/og/card/card1?v=${drawnCardVersion(drawnCard(card, null))}`);
+    expect(JSON.stringify(meta)).not.toContain('mira');
+  });
+
+  it('names the Meta app as fb:app_id only when one is set', () => {
+    const withId = buildCardMetadata({ card: baseCard, author, locale: 'en', base, anonymousLabel: 'Anonymous', metaAppId: '1115208464203859' });
+    expect(withId.facebook).toEqual({ appId: '1115208464203859' });
+    expect(buildCardMetadata({ card: baseCard, author, locale: 'en', base, anonymousLabel: 'Anonymous' }).facebook).toBeUndefined();
+    expect(metaAppId(' 1115208464203859 ')).toBe('1115208464203859');
+    expect(metaAppId('')).toBeUndefined();
+    expect(metaAppId(undefined)).toBeUndefined();
+    expect(metaAppId('not-an-id')).toBeUndefined();
   });
 
   it('prefers the viewer-locale translation of title and story', () => {
@@ -101,6 +139,22 @@ describe('buildCardMetadata', () => {
     const card: Card = { ...baseCard, anonymous: true };
     const meta = buildCardMetadata({ card, author, locale: 'en', base, anonymousLabel: 'Anonymous' });
     expect((meta.openGraph as { authors?: string[] }).authors).toBeUndefined();
+  });
+
+  // A slug that collided carries the author's handle (slugify) and never changes: one assigned
+  // while the card was named would name its author in the address Facebook and LINE keep.
+  it("gives an anonymous card's canonical and og:url its id, never its slug", () => {
+    const card: Card = { ...baseCard, slug: 'a-quiet-turning-point-mira', anonymous: true };
+    const meta = buildCardMetadata({ card, author: null, locale: 'zh-TW', base, anonymousLabel: '匿名' });
+    expect(meta.alternates?.canonical).toBe('https://resonance.example/zh-TW/card/card1');
+    expect((meta.openGraph as { url?: string }).url).toBe('https://resonance.example/zh-TW/card/card1');
+    expect(JSON.stringify(meta)).not.toContain('mira');
+  });
+
+  it("keeps a named card's slug as its canonical and og:url", () => {
+    const meta = buildCardMetadata({ card: baseCard, author, locale: 'zh-TW', base, anonymousLabel: '匿名' });
+    expect(meta.alternates?.canonical).toBe('https://resonance.example/zh-TW/card/a-quiet-turning-point');
+    expect((meta.openGraph as { url?: string }).url).toBe('https://resonance.example/zh-TW/card/a-quiet-turning-point');
   });
 });
 
@@ -138,6 +192,12 @@ describe('buildProfileMetadata', () => {
     });
     expect((meta.openGraph?.images as { url: string }[])[0].url).toBe('https://resonance.example/og-cover.jpg');
     expect((meta.twitter as { card?: string }).card).toBe('summary_large_image');
+  });
+
+  it('names the Meta app as fb:app_id on a profile only when one is set', () => {
+    const opts = { user: author, locale: 'en' as const, base, title: 'mira · Resonance', description: 'bio' };
+    expect(buildProfileMetadata({ ...opts, metaAppId: '1115208464203859' }).facebook).toEqual({ appId: '1115208464203859' });
+    expect(buildProfileMetadata(opts).facebook).toBeUndefined();
   });
 
   it('percent-encodes a CJK handle in the canonical URL', () => {
