@@ -372,3 +372,20 @@ then the Latin face per glyph), a Latin one in Playfair over DM Sans. A story's 
 The share image's numbers are `ShareCardRecipe` (`native/fixtures/share-card.json`), its words
 `SharePassages.opening` (`share-passages.json`), and the trash's calls `WritingApi.trashCard` / `restoreCard` /
 `deleteCard(onlyIfTrashed)` / `emptyTrash`, with `Trash`'s clock over `FeedCard.trashedAt` / `purgeAt`.
+
+The card page reads in the story's type (reading-type §5–§8): `StoryMarkdown(blocks, type, lang, …)` and
+`StoryTitle` take `StoryType.of(script, class)` and the story's language, set every block from the generated
+`Tokens.Story*` (no prose number is written in Kotlin: `ProseMetrics` in `core/kit` collapses story.css's margins
+from the `ProseSpacing` the type resolves), and sit inside `ReadingTextScale` — the cards a story embeds go back
+under `CappedTextScale`. The head is cover → title → byline (avatar and pen name over 「6 分鐘 · 日期」; the meta line
+alone beside an expanded window's rail, which no longer shows the date); share and the ⋯ stay in the bar.
+`WindowLayout.cardPage()` is §4's formula (the 680 measure, centred; on an expanded window the rail 48 past it).
+Sharing a card (share.spec, Owner revision; `ui/share`) is one glyph, shown only for a published, public card out
+of the trash (`ShareLinks.canShare`), straight to the system sheet: `ShareIntents.cardChooser` carries the link
+(an anonymous card's by its id) with the card picture as its alternate intent, and the app's own Instagram 限時動態
+and 儲存圖片 actions (ChooserActions on 34+, LabeledIntents on 29–33, both reaching the unexported
+`ShareActionActivity`). The picture is drawn on the device — `ShareCardCanvas` / `ShareCardSticker` /
+`ShareCardBackdrop` in `core/design`, recorded off screen by `ShareCardRenderer` into GraphicsLayers at
+Density(3, fontScale 1) — and written to `cacheDir/share` (the `{applicationId}.share` FileProvider; emptied
+before each share and on sign-out). Stories needs `AppConfig.metaAppId` and Instagram installed; the owner of an
+anonymous card is asked first (`share.anonymousTitle`). A person's page shares its plain link.
