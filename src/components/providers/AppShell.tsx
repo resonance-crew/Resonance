@@ -5,6 +5,7 @@ import { AppHeader } from '@/components/sections/AppHeader/AppHeader';
 import { AppChromeProvider } from '@/components/providers/AppChrome';
 import { AccountDeletionNotice } from '@/components/molecules/AccountDeletionNotice/AccountDeletionNotice';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { ToastProvider } from '@/components/providers/ToastProvider';
 import { useMyProfile } from '@/lib/data/hooks';
 import { useRouter, usePathname } from '@/i18n/navigation';
 import { nextQuery } from '@/lib/auth/nextPath';
@@ -74,12 +75,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       }
     : PLACEHOLDER_USER;
 
+  // The one toast (useToast) is drawn after <main>, and outlives a page's router.replace.
   return (
     <AppChromeProvider>
-      {!bareChrome && <AppHeader user={headerUser} signedIn={!!authUser} authReady={!loading} />}
-      <main style={{ minHeight: '100vh' }}>{children}</main>
-      {/* The banner's status comes from a cookie-authenticated /api route. */}
-      {authUser && sessionReady && <AccountDeletionNotice />}
+      <ToastProvider>
+        {!bareChrome && <AppHeader user={headerUser} signedIn={!!authUser} authReady={!loading} />}
+        <main style={{ minHeight: '100vh' }}>{children}</main>
+        {/* The banner's status comes from a cookie-authenticated /api route. */}
+        {authUser && sessionReady && <AccountDeletionNotice />}
+      </ToastProvider>
     </AppChromeProvider>
   );
 }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderWithIntl, screen, waitFor } from '@/../test/render';
+import { fireEvent, renderWithIntl, screen, waitFor } from '@/../test/render';
 
 // The signed-in area's shell routes whoever can't be in it yet: signed out to
 // /signin (public pages aside), signed in without a profile — or with one
@@ -18,6 +18,7 @@ vi.mock('@/components/sections/AppHeader/AppHeader', () => ({ AppHeader: () => n
 vi.mock('@/components/molecules/AccountDeletionNotice/AccountDeletionNotice', () => ({ AccountDeletionNotice: () => null }));
 
 import { AppShell } from './AppShell';
+import { useToast } from './ToastProvider';
 
 const shell = () => renderWithIntl(<AppShell><p>the page</p></AppShell>);
 const named = (handle: string) => ({ id: 'nina', handle, initials: 'NI', accentColor: 'x' });
@@ -69,6 +70,30 @@ describe('AppShell', () => {
     Object.assign(profile, { data: undefined, isLoading: true });
     shell();
     await waitFor(() => expect(replace).not.toHaveBeenCalled());
+  });
+
+  // One toast for the whole signed-in area, drawn after the page (so it outlives a page's router.replace).
+  it('gives every page its one toast, drawn after <main>', async () => {
+    profile.data = named('nina');
+    function Trash() {
+      const toasts = useToast();
+      return (
+        <button type="button" onClick={() => toasts.show({ message: '已還原' })}>
+          restore
+        </button>
+      );
+    }
+    const { container } = renderWithIntl(
+      <AppShell>
+        <Trash />
+      </AppShell>,
+    );
+    const region = screen.getByRole('status');
+    // The live region is after the page, not in it.
+    expect(container.querySelector('main')!.compareDocumentPosition(region) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(container.querySelector('main')!.contains(region)).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'restore' }));
+    await waitFor(() => expect(region).toHaveTextContent('已還原'));
   });
 
   it('sends a signed-out visitor to sign in, except on a public page', async () => {

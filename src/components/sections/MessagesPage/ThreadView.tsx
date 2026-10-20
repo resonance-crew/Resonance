@@ -5,8 +5,8 @@ import { useLocale, useTranslations } from 'next-intl';
 import useSWR, { useSWRConfig } from 'swr';
 import { BareIconButton } from '@/components/atoms/BareIconButton/BareIconButton';
 import { HandDrawnAvatar } from '@/components/atoms/HandDrawnAvatar/HandDrawnAvatar';
-import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import { Icon } from '@/components/atoms/Icon';
+import { InkPill } from '@/components/atoms/InkPill/InkPill';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { OrganicImage } from '@/components/atoms/OrganicImage/OrganicImage';
 import { OrganicScrollbar, organicScrollTarget } from '@/components/atoms/OrganicScrollbar/OrganicScrollbar';
@@ -18,7 +18,6 @@ import { OrganicMenu } from '@/components/molecules/OrganicMenu/OrganicMenu';
 import { CardEmbedSourceContext, useCardEmbed } from '@/components/molecules/EmbedStoryCard/useCardEmbed';
 import { useSafetyActions } from '@/components/molecules/SafetyActions/useSafetyActions';
 import { seedFromString } from '@/lib/design/prng';
-import { useElementSize } from '@/lib/hooks/useElementSize';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useCardSummaries, useMyBlockedIds } from '@/lib/data/hooks';
@@ -785,15 +784,17 @@ export function ThreadView({ handle, replyNote }: ThreadViewProps) {
               </div>
               {/* Where the thread meets what is fixed under it: the paper dissolving upward over the messages. */}
               <div className={styles.edge} aria-hidden />
+              {/* The small pill over the foot of the thread: the way back to the latest message, or a word that something was copied. */}
               {showPill && (
-                <Pill
+                <InkPill
+                  size="sm"
                   className={styles.pill}
                   onClick={toLatest}
                   icon="chevron-down"
                   label={newBelow ? t('newMessages') : t('jumpToLatest')}
                 />
               )}
-              {copied && <Pill className={styles.pill} label={t('copied')} />}
+              {copied && <InkPill size="sm" announce className={styles.pill} label={t('copied')} />}
               {searchOpen && listShown && (
                 <SearchResults
                   query={query}
@@ -917,37 +918,6 @@ export function ThreadView({ handle, replyNote }: ThreadViewProps) {
         )}
       </ThreadActionsContext.Provider>
     </CardEmbedSourceContext.Provider>
-  );
-}
-
-/**
- * The small pill over the foot of the thread — the way back to the latest
- * message (`onClick`), or a word that something happened (copied): a
- * wobbly terracotta-light wash with no pen line.
- */
-function Pill({ label, icon, onClick, className }: { label: string; icon?: 'chevron-down'; onClick?: () => void; className?: string }) {
-  const ref = useRef<HTMLElement>(null);
-  const { w, h } = useElementSize(ref);
-  const body = (
-    <>
-      <HandDrawnBorder w={w} h={h} R={h / 2} seed={41} mag={1.2} segmentsH={2} segmentsV={1} curve={1.4} fillColor="var(--color-terracotta-light)" />
-      {icon && <Icon name={icon} size={14} className={styles.pillGlyph} />}
-      <span className={styles.pillLabel}>{label}</span>
-    </>
-  );
-  const shared = {
-    className: `${className ?? ''} res-shape-stand-in`,
-    'data-shape-pending': w > 0 && h > 0 ? undefined : '',
-    style: { '--shape-fill': 'var(--color-terracotta-light)', '--shape-radius': '999px' } as React.CSSProperties,
-  };
-  return onClick ? (
-    <button ref={ref as React.RefObject<HTMLButtonElement>} type="button" onClick={onClick} {...shared}>
-      {body}
-    </button>
-  ) : (
-    <span ref={ref as React.RefObject<HTMLSpanElement>} role="status" {...shared}>
-      {body}
-    </span>
   );
 }
 

@@ -435,6 +435,24 @@ describe('Messenger’s thread, drawn by hand', () => {
     expect(screen.queryByText('Replying to alice')).not.toBeInTheDocument();
   });
 
+  // The thread's pill is the toast's face (atoms/InkPill), but the thread has no toast host to
+  // speak for it: its 已複製 announces itself, while the way back to the latest is a button.
+  it('still says “Copied” out loud, as a status of its own', async () => {
+    server.messages = [text('m1', 'read https://example.com/a', { sentAt: at(10, 0) })];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    const user = (await import('@testing-library/user-event')).default.setup();
+    renderWithIntl(thread());
+    await screen.findByRole('link', { name: 'https://example.com/a' });
+    expect(screen.queryByRole('status')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'More options' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Copy' }));
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent('Copied');
+    expect(status).not.toHaveAttribute('aria-hidden');
+    expect(status.tagName).toBe('SPAN');
+  });
+
   it('lifts a message pressed and held on a touch screen out of the thread, with its menu', async () => {
     server.messages = [text('m1', 'hold me', { sentAt: at(10, 0) })];
     vi.mocked(callApi).mockResolvedValue({ cards: [] });
