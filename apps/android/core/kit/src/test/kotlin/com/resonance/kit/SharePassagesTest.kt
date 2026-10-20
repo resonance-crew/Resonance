@@ -77,6 +77,28 @@ class SharePassagesTest {
         assertEquals("我讀了外婆的醃梅子三次。", SharePassages.opening("我讀了[外婆的醃梅子](/card/grandmas-plums)三次。"))
     }
 
+    /** [story]'s opening, read on a thread with a small stack (a device's worker threads have about 1 MB). */
+    private fun openingOnASmallStack(story: String): String {
+        var opening: String? = null
+        var failure: Throwable? = null
+        val reader = Thread(null, { runCatching { SharePassages.opening(story) }.onSuccess { opening = it }.onFailure { failure = it } }, "share", 256L * 1024)
+        reader.start()
+        reader.join()
+        failure?.let { throw AssertionError("reading a deeply nested story failed", it) }
+        return opening!!
+    }
+
+    @Test fun quotesNestedThousandsDeepAreReadWithoutRunningOutOfStack() {
+        // A quote a hundred deep is quoted as the web quotes it.
+        assertEquals("外婆把青梅一顆顆擦乾。", openingOnASmallStack("> ".repeat(100) + "外婆把青梅一顆顆擦乾。"))
+        // The rules let a story open with `> > > …` as deep as its length allows. commonmark-java
+        // stops opening blocks past its own depth (the rest is a paragraph's text, so the card
+        // quotes marks); the share sheet still opens, never a crash — the web's reader runs out of
+        // stack there.
+        val deep = openingOnASmallStack("> ".repeat(9_000) + "外婆把青梅一顆顆擦乾。")
+        assertTrue(SharePassages.graphemeCount(deep) <= SharePassages.MAX_GRAPHEMES + 1)
+    }
+
     @Test fun theStoryIsReadWithoutGfmAsTheServerReadsIt() {
         // Pictures on two lines of one paragraph are still pictures alone (the line break is text there).
         assertEquals("真的寫得夠長了吧。", SharePassages.opening("![a](x)\n![b](y)\n\n真的寫得夠長了吧。"))
