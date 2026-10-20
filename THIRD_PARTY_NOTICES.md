@@ -9,10 +9,16 @@ Gradle are not listed here: each package carries its own license.
 
 The iOS and Android apps bundle these typefaces from `apps/shared/fonts/`
 (built by `scripts/native/subset-fonts.py` from the files
-`scripts/native/fetch-fonts.sh` downloads). The website uses the same families
-but keeps no font files in this repository: next/font fetches the Google Fonts
+`scripts/native/fetch-fonts.sh` downloads). The website's pages use the same
+families without font files of their own: next/font fetches the Google Fonts
 at build time and serves them from the site, and the handwriting face loads from
-jsDelivr.
+jsDelivr. The server's link-preview image (`/api/og/card`) draws with static
+instances of four of them, made from the apps' files by
+`scripts/linkImage/build-fonts.py` into `src/lib/linkImage/fonts/` (with
+`OFL.txt` beside them): Noto Serif TC 600, Noto Sans TC 400 and 600 (of the
+subsets below), DM Sans 400 and 600 (optical size 14), and Playfair Display 700
+with lining figures as the default, renamed Share Display
+(`ShareDisplay-Bold.ttf`) because "Playfair Display" is its Reserved Font Name.
 
 | File | Typeface | Copyright | Reserved Font Name | Source | Changes |
 | --- | --- | --- | --- | --- | --- |
