@@ -13,9 +13,9 @@ import styles from './BrandMark.module.css';
  * 16.35.0 (simple-icons.org; its files are CC0, and its data names each
  * brand's own page as the mark's source and guidelines), copied verbatim —
  * the path of icons/{line,threads,facebook,x}.svg. They are trademarks of
- * their owners, used here only to name the platform a row shares to, as
- * their guidelines allow; BrandMark.test.tsx pins a hash of each path:
- * changing one is a deliberate act, never a tidy-up.
+ * their owners, used here only to name the platform a row shares to (each
+ * brand's guidelines still govern how; the owner reviews them). BrandMark.test.tsx
+ * pins a hash of each path: changing one is a deliberate act, never a tidy-up.
  *
  * Deliberately not in the Icon registry (SKILL.md rule 2's one exception):
  * these aren't hand-drawn and aren't ours to redraw, they are filled shapes
