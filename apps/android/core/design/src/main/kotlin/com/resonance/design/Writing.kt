@@ -157,26 +157,33 @@ fun HandDrawnImage(
             }
         }
         overlay()
-        if (onRemove != null) Box(
-            Modifier
-                .align(Alignment.TopEnd)
-                .padding(12.dp)
-                .size(34.dp)
-                .drawWithCache {
-                    val o = WobRectShape(34 * 0.4, seed + 5, mag = 34 * 0.022, options = WobRectOptions(
-                        curve = 1.3, cornerJitter = 3.2, cornerOffset = 34 * 0.06, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0),
-                    )).createOutline(size, layoutDirection, this)
-                    val ink = Stroke(Tokens.Ink.toPx())
-                    onDrawBehind {
-                        drawOutline(o, Mixes.ImageRemoveFill)
-                        drawOutline(o, Mixes.ImageRemoveStroke, style = ink)
-                    }
-                }
-                .plainClickable(role = Role.Button, onClick = onRemove)
-                .semantics { contentDescription = removeLabel },
-            contentAlignment = Alignment.Center,
-        ) { OrganicIcon(IconName.Close, size = 16.dp, color = Tokens.Cream) }
+        if (onRemove != null) ImageRemoveButton(removeLabel, seed + 5, Modifier.align(Alignment.TopEnd).padding(12.dp), onRemove)
     }
+}
+
+/**
+ * The ✕ on a picture the writer chose (the editor's image remove): a dark wobbly chip, 34 across,
+ * the cream cross on it — over the cover in the writer, at its top-end corner.
+ */
+@Composable
+fun ImageRemoveButton(label: String, seed: Double, modifier: Modifier = Modifier, onRemove: () -> Unit) {
+    Box(
+        modifier
+            .size(34.dp)
+            .drawWithCache {
+                val o = WobRectShape(34 * 0.4, seed, mag = 34 * 0.022, options = WobRectOptions(
+                    curve = 1.3, cornerJitter = 3.2, cornerOffset = 34 * 0.06, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0),
+                )).createOutline(size, layoutDirection, this)
+                val ink = Stroke(Tokens.Ink.toPx())
+                onDrawBehind {
+                    drawOutline(o, Mixes.ImageRemoveFill)
+                    drawOutline(o, Mixes.ImageRemoveStroke, style = ink)
+                }
+            }
+            .plainClickable(role = Role.Button, onClick = onRemove)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) { OrganicIcon(IconName.Close, size = 16.dp, color = Tokens.Cream) }
 }
 
 /**
