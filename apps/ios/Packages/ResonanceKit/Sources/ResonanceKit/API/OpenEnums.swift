@@ -40,6 +40,8 @@ public enum OpenEnums {
         "visibility": (Set(Components.Schemas.FeedCard.VisibilityPayload.allCases.map(\.rawValue))
             .union(Components.Schemas.CardDetail.VisibilityPayload.allCases.map(\.rawValue)), "private"),
         "primaryLocale": (Set(Components.Schemas.Me.PrimaryLocalePayload.allCases.map(\.rawValue)), "en"),
+        // What restoring a card from the trash brings back (the owner's own answers only): unknown reads as private.
+        "restoresTo": (Set(Components.Schemas.FeedCard.RestoresToPayload.allCases.map(\.rawValue)), "private"),
         // Today's picks: unknown is "not final" — the app asks again later.
         "status": (Set(Components.Schemas.RecommendedFeed.StatusPayload.allCases.map(\.rawValue)), "stale"),
         // An error's code: one this build can't act on is an error all the same (its message still shows).
