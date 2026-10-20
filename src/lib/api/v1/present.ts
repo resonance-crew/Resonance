@@ -1,6 +1,7 @@
 import type { DocumentData, Firestore } from 'firebase-admin/firestore';
 import type { Card } from '@/lib/db/types';
 import { linkPreviewsOf } from '@/lib/links/previewShape';
+import { purgeAtOf, restorableVisibility, trashExpired } from '@/lib/cards/trash';
 import type { AuthorBody, FeedCardBody, LinkPreviewBody } from './schemas';
 import { summaryOf, type ListCard } from './summary';
 
@@ -58,6 +59,27 @@ export interface FeedCardOptions {
   reason?: string | null;
   /** The viewer wrote the card (their card box): show the byline even when anonymous. */
   deanonymize?: boolean;
+  /**
+   * The viewer wrote the card and this answer is theirs alone (the trash
+   * shelf, their card's own page, what trashing and restoring answer): a
+   * card in the trash says so — when it went in, when it goes for good, and
+   * what restoring it brings back. Never on anyone else's answer, where a
+   * card in the trash is absent anyway.
+   */
+  own?: boolean;
+}
+
+/** When a card went into the trash, as a valid date; null for a card that isn't there. */
+export function trashedAtOf(c: Pick<Card, 'trashedAt'>): Date | null {
+  const at = c.trashedAt;
+  return at instanceof Date && !Number.isNaN(at.getTime()) ? at : null;
+}
+
+/** The trash's own fields on a FeedCard (FeedCardOptions.own). */
+function trashFields(c: ListCard): Pick<FeedCardBody, 'trashedAt' | 'purgeAt' | 'restoresTo'> {
+  const at = trashedAtOf(c);
+  if (!at) return {};
+  return { trashedAt: at.toISOString(), purgeAt: purgeAtOf(at).toISOString(), restoresTo: restorableVisibility(c.trashedFrom?.visibility) };
 }
 
 /**
@@ -86,6 +108,7 @@ export function toFeedCard(c: ListCard, author: DocumentData | undefined, opts: 
     readMinutes: summary.readMinutes,
     referenceCardId: str(c.referenceCardId),
     reason: opts.reason ?? null,
+    ...(opts.own ? trashFields(c) : {}),
   };
 }
 
@@ -132,7 +155,13 @@ export async function connected(db: Firestore, a: string, b: string): Promise<bo
  * reader could open it would turn on being connected to its author.
  */
 export function cardVisible(card: Card, viewerId: string, isConnected: (authorId: string) => boolean): boolean {
-  if (card.authorId === viewerId) return true;
+  const trashed = trashedAtOf(card);
+  // A card in the trash is its author's alone — and theirs only until its
+  // purge date, even before the daily cron reaches it (lib/cards/trash).
+  // Private while there (the trash makes it so), it would be absent to
+  // everyone else anyway: this backs that up.
+  if (card.authorId === viewerId) return !trashed || !trashExpired(trashed);
+  if (trashed || card.trashedAt != null) return false;
   // A draft is its author's alone, whatever visibility it will be published with.
   if (!card.publishedAt) return false;
   if (card.visibility === 'public') return true;

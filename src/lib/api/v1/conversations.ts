@@ -459,12 +459,14 @@ export async function sendMessage(
     const answers = openRequest(convo)?.from === other;
     // Connected first (a resonance, or an answered note, connects you); a block also ends the connection.
     if (!connection.exists && !answers) throw new ApiFailure('forbidden', 'You can message people you are connected with.');
-    // A note gone with its card — deleting a card deletes its notes after it —
-    // is answered all the same, without saying which (as below). A card that
-    // isn't yours is as gone as a missing one, so the answer never says
-    // whether someone else's card is there; one of yours still there means a
+    // A note gone with its card — deleting a card deletes its notes after it,
+    // and so does moving an anonymous one to the trash — is answered all the
+    // same, without saying which (as below). A card that isn't yours is as
+    // gone as a missing one, so the answer never says whether someone else's
+    // card is there; one of yours still there, out of the trash, means a
     // note that never was.
-    const noteGone = !!noteRef && !note?.exists && !(noteCard?.exists && noteCard.get('authorId') === uid);
+    const noteGone = !!noteRef && !note?.exists
+      && !(noteCard?.exists && noteCard.get('authorId') === uid && noteCard.get('trashedAt') == null);
     // A message answers a note they left you, on the card it names — nothing
     // else, one answer for all of it: a note of your own on an anonymous card
     // would otherwise tell you, by which error came back, whether they wrote it.

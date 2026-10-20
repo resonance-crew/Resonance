@@ -5,6 +5,7 @@ import type { Card } from '@/lib/db/types';
 import { cardPagePaths } from '@/lib/api/revalidate';
 import { hasPenName, noPenName, pairOf } from './conversations';
 import { ApiFailure } from './http';
+import { refuseInTrash } from './inTrash';
 import { addReason, connect, originsRef, readTakeBack, resonanceReason, takeBack } from './origins';
 import { cardVisible, toFeedCard } from './present';
 import { visibleCardById } from './reads';
@@ -274,6 +275,8 @@ export async function resonateWith(db: Firestore, uid: string, targetId: string,
     const targetNow = reach.original;
     // Someone else's card is as absent as a missing one.
     if (!chosen.exists || chosen.get('authorId') !== uid) throw notFound();
+    // Your own card in the trash answers nothing until it is restored.
+    refuseInTrash(chosen);
     if (!targetNow || targetNow.authorId !== target.authorId || !cardVisible(targetNow, uid, () => reach.connected)) throw notFound();
     const answered: DocumentData = { ...chosen.data()!, referenceCardId: targetId };
     // A pen name for what reaches someone (a public card under their name

@@ -48,8 +48,9 @@ const settled = async () => {
   await Promise.all(afterWork);
   return revalidatePath.mock.calls.map(([p]) => p);
 };
-const STALE = ['/card/c1', '/card/a-walk', '/u/alice', '/'];
-const LOCALIZED = ['/en/card/c1', '/zh-TW/card/c1', '/en/card/a-walk', '/zh-TW/card/a-walk', '/en/u/alice', '/zh-TW/u/alice', '/en', '/zh-TW', '/sitemap.xml'];
+// Never the author's profile: its HTML holds no cards (lib/api/v1/cards).
+const STALE = ['/card/c1', '/card/a-walk', '/'];
+const LOCALIZED = ['/en/card/c1', '/zh-TW/card/c1', '/en/card/a-walk', '/zh-TW/card/a-walk', '/en', '/zh-TW', '/sitemap.xml'];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -73,7 +74,7 @@ describe('PATCH /api/v1/cards/{id}', () => {
   const patch = (body: unknown, key = 'c1') =>
     PATCH(new Request(`http://localhost/api/v1/cards/${key}`, { method: 'PATCH', body: JSON.stringify(body) }), ctx(key));
 
-  it("answers the card and revalidates its pages and its author's profile in every locale", async () => {
+  it('answers the card and revalidates its pages in every locale', async () => {
     updateCard.mockResolvedValue({ card: { id: 'c1', visibility: 'private' }, stale: STALE });
     const res = await patch({ visibility: 'private', anonymous: null });
     expect(res.status).toBe(200);
@@ -119,8 +120,28 @@ describe('DELETE /api/v1/cards/{id}', () => {
     deleteCard.mockResolvedValue({ stale: STALE });
     const res = await DELETE(new Request('http://localhost/api/v1/cards/c1', { method: 'DELETE' }), ctx('c1'));
     expect(res.status).toBe(204);
-    expect(deleteCard).toHaveBeenCalledWith({}, 'alice', 'c1');
+    expect(deleteCard).toHaveBeenCalledWith({}, 'alice', 'c1', { onlyIfTrashed: false });
     expect(await settled()).toEqual(LOCALIZED);
+  });
+
+  it('passes onlyIfTrashed, which the trash\'s own delete sends, and refuses a value off the contract', async () => {
+    deleteCard.mockResolvedValue({ stale: STALE, deleted: true });
+    await DELETE(new Request('http://localhost/api/v1/cards/c1?onlyIfTrashed=true', { method: 'DELETE' }), ctx('c1'));
+    expect(deleteCard).toHaveBeenLastCalledWith({}, 'alice', 'c1', { onlyIfTrashed: true });
+    await DELETE(new Request('http://localhost/api/v1/cards/c1?onlyIfTrashed=false', { method: 'DELETE' }), ctx('c1'));
+    expect(deleteCard).toHaveBeenLastCalledWith({}, 'alice', 'c1', { onlyIfTrashed: false });
+    deleteCard.mockClear();
+    expect((await DELETE(new Request('http://localhost/api/v1/cards/c1?onlyIfTrashed=yes', { method: 'DELETE' }), ctx('c1'))).status).toBe(400);
+    expect(deleteCard).not.toHaveBeenCalled();
+  });
+
+  it('answers 409 for a card no longer in the trash, revalidating nothing', async () => {
+    const { ApiFailure } = await import('@/lib/api/v1/http');
+    deleteCard.mockRejectedValue(new ApiFailure('conflict', 'This card is not in the trash.'));
+    const res = await DELETE(new Request('http://localhost/api/v1/cards/c1?onlyIfTrashed=true', { method: 'DELETE' }), ctx('c1'));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: { code: 'conflict', message: 'This card is not in the trash.' } });
+    expect(await settled()).toEqual([]);
   });
 
   it("is 404 for a card that isn't yours, revalidating nothing", async () => {
@@ -135,7 +156,7 @@ describe('DELETE /api/v1/cards/{id}', () => {
 describe('POST /api/v1/cards/{id}/edits/apply', () => {
   const apply = () => applyEdit(new Request('http://localhost/api/v1/cards/c1/edits/apply', { method: 'POST' }), ctx('c1'));
 
-  it('keeps the page list out of the answer, revalidates the card by id and slug and the profile, and reaches out for a resonance it made reachable — after the response', async () => {
+  it('keeps the page list out of the answer, revalidates the card by id and slug, and reaches out for a resonance it made reachable — after the response', async () => {
     applyCardEdit.mockResolvedValue({ id: 'c1', slug: 'a-walk', applied: true, stale: STALE, reaches: true });
     const res = await apply();
     expect(await res.json()).toEqual({ id: 'c1', slug: 'a-walk', applied: true });

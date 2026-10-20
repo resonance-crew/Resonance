@@ -3,6 +3,7 @@ import { assignSlug } from '@/lib/ai/assignSlug';
 import { ANONYMOUS_VISIBILITY_MESSAGE, anonymousForConnections } from '@/lib/db/firestore/cardContent';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
 import { ApiFailure } from './http';
+import { refuseInTrash } from './inTrash';
 import { reachable, tryReachResonance } from './resonate';
 import { summaryFields } from './summary';
 
@@ -47,7 +48,8 @@ function within<T>(p: Promise<T>, ms: number): Promise<T | typeof LATE> {
  *
  * An anonymous card is public or private: one set to be anonymous and for
  * connections only is refused (`invalid_request`, see
- * anonymousForConnections), and nothing is written.
+ * anonymousForConnections), and nothing is written. A card in the trash is
+ * refused too (409, ./inTrash) until it is restored.
  *
  * The slug and the resonance are made side by side. The slug is waited for
  * `slugWaitMs` at most: past that the answer says `slug: null` (the id is a
@@ -70,6 +72,8 @@ export async function publishCard(
     const snap = await tx.get(ref);
     // Someone else's card is as absent as a missing one.
     if (!snap.exists || snap.get('authorId') !== uid) throw new ApiFailure('not_found', 'No such card.');
+    // Restored first: published from the trash it would go out private, answering nothing.
+    refuseInTrash(snap);
     if (!String(snap.get('thoughtCore') ?? '').trim()) throw new ApiFailure('invalid_request', 'A card needs a title before it is published.');
     const firstPublish = snap.get('publishedAt') == null;
     // Never newly published anonymous and for connections only (a card published so before is left as it is).

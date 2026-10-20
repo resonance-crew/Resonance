@@ -112,6 +112,26 @@ export function buildOpenApi(): Json {
       '/handles/{handle}': get('getHandleAvailability', 'Whether a pen name is free', 'HandleAvailability', {
         parameters: [handle],
       }, [400, 401]),
+      '/me/trash': {
+        delete: {
+          operationId: 'emptyTrash',
+          summary: 'Empty your trash: every card in it is deleted for good, a page at a time',
+          description:
+            'The first call sends no `before`; call again with the answer\'s `before` while `remaining` and `deleted` are both ' +
+            'above 0. Only cards still in the trash from before `before` are taken: one restored meanwhile, or moved there ' +
+            'since, stays. `deleted` counts the cards this call deleted.',
+          parameters: [
+            {
+              name: 'before',
+              in: 'query',
+              required: false,
+              description: "The first call's answer's `before` (ISO 8601); absent: now.",
+              schema: { type: 'string', format: 'date-time' },
+            },
+          ],
+          responses: { '200': { description: 'OK', ...json(ref('EmptiedTrash')) }, ...errors(400, 401, 429) },
+        },
+      },
       '/me/cards': get('getCardBox', 'One shelf of your card box', 'CardList', {
         parameters: [
           { name: 'tab', in: 'query', required: true, schema: { type: 'string', enum: [...CardBoxTab.options] } },
@@ -172,20 +192,63 @@ export function buildOpenApi(): Json {
             '(see `DELETE /cards/{key}/resonances/{cardId}`); the card still answers the original (listed under it while ' +
             'public, without your name when anonymous). An anonymous card is ' +
             'public or private: a change that would leave it anonymous and for connections only is `400 invalid_request` ("An ' +
-            'anonymous card is public or private."); a card already that way stays so until either field changes.',
+            'anonymous card is public or private."); a card already that way stays so until either field changes. A card in ' +
+            'the trash changes only by a restore: `409 conflict` ("This card is in the trash.").',
           parameters: [pathParam('key', 'The card id')],
           requestBody: { required: true, ...json(ref('UpdateCardRequest')) },
-          responses: { '200': { description: 'The card as your card box shows it', ...json(ref('FeedCard')) }, ...errors(400, 401, 404) },
+          responses: { '200': { description: 'The card as your card box shows it', ...json(ref('FeedCard')) }, ...errors(400, 401, 404, 409) },
         },
         delete: {
           operationId: 'deleteCard',
-          summary: 'Delete your card, draft or published (a retry after success is 404)',
+          summary: 'Delete your card for good, draft or published (a retry after success is 404)',
           description:
+            'Clients with a trash move cards there first (`POST /cards/{key}/trash`) and delete for good only from it, ' +
+            'sending `onlyIfTrashed=true`: a card no longer in the trash (restored on another device) is then `409 conflict` ' +
+            '("This card is not in the trash.") and stays. ' +
             'A resonance is taken back with it, as `DELETE /cards/{key}/resonances/{cardId}` takes it back. The notes left on ' +
             'the card go with it. The only way a published card is deleted: a client may delete its own draft straight from ' +
             'Firestore, never a published card.',
-          parameters: [pathParam('key', 'The card id')],
-          responses: { '204': { description: 'Deleted' }, ...errors(400, 401, 404) },
+          parameters: [
+            pathParam('key', 'The card id'),
+            {
+              name: 'onlyIfTrashed',
+              in: 'query',
+              required: false,
+              description: '`true`: refuse (409) a card that is not in the trash.',
+              schema: { type: 'string', enum: ['true', 'false'] },
+            },
+          ],
+          responses: { '204': { description: 'Deleted' }, ...errors(400, 401, 404, 409) },
+        },
+      },
+      '/cards/{key}/trash': {
+        post: {
+          operationId: 'trashCard',
+          summary: 'Move your card to the trash: private to everyone until you restore it, deleted for good after 30 days',
+          description:
+            'Where a card goes when you delete it. While there it is private (nobody else can read, list or answer it: it is ' +
+            "absent to them as a missing card is) and answers nothing (`referenceCardId` is parked); it keeps its slug, dates, " +
+            'story and place. A resonance is taken back at once, as hiding it is: no longer a reason you are connected, and ' +
+            'the connection goes when no reason is left — restoring it never brings that back. The notes left on an anonymous ' +
+            'card are deleted (they do not come back); a named card keeps its notes. It is changed by nothing but a restore ' +
+            '(PATCH, publish, edits/apply and resonating with it are `409 conflict`, "This card is in the trash."). A card in the ' +
+            'trash already is `changed: false`, its 30 days running from when it first went in. Someone else\'s card, or one ' +
+            'past its purge date, is `404`.',
+          parameters: [cardId],
+          responses: { '200': { description: 'OK', ...json(ref('TrashedCard')) }, ...errors(400, 401, 404, 429) },
+        },
+      },
+      '/cards/{key}/restore': {
+        post: {
+          operationId: 'restoreCard',
+          summary: 'Bring your card back from the trash as it was (its visibility, slug and place)',
+          description:
+            'A resonance answers its original again, as making a hidden one public again does — unless another of your cards ' +
+            'answers that original now, or the original answers this card: then it comes back on its own (`droppedResonance`). ' +
+            "Its original's author is rung only if this resonance never reached them before (once ever per reader and card). " +
+            'A card not in the trash is `changed: false`; one past its purge date (30 days in) is `404`.',
+          parameters: [cardId],
+          responses: { '200': { description: 'OK', ...json(ref('RestoredCard')) }, ...errors(400, 401, 404, 429) },
         },
       },
       '/cards/{key}/resonances': {
@@ -195,7 +258,8 @@ export function buildOpenApi(): Json {
           summary: 'Make one of your published public cards a resonance of this one (connects you and rings its author, as publishing one does)',
           description:
             'A card answers one card, and you answer a card with one of yours: `409 conflict` when the card already answers another, ' +
-            'or another of your cards already answers this one. Asking again with the same card is `changed: false` and rings no one. ' +
+            'or another of your cards already answers this one — and when yours is in the trash ("This card is in the trash."). ' +
+            'Asking again with the same card is `changed: false` and rings no one. ' +
             'An anonymous card connects no one and rings no one; an anonymous original rings its author but connects no one ' +
             '(that bell carries `payload.anonymous`: its push opens the card). ' +
             'A block either way is `403 blocked` for a named original; an anonymous one is answered all the same, and the block ' +
@@ -232,9 +296,10 @@ export function buildOpenApi(): Json {
             '(not when the original is anonymous) and their bell rung — once per reader and card, whatever path rang it first; ' +
             'never across a block, nor without a pen name. A private, connections-only or anonymous one reaches no one. Either ' +
             'way the card is published: reaching out never fails it. An anonymous card is public or private: a draft set to be ' +
-            'anonymous and for connections only is `400 invalid_request` ("An anonymous card is public or private.") and stays a draft.',
+            'anonymous and for connections only is `400 invalid_request` ("An anonymous card is public or private.") and stays a draft. ' +
+            'A card in the trash is `409 conflict` ("This card is in the trash.") until it is restored.',
           parameters: [pathParam('key', 'The card id')],
-          responses: { '200': { description: 'OK', ...json(ref('PublishResponse')) }, ...errors(400, 401, 404) },
+          responses: { '200': { description: 'OK', ...json(ref('PublishResponse')) }, ...errors(400, 401, 404, 409) },
         },
       },
       '/cards/{key}/edits/apply': {
@@ -246,9 +311,9 @@ export function buildOpenApi(): Json {
             'as a PATCH doing so would (see updateCard); one that leaves it private, connections-only or anonymous takes it ' +
             'back, as that PATCH would. An edit that would leave the card anonymous and for connections only is ' +
             '`400 invalid_request` ("An anonymous card is public or private."), the card and the edit left as they were — unless ' +
-            'the card already is so and the edit keeps both.',
+            'the card already is so and the edit keeps both. A card in the trash is `409 conflict` ("This card is in the trash.").',
           parameters: [pathParam('key', 'The card id')],
-          responses: { '200': { description: 'OK', ...json(ref('ApplyEditResponse')) }, ...errors(400, 401, 404) },
+          responses: { '200': { description: 'OK', ...json(ref('ApplyEditResponse')) }, ...errors(400, 401, 404, 409) },
         },
       },
       '/cards/{key}/report': {

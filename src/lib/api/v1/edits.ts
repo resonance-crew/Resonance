@@ -1,8 +1,9 @@
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
-import { cardPagePaths, landingPagePaths, profilePagePaths } from '@/lib/api/revalidate';
+import { cardPagePaths, landingPagePaths } from '@/lib/api/revalidate';
 import { ANONYMOUS_VISIBILITY_MESSAGE, anonymousForConnections, cardContentProblem, editedAudience } from '@/lib/db/firestore/cardContent';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
 import { ApiFailure } from './http';
+import { refuseInTrash } from './inTrash';
 import { readTakeBack, takeBack } from './origins';
 import { becameReachable, hiddenResonance } from './resonate';
 import { summaryFields } from './summary';
@@ -13,7 +14,7 @@ export interface ApplyEditResult {
   slug: string | null;
   /** False when there was no pending edit to apply (a retry after success lands here). */
   applied: boolean;
-  /** The card, profile and landing pages the revision made stale, for the route to revalidate (never returned). */
+  /** The card and landing pages the revision made stale, for the route to revalidate (never returned; never the profile, see ./cards). */
   stale: string[];
   /** The revision made a published resonance reachable: the route reaches its original after the response (never returned). */
   reaches: boolean;
@@ -41,16 +42,19 @@ export interface ApplyEditResult {
  * as a PATCH hiding it is (hiddenResonance). An edit that would leave
  * the card anonymous and for connections only is refused, as a PATCH is
  * (anonymousForConnections) — unless the card is that way already and the
- * edit keeps both as they are, so an older card stays editable.
+ * edit keeps both as they are, so an older card stays editable. A card in
+ * the trash takes no edit until it is restored (409, ./inTrash).
  */
 export async function applyCardEdit(db: Firestore, uid: string, id: string): Promise<ApplyEditResult> {
   if (isReservedId(id)) throw new ApiFailure('not_found', 'No such card.');
   const ref = db.doc(`cards/${id}`);
   const editRef = db.doc(`cards/${id}/edits/current`);
   return db.runTransaction(async (tx) => {
-    const [snap, edit, me] = await Promise.all([tx.get(ref), tx.get(editRef), tx.get(db.doc(`users/${uid}`))]);
+    const [snap, edit] = await Promise.all([tx.get(ref), tx.get(editRef)]);
     // Someone else's card is as absent as a missing one.
     if (!snap.exists || snap.get('authorId') !== uid) throw new ApiFailure('not_found', 'No such card.');
+    // Restored first: its working copy waits (the restore sets its visibility straight).
+    refuseInTrash(snap);
     if (snap.get('publishedAt') == null) {
       throw new ApiFailure('invalid_request', 'A draft saves as you write; publish it instead.');
     }
@@ -87,12 +91,10 @@ export async function applyCardEdit(db: Firestore, uid: string, id: string): Pro
     takeBack(tx, hiddenResonance(after) ? await readTakeBack(tx, db, uid, id) : []);
     tx.set(ref, fields, { merge: true });
     tx.delete(editRef);
-    // Its page under both names, its author's profile (which lists it — unless
-    // it just went private or anonymous), and the landing page if it was or is
-    // public there.
+    // Its page under both names, and the landing page if it was or is public
+    // there — never its author's profile, whose HTML holds no cards (./cards).
     const stale = [
       ...cardPagePaths({ id, slug }),
-      ...profilePagePaths(me.get('handle')),
       ...landingPagePaths(snap.data(), { visibility: fields.visibility, publishedAt: snap.get('publishedAt') }),
     ];
     const reaches = becameReachable(snap.data()!, after);

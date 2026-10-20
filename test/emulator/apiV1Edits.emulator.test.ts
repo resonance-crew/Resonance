@@ -82,7 +82,8 @@ describe('applyCardEdit', () => {
       // The route revalidates these after its response: the card under both
       // names, the profile listing it, and the landing page it was public on
       // (this edit took it to connections-only).
-      stale: ['/card/live', '/card/a-quiet-night', '/u/小安', `/u/${encodeURIComponent('小安')}`, '/'],
+      // Never the author's profile (its HTML holds no cards; lib/api/v1/cards).
+      stale: ['/card/live', '/card/a-quiet-night', '/'],
       // No resonance to reach (it answers no card).
       reaches: false,
     });

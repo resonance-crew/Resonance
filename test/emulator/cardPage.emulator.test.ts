@@ -105,6 +105,22 @@ describe('card page server read', () => {
     expect(toCardSeed(loaded.id, loaded.card, loaded.author)).toEqual({ id: key, view: null });
   });
 
+  // A card in the trash is private while there: its page is exactly a private card's, an anonymous one's too.
+  it.each([
+    ['in-the-trash', {}],
+    ['anon-in-the-trash', { anonymous: true }],
+  ] as const)('gives only the id of %s, as of a private card', async (key, extra) => {
+    await card(key, {
+      ...extra,
+      visibility: 'private',
+      trashedAt: at(5_000_000),
+      trashedFrom: { visibility: 'public', referenceCardId: null },
+    });
+    const [loaded, priv] = await Promise.all([readCardForPage(db, key), readCardForPage(db, 'private-diary')]);
+    expect(loaded).toEqual({ ...priv, id: key });
+    expect(toCardSeed(loaded.id, loaded.card, loaded.author)).toEqual({ ...toCardSeed(priv.id, priv.card, priv.author), id: key });
+  });
+
   it('resolves a slug to the card that holds it, like every other resolver', async () => {
     const loaded = await readCardForPage(db, 'shared-slug');
     expect(loaded.id).toBe('first-holder');

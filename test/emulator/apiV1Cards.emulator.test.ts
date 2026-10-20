@@ -19,9 +19,8 @@ vi.mock('@/lib/recommend/vectorStore', () => ({ getVectorStore: () => mocks.stor
 
 // The card box's own changes through the v1 API against the Firestore
 // emulator: visibility, anonymity and deleting — owner only, and each naming
-// the cached pages (card by id and slug, the author's profile, the landing
-// page that lists the latest public cards) the route revalidates after its
-// response.
+// the cached pages (card by id and slug, the landing page that lists the
+// latest public cards) the route revalidates after its response.
 
 const PROJECT = 'demo-resonance-api-cards';
 let app: App;
@@ -40,7 +39,9 @@ afterAll(async () => {
   await deleteApp(app);
 });
 
-const PAGES = ['/card/live', '/card/a-quiet-night', '/u/小安', `/u/${encodeURIComponent('小安')}`, '/'];
+// Never the author's profile: its HTML holds no cards, and starting its cache
+// afresh as an anonymous card changes would point at who wrote it.
+const PAGES = ['/card/live', '/card/a-quiet-night', '/'];
 
 beforeEach(async () => {
   await fetch(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, {
@@ -367,7 +368,7 @@ describe('the recommendation vectors of a card whose visibility changes (PATCH /
 describe('deleteCard (DELETE /cards/{id})', () => {
   it('removes the card, its pending edit and its recommendation vectors, naming its pages', async () => {
     await db.doc('cards/live/edits/current').set({ story: 'half-written' });
-    const { stale } = await deleteCard(db, 'alice', 'live', new FirestoreVectorStore(db));
+    const { stale } = await deleteCard(db, 'alice', 'live', { vectors: new FirestoreVectorStore(db) });
     expect(stale).toEqual(PAGES);
     expect((await db.doc('cards/live').get()).exists).toBe(false);
     expect((await db.doc('cards/live/edits/current').get()).exists).toBe(false);
@@ -388,7 +389,7 @@ describe('deleteCard (DELETE /cards/{id})', () => {
     await db.doc('users/carol/blocks/alice').set({ blockedUid: 'alice' });
     const withheld = await sendNote(db, 'carol', { cardId: 'live', text: 'hi again' });
     const elsewhere = await sendNote(db, 'carol', { cardId: 'bobs', text: 'to bob' });
-    await deleteCard(db, 'alice', 'live', new FirestoreVectorStore(db));
+    await deleteCard(db, 'alice', 'live', { vectors: new FirestoreVectorStore(db) });
     expect((await db.doc(`notes/${delivered.id}`).get()).exists).toBe(false);
     expect((await db.doc(`notes/${withheld.id}`).get()).exists).toBe(false);
     expect((await db.doc(`notes/${elsewhere.id}`).get()).exists).toBe(true);
@@ -404,7 +405,7 @@ describe('deleteCard (DELETE /cards/{id})', () => {
     console.error = () => {};
     let tried = 0;
     try {
-      await deleteCard(db, 'alice', 'live', new FirestoreVectorStore(db));
+      await deleteCard(db, 'alice', 'live', { vectors: new FirestoreVectorStore(db) });
       tried = underneath.mock.calls.length;
     } finally {
       console.error = quiet;
@@ -418,23 +419,23 @@ describe('deleteCard (DELETE /cards/{id})', () => {
 
   it("names only the id page of a card without a slug (a draft)", async () => {
     await db.doc('cards/draft').set({ authorId: 'alice', thoughtCore: '草稿', story: '', visibility: 'public', publishedAt: null });
-    const { stale } = await deleteCard(db, 'alice', 'draft', new FirestoreVectorStore(db));
-    expect(stale).toEqual(['/card/draft', '/u/小安', `/u/${encodeURIComponent('小安')}`]);
+    const { stale } = await deleteCard(db, 'alice', 'draft', { vectors: new FirestoreVectorStore(db) });
+    expect(stale).toEqual(['/card/draft']);
   });
 
   it("is not_found for someone else's card, and for one already deleted (a retry)", async () => {
-    expect((await failure(deleteCard(db, 'bob', 'live', new FirestoreVectorStore(db)))).code).toBe('not_found');
+    expect((await failure(deleteCard(db, 'bob', 'live', { vectors: new FirestoreVectorStore(db) }))).code).toBe('not_found');
     expect((await db.doc('cards/live').get()).exists).toBe(true);
     expect((await db.doc('cardVectors/live__insight').get()).exists).toBe(true);
-    await deleteCard(db, 'alice', 'live', new FirestoreVectorStore(db));
-    expect((await failure(deleteCard(db, 'alice', 'live', new FirestoreVectorStore(db)))).code).toBe('not_found');
+    await deleteCard(db, 'alice', 'live', { vectors: new FirestoreVectorStore(db) });
+    expect((await failure(deleteCard(db, 'alice', 'live', { vectors: new FirestoreVectorStore(db) }))).code).toBe('not_found');
   });
 
   it('still deletes the card when its vectors cannot be removed', async () => {
     const quiet = console.error;
     console.error = () => {};
     try {
-      await deleteCard(db, 'alice', 'live', { deleteByCard: async () => { throw new Error('vector store down'); } });
+      await deleteCard(db, 'alice', 'live', { vectors: { deleteByCard: async () => { throw new Error('vector store down'); } } });
     } finally {
       console.error = quiet;
     }
@@ -454,7 +455,7 @@ describe('a card id Firestore keeps for itself', () => {
     await missing(updateCard(db, 'alice', '__x__', { visibility: 'private' }));
     await missing(publishCard(db, 'alice', '__x__', async () => 'x'));
     await missing(applyCardEdit(db, 'alice', '__x__'));
-    await missing(deleteCard(db, 'alice', '__x__', new FirestoreVectorStore(db)));
+    await missing(deleteCard(db, 'alice', '__x__', { vectors: new FirestoreVectorStore(db) }));
     expect((await getCardsByKeys(db, 'bob', ['__x__', 'live'])).cards.map((c) => c.id)).toEqual(['live']);
     expect((await card()).visibility).toBe('public');
   });

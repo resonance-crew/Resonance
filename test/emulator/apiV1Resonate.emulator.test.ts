@@ -679,7 +679,7 @@ describe('unresonate (DELETE /cards/{id}/resonances/{cardId})', () => {
       it('the connection goes with it, and its pending edit', async () => {
         await resonateWith(db, 'alice', 'orig', 'mine');
         await db.doc('cards/mine/edits/current').set({ thoughtCore: 'wip', story: 'wip', authorId: 'alice' });
-        await deleteCard(db, 'alice', 'mine', { deleteByCard: async () => {} });
+        await deleteCard(db, 'alice', 'mine', { vectors: { deleteByCard: async () => {} } });
         expect((await db.doc('cards/mine').get()).exists).toBe(false);
         expect((await db.doc('cards/mine/edits/current').get()).exists).toBe(false);
         expect(await connected()).toBe(false);
@@ -689,7 +689,7 @@ describe('unresonate (DELETE /cards/{id}/resonances/{cardId})', () => {
       it("but not once the original's author has written to her", async () => {
         await resonateWith(db, 'alice', 'orig', 'mine');
         await sendMessage(db, 'bob', { to: 'alice', text: 'hi' });
-        await deleteCard(db, 'alice', 'mine', { deleteByCard: async () => {} });
+        await deleteCard(db, 'alice', 'mine', { vectors: { deleteByCard: async () => {} } });
         expect(await connected()).toBe(true);
       });
 
@@ -717,7 +717,7 @@ describe('unresonate (DELETE /cards/{id}/resonances/{cardId})', () => {
             };
           },
         });
-        await deleteCard(racing, 'alice', 'mine', { deleteByCard: async () => {} });
+        await deleteCard(racing, 'alice', 'mine', { vectors: { deleteByCard: async () => {} } });
         expect((await db.doc('cards/mine').get()).exists).toBe(false);
         expect(await connected()).toBe(false);
       });
@@ -726,7 +726,7 @@ describe('unresonate (DELETE /cards/{id}/resonances/{cardId})', () => {
       it('racing a resonance for real: the card gone, never the connection left without it', async () => {
         await Promise.allSettled([
           resonateWith(db, 'alice', 'orig', 'mine'),
-          deleteCard(db, 'alice', 'mine', { deleteByCard: async () => {} }),
+          deleteCard(db, 'alice', 'mine', { vectors: { deleteByCard: async () => {} } }),
         ]);
         expect((await db.doc('cards/mine').get()).exists).toBe(false);
         expect(await connected()).toBe(false);

@@ -131,13 +131,15 @@ describe('pushConnectionCard', () => {
     expect((await pushConnectionCard(db, 'walk2', sender, { now: NOW })).outcomes).toEqual({ blocked: 2 });
   });
 
-  it('announces no card that is anonymous, not public, unpublished or gone — nor one by an author without a pen name', async () => {
+  it('announces no card that is anonymous, not public, unpublished, in the trash or gone — nor one by an author without a pen name', async () => {
     const { sender, sent } = fakeFcm();
     await card('masked', { anonymous: true });
     await card('friends', { visibility: 'connections' });
     await card('mine', { visibility: 'private' });
     await card('draft', { publishedAt: null });
-    for (const id of ['masked', 'friends', 'mine', 'draft', 'missing']) {
+    // Moved to the trash before its announcement went out: private while there.
+    await card('trashed', { visibility: 'private', trashedAt: new Date(), trashedFrom: { visibility: 'public', referenceCardId: null } });
+    for (const id of ['masked', 'friends', 'mine', 'draft', 'trashed', 'missing']) {
       expect(await pushConnectionCard(db, id, sender, { now: NOW }), id).toMatchObject({ skipped: 'not-announceable', recipients: 0 });
     }
     await db.doc('users/bob').set({ handle: '' });

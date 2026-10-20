@@ -294,6 +294,25 @@ describe('purgeAccount', () => {
     expect(await exists(`notes/${withheld.id}`)).toBe(false);
   });
 
+  // A card in the trash is still its author's card (cards by authorId): the
+  // account takes it, with what is under it and the notes a named one kept.
+  it('removes the cards in its trash, with their pending edits and notes', async () => {
+    await seedWorld();
+    const at = Timestamp.fromDate(new Date('2026-09-30T00:00:00Z'));
+    const trash = { visibility: 'private', trashedAt: at, trashedFrom: { visibility: 'public', referenceCardId: null } };
+    await Promise.all([
+      db.doc('cards/alice-trashed').set({ authorId: 'alice', thoughtCore: 'T', story: 's', anonymous: false, publishedAt: at, ...trash }),
+      db.doc('cards/alice-trashed/edits/current').set({ story: 'half' }),
+      db.doc('cards/alice-trashed-draft').set({ authorId: 'alice', thoughtCore: 'D', story: 's', publishedAt: null, ...trash }),
+      db.doc('notes/on-trashed').set({ cardId: 'alice-trashed', fromUserId: 'bob', toUserId: 'alice', text: 'hi', readAt: null, createdAt: at }),
+    ]);
+    await purgeAccount({ db, deleteAuthUser: vi.fn(async () => {}) }, 'alice');
+    expect(await exists('cards/alice-trashed')).toBe(false);
+    expect(await exists('cards/alice-trashed/edits/current')).toBe(false);
+    expect(await exists('cards/alice-trashed-draft')).toBe(false);
+    expect(await exists('notes/on-trashed')).toBe(false);
+  });
+
   it('removes the notes on a card before the card, so a purge cut short leaves none its next run could no longer find', async () => {
     const at = Timestamp.fromDate(new Date('2026-09-30T00:00:00Z'));
     const writer = db.bulkWriter();

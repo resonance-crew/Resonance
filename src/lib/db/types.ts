@@ -1,3 +1,5 @@
+import type { TrashedFrom } from '@/lib/cards/trash';
+
 export type Locale = 'zh-TW' | 'en' | 'ja' | 'ko' | 'es';
 export type Visibility = 'public' | 'connections' | 'private';
 
@@ -68,6 +70,16 @@ export interface Card {
    * URL is here, and the plain link otherwise.
    */
   linkPreviews?: LinkPreview[];
+  /**
+   * When its author moved it to the trash (server-only: POST
+   * /api/v1/cards/{id}/trash); absent on a card that isn't there. While it
+   * is, the card is private to everyone and answers nothing (its
+   * `referenceCardId` parked in `trashedFrom`), and it is deleted for good
+   * TRASH_DAYS later (lib/cards/trash).
+   */
+  trashedAt?: Date | null;
+  /** What restoring it brings back (server-only, beside `trashedAt`). */
+  trashedFrom?: TrashedFrom | null;
 }
 
 /**

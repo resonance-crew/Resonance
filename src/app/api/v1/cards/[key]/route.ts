@@ -3,7 +3,7 @@ import { ApiFailure, parse, routeParam, withUser, type RouteContext } from '@/li
 import { deleteCard, updateCard } from '@/lib/api/v1/cards';
 import { tryReachResonance } from '@/lib/api/v1/resonate';
 import { getCardDetail } from '@/lib/api/v1/reads';
-import { CardDetailQuery, CardIdParam, CardKey, UpdateCardRequest } from '@/lib/api/v1/schemas';
+import { CardDetailQuery, CardIdParam, CardKey, DeleteCardQuery, UpdateCardRequest } from '@/lib/api/v1/schemas';
 import { revalidateLocalized } from '@/lib/api/revalidate';
 import { getAdminDb } from '@/lib/db/firestore/admin';
 import { BRIEF, OWN, cachedJson } from '@/lib/api/v1/cache';
@@ -41,10 +41,17 @@ export const PATCH = withUser(async (user, req, ctx: RouteContext<'key'>) => {
   return NextResponse.json(card);
 });
 
-/** DELETE /api/v1/cards/{id} — delete your card, draft or published; a resonance takes back the connection it made (see deleteCard). */
-export const DELETE = withUser(async (user, _req, ctx: RouteContext<'key'>) => {
+/**
+ * DELETE /api/v1/cards/{id}?onlyIfTrashed= — delete your card for good, draft
+ * or published; a resonance takes back the connection it made (see
+ * deleteCard). Clients with a trash move a card there first (POST …/trash),
+ * and their 永久刪除 sends `onlyIfTrashed=true`: a card restored meanwhile is
+ * 409 and stays.
+ */
+export const DELETE = withUser(async (user, req, ctx: RouteContext<'key'>) => {
   const id = parse(CardIdParam, await routeParam(ctx, 'key'));
-  const { stale } = await deleteCard(getAdminDb(), user.id, id);
+  const { onlyIfTrashed } = parse(DeleteCardQuery, Object.fromEntries(new URL(req.url).searchParams));
+  const { stale } = await deleteCard(getAdminDb(), user.id, id, { onlyIfTrashed: onlyIfTrashed === 'true' });
   after(() => void revalidateLocalized(stale));
   return new NextResponse(null, { status: 204 });
 });
