@@ -394,24 +394,6 @@ private fun ShelfTabs(selection: TabGetCardBox, edge: Dp, air: CardBoxAir, openM
     }
 }
 
-/**
- * A strip that scrolls sideways fades out at an edge with more beyond it, so a tab cut by the
- * screen's edge reads as "more this way" rather than as broken.
- */
-private fun Modifier.fadingEdges(scroll: ScrollState, width: Dp = 32.dp): Modifier =
-    graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
-        drawContent()
-        val w = width.toPx()
-        if (scroll.canScrollForward) drawRect(
-            Brush.horizontalGradient(listOf(Color.Transparent, Color.Black), startX = size.width - w, endX = size.width),
-            topLeft = Offset(size.width - w, 0f), size = Size(w, size.height), blendMode = BlendMode.DstOut,
-        )
-        if (scroll.canScrollBackward) drawRect(
-            Brush.horizontalGradient(listOf(Color.Black, Color.Transparent), startX = 0f, endX = w),
-            size = Size(w, size.height), blendMode = BlendMode.DstOut,
-        )
-    }
-
 private fun shelfTitle(s: TabGetCardBox) = when (s) {
     TabGetCardBox.published -> L10n.Me.Tabs.published
     TabGetCardBox.`private` -> L10n.Me.Tabs.private

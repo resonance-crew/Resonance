@@ -1,9 +1,5 @@
 package com.resonance.app.ui
 
-import androidx.compose.ui.unit.dp
-import com.resonance.design.ModalErrorGap
-import com.resonance.design.ModalErrorTuck
-import com.resonance.design.ModalGap
 import com.resonance.kit.api.ApiFailure
 import com.resonance.kit.l10n.Strings
 import org.junit.After
@@ -14,11 +10,11 @@ import java.io.File
 import java.io.IOException
 
 /**
- * The publish panel says why publishing (or saving changes) didn't go through in its own words
+ * The publish step says why publishing (or saving changes) didn't go through in its own words
  * (write.publishPanel.*) — never the server's English ("A card needs a title before it is
  * published.") or the network's ("Unable to resolve host…"): a card gone can't be found; the
  * day's publishing used up waits for tomorrow; anything else didn't publish, or for an update
- * didn't save — try again. Its error line stands 12 over its buttons, as in every dialog.
+ * didn't save — try again.
  */
 class PublishErrorTest {
     private val language = Strings.language
@@ -66,10 +62,10 @@ class PublishErrorTest {
         assertEquals("That's the limit for today — try again tomorrow", publishError(ApiFailure("rate_limited", "Too many requests.", 429), updating = false))
     }
 
-    @Test fun itsErrorLineStandsTwelveOverTheButtonsAsInEveryDialog() {
-        // The column's gap, less what the error line gives back at its foot, plus the air the actions keep.
-        assertEquals(ModalErrorGap, ModalGap - ModalErrorTuck + publishActionsTop(afterError = true))
-        // Under the divider, with no error, the column's own gap is all.
-        assertEquals(0.dp, publishActionsTop(afterError = false))
+    @Test fun droppingARevisionThatFailsSaysItDidntGoThrough() {
+        // 捨棄修改 and the trash's moves say the safety copy's "didn't go through" for anything but the day's limit or a card gone.
+        assertEquals("沒完成，再試一次", failureText(ApiFailure("internal", "Something went wrong.", 500), "沒完成，再試一次"))
+        assertEquals("找不到這張卡片", failureText(ApiFailure("not_found", "No such card.", 404), "沒完成，再試一次"))
+        assertEquals("沒完成，再試一次", failureText(null, "沒完成，再試一次"))
     }
 }
