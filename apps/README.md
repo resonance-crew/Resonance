@@ -372,3 +372,20 @@ then the Latin face per glyph), a Latin one in Playfair over DM Sans. A story's 
 The share image's numbers are `ShareCardRecipe` (`native/fixtures/share-card.json`), its words
 `SharePassages.opening` (`share-passages.json`), and the trash's calls `WritingApi.trashCard` / `restoreCard` /
 `deleteCard(onlyIfTrashed)` / `emptyTrash`, with `Trash`'s clock over `FeedCard.trashedAt` / `purgeAt`.
+
+The writer (writer.spec, Android): `WriteScreen` is two steps over one `WriteModel`. Writing is the bare title
+(`StoryType`'s title style, by the script the island reports) and the island as the bare page (`StoryCanvas`:
+`?layout=canvas&locale=`, its editable root's min-height set by the host so a tap under the words lands in the
+story), with `StoryFormatBar` docked on the keyboard while the story has the focus and the page kept above it from
+the island's `caret` message (`caretScroll`); 下一步 sits in the bar (floating at the pane's top end at the split).
+The publish step (`PublishStep` in WriteScreen.kt) is composed the first time it opens and stays, the writing step
+kept composed — and drawn without a standing graphics layer, which would freeze the WebView's size — under it; its
+choices are the draft's values (`setAudience` coerces an anonymous card for connections to public in one change).
+`WriteModel` takes `DraftStore` (DraftService), `WriterCalls` (`WritingApi.writerCalls()`) and `StoryEditor` (the
+bridge), so `WriterStepsTest` drives the steps with stand-ins; a write the rules refuse or a 409 'This card is in the
+trash.' is read again (`DraftStore.isTrashed`) and turns into the trashed line with 還原. The trash's moves go
+through `TrashCenter` (`LocalTrash`, one per account in `MainTabs` beside the toasts, with `RestoredAloneNotice`), so
+a toast's 復原 outlives the card's ⋯; `CardActionsMenu`'s 刪除 trashes (asking only per `trashAsk`),
+`TrashActionsMenu` restores or deletes for good, the card box's last shelf is 垃圾桶, `TrashedCardBanner` heads the
+owner's trashed card page, and the thought map parks a trashed card's node (`ThoughtMapStore.parkNodes`) so a
+restore puts it back in place.
