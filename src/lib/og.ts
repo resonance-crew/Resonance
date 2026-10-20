@@ -71,7 +71,12 @@ export function buildCardMetadata(opts: {
     card.media?.type === 'image' && card.media.url
       ? shareImage(base, 'card', card.id, card.media.url, storageBases)
       : `${base}${OG_COVER_PATH}`;
-  const url = card.slug ? `${base}/${locale}/card/${card.slug}` : undefined;
+  // The address platforms keep for the card (canonical, og:url — Facebook and
+  // LINE resolve a shared link to og:url). An anonymous card's is its id: a
+  // slug that collided carries `-{handle}` (lib/ai/slugify) and never changes,
+  // so one assigned while the card was named would name its author.
+  const key = card.anonymous ? card.id : card.slug;
+  const url = key ? `${base}/${locale}/card/${key}` : undefined;
 
   return {
     title,

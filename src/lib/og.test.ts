@@ -102,6 +102,22 @@ describe('buildCardMetadata', () => {
     const meta = buildCardMetadata({ card, author, locale: 'en', base, anonymousLabel: 'Anonymous' });
     expect((meta.openGraph as { authors?: string[] }).authors).toBeUndefined();
   });
+
+  // A slug that collided carries the author's handle (slugify) and never changes: one assigned
+  // while the card was named would name its author in the address Facebook and LINE keep.
+  it("gives an anonymous card's canonical and og:url its id, never its slug", () => {
+    const card: Card = { ...baseCard, slug: 'a-quiet-turning-point-mira', anonymous: true };
+    const meta = buildCardMetadata({ card, author: null, locale: 'zh-TW', base, anonymousLabel: '匿名' });
+    expect(meta.alternates?.canonical).toBe('https://resonance.example/zh-TW/card/card1');
+    expect((meta.openGraph as { url?: string }).url).toBe('https://resonance.example/zh-TW/card/card1');
+    expect(JSON.stringify(meta)).not.toContain('mira');
+  });
+
+  it("keeps a named card's slug as its canonical and og:url", () => {
+    const meta = buildCardMetadata({ card: baseCard, author, locale: 'zh-TW', base, anonymousLabel: '匿名' });
+    expect(meta.alternates?.canonical).toBe('https://resonance.example/zh-TW/card/a-quiet-turning-point');
+    expect((meta.openGraph as { url?: string }).url).toBe('https://resonance.example/zh-TW/card/a-quiet-turning-point');
+  });
 });
 
 describe('buildProfileMetadata', () => {
