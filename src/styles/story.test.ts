@@ -71,3 +71,39 @@ describe("the island's :root", () => {
     for (const value of root.values()) expect(value).not.toMatch(/oklch\(|color-mix\(/);
   });
 });
+
+describe('the story stylesheet’s rules', () => {
+  /** A selector list split at its own commas, not those inside :is(…) or :not(…). */
+  const topLevel = (list: string) => {
+    const out = [''];
+    let depth = 0;
+    for (const ch of list) {
+      if (ch === '(') depth++;
+      if (ch === ')') depth--;
+      if (ch === ',' && depth === 0) out.push('');
+      else out[out.length - 1] += ch;
+    }
+    return out;
+  };
+  /** Each rule's selector list and body, comments out. */
+  const rules = [...storyCss.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({
+    selectors: topLevel(m[1]).map((s) => s.trim().replace(/\s+/g, ' ')),
+    body: m[2],
+  }));
+  const ruleFor = (selector: string) => rules.find((r) => r.selectors.includes(selector));
+
+  it('sets a Latin word’s apostrophe in the Latin face of a CJK story’s headings and title', () => {
+    for (const selector of [
+      ".story-prose:not([data-script='latin']) :is(h1, h2, h3, h4, h5, h6) .story-latin-mark",
+      ".story-title:not([data-script='latin']) .story-latin-mark",
+    ]) {
+      expect(ruleFor(selector)?.body, selector).toMatch(/font-family:\s*var\(--font-playfair/);
+    }
+  });
+
+  it('keeps a CJK title’s clauses whole, and nothing else in that rule', () => {
+    const rule = ruleFor('.story-title .story-clause');
+    expect(rule?.selectors).toEqual(['.story-title .story-clause']);
+    expect(rule?.body.trim()).toBe('display: inline-block;');
+  });
+});

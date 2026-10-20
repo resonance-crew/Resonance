@@ -371,12 +371,12 @@
 }
 
 .story-prose:not([data-script='latin']) :is(h1, h2, h3, h4, h5, h6) .story-latin-mark,
+.story-title:not([data-script='latin']) .story-latin-mark {
+  font-family: var(--font-playfair, 'Playfair Display'), var(--s-heading-face);
+}
+
 /* A CJK title's clauses (CardDetail/LatinMarkText): each one whole on a line
    when it fits, so a long title breaks after its punctuation, not mid-phrase. */
 .story-title .story-clause {
   display: inline-block;
-}
-
-.story-title:not([data-script='latin']) .story-latin-mark {
-  font-family: var(--font-playfair, 'Playfair Display'), var(--s-heading-face);
 }
