@@ -135,6 +135,94 @@ object Tokens {
     const val FeedGap = 24f
     /** --feed-three-col-min */
     const val FeedThreeColMin = 960f
+    /** --story-size */
+    const val StorySize = 18f
+    /** --story-size-compact */
+    const val StorySizeCompact = 17f
+    /** --story-size-latin */
+    const val StorySizeLatin = 20f
+    /** --story-size-latin-compact */
+    const val StorySizeLatinCompact = 18f
+    /** --story-leading */
+    const val StoryLeading = 1.85f
+    /** --story-leading-compact */
+    const val StoryLeadingCompact = 1.8f
+    /** --story-leading-latin */
+    const val StoryLeadingLatin = 1.65f
+    /** --story-leading-latin-compact */
+    const val StoryLeadingLatinCompact = 1.6f
+    /** --story-tracking */
+    const val StoryTracking = 0.03f
+    /** --story-para-gap */
+    const val StoryParaGap = 1.3f
+    /** --story-list-indent */
+    const val StoryListIndent = 1.6f
+    /** --story-item-gap */
+    const val StoryItemGap = 0.3f
+    /** --story-bold */
+    const val StoryBold = 600f
+    /** --story-code */
+    const val StoryCode = 0.88f
+    /** --story-title */
+    const val StoryTitle = 36f
+    /** --story-title-compact */
+    const val StoryTitleCompact = 28f
+    /** --story-title-latin */
+    const val StoryTitleLatin = 40f
+    /** --story-title-latin-compact */
+    const val StoryTitleLatinCompact = 32f
+    /** --story-title-leading */
+    const val StoryTitleLeading = 1.4f
+    /** --story-title-leading-latin */
+    const val StoryTitleLeadingLatin = 1.2f
+    /** --story-heading-leading */
+    const val StoryHeadingLeading = 1.4f
+    /** --story-heading-tracking */
+    const val StoryHeadingTracking = 0.02f
+    /** --story-heading-weight */
+    const val StoryHeadingWeight = 600f
+    /** --story-heading-weight-latin */
+    const val StoryHeadingWeightLatin = 700f
+    /** --story-h2 */
+    const val StoryH2 = 1.3f
+    /** --story-h3 */
+    const val StoryH3 = 1.12f
+    /** --story-heading-above */
+    const val StoryHeadingAbove = 2f
+    /** --story-h2-below */
+    const val StoryH2Below = 0.6f
+    /** --story-h3-below */
+    const val StoryH3Below = 0.5f
+    /** --story-block-gap */
+    const val StoryBlockGap = 32f
+    /** --story-block-gap-compact */
+    const val StoryBlockGapCompact = 24f
+    /** --story-rule-gap */
+    const val StoryRuleGap = 40f
+    /** --story-rule-gap-compact */
+    const val StoryRuleGapCompact = 32f
+    /** --story-cover-gap */
+    const val StoryCoverGap = 28f
+    /** --story-cover-gap-compact */
+    const val StoryCoverGapCompact = 20f
+    /** --story-meta-gap */
+    const val StoryMetaGap = 16f
+    /** --story-lead-gap */
+    const val StoryLeadGap = 40f
+    /** --story-lead-gap-compact */
+    const val StoryLeadGapCompact = 32f
+    /** --story-end-gap */
+    const val StoryEndGap = 40f
+    /** --story-end-gap-compact */
+    const val StoryEndGapCompact = 32f
+    /** --story-meta-size */
+    const val StoryMetaSize = 14f
+    /** --story-meta-size-compact */
+    const val StoryMetaSizeCompact = 13f
+    /** --story-byline-avatar */
+    const val StoryBylineAvatar = 40f
+    /** --story-rail-gap */
+    const val StoryRailGap = 48f
     /** --radius-sm */
     const val RadiusSm = 12f
     /** --radius-md */

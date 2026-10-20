@@ -131,6 +131,94 @@ public nonisolated enum Tokens {
     public static let feedGap: CGFloat = 24
     /// --feed-three-col-min
     public static let feedThreeColMin: CGFloat = 960
+    /// --story-size
+    public static let storySize: CGFloat = 18
+    /// --story-size-compact
+    public static let storySizeCompact: CGFloat = 17
+    /// --story-size-latin
+    public static let storySizeLatin: CGFloat = 20
+    /// --story-size-latin-compact
+    public static let storySizeLatinCompact: CGFloat = 18
+    /// --story-leading
+    public static let storyLeading: CGFloat = 1.85
+    /// --story-leading-compact
+    public static let storyLeadingCompact: CGFloat = 1.8
+    /// --story-leading-latin
+    public static let storyLeadingLatin: CGFloat = 1.65
+    /// --story-leading-latin-compact
+    public static let storyLeadingLatinCompact: CGFloat = 1.6
+    /// --story-tracking
+    public static let storyTracking: CGFloat = 0.03
+    /// --story-para-gap
+    public static let storyParaGap: CGFloat = 1.3
+    /// --story-list-indent
+    public static let storyListIndent: CGFloat = 1.6
+    /// --story-item-gap
+    public static let storyItemGap: CGFloat = 0.3
+    /// --story-bold
+    public static let storyBold: CGFloat = 600
+    /// --story-code
+    public static let storyCode: CGFloat = 0.88
+    /// --story-title
+    public static let storyTitle: CGFloat = 36
+    /// --story-title-compact
+    public static let storyTitleCompact: CGFloat = 28
+    /// --story-title-latin
+    public static let storyTitleLatin: CGFloat = 40
+    /// --story-title-latin-compact
+    public static let storyTitleLatinCompact: CGFloat = 32
+    /// --story-title-leading
+    public static let storyTitleLeading: CGFloat = 1.4
+    /// --story-title-leading-latin
+    public static let storyTitleLeadingLatin: CGFloat = 1.2
+    /// --story-heading-leading
+    public static let storyHeadingLeading: CGFloat = 1.4
+    /// --story-heading-tracking
+    public static let storyHeadingTracking: CGFloat = 0.02
+    /// --story-heading-weight
+    public static let storyHeadingWeight: CGFloat = 600
+    /// --story-heading-weight-latin
+    public static let storyHeadingWeightLatin: CGFloat = 700
+    /// --story-h2
+    public static let storyH2: CGFloat = 1.3
+    /// --story-h3
+    public static let storyH3: CGFloat = 1.12
+    /// --story-heading-above
+    public static let storyHeadingAbove: CGFloat = 2
+    /// --story-h2-below
+    public static let storyH2Below: CGFloat = 0.6
+    /// --story-h3-below
+    public static let storyH3Below: CGFloat = 0.5
+    /// --story-block-gap
+    public static let storyBlockGap: CGFloat = 32
+    /// --story-block-gap-compact
+    public static let storyBlockGapCompact: CGFloat = 24
+    /// --story-rule-gap
+    public static let storyRuleGap: CGFloat = 40
+    /// --story-rule-gap-compact
+    public static let storyRuleGapCompact: CGFloat = 32
+    /// --story-cover-gap
+    public static let storyCoverGap: CGFloat = 28
+    /// --story-cover-gap-compact
+    public static let storyCoverGapCompact: CGFloat = 20
+    /// --story-meta-gap
+    public static let storyMetaGap: CGFloat = 16
+    /// --story-lead-gap
+    public static let storyLeadGap: CGFloat = 40
+    /// --story-lead-gap-compact
+    public static let storyLeadGapCompact: CGFloat = 32
+    /// --story-end-gap
+    public static let storyEndGap: CGFloat = 40
+    /// --story-end-gap-compact
+    public static let storyEndGapCompact: CGFloat = 32
+    /// --story-meta-size
+    public static let storyMetaSize: CGFloat = 14
+    /// --story-meta-size-compact
+    public static let storyMetaSizeCompact: CGFloat = 13
+    /// --story-byline-avatar
+    public static let storyBylineAvatar: CGFloat = 40
+    /// --story-rail-gap
+    public static let storyRailGap: CGFloat = 48
     /// --radius-sm
     public static let radiusSm: CGFloat = 12
     /// --radius-md

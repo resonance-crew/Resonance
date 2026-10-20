@@ -12,58 +12,11 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { INK, INK_LIGHT, INK_STRONG } from '../../src/lib/design/strokes';
+import { encode, linearSrgbToLinearP3, mix, mixWithBlack, parseOklch, srgbHex, toLinearSrgb, type Oklch } from './oklch';
 
 const root = resolve(__dirname, '../..');
 const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
 
-type Oklch = { L: number; C: number; H: number; alpha: number };
-
-function parseOklch(s: string): Oklch {
-  const m = /oklch\(\s*([\d.]+)(%?)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\s*\)/.exec(s);
-  if (!m) throw new Error(`not an oklch() color: ${s}`);
-  const L = m[2] === '%' ? Number(m[1]) / 100 : Number(m[1]);
-  return { L, C: Number(m[3]), H: Number(m[4]), alpha: m[5] ? Number(m[5]) : 1 };
-}
-
-/** CSS Color 5: color-mix(in oklch, c, black p) — black has no hue, so c's hue carries. */
-function mixWithBlack(c: Oklch, blackShare: number): Oklch {
-  const k = 1 - blackShare;
-  return { L: c.L * k, C: c.C * k, H: c.H, alpha: c.alpha };
-}
-
-/** CSS Color 5: color-mix(in oklch, a p, b) — shorter-arc hue interpolation. */
-function mix(a: Oklch, b: Oklch, p: number): Oklch {
-  let dh = b.H - a.H;
-  if (dh > 180) dh -= 360;
-  if (dh < -180) dh += 360;
-  const H = (((a.H + dh * (1 - p)) % 360) + 360) % 360;
-  return { L: a.L * p + b.L * (1 - p), C: a.C * p + b.C * (1 - p), H, alpha: a.alpha * p + b.alpha * (1 - p) };
-}
-
-// OKLCH → OKLab → linear sRGB (Björn Ottosson) → linear Display P3.
-function toLinearSrgb({ L, C, H }: Oklch): [number, number, number] {
-  const a = C * Math.cos((H * Math.PI) / 180);
-  const b = C * Math.sin((H * Math.PI) / 180);
-  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
-  return [
-    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
-  ];
-}
-function linearSrgbToLinearP3([r, g, b]: [number, number, number]): [number, number, number] {
-  return [
-    0.8224621 * r + 0.177538 * g,
-    0.0331941 * r + 0.9668058 * g,
-    0.0170827 * r + 0.0723974 * g + 0.9105199 * b,
-  ];
-}
-const encode = (x: number) => {
-  const v = Math.min(1, Math.max(0, x));
-  return v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055;
-};
 const r4 = (n: number) => Math.round(n * 10000) / 10000;
 
 interface Token {
@@ -79,11 +32,7 @@ function token(name: string, c: Oklch, source: string): Token {
   const lin = toLinearSrgb(c);
   const inSrgbGamut = lin.every((v) => v >= -1e-4 && v <= 1 + 1e-4);
   const p3 = linearSrgbToLinearP3(lin).map(encode).map(r4) as [number, number, number];
-  const hex = lin
-    .map(encode)
-    .map((v) => Math.round(v * 255).toString(16).padStart(2, '0'))
-    .join('');
-  return { name, source, p3, srgbHex: `#${hex}`, inSrgbGamut, alpha: c.alpha };
+  return { name, source, p3, srgbHex: srgbHex(c), inSrgbGamut, alpha: c.alpha };
 }
 
 const tokens: Token[] = [];

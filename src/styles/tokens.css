@@ -101,13 +101,87 @@
   /* The feed's content width from which the bordered grid takes 3 columns (else 2). */
   --feed-three-col-min: 960px;
 
+  /* ── A story's type: the reader, the writer and the apps ─────────────
+     One vocabulary for every surface that sets a story — the card page's
+     title and prose, the web writer, the apps' editor island
+     (scripts/native/build-editor.mjs copies these into its :root) and the
+     apps' readers (scripts/native/tokens.ts exports every plain px value and
+     unitless number to Tokens.swift / Tokens.kt). The rules that use them are
+     written once, in src/styles/story.css.
+     - A story is set by its script (src/lib/text/script.ts, data-script):
+       CJK — the default — puts a Ming title and headings over a Hei body,
+       both CJK-first, so Latin letters and digits inside Chinese come from
+       the CJK faces' own Latin; a Latin-script story keeps Playfair over
+       DM Sans (--font-heading / --font-body, which nothing here changes).
+     - Plain px, or a unitless number. A ratio multiplies the element's own
+       font size: CSS writes calc(var(--x) * 1em), the apps × size. Nothing
+       here may be a clamp() or carry another unit, or the apps get nothing.
+     - A -compact name is a phone (the web ≤ 640px, the apps' compact class)
+       and density="compact" at any width; the plain name every wider window.
+     - Tracking is em of the text it sets (CJK only: a Latin story's is 0).
+     designs/DESIGN.md (Story reader) says which surface takes which. */
+  --font-story-serif: var(--font-noto-serif-tc, 'Noto Serif TC'), var(--font-playfair, 'Playfair Display'), Georgia, serif;
+  --font-story-sans:  var(--font-noto-sans-tc, 'Noto Sans TC'), var(--font-dm-sans, 'DM Sans'), system-ui, sans-serif;
+  /* The body (CJK; -latin for a Latin-script story). The column is --measure. */
+  --story-size: 18px;
+  --story-size-compact: 17px;
+  --story-size-latin: 20px;
+  --story-size-latin-compact: 18px;
+  --story-leading: 1.85;
+  --story-leading-compact: 1.8;
+  --story-leading-latin: 1.65;
+  --story-leading-latin-compact: 1.6;
+  --story-tracking: 0.03;          /* em: CJK body, quotes, lists */
+  --story-para-gap: 1.3;           /* em after a paragraph, list, quote, code block, table */
+  --story-list-indent: 1.6;        /* em */
+  --story-item-gap: 0.3;           /* em above and below a list item */
+  --story-bold: 600;
+  --story-code: 0.88;              /* × the text around it */
+  /* The title. */
+  --story-title: 36px;
+  --story-title-compact: 28px;
+  --story-title-latin: 40px;
+  --story-title-latin-compact: 32px;
+  --story-title-leading: 1.4;
+  --story-title-leading-latin: 1.2;
+  /* Headings h2–h6 (a story's `#` is drawn as an h2), and the title's face. */
+  --story-heading-leading: 1.4;
+  --story-heading-tracking: 0.02;  /* em: CJK title and headings */
+  --story-heading-weight: 600;
+  --story-heading-weight-latin: 700;
+  --story-h2: 1.3;                 /* × the body */
+  --story-h3: 1.12;                /* × the body: h3–h6 */
+  --story-heading-above: 2;        /* em of the heading */
+  --story-h2-below: 0.6;           /* em of the heading */
+  --story-h3-below: 0.5;           /* em of the heading */
+  /* Blocks in the story: pictures, link cards, card embeds; the pen rule. */
+  --story-block-gap: 32px;
+  --story-block-gap-compact: 24px;
+  --story-rule-gap: 40px;
+  --story-rule-gap-compact: 32px;
+  /* The card page's head and foot around the story. */
+  --story-cover-gap: 28px;         /* cover → title */
+  --story-cover-gap-compact: 20px;
+  --story-meta-gap: 16px;          /* title → byline / meta row */
+  --story-lead-gap: 40px;          /* byline / meta row → story */
+  --story-lead-gap-compact: 32px;
+  --story-end-gap: 40px;           /* story → tags */
+  --story-end-gap-compact: 32px;
+  --story-meta-size: 14px;
+  --story-meta-size-compact: 13px;
+  --story-byline-avatar: 40px;
+  --story-rail-gap: 48px;          /* the text → the author rail */
+  /* Inline code and code blocks: the ink at a whisper. Story CSS only (the
+     island resolves it to an rgb() of its own, the apps their own tint). */
+  --story-code-tint: color-mix(in oklch, var(--color-text) 6%, transparent);
+
   /* Story images (article body + the editor, so both look the same).
-     A photo is its own beat in the text: it carries its own breathing room,
-     so nobody has to type blank lines around it. The height cap is what
-     keeps a portrait photo from running off the bottom of the screen —
-     tall shots stay readable beside the paragraphs instead of dwarfing
-     them. A blank line the writer adds on purpose is worth one more line
-     of space (see SpacedParagraphNode). */
+     A photo is its own beat in the text: it carries its own breathing room
+     (--story-block-gap), so nobody has to type blank lines around it. The
+     height cap is what keeps a portrait photo from running off the bottom
+     of the screen — tall shots stay readable beside the paragraphs instead
+     of dwarfing them. A blank line the writer adds on purpose is worth one
+     more line of space (see SpacedParagraphNode). */
   --story-image-gap: clamp(22px, 3.2vw, 34px);
   --story-image-max-h: min(62vh, 520px);
   --story-blank-line: 1.6em;
