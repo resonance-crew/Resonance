@@ -127,6 +127,8 @@ export const SHARE_CARD = {
     avatar: { size: 30, outline: 'oklch(36% 0.06 60 / 0.55)', width: INK, fill: 'cardFill' },
     gap: 10,
     name: { size: 13, weight: 600, leading: 1.3, colour: '--color-text', face: '--font-body' },
+    /** After the pen name, when the author is verified (the web's HandDrawnCheckmark). Never on an anonymous card. */
+    verifiedMark: { size: 12, gap: 4 },
     date: { size: 11.5, weight: 400, colour: '--color-text-muted', face: '--font-body', style: 'medium' },
     /** The least room between the byline and the lockup. */
     minSpace: 8,

@@ -137,6 +137,10 @@
       "colour": "--color-text",
       "face": "--font-body"
     },
+    "verifiedMark": {
+      "size": 12,
+      "gap": 4
+    },
     "date": {
       "size": 11.5,
       "weight": 400,
