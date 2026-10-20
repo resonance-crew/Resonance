@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -36,6 +39,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.resonance.design.generated.Tokens
 import com.resonance.kit.l10n.L10n
+import com.resonance.kit.story.StoryScript
 
 /** The shimmer's highlight: the theme's light accent, or a card's own hue inside a card. */
 val LocalSkeletonHighlight = compositionLocalOf { Mixes.skeletonHighlight() }
@@ -116,38 +120,47 @@ fun androidx.compose.foundation.lazy.LazyListScope.storyCardSkeletons(count: Int
 val GridUnderBar = HeaderEdgeHeight + TabletHeaderAir - BarLineInset
 
 /**
- * CardDetailSkeleton.tsx on a phone: the byline, the cover, two title lines,
- * the story's first lines and a few tags, at the real page's sizes and gaps.
+ * CardDetailSkeleton.tsx: the article's own head and gaps (reading-type §11.1) — the cover at its
+ * 0.52 ratio, two title lines as tall as the title's type (28 apart 11 on a phone, 36 and 14
+ * wider), the byline (the avatar and pen name with no rail beside the article, else the meta line
+ * alone), then the story's first lines and a few tags — so nothing moves when the card arrives.
+ * A CJK story's numbers (the type isn't known yet).
  */
 @Composable
-fun CardDetailSkeleton(modifier: Modifier = Modifier) {
+fun CardDetailSkeleton(modifier: Modifier = Modifier, compact: Boolean = true, byline: Boolean = true) {
+    val type = StoryType(StoryScript.Cjk, compact)
     Column(modifier.fillMaxWidth().semantics { contentDescription = L10n.Home.moreLoading }) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Skeleton(height = 44.dp, circle = true)
-            Column(Modifier.weight(1f)) {
-                Skeleton(Modifier.width(140.dp), height = 15.dp)
-                Skeleton(Modifier.padding(top = 7.dp).width(96.dp), height = 13.dp)
+        Skeleton(Modifier.aspectRatio(1 / 0.52f), height = Dp.Unspecified, radius = 18.dp)
+        Spacer(Modifier.height(type.coverGap.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(if (compact) 11.dp else 14.dp)) {
+            Skeleton(Modifier.fillMaxWidth(0.9f), height = type.titleSize.dp)
+            Skeleton(Modifier.fillMaxWidth(0.55f), height = type.titleSize.dp)
+        }
+        Spacer(Modifier.height(type.metaGap.dp))
+        Row(Modifier.heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (byline) Skeleton(height = Tokens.StoryBylineAvatar.dp, circle = true)
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (byline) Skeleton(Modifier.width(120.dp), height = 15.dp)
+                Skeleton(Modifier.width(160.dp), height = 14.dp)
             }
         }
-        Skeleton(Modifier.padding(top = 28.dp, bottom = 20.dp), height = 180.dp, radius = 18.dp)
-        Column(Modifier.padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Skeleton(Modifier.fillMaxWidth(0.9f), height = 38.dp)
-            Skeleton(Modifier.fillMaxWidth(0.55f), height = 38.dp)
-        }
-        StorySkeleton()
+        Spacer(Modifier.height(type.leadGap.dp))
+        StorySkeleton(compact = compact)
     }
 }
 
 /**
- * The lower half of [CardDetailSkeleton]: the story's first lines and a few tags — what a card
- * page still waits for once its head is drawn from the list the card was opened in.
+ * The lower half of [CardDetailSkeleton]: the story's first lines (as tall as its words, 17 apart
+ * 13.6 on a phone, 18 and 15 wider) and a few tags — what a card page still waits for once its
+ * head is drawn from the list the card was opened in.
  */
 @Composable
-fun StorySkeleton(modifier: Modifier = Modifier) {
+fun StorySkeleton(modifier: Modifier = Modifier, compact: Boolean = true) {
+    val type = StoryType(StoryScript.Cjk, compact)
     Column(modifier.fillMaxWidth()) {
-        Column(Modifier.padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            repeat(3) { Skeleton(height = 17.dp) }
-            Skeleton(Modifier.fillMaxWidth(0.65f), height = 17.dp)
+        Column(Modifier.padding(bottom = type.endGap.dp), verticalArrangement = Arrangement.spacedBy(if (compact) 13.6.dp else 15.dp)) {
+            repeat(3) { Skeleton(height = type.bodySize.dp) }
+            Skeleton(Modifier.fillMaxWidth(0.65f), height = type.bodySize.dp)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(64, 84, 56).forEach { Skeleton(Modifier.width(it.dp), height = 26.dp, radius = 13.dp) }

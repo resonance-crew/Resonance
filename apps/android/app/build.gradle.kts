@@ -69,6 +69,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    // The share's intents, its sheet actions and their activity run on the JVM under Robolectric,
+    // with the merged manifest (the share FileProvider, the actions' activity) and resources.
+    testOptions { unitTests.isIncludeAndroidResources = true }
 }
 
 // The story editor (native/editor/dist/editor.html) is build output the repo does not keep: it comes
@@ -125,4 +129,5 @@ dependencies {
     implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.2.1")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.17")
 }

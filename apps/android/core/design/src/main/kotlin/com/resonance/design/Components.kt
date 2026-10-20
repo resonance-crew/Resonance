@@ -57,6 +57,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -240,7 +241,15 @@ fun initialsScale(initials: String): Float {
  * initials, or clipped to their picture, with a soft ink rim.
  */
 @Composable
-fun HandDrawnAvatar(initials: String, imageUrl: String? = null, color: Color = Tokens.TerracottaLight, size: Dp = 32.dp, seed: Double = 7.0) {
+fun HandDrawnAvatar(
+    initials: String,
+    imageUrl: String? = null,
+    color: Color = Tokens.TerracottaLight,
+    size: Dp = 32.dp,
+    seed: Double = 7.0,
+    /** The picture already loaded (a share card's recording draws nothing still on its way), in place of [imageUrl]. */
+    image: ImageBitmap? = null,
+) {
     val s = size.value.toDouble()
     val shape = WobRectShape(
         s * 0.4, seed, mag = s * 0.022,
@@ -262,7 +271,9 @@ fun HandDrawnAvatar(initials: String, imageUrl: String? = null, color: Color = T
         contentAlignment = Alignment.Center,
     ) {
         BasicText(initials, style = AppFonts.body(size.value * initialsScale(initials), 700, lineHeight = 1f))
-        if (imageUrl != null) {
+        if (image != null) {
+            Image(image, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.size(size).clip(shape))
+        } else if (imageUrl != null) {
             AsyncImage(model = imageUrl, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                 modifier = Modifier.size(size).clip(shape))
         }

@@ -3,6 +3,7 @@ package com.resonance.kit
 import com.resonance.api.models.LinkPreview as ApiLinkPreview
 import com.resonance.kit.story.InlineRun
 import com.resonance.kit.story.ProseMetrics
+import com.resonance.kit.story.ProseSpacing
 import com.resonance.kit.story.StoryBlock
 import com.resonance.kit.story.StoryLinks
 import com.resonance.kit.story.StoryParser
@@ -74,10 +75,42 @@ class StoryParserTest {
         assertEquals("<b>不是 HTML</b> 與 <script>x</script>", text(blocks("html-is-text")[0]))
     }
 
+    /** A CJK story's room on a wide window (18px body): story.css's margins as the type resolves them. */
+    private val cjkWide = ProseSpacing(
+        paragraph = 23.4f, h2Above = 46.8f, h2Below = 14.04f, h3Above = 40.32f, h3Below = 10.08f,
+        block = 32f, rule = 40f, blank = 28.8f, item = 5.4f,
+    )
+
+    private fun rounded(gaps: List<Float>) = gaps.map { (it * 100).roundToInt() / 100.0 }
+
     @Test fun proseMarginsCollapseLikeCss() {
-        val gaps = ProseMetrics.gaps(listOf(StoryBlock.Paragraph(emptyList()), StoryBlock.Heading(2, emptyList()), StoryBlock.Paragraph(emptyList()), StoryBlock.Blank, StoryBlock.Paragraph(emptyList())))
-        assertEquals(listOf(0.0, 35.2, 13.2, 18.7, 0.0), gaps.map { (it * 10).roundToInt() / 10.0 })
+        val p = StoryBlock.Paragraph(emptyList())
+        val gaps = ProseMetrics.gaps(listOf(p, StoryBlock.Heading(2, emptyList()), p, StoryBlock.Blank, p, StoryBlock.Heading(4, emptyList()), p), cjkWide)
+        // The heading's room above wins over the paragraph's below it; its own below binds it to the text after.
+        assertEquals(listOf(0.0, 46.8, 14.04, 23.4, 0.0, 40.32, 10.08), rounded(gaps))
         assertIs<StoryBlock.Blank>(blocks("blank-paragraph")[1])
+    }
+
+    @Test fun picturesCardsAndRulesKeepTheirOwnRoom() {
+        val p = StoryBlock.Paragraph(emptyList())
+        val link = StoryBlock.SoleLink("https://example.com/", emptyList())
+        val blocks = listOf(p, StoryBlock.Image("a.jpg", ""), p, StoryBlock.Rule, p, link, p, StoryBlock.CardEmbed("/card/x", "x"), StoryBlock.ListBlock(false, 1, listOf(listOf(p))))
+        // A standalone link with a preview is a card's block; without one it is a paragraph.
+        assertEquals(listOf(0.0, 32.0, 32.0, 40.0, 40.0, 32.0, 32.0, 32.0, 32.0), rounded(ProseMetrics.gaps(blocks, cjkWide) { true }))
+        assertEquals(listOf(0.0, 32.0, 32.0, 40.0, 40.0, 23.4, 23.4, 32.0, 32.0), rounded(ProseMetrics.gaps(blocks, cjkWide) { false }))
+    }
+
+    @Test fun aQuoteKeepsAPictureRoomAboveButNotAHeadings() {
+        val p = StoryBlock.Paragraph(emptyList())
+        assertEquals(listOf(32.0, 32.0), rounded(ProseMetrics.gaps(listOf(StoryBlock.Image("a.jpg", ""), p), cjkWide, nested = true)))
+        assertEquals(listOf(0.0, 10.08), rounded(ProseMetrics.gaps(listOf(StoryBlock.Heading(3, emptyList()), p), cjkWide, nested = true)))
+        assertEquals(listOf(0.0, 23.4), rounded(ProseMetrics.gaps(listOf(p, p), cjkWide, nested = true)))
+    }
+
+    @Test fun listItemsPartByTheirOwnRoomUnlessANestedListEndsOne() {
+        val p = StoryBlock.Paragraph(emptyList())
+        val nested = StoryBlock.ListBlock(false, 1, listOf(listOf(p)))
+        assertEquals(listOf(0.0, 5.4, 23.4), rounded(ProseMetrics.itemGaps(listOf(listOf(p), listOf(p, nested), listOf(p)), cjkWide)))
     }
 
     // Standalone links (native/fixtures/story-link-cards.json, the server's and the web's own cases)

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 儲存圖片 in the system share sheet: the hand-drawn picture glyph (src/components/atoms/Icon/icons/image.tsx), in the text's ink. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path
+        android:strokeColor="#2F2115" android:strokeWidth="1.6" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M4.4,6.0 C8.0,4.8 14.6,5.0 19.5,5.7 C20.0,9.5 19.2,14.4 19.7,18.3 C15.3,19.0 8.6,18.7 4.5,18.4 C4.0,14.7 4.7,9.5 4.4,6.0 Z" />
+    <path
+        android:strokeColor="#2F2115" android:strokeWidth="1.6" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M4.6,17.6 C7.0,14.4 8.6,12.6 10.8,12.5 C13.1,12.5 15.5,15.0 19.4,17.5" />
+    <path
+        android:strokeColor="#2F2115" android:strokeWidth="1.6" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M12.5,17.8 C13.9,16.0 14.7,14.7 16.0,14.7 C17.3,14.7 18.4,15.7 19.4,16.7" />
+    <path
+        android:strokeColor="#2F2115" android:strokeWidth="1.6" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M8.7,9.2 C9.7,9.0 10.5,9.6 10.5,10.3 C10.4,11.0 9.5,11.4 8.7,11.2 C7.9,11.0 7.7,10.0 8.0,9.5 C8.2,9.3 8.5,9.2 8.7,9.2 Z" />
+</vector>

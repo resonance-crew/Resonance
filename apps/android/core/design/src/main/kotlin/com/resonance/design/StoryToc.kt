@@ -71,22 +71,25 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** One entry of a story's table of contents: an h2 or an h3, in reading order. */
+/**
+ * One entry of a story's table of contents, in reading order: the reader's h2 (a story's `#` or
+ * `##`) at the first level, every smaller heading (h3–h6) at the second — CardToc's levels.
+ */
 class TocHeading(val block: StoryBlock.Heading, val text: String) {
-    val level: Int get() = block.level
+    val level: Int get() = if (block.level <= 2) 2 else 3
 }
 
 object StoryToc {
     /**
-     * The story's h2 and h3 in reading order, inside quotes and list items too — what the web's
-     * CardDetailClient finds with `querySelectorAll('h2, h3')` in the rendered story; a heading
-     * with no words (no slug, so no anchor on the web) is left out.
+     * The story's headings in reading order, inside quotes and list items too — what the web's
+     * CardToc finds with `querySelectorAll('h2, h3, h4, h5, h6')` in the rendered story (its `#`
+     * drawn as an h2); a heading with no words (no slug, so no anchor on the web) is left out.
      */
     fun headings(blocks: List<StoryBlock>): List<TocHeading> {
         val out = ArrayList<TocHeading>()
         fun walk(list: List<StoryBlock>) {
             for (b in list) when (b) {
-                is StoryBlock.Heading -> if (b.level == 2 || b.level == 3) {
+                is StoryBlock.Heading -> {
                     val text = b.runs.joinToString("") { it.text }.trim()
                     if (text.isNotEmpty()) out += TocHeading(b, text)
                 }

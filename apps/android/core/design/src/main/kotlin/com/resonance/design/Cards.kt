@@ -430,13 +430,13 @@ private fun BorderedCardFrame(palette: CardPalette, seed: Double, modifier: Modi
     )
 }
 
-/** StoryCard.tsx's desktop outline: 3–4 turns across, 5–6 down, gentle curves, corners drifting 4. */
-private val BorderedCardWob = WobRectOptions(
+/** StoryCard.tsx's desktop outline: 3–4 turns across, 5–6 down, gentle curves, corners drifting 4 (the share card's too). */
+internal val BorderedCardWob = WobRectOptions(
     curve = 0.55, cornerJitter = 0.7, cornerOffset = 4.0, segmentsH = SegValue.Range(3, 4), segmentsV = SegValue.Range(5, 6),
 )
 
-/** STORY_GRAIN.paper: the bordered card's paper grain. */
-private const val BorderedCardGrain = 0.2f
+/** STORY_GRAIN.paper: the bordered card's paper grain (the share card's too). */
+internal const val BorderedCardGrain = 0.2f
 
 /**
  * MiniStoryCard on a phone — the pared-back card of the resonance and

@@ -417,3 +417,34 @@ one, and the full time); a drag toward the middle replies. Search lists the matc
 (`SearchResults`, the snippet cut by `SearchSnippet`); choosing one takes the thread to that message with the words
 marked, and the bar steps through the matches. Words are drawn by `ChatText` (CSS line boxes with spans: links,
 highlights), so a bubble keeps the web's metrics.
+
+Toasts, story type and text size (the 2026-10-20 redesign's foundation): the shell has one toast
+(`Toasts` in `core/design`, drawn once by `ToastHost` in `MainTabs` over every page and bar, under dialogs);
+a page shows one with `LocalToasts.current.show(message, announce, action)` — 4 s, 8 s with an action, longer
+when the accessibility timeout asks for it, held under a finger, a mouse or a keyboard's focus — and TalkBack
+hears each through one polite live region. Its face is `OrganicPill` (`PillSize.Toast`; the thread's pill is
+`PillSize.Small`). A story is set by its script (`StoryScripts` in `core/kit`, the twin of
+`src/lib/text/script.ts`, pinned by `native/fixtures/story-script.json`) through `StoryType`, which reads the
+generated `Tokens.Story*` in one place: a CJK story in `AppFonts.Family.HeadingCJK` / `BodyCJK` (Noto TC first,
+then the Latin face per glyph), a Latin one in Playfair over DM Sans. A story's title and words sit inside
+`ReadingTextScale` (the system's text size up to 2×); everything else stays under `CappedTextScale`'s 1.25.
+The share image's numbers are `ShareCardRecipe` (`native/fixtures/share-card.json`), its words
+`SharePassages.opening` (`share-passages.json`), and the trash's calls `WritingApi.trashCard` / `restoreCard` /
+`deleteCard(onlyIfTrashed)` / `emptyTrash`, with `Trash`'s clock over `FeedCard.trashedAt` / `purgeAt`.
+
+The card page reads in the story's type (reading-type §5–§8): `StoryMarkdown(blocks, type, lang, …)` and
+`StoryTitle` take `StoryType.of(script, class)` and the story's language, set every block from the generated
+`Tokens.Story*` (no prose number is written in Kotlin: `ProseMetrics` in `core/kit` collapses story.css's margins
+from the `ProseSpacing` the type resolves), and sit inside `ReadingTextScale` — the cards a story embeds go back
+under `CappedTextScale`. The head is cover → title → byline (avatar and pen name over 「6 分鐘 · 日期」; the meta line
+alone beside an expanded window's rail, which no longer shows the date); share and the ⋯ stay in the bar.
+`WindowLayout.cardPage()` is §4's formula (the 680 measure, centred; on an expanded window the rail 48 past it).
+Sharing a card (share.spec, Owner revision; `ui/share`) is one glyph, shown only for a published, public card out
+of the trash (`ShareLinks.canShare`), straight to the system sheet: `ShareIntents.cardChooser` carries the link
+(an anonymous card's by its id) with the card picture as its alternate intent, and the app's own Instagram 限時動態
+and 儲存圖片 actions (ChooserActions on 34+, LabeledIntents on 29–33, both reaching the unexported
+`ShareActionActivity`). The picture is drawn on the device — `ShareCardCanvas` / `ShareCardSticker` /
+`ShareCardBackdrop` in `core/design`, recorded off screen by `ShareCardRenderer` into GraphicsLayers at
+Density(3, fontScale 1) — and written to `cacheDir/share` (the `{applicationId}.share` FileProvider; emptied
+before each share and on sign-out). Stories needs `AppConfig.metaAppId` and Instagram installed; the owner of an
+anonymous card is asked first (`share.anonymousTitle`). A person's page shares its plain link.

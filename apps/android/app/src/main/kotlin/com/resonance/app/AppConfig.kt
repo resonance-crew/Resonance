@@ -13,6 +13,11 @@ data class AppConfig(
     val emulatorAuthPort: Int = 9099,
     val emulatorFirestorePort: Int = 8080,
     val emulatorApiPort: Int = 3100,
+    /**
+     * The Meta (Facebook) app id the app shares to Instagram Stories under (`source_application`;
+     * share.spec §4.8): app "Resonance", no permissions, no review. Null hides the Stories action.
+     */
+    val metaAppId: String? = META_APP_ID,
 ) {
     val origin: String = if (usesEmulator) "http://$EMULATOR_HOST:$emulatorApiPort" else "https://resonance.channel"
 
@@ -20,5 +25,7 @@ data class AppConfig(
         const val EMULATOR_HOST = "10.0.2.2"
         /** The emulators run as this project (firebase/firebase.json); the app must match. */
         const val EMULATOR_PROJECT = "demo-resonance"
+        /** [metaAppId]'s value (iOS: AppConfig.metaAppID). */
+        const val META_APP_ID = "1115208464203859"
     }
 }

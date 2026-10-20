@@ -11,10 +11,10 @@ import org.junit.Test
  * stretch of its rule stands — scrollbarGeometry.ts's thumbGeometry, number for number.
  */
 class StoryTocTest {
-    @Test fun theStorysH2AndH3InReadingOrderQuotesAndListsToo() {
+    @Test fun theStorysHeadingsInReadingOrderQuotesAndListsToo() {
         val blocks = StoryParser.parse(
             """
-            # A title the reader draws as an h1
+            # A story's hash, drawn as the reader's h2
             
             ## First
             
@@ -34,10 +34,11 @@ class StoryTocTest {
             """.trimIndent(),
         )
         val headings = StoryToc.headings(blocks)
-        assertEquals(listOf("First", "Inside it", "Quoted", "Listed", "First"), headings.map { it.text })
-        assertEquals(listOf(2, 3, 2, 3, 2), headings.map { it.level })
+        assertEquals(listOf("A story's hash, drawn as the reader's h2", "First", "Inside it", "Quoted", "Listed", "Too deep", "First"), headings.map { it.text })
+        // `#` is the reader's h2; h4 and below sit at the second level with h3.
+        assertEquals(listOf(2, 2, 3, 2, 3, 3, 2), headings.map { it.level })
         // Two headings with the same words are two places.
-        assertTrue(headings[0].block !== headings[4].block)
+        assertTrue(headings[1].block !== headings[6].block)
     }
 
     @Test fun theStretchIsTheVisibleShareOfTheListAtLeast36() {

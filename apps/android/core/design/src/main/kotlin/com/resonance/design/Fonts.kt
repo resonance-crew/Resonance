@@ -25,12 +25,37 @@ import com.resonance.design.generated.Tokens
  * that chain: Latin from the bundled font, CJK from the next family, then the
  * system. Android already ships Noto Sans/Serif CJK, so bundling Noto TC is
  * optional — S5 measures both.
+ *
+ * A CJK story is set the other way round (reading-type option A; tokens.css
+ * `--font-story-serif` / `--font-story-sans`): the bundled Noto TC first, its
+ * own Latin and digits included, then the Latin face for what the subset lacks,
+ * then the system — [Family.HeadingCJK] and [Family.BodyCJK]. Their primary is
+ * always the bundled Noto, whatever [useBundledCJK] says.
  */
 object AppFonts {
-    enum class Family(val asset: String, val cjkAsset: String, val systemFallback: String) {
+    enum class Family(
+        val asset: String,
+        /** The bundled face a glyph the primary lacks comes from next (Noto TC for the Latin-first faces). */
+        val fallbackAsset: String,
+        val systemFallback: String,
+        /** CJK-first: the primary is Noto TC and the fallback the Latin face, both always bundled. */
+        val cjkFirst: Boolean = false,
+    ) {
         Heading("PlayfairDisplay.ttf", "NotoSerifTC.ttf", "serif"),
         Body("DMSans.ttf", "NotoSansTC.ttf", "sans-serif"),
         Handwritten("ChenYuluoyanThin.ttf", "NotoSerifTC.ttf", "serif"),
+        /** A CJK story's title and headings: Noto Serif TC → Playfair Display → serif (`--font-story-serif`). */
+        HeadingCJK("NotoSerifTC.ttf", "PlayfairDisplay.ttf", "serif", cjkFirst = true),
+        /** A CJK story's words: Noto Sans TC → DM Sans → sans-serif (`--font-story-sans`). */
+        BodyCJK("NotoSansTC.ttf", "DMSans.ttf", "sans-serif", cjkFirst = true),
+        ;
+
+        /** The Latin face of this family's element: what an apostrophe inside a Latin word is set in (story.css `.story-latin-mark`). */
+        val latin: Family get() = when (this) {
+            HeadingCJK -> Heading
+            BodyCJK -> Body
+            else -> this
+        }
     }
 
     private lateinit var context: Context
@@ -73,8 +98,9 @@ object AppFonts {
         val builder = PlatformTypeface.CustomFallbackBuilder(primary)
             .setStyle(FontStyle(weight, FontStyle.FONT_SLANT_UPRIGHT))
             .setSystemFallback(family.systemFallback)
-        if (useBundledCJK) {
-            builder.addCustomFallback(PlatformFontFamily.Builder(font(family.cjkAsset, weight)).build())
+        // A CJK-first family's fallback is the Latin face, never left out; a Latin-first one's is the bundled Noto TC, when used.
+        if (family.cjkFirst || useBundledCJK) {
+            builder.addCustomFallback(PlatformFontFamily.Builder(font(family.fallbackAsset, weight)).build())
         }
         builder.build()
     }

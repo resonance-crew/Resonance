@@ -12,6 +12,7 @@ import com.resonance.kit.api.AppHttp
 import com.resonance.kit.api.HttpCaching
 import com.resonance.kit.l10n.Strings
 import com.resonance.kit.reading.ApiCache
+import com.resonance.app.ui.share.ShareFiles
 import okhttp3.Cache
 import java.io.File
 
@@ -33,6 +34,7 @@ class ResonanceApp : Application(), SingletonImageLoader.Factory {
         httpCaching = httpCaching,
         // What the screens a cold start opens on last showed, per account (cache: never backed up).
         kept = ApiCache(File(cacheDir, "api")),
+        shareFiles = File(cacheDir, ShareFiles.DIR),
     ).also {
         session = it
         it.start { it.loadMe() }
