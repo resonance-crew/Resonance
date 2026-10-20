@@ -35,8 +35,9 @@
    The numbers are tokens.css's (A story's type). Each script and each
    density picks its set into the --s-* variables first, so a rule below
    names its value once. Specificity stays low and flat (one class, an
-   attribute, elements) and nothing here sets a block's inline margins, so
-   the consumers' modules never fight these rules for a property. */
+   attribute, elements; the blocks' spacing weaker still) and nothing here
+   sets a block's inline margins, so a consumer's module never has to fight
+   these rules for a property, whatever order the page loads them in. */
 
 /* ── The numbers, by script and by width ─────────────────────────────── */
 
@@ -275,15 +276,17 @@
 /* ── Blocks: pictures, link cards, card embeds ──────────────────────── */
 
 /* Their own beat in the text, with air above and below; the consumer centres
-   them (or keeps them at a quote's edge) with its own inline margins. */
-.story-prose .story-picture {
+   them (or keeps them at a quote's edge) with its own inline margins. Kept
+   weak (:where), so a consumer's quote that ends on a picture or a card
+   closes on it, whichever stylesheet the page happens to load first. */
+.story-prose :where(.story-picture) {
   margin-top: var(--s-block);
   margin-bottom: var(--s-block);
 }
 
 /* A card sets its own type: the prose's tracking, justification and
    breaking stop at its edge. */
-.story-prose .story-embed {
+.story-prose :where(.story-embed) {
   margin-top: var(--s-block);
   margin-bottom: var(--s-block);
   letter-spacing: normal;
