@@ -10,11 +10,12 @@ import styles from './BrandMark.module.css';
  * someone who accepts its terms (LINE's logo guidelines, line.me/en/logo;
  * Meta's brand resources for the Facebook "f" and Threads; X's brand
  * toolkit, about.x.com), so the same marks are taken from Simple Icons
- * 16.35.0 (simple-icons.org, CC0 — its files trace the brands' official
- * downloads, named in its data as each mark's source), copied verbatim. They are
- * trademarks of their owners, used here only to name the platform a row
- * shares to. BrandMark.test.ts pins a hash of each path: changing one is a
- * deliberate act, never a tidy-up.
+ * 16.35.0 (simple-icons.org; its files are CC0, and its data names each
+ * brand's own page as the mark's source and guidelines), copied verbatim —
+ * the path of icons/{line,threads,facebook,x}.svg. They are trademarks of
+ * their owners, used here only to name the platform a row shares to, as
+ * their guidelines allow; BrandMark.test.tsx pins a hash of each path:
+ * changing one is a deliberate act, never a tidy-up.
  *
  * Deliberately not in the Icon registry (SKILL.md rule 2's one exception):
  * these aren't hand-drawn and aren't ours to redraw, they are filled shapes
