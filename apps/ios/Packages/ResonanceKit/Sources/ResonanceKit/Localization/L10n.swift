@@ -744,6 +744,8 @@ public enum L10n {
     public enum Write {
         /// Give it a one-line title first
         public static var titleRequired: String { Strings.shared.string("write.titleRequired") }
+        /// Next
+        public static var next: String { Strings.shared.string("write.next") }
         /// New card
         public static var title: String { Strings.shared.string("write.title") }
         /// Edit draft
@@ -772,11 +774,13 @@ public enum L10n {
         public static var referenceCard: String { Strings.shared.string("write.referenceCard") }
         /// One-line title
         public static var coreLabel: String { Strings.shared.string("write.coreLabel") }
+        /// One-line title
+        public static var titlePlaceholder: String { Strings.shared.string("write.titlePlaceholder") }
         /// e.g. Being seen matters more than being liked
         public static var corePlaceholder: String { Strings.shared.string("write.corePlaceholder") }
         /// Story
         public static var storyLabel: String { Strings.shared.string("write.storyLabel") }
-        /// Write the moment that pulled that line out of you…
+        /// Start with the moment that made you want to write…
         public static var storyPlaceholder: String { Strings.shared.string("write.storyPlaceholder") }
         public enum Editor {
             /// Editor toolbar
@@ -799,6 +803,10 @@ public enum L10n {
             public static var insertCard: String { Strings.shared.string("write.editor.insertCard") }
             /// Insert image
             public static var insertImage: String { Strings.shared.string("write.editor.insertImage") }
+            /// Insert
+            public static var insert: String { Strings.shared.string("write.editor.insert") }
+            /// Hide keyboard
+            public static var hideKeyboard: String { Strings.shared.string("write.editor.hideKeyboard") }
             /// Uploading image…
             public static var imageUploading: String { Strings.shared.string("write.editor.imageUploading") }
             /// Couldn’t upload the image — please try again
@@ -838,6 +846,8 @@ public enum L10n {
         public static var mediaLabel: String { Strings.shared.string("write.mediaLabel") }
         /// Remove image
         public static var mediaRemove: String { Strings.shared.string("write.mediaRemove") }
+        /// Change image
+        public static var mediaReplace: String { Strings.shared.string("write.mediaReplace") }
         /// Add an image
         public static var mediaPlaceholder: String { Strings.shared.string("write.mediaPlaceholder") }
         /// Any common image format
@@ -858,8 +868,12 @@ public enum L10n {
         public static var mediaGenerating: String { Strings.shared.string("write.mediaGenerating") }
         /// Couldn’t generate an image — please try again
         public static var mediaGenerateError: String { Strings.shared.string("write.mediaGenerateError") }
+        /// The image is still on its way — you can publish once it's in
+        public static var mediaBusyHint: String { Strings.shared.string("write.mediaBusyHint") }
         /// AI-generated illustration
         public static var mediaGeneratedLabel: String { Strings.shared.string("write.mediaGeneratedLabel") }
+        /// How the card looks in a list
+        public static var previewCaption: String { Strings.shared.string("write.previewCaption") }
         public enum Visibility {
             /// Who can see
             public static var label: String { Strings.shared.string("write.visibility.label") }
@@ -900,7 +914,7 @@ public enum L10n {
         public static var publishing: String { Strings.shared.string("write.publishing") }
         /// Draft saved · {time}
         public static func autosaved(time: String) -> String { Strings.shared.format("write.autosaved", ["time": time]) }
-        /// This card is already published. Changes are kept privately until you press Save changes.
+        /// This card is live — changes stay private until you save them
         public static var editLiveHint: String { Strings.shared.string("write.editLiveHint") }
         /// Changes saved privately · {time} (readers still see the old version)
         public static func editBuffered(time: String) -> String { Strings.shared.format("write.editBuffered", ["time": time]) }
@@ -945,6 +959,10 @@ public enum L10n {
             public static var updating: String { Strings.shared.string("write.publishPanel.updating") }
             /// An anonymous card is either public or only for you
             public static var anonymousVisibility: String { Strings.shared.string("write.publishPanel.anonymousVisibility") }
+            /// A public resonance under your name lets the original's author know it's you
+            public static var resonanceReaches: String { Strings.shared.string("write.publishPanel.resonanceReaches") }
+            /// The original's author won't be notified
+            public static var resonanceQuiet: String { Strings.shared.string("write.publishPanel.resonanceQuiet") }
             /// Couldn't publish — try again
             public static var failed: String { Strings.shared.string("write.publishPanel.failed") }
             /// That's the limit for today — try again tomorrow
@@ -964,6 +982,14 @@ public enum L10n {
         }
         /// Remove tag
         public static var removeTag: String { Strings.shared.string("write.removeTag") }
+        public enum Trashed {
+            /// Restore it to keep writing
+            public static var line: String { Strings.shared.string("write.trashed.line") }
+            /// Restore and keep writing
+            public static var restore: String { Strings.shared.string("write.trashed.restore") }
+            /// This card is in the trash — restore it to save
+            public static var status: String { Strings.shared.string("write.trashed.status") }
+        }
     }
     public enum Me {
         /// Joined {date}
@@ -1073,6 +1099,8 @@ public enum L10n {
             public static var unresonateConfirmBody: String { Strings.shared.string("me.actions.unresonateConfirmBody") }
             /// Stop resonating
             public static var unresonateConfirm: String { Strings.shared.string("me.actions.unresonateConfirm") }
+            /// Restore
+            public static var restore: String { Strings.shared.string("me.actions.restore") }
         }
         /// Anonymous
         public static var anonymousBadge: String { Strings.shared.string("me.anonymousBadge") }
