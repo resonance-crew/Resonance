@@ -13,23 +13,32 @@ import { useCallback, useRef, type RefObject } from 'react';
  * something else (an OrganicScrollbar) reads it too: it is kept current. The
  * attributes are written on the element itself, once a frame at most, so a
  * scroll never renders the list again.
+ *
+ * `axis: 'x'` watches a row that scrolls sideways instead (the writer's
+ * keyboard format bar): `[data-edge-fade-left]`, `[data-edge-fade-right]`.
  */
-export function useEdgeFades<T extends HTMLElement>(ref?: RefObject<T | null>) {
+export function useEdgeFades<T extends HTMLElement>(ref?: RefObject<T | null>, axis: 'x' | 'y' = 'y') {
   const stop = useRef<(() => void) | null>(null);
   return useCallback(
     (el: T | null) => {
       if (ref) ref.current = el;
       stop.current?.();
-      stop.current = el ? watch(el) : null;
+      stop.current = el ? watch(el, axis) : null;
     },
-    [ref],
+    [ref, axis],
   );
 }
 
-function watch(el: HTMLElement): () => void {
+function watch(el: HTMLElement, axis: 'x' | 'y'): () => void {
   let frame: number | null = null;
   const update = () => {
     frame = null;
+    if (axis === 'x') {
+      const max = el.scrollWidth - el.clientWidth;
+      mark(el, 'edgeFadeLeft', max > 1 && el.scrollLeft > 1);
+      mark(el, 'edgeFadeRight', max > 1 && el.scrollLeft < max - 1);
+      return;
+    }
     const max = el.scrollHeight - el.clientHeight;
     mark(el, 'edgeFadeTop', max > 1 && el.scrollTop > 1);
     mark(el, 'edgeFadeBottom', max > 1 && el.scrollTop < max - 1);
@@ -67,7 +76,7 @@ function watch(el: HTMLElement): () => void {
   };
 }
 
-function mark(el: HTMLElement, key: 'edgeFadeTop' | 'edgeFadeBottom', on: boolean) {
+function mark(el: HTMLElement, key: 'edgeFadeTop' | 'edgeFadeBottom' | 'edgeFadeLeft' | 'edgeFadeRight', on: boolean) {
   if (on) {
     if (el.dataset[key] == null) el.dataset[key] = '';
   } else if (el.dataset[key] != null) {

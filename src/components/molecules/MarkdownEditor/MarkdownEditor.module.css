@@ -157,9 +157,12 @@
 
 .toolBtn {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   background: transparent;
-  padding: 5px 9px;
+  padding: 0;
   font-family: var(--font-body);
   font-size: 13px;
   font-weight: 600;
@@ -169,6 +172,30 @@
   /* Hover/active wash is a wobbly curved fill (HandDrawnBorder) driven by
      this variable rather than a flat rounded-rect background. */
   --tool-btn-fill: transparent;
+}
+
+/* The face the wash is drawn round: the toolbar's size. */
+.toolFace {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+}
+
+/* On the keyboard bar the button is a finger's 44px; its face stands about 36px in it. */
+.toolBtn[data-touch] {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.toolBtn[data-touch] .toolFace {
+  padding: 9px 10px;
+}
+
+.toolBtn:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: -2px;
+  border-radius: 12px;
 }
 
 .toolBtn:hover:not(:disabled) {
@@ -200,6 +227,66 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+
+/* ── The canvas (the writer's page) ─────────────────────────────────── */
+
+/* No frame, no toolbar: the story is the page, set by story.css at the
+   reader's measure. A tap anywhere under the words lands in it. */
+.canvas {
+  position: relative;
+}
+
+.content.canvasContent {
+  padding: 0;
+  min-height: max(240px, calc(100dvh - 320px));
+}
+
+/* The selection bubble (Tiptap's BubbleMenu places it): over the story and
+   its pictures, under the writer's bar it flips away from. */
+.bubble {
+  z-index: 110;
+  transition: opacity 120ms ease-out;
+}
+
+.bubblePanel {
+  position: relative;
+  padding: 5px 6px;
+}
+
+.bubbleRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* The "+" left of an empty line (Tiptap's FloatingMenu). */
+.insertHandle {
+  z-index: 6;
+  transition: opacity 120ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble,
+  .insertHandle {
+    transition: none;
+  }
+}
+
+/* Pictures on their way in, said under the story (the canvas has no toolbar to show it on). */
+.uploadingLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.canvas .imageError {
+  padding: 10px 0 0;
 }
 
 .imageError {

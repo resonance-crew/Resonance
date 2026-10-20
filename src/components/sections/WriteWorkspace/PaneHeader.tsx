@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, type CSSProperties, type ReactNode } from 'react';
+import { useMemo, type CSSProperties, type ReactNode, type Ref } from 'react';
 import { BareIconButton } from '@/components/atoms/BareIconButton/BareIconButton';
 import { HEADER_STROKE_Y } from '@/components/sections/AppHeader/HeaderChrome';
 import { pointsToBezier, wavyPoints } from '@/lib/design/wavyPath';
@@ -37,6 +37,12 @@ export interface PaneHeaderProps {
   onBack: () => void;
   /** Something has scrolled under it: the pen line inks in whole. */
   scrolled: boolean;
+  /** The arrow waits (a request on its way that leaving would cut short). */
+  backDisabled?: boolean;
+  /** What closes the row on the right (the editor's 下一步), as the writer's bar has it: the title gives way. */
+  trailing?: ReactNode;
+  /** The title, for a host that moves the focus to it (the publish step names itself here). */
+  titleRef?: Ref<HTMLHeadingElement>;
 }
 
 /**
@@ -45,10 +51,11 @@ export interface PaneHeaderProps {
  * pane's paper over what it shows, a wavy pen line under it that what scrolls
  * passes beneath; the back arrow and the pane's title on the left, as the
  * writer's own bar has them (HeaderBar) — the way back to the map (the edits
- * are saved as they are made, so it hides, it never discards — hence no ✕).
+ * are saved as they are made, so it hides, it never discards — hence no ✕) —
+ * and what the editor does next at the row's end (下一步), as the bar has it.
  * At the split the pane has no header: its divider hides it.
  */
-export function PaneHeader({ title, backLabel, onBack, scrolled }: PaneHeaderProps) {
+export function PaneHeader({ title, backLabel, onBack, scrolled, backDisabled = false, trailing, titleRef }: PaneHeaderProps) {
   const { strokeD, paperD } = useMemo(wavePaths, []);
   return (
     <header
@@ -67,9 +74,13 @@ export function PaneHeader({ title, backLabel, onBack, scrolled }: PaneHeaderPro
           tipAlign="start"
           seed={13}
           className={barStyles.back}
+          disabled={backDisabled}
           onClick={onBack}
         />
-        <h2 className={barStyles.title}>{title}</h2>
+        <h2 ref={titleRef} tabIndex={titleRef ? -1 : undefined} className={barStyles.title}>
+          {title}
+        </h2>
+        {trailing != null && <div className={barStyles.trailing}>{trailing}</div>}
       </div>
       <svg
         aria-hidden="true"

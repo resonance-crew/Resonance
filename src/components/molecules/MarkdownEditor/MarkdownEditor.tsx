@@ -1,26 +1,42 @@
 'use client';
 
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { useEditor, EditorContent, useEditorState } from '@tiptap/react';
 import Placeholder from '@tiptap/extension-placeholder';
 import { HandDrawnDashedSurface } from '@/components/atoms/HandDrawnDashedBorder/HandDrawnDashedBorder';
-import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import { Divider } from '@/components/atoms/Divider/Divider';
 import { Icon } from '@/components/atoms/Icon';
 import { SketchLoader } from '@/components/atoms/SketchLoader/SketchLoader';
 import { storyLinkWaveStyle } from '@/lib/design/storyLinkWave';
-import { pointsToBezier, ruleSteps, wavyPoints } from '@/lib/design/wavyPath';
+import { ruleSteps } from '@/lib/design/wavyPath';
 import { useElementSize } from '@/lib/hooks/useElementSize';
+import { useKeyboardInset } from '@/lib/hooks/useKeyboardInset';
+import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { UnsupportedImage, uploadImageFile } from '@/lib/images/upload';
 import type { Card } from '@/lib/db/types';
 import { getMarkdown, storyExtensions } from '@/lib/markdown/editorSchema';
+import { LatinMarks } from '@/lib/markdown/latinMarks';
 import type { StoryScript } from '@/lib/text/script';
 import '@/styles/story.css';
 import { OrganicImageNode } from './OrganicImageNode';
 import { CardEmbedNode } from './CardEmbedNode';
 import { CurvedBlockquoteNode } from './CurvedBlockquoteNode';
+import { FormatBubble } from './FormatBubble';
+import { InsertHandle } from './InsertHandle';
+import { KeyboardFormatBar } from './KeyboardFormatBar';
+import { ToolButton } from './ToolButton';
+import {
+  activeFormats,
+  buildToolbarPaths,
+  NO_FORMATS,
+  runFormat,
+  TOOLBAR_TOTAL_H,
+  TOOLBAR_W,
+  toolbarMask,
+  type FormatCommand,
+} from './formatting';
 import styles from './MarkdownEditor.module.css';
 import { INK_LIGHT } from '@/lib/design/strokes';
 import { useOpenedOnce } from '@/lib/hooks/useOpenedOnce';
@@ -31,36 +47,26 @@ const InsertCardModal = dynamic(() => import('./InsertCardModal').then((m) => m.
 // Any picture the browser can read: compressImage turns it into one the server takes.
 const ACCEPTED_IMAGES = 'image/*';
 
-// Same construction as AppHeader's wavy bottom edge: a stretchable mask that
-// fills the toolbar background down to a hand-drawn wave running the full
-// width, plus the matching pen stroke along that wave.
-const TOOLBAR_W = 800;
-const TOOLBAR_BODY_H = 42;
-const TOOLBAR_WAVE_H = 12;
-const TOOLBAR_TOTAL_H = TOOLBAR_BODY_H + TOOLBAR_WAVE_H;
-
-// The drawing is TOOLBAR_W wide and stretched to the toolbar's width, so its
-// turn count follows the width it is shown at (ruleSteps): a phone's toolbar
-// gets a few, a desktop's more.
-function buildToolbarPaths(seed: number, steps: number) {
-  const baseY = TOOLBAR_BODY_H + TOOLBAR_WAVE_H * 0.35;
-  const pts = wavyPoints(TOOLBAR_W, baseY, 2, seed, steps);
-  const strokeD = pointsToBezier(pts);
-  const f = (n: number) => +n.toFixed(2);
-  const last = pts[pts.length - 1];
-  let maskD = `M 0,0 L ${TOOLBAR_W},0 L ${f(last[0])},${f(last[1])}`;
-  for (let i = pts.length - 2; i >= 0; i--) {
-    const [x0, y0] = pts[i + 1];
-    const [x1, y1] = pts[i];
-    const midX = (x0 + x1) / 2;
-    maskD += ` C ${f(midX)},${f(y0)} ${f(midX)},${f(y1)} ${f(x1)},${f(y1)}`;
-  }
-  maskD += ' Z';
-  return { maskD, strokeD };
-}
+/** A fine pointer that hovers: the canvas's selection bubble and "+"; anything else gets the keyboard bar. */
+const FINE_POINTER = '(hover: hover) and (pointer: fine)';
+/** How far the caret keeps above the keyboard bar's row, beyond the bar itself. */
+const CARET_CLEARANCE = 16;
+/** The keyboard bar's row. */
+const BAR_ROW_H = 44;
 
 function imageFiles(list: FileList | undefined | null): File[] {
   return Array.from(list ?? []).filter((f) => f.type.startsWith('image/'));
+}
+
+/** What the writer asks of its story field. */
+export interface MarkdownEditorHandle {
+  /**
+   * Puts the caret in the story: at its start, at its end, or where it was
+   * (`keep`, the selection the writer left — coming back from the publish step).
+   */
+  focus(where?: 'start' | 'end' | 'keep'): void;
+  /** Whether the story holds no words, pictures or cards. */
+  isEmpty(): boolean;
 }
 
 export interface MarkdownEditorProps {
@@ -78,16 +84,31 @@ export interface MarkdownEditorProps {
    */
   script?: StoryScript;
   lang?: string;
+  /**
+   * `framed` (default): the story inside the form's dashed frame, under a
+   * fixed toolbar. `canvas`: the writer's own page — no frame and no toolbar,
+   * the story at the reader's measure and type; formatting comes when it is
+   * wanted (a selection bubble and a "+" on an empty line for a fine pointer,
+   * a bar docked on the keyboard for a finger).
+   */
+  variant?: 'framed' | 'canvas';
+  /** What the writer asks of the field (focus, emptiness). */
+  editorRef?: Ref<MarkdownEditorHandle>;
+  /** Pictures are on their way into the story (the publish step waits for them). */
+  onUploadingChange?: (uploading: boolean) => void;
+  /** The story took or lost the focus. */
+  onFocusChange?: (focused: boolean) => void;
 }
 
 /**
  * Rich story editor that stores Markdown. Built on Tiptap (ProseMirror) so we
- * get markdown input rules (`## `, `**bold**`, `- list`, `> quote`) plus a
- * HackMD-style fixed toolbar pinned to the top of the writing surface — a
- * stable home for actions that don't fit a selection popup, like inserting a
- * link to one of your own cards or uploading an inline image. Images can also
- * arrive by paste (Ctrl+V) or drag-drop, landing at the cursor / drop point.
- * Sits inside the same wobbly dashed surface as the Field inputs.
+ * get markdown input rules (`## `, `**bold**`, `- list`, `> quote`), the
+ * shortcuts, and pictures by paste (Ctrl+V) or drag-drop at the cursor / drop
+ * point. The story's type is the reader's own (src/styles/story.css, with the
+ * apostrophes inside Latin words set in the Latin face: LatinMarks, a
+ * decoration beside the schema, never in it). Framed, it sits in the form's
+ * wobbly dashed surface under a HackMD-style fixed toolbar; as the writer's
+ * canvas it is the page itself (see `variant`).
  */
 export function MarkdownEditor({
   value,
@@ -97,8 +118,13 @@ export function MarkdownEditor({
   seed = 17,
   script,
   lang,
+  variant = 'framed',
+  editorRef,
+  onUploadingChange,
+  onFocusChange,
 }: MarkdownEditorProps) {
   const t = useTranslations('write.editor');
+  const canvas = variant === 'canvas';
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
   const [cardModalOpen, setCardModalOpen] = useState(false);
@@ -111,9 +137,18 @@ export function MarkdownEditor({
   const { w: toolbarW } = useElementSize(toolbarRef);
   const toolbarSteps = ruleSteps(toolbarW);
 
+  // The canvas's tools follow the pointer, not the width: null until hydrated (neither is drawn).
+  const fine = useMediaQuery(FINE_POINTER);
+  const touchBar = canvas && fine === false;
+  const kbInset = useKeyboardInset(touchBar && focus);
+
   // editorProps handlers are captured once at editor creation, so they reach
   // the latest upload logic through a ref instead of a stale closure.
   const insertImagesRef = useRef<(files: File[], pos?: number) => void>(() => {});
+  // The selection bubble's element, for Option/Alt+F10.
+  const bubbleRef = useRef<HTMLDivElement | null>(null);
+  const onFocusChangeRef = useRef(onFocusChange);
+  onFocusChangeRef.current = onFocusChange;
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -121,13 +156,14 @@ export function MarkdownEditor({
     // native apps' editor island); only the node views are the web's own.
     extensions: [
       ...storyExtensions({ blockquote: CurvedBlockquoteNode, image: OrganicImageNode, cardEmbed: CardEmbedNode }),
+      LatinMarks,
       Placeholder.configure({ placeholder: placeholder ?? '' }),
     ],
     content: value,
     editorProps: {
       // Re-read on every render (useEditor applies changed options), so a new script re-sets the story at once.
       attributes: {
-        class: `${styles.content} story-prose`,
+        class: [styles.content, canvas && styles.canvasContent, 'story-prose'].filter(Boolean).join(' '),
         ...(script ? { 'data-script': script } : {}),
         ...(lang ? { lang } : {}),
         // The pen wave every link in the story wears (one for all of them here; the reader seeds one per link).
@@ -136,6 +172,8 @@ export function MarkdownEditor({
         'aria-multiline': 'true',
         ...(ariaLabel ? { 'aria-label': ariaLabel } : {}),
       },
+      // On a touch screen the caret keeps clear of the keyboard and the bar docked on it.
+      ...(touchBar ? { scrollMargin: { top: 16, right: 0, left: 0, bottom: kbInset + BAR_ROW_H + CARET_CLEARANCE } } : {}),
       // Pasted screenshots / copied images land at the cursor.
       handlePaste: (_view, event) => {
         const files = imageFiles(event.clipboardData?.files);
@@ -155,53 +193,60 @@ export function MarkdownEditor({
         insertImagesRef.current(files, coords?.pos);
         return true;
       },
+      // Option/Alt+F10 moves the focus into the selection bubble (WAI-ARIA's key for a toolbar of the text).
+      handleKeyDown: (_view, event) => {
+        if (!(event.altKey && event.key === 'F10')) return false;
+        const first = bubbleRef.current?.querySelector<HTMLButtonElement>('[data-tool][tabindex="0"], [data-tool]');
+        if (!first || bubbleRef.current?.style.visibility === 'hidden') return false;
+        event.preventDefault();
+        first.focus();
+        return true;
+      },
     },
     onUpdate: ({ editor }) => onChange(getMarkdown(editor)),
-    onFocus: () => setFocus(true),
-    onBlur: () => setFocus(false),
+    onFocus: () => {
+      setFocus(true);
+      onFocusChangeRef.current?.(true);
+    },
+    onBlur: () => {
+      setFocus(false);
+      onFocusChangeRef.current?.(false);
+    },
   });
 
-  const activeStates = useEditorState({
-    editor,
-    selector: (ctx) => {
-      if (!ctx.editor) {
-        return {
-          bold: false,
-          italic: false,
-          h2: false,
-          h3: false,
-          bulletList: false,
-          orderedList: false,
-          blockquote: false,
-        };
-      }
-      return {
-        bold: ctx.editor.isActive('bold'),
-        italic: ctx.editor.isActive('italic'),
-        h2: ctx.editor.isActive('heading', { level: 2 }),
-        h3: ctx.editor.isActive('heading', { level: 3 }),
-        bulletList: ctx.editor.isActive('bulletList'),
-        orderedList: ctx.editor.isActive('orderedList'),
-        blockquote: ctx.editor.isActive('blockquote'),
-      };
-    },
-  }) ?? {
-    bold: false,
-    italic: false,
-    h2: false,
-    h3: false,
-    bulletList: false,
-    orderedList: false,
-    blockquote: false,
-  };
+  useImperativeHandle(
+    editorRef,
+    () => ({
+      focus(where = 'end') {
+        if (!editor) return;
+        if (where === 'keep') editor.commands.focus();
+        else editor.commands.focus(where);
+      },
+      isEmpty() {
+        return editor?.isEmpty ?? true;
+      },
+    }),
+    [editor],
+  );
+
+  // The keyboard rising over the caret: bring the caret above the bar once (typing keeps it there).
+  const keyboardUp = kbInset > 0;
+  useEffect(() => {
+    if (keyboardUp && editor && !editor.isDestroyed && editor.isFocused) editor.commands.scrollIntoView();
+  }, [keyboardUp, editor]);
+
+  const uploading = uploadingCount > 0;
+  useEffect(() => {
+    onUploadingChange?.(uploading);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploading]);
+
+  const activeStates =
+    useEditorState({ editor, selector: (ctx) => activeFormats(ctx.editor) }) ?? NO_FORMATS;
 
   const { toolbarMaskUrl, toolbarStrokeD } = useMemo(() => {
     const { maskD, strokeD } = buildToolbarPaths(seed + 5, toolbarSteps);
-    const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${TOOLBAR_W} ${TOOLBAR_TOTAL_H}' preserveAspectRatio='none'><path d='${maskD}' fill='white'/></svg>`;
-    return {
-      toolbarMaskUrl: `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`,
-      toolbarStrokeD: strokeD,
-    };
+    return { toolbarMaskUrl: toolbarMask(maskD), toolbarStrokeD: strokeD };
   }, [seed, toolbarSteps]);
 
   insertImagesRef.current = (files, pos) => {
@@ -243,6 +288,63 @@ export function MarkdownEditor({
     setCardModalOpen(false);
   }
 
+  const pickImages = () => fileInputRef.current?.click();
+  const pickCard = () => setCardModalOpen(true);
+
+  // What every variant keeps: the error line, the picture picker, the card picker.
+  const shared = (
+    <>
+      {imageError && <div className={styles.imageError}>{imageError}</div>}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={ACCEPTED_IMAGES}
+        multiple
+        className={styles.fileInputHidden}
+        onChange={(e) => {
+          const files = imageFiles(e.currentTarget.files);
+          if (files.length > 0) insertImagesRef.current(files);
+          e.currentTarget.value = '';
+        }}
+      />
+      {cardModalLoaded && (
+        <InsertCardModal open={cardModalOpen} onClose={() => setCardModalOpen(false)} onPick={insertCardLink} />
+      )}
+    </>
+  );
+
+  if (canvas) {
+    return (
+      <div className={styles.canvas}>
+        <EditorContent editor={editor} />
+        {fine === true && (
+          <>
+            <FormatBubble ref={bubbleRef} editor={editor} seed={seed} />
+            <InsertHandle editor={editor} seed={seed} onInsertImage={pickImages} onInsertCard={pickCard} />
+          </>
+        )}
+        {touchBar && (
+          <KeyboardFormatBar
+            editor={editor}
+            focused={focus}
+            inset={kbInset}
+            seed={seed}
+            uploading={uploading}
+            onInsertImage={pickImages}
+            onInsertCard={pickCard}
+          />
+        )}
+        {uploading && (
+          <p className={styles.uploadingLine} role="status">
+            <SketchLoader size={15} seed={seed} ariaLabel={t('imageUploading')} />
+            {t('imageUploading')}
+          </p>
+        )}
+        {shared}
+      </div>
+    );
+  }
+
   const btn = (
     label: ReactNode,
     aria: string,
@@ -258,6 +360,7 @@ export function MarkdownEditor({
       seed={seed + (opts.seed ?? 0)}
     />
   );
+  const format = (command: FormatCommand) => () => runFormat(editor, command);
 
   return (
     <HandDrawnDashedSurface
@@ -289,36 +392,15 @@ export function MarkdownEditor({
             />
           </svg>
           <div className={styles.toolbar} role="toolbar" aria-label={t('toolbarLabel')}>
-            {btn(t('bold'), t('bold'), () => editor.chain().focus().toggleBold().run(), {
-              active: activeStates.bold,
-              seed: 21,
-            })}
-            {btn(t('italic'), t('italic'), () => editor.chain().focus().toggleItalic().run(), {
-              active: activeStates.italic,
-              seed: 28,
-            })}
+            {btn(t('bold'), t('bold'), format('bold'), { active: activeStates.bold, seed: 21 })}
+            {btn(t('italic'), t('italic'), format('italic'), { active: activeStates.italic, seed: 28 })}
             <Divider orientation="vertical" seed={seed + 3} amplitude={1.2} spacing={4} />
-            {btn('H2', t('h2'), () => editor.chain().focus().toggleHeading({ level: 2 }).run(), {
-              active: activeStates.h2,
-              seed: 35,
-            })}
-            {btn('H3', t('h3'), () => editor.chain().focus().toggleHeading({ level: 3 }).run(), {
-              active: activeStates.h3,
-              seed: 42,
-            })}
+            {btn('H2', t('h2'), format('h2'), { active: activeStates.h2, seed: 35 })}
+            {btn('H3', t('h3'), format('h3'), { active: activeStates.h3, seed: 42 })}
             <Divider orientation="vertical" seed={seed + 9} amplitude={1.2} spacing={4} />
-            {btn(t('bulletList'), t('bulletList'), () => editor.chain().focus().toggleBulletList().run(), {
-              active: activeStates.bulletList,
-              seed: 49,
-            })}
-            {btn(t('orderedList'), t('orderedList'), () => editor.chain().focus().toggleOrderedList().run(), {
-              active: activeStates.orderedList,
-              seed: 56,
-            })}
-            {btn(t('quote'), t('quote'), () => editor.chain().focus().toggleBlockquote().run(), {
-              active: activeStates.blockquote,
-              seed: 63,
-            })}
+            {btn(t('bulletList'), t('bulletList'), format('bulletList'), { active: activeStates.bulletList, seed: 49 })}
+            {btn(t('orderedList'), t('orderedList'), format('orderedList'), { active: activeStates.orderedList, seed: 56 })}
+            {btn(t('quote'), t('quote'), format('blockquote'), { active: activeStates.blockquote, seed: 63 })}
             <Divider orientation="vertical" seed={seed + 15} amplitude={1.2} spacing={4} />
             {btn(
               <span className={styles.toolBtnIconLabel}>
@@ -326,12 +408,12 @@ export function MarkdownEditor({
                 {t('insertCard')}
               </span>,
               t('insertCard'),
-              () => setCardModalOpen(true),
+              pickCard,
               { seed: 70 }
             )}
             {btn(
               <span className={styles.toolBtnIconLabel}>
-                {uploadingCount > 0 ? (
+                {uploading ? (
                   <SketchLoader size={15} seed={seed} ariaLabel={t('imageUploading')} />
                 ) : (
                   <Icon name="image" size={15} />
@@ -339,86 +421,15 @@ export function MarkdownEditor({
                 {t('insertImage')}
               </span>,
               t('insertImage'),
-              () => fileInputRef.current?.click(),
-              { disabled: uploadingCount > 0, seed: 77 }
+              pickImages,
+              { disabled: uploading, seed: 77 }
             )}
           </div>
         </div>
 
         <EditorContent editor={editor} />
-
-        {imageError && <div className={styles.imageError}>{imageError}</div>}
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={ACCEPTED_IMAGES}
-          multiple
-          className={styles.fileInputHidden}
-          onChange={(e) => {
-            const files = imageFiles(e.currentTarget.files);
-            if (files.length > 0) insertImagesRef.current(files);
-            e.currentTarget.value = '';
-          }}
-        />
-
-        {cardModalLoaded && (
-          <InsertCardModal
-            open={cardModalOpen}
-            onClose={() => setCardModalOpen(false)}
-            onPick={insertCardLink}
-          />
-        )}
+        {shared}
       </div>
     </HandDrawnDashedSurface>
-  );
-}
-
-interface ToolButtonProps {
-  label: ReactNode;
-  aria: string;
-  onClick: () => void;
-  active?: boolean;
-  disabled?: boolean;
-  seed: number;
-}
-
-/** Toolbar button whose hover/active wash is a wobbly curved fill (same
- *  hand-drawn chip language as the header's notification badge) instead of a
- *  flat rounded rectangle. */
-function ToolButton({ label, aria, onClick, active, disabled, seed }: ToolButtonProps) {
-  const ref = useRef<HTMLButtonElement>(null);
-  const { w, h } = useElementSize(ref);
-  return (
-    <button
-      ref={ref}
-      type="button"
-      className={styles.toolBtn}
-      data-active={active || undefined}
-      disabled={disabled}
-      aria-label={aria}
-      aria-pressed={active}
-      title={aria}
-      // keep the selection / cursor while clicking the toolbar
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onClick}
-    >
-      {w > 0 && h > 0 && (
-        <HandDrawnBorder
-          w={w}
-          h={h}
-          R={h * 0.4}
-          seed={seed}
-          mag={1.4}
-          segmentsH={2}
-          segmentsV={1}
-          curve={1.5}
-          cornerJitter={2.6}
-          cornerOffset={h * 0.05}
-          fillColor="var(--tool-btn-fill)"
-        />
-      )}
-      <span className={styles.toolBtnLabel}>{label}</span>
-    </button>
   );
 }

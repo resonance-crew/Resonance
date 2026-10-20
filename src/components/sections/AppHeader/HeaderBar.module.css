@@ -36,6 +36,7 @@
 }
 
 .title {
+  flex: 0 1 auto;
   min-width: 0;
   margin: 0;
   overflow: hidden;
@@ -47,4 +48,28 @@
   color: var(--color-text);
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* Named from script (the writer's publish step): the heading says where the
+   focus is; it is no control, so it draws no ring. */
+.title:focus {
+  outline: none;
+}
+
+/* What the page does next, at the row's end: it keeps its size and the title
+   ellipsizes before it shrinks. */
+.trailing {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding-left: 8px;
+}
+
+/* A finger needs 44px to land on (the small pills are about 38px). */
+@media (pointer: coarse) {
+  .trailing > button {
+    min-height: 44px;
+  }
 }

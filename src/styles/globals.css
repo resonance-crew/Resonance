@@ -123,6 +123,22 @@ textarea::placeholder {
   mask-image: linear-gradient(to bottom, transparent, #000 16px, #000 calc(100% - 16px), transparent);
 }
 
+/* A row that scrolls sideways (useEdgeFades(ref, 'x')). */
+[data-edge-fade-left] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 16px);
+  mask-image: linear-gradient(to right, transparent, #000 16px);
+}
+
+[data-edge-fade-right] {
+  -webkit-mask-image: linear-gradient(to left, transparent, #000 16px);
+  mask-image: linear-gradient(to left, transparent, #000 16px);
+}
+
+[data-edge-fade-left][data-edge-fade-right] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+}
+
 /* ── Organic shape entrance ──────────────────────────────────────────
    Hand-drawn SVGs only mount once their host has been measured, so they
    appear after the surrounding chrome. A short fade keeps that arrival from
