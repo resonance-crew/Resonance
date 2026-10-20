@@ -116,6 +116,7 @@ struct MainTabView: View {
     private let tabs: [AppTab] = [.feed, .messages, .notifications, .cardBox]
     #if DEBUG
     private static var openedLaunchRoute = false
+    private static var openedLaunchWriter = false
     #endif
 
     /// The header's tabs and pen over the current tab: its root only.
@@ -240,8 +241,12 @@ struct MainTabView: View {
 
     /// What the tab view does around its stacks: the deletion's undo, the writer's requests, links and pushes.
     private func effects(_ content: some View) -> some View {
-        content
+        @Bindable var session = session
+        return content
         .accountDeletionNotice()
+        // A resonance restored from the trash that came back on its own says so, wherever it was restored from.
+        .organicNotice(isPresented: $session.restoredAloneNotice, title: L10n.Me.Actions.restored,
+                       message: L10n.Me.Actions.restoredAloneBody, closeLabel: L10n.Safety.Report.close, seed: 17)
         .animation(.easeOut(duration: 0.12), value: bottomBar)
         .background(Tokens.cream)
         .environment(writer)
@@ -289,6 +294,20 @@ struct MainTabView: View {
                     toasts.show(L10n.Me.Actions.restored)
                 }
             })
+        }
+        // `-openWriter YES` opens the writer on a new card at launch, `-writeCard <id>` on one of your cards
+        // (screen checks: with `-writeTitle`/`-writeStory`, and `-writeStep publish` for the publish step).
+        .task {
+            // `-cardBoxShelf trash` (any shelf's web key) opens the card box on that shelf.
+            if UserDefaults.standard.string(forKey: "cardBoxShelf") != nil, !Self.openedLaunchWriter { tab = .cardBox }
+            guard !Self.openedLaunchWriter else { return }
+            if let card = UserDefaults.standard.string(forKey: "writeCard") {
+                Self.openedLaunchWriter = true
+                paths[tab, default: []].append(.write(.init(cardId: card)))
+            } else if UserDefaults.standard.bool(forKey: "openWriter") {
+                Self.openedLaunchWriter = true
+                paths[tab, default: []].append(.write(.init()))
+            }
         }
         // `-route /card/<slug>` or `-route /u/<handle>` opens that page at launch (screen checks); a query
         // comes along (`/messages/<handle>?note=…&card=…`, a bell's link).

@@ -95,6 +95,10 @@ final class SessionStore {
     /// The app's one toast (「已移到垃圾桶 · 復原」, 「已還原」): shown over the tabs' foot by the shell
     /// (`MainTabView`'s ToastHost), so it outlives the page that asked for it.
     let toasts = ToastCenter()
+    /// 「已還原 — 這張卡片回來了，但不再與原本那張卡片共振」: a resonance restored from the trash that came
+    /// back on its own. Said in a notice the shell draws (it outlives whatever restored the card: the
+    /// toast's 復原 after the card's ⋯ left with its card).
+    var restoredAloneNotice = false
     /// The messages this account sent that are still on their way, one queue per conversation
     /// (they outlive the thread that sent them; emptied when the account changes).
     let outboxes: ChatOutboxes
@@ -307,6 +311,7 @@ final class SessionStore {
         // Messages still on their way were the last account's; so was a toast's undo.
         outboxes.clear()
         toasts.dismiss()
+        restoredAloneNotice = false
         push.signedIn = newUID
         // The thought map belongs to the account too (kept between visits while it is signed in).
         thoughtMap = ThoughtMapStore(api: reading)

@@ -19,6 +19,8 @@ struct CardScreen: View {
     @State private var linkToConfirm: ChatLinks.Parsed?
     /// How far through the story the reader is, for the bar's terracotta line (only the bar reads it).
     @State private var meter = ReadingMeter()
+    /// The owner moved the card to the trash on this page a moment ago: the banner takes the focus.
+    @State private var justTrashed = false
     @Environment(\.window) private var window
     /// A tablet's header (round 5 C1): the card's title fades into its centre in place of the author.
     @Environment(\.headerChrome) private var headerChrome
@@ -147,7 +149,8 @@ struct CardScreen: View {
                         .transition(.opacity.combined(with: .offset(y: 8)))
                 }
             } trailing: {
-                if let detail = model?.detail {
+                // The owner's card in the trash has neither its share nor its ⋯: its banner is the way out.
+                if let detail = model?.detail, !TrashedCardBanner.shows(detail) {
                     let card = detail.card
                     let hue = card.accentHue ?? 55
                     ShareLink(item: session.config.origin.appending(path: "card/\(card.routeKey)")) {
@@ -158,9 +161,13 @@ struct CardScreen: View {
                     // The ⋯ lives in the bar, as phone apps keep a page's actions: the owner's, or the reader's safety menu —
                     // anonymous cards included (App Store 1.2), whose author only the server knows: Report alone.
                     if detail.isOwner {
+                        // 刪除 leaves the page here, its trash banner in place of the share and the ⋯.
                         CardActionsMenu(cardId: card.id, visibility: card.visibility.rawValue, seed: hue + 3,
                                         answering: card.referenceCardId, answeringTitle: detail.referenceCard?.value1.title,
-                                        showsCardAfterEdit: false, onDeleted: { openRoute.dismissToRoot() }, trigger: .bare)
+                                        answeringAnonymous: detail.referenceCard?.value1.anonymous,
+                                        isPublished: card.publishedAt != nil, anonymous: detail.anonymous, title: card.title,
+                                        trashFeedback: .page, showsCardAfterEdit: false, onTrashed: { justTrashed = true },
+                                        trigger: .bare)
                     } else {
                         let author = detail.anonymous ? nil : card.author?.value1
                         SafetyMenu(target: .card(id: card.id, authorId: author?.id), handle: author?.handle, seed: hue + 3)
@@ -206,8 +213,14 @@ struct CardScreen: View {
 
     private func page(_ model: CardModel, _ detail: CardDetail) -> some View {
         let card = detail.card
+        // The owner's card in the trash: its banner first, and nothing around the story but its tags.
+        let trashed = TrashedCardBanner.shows(detail)
         return VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
+                if trashed {
+                    TrashedCardBanner(card: card, focusTitle: justTrashed) { openRoute.dismissToRoot() }
+                        .padding(.bottom, 24)
+                }
                 head(card, anonymous: detail.anonymous)
                 StoryMarkdownView(blocks: model.blocks, onOpenURL: open) { href, title in
                     CardEmbedView(href: href, title: title, card: model.embed(for: href))
@@ -242,7 +255,7 @@ struct CardScreen: View {
                 if !detail.isOwner {
                     CardViewerActions(cardId: card.id, referenceCardId: card.referenceCardId).padding(.bottom, 40)
                 }
-                if !model.links.isEmpty {
+                if !trashed, !model.links.isEmpty {
                     Text(L10n.Card.linkedCards)
                         .font(AppFonts.heading(20))
                         .tracking(-0.01 * 20)
@@ -255,18 +268,18 @@ struct CardScreen: View {
             .padding(.horizontal, 20)
             .headerGap(phone: 16)
 
-            if !model.links.isEmpty { MiniCardList(cards: model.links).padding(.horizontal, -bleed).padding(.bottom, 40) }
+            if !trashed, !model.links.isEmpty { MiniCardList(cards: model.links).padding(.horizontal, -bleed).padding(.bottom, 40) }
             // The article's own bottom padding — already there under a last row that keeps its own 40
             // (the reader's actions, the tags, the linked cards): not a second band of air.
-            if detail.isOwner && card.tags.isEmpty && model.links.isEmpty { Color.clear.frame(height: 8) }
+            if detail.isOwner && card.tags.isEmpty && (trashed || model.links.isEmpty) { Color.clear.frame(height: 8) }
 
-            let resonance = model.resonanceSection
+            let resonance = trashed ? [] : model.resonanceSection
             if !resonance.isEmpty {
                 section(L10n.Card.ResonanceSection.title, headingGap: tablet ? Self.tabletHeadingGap : 40) {
                     MiniCardList(cards: resonance).padding(.horizontal, -bleed)
                 }
             }
-            if !model.related.isEmpty {
+            if !trashed, !model.related.isEmpty {
                 // Bands, and on an expanded window the bordered grid — as the lists above it (round 5 D3).
                 section(L10n.Card.related, headingGap: tablet ? Self.tabletHeadingGap : 56) {
                     StoryCardList(cards: model.related).padding(.horizontal, -bleed)

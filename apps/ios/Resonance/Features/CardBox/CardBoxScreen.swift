@@ -2,9 +2,9 @@ import DesignSystem
 import ResonanceKit
 import SwiftUI
 
-/// My card box (me/page.tsx): who I am, then my cards on six shelves —
+/// My card box (me/page.tsx): who I am, then my cards on seven shelves —
 /// published, private, drafts, the cards I resonated with, cards linking to
-/// mine, bookmarks.
+/// mine, bookmarks, and the trash (always last, before the thought map).
 struct CardBoxScreen: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.window) private var window
@@ -22,7 +22,12 @@ struct CardBoxScreen: View {
     /// a quiet line over it says why) — over that shelf only, never one chosen while it was on its way.
     @State private var refreshFailure: ShelfFailure?
 
-    private static let order: [ReadingAPI.CardBoxShelf] = [.published, ._private, .draft, .resonated, .linked, .bookmarks]
+    /// The shelves in the strip's order: the trash always last (trash.spec §4), shown even while empty —
+    /// it is read only when chosen, never to decide whether it shows.
+    static let order: [ReadingAPI.CardBoxShelf] = [.published, ._private, .draft, .resonated, .linked, .bookmarks, .trash]
+    #if DEBUG
+    private static var choseLaunchShelf = false
+    #endif
     /// The shelves of my own cards (OWNED_TABS): each card gets its ⋯.
     static let owned: Set<ReadingAPI.CardBoxShelf> = [.published, ._private, .draft]
 
@@ -48,6 +53,15 @@ struct CardBoxScreen: View {
             withAnimation(.easeInOut(duration: 0.25)) { refreshFailure = after }
             if let after { AccessibilityNotification.Announcement(after.failure.message).post() }
         }
+        #if DEBUG
+        .task {
+            // `-cardBoxShelf <web key>` opens on that shelf (screen checks).
+            guard !Self.choseLaunchShelf, let key = UserDefaults.standard.string(forKey: "cardBoxShelf"),
+                  let chosen = Self.order.first(where: { Self.webKey($0) == key }) else { return }
+            Self.choseLaunchShelf = true
+            shelf = chosen
+        }
+        #endif
         .task(id: shelf) {
             refreshFailure = nil
             // Another shelf's failure isn't this one's: it shows its skeleton until its own answer.
@@ -102,6 +116,7 @@ struct CardBoxScreen: View {
     /// wash (seeded per tab key, as on the web), with no rim — the wash alone
     /// marks it, one frame per layer.
     private var tabs: some View {
+        ScrollViewReader { proxy in
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
                 ForEach(Self.order, id: \.self) { s in
@@ -122,6 +137,7 @@ struct CardBoxScreen: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(active ? [.isSelected, .isButton] : .isButton)
+                    .id(s)
                 }
                 // The thought map is the strip's last tab; it opens its own screen (OrganicTabs' thoughtMapHref).
                 Button { openRoute(.thoughtMap) } label: {
@@ -140,6 +156,11 @@ struct CardBoxScreen: View {
             .padding(.vertical, 7)
         }
         .scrollIndicators(.hidden)
+        // The shelf chosen is in view (the trash, last, is off a phone's edge).
+        .onChange(of: shelf, initial: true) { _, chosen in
+            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(chosen) }
+        }
+        }
         .sensoryFeedback(.selection, trigger: shelf)
     }
 
@@ -150,6 +171,9 @@ struct CardBoxScreen: View {
                 // The shared empty state (design §1); the empty published shelf also points at the first story (ux §4).
                 if shelf == .bookmarks {
                     OrganicEmptyState(message: Self.empty(shelf), icon: .bookmark, seed: 59)
+                } else if shelf == .trash {
+                    OrganicEmptyState(title: Self.empty(shelf), message: L10n.Me.emptyTrashLine(days: CardTrash.days),
+                                      icon: .trash, seed: 61)
                 } else if shelf == .published {
                     OrganicEmptyState(title: Self.empty(shelf), actionTitle: L10n.Me.emptyPublishedCta, icon: .cards, seed: 53) {
                         writer.open()
@@ -157,6 +181,8 @@ struct CardBoxScreen: View {
                 } else {
                     OrganicEmptyState(title: Self.empty(shelf), icon: .cards, seed: 53)
                 }
+            } else if shelf == .trash {
+                TrashShelf(cards: cards)
             } else if shelf == .linked {
                 MiniCardList(cards: cards)
             } else if Self.owned.contains(shelf) {
@@ -246,7 +272,6 @@ struct CardBoxScreen: View {
         case .resonated: L10n.Me.Tabs.resonated
         case .linked: L10n.Me.Tabs.linked
         case .bookmarks: L10n.Me.Tabs.bookmarks
-        // The web's trash shelf (not in `order` until the app's own trash ships).
         case .trash: L10n.Me.Tabs.trash
         }
     }
@@ -310,7 +335,115 @@ private struct ManagedCardList: View {
             // a bordered card's corner is its own); the trigger's 44pt hit box reaches 3 past the 38pt chip.
             .overlay(alignment: .topTrailing) {
                 CardActionsMenu(cardId: card.id, visibility: card.visibility.rawValue, seed: hue, hue: hue,
-                                answering: card.referenceCardId)
+                                answering: card.referenceCardId, isPublished: card.publishedAt != nil,
+                                anonymous: card.anonymous, title: card.title)
+                    .padding(.top, 14 - 3)
+                    .padding(.trailing, (bordered ? 14 : 34) - 3)
+            }
+        }
+    }
+}
+
+/// The card box's 垃圾桶 (the web's TrashShelf): what I deleted, the latest in first, for 30 days —
+/// each saying where it came from and when it goes (``TrashCaption``). A published card opens its
+/// page (its trash banner), a draft the writer (its trashed notice). Its ⋯ restores it or deletes it
+/// for good; 清空垃圾桶 deletes them all, asked first in red. Over the cards, how long the trash
+/// keeps them — and, while an anonymous card is here, that the notes left on it went with it.
+private struct TrashShelf: View {
+    let cards: [FeedCard]
+    @Environment(WriteLauncher.self) private var writer
+    @Environment(SessionStore.self) private var session
+    @Environment(\.window) private var window
+    @State private var emptying = false
+    @State private var busy = false
+    @State private var failed = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            header.alignedWithCardGrid()
+            TrashCardList(cards: cards)
+        }
+        // For good, every card here: the verb in red; busy through the whole emptying.
+        .organicConfirm(isPresented: $emptying, title: L10n.Me.Actions.emptyTrashTitle, message: L10n.Me.Actions.emptyTrashBody,
+                        cancelLabel: L10n.Me.Actions.deleteCancel, confirmLabel: L10n.Me.Actions.emptyTrash,
+                        closeLabel: L10n.Me.Actions.deleteCancel, busy: busy, error: failed ? L10n.Safety.actionError : nil,
+                        destructive: true, seed: 67) {
+            Task { await empty() }
+        }
+    }
+
+    @ViewBuilder private var header: some View {
+        let lines = VStack(alignment: .leading, spacing: 4) {
+            Text(L10n.Me.trashHint(days: CardTrash.days))
+            if TrashCaption.holdsAnonymous(cards) { Text(L10n.Me.trashAnonymousNotes) }
+        }
+        .font(AppFonts.body(13))
+        .foregroundStyle(Tokens.textMuted)
+        .fixedSize(horizontal: false, vertical: true)
+        // It only opens a question, which is red: the tonal red, as Settings' 刪除帳號.
+        let button = OrganicButton(L10n.Me.Actions.emptyTrash, variant: .dangerTonal, size: .sm) {
+            failed = false
+            emptying = true
+        }
+        .fixedSize()
+        if window.layoutClass == .compact {
+            // A phone: the button under the lines, at their start.
+            VStack(alignment: .leading, spacing: 12) {
+                lines
+                button
+            }
+        } else {
+            HStack(alignment: .center, spacing: 12) {
+                lines.frame(maxWidth: .infinity, alignment: .leading)
+                button
+            }
+        }
+    }
+
+    private func empty() async {
+        guard !busy else { return }
+        busy = true
+        failed = false
+        defer { busy = false }
+        do {
+            _ = try await session.writing.emptyTrash()
+            emptying = false
+        } catch {
+            // What is left is read again, and the question stays to try once more.
+            failed = true
+        }
+        writer.noteChange(.init())
+    }
+}
+
+/// The trash's cards (ProfileTabs' trash shelf): each with its caption under the byline and the
+/// trash's ⋯ over its top-right corner; an anonymous one wears the anonymous byline, as on the other
+/// owned shelves. A published card opens its page; a draft, the writer.
+private struct TrashCardList: View {
+    let cards: [FeedCard]
+    @Environment(WriteLauncher.self) private var writer
+    @Environment(SessionStore.self) private var session
+
+    var body: some View {
+        let palettes = CardPalette.palettes(cards.map(\.accentHue))
+        let now = Date.now
+        CardColumns(count: cards.count) { i, bordered in
+            let card = cards[i]
+            let hue = CardPalette(index: palettes[i]).hue
+            let face = StoryCardView(card.publicStory, position: i, isLast: i == cards.count - 1, bordered: bordered,
+                                     palette: palettes[i])
+                .footnote(TrashCaption.text(card, now: now))
+            Group {
+                if card.publishedAt == nil {
+                    Button { writer.edit(card.id) } label: { face }
+                } else {
+                    // Never prefilled from the shelf: a trash summary isn't the card's page.
+                    NavigationLink(value: Route.card(card.routeKey)) { face }
+                }
+            }
+            .buttonStyle(.plain)
+            .overlay(alignment: .topTrailing) {
+                TrashActionsMenu(cardId: card.id, seed: hue, hue: hue)
                     .padding(.top, 14 - 3)
                     .padding(.trailing, (bordered ? 14 : 34) - 3)
             }
