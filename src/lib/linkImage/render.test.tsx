@@ -1,17 +1,19 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import sharp from 'sharp';
 import type { Card, User } from '@/lib/db/types';
 import { fontCoverage } from './cmap';
 import { MISSING, OG_FONT_DIR, allFonts, drawable, fontsFor, latinFonts } from './fonts';
 import { coverVersion, drawnCard, drawnCardVersion, type DrawnCard } from './model';
-import { drawnCardElement } from './render';
+import { drawnCardElement, renderDrawnCard } from './render';
 import { imageVersion } from './version';
 
 // The link-preview image of a card without a cover: what it draws, from what,
 // and — for an anonymous card — what it never draws. Rendering itself (satori,
-// the JPEG) is covered by the route's suite (src/app/api/og/card).
+// the JPEG) is covered by the route's suite (src/app/api/og/card), except that
+// a render never reaches the network for a glyph.
 
 const STORAGE = ['https://img.example'];
 const PHOTO = 'https://img.example/avatar/2026-10/0b9c6a2e-1f43-4c55-9d8e-2a1c3b4d5e6f.webp';
@@ -180,6 +182,20 @@ describe("the image's fonts", () => {
     expect(drawable('第一段\n第二段', coverage)).toBe('第一段\n第二段');
   });
 
+  it('draws a space no face draws as a plain one, any line break as a line feed, and drops a byte-order mark', async () => {
+    const latin = (await latinFonts()).coverage;
+    expect(drawable('A\u3000title', latin)).toBe('A title');
+    expect(drawable('Odd\uFEFFspace', latin)).toBe('Oddspace');
+    expect(drawable('Line\u2028sep\u2029end\r\nnext\rlast', latin)).toBe('Line\nsep\nend\nnext\nlast');
+    expect(drawable('Ogham\u1680mark\vtab\ffeed\there', latin)).toBe('Ogham mark tab feed here');
+    // A space a face draws stays as it is: the CJK faces draw the ideographic space.
+    expect(drawable('外婆\u3000的梅子', (await allFonts()).coverage)).toBe('外婆\u3000的梅子');
+    // And a space alone never asks for the CJK faces.
+    const set = await fontsFor({ title: 'A\u3000title' });
+    expect(set.fonts.map((f) => f.name)).not.toContain('Story Sans');
+    expect(set.texts.title).toBe('A title');
+  });
+
   it('reads the CJK faces only for words that need them', async () => {
     const latin = await fontsFor({ title: 'Plums 2024', name: 'mira' });
     expect(latin.fonts.map((f) => f.name)).not.toContain('Story Sans');
@@ -188,4 +204,38 @@ describe("the image's fonts", () => {
     expect(cjk.fonts.map((f) => f.name)).toEqual(expect.arrayContaining(['Story Serif', 'Story Sans', 'Share Display', 'Body']));
     expect(cjk.texts.title).toBe('外婆的醃梅子 ');
   });
+});
+
+// next/og hands satori a loader that fetches a glyph no font has from Google Fonts (font CSS,
+// then the font) in the middle of the render, with no deadline. Satori asks for every grapheme
+// but a tab and a line feed, spaces included: a space no face draws — an ideographic space
+// typed from a Chinese IME into a Latin title, a BOM pasted along, a line separator — must not
+// reach it either.
+describe('a render', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const LATIN_STORY = 'Every May my grandmother dried the plums on a bamboo tray.';
+  // A Latin card is drawn with the Latin faces alone, a CJK one with all of them.
+  const titles: [string, string, string][] = [
+    ['an ideographic space in a Latin title', 'A\u3000title', LATIN_STORY],
+    ['a byte-order mark', 'Odd\uFEFFspace', LATIN_STORY],
+    ['a line separator', 'Line\u2028sep', LATIN_STORY],
+    ['a paragraph separator in a CJK title', '外婆\u2029的梅子', card().story],
+    ['thin, narrow and medium mathematical spaces', 'Thin\u2009space\u202Fnarrow\u205Fmath', LATIN_STORY],
+    ['the en quad to the hair space', 'Spaces\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u200Aend', LATIN_STORY],
+    ['an Ogham space mark', 'Ogham\u1680mark', LATIN_STORY],
+    ['a vertical tab, a form feed and a CRLF', 'Tab\vfeed\fline\r\nend', LATIN_STORY],
+    ['a no-break space and a tab', 'No\u00A0break\there', LATIN_STORY],
+  ];
+
+  it.each(titles)('never sends for a glyph: %s', async (_, title, story) => {
+    const sent = vi.fn(async (input: unknown) => {
+      throw new Error(`no network in a render: ${String(input)}`);
+    });
+    vi.stubGlobal('fetch', sent);
+    const jpeg = await renderDrawnCard(drawnCard(card({ thoughtCore: title, story }), author, STORAGE)).catch((e: unknown) => e);
+    expect(sent.mock.calls.map(([input]) => String(input))).toEqual([]);
+    expect(jpeg).toBeInstanceOf(Buffer);
+    expect(await sharp(jpeg as Buffer).metadata()).toMatchObject({ format: 'jpeg', width: 1200, height: 630 });
+  }, 30_000);
 });

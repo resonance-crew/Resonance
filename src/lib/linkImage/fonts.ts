@@ -11,11 +11,14 @@ import { fontCoverage } from './cmap';
  * the folder with the route.
  *
  * What none of them draws is left out of the text before satori sees it
- * (`drawable`): satori asks next/og for a missing glyph, and next/og fetches
- * it from Google Fonts (an emoji from a CDN) while the image renders — a
- * request to a third party carrying the card's words. A letter or digit
- * outside the faces (a Hanzi beyond Big5 level 1, kana, Hangul) becomes □,
- * an emoji or any other mark is dropped.
+ * (`drawable`): satori asks next/og for a missing glyph — any character but a
+ * tab or a line feed, spaces too — and next/og fetches it from Google Fonts
+ * (an emoji from a CDN) while the image renders, with no deadline: a request
+ * to a third party carrying the card's words. A letter or digit outside the
+ * faces (a Hanzi beyond Big5 level 1, kana, Hangul) becomes □, a space none
+ * draws (an ideographic space in a Latin card, a thin or an Ogham space) a
+ * plain one, a line or paragraph separator or a CR a line feed, and a
+ * byte-order mark, an emoji or any other mark is dropped.
  */
 
 export const OG_FONT_DIR = join(process.cwd(), 'src/lib/linkImage/fonts');
@@ -92,17 +95,31 @@ export function allFonts(): Promise<FontSet> {
 
 const BLANK = /\s/u;
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
+/** A line break however it is spelled — CRLF, CR, a line or paragraph separator — as the line feed satori breaks at (or, outside pre-line, reads as a space). */
+const LINE_BREAK = /\r\n?|[\u2028\u2029]/g;
+const LINE_FEED = '\n';
+const SPACE = ' ';
+const BYTE_ORDER_MARK = '\uFEFF';
 /** What stands in for a letter or digit no face draws. */
 export const MISSING = '□';
 
-/** The text with what `coverage` doesn't draw left out (a letter or digit as □, when □ itself is drawn). */
+/** One character as it is drawn with `coverage`: itself, a stand-in, or nothing. */
+function drawnChar(ch: string, coverage: Set<number>): string {
+  // The line feed is the one character besides a tab satori never looks up (and a tab it folds into a space).
+  if (ch === LINE_FEED || coverage.has(ch.codePointAt(0)!)) return ch;
+  if (BLANK.test(ch)) return ch === BYTE_ORDER_MARK || !coverage.has(SPACE.codePointAt(0)!) ? '' : SPACE;
+  if (LETTER_OR_DIGIT.test(ch) && coverage.has(MISSING.codePointAt(0)!)) return MISSING;
+  return '';
+}
+
+/**
+ * The text with what `coverage` doesn't draw left out: a letter or digit as □
+ * (when □ itself is drawn), a space as a plain space, a line break as a line
+ * feed — so every character satori is handed is one a face draws, or a line feed.
+ */
 export function drawable(text: string, coverage: Set<number>): string {
   let out = '';
-  for (const ch of text) {
-    const code = ch.codePointAt(0)!;
-    if (coverage.has(code) || BLANK.test(ch)) out += ch;
-    else if (LETTER_OR_DIGIT.test(ch) && coverage.has(MISSING.codePointAt(0)!)) out += MISSING;
-  }
+  for (const ch of text.replace(LINE_BREAK, LINE_FEED)) out += drawnChar(ch, coverage);
   return out;
 }
 
@@ -113,6 +130,7 @@ export function drawable(text: string, coverage: Set<number>): string {
  */
 export async function fontsFor<T extends Record<string, string>>(texts: T): Promise<{ fonts: OgFont[]; texts: T }> {
   const latin = await latinFonts();
+  // A space never asks for the CJK faces: one the Latin faces don't draw is drawn as a plain space (drawable).
   const fits = Object.values(texts).every((t) => [...t].every((ch) => latin.coverage.has(ch.codePointAt(0)!) || BLANK.test(ch)));
   const set = fits ? latin : await allFonts();
   const drawn = Object.fromEntries(Object.entries(texts).map(([k, t]) => [k, drawable(t, set.coverage)])) as T;
