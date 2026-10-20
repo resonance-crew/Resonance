@@ -42,7 +42,13 @@ import UIKit
 
     @Test func aHeadingsLastLineShowsItsWholeWave() throws {
         var overhang: [String: CGFloat] = [:]
-        for (name, style) in [("body", ProseStyle.body), ("h2", ProseStyle.h2), ("h3", ProseStyle.h3)] {
+        let story = StoryTypography(script: .cjk, compact: true)
+        let latin = StoryTypography(script: .latin, compact: false)
+        let styles: [(String, ProseStyle)] = [
+            ("body", .body(story)), ("h2", ProseStyle.body(story).heading(level: 2)), ("h3", ProseStyle.body(story).heading(level: 3)),
+            ("latin body", .body(latin)), ("latin h2", ProseStyle.body(latin).heading(level: 2)),
+        ]
+        for (name, style) in styles {
             let (window, view) = try shown(style)
             defer { window.isHidden = true }
             let waves = (view.layer.sublayers ?? []).compactMap { $0 as? CAShapeLayer }
@@ -54,9 +60,9 @@ import UIKit
             // Whatever reaches past the foot is drawn, not cut off.
             #expect(overhang[name]! <= 0 || !view.clipsToBounds, "\(name): the wave is cut at the view's foot")
         }
-        // The reader's line box holds its wave; a heading's tight one (1.3, 1.35) doesn't.
+        // The body's line box (1.8, 1.65) holds its wave whole.
         #expect(overhang["body"]! <= 0)
-        #expect(overhang["h2"]! > 0 && overhang["h3"]! > 0)
+        #expect(overhang["latin body"]! <= 0)
     }
 
     /// The line box's room under the baseline (CSSLineBoxes centres the content area in it).

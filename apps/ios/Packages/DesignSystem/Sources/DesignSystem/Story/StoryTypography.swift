@@ -97,6 +97,15 @@ public nonisolated struct StoryTypography: Hashable, Sendable {
     public var itemGap: CGFloat { Tokens.storyItemGap }
     /// Code, inline or in a block, × the text around it (`--story-code`).
     public var codeScale: CGFloat { Tokens.storyCode }
+    /// A line the writer left blank, in em of the body (`--story-blank-line: 1.6em`, not exported: an em length).
+    public static let blankLine: CGFloat = 1.6
+    /// The quote's pen rail: how wide its wavy line's box is, the same on all three platforms.
+    public static let quoteRail: CGFloat = 5.2
+    /// A code block's line height × the body (`pre { line-height: 1.6 }` at the body's size), its
+    /// padding (12 above and below, 16 a side) and radius (`--radius-sm`).
+    public static let codeBlockLeading: CGFloat = 1.6
+    public static let codeBlockPadding = EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
+    public static let codeBlockRadius: CGFloat = Tokens.radiusSm
     /// `em`'s synthesized oblique: the one shear both apps use (AppFonts' italic), the web's browser's.
     public static let italicShear: CGFloat = AppFonts.obliqueMatrix.c
 
@@ -156,6 +165,10 @@ public nonisolated struct StoryTypography: Hashable, Sendable {
     public var endGap: CGFloat { compact ? Tokens.storyEndGapCompact : Tokens.storyEndGap }
     /// The meta line's size (read time · date): interface type, under the 1.25× cap.
     public var metaSize: CGFloat { compact ? Tokens.storyMetaSizeCompact : Tokens.storyMetaSize }
+    /// The byline's meta line under the pen name, wherever the byline stands (no author rail: the
+    /// web's ≤ 900, whose byline keeps the phone's size), and the meta row's beside the rail.
+    public static let bylineMetaSize: CGFloat = Tokens.storyMetaSizeCompact
+    public static let metaRowSize: CGFloat = Tokens.storyMetaSize
     /// The byline's avatar (a phone's head).
     public var bylineAvatar: CGFloat { Tokens.storyBylineAvatar }
     /// The text column → the author rail (expanded windows).
@@ -203,6 +216,18 @@ public nonisolated struct StoryTypography: Hashable, Sendable {
     public func headingFont(level: Int, oblique: Bool = false) -> UIFont {
         AppFonts.storyUIFont(headingFamily, size: headingSize(level: level), weight: headingWeight, oblique: oblique, lining: true,
                              relativeTo: Role.heading.textStyle)
+    }
+
+    /// The story's vertical rhythm at the person's text size: the body's size and the spaces
+    /// between its blocks — paragraph and heading margins in their own em, the block and rule gaps
+    /// grown with the body (`ProseMetrics` collapses them as CSS does).
+    public func rhythm() -> ProseRhythm {
+        let body = bodySize * scale(.body)
+        let heading = scale(.heading)
+        return ProseRhythm(body: body, paragraphGap: paragraphGap, h2: headingSize(level: 2) * heading,
+                           h3: headingSize(level: 3) * heading, headingAbove: Tokens.storyHeadingAbove,
+                           h2Below: Tokens.storyH2Below, h3Below: Tokens.storyH3Below,
+                           blockGap: blockGap * scale(.body), ruleGap: ruleGap * scale(.body), blankLine: Self.blankLine)
     }
 
     /// The body's face at the person's text size: regular, or `--story-bold`; `oblique` for `em`.

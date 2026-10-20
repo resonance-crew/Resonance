@@ -13,10 +13,13 @@ public struct CSSTextView: UIViewRepresentable {
     var onOpenURL: (URL) -> Void
     /// Take the text's own width (a chat bubble shrink-wrapping its words) rather than all that's offered.
     var fitsContent: Bool
+    /// The language VoiceOver reads it in (a story's own, whatever the interface's); nil keeps the app's.
+    var language: String?
 
-    public init(_ text: NSAttributedString, font: UIFont, lineHeight: CGFloat, fitsContent: Bool = false,
+    public init(_ text: NSAttributedString, font: UIFont, lineHeight: CGFloat, fitsContent: Bool = false, language: String? = nil,
                 onOpenURL: @escaping (URL) -> Void = { _ in }) {
         self.fitsContent = fitsContent
+        self.language = language
         self.text = text
         self.font = font
         self.lineHeight = lineHeight
@@ -60,7 +63,16 @@ public struct CSSTextView: UIViewRepresentable {
         // Under the letters, not under the line box: the depth every platform shares (0.29em).
         (view as? LinkWaveTextView)?.waveDrop = LinkWaves.drop(fontSize: font.pointSize)
         view.layoutManager.delegate = boxes
-        if view.attributedText != text { view.attributedText = text }
+        // A justified paragraph is laid out ragged and spread by hand once its width is known
+        // (StoryJustification: as a browser spreads Chinese, not only at the spaces).
+        let coordinator = context.coordinator
+        if coordinator.input != text {
+            coordinator.input = text
+            coordinator.prepared = StoryJustification.prepared(text)
+            coordinator.justifiedWidth = nil
+            view.attributedText = coordinator.prepared
+        }
+        view.accessibilityLanguage = language
     }
 
     public func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
@@ -68,6 +80,12 @@ public struct CSSTextView: UIViewRepresentable {
         let container = uiView.textContainer
         if container.size.width != width {
             container.size = CGSize(width: width, height: .greatestFiniteMagnitude)
+        }
+        let coordinator = context.coordinator
+        if let prepared = coordinator.prepared, coordinator.justifiedWidth != width, StoryJustification.wanted(coordinator.input ?? prepared) {
+            uiView.textStorage.setAttributedString(prepared)
+            StoryJustification.apply(storage: uiView.textStorage, layoutManager: uiView.layoutManager, container: container)
+            coordinator.justifiedWidth = width
         }
         uiView.layoutManager.ensureLayout(for: container)
         let used = uiView.layoutManager.usedRect(for: container)
@@ -78,6 +96,11 @@ public struct CSSTextView: UIViewRepresentable {
         var onOpenURL: (URL) -> Void = { _ in }
         /// The layout manager holds its delegate weakly.
         var lineBoxes: CSSLineBoxes?
+        /// The text as given, as laid out (justified paragraphs ragged), and the width it was last
+        /// justified for.
+        var input: NSAttributedString?
+        var prepared: NSAttributedString?
+        var justifiedWidth: CGFloat?
 
         public func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem, defaultAction: UIAction) -> UIAction? {
             guard case let .link(url) = textItem.content else { return defaultAction }
@@ -86,62 +109,121 @@ public struct CSSTextView: UIViewRepresentable {
     }
 }
 
-/// How a run of story text looks: the reader's `.prose` styles.
+/// How a run of story text looks — src/styles/story.css's `.story-prose` rules for one kind of block,
+/// in the story's type (``StoryTypography``: its script, the window, the person's text size along the
+/// reading curve): the body (a paragraph, a quote's words, a list item) or a heading, h2–h6 (a
+/// story's `#` is drawn as an h2).
+///
+/// The body's lines are justified in a CJK story (the last one as it falls) and ragged in a Latin
+/// one; headings start-aligned in both, with lining figures. Tracking is the story's (+0.03em in a
+/// CJK body, +0.02em on its headings, none in a Latin story or in code); `strong` is the story's
+/// bold; `em` the one synthesized oblique; links' words the deep terracotta every label on paper
+/// wears (their wave stays terracotta, ``LinkWaveTextView``); code the story's code size on its
+/// faint tint. An apostrophe inside a Latin word in a CJK story is set in that element's Latin face.
 public struct ProseStyle: Sendable {
-    public var family: AppFonts.Family
-    public var size: CGFloat
-    public var weight: UIFont.Weight
-    public var lineHeight: CGFloat
+    public var typography: StoryTypography
+    public var role: StoryTypography.Role
+    /// A heading's level (1–6; h1 is drawn as h2). Unused for the body.
+    public var level: Int
     public var color: UIColor
-    public var italic: Bool
-    /// Letter spacing in em (CSS `letter-spacing`).
-    public var tracking: CGFloat
-    /// Inside a quote: its pictures and cards keep to the quote's edge instead of centring in the column.
+    /// Inside a quote: its words and headings muted, its pictures and cards at the quote's edge
+    /// instead of centred in the column.
     public var inQuote = false
+    /// The story's language (`ScriptRule.storyLang`), for VoiceOver: on the story's words only, never
+    /// on what is around them.
+    public var language: String?
 
-    public static let body = ProseStyle(family: .body, size: 17, weight: .regular, lineHeight: 1.8, color: UIColor(Tokens.text), italic: false, tracking: 0)
-    public static let h2 = ProseStyle(family: .heading, size: 22, weight: .bold, lineHeight: 1.3, color: UIColor(Tokens.text), italic: false, tracking: -0.01)
-    public static let h3 = ProseStyle(family: .heading, size: 18, weight: .bold, lineHeight: 1.35, color: UIColor(Tokens.text), italic: false, tracking: 0)
+    public init(typography: StoryTypography, role: StoryTypography.Role, level: Int = 2, color: UIColor = UIColor(Tokens.text),
+                inQuote: Bool = false, language: String? = nil) {
+        self.typography = typography
+        self.role = role
+        self.level = level
+        self.color = color
+        self.inQuote = inQuote
+        self.language = language
+    }
 
-    /// Blockquotes: muted and italic.
+    /// A story's paragraphs, list items and quoted words.
+    public static func body(_ typography: StoryTypography, language: String? = nil) -> ProseStyle {
+        ProseStyle(typography: typography, role: .body, language: language)
+    }
+
+    /// A heading of `level` in text set as this (a quote's heading keeps the quote's muted ink).
+    public func heading(level: Int) -> ProseStyle {
+        var s = self
+        s.role = .heading
+        s.level = level
+        return s
+    }
+
+    /// A quote's words: muted and upright (no synthetic slanted Chinese), at the body's size.
     public var quoted: ProseStyle {
         var s = self
         s.color = UIColor(Tokens.textMuted)
-        s.italic = true
         s.inQuote = true
         return s
     }
 
-    /// `size` at the person's text size, as every text takes it: the line box
-    /// (`lineHeight` × this) and the spacing around it grow in step.
-    var scaledSize: CGFloat { size * TextScale.factor(relativeTo: family.textStyle) }
+    public var family: AppFonts.Family { role == .heading ? typography.headingFamily : typography.bodyFamily }
 
-    public var font: UIFont { AppFonts.uiFont(family, size: scaledSize, weight: weight) }
+    /// The CSS line height, × the font's size.
+    public var lineHeight: CGFloat { role == .heading ? typography.headingLeading : typography.bodyLeading }
 
-    /// Browsers synthesize italics for faces loaded without one (the site
-    /// loads none) by slanting the upright glyphs; so does this.
-    static let syntheticItalic: CGFloat = 0.2
+    /// The block's face at the person's text size: what its line boxes are measured by.
+    public var font: UIFont { face() }
 
-    public func attributed(_ runs: [InlineRun], paragraph: NSParagraphStyle? = nil) -> NSAttributedString {
-        let size = scaledSize
+    private func face(bold: Bool = false, oblique: Bool = false) -> UIFont {
+        if role == .heading {
+            // `strong` inside a heading takes the story's bold, as story.css says of every strong.
+            guard bold else { return typography.headingFont(level: level, oblique: oblique) }
+            let base = typography.headingFont(level: level)
+            return AppFonts.uiFont(family, size: base.pointSize, weight: typography.boldWeight, oblique: oblique, lining: true)
+        }
+        return typography.bodyFont(bold: bold, oblique: oblique)
+    }
+
+    /// The paragraph's runs as one attributed string, laid out in its CSS line boxes (``CSSTextView``
+    /// sets the boxes; this the alignment and the breaking).
+    public func attributed(_ runs: [InlineRun]) -> NSAttributedString {
+        let base = font
+        let size = base.pointSize
+        let paragraph = typography.paragraphStyle(lineBox: size * lineHeight, role: role)
+        let kern = typography.kern(role, pointSize: size)
         let out = NSMutableAttributedString()
+        // Each run's own face, for the Latin face an apostrophe inside a Latin word takes in it.
+        var faces: [(range: NSRange, bold: Bool, oblique: Bool, code: Bool)] = []
         for run in runs {
+            let font = run.code
+                ? UIFont.monospacedSystemFont(ofSize: size * typography.codeScale, weight: run.bold ? typography.boldWeight : .regular)
+                : face(bold: run.bold, oblique: run.italic)
             var attrs: [NSAttributedString.Key: Any] = [
-                .font: run.code
-                    ? UIFont.monospacedSystemFont(ofSize: size * 0.9, weight: run.bold ? .bold : .regular)
-                    : AppFonts.uiFont(family, size: size, weight: run.bold ? .bold : weight),
+                .font: font,
                 .foregroundColor: color,
+                .paragraphStyle: paragraph,
+                // Code keeps its own spacing (`letter-spacing: 0`).
+                .kern: run.code ? 0 : kern,
             ]
-            if italic || run.italic { attrs[.obliqueness] = Self.syntheticItalic }
-            if tracking != 0 { attrs[.kern] = tracking * size }
+            if run.code { attrs[.backgroundColor] = Self.codeTint }
             if run.strikethrough { attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
             if let link = run.link, let url = URL(string: link) {
                 attrs[.link] = url
-                attrs[.foregroundColor] = UIColor(Tokens.terracotta)
+                attrs[.foregroundColor] = UIColor(Tokens.buttonOnTonal)
             }
-            if let paragraph { attrs[.paragraphStyle] = paragraph }
+            faces.append((NSRange(location: out.length, length: (run.text as NSString).length), run.bold, run.italic, run.code))
             out.append(NSAttributedString(string: run.text, attributes: attrs))
+        }
+        if typography.script == .cjk, let latin = StoryTypography.latinMarkFamily(for: family) {
+            let weight = role == .heading ? typography.headingWeight : .regular
+            for mark in StoryScript.latinMarks(out.string) {
+                guard let run = faces.first(where: { NSLocationInRange(mark, $0.range) }), !run.code else { continue }
+                let face = AppFonts.uiFont(latin, size: size, weight: run.bold ? typography.boldWeight : weight, oblique: run.oblique,
+                                           lining: role == .heading)
+                out.addAttribute(.font, value: face, range: NSRange(location: mark, length: 1))
+            }
         }
         return out
     }
+
+    /// Code's tint (`--story-code-tint`): the text's ink at 6% over the paper.
+    static let codeTint = UIColor(Tokens.text.opacity(0.06))
 }

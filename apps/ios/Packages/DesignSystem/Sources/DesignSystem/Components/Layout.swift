@@ -95,10 +95,17 @@ private struct ReadableColumn: ViewModifier {
     }
 }
 
-/// Where a card page's article and its author rail sit (design §11): on an expanded window a centred
-/// container of at most 1200 (the page's pads inside) holding the article (its text ≤ 720) and, 48
-/// past it, the 260 rail; narrower, one centred column of at most 760. `article` counts the
-/// article's own 20 sides; `leading` and `railX` are from the page's leading edge.
+/// Where a card page's article and its author rail sit (reading-type §4, the web's three-track grid):
+///
+/// - expanded: in the window less the page's pads (W), the text column T = min(--measure, W − R),
+///   where R = the rail gap and the rail (48 + 260 = 308); centred while there is room for the rail
+///   beside it (S = max(0, min((W − T) / 2, W − T − R))), sliding left below that — exactly centred
+///   from 1392 wide. The rail stands 48 past the text.
+/// - medium: one centred column, T = min(--measure, width − 2 · pad); no rail.
+/// - compact: the window, 20 a side.
+///
+/// `article` counts the article's own 20 sides (its text is `article − 40`); `leading` and `railX`
+/// are from the page's leading edge.
 public nonisolated struct CardPageLayout: Sendable, Equatable {
     public var rail: Bool
     public var article: CGFloat
@@ -112,16 +119,31 @@ public nonisolated struct CardPageLayout: Sendable, Equatable {
         self.railX = railX
     }
 
+    /// The article's own sides, inside `article`.
+    public static let articleInset: CGFloat = 20
+    /// What the rail takes beside the text: its gap and its width (R).
+    public static var railReach: CGFloat { Tokens.storyRailGap + Tokens.cardRailW }
+
+    /// The text column's width (what the story is set in).
+    public var text: CGFloat { max(0, article - 2 * Self.articleInset) }
+
     /// `width`: what the page has across; `window`: the window's width.
     public static func of(width: CGFloat, window: CGFloat) -> CardPageLayout {
-        guard LayoutClass.of(window) == .expanded else {
-            let article = min(width, 760)
-            return CardPageLayout(rail: false, article: article, leading: (width - article) / 2, railX: 0)
+        let pad = LayoutClass.pad(window)
+        switch LayoutClass.of(window) {
+        case .compact:
+            return CardPageLayout(rail: false, article: width, leading: 0, railX: 0)
+        case .medium:
+            let text = max(0, min(Tokens.measure, width - 2 * pad))
+            return CardPageLayout(rail: false, article: text + 2 * articleInset, leading: (width - text) / 2 - articleInset, railX: 0)
+        case .expanded:
+            let inner = max(0, width - 2 * pad)
+            let text = max(0, min(Tokens.measure, inner - railReach))
+            let slide = max(0, min((inner - text) / 2, inner - text - railReach))
+            let start = pad + slide
+            return CardPageLayout(rail: true, article: text + 2 * articleInset, leading: start - articleInset,
+                                  railX: start + text + Tokens.storyRailGap)
         }
-        let inner = min(width, 1200) - 2 * LayoutClass.pad(window)
-        let text = max(0, min(720, inner - 48 - Tokens.cardRailW))
-        let start = (width - (text + 48 + Tokens.cardRailW)) / 2
-        return CardPageLayout(rail: true, article: text + 40, leading: start - 20, railX: start + text + 48)
     }
 }
 

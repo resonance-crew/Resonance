@@ -135,13 +135,46 @@ import Testing
         // Words round a link, or marks on it, keep it in its sentence.
         #expect(StoryParser.parse("我讀了 [這篇](https://example.com/inline) 之後").first.map { if case .paragraph = $0 { true } else { false } } == true)
         #expect(StoryParser.parse("**https://example.com/bold**").first.map { if case .paragraph = $0 { true } else { false } } == true)
-        // Spaced like a paragraph.
-        #expect(ProseMetrics.margins(blocks[1]).bottom == ProseMetrics.margins(.paragraph([])).bottom)
-        #expect(ProseMetrics.margins(blocks[1]).top == 0)
+        // Spaced like a paragraph — or, drawn as its page's card, like a picture.
+        let rhythm = Self.cjkDesktop
+        #expect(ProseMetrics.margins(blocks[1], rhythm).bottom == ProseMetrics.margins(.paragraph([]), rhythm).bottom)
+        #expect(ProseMetrics.margins(blocks[1], rhythm).top == 0)
+        #expect(ProseMetrics.margins(blocks[1], rhythm, asCard: true) == (rhythm.blockGap, rhythm.blockGap))
     }
 
+    /// A CJK story on a wide window at the default text size (reading-type §6's computed values):
+    /// 18pt body, 1.3em between paragraphs, h2 1.3 and h3 1.12 of the body, 2em above a heading and
+    /// 0.6 / 0.5 below it, 32 round a picture or a card, 40 round the rule.
+    static let cjkDesktop = ProseRhythm(body: 18, paragraphGap: 1.3, h2: 18 * 1.3, h3: 18 * 1.12, headingAbove: 2, h2Below: 0.6,
+                                        h3Below: 0.5, blockGap: 32, ruleGap: 40)
+
     @Test func proseMarginsCollapseLikeCSS() {
-        let gaps = ProseMetrics.gaps([.paragraph([]), .heading(level: 2, []), .paragraph([]), .blank, .paragraph([])])
-        #expect(gaps.map { ($0 * 10).rounded() / 10 } == [0, 35.2, 13.2, 18.7, 0])
+        let tenth = { (v: CGFloat) in (v * 10).rounded() / 10 }
+        let gaps = ProseMetrics.gaps([.paragraph([]), .heading(level: 2, []), .paragraph([]), .blank, .paragraph([]),
+                                      .heading(level: 3, []), .paragraph([]), .image(url: "a", alt: ""), .rule, .heading(level: 4, [])],
+                                     Self.cjkDesktop)
+        // Above an h2 its 2em (46.8) outweighs the paragraph's 23.4; under it 0.6em (14.0) gives way to nothing.
+        // A blank line keeps the paragraph's gap above it and none below; a picture and the rule their own.
+        #expect(gaps.map(tenth) == [0, 46.8, 14.0, 23.4, 0, 40.3, 10.1, 32, 40, 40.3])
+        // A heading opening the story (a quote, a list item) has nothing above it.
+        #expect(ProseMetrics.gaps([.heading(level: 2, []), .paragraph([])], Self.cjkDesktop).map(tenth) == [0, 14.0])
+        // # is drawn as an h2.
+        #expect(ProseMetrics.margins(.heading(level: 1, []), Self.cjkDesktop) == ProseMetrics.margins(.heading(level: 2, []), Self.cjkDesktop))
+        // A standalone link drawn as its card is a block like a picture.
+        let link = StoryBlock.soleLink(href: "https://a.example/x", text: "x", runs: [])
+        #expect(ProseMetrics.gaps([.paragraph([]), link, .paragraph([])], Self.cjkDesktop, asCard: { $0 == 1 }) == [0, 32, 32])
+        #expect(ProseMetrics.gaps([.paragraph([]), link, .paragraph([])], Self.cjkDesktop).map(tenth) == [0, 23.4, 23.4])
+    }
+
+    @Test func aStoryNestedPastTheParsersDepthIsReadAsItsWords() {
+        // Apple's parser recurses per level: thousands of quotes would crash it. Past the limit the
+        // story is its paragraphs of words, as written; at the limit it is parsed as ever.
+        let deep = String(repeating: "> ", count: 5_000) + "雨停了\n\n第二段"
+        #expect(StoryNesting.tooDeep(deep))
+        #expect(StoryParser.parse(deep) == [.paragraph([InlineRun(String(repeating: "> ", count: 5_000) + "雨停了")]),
+                                            .paragraph([InlineRun("第二段")])])
+        let atLimit = String(repeating: "> ", count: StoryNesting.limit) + "雨停了"
+        #expect(!StoryNesting.tooDeep(atLimit))
+        guard case .quote = StoryParser.parse(atLimit).first else { return #expect(Bool(false)) }
     }
 }

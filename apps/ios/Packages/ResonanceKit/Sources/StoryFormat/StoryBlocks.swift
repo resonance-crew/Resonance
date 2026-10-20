@@ -57,9 +57,30 @@ public nonisolated enum StoryParser {
     /// The story as CommonMark reads it, without "smart" punctuation — as the web's reader and the
     /// server read it: `'` and `"` stay as written (a link's `?q=what's` stays one link), `--` and
     /// `...` too.
+    ///
+    /// A story opening quotes and lists deeper than `StoryNesting.limit` on a line would run Apple's
+    /// recursive parser out of stack: it is drawn as its words instead, a paragraph per blank-line
+    /// gap, nothing parsed.
     public static func parse(_ markdown: String) -> [StoryBlock] {
+        guard !StoryNesting.tooDeep(markdown) else { return unparsed(markdown) }
         let document = Document(parsing: markdown, options: [.disableSmartOpts])
         return document.children.compactMap(block)
+    }
+
+    /// The story as written, a paragraph of words per run of lines between blank ones.
+    static func unparsed(_ markdown: String) -> [StoryBlock] {
+        var blocks: [StoryBlock] = []
+        var lines: [Substring] = []
+        func close() {
+            let text = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty { blocks.append(.paragraph([InlineRun(text)])) }
+            lines = []
+        }
+        for line in markdown.split(separator: "\n", omittingEmptySubsequences: false) {
+            if line.allSatisfy(\.isWhitespace) { close() } else { lines.append(line) }
+        }
+        close()
+        return blocks
     }
 
     static func block(_ node: Markup) -> StoryBlock? {
@@ -254,23 +275,73 @@ nonisolated extension StoryBlock {
     }
 }
 
-/// CSS margins (top, bottom) of each block at the reader's 17pt, and the gap
-/// between two blocks: the larger of the facing margins, as CSS collapses them.
-public nonisolated enum ProseMetrics {
-    public static let em: CGFloat = 17
+/// A story's vertical rhythm as the reader sets it (src/styles/story.css): the body's size and every
+/// space between its blocks, in points at the size the story is drawn — DesignSystem's
+/// `StoryTypography` makes one by the story's script, the window and the person's text size (the
+/// tokens live there; this package draws nothing). Ratios are in em of the element's own size, as
+/// the CSS writes `calc(var(--x) * 1em)`.
+public nonisolated struct ProseRhythm: Hashable, Sendable {
+    /// The body's size: a paragraph's, a list's, a quote's em.
+    public var body: CGFloat
+    /// After a paragraph, a list, a quote or a code block, in em (`--story-para-gap`).
+    public var paragraphGap: CGFloat
+    /// An h1's and an h2's size, and an h3's to an h6's (a story's `#` is drawn as an h2).
+    public var h2: CGFloat
+    public var h3: CGFloat
+    /// Above a heading, in em of the heading (`--story-heading-above`), and below an h2 or the rest.
+    public var headingAbove: CGFloat
+    public var h2Below: CGFloat
+    public var h3Below: CGFloat
+    /// Above and below a picture, a link's card or an embedded card (`--story-block-gap`).
+    public var blockGap: CGFloat
+    /// Above and below the pen's rule (`--story-rule-gap`).
+    public var ruleGap: CGFloat
+    /// A line the writer left blank, in em (`--story-blank-line`).
+    public var blankLine: CGFloat
 
-    public static func margins(_ block: StoryBlock) -> (top: CGFloat, bottom: CGFloat) {
+    public init(body: CGFloat, paragraphGap: CGFloat, h2: CGFloat, h3: CGFloat, headingAbove: CGFloat, h2Below: CGFloat,
+                h3Below: CGFloat, blockGap: CGFloat, ruleGap: CGFloat, blankLine: CGFloat = 1.6) {
+        self.body = body
+        self.paragraphGap = paragraphGap
+        self.h2 = h2
+        self.h3 = h3
+        self.headingAbove = headingAbove
+        self.h2Below = h2Below
+        self.h3Below = h3Below
+        self.blockGap = blockGap
+        self.ruleGap = ruleGap
+        self.blankLine = blankLine
+    }
+
+    /// A heading's size.
+    public func heading(level: Int) -> CGFloat { level <= 2 ? h2 : h3 }
+}
+
+/// CSS margins (top, bottom) of each block, and the gap between two blocks: the larger of the
+/// facing margins, as CSS collapses them. Nothing above a story's (a quote's, a list item's) first
+/// block, nothing below its last.
+public nonisolated enum ProseMetrics {
+    /// `asCard`: a paragraph standing alone as a link is drawn as its page's card (a block with the
+    /// block gap round it), not as the paragraph it is written as.
+    public static func margins(_ block: StoryBlock, _ rhythm: ProseRhythm, asCard: Bool = false) -> (top: CGFloat, bottom: CGFloat) {
+        let paragraph = (top: CGFloat(0), bottom: rhythm.paragraphGap * rhythm.body)
         switch block {
         case let .heading(level, _):
-            return level <= 2 ? (1.6 * 22, 0.6 * 22) : (1.4 * 18, 0.5 * 18)
+            let size = rhythm.heading(level: level)
+            return (rhythm.headingAbove * size, (level <= 2 ? rhythm.h2Below : rhythm.h3Below) * size)
         case .blank: return (0, 0)
-        case .image: return (22, 22)
-        case .rule: return (28, 28)
-        case .paragraph, .cardEmbed, .soleLink, .quote, .list, .code: return (0, 1.1 * em)
+        case .image, .cardEmbed: return (rhythm.blockGap, rhythm.blockGap)
+        case .rule: return (rhythm.ruleGap, rhythm.ruleGap)
+        case .soleLink: return asCard ? (rhythm.blockGap, rhythm.blockGap) : paragraph
+        case .paragraph, .quote, .list, .code: return paragraph
         }
     }
 
-    public static func gaps(_ blocks: [StoryBlock]) -> [CGFloat] {
-        blocks.indices.map { i in i == 0 ? 0 : max(margins(blocks[i - 1]).bottom, margins(blocks[i]).top) }
+    /// The space above each block (the first has none). `asCard(i)`: whether block `i`, a
+    /// standalone link, is drawn as its page's card.
+    public static func gaps(_ blocks: [StoryBlock], _ rhythm: ProseRhythm, asCard: (Int) -> Bool = { _ in false }) -> [CGFloat] {
+        blocks.indices.map { i in
+            i == 0 ? 0 : max(margins(blocks[i - 1], rhythm, asCard: asCard(i - 1)).bottom, margins(blocks[i], rhythm, asCard: asCard(i)).top)
+        }
     }
 }

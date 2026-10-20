@@ -10,9 +10,9 @@ import Testing
 @MainActor @Suite struct ReaderChromeTests {
     // MARK: Table of contents
 
-    @Test func theContentsAreTheStorysOwnH2AndH3InOrderEachByItsPlace() {
+    @Test func theContentsAreTheStorysOwnHeadingsInOrderEachByItsPlace() {
         let blocks = StoryParser.parse("""
-        # A title the web leaves out
+        # Drawn as an h2
 
         Words.
 
@@ -22,15 +22,16 @@ import Testing
 
         > ## A heading in a quote stays the quote's
 
-        #### Too deep for the contents
+        #### Smaller headings sit at the second level
 
         ##
 
         ## Two
         """)
         let entries = TocEntry.entries(blocks)
-        #expect(entries.map(\.text) == ["One", "One and a half", "Two"])
-        #expect(entries.map(\.level) == [2, 3, 2])
+        // h2–h6 as the web reads them (h1 drawn as an h2); a quote's own heading and an empty one are left out.
+        #expect(entries.map(\.text) == ["Drawn as an h2", "One", "One and a half", "Smaller headings sit at the second level", "Two"])
+        #expect(entries.map(\.level) == [2, 2, 3, 3, 2])
         // Each names the block the page scrolls to.
         for entry in entries {
             guard case .heading = blocks[entry.index] else {

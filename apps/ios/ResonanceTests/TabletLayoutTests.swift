@@ -145,25 +145,45 @@ import Testing
         #expect(WindowLayout(width: 1376, height: 1032).writerSplit)
     }
 
-    @Test func aWideCardPageSetsItsArticleBesideTheAuthorsRail() {
-        // iPad Pro 13" lying down: the whole 1376, a 1200 container with 48 pads.
-        let wide = CardPageLayout.of(width: 1376, window: 1376)
-        #expect(wide.rail)
-        #expect(wide.article == 760)
-        #expect(wide.leading == 154)
-        #expect(wide.railX == CGFloat(174 + 720 + 48))
-        // Standing (1032): the text narrows to what is left beside the author's rail.
-        let standing = CardPageLayout.of(width: 1032, window: 1032)
-        #expect(standing.rail)
-        #expect(standing.railX + Tokens.cardRailW <= 1032 - LayoutClass.pad(1032) + 0.01)
-        #expect(standing.article - 40 + 48 + Tokens.cardRailW <= 1032 - 2 * LayoutClass.pad(1032) + 0.01)
-        // Medium and phones: one column of at most 760, centred, no rail.
-        let medium = CardPageLayout.of(width: 656, window: 744)
-        #expect(!medium.rail && medium.article == 656 && medium.leading == 0)
-        let mediumWide = CardPageLayout.of(width: 800, window: 888)
-        #expect(mediumWide.article == 760 && mediumWide.leading == 20)
+    @Test func aWideCardPageSetsItsTextInTheMeasureAndTheRail48PastIt() {
+        // reading-type §4's worked widths (the web's three-track grid): the text's span, the rail's start.
+        func text(_ l: CardPageLayout) -> ClosedRange<CGFloat> {
+            (l.leading + CardPageLayout.articleInset)...(l.leading + CardPageLayout.articleInset + l.text)
+        }
+        func near(_ a: ClosedRange<CGFloat>, _ b: ClosedRange<CGFloat>) -> Bool {
+            abs(a.lowerBound - b.lowerBound) < 0.6 && abs(a.upperBound - b.upperBound) < 0.6
+        }
+        // 1440: the 680 column centred (380–1060), the rail 1108–1368.
+        let w1440 = CardPageLayout.of(width: 1440, window: 1440)
+        #expect(w1440.rail && w1440.text == Tokens.measure)
+        #expect(near(text(w1440), 380...1060))
+        #expect(w1440.railX == 1108 && w1440.railX + Tokens.cardRailW == 1368)
+        // 1392: the first width where it is exactly centred (both sides 308 + 48).
+        let w1392 = CardPageLayout.of(width: 1392, window: 1392)
+        #expect(near(text(w1392), 356...1036))
+        #expect(w1392.railX + Tokens.cardRailW == 1392 - 48)
+        // 1280: it slides left so the rail still fits beside it.
+        #expect(near(text(CardPageLayout.of(width: 1280, window: 1280)), 244...924))
+        // 1024: the text narrows to what the rail leaves (41–675), the rail 723–983.
+        let w1024 = CardPageLayout.of(width: 1024, window: 1024)
+        #expect(near(text(w1024), 41...675))
+        #expect(abs(w1024.railX - 723) < 0.6 && abs(w1024.railX + Tokens.cardRailW - 983) < 0.6)
+        // iPad Pro 13" lying down (1376) and standing (1032): the rail ends on the page's pad.
+        for w: CGFloat in [1376, 1032, 901] {
+            let l = CardPageLayout.of(width: w, window: w)
+            #expect(l.rail)
+            #expect(abs(l.railX + Tokens.cardRailW - (w - LayoutClass.pad(w))) < 0.01 || l.railX + Tokens.cardRailW < w - LayoutClass.pad(w))
+            #expect(l.railX - (l.leading + CardPageLayout.articleInset + l.text) == Tokens.storyRailGap)
+        }
+        // Medium: one centred column of the measure (or the window less its pads), no rail.
+        let w768 = CardPageLayout.of(width: 768, window: 768)
+        #expect(!w768.rail && w768.text == Tokens.measure && near(text(w768), 44...724))
+        let narrow = CardPageLayout.of(width: 656, window: 744)
+        #expect(!narrow.rail && abs(narrow.text - (656 - 2 * LayoutClass.pad(744))) < 0.01)
+        #expect(abs((narrow.leading + 20) * 2 + narrow.text - 656) < 0.01)
+        // A phone: the window, 20 a side.
         let phone = CardPageLayout.of(width: 402, window: 402)
-        #expect(!phone.rail && phone.article == 402 && phone.leading == 0)
+        #expect(!phone.rail && phone.article == 402 && phone.leading == 0 && phone.text == 362)
     }
 
     @Test func twoPanesDrawTheConversationBesideTheListAndPushOnlyWhatIsOverIt() {

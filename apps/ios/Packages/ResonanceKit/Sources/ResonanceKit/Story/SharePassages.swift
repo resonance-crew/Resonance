@@ -1,5 +1,6 @@
 import Foundation
 import Markdown
+import StoryFormat
 
 /// What a share card quotes from a story — src/lib/markdown/sharePassages.ts, the one rule the
 /// apps' 9:16 share image and the web's link-preview image (/api/og/card) share, pinned case by
@@ -25,12 +26,10 @@ public nonisolated enum SharePassages {
     public static let max = 40
     /// A passage, and the opening, is cut at this many graphemes, with "…".
     public static let maxGraphemes = 600
-    /// The deepest a line may open quotes and lists (`> > - …`) for the story to be read at all.
-    /// Apple's parser builds its tree recursively, and a few thousand levels (a story of
-    /// `> > > …`, which the rules let run to 200 000 characters) run it out of stack — a crash, not
-    /// a slow read; the web's reader has no such floor. No story worth quoting nests this deep: one
-    /// that does is quoted not at all.
-    public static let maxNesting = 32
+    /// The deepest a line may open quotes and lists (`> > - …`) for the story to be read at all
+    /// (`StoryNesting.limit`: deeper, Apple's recursive parser runs out of stack). No story worth
+    /// quoting nests this deep: one that does is quoted not at all.
+    public static let maxNesting = StoryNesting.limit
 
     /// The story's opening, what a share card quotes: its quotable blocks joined by line breaks, cut
     /// at `maxGraphemes`. The card then truncates it by its own lines. Empty when the story holds
@@ -87,41 +86,8 @@ public nonisolated enum SharePassages {
     }
 
     /// Whether a line of the story opens more than `maxNesting` quotes and list items at its start
-    /// (a `>`, a bullet or a number followed by a space each count; a guess on the deep side, read
-    /// in one pass over the bytes).
-    static func nestsTooDeep(_ story: String) -> Bool {
-        let bytes = Array(story.utf8)
-        let space: Set<UInt8> = [0x20, 0x09]
-        var i = 0
-        while i < bytes.count {
-            var depth = 0
-            scan: while i < bytes.count, bytes[i] != 0x0A {
-                while i < bytes.count, space.contains(bytes[i]) { i += 1 }
-                guard i < bytes.count else { break }
-                switch bytes[i] {
-                case UInt8(ascii: ">"):
-                    i += 1
-                case UInt8(ascii: "-"), UInt8(ascii: "*"), UInt8(ascii: "+"):
-                    guard i + 1 < bytes.count, space.contains(bytes[i + 1]) else { break scan }
-                    i += 2
-                case UInt8(ascii: "0")...UInt8(ascii: "9"):
-                    var j = i
-                    while j < bytes.count, j - i < 9, (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(bytes[j]) { j += 1 }
-                    guard j + 1 < bytes.count, bytes[j] == UInt8(ascii: ".") || bytes[j] == UInt8(ascii: ")"),
-                          space.contains(bytes[j + 1]) else { break scan }
-                    i = j + 2
-                default:
-                    break scan
-                }
-                depth += 1
-                if depth > maxNesting { return true }
-            }
-            // On to the next line.
-            while i < bytes.count, bytes[i] != 0x0A { i += 1 }
-            i += 1
-        }
-        return false
-    }
+    /// (StoryFormat's `StoryNesting`, which the reader's parser asks too).
+    static func nestsTooDeep(_ story: String) -> Bool { StoryNesting.tooDeep(story, limit: maxNesting) }
 
     /// The paragraph's children that say something: neither blank words nor a soft line break (the
     /// web's tree keeps those inside its text, as blank text).

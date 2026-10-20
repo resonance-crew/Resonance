@@ -2,9 +2,11 @@ import DesignSystem
 import ResonanceKit
 import SwiftUI
 
-/// A card's page (card/[slug]/page.tsx, phone layout): byline, cover, title,
-/// the story, tags, what a reader can do next; then the
-/// resonance and related sections, set straight on the page.
+/// A card's page (card/[slug]/page.tsx): the cover, the title in the story's type, the byline (or,
+/// beside a wide window's author rail, the meta line) under it, the story, tags, what a reader can do
+/// next; then the resonance and related sections, set straight on the page. The title and story are
+/// set by their script (`CardModel.storyType` → ``StoryTypography``); the share and the ⋯ live in the
+/// bar, as phone apps keep a page's actions.
 struct CardScreen: View {
     let key: String
     @Environment(SessionStore.self) private var session
@@ -94,7 +96,7 @@ struct CardScreen: View {
             switch model?.phase ?? .loading {
             case .loading:
                 // Opened from a list: that list's byline, cover and title at once; the rest while it loads.
-                if let card = model?.placeholder { placeholderPage(card) } else { CardDetailSkeleton() }
+                if let card = model?.placeholder { placeholderPage(card) } else { CardDetailSkeleton(rail: layout.rail) }
             case .notFound:
                 OrganicEmptyState(title: L10n.Card.NotFound.title, titleSize: 24, actionTitle: L10n.Card.NotFound.back,
                                   actionStyle: .link) { openRoute.dismissToRoot() }
@@ -121,8 +123,10 @@ struct CardScreen: View {
         } action: { _, viewport in
             meter.viewport = viewport
         }
-        // Where the byline ends: its 16 of air and the 44 avatar.
-        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 60 } action: { _, gone in
+        // Where the byline ends, as measured under the title (until then, about where a phone's lands).
+        .onScrollGeometryChange(for: Bool.self) { [meter] in
+            $0.contentOffset.y + $0.contentInsets.top > (meter.bylineBottom ?? ReadingMeter.bylineBottomGuess)
+        } action: { _, gone in
             withAnimation(.easeOut(duration: 0.2)) { bylineGone = gone }
         }
         // A heading chosen in the table of contents is held marked until the scroll there ends.
@@ -206,10 +210,12 @@ struct CardScreen: View {
 
     private func page(_ model: CardModel, _ detail: CardDetail) -> some View {
         let card = detail.card
+        let type = model.storyType
+        let story = StoryTypography(script: type.script, layout: window.layoutClass)
         return VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
-                head(card, anonymous: detail.anonymous)
-                StoryMarkdownView(blocks: model.blocks, onOpenURL: open) { href, title in
+                head(card, anonymous: detail.anonymous, type: type)
+                StoryMarkdownView(blocks: model.blocks, typography: story, language: type.lang, onOpenURL: open) { href, title in
                     CardEmbedView(href: href, title: title, card: model.embed(for: href))
                 } linkCard: { href, text in
                     model.linkPreview(href: href, text: text).map { preview in
@@ -231,7 +237,7 @@ struct CardScreen: View {
                 }
                 // The story block alone (not the cover, title or what follows) is what the progress measures.
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.pageSpace)) } action: { meter.story = $0 }
-                .padding(.bottom, 32)
+                .padding(.bottom, story.endGap)
                 if !card.tags.isEmpty {
                     // Tags are app furniture: the theme colour, not the card's hue.
                     FlowRow(spacing: 8) {
@@ -245,7 +251,6 @@ struct CardScreen: View {
                 if !model.links.isEmpty {
                     Text(L10n.Card.linkedCards)
                         .font(AppFonts.heading(20))
-                        .tracking(-0.01 * 20)
                         .foregroundStyle(Tokens.text)
                         // A tablet's headings: 64 above (the 40 of the row before it, and 24), 56 to its cards.
                         .padding(.top, tablet ? Self.tabletHeadingAbove - 40 : 0)
@@ -278,74 +283,51 @@ struct CardScreen: View {
         .coordinateSpace(.named(Self.pageSpace))
     }
 
-    /// Byline, cover and title: what a list already knows of the card (its
-    /// actions live in the bar).
-    private func head(_ card: FeedCard, anonymous: Bool) -> some View {
+    /// Cover, title and byline: what a list already knows of the card (its actions live in the bar).
+    /// The cover, `coverGap`, the title in the story's type, `metaGap`, then the byline where no rail
+    /// names the author (a phone, a medium window) or the meta line alone beside the rail, and
+    /// `leadGap` down to the story.
+    private func head(_ card: FeedCard, anonymous: Bool, type: StoryType) -> some View {
         let hue = card.accentHue ?? 55
+        let story = StoryTypography(script: type.script, layout: window.layoutClass)
         return VStack(alignment: .leading, spacing: 0) {
-            if !layout.rail {
-                byline(card, anonymous: anonymous)
-                    .padding(.bottom, 28)
-            }
             if let url = card.imageUrl.flatMap(URL.init(string:)) {
                 OrganicImage(url: url, seed: hue + 11, fill: Tokens.creamDark)
                     // On its way, the cover shimmers in the card's own hue (as in its story card).
                     .environment(\.skeletonHue, card.accentHue)
                     .aspectRatio(1 / 0.52, contentMode: .fit)
-                    .padding(.bottom, 20)
+                    .padding(.bottom, story.coverGap)
                     .accessibilityLabel(card.imageLabel ?? card.title)
             }
-            CSSText(card.title, font: AppFonts.scaledUIFont(.heading, size: 28, weight: .bold), lineHeight: 1.2,
-                    tracking: -0.015 * 28)
-                .accessibilityAddTraits(.isHeader)
+            StoryTitle(card.title, typography: story, lang: type.lang)
                 // Where the title ends, for the tablet header's centre (it fades in once this is under the line).
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.pageSpace)).maxY } action: { meter.titleBottom = $0 }
-                .padding(.bottom, 28)
+                .padding(.bottom, story.metaGap)
+            Group {
+                if layout.rail {
+                    // The rail names the author: the row keeps its meta line alone.
+                    StoryMetaLine(card: card, size: StoryTypography.metaRowSize)
+                        .frame(minHeight: 44, alignment: .leading)
+                } else {
+                    StoryBylineRow(card: card, anonymous: anonymous, avatar: story.bylineAvatar)
+                        // Where the byline ends: past it, the bar names the author.
+                        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.pageSpace)).maxY } action: { meter.bylineBottom = $0 }
+                }
+            }
+            .padding(.bottom, story.leadGap)
         }
     }
 
     /// The page as a list knew the card: its head as it will stand, then the
     /// story still loading.
     private func placeholderPage(_ card: FeedCard) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            head(card, anonymous: card.anonymous)
-            StorySkeleton()
+        let type = model?.storyType ?? StoryType(script: .cjk, lang: nil)
+        return VStack(alignment: .leading, spacing: 0) {
+            head(card, anonymous: card.anonymous, type: type)
+            StorySkeleton(typography: StoryTypography(script: type.script, layout: window.layoutClass))
         }
         .padding(.horizontal, 20)
         .headerGap(phone: 16)
-    }
-
-    /// The phone byline: avatar, pen name (→ their page), region flag, verified mark; the published date under them.
-    private func byline(_ card: FeedCard, anonymous: Bool) -> some View {
-        let author = card.author?.value1
-        return HStack(spacing: 12) {
-            if let author, !anonymous {
-                HandDrawnAvatar(initials: author.initials, imageURL: author.avatarUrl.flatMap(URL.init(string:)),
-                                color: author.accent, size: 44, seed: author.avatarSeedValue)
-            } else {
-                HandDrawnAvatar(initials: "·", color: Tokens.creamDark, size: 44, seed: 97)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    if let author, !anonymous {
-                        Button(author.handle) { openRoute(.author(author.handle)) }
-                            .font(AppFonts.body(16, weight: .semibold))
-                            .foregroundStyle(Tokens.text)
-                            .buttonStyle(.plain)
-                        AuthorRegionFlag(region: author.region, size: 14)
-                        if author.verified {
-                            OrganicIcon(.verified, size: 14, color: Tokens.sage, strokeWidth: 1.8)
-                                .accessibilityLabel(L10n.Card.verified)
-                        }
-                    } else {
-                        Text(L10n.Card.anonymousAuthor).font(AppFonts.body(16, weight: .semibold)).foregroundStyle(Tokens.textMuted)
-                    }
-                }
-                if let date = publishedDate(card) {
-                    Text(date).font(AppFonts.body(13)).foregroundStyle(Tokens.textMuted)
-                }
-            }
-        }
     }
 
     /// A section under the article. On phones the web drops the tinted band
@@ -355,7 +337,6 @@ struct CardScreen: View {
         VStack(spacing: 0) {
             Text(title)
                 .font(AppFonts.heading(22))
-                .tracking(-0.01 * 22)
                 .foregroundStyle(Tokens.text)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
@@ -413,9 +394,9 @@ private struct CardScroll: ViewModifier {
 }
 
 /// The author beside a wide window's article (the web's CardAuthorAside, design §11): their avatar,
-/// pen name (→ their page) with the region's flag and the verified mark, and the published date;
-/// an anonymous card's dot and 「匿名」, with a word for its owner. No way to message from here:
-/// that is the profile's.
+/// pen name (→ their page) with the region's flag and the verified mark; an anonymous card's dot and
+/// 「匿名」, with a word for its owner. The date is under the title (the meta line), not here. No
+/// way to message from here: that is the profile's.
 private struct CardAuthorRail: View {
     let card: FeedCard
     let anonymous: Bool
@@ -443,17 +424,11 @@ private struct CardAuthorRail: View {
                             .accessibilityLabel(L10n.Card.verified)
                     }
                 }
-                if let date = publishedDate(card) {
-                    Text(date).font(AppFonts.body(13)).foregroundStyle(Tokens.textMuted)
-                }
             } else {
                 HandDrawnAvatar(initials: "·", color: Tokens.creamDark, size: 56, seed: 97)
                     .accessibilityHidden(true)
                     .padding(.bottom, 8)
                 Text(L10n.Card.anonymousAuthor).font(AppFonts.body(16, weight: .semibold)).foregroundStyle(Tokens.textMuted)
-                if let date = publishedDate(card) {
-                    Text(date).font(AppFonts.body(13)).foregroundStyle(Tokens.textMuted)
-                }
                 if isOwner {
                     Text(L10n.Card.anonymousOwnerNote)
                         .font(AppFonts.body(14)).lineSpacing(14 * 0.6).foregroundStyle(Tokens.textMuted)
@@ -462,6 +437,77 @@ private struct CardAuthorRail: View {
             }
         }
         .accessibilityElement(children: .contain)
+    }
+}
+
+/// The line under the title where no rail names the author (the web's StoryByline up to 900): the
+/// author's avatar (40), pen name (→ their page; one line, its end cut with an ellipsis), the
+/// region's flag and the verified mark, over the meta line. An anonymous card shows the neutral 「·」
+/// and 「匿名」 in muted ink, linking nowhere, to everyone — its owner too. The row grows with large
+/// text and a wrapping meta line (at least 44, never a fixed height); its actions are the bar's.
+struct StoryBylineRow: View {
+    let card: FeedCard
+    let anonymous: Bool
+    /// The avatar's size (`StoryTypography.bylineAvatar`).
+    var avatar: CGFloat = 40
+    @Environment(\.openRoute) private var openRoute
+
+    var body: some View {
+        let author = card.author?.value1
+        HStack(spacing: 12) {
+            if let author, !anonymous {
+                HandDrawnAvatar(initials: author.initials, imageURL: author.avatarUrl.flatMap(URL.init(string:)),
+                                color: author.accent, size: avatar, seed: author.avatarSeedValue)
+            } else {
+                HandDrawnAvatar(initials: "·", color: Tokens.creamDark, size: avatar, seed: 97)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    if let author, !anonymous {
+                        Button(author.handle) { openRoute(.author(author.handle)) }
+                            .font(AppFonts.body(15, weight: .semibold))
+                            .foregroundStyle(Tokens.text)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .buttonStyle(.plain)
+                            .layoutPriority(-1)
+                        AuthorRegionFlag(region: author.region, size: 14)
+                        if author.verified {
+                            OrganicIcon(.verified, size: 13, color: Tokens.sage, strokeWidth: 1.8)
+                                .accessibilityLabel(L10n.Card.verified)
+                        }
+                    } else {
+                        Text(L10n.Card.anonymousAuthor)
+                            .font(AppFonts.body(15, weight: .semibold))
+                            .foregroundStyle(Tokens.textMuted)
+                            .lineLimit(1)
+                    }
+                }
+                StoryMetaLine(card: card, size: StoryTypography.bylineMetaSize)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(minHeight: 44)
+    }
+}
+
+/// 「6 分鐘 · 2026年10月10日」: the read time and the published date in the reader's language, muted
+/// interface type that may wrap (a draft shows its read time alone).
+struct StoryMetaLine: View {
+    let card: FeedCard
+    let size: CGFloat
+
+    static func text(_ card: FeedCard) -> String {
+        let minutes = L10n.App.readMinutes(count: card.readMinutes)
+        return publishedDate(card).map { "\(minutes) · \($0)" } ?? minutes
+    }
+
+    var body: some View {
+        Text(Self.text(card))
+            .font(AppFonts.body(size))
+            .lineSpacing(size * 0.4)
+            .foregroundStyle(Tokens.textMuted)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -500,26 +546,38 @@ private struct BarAuthor: View {
     }
 }
 
-/// CardDetailSkeleton on a phone: the byline, cover, title, story and tags
-/// as shimmering blocks where they will land.
+/// CardDetailSkeleton: the cover, the title, the byline (the meta line beside a rail), the story and
+/// its tags as shimmering blocks where they will land — the title's bars its line box's size apart,
+/// the story's the body's (its script unknown yet: a CJK story's, the site's own).
 private struct CardDetailSkeleton: View {
+    var rail = false
+    @Environment(\.window) private var window
+
     var body: some View {
+        let story = StoryTypography(script: .cjk, layout: window.layoutClass)
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 12) {
-                SkeletonBlock(width: 44, circle: true)
-                VStack(alignment: .leading, spacing: 7) {
-                    SkeletonBlock(width: 140, height: 15)
-                    SkeletonBlock(width: 96, height: 13)
+            SkeletonBlock(height: 180, radius: 18).padding(.bottom, story.coverGap)
+            VStack(alignment: .leading, spacing: story.titleSize * (story.titleLeading - 1)) {
+                SkeletonBlock(fraction: 0.9, height: story.titleSize)
+                SkeletonBlock(fraction: 0.55, height: story.titleSize)
+            }
+            .padding(.bottom, story.metaGap)
+            Group {
+                if rail {
+                    SkeletonBlock(width: 160, height: StoryTypography.metaRowSize)
+                } else {
+                    HStack(spacing: 12) {
+                        SkeletonBlock(width: story.bylineAvatar, circle: true)
+                        VStack(alignment: .leading, spacing: 7) {
+                            SkeletonBlock(width: 120, height: 15)
+                            SkeletonBlock(width: 160, height: StoryTypography.bylineMetaSize)
+                        }
+                    }
                 }
             }
-            .padding(.bottom, 28)
-            SkeletonBlock(height: 180, radius: 18).padding(.bottom, 20)
-            VStack(alignment: .leading, spacing: 12) {
-                SkeletonBlock(fraction: 0.9, height: 38)
-                SkeletonBlock(fraction: 0.55, height: 38)
-            }
-            .padding(.bottom, 28)
-            StorySkeleton()
+            .frame(minHeight: 44, alignment: .leading)
+            .padding(.bottom, story.leadGap)
+            StorySkeleton(typography: story)
         }
         .padding(.horizontal, 20)
         .headerGap(phone: 16)
@@ -528,17 +586,21 @@ private struct CardDetailSkeleton: View {
     }
 }
 
-/// The story and its tags, still loading (under a real or skeleton head).
+/// The story and its tags, still loading (under a real or skeleton head): bars the body's size, a
+/// line box apart.
 private struct StorySkeleton: View {
+    let typography: StoryTypography
+
     var body: some View {
+        let size = typography.bodySize
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 12) {
-                SkeletonBlock(height: 17)
-                SkeletonBlock(height: 17)
-                SkeletonBlock(height: 17)
-                SkeletonBlock(fraction: 0.65, height: 17)
+            VStack(alignment: .leading, spacing: size * (typography.bodyLeading - 1)) {
+                SkeletonBlock(height: size)
+                SkeletonBlock(height: size)
+                SkeletonBlock(height: size)
+                SkeletonBlock(fraction: 0.65, height: size)
             }
-            .padding(.bottom, 32)
+            .padding(.bottom, typography.endGap)
             HStack(spacing: 8) {
                 SkeletonBlock(width: 64, height: 26, radius: 13)
                 SkeletonBlock(width: 84, height: 26, radius: 13)
@@ -591,6 +653,11 @@ final class ReadingMeter {
     var story: CGRect = .zero { didSet { update() } }
     /// The article title's bottom in the page (round 5 C1: a tablet's header names the card past it).
     var titleBottom: CGFloat? { didSet { update() } }
+    /// The byline's bottom in the page: once it is under the bar, the bar names the author (only the
+    /// scroll's own check reads it).
+    @ObservationIgnored var bylineBottom: CGFloat?
+    /// Where a phone's byline ends before it is measured: a two-line title under no cover, 16 of air, the 44 row.
+    static let bylineBottomGuess: CGFloat = 16 + 2 * 39 + 16 + 44
     var viewport = Viewport(top: 0, height: 0) { didSet { update() } }
     /// The table of contents' headings by their tops in the page, in reading order.
     var headings: [TocReading.Heading] = [] { didSet { update() } }
