@@ -1302,3 +1302,86 @@ describe('cards: who can read which', () => {
     await assertSucceeds(getDocs(query(collection(bob, 'cards'), where('authorId', '==', 'bob'), where('referenceCardId', '==', 'orig'), limit(1))));
   });
 });
+
+describe('cards in the trash (trashedAt, written by the server alone)', () => {
+  // Alice's cards in the trash: a published public one (private while
+  // there, its resonance parked in trashedFrom) and a draft; and Bob's
+  // public card, which Alice may answer — until he moves it to the trash.
+  const trashedAt = new Date('2026-10-01T08:00:00Z');
+  const TRASHED = 'tttttttttttttttttttt';
+  const TRASHED_DRAFT = 'dddddddddddddddddddd';
+  beforeEach(async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'cards', TRASHED), publishedCard('alice', {
+        visibility: 'private', trashedAt, trashedFrom: { visibility: 'public', referenceCardId: 'orig' },
+      }));
+      await setDoc(doc(db, 'cards', TRASHED_DRAFT), {
+        ...publishedCard('alice', { publishedAt: null, slug: null }),
+        visibility: 'private', trashedAt, trashedFrom: { visibility: 'public', referenceCardId: null },
+      });
+      await setDoc(doc(db, 'cards', 'bobs'), publishedCard('bob'));
+      await setDoc(doc(db, 'cards', 'bobsTrashed'), publishedCard('bob', {
+        visibility: 'private', trashedAt, trashedFrom: { visibility: 'public', referenceCardId: null },
+      }));
+      await setDoc(doc(db, 'cards', 'live'), publishedCard('alice'));
+    });
+  });
+
+  it("takes no story, visibility or byline change on one until it is restored (an older build could make it public again)", async () => {
+    const db = as('alice');
+    for (const id of [TRASHED, TRASHED_DRAFT]) {
+      const ref = doc(db, 'cards', id);
+      await assertFails(setDoc(ref, { story: 'Still writing', updatedAt: serverTimestamp() }, { merge: true }));
+      await assertFails(setDoc(ref, { visibility: 'public', updatedAt: serverTimestamp() }, { merge: true }));
+      await assertFails(setDoc(ref, { anonymous: true }, { merge: true }));
+      await assertFails(updateDoc(ref, { thoughtCore: 'New title' }));
+    }
+  });
+
+  it('takes no pending edit into one, created or replaced', async () => {
+    const working = { thoughtCore: 'Revised', story: 'Still writing', tags: ['a'], visibility: 'public', anonymous: false, updatedAt: serverTimestamp() };
+    await assertFails(setDoc(doc(as('alice'), 'cards', TRASHED, 'edits', 'current'), working));
+    await seed(async (db) => {
+      await setDoc(doc(db, 'cards', TRASHED, 'edits', 'current'), { ...working, updatedAt: new Date() });
+    });
+    await assertFails(setDoc(doc(as('alice'), 'cards', TRASHED, 'edits', 'current'), working));
+    // Read and thrown away as ever: it is still the author's own writing.
+    await assertSucceeds(getDoc(doc(as('alice'), 'cards', TRASHED, 'edits', 'current')));
+    await assertSucceeds(deleteDoc(doc(as('alice'), 'cards', TRASHED, 'edits', 'current')));
+    // A card not in the trash still takes one.
+    await assertSucceeds(setDoc(doc(as('alice'), 'cards', 'live', 'edits', 'current'), working));
+  });
+
+  it('lets no client write trashedAt or trashedFrom, on a new draft or an update, nor re-point a card', async () => {
+    const db = as('alice');
+    await assertFails(setDoc(doc(collection(db, 'cards')), draft('alice', { trashedAt: serverTimestamp() })));
+    await assertFails(setDoc(doc(collection(db, 'cards')), draft('alice', { trashedFrom: { visibility: 'public', referenceCardId: null } })));
+    const live = doc(db, 'cards', 'live');
+    await assertFails(setDoc(live, { trashedAt: serverTimestamp() }, { merge: true }));
+    await assertFails(setDoc(live, { trashedFrom: { visibility: 'public', referenceCardId: null } }, { merge: true }));
+    await assertFails(setDoc(live, { referenceCardId: 'bobs' }, { merge: true }));
+    // Nor take one out of the trash by clearing the field.
+    await assertFails(updateDoc(doc(db, 'cards', TRASHED), { trashedAt: deleteField(), trashedFrom: deleteField() }));
+    await assertFails(updateDoc(doc(db, 'cards', TRASHED), { trashedAt: deleteField(), visibility: 'public' }));
+  });
+
+  it("refuses a resonance draft answering someone else's card in the trash (it reads as private)", async () => {
+    const db = as('alice');
+    await assertSucceeds(setDoc(doc(collection(db, 'cards')), draft('alice', { referenceCardId: 'bobs' })));
+    await assertFails(setDoc(doc(collection(db, 'cards')), draft('alice', { referenceCardId: 'bobsTrashed' })));
+  });
+
+  it('opens one to its author alone, by get and in their own lists', async () => {
+    await assertSucceeds(getDoc(doc(as('alice'), 'cards', TRASHED)));
+    await assertSucceeds(getDocs(query(collection(as('alice'), 'cards'), where('authorId', '==', 'alice'))));
+    await assertFails(getDoc(doc(as('bob'), 'cards', TRASHED)));
+    await assertFails(getDoc(doc(anonymous(), 'cards', TRASHED)));
+    await assertFails(getDocs(query(collection(as('bob'), 'cards'), where('authorId', '==', 'alice'))));
+  });
+
+  it('lets its author delete a draft in the trash (an older tester build), never a published card in it', async () => {
+    await assertSucceeds(deleteDoc(doc(as('alice'), 'cards', TRASHED_DRAFT)));
+    await assertFails(deleteDoc(doc(as('alice'), 'cards', TRASHED)));
+    await assertFails(deleteDoc(doc(as('bob'), 'cards', TRASHED)));
+  });
+});

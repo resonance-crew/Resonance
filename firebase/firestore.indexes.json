@@ -37,6 +37,20 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "trashedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "cards",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "authorId",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "visibility",
           "order": "ASCENDING"
         },

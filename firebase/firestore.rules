@@ -262,8 +262,15 @@ service cloud.firestore {
       // switch beside it: refused here, that save failed silently and the
       // draft went out under its author's name. (publishedAt is no client
       // write, so the draft stays one.)
+      // A card in the trash (`trashedAt`, written by the server alone: POST
+      // /api/v1/cards/{id}/trash) takes no client write at all until it is
+      // restored: it is private with its resonance parked, so nothing else
+      // here would stop a client — an older build too — making it public
+      // again, and a save landing in a card its owner was told is in the
+      // trash would be lost to them.
       allow update: if signedIn()
         && resource.data.authorId == request.auth.uid
+        && resource.data.get("trashedAt", null) == null
         && changedKeys().hasOnly([
           "thoughtCore", "story", "tags", "visibility", "anonymous", "media", "accentHue", "updatedAt"
         ])
@@ -348,10 +355,13 @@ service cloud.firestore {
         allow read: if signedIn() && ownsCard();
         // A whole working copy, replaced each time (never merged). It may keep
         // a card anonymous and for connections only that already is (an older
-        // card stays editable), never make one so.
+        // card stays editable), never make one so. Never into a card in the
+        // trash: restoring it would otherwise meet a copy saved with the
+        // trash's 'private', which applying would hide the card again with.
         allow create, update: if signedIn()
           && editId == "current"
           && ownsCard()
+          && card().get("trashedAt", null) == null
           && request.resource.data.keys().hasOnly([
             "thoughtCore", "story", "tags", "visibility", "anonymous", "media", "accentHue", "updatedAt", "authorId"
           ])
