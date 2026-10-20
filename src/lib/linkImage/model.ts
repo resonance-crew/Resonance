@@ -6,7 +6,7 @@ import { publishedDate } from '@/lib/publishedDate';
 import { sharePalette, shareSeed } from '@/lib/share/shareCard';
 import { storageKeyOf } from '@/lib/storage/publicUrl';
 import { storyType, type StoryScript } from '@/lib/text/script';
-import { imageVersion } from './version';
+import { imageVersion, keyedImageVersion } from './version';
 
 /**
  * What the link-preview image of a card draws (/api/og/card/{id}, og:image):
@@ -92,8 +92,13 @@ export function drawnCard(
   };
 }
 
-/** The version in a drawn image's address (`?v=`): a new drawing is a new URL no cache answers from the old. */
-export function drawnCardVersion(card: DrawnCard): string {
-  return imageVersion(JSON.stringify(card));
+/**
+ * The version in a drawn image's address (`?v=`): a new drawing is a new URL
+ * no cache answers from the old. Keyed (keyedImageVersion): what a drawing
+ * names — a pen name, a photo — is public, but which version a card's drawing
+ * had under a name it no longer shows must not be something anyone can make.
+ */
+export function drawnCardVersion(card: DrawnCard, key?: Buffer | null): string {
+  return keyedImageVersion(JSON.stringify(card), key);
 }
 
