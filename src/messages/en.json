@@ -343,6 +343,17 @@
       "notesGone": "The notes left on this anonymous card have been deleted"
     }
   },
+  "share": {
+    "profile": "Share profile",
+    "copyLink": "Copy link",
+    "copied": "Link copied",
+    "copyFailed": "Couldn’t copy the link",
+    "on": "Share on {platform}",
+    "more": "More ways to share",
+    "postText": "“{title}” by {handle}",
+    "postTextAnonymous": "“{title}”",
+    "anonymousHint": "Sharing it from your account may tell people it’s yours"
+  },
   "messages": {
     "title": "Messages",
     "subtitle": "Quiet conversations with the people you're connected with",

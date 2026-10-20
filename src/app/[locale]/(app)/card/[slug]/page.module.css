@@ -1,47 +1,50 @@
+/* The article grid: the story's column (--measure, 680) in the middle, the
+   author rail 48px to the right of the text. Grid sizing grows the middle
+   track to 680 first; the flexible tracks share the rest, and the right one
+   never drops below the rail and its gap (308) — so the column is centred
+   from 1392px (both side tracks ≥ 308) and slides left below that, the rail
+   always beside the text (reading-type §4). */
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
-  gap: clamp(32px, 4vw, 64px);
   align-items: start;
-  max-width: var(--page-max-w-wide);
-  margin: 0 auto;
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(0, var(--measure))
+    minmax(calc(var(--story-rail-gap) + var(--card-rail-w)), 1fr);
 }
 
 .article {
+  grid-column: 2;
   min-width: 0;
-  max-width: 720px;
 }
 
-/* Article cover image — clipped to an organic curve by OrganicImage. */
+/* The cover, clipped to an organic curve by OrganicImage. */
 .heroImage {
-  margin-bottom: clamp(20px, 3vw, 28px);
+  margin-bottom: var(--story-cover-gap);
 }
 
-/* Article title — replaces the old quote-card chrome with a plain heading. */
-.titleRow {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 28px;
-}
-
+/* The title (story.css .story-title sets its type) has the column to itself. */
 .title {
   margin: 0;
-  flex: 1;
-  min-width: 0;
-  font-family: var(--font-heading);
-  font-size: clamp(28px, 4.4vw, 44px);
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.015em;
-  color: var(--color-text);
-  /* No lone character left on the last line (「…幾個網 / 頁」 beside the ⋯ on a phone). */
-  text-wrap: pretty;
+}
+
+/* The byline / meta row: under the title, the story after it. */
+.byline {
+  margin-top: var(--story-meta-gap);
+  margin-bottom: var(--story-lead-gap);
+}
+
+/* The story ends, then the tags. */
+.story {
+  margin-bottom: var(--story-end-gap);
 }
 
 /* Right rail: author intro on top, ToC below; sticks while the article scrolls.
    It never runs past the window: a long ToC scrolls inside it (CardToc). */
 .aside {
+  grid-column: 3;
+  width: var(--card-rail-w);
+  margin-left: var(--story-rail-gap);
   position: sticky;
   top: calc(var(--app-header-h) + 24px);
   max-height: calc(100vh - var(--app-header-h) - 48px);
@@ -51,25 +54,35 @@
   gap: 28px;
 }
 
-/* Compact author header shown inline above the article on mobile (the rail is
-   hidden there). */
-.mobileAuthor {
-  display: none;
-}
-
+/* No rail: one column, centred, at most the measure (the window less the
+   page's gutters below that — 20 a side on a phone). The byline under the
+   title names the author. */
 @media (max-width: 900px) {
   .layout {
-    grid-template-columns: 1fr;
-    max-width: 760px;
+    grid-template-columns: minmax(0, var(--measure));
+    justify-content: center;
+  }
+
+  .article {
+    grid-column: 1;
   }
 
   .aside {
     display: none;
   }
+}
 
-  .mobileAuthor {
-    display: block;
-    margin-bottom: 28px;
+@media (max-width: 640px) {
+  .heroImage {
+    margin-bottom: var(--story-cover-gap-compact);
+  }
+
+  .byline {
+    margin-bottom: var(--story-lead-gap-compact);
+  }
+
+  .story {
+    margin-bottom: var(--story-end-gap-compact);
   }
 }
 
@@ -128,7 +141,6 @@
   font-family: var(--font-heading);
   font-size: clamp(22px, 2.6vw, 26px);
   font-weight: 700;
-  letter-spacing: -0.01em;
   color: var(--color-text);
   margin: 0 0 clamp(40px, 5vw, 64px);
   text-align: center;
@@ -139,7 +151,6 @@
   font-family: var(--font-heading);
   font-size: clamp(20px, 2.4vw, 24px);
   font-weight: 700;
-  letter-spacing: -0.01em;
   color: var(--color-text);
   margin: 0 0 24px;
 }

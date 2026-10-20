@@ -589,6 +589,26 @@ object L10n {
             val notesGone: String get() = Strings.string("card.trashed.notesGone")
         }
     }
+    object Share {
+        /** Share profile */
+        val profile: String get() = Strings.string("share.profile")
+        /** Copy link */
+        val copyLink: String get() = Strings.string("share.copyLink")
+        /** Link copied */
+        val copied: String get() = Strings.string("share.copied")
+        /** Couldn’t copy the link */
+        val copyFailed: String get() = Strings.string("share.copyFailed")
+        /** Share on {platform} */
+        fun on(platform: String): String = Strings.format("share.on", mapOf("platform" to platform))
+        /** More ways to share */
+        val more: String get() = Strings.string("share.more")
+        /** “{title}” by {handle} */
+        fun postText(title: String, handle: String): String = Strings.format("share.postText", mapOf("title" to title, "handle" to handle))
+        /** “{title}” */
+        fun postTextAnonymous(title: String): String = Strings.format("share.postTextAnonymous", mapOf("title" to title))
+        /** Sharing it from your account may tell people it’s yours */
+        val anonymousHint: String get() = Strings.string("share.anonymousHint")
+    }
     object Messages {
         /** Messages */
         val title: String get() = Strings.string("messages.title")

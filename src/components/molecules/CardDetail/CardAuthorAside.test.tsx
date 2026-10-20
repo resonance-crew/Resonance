@@ -56,6 +56,13 @@ describe('CardAuthorAside', () => {
     expect(mockIsConnected).not.toHaveBeenCalled();
   });
 
+  // When it was published is the card's, under its title (StoryByline); the rail is about the person.
+  it('names the person and not the date', () => {
+    const { container } = render(<CardAuthorAside author={{ ...author, bio: 'Writes at dawn' }} verifiedLabel="Verified" />);
+    expect(screen.getByText('Writes at dawn')).toBeInTheDocument();
+    expect(container.querySelector('time')).toBeNull();
+  });
+
   it('shows the anonymous byline without a profile link', () => {
     render(<CardAuthorAside author={author} verifiedLabel="Verified" anonymous />);
     expect(screen.queryByRole('link')).not.toBeInTheDocument();

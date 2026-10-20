@@ -1,49 +1,45 @@
 import { Skeleton } from '@/components/atoms/Skeleton/Skeleton';
 import pageStyles from '@/app/[locale]/(app)/card/[slug]/page.module.css';
+import styles from './CardDetailSkeleton.module.css';
 
 /**
  * Loading state for the card detail page. Reuses the real article layout —
- * the two-column grid (article + sticky author/ToC rail) and the in-article
- * order (hero image → title → story → tags) — so there's no position or style
- * jump when content arrives. Only the avatar, image, text, tags and icons
- * become grey blocks. The compact author header is shown inline on mobile
- * (where the rail is hidden), matching the real page.
+ * the grid (the story's column and the sticky author/ToC rail beside it) and
+ * the head's order and gaps (cover → title → byline / meta row → story →
+ * tags) — so nothing moves when the card arrives; only the avatar, picture,
+ * text and tags are grey blocks, at the title's and the story's own line
+ * heights (36 and 18 tall; 28 and 17 on a phone). Up to 900px the byline
+ * holds the author's avatar and pen name as the real one does; from 901px the
+ * meta line alone, the rail holding the author.
  */
 export function CardDetailSkeleton() {
   return (
     <div className={pageStyles.layout} role="status" aria-label="Loading">
       <article className={pageStyles.article}>
-        {/* Compact author header — mobile only, mirrors the real page. */}
-        <header className={pageStyles.mobileAuthor}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Skeleton width={44} height={44} circle />
-            <div style={{ flex: 1 }}>
-              <Skeleton width={140} height={15} />
-              <Skeleton width={96} height={13} style={{ marginTop: 7 }} />
-            </div>
-          </div>
-        </header>
+        {/* The cover. */}
+        <Skeleton height="auto" radius={18} className={`${pageStyles.heroImage} ${styles.cover}`} />
 
-        {/* Hero cover image. */}
-        <Skeleton
-          height="clamp(180px, 38vw, 374px)"
-          radius={18}
-          className={pageStyles.heroImage}
-          style={{ display: 'block' }}
-        />
-
-        {/* Title — two large lines matching the h1 rhythm. */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 28 }}>
-          <Skeleton height={38} width="90%" />
-          <Skeleton height={38} width="55%" />
+        {/* The title — two lines at its own size. */}
+        <div className={styles.lines} data-kind="title">
+          <Skeleton height="var(--sk-line)" width="90%" />
+          <Skeleton height="var(--sk-line)" width="55%" />
         </div>
 
-        {/* Story body. */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
-          <Skeleton height={17} />
-          <Skeleton height={17} />
-          <Skeleton height={17} />
-          <Skeleton height={17} width="65%" />
+        {/* The byline / meta row. */}
+        <div className={`${pageStyles.byline} ${styles.byline}`}>
+          <Skeleton width={40} circle className={styles.avatar} />
+          <div className={styles.bylineText}>
+            <Skeleton width={120} height={15} className={styles.name} />
+            <Skeleton width={160} height={14} />
+          </div>
+        </div>
+
+        {/* The story. */}
+        <div className={`${pageStyles.story} ${styles.lines}`} data-kind="body">
+          <Skeleton height="var(--sk-line)" />
+          <Skeleton height="var(--sk-line)" />
+          <Skeleton height="var(--sk-line)" />
+          <Skeleton height="var(--sk-line)" width="65%" />
         </div>
 
         {/* Tags. */}
@@ -59,7 +55,6 @@ export function CardDetailSkeleton() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Skeleton width={56} height={56} circle />
           <Skeleton width={120} height={16} />
-          <Skeleton width={72} height={13} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
             <Skeleton height={13} />
             <Skeleton height={13} width="80%" />

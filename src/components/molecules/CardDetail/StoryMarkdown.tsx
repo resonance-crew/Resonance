@@ -15,6 +15,7 @@ import { isBlankParagraph } from '@/lib/markdown/blankLines';
 import { SITE_HOSTS, soleLinkParagraphs } from '@/lib/links/storyLinks';
 import { seedFromString } from '@/lib/design/prng';
 import { storyLinkWaveVars } from '@/lib/design/storyLinkWave';
+import { rehypeLatinMarks } from '@/lib/markdown/rehypeLatinMarks';
 import { storyType, type StoryScript } from '@/lib/text/script';
 import '@/styles/story.css';
 import styles from './StoryMarkdown.module.css';
@@ -72,6 +73,8 @@ function toOtherSite(href: string | undefined): boolean {
 const AWAY = { target: '_blank', rel: 'noopener noreferrer nofollow ugc' } as const;
 
 const components: Components = {
+  // A story's `#` is drawn as the reader's h2, and is one: the page has one h1, the card's title.
+  h1: ({ node: _node, ...rest }) => <h2 {...rest} />,
   // Links wear the pen's wavy underline as a repeating background, so a link
   // that wraps gets a stroke under every line (OrganicLink's absolutely
   // positioned svg can't follow a wrapped inline box). One to another site
@@ -156,14 +159,18 @@ function StoryParagraph({ node, children }: { children?: ReactNode } & ExtraProp
   return <p>{children}</p>;
 }
 
+const LATIN_PLUGINS = [rehypeSlug];
+const CJK_PLUGINS = [rehypeSlug, rehypeLatinMarks];
+
 export interface StoryMarkdownProps {
   source: string;
   /**
    * How the story is set (src/styles/story.css): its script and the language
    * of its words. The card page passes both, read off the title and story
-   * together (lib/text/script storyType); without them they are read off the
-   * story alone. `lang` goes on this root only — never on what is around the
-   * story, which is in the reader's own language.
+   * together (lib/text/script storyType) — a `script` with no `lang` is a
+   * story whose language can't be named, and gets no tag; without a script
+   * both are read off the story alone. `lang` goes on this root only — never
+   * on what is around the story, which is in the reader's own language.
    */
   script?: StoryScript;
   lang?: string;
@@ -190,16 +197,14 @@ export function StoryMarkdown({ source, script, lang, density }: StoryMarkdownPr
     [source, previews],
   );
   // The same in the server's render and the browser's: a pure reading of the source.
-  const read = useMemo(() => (script && lang ? null : storyType('', source)), [script, lang, source]);
+  const read = useMemo(() => (script ? null : storyType('', source)), [script, source]);
+  const setAs = script ?? read?.script;
+  // A CJK story sets an apostrophe inside a Latin word in its Latin face (after the slugs, read from the words as they are).
+  const rehypePlugins = setAs === 'latin' ? LATIN_PLUGINS : CJK_PLUGINS;
   return (
-    <div
-      className="story-prose"
-      data-script={script ?? read?.script}
-      data-density={density}
-      lang={lang ?? read?.lang}
-    >
+    <div className="story-prose" data-script={setAs} data-density={density} lang={read ? read.lang : lang}>
       <StoryLinkCardsContext.Provider value={cards}>
-        <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSlug]} components={components}>
+        <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={components}>
           {source}
         </Markdown>
       </StoryLinkCardsContext.Provider>

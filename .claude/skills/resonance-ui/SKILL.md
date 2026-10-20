@@ -36,7 +36,7 @@ When building UI in this repo, **always reach for these primitives before writin
 ## Hard rules
 
 1. **No card-in-card.** If a region inside a `<Panel>` looks like it needs another container, use `<Divider />` between sub-sections instead. On mobile the Panel chrome collapses automatically (`collapseOnMobile` default `true`).
-2. **No inline SVG and no emoji icons** in component files. Add the SVG to `src/components/atoms/Icon/icons/<name>.tsx` and register it in `registry.ts`. Then call `<Icon name="…" />`.
+2. **No inline SVG and no emoji icons** in component files. Add the SVG to `src/components/atoms/Icon/icons/<name>.tsx` and register it in `registry.ts`. Then call `<Icon name="…" />`. The one exception: other companies' brand marks (the share menu's LINE / Threads / Facebook / X) live in `atoms/BrandMark` — their official monochrome paths unmodified, filled in `--color-text`, web only and outside the registry (so `apps:generate` never sees them), each path's hash pinned by its test; never redraw, recolour or add one to `ICONS`.
 3. **No inline `style` for design-system values** — typography, color, padding, radius. Use CSS Modules + tokens (`var(--…)`). Inline `style` is fine for one-off layout (grid template, sticky offset).
 4. **Pages in `(app)/...` must own their header offset.** The `(app)` layout does **not** add top padding. Either use `<PageShell>` or apply `padding-top: calc(var(--app-header-h) + var(--page-pad-top))` directly.
 5. **Placeholders are styled globally** in `globals.css`. Do not set `::placeholder` per-component.

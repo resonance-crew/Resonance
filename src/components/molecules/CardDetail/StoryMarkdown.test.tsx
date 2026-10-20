@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, renderWithIntl, screen } from '@/../test/render';
 import fixture from '../../../../native/fixtures/story-link-cards.json';
@@ -116,6 +118,40 @@ describe('StoryMarkdown type', () => {
     expect(card.closest('.story-embed')).not.toBeNull();
     expect(card).not.toHaveClass('story-link');
     expect(container.querySelectorAll('.story-embed')).toHaveLength(2);
+  });
+
+  // The page's one h1 is the card's title; a story's `#` is its first rank of heading.
+  it('renders a story’s # as an h2, its ToC anchor kept', () => {
+    const { container } = renderWithIntl(<StoryMarkdown source={'# 出發之前\n\n那天早上下著小雨。\n\n## 0 公尺'} />);
+    expect(container.querySelector('h1')).toBeNull();
+    const headings = screen.getAllByRole('heading', { level: 2 });
+    expect(headings.map((h) => h.textContent)).toEqual(['出發之前', '0 公尺']);
+    expect(headings[0].id).toBeTruthy();
+  });
+
+  // A CJK face draws ‘ ’ full-width, a half-em hole inside don’t.
+  it('sets an apostrophe inside a Latin word apart in a CJK story — and never in code or in a Latin story', () => {
+    const zh = renderWithIntl(
+      <StoryMarkdown source={'教練只說：don’t rush. 他’s 不算，‘OK’ 也不算。\n\n## rock’n’roll 那年\n\n`can’t`'} />,
+    );
+    const marks = Array.from(zh.container.querySelectorAll('.story-latin-mark'));
+    expect(marks.map((m) => m.textContent)).toEqual(['’', '’', '’']);
+    expect(marks[0].parentElement!.tagName).toBe('P');
+    expect(marks[1].closest('h2')).not.toBeNull();
+    // The words read as they were written, the heading's anchor too.
+    expect(screen.getByText(/教練只說/).textContent).toBe('教練只說：don’t rush. 他’s 不算，‘OK’ 也不算。');
+    expect(zh.container.querySelector('h2')!.id).toBe('rocknroll-那年');
+    expect(zh.container.querySelector('code')!.innerHTML).toBe('can’t');
+    zh.unmount();
+
+    const en = renderWithIntl(<StoryMarkdown source={'I don’t know why the kettle ticks before it sings.'} />);
+    expect(en.container.querySelector('.story-prose')).toHaveAttribute('data-script', 'latin');
+    expect(en.container.querySelectorAll('.story-latin-mark')).toHaveLength(0);
+  });
+
+  it('lets a card or link card keep its own type: the prose’s tracking and justification stop at its edge', () => {
+    const css = readFileSync(join(process.cwd(), 'src/styles/story.css'), 'utf8');
+    expect(css).toMatch(/\.story-prose :where\(\.story-embed\) \{[^}]*letter-spacing: normal;[^}]*text-align: start;/);
   });
 });
 

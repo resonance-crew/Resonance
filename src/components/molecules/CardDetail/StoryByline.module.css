@@ -1,0 +1,85 @@
+/* The line under a card page's title (StoryByline). Its place on the page —
+   --story-meta-gap above it, --story-lead-gap below — is the page's. */
+.byline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* Grows with large text and a wrapping meta line; never clips (WCAG 1.4.12). */
+  min-height: 44px;
+}
+
+.avatar {
+  display: flex;
+  flex: none;
+}
+
+/* The pen name over the meta line; it takes what the avatar and actions leave. */
+.text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.name > :not(.handle) {
+  flex: none;
+}
+
+/* One line, whatever its length: a long pen name ends in an ellipsis at 320px. */
+.handle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.35;
+  font-weight: 600;
+  color: var(--color-text);
+  text-decoration: none;
+}
+.anonymous {
+  color: var(--color-text-muted);
+}
+
+/* 「6 分鐘 · 2026年10月10日」: UI type in the reader's language, muted (5.0:1); it may wrap. */
+.meta {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--story-meta-size-compact);
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+
+/* Share, then the ⋯: at the row's far end, never squeezed. The glyphs' own
+   hit areas part them under a coarse pointer (44px each). */
+.actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+@media (pointer: coarse) {
+  .actions {
+    gap: 0;
+  }
+}
+
+/* The rail names the author from 901px: the row keeps its meta line alone. */
+@media (min-width: 901px) {
+  .avatar,
+  .name {
+    display: none;
+  }
+  .meta {
+    font-size: var(--story-meta-size);
+  }
+}
