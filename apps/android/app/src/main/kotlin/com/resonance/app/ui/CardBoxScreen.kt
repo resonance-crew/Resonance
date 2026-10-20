@@ -77,6 +77,10 @@ import com.resonance.kit.reading.ApiCache
 import com.resonance.kit.reading.FeedLoader
 import com.resonance.kit.reading.RefreshFailure
 import kotlinx.coroutines.CancellationException
+import com.resonance.design.OrganicConfirmDialog
+import com.resonance.kit.api.Trash
+import com.resonance.kit.api.purgeInstant
+import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -202,9 +206,10 @@ internal fun shelvesToRead(shelf: TabGetCardBox, current: (TabGetCardBox) -> Boo
     else listOf(shelf) + ShelfOrder.filter { it in OwnedShelves && it != shelf && !current(it) }
 
 /**
- * My card box (me/page.tsx): who I am, then my cards on six shelves —
+ * My card box (me/page.tsx): who I am, then my cards on seven shelves —
  * published, private, drafts, the cards I resonated with, cards linking to
- * mine, bookmarks. The twin of iOS's CardBoxScreen; [CardBoxModel] keeps the shelves.
+ * mine, bookmarks, and the trash (垃圾桶, always last: what I deleted, for
+ * 30 days). The twin of iOS's CardBoxScreen; [CardBoxModel] keeps the shelves.
  */
 @Composable
 fun CardBoxScreen(session: Session, open: (Route) -> Unit) {
@@ -224,7 +229,10 @@ fun CardBoxScreen(session: Session, open: (Route) -> Unit) {
     val layout = cardListLayout()
 
     // A phone's card box has 8 more under the bar's line, and 8 more either side of the shelves (round 5 E2).
-    val air = CardBoxAir.of(LocalWindowLayout.current.cls)
+    val cls = LocalWindowLayout.current.cls
+    val air = CardBoxAir.of(cls)
+    // 清空垃圾桶's question (asked over the shelf, whatever has scrolled), and whether its last try failed.
+    var emptying by remember { mutableStateOf<Emptying?>(null) }
     TabScreen(
         L10n.App.Nav.me,
         titleInBar = true,
@@ -279,6 +287,7 @@ fun CardBoxScreen(session: Session, open: (Route) -> Unit) {
         when {
             cards == null && failed -> item { OrganicEmptyState(L10n.Native.loadError, L10n.Native.retry, { model.refresh(shelf, changes, retry = true) }, action = EmptyAction.Outline) }
             cards == null -> storyCardSkeletons(if (layout.isGrid) layout.columns * 2 else 6, layout = layout)
+            shelf == TabGetCardBox.trash -> trashShelf(cards, open, layout, compact = cls == LayoutClass.Compact) { emptying = Emptying.Asking }
             // An empty shelf: the shared empty state (its own words as the title; the bookmarks' as its line),
             // and the empty published shelf points at the first story (ux §4).
             cards.isEmpty() -> item {
@@ -299,6 +308,128 @@ fun CardBoxScreen(session: Session, open: (Route) -> Unit) {
             else -> storyCards(cards, open, layout = layout)
         }
     }
+    emptying?.let { state -> EmptyTrashDialog(state) { emptying = it } }
+}
+
+/** 清空垃圾桶's question: asked, working, or asked again after a try that failed. */
+internal enum class Emptying { Asking, Busy, Failed }
+
+/**
+ * 清空垃圾桶？ · 垃圾桶裡的卡片都會永久刪除，無法復原 · 先留著 | 清空垃圾桶, the verb red. It stays,
+ * working, while the trash is emptied page by page; done, the shelf reads again and shows it empty;
+ * a failure says so in the question, the shelf reading again to what is left.
+ */
+@Composable
+private fun EmptyTrashDialog(state: Emptying, set: (Emptying?) -> Unit) {
+    val trash = LocalTrash.current ?: return
+    OrganicConfirmDialog(
+        title = L10n.Me.Actions.emptyTrashTitle,
+        body = L10n.Me.Actions.emptyTrashBody,
+        cancelLabel = L10n.Me.Actions.deleteCancel,
+        confirmLabel = L10n.Me.Actions.emptyTrash,
+        onCancel = { set(null) },
+        onConfirm = {
+            if (state != Emptying.Busy) {
+                set(Emptying.Busy)
+                trash.launch {
+                    try {
+                        emptyTrash()
+                        set(null)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        set(Emptying.Failed)
+                    }
+                }
+            }
+        },
+        busy = state == Emptying.Busy,
+        seed = 67.0,
+        error = if (state == Emptying.Failed) L10n.Safety.actionError else null,
+        destructive = true,
+    )
+}
+
+/**
+ * The trash shelf (TrashShelf.tsx): what I deleted, the latest in first — never one past its days,
+ * which is gone to me too. Over it how long cards wait (and, while an anonymous card is here, that
+ * its notes went with it) with 清空垃圾桶; each card says where it came from and when it goes
+ * ([TrashWords]) and wears the trash's ⋯ (還原 · 永久刪除). A published card opens its page (its
+ * trash banner), a draft the writer (its trashed notice) — never prefilled: a summary isn't the card.
+ * Empty, the trash's own empty state.
+ */
+private fun LazyListScope.trashShelf(cards: List<FeedCard>, open: (Route) -> Unit, layout: CardListLayout, compact: Boolean, onEmpty: () -> Unit) {
+    val now = Instant.now()
+    val shown = inTrash(cards, now)
+    if (shown.isEmpty()) {
+        item {
+            OrganicEmptyState(
+                title = L10n.Me.emptyTrash, message = L10n.Me.emptyTrashLine(Trash.DAYS),
+                icon = IconName.Trash, seed = 61.0, fill = true,
+            )
+        }
+        return
+    }
+    item { TrashHeader(anonymousHere = shown.any { it.anonymous && it.publishedAt != null }, inset = layout.headerInset, compact = compact, onEmpty = onEmpty) }
+    val tap: (FeedCard) -> Route = ::trashTap
+    val palettes = cardFamilies(shown)
+    val caption: @Composable (FeedCard) -> Unit = { card ->
+        BasicText(TrashWords.caption(card, now), style = AppFonts.body(12.5f, lineHeight = 1.4f, color = Tokens.TextMuted), modifier = Modifier.padding(top = 8.dp))
+    }
+    if (layout.isGrid) return borderedCards(
+        shown, open, null, false, layout, tap, keyPrefix = "trash:",
+        overlay = { card, i ->
+            val hue = CardPalette.of(palettes[i]).hue
+            Box(Modifier.align(Alignment.TopEnd).padding(top = 14.dp - 3.dp, end = 14.dp - 3.dp)) {
+                TrashActionsMenu(TrashRef(card.id, card.title), seed = hue, hue = hue)
+            }
+        },
+        caption = caption,
+    )
+    itemsIndexed(shown, key = { _, c -> "trash:${c.id}" }) { i, card ->
+        val hue = CardPalette.of(palettes[i]).hue
+        Column(Modifier.fillMaxWidth()) {
+            Box {
+                StoryCard(card.story(), i, i == shown.lastIndex, Modifier.plainClickable { open(tap(card)) }, inset = layout.inset, palette = palettes[i])
+                Box(Modifier.align(Alignment.TopEnd).padding(top = 14.dp - 3.dp, end = layout.inset - 4.dp - 3.dp)) {
+                    TrashActionsMenu(TrashRef(card.id, card.title), seed = hue, hue = hue)
+                }
+            }
+            Box(Modifier.padding(start = layout.inset, end = layout.inset, bottom = 8.dp)) { caption(card) }
+        }
+    }
+}
+
+/** What the trash shelf lists: the cards in the trash, never one past its days (gone to its owner too, before the server's purge reaches it). */
+internal fun inTrash(cards: List<FeedCard>, now: Instant = Instant.now()): List<FeedCard> =
+    cards.filter { c -> c.purgeInstant?.let { !Trash.expired(it, now) } ?: true }
+
+/** Where a card in the trash opens: a published one its page (the banner), a draft the writer (its notice). */
+internal fun trashTap(card: FeedCard): Route = if (card.publishedAt != null) Route.Card(card.routeKey) else Route.Write(cardId = card.id)
+
+/**
+ * The trash shelf's head: 卡片會在垃圾桶保留 30 天，之後永久刪除 (and, while an anonymous card is here,
+ * 匿名卡片移到垃圾桶時，留在上面的紙條會一併刪除) at 13 muted, and 清空垃圾桶 in the tonal red at its
+ * end — on a phone under the lines, at their start. It only opens a question, which is red.
+ */
+@Composable
+private fun TrashHeader(anonymousHere: Boolean, inset: Dp, compact: Boolean, onEmpty: () -> Unit) {
+    val lines: @Composable () -> Unit = {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            BasicText(L10n.Me.trashHint(Trash.DAYS), style = AppFonts.body(13f, lineHeight = 1.5f, color = Tokens.TextMuted))
+            if (anonymousHere) BasicText(L10n.Me.trashAnonymousNotes, style = AppFonts.body(13f, lineHeight = 1.5f, color = Tokens.TextMuted))
+        }
+    }
+    val empty: @Composable () -> Unit = {
+        OrganicButton(L10n.Me.Actions.emptyTrash, variant = ButtonVariant.DangerTonal, small = true, onClick = onEmpty)
+    }
+    if (compact) Column(Modifier.padding(horizontal = inset).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        lines()
+        empty()
+    } else Row(Modifier.padding(horizontal = inset).padding(bottom = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(Modifier.weight(1f)) { lines() }
+        empty()
+    }
 }
 
 /** The shelves of my own cards (OWNED_TABS): each card gets its ⋯. */
@@ -313,13 +444,13 @@ private val OwnedShelves = setOf(TabGetCardBox.published, TabGetCardBox.`private
 private fun LazyListScope.managedCards(session: Session, cards: List<FeedCard>, open: (Route) -> Unit, resumesDrafts: Boolean, layout: CardListLayout) {
     val tap: (FeedCard) -> Route = { card -> if (resumesDrafts) Route.Write(cardId = card.id) else Route.Card(card.routeKey, card) }
     val palettes = cardFamilies(cards)
-    if (layout.isGrid) return borderedCards(cards, open, null, false, layout, tap) { card, i ->
+    if (layout.isGrid) return borderedCards(cards, open, null, false, layout, tap, overlay = { card, i ->
         val hue = CardPalette.of(palettes[i]).hue
         // 14 in from the card's corner, as on a band; the trigger's 44dp hit box reaches 3 past the chip.
         Box(Modifier.align(Alignment.TopEnd).padding(top = 14.dp - 3.dp, end = 14.dp - 3.dp)) {
-            CardActionsMenu(session, card.id, card.visibility.value, open, seed = hue, hue = hue, referenceCardId = card.referenceCardId)
+            CardMenu(session, card, open, hue)
         }
-    }
+    })
     itemsIndexed(cards, key = { _, c -> c.id }) { i, card ->
         val hue = CardPalette.of(palettes[i]).hue
         Column(Modifier.fillMaxWidth()) {
@@ -328,11 +459,24 @@ private fun LazyListScope.managedCards(session: Session, cards: List<FeedCard>, 
                 // The chip 14 in from the card's corner (the card's box sits 20 in from the screen, or
                 // its column's inset less the band's 18); the trigger's 44dp hit box reaches 3 past the 38dp chip.
                 Box(Modifier.align(Alignment.TopEnd).padding(top = 14.dp - 3.dp, end = layout.inset - 4.dp - 3.dp)) {
-                    CardActionsMenu(session, card.id, card.visibility.value, open, seed = hue, hue = hue, referenceCardId = card.referenceCardId)
+                    CardMenu(session, card, open, hue)
                 }
             }
         }
     }
+}
+
+/**
+ * The owner's ⋯ on one of my shelved cards: 刪除 moves it to the trash with the undo toast — asking
+ * first only for a published, public, named resonance (whose original's byline the shelf doesn't
+ * know: looked up when it matters).
+ */
+@Composable
+private fun CardMenu(session: Session, card: FeedCard, open: (Route) -> Unit, hue: Double) {
+    CardActionsMenu(
+        session, card.id, card.visibility.value, open, seed = hue, hue = hue, referenceCardId = card.referenceCardId,
+        published = card.publishedAt != null, anonymous = card.anonymous, title = card.title,
+    )
 }
 
 /**
@@ -347,7 +491,11 @@ internal data class CardBoxAir(val extraTop: Dp, val shelvesTop: Dp, val shelves
     }
 }
 
-private val ShelfOrder = listOf(TabGetCardBox.published, TabGetCardBox.`private`, TabGetCardBox.draft, TabGetCardBox.resonated, TabGetCardBox.linked, TabGetCardBox.bookmarks)
+/** The shelves in the strip's order (OrganicTabs'), the trash always last before the thought map. */
+internal val ShelfOrder = listOf(
+    TabGetCardBox.published, TabGetCardBox.`private`, TabGetCardBox.draft, TabGetCardBox.resonated, TabGetCardBox.linked,
+    TabGetCardBox.bookmarks, TabGetCardBox.trash,
+)
 
 /**
  * The shelves as OrganicTabs' scrollable `surface` strip: the chosen one on a
@@ -401,7 +549,6 @@ private fun shelfTitle(s: TabGetCardBox) = when (s) {
     TabGetCardBox.resonated -> L10n.Me.Tabs.resonated
     TabGetCardBox.linked -> L10n.Me.Tabs.linked
     TabGetCardBox.bookmarks -> L10n.Me.Tabs.bookmarks
-    // The web's trash shelf (not in ShelfOrder until the app's own trash ships).
     TabGetCardBox.trash -> L10n.Me.Tabs.trash
     // The generated client's stand-in for a value it doesn't know (an answer from a newer server); never a shelf here.
     TabGetCardBox.unknownDefaultOpenApi -> ""

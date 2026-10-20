@@ -208,6 +208,8 @@ internal fun LazyListScope.borderedCards(
     keyPrefix: String = "",
     /** Laid over a card's top-end corner (the owner's ⋯ on their shelves). */
     overlay: (@Composable BoxScope.(FeedCard, Int) -> Unit)? = null,
+    /** Under each card (the trash shelf's where-from and when). */
+    caption: (@Composable (FeedCard) -> Unit)? = null,
 ) {
     val n = layout.columns
     val blocks = cards.indices.chunked(n * GridBlockRows)
@@ -226,9 +228,12 @@ internal fun LazyListScope.borderedCards(
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(gap)) {
                     for (i in block) if (i % n == c) {
                         val card = cards[i]
-                        Box {
-                            BorderedStoryCard(card.story(), i, Modifier.plainClickable { open(tap(card)) }, palette = palettes[i])
-                            overlay?.invoke(this, card, i)
+                        Column {
+                            Box {
+                                BorderedStoryCard(card.story(), i, Modifier.plainClickable { open(tap(card)) }, palette = palettes[i])
+                                overlay?.invoke(this, card, i)
+                            }
+                            caption?.invoke(card)
                         }
                     }
                 }

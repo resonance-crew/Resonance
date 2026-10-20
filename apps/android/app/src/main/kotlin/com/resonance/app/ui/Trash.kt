@@ -27,6 +27,7 @@ import com.resonance.kit.l10n.L10n
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /** What the trash's moves ask of the server ([WritingApi] on screen; a stand-in under test). */
@@ -81,6 +82,9 @@ class TrashCenter(
     var restoredAlone by mutableStateOf(false)
 
     private fun change(card: TrashRef) = Session.CardChange(card.id, card.referenceCardId)
+
+    /** Runs [work] in the shell's scope: what it shows or says outlives the control (a card's ⋯) that asked. */
+    fun launch(work: suspend TrashCenter.() -> Unit): Job = scope.launch { work() }
 
     /** To the trash; what showed the card reads again, whether it went or not (the shelf then shows where it is). */
     suspend fun trash(card: TrashRef): TrashedCard =
@@ -166,14 +170,21 @@ val LocalTrash = staticCompositionLocalOf<TrashCenter?> { null }
  */
 @Composable
 fun RestoredAloneNotice(trash: TrashCenter) {
-    if (!trash.restoredAlone) return
-    val close = { trash.restoredAlone = false }
-    OrganicModal(close, L10n.Me.Actions.restored, seed = 73.0, closeLabel = L10n.Native.close, maxWidth = 400.dp) {
+    if (trash.restoredAlone) OneExitNotice(L10n.Me.Actions.restored, L10n.Me.Actions.restoredAloneBody, seed = 73.0) { trash.restoredAlone = false }
+}
+
+/**
+ * A notice with nothing to choose, in the web's Modal: its title and its words, then the one way
+ * out — the quiet close, under them at the right (a refused move: 刪除 · 沒完成，再試一次).
+ */
+@Composable
+internal fun OneExitNotice(title: String, body: String, seed: Double, onDismiss: () -> Unit) {
+    OrganicModal(onDismiss, title, seed = seed, closeLabel = L10n.Native.close, maxWidth = 400.dp) {
         Column(Modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            ModalTitle(L10n.Me.Actions.restored)
-            ModalBody(L10n.Me.Actions.restoredAloneBody)
+            ModalTitle(title)
+            ModalBody(body)
         }
-        ModalCloseButton(L10n.Native.close, close)
+        ModalCloseButton(L10n.Native.close, onDismiss)
     }
 }
 

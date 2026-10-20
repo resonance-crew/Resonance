@@ -44,6 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSerializable
 import androidx.compose.runtime.setValue
@@ -446,10 +447,13 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
     val panes = remember(expanded, session) { listOf(MessagesPanesStrategy(expanded, session), SinglePaneSceneStrategy()) }
     // The shell's one toast (trash.spec §6): the account's, like the tabs — a new account starts without one.
     val toasts = remember { Toasts() }
+    // The trash's moves, which outlive the control that asked (a toast's 復原 after its card left the shelf).
+    val shellScope = rememberCoroutineScope()
+    val trash = remember(session) { TrashCenter(session.writing.trashCalls(), session::noteCardChange, toasts, shellScope) }
     // It moves with the tab bar as a page is pushed over a tab's root or popped back to it.
     val toastBottom by animateDpAsState(toastClearance(cls, tabBarShown = !topTabs && stack.size == 1), label = "toastBottom")
 
-    CompositionLocalProvider(LocalWindowLayout provides WindowLayout(windowWidth), LocalRootTaps provides rootTaps, LocalToasts provides toasts) {
+    CompositionLocalProvider(LocalWindowLayout provides WindowLayout(windowWidth), LocalRootTaps provides rootTaps, LocalToasts provides toasts, LocalTrash provides trash) {
         Box(Modifier.fillMaxSize().cream()) {
             key(languageEpoch) {
                 val entries: Map<Tab, List<NavEntry<Route>>> = Tab.entries.associateWith { t ->
@@ -481,6 +485,8 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
             }
             // Over every page and the bars, under any dialog (a window of its own).
             ToastHost(toasts, Modifier.align(Alignment.BottomCenter), bottom = toastBottom)
+            // A restored resonance that came back on its own says so here, whatever restored it.
+            RestoredAloneNotice(trash)
         }
     }
 }

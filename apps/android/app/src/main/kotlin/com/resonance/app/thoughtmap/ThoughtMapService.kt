@@ -1,6 +1,7 @@
 package com.resonance.app.thoughtmap
 
 import com.google.firebase.firestore.DocumentReference
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.Query
@@ -208,22 +209,7 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
         return readCards(ids, read = { id -> attempt { card(cardsCol.document(id).get().await()) } }, summaries = reading::cards)
     }
 
-    private fun card(d: DocumentSnapshot): MapCard? {
-        if (!d.exists()) return null
-        val media = d.get("media") as? Map<*, *>
-        return MapCard(
-            id = d.id,
-            authorId = d.getString("authorId") ?: "",
-            slug = d.getString("slug"),
-            title = d.getString("thoughtCore") ?: "",
-            story = d.getString("story") ?: "",
-            tags = (d.get("tags") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
-            visibility = d.getString("visibility") ?: "public",
-            publishedAt = d.getTimestamp("publishedAt")?.toDate()?.time,
-            mediaUrl = if (media?.get("type") == "image") media["url"] as? String else null,
-            accentHue = d.getDouble("accentHue"),
-        )
-    }
+    private fun card(d: DocumentSnapshot): MapCard? = if (!d.exists()) null else mapCardOf(d.id, d.data.orEmpty())
 
     /** A read that may be refused (a card I can no longer read) or fail: null then; a cancelled one still cancels. */
     private suspend fun <T> attempt(read: suspend () -> T): T? = try {
@@ -316,6 +302,28 @@ class ThoughtMapService(val uid: String, private val reading: ReadingApi) {
             mediaUrl = c.imageUrl,
             accentHue = c.accentHue,
         )
+
+        /**
+         * What a node shows of a card read under the rules: null for one in the trash — it and its
+         * arrows leave the map while it is there, and come back to their places with a restore (the
+         * map keeps them: [ThoughtMapStore] parks the node).
+         */
+        fun mapCardOf(id: String, data: Map<String, Any?>): MapCard? {
+            if (data["trashedAt"] != null) return null
+            val media = data["media"] as? Map<*, *>
+            return MapCard(
+                id = id,
+                authorId = data["authorId"] as? String ?: "",
+                slug = data["slug"] as? String,
+                title = data["thoughtCore"] as? String ?: "",
+                story = data["story"] as? String ?: "",
+                tags = (data["tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                visibility = data["visibility"] as? String ?: "public",
+                publishedAt = (data["publishedAt"] as? Timestamp)?.toDate()?.time,
+                mediaUrl = if (media?.get("type") == "image") media["url"] as? String else null,
+                accentHue = (data["accentHue"] as? Number)?.toDouble(),
+            )
+        }
 
         /** A shelf's size (the web's BOX_LIMIT). */
         private const val OWN_LIMIT = 40

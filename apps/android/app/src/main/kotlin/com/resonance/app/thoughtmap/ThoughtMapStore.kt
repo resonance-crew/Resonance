@@ -181,6 +181,22 @@ class ThoughtMapStore(private val reading: ReadingApi) {
             return Refresh.AllCards
         }
 
+        /**
+         * Out of view, the nodes whose card is gone ([known] false), into [parked]; back in view, the
+         * parked ones whose card is known again, where they were (at the end of the drawing order).
+         */
+        fun parkNodes(nodes: MutableMap<String, MapNode>, order: MutableList<String>, parked: MutableMap<String, MapNode>, known: (String) -> Boolean) {
+            for (id in order.toList()) if (!known(id)) {
+                nodes.remove(id)?.let { parked[id] = it }
+                order.remove(id)
+            }
+            for ((id, node) in parked.toList()) if (known(id) && nodes[id] == null) {
+                nodes[id] = node
+                order.add(id)
+                parked.remove(id)
+            }
+        }
+
         /** The label pill's size in world units (TagPill sm: 10px 600 uppercase at 0.04em, 3×10 padding). */
         fun pillSize(text: String): Pair<Double, Double> =
             Pair(Math.ceil(MapText.width(text.uppercase(), AppFonts.Family.Body, 600, 10f, 0.04f).toDouble()) + 20, 19.0)
@@ -256,12 +272,17 @@ class ThoughtMapStore(private val reading: ReadingApi) {
                 val missing = m.nodes.map { it.cardId }.filter { byId[it] == null }
                 for (card in service.cards(missing)) byId[card.id] = card
                 applyCards(byId, c.resonated)
-                // A card that's gone (deleted, or an original I can no longer read) drops out of view.
+                // A card that's gone (deleted, in the trash, an original I can no longer read) drops out of
+                // view; its place is kept, for a card that comes back (a restore).
                 nodes.clear()
                 nodeOrder.clear()
-                for (n in m.nodes) if (cards[n.cardId] != null) {
-                    nodes[n.cardId] = MapNode(n.cardId, n.x, n.y, n.groupId)
-                    nodeOrder.add(n.cardId)
+                parked.clear()
+                for (n in m.nodes) {
+                    val node = MapNode(n.cardId, n.x, n.y, n.groupId)
+                    if (cards[n.cardId] != null) {
+                        nodes[n.cardId] = node
+                        nodeOrder.add(n.cardId)
+                    } else parked[n.cardId] = node
                 }
                 edges.clear()
                 edgeOrder.clear()
@@ -294,9 +315,10 @@ class ThoughtMapStore(private val reading: ReadingApi) {
         try {
             val c = service.cards()
             val byId = LinkedHashMap(c.cards)
-            val missing = nodeOrder.filter { byId[it] == null }
+            val missing = (nodeOrder + parked.keys).filter { byId[it] == null }
             for (card in service.cards(missing)) byId[card.id] = card
             applyCards(byId, c.resonated)
+            parkNodes(nodes, nodeOrder, parked, cards::containsKey)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -328,11 +350,18 @@ class ThoughtMapStore(private val reading: ReadingApi) {
             } else {
                 byId.remove(id)
                 resonated -= id
-                if (nodes.remove(id) != null) nodeOrder.remove(id)
             }
         }
         applyCards(byId, resonated)
+        parkNodes(nodes, nodeOrder, parked, cards::containsKey)
     }
+
+    /**
+     * The places of cards that are gone for now (in the trash, made private): out of view, kept, so
+     * a card that comes back — a restore — returns to where it was, its arrows with it. A fresh load
+     * reads them from the map again.
+     */
+    private val parked = HashMap<String, MapNode>()
 
     private fun applyCards(byId: Map<String, MapCard>, resonated: Set<String>) {
         cards = byId

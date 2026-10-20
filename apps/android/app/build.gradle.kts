@@ -125,4 +125,6 @@ dependencies {
     implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.2.1")
     testImplementation("junit:junit:4.13.2")
+    // The trash's and the writer's calls through the app's own adapters, against a local server.
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }
