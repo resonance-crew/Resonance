@@ -352,7 +352,17 @@
     "more": "More ways to share",
     "postText": "“{title}” by {handle}",
     "postTextAnonymous": "“{title}”",
-    "anonymousHint": "Sharing it from your account may tell people it’s yours"
+    "anonymousHint": "Sharing it from your account may tell people it’s yours",
+    "toStories": "Instagram Stories",
+    "anonymousTitle": "Share an anonymous card",
+    "image": {
+      "storiesFailed": "Couldn’t open Instagram",
+      "save": "Save image",
+      "saved": "Image saved",
+      "saveFailed": "Couldn’t save the image",
+      "saveDenied": "Allow Resonance to add photos in Settings",
+      "photoAccess": "Saves share images to your photo library"
+    }
   },
   "messages": {
     "title": "Messages",
