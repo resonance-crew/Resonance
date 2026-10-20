@@ -62,14 +62,19 @@ enum EditorSplit {
     var cardId: () -> String? = { nil }
     /// Whether the page should ask before it goes back (writing to put away).
     var holds: () -> Bool = { false }
-    /// The writer's way back: the question first while there is writing, then the page goes.
+    /// The writer's way back (its bar's arrow, the edge swipe): from the publish step to writing;
+    /// from writing, the question first while there is writing, then the page goes.
     var goBack: (() -> Void)?
+    /// Out of the page from either step (the Leave on the map at the split): the question first while
+    /// there is writing, then the page goes.
+    var leave: (() -> Void)?
 
     func clear() {
         saveNow = {}
         cardId = { nil }
         holds = { false }
         goBack = nil
+        leave = nil
     }
 }
 
@@ -161,7 +166,7 @@ struct WriteWorkspace: View {
             if showsMap {
                 // The card the pane shows: the one opened over the writer's (or from the map), else the
                 // writer's own once it has an id.
-                ThoughtMapScreen(openCard: split ? { openFromMap($0) } : nil, back: { back() },
+                ThoughtMapScreen(openCard: split ? { openFromMap($0) } : nil, back: { leaveFromMap() },
                                  focus: { card?.cardId ?? pane.cardId() }, settled: settled)
                     .frame(width: split ? max(0, w - shown) : w)
             }
@@ -364,10 +369,16 @@ struct WriteWorkspace: View {
         docking = nil
     }
 
-    /// The Back on the canvas and the edge swipe: the writer's rule while the pane holds a card (the
-    /// question first when there is writing), otherwise the page goes.
+    /// The edge swipe: the writer's rule while the pane holds a card (from its publish step back to
+    /// writing; from writing, the question first when there is writing), otherwise the page goes.
     private func back() {
         if card != nil, let goBack = pane.goBack { goBack() } else { dismiss() }
+    }
+
+    /// The Leave on the canvas: out of the page from either of the pane's steps (the question first
+    /// when there is writing) — the step's own ← 繼續寫 is the way back to writing.
+    private func leaveFromMap() {
+        if card != nil, let leave = pane.leave { leave() } else { dismiss() }
     }
 }
 

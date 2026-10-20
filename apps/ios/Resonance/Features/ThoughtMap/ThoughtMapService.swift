@@ -244,19 +244,27 @@ struct ThoughtMapService {
     }
 
     nonisolated private static func card(_ d: DocumentSnapshot) -> MapCard? {
-        guard d.exists else { return nil }
-        let media = d.get("media") as? [String: Any]
+        guard d.exists, let data = d.data() else { return nil }
+        return card(id: d.documentID, data: data)
+    }
+
+    /// A card's document as the map holds it — nil for one in the trash (trash.spec §5.6): it and its
+    /// arrows aren't drawn, and its node, edges and labels stay stored, so a restore puts it back in
+    /// place. (The server's `?keys=` fallback leaves trashed cards out for everyone, its owner too.)
+    nonisolated static func card(id: String, data d: [String: Any]) -> MapCard? {
+        guard d["trashedAt"] == nil || d["trashedAt"] is NSNull else { return nil }
+        let media = d["media"] as? [String: Any]
         return MapCard(
-            id: d.documentID,
-            authorId: d.get("authorId") as? String ?? "",
-            slug: d.get("slug") as? String,
-            title: d.get("thoughtCore") as? String ?? "",
-            story: d.get("story") as? String ?? "",
-            tags: d.get("tags") as? [String] ?? [],
-            visibility: d.get("visibility") as? String ?? "public",
-            publishedAt: (d.get("publishedAt") as? Timestamp)?.dateValue(),
+            id: id,
+            authorId: d["authorId"] as? String ?? "",
+            slug: d["slug"] as? String,
+            title: d["thoughtCore"] as? String ?? "",
+            story: d["story"] as? String ?? "",
+            tags: d["tags"] as? [String] ?? [],
+            visibility: d["visibility"] as? String ?? "public",
+            publishedAt: (d["publishedAt"] as? Timestamp)?.dateValue(),
             mediaURL: (media?["type"] as? String) == "image" ? (media?["url"] as? String).flatMap(URL.init(string:)) : nil,
-            accentHue: num(d.get("accentHue")))
+            accentHue: num(d["accentHue"]))
     }
 
     nonisolated private static func num(_ v: Any?) -> Double? { (v as? NSNumber)?.doubleValue }

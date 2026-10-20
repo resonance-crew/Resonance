@@ -48,6 +48,13 @@ public struct StoryCardView: View {
     var underBar: Bool
     var bordered: Bool
     var family: Int?
+    /// What lies in the picture's frame over the cover (the writer's preview: its cover editor).
+    var coverSlot: AnyView?
+    /// The writer's preview of the card being written: no arrow, no hover wash, and its parts (the
+    /// cover editor's buttons) kept apart for VoiceOver rather than read as one card.
+    var isPreview = false
+    /// A quiet line under the byline (the trash shelf's 「還原後公開 · 23 天後永久刪除」).
+    var footnote: String?
     @State private var hovered = false
 
     /// `underBar`: the first card of a page whose bar's pen line is its top edge (home): no rule of
@@ -65,6 +72,28 @@ public struct StoryCardView: View {
         self.family = palette
     }
 
+    /// The picture's frame holds `slot` over the cover (or its striped stand-in), clipped to the
+    /// frame's own wobble: the writer's preview, whose picture is where the cover is edited.
+    public func coverSlot<Slot: View>(@ViewBuilder _ slot: () -> Slot) -> StoryCardView {
+        var card = self
+        card.coverSlot = AnyView(slot())
+        return card
+    }
+
+    /// A quiet line under the byline, in the muted ink (12.5, the web's CardLinkGrid caption).
+    public func footnote(_ text: String?) -> StoryCardView {
+        var card = self
+        card.footnote = text
+        return card
+    }
+
+    /// The card as a preview (StoryCard `preview`): presentational — no arrow, no hover wash.
+    public func preview(_ on: Bool = true) -> StoryCardView {
+        var card = self
+        card.isPreview = on
+        return card
+    }
+
     private var palette: CardPalette {
         family.map(CardPalette.init(index:)) ?? CardPalette(accentHue: content.accentHue, position: position)
     }
@@ -72,11 +101,16 @@ public struct StoryCardView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            OrganicImage(url: content.imageURL, seed: seed + 5, grain: StoryGrain.cover) {
-                StoryImagePlaceholder(fill: palette.fill, stripe: palette.stripe, label: content.imageLabel)
+            ZStack {
+                OrganicImage(url: content.imageURL, seed: seed + 5, grain: StoryGrain.cover) {
+                    StoryImagePlaceholder(fill: palette.fill, stripe: palette.stripe, label: content.imageLabel)
+                }
+                .accessibilityHidden(true)
+                if let coverSlot {
+                    coverSlot.clipShape(OrganicImageShape(seed: seed + 5, radius: 18, bleed: 0))
+                }
             }
             .aspectRatio(1 / 0.62, contentMode: .fit)
-            .accessibilityHidden(true)
 
             if !content.tags.isEmpty {
                 FlowRow(spacing: 6) {
@@ -100,11 +134,20 @@ public struct StoryCardView: View {
                     Text(content.readTime).font(AppFonts.body(12)).foregroundStyle(Tokens.textMuted)
                 }
                 Spacer()
-                OrganicIcon(.arrowRight, size: 18, strokeWidth: Tokens.ink)
-                    .foregroundStyle(Tokens.text.opacity(0.28))
-                    .accessibilityHidden(true)
+                if !isPreview {
+                    OrganicIcon(.arrowRight, size: 18, strokeWidth: Tokens.ink)
+                        .foregroundStyle(Tokens.text.opacity(0.28))
+                        .accessibilityHidden(true)
+                }
             }
             .padding(.top, 8)
+
+            if let footnote {
+                Text(footnote)
+                    .font(AppFonts.body(12.5))
+                    .foregroundStyle(Tokens.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if let reason = content.reason, !reason.isEmpty {
                 HStack(alignment: .top, spacing: 7) {
@@ -117,10 +160,11 @@ public struct StoryCardView: View {
         }
         // A cover on its way shimmers in this card's own family (the web's --skeleton-highlight).
         .environment(\.skeletonHue, palette.hue)
-        .modifier(StoryCardChrome(palette: palette, seed: seed, isLast: isLast, underBar: underBar, bordered: bordered, hovered: hovered))
+        .modifier(StoryCardChrome(palette: palette, seed: seed, isLast: isLast, underBar: underBar, bordered: bordered,
+                                  hovered: hovered && !isPreview))
         .contentShape(Rectangle())
         .onHover { hovered = $0 }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: isPreview ? .contain : .combine)
     }
 }
 
