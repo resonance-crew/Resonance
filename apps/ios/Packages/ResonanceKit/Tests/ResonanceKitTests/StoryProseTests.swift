@@ -1,11 +1,12 @@
 import Foundation
+import ResonanceKit
 import Testing
-@testable import Resonance
 
-/// A thought-map node's excerpt follows the one rule the server and the web share
-/// (src/lib/markdown/plainText.ts and its test, case for case): the Markdown stripped, every bare
+/// A story's prose follows the one rule the server and the web share (src/lib/markdown/plainText.ts
+/// and its test, case for case) — what a thought-map node's excerpt, the script a story is set in and
+/// a share card's words are read from: the Markdown stripped, every bare
 /// address the link rules find left out — nothing else — and the cut made between code points.
-@MainActor @Suite struct StoryProseTests {
+@Suite struct StoryProseTests {
     @Test func anAddressGoesTheSentencesPunctuationStays() {
         #expect(StoryProse.withoutLinks("我很喜歡 https://example.com，因為它很好。") == "我很喜歡，因為它很好。")
         #expect(StoryProse.withoutLinks("他說「https://example.com/x」很好") == "他說「」很好")
@@ -52,8 +53,8 @@ import Testing
         // A hard break is a space; an escaped bracket makes no link; a reference in a link's text is read too.
         #expect(StoryProse.plainText("第一行\\\n第二行 \\[not a link\\](x) [Tom &amp; Jerry](https://example.com)")
             == "第一行 第二行 [not a link](x) Tom & Jerry")
-        // The excerpt the thought map shows of `->` (the Android feed's `-&gt;`).
-        #expect(plainExcerpt("我想 -&gt; 你") == "我想 -> 你")
+        // What the thought map shows of `->` (the Android feed's `-&gt;`).
+        #expect(StoryProse.excerpt(StoryProse.plainText("我想 -&gt; 你"), max: 80) == "我想 -> 你")
     }
 
     @Test func anAddressWhoseTextHoldsAReferenceIsStillLeftOut() {
@@ -61,7 +62,7 @@ import Testing
     }
 
     @Test func anyStoryTheRulesTakeReadsInAMoment() {
-        // Each took many seconds before (a quadratic pattern), in every node showing the excerpt; the web's test asks 1 s, this one 2 (a busy simulator).
+        // Each took many seconds before (a quadratic pattern), in every node showing the excerpt; the web's test asks 1 s, this one 2 (a busy machine).
         for unit in ["[", "![", "[a](", "[](", "\n", " \n", "-\n", "\t\n\n"] {
             let story = String(repeating: unit, count: 200_000 / unit.count)
             let started = Date()
@@ -85,6 +86,6 @@ import Testing
     @Test func theCutFallsBetweenCodePointsNeverInsideAnEmoji() {
         #expect(StoryProse.excerpt(String(repeating: "a", count: 95) + "😀b", max: 96) == String(repeating: "a", count: 95) + "😀…")
         #expect(StoryProse.excerpt("short", max: 96) == "short")
-        #expect(plainExcerpt("**九份**的雨 https://example.com/rain", max: 80) == "九份的雨")
+        #expect(StoryProse.excerpt(StoryProse.plainText("**九份**的雨 https://example.com/rain"), max: 80) == "九份的雨")
     }
 }
