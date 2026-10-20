@@ -11,6 +11,7 @@ import { HandDrawnAvatar } from '@/components/atoms/HandDrawnAvatar/HandDrawnAva
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { Link } from '@/i18n/navigation';
 import { INK_LIGHT, INK_STRONG } from '@/lib/design/strokes';
+import { avatarColorFor } from '@/lib/design/avatarColors';
 import { BeliefCycle, BeliefMotif, PaperCard, ResonanceSketch, type Belief } from './AboutArt';
 import styles from './AboutPage.module.css';
 
@@ -22,8 +23,9 @@ const CONTRASTS = ['traffic', 'algorithm', 'performance', 'roles', 'followers', 
 /**
  * The team, by name and face only: no school, major, year or title — we'd
  * rather be met as whole people, as the page says. The pictures are square
- * crops of the pitch deck's photos (one not taken yet is an empty frame);
- * the English names as each of us gives them.
+ * crops of the pitch deck's photos; one not taken yet is drawn as a new
+ * profile's avatar is (its name's first two characters, in a colour picked
+ * from the name). The English names as each of us gives them.
  */
 const TEAM: { zh: string; en: string; src?: string; seed: number }[] = [
   { zh: '陳念誠', en: 'Nian-Cheng Chen', src: '/team/chen.webp', seed: 11 },
@@ -236,8 +238,8 @@ export function AboutPage() {
               <li key={m.zh} className={styles.member}>
                 <HandDrawnAvatar
                   src={m.src}
-                  initials={m.src ? (latin ? m.en : m.zh) : ''}
-                  color={m.src ? undefined : 'var(--color-cream)'}
+                  initials={m.src ? (latin ? m.en : m.zh) : m.zh.slice(0, 2)}
+                  color={m.src ? undefined : avatarColorFor(m.zh)}
                   size={112}
                   seed={m.seed}
                 />
