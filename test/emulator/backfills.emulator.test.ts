@@ -198,6 +198,21 @@ describe('orphan-notes', () => {
     expect(await deleteOrphanNotes(db, { apply: true, log: quiet })).toEqual({ notes: 3, orphans: 0, malformed: 1, deleted: 0 });
   });
 
+  // An anonymous card's notes go as it goes into the trash: a clean-up that failed left these.
+  it("deletes the notes still on an anonymous card in the trash — never a named one's", async () => {
+    const at = joined('2026-09-01T00:00:00Z');
+    const trash = { visibility: 'private', trashedAt: at, trashedFrom: { visibility: 'public', referenceCardId: null } };
+    await Promise.all([
+      db.doc('cards/masked').set({ authorId: 'alice', anonymous: true, ...trash }),
+      db.doc('cards/named').set({ authorId: 'alice', anonymous: false, ...trash }),
+      db.doc('notes/on-masked').set({ cardId: 'masked', fromUserId: 'carol', toUserId: 'alice', text: 'hi', readAt: null, createdAt: at }),
+      db.doc('notes/on-named').set({ cardId: 'named', fromUserId: 'carol', toUserId: 'alice', text: 'hi', readAt: null, createdAt: at }),
+    ]);
+    expect(await deleteOrphanNotes(db, { apply: true, log: quiet })).toEqual({ notes: 2, orphans: 1, malformed: 0, deleted: 1 });
+    expect(await data('notes/on-masked')).toBeNull();
+    expect(await data('notes/on-named')).not.toBeNull();
+  });
+
   it('reads past a page of notes', async () => {
     const at = joined('2026-09-01T00:00:00Z');
     const writer = db.bulkWriter();

@@ -17,6 +17,7 @@
  */
 import 'dotenv/config';
 import { emulatorEnv, EMULATOR_PROJECT_ID } from '../emulator-env.mjs';
+import { purgeAtOf } from '../../src/lib/cards/trash';
 
 const args = process.argv.slice(2);
 const useEmulator = args.includes('--emulator');
@@ -73,6 +74,10 @@ async function main() {
     const [report, evidence] = await db.getAll(db.doc(`reports/${id}`), db.doc(`reportEvidence/${id}`));
     if (!report.exists) throw new Error(`No report ${id}`);
     console.log(JSON.stringify({ report: plain(report.data()), evidence: plain(evidence.data()) ?? null }, null, 2));
+    // What became of a reported card since: the evidence keeps it as it read when it was filed.
+    const r = report.data()!;
+    const cardId = r.targetType === 'card' && typeof r.targetId === 'string' && !r.targetId.includes('/') ? r.targetId : null;
+    if (cardId) console.log(`card now: ${cardState((await db.doc(`cards/${cardId}`).get()).data())}`);
     return;
   }
 
@@ -89,6 +94,18 @@ async function main() {
   }
 
   throw new Error(`Unknown command "${command}" (use list | show | resolve)`);
+}
+
+/** One line on a reported card as it is now: live, private, in its author's trash (and until when), or gone. */
+function cardState(card: Record<string, unknown> | undefined): string {
+  if (!card) return 'gone (deleted for good)';
+  const trashedAt = card.trashedAt as { toMillis?: () => number } | undefined;
+  if (typeof trashedAt?.toMillis === 'function') {
+    const at = trashedAt.toMillis();
+    return `in its author's trash since ${new Date(at).toISOString()} (deleted for good ${purgeAtOf(at).toISOString()} unless restored)`;
+  }
+  if (card.publishedAt == null) return 'a draft';
+  return card.visibility === 'public' ? 'live (public)' : `live, ${String(card.visibility ?? 'private')}`;
 }
 
 /** One line on what a report kept of its subject (reportEvidence). */

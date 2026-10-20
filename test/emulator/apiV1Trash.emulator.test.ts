@@ -346,6 +346,13 @@ describe('notes on a card in the trash', () => {
     expect((await db.collection('notes').where('cardId', '==', 'live').get()).size).toBe(0);
   });
 
+  it("can't be shared in a message, even by its author", async () => {
+    await set('connections/alice_carol', { userIds: ['alice', 'carol'], establishedAt: Timestamp.now() });
+    await trashCard(db, 'alice', 'live');
+    expect(answer(await failure(sendMessage(db, 'alice', { to: 'carol', text: 'look', cardRef: 'live' })))).toEqual(MISSING);
+    expect((await db.collection('conversations').get()).empty).toBe(true);
+  });
+
   it("let a reply that quotes a note on the sender's own anonymous card in the trash go without the quote", async () => {
     await db.doc('cards/live').update({ anonymous: true });
     await set('connections/alice_carol', { userIds: ['alice', 'carol'], establishedAt: Timestamp.now() });

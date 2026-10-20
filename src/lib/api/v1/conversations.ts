@@ -427,7 +427,8 @@ export async function sendMessage(
   // An id Firestore keeps for itself names no message (and would throw if asked for as a document).
   if (input.replyTo && isReservedId(input.replyTo)) throw new ApiFailure('invalid_request', 'No such message to reply to.');
   const card = input.cardRef ? await visibleCardById(db, uid, input.cardRef) : null;
-  if (card && !card.publishedAt) throw new ApiFailure('not_found', 'No such card.');
+  // A draft, or your own card in the trash (no one else can read one), is no card to share.
+  if (card && (!card.publishedAt || card.trashedAt != null)) throw new ApiFailure('not_found', 'No such card.');
   // A noteRef naming an id Firestore keeps for itself names no note: read as one that isn't there (one answer for all).
   const noteRef = input.noteRef && !isReservedId(input.noteRef.noteId) && !isReservedId(input.noteRef.cardId) ? input.noteRef : null;
   const pair = pairOf(uid, other);

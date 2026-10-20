@@ -31,7 +31,8 @@
  *       they open the card, never a thread with whoever wrote the note or resonance
  *   npx tsx scripts/backfill.ts orphan-notes  [--apply] [--emulator]
  *       delete notes whose card is gone (left by older builds' client deletes, or a clean-up that failed
- *       after the card went); notes naming no card are reported, not deleted — production runs are the owner's call
+ *       after the card went), and those still on an anonymous card in the trash (they go as it goes in);
+ *       notes naming no card are reported, not deleted — production runs are the owner's call
  *   npx tsx scripts/backfill.ts link-previews [--missing] [--apply] [--emulator]
  *       published cards get the previews of their stories' standalone links (fetches the pages;
  *       --apply against production needs LINK_PREVIEW_SECRET or FIREBASE_PRIVATE_KEY — the deployment's —
