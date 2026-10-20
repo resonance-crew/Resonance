@@ -1,4 +1,5 @@
 import DesignSystem
+import StoryFormat
 import SwiftUI
 import Testing
 import UIKit
@@ -99,6 +100,40 @@ import UIKit
         }
         let (x, y) = (luminance(a), luminance(b))
         return (max(x, y) + 0.05) / (min(x, y) + 0.05)
+    }
+
+    /// A story's card link to a card the reader can't see is the link the story wrote, set as the prose
+    /// around it is (its face and size on the reading curve, the link's ink) — not a smaller line in
+    /// the interface's type and plain terracotta.
+    @Test func anUnreadableCardLinkIsAProseLink() throws {
+        let story = StoryTypography(script: .cjk, compact: true)
+        let blocks: [StoryBlock] = [.paragraph([InlineRun("那天的河。")]), .cardEmbed(href: "/card/x", title: "我的另一張卡")]
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        defer { window.isHidden = true }
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 600)
+        window.rootViewController = UIHostingController(rootView: VStack(spacing: 0) {
+            StoryMarkdownView(blocks: blocks, typography: story, onOpenURL: { _ in }) { _, _ -> EmptyView? in nil }
+            Spacer(minLength: 0)
+        })
+        window.makeKeyAndVisible()
+        window.layoutIfNeeded()
+        let views = Self.textViews(in: window)
+        let link = try #require(views.first { $0.attributedText.string == "我的另一張卡" })
+        let prose = try #require(views.first { $0.attributedText.string == "那天的河。" })
+        let attrs = link.attributedText.attributes(at: 0, effectiveRange: nil)
+        #expect((attrs[.link] as? URL)?.absoluteString == "/card/x")
+        let font = try #require(attrs[.font] as? UIFont)
+        let around = try #require(prose.attributedText.attribute(.font, at: 0, effectiveRange: nil) as? UIFont)
+        #expect(font.fontName == around.fontName)
+        #expect(font.pointSize == around.pointSize)
+        #expect(font.pointSize == ProseStyle.body(story).font.pointSize)
+        func rgba(_ c: UIColor?) -> [CGFloat] {
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            c?.resolvedColor(with: UITraitCollection(userInterfaceStyle: .light)).getRed(&r, green: &g, blue: &b, alpha: &a)
+            return [r, g, b, a].map { ($0 * 1000).rounded() }
+        }
+        #expect(rgba(attrs[.foregroundColor] as? UIColor) == rgba(UIColor(Tokens.buttonOnTonal)))
     }
 
     func height(_ card: StoryLinkCard, width: CGFloat = 360) -> CGFloat {

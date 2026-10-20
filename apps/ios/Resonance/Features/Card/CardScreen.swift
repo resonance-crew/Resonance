@@ -228,8 +228,9 @@ struct CardScreen: View {
                         .padding(.bottom, 24)
                 }
                 head(card, anonymous: detail.anonymous, type: type)
-                StoryMarkdownView(blocks: model.blocks, typography: story, language: type.lang, onOpenURL: open) { href, title in
-                    CardEmbedView(href: href, title: title, card: model.embed(for: href))
+                // A card the reader can't see (private, gone, blocked) is the link the story wrote, as the prose draws one.
+                StoryMarkdownView(blocks: model.blocks, typography: story, language: type.lang, onOpenURL: open) { href, _ in
+                    model.embed(for: href).map { CardEmbedView(href: href, card: $0) }
                 } linkCard: { href, text in
                     model.linkPreview(href: href, text: text).map { preview in
                         // The host as the card shows it is also what VoiceOver says the card opens (as on the web).
@@ -627,30 +628,17 @@ private struct StorySkeleton: View {
 
 /// A card link standing alone in a story: the linked card as a block like a link's card, holding
 /// the card as a chat shares it (round 5 D2), drawn from the summary the card page brought along
-/// with the story — or the plain link when the viewer can't see it (web: CardEmbedLink).
+/// with the story. One the viewer can't see isn't this: the story draws its link as prose (web:
+/// CardEmbedLink).
 struct CardEmbedView: View {
     let href: String
-    let title: String
-    /// The page's summary of the linked card; nil draws the plain link.
-    let card: FeedCard?
+    /// The page's summary of the linked card.
+    let card: FeedCard
     @Environment(\.openRoute) private var openRoute
 
     var body: some View {
-        if let card {
-            StoryCardEmbed(title: card.title, seed: Double(seedFromString(href)),
-                           section: SharedCardSection(card: card, onOpen: nil)) { openRoute(.card(card.routeKey)) }
-        } else {
-            Button {
-                if let key = CardKey.of(href: href) { openRoute(.card(key)) }
-            } label: {
-                Text(title)
-                    .font(AppFonts.body(17))
-                    .underline()
-                    .foregroundStyle(Tokens.terracotta)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
-        }
+        StoryCardEmbed(title: card.title, seed: Double(seedFromString(href)),
+                       section: SharedCardSection(card: card, onOpen: nil)) { openRoute(.card(card.routeKey)) }
     }
 }
 

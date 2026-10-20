@@ -10,22 +10,24 @@ import SwiftUI
 /// blank-line markers as air. Vertical rhythm follows CSS margins, collapsing between blocks
 /// (``ProseMetrics``).
 ///
-/// `embed` draws a card link's card; `linkCard` a standalone link's page
-/// card (`StoryBlock.soleLink`'s address and words) — nil leaves the
+/// `embed` draws a card link's card — nil (a card the reader can't see: private, gone, by someone
+/// they blocked) draws the link the story wrote, a link of the prose's own (its face and size on the
+/// reading curve, the link's ink and wave), as the web's CardEmbedLink falls back to; `linkCard` a
+/// standalone link's page card (`StoryBlock.soleLink`'s address and words) — nil leaves the
 /// paragraph as it is written.
 public struct StoryMarkdownView<Embed: View, LinkCard: View>: View {
     let blocks: [StoryBlock]
     let typography: StoryTypography
     let language: String?
     let onOpenURL: (URL) -> Void
-    let embed: (_ href: String, _ title: String) -> Embed
+    let embed: (_ href: String, _ title: String) -> Embed?
     let linkCard: (_ href: String?, _ text: String) -> LinkCard?
     var anchorsHeadings = false
     var headingSpace: String?
 
     /// `language`: the story's own (`ScriptRule.storyLang`), for VoiceOver.
     public init(blocks: [StoryBlock], typography: StoryTypography, language: String? = nil, onOpenURL: @escaping (URL) -> Void,
-                @ViewBuilder embed: @escaping (_ href: String, _ title: String) -> Embed,
+                embed: @escaping (_ href: String, _ title: String) -> Embed?,
                 linkCard: @escaping (_ href: String?, _ text: String) -> LinkCard?) {
         self.blocks = blocks
         self.typography = typography
@@ -78,7 +80,7 @@ public struct StoryHeadingAnchor: Hashable, Sendable {
 extension StoryMarkdownView where LinkCard == EmptyView {
     /// A story whose standalone links stay the paragraphs they are.
     public init(blocks: [StoryBlock], typography: StoryTypography, language: String? = nil, onOpenURL: @escaping (URL) -> Void,
-                @ViewBuilder embed: @escaping (_ href: String, _ title: String) -> Embed) {
+                embed: @escaping (_ href: String, _ title: String) -> Embed?) {
         self.init(blocks: blocks, typography: typography, language: language, onOpenURL: onOpenURL, embed: embed) { _, _ in nil }
     }
 }
@@ -88,7 +90,7 @@ struct BlockStack<Embed: View, LinkCard: View>: View {
     let style: ProseStyle
     let rhythm: ProseRhythm
     let onOpenURL: (URL) -> Void
-    let embed: (String, String) -> Embed
+    let embed: (String, String) -> Embed?
     let linkCard: (String?, String) -> LinkCard?
     var anchors = false
     var headingSpace: String?
@@ -137,7 +139,7 @@ struct BlockView<Embed: View, LinkCard: View>: View {
     let style: ProseStyle
     let rhythm: ProseRhythm
     let onOpenURL: (URL) -> Void
-    let embed: (String, String) -> Embed
+    let embed: (String, String) -> Embed?
     let linkCard: (String?, String) -> LinkCard?
 
     /// A picture or a card narrower than the column: centred in it, at the quote's edge inside a quote.
@@ -156,10 +158,14 @@ struct BlockView<Embed: View, LinkCard: View>: View {
         case let .image(url, alt):
             StoryImageView(url: URL(string: url), alt: alt, seed: Double(seedFromString(url)), alignment: blockAlignment)
                 .frame(maxWidth: .infinity, alignment: blockAlignment)
-        // A card (≤ 520 wide) centred in the column, as a picture is (the web's embedBlock).
+        // A card (≤ 520 wide) centred in the column, as a picture is (the web's embedBlock); one the
+        // reader can't see is the link the story wrote, in the prose's own type (in the block's place).
         case let .cardEmbed(href, title):
-            embed(href, title)
-                .frame(maxWidth: .infinity, alignment: blockAlignment)
+            if let card = embed(href, title) {
+                card.frame(maxWidth: .infinity, alignment: blockAlignment)
+            } else {
+                text([InlineRun(title, link: href)], style)
+            }
         case let .soleLink(href, words, runs):
             if let card = linkCard(href, words) { card.frame(maxWidth: .infinity, alignment: blockAlignment) } else { text(runs, style) }
         case let .quote(children):
@@ -202,7 +208,7 @@ struct ListItemView<Embed: View, LinkCard: View>: View {
     let style: ProseStyle
     let rhythm: ProseRhythm
     let onOpenURL: (URL) -> Void
-    let embed: (String, String) -> Embed
+    let embed: (String, String) -> Embed?
     let linkCard: (String?, String) -> LinkCard?
 
     var body: some View {
