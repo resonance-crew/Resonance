@@ -12,6 +12,16 @@ export const OG_COVER_SIZE = { width: 2640, height: 1416 } as const;
 export { imageVersion };
 
 /**
+ * The Meta (Facebook) app the site's pages name (`fb:app_id`), from
+ * NEXT_PUBLIC_META_APP_ID — the app the share dialog and Instagram's Stories
+ * hand-off are registered under. Nothing when it's unset or not an id.
+ */
+export function metaAppId(id: string | undefined = process.env.NEXT_PUBLIC_META_APP_ID): string | undefined {
+  const trimmed = id?.trim();
+  return trimmed && /^\d{1,32}$/.test(trimmed) ? trimmed : undefined;
+}
+
+/**
  * The share image for one of our stored pictures: a JPEG made from it by
  * /api/og/{kind}/{id} — stored pictures are AVIF or WebP, which some
  * platforms can't show. A picture hosted elsewhere is shared as it is.
@@ -63,6 +73,8 @@ export function buildCardMetadata(opts: {
   anonymousLabel: string;
   /** publicBases(): where our stored pictures are served from (R2_PUBLIC_BASE, and a former base during a move). */
   storageBases?: readonly string[];
+  /** {@link metaAppId}: named as fb:app_id when set. */
+  metaAppId?: string;
 }): Metadata {
   const { card, author, locale, base, anonymousLabel, storageBases } = opts;
   const { title, story } = localizedCard(card, locale);
@@ -100,6 +112,7 @@ export function buildCardMetadata(opts: {
       description,
       images: [image.url],
     },
+    facebook: opts.metaAppId ? { appId: opts.metaAppId } : undefined,
   };
 }
 
@@ -122,6 +135,8 @@ export function buildProfileMetadata(opts: {
   description: string;
   /** publicBases(): where our stored pictures are served from (R2_PUBLIC_BASE, and a former base during a move). */
   storageBases?: readonly string[];
+  /** {@link metaAppId}: named as fb:app_id when set. */
+  metaAppId?: string;
 }): Metadata {
   const { user, locale, base, title, description, storageBases } = opts;
   const hasAvatar = Boolean(user.avatarUrl);
@@ -148,5 +163,6 @@ export function buildProfileMetadata(opts: {
       description,
       images: [image],
     },
+    facebook: opts.metaAppId ? { appId: opts.metaAppId } : undefined,
   };
 }

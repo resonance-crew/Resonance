@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCardMetadata, buildProfileMetadata, imageVersion } from './og';
+import { buildCardMetadata, buildProfileMetadata, imageVersion, metaAppId } from './og';
 import { coverVersion, drawnCard, drawnCardVersion } from '@/lib/linkImage/model';
 import type { Card, User } from '@/lib/db/types';
 
@@ -113,6 +113,16 @@ describe('buildCardMetadata', () => {
     expect(JSON.stringify(meta)).not.toContain('mira');
   });
 
+  it('names the Meta app as fb:app_id only when one is set', () => {
+    const withId = buildCardMetadata({ card: baseCard, author, locale: 'en', base, anonymousLabel: 'Anonymous', metaAppId: '1115208464203859' });
+    expect(withId.facebook).toEqual({ appId: '1115208464203859' });
+    expect(buildCardMetadata({ card: baseCard, author, locale: 'en', base, anonymousLabel: 'Anonymous' }).facebook).toBeUndefined();
+    expect(metaAppId(' 1115208464203859 ')).toBe('1115208464203859');
+    expect(metaAppId('')).toBeUndefined();
+    expect(metaAppId(undefined)).toBeUndefined();
+    expect(metaAppId('not-an-id')).toBeUndefined();
+  });
+
   it('prefers the viewer-locale translation of title and story', () => {
     const card: Card = {
       ...baseCard,
@@ -182,6 +192,12 @@ describe('buildProfileMetadata', () => {
     });
     expect((meta.openGraph?.images as { url: string }[])[0].url).toBe('https://resonance.example/og-cover.jpg');
     expect((meta.twitter as { card?: string }).card).toBe('summary_large_image');
+  });
+
+  it('names the Meta app as fb:app_id on a profile only when one is set', () => {
+    const opts = { user: author, locale: 'en' as const, base, title: 'mira · Resonance', description: 'bio' };
+    expect(buildProfileMetadata({ ...opts, metaAppId: '1115208464203859' }).facebook).toEqual({ appId: '1115208464203859' });
+    expect(buildProfileMetadata(opts).facebook).toBeUndefined();
   });
 
   it('percent-encodes a CJK handle in the canonical URL', () => {
