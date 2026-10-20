@@ -62,32 +62,16 @@
   margin-bottom: 20px;
 }
 
+/* The title and the story take the reader's type at its compact numbers
+   (story.css .story-title / .story-prose, data-density="compact"); here only
+   their place in the panel. */
 .title {
-  font-family: var(--font-heading);
-  font-size: clamp(20px, 2.5vw, 28px);
-  font-weight: 700;
-  line-height: 1.3;
   margin: 0 0 20px 0;
-  color: var(--color-text);
 }
 
 .story {
-  font-family: var(--font-body);
-  font-size: 15px;
-  line-height: 1.7;
-  color: var(--color-text);
   margin-bottom: 24px;
 }
-
-/* Adjust nested elements in story markdown to fit the panel */
-.story h2, .story h3 {
-  font-family: var(--font-heading);
-  font-weight: 700;
-  margin-top: 24px;
-  margin-bottom: 12px;
-}
-.story h2 { font-size: 20px; }
-.story h3 { font-size: 17px; }
 
 .tagRow {
   display: flex;

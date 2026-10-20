@@ -3,6 +3,8 @@
 import { useTranslations, useLocale } from 'next-intl';
 import { useCard } from '@/lib/data/hooks';
 import { StoryMarkdown } from '@/components/molecules/CardDetail/StoryMarkdown';
+import { LatinMarkText } from '@/components/molecules/CardDetail/LatinMarkText';
+import { storyType } from '@/lib/text/script';
 import { HandDrawnAvatar } from '@/components/atoms/HandDrawnAvatar/HandDrawnAvatar';
 import { HandDrawnCheckmark } from '@/components/atoms/HandDrawnCheckmark/HandDrawnCheckmark';
 import { OrganicImage } from '@/components/atoms/OrganicImage/OrganicImage';
@@ -33,6 +35,8 @@ export function OriginalCardPanel({ cardId }: OriginalCardPanelProps) {
 
   const { card, author } = data;
   const hue = card.accentHue ?? 55;
+  // Set as its own page sets it (src/styles/story.css), at the phone's numbers: a panel beside the writer.
+  const type = storyType(card.thoughtCore, card.story);
 
   return (
     <div className={styles.panel}>
@@ -85,10 +89,12 @@ export function OriginalCardPanel({ cardId }: OriginalCardPanelProps) {
         />
       )}
 
-      <h2 className={styles.title}>{card.thoughtCore}</h2>
+      <h2 className={`story-title ${styles.title}`} data-script={type.script} data-density="compact" lang={type.lang}>
+        {type.script === 'cjk' ? <LatinMarkText text={card.thoughtCore} /> : card.thoughtCore}
+      </h2>
 
       <div className={styles.story}>
-        <StoryMarkdown source={card.story} />
+        <StoryMarkdown source={card.story} script={type.script} lang={type.lang} density="compact" />
       </div>
 
       <div className={styles.tagRow}>

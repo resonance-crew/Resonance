@@ -12,6 +12,17 @@ export interface TocHeading {
   level: 2 | 3;
 }
 
+/**
+ * The ToC of a rendered story: every heading h2–h6 that rehype-slug gave an
+ * anchor (a story's `#` is rendered as an h2), in reading order — an h2 at
+ * the first level, every smaller one at the second, as the apps' ToCs do.
+ */
+export function tocHeadings(root: ParentNode): TocHeading[] {
+  return Array.from(root.querySelectorAll<HTMLHeadingElement>('h2, h3, h4, h5, h6'))
+    .map((el) => ({ id: el.id, text: el.textContent ?? '', level: el.tagName === 'H2' ? (2 as const) : (3 as const) }))
+    .filter((h) => h.id);
+}
+
 // Curve depth + stroke weight of the hand-drawn rule down the left of the list.
 const AMP = 5;
 const SW = INK_LIGHT;

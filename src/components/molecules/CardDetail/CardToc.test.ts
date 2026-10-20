@@ -1,5 +1,6 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { headingBeingRead } from './CardToc';
+import { headingBeingRead, tocHeadings } from './CardToc';
 
 const tops = (...ys: number[]) => ys.map((top, i) => ({ id: `h${i + 1}`, top }));
 
@@ -16,5 +17,20 @@ describe('headingBeingRead', () => {
   it('at the end of the page, is the last heading on screen (the closing sections never reach the line)', () => {
     expect(headingBeingRead(tops(-600, 100, 500, 760), 178, true, 800)).toBe('h4');
     expect(headingBeingRead(tops(-600, 100, 500, 900), 178, true, 800)).toBe('h3');
+  });
+});
+
+describe('tocHeadings', () => {
+  it('takes every heading h2–h6 with an anchor, h2 at the first level and the rest at the second', () => {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<h2 id="a">出發</h2><p>…</p><h3 id="b">0 公尺</h3><h4 id="c">補給站</h4><h6 id="d">終點</h6><h5>no anchor</h5><h2 id="e">回家</h2>';
+    expect(tocHeadings(root)).toEqual([
+      { id: 'a', text: '出發', level: 2 },
+      { id: 'b', text: '0 公尺', level: 3 },
+      { id: 'c', text: '補給站', level: 3 },
+      { id: 'd', text: '終點', level: 3 },
+      { id: 'e', text: '回家', level: 2 },
+    ]);
   });
 });
