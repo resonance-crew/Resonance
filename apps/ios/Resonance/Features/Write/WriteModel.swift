@@ -18,8 +18,9 @@ enum WriterStep: Equatable {
 struct WriterCalls {
     /// Publishes the draft (POST …/publish): where the card lives now (its slug, or its id).
     var publish: (String) async throws -> String
-    /// Applies the pending edit (POST …/edits/apply): where the card lives (its slug, when the answer has it).
-    var applyEdit: (String) async throws -> String?
+    /// Applies the pending edit (POST …/edits/apply): whether there was one to apply, and where the card
+    /// lives (its slug, when the answer has it).
+    var applyEdit: (String) async throws -> AppliedEdit
     /// The mirror moment for a title and story (/api/cards/insight), or nil.
     var insight: (String, String) async throws -> String?
     /// Out of the trash (POST …/restore): whether it came back on its own, no longer answering its original.
@@ -27,7 +28,14 @@ struct WriterCalls {
     /// A card went out: the moment to ask whether notifications may show (`PushCenter.reachedOut`).
     var reachedOut: () -> Void
 
-    init(publish: @escaping (String) async throws -> String, applyEdit: @escaping (String) async throws -> String?,
+    /// What POST …/edits/apply came to: `applied` false when the card had no pending edit by then —
+    /// applied or dropped elsewhere (the web, another device) since the writer last wrote it.
+    struct AppliedEdit: Equatable {
+        var applied: Bool
+        var slug: String?
+    }
+
+    init(publish: @escaping (String) async throws -> String, applyEdit: @escaping (String) async throws -> AppliedEdit,
          insight: @escaping (String, String) async throws -> String?, restore: @escaping (String) async throws -> Bool,
          reachedOut: @escaping () -> Void = {}) {
         self.publish = publish
@@ -42,7 +50,8 @@ struct WriterCalls {
             let result = try await writing.publish(id)
             return result.slug ?? result.id
         }, applyEdit: { id in
-            try await writing.applyEdit(id).slug
+            let result = try await writing.applyEdit(id)
+            return AppliedEdit(applied: result.applied, slug: result.slug)
         }, insight: { title, story in
             try await writing.insight(title: title, story: story)
         }, restore: { id in
@@ -213,6 +222,25 @@ final class WriteModel {
         !(values.isEmpty && draftId == nil) && values != lastStored
     }
 
+    /// What going back asks before the page goes, or nil to go at once.
+    enum LeaveQuestion: Equatable {
+        /// 「寫下的內容已經存成草稿…」: a draft, kept on the way out.
+        case draft
+        /// 「你的修改已經存起來了…」: a live card's revision, kept in its buffer.
+        case revision
+        /// The card is in the trash, where nothing is written until it is restored: what was typed
+        /// since the last save it took would go with the page (「這張卡片在垃圾桶裡，還原後才會儲存」).
+        case trashed
+    }
+
+    /// Whether — and how — leaving asks first: never saying writing is kept that the trash refuses.
+    /// A card in the trash asks only for words it holds nowhere; everything else, as `holdsWriting`.
+    var leaveQuestion: LeaveQuestion? {
+        if trashed { return needsSave ? .trashed : nil }
+        guard holdsWriting else { return nil }
+        return isPublished ? .revision : .draft
+    }
+
     /// What this visit changed, for the screens behind the writer; nil when it wrote nothing.
     var change: WriteLauncher.Change? {
         wrote ? WriteLauncher.Change(cardId: draftId, referenceCardId: referenceCardId) : nil
@@ -245,11 +273,12 @@ final class WriteModel {
 
     /// Hands the draft as it is now to Firestore — which keeps it on the device from this moment and
     /// sends it after any write before it — without waiting for the server (leaving, going to the
-    /// background). Nothing new to keep, nothing is written; nor while the card is in the trash,
-    /// where the rules refuse it (what is typed waits on screen for the restore).
-    func store() {
+    /// background). Nothing new to keep, nothing is written (unless `force`d: 儲存修改 writes the
+    /// buffer it applies); nor while the card is in the trash, where the rules refuse it (what is
+    /// typed waits on screen for the restore).
+    func store(force: Bool = false) {
         saveTask?.cancel()
-        guard let drafts, needsSave, !trashed else { return }
+        guard let drafts, force || needsSave, !trashed else { return }
         let v = values
         let write: IssuedWrite
         var created: String?
@@ -369,6 +398,7 @@ final class WriteModel {
             return false
         }
         nextSaveError = nil
+        settleAudience()
         if draftId == nil {
             nextBusy = true
             let loader = Task { [weak self] in
@@ -429,6 +459,17 @@ final class WriteModel {
         next.anonymous = anonymous
         next.visibility = Self.visibility(values.visibility, anonymous: anonymous)
         values = next
+    }
+
+    /// A card about to be first published keeps no audience the server refuses: a draft stored
+    /// anonymous and for connections only (the rules let a draft hold the pair, and the builds before
+    /// letters kept a web draft's audience beside their anonymous switch) goes public, as making it
+    /// anonymous here would have — so the step shows 公開 chosen and 發布 is never a 400 whatever
+    /// is retried. A live card already that way keeps both (the server lets it).
+    private func settleAudience() {
+        guard !isPublished else { return }
+        let audience = Self.visibility(values.visibility, anonymous: values.anonymous)
+        if audience != values.visibility { values.visibility = audience }
     }
 
     /// The line under the choices of a resonance: before it is first published, whether it will
@@ -635,6 +676,7 @@ final class WriteModel {
             step = .write
             return nil
         }
+        settleAudience()
         busyVerb = .publish
         pending = true
         publishError = nil
@@ -654,6 +696,9 @@ final class WriteModel {
 
     /// 儲存修改: the working copy goes into the buffer, then the server makes it the live card — the
     /// moment an edit reaches readers. The publish date stays. Answers where the card lives, or nil.
+    /// The buffer is written first even when nothing changed since the last save: another device may
+    /// have applied or dropped it meanwhile, and the server applies only what is there — an answer
+    /// that there was nothing (`applied` false) is a save that didn't happen, never a finish.
     func applyEdit() async -> String? {
         guard !pending, let id = draftId else { return nil }
         guard !values.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -666,13 +711,28 @@ final class WriteModel {
         publishError = nil
         defer { pending = false }
         do {
-            await saveNow()
+            // Only the server's yes to this very write counts as the buffer holding what is on screen.
+            lastSaved = nil
+            store(force: true)
+            await chain?.value
             if values != lastSaved { throw APIFailure(code: "internal", message: L10n.Native.saveError, status: nil) }
-            let key = try await calls.applyEdit(id)
+            let result = try await calls.applyEdit(id)
+            guard result.applied else {
+                // The buffer was gone by then (applied or dropped elsewhere): the words on screen may not be
+                // live and are kept nowhere — owed a save again, so a retry or leaving writes them.
+                lastSaved = nil
+                lastStored = nil
+                savedAt = nil
+                hasPendingEdit = false
+                publishError = L10n.Native.saveError
+                return nil
+            }
             wrote = true
             hasPendingEdit = false
-            return key ?? slug ?? id
+            return result.slug ?? slug ?? id
         } catch {
+            // The buffer's write was refused for the trash: the writer says so already.
+            if trashed { return nil }
             if await confirmTrashed(error) { return nil }
             publishError = PublishFailure.message(error, updating: true)
             return nil

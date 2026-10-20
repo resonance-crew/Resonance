@@ -62,6 +62,8 @@ import Testing
     var insightAnswer: String? = "被理解之前，先被看見"
     var publishError: Error?
     var applyError: Error?
+    /// Whether the card still had a pending edit when it was applied (false: applied or dropped elsewhere).
+    var applyFound = true
     var restoreAlone = false
     /// Holds a publish until the test lets it go.
     var publishGate: Gate<Void>?
@@ -75,7 +77,7 @@ import Testing
         }, applyEdit: { [self] id in
             applied.append(id)
             if let applyError { throw applyError }
-            return "a-walk"
+            return WriterCalls.AppliedEdit(applied: applyFound, slug: "a-walk")
         }, insight: { [self] title, story in
             insights.append((title, story))
             return insightAnswer
@@ -348,6 +350,58 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(model.publishError == L10n.Write.PublishPanel.rateLimited)
     }
 
+    @Test func aDraftKeptAnonymousForConnectionsGoesOutPublic() async {
+        // Kept so by a build before letters (or the web's draft beside their anonymous switch): the rules let a draft hold it.
+        let store = RecordingDraftStore()
+        let server = ServerCalls()
+        let model = WriteModel(drafts: store, writing: writing(), calls: server.calls,
+                               opened: card(visibility: "connections", anonymous: true))
+        // The step opens on an audience it can show: 公開 chosen.
+        #expect(await model.goNext())
+        #expect(model.values.visibility == "public")
+        #expect(await model.publish() == "a-walk")
+        #expect(server.published == ["card-1"])
+        // What the server publishes was never anonymous and for connections only.
+        #expect(store.writes.last?.values.visibility == "public")
+        #expect(store.writes.last?.values.anonymous == true)
+        #expect(store.writes.allSatisfy { !($0.values.anonymous && $0.values.visibility == "connections") })
+        // A live card already that way keeps both (the server lets it).
+        let live = WriteModel(drafts: store, writing: writing(), calls: server.calls,
+                              opened: card(published: true, visibility: "connections", anonymous: true))
+        #expect(await live.goNext())
+        #expect(live.values.visibility == "connections")
+    }
+
+    @Test func savingChangesWritesTheBufferFirstEvenUnchanged() async {
+        // A revision kept in its buffer, nothing typed since: 儲存修改 writes it again before applying.
+        let store = RecordingDraftStore()
+        let server = ServerCalls()
+        let live = WriteModel(drafts: store, writing: writing(), calls: server.calls, opened: card(published: true, pending: true))
+        #expect(!live.needsSave)
+        #expect(await live.applyEdit() == "a-walk")
+        #expect(store.writes.map(\.kind) == [.edit])
+        #expect(server.applied == ["card-1"])
+    }
+
+    @Test func changesWhoseBufferWentElsewhereAreNotSaidToBeSaved() async {
+        // The buffer was applied or dropped on another device meanwhile: the server finds nothing to apply.
+        let store = RecordingDraftStore()
+        let server = ServerCalls()
+        server.applyFound = false
+        let live = WriteModel(drafts: store, writing: writing(), calls: server.calls, opened: card(published: true, pending: true))
+        #expect(await live.goNext())
+        #expect(await live.applyEdit() == nil)
+        #expect(live.publishError == L10n.Native.saveError)
+        #expect(live.step == .publish)
+        // The words on screen are owed a save: leaving asks and writes them, a retry writes them again.
+        #expect(live.needsSave)
+        #expect(live.leaveQuestion == .revision)
+        server.applyFound = true
+        #expect(await live.applyEdit() == "a-walk")
+        #expect(store.writes.map(\.kind) == [.edit, .edit])
+        #expect(live.publishError == nil)
+    }
+
     @Test func theWayOutBesideTheVerb() {
         #expect(PublishStep.showsSecondary(WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card())))
         let live = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card(published: true))
@@ -399,6 +453,39 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         model.store()
         #expect(store.writes.count == writes)
         #expect(model.values.story.hasSuffix(" More."))
+    }
+
+    @Test func leavingACardInTheTrashNeverSaysTheWritingIsKept() async {
+        let store = RecordingDraftStore()
+        let model = WriteModel(drafts: store, writing: writing(), calls: ServerCalls().calls, opened: card())
+        #expect(model.leaveQuestion == .draft)
+        store.trashed = true
+        store.answers = [.failure(refusedByRules)]
+        model.values.story += " Typed after it went to the trash."
+        model.store()
+        #expect(await eventually { model.trashed })
+        // What was typed is held nowhere: the question says the card saves only once restored.
+        #expect(model.leaveQuestion == .trashed)
+        #expect(WriteScreen.leaveMessage(model.leaveQuestion) == L10n.Write.Trashed.status)
+        #expect(WriteScreen.leaveMessage(.draft) == L10n.Write.leaveBody)
+        #expect(WriteScreen.leaveMessage(.revision) == L10n.Write.leaveBodyRevision)
+        // A live card's revision alike.
+        let live = WriteModel(drafts: store, writing: writing(), calls: ServerCalls().calls, opened: card(published: true, pending: true))
+        #expect(live.leaveQuestion == .revision)
+        store.answers = [.failure(refusedByRules)]
+        live.values.story += " More."
+        live.store()
+        #expect(await eventually { live.trashed })
+        #expect(live.leaveQuestion == .trashed)
+        // Nothing typed since its last save took: everything on screen is in the card, and leaving asks nothing.
+        let server = ServerCalls()
+        server.publishError = inTheTrash
+        let saved = WriteModel(drafts: store, writing: writing(), calls: server.calls, opened: card())
+        #expect(await saved.goNext())
+        _ = await saved.publish()
+        #expect(saved.trashed)
+        #expect(!saved.needsSave)
+        #expect(saved.leaveQuestion == nil)
     }
 
     @Test func aRefusedSaveThatIsNotTheTrashIsLeftForTheNextTry() async {

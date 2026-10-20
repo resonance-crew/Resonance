@@ -266,8 +266,7 @@ struct WriteScreen: View {
             } onCancel: { pickingCard = false }
             .withSession(session)
         }
-        .organicConfirm(isPresented: $leaving, title: L10n.Write.leaveTitle,
-                        message: model.isPublished ? L10n.Write.leaveBodyRevision : L10n.Write.leaveBody,
+        .organicConfirm(isPresented: $leaving, title: L10n.Write.leaveTitle, message: Self.leaveMessage(model.leaveQuestion),
                         cancelLabel: L10n.Write.leaveStay, confirmLabel: L10n.Write.leaveConfirm, closeLabel: L10n.Write.leaveStay,
                         seed: 61) {
             leaving = false
@@ -496,13 +495,23 @@ struct WriteScreen: View {
     }
 
     /// Out of the page from either step (the Leave over the map at the split): the question first
-    /// when there is writing to put away.
+    /// when there is writing to put away — or, the card being in the trash, words it holds nowhere.
     private func leaveAsking(_ model: WriteModel) {
         guard !model.pending else { return }
-        if model.holdsWriting {
+        if model.leaveQuestion != nil {
             leaving = true
         } else {
             Task { await leave(model) }
+        }
+    }
+
+    /// What the question says: that the writing is kept — or, for a card in the trash, that nothing
+    /// is kept until it is restored (leaving now leaves what was typed since behind).
+    static func leaveMessage(_ question: WriteModel.LeaveQuestion?) -> String {
+        switch question {
+        case .trashed: L10n.Write.Trashed.status
+        case .revision: L10n.Write.leaveBodyRevision
+        case .draft, nil: L10n.Write.leaveBody
         }
     }
 
