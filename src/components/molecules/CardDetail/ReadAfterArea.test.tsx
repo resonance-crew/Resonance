@@ -175,7 +175,8 @@ describe('ReadAfterArea', () => {
     expect(mockPush).toHaveBeenCalledWith('/write/draft-9');
   });
 
-  it('upgrades a long note by navigating to the write page with the text in searchParams', async () => {
+  // The note's words go to the writer through this tab's storage, never in the address.
+  it('upgrades a long note into a resonance, its words handed to the writer out of the address', async () => {
     renderWithIntl(<ReadAfterArea cardId="c1" cardTitle="Title" author={author} />);
     await user().click(screen.getByRole('button', { name: 'Send the author a little note' }));
 
@@ -187,6 +188,8 @@ describe('ReadAfterArea', () => {
       screen.getByRole('button', { name: 'Want to turn this into a resonance card?' }),
     );
 
-    expect(mockPush).toHaveBeenCalledWith(`/write?referenceCardId=c1&story=${encodeURIComponent(long)}`);
+    expect(mockPush).toHaveBeenCalledWith('/write?referenceCardId=c1');
+    expect(sessionStorage.getItem('resonance:write-seed:c1')).toBe(long);
+    sessionStorage.clear();
   });
 });

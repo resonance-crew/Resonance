@@ -1,12 +1,13 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { SketchLoader } from '@/components/atoms/SketchLoader/SketchLoader';
 import { WorkspaceShell } from '@/components/sections/WriteWorkspace/WorkspaceShell';
 import { useAuth } from '@/components/providers/AuthProvider';
-import type { CardEditorHandle } from '@/components/molecules/CardEditor/CardEditor';
+import type { CardEditorHandle, PrimaryAction, WriterStep } from '@/components/molecules/CardEditor/CardEditor';
+import { PaneActionButton } from '@/components/sections/WriteWorkspace/PaneActionButton';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { useRouter } from '@/i18n/navigation';
 import type { Card } from '@/lib/db/types';
@@ -43,30 +44,65 @@ export function ThoughtMapPage() {
   const split = useMediaQuery('(min-width: 1200px)');
   const [openedCard, setOpenedCard] = useState<Card | null>(null);
   const editor = useRef<CardEditorHandle>(null);
+  // The opened card's editor: its step (kept to itself — this page's query is its tabs'), 下一步, its business.
+  const [step, setStep] = useState<WriterStep>('write');
+  const [action, setAction] = useState<PrimaryAction | null>(null);
+  const [pending, setPending] = useState(false);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const focusTitle = useCallback(() => titleRef.current?.focus({ preventScroll: true }), []);
   const openCard = (card: Card) => {
     if (split === true && card.authorId !== user?.id) router.push(`/card/${card.slug ?? card.id}`);
     // The card shown before it saves as its editor goes.
-    else setOpenedCard(card);
+    else {
+      setStep('write');
+      setAction(null);
+      setOpenedCard(card);
+    }
   };
   const paneTitle = !openedCard
     ? null
     : openedCard.authorId !== user?.id
       ? t('referenceCard')
-      : openedCard.publishedAt
-        ? t('editPublishedTitle')
-        : t('editTitle');
+      : step === 'publish'
+        ? openedCard.publishedAt
+          ? t('publishPanel.updateTitle')
+          : t('publishPanel.title')
+        : openedCard.publishedAt
+          ? t('editPublishedTitle')
+          : t('editTitle');
 
   return (
     <WorkspaceShell
       open={openedCard != null}
-      onClose={() => setOpenedCard(null)}
+      // Its back: from the publish step, back to writing; else back to the map.
+      onClose={() => {
+        if (editor.current?.stepBack()) return;
+        setOpenedCard(null);
+      }}
       onHide={() => void editor.current?.saveNow().catch((err) => console.error('Save failed:', err))}
       paneTitle={paneTitle}
+      paneBack={{ label: step === 'publish' ? t('leaveStay') : undefined, disabled: pending }}
       paneKey={openedCard?.id}
       focusCardId={openedCard?.id}
       onOpenCard={openCard}
+      paneAction={action ? <PaneActionButton action={action} /> : undefined}
+      titleRef={titleRef}
     >
-      {openedCard && <OpenedCardPane key={openedCard.id} card={openedCard} titled={false} editorRef={editor} />}
+      {openedCard && (
+        <OpenedCardPane
+          key={openedCard.id}
+          card={openedCard}
+          titled={false}
+          editorRef={editor}
+          editorProps={{
+            onStepChange: setStep,
+            onPrimaryActionChange: setAction,
+            onPendingChange: setPending,
+            inlineStepHeading: split === true,
+            focusStepHeading: focusTitle,
+          }}
+        />
+      )}
     </WorkspaceShell>
   );
 }

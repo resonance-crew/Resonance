@@ -1,6 +1,6 @@
 'use client';
 
-import { CSSProperties, MouseEvent, useMemo, useRef, useState } from 'react';
+import { CSSProperties, MouseEvent, ReactNode, useMemo, useRef, useState } from 'react';
 import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import { BrushWash } from '@/components/atoms/BrushWash/BrushWash';
 import { INK, INK_LIGHT } from '@/lib/design/strokes';
@@ -57,7 +57,19 @@ export const CARD_BORDERS = [
 // cover-image dominant-colour extraction); re-exported for existing consumers.
 export { CARD_HUES };
 
-function StoryImage({ label, accentFill, imageUrl, seed }: { label: string; accentFill: string; imageUrl?: string; seed: number }) {
+function StoryImage({
+  label,
+  accentFill,
+  imageUrl,
+  seed,
+  slot,
+}: {
+  label: string;
+  accentFill: string;
+  imageUrl?: string;
+  seed: number;
+  slot?: ReactNode;
+}) {
   const stripeFill = accentFill.replace(/(\d+)%/, (_, n) => `${Math.max(0, +n - 7)}%`);
   return (
     <OrganicImage
@@ -66,6 +78,7 @@ function StoryImage({ label, accentFill, imageUrl, seed }: { label: string; acce
       seed={seed}
       ratio={0.62}
       className={styles.imagePlaceholder}
+      overlay={slot}
     >
       {!imageUrl && (
         <svg
@@ -87,18 +100,20 @@ function StoryImage({ label, accentFill, imageUrl, seed }: { label: string; acce
               strokeOpacity="0.28"
             />
           ))}
-          <text
-            x="50%"
-            y="52%"
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fontFamily="monospace"
-            fontSize="10.5"
-            fill="oklch(28% 0.04 60)"
-            fillOpacity="0.42"
-          >
-            {label}
-          </text>
+          {!slot && (
+            <text
+              x="50%"
+              y="52%"
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontFamily="monospace"
+              fontSize="10.5"
+              fill="oklch(28% 0.04 60)"
+              fillOpacity="0.42"
+            >
+              {label}
+            </text>
+          )}
         </svg>
       )}
       <GrainOverlay opacity={STORY_GRAIN.cover} />
@@ -160,10 +175,42 @@ export interface StoryCardProps {
    * neighbours' family. Unset: the card's own (cover hue, else position).
    */
   palette?: number;
+  /**
+   * Laid over the cover's frame (inside its hand-drawn clip, at the card's
+   * 0.62 ratio): the writer's preview puts its cover editor here — the striped
+   * placeholder's own label then steps aside.
+   */
+  coverSlot?: ReactNode;
+  /**
+   * How far a phone's full-bleed band reaches past its column on each side
+   * (CSS length; the feed's `--story-bleed` otherwise): the writer's preview
+   * passes the page's own pad, so the band meets the window's edges there.
+   */
+  bleed?: string;
+  /**
+   * A picture of the card, not a link to it (the writer's preview): no hover
+   * wash, no pointer, no arrow. A `group` named by `labelledBy`.
+   */
+  preview?: boolean;
+  /** For `preview`: the id of what names the group (its caption). */
+  labelledBy?: string;
 }
 
-export function StoryCard({ story, index = 0, isLast = false, isFirst = false, loading = false, quote, palette }: StoryCardProps) {
-  const [hovered, setHovered] = useState(false);
+export function StoryCard({
+  story,
+  index = 0,
+  isLast = false,
+  isFirst = false,
+  loading = false,
+  quote,
+  palette,
+  coverSlot,
+  bleed,
+  preview = false,
+  labelledBy,
+}: StoryCardProps) {
+  const [hoveredRaw, setHovered] = useState(false);
+  const hovered = hoveredRaw && !preview;
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const cardRef = useRef<HTMLElement>(null);
   const { w, h } = useElementSize(cardRef, 340, 480);
@@ -211,10 +258,14 @@ export function StoryCard({ story, index = 0, isLast = false, isFirst = false, l
       onMouseLeave={(e) => { recordPointer(e); setHovered(false); }}
       className={styles.card}
       data-first={isFirst || undefined}
+      data-preview={preview || undefined}
+      role={preview ? 'group' : undefined}
+      aria-labelledby={preview ? labelledBy : undefined}
       style={{
         // Mobile-vs-desktop layout lives in the module CSS (640px media
         // query); the card only supplies its palette as variables.
         '--card-interior': cardInterior,
+        ...(bleed ? { '--story-bleed': bleed } : {}),
         // Tint every placeholder shimmer inside with this card's own hue
         // (a lighter shade of the card family), overriding the theme accent.
         '--skeleton-highlight': `oklch(88% 0.08 ${hue})`,
@@ -290,6 +341,7 @@ export function StoryCard({ story, index = 0, isLast = false, isFirst = false, l
             accentFill={accentFill}
             imageUrl={story!.imageUrl}
             seed={seed + 5}
+            slot={coverSlot}
           />
         )}
 
@@ -368,7 +420,7 @@ export function StoryCard({ story, index = 0, isLast = false, isFirst = false, l
           </div>
           {loading ? (
             <Skeleton width={18} height={18} circle />
-          ) : (
+          ) : preview ? null : (
             <Icon
               name="arrow-right"
               size={18}

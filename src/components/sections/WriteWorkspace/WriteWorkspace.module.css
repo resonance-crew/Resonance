@@ -274,11 +274,25 @@
 /* The draft's save state, where the page title's subtitle was: the bar has
    the title now (the apps' writer: "the save state stays here"). */
 .saveStatus {
-  margin: 0 0 clamp(20px, 3vw, 28px);
+  margin: 0 0 clamp(16px, 2.4vw, 24px);
   font-family: var(--font-body);
   font-size: 14px;
   line-height: 1.5;
   color: var(--color-text-muted);
+}
+
+/* At the split it is the column's first row, on one line with the floating
+   下一步 (and the Leave over the map): as tall as the pill, and clear of it. */
+@media (min-width: 1200px) {
+  .saveStatus {
+    display: flex;
+    align-items: center;
+    min-height: 38px;
+  }
+
+  .editorCol[data-action] .saveStatus {
+    padding-right: 112px;
+  }
 }
 
 /* Each thing the writer's pane can show (the draft, a card opened from the
@@ -287,6 +301,17 @@
   position: absolute;
   inset: 0;
   overflow-y: auto;
+}
+
+/* At the split the pane has no bar: what it does next (下一步) floats at its
+   top-right, the mirror of the Leave over the map, outside what scrolls —
+   the story's lines pass under the opaque pill as the map passes under the
+   Leave. */
+.paneAction {
+  position: absolute;
+  z-index: 7;
+  top: var(--editor-pad-top);
+  right: var(--page-pad-x);
 }
 
 /* The pane's column: below the split the thought map's pane has its header

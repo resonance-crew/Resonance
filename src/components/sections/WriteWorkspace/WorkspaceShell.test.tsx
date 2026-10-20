@@ -647,4 +647,68 @@ describe('the workspace at the split', () => {
     expect(pane()).toHaveAttribute('data-folded');
     expect(divider()).toHaveFocus();
   });
+
+  // The editor's 下一步 at the split, where the pane has no bar: floating at its top-right, outside what scrolls.
+  it('floats the pane’s next action over the pane, outside what scrolls, and folds it with the pane', () => {
+    renderWithIntl(
+      <WorkspaceShell open bar={{ title: 'New card', onBack: vi.fn() }} paneAction={<button type="button">Next</button>}>
+        <p>editor</p>
+      </WorkspaceShell>,
+    );
+    const next = screen.getByRole('button', { name: 'Next' });
+    expect(pane()).toContainElement(next);
+    expect(screen.getByText('editor').parentElement).not.toContainElement(next);
+    expect(screen.queryByRole('banner')).toBeNull();
+  });
+
+  // The story's selection bubble gives the words back on Escape: the pane stays.
+  it('leaves Escape to a toolbar in the pane, and to a publish on its way', async () => {
+    const { unmount } = renderWithIntl(
+      <WorkspaceShell open onClose={vi.fn()}>
+        <div role="toolbar" aria-label="Formatting">
+          <button type="button">Bold</button>
+        </div>
+      </WorkspaceShell>,
+    );
+    screen.getByRole('button', { name: 'Bold' }).focus();
+    await userEvent.keyboard('{Escape}');
+    expect(pane()).not.toHaveAttribute('data-folded');
+    unmount();
+
+    renderWithIntl(
+      <WorkspaceShell open onClose={vi.fn()}>
+        <section data-step-pending="">
+          <button type="button">Publish</button>
+        </section>
+      </WorkspaceShell>,
+    );
+    screen.getByRole('button', { name: 'Publish' }).focus();
+    await userEvent.keyboard('{Escape}');
+    expect(pane()).not.toHaveAttribute('data-folded');
+  });
+});
+
+describe('the pane’s next action below the split', () => {
+  afterEach(() => {
+    window.matchMedia = realMatchMedia;
+  });
+
+  it('ends the writer’s bar, or the pane’s header row, with it', () => {
+    screenWidth(900);
+    const { unmount } = renderWithIntl(
+      <WorkspaceShell open bar={{ title: 'New card', onBack: vi.fn() }} paneAction={<button type="button">Next</button>}>
+        <p>editor</p>
+      </WorkspaceShell>,
+    );
+    expect(within(screen.getByRole('banner')).getByRole('button', { name: 'Next' })).toBeInTheDocument();
+    unmount();
+
+    renderWithIntl(
+      <WorkspaceShell open onClose={vi.fn()} paneTitle="Edit draft" paneAction={<button type="button">Next</button>}>
+        <p>editor</p>
+      </WorkspaceShell>,
+    );
+    const header = screen.getByRole('heading', { level: 2, name: 'Edit draft' }).closest('header')!;
+    expect(within(header).getByRole('button', { name: 'Next' })).toBeInTheDocument();
+  });
 });

@@ -71,3 +71,32 @@ describe('StoryCard hover', () => {
     expect(card.querySelector('mask')).toBeNull();
   });
 });
+
+// The writer's publish step shows the card as a list will: the same card, its cover the editor's.
+describe('StoryCard as the writer\'s preview', () => {
+  it('is a picture of the card named by its caption, with the cover slot in the cover\'s frame', () => {
+    const { container } = render(
+      <>
+        <StoryCard story={story} preview labelledBy="cap" bleed="var(--page-pad-x)" coverSlot={<button>Add an image</button>} />
+        <p id="cap">How the card looks in a list</p>
+      </>,
+    );
+    const card = screen.getByRole('group', { name: 'How the card looks in a list' });
+    expect(card.style.getPropertyValue('--story-bleed')).toBe('var(--page-pad-x)');
+    // The slot sits in the cover's frame, the placeholder's own label stepping aside.
+    const frame = container.querySelector('svg rect[fill]')!.closest('div[style*="padding-bottom"]')!;
+    expect(frame).toContainElement(screen.getByRole('button', { name: 'Add an image' }));
+    expect(screen.queryByText('story illustration')).toBeNull();
+    // No wash from the pointer, and no arrow saying it opens.
+    const disc = card.querySelector('[data-brush-wash]')!.firstElementChild as HTMLElement;
+    fireEvent.mouseEnter(card, { clientX: 20, clientY: 30 });
+    expect(Number(disc.style.transform.match(/scale\(([^)]+)\)/)?.[1])).toBe(0);
+  });
+
+  it('is the feed\'s card, unchanged, without them', () => {
+    render(<StoryCard story={story} />);
+    expect(screen.queryByRole('group')).toBeNull();
+    expect(screen.getByText('story illustration')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'A quiet realization' }).closest('article')).not.toHaveAttribute('data-preview');
+  });
+});

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import * as React from 'react';
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { renderWithIntl, screen, userEvent } from '@/../test/render';
+import { renderWithIntl, screen, userEvent, within } from '@/../test/render';
+import en from '@/messages/en.json';
 import { mockElementSize } from '@/../test/organic';
 import type { Card } from '@/lib/db/types';
 
@@ -23,10 +24,42 @@ vi.mock('@/components/molecules/ThoughtMap/ThoughtMapBoard', () => ({
   ),
 }));
 const saveNow = vi.fn(async () => {});
+// The pane's editor, as the page sees it: its handle, its 下一步, and its step (kept to itself).
 vi.mock('@/components/sections/WriteWorkspace/OpenedCardPane', () => ({
-  OpenedCardPane: ({ card, editorRef }: { card: Card; editorRef?: React.Ref<unknown> }) => {
-    React.useImperativeHandle(editorRef, () => ({ saveNow, hasWork: () => false, cardId: () => card.id }));
-    return <p>opened: {card.thoughtCore}</p>;
+  OpenedCardPane: ({
+    card,
+    editorRef,
+    editorProps,
+  }: {
+    card: Card;
+    editorRef?: React.Ref<unknown>;
+    editorProps?: {
+      onStepChange?: (s: 'write' | 'publish') => void;
+      onPrimaryActionChange?: (a: unknown) => void;
+    };
+  }) => {
+    const [step, setStep] = React.useState<'write' | 'publish'>('write');
+    const go = (next: 'write' | 'publish') => {
+      setStep(next);
+      editorProps?.onStepChange?.(next);
+    };
+    React.useImperativeHandle(editorRef, () => ({
+      saveNow,
+      hasWork: () => false,
+      cardId: () => card.id,
+      stepBack: () => (step === 'publish' ? (go('write'), true) : false),
+    }));
+    React.useEffect(() => {
+      editorProps?.onPrimaryActionChange?.(
+        step === 'write' ? { label: 'Next', disabled: false, loading: false, onPress: () => go('publish') } : null,
+      );
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [step]);
+    return (
+      <p>
+        opened: {card.thoughtCore} ({step})
+      </p>
+    );
   },
 }));
 
@@ -62,12 +95,12 @@ describe('the thought-map page', () => {
     expect(screen.queryByText(/opened:/)).toBeNull();
 
     await userEvent.click(screen.getByRole('button', { name: 'open mine' }));
-    expect(await screen.findByText('opened: My card')).toBeInTheDocument();
+    expect(await screen.findByText('opened: My card (write)')).toBeInTheDocument();
     const divider = screen.getByRole('separator');
     divider.focus();
     await userEvent.keyboard('{Enter}');
     expect(saveNow).toHaveBeenCalledTimes(1);
-    expect(screen.getByText('opened: My card')).toBeInTheDocument();
+    expect(screen.getByText('opened: My card (write)')).toBeInTheDocument();
   });
 
   // Below it the pane covers the map, and someone else's card opens there as its reading panel, as before.
@@ -76,6 +109,36 @@ describe('the thought-map page', () => {
     renderWithIntl(<ThoughtMapPage />);
     await userEvent.click(screen.getByRole('button', { name: 'open theirs' }));
     expect(push).not.toHaveBeenCalled();
-    expect(await screen.findByText('opened: Bob’s walk')).toBeInTheDocument();
+    expect(await screen.findByText('opened: Bob’s walk (write)')).toBeInTheDocument();
+  });
+
+  // The pane's editor writes in two steps, as the writer's page does, with no address of its own.
+  it('ends the pane’s header with 下一步, and names the publish step there with its way back', async () => {
+    screenAtSplit(false);
+    const pushState = vi.spyOn(window.history, 'pushState');
+    renderWithIntl(<ThoughtMapPage />, {});
+    await userEvent.click(screen.getByRole('button', { name: 'open mine' }));
+    await screen.findByText('opened: My card (write)');
+    const header = () => screen.getByRole('heading', { level: 2 }).closest('header')!;
+    expect(screen.getByRole('heading', { level: 2, name: en.write.editTitle })).toBeInTheDocument();
+    await userEvent.click(within(header()).getByRole('button', { name: en.write.next }));
+
+    expect(screen.getByText('opened: My card (publish)')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: en.write.publishPanel.title })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: en.write.next })).toBeNull();
+    // Its back: to writing, the pane staying open.
+    await userEvent.click(screen.getByRole('button', { name: en.write.leaveStay }));
+    expect(screen.getByText('opened: My card (write)')).toBeInTheDocument();
+    expect(pushState).not.toHaveBeenCalled();
+    pushState.mockRestore();
+  });
+
+  it('floats 下一步 over the pane at the split', async () => {
+    screenAtSplit(true);
+    renderWithIntl(<ThoughtMapPage />);
+    await userEvent.click(screen.getByRole('button', { name: 'open mine' }));
+    await screen.findByText('opened: My card (write)');
+    await userEvent.click(screen.getByRole('button', { name: en.write.next }));
+    expect(screen.getByText('opened: My card (publish)')).toBeInTheDocument();
   });
 });

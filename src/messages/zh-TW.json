@@ -422,6 +422,7 @@
   },
   "write": {
     "titleRequired": "先寫下一句話標題",
+    "next": "下一步",
     "title": "寫一張新卡片",
     "editTitle": "編輯草稿",
     "editPublishedTitle": "編輯已發布的卡片",
@@ -436,9 +437,10 @@
     "resizeDivider": "拖曳調整左右比例",
     "referenceCard": "原文章",
     "coreLabel": "一句話標題",
+    "titlePlaceholder": "一句話標題",
     "corePlaceholder": "例：被看見，比被喜歡更難得⋯",
     "storyLabel": "故事本體",
-    "storyPlaceholder": "把那個讓你忍不住寫下思維核心的時刻，寫出來⋯",
+    "storyPlaceholder": "從那個讓你想寫下來的時刻開始⋯",
     "editor": {
       "toolbarLabel": "編輯工具列",
       "bold": "粗體",
@@ -450,6 +452,8 @@
       "quote": "引言",
       "insertCard": "插入卡片",
       "insertImage": "插入圖片",
+      "insert": "插入",
+      "hideKeyboard": "收起鍵盤",
       "imageUploading": "圖片上傳中⋯",
       "imageUploadError": "圖片上傳失敗，請再試一次",
       "imageUnsupported": "讀不出這張圖片，請換成 JPG 或 PNG",
@@ -471,6 +475,7 @@
     "tagsHelp": "按 Enter 新增，或讓 AI 從故事裡建議",
     "mediaLabel": "搭配一張圖片（選填）",
     "mediaRemove": "移除圖片",
+    "mediaReplace": "換一張圖片",
     "mediaPlaceholder": "加一張圖片",
     "mediaHint": "常見的圖片格式都可以",
     "mediaUploadError": "圖片上傳失敗，請稍後再試",
@@ -481,7 +486,9 @@
     "mediaGenerateNeedStory": "請先寫下故事內容",
     "mediaGenerating": "正在構思畫面⋯",
     "mediaGenerateError": "圖片生成失敗，請再試一次",
+    "mediaBusyHint": "圖片還在處理，好了就能發布",
     "mediaGeneratedLabel": "AI 生成插圖",
+    "previewCaption": "卡片在列表裡的樣子",
     "visibility": {
       "label": "誰可以看見",
       "public": "公開",
@@ -504,7 +511,7 @@
     "publish": "發布",
     "publishing": "發布中⋯",
     "autosaved": "草稿已自動儲存 · {time}",
-    "editLiveHint": "這張卡片已經發布了。修改會先私下暫存，按「儲存修改」才會更新給讀者。",
+    "editLiveHint": "這張卡片已經發布，修改會先私下暫存，儲存後才會更新給讀者",
     "editBuffered": "修改已暫存 · {time}　（讀者還看不到）",
     "editBufferedIdle": "有一份還沒儲存的修改，只有你看得到",
     "saveDraftAndLeave": "存成草稿，稍後再寫",
@@ -527,6 +534,8 @@
       "update": "儲存修改",
       "updating": "儲存中⋯",
       "anonymousVisibility": "匿名卡片只能公開，或設為只有自己看得到",
+      "resonanceReaches": "公開並署名的共振，會讓原作者知道是你",
+      "resonanceQuiet": "這張共振不會通知原作者",
       "failed": "沒發布成功，再試一次",
       "rateLimited": "今天的次數用完了，明天再試"
     },
@@ -537,7 +546,12 @@
       "q2": "有沒有一句話，你很想說給過去的自己聽？",
       "q3": "哪一次失敗，教會了你一件別人沒教過的事？"
     },
-    "removeTag": "移除標籤"
+    "removeTag": "移除標籤",
+    "trashed": {
+      "line": "還原之後就能繼續寫",
+      "restore": "還原並繼續寫",
+      "status": "這張卡片在垃圾桶裡，還原後才會儲存"
+    }
   },
   "me": {
     "joined": "{date} 加入",
@@ -595,7 +609,8 @@
       "unresonate": "取消共振",
       "unresonateConfirmTitle": "不再與〈{title}〉共振？",
       "unresonateConfirmBody": "卡片會留著。如果是這次共振讓你們連結、對方也還沒寫信給你，你們的連結會一併收回。",
-      "unresonateConfirm": "取消共振"
+      "unresonateConfirm": "取消共振",
+      "restore": "還原"
     },
     "anonymousBadge": "匿名發布",
     "emptyPublishedCta": "寫下一個故事",

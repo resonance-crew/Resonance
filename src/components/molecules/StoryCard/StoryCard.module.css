@@ -10,6 +10,11 @@
   transition: background 320ms ease;
 }
 
+/* The writer's preview is a picture of the card, not a link to it. */
+.card[data-preview] {
+  cursor: default;
+}
+
 /* Phones: the card is a full-bleed section (tinted band between wavy
    dividers), not a floating rounded box. Driven by CSS — not useIsMobile —
    so the very first SSR paint already has the right layout. */

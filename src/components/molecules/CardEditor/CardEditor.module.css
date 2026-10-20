@@ -1,209 +1,131 @@
-/* Single writing column, horizontally centered. The AI partner panel that used
-   to occupy the right track is deferred; we keep the column at its prior
-   reading width (not full page width) and center it. */
+/* One column at the reader's measure, centred: the writer writes in the
+   width the card page will set the story in. */
 .grid {
   display: flex;
   justify-content: center;
 }
 
 .column {
-  display: flex;
-  flex-direction: column;
-  gap: clamp(22px, 3vw, 32px);
   width: 100%;
-  max-width: 680px;
+  max-width: var(--measure);
   min-width: 0;
+  /* A value written in cqi (none yet) sizes to the pane at the split, not the window. */
+  container-type: inline-size;
 }
 
-.fileInputWrap {
-  width: 100%;
-  border-radius: var(--field-radius);
+/* ── The writing step: the title, the story ───────────────────────────── */
+
+.write {
+  display: flex;
+  flex-direction: column;
 }
-/* Streamed in-progress AI illustration: the blurred rough pass sits inside
-   the final hand-drawn frame (HandDrawnImage renders clip + wash), with the
-   sketch loader + label riding on top. */
-.generatingOverlay {
+
+/* The steps cross by sliding a little toward their side (writing on the
+   left, publishing on the right); with reduced motion, a short fade. Nothing
+   moves the first time the page shows. */
+.write[data-returned]:not([hidden]) {
+  animation: fromLeft 220ms ease-out;
+}
+
+.publish:not([hidden]) {
+  animation: fromRight 220ms ease-out;
+}
+
+@keyframes fromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fromRight {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes crossFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .write[data-returned]:not([hidden]),
+  .publish:not([hidden]) {
+    animation: crossFade 150ms ease-out;
+  }
+}
+
+/* The title and what it says about itself (how many characters, or that it
+   is wanted), the note in the gap to the story so the story never moves. */
+.titleBlock {
+  position: relative;
+  margin-bottom: clamp(16px, 2vw, 24px);
+}
+
+/* story.css's .story-title sets the type; the field inside takes it. */
+.title {
+  margin: 0;
+}
+
+.titleNote {
   position: absolute;
-  inset: 0;
+  top: 100%;
+  right: 0;
+  left: 0;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
+  justify-content: flex-end;
+  pointer-events: none;
 }
-.generatingOverlay .uploadText {
-  color: var(--color-text);
-}
-/* Two equal halves — upload (left) and AI generate (right) — split by a
-   vertical pen rule. */
-.mediaSplit {
-  display: flex;
-  align-items: stretch;
-  width: 100%;
-}
-.mediaHalf {
-  flex: 1 1 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  font: inherit;
-  color: inherit;
-  background: none;
-  border: 0;
-  cursor: pointer;
-}
-.mediaHalf:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-.mediaHalf:hover:not(:disabled) .uploadText {
-  color: var(--color-text);
-}
-.uploadInner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: clamp(22px, 4vw, 34px) 18px;
-  text-align: center;
-}
-.uploadText {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  transition: color 150ms;
-}
-.mediaHalf[data-drag] .uploadText {
-  color: var(--color-text);
-}
-.uploadHint {
+
+.titleNote > div {
+  margin-top: 2px;
   font-size: 12px;
-  color: var(--color-text-muted);
-  opacity: 0.75;
-}
-/* Visually hidden but still focusable / clickable via the wrapping label. */
-.fileInputHidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
 }
 
-.actions {
+.titleNote[data-full] > div {
+  color: var(--color-text);
+}
+
+.titleNote[role='alert'] {
+  justify-content: flex-start;
+}
+
+/* 下一步's save didn't go through: under the story, in the writer's words. */
+.saveError {
+  margin: 16px 0 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-danger, oklch(58% 0.16 25));
+}
+
+/* A card moved to the trash elsewhere: the save line says so, with 還原. */
+.trashed {
   display: flex;
-  gap: 12px;
-  align-items: center;
   flex-wrap: wrap;
-  margin-top: 6px;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 clamp(20px, 3vw, 28px);
 }
 
-/* While a save or publish is in flight the buttons wait, dimmed. */
-
-.actionError {
-  font-size: 12px;
-  color: var(--color-terracotta);
-}
-
-/* On a phone the two do not sit side by side: Publish (or Save changes)
-   takes the width, and the tonal way out (Save draft and leave, Discard
-   changes) takes it too on its own row under it, the error line centred
-   under both — one balanced column of two pills of one size. */
-@media (max-width: 640px) {
-  .actionsStack {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-  /* The button's own face (.btn) is inline-flex and measures itself, so a
-     full-width wrapper needs the face stretched too: it redraws at that width. */
-  .primaryAction > button,
-  .secondaryAction > button {
-    display: flex;
-    width: 100%;
-  }
-  .actionError {
-    align-self: center;
-    text-align: center;
-  }
-}
-
-.aiRow {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  text-align: left;
-  width: 100%;
-  background: none;
-  border: none;
-  padding: 12px 4px;
-  cursor: pointer;
-  color: var(--color-text);
+.trashedLine {
+  flex: 1 1 16em;
   font-family: var(--font-body);
-  transition: opacity 150ms;
-}
-.aiRow:hover { opacity: 0.75; }
-
-.aiRowTitle { font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
-.aiRowHint  { font-size: 12px; color: var(--color-text-muted); line-height: 1.5; }
-
-.suggestionList {
-  margin-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.suggestionBtn {
-  display: block;
-  text-align: left;
-  border: none;
-  background: none;
-  color: var(--color-text);
-  padding: 8px 0;
-  cursor: pointer;
-  font-family: var(--font-heading);
-  font-size: 15px;
-  width: 100%;
-}
-.suggestionBtn:hover { color: var(--color-terracotta); }
-
-.polishPreview {
-  margin-top: 16px;
-  padding: 16px 0 0;
-  border-top: 1px dashed oklch(70% 0.04 60);
   font-size: 14px;
-}
-
-.polishHeader {
-  font-size: 12px;
+  line-height: 1.5;
   color: var(--color-text-muted);
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
-
-.polishText {
-  white-space: pre-wrap;
-  font-family: var(--font-body);
-  margin-bottom: 12px;
-  line-height: 1.7;
-}
-
-.iconBtn {
-  background: none;
-  border: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  padding: 4px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.iconBtn:hover { color: var(--color-text); }
