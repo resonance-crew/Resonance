@@ -3,17 +3,22 @@ import PhotosUI
 import ResonanceKit
 import SwiftUI
 
-/// Writing a card (the web's write page on a phone): the one-line title, the
-/// story in the editor island under the web's text toolbar, tags in one field
-/// (typed, or suggested by the model), the cover photo, then Publish (through
-/// the publish panel) or leave with the draft saved. Drafts save themselves a moment after typing stops.
-/// Opened on one of your cards (write/[id]) it resumes a draft, or revises a
-/// published card: then Save changes / Discard changes.
-/// A page on the tab's stack like the others: the bar's arrow (or the edge
-/// swipe) goes back, asking first when there is writing to put away. It is
-/// always the card of a ``WriteWorkspace``: alone under its bar below the split
-/// width, the editor pane beside the thought map from 1200 across (round 5 E5),
-/// where the workspace's own Back and edge swipe ask through `pane`.
+/// Writing a card (the web's write page, writer.spec), in two steps on one page. Writing: a bare
+/// page — the one-line title and the story in the editor island, set as the card page sets them —
+/// nothing else on it but the save line and one 下一步 (in the bar; floating at the pane's top at
+/// the split), with the formatting docked on the keyboard while the story has the focus. 下一步
+/// asks for a title, makes sure a new draft is kept, and opens the publish step in the same place
+/// (``PublishStep``): the mirror, the card as a list will show it with its cover, tags, who can see
+/// it and the byline, then 發布 — or 儲存修改 for a live card. The story stays mounted under the
+/// step, so its undo history and selection survive the round trip; drafts save themselves a moment
+/// after typing stops, in either step.
+/// A page on the tab's stack like the others: the bar's arrow (or the edge swipe) goes back from the
+/// publish step to writing, and from writing out of the page, asking first when there is writing to
+/// put away. It is always the card of a ``WriteWorkspace``: alone under its bar below the split
+/// width, the editor pane beside the thought map from 1200 across (round 5 E5), where the
+/// workspace's own Back and edge swipe ask through `pane`.
+/// Opened on a card in the trash it says so, with 還原並繼續寫; a card moved to the trash while it is
+/// open here (another device) says so where the save line was, with 還原, keeping what is typed.
 struct WriteScreen: View {
     let request: WriteLauncher.Request
     /// What the workspace asks of this card (saving now, the way back); filled in here.
@@ -28,34 +33,52 @@ struct WriteScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openRoute) private var openRoute
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The writer takes the whole window; from 1200 across, the thought map beside it (design §12).
     @Environment(\.window) private var window
     @State private var model: WriteModel?
-    @State private var scrolled = false
+    /// Each step's own bar line (the page under the bar has scrolled).
+    @State private var scrolledWrite = false
+    @State private var scrolledPublish = false
     /// The "leave for now?" question is open.
     @State private var leaving = false
     /// Opening a card that is missing or not yours.
     @State private var notFound = false
+    /// Opening one of your cards that is in the trash: nothing is written into it until it is restored.
+    @State private var inTrash: DraftService.OpenedCard?
+    @State private var restoringOpened = false
+    @State private var restoreOpenedFailed = false
     /// The first-card guide (ux §5): a brand-new writer's fresh card only.
     @State private var showGuide = false
-    @State private var publishing = false
-    /// The panel is publishing or saving: it can't be closed meanwhile (the web's pending gate).
-    @State private var panelBusy = false
     /// The anonymous-publishing hint, for this writer's first few visits (counted per visit, as the web).
     @State private var showsAnonymousHint = false
-    /// Discarding a revision (the buttons wait meanwhile).
-    @State private var discarding = false
-    @State private var actionError: String?
+    /// The publish step has been shown (it stays mounted from then: a cover on its way, the mirror's answer).
+    @State private var publishLoaded = false
+    /// The format bar is on the keyboard (the story has the focus, or had it a moment ago).
+    @State private var formatBar = false
     @State private var pickingCard = false
     @State private var coverItem: PhotosPickerItem?
     @State private var pickingCover = false
     @State private var inlineItem: PhotosPickerItem?
     @State private var pickingInline = false
+    @FocusState private var titleFocused: Bool
+    /// The title had the focus as the publish step opened: back to writing puts it there again.
+    @State private var titleHadFocus = false
+    /// What is left of the writing page's height under the title (the story's least height).
+    @State private var storyRoom: CGFloat = 320
+    @State private var publishScroll = ScrollPosition(edge: .top)
+    private static let writeSpace = "write.content"
+    @State private var writeScroll = ScrollPosition(edge: .top)
+    @State private var writeViewport = CaretFollow.Viewport(offset: 0, insetTop: 0, height: 0)
+    /// Where the story's island begins in the writing page's content.
+    @State private var islandTop: CGFloat = 0
 
     var body: some View {
         Group {
             if let model {
-                editor(model)
+                steps(model)
+            } else if let inTrash {
+                trashedNotice(inTrash)
             } else if notFound {
                 missing
             } else {
@@ -67,12 +90,7 @@ struct WriteScreen: View {
         }
         .background(Tokens.cream)
         .safeAreaInset(edge: .top, spacing: 0) {
-            if showsBar {
-                // The title is the one a visit has once the card is known; a new card's is known at once.
-                OrganicInlineBar(model?.title ?? (request.cardId == nil ? L10n.Write.title : ""), backLabel: L10n.App.Nav.back,
-                                 scrolled: scrolled)
-                    .onBack { if let model { goBack(model) } else { dismiss() } }
-            }
+            if showsBar { bar }
         }
         .toolbar(.hidden, for: .navigationBar)
         // Leaving the app saves what is written now, not 1.5s later (the web's visibilitychange flush).
@@ -80,97 +98,155 @@ struct WriteScreen: View {
             if phase != .active, let model { model.store() }
         }
         .task {
-            if model == nil {
-                // The editor's page starts loading now, beside the card's read rather than after it.
-                let editor = StoryEditorBridge(placeholder: L10n.Write.storyPlaceholder)
-                var opened: DraftService.OpenedCard?
-                if let cardId = request.cardId {
-                    opened = try? await session.drafts?.open(cardId)
-                    guard opened != nil else {
-                        notFound = true
-                        pane.goBack = { dismiss() }
-                        return
-                    }
-                }
-                let model = WriteModel(drafts: session.drafts, writing: session.writing, referenceCardId: request.referenceCardId,
-                                       opened: opened, editor: editor)
-                #if DEBUG
-                // `-writeTitle "…" -writeStory "…" -writeCover <url>` fill a new card (screen checks; the simulator can't type into it).
-                let defaults = UserDefaults.standard
-                if let title = defaults.string(forKey: "writeTitle") { model.values.title = title }
-                if let cover = defaults.string(forKey: "writeCover").flatMap(URL.init(string:)) { model.values.imageURL = cover }
-                if let story = defaults.string(forKey: "writeStory") {
-                    model.editor.setMarkdown(story)
-                    model.values.story = story
-                }
-                #endif
-                if let story = request.story {
-                    model.editor.setMarkdown(story)
-                    model.values.story = story
-                }
-                self.model = model
-                // The workspace's Back, its edge swipe and its hiding of the pane come here.
-                pane.saveNow = { [weak model, writer] in
-                    guard let model else { return }
-                    model.store()
-                    // The lists hear of it (the map's titles, the card box) once the server has it, as on leaving.
-                    Task { _ = await model.settled(within: Self.leaveWait); writer.leave(model.change) }
-                }
-                pane.cardId = { [weak model] in model?.draftId }
-                pane.holds = { [weak model] in model.map { $0.holdsWriting || $0.needsSave } ?? false }
-                pane.goBack = { [weak model] in if let model { goBack(model) } }
-                // The first-card guide is for a brand-new writer's fresh card: asked beside the open page, never
-                // before it (a read stuck on the network once held the loader ~40s), and only while nothing is written.
-                if request.cardId == nil, request.referenceCardId == nil, let drafts = session.drafts {
-                    let newcomer = await firstAnswer(within: Self.guideWait) { await !drafts.hasAnyCards() } ?? false
-                    if newcomer, !model.holdsWriting { withAnimation(.easeOut(duration: 0.2)) { showGuide = true } }
-                }
-                showsAnonymousHint = await session.hints?.claim("anonymous-publish") ?? false
-            }
+            if model == nil, inTrash == nil, !notFound { await open() }
         }
     }
 
-    /// The editor in a centred writing column (the workspace sizes it: the window below the split, its
-    /// pane beside the map from 1200 across).
-    private func editor(_ model: WriteModel) -> some View {
-        @Bindable var model = model
-        return ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                saveStatus(model)
-                if showGuide {
-                    FirstCardGuide { question in
-                        // Seeded into the story as a quote to write against; the guide steps aside.
-                        model.seed(story: "> \(question)\n\n")
-                        withAnimation(.easeOut(duration: 0.2)) { showGuide = false }
-                    }
-                }
-                OrganicTextArea(L10n.Write.coreLabel, text: $model.values.title, placeholder: L10n.Write.corePlaceholder,
-                                maxLength: WriteModel.titleMax, display: true, curve: 0.8)
-                VStack(alignment: .leading, spacing: 10) {
-                    label(L10n.Write.storyLabel)
-                    StoryEditorField(bridge: model.editor, onInsertCard: { pickingCard = true },
-                                     onInsertImage: { pickingInline = true }, uploadingImage: model.uploadingInline)
-                }
-                tags(model)
-                cover(model)
-                actions(model)
+    // MARK: Opening
+
+    /// Opens the card (or a new one): the editor's page starts loading beside the card's read.
+    private func open() async {
+        let locale = Strings.shared.language.rawValue
+        let editor = StoryEditorBridge(placeholder: L10n.Write.storyPlaceholder, layout: .canvas, locale: locale)
+        var opened: DraftService.OpenedCard?
+        if let cardId = request.cardId {
+            opened = try? await session.drafts?.open(cardId)
+            guard let card = opened else {
+                notFound = true
+                pane.goBack = { dismiss() }
+                pane.leave = { dismiss() }
+                return
             }
-            .padding(.horizontal, window.layoutClass == .compact ? 20 : window.pad)
-            // In the pane there is no bar: its first line sits level with the Back on the canvas.
-            .padding(.top, showsBar ? 16 : WriteWorkspace.paneTop)
-            .padding(.bottom, 48)
-            // Wider than a phone, the web's writing measure (680 and the page's pads), centred.
-            .frame(maxWidth: window.layoutClass == .compact ? .infinity : Tokens.measure + 2 * window.pad)
-            .frame(maxWidth: .infinity)
-            // A tap on the page between the fields puts the keyboard away; the fields, the story and the
-            // buttons are in front of it and keep their own taps.
-            .background { Color.clear.contentShape(Rectangle()).onTapGesture { putKeyboardAway(model) } }
+            if card.trashedAt != nil {
+                inTrash = card
+                pane.goBack = { dismiss() }
+                pane.leave = { dismiss() }
+                return
+            }
         }
-        .onHeaderScroll($scrolled)
-        .scrollDismissesKeyboard(.interactively)
-        // The edge swipe asks what the arrow asks while there is writing to put away (the workspace
-        // takes it, through `pane`), and a draft cleared since its last save still goes through
-        // leaving, which saves it.
+        let model = WriteModel(drafts: session.drafts, writing: session.writing, referenceCardId: request.referenceCardId,
+                               opened: opened, locale: locale, editor: editor)
+        #if DEBUG
+        // `-writeTitle "…" -writeStory "…" -writeCover <url>` fill a new card (screen checks; the simulator can't type into it).
+        let defaults = UserDefaults.standard
+        if request.cardId == nil {
+            if let title = defaults.string(forKey: "writeTitle") { model.values.title = title }
+            if let cover = defaults.string(forKey: "writeCover").flatMap(URL.init(string:)) { model.values.imageURL = cover }
+            if let story = defaults.string(forKey: "writeStory") {
+                model.editor.setMarkdown(story)
+                model.values.story = story
+            }
+        }
+        #endif
+        if let story = request.story {
+            model.editor.setMarkdown(story)
+            model.values.story = story
+        }
+        self.model = model
+        // The workspace's Back, its edge swipe and its hiding of the pane come here.
+        pane.saveNow = { [weak model, writer] in
+            guard let model else { return }
+            model.store()
+            // The lists hear of it (the map's titles, the card box) once the server has it, as on leaving.
+            Task { _ = await model.settled(within: Self.leaveWait); writer.leave(model.change) }
+        }
+        pane.cardId = { [weak model] in model?.draftId }
+        // The publish step is held too: the edge swipe takes it back to writing.
+        pane.holds = { [weak model] in model.map { $0.holdsWriting || $0.needsSave || $0.step == .publish } ?? false }
+        pane.goBack = { [weak model] in if let model { goBack(model) } }
+        pane.leave = { [weak model] in if let model { leaveAsking(model) } }
+        #if DEBUG
+        // `-writeStep publish` opens a new card's publish step at once (screen checks).
+        if defaults.string(forKey: "writeStep") == "publish" { Task { await next(model) } }
+        // `-writeFocus YES` puts the caret in the story once its page is up (the format bar on the keyboard).
+        if defaults.bool(forKey: "writeFocus") {
+            Task {
+                while !model.editor.ready { try? await Task.sleep(for: .milliseconds(100)) }
+                try? await Task.sleep(for: .seconds(1))
+                model.editor.focus()
+            }
+        }
+        // `-writeAppend "…" -writeAppendAfter <seconds>` types onto the story a while later (a save to watch).
+        if let more = defaults.string(forKey: "writeAppend") {
+            let after = max(1, defaults.double(forKey: "writeAppendAfter"))
+            Task {
+                try? await Task.sleep(for: .seconds(after))
+                model.values.story += more
+                model.store()
+            }
+        }
+        #endif
+        // The first-card guide is for a brand-new writer's fresh card: asked beside the open page, never
+        // before it (a read stuck on the network once held the loader ~40s), and only while nothing is written.
+        if request.cardId == nil, request.referenceCardId == nil, let drafts = session.drafts {
+            let newcomer = await firstAnswer(within: Self.guideWait) { await !drafts.hasAnyCards() } ?? false
+            if newcomer, !model.holdsWriting { withAnimation(.easeOut(duration: 0.2)) { showGuide = true } }
+        }
+        showsAnonymousHint = await session.hints?.claim("anonymous-publish") ?? false
+    }
+
+    // MARK: The bar
+
+    private var bar: some View {
+        let step = model?.step ?? .write
+        let title = step == .publish ? PublishStep.title(updating: model?.isPublished ?? false)
+            : model?.title ?? (request.cardId == nil ? L10n.Write.title : (inTrash?.isPublished == true ? L10n.Write.editPublishedTitle : L10n.Write.editTitle))
+        return OrganicInlineBar(title, backLabel: step == .publish ? L10n.Write.leaveStay : L10n.App.Nav.back,
+                                scrolled: step == .publish ? scrolledPublish : scrolledWrite) {
+            if let model, model.step == .write, !model.trashed {
+                nextButton(model)
+                    // The bar's actions sit 12 into its margin (bare glyphs); a pill keeps the page's margin.
+                    .padding(.trailing, 12)
+            }
+        }
+        .onBack { if let model { goBack(model) } else { dismiss() } }
+    }
+
+    /// 下一步: the one way forward while writing (solid, small), its loader while a new draft's first
+    /// save takes a moment; nothing written yet, it waits.
+    private func nextButton(_ model: WriteModel) -> some View {
+        OrganicButton(L10n.Write.next, variant: .solid, size: .sm) { Task { await next(model) } }
+            .loading(model.nextLoading)
+            .disabled(!model.canGoNext)
+            .fixedSize()
+            .layoutPriority(1)
+    }
+
+    // MARK: The two steps
+
+    private func steps(_ model: WriteModel) -> some View {
+        let writing = model.step == .write
+        let shift: CGFloat = reduceMotion ? 0 : 16
+        return ZStack(alignment: .top) {
+            writeStep(model)
+                .opacity(writing ? 1 : 0)
+                .offset(x: writing ? 0 : -shift)
+                .allowsHitTesting(writing)
+                .accessibilityHidden(!writing)
+            if publishLoaded {
+                publishStep(model)
+                    .opacity(writing ? 0 : 1)
+                    .offset(x: writing ? shift : 0)
+                    .allowsHitTesting(!writing)
+                    .accessibilityHidden(writing)
+            }
+        }
+        .animation(reduceMotion ? .easeOut(duration: 0.15) : .easeOut(duration: 0.22), value: model.step)
+        .onChange(of: model.step) { _, step in
+            if step == .publish {
+                publishLoaded = true
+                publishScroll.scrollTo(edge: .top)
+                UIAccessibility.post(notification: .screenChanged, argument: nil)
+            } else if titleHadFocus {
+                titleFocused = true
+            }
+        }
+        .onChange(of: model.titleError) { _, asking in if asking { titleFocused = true } }
+        .onChange(of: model.restoredAlone) { _, alone in
+            guard alone else { return }
+            model.restoredAlone = false
+            session.restoredAloneNotice = true
+        }
         .photosPicker(isPresented: $pickingInline, selection: $inlineItem, matching: .images)
         .photosPicker(isPresented: $pickingCover, selection: $coverItem, matching: .images)
         .onChange(of: inlineItem) { _, item in
@@ -190,17 +266,6 @@ struct WriteScreen: View {
             } onCancel: { pickingCard = false }
             .withSession(session)
         }
-        .organicModal(isPresented: $publishing, seed: 29, maxWidth: 480, closeLabel: L10n.Write.PublishPanel.cancel,
-                      dismissible: !panelBusy) {
-            PublishPanel(model: model, pending: $panelBusy, showsAnonymousHint: showsAnonymousHint) { routeKey in
-                publishing = false
-                Task {
-                    await finish(card: routeKey, change: model.change ?? .init(cardId: model.draftId, referenceCardId: model.referenceCardId),
-                                 afterDialog: true)
-                }
-            } onCancel: { publishing = false }
-            .withSession(session)
-        }
         .organicConfirm(isPresented: $leaving, title: L10n.Write.leaveTitle,
                         message: model.isPublished ? L10n.Write.leaveBodyRevision : L10n.Write.leaveBody,
                         cancelLabel: L10n.Write.leaveStay, confirmLabel: L10n.Write.leaveConfirm, closeLabel: L10n.Write.leaveStay,
@@ -210,15 +275,208 @@ struct WriteScreen: View {
         }
     }
 
-    /// What the page header carried under its title: the save state, in plain words.
-    /// An unsaved draft has nothing to say, so the line isn't there until its first save.
+    /// Step 1: the save line, the guide, the bare title and the story; the format bar on the keyboard.
+    private func writeStep(_ model: WriteModel) -> some View {
+        GeometryReader { outer in
+            ScrollView {
+                writeColumn(model)
+                    // A tap on the page between the fields puts the keyboard away; the fields, the story and the
+                    // buttons are in front of it and keep their own taps.
+                    .background { Color.clear.contentShape(Rectangle()).onTapGesture { putKeyboardAway(model) } }
+                    .coordinateSpace(.named(Self.writeSpace))
+            }
+            .scrollPosition($writeScroll)
+            .onHeaderScroll($scrolledWrite)
+            .scrollDismissesKeyboard(.interactively)
+            // The caret's line stays above the keyboard and its bar: scrolled to only when it leaves the band shown —
+            // and again once the keyboard and its bar have risen under it (the band shown shrinks).
+            .onScrollGeometryChange(for: CaretFollow.Viewport.self) { geo in
+                CaretFollow.Viewport(offset: geo.contentOffset.y, insetTop: geo.contentInsets.top, height: geo.containerSize.height)
+            } action: { before, after in
+                writeViewport = after
+                if after.height < before.height { followCaret(model) }
+            }
+            .onChange(of: model.editor.caret) { _, _ in followCaret(model) }
+            // The story moved down the page under the caret (the save line came in above the title).
+            .onChange(of: islandTop) { _, _ in followCaret(model) }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if formatBar {
+                    StoryFormatBar(bridge: model.editor, onInsertImage: { pickingInline = true },
+                                   onInsertCard: { pickingCard = true }, uploadingImage: model.uploadingInline)
+                        .transition(.opacity.animation(.easeOut(duration: 0.12)))
+                }
+            }
+            .onAppear { storyRoom = max(240, outer.size.height - 220) }
+            .onChange(of: outer.size.height) { _, height in storyRoom = max(240, height - 220) }
+        }
+        // The bar rides the keyboard while the story has the focus, and a moment after it lets go.
+        .onChange(of: model.editor.focused) { _, focused in
+            if focused {
+                formatBar = true
+            } else {
+                Task {
+                    try? await Task.sleep(for: FormatBarPresence.grace)
+                    if !model.editor.focused { withAnimation(.easeOut(duration: 0.08)) { formatBar = false } }
+                }
+            }
+        }
+        .onChange(of: model.editor.script) { _, script in model.scriptChanged(script) }
+        // In the pane there is no bar: 下一步 floats at its top, mirroring the Leave on the map.
+        .overlay(alignment: .topTrailing) {
+            if !showsBar, model.step == .write, !model.trashed {
+                nextButton(model)
+                    .environment(\.organicButtonMinHeight, Self.splitRow)
+                    .padding(.top, WriteWorkspace.paneTop)
+                    .padding(.trailing, window.pad)
+            }
+        }
+    }
+
+    /// At the split, the first row: the save line beside the floating 下一步, as tall as the pill.
+    private static let splitRow: CGFloat = 44
+
+    private func writeColumn(_ model: WriteModel) -> some View {
+        let typo = StoryTypography(script: model.script, layout: window.layoutClass)
+        return VStack(alignment: .leading, spacing: 0) {
+            statusLine(model)
+                .frame(minHeight: showsBar ? 0 : Self.splitRow, alignment: .leading)
+                // The floating pill's room at the split.
+                .padding(.trailing, showsBar ? 0 : 120)
+                .padding(.bottom, statusShown(model) || !showsBar ? 16 : 0)
+            if showGuide {
+                FirstCardGuide { question in
+                    // Seeded into the story as a quote to write against; the guide steps aside.
+                    model.seed(story: "> \(question)\n\n")
+                    withAnimation(.easeOut(duration: 0.2)) { showGuide = false }
+                }
+                .padding(.bottom, 24)
+            }
+            titleField(model, typo: typo)
+                .padding(.bottom, 16)
+            StoryCanvasField(bridge: model.editor, minHeight: storyRoom)
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.writeSpace)).minY } action: { islandTop = $0 }
+        }
+        .padding(.horizontal, window.layoutClass == .compact ? 20 : window.pad)
+        // In the pane there is no bar: its first line sits level with the Back on the canvas.
+        .padding(.top, showsBar ? 16 : WriteWorkspace.paneTop)
+        .padding(.bottom, 48)
+        // Wider than a phone, the web's writing measure (680 and the page's pads), centred.
+        .frame(maxWidth: window.layoutClass == .compact ? .infinity : Tokens.measure + 2 * window.pad)
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Keeps the caret's line, 16 above and below it, in the band the page shows (`CaretFollow`).
+    private func followCaret(_ model: WriteModel) {
+        guard let caret = model.editor.caret,
+              let y = CaretFollow.offset(caret: caret, islandTop: islandTop, viewport: writeViewport) else { return }
+        withAnimation(.easeOut(duration: 0.18)) { writeScroll.scrollTo(y: y) }
+    }
+
+    private func statusShown(_ model: WriteModel) -> Bool {
+        model.trashed || model.saveStatus != nil || model.nextSaveError != nil
+    }
+
+    /// What the page header carried under its title: the save state, in plain words — or, for a card
+    /// moved to the trash meanwhile, that it is there, with 還原. An unsaved draft has nothing to say.
     @ViewBuilder
-    private func saveStatus(_ model: WriteModel) -> some View {
-        if let status = model.saveStatus {
-            Text(status)
-                .font(AppFonts.body(14))
-                .foregroundStyle(Tokens.textMuted)
-                .contentTransition(.opacity)
+    private func statusLine(_ model: WriteModel) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if model.trashed {
+                HStack(spacing: 12) {
+                    Text(L10n.Write.Trashed.status)
+                        .font(AppFonts.body(14))
+                        .foregroundStyle(Tokens.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    OrganicButton(L10n.Me.Actions.restore, variant: .tonal, size: .sm) { Task { await model.restore() } }
+                        .loading(model.restoring)
+                        .fixedSize()
+                }
+                .accessibilityElement(children: .contain)
+                if let error = model.restoreError {
+                    Text(error).font(AppFonts.body(12)).foregroundStyle(Tokens.terracotta)
+                }
+            } else if let status = model.saveStatus {
+                Text(status)
+                    .font(AppFonts.body(14))
+                    .foregroundStyle(Tokens.textMuted)
+                    .contentTransition(.opacity)
+            }
+            if let error = model.nextSaveError {
+                Text(error).font(AppFonts.body(13)).foregroundStyle(Tokens.terracotta)
+            }
+        }
+    }
+
+    /// The title: one line of intent, borderless, in the card page's own title type (by the story's
+    /// script); Return goes on to the story. From 50 characters it says how many it has; 下一步 with
+    /// none asks for one under it.
+    private func titleField(_ model: WriteModel, typo: StoryTypography) -> some View {
+        let font = typo.titleFont()
+        let lineBox = font.pointSize * typo.titleLeading
+        return VStack(alignment: .leading, spacing: 4) {
+            TextField(text: Binding(get: { model.values.title }, set: { text in
+                if model.typeTitle(text) {
+                    // Return: on to the story.
+                    titleFocused = false
+                    model.editor.focus()
+                }
+            }), prompt: Text(L10n.Write.titlePlaceholder).font(Font(font)).foregroundStyle(Tokens.placeholder), axis: .vertical) {
+                Text(L10n.Write.coreLabel)
+            }
+            .font(Font(font))
+            .tracking(typo.kern(.title, pointSize: font.pointSize))
+            .lineSpacing(max(0, lineBox - font.lineHeight))
+            .lineLimit(1...5)
+            .foregroundStyle(Tokens.text)
+            .tint(Tokens.terracotta)
+            .submitLabel(.next)
+            .focused($titleFocused)
+            .onChange(of: titleFocused) { _, focused in if focused { titleHadFocus = true } }
+            .accessibilityLabel(L10n.Write.coreLabel)
+            // What 下一步 asked for, said with the field (its own value stays the title typed).
+            .accessibilityHint(model.titleError ? L10n.Write.titleRequired : "")
+            if model.titleError {
+                Text(L10n.Write.titleRequired)
+                    .font(AppFonts.body(Tokens.hintSize))
+                    .foregroundStyle(Tokens.terracotta)
+                    .accessibilityAddTraits(.isStaticText)
+                    .onAppear { AccessibilityNotification.Announcement(L10n.Write.titleRequired).post() }
+            } else if model.showsTitleCount {
+                Text(verbatim: "\(model.values.title.count) / \(WriteModel.titleMax)")
+                    .font(AppFonts.body(Tokens.hintSize))
+                    .monospacedDigit()
+                    .foregroundStyle(model.values.title.count >= WriteModel.titleMax ? Tokens.text : Tokens.textMuted)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+    }
+
+    /// Step 2, in its own scroll (it starts at its top each time it opens; writing keeps its place).
+    private func publishStep(_ model: WriteModel) -> some View {
+        ScrollView {
+            PublishStep(model: model, inlineHeading: !showsBar, showsAnonymousHint: showsAnonymousHint,
+                        onBack: { model.stepBack() }, onPickCover: { pickingCover = true },
+                        onSubmit: { Task { await submit(model) } },
+                        onSecondary: { Task { await secondary(model) } })
+                .padding(.horizontal, window.layoutClass == .compact ? 20 : window.pad)
+                .padding(.top, showsBar ? 16 : WriteWorkspace.paneTop)
+                .padding(.bottom, 48)
+                .frame(maxWidth: window.layoutClass == .compact ? .infinity : Tokens.measure + 2 * window.pad)
+                .frame(maxWidth: .infinity)
+        }
+        .scrollPosition($publishScroll)
+        .onHeaderScroll($scrolledPublish)
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    // MARK: Moving between the steps, and leaving
+
+    /// 下一步: the keyboard goes; the title is asked for when there is none (its field takes the focus).
+    private func next(_ model: WriteModel) async {
+        let hadTitle = titleFocused
+        putKeyboardAway(model)
+        if await model.goNext() {
+            titleHadFocus = hadTitle
         }
     }
 
@@ -226,11 +484,21 @@ struct WriteScreen: View {
     /// island lets go of its focus (as a tap on the page, or an action under the fields, does).
     private func putKeyboardAway(_ model: WriteModel) {
         if model.editor.focused { model.editor.blur() }
+        titleFocused = false
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
-    /// Back (the arrow, the edge swipe): with writing to put away, the question first; otherwise at once.
+    /// Back (the arrow, the edge swipe): from the publish step to writing, no question; from writing,
+    /// the question first when there is writing to put away, otherwise at once.
     private func goBack(_ model: WriteModel) {
+        if model.stepBack() { return }
+        leaveAsking(model)
+    }
+
+    /// Out of the page from either step (the Leave over the map at the split): the question first
+    /// when there is writing to put away.
+    private func leaveAsking(_ model: WriteModel) {
+        guard !model.pending else { return }
         if model.holdsWriting {
             leaving = true
         } else {
@@ -258,11 +526,29 @@ struct WriteScreen: View {
     /// How long the first-card guide waits to learn whether this is a first card.
     static let guideWait: Duration = .seconds(3)
 
+    /// 發布 / 儲存修改 in the step's foot.
+    private func submit(_ model: WriteModel) async {
+        let key = model.isPublished ? await model.applyEdit() : await model.publish()
+        guard let key else { return }
+        await finish(card: key, change: model.change ?? .init(cardId: model.draftId, referenceCardId: model.referenceCardId))
+    }
+
+    /// 存成草稿，稍後再寫 (a draft) / 捨棄修改 (a live card's revision).
+    private func secondary(_ model: WriteModel) async {
+        if model.isPublished {
+            guard let key = await model.discardEdit() else { return }
+            await finish(card: key, change: model.change ?? .init(cardId: model.draftId))
+        } else {
+            model.leaving(true)
+            await leave(model, exits: false)
+            model.leaving(false)
+        }
+    }
+
     /// The card went out (published, revised, or its revision dropped): its page takes the writer's
     /// place as the web goes to it, unless the card's own page is underneath.
-    private func finish(card key: String, change: WriteLauncher.Change, afterDialog: Bool = false) async {
+    private func finish(card key: String, change: WriteLauncher.Change) async {
         writer.leave(change)
-        if afterDialog { try? await Task.sleep(for: Self.dialogSettle) }
         if let onDone {
             onDone()
         } else if request.showsCard {
@@ -275,172 +561,59 @@ struct WriteScreen: View {
     /// A dialog's fade (0.16s) and the cover it rides on.
     private static let dialogSettle: Duration = .milliseconds(240)
 
-    private func label(_ text: String) -> some View {
-        Text(text.uppercased())
-            .font(AppFonts.body(Tokens.labelSize, weight: .semibold))
-            .tracking(Tokens.labelSize * 0.06)
-            .foregroundStyle(Tokens.textMuted)
-    }
+    // MARK: Not here, or in the trash
 
-    /// Tags (CardEditor's TagField): one field holding the chosen tags, the input
-    /// and its one action (AI suggestions, or Add once something is typed), and
-    /// under it a muted line on how — the error in its place when there is one.
-    private func tags(_ model: WriteModel) -> some View {
-        @Bindable var model = model
-        return VStack(alignment: .leading, spacing: 10) {
-            label(L10n.Write.tagsLabel)
-            VStack(alignment: .leading, spacing: 6) {
-                TagField(tags: model.values.tags, draft: $model.tagDraft, placeholder: L10n.Write.tagsPlaceholder,
-                         suggesting: model.suggestingTags, onRemove: model.removeTag, onAdd: model.addTag,
-                         onSuggest: { Task { await model.suggestTags() } })
-                    .onChange(of: model.tagDraft) { _, text in model.typedTag(text) }
-                Text(model.tagError ?? L10n.Write.tagsHelp)
-                    .font(AppFonts.body(Tokens.hintSize))
-                    .foregroundStyle(model.tagError == nil ? Tokens.textMuted : Tokens.terracotta)
-            }
-        }
-    }
-
-    /// The cover: the picked or drawn picture in its frame (✕ removes it); an
-    /// illustration's preview, blurred, while it renders; the loader while a
-    /// photo goes up; otherwise the split surface — upload on the left,
-    /// illustrate from the story on the right, a pen rule between.
-    private func cover(_ model: WriteModel) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            label(L10n.Write.mediaLabel)
-            if let url = model.values.imageURL {
-                HandDrawnImage(.url(url), removeLabel: L10n.Write.mediaRemove, onRemove: {
-                    putKeyboardAway(model)
-                    model.removeCover()
-                })
-            } else if let preview = model.partialPreview {
-                HandDrawnImage(.image(preview), blur: 14, wash: Tokens.cream.opacity(0.45)) {
-                    VStack(spacing: 6) {
-                        SketchLoader(size: 64)
-                        Text(L10n.Write.mediaGenerating).font(AppFonts.body(14, weight: .semibold)).foregroundStyle(Tokens.text)
-                    }
-                }
-            } else if model.mediaBusy {
-                VStack(spacing: 6) {
-                    SketchLoader(size: 64)
-                    Text(model.generating ? L10n.Write.mediaGenerating : L10n.Write.mediaUploading)
-                        .font(AppFonts.body(14, weight: .semibold)).foregroundStyle(Tokens.textMuted)
-                }
-                .padding(.vertical, 22)
-                .frame(maxWidth: .infinity)
-                .modifier(MediaFrame(busy: true))
-            } else {
-                HStack(spacing: 0) {
-                    Button {
-                        putKeyboardAway(model)
-                        pickingCover = true
-                    } label: {
-                        MediaHalf(icon: .image, title: L10n.Write.mediaPlaceholder, hint: L10n.Write.mediaHint)
-                    }
-                    .buttonStyle(.plain)
-                    OrganicVerticalRule(lineWidth: Tokens.ink)
-                    Button {
-                        putKeyboardAway(model)
-                        Task { await model.generateCover() }
-                    } label: {
-                        MediaHalf(icon: .sparkle, title: L10n.Write.mediaGenerate,
-                                  hint: model.canGenerate ? L10n.Write.mediaGenerateHint : L10n.Write.mediaGenerateNeedStory)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!model.canGenerate)
-                    .opacity(model.canGenerate ? 1 : 0.55)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                .modifier(MediaFrame())
-            }
-            if let error = model.mediaError {
-                Text(error).font(AppFonts.body(12)).foregroundStyle(Tokens.terracotta).padding(.top, -4)
-            }
-        }
-    }
-
-    /// Everything autosaves; these are only about intent. A draft: publish it,
-    /// or step away. A live card: put the revision in front of readers, or drop it.
-    /// On a phone one centred column of two pills of one size: the verb across the
-    /// width, the tonal way out (Save draft and leave / Discard changes) as wide on its
-    /// own row under it, the error centred under both; a wider layout keeps them in a row.
-    private func actions(_ model: WriteModel) -> some View {
-        let compact = window.layoutClass == .compact
-        return VStack(alignment: compact ? .center : .leading, spacing: compact ? 4 : 8) {
-            Group {
-                if compact {
-                    VStack(spacing: 10) {
-                        primaryAction(model, fillsWidth: true)
-                        secondaryAction(model, fillsWidth: true)
-                    }
-                } else {
-                    FlowRow(spacing: 12) {
-                        primaryAction(model)
-                        secondaryAction(model)
-                    }
-                }
-            }
-            // Discarding: that button is at work, and the row waits on it.
-            .allowsHitTesting(!discarding)
-            if let actionError {
-                Text(actionError)
-                    .font(AppFonts.body(12))
-                    .foregroundStyle(Tokens.terracotta)
-                    .multilineTextAlignment(compact ? .center : .leading)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: compact ? .center : .leading)
-        .padding(.top, 6)
-    }
-
-    private func primaryAction(_ model: WriteModel, fillsWidth: Bool = false) -> some View {
-        OrganicButton(model.isPublished ? L10n.Write.saveChanges : L10n.Write.publish) {
-            putKeyboardAway(model)
-            actionError = nil
-            publishing = true
-        }
-        .fillingWidth(fillsWidth)
-        .disabled(discarding)
-    }
-
-    @ViewBuilder
-    private func secondaryAction(_ model: WriteModel, fillsWidth: Bool = false) -> some View {
-        if !model.isPublished {
-            OrganicButton(L10n.Write.saveDraftAndLeave, variant: .tonal) {
-                putKeyboardAway(model)
-                Task { await leave(model, exits: false) }
-            }
-            .fillingWidth(fillsWidth)
-        } else if model.hasPendingEdit {
-            OrganicButton(L10n.Write.discardChanges, variant: .tonal) {
-                putKeyboardAway(model)
-                Task { await discard(model) }
-            }
-            .fillingWidth(fillsWidth)
-            .loading(discarding)
-        }
-    }
-
-    private func discard(_ model: WriteModel) async {
-        guard !discarding else { return }
-        discarding = true
-        actionError = nil
-        defer { discarding = false }
-        do {
-            let key = try await model.discardEdit()
-            await finish(card: key, change: model.change ?? .init(cardId: model.draftId))
-        } catch {
-            actionError = L10n.Native.saveError
-        }
-    }
-
-    /// The card isn't there (deleted) or isn't yours: the card page's own not-found — its heading,
-    /// then Back as the tonal pill (every button has a fill; a bare terracotta word didn't read as one).
+    /// The card isn't there (deleted, or past its 30 days in the trash) or isn't yours: the card
+    /// page's own not-found — its heading, then Back as the tonal pill.
     private var missing: some View {
         OrganicEmptyState(title: L10n.Card.NotFound.title, titleSize: 24, actionTitle: L10n.Card.NotFound.back,
                           actionStyle: .link) { if let onDone { onDone() } else { dismiss() } }
             .padding(.top, 56)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// One of your cards in the trash (trash.spec §5.5): what it is, and 還原並繼續寫 — restored, it is
+    /// read again and opens in the editor.
+    private func trashedNotice(_ card: DraftService.OpenedCard) -> some View {
+        VStack(spacing: 0) {
+            EmptyStateMark(icon: .trash, seed: 61).padding(.bottom, 18)
+            CSSText(L10n.Card.Trashed.title, font: AppFonts.scaledUIFont(.heading, size: 20, weight: .regular), lineHeight: 1.3,
+                    alignment: .center)
+                .accessibilityAddTraits(.isHeader)
+                .padding(.bottom, 8)
+            CSSText(L10n.Write.Trashed.line, font: AppFonts.scaledUIFont(.body, size: 14.5), lineHeight: 1.6,
+                    color: UIColor(Tokens.textMuted), alignment: .center)
+                .padding(.bottom, 20)
+            OrganicButton(L10n.Write.Trashed.restore, variant: .solid, size: .sm) { Task { await restoreOpened(card) } }
+                .loading(restoringOpened)
+            if restoreOpenedFailed {
+                Text(L10n.Me.Actions.undoFailed).font(AppFonts.body(12)).foregroundStyle(Tokens.terracotta)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 10)
+            }
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: 340)
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.bottom, 80)
+    }
+
+    private func restoreOpened(_ card: DraftService.OpenedCard) async {
+        guard !restoringOpened else { return }
+        restoringOpened = true
+        restoreOpenedFailed = false
+        defer { restoringOpened = false }
+        do {
+            let restored = try await session.writing.restoreCard(card.id)
+            if restored.droppedResonance { session.restoredAloneNotice = true }
+            // Restored: the lists that showed it in the trash read again, and the card opens in the editor.
+            writer.noteChange(.init(cardId: card.id, referenceCardId: restored.card.referenceCardId))
+            inTrash = nil
+            await open()
+        } catch {
+            restoreOpenedFailed = true
+        }
     }
 
     private static func load(_ item: PhotosPickerItem) async -> UIImage? {
@@ -449,156 +622,31 @@ struct WriteScreen: View {
     }
 }
 
-/// The publish panel (PublishPanel.tsx): the insight echo, who can see it,
-/// publishing anonymously with the card head it will get, then Publish. For a
-/// published card's revision ('update' mode) the echo gives way to a plain
-/// line about what the button does, and it saves the changes instead.
-private struct PublishPanel: View {
-    let model: WriteModel
-    @Binding var pending: Bool
-    let showsAnonymousHint: Bool
-    let onPublished: (String) -> Void
-    let onCancel: () -> Void
-    @Environment(SessionStore.self) private var session
-    @State private var visibility = "public"
-    @State private var anonymous = false
-    @State private var insight: String?
-    @State private var insightLoading = false
-    @State private var error: String?
-
-    var body: some View {
-        let updating = model.isPublished
-        VStack(alignment: .leading, spacing: 18) {
-            ModalTitle(updating ? L10n.Write.PublishPanel.updateTitle : L10n.Write.PublishPanel.title)
-            if updating {
-                CSSText(L10n.Write.PublishPanel.updateHint, font: AppFonts.scaledUIFont(.body, size: 14), lineHeight: 1.7,
-                        color: UIColor(Tokens.textMuted))
-            }
-            // The echo eases into the room its words take, rather than pushing the controls under a finger.
-            Group {
-                if insightLoading {
-                    HStack(spacing: 10) {
-                        SketchLoader(size: 28)
-                        Text(L10n.Write.PublishPanel.insightLoading).font(AppFonts.body(14)).foregroundStyle(Tokens.textMuted)
-                    }
-                    .transition(.opacity)
-                } else if let insight, !insight.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    HStack(alignment: .top, spacing: 10) {
-                        OrganicIcon(.sparkle, size: 16, color: Tokens.terracotta).padding(.top, 2)
-                        Text(L10n.Write.PublishPanel.insight(coreInsight: insight)).font(AppFonts.body(14)).foregroundStyle(Tokens.text)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .transition(.opacity)
-                }
-            }
-            .animation(.easeOut(duration: 0.25), value: insightLoading)
-            VStack(alignment: .leading, spacing: 10) {
-                Text(L10n.Write.Visibility.label.uppercased())
-                    .font(AppFonts.body(Tokens.labelSize, weight: .semibold))
-                    .tracking(Tokens.labelSize * 0.06)
-                    .foregroundStyle(Tokens.textMuted)
-                // A segmented choice with no pen line (its options are buttons): a quiet paper-dark track
-                // shows the control's extent, the chosen side wears the tonal peach with the deep label.
-                SegmentedActionBar([
-                    visibilityOption("public", L10n.Write.Visibility.`public`, icon: .globe),
-                    visibilityOption("private", L10n.Write.Visibility.`private`, icon: .lock),
-                ], fill: Tokens.creamDark)
-            }
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 12) {
-                    Text(L10n.Write.PublishPanel.anonymousToggle).font(AppFonts.body(14)).foregroundStyle(Tokens.text)
-                    Spacer(minLength: 0)
-                    OrganicToggle(isOn: $anonymous, label: L10n.Write.PublishPanel.anonymousToggle, seed: 57)
-                }
-                // Seeing is understanding: the exact card head the world will get.
-                HStack(spacing: 10) {
-                    if anonymous {
-                        HandDrawnAvatar(initials: "·", color: Tokens.creamDark, size: 34, seed: 97)
-                    } else if let me = session.me {
-                        HandDrawnAvatar(initials: me.initials, imageURL: me.avatarUrl.flatMap(URL.init(string:)),
-                                        color: OKLCHColor.parse(me.accentColor) ?? Tokens.terracottaLight, size: 34, seed: 7)
-                    }
-                    Text(anonymous ? L10n.Write.PublishPanel.anonymousName : session.me?.handle ?? "")
-                        .font(AppFonts.body(14, weight: .semibold))
-                        .foregroundStyle(anonymous ? Tokens.textMuted : Tokens.text)
-                }
-                // Under the switch, never above it (the switch stays under the finger): why an anonymous
-                // card has no other audience, in the place the first visits' hint holds — both are laid
-                // out, the one not meant shown clear, so turning it on moves nothing.
-                ZStack(alignment: .topLeading) {
-                    if showsAnonymousHint {
-                        hint(L10n.Write.PublishPanel.anonymousHint).opacity(anonymous ? 0 : 1)
-                    }
-                    if anonymous || showsAnonymousHint {
-                        hint(L10n.Write.PublishPanel.anonymousVisibility).opacity(anonymous ? 1 : 0)
-                    }
-                }
-                .animation(.easeOut(duration: 0.2), value: anonymous)
-            }
-            WavyDivider(seed: 47)
-            // The foot every dialog shares: right-aligned, 再想想 the tonal way out, the verb solid and rightmost;
-            // why the last try failed right above it.
-            VStack(alignment: .leading, spacing: 12) {
-                if let error { ModalError(error) }
-                ModalActions(busy: pending) {
-                    OrganicButton(L10n.Write.PublishPanel.cancel, variant: .tonal, size: .sm, action: onCancel)
-                } verb: {
-                    OrganicButton(updating ? L10n.Write.PublishPanel.update : L10n.Write.PublishPanel.publish,
-                                  variant: .solid, size: .sm) {
-                        Task { await publish() }
-                    }
-                    .workingLabel(updating ? L10n.Write.saveShort : nil)
-                }
-            }
-        }
-        // Anonymous is public or yours alone: a card for connections turns public as it goes anonymous.
-        .onChange(of: anonymous) { _, on in visibility = WriteModel.visibility(visibility, anonymous: on) }
-        .task {
-            // As it is: a connections card shows neither row picked, and keeps its audience unless one is
-            // (or it is anonymous, which no connections card may be).
-            visibility = WriteModel.visibility(model.values.visibility, anonymous: model.values.anonymous)
-            anonymous = model.values.anonymous
-            // The mirror moment is for a first publication only.
-            guard !model.isPublished else { return }
-            insightLoading = true
-            insight = try? await session.writing.insight(title: model.values.title, story: model.values.story)
-            insightLoading = false
-        }
+/// Keeping the caret above the keyboard (writer.spec §1.5): the island tells where its caret's line
+/// is; the page scrolls only when that line, 16 above and below it, leaves the band it shows between
+/// the bar and the keyboard's format bar — and then just enough.
+enum CaretFollow {
+    /// What the writing page's scroll shows: its content offset (UIKit's, the top inset below zero),
+    /// the top inset, and the height shown between the insets.
+    struct Viewport: Equatable {
+        var offset: CGFloat
+        var insetTop: CGFloat
+        var height: CGFloat
     }
 
-    private func hint(_ text: String) -> some View {
-        Text(text).font(AppFonts.body(Tokens.hintSize)).foregroundStyle(Tokens.textMuted)
-            .fixedSize(horizontal: false, vertical: true)
-    }
+    static let margin: CGFloat = 16
 
-    private func visibilityOption(_ value: String, _ label: String, icon: IconName) -> SegmentSpec {
-        let chosen = visibility == value
-        // The other side's ink stays deep enough to read on the track.
-        return SegmentSpec(id: value, icon: icon, label: label,
-                           fill: chosen ? Tokens.buttonTonal : nil,
-                           ink: chosen ? Tokens.buttonOnTonal : Tokens.segmentIdleInk,
-                           pressInk: .black.opacity(0.05), selected: chosen) {
-            visibility = value
-        }
-    }
-
-    private func publish() async {
-        // The server refuses a card without a title; say so in the writer's words.
-        guard !model.values.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            error = L10n.Write.titleRequired
-            return
-        }
-        pending = true
-        error = nil
-        let updating = model.isPublished
-        do {
-            onPublished(updating
-                        ? try await model.applyEdit(visibility: visibility, anonymous: anonymous)
-                        : try await model.publish(visibility: visibility, anonymous: anonymous))
-        } catch {
-            self.error = PublishFailure.message(error, updating: updating)
-        }
-        pending = false
+    /// The page's new scroll position (a point of its content at the top of what it shows), or nil when
+    /// the caret's line is in view already.
+    static func offset(caret: StoryEditorBridge.Caret, islandTop: CGFloat, viewport: Viewport) -> CGFloat? {
+        guard viewport.height > 0 else { return nil }
+        let top = islandTop + caret.top - margin
+        let bottom = islandTop + caret.bottom + margin
+        let shownTop = viewport.offset + viewport.insetTop
+        let shownBottom = shownTop + viewport.height
+        if bottom > shownBottom { return max(0, bottom - viewport.height) }
+        if top < shownTop { return max(0, top) }
+        return nil
     }
 }
 
@@ -606,8 +654,9 @@ private struct PublishPanel: View {
 /// never the server's, which are English (nor the system's): the card gone (deleted elsewhere) is
 /// that it can't be found; the day's publishing spent (429 `rate_limited`, which trying again today
 /// would only hear again) says so and when it comes back; anything else — offline, the server's
-/// trouble, a refusal the panel can't name — is a retry: the publish that didn't happen, or the
-/// changes that weren't saved. (A card without a title is said before anything is sent.)
+/// trouble, a refusal the step can't name — is a retry: the publish that didn't happen, or the
+/// changes that weren't saved. (A card without a title is said before anything is sent; one in the
+/// trash is the writer's trashed notice.)
 enum PublishFailure {
     static func message(_ error: Error, updating: Bool = false) -> String {
         let failure = error as? APIFailure
@@ -617,4 +666,3 @@ enum PublishFailure {
         return updating ? L10n.Native.saveError : L10n.Write.PublishPanel.failed
     }
 }
-

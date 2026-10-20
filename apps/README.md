@@ -131,6 +131,13 @@ every kind of content. `-writeTitle "…" -writeStory "…"` start a new card wi
 that text (the simulator can't type into the fields from outside), and
 `-writeCover <url>` with that picture as its cover; `-threadDraft "…"` fills a
 conversation's composer (`-route /messages/<handle>` opens one).
+`-openWriter YES` opens the writer on a new card at launch and `-writeCard <id>`
+on one of yours (a draft, a published card, one in the trash); `-writeStep publish`
+then opens its publish step, `-writeFocus YES` puts the caret in the story (the
+keyboard and its format bar up), and `-writeAppend "…" -writeAppendAfter <s>`
+types onto the story a while later (a save to watch, e.g. refused once the card
+is moved to the trash elsewhere). `-cardBoxShelf <key>` opens the card box on
+that shelf (`trash` for the trash).
 `-route /me/thought-map` opens the thought map (the seed gives alice one:
 a region, three cards, a labelled arrow).
 `-pushToken <any>` registers a stand-in push token under the signed-in
@@ -166,7 +173,13 @@ Reading: a card's page is one `GET /api/v1/cards/{key}?include=resonances,relate
 (story embeds come from `embeds`, matched by slug or id with `CardKey.of(href:)`; an unmatched link
 stays a plain link), a person's page one `GET /api/v1/users/{handle}?include=cards,links&limit=12`, and
 a conversation's shared cards one `GET /api/v1/cards?keys=` (`CardSummaries`). A card's ⋯ visibility
-change and delete go through `PATCH`/`DELETE /api/v1/cards/{id}`. A tapped push opens its thread by
+change goes through `PATCH /api/v1/cards/{id}`; its 刪除 moves the card to the trash
+(`POST …/trash`, `TrashDecision`: no question but the plain one for a public, named resonance whose
+original is named), with the shell's 「已移到垃圾桶 · 復原」 toast in the card box and the trash banner
+(`TrashedCardBanner`) on the card's own page, which stays. The card box's last shelf, 垃圾桶, restores
+(`…/restore`), deletes for good (`DELETE …?onlyIfTrashed=true`, asked in red) and empties
+(`DELETE /me/trash`, paged by `WritingAPI.emptyTrash`); a trashed card is left off the thought map
+(its node stays stored), and the writer opens one on a 還原並繼續寫 notice. A tapped push opens its thread by
 `data.fromUserId`. The latest feed and a person's cards page by `nextPageToken` (`FeedPage.next`;
 a page without one falls back to `nextCursor`). The card box asks for my own shelves (published,
 private, drafts) in one `GET /api/v1/me/cardbox?shelves=`, the others' when shown; whichever answer
@@ -197,6 +210,24 @@ new UTC day, `SessionStore.awayRefreshes` refreshes saved screens. The editor
 island is served from `resonance-editor://editor/editor.html` by
 `EditorPageHandler` with a hash-based CSP: if `scripts/native/build-editor.mjs`
 starts loading anything new, update `EditorPage`.
+
+Writing (writer.spec, `WriteScreen`): two steps on one page. Writing is the bare
+title (the story's title type, by the script the island posts) over the island in
+its canvas layout (`?layout=canvas&locale=`: an empty story in the interface
+language's type), whose formatting is `StoryFormatBar`, docked on the keyboard
+while the story has the focus; the page keeps the island's caret line (`caret`)
+above it (`CaretFollow`), and the island's own scroll view is pinned at its top
+(WebKit would otherwise slide the story out of its frame to show the caret).
+下一步 (the bar's trailing pill; floating at the pane's top at the split) asks for
+a title, waits a moment for a new draft's first save, and opens `PublishStep` in
+place: the mirror (asked once per title and story, never for a revision), the
+card as a list shows it with its cover editor in the picture, tags, who can see
+it, the byline, the resonance line, then 存成草稿，稍後再寫 | 發布 (捨棄修改 |
+儲存修改 for a live card). Its choices are the draft's own values and autosave;
+back from it is back to writing (the bar's 繼續寫, the edge swipe), the map's
+Leave at the split leaves from either step. A save the rules refuse, or a
+publish answered 409, is read again: a card moved to the trash meanwhile says so
+where the save line was, with 還原, keeping what is typed.
 
 The app hosts its unit tests; run them with `xcodebuild test … -destination
 'id=<udid>'`. Under XCTest the app points at a local stack that isn't there

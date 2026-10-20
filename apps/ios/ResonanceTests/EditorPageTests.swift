@@ -30,6 +30,21 @@ import WebKit
         }
     }
 
+    /// The writer's bare page: the canvas layout and the interface language ride the query; the old
+    /// field's page has neither (an installed host's island is set as it always was).
+    @Test func theCanvasPageSaysItsLayoutAndLanguage() throws {
+        let canvas = try #require(URLComponents(url: EditorPage.url(placeholder: "寫", layout: .canvas, locale: "en"),
+                                                resolvingAgainstBaseURL: false))
+        let query = Dictionary(uniqueKeysWithValues: (canvas.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+        #expect(query["layout"] == "canvas")
+        #expect(query["locale"] == "en")
+        #expect(query["embed"] == "1")
+        #expect(query["placeholder"] == "寫")
+        #expect(EditorPage.isPage(EditorPage.url(placeholder: "寫", layout: .canvas, locale: "en")))
+        let field = try #require(URLComponents(url: page, resolvingAgainstBaseURL: false))
+        #expect(!(field.queryItems ?? []).contains { $0.name == "layout" || $0.name == "locale" })
+    }
+
     @Test func onlyThePagesOwnScriptsMayRun() throws {
         let html = try String(contentsOf: try #require(Bundle.main.url(forResource: "editor", withExtension: "html")), encoding: .utf8)
         let scripts = EditorPage.inlineScripts(in: html)

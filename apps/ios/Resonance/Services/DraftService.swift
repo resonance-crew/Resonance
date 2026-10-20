@@ -1,5 +1,6 @@
 import FirebaseFirestore
 import Foundation
+import ResonanceKit
 
 /// A draft's editable fields — CardEditor's DraftValues.
 struct DraftValues: Equatable {
@@ -37,6 +38,12 @@ protocol DraftStore {
     func update(_ id: String, _ v: DraftValues) -> IssuedWrite
     func saveEdit(_ id: String, _ v: DraftValues) -> IssuedWrite
     func discardEdit(_ id: String) async throws
+    /// Whether the card is in the trash now (read again when a save was refused).
+    func isTrashed(_ id: String) async throws -> Bool
+}
+
+extension DraftStore {
+    func isTrashed(_ id: String) async throws -> Bool { false }
 }
 
 /// Drafts, written straight to Firestore like the web editor's client
@@ -104,22 +111,45 @@ struct DraftService: DraftStore {
         let slug: String?
         let referenceCardId: String?
         let hasPendingEdit: Bool
+        /// When it went to the trash, if it is there: the writer says so and writes nothing into it
+        /// until it is restored (trash.spec §5.5).
+        var trashedAt: Date? = nil
+        /// A live card's audience as readers have it now (the copy being edited may be a pending
+        /// edit's): whether saving makes a resonance reach its original.
+        var liveVisibility: String? = nil
+        var liveAnonymous: Bool? = nil
         /// Where it lives once published: the slug, or the id.
         var routeKey: String { slug ?? id }
     }
 
-    /// Your card by id, or nil when it is missing or someone else's (rules deny → nil).
-    /// The pending edit is asked for beside the card, not after it (a draft has
-    /// none: that read finds nothing, and is left unused).
+    /// Your card by id, or nil when it is missing or someone else's (rules deny → nil) — or in the
+    /// trash past its 30 days (gone to its owner too). The pending edit is asked for beside the card,
+    /// not after it (a draft has none: that read finds nothing, and is left unused).
     func open(_ id: String) async throws -> OpenedCard? {
         let ref = db.collection("cards").document(id)
         let edit = editRef(id)
         async let pending = try? edit.getDocument()
         guard let card = try? await ref.getDocument(), let data = card.data(), data["authorId"] as? String == uid else { return nil }
+        let buffered = data["publishedAt"] is Timestamp ? await pending?.data() : nil
+        return Self.opened(id: id, data: data, buffered: buffered)
+    }
+
+    /// A card's document (and its pending edit's) as the writer opens it; nil for one in the trash past its 30 days.
+    static func opened(id: String, data: [String: Any], buffered: [String: Any]?, now: Date = .now) -> OpenedCard? {
         let isPublished = data["publishedAt"] is Timestamp
-        let buffered = isPublished ? await pending?.data() : nil
-        return OpenedCard(id: id, values: Self.values(buffered ?? data), isPublished: isPublished, slug: data["slug"] as? String,
-                          referenceCardId: data["referenceCardId"] as? String, hasPendingEdit: buffered != nil)
+        let trashedAt = (data["trashedAt"] as? Timestamp)?.dateValue()
+        if let trashedAt, CardTrash.purgeAt(trashedAt: trashedAt) <= now { return nil }
+        let pending = isPublished ? buffered : nil
+        return OpenedCard(id: id, values: values(pending ?? data), isPublished: isPublished, slug: data["slug"] as? String,
+                          referenceCardId: data["referenceCardId"] as? String, hasPendingEdit: pending != nil,
+                          trashedAt: trashedAt, liveVisibility: data["visibility"] as? String ?? "public",
+                          liveAnonymous: data["anonymous"] as? Bool ?? false)
+    }
+
+    /// Whether your card is in the trash now (`trashedAt`, written by the server alone).
+    func isTrashed(_ id: String) async throws -> Bool {
+        let snap = try await db.collection("cards").document(id).getDocument(source: .server)
+        return snap.get("trashedAt") is Timestamp
     }
 
     private static func values(_ d: [String: Any]) -> DraftValues {

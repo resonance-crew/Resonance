@@ -20,17 +20,27 @@ enum EditorPage {
     /// The fonts the page's @font-face rules name (scripts/native/build-editor.mjs), in the bundle's fonts/.
     static let fonts: Set<String> = ["PlayfairDisplay.ttf", "DMSans.ttf", "NotoSansTC.ttf", "NotoSerifTC.ttf"]
 
-    /// The page, as the writing screen embeds it.
-    static func url(placeholder: String) -> URL {
+    /// How the page lays the story out: in the old framed story field (`field`), or as the writer's
+    /// bare page (`canvas`: no frame or padding of its own — the writing screen sizes and scrolls it).
+    enum Layout: Equatable {
+        case field, canvas
+    }
+
+    /// The page, as the writing screen embeds it. `locale` (the interface language) is the type an
+    /// empty story starts in (`localeScript`); the island reads the story's own script from there.
+    static func url(placeholder: String, layout: Layout = .field, locale: String? = nil) -> URL {
         var components = URLComponents()
         components.scheme = scheme
         components.host = host
         components.path = path
-        components.queryItems = [
+        var query = [
             URLQueryItem(name: "embed", value: "1"),
             URLQueryItem(name: "fonts", value: "fonts/"),
             URLQueryItem(name: "placeholder", value: placeholder),
         ]
+        if layout == .canvas { query.append(URLQueryItem(name: "layout", value: "canvas")) }
+        if let locale { query.append(URLQueryItem(name: "locale", value: locale)) }
+        components.queryItems = query
         return components.url!
     }
 

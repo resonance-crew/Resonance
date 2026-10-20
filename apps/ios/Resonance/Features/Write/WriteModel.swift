@@ -1,16 +1,70 @@
+import DesignSystem
+import FirebaseFirestore
 import Foundation
 import Observation
+import ResonanceAPI
 import ResonanceKit
 import UIKit
 
+/// The writer's two steps (writer.spec): writing — the bare title and the story — then the publish
+/// step in the same place, 發布這張卡片 (更新這張卡片 for a live card).
+enum WriterStep: Equatable {
+    case write, publish
+}
+
+/// What the writer asks of the server beyond its drafts, so a test can answer in its place:
+/// publishing, putting a live card's revision in front of readers, the publish step's mirror, and
+/// taking the card out of the trash.
+struct WriterCalls {
+    /// Publishes the draft (POST …/publish): where the card lives now (its slug, or its id).
+    var publish: (String) async throws -> String
+    /// Applies the pending edit (POST …/edits/apply): where the card lives (its slug, when the answer has it).
+    var applyEdit: (String) async throws -> String?
+    /// The mirror moment for a title and story (/api/cards/insight), or nil.
+    var insight: (String, String) async throws -> String?
+    /// Out of the trash (POST …/restore): whether it came back on its own, no longer answering its original.
+    var restore: (String) async throws -> Bool
+
+    init(publish: @escaping (String) async throws -> String, applyEdit: @escaping (String) async throws -> String?,
+         insight: @escaping (String, String) async throws -> String?, restore: @escaping (String) async throws -> Bool) {
+        self.publish = publish
+        self.applyEdit = applyEdit
+        self.insight = insight
+        self.restore = restore
+    }
+
+    init(_ writing: WritingAPI) {
+        self.init(publish: { id in
+            let result = try await writing.publish(id)
+            return result.slug ?? result.id
+        }, applyEdit: { id in
+            try await writing.applyEdit(id).slug
+        }, insight: { title, story in
+            try await writing.insight(title: title, story: story)
+        }, restore: { id in
+            try await writing.restoreCard(id).droppedResonance
+        })
+    }
+}
+
 /// The writing screen's state and its work (CardEditor): the draft's values,
-/// autosave a moment after typing stops, AI tags, the cover photo, publishing.
-/// Opened on a published card it revises instead: autosave buffers the
-/// working copy privately and "Save changes" puts it in front of readers.
+/// autosave a moment after typing stops, the two steps and what moves between
+/// them, AI tags, the cover photo, publishing. Opened on a published card it
+/// revises instead: autosave buffers the working copy privately and the
+/// publish step's 儲存修改 puts it in front of readers. Everything chosen in
+/// the publish step (tags, the cover, who can see it, the byline) is the
+/// draft's own value and autosaves like the words — going back to writing
+/// keeps it.
 @MainActor @Observable
 final class WriteModel {
     var values = DraftValues() {
-        didSet { if values != oldValue { scheduleSave() } }
+        didSet {
+            if values != oldValue { scheduleSave() }
+            if values.title != oldValue.title {
+                editor.setTitle(values.title)
+                titleError = false
+            }
+        }
     }
     private(set) var draftId: String?
     private(set) var savedAt: Date?
@@ -23,6 +77,9 @@ final class WriteModel {
     private(set) var hasPendingEdit: Bool
     /// The published card's slug (its page lives at slug ?? id).
     let slug: String?
+    /// A live resonance that reaches its original already (published, public and named, as readers
+    /// have it now): saving its revision tells no one anything new.
+    let liveReaches: Bool
     var tagDraft = ""
     private(set) var suggestingTags = false
     var tagError: String?
@@ -35,6 +92,8 @@ final class WriteModel {
 
     /// Uploading or illustrating — the image surface waits either way.
     var mediaBusy: Bool { uploadingCover || generating }
+    /// A picture is on its way, the cover's or the story's: the step's verb waits for it.
+    var publishWaitsForMedia: Bool { mediaBusy || uploadingInline }
     /// The web's canGenerate: there is a story to draw from.
     var canGenerate: Bool { !values.story.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !mediaBusy }
 
@@ -42,8 +101,49 @@ final class WriteModel {
     let referenceCardId: String?
     let editor: StoryEditorBridge
 
+    // MARK: The steps
+
+    /// Which step is on screen.
+    var step: WriterStep = .write {
+        didSet {
+            guard step != oldValue else { return }
+            if step == .publish { askInsight() } else { dropInsight() }
+        }
+    }
+    /// 下一步 found no title: the title asks for one (先寫下一句話標題) until it is typed in.
+    var titleError = false
+    /// 下一步 is waiting on a new draft's first save (the pill shows its loader after a moment).
+    private(set) var nextBusy = false
+    private(set) var nextLoading = false
+    /// 下一步's save didn't go through (沒存成，再試一次, under the save line).
+    var nextSaveError: String?
+    /// Publishing, saving changes, discarding or leaving is on its way: the step waits.
+    private(set) var pending = false
+    /// What `pending` is for: its button shows the loader, the other rests.
+    enum BusyVerb: Equatable { case publish, leave }
+    private(set) var busyVerb: BusyVerb = .publish
+    /// Why the last publish, save or discard didn't go through (above the step's foot).
+    var publishError: String?
+
+    // MARK: The trash
+
+    /// The card went to the trash while open here (on another device, the web): nothing is written
+    /// into it until it is restored; what is typed stays.
+    private(set) var trashed = false
+    private(set) var restoring = false
+    var restoreError: String?
+    /// A restored resonance came back on its own (no longer answering its original): said once.
+    var restoredAlone = false
+
+    // MARK: How the story is set
+
+    /// The title's type: the story's script as the island sets it (an empty draft in the interface
+    /// language's, changing only once the writing clearly leans the other way).
+    private(set) var script: StoryScript
+
     @ObservationIgnored private let drafts: (any DraftStore)?
     @ObservationIgnored private let writing: WritingAPI
+    @ObservationIgnored let calls: WriterCalls
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     /// The server's answers to the writes handed over, awaited one after another (Firestore sends
     /// the writes themselves in the order they were made).
@@ -59,22 +159,36 @@ final class WriteModel {
     /// CardEditor's AUTOSAVE_DELAY_MS (leaving or going to the background saves at once).
     static let autosaveDelay: Duration = .milliseconds(1500)
     static let titleMax = 60
+    /// From this many characters on, the title says how many it has (CharCount n / 60).
+    static let titleCountFrom = 50
+    /// How long 下一步 waits on a new draft's first save before it shows its loader.
+    static let nextLoaderDelay: Duration = .milliseconds(300)
+    /// How long 下一步 waits for the server to take a new draft (the draft is on the device either
+    /// way: past this the step opens, and publishing waits for the network as it always has).
+    static let nextWait: Duration = .seconds(3)
 
-    init(drafts: (any DraftStore)?, writing: WritingAPI, referenceCardId: String? = nil, opened: DraftService.OpenedCard? = nil,
+    init(drafts: (any DraftStore)?, writing: WritingAPI, calls: WriterCalls? = nil, referenceCardId: String? = nil,
+         opened: DraftService.OpenedCard? = nil, locale: String = Strings.shared.language.rawValue,
          editor bridge: StoryEditorBridge? = nil) {
         self.drafts = drafts
         self.writing = writing
+        self.calls = calls ?? WriterCalls(writing)
         self.referenceCardId = opened?.referenceCardId ?? referenceCardId
         isPublished = opened?.isPublished ?? false
         hasPendingEdit = opened?.hasPendingEdit ?? false
         slug = opened?.slug
+        liveReaches = (opened?.isPublished ?? false) && opened?.referenceCardId != nil
+            && WriteModel.reaches(visibility: opened?.liveVisibility ?? "private", anonymous: opened?.liveAnonymous ?? true)
         title = opened.map { $0.isPublished ? L10n.Write.editPublishedTitle : L10n.Write.editTitle } ?? L10n.Write.title
-        editor = bridge ?? StoryEditorBridge(placeholder: L10n.Write.storyPlaceholder)
+        script = ScriptRule.writerScript(current: ScriptRule.localeScript(locale), title: opened?.values.title ?? "",
+                                         story: opened?.values.story ?? "")
+        editor = bridge ?? StoryEditorBridge(placeholder: L10n.Write.storyPlaceholder, layout: .canvas, locale: locale)
         if let opened {
             draftId = opened.id
             values = opened.values
             lastSaved = opened.values
             lastStored = opened.values
+            editor.setTitle(opened.values.title)
             editor.setMarkdown(opened.values.story)
         }
         editor.onChange = { [weak self] markdown in self?.values.story = markdown }
@@ -100,6 +214,11 @@ final class WriteModel {
         wrote ? WriteLauncher.Change(cardId: draftId, referenceCardId: referenceCardId) : nil
     }
 
+    /// The island told how it sets the story now: the title follows.
+    func scriptChanged(_ next: StoryScript) {
+        if next != script { script = next }
+    }
+
     // MARK: Autosave
 
     private func scheduleSave() {
@@ -122,10 +241,11 @@ final class WriteModel {
 
     /// Hands the draft as it is now to Firestore — which keeps it on the device from this moment and
     /// sends it after any write before it — without waiting for the server (leaving, going to the
-    /// background). Nothing new to keep, nothing is written.
+    /// background). Nothing new to keep, nothing is written; nor while the card is in the trash,
+    /// where the rules refuse it (what is typed waits on screen for the restore).
     func store() {
         saveTask?.cancel()
-        guard let drafts, needsSave else { return }
+        guard let drafts, needsSave, !trashed else { return }
         let v = values
         let write: IssuedWrite
         var created: String?
@@ -150,7 +270,7 @@ final class WriteModel {
                 try await write.acknowledged()
                 self?.confirmed(v)
             } catch {
-                self?.refused(v, created: created)
+                await self?.refused(v, created: created, error: error)
             }
         }
     }
@@ -168,13 +288,15 @@ final class WriteModel {
     }
 
     /// The server refused a write (kept in memory; the next edit, or leaving, tries again): what it
-    /// held counts as unwritten — a draft it was to create has no document.
-    private func refused(_ v: DraftValues, created: String?) {
+    /// held counts as unwritten — a draft it was to create has no document. A refusal the card being
+    /// in the trash would explain is looked into: if it is there, the writer says so.
+    private func refused(_ v: DraftValues, created: String?, error: Error) async {
         if let created, draftId == created {
             draftId = nil
             lastSaved = nil
         }
         if lastStored == v { lastStored = lastSaved }
+        if created == nil { _ = await confirmTrashed(error) }
     }
 
     /// The first-card guide's question, as the story to write against: it is
@@ -189,8 +311,9 @@ final class WriteModel {
 
     /// One line of plain reassurance under the page title: what has happened
     /// and, for a live card, what has not happened yet. A draft says nothing
-    /// until it has been saved.
+    /// until it has been saved; a card in the trash has its own line.
     var saveStatus: String? {
+        if trashed { return nil }
         let time = savedAt?.formatted(Date.FormatStyle(date: .omitted, time: .shortened, locale: Strings.shared.locale))
         if isPublished {
             if let time { return L10n.Write.editBuffered(time: time) }
@@ -201,6 +324,190 @@ final class WriteModel {
 
     /// The page title: a new card, a draft being resumed, or a live card being revised.
     let title: String
+
+    // MARK: Step 1: the title, 下一步
+
+    /// Whether 下一步 can be pressed: a draft once something is written on it (a live card always),
+    /// and never while its card is in the trash (it isn't shown then).
+    var canGoNext: Bool { (isPublished || !values.isEmpty) && !trashed }
+
+    /// The title, as typed or pasted: one line — a typed Return means "on to the story" (answered
+    /// true), a pasted line break is a space — and at most 60 characters.
+    @discardableResult
+    func typeTitle(_ text: String) -> Bool {
+        let before = values.title
+        guard text.contains(where: \.isNewline) else {
+            values.title = String(text.prefix(Self.titleMax))
+            return false
+        }
+        let joined = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).joined(separator: " ")
+        // Return typed at the end (or anywhere): the title is what it was, without the break.
+        if text.filter({ !$0.isNewline }) == before {
+            values.title = before
+            return true
+        }
+        values.title = String(joined.prefix(Self.titleMax))
+        return false
+    }
+
+    /// Whether the title says how many characters it has (from 50 on, unless it is asking for one).
+    var showsTitleCount: Bool { values.title.count >= Self.titleCountFrom && !titleError }
+
+    /// 下一步: a title is asked for first; a new draft is handed over (and the server's answer waited
+    /// on a moment, so a refusal keeps the writer here) before the step opens; a kept one saves on
+    /// its way. Answers whether the publish step opened.
+    @discardableResult
+    func goNext() async -> Bool {
+        guard !nextBusy, !pending, !trashed else { return false }
+        guard !values.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            titleError = true
+            step = .write
+            return false
+        }
+        nextSaveError = nil
+        if draftId == nil {
+            nextBusy = true
+            let loader = Task { [weak self] in
+                try? await Task.sleep(for: Self.nextLoaderDelay)
+                guard !Task.isCancelled else { return }
+                self?.nextLoading = true
+            }
+            defer {
+                loader.cancel()
+                nextLoading = false
+                nextBusy = false
+            }
+            store()
+            _ = await settled(within: Self.nextWait)
+            guard draftId != nil else {
+                nextSaveError = L10n.Native.saveError
+                return false
+            }
+        } else {
+            store()
+        }
+        guard !trashed else { return false }
+        step = .publish
+        return true
+    }
+
+    /// Back from the publish step (the bar's 繼續寫, the edge swipe): to writing — never while a
+    /// publish is on its way. False while writing: nothing to step back to, the page's way out answers.
+    @discardableResult
+    func stepBack() -> Bool {
+        guard step == .publish else { return false }
+        if !pending { step = .write }
+        return true
+    }
+
+    // MARK: Step 2: who can see it
+
+    /// Who may read a card published with these choices: an anonymous card is public or its
+    /// author's alone — never for connections, which would tell them who wrote it (the server
+    /// refuses the pair), so a connections card made anonymous goes public.
+    nonisolated static func visibility(_ visibility: String, anonymous: Bool) -> String {
+        anonymous && visibility == "connections" ? "public" : visibility
+    }
+
+    /// Whether a card in this audience reaches the card it answers: public and under its author's name.
+    nonisolated static func reaches(visibility: String, anonymous: Bool) -> Bool {
+        visibility == "public" && !anonymous
+    }
+
+    /// 公開 or 只有自己 chosen in the step.
+    func choose(visibility: String) {
+        values.visibility = Self.visibility(visibility, anonymous: values.anonymous)
+    }
+
+    /// 以匿名發布 turned on or off: one change, so no write is ever anonymous and for connections only.
+    func setAnonymous(_ anonymous: Bool) {
+        var next = values
+        next.anonymous = anonymous
+        next.visibility = Self.visibility(values.visibility, anonymous: anonymous)
+        values = next
+    }
+
+    /// The line under the choices of a resonance: before it is first published, whether it will
+    /// reach its original's author; a live one's, only when this save makes a hidden one public and
+    /// named (it reaches its original then, as making it public would). Nil for every other card.
+    var resonanceLine: String? {
+        guard referenceCardId != nil else { return nil }
+        let reaches = Self.reaches(visibility: values.visibility, anonymous: values.anonymous)
+        if isPublished { return !liveReaches && reaches ? L10n.Write.PublishPanel.resonanceReaches : nil }
+        return reaches ? L10n.Write.PublishPanel.resonanceReaches : L10n.Write.PublishPanel.resonanceQuiet
+    }
+
+    // MARK: Step 2: the mirror
+
+    /// The mirror line's state: on its way, an answer to show, or nothing (the line collapses).
+    enum Insight: Equatable {
+        case loading
+        case shown(String)
+        case none
+    }
+
+    private(set) var insight: Insight?
+    /// What the mirror answered for a text, kept for the writer's visit: coming back to the step with
+    /// the same words asks nothing again.
+    @ObservationIgnored private var reflection: (key: String, value: String?)?
+    @ObservationIgnored private var insightTask: Task<Void, Never>?
+    /// How many times the mirror was asked (a test's count of the `insight` budget spent).
+    @ObservationIgnored private(set) var insightAsks = 0
+
+    /// The step opened: the mirror is asked once per distinct title and story — never for a live
+    /// card's revision (it belongs to first publication), never for an untitled draft.
+    private func askInsight() {
+        guard !isPublished else { return }
+        let title = values.title, story = values.story
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let key = title + "\u{0}" + story
+        if let reflection, reflection.key == key {
+            insight = reflection.value.map(Insight.shown) ?? Insight.none
+            return
+        }
+        insight = .loading
+        insightTask?.cancel()
+        insightAsks += 1
+        let ask = calls.insight
+        insightTask = Task { [weak self] in
+            let answer = try? await ask(title, story)
+            guard !Task.isCancelled, let self else { return }
+            let value = answer.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+            reflection = (key, value)
+            insight = value.map(Insight.shown) ?? Insight.none
+        }
+    }
+
+    /// Leaving the step drops the question on its way (an answer that never came is asked again).
+    private func dropInsight() {
+        insightTask?.cancel()
+        insightTask = nil
+        if insight == .loading { insight = nil }
+    }
+
+    // MARK: Step 2: the preview
+
+    /// The card as a list will show it, from what is on screen: the viewer's byline, or 匿名.
+    func preview(me: Components.Schemas.Me?) -> StoryCardContent {
+        let anonymous = values.anonymous
+        let title = values.title
+        return StoryCardContent(
+            id: draftId ?? "new",
+            title: title,
+            excerpt: StoryProse.excerpt(StoryProse.plainText(values.story), max: 96),
+            authorName: anonymous ? L10n.Write.PublishPanel.anonymousName : me?.handle ?? "",
+            authorInitials: anonymous ? "·" : me?.initials ?? "?",
+            authorImageURL: anonymous ? nil : me?.avatarUrl.flatMap(URL.init(string:)),
+            avatarSeed: anonymous ? 217 : Double(seedFromString(me?.id ?? "")),
+            readTime: L10n.App.readMinutes(count: ReadTime.minutes(values.story)),
+            tags: Array(values.tags.prefix(4)),
+            imageURL: values.imageURL,
+            // With no cover the picture is the cover editor's: its two ways to one, not a label under them.
+            imageLabel: values.imageURL == nil ? "" : values.imageLabel ?? String(title.prefix(24)),
+            accentHue: values.accentHue,
+            reason: nil
+        )
+    }
 
     // MARK: Tags
 
@@ -293,12 +600,13 @@ final class WriteModel {
     }
 
     func removeCover() {
+        mediaError = nil
         values.imageURL = nil
         values.imageLabel = nil
         values.accentHue = nil
     }
 
-    /// A photo inside the story (the toolbar's Insert image).
+    /// A photo inside the story (the format bar's 插入圖片).
     func insertImage(_ image: UIImage, filename: String) async {
         guard !uploadingInline, let data = CoverImage.jpeg(image) else { return }
         uploadingInline = true
@@ -310,53 +618,180 @@ final class WriteModel {
         }
     }
 
-    // MARK: Publish
+    // MARK: Step 2: publish, save changes, discard
 
-    /// Who may read a card published with these choices: an anonymous card is public or its
-    /// author's alone — never for connections, which would tell them who wrote it (the server
-    /// refuses the pair), so a connections card made anonymous goes public.
-    nonisolated static func visibility(_ visibility: String, anonymous: Bool) -> String {
-        anonymous && visibility == "connections" ? "public" : visibility
+    /// 發布: the draft as it is (with the step's choices, already its own) is saved, then
+    /// published; answers where the card lives — nil when it didn't go (`publishError` says why, or
+    /// the card turned out to be in the trash).
+    func publish() async -> String? {
+        guard !pending else { return nil }
+        // The server refuses a card without a title; say so in the writer's words, where the title is.
+        guard !values.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            titleError = true
+            step = .write
+            return nil
+        }
+        busyVerb = .publish
+        pending = true
+        publishError = nil
+        defer { pending = false }
+        do {
+            guard let id = await saveNow() else { throw APIFailure(code: "invalid_request", message: "Nothing to publish.", status: nil) }
+            let key = try await calls.publish(id)
+            wrote = true
+            PushCenter.shared.reachedOut()
+            return key
+        } catch {
+            if await confirmTrashed(error) { return nil }
+            publishError = PublishFailure.message(error)
+            return nil
+        }
     }
 
-    /// Saves the choices with the draft, then publishes it; returns where the card lives.
-    func publish(visibility: String, anonymous: Bool) async throws -> String {
-        values.visibility = Self.visibility(visibility, anonymous: anonymous)
-        values.anonymous = anonymous
-        guard let id = await saveNow() else { throw APIFailure(code: "invalid_request", message: "Nothing to publish.", status: nil) }
-        let result = try await writing.publish(id)
-        wrote = true
-        PushCenter.shared.reachedOut()
-        return result.slug ?? result.id
+    /// 儲存修改: the working copy goes into the buffer, then the server makes it the live card — the
+    /// moment an edit reaches readers. The publish date stays. Answers where the card lives, or nil.
+    func applyEdit() async -> String? {
+        guard !pending, let id = draftId else { return nil }
+        guard !values.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            titleError = true
+            step = .write
+            return nil
+        }
+        busyVerb = .publish
+        pending = true
+        publishError = nil
+        defer { pending = false }
+        do {
+            await saveNow()
+            if values != lastSaved { throw APIFailure(code: "internal", message: L10n.Native.saveError, status: nil) }
+            let key = try await calls.applyEdit(id)
+            wrote = true
+            hasPendingEdit = false
+            return key ?? slug ?? id
+        } catch {
+            if await confirmTrashed(error) { return nil }
+            publishError = PublishFailure.message(error, updating: true)
+            return nil
+        }
     }
 
-    /// Save changes: the working copy (with the panel's choices) goes into the
-    /// buffer, then the server makes it the live card — the moment an edit
-    /// reaches readers. The publish date stays. Returns where the card lives.
-    func applyEdit(visibility: String, anonymous: Bool) async throws -> String {
-        values.visibility = Self.visibility(visibility, anonymous: anonymous)
-        values.anonymous = anonymous
-        guard let id = draftId else { throw APIFailure(code: "not_found", message: "No such card.", status: nil) }
-        await saveNow()
-        if values != lastSaved { throw APIFailure(code: "internal", message: L10n.Native.saveError, status: nil) }
-        let result = try await writing.applyEdit(id)
-        wrote = true
-        hasPendingEdit = false
-        return result.slug ?? slug ?? id
-    }
-
-    /// Discard changes: the buffer goes; the live card was never touched.
-    func discardEdit() async throws -> String {
-        guard let id = draftId, let drafts else { throw APIFailure(code: "not_found", message: "No such card.", status: nil) }
+    /// 捨棄修改: the buffer goes; the live card was never touched. Answers where the card lives, or nil.
+    func discardEdit() async -> String? {
+        guard !pending, let id = draftId, let drafts else { return nil }
+        busyVerb = .leave
+        pending = true
+        publishError = nil
+        defer { pending = false }
         saveTask?.cancel()
         // Behind any autosave in flight, so a straggling write can't re-create the buffer.
         await chain?.value
-        try await drafts.discardEdit(id)
+        do {
+            try await drafts.discardEdit(id)
+        } catch {
+            publishError = L10n.Safety.actionError
+            return nil
+        }
         wrote = true
         hasPendingEdit = false
         lastSaved = values
         lastStored = values
         return slug ?? id
+    }
+
+    /// 存成草稿，稍後再寫 is on its way out (the screen hands the draft over and waits a moment).
+    func leaving(_ on: Bool) {
+        busyVerb = .leave
+        pending = on
+    }
+
+    // MARK: The trash
+
+    /// Whether a refusal is one the card being in the trash would explain: the rules' (a write) or the
+    /// server's 409 'This card is in the trash.'.
+    nonisolated static func mayBeTrashed(_ error: Error) -> Bool {
+        isTrashRefusal(error) || FirestoreFailure.isRefused(error)
+    }
+
+    /// The server's answer for a card in the trash.
+    nonisolated static func isTrashRefusal(_ error: Error) -> Bool {
+        guard let failure = error as? APIFailure else { return false }
+        return (failure.status == 409 || failure.code == "conflict") && failure.message.localizedCaseInsensitiveContains("trash")
+    }
+
+    /// A save, a publish or an apply was refused in a way the trash would explain: the card is read
+    /// again, and if it is there the writer says so (with 還原), back on the writing step, keeping
+    /// everything typed. True when it is.
+    func confirmTrashed(_ error: Error) async -> Bool {
+        guard let id = draftId, Self.mayBeTrashed(error) else { return false }
+        if let drafts {
+            do {
+                guard try await drafts.isTrashed(id) else { return false }
+            } catch {
+                // Not read: a 409 from the server is answer enough.
+                guard Self.isTrashRefusal(error) else { return false }
+            }
+        } else if !Self.isTrashRefusal(error) {
+            return false
+        }
+        trashed = true
+        restoreError = nil
+        publishError = nil
+        nextSaveError = nil
+        step = .write
+        return true
+    }
+
+    /// Out of the trash, as it was: what was typed meanwhile is written at once.
+    func restore() async {
+        guard let id = draftId, !restoring else { return }
+        restoring = true
+        restoreError = nil
+        defer { restoring = false }
+        do {
+            restoredAlone = try await calls.restore(id)
+        } catch {
+            restoreError = L10n.Safety.actionError
+            return
+        }
+        trashed = false
+        wrote = true
+        store()
+    }
+}
+
+extension FirestoreFailure {
+    /// The rules said no (a write into a card the writer may no longer change: one in the trash).
+    nonisolated static func isRefused(_ error: Error) -> Bool {
+        let e = error as NSError
+        return e.domain == FirestoreErrorDomain && e.code == FirestoreErrorCode.permissionDenied.rawValue
+    }
+}
+
+/// How long a story takes to read, in whole minutes (at least 1) — lib/readTime: CJK by the
+/// character (320 a minute), the rest by the word (230 a minute), added up; marks standing alone
+/// (……, ——, Markdown's ## and -) count as characters, as they always did.
+nonisolated enum ReadTime {
+    static let cjkPerMinute = 320.0
+    static let wordsPerMinute = 230.0
+    private static let cjk = #"\p{scx=Han}\p{scx=Hira}\p{scx=Kana}\p{scx=Hang}\p{scx=Bopo}\x{3000}-\x{303F}\x{FF00}-\x{FFEF}"#
+    private static let run = try! NSRegularExpression(pattern: "([\(cjk)]+)|[^\\s\(cjk)]+")
+    private static let wordlike = try! NSRegularExpression(pattern: #"[\p{L}\p{N}]"#)
+
+    static func minutes(_ text: String) -> Int {
+        let ns = text as NSString
+        var chars = 0
+        var words = 0
+        for match in run.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            let piece = ns.substring(with: match.range)
+            if match.range(at: 1).location != NSNotFound {
+                chars += piece.utf16.count
+            } else if wordlike.firstMatch(in: piece, range: NSRange(location: 0, length: (piece as NSString).length)) != nil {
+                words += 1
+            } else {
+                chars += piece.utf16.count
+            }
+        }
+        return max(1, Int((Double(chars) / cjkPerMinute + Double(words) / wordsPerMinute).rounded()))
     }
 }
 
