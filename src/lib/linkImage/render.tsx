@@ -40,7 +40,8 @@ export const LINK_IMAGE = {
   /** Image pixels to a CSS pixel of the card as it is seen. */
   scale: 2.4,
   card: { x: 56, y: 36, width: 1088, height: 558, padding: 48 },
-  title: { cjk: 56, latin: 62, maxLines: 2 },
+  /** A title running at most `balanceUpTo` lines' width is balanced, a longer one clamped to `maxLines`. */
+  title: { cjk: 56, latin: 62, maxLines: 2, balanceUpTo: 1.75 },
   words: { cjk: 28, latin: 31, maxLines: 3, maxLinesAfterShortTitle: 4, gapAbove: 22 },
   rule: { gapAbove: 26, height: 8, gapBelow: 22 },
   byline: { avatar: 64, gap: 20, name: 28, date: 23, dateGap: 2 },
@@ -77,15 +78,16 @@ function typeStyle(type: ShareType, size: number): CSSProperties {
 const WIDE = /[\p{scx=Han}\p{scx=Hira}\p{scx=Kana}\p{scx=Hang}\u3000-\u303f\uff00-\uffef]/u;
 
 /**
- * Whether the title surely sets on one line: a CJK character is an em (plus
- * tracking) wide, anything else is counted as wide as Latin ever runs. Only
- * then do the words take a fourth line.
+ * How wide the title runs on one line, at most: a CJK character is an em
+ * (plus tracking) wide, anything else is counted as wide as Latin ever runs.
+ * Only a title that surely sets on one line gives the words a fourth line;
+ * only one that surely fits its two lines is balanced.
  */
-function titleFitsOneLine(title: string, script: StoryScript, size: number, width: number): boolean {
+function titleWidth(title: string, script: StoryScript, size: number): number {
   const tracking = tokenValue(SHARE_TYPE.title[script].tracking);
   let ems = 0;
   for (const ch of title) ems += WIDE.test(ch) ? 1 + tracking : /\s/.test(ch) ? 0.3 : 0.72;
-  return ems * size <= width;
+  return ems * size;
 }
 
 interface Drawn {
@@ -164,8 +166,8 @@ export function drawnCardElement(card: DrawnCard, texts: Drawn, photo: string | 
   const titleSize = L.title[card.script];
   const wordsSize = L.words[card.script];
   const wordsType = SHARE_TYPE.words[card.script];
-  const wordLines =
-    texts.title && titleFitsOneLine(texts.title, card.script, titleSize, inner) ? L.words.maxLinesAfterShortTitle : L.words.maxLines;
+  const titleRun = texts.title ? titleWidth(texts.title, card.script, titleSize) : 0;
+  const wordLines = texts.title && titleRun <= inner ? L.words.maxLinesAfterShortTitle : L.words.maxLines;
   const rule = wavyLine(inner, card.seed + SHARE_CARD.rule.seedOffset, SHARE_CARD.rule.amplitude * k, SHARE_CARD.rule.steps);
   const { lockup, byline } = SHARE_CARD;
 
@@ -215,7 +217,9 @@ export function drawnCardElement(card: DrawnCard, texts: Drawn, photo: string | 
             style={{
               ...typeStyle(SHARE_TYPE.title[card.script], titleSize),
               display: 'block',
-              lineClamp: L.title.maxLines,
+              // satori balances by narrowing the box while its height holds, and a clamped height
+              // always holds: a title is balanced (as the reader sets it) only when it surely needs no clamp.
+              ...(titleRun <= inner * L.title.balanceUpTo ? { textWrap: 'balance' as const } : { lineClamp: L.title.maxLines }),
               color: token(SHARE_CARD.title.colour),
               flexShrink: 0,
             }}

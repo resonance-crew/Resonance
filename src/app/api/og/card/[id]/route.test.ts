@@ -203,10 +203,13 @@ describe('GET /api/og/card/{id} for a card without a cover', () => {
   }, 30_000);
 
   it("draws the initials when the author's photo can't be read", async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
     objects.set(storageKey(AVATAR), new Uint8Array([1, 2, 3]));
     await expectJpeg(await get('bare1', await pageVersion('bare1')), 1200, 630);
+    expect(logged).toHaveBeenCalledWith('[og] drawn card photo', expect.anything());
     objects.delete(storageKey(AVATAR));
     await expectJpeg(await get('bare1', await pageVersion('bare1')), 1200, 630);
+    logged.mockRestore();
   }, 30_000);
 });
 
