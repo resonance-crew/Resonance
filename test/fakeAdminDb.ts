@@ -1,6 +1,6 @@
 // A tiny in-memory stand-in for the Admin SDK's Firestore, for suites that
 // render server code (pages, route handlers) without the emulator: documents
-// by path, `doc(path).get()` / `.set()`, `collection(name).doc(id)` and
+// by path, `doc(path).get()` / `.set()`, `getAll(…refs, { fieldMask })`, `collection(name).doc(id)` and
 // queries — `where` (`==`, `!=`) chained, `orderBy`, `select` (which, as
 // in Firestore, leaves only the named fields in `data()`), `limit`, `get`.
 // Store timestamps as firebase-admin `Timestamp`s so the real mappers convert
@@ -118,6 +118,15 @@ export function fakeAdminDb(docs: Record<string, Data>): FakeAdminDb {
   const pathOf = (ref: Ref) => ref.path!;
   const db = {
     doc: (path: string) => Object.assign(docRef(path), { path }),
+    // getAll(ref…, { fieldMask }?): each document as `doc().get()` gives it, with only the masked fields.
+    getAll: async (...args: unknown[]) => {
+      const last = args.at(-1) as { fieldMask?: string[]; path?: string } | undefined;
+      const options = last && !last.path ? (args.pop() as { fieldMask?: string[] }) : {};
+      return (args as Ref[]).map((ref) => {
+        reads.push(pathOf(ref));
+        return snap(pathOf(ref), options.fieldMask);
+      });
+    },
     runTransaction: async <T>(fn: (tx: unknown) => Promise<T>): Promise<T> =>
       fn({
         get: (ref: Ref) => ref.get(),

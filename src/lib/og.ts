@@ -2,26 +2,14 @@ import type { Metadata } from 'next';
 import type { Card, Locale, User } from '@/lib/db/types';
 import { plainExcerpt } from '@/lib/adapters/story';
 import { storageKeyOf } from '@/lib/storage/publicUrl';
+import { imageVersion } from '@/lib/linkImage/version';
+import { LINK_IMAGE_SIZE, coverVersion, drawnCard, drawnCardVersion } from '@/lib/linkImage/model';
 
 /** Absolute-URL default share image (the platform cover). */
 export const OG_COVER_PATH = '/og-cover.jpg';
 export const OG_COVER_SIZE = { width: 2640, height: 1416 } as const;
 
-/**
- * A short tag for a picture's URL (FNV-1a, twice): the share image's URL
- * carries it, so a new cover or photo is a new URL no cache answers from
- * the old one.
- */
-export function imageVersion(url: string): string {
-  let a = 0x811c9dc5;
-  let b = 0x01000193 ^ url.length;
-  for (let i = 0; i < url.length; i++) {
-    const c = url.charCodeAt(i);
-    a = Math.imul(a ^ c, 0x01000193) >>> 0;
-    b = Math.imul(b ^ c, 0x0100019d) >>> 0;
-  }
-  return a.toString(36) + b.toString(36);
-}
+export { imageVersion };
 
 /**
  * The share image for one of our stored pictures: a JPEG made from it by
@@ -31,6 +19,21 @@ export function imageVersion(url: string): string {
 function shareImage(base: string, kind: 'card' | 'user', id: string, url: string, storageBases: readonly string[] | undefined): string {
   if (!storageKeyOf(url, storageBases)) return url;
   return `${base}/api/og/${kind}/${encodeURIComponent(id)}?v=${imageVersion(url)}`;
+}
+
+/**
+ * A card's link-preview image, 1200 × 630 (/api/og/card/{id}): its stored
+ * cover cropped to that size, or — without one — the card drawn
+ * (lib/linkImage). A cover hosted elsewhere is shared as it is, its size
+ * unknown.
+ */
+function cardImage(card: Card, author: User | null, base: string, storageBases: readonly string[] | undefined) {
+  const path = `${base}/api/og/card/${encodeURIComponent(card.id)}`;
+  const cover = card.media?.type === 'image' && card.media.url ? card.media.url : null;
+  if (cover && !storageKeyOf(cover, storageBases)) return { url: cover };
+  // An anonymous card's image is drawn from the card alone.
+  const version = cover ? coverVersion(cover) : drawnCardVersion(drawnCard(card, card.anonymous ? null : author, storageBases));
+  return { url: `${path}?v=${version}`, ...LINK_IMAGE_SIZE };
 }
 
 /**
@@ -66,11 +69,8 @@ export function buildCardMetadata(opts: {
   const description = plainExcerpt(story, 200);
 
   const byline = card.anonymous || !author ? anonymousLabel : author.handle;
-  // Share thumbnail: the card's own image when it has one (as a JPEG), else the platform cover.
-  const image =
-    card.media?.type === 'image' && card.media.url
-      ? shareImage(base, 'card', card.id, card.media.url, storageBases)
-      : `${base}${OG_COVER_PATH}`;
+  // Share thumbnail: the card's cover (as a JPEG), else the card itself drawn.
+  const image = cardImage(card, author, base, storageBases);
   // The address platforms keep for the card (canonical, og:url — Facebook and
   // LINE resolve a shared link to og:url). An anonymous card's is its id: a
   // slug that collided carries `-{handle}` (lib/ai/slugify) and never changes,
@@ -89,7 +89,7 @@ export function buildCardMetadata(opts: {
       url,
       siteName: 'Resonance',
       locale,
-      images: [{ url: image, alt: title }],
+      images: [{ ...image, alt: title }],
       authors: card.anonymous || !author ? undefined : [byline],
       publishedTime: card.publishedAt ? new Date(card.publishedAt).toISOString() : undefined,
       tags: card.tags,
@@ -98,7 +98,7 @@ export function buildCardMetadata(opts: {
       card: 'summary_large_image',
       title,
       description,
-      images: [image],
+      images: [image.url],
     },
   };
 }

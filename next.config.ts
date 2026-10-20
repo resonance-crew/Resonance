@@ -31,11 +31,14 @@ const nextConfig: NextConfig = {
   // backstop simply renders fresh once it is a day old.
   expireTime: 86400,
 
-  // The policy pages read their Markdown from docs/legal (src/lib/legal).
+  // The policy pages read their Markdown from docs/legal (src/lib/legal); a
+  // card's link-preview image reads its static fonts (src/lib/linkImage/fonts,
+  // ~7 MB, read only by this route) from disk.
   outputFileTracingIncludes: {
     '/[locale]/privacy': ['./docs/legal/**/*'],
     '/[locale]/terms': ['./docs/legal/**/*'],
     '/[locale]/support': ['./docs/legal/**/*'],
+    '/api/og/card/[id]': ['./src/lib/linkImage/fonts/*.ttf'],
   },
 
   // ── Security headers on every response (see src/lib/api/securityHeaders) ──
