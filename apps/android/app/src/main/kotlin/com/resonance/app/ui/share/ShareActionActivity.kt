@@ -1,6 +1,7 @@
 package com.resonance.app.ui.share
 
 import android.app.Activity
+import android.app.ActivityOptions
 import android.app.PendingIntent
 import android.content.ActivityNotFoundException
 import android.content.ClipData
@@ -132,11 +133,26 @@ class ShareActionActivity : Activity() {
             labels.map { action ->
                 val pending = PendingIntent.getActivity(
                     context, action.hashCode(), intent(context, action, share).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                    // A fresh one per share (an earlier share's, kept by the system, would keep its own extras and options).
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_CANCEL_CURRENT, startedFromTheSheet(),
                 )
                 val icon = if (action == STORIES) Icon.createWithResource(ShareIntents.INSTAGRAM, instagramIcon) else Icon.createWithResource(context, R.drawable.ic_share_save)
                 ChooserAction.Builder(icon, label(action), pending).build()
             }.toTypedArray()
+
+        /**
+         * The creator's leave for the sheet to start this activity: from API 34 an app's PendingIntent
+         * starts an activity from another app's window (the sheet's) only when its creator says so —
+         * here while the app's own page is visible under the sheet, which it always is.
+         */
+        @RequiresApi(34)
+        private fun startedFromTheSheet(): Bundle = ActivityOptions.makeBasic().apply {
+            @Suppress("DEPRECATION")
+            setPendingIntentCreatorBackgroundActivityStartMode(
+                if (Build.VERSION.SDK_INT >= 36) ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_IF_VISIBLE
+                else ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED,
+            )
+        }.toBundle()
 
         private fun label(action: String): String = if (action == STORIES) L10n.Share.toStories else L10n.Share.Image.save
 

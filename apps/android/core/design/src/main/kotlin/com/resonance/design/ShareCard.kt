@@ -1,5 +1,23 @@
 package com.resonance.design
 
+import android.graphics.Paint
+import android.graphics.text.LineBreaker
+import android.text.Layout
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.StaticLayout
+import android.text.TextPaint
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.LineBreak
+import androidx.compose.ui.unit.Dp
+import kotlin.math.max
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -166,19 +184,15 @@ fun ShareCard(model: ShareCardModel, cover: ImageBitmap?, modifier: Modifier = M
                 model.title,
                 maxLines = if (withCover) ShareCardRecipe.Title.MAX_LINES_WITH_COVER else ShareCardRecipe.Title.MAX_LINES_WITHOUT_COVER,
                 overflow = TextOverflow.Ellipsis,
-                style = ShareCardRecipe.titleStyle(model.script, if (withCover) ShareCardRecipe.Title.SIZE_WITH_COVER else ShareCardRecipe.Title.SIZE_WITHOUT_COVER),
+                // Balanced, as the reader sets a title.
+                style = ShareCardRecipe.titleStyle(model.script, if (withCover) ShareCardRecipe.Title.SIZE_WITH_COVER else ShareCardRecipe.Title.SIZE_WITHOUT_COVER)
+                    .copy(lineBreak = LineBreak(LineBreak.Strategy.Balanced, LineBreak.Strictness.Strict, LineBreak.WordBreak.Default)),
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(ShareCardRecipe.Title.GAP_BELOW.dp))
         }
         if (model.words.isNotBlank()) {
-            BasicText(
-                model.words,
-                maxLines = if (withCover) ShareCardRecipe.Words.MAX_LINES_WITH_COVER else ShareCardRecipe.Words.MAX_LINES_WITHOUT_COVER,
-                overflow = TextOverflow.Ellipsis,
-                style = ShareCardRecipe.wordsStyle(model.script),
-                modifier = Modifier.fillMaxWidth(),
-            )
+            ShareWords(model.words, model.script, if (withCover) ShareCardRecipe.Words.MAX_LINES_WITH_COVER else ShareCardRecipe.Words.MAX_LINES_WITHOUT_COVER)
             Spacer(Modifier.height(ShareCardRecipe.Words.GAP_BELOW.dp))
         }
         // StoryCardSeparator: wavyLine(width, seed + 91, 1.2, 6) in the family's rule ink.
@@ -192,6 +206,66 @@ fun ShareCard(model: ShareCardModel, cover: ImageBitmap?, modifier: Modifier = M
         Spacer(Modifier.height(ShareCardRecipe.Rule.GAP_BELOW.dp))
         ShareByline(model, palette)
     }
+}
+
+/**
+ * The card's words in the story's body type at the recipe's size — exact CSS line boxes, a CJK
+ * story's justified between characters where the device can (API 35+; Compose's own justify
+ * stretches only spaces, which in Chinese are the gaps a link or a line break left), at most
+ * [maxLines], cut with a tail "…" on a line of natural width, paragraph breaks kept.
+ */
+@Composable
+private fun ShareWords(text: String, script: StoryScript, maxLines: Int) {
+    val type = StoryType(script, compact = false)
+    val scaled = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val widthPx = constraints.maxWidth
+        val layout = remember(text, script, maxLines, widthPx, scaled.density, scaled.fontScale) { wordsLayout(text, type, maxLines, widthPx, scaled) }
+        Box(
+            Modifier
+                .width(Dp(layout.width / scaled.density))
+                .height(Dp(layout.height / scaled.density))
+                .semantics { this.text = AnnotatedString(text) }
+                .drawBehind { drawIntoCanvas { layout.draw(it.nativeCanvas) } },
+        )
+    }
+}
+
+internal fun wordsLayout(text: String, type: StoryType, maxLines: Int, widthPx: Int, density: Density): StaticLayout {
+    val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = AppFonts.typeface(type.bodyFamily, type.bodyWeight)
+        textSize = density.cssFontPx(ShareCardRecipe.Words.SIZE)
+        color = Tokens.Text.toArgb()
+        letterSpacing = type.bodyTracking
+    }
+    val full = wordsLayout(text, type, paint, widthPx)
+    if (full.lineCount <= maxLines) return full
+    // Cut after the last line that fits and end it with "…": the cut line is then the text's last,
+    // set natural rather than stretched to the edge as a justified line would be; a character less
+    // at a time while the "…" would push it onto a line of its own.
+    var end = full.getLineEnd(maxLines - 1)
+    while (end > 0) {
+        val cut = wordsLayout(text.substring(0, end).trimEnd() + ELLIPSIS, type, paint, widthPx)
+        if (cut.lineCount <= maxLines) return cut
+        end -= Character.charCount(text.codePointBefore(end))
+    }
+    return wordsLayout(ELLIPSIS, type, paint, widthPx)
+}
+
+private const val ELLIPSIS = "…"
+
+private fun wordsLayout(text: String, type: StoryType, paint: TextPaint, widthPx: Int): StaticLayout {
+    val spanned = SpannableString(text).apply {
+        setSpan(CssLineHeightSpan(paint.textSize * type.bodyLeading, paint.fontMetrics), 0, text.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+    }
+    val b = StaticLayout.Builder.obtain(spanned, 0, text.length, paint, max(1, widthPx))
+        .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+        .setIncludePad(false)
+        .setUseLineSpacingFromFallbacks(false)
+        .setBreakStrategy(LineBreaker.BREAK_STRATEGY_SIMPLE)
+        .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
+    StoryType.applyBreaking(b, justified = type.justified)
+    return b.build()
 }
 
 /** The cover in OrganicImage's clip, the picture past the box by the clip's outward swing (as [OrganicImage] does), under its grain. */

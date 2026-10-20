@@ -114,6 +114,20 @@ class ShareCardTest {
         }
     }
 
+    @Test fun longWordsAreCutWithAnEllipsisOnALineOfTheirOwnWidth() {
+        val type = StoryType(StoryScript.Cjk, compact = false)
+        val width = 768
+        val layout = wordsLayout(words, type, 4, width, Density(3f, 1f))
+        assertEquals(4, layout.lineCount)
+        val last = layout.text.subSequence(layout.getLineStart(3), layout.getLineEnd(3)).toString()
+        assertTrue(last, last.endsWith("…"))
+        // The cut line is the text's last: natural, not stretched to the edge as the lines above it are.
+        assertTrue(layout.getLineMax(3) <= width.toFloat())
+        assertEquals(0, layout.getEllipsisCount(3))
+        // What fits is left whole.
+        assertEquals(1, wordsLayout("一句話。", type, 4, width, Density(3f, 1f)).lineCount)
+    }
+
     @Test fun anAnonymousCardSaysAnonymousAndNamesNoOne() {
         at(1f) { ShareCardCanvas(model(ShareByline.Anonymous), cover = null) }
         val drawn = texts()
