@@ -26,7 +26,14 @@ import { autoCurve, autoMag, autoSegments } from '@/lib/design/wobAuto';
 import { INK, INK_LIGHT, INK_STRONG } from '@/lib/design/strokes';
 import styles from './Field.module.css';
 
+/**
+ * `bare` is a document's own field, not a form's: no frame, no padding, no
+ * type of its own — it takes the type of what it is set in (the writer's
+ * title takes the card page's title type from src/styles/story.css). Its
+ * focus is its caret. Textarea only.
+ */
 type Variant = 'default' | 'subtle';
+type TextareaVariant = Variant | 'bare';
 type Tone = 'default' | 'display';
 
 export interface FieldLabelProps {
@@ -117,7 +124,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
 });
 
 export type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
-  variant?: Variant;
+  variant?: TextareaVariant;
   tone?: Tone;
   seed?: number;
   curve?: number;

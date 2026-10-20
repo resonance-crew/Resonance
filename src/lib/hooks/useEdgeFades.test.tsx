@@ -12,6 +12,15 @@ function List() {
   );
 }
 
+function Row() {
+  const ref = useEdgeFades<HTMLDivElement>(undefined, 'x');
+  return (
+    <div ref={ref} data-testid="row">
+      <button>bold</button>
+    </div>
+  );
+}
+
 // jsdom lays nothing out: give the list a size and a scroll position by hand.
 function size(el: HTMLElement, { scrollHeight, clientHeight, scrollTop }: { scrollHeight: number; clientHeight: number; scrollTop: number }) {
   Object.defineProperty(el, 'scrollHeight', { configurable: true, value: scrollHeight });
@@ -51,5 +60,24 @@ describe('useEdgeFades', () => {
     fireEvent.scroll(list);
     expect(list).toHaveAttribute('data-edge-fade-top');
     expect(list).not.toHaveAttribute('data-edge-fade-bottom');
+  });
+
+  // The writer's keyboard format bar scrolls sideways under a finger.
+  it('fades the sides a row can still scroll toward', () => {
+    render(<Row />);
+    const row = screen.getByTestId('row');
+    const sized = (scrollLeft: number) => {
+      Object.defineProperty(row, 'scrollWidth', { configurable: true, value: 700 });
+      Object.defineProperty(row, 'clientWidth', { configurable: true, value: 320 });
+      Object.defineProperty(row, 'scrollLeft', { configurable: true, writable: true, value: scrollLeft });
+      fireEvent.scroll(row);
+    };
+    sized(0);
+    expect(row).not.toHaveAttribute('data-edge-fade-left');
+    expect(row).toHaveAttribute('data-edge-fade-right');
+    sized(380);
+    expect(row).toHaveAttribute('data-edge-fade-left');
+    expect(row).not.toHaveAttribute('data-edge-fade-right');
+    expect(row).not.toHaveAttribute('data-edge-fade-bottom');
   });
 });

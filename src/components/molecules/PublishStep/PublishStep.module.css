@@ -1,0 +1,321 @@
+/* The publish step: the writer's column, the publish panel's sections down
+   it at the writer's own gap. */
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(22px, 3vw, 32px);
+  min-width: 0;
+}
+
+/* At the split (no bar over the pane): ← 繼續寫 and the step's name, level
+   with the Leave over the map — the writer's bar's row in small. */
+.headingRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+}
+
+.back {
+  margin-left: -9px;
+  transform: translateY(1px);
+}
+
+@media (pointer: coarse) {
+  .back {
+    margin-left: -13px;
+  }
+  .headingRow {
+    gap: 4px;
+  }
+}
+
+.heading {
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--color-text);
+}
+
+/* Named from script as the step opens: it says where the focus is, and is no control. */
+.heading:focus {
+  outline: none;
+}
+
+.hint {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--color-text-muted);
+}
+
+/* The mirror moment: the sparkle beside the echo, or the loader while it is
+   read. An answer of nothing folds the line away (its height to none). */
+.insightWrap {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 200ms ease, margin 200ms ease;
+}
+
+.insightWrap[data-collapsed] {
+  grid-template-rows: 0fr;
+  /* The step's gap closes with it. */
+  margin-bottom: calc(-1 * clamp(22px, 3vw, 32px));
+}
+
+.insightClip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .insightWrap {
+    transition: none;
+  }
+}
+
+.insight {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--color-text);
+}
+
+.insight[data-loading] {
+  align-items: center;
+}
+
+.insightGlyph {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+/* The sections a pending publish holds still: no frame of its own. */
+.fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(22px, 3vw, 32px);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* The card as a list shows it: a feed card's width on a wider screen, left on
+   the column; on a phone the feed's own full-bleed band. */
+.previewBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.preview {
+  width: 100%;
+  max-width: 360px;
+}
+
+@media (max-width: 640px) {
+  .preview {
+    max-width: none;
+  }
+}
+
+.caption {
+  margin: 8px 0 0;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.label {
+  font-family: var(--font-body);
+  font-size: var(--label-size);
+  letter-spacing: var(--label-tracking);
+  color: var(--color-text-muted);
+}
+
+.choice {
+  display: flex;
+}
+
+.note {
+  margin: 0;
+  font-size: var(--hint-size, 12px);
+  color: var(--color-text-muted);
+}
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.byline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.name {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.name[data-anonymous] {
+  color: var(--color-text-muted);
+}
+
+/* Whether a resonance tells the original's author: one quiet line with the wave. */
+.resonance {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.resonance:empty {
+  display: none;
+}
+
+.footBlock {
+  display: flex;
+  flex-direction: column;
+}
+
+.busyHint {
+  margin: 0 0 12px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+/* On a phone the two do not sit side by side: the verb takes the width, the
+   tonal way out the width under it (the writer's own stack); the buttons'
+   faces stretch with them and redraw at that width. */
+@media (max-width: 640px) {
+  .foot > div {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .foot > div > button {
+    display: flex;
+    width: 100%;
+  }
+}
+
+/* ── The cover, in the preview's picture ─────────────────────────────── */
+
+.cover {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.fileInput {
+  display: none;
+}
+
+.coverEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  text-align: center;
+}
+
+.coverPills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.pillIcon {
+  display: inline-flex;
+}
+
+.coverNeed {
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.4;
+  color: oklch(28% 0.04 60 / 0.7);
+}
+
+/* On its way: the pen's loader, over the model's rough pass while it paints
+   (blurred and washed: it isn't a settled picture yet). */
+.coverBusy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.coverBusy[data-partial] {
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  background: color-mix(in oklch, var(--color-cream) 45%, transparent);
+}
+
+.coverBusyText {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* The editor's × over the picture's top-right corner, clear of the wobble. */
+.coverRemove {
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  width: 0;
+  height: 0;
+}
+
+/* A file dragged over the frame: a dashed frame, focused. */
+.coverDrop {
+  pointer-events: none;
+}
+
+.coverBelow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+}

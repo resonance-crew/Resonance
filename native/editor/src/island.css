@@ -28,3 +28,10 @@ p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: 
 html.embed, html.embed body { background: transparent; overflow: hidden; }
 html.embed #editor { padding: 14px 18px 18px; }
 html.embed .ProseMirror { min-height: 168px; }
+
+/* The writer's bare page (?layout=canvas): no frame, no padding — the host
+   sizes the view (the 'height' message) and scrolls it. After .embed's, which
+   it may come with. */
+html.canvas, html.canvas body { background: transparent; }
+html.canvas #editor { padding: 0; }
+html.canvas .ProseMirror { min-height: 0; }

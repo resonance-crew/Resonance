@@ -1,45 +1,56 @@
 'use client';
 
-import { useEffect, useImperativeHandle, useMemo, useState, type Ref } from 'react';
-import dynamic from 'next/dynamic';
-import { useTranslations } from 'next-intl';
-import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
-import { Icon } from '@/components/atoms/Icon';
-import { Divider } from '@/components/atoms/Divider/Divider';
-import { Field, Textarea, CharCount } from '@/components/atoms/Field/Field';
-import { HandDrawnDashedSurface } from '@/components/atoms/HandDrawnDashedBorder/HandDrawnDashedBorder';
-import { HandDrawnImage } from '@/components/atoms/HandDrawnImage/HandDrawnImage';
-import { SketchLoader } from '@/components/atoms/SketchLoader/SketchLoader';
-import { MarkdownEditor } from '@/components/molecules/MarkdownEditor/MarkdownEditor';
-import { UnsupportedImage, uploadImageFile } from '@/lib/images/upload';
-import { extractAccentHue } from '@/lib/images/accentHue';
-import { useRef } from 'react';
-import { INK } from '@/lib/design/strokes';
-// import { Panel } from '@/components/molecules/Panel/Panel'; // AI 寫作夥伴（暫停）
-import { SegmentedActionBar } from '@/components/molecules/SegmentedActionBar/SegmentedActionBar';
-import { TagField } from '@/components/molecules/TagField/TagField';
-import { useOpenedOnce } from '@/lib/hooks/useOpenedOnce';
 import {
-  createCardDraft,
-  publishCard,
-  updateCardDraft,
-} from '@/lib/db/firestore/client/cards';
+  useCallback,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Ref,
+} from 'react';
+import { useTranslations } from 'next-intl';
+import { CharCount, FieldHint, Textarea } from '@/components/atoms/Field/Field';
+import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
+import { MarkdownEditor, type MarkdownEditorHandle } from '@/components/molecules/MarkdownEditor/MarkdownEditor';
+import { PublishStep, reachesOriginal } from '@/components/molecules/PublishStep/PublishStep';
+import { createCardDraft, publishCard, updateCardDraft } from '@/lib/db/firestore/client/cards';
 import {
   applyPendingCardEdit,
   discardPendingCardEdit,
   savePendingCardEdit,
 } from '@/lib/db/firestore/client/cardEdits';
+import { getCardById } from '@/lib/db/firestore/client/reads';
 import type { Card, CardMedia, Visibility, Locale } from '@/lib/db/types';
-import type { GenerateImageEvent } from '@/app/api/generate-image/route';
-import { ndjsonValues } from '@/lib/streams/ndjson';
 import { useRouter } from '@/i18n/navigation';
 import { ApiError } from '@/lib/db/firestore/client/api';
 import { useLeaveWriter } from '@/lib/hooks/useLeaveWriter';
+import { useOpenedOnce } from '@/lib/hooks/useOpenedOnce';
 import { useConnectionRefresh } from '@/lib/data/resonate';
+import { localeScript, storyLang, writerScript, type StoryScript } from '@/lib/text/script';
+import { isTrashed, isTrashRefusal, mayBeTrashed, restoreTrashedCard } from './trashedCard';
+import '@/styles/story.css';
 import styles from './CardEditor.module.css';
 
-// The publish panel loads when it is first opened, not with the editor.
-const PublishPanel = dynamic(() => import('@/components/molecules/PublishPanel/PublishPanel').then((m) => m.PublishPanel));
+/** The longest title a card takes (the server's too). */
+export const TITLE_MAX = 60;
+/** From this many characters on, the title says how many are left. */
+const TITLE_COUNT_FROM = 50;
+/** How long 下一步 waits on the first save before it shows its loader. */
+const NEXT_LOADER_MS = 300;
+
+/** The writer's two steps: writing (the title and the story), then publishing (發布這張卡片 / 更新這張卡片). */
+export type WriterStep = 'write' | 'publish';
+
+/** What the page around the editor draws as its one forward action (下一步): in its bar, or floating at the split. */
+export interface PrimaryAction {
+  label: string;
+  disabled: boolean;
+  loading: boolean;
+  onPress: () => void;
+}
 
 export interface CardEditorProps {
   initial?: {
@@ -49,12 +60,17 @@ export interface CardEditorProps {
     /**
      * Set when this card is already live. Flips the editor from "writing a
      * draft" to "revising something people can read": autosave goes to the
-     * private pending-edit buffer instead of the card, and the primary action
-     * becomes 儲存修改 rather than 發布.
+     * private pending-edit buffer instead of the card, and the publish step
+     * becomes 更新這張卡片 → 儲存修改.
      */
     publishedAt?: Date | null;
     /** A working copy was already buffered for this published card. */
     hasPendingEdit?: boolean;
+    /**
+     * A live card's audience as readers have it now (the copy being edited may
+     * be a pending edit's): whether saving makes a resonance reach its original.
+     */
+    live?: { visibility: Visibility; anonymous: boolean };
     thoughtCore?: string;
     story?: string;
     tags?: string[];
@@ -63,6 +79,13 @@ export interface CardEditorProps {
     accentHue?: number;
     anonymous?: boolean;
   };
+  /**
+   * Words the writer brings along to start the story with (a note grown into
+   * a resonance carries its own): written by the writer, so unlike `initial`
+   * they are work to keep — the draft is saved with them.
+   */
+  seedStory?: string;
+  /** The UI's locale: a new card's language, and the type an empty draft starts in. */
   locale: Locale;
   /**
    * When set, the created/updated card references this card (a "resonance"
@@ -70,28 +93,37 @@ export interface CardEditorProps {
    */
   referenceCardId?: string;
   /**
-   * `'page'` (default) is the full Write page: outline buttons + slug redirect
-   * on publish. `'inline'` is the embedded resonance composer: hides the
-   * visibility selector (always public), shows a 公開發表 / 存草稿 segmented bar,
-   * and reports results via callbacks instead of navigating away.
-   */
-  mode?: 'page' | 'inline';
-  /** Called after a successful publish (inline mode). */
-  onPublished?: (card: Card) => void;
-  /** Called after a successful draft save (inline mode). */
-  onSavedDraft?: (card: Card) => void;
-  /**
    * Reports the story text as it is typed. Lets a wrapper offer exits that
-   * carry the draft along (e.g. the resonance editor's「寄給作者就好」downgrade
-   * into a private note).
+   * carry the draft along.
    */
   onStoryChange?: (story: string) => void;
   /**
    * Reports the save state as ready-to-render copy ("草稿已自動儲存 · 14:32").
-   * The host shows it beside the page title — the reassurance has to be
+   * The host shows it at the top of the column — the reassurance has to be
    * visible without scrolling to the bottom of the form.
    */
   onSaveStatusChange?: (label: string | null) => void;
+  /**
+   * The step shown, when the host keeps it (the writer's page puts it in the
+   * address, so the browser's back returns to writing); the editor keeps its
+   * own otherwise (the thought map's pane).
+   */
+  step?: WriterStep;
+  /** The editor asks to change step (下一步, 繼續寫, or back to writing to show why it can't go on). */
+  onStepChange?: (step: WriterStep) => void;
+  /** What the host draws as the one way forward while writing (null in the publish step, or for a trashed card). */
+  onPrimaryActionChange?: (action: PrimaryAction | null) => void;
+  /**
+   * The pane has no bar (at the split): the publish step names itself in its
+   * own first row. Otherwise the host's bar does, and `focusStepHeading`
+   * moves the focus there as the step opens.
+   */
+  inlineStepHeading?: boolean;
+  focusStepHeading?: () => void;
+  /** The way out once the draft is saved for later (the host's; by default back where the writer came from). */
+  onLeave?: () => void;
+  /** Publishing, saving or leaving is on its way: the host's back waits with the step's buttons. */
+  onPendingChange?: (pending: boolean) => void;
   /** What the page around it asks as it goes (the writer's back arrow). */
   ref?: Ref<CardEditorHandle>;
 }
@@ -115,14 +147,13 @@ export interface CardEditorHandle {
    * /write — the draft its first save made; undefined before that.
    */
   cardId(): string | undefined;
+  /**
+   * The back arrow from the publish step: back to writing (true), or — while
+   * writing, nothing to step back to — false, and the page's way out answers.
+   * A publish on its way holds it (true: nothing else happens).
+   */
+  stepBack(): boolean;
 }
-
-// AI 寫作夥伴：暫時停用，未來會重新啟用
-// const SAMPLE_TITLES = [
-//   '有些話,寫下來,是為了自己先聽見。',
-//   '被看見,比被喜歡更難得。',
-//   '停下來看一件小事,是一種慢慢的勇敢。',
-// ];
 
 /** Everything a draft save writes, in one comparable shape. */
 interface DraftValues {
@@ -148,69 +179,138 @@ function draftSnapshot(v: DraftValues): string {
   });
 }
 
-/** A draft with no content yet — autosave won't create a document for it. */
+/** A draft with no content yet — autosave won't create a document for it, and 下一步 has nothing to take on. */
 function isEmptyDraft(v: DraftValues): boolean {
   return !v.thoughtCore.trim() && !v.story.trim() && v.tags.length === 0 && !v.media;
 }
 
-/** How long editing must pause before the draft autosaves. */
+/** The title is one line: a line break typed or pasted into it is a space. */
+function oneLine(text: string): string {
+  return text.replace(/\r\n?|\n/g, ' ').slice(0, TITLE_MAX);
+}
+
+/** The nearest box that scrolls (the writer's pane): each step keeps its own place in it. */
+function scrollParent(el: HTMLElement | null): HTMLElement | null {
+  for (let node = el?.parentElement ?? null; node; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node);
+    if (overflowY === 'auto' || overflowY === 'scroll') return node;
+  }
+  return null;
+}
+
+/** How long editing must pause before the draft autosaves (and its type is read again). */
 const AUTOSAVE_DELAY_MS = 1500;
 
+/**
+ * The writer, in two steps (writer.spec). Writing: a bare page — the title
+ * and the story, set as the card page will set them (src/styles/story.css),
+ * nothing else on it but the save line (the host's) and one 下一步 (the
+ * host's bar, or floating at the split: `onPrimaryActionChange`). 下一步 asks
+ * for a title, makes sure a new draft exists, and opens the publish step in
+ * the same place (PublishStep): the mirror, the card as a list will show it
+ * with its cover, tags, audience and anonymity, then 發布 (or, for a live
+ * card, 儲存修改). The story stays mounted under the step, so its undo
+ * history and selection survive the round trip; everything chosen in the
+ * step is the editor's own value and autosaves like the words.
+ */
 export function CardEditor({
   initial,
+  seedStory,
   locale,
   referenceCardId,
-  mode = 'page',
-  onPublished,
-  onSavedDraft,
   onStoryChange,
   onSaveStatusChange,
+  step: stepProp,
+  onStepChange,
+  onPrimaryActionChange,
+  inlineStepHeading = false,
+  focusStepHeading,
+  onLeave,
+  onPendingChange,
   ref,
 }: CardEditorProps) {
   const t = useTranslations('write');
   const tCard = useTranslations('card');
   const tNative = useTranslations('native');
   const tSafety = useTranslations('safety');
-  // const tAi = useTranslations('write.ai'); // AI 寫作夥伴：暫時停用
+  const tMe = useTranslations('me.actions');
   const router = useRouter();
   const refreshConnections = useConnectionRefresh();
   // Back where the writer came from — or, in a tab of its own, to the card box, where the draft now is.
   const leaveWriter = useLeaveWriter('/me');
-  const inline = mode === 'inline';
 
   const [thoughtCore, setThoughtCore] = useState(initial?.thoughtCore ?? '');
-  const [story, setStory] = useState(initial?.story ?? '');
+  const [story, setStory] = useState(initial?.story ?? seedStory ?? '');
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
   const [visibility, setVisibility] = useState<Visibility>(initial?.visibility ?? 'public');
   const [anonymous, setAnonymous] = useState(initial?.anonymous ?? false);
-  const [publishOpen, setPublishOpen] = useState(false);
-  const publishPanelLoaded = useOpenedOnce(publishOpen);
   const [media, setMedia] = useState<CardMedia | undefined>(initial?.media);
   // Cover-image dominant hue (snapped to the card palette). Recomputed when a
-  // cover is uploaded/generated, cleared when removed — see setCover below.
+  // cover is uploaded/generated, cleared when removed.
   const [accentHue, setAccentHue] = useState<number | null>(initial?.accentHue ?? null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  // In-progress AI illustration (data URL) — the model streams 1–2 rough
-  // passes before the final image, shown inside the busy media box.
-  const [partialPreview, setPartialPreview] = useState<string | null>(null);
-  const [suggestingTags, setSuggestingTags] = useState(false);
-  const [tagError, setTagError] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
-  // AI 寫作夥伴：暫時停用，未來會重新啟用
-  // const [titleSuggestions, setTitleSuggestions] = useState<string[]>([]);
-  // const [polishPreview, setPolishPreview] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   // Which action `pending` is for: its button shows the loader (B6), the other rests.
   const [busyVerb, setBusyVerb] = useState<'publish' | 'leave'>('publish');
   const [publishError, setPublishError] = useState<string | null>(null);
-  // Revising a live card: the primary action saves changes rather than
+  // 下一步 found no title.
+  const [titleError, setTitleError] = useState(false);
+  // 下一步's save didn't go through.
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [nextLoading, setNextLoading] = useState(false);
+  const nextBusy = useRef(false);
+  // Pictures still on their way into the story.
+  const [storyBusy, setStoryBusy] = useState(false);
+  // Moved to the trash elsewhere while open here (trash.spec §5.5).
+  const [trashed, setTrashed] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  // Revising a live card: the step's verb saves changes rather than
   // publishing, and autosave buffers instead of writing through. Fixed for the
   // editor's lifetime — the host remounts it when the route's card changes.
   const isPublished = initial?.publishedAt != null;
   const [hasPendingEdit, setHasPendingEdit] = useState(initial?.hasPendingEdit ?? false);
+
+  // ---- The step ---------------------------------------------------------
+  const [ownStep, setOwnStep] = useState<WriterStep>('write');
+  const step = stepProp ?? ownStep;
+  const changeStep = useCallback(
+    (next: WriterStep) => {
+      if (stepProp === undefined) setOwnStep(next);
+      onStepChange?.(next);
+    },
+    [stepProp, onStepChange],
+  );
+  const stepRef = useRef(step);
+  stepRef.current = step;
+  // The publish step mounts the first time it is shown, and stays (a cover on its way, the mirror's answer).
+  const publishLoaded = useOpenedOnce(step === 'publish');
+
+  // ---- The story's type ----------------------------------------------------
+  // Read again on the autosave tick, never per keystroke: a new card starts in
+  // its UI locale's type, and changes only once there is enough of it and it
+  // leans clearly the other way (writerScript).
+  const [type, setType] = useState<{ script: StoryScript; lang: string | undefined }>(() => {
+    const title = initial?.thoughtCore ?? '';
+    const text = initial?.story ?? seedStory ?? '';
+    return { script: writerScript(localeScript(locale), title, text), lang: storyLang(title, text) };
+  });
+  useEffect(() => {
+    const h = setTimeout(() => {
+      setType((now) => {
+        const script = writerScript(now.script, thoughtCore, story);
+        const lang = storyLang(thoughtCore, story);
+        return script === now.script && lang === now.lang ? now : { script, lang };
+      });
+    }, AUTOSAVE_DELAY_MS);
+    return () => clearTimeout(h);
+  }, [thoughtCore, story]);
+
+  const reportPending = useRef(onPendingChange);
+  reportPending.current = onPendingChange;
+  useEffect(() => {
+    reportPending.current?.(pending);
+  }, [pending]);
 
   useEffect(() => {
     onStoryChange?.(story);
@@ -246,69 +346,29 @@ export function CardEditor({
   // Set once the editor is done with this card (saved or discarded): the
   // unmount flush must not resurrect a buffer we just cleared.
   const closedRef = useRef(false);
+  const trashedRef = useRef(false);
+  trashedRef.current = trashed;
 
   /**
-   * One line of plain reassurance, shown next to the page title (never only at
-   * the bottom of the form — the whole confusion was people not knowing their
-   * writing was safe). It says both what has happened and, for a live card,
-   * what has *not* happened yet. A draft says nothing until its first save.
+   * One line of plain reassurance at the top of the column. It says both what
+   * has happened and, for a live card, what has *not* happened yet. A draft
+   * says nothing until its first save; a card in the trash has its own line
+   * (with 還原), drawn by the editor.
    */
   const saveStatusLabel = useMemo(() => {
-    if (inline) return null;
+    if (trashed) return null;
     const time = savedAt?.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
     if (isPublished) {
       if (savedAt) return t('editBuffered', { time: time! });
       return hasPendingEdit ? t('editBufferedIdle') : t('editLiveHint');
     }
     return savedAt ? t('autosaved', { time: time! }) : null;
-  }, [savedAt, hasPendingEdit, isPublished, inline, locale, t]);
+  }, [savedAt, hasPendingEdit, isPublished, trashed, locale, t]);
 
   useEffect(() => {
     onSaveStatusChange?.(saveStatusLabel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saveStatusLabel]);
-
-  async function suggestTags() {
-    if (suggestingTags) return;
-    setTagError(null);
-    setSuggestingTags(true);
-    try {
-      // The draft may be unsaved, so the editor state travels in the body. The
-      // server merges in the author's past tags before asking the model.
-      const res = await fetch('/api/cards/tags', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ thoughtCore, story, tags }),
-      });
-      if (!res.ok) throw new Error(`Tag suggestion failed: ${res.status}`);
-      const { tags: suggested } = (await res.json()) as { tags?: string[] };
-      // The field stays open while the model thinks, so merge into what is
-      // there now, not into the list this request started from.
-      setTags((now) => {
-        const fresh = (suggested ?? []).filter((x) => !now.includes(x));
-        return fresh.length > 0 ? [...now, ...fresh] : now;
-      });
-    } catch (err) {
-      console.error('Tag suggestion failed:', err);
-      setTagError(t('tagsSuggestError'));
-    } finally {
-      setSuggestingTags(false);
-    }
-  }
-
-  // AI 寫作夥伴：暫時停用，未來會重新啟用
-  // function suggestTitles() {
-  //   setTitleSuggestions(SAMPLE_TITLES);
-  // }
-  // function stubPolish() {
-  //   setPolishPreview(story.replace(/\n{3,}/g, '\n\n').trim());
-  // }
-
-  /** Publish-time choices arrive from the publish panel, ahead of state. */
-  interface PublishChoices {
-    visibility?: Visibility;
-    anonymous?: boolean;
-  }
 
   /** The editable body, in the shape both the card doc and the buffer take. */
   function payloadFrom(v: DraftValues) {
@@ -323,23 +383,14 @@ export function CardEditor({
     };
   }
 
-  /** Current values, with any publish/update panel choices layered on top. */
-  function currentValues(choices?: PublishChoices): DraftValues {
-    return {
-      ...valuesRef.current,
-      visibility: choices?.visibility ?? valuesRef.current.visibility,
-      anonymous: choices?.anonymous ?? valuesRef.current.anonymous,
-    };
-  }
-
   /**
    * Persist the working copy. Returns the card for a draft (the caller may
    * need its freshly minted id); a published card's edits land in the buffer,
    * which has no card to hand back — hence `null`.
    */
-  function saveDraft(choices?: PublishChoices): Promise<Card | null> {
+  function saveDraft(): Promise<Card | null> {
     const run = writeChainRef.current.then(async () => {
-      const v = currentValues(choices);
+      const v = valuesRef.current;
       const payload = payloadFrom(v);
       if (isPublished && draftIdRef.current) {
         await savePendingCardEdit(draftIdRef.current, payload);
@@ -351,10 +402,11 @@ export function CardEditor({
       const card = draftIdRef.current
         ? await updateCardDraft(draftIdRef.current, payload)
         : await createCardDraft({ ...payload, originalLocale: locale, referenceCardId });
-      if (!draftIdRef.current && !inline) {
+      if (!draftIdRef.current) {
         // First save of a fresh draft: swap /write for /write/{id} in place
         // (Next integrates native replaceState) so a reload or a later
-        // traversal reopens this draft instead of a blank editor.
+        // traversal reopens this draft instead of a blank editor — before the
+        // publish step's entry is pushed over it.
         const path = window.location.pathname;
         const next = path.replace(/\/write(\/[^/]+)?$/, `/write/${card.id}`);
         if (next !== path) {
@@ -377,30 +429,52 @@ export function CardEditor({
     return draftSnapshot(v) !== lastSavedRef.current && !(!draftIdRef.current && isEmptyDraft(v));
   }
 
+  /**
+   * A write or a publish was refused in a way the card being in the trash
+   * would explain: the card is read again, and if it is there the writer says
+   * so (with 還原), back on the writing step, keeping everything typed.
+   */
+  async function confirmTrashed(err: unknown): Promise<boolean> {
+    const id = draftIdRef.current;
+    if (!id || !mayBeTrashed(err)) return false;
+    try {
+      const card = await getCardById(id);
+      if (!isTrashed(card)) return false;
+    } catch {
+      // Not read: a 409 from the server is answer enough.
+      if (!isTrashRefusal(err)) return false;
+    }
+    setTrashed(true);
+    setRestoreError(null);
+    if (stepRef.current !== 'write') changeStep('write');
+    return true;
+  }
+
   // Kick a save if the current values differ from what was last written.
   // Failures stay silent (logged) — the state remains dirty, so the next
-  // pause or the publish path retries.
+  // pause or the publish path retries — unless the card turns out to be in
+  // the trash, which the writer is then told.
   function autosaveNow() {
-    if (closedRef.current || !needsSave()) return;
-    void saveDraft().catch((err) => console.error('Autosave failed:', err));
+    if (closedRef.current || trashedRef.current || !needsSave()) return;
+    void saveDraft().catch(async (err) => {
+      if (await confirmTrashed(err)) return;
+      console.error('Autosave failed:', err);
+    });
   }
   const autosaveNowRef = useRef(autosaveNow);
   autosaveNowRef.current = autosaveNow;
 
-  // Debounce: save AUTOSAVE_DELAY_MS after the last edit. Inline (resonance)
-  // composers keep their explicit publish/save buttons instead.
+  // Debounce: save AUTOSAVE_DELAY_MS after the last edit.
   useEffect(() => {
-    if (inline) return;
     const h = setTimeout(() => autosaveNowRef.current(), AUTOSAVE_DELAY_MS);
     return () => clearTimeout(h);
-  }, [thoughtCore, story, tags, visibility, anonymous, media, accentHue, inline]);
+  }, [thoughtCore, story, tags, visibility, anonymous, media, accentHue]);
 
   // Edits younger than the debounce flush when the editor unmounts (in-app
   // back/navigation keeps the JS context alive, so the async write completes)
   // and when the tab is backgrounded — the closest signal mobile gives before
   // being killed.
   useEffect(() => {
-    if (inline) return;
     const flush = () => autosaveNowRef.current();
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') flush();
@@ -410,7 +484,7 @@ export function CardEditor({
       document.removeEventListener('visibilitychange', onVisibility);
       flush();
     };
-  }, [inline]);
+  }, []);
 
   /**
    * Why publishing, saving or discarding didn't go through, in the writer's
@@ -426,18 +500,119 @@ export function CardEditor({
         ? tCard('notFound.title')
         : fallback;
 
-  async function submit(choices?: PublishChoices) {
-    if (pending) return;
-    // The server refuses a card without a title; say so in the writer's words.
+  // ---- Step 1: the title, the story, 下一步 --------------------------------
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+  const storyRef = useRef<MarkdownEditorHandle>(null);
+  // Which field the writer was in: going back to writing puts them there again.
+  const lastField = useRef<'title' | 'story' | null>(null);
+  const titleErrorId = useId();
+
+  /** No title: the writing step, its title asking for one. */
+  function askForTitle() {
+    setTitleError(true);
+    if (stepRef.current !== 'write') changeStep('write');
+    requestAnimationFrame(() => titleRef.current?.focus());
+  }
+
+  async function goNext() {
+    if (nextBusy.current || pending || trashedRef.current) return;
     if (!valuesRef.current.thoughtCore.trim()) {
-      setPublishError(t('titleRequired'));
+      askForTitle();
+      return;
+    }
+    setSaveError(null);
+    if (!draftIdRef.current) {
+      // A new draft is written before the step opens: the step is an address of the draft's own
+      // (/write/{id}?step=publish), which a reload or the browser's back must find.
+      nextBusy.current = true;
+      const loader = window.setTimeout(() => setNextLoading(true), NEXT_LOADER_MS);
+      try {
+        await saveDraft();
+      } catch (err) {
+        console.error('Save before publishing failed:', err);
+        setSaveError(tNative('saveError'));
+        return;
+      } finally {
+        window.clearTimeout(loader);
+        setNextLoading(false);
+        nextBusy.current = false;
+      }
+    } else if (needsSave()) {
+      // A draft that is kept already saves on its way: the step opens at once.
+      void saveDraft().catch(async (err) => {
+        if (await confirmTrashed(err)) return;
+        console.error('Autosave failed:', err);
+      });
+    }
+    changeStep('publish');
+  }
+  const goNextRef = useRef(goNext);
+  goNextRef.current = goNext;
+
+  // The one way forward, drawn by the host: 下一步 while writing; nothing in the publish step (its foot has
+  // the verb) or for a card in the trash.
+  const actionHidden = step !== 'write' || trashed;
+  const actionDisabled = !isPublished && isEmptyDraft(values);
+  const reportAction = useRef(onPrimaryActionChange);
+  reportAction.current = onPrimaryActionChange;
+  const nextLabel = t('next');
+  useEffect(() => {
+    reportAction.current?.(
+      actionHidden
+        ? null
+        : { label: nextLabel, disabled: actionDisabled, loading: nextLoading, onPress: () => void goNextRef.current() },
+    );
+  }, [actionHidden, actionDisabled, nextLoading, nextLabel]);
+  useEffect(() => () => reportAction.current?.(null), []);
+
+  // ---- Moving between the steps: focus and each step's place in the scroll ----
+  const rootRef = useRef<HTMLDivElement>(null);
+  const writeScroll = useRef(0);
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const headingFocusPending = useRef(false);
+  const prevStep = useRef(step);
+  useLayoutEffect(() => {
+    if (prevStep.current === step) return;
+    const from = prevStep.current;
+    prevStep.current = step;
+    const scroller = scrollParent(rootRef.current);
+    if (step === 'publish') {
+      if (from === 'write' && scroller) writeScroll.current = scroller.scrollTop;
+      if (scroller) scroller.scrollTop = 0;
+      // The step names itself where the focus goes: its own heading at the split, the host's bar otherwise.
+      if (inlineStepHeading) {
+        if (headingRef.current) headingRef.current.focus({ preventScroll: true });
+        else headingFocusPending.current = true;
+      } else focusStepHeading?.();
+    } else {
+      if (scroller) scroller.scrollTop = writeScroll.current;
+      // Back where the writer was: the title, or the story with its selection.
+      if (lastField.current === 'story') storyRef.current?.focus('keep');
+      else titleRef.current?.focus({ preventScroll: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+  const setHeading = useCallback((el: HTMLHeadingElement | null) => {
+    headingRef.current = el;
+    if (el && headingFocusPending.current) {
+      headingFocusPending.current = false;
+      el.focus({ preventScroll: true });
+    }
+  }, []);
+
+  // ---- Step 2: publish, save changes, leave ---------------------------------
+  async function submit() {
+    if (pending) return;
+    // The server refuses a card without a title; say so in the writer's words, where the title is.
+    if (!valuesRef.current.thoughtCore.trim()) {
+      askForTitle();
       return;
     }
     setBusyVerb('publish');
     setPending(true);
     setPublishError(null);
     try {
-      const card = await saveDraft(choices);
+      const card = await saveDraft();
       if (!card) throw new Error('Draft was not saved');
       // One server call publishes it (POST /api/v1/cards/{id}/publish, as the
       // apps do): it stamps the card once, gives it its English URL slug (the
@@ -447,15 +622,12 @@ export function CardEditor({
       // connection would name its author. The recommendation index and the
       // card page's cache are refreshed after the response.
       const published = await publishCard(card.id);
-      const destination = published.slug ?? published.id;
-      // Inline (resonance) mode stays on the page so the resonance section can
-      // refresh in place; the page editor navigates to the new card.
-      if (inline) {
-        onPublished?.({ ...card, publishedAt: card.publishedAt ?? new Date(), slug: published.slug ?? card.slug });
-      } else {
-        router.push(`/card/${destination}`);
-      }
+      closedRef.current = true;
+      // In place of the step's own address: back from the card is the writing step, never a step of a card
+      // that is live now.
+      router.replace(`/card/${published.slug ?? published.id}`);
     } catch (err) {
+      if (await confirmTrashed(err)) return;
       console.error('Publish failed:', err);
       setPublishError(failure(err, t('publishPanel.failed')));
     } finally {
@@ -470,17 +642,16 @@ export function CardEditor({
    * Merge the buffered revision into the live card. This — not autosave — is
    * the moment an edit becomes visible to readers. One server call does it
    * (POST /api/v1/cards/{id}/edits/apply, as the apps do), from the buffer:
-   * so the working copy on screen, with the panel's choices, is written there
+   * so the working copy on screen, with the step's choices, is written there
    * first. `publishedAt` and the slug are left alone (updating a card is not
    * re-publishing it); the cached pages and the recommendation index are
    * refreshed after the response.
    */
-  async function applyUpdate(choices?: PublishChoices) {
+  async function applyUpdate() {
     const id = draftIdRef.current;
     if (pending || !id) return;
-    // The server refuses a card without a title; say so in the writer's words.
     if (!valuesRef.current.thoughtCore.trim()) {
-      setPublishError(t('titleRequired'));
+      askForTitle();
       return;
     }
     setBusyVerb('publish');
@@ -490,7 +661,7 @@ export function CardEditor({
       // The save queues behind any in-flight autosave and the apply behind the
       // save, so no straggling write can re-create the buffer after it's gone.
       // A failed save never reaches the apply.
-      const run = saveDraft(choices).then(() => applyPendingCardEdit(id));
+      const run = saveDraft().then(() => applyPendingCardEdit(id));
       writeChainRef.current = run.catch(() => undefined);
       const result = await run;
       if (!result.applied) {
@@ -505,10 +676,11 @@ export function CardEditor({
       // A resonance these changes hid or unnamed was taken back with them: the connection with the original's
       // author may have ended, so what turns on the viewer's connections is read again.
       if (referenceCardId) refreshConnections();
-      router.push(`/card/${result.slug ?? initial?.slug ?? id}`);
+      router.replace(`/card/${result.slug ?? initial?.slug ?? id}`);
     } catch (err) {
-      console.error('Save changes failed:', err);
       closedRef.current = false;
+      if (await confirmTrashed(err)) return;
+      console.error('Save changes failed:', err);
       setPublishError(failure(err, tNative('saveError')));
     } finally {
       setPending(false);
@@ -528,7 +700,7 @@ export function CardEditor({
       await run;
       setHasPendingEdit(false);
       closedRef.current = true;
-      router.push(cardHref);
+      router.replace(cardHref);
     } catch (err) {
       console.error('Discard edits failed:', err);
       closedRef.current = false;
@@ -539,9 +711,9 @@ export function CardEditor({
   }
 
   /**
-   * The explicit way out of a draft. Autosave already makes leaving safe, but
-   * "just close the window" is not something anyone should have to infer —
-   * this gives the intent a button to land on.
+   * The explicit way out of a draft, in the publish step's foot. Autosave
+   * already makes leaving safe, but "just close the window" is not something
+   * anyone should have to infer — this gives the intent a button to land on.
    */
   async function saveDraftAndLeave() {
     if (pending) return;
@@ -551,13 +723,33 @@ export function CardEditor({
     try {
       if (needsSave()) await saveDraft();
       closedRef.current = true;
-      leaveWriter();
+      (onLeave ?? leaveWriter)();
     } catch (err) {
-      console.error('Save draft failed:', err);
       closedRef.current = false;
+      if (await confirmTrashed(err)) return;
+      console.error('Save draft failed:', err);
       setPublishError(failure(err, tNative('saveError')));
     } finally {
       setPending(false);
+    }
+  }
+
+  /** Out of the trash, as it was: what was typed meanwhile is written at once. */
+  async function restore() {
+    const id = draftIdRef.current;
+    if (!id || restoring) return;
+    setRestoring(true);
+    setRestoreError(null);
+    try {
+      await restoreTrashedCard(id);
+      setTrashed(false);
+      trashedRef.current = false;
+      if (!closedRef.current && needsSave()) await saveDraft();
+    } catch (err) {
+      console.error('Restore failed:', err);
+      setRestoreError(tSafety('actionError'));
+    } finally {
+      setRestoring(false);
     }
   }
 
@@ -569,392 +761,135 @@ export function CardEditor({
       return !isEmptyDraft(v) && (draftIdRef.current != null || unsaved);
     },
     async saveNow() {
-      if (!closedRef.current && needsSave()) await saveDraft();
+      if (!closedRef.current && !trashedRef.current && needsSave()) await saveDraft();
     },
     cardId() {
       return draftIdRef.current;
     },
+    stepBack() {
+      if (stepRef.current !== 'publish') return false;
+      if (!pending) changeStep('write');
+      return true;
+    },
   }));
 
-  const mediaBusy = uploading || generating;
-  const canGenerate = story.trim().length > 0 && !mediaBusy;
-
-  async function generateFromStory() {
-    if (mediaBusy || story.trim().length === 0) return;
-    setUploadError(null);
-    setGenerating(true);
-    setPartialPreview(null);
-    try {
-      // The story body lives only in editor state here (the draft may be
-      // unsaved), so send it to the server, which distills it into an imagery
-      // prompt, renders the doodle, stores it in R2, and returns the URL. The
-      // response is an NDJSON stream: in-progress previews arrive as `partial`
-      // events while the model paints, then `done` carries the stored URL.
-      const res = await fetch('/api/generate-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ story }),
-      });
-      if (!res.ok || !res.body) {
-        setUploadError(t('mediaGenerateError'));
-        return;
-      }
-      let finalUrl: string | null = null;
-      for await (const event of ndjsonValues<GenerateImageEvent>(res.body)) {
-        if (event.type === 'partial') {
-          setPartialPreview(`data:image/png;base64,${event.b64}`);
-        } else if (event.type === 'done') {
-          finalUrl = event.publicUrl;
-        } else if (event.type === 'error') {
-          setUploadError(t('mediaGenerateError'));
-          return;
-        }
-      }
-      if (!finalUrl) {
-        setUploadError(t('mediaGenerateError'));
-        return;
-      }
-      setMedia({ type: 'image', url: finalUrl, label: t('mediaGeneratedLabel') });
-      setAccentHue(await extractAccentHue(finalUrl));
-    } catch {
-      setUploadError(t('mediaGenerateError'));
-    } finally {
-      setGenerating(false);
-      setPartialPreview(null);
-    }
-  }
-
-  async function uploadImage(file: File) {
-    if (mediaBusy) return;
-    setUploadError(null);
-    setUploading(true);
-    try {
-      const { publicUrl } = await uploadImageFile(file);
-      setMedia({ type: 'image', url: publicUrl, label: file.name });
-      // Read the hue from the local file — no extra fetch, no CORS involved.
-      setAccentHue(await extractAccentHue(file));
-    } catch (e) {
-      setUploadError(t(e instanceof UnsupportedImage ? 'mediaUnsupported' : 'mediaUploadError'));
-    } finally {
-      setUploading(false);
-    }
-  }
+  const showCount = thoughtCore.length >= TITLE_COUNT_FROM && !titleError;
 
   return (
-    <div className={styles.grid}>
+    <div ref={rootRef} className={styles.grid}>
       <div className={styles.column}>
-        {/* Core */}
-        <Field
-          label={t('coreLabel')}
-          htmlFor="card-core"
-          trailing={<CharCount count={thoughtCore.length} max={60} />}
-        >
-          <Textarea
-            id="card-core"
-            value={thoughtCore}
-            onChange={(e) => setThoughtCore(e.target.value.slice(0, 60))}
-            placeholder={t('corePlaceholder')}
-            rows={2}
-            tone="display"
-            curve={0.8}
-            autoGrow
-          />
-          {/* AI 寫作夥伴：標題建議暫時停用，未來會重新啟用 */}
-        </Field>
+        <div className={styles.write} hidden={step !== 'write'} data-returned={publishLoaded || undefined}>
+          {trashed && (
+            <div className={styles.trashed} role="status">
+              <span className={styles.trashedLine}>{t('trashed.status')}</span>
+              <OrganicButton variant="tonal" size="sm" loading={restoring} onClick={() => void restore()}>
+                {tMe('restore')}
+              </OrganicButton>
+              {restoreError && <FieldHint tone="error">{restoreError}</FieldHint>}
+            </div>
+          )}
 
-        {/* Story */}
-        <Field label={t('storyLabel')}>
+          {saveError && (
+            <p className={styles.saveError} role="alert">
+              {saveError}
+            </p>
+          )}
+
+          {/* The title: one line of intent, in the card page's own title type. */}
+          <div className={styles.titleBlock}>
+            <div className={`${styles.title} story-title`} data-script={type.script}>
+              <Textarea
+                ref={titleRef}
+                variant="bare"
+                rows={1}
+                autoGrow
+                value={thoughtCore}
+                lang={type.lang}
+                aria-label={t('coreLabel')}
+                aria-invalid={titleError || undefined}
+                aria-describedby={titleError ? titleErrorId : undefined}
+                placeholder={t('titlePlaceholder')}
+                onFocus={() => (lastField.current = 'title')}
+                onChange={(e) => {
+                  setThoughtCore(oneLine(e.target.value));
+                  setTitleError(false);
+                }}
+                onKeyDown={(e) => {
+                  // Enter goes on to the story (an input method's Enter only picks its word).
+                  if (e.key !== 'Enter' || e.nativeEvent.isComposing || e.keyCode === 229) return;
+                  e.preventDefault();
+                  storyRef.current?.focus(valuesRef.current.story.trim() ? 'end' : 'start');
+                }}
+              />
+            </div>
+            {titleError ? (
+              <div id={titleErrorId} className={styles.titleNote} role="alert">
+                <FieldHint tone="error">{t('titleRequired')}</FieldHint>
+              </div>
+            ) : (
+              showCount && (
+                <div className={styles.titleNote} data-full={thoughtCore.length >= TITLE_MAX || undefined}>
+                  <CharCount count={thoughtCore.length} max={TITLE_MAX} />
+                </div>
+              )
+            )}
+          </div>
+
+          {/* The story, set as the reader sets it. */}
           <MarkdownEditor
+            variant="canvas"
+            editorRef={storyRef}
             value={story}
             onChange={setStory}
             placeholder={t('storyPlaceholder')}
             ariaLabel={t('storyLabel')}
             seed={17}
+            script={type.script}
+            lang={type.lang}
+            onUploadingChange={setStoryBusy}
+            onFocusChange={(focused) => focused && (lastField.current = 'story')}
           />
-          {/* AI 寫作夥伴：潤飾 diff 預覽暫時停用，未來會重新啟用 */}
-        </Field>
 
-        {/* Tags */}
-        <Field label={t('tagsLabel')} htmlFor="card-tags">
-          <TagField
-            id="card-tags"
-            tags={tags}
-            onChange={setTags}
-            onSuggest={() => void suggestTags()}
-            suggesting={suggestingTags}
-            error={tagError}
-          />
-        </Field>
-
-        {/* Media */}
-        <Field label={t('mediaLabel')}>
-          {media ? (
-            <HandDrawnImage
-              src={media.url}
-              alt={media.label ?? ''}
-              seed={31}
-              R={16}
-              curve={0.8}
-              onRemove={() => { setMedia(undefined); setAccentHue(null); }}
-              removeLabel={t('mediaRemove')}
-            />
-          ) : mediaBusy ? (
-            partialPreview ? (
-              // The model's in-progress pass: shown straight inside the same
-              // hand-drawn frame (identical seed/geometry + final aspect
-              // ratio) the stored image will land in, gaussian-blurred and
-              // washed because it isn't a settled picture yet.
-              <HandDrawnImage
-                src={partialPreview}
-                seed={31}
-                R={16}
-                curve={0.8}
-                blur={14}
-                wash="color-mix(in oklch, var(--color-cream) 45%, transparent)"
-              >
-                <span className={styles.generatingOverlay}>
-                  <SketchLoader size={64} seed={31} ariaLabel={t('mediaGenerating')} />
-                  <span className={styles.uploadText}>{t('mediaGenerating')}</span>
-                </span>
-              </HandDrawnImage>
-            ) : (
-              <HandDrawnDashedSurface
-                seed={31}
-                R={16}
-                curve={0.8}
-                state="focus"
-                className={styles.fileInputWrap}
-              >
-                <span className={styles.uploadInner}>
-                  <SketchLoader
-                    size={64}
-                    seed={31}
-                    ariaLabel={generating ? t('mediaGenerating') : t('mediaUploading')}
-                  />
-                  <span className={styles.uploadText}>
-                    {generating ? t('mediaGenerating') : t('mediaUploading')}
-                  </span>
-                </span>
-              </HandDrawnDashedSurface>
-            )
-          ) : (
-            // Split surface: drag/click upload on the left, AI generation on the
-            // right, divided by a vertical pen rule.
-            <HandDrawnDashedSurface
-              seed={31}
-              R={16}
-              curve={0.8}
-              state={dragOver ? 'focus' : 'idle'}
-              className={styles.fileInputWrap}
-            >
-              <div className={styles.mediaSplit}>
-                <label
-                  className={styles.mediaHalf}
-                  data-drag={dragOver || undefined}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setDragOver(true);
-                  }}
-                  onDragLeave={() => setDragOver(false)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setDragOver(false);
-                    const file = e.dataTransfer.files?.[0];
-                    if (file) void uploadImage(file);
-                  }}
-                >
-                  <span className={styles.uploadInner}>
-                    <Icon name="image" size={26} color="var(--color-terracotta)" />
-                    <span className={styles.uploadText}>{t('mediaPlaceholder')}</span>
-                    <span className={styles.uploadHint}>{t('mediaHint')}</span>
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.currentTarget.files?.[0];
-                      if (file) void uploadImage(file);
-                      e.currentTarget.value = '';
-                    }}
-                    className={styles.fileInputHidden}
-                  />
-                </label>
-
-                <Divider orientation="vertical" spacing={0} strokeWidth={INK} />
-
-                <button
-                  type="button"
-                  className={styles.mediaHalf}
-                  disabled={!canGenerate}
-                  onClick={() => void generateFromStory()}
-                  title={canGenerate ? undefined : t('mediaGenerateNeedStory')}
-                >
-                  <span className={styles.uploadInner}>
-                    <Icon name="sparkle" size={26} color="var(--color-terracotta)" />
-                    <span className={styles.uploadText}>{t('mediaGenerate')}</span>
-                    <span className={styles.uploadHint}>
-                      {canGenerate ? t('mediaGenerateHint') : t('mediaGenerateNeedStory')}
-                    </span>
-                  </span>
-                </button>
-              </div>
-            </HandDrawnDashedSurface>
-          )}
-          {uploadError && (
-            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--color-terracotta)' }}>
-              {uploadError}
-            </div>
-          )}
-        </Field>
-
-        {/* Visibility now lives in the publish panel (ux §6) — the page editor
-            body stays about the writing; resonance (inline) cards are always
-            public and never see the panel. */}
-
-        {/* Actions */}
-        {inline ? (
-          <div className={styles.actions}>
-            <SegmentedActionBar
-              segments={[
-                {
-                  key: 'publish',
-                  icon: <Icon name="wave" size={16} color="var(--color-cream)" />,
-                  label: tCard('publishResonance'),
-                  loading: pending && busyVerb === 'publish',
-                  textColor: 'var(--color-cream)',
-                  fill: 'var(--button-fill)',
-                  hoverOverlay: 'oklch(0% 0 0 / 0.14)',
-                  onClick: () => void submit(),
-                },
-                {
-                  key: 'draft',
-                  icon: <Icon name="pen" size={16} />,
-                  label: tCard('saveResonanceDraft'),
-                  loading: pending && busyVerb === 'leave',
-                  onClick: () => {
-                    if (pending) return;
-                    setBusyVerb('leave');
-                    setPending(true);
-                    setPublishError(null);
-                    saveDraft()
-                      .then((card) => card && onSavedDraft?.(card))
-                      .catch((err) => {
-                        console.error('Save draft failed:', err);
-                        setPublishError(failure(err, tNative('saveError')));
-                      })
-                      .finally(() => setPending(false));
-                  },
-                },
-              ]}
-            />
-            {publishError && (
-              <span style={{ fontSize: 12, color: 'var(--color-terracotta)' }}>{publishError}</span>
-            )}
-          </div>
-        ) : (
-        <div className={`${styles.actions} ${styles.actionsStack}`}>
-          {/* Everything autosaves; these buttons are only about *intent*.
-              A draft: publish it, or step away and come back later. A live
-              card: put the revision in front of readers, or drop it. On a
-              phone they are one centred column: the verb across the width,
-              the quiet way out under it. */}
-          <div className={styles.primaryAction}>
-            <OrganicButton
-              variant="primary"
-              loading={pending && busyVerb === 'publish'}
-              disabled={pending && busyVerb !== 'publish'}
-              onClick={() => {
-                setPublishError(null);
-                setPublishOpen(true);
-              }}
-            >
-              {isPublished ? t('saveChanges') : t('publish')}
-            </OrganicButton>
-          </div>
-          {(isPublished ? hasPendingEdit : true) && (
-            <div className={styles.secondaryAction}>
-              <OrganicButton
-                variant="text"
-                loading={pending && busyVerb === 'leave'}
-                disabled={pending && busyVerb !== 'leave'}
-                onClick={() => void (isPublished ? discardEdits() : saveDraftAndLeave())}
-              >
-                {isPublished ? t('discardChanges') : t('saveDraftAndLeave')}
-              </OrganicButton>
-            </div>
-          )}
-          {publishError && !publishOpen && (
-            <span className={styles.actionError}>{publishError}</span>
-          )}
-          {/* The save state used to live here and nowhere else, which is why
-              nobody found it. It now sits under the page title
-              (`onSaveStatusChange`); a second copy beside the buttons would
-              just be the same sentence twice on one screen. */}
         </div>
-        )}
 
-        {!inline && publishPanelLoaded && (
-          <PublishPanel
-            open={publishOpen}
-            onClose={() => setPublishOpen(false)}
-            mode={isPublished ? 'update' : 'publish'}
-            thoughtCore={thoughtCore}
-            story={story}
-            initialVisibility={visibility}
-            initialAnonymous={anonymous}
-            pending={pending}
-            error={publishError}
-            onPublish={(choices) => {
-              // Keep editor state in sync so a failed publish (panel stays
-              // open) retries with the same choices.
-              setVisibility(choices.visibility);
-              setAnonymous(choices.anonymous);
-              if (isPublished) void applyUpdate(choices);
-              else void submit(choices);
-            }}
-          />
+        {publishLoaded && (
+          <div className={styles.publish} hidden={step !== 'publish'}>
+            <PublishStep
+              mode={isPublished ? 'update' : 'publish'}
+              active={step === 'publish'}
+              inlineHeading={inlineStepHeading}
+              headingRef={setHeading}
+              onBack={() => changeStep('write')}
+              values={values}
+              onTagsChange={setTags}
+              onAudienceChange={(next) => {
+                // One change, so no write is ever anonymous and for connections only.
+                setVisibility(next.visibility);
+                setAnonymous(next.anonymous);
+              }}
+              onCoverChange={(next, hue) => {
+                setMedia(next);
+                setAccentHue(hue);
+              }}
+              resonance={referenceCardId != null}
+              liveReaches={
+                isPublished &&
+                reachesOriginal(
+                  initial?.live?.visibility ?? initial?.visibility ?? 'public',
+                  initial?.live?.anonymous ?? initial?.anonymous ?? false,
+                )
+              }
+              storyBusy={storyBusy}
+              pending={pending}
+              busyVerb={busyVerb}
+              error={publishError}
+              onSubmit={() => void (isPublished ? applyUpdate() : submit())}
+              onSecondary={() => void (isPublished ? discardEdits() : saveDraftAndLeave())}
+              showSecondary={isPublished ? hasPendingEdit || draftSnapshot(values) !== lastSavedRef.current : true}
+            />
+          </div>
         )}
       </div>
-
-      {/*
-        AI 寫作夥伴（暫時停用，未來會重新啟用）
-        原本右側的 AI Assist Panel — 提供潤飾 / 標題 / 標籤建議。
-        恢復時取消下方註解，並還原上方相關 state、handlers、imports（Panel / Divider / tAi）。
-
-        <Panel
-          title={<><Icon name="sparkle" size={16} color="var(--color-terracotta)" />{tAi('panel')}</>}
-          footer={tAi('stubNotice')}
-          sticky
-          collapseOnMobile
-        >
-          <AiRow icon="sparkle" title={tAi('polish')} hint={tAi('polishHint')} onClick={stubPolish} />
-          <Divider seed={11} />
-          <AiRow icon="star" title={tAi('title')} hint={tAi('titleHint')} onClick={suggestTitles} />
-          <Divider seed={23} />
-          <AiRow icon="plus" title={tAi('tags')} hint={tAi('tagsHint')} onClick={suggestTags} />
-        </Panel>
-      */}
     </div>
   );
 }
-
-// AI 寫作夥伴：暫時停用，未來會重新啟用
-// interface AiRowProps {
-//   icon: 'sparkle' | 'star' | 'plus';
-//   title: string;
-//   hint: string;
-//   onClick: () => void;
-// }
-
-// AI 寫作夥伴：暫時停用，未來會重新啟用
-// function AiRow({ icon, title, hint, onClick }: AiRowProps) {
-//   return (
-//     <button type="button" onClick={onClick} className={styles.aiRow}>
-//       <span className={styles.aiRowTitle}>
-//         <Icon name={icon} size={14} color="var(--color-terracotta)" />
-//         {title}
-//       </span>
-//       <span className={styles.aiRowHint}>{hint}</span>
-//     </button>
-//   );
-// }

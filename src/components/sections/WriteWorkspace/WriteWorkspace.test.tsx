@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import * as React from 'react';
 import { afterEach, beforeEach, describe, it, expect, onTestFinished, vi } from 'vitest';
-import { fireEvent, renderWithIntl, screen, userEvent, waitFor, within } from '@/../test/render';
+import { act, fireEvent, renderWithIntl, screen, userEvent, waitFor, within } from '@/../test/render';
 import en from '@/messages/en.json';
 import type { Card } from '@/lib/db/types';
 
@@ -12,11 +12,45 @@ const editor = vi.hoisted(() => ({
   hasWork: vi.fn(() => false),
   saveNow: vi.fn(async () => {}),
   cardId: vi.fn((): string | undefined => undefined),
+  stepBack: vi.fn(() => false),
 }));
+// It reports its 下一步 to the page, which draws it; pressed, it asks for the publish step, and the bar's back
+// from there asks for writing again (CardEditor's own contract, its suite's).
 vi.mock('@/components/molecules/CardEditor/CardEditor', () => ({
-  CardEditor: ({ ref }: { ref?: React.Ref<typeof editor> }) => {
-    React.useImperativeHandle(ref, () => editor);
-    return <textarea aria-label="Draft" />;
+  CardEditor: ({
+    ref,
+    step = 'write',
+    onStepChange,
+    onPrimaryActionChange,
+    onLeave,
+  }: {
+    ref?: React.Ref<unknown>;
+    step?: 'write' | 'publish';
+    onStepChange?: (s: 'write' | 'publish') => void;
+    onPrimaryActionChange?: (a: unknown) => void;
+    onLeave?: () => void;
+  }) => {
+    React.useImperativeHandle(ref, () => ({
+      ...editor,
+      stepBack: () => {
+        editor.stepBack();
+        if (step !== 'publish') return false;
+        onStepChange?.('write');
+        return true;
+      },
+    }));
+    React.useEffect(() => {
+      onPrimaryActionChange?.(
+        step === 'write' ? { label: 'Next', disabled: false, loading: false, onPress: () => onStepChange?.('publish') } : null,
+      );
+    }, [step, onStepChange, onPrimaryActionChange]);
+    return (
+      <>
+        <textarea aria-label="Draft" />
+        <p>step: {step}</p>
+        {step === 'publish' && <button onClick={onLeave}>Save draft and leave</button>}
+      </>
+    );
   },
 }));
 
@@ -54,6 +88,7 @@ const openedEditor = vi.hoisted(() => ({
   hasWork: vi.fn(() => false),
   saveNow: vi.fn(async () => {}),
   cardId: vi.fn((): string | undefined => undefined),
+  stepBack: vi.fn(() => false),
 }));
 vi.mock('./OpenedCardPane', () => ({
   OpenedCardPane: ({ card, editorRef }: { card: Card; editorRef?: React.Ref<typeof openedEditor> }) => {
@@ -186,6 +221,79 @@ describe('the writer below the split', () => {
     expect(screen.getByRole('dialog', { name: en.write.leaveTitle })).toBeInTheDocument();
     await confirmLeave();
     await waitFor(() => expect(back).toHaveBeenCalledTimes(1));
+  });
+});
+
+// 下一步 opens the publish step in place, and the address says so: the browser's back returns to writing.
+describe('the publish step', () => {
+  const nextButton = () => screen.getByRole('button', { name: en.write.next });
+  beforeEach(() => {
+    window.history.replaceState(null, '', '/en/write/draft');
+  });
+
+  it('puts 下一步 at the end of the bar below the split, and floats it over the pane at the split', () => {
+    screenAtSplit(false);
+    const { unmount } = renderWithIntl(<WriteWorkspace title={en.write.editTitle} locale="en" initial={{ id: 'draft', story: 'x' }} />);
+    expect(within(screen.getByRole('banner')).getByRole('button', { name: en.write.next })).toBeInTheDocument();
+    unmount();
+    screenAtSplit(true);
+    renderWithIntl(<WriteWorkspace title={en.write.editTitle} locale="en" initial={{ id: 'draft', story: 'x' }} />);
+    expect(screen.queryByRole('banner')).toBeNull();
+    expect(nextButton()).toBeInTheDocument();
+  });
+
+  it('enters the step under its own address, and the browser’s back returns to writing', async () => {
+    screenAtSplit(false);
+    renderWithIntl(<WriteWorkspace title={en.write.editTitle} locale="en" initial={{ id: 'draft', story: 'x' }} />);
+    await userEvent.click(nextButton());
+    expect(window.location.search).toBe('?step=publish');
+    expect(screen.getByText('step: publish')).toBeInTheDocument();
+    // The bar names the step, its back is the way back to writing, and the step's foot has the verb.
+    expect(screen.getByRole('heading', { level: 1, name: en.write.publishPanel.title })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: en.write.leaveStay })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: en.write.next })).toBeNull();
+
+    act(() => window.history.back());
+    await waitFor(() => expect(screen.getByText('step: write')).toBeInTheDocument());
+    expect(window.location.search).toBe('');
+    expect(screen.getByRole('heading', { level: 1, name: en.write.editTitle })).toBeInTheDocument();
+  });
+
+  it('goes back to writing from the step without asking, and asks from writing as ever', async () => {
+    screenAtSplit(false);
+    editor.hasWork.mockReturnValue(true);
+    renderWithIntl(<WriteWorkspace title={en.write.editTitle} locale="en" initial={{ id: 'draft', story: 'x' }} />);
+    await userEvent.click(nextButton());
+    await userEvent.click(screen.getByRole('button', { name: en.write.leaveStay }));
+    await waitFor(() => expect(screen.getByText('step: write')).toBeInTheDocument());
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(back).not.toHaveBeenCalled();
+
+    await userEvent.click(backArrow());
+    expect(screen.getByRole('dialog', { name: en.write.leaveTitle })).toBeInTheDocument();
+  });
+
+  // Saved for later from the step: its entry is popped first, so the way out isn't back to it.
+  it('leaves from the step past its own entry', async () => {
+    renderWithIntl(<WriteWorkspace title={en.write.editTitle} locale="en" initial={{ id: 'draft', story: 'x' }} />);
+    await userEvent.click(nextButton());
+    expect(window.location.search).toBe('?step=publish');
+    await userEvent.click(screen.getByRole('button', { name: 'Save draft and leave' }));
+    await waitFor(() => expect(back).toHaveBeenCalledTimes(1));
+    expect(window.location.search).toBe('');
+  });
+
+  it('opens at the step when its address says so (a reload), and loses the step from it in place', async () => {
+    screenAtSplit(false);
+    window.history.replaceState(null, '', '/en/write/draft?step=publish');
+    const pushState = vi.spyOn(window.history, 'pushState');
+    onTestFinished(() => pushState.mockRestore());
+    renderWithIntl(<WriteWorkspace title={en.write.editTitle} locale="en" initial={{ id: 'draft', story: 'x' }} />);
+    expect(await screen.findByText('step: publish')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: en.write.leaveStay }));
+    expect(screen.getByText('step: write')).toBeInTheDocument();
+    expect(window.location.search).toBe('');
+    expect(pushState).not.toHaveBeenCalled();
   });
 });
 

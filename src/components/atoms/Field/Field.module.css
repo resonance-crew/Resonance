@@ -218,6 +218,29 @@ textarea.field.autoGrow {
   border-bottom-color: var(--field-border-focus);
 }
 
+/* Variant: bare — a document's own field (the writer's title): no frame, no
+   padding and no type of its own. It takes the type of what it is set in, so
+   the title is written in the type the card page will show it in; its focus
+   is the caret (WCAG 2.4.7: the field has an accessible name, and the caret
+   is in the accent). */
+.field[data-variant='bare'] {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  text-align: inherit;
+  text-transform: inherit;
+  color: inherit;
+  caret-color: var(--color-terracotta);
+}
+
+textarea.field[data-variant='bare'] {
+  resize: none;
+  min-height: 0;
+}
+
 .fieldGroup {
   display: flex;
   flex-direction: column;

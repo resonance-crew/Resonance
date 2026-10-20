@@ -1,9 +1,14 @@
 'use client';
 
 import { useLocale, useTranslations } from 'next-intl';
-import type { Ref } from 'react';
+import { useState, type Ref } from 'react';
 import useSWR from 'swr';
-import { CardEditor, type CardEditorHandle } from '@/components/molecules/CardEditor/CardEditor';
+import {
+  CardEditor,
+  type CardEditorHandle,
+  type CardEditorProps,
+  type WriterStep,
+} from '@/components/molecules/CardEditor/CardEditor';
 import { PageTitle } from '@/components/molecules/PageShell/PageShell';
 import { SketchLoader } from '@/components/atoms/SketchLoader/SketchLoader';
 import { LoadError } from '@/components/molecules/LoadError/LoadError';
@@ -27,20 +32,29 @@ import styles from './WriteWorkspace.module.css';
  *
  * `titled={false}` leaves the title to the host: the writer's bar, or the
  * thought map pane's own header row. `editorRef` hands the host the editor's
- * handle (folding the pane away saves at once).
+ * handle (folding the pane away saves at once); `editorProps` its two steps
+ * (the step, 下一步, the step's name) — the editor keeps the step to itself,
+ * with no address of its own. The save line is the pane's, over the writing.
  */
 export function OpenedCardPane({
   card,
   titled = true,
   editorRef,
+  editorProps,
 }: {
   card: Card;
   titled?: boolean;
   editorRef?: Ref<CardEditorHandle>;
+  editorProps?: Pick<
+    CardEditorProps,
+    'onStepChange' | 'onPrimaryActionChange' | 'onPendingChange' | 'inlineStepHeading' | 'focusStepHeading'
+  >;
 }) {
   const t = useTranslations('write');
   const locale = useLocale() as Locale;
   const { user } = useAuth();
+  const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [step, setStep] = useState<WriterStep>('write');
   const isOwn = user?.id === card.authorId;
   const { data: pending, isLoading, error, mutate } = useSWR(
     isOwn && card.publishedAt ? `pendingEdit:${card.id}` : null,
@@ -72,16 +86,24 @@ export function OpenedCardPane({
   return (
     <div className={styles.editorCol}>
       {titled && <PageTitle>{card.publishedAt ? t('editPublishedTitle') : t('editTitle')}</PageTitle>}
+      {step === 'write' && saveStatus && <p className={styles.saveStatus}>{saveStatus}</p>}
       <CardEditor
         key={card.id}
         ref={editorRef}
         locale={locale}
         referenceCardId={card.referenceCardId}
+        onSaveStatusChange={setSaveStatus}
+        {...editorProps}
+        onStepChange={(next) => {
+          setStep(next);
+          editorProps?.onStepChange?.(next);
+        }}
         initial={{
           id: card.id,
           slug: card.slug,
           publishedAt: card.publishedAt,
           hasPendingEdit: pending != null,
+          live: { visibility: card.visibility, anonymous: card.anonymous ?? false },
           thoughtCore: values.thoughtCore,
           story: values.story,
           tags: values.tags,

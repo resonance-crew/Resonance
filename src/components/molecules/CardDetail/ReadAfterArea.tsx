@@ -7,6 +7,7 @@ import { NoteComposer } from '@/components/molecules/NoteComposer/NoteComposer';
 import { CardViewerActions } from './CardViewerActions';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useRouter } from '@/i18n/navigation';
+import { leaveWriteSeed } from '@/lib/data/writeSeed';
 
 export interface ReadAfterAreaProps {
   cardId: string;
@@ -74,10 +75,12 @@ export function ReadAfterArea({ cardId, cardTitle, referenceCardId, author }: Re
     setNoteOpen(true);
   }
 
-  // 紙條 → 共振: hand the text up into the resonance editor.
+  // 紙條 → 共振: hand the text up into the resonance editor — through this tab's storage, never the address
+  // (private words don't go in a request or the history).
   function handleUpgrade(text: string) {
     setNoteOpen(false);
-    router.push(`/write?referenceCardId=${cardId}&story=${encodeURIComponent(text)}`);
+    leaveWriteSeed(cardId, text);
+    router.push(`/write?referenceCardId=${cardId}`);
   }
 
   return (

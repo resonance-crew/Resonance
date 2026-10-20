@@ -20,6 +20,11 @@ export interface OrganicImageProps {
   /** Overlays or fallback content rendered inside the clipped box. */
   children?: ReactNode;
   /**
+   * Laid over the picture inside the clip, on the box itself (children reach past it by the wobble's
+   * bleed): controls that sit on the picture — the writer's cover slot — keep their place in the frame.
+   */
+  overlay?: ReactNode;
+  /**
    * The page's main picture (the card page's cover): requested at once, ahead
    * of other images. Every other image waits until it nears the viewport —
    * the box already holds its space (`ratio`), so nothing moves when it lands.
@@ -43,6 +48,7 @@ export function OrganicImage({
   className,
   style,
   children,
+  overlay,
   priority = false,
 }: OrganicImageProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -113,6 +119,7 @@ export function OrganicImage({
         )}
         {children}
       </div>
+      {overlay != null && <div style={{ position: 'absolute', inset: 0 }}>{overlay}</div>}
     </div>
   );
 }

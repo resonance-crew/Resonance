@@ -774,6 +774,8 @@ object L10n {
     object Write {
         /** Give it a one-line title first */
         val titleRequired: String get() = Strings.string("write.titleRequired")
+        /** Next */
+        val next: String get() = Strings.string("write.next")
         /** New card */
         val title: String get() = Strings.string("write.title")
         /** Edit draft */
@@ -802,11 +804,13 @@ object L10n {
         val referenceCard: String get() = Strings.string("write.referenceCard")
         /** One-line title */
         val coreLabel: String get() = Strings.string("write.coreLabel")
+        /** One-line title */
+        val titlePlaceholder: String get() = Strings.string("write.titlePlaceholder")
         /** e.g. Being seen matters more than being liked */
         val corePlaceholder: String get() = Strings.string("write.corePlaceholder")
         /** Story */
         val storyLabel: String get() = Strings.string("write.storyLabel")
-        /** Write the moment that pulled that line out of you… */
+        /** Start with the moment that made you want to write… */
         val storyPlaceholder: String get() = Strings.string("write.storyPlaceholder")
         object Editor {
             /** Editor toolbar */
@@ -829,6 +833,10 @@ object L10n {
             val insertCard: String get() = Strings.string("write.editor.insertCard")
             /** Insert image */
             val insertImage: String get() = Strings.string("write.editor.insertImage")
+            /** Insert */
+            val insert: String get() = Strings.string("write.editor.insert")
+            /** Hide keyboard */
+            val hideKeyboard: String get() = Strings.string("write.editor.hideKeyboard")
             /** Uploading image… */
             val imageUploading: String get() = Strings.string("write.editor.imageUploading")
             /** Couldn’t upload the image — please try again */
@@ -868,6 +876,8 @@ object L10n {
         val mediaLabel: String get() = Strings.string("write.mediaLabel")
         /** Remove image */
         val mediaRemove: String get() = Strings.string("write.mediaRemove")
+        /** Change image */
+        val mediaReplace: String get() = Strings.string("write.mediaReplace")
         /** Add an image */
         val mediaPlaceholder: String get() = Strings.string("write.mediaPlaceholder")
         /** Any common image format */
@@ -888,8 +898,12 @@ object L10n {
         val mediaGenerating: String get() = Strings.string("write.mediaGenerating")
         /** Couldn’t generate an image — please try again */
         val mediaGenerateError: String get() = Strings.string("write.mediaGenerateError")
+        /** The image is still on its way — you can publish once it's in */
+        val mediaBusyHint: String get() = Strings.string("write.mediaBusyHint")
         /** AI-generated illustration */
         val mediaGeneratedLabel: String get() = Strings.string("write.mediaGeneratedLabel")
+        /** How the card looks in a list */
+        val previewCaption: String get() = Strings.string("write.previewCaption")
         object Visibility {
             /** Who can see */
             val label: String get() = Strings.string("write.visibility.label")
@@ -930,7 +944,7 @@ object L10n {
         val publishing: String get() = Strings.string("write.publishing")
         /** Draft saved · {time} */
         fun autosaved(time: String): String = Strings.format("write.autosaved", mapOf("time" to time))
-        /** This card is already published. Changes are kept privately until you press Save changes. */
+        /** This card is live — changes stay private until you save them */
         val editLiveHint: String get() = Strings.string("write.editLiveHint")
         /** Changes saved privately · {time} (readers still see the old version) */
         fun editBuffered(time: String): String = Strings.format("write.editBuffered", mapOf("time" to time))
@@ -975,6 +989,10 @@ object L10n {
             val updating: String get() = Strings.string("write.publishPanel.updating")
             /** An anonymous card is either public or only for you */
             val anonymousVisibility: String get() = Strings.string("write.publishPanel.anonymousVisibility")
+            /** A public resonance under your name lets the original's author know it's you */
+            val resonanceReaches: String get() = Strings.string("write.publishPanel.resonanceReaches")
+            /** The original's author won't be notified */
+            val resonanceQuiet: String get() = Strings.string("write.publishPanel.resonanceQuiet")
             /** Couldn't publish — try again */
             val failed: String get() = Strings.string("write.publishPanel.failed")
             /** That's the limit for today — try again tomorrow */

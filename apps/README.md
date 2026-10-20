@@ -93,6 +93,12 @@ npm run apps:generate   # tokens, string accessors, icons, openapi.json, editor 
 Both apps also bundle the story editor island, `native/editor/dist/editor.html`
 (the writing screen's story field), which sets a story with the web's own
 `src/styles/story.css` under the web's tokens (`scripts/native/islandRoot.ts`).
+For the two-step writer (writer.spec, the apps' phase 2) it also takes
+`?layout=canvas` (no frame or padding of its own), `?locale=` (the type an
+empty story starts in) and `setTitle` / `setScript` over the bridge, and posts
+`script` (how the story is set, for the native title field) and `caret` (the
+caret's line, to keep above a keyboard bar) — all additive: a host that passes
+none of it gets the island as before (src/lib/markdown/editorIsland.test.ts).
 It is built, not committed: run
 `npm run native:editor` (or `apps:generate`) before the first app build. An
 Android build without it installs and runs, but the writer's story field says

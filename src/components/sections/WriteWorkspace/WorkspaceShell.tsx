@@ -10,6 +10,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type Ref,
   type UIEvent,
 } from 'react';
 import { useTranslations } from 'next-intl';
@@ -54,6 +55,8 @@ export interface WorkspaceShellProps {
   onHide?: () => void;
   /** What the pane shows, named in its header row below the split (with `onClose` and no `bar`). */
   paneTitle?: ReactNode;
+  /** The header row's back, when it isn't 返回 (the publish step's 繼續寫), and whether it waits. */
+  paneBack?: { label?: string; disabled?: boolean };
   /**
    * Which card the pane shows (its id): another card opened while the pane is
    * open starts at its top, the header's line at rest; and closing the pane
@@ -77,9 +80,19 @@ export interface WorkspaceShellProps {
    * workspace is one page with the thought map's: no bar, the Leave floating
    * over the map (`onLeave`) its way back.
    */
-  bar?: { title: ReactNode; onBack: () => void };
+  bar?: { title: ReactNode; onBack: () => void; backDisabled?: boolean; backLabel?: string };
   /** The Leave floating over the map; the page's history back without it. */
   onLeave?: () => void;
+  /**
+   * What the pane does next (the editor's 下一步): at the end of the writer's
+   * bar or the pane's header row below the split; at the split, where the
+   * pane has neither, it floats at the pane's top-right — the Leave's mirror
+   * over the map — outside what scrolls, so it never scrolls away and folds
+   * with the pane.
+   */
+  paneAction?: ReactNode;
+  /** The bar's (or the pane header's) title, for a host that moves the focus to it. */
+  titleRef?: Ref<HTMLHeadingElement>;
   children: ReactNode;
 }
 
@@ -100,12 +113,15 @@ export function WorkspaceShell({
   onClose,
   onHide,
   paneTitle,
+  paneBack,
   paneKey,
   onOpenCard,
   focusCardId,
   leftOverride,
   bar,
   onLeave,
+  paneAction,
+  titleRef,
   children,
 }: WorkspaceShellProps) {
   const t = useTranslations('write');
@@ -322,6 +338,10 @@ export function WorkspaceShell({
       if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing || e.keyCode === 229) return;
       if (document.querySelector('[role="menu"], [role="listbox"], [aria-modal="true"]')) return;
       const target = e.target instanceof HTMLElement ? e.target : null;
+      // A toolbar keeps its Escape (the story's selection bubble gives the words back with it), and a publish
+      // on its way holds the pane where it is.
+      if (target?.closest('[role="toolbar"]')) return;
+      if (paneRef.current?.querySelector('[data-step-pending]')) return;
       const editable = !!target && (target.isContentEditable || target.matches('input, textarea, select'));
       // A field on the map (an arrow's label, a region's title being named)
       // keeps its Escape, which cancels it; its buttons and cards do not.
@@ -359,7 +379,16 @@ export function WorkspaceShell({
     >
       {barShown && (
         <div className={styles.barBelowSplit}>
-          <HeaderBar title={bar.title} backLabel={tNav('back')} onBack={bar.onBack} scrolled={scrolled} heading />
+          <HeaderBar
+            title={bar.title}
+            backLabel={bar.backLabel ?? tNav('back')}
+            onBack={bar.onBack}
+            backDisabled={bar.backDisabled}
+            scrolled={scrolled}
+            heading
+            trailing={paneAction}
+            titleRef={titleRef}
+          />
         </div>
       )}
       {/* At the split the writer's title is the page's heading still, for a screen reader. */}
@@ -451,11 +480,15 @@ export function WorkspaceShell({
                   // (and keeps its sticky toolbar) under the header's pen line.
                   <PaneHeader
                     title={paneTitle}
-                    backLabel={tNav('back')}
+                    backLabel={paneBack?.label ?? tNav('back')}
+                    backDisabled={paneBack?.disabled}
                     onBack={onClose!}
                     scrolled={paneScrolled}
+                    trailing={paneAction}
+                    titleRef={titleRef}
                   />
                 )}
+                {split === true && paneAction != null && <div className={styles.paneAction}>{paneAction}</div>}
                 <div ref={paneBodyRef} className={styles.paneBody} onScrollCapture={headed ? onPaneScroll : undefined}>
                   {children}
                 </div>

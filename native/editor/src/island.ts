@@ -7,13 +7,26 @@
  * geometry (wobRect, wavyVertical). Built into one self-contained file by
  * scripts/native/build-editor.mjs.
  *
- * Bridge (native → island): window.ResonanceEditor.{setMarkdown, getMarkdown, roundtrip, focus, blur, exec}
+ * Page (query): ?embed=1 the story field of the writing screen (framed by the
+ *   host); ?layout=canvas the writer's bare page (no frame, no padding — the
+ *   host sizes the view and scrolls it); ?locale= the UI's locale, whose type
+ *   an empty story starts in (default zh-TW); ?script=cjk|latin sets the story
+ *   in that type for good (the host decides); ?placeholder=, ?fonts=.
+ * Bridge (native → island): window.ResonanceEditor.{setMarkdown, getMarkdown, roundtrip, focus, blur, exec,
+ *   setTitle, setScript}
  *   exec(command, args?) runs a toolbar command (the web MarkdownEditor's set:
  *   bold, italic, h2, h3, bulletList, orderedList, blockquote, insertCard,
  *   insertImage, undo, redo); it returns false when the command can't run.
- * Bridge (island → native): {type: 'ready' | 'change' | 'height' | 'state' | 'focus', ...} posted to
+ *   setTitle(title) tells the island the card's title, which it reads with the
+ *   story to set them (lib/text/script writerScript, as the web writer does);
+ *   setScript(script | null, lang?) sets the type by hand (null: by the text again).
+ * Bridge (island → native): {type: 'ready' | 'change' | 'height' | 'state' | 'focus' | 'script' | 'caret', ...}
+ *   posted to
  *   iOS  window.webkit.messageHandlers.editor
  *   Android window.ResonanceBridge.postMessage(json)
+ *   'script' {script, lang}: how the story is set now (the host sets its title field the same way);
+ *   'caret' {top, bottom}: the caret's line in the page's px (zoom included), while the story has the
+ *   focus — the host keeps it above its keyboard bar. Hosts ignore a type they don't know.
  */
 import { Editor } from '@tiptap/core';
 import Blockquote from '@tiptap/extension-blockquote';
@@ -23,6 +36,8 @@ import { wobRect } from '../../../src/lib/design/wobRect';
 import { seedFromString } from '../../../src/lib/design/prng';
 import { storyLinkWaveVars } from '../../../src/lib/design/storyLinkWave';
 import { BlockImage, CardEmbed, getMarkdown, storyExtensions } from '../../../src/lib/markdown/editorSchema';
+import { LatinMarks } from '../../../src/lib/markdown/latinMarks';
+import { localeScript, storyLang, writerScript, type StoryScript } from '../../../src/lib/text/script';
 
 /** Which toolbar buttons show as on, and whether undo/redo can run — the web toolbar's activeStates. */
 type ToolbarState = {
@@ -36,7 +51,9 @@ type Message =
   | { type: 'change'; markdown: string }
   | { type: 'height'; px: number }
   | ({ type: 'state' } & ToolbarState)
-  | { type: 'focus'; focused: boolean };
+  | { type: 'focus'; focused: boolean }
+  | { type: 'script'; script: StoryScript; lang: string | null }
+  | { type: 'caret'; top: number; bottom: number };
 
 declare global {
   interface Window {
@@ -49,6 +66,8 @@ declare global {
       focus(): void;
       blur(): void;
       exec(command: Command, args?: { href?: string; title?: string; src?: string; alt?: string }): boolean;
+      setTitle(title: string): void;
+      setScript(script: StoryScript | null, lang?: string | null): void;
     };
   }
 }
@@ -136,12 +155,36 @@ const params = new URLSearchParams(location.search);
 // ?embed=1: the story field of the writing screen — the host frames it, sizes
 // the view to the content (the 'height' message) and scrolls the page itself.
 if (params.get('embed') === '1') document.documentElement.classList.add('embed');
+// ?layout=canvas: the writer's bare page — no frame and no padding of its own (island.css).
+if (params.get('layout') === 'canvas') document.documentElement.classList.add('canvas');
 // The pen wave every link in the story wears (island.css), as the web editor's.
 for (const [name, value] of Object.entries(storyLinkWaveVars('editor'))) document.documentElement.style.setProperty(name, value);
 const extensions = [
   ...storyExtensions({ blockquote: IslandBlockquote, image: IslandImage, cardEmbed: IslandCardEmbed }),
+  // The apostrophes inside Latin words, set in the Latin face (a decoration: the stored story is untouched).
+  LatinMarks,
   Placeholder.configure({ placeholder: params.get('placeholder') ?? '寫下你的故事…' }),
 ];
+
+// ── How the story is set (src/styles/story.css on .story-prose) ──
+// Its script and language, read off the title and the story as the web writer
+// reads them (writerScript: an empty story in the UI locale's type, changing
+// only once it clearly leans the other way), again a moment after writing
+// pauses — never per keystroke. Installed hosts pass neither ?locale nor a
+// title: their stories start as CJK, as the island always set them.
+const forcedParam = params.get('script');
+let forced: StoryScript | null = forcedParam === 'cjk' || forcedParam === 'latin' ? forcedParam : null;
+let forcedLang: string | null = null;
+const startScript: StoryScript = localeScript(params.get('locale') ?? 'zh-TW');
+let title = '';
+let type: { script: StoryScript; lang: string | null } = { script: forced ?? startScript, lang: null };
+let typeTimer: ReturnType<typeof setTimeout> | undefined;
+/** How long writing must pause before the story's type is read again (the web writer's autosave tick). */
+const TYPE_DELAY_MS = 1500;
+
+function rootAttributes(): Record<string, string> {
+  return { class: 'story-prose', 'data-script': type.script, ...(type.lang ? { lang: type.lang } : {}) };
+}
 
 let timer: ReturnType<typeof setTimeout> | undefined;
 const editor = new Editor({
@@ -149,18 +192,67 @@ const editor = new Editor({
   extensions,
   content: '',
   // A story's type is the web's src/styles/story.css, keyed on this class (island.css).
-  editorProps: { attributes: { class: 'story-prose' } },
+  editorProps: { attributes: rootAttributes() },
   onUpdate: () => {
     clearTimeout(timer);
     timer = setTimeout(() => send({ type: 'change', markdown: getMarkdown(editor) }), 150);
+    readTypeSoon();
   },
   onTransaction: () => sendState(),
-  onFocus: () => send({ type: 'focus', focused: true }),
+  onSelectionUpdate: () => sendCaret(),
+  onFocus: () => {
+    send({ type: 'focus', focused: true });
+    sendCaret();
+  },
   onBlur: () => send({ type: 'focus', focused: false }),
 });
 
-// The toolbar lives natively above the keyboard; it only needs to hear when
-// something it shows changed, at most once a frame.
+/** Sets the story's type on its root, and tells the host. */
+function setType(next: { script: StoryScript; lang: string | null }) {
+  if (next.script === type.script && next.lang === type.lang) return;
+  type = next;
+  editor.setOptions({ editorProps: { ...editor.options.editorProps, attributes: rootAttributes() } });
+  send({ type: 'script', script: type.script, lang: type.lang });
+}
+
+/** The type the text calls for: from `from` (writerScript's hysteresis), or as set by hand. */
+function readType(from: StoryScript): { script: StoryScript; lang: string | null } {
+  const story = editor.isEmpty ? '' : getMarkdown(editor);
+  if (forced) return { script: forced, lang: forcedLang ?? storyLang(title, story) ?? null };
+  return { script: writerScript(from, title, story), lang: storyLang(title, story) ?? null };
+}
+
+function readTypeSoon() {
+  clearTimeout(typeTimer);
+  typeTimer = setTimeout(() => setType(readType(type.script)), TYPE_DELAY_MS);
+}
+
+// The caret's line while the story has the focus, at most once a frame: the host keeps it above its
+// keyboard bar, scrolling only when it leaves the band it can see.
+let caretFrame = 0;
+function sendCaret() {
+  cancelAnimationFrame(caretFrame);
+  caretFrame = requestAnimationFrame(() => {
+    if (!editor.isFocused) return;
+    const rect = editor.view.coordsAtPos(editor.state.selection.head);
+    // In the page's px as laid out, zoom included (the 'height' message's): where the host's text scale is a
+    // CSS zoom on the body, an engine that measures inside it unzoomed (offsetHeight agrees with the rect)
+    // is scaled here; one that measures it as drawn already is not.
+    const zoom = parseFloat(document.body.style.zoom || '1') || 1;
+    const drawn = document.body.getBoundingClientRect().height;
+    const laidOut = document.body.offsetHeight;
+    const scale = zoom !== 1 && Math.abs(drawn - laidOut) < Math.abs(drawn - laidOut * zoom) ? zoom : 1;
+    send({
+      type: 'caret',
+      top: Math.round((rect.top + window.scrollY) * scale),
+      bottom: Math.round((rect.bottom + window.scrollY) * scale),
+    });
+  });
+}
+
+// The host draws the toolbar (in its story field, or docked on its keyboard in
+// the canvas layout); it only needs to hear when something it shows changed,
+// at most once a frame.
 let lastState = '';
 let stateFrame = 0;
 function sendState() {
@@ -186,13 +278,20 @@ function sendState() {
   });
 }
 
-new ResizeObserver(() => send({ type: 'height', px: document.documentElement.scrollHeight })).observe(document.body);
+new ResizeObserver(() => {
+  send({ type: 'height', px: document.documentElement.scrollHeight });
+  // Its lines moved (a picture landed, the text re-wrapped): where the caret is now.
+  if (editor.isFocused) sendCaret();
+}).observe(document.body);
 
 window.ResonanceEditor = {
   // Loading a draft is not an edit: kept out of undo history, so undo can
   // never take the page back to empty.
   setMarkdown(md) {
     editor.chain().setMeta('addToHistory', false).setContent(md, { emitUpdate: false }).run();
+    // A story opened is read as it is (from the UI locale's type), not from whatever was set before.
+    clearTimeout(typeTimer);
+    setType(readType(startScript));
     return getMarkdown(editor);
   },
   getMarkdown: () => getMarkdown(editor),
@@ -228,6 +327,20 @@ window.ResonanceEditor = {
       default: return false;
     }
   },
+  setTitle(next) {
+    if (next === title) return;
+    title = next;
+    readTypeSoon();
+  },
+  setScript(script, lang = null) {
+    forced = script;
+    forcedLang = script ? lang : null;
+    clearTimeout(typeTimer);
+    setType(readType(script ?? startScript));
+  },
 };
 
+
 send({ type: 'ready', ms: performance.now() });
+// The host learns how the story is set from the start.
+send({ type: 'script', script: type.script, lang: type.lang });

@@ -194,6 +194,8 @@ export default function EditCardPage() {
         slug: card.slug,
         publishedAt: card.publishedAt,
         hasPendingEdit: pending != null,
+        // How readers have it now (the copy edited may be the pending one's).
+        live: { visibility: card.visibility, anonymous: card.anonymous ?? false },
         thoughtCore: values.thoughtCore,
         story: values.story,
         tags: values.tags,
