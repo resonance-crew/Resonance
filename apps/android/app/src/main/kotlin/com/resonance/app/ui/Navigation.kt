@@ -367,14 +367,6 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
     // A page's conversation on a tablet goes to the Messages tab (read when opened: the pages keep this lambda).
     val toMessages = rememberUpdatedState<(Route.Thread) -> Unit> { open(it) }
 
-    // Just past onboarding: the writer opens on the first tab, as the web's signup goes to /write
-    // (unless a link brought the person here, which wins, as the web's `next` does).
-    LaunchedEffect(Unit) {
-        if (!session.justOnboarded) return@LaunchedEffect
-        session.justOnboarded = false
-        if (incomingRoute.value == null) stack.add(Route.Write())
-    }
-
     // A site page the app doesn't show itself opens in the in-app browser rather than being dropped.
     val context = LocalContext.current
     LaunchedEffect(incomingRoute.value) {

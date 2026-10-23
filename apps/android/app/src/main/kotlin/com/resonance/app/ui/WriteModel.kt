@@ -380,19 +380,6 @@ class WriteModel(
     }
 
     /**
-     * The first-card guide's question, as the story to write against: it is
-     * the starting point, not writing — nothing is saved until the user adds to it.
-     */
-    fun seed(story: String) {
-        editor.setMarkdown(story)
-        val before = values
-        values = before.copy(story = story)
-        // Nothing else waiting to be written: the seed becomes the baseline. (Anything the
-        // user had typed before picking is still owed a save, so its timer runs.)
-        if (before == lastSaved || (draftId == null && before.isEmpty)) lastSaved = values else scheduleSave()
-    }
-
-    /**
      * One line of plain reassurance under the page title: what has happened
      * and, for a live card, what has not happened yet. A draft says nothing
      * until it has been saved; a card in the trash has its own line, with 還原.
@@ -850,9 +837,7 @@ internal fun oneLine(text: String): String {
 /**
  * Whether the writer holds anything worth asking about before it goes: a new card or draft with
  * words, a title, tags or a cover in it that is kept (`saved`: it has a draft) or is about to be;
- * a live card's revision, waiting in its buffer (`pendingEdit`) or typed and not saved yet. Words
- * the first-card guide seeded are the starting point, not writing: nothing keeps them, so they
- * count only once there is a draft.
+ * a live card's revision, waiting in its buffer (`pendingEdit`) or typed and not saved yet.
  */
 internal fun holdsWork(isPublished: Boolean, values: DraftValues, lastSaved: DraftValues?, saved: Boolean, pendingEdit: Boolean): Boolean =
     if (isPublished) pendingEdit || values != lastSaved

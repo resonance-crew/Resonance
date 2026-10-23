@@ -341,13 +341,8 @@ private fun WriteForm(
     // Leaving the app saves what is written now, not 1.5s later.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { model.flush() }
     var pickingCard by remember { mutableStateOf(false) }
-    // The first-card guide (ux §5): a brand-new writer's fresh card only.
-    var showGuide by remember(model) { mutableStateOf(false) }
     // The anonymous-publishing hint, for this writer's first few visits (counted per visit, as the web).
     var showsAnonymousHint by remember(model) { mutableStateOf(false) }
-    LaunchedEffect(model) {
-        if (opened == null && referenceCardId == null) session.drafts?.let { showGuide = !it.hasAnyCards() }
-    }
     LaunchedEffect(model) { showsAnonymousHint = session.hints?.claim("anonymous-publish") ?: false }
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { model.setCover(context, it) } }
     val inlinePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { model.insertImage(context, it) } }
@@ -493,13 +488,8 @@ private fun WriteForm(
         ) {
             WritingStep(
                 model, bridge, bar = bar, compact = compactWindow, pad = pad, columnMax = columnMax, scroll = writeScroll,
-                viewport = viewport, docked = docked, pillWidth = pillWidth, showGuide = showGuide,
+                viewport = viewport, docked = docked, pillWidth = pillWidth,
                 titleFocus = titleFocus, onTitleFocus = { titleFocused = it },
-                onPickGuide = { question ->
-                    // Seeded into the story as a quote to write against; the guide steps aside.
-                    model.seed("> $question\n\n")
-                    showGuide = false
-                },
                 onRestore = {
                     scope.launch {
                         if (model.restore() == true) trash?.restoredAlone = true
@@ -604,8 +594,8 @@ private fun NextButton(model: WriteModel, onPress: () -> Unit) {
 
 /**
  * The writing step (writer.spec §1): the save line (or, for a card moved to the trash meanwhile,
- * its line with 還原), the first-card guide, the bare title in the card page's title type, then
- * the story — nothing else.
+ * its line with 還原), the bare title in the card page's title type, then the story — nothing
+ * else (a new writer's first card too: no guide stands between them and the page).
  */
 @Composable
 private fun WritingStep(
@@ -620,10 +610,8 @@ private fun WritingStep(
     docked: Boolean,
     /** At the split, how wide the floating 下一步 is (px): the save line keeps clear of it. */
     pillWidth: Int,
-    showGuide: Boolean,
     titleFocus: FocusRequester,
     onTitleFocus: (Boolean) -> Unit,
-    onPickGuide: (String) -> Unit,
     onRestore: () -> Unit,
     dismissKeyboard: () -> Unit,
 ) {
@@ -672,10 +660,6 @@ private fun WritingStep(
             BasicText(it, style = AppFonts.body(13f, lineHeight = 1.5f, color = Mixes.Danger), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive })
         }
         Spacer(Modifier.height(16.dp))
-        if (showGuide) {
-            FirstCardGuide(onPickGuide)
-            Spacer(Modifier.height(28.dp))
-        }
         TitleField(model, bridge, compact, titleFocus, onTitleFocus)
         Spacer(Modifier.height(16.dp))
         Box(Modifier.onGloballyPositioned { storyCoords = it }) {

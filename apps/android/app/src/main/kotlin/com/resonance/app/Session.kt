@@ -112,8 +112,6 @@ class Session(
     val signInError: StateFlow<String?> = _signInError
     private val _entry = MutableStateFlow(Entry.Waiting)
     val entry: StateFlow<Entry> = _entry
-    /** Set when this sign-in just finished onboarding: the tabs open the writer, as the web's signup goes to /write. */
-    var justOnboarded = false
 
     val api = ApiConfiguration(config.origin) { force -> idToken(force) }
     val reading = ReadingApi(api, http)
@@ -276,7 +274,6 @@ class Session(
             _profile.value = Profile.Unknown
             // A profile this device has already seen lets the tabs open at once; otherwise wait for /me.
             _entry.value = if (next != null && prefs.getBoolean(profileKey(next), false)) Entry.App else Entry.Waiting
-            justOnboarded = false
             _deletionDate.value = null
             _phase.value = if (next == null) Phase.SignedOut else Phase.SignedIn
             if (next != null) {
@@ -401,11 +398,11 @@ class Session(
      * Onboarding: the new account's pen name, region and writing language
      * (POST /api/v1/me). An account that already had a profile gets it back
      * unchanged — named, if it had no pen name; a name taken meanwhile throws a
-     * conflict [ApiFailure].
+     * conflict [ApiFailure]. Named, the account opens on the tabs as any sign-in
+     * does: the home feed first, not the writer.
      */
     suspend fun createProfile(handle: String, region: String, primaryLocale: String) {
         val me = profiles.create(handle, region, primaryLocale)
-        justOnboarded = true
         setMe(me)
     }
 
