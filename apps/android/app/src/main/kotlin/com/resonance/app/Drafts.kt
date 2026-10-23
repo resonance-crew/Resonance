@@ -247,11 +247,4 @@ class DraftService(private val uid: String) : DraftStore {
         cards.whereEqualTo("authorId", uid).whereEqualTo("referenceCardId", cardId).limit(1).get().await().documents.firstOrNull()?.let { doc ->
             Resonance(doc.id, doc.getString("slug")?.takeIf { it.isNotEmpty() } ?: doc.id, doc.get("publishedAt") != null)
         }
-
-    /**
-     * hasAnyOwnCards: whether you have written anything at all (drafts count).
-     * A failed read counts as "has written": the guide is for newcomers only.
-     */
-    suspend fun hasAnyCards(): Boolean =
-        attempt { cards.whereEqualTo("authorId", uid).limit(1).get().await().isEmpty.not() } ?: true
 }

@@ -351,7 +351,9 @@ adb shell am start -n com.resonance.stories/com.resonance.app.MainActivity \
 ```
 
 Reading (tests in `:core:kit`: FeedLoader, CardPageLoader, CardCache): the feed shows the latest cards
-first; picks that answer later wait behind the "今天的推薦準備好了" hint. A card page is one
+first; picks that answer later go on top of them at once (`FeedLoader.State.picksAbove`, no hint to tap),
+less any the latest already show — the latest keep their places, rows and colours (`storyCards`' `leading`
+run), a reader at the very top sees the first pick and one scrolled into the feed stays put. A card page is one
 `GET /api/v1/cards/{key}?include=resonances,related,links,embeds` (story embeds from `embeds`, matched
 by slug or id; an unmatched link stays plain), a person's page one `GET /users/{handle}?include=cards,links&limit=12`,
 and a thread's shared cards one `GET /cards?keys=` per batch of new ids. Lists pass their FeedCard as
@@ -404,6 +406,11 @@ is a Custom Tab. The build registers the `chat-push` capability, so the server s
 `PushCenter.showChatMessage` draws the conversation's notification itself (one `MessagingStyle` per pair id on the
 "messages" channel, silent while that thread is resumed). Debug builds fake one:
 `--es pushChatBody "…" --es pushChatConversation alice_bob --es pushChatId m1 --es pushFromUserId bob --es pushRoute /messages/bob`.
+
+A note (小紙條, `NoteComposer`) keeps its unsent words on the device per account and card (`NoteDrafts` in `:core:kit`,
+`note-drafts.xml` via `NoteDraftPrefs`, outside the backup): written a moment after typing stops, as the app leaves the screen
+and as the composer closes (a tap beside it, back, 取消), and opened on again for that card; cleared once the server answers
+201, when the text is emptied, and with the account's other local data on sign-out. At most 50 are kept, none past 30 days.
 
 The thread screen (`ThreadScreen`, `ThreadList`, `ThreadActions`, `ThreadSearch`, `ThreadComposer`) draws that model.
 The bar is an `OrganicInlineBar` over the list (cream stops on the pen line, content scrolls up under it; half ink

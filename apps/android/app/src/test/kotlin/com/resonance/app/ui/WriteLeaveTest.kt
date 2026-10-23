@@ -7,7 +7,7 @@ import org.junit.Test
 
 /**
  * When going back from the writer asks first: only when something written would be left behind.
- * A blank card, words the first-card guide seeded and a live card nobody has touched leave at once.
+ * A blank card and a live card nobody has touched leave at once.
  */
 class WriteLeaveTest {
     private val written = DraftValues(title = "A walk in the rain")
@@ -38,14 +38,6 @@ class WriteLeaveTest {
 
     @Test fun aDraftEmptiedOutAgainLeavesAtOnce() {
         assertFalse(draft(DraftValues(), lastSaved = written, saved = true))
-    }
-
-    @Test fun wordsTheGuideSeededAreNotWritingUntilThereIsADraft() {
-        val seeded = DraftValues(story = "> What stayed with you?\n\n")
-        // Seeded: the baseline, no draft behind it.
-        assertFalse(draft(seeded, lastSaved = seeded))
-        // The person types on: now it is theirs.
-        assertTrue(draft(seeded.copy(story = seeded.story + "The rain"), lastSaved = seeded))
     }
 
     @Test fun aLiveCardAsksOnlyForARevision() {

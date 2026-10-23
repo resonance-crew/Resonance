@@ -11,12 +11,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.height
@@ -42,8 +46,10 @@ import com.resonance.design.generated.Tokens
 import com.resonance.design.plainClickable
 import com.resonance.kit.api.ApiFailure
 import com.resonance.kit.chat.NoteAttempt
+import com.resonance.kit.chat.NoteDraft
 import com.resonance.kit.l10n.L10n
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** The most a note (or a message) may hold, in UTF-16 units — the rules' own cap. */
@@ -59,11 +65,25 @@ const val NOTE_UPGRADE_THRESHOLD = 200
  * offer to make it a resonance card instead (`onUpgrade` carries its words
  * into the writer). Sending replaces the form with a quiet confirmation. The
  * twin of iOS's NoteComposer.
+ *
+ * Its words wait on the device until the note goes ([NoteDraft]): closed any
+ * way — a tap beside the sheet, back, 取消 — or with the app killed, the
+ * composer opens on them again for this card; sent (the server's 201) or
+ * emptied, nothing is kept.
  */
 @Composable
 fun NoteComposer(session: Session, cardId: String, onClose: () -> Unit, onUpgrade: (String) -> Unit) {
     val scope = rememberCoroutineScope()
-    var text by remember { mutableStateOf("") }
+    val draft = remember(session, cardId) { NoteDraft(session.noteDrafts, cardId) }
+    var text by remember(draft) { mutableStateOf(draft.initial) }
+    // Kept a moment after typing stops, as the app leaves the screen, and on every way out of the composer.
+    val typed by rememberUpdatedState(text)
+    LaunchedEffect(draft, text) {
+        delay(NOTE_DRAFT_DELAY_MS)
+        draft.keep(text)
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { draft.keep(typed) }
+    DisposableEffect(draft) { onDispose { draft.keep(typed) } }
     var pending by remember { mutableStateOf(false) }
     var sent by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -143,6 +163,8 @@ fun NoteComposer(session: Session, cardId: String, onClose: () -> Unit, onUpgrad
                     scope.launch {
                         try {
                             attempt.send(cardId, words) { clientId -> session.messaging.sendNote(cardId, words, clientId) }
+                            // Left: its draft goes, and nothing the composer still holds is kept again.
+                            draft.sent()
                             sent = true
                             PushCenter.reachedOut()
                         } catch (e: CancellationException) {
@@ -161,6 +183,9 @@ fun NoteComposer(session: Session, cardId: String, onClose: () -> Unit, onUpgrad
 
 /** The air over the composer's foot: ModalErrorGap under an error line, once its tuck is given back. */
 private val NoteFootTop = ModalErrorGap + ModalErrorTuck
+
+/** How long after the last keystroke a note's draft is written down. */
+private const val NOTE_DRAFT_DELAY_MS = 400L
 
 /**
  * Why a note didn't go, in the app's words — never the server's English: notes waiting
