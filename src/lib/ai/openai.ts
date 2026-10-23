@@ -23,6 +23,15 @@ export function embedModel(): string {
   return process.env.OPENAI_EMBED_MODEL ?? 'text-embedding-3-small';
 }
 
+/**
+ * The publish panel's mirror (mirrorInsight): one sentence that has to catch
+ * what a story leaves unsaid, which the mini model too often missed or
+ * flattened into a saying. Its own setting, so it can change alone.
+ */
+export function mirrorModel(): string {
+  return process.env.OPENAI_MIRROR_MODEL ?? 'gpt-5.6-terra';
+}
+
 /** Cheap model used for the recommendation funnel's batch rerank stage. */
 export function rerankModel(): string {
   return process.env.OPENAI_RERANK_MODEL ?? 'gpt-5.4-mini-2026-03-17';

@@ -44,7 +44,7 @@ describe('POST /api/cards/insight', () => {
     expect(mirrorInsight).not.toHaveBeenCalled();
   });
 
-  it('reads only the start of a long draft, cut before anything measures it — a flood of `[` answers at once, spending nothing', async () => {
+  it('reads only the two ends of a long draft, cut before anything measures it — a flood of `[` answers at once, spending nothing', async () => {
     const started = performance.now();
     const res = await post({ thoughtCore: '['.repeat(200_000), story: '['.repeat(1_000_000) });
     expect(await res.json()).toEqual({ coreInsight: null });
@@ -53,12 +53,15 @@ describe('POST /api/cards/insight', () => {
     expect(mirrorInsight).not.toHaveBeenCalled();
   });
 
-  it("hands the model only the start of a long draft: a title's length, and the story's first characters", async () => {
+  it("hands the model a title's length and both ends of a long story — where it most often turns", async () => {
     mirrorInsight.mockResolvedValueOnce('A morning can be yours');
-    await post({ thoughtCore: 'T'.repeat(5_000), story: STORY.repeat(1_000) });
+    const ending = 'And that was when I knew the mornings had been mine all along.';
+    await post({ thoughtCore: 'T'.repeat(5_000), story: STORY.repeat(1_000) + ending });
     const [{ title, story }] = mirrorInsight.mock.calls[0] as [{ title: string; story: string }];
     expect(title).toHaveLength(CARD_LIMITS.title);
-    expect(story).toBe(STORY.repeat(1_000).slice(0, DRAFT_READ_CHARS));
+    expect(story.length).toBeLessThanOrEqual(DRAFT_READ_CHARS);
+    expect(story.startsWith(STORY)).toBe(true);
+    expect(story.endsWith(ending)).toBe(true);
   });
 
   it('answers null when the model has nothing to say or fails, and 401 signed out', async () => {

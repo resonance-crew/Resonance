@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { acceptInsight, DRAFT_READ_CHARS, draftScript, draftUnits, MIN_DRAFT_UNITS } from './mirror';
+import { acceptInsight, DRAFT_READ_CHARS, draftScript, draftUnits, MIN_DRAFT_UNITS, mirrorDraft } from './mirror';
 
 // The publish panel's mirror moment: the draft's language, enough to read, and
 // what of the model's answer is a line worth showing. The model is mocked
@@ -11,6 +11,7 @@ vi.mock('./openai', () => ({
   chatJSON: (...a: unknown[]) => chatJSON(...a),
   generateImage: vi.fn(),
   generateImageStream: vi.fn(),
+  mirrorModel: () => 'the-mirror-model',
 }));
 const { mirrorInsight } = await import('./tasks');
 
@@ -47,6 +48,27 @@ describe('draftScript', () => {
   it('reads the prose, not the Markdown, the addresses or the entities around it', () => {
     expect(draftScript('', `https://example.com/a-very-long-english-address-with-many-words\n\n${ZH}`)).toBe('han');
     expect(draftUnits('', '**一** -&gt; https://example.com/x')).toBe(1);
+  });
+});
+
+describe('mirrorDraft', () => {
+  it('keeps a story that fits whole, and of a longer one its opening and more of its close', () => {
+    expect(mirrorDraft(ZH)).toBe(ZH);
+    const long = `開頭${'中'.repeat(10_000)}結尾`;
+    const read = mirrorDraft(long);
+    expect(read.length).toBeLessThanOrEqual(DRAFT_READ_CHARS);
+    expect(read.startsWith('開頭')).toBe(true);
+    expect(read.endsWith('結尾')).toBe(true);
+    expect(read).toContain('……');
+    // Read again, it is what it was (the route cuts it, and so does the task).
+    expect(mirrorDraft(read)).toBe(read);
+  });
+
+  it('never cuts a character in two at either end', () => {
+    const emoji = '🌧️';
+    const read = mirrorDraft(emoji.repeat(5_000));
+    expect(read.length).toBeLessThanOrEqual(DRAFT_READ_CHARS);
+    expect(() => encodeURIComponent(read)).not.toThrow();
   });
 });
 
@@ -96,6 +118,21 @@ describe('mirrorInsight', () => {
     // What the QA saw on Android: the old signature's Chinese examples pulled an English draft into Chinese.
     chatJSON.mockResolvedValueOnce({ insight: '獨立的早晨，從允許自己慢下來開始。' });
     expect(await mirrorInsight({ title: EN_TITLE, story: EN })).toBeNull();
+  });
+
+  // Read from its start alone (1 200 characters, once), a story past that lost its ending — where a
+  // personal story most often turns — and the mirror answered what the opening seemed to say.
+  it('reads a long draft at both ends: the turn near its close reaches the model', async () => {
+    const turn = '原來我等的從來不是安靜，而是那段每天都會再重來一次的琴聲。';
+    const story = `${ZH}\n\n${'樓上又在練琴，卡在同一個地方。'.repeat(400)}\n\n${turn}`;
+    chatJSON.mockResolvedValueOnce({ insight: '我等的不是安靜，是每天重來的琴聲' });
+    expect(await mirrorInsight({ title: ZH_TITLE, story })).toBe('我等的不是安靜，是每天重來的琴聲');
+    const [messages, opts] = chatJSON.mock.calls[0];
+    expect(messages[1].content).toContain(ZH);
+    expect(messages[1].content).toContain(turn);
+    expect(messages[1].content.length).toBeLessThanOrEqual(ZH_TITLE.length + 2 + DRAFT_READ_CHARS);
+    expect(messages[0].content).toContain('Read the whole draft');
+    expect(opts.model).toBe('the-mirror-model');
   });
 
   it('answers a Chinese draft in Chinese', async () => {

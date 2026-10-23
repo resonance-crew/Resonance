@@ -22,18 +22,47 @@ export const MIN_DRAFT_UNITS = 15;
 /** The longest line the panel shows; longer is commentary, not a mirror. */
 export const MAX_INSIGHT_CHARS = 160;
 /**
- * How much of a draft, title and story together, is read from its start —
- * the route keeps no more of the story than this, and its length and
- * language are measured on no more. The model is shown the first 1 200
- * characters (./tasks), so the language is judged on about the text it
- * answers; and a story may be 200 000 characters, which nothing here should
- * read through before the author's budget is spent (or at all).
+ * How much of a story the mirror reads — the route keeps no more of it than
+ * this (`mirrorDraft`), and its length and language are measured on no more;
+ * a story may be 200 000 characters, which nothing here should read through
+ * before the author's budget is spent (or at all).
  */
 export const DRAFT_READ_CHARS = SCRIPT_READ_CHARS;
 
+/**
+ * A longer story is read at both ends: its opening, and more of its close —
+ * where a personal story most often turns. Read from the start alone (its
+ * first 1 200 characters, once), every story past that lost its ending, and
+ * with it the realization the mirror is there to hand back.
+ */
+const HEAD_CHARS = 1_400;
+const GAP = '\n\n……\n\n';
+const TAIL_CHARS = DRAFT_READ_CHARS - HEAD_CHARS - GAP.length;
+
+/** Within a UTF-16 string, never between the two halves of one character. */
+const lowSurrogate = (s: string, i: number) => {
+  const c = s.charCodeAt(i);
+  return c >= 0xdc00 && c <= 0xdfff;
+};
+
+/**
+ * The story as the mirror reads it: whole up to DRAFT_READ_CHARS, else its
+ * first HEAD_CHARS and its last characters with an elision between, no
+ * longer than that in all (so reading it again changes nothing). Takes no
+ * look at what lies between the two ends.
+ */
+export function mirrorDraft(story: string): string {
+  if (story.length <= DRAFT_READ_CHARS) return story;
+  let head = HEAD_CHARS;
+  if (lowSurrogate(story, head)) head -= 1;
+  let tail = story.length - TAIL_CHARS;
+  if (lowSurrogate(story, tail)) tail += 1;
+  return story.slice(0, head) + GAP + story.slice(tail);
+}
+
 const CJK_CHAR = /[\p{scx=Han}\p{scx=Hira}\p{scx=Kana}\p{scx=Hang}]/u;
 
-/** How much there is to read: CJK characters and other words, as the read time counts them (of the first DRAFT_READ_CHARS). */
+/** How much there is to read: CJK characters and other words, as the read time counts them (of DRAFT_READ_CHARS at most). */
 export function draftUnits(title: string, story: string): number {
   const m = measure(readableProse(title, story));
   return m.cjk + m.words;

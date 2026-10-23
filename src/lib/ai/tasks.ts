@@ -4,8 +4,8 @@
 
 import type { InsightSignature } from '@/lib/db/types';
 import { parseSignature } from '@/lib/recommend/signature';
-import { acceptInsight, draftScript, draftUnits, languageInstruction, MIN_DRAFT_UNITS } from './mirror';
-import { chat, chatJSON, generateImage, generateImageStream } from './openai';
+import { acceptInsight, draftScript, draftUnits, languageInstruction, MIN_DRAFT_UNITS, mirrorDraft } from './mirror';
+import { chat, chatJSON, generateImage, generateImageStream, mirrorModel } from './openai';
 import { slugify } from './slugify';
 import { parseTagList } from './tags';
 
@@ -115,24 +115,26 @@ const MIRROR_MAX_TOKENS = 1_500;
 export async function mirrorInsight(input: ExtractSignatureInput, opts: { signal?: AbortSignal } = {}): Promise<string | null> {
   if (draftUnits(input.title, input.story) < MIN_DRAFT_UNITS) return null;
   const script = draftScript(input.title, input.story);
-  const text = `${input.title.trim()}\n\n${input.story.trim()}`.trim().slice(0, MAX_STORY_CHARS);
+  // The whole draft, or both its ends (mirrorDraft): the realization is so often where it turns, near the end.
+  const text = `${input.title.trim()}\n\n${mirrorDraft(input.story).trim()}`.trim();
   const deadline = AbortSignal.timeout(MIRROR_TIMEOUT_MS);
   const raw = await chatJSON<Record<string, unknown>>(
     [
       {
         role: 'system',
         content: [
-          'You are the quiet mirror of a personal storytelling app. Just before an author publishes a draft, you hand back, in ONE short sentence, the realization at the heart of it — the lesson or feeling it seems to carry, not a summary of its events — as a line the author might have written themselves.',
+          'You are the quiet mirror of a personal storytelling app. Just before an author publishes a draft, you hand back, in ONE short sentence, the realization at the heart of it — what the author came to understand or feel, not a summary of its events — as a line the author might have written themselves.',
+          "Read the whole draft before deciding. The realization is often not where most of the words are: it may be one quiet line in the middle, the turn near the end, or never said at all — carried by what the narrator does, stops doing, or leaves out. Weigh what changed in the narrator above the setting, the description and the topic the draft seems to be about. When it is unsaid, name it plainly and gently, in the author's voice, without retelling the story or explaining it.",
           'Reply with ONLY a JSON object: {"insight": "<the sentence>"} — or {"insight": null}.',
           languageInstruction(script),
           'Keep it short: at most 25 words, or 40 characters in Chinese or Japanese. No quotation marks around it.',
-          'Reply {"insight": null} when the draft is too short, unfinished, a test, placeholder text, a list or a plain account of a day with no realization in it. Only reflect what the author actually wrote; never invent a meaning the draft does not hold — when unsure, null.',
+          'Reply {"insight": null} when the draft is too short, unfinished, a test, placeholder text, a list or a plain account of a day with no realization in it. Only reflect what the author actually wrote or clearly shows; never invent a meaning the draft does not hold — when unsure, null.',
           'Never comment on the draft, the author or yourself, never ask for more, never say what is missing: either the sentence, or null.',
         ].join('\n'),
       },
       { role: 'user', content: text },
     ],
-    { signal: opts.signal ? AbortSignal.any([deadline, opts.signal]) : deadline, maxTokens: MIRROR_MAX_TOKENS },
+    { model: mirrorModel(), signal: opts.signal ? AbortSignal.any([deadline, opts.signal]) : deadline, maxTokens: MIRROR_MAX_TOKENS },
   );
   return acceptInsight(raw?.insight, script);
 }

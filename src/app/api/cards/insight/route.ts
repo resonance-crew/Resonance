@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { limited } from '@/lib/api/rateLimit';
 import { getAdminDb } from '@/lib/db/firestore/admin';
-import { DRAFT_READ_CHARS, draftUnits, MIN_DRAFT_UNITS } from '@/lib/ai/mirror';
+import { draftUnits, MIN_DRAFT_UNITS, mirrorDraft } from '@/lib/ai/mirror';
 import { mirrorInsight } from '@/lib/ai/tasks';
 import { CARD_LIMITS } from '@/lib/db/firestore/cardContent';
 
@@ -27,10 +27,10 @@ export async function POST(req: Request) {
     thoughtCore?: unknown;
     story?: unknown;
   } | null;
-  // Only the draft's start is read (DRAFT_READ_CHARS, lib/ai/mirror), cut before anything measures it: the
-  // body has no size limit of its own, and reading all of a long one is work done before any budget is spent.
+  // A long draft is read at its two ends only (mirrorDraft, lib/ai/mirror), cut before anything measures it:
+  // the body has no size limit of its own, and reading all of a long one is work done before any budget is spent.
   const thoughtCore = typeof body?.thoughtCore === 'string' ? body.thoughtCore.slice(0, CARD_LIMITS.title) : '';
-  const story = typeof body?.story === 'string' ? body.story.slice(0, DRAFT_READ_CHARS) : '';
+  const story = typeof body?.story === 'string' ? mirrorDraft(body.story) : '';
   // Too little to reflect: nothing to say, and nothing spent on saying it.
   if (draftUnits(thoughtCore, story) < MIN_DRAFT_UNITS) {
     return NextResponse.json({ coreInsight: null });
