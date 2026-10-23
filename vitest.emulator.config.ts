@@ -10,6 +10,8 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['test/emulator/**/*.emulator.test.ts'],
+    // Queries are refused, as in production, without the composite index they need.
+    setupFiles: ['test/emulator/indexGuard.ts'],
     // Suites share one emulator; running files in parallel would let one
     // suite's clearFirestore() wipe another's fixtures mid-test.
     fileParallelism: false,

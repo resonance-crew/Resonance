@@ -296,8 +296,11 @@ export async function emptyTrash(
 ): Promise<EmptiedTrashResult> {
   const started = opts.now ?? Date.now();
   const cutoff = Timestamp.fromMillis(Math.min(opts.before?.getTime() ?? started, started));
-  const inTrash = db.collection('cards').where('authorId', '==', uid).where('trashedAt', '<=', cutoff);
-  const page = await inTrash.orderBy('trashedAt', 'desc').select().limit(EMPTY_PAGE).get();
+  // Ordered as the (authorId, trashedAt desc) index is, the count too: unordered, a range on
+  // trashedAt orders it ascending, which asks for an index no one made — the page went, then
+  // the count failed, and every emptying answered 500 with the trash already empty.
+  const inTrash = db.collection('cards').where('authorId', '==', uid).where('trashedAt', '<=', cutoff).orderBy('trashedAt', 'desc');
+  const page = await inTrash.select().limit(EMPTY_PAGE).get();
   const budget = opts.budgetMs ?? EMPTY_BUDGET_MS;
   const stale: string[] = [];
   let deleted = 0;
