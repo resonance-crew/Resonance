@@ -7,7 +7,9 @@ import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { Icon } from '@/components/atoms/Icon';
 import { Panel } from '@/components/molecules/Panel/Panel';
 import { ModalActions, ModalCloseRow } from '@/components/molecules/Modal/ModalActions';
+import { useAuth } from '@/components/providers/AuthProvider';
 import { useMyProfile } from '@/lib/data/hooks';
+import { forgetNoteDraft, keepNoteDraft, readNoteDraft } from '@/lib/data/noteDrafts';
 import { ApiError } from '@/lib/db/firestore/client/api';
 import { sendNote, NOTE_MAX_LENGTH } from '@/lib/db/firestore/client/notes';
 import { useHint } from '@/lib/hints';
@@ -38,6 +40,10 @@ export interface NoteComposerProps {
  * The private note (小紙條) composer — deliberately NOT the full CardEditor:
  * one textarea, one send button. The lightness of the form is the lowness of
  * the barrier. Speaking to the author has no audience, no counts.
+ *
+ * What is typed is kept as it is typed (lib/data/noteDrafts): closed however
+ * it closes, the composer opens on this card again with the words still there,
+ * until the note is sent.
  */
 export function NoteComposer({
   cardId,
@@ -51,7 +57,10 @@ export function NoteComposer({
   const tCard = useTranslations('card');
   const tMessages = useTranslations('messages');
   const { data: me } = useMyProfile();
-  const [text, setText] = useState(initialText ?? '');
+  const { user } = useAuth();
+  const uid = user?.id;
+  // Words carried in (the resonance editor's way back to a note) win over what was kept.
+  const [text, setText] = useState(() => initialText ?? (uid ? readNoteDraft(uid, cardId) : null) ?? '');
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -75,6 +84,7 @@ export function NoteComposer({
       try {
         await sendNote({ cardId, text: trimmed, clientId });
         attempt.current = null;
+        if (uid) forgetNoteDraft(uid, cardId);
         setSent(true);
         onSent?.();
       } catch (err) {
@@ -116,7 +126,10 @@ export function NoteComposer({
       >
         <Textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            if (uid) keepNoteDraft(uid, cardId, e.target.value);
+          }}
           placeholder={t('placeholder')}
           rows={4}
           maxLength={NOTE_MAX_LENGTH}
@@ -128,7 +141,11 @@ export function NoteComposer({
       {onUpgrade && trimmed.length > NOTE_UPGRADE_THRESHOLD && (
         <button
           type="button"
-          onClick={() => onUpgrade(text)}
+          onClick={() => {
+            // Carried into a card of its own: the writer keeps the words from here.
+            if (uid) forgetNoteDraft(uid, cardId);
+            onUpgrade(text);
+          }}
           style={{
             background: 'none',
             border: 'none',

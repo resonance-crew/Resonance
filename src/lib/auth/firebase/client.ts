@@ -21,6 +21,7 @@ import {
   type User as FirebaseUser,
 } from 'firebase/auth';
 import { startAppCheck } from './appCheck';
+import { forgetAllNoteDrafts } from '@/lib/data/noteDrafts';
 import type { IAuthProvider } from '../interfaces';
 import type { AuthSession, AuthUser, PhoneVerificationInput, SignInInput, SignUpInput } from '../types';
 
@@ -288,6 +289,8 @@ export class FirebaseClientAuthProvider implements IAuthProvider {
     // A cookie still being minted must not land after the DELETE below.
     await sessionSettled();
     clearSessionMark();
+    // Words typed in this browser and not sent leave with the account.
+    forgetAllNoteDrafts();
     await firebaseSignOut(getFirebaseClientAuth());
     await fetch('/api/auth/session', { method: 'DELETE' });
   }

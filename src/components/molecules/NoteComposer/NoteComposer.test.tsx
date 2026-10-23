@@ -14,11 +14,15 @@ vi.mock('@/lib/data/hooks', () => ({
 vi.mock('@/lib/hints', () => ({
   useHint: () => ({ visible: true, dismiss: vi.fn() }),
 }));
+const viewer = vi.hoisted(() => ({ user: { id: 'me' } as { id: string } | null }));
+vi.mock('@/components/providers/AuthProvider', () => ({ useAuth: () => viewer }));
 
 import { sendNote } from '@/lib/db/firestore/client/notes';
 import { ApiError } from '@/lib/db/firestore/client/api';
 
 beforeEach(() => {
+  window.localStorage.clear();
+  viewer.user = { id: 'me' };
   mockUseMyProfile.mockReturnValue({ data: { id: 'me', handle: 'my-handle' } });
   vi.mocked(sendNote).mockResolvedValue('note-1');
 });
@@ -161,5 +165,66 @@ describe('NoteComposer', () => {
     );
     expect(onUpgrade).toHaveBeenCalledWith(long);
     expect(sendNote).not.toHaveBeenCalled();
+  });
+
+  // 小紙條儲存訊息: what was typed outlives the composer — closed by its 取消,
+  // the backdrop or the browser — and comes back on the same card, until sent.
+  describe('unsent words', () => {
+    const box = () => screen.getByPlaceholderText('Something you want to tell the author…');
+
+    it('come back when the composer opens on the same card again, after any way of closing it', async () => {
+      const first = renderWithIntl(<NoteComposer cardId="c1" onClose={vi.fn()} />);
+      fireEvent.change(box(), { target: { value: 'Half of what I meant to say' } });
+      first.unmount();
+
+      renderWithIntl(<NoteComposer cardId="c1" onClose={vi.fn()} />);
+      expect(box()).toHaveValue('Half of what I meant to say');
+    });
+
+    it('are kept per card and per account', async () => {
+      const first = renderWithIntl(<NoteComposer cardId="c1" />);
+      fireEvent.change(box(), { target: { value: 'For the first card' } });
+      first.unmount();
+
+      const other = renderWithIntl(<NoteComposer cardId="c2" />);
+      expect(box()).toHaveValue('');
+      other.unmount();
+
+      viewer.user = { id: 'someone-else' };
+      renderWithIntl(<NoteComposer cardId="c1" />);
+      expect(box()).toHaveValue('');
+    });
+
+    it('are gone once the note is sent', async () => {
+      const first = renderWithIntl(<NoteComposer cardId="c1" />);
+      fireEvent.change(box(), { target: { value: 'Your story stayed with me.' } });
+      await user().click(screen.getByRole('button', { name: 'Send' }));
+      expect(await screen.findByText('Your note is on its way')).toBeInTheDocument();
+      first.unmount();
+
+      renderWithIntl(<NoteComposer cardId="c1" />);
+      expect(box()).toHaveValue('');
+    });
+
+    it('stay when the send fails, for the next try', async () => {
+      vi.mocked(sendNote).mockRejectedValueOnce(new Error('offline'));
+      const first = renderWithIntl(<NoteComposer cardId="c1" />);
+      fireEvent.change(box(), { target: { value: 'Still here' } });
+      await user().click(screen.getByRole('button', { name: 'Send' }));
+      await waitFor(() => expect(sendNote).toHaveBeenCalled());
+      first.unmount();
+
+      renderWithIntl(<NoteComposer cardId="c1" />);
+      expect(box()).toHaveValue('Still here');
+    });
+
+    it('give way to words carried in from the writer', () => {
+      const first = renderWithIntl(<NoteComposer cardId="c1" />);
+      fireEvent.change(box(), { target: { value: 'Kept' } });
+      first.unmount();
+
+      renderWithIntl(<NoteComposer cardId="c1" initialText="Carried back from the writer" />);
+      expect(box()).toHaveValue('Carried back from the writer');
+    });
   });
 });
