@@ -202,13 +202,6 @@ struct DraftService: DraftStore {
         return snap.documents.first.map { Resonance(id: $0.documentID, published: $0.get("publishedAt") is Timestamp) }
     }
 
-    /// hasAnyOwnCards: whether you have written anything at all (drafts count).
-    func hasAnyCards() async -> Bool {
-        let snap = try? await db.collection("cards").whereField("authorId", isEqualTo: uid).limit(to: 1).getDocuments()
-        // A failed read counts as "has written": the guide is for newcomers only.
-        return snap.map { !$0.documents.isEmpty } ?? true
-    }
-
     // The completion form: the payload never leaves the main actor. Firestore applies the write to
     // its local cache as it is called — the draft is kept from here — and the completion is the
     // server's answer.

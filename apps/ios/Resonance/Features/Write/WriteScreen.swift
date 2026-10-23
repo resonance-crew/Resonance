@@ -48,8 +48,6 @@ struct WriteScreen: View {
     @State private var inTrash: DraftService.OpenedCard?
     @State private var restoringOpened = false
     @State private var restoreOpenedFailed = false
-    /// The first-card guide (ux §5): a brand-new writer's fresh card only.
-    @State private var showGuide = false
     /// The anonymous-publishing hint, for this writer's first few visits (counted per visit, as the web).
     @State private var showsAnonymousHint = false
     /// The publish step has been shown (it stays mounted from then: a cover on its way, the mirror's answer).
@@ -176,12 +174,6 @@ struct WriteScreen: View {
             }
         }
         #endif
-        // The first-card guide is for a brand-new writer's fresh card: asked beside the open page, never
-        // before it (a read stuck on the network once held the loader ~40s), and only while nothing is written.
-        if request.cardId == nil, request.referenceCardId == nil, let drafts = session.drafts {
-            let newcomer = await firstAnswer(within: Self.guideWait) { await !drafts.hasAnyCards() } ?? false
-            if newcomer, !model.holdsWriting { withAnimation(.easeOut(duration: 0.2)) { showGuide = true } }
-        }
         showsAnonymousHint = await session.hints?.claim("anonymous-publish") ?? false
     }
 
@@ -274,7 +266,7 @@ struct WriteScreen: View {
         }
     }
 
-    /// Step 1: the save line, the guide, the bare title and the story; the format bar on the keyboard.
+    /// Step 1: the save line, the bare title and the story; the format bar on the keyboard.
     private func writeStep(_ model: WriteModel) -> some View {
         GeometryReader { outer in
             ScrollView {
@@ -342,14 +334,6 @@ struct WriteScreen: View {
                 // The floating pill's room at the split.
                 .padding(.trailing, showsBar ? 0 : 120)
                 .padding(.bottom, statusShown(model) || !showsBar ? 16 : 0)
-            if showGuide {
-                FirstCardGuide { question in
-                    // Seeded into the story as a quote to write against; the guide steps aside.
-                    model.seed(story: "> \(question)\n\n")
-                    withAnimation(.easeOut(duration: 0.2)) { showGuide = false }
-                }
-                .padding(.bottom, 24)
-            }
             titleField(model, typo: typo)
                 .padding(.bottom, 16)
             StoryCanvasField(bridge: model.editor, minHeight: storyRoom)
@@ -532,8 +516,6 @@ struct WriteScreen: View {
 
     /// How long leaving waits for the server to confirm the draft.
     static let leaveWait: Duration = .seconds(2)
-    /// How long the first-card guide waits to learn whether this is a first card.
-    static let guideWait: Duration = .seconds(3)
 
     /// 發布 / 儲存修改 in the step's foot.
     private func submit(_ model: WriteModel) async {
