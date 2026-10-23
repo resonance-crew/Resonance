@@ -124,6 +124,21 @@ type Drag =
 
 const swallow = (err: unknown) => console.error('[thoughtMap] persist failed', err);
 
+/** Where typing goes: a field, or anything editable (the story editor is contenteditable). */
+const TYPING = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
+
+/**
+ * A key the map may act on: pressed with the focus on the map itself, or on
+ * nothing (a card is selected by a press, which moves no focus) — never in a
+ * field or an editor, nor on a control elsewhere on the page.
+ */
+function keyForMap(e: KeyboardEvent, board: HTMLElement | null): boolean {
+  const at = e.target instanceof Element ? e.target : document.activeElement;
+  if (!at || at === document.body || at === document.documentElement) return true;
+  if (at.closest(TYPING) || (at instanceof HTMLElement && at.isContentEditable)) return false;
+  return !!board?.contains(at);
+}
+
 export interface ThoughtMapCanvasProps {
   data: MyThoughtMap;
   style?: CSSProperties;
@@ -809,14 +824,15 @@ export function ThoughtMapCanvas({
     else removeGroupById(id);
   };
 
-  // Delete/Backspace removes the selected node/arrow/region — unless the user
-  // is typing in the inspector's text field.
+  // Delete/Backspace removes the selected node/arrow/region: a key meant for
+  // the map alone (keyForMap). It once listened to every key on the page, a
+  // field's aside: Backspace in the story of the card open beside the map —
+  // contenteditable, no field — took that card off the map for good, and the
+  // keystroke never reached the story.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Delete' && e.key !== 'Backspace') return;
-      const tag = (document.activeElement?.tagName ?? '').toLowerCase();
-      if (tag === 'input' || tag === 'textarea') return;
-      if (!selection) return;
+      if (!selection || e.defaultPrevented || !keyForMap(e, boardRef.current)) return;
       e.preventDefault();
       removeSelection();
     };
@@ -824,6 +840,18 @@ export function ThoughtMapCanvas({
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selection, nodes, edges, groups]);
+
+  // A press anywhere off the map (the pane beside it: its story, its 下一步)
+  // lets go of what the map had selected, as a press on its own paper does —
+  // nothing stays selected there for a key to remove.
+  useEffect(() => {
+    if (!selection) return;
+    const onPress = (e: PointerEvent) => {
+      if (e.target instanceof Node && !boardRef.current?.contains(e.target)) setSelection(null);
+    };
+    document.addEventListener('pointerdown', onPress, true);
+    return () => document.removeEventListener('pointerdown', onPress, true);
+  }, [selection]);
 
   /** Begin renaming an arrow in place, on its own label pill. */
   const startEdgeEdit = (id: string) => {
