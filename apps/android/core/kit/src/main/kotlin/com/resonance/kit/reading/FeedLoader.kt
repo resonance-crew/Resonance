@@ -25,10 +25,12 @@ import kotlin.time.Duration.Companion.seconds
  * asked for together, each shown as soon as it arrives. Picks that come first
  * — or within [picksGrace] of the latest — lead the feed ("load more" then
  * reveals the latest, deduped against them). Picks that come once the latest
- * cards are on screen wait behind a hint (`home.recommended.ready`): nothing
- * moves under the reader until they ask. A failed pick request (the day's
- * first, while the server still builds them, can outlast the client's
- * timeout) is asked once more a little later.
+ * cards are on screen go on top of them at once ([State.picksAbove]), less any
+ * the latest already show: the latest stay exactly as they were below them, so
+ * scrolling up finds the new cards and nothing being read moves (no hint to
+ * tap first). A failed pick request (the day's first, while the server still
+ * builds them, can outlast the client's timeout) is asked once more a little
+ * later, and goes on top the same way.
  *
  * With a [FeedStore] for the reader, a first read starts from the feed as it
  * was last read (on a cold start too) instead of the skeleton, and keeps what
@@ -55,8 +57,11 @@ class FeedLoader(
         val next: NextPage? = null,
         /** The reader asked for the latest cards below the picks. */
         val showLatest: Boolean = false,
-        /** Picks that arrived after the latest cards were shown: the hint offers them. */
-        val waitingPicks: List<FeedCard> = emptyList(),
+        /**
+         * The picks came once the latest cards were on screen and went on top of them: the latest
+         * keep every card they showed, where it was, and the picks above leave out the ones they hold.
+         */
+        val picksAbove: Boolean = false,
         val loadingMore: Boolean = false,
         /** The last pull brought nothing back (and why): the feed on screen stayed as it was. Gone with the next answer. */
         val refreshFailure: RefreshFailure? = null,
@@ -71,16 +76,27 @@ class FeedLoader(
         /** With no picks there is nothing to hold back: the latest cards show at once. */
         val latestVisible: Boolean get() = recommended.isEmpty() || showLatest
 
-        /** What the feed shows, in order. */
-        val cards: List<FeedCard>
+        /** The picks as the feed shows them, at its head: all of them, or — above the latest — those the latest don't hold. */
+        val picksShown: List<FeedCard>
             get() {
-                if (!latestVisible) return recommended
-                val picked = recommended.map { it.id }.toSet()
-                return recommended + latest.filter { it.id !in picked }
+                if (!picksAbove || !latestVisible) return recommended
+                val shown = latest.mapTo(HashSet()) { it.id }
+                return recommended.filter { it.id !in shown }
             }
 
+        /** The latest cards as the feed shows them, after the picks: none until visible; above them, the picks they hold stay out. */
+        val latestShown: List<FeedCard>
+            get() {
+                if (!latestVisible) return emptyList()
+                if (picksAbove) return latest
+                val picked = recommended.mapTo(HashSet()) { it.id }
+                return latest.filter { it.id !in picked }
+            }
+
+        /** What the feed shows, in order. */
+        val cards: List<FeedCard> get() = picksShown + latestShown
+
         val canLoadMore: Boolean get() = !latestVisible || next != null
-        val picksReady: Boolean get() = waitingPicks.isNotEmpty()
 
         /** Loading until either list has something to show, or both have answered. */
         internal fun settled(): State {
@@ -226,14 +242,6 @@ class FeedLoader(
         }
     }
 
-    /** Shows the picks the hint offered, above the latest cards (which stay). */
-    fun revealPicks() {
-        _state.update { s ->
-            if (s.waitingPicks.isEmpty()) s
-            else s.copy(recommended = s.waitingPicks, waitingPicks = emptyList(), showLatest = true)
-        }
-    }
-
     /** First reveals the latest cards; after that, reads the next page of them. */
     fun loadMore() {
         val s = _state.value
@@ -273,8 +281,8 @@ class FeedLoader(
         picks.isEmpty() -> this
         // Already leading the feed (a re-read): they stay where they are.
         recommended.isNotEmpty() -> copy(recommended = picks)
-        // The latest cards are on screen: the picks wait for the reader's tap.
-        phase == Phase.Loaded && cards.isNotEmpty() -> copy(waitingPicks = picks)
+        // The latest cards are on screen: the picks go on top of them now, the latest staying as they are below.
+        phase == Phase.Loaded && cards.isNotEmpty() -> copy(recommended = picks, showLatest = true, picksAbove = true)
         else -> copy(recommended = picks)
     }
 

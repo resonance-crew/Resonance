@@ -351,7 +351,9 @@ adb shell am start -n com.resonance.stories/com.resonance.app.MainActivity \
 ```
 
 Reading (tests in `:core:kit`: FeedLoader, CardPageLoader, CardCache): the feed shows the latest cards
-first; picks that answer later wait behind the "今天的推薦準備好了" hint. A card page is one
+first; picks that answer later go on top of them at once (`FeedLoader.State.picksAbove`, no hint to tap),
+less any the latest already show — the latest keep their places, rows and colours (`storyCards`' `leading`
+run), a reader at the very top sees the first pick and one scrolled into the feed stays put. A card page is one
 `GET /api/v1/cards/{key}?include=resonances,related,links,embeds` (story embeds from `embeds`, matched
 by slug or id; an unmatched link stays plain), a person's page one `GET /users/{handle}?include=cards,links&limit=12`,
 and a thread's shared cards one `GET /cards?keys=` per batch of new ids. Lists pass their FeedCard as

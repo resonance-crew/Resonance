@@ -153,6 +153,19 @@ fun FeedCard.story(): StoryCardContent {
  */
 fun cardFamilies(cards: List<FeedCard>): List<Int> = CardPalette.palettes(cards.map { it.accentHue })
 
+/**
+ * A card's place in its run, for a list shown as two: the [leading] cards that came on top of the
+ * rest after the rest were on screen (the feed's late picks), then the rest. Its colour family
+ * ([cardRunFamilies]), its shapes' seeds and its grid rows are worked out within its run, so the
+ * cards that were already showing keep every one of them. One run when [leading] is 0 or all.
+ */
+internal fun runPosition(i: Int, leading: Int, size: Int): Int = if (leading in 1 until size && i >= leading) i - leading else i
+
+/** The colour families of a list shown as two runs ([runPosition]): each run coloured as a list of its own. */
+internal fun cardRunFamilies(cards: List<FeedCard>, leading: Int): List<Int> =
+    if (leading in 1 until cards.size) cardFamilies(cards.subList(0, leading)) + cardFamilies(cards.subList(leading, cards.size))
+    else cardFamilies(cards)
+
 /** Where the card lives on the site (its slug, or its id before it had one). */
 val FeedCard.routeKey: String get() = slug ?: id
 
@@ -177,13 +190,15 @@ fun LazyListScope.storyCards(
     onLast: (() -> Unit)? = null,
     firstUnderBar: Boolean = false,
     layout: CardListLayout = CardListLayout.Phone,
+    /** How many of the first cards came on top of the others once those showed (the feed's late picks): a run of their own. */
+    leading: Int = 0,
 ) {
-    if (layout.isGrid) return borderedCards(cards, open, onLast, firstUnderBar, layout)
-    // No card wears the family of any of the three before it (design note B3), over the list as shown.
-    val palettes = cardFamilies(cards)
+    if (layout.isGrid) return borderedCards(cards, open, onLast, firstUnderBar, layout, leading = leading)
+    // No card wears the family of any of the three before it (design note B3), over the list as shown — each run as its own.
+    val palettes = cardRunFamilies(cards, leading)
     itemsIndexed(cards, key = { _, c -> c.id }) { i, card ->
         StoryCard(
-            card.story(), i, i == cards.lastIndex,
+            card.story(), runPosition(i, leading, cards.size), i == cards.lastIndex,
             Modifier.plainClickable { open(Route.Card(card.routeKey, card)) }.pointerHoverIcon(PointerIcon.Hand),
             isFirst = firstUnderBar && i == 0, inset = layout.inset, palette = palettes[i],
         )
@@ -195,6 +210,9 @@ fun LazyListScope.storyCards(
  * An expanded window's cards (design note §10): the web desktop's bordered cards in columns,
  * row-major — card i in column i mod n, each column stacking its own cards (CardLinkGrid) —
  * [GridBlockRows] rows to a block of the lazy list, so a long feed still composes as it scrolls.
+ * Cards that came on top of the others once those showed ([leading]: the feed's late picks) are
+ * blocked apart, so the others keep their rows and their blocks' keys — the list keeps the block
+ * being read in place, the new ones above it.
  */
 internal fun LazyListScope.borderedCards(
     cards: List<FeedCard>,
@@ -210,12 +228,14 @@ internal fun LazyListScope.borderedCards(
     overlay: (@Composable BoxScope.(FeedCard, Int) -> Unit)? = null,
     /** Under each card (the trash shelf's where-from and when). */
     caption: (@Composable (FeedCard) -> Unit)? = null,
+    /** How many of the first cards came on top of the others once those showed: a run of blocks of their own. */
+    leading: Int = 0,
 ) {
     val n = layout.columns
-    val blocks = cards.indices.chunked(n * GridBlockRows)
-    // The same families as the list read top to bottom: row-major, so none shares one with the cards beside or above it.
-    val palettes = cardFamilies(cards)
-    itemsIndexed(blocks, key = { b, block -> "${keyPrefix}grid:$b:${cards[block.first()].id}" }) { b, block ->
+    val blocks = gridBlocks(cards.size, n * GridBlockRows, leading)
+    // The same families as the list read top to bottom (each run as its own): row-major, so none shares one with the cards beside or above it.
+    val palettes = cardRunFamilies(cards, leading)
+    itemsIndexed(blocks, key = { _, block -> "${keyPrefix}grid:${block.key}:${cards[block.indices.first()].id}" }) { b, block ->
         val gap = Tokens.FeedGap.dp
         Row(
             Modifier
@@ -226,11 +246,11 @@ internal fun LazyListScope.borderedCards(
         ) {
             for (c in 0 until n) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(gap)) {
-                    for (i in block) if (i % n == c) {
+                    for ((m, i) in block.indices.withIndex()) if (m % n == c) {
                         val card = cards[i]
                         Column {
                             Box {
-                                BorderedStoryCard(card.story(), i, Modifier.plainClickable { open(tap(card)) }, palette = palettes[i])
+                                BorderedStoryCard(card.story(), runPosition(i, leading, cards.size), Modifier.plainClickable { open(tap(card)) }, palette = palettes[i])
                                 overlay?.invoke(this, card, i)
                             }
                             caption?.invoke(card)
@@ -241,6 +261,19 @@ internal fun LazyListScope.borderedCards(
         }
         if (b == blocks.lastIndex) onLast?.invoke()
     }
+}
+
+/** A block of a card grid: the cards' indices in the list, and its key within the list (`$b`, or `lead$b` for the leading run's). */
+internal class GridBlock(val key: String, val indices: List<Int>)
+
+/**
+ * A grid of [size] cards in blocks of [perBlock], the [leading] ones (when some, not all) blocked
+ * apart from the rest: the rest's blocks — their cards and keys — are exactly what they were
+ * without the leading run.
+ */
+internal fun gridBlocks(size: Int, perBlock: Int, leading: Int = 0): List<GridBlock> {
+    fun run(range: IntRange, tag: String) = range.toList().chunked(perBlock).mapIndexed { b, indices -> GridBlock("$tag$b", indices) }
+    return if (leading in 1 until size) run(0 until leading, "lead") + run(leading until size, "") else run(0 until size, "")
 }
 
 /**
@@ -344,8 +377,6 @@ fun TabScreen(
     titleInBar: Boolean = false,
     trailing: @Composable RowScope.() -> Unit = {},
     list: LazyListState = rememberLazyListState(),
-    /** Floats over the list, under nothing but the brand bar (the feed's picks hint). */
-    overlay: @Composable BoxScope.() -> Unit = {},
     /** What a pull past the list's top runs (a refresh asked for by hand), awaited while the loader is docked; null: no pull. */
     onRefresh: (suspend () -> Unit)? = null,
     /** Whether a pull may start now (not while a first read still shows its skeleton). */
@@ -412,7 +443,6 @@ fun TabScreen(
         val bar = if (pinned) Modifier else Modifier.offset { IntOffset(0, quickReturn.offset.roundToInt()) }
         if (titleInBar && title != null) OrganicBrandBar(list.scrolledPast20(), bar, brand = title, isHeading = true, trailing = trailing)
         else OrganicBrandBar(list.scrolledPast20(), bar)
-        overlay()
         Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).background(Tokens.Cream))
     }
 }

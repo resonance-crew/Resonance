@@ -37,8 +37,8 @@ import kotlin.time.Duration.Companion.seconds
 
 /**
  * The home feed never waits on today's picks: the latest cards show when they
- * arrive, and picks that come later wait behind the hint instead of moving
- * what is on screen.
+ * arrive, and picks that come later go on top of them at once — less any the
+ * latest already show — leaving every latest card where it was.
  */
 class FeedLoaderTest {
     private val server = MockWebServer()
@@ -69,24 +69,45 @@ class FeedLoaderTest {
 
     private suspend fun until(check: (FeedLoader.State) -> Boolean) = withTimeout(4_000) { loader.state.first(check) }
 
-    @Test fun theLatestShowsWhileThePicksAreStillComingAndThePicksWaitForATap() = runBlocking {
+    @Test fun theLatestShowsWhileThePicksAreStillComingAndThePicksGoOnTopOfThemOnceTheyCome() = runBlocking {
         routes.on("/feed") { json(pageJson("a", "b", "p2", cursor = "2026-09-01T08:00:00.000Z")) }
         routes.on("/feed/recommended") { held(picksGate, listJson("p1", "p2")) }
         loader.load()
         val shown = until { it.phase == FeedLoader.Phase.Loaded }
         assertEquals(listOf("a", "b", "p2"), shown.cards.map { it.id })
-        assertFalse(shown.picksReady)
+        assertFalse(shown.picksAbove)
 
         picksGate.countDown()
-        val ready = until { it.picksReady }
-        // Nothing moved: the picks wait behind the hint.
-        assertEquals(listOf("a", "b", "p2"), ready.cards.map { it.id })
+        val above = until { it.picksAbove }
+        // On top at once, no tap: the picks the latest don't show lead, and the latest are exactly as they were
+        // below them — p2 too, where it was being read, rather than pulled up among the picks.
+        assertEquals(listOf("p1", "a", "b", "p2"), above.cards.map { it.id })
+        assertEquals(listOf("p1"), above.picksShown.map { it.id })
+        assertEquals(listOf("a", "b", "p2"), above.latestShown.map { it.id })
+        assertTrue(above.latestVisible)
+        assertTrue(above.canLoadMore)
+    }
 
-        loader.revealPicks()
-        val revealed = loader.state.value
-        assertEquals(listOf("p1", "p2", "a", "b"), revealed.cards.map { it.id })
-        assertFalse(revealed.picksReady)
-        assertTrue(revealed.canLoadMore)
+    @Test fun picksOnTopStayThereThroughARereadAndTheNextPageGoesUnderTheLatest() = runBlocking {
+        routes.on("/feed") { json(pageJson("a", "b", cursor = "2026-09-01T08:00:00.000Z", token = "t1")) }
+        routes.on("/feed/recommended") { held(picksGate, listJson("p1", "b")) }
+        loader.refresh("me", version = 0, now = 0)
+        until { it.phase == FeedLoader.Phase.Loaded }
+        picksGate.countDown()
+        assertEquals(listOf("p1", "a", "b"), until { it.picksAbove }.cards.map { it.id })
+
+        // The reader's own card changed: both lists are read again, and the picks keep their place on top.
+        routes.on("/feed") { json(pageJson("mine", "a", "b", cursor = "2026-09-01T08:00:00.000Z", token = "t1")) }
+        routes.on("/feed/recommended") { json(listJson("p1", "p3")) }
+        loader.refresh("me", version = 1, now = 1_000)
+        val reread = until { it.cards.map { c -> c.id } == listOf("p1", "p3", "mine", "a", "b") }
+        assertTrue(reread.picksAbove)
+
+        routes.on("/feed") { json(pageJson("p3", "c")) }
+        loader.loadMore()
+        // A pick the next page brings stays among the latest, where it comes; the picks above leave it out.
+        val more = until { it.latest.size == 5 }
+        assertEquals(listOf("p1", "mine", "a", "b", "p3", "c"), more.cards.map { it.id })
     }
 
     @Test fun picksAMomentBehindTheLatestStillLead() = runBlocking {
@@ -98,7 +119,7 @@ class FeedLoaderTest {
         loader.load()
         val shown = until { it.phase == FeedLoader.Phase.Loaded }
         assertEquals(listOf("p1"), shown.cards.map { it.id })
-        assertFalse(shown.picksReady)
+        assertFalse(shown.picksAbove)
     }
 
     @Test fun picksThatComeFirstLeadAndTheLatestWaitsBehindLoadMore() = runBlocking {
@@ -117,7 +138,7 @@ class FeedLoaderTest {
         assertFalse(loader.state.value.canLoadMore)
     }
 
-    @Test fun aFailedPickRequestIsAskedAgainAndThenOffered() = runBlocking {
+    @Test fun aFailedPickRequestIsAskedAgainAndThenGoesOnTop() = runBlocking {
         val asked = AtomicInteger()
         routes.on("/feed") { json(pageJson("a")) }
         routes.on("/feed/recommended") {
@@ -125,9 +146,9 @@ class FeedLoaderTest {
         }
         loader.load()
         until { it.phase == FeedLoader.Phase.Loaded }
-        val ready = until { it.picksReady }
+        val above = until { it.picksAbove }
         assertEquals(2, asked.get())
-        assertEquals(listOf("a"), ready.cards.map { it.id })
+        assertEquals(listOf("p1", "a"), above.cards.map { it.id })
     }
 
     @Test fun theNextPageAppendsWithoutRepeats() = runBlocking {
