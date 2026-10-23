@@ -203,8 +203,10 @@ describe('HomeFeedPage', () => {
 
 // Today's picks come from a server call that can take a while; the latest
 // public cards come straight from Firestore. Whichever reaches the reader
-// first leads, and nothing already on screen is ever reshuffled or swapped
-// back for the skeleton.
+// first shows first; picks that come after the latest cards go on top of them
+// at once (no pill to ask for them), without moving what a reader who has
+// scrolled into the feed is looking at — and nothing is ever swapped back for
+// the skeleton.
 describe('HomeFeedPage — latest first, picks when they come', () => {
   const latest = {
     data: {
@@ -238,24 +240,43 @@ describe('HomeFeedPage — latest first, picks when they come', () => {
     expect(shown()).toEqual(['/card/l1', '/card/l2']);
   });
 
-  it('keeps the latest cards in place when the picks arrive after them, and offers the picks instead', async () => {
+  it('puts the picks on top of the latest cards the moment they arrive, with no pill to ask for them', () => {
+    mockUseFeed.mockReturnValue(latest);
+    mockUseRecommendedFeed.mockReturnValue({ data: undefined, isLoading: true });
+    const { rerender } = renderWithIntl(<HomeFeedPage />);
+    expect(shown()).toEqual(['/card/l1', '/card/l2']);
+
+    mockUseRecommendedFeed.mockReturnValue(picks);
+    rerender(<HomeFeedPage />);
+    expect(shown()).toEqual(['/card/r1', '/card/l1', '/card/l2']);
+    expect(screen.queryByRole('button', { name: "Today's picks are ready" })).not.toBeInTheDocument();
+  });
+
+  // Scrolled into the feed, the reader keeps the card they are looking at where it stood: the picks go in above.
+  it('keeps the card a scrolled reader is looking at where it stood as the picks go in above it', () => {
     mockUseFeed.mockReturnValue(latest);
     mockUseRecommendedFeed.mockReturnValue({ data: undefined, isLoading: true });
     const { rerender } = renderWithIntl(<HomeFeedPage />);
 
-    mockUseRecommendedFeed.mockReturnValue(picks);
-    rerender(<HomeFeedPage />);
-
-    // Nothing moved: the reader is still looking at the same cards…
-    expect(shown()).toEqual(['/card/l1', '/card/l2']);
-    expect(screen.queryByText('A pick for you')).not.toBeInTheDocument();
-    // …and a small hint says today's picks are ready.
-    const hint = screen.getByRole('button', { name: "Today's picks are ready" });
-
-    await userEvent.setup().click(hint);
-    // Asked for, the picks go on top and the latest cards stay below them.
-    expect(shown()).toEqual(['/card/r1', '/card/l1', '/card/l2']);
-    expect(screen.queryByRole('button', { name: "Today's picks are ready" })).not.toBeInTheDocument();
+    // The reader is down the page, l1 under the bar; the pick, once above it, pushes it 600px down.
+    const scrollBy = vi.spyOn(window, 'scrollBy').mockImplementation(() => {});
+    Object.defineProperty(window, 'scrollY', { value: 900, configurable: true });
+    const box = (top: number) => ({ top, bottom: top + 500, left: 0, right: 0, width: 0, height: 500, x: 0, y: top, toJSON: () => ({}) });
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const pushed = document.querySelector('[data-card-id="r1"]') ? 600 : 0;
+      const tops: Record<string, number> = { r1: -480, l1: 120 + pushed, l2: 640 + pushed };
+      return box(tops[this.dataset.cardId ?? ''] ?? 0) as DOMRect;
+    });
+    try {
+      mockUseRecommendedFeed.mockReturnValue(picks);
+      rerender(<HomeFeedPage />);
+      expect(shown()).toEqual(['/card/r1', '/card/l1', '/card/l2']);
+      expect(scrollBy).toHaveBeenCalledWith(0, 600);
+    } finally {
+      rect.mockRestore();
+      scrollBy.mockRestore();
+      Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
+    }
   });
 
   it('never falls back to the skeleton once cards are showing', () => {

@@ -24,58 +24,6 @@
   white-space: nowrap;
 }
 
-/* Where 「今天的推薦準備好了」scrolls back to: the page's top, under the bar. */
-.feedTop {
-  scroll-margin-top: var(--app-header-h);
-}
-
-/* Today's picks arrived after the latest cards: a small pill that rides just
-   under the header while the reader scrolls, instead of reshuffling the feed.
-   It takes no room (the first card stays under the bar): the pill hangs from
-   a line of no height, over the cards. */
-.picksHint {
-  position: sticky;
-  top: calc(var(--app-header-h) + 12px);
-  z-index: 20;
-  display: flex;
-  justify-content: center;
-  height: 0;
-  overflow: visible;
-  pointer-events: none;
-  animation: picksHintIn 360ms ease-out both;
-}
-
-.picksHint > * {
-  align-self: flex-start;
-}
-
-.picksHint > * {
-  pointer-events: auto;
-}
-
-.picksHintLabel {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-@keyframes picksHintIn {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .picksHint {
-    animation: none;
-  }
-}
-
 /* Under the last card: Load more while more can come, else the end mark. */
 .foot {
   margin-top: 48px;

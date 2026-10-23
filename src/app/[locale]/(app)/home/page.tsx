@@ -1,11 +1,10 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { CardLinkGrid } from '@/components/molecules/CardLinkGrid/CardLinkGrid';
 import { FeedSkeleton } from '@/components/atoms/CardSkeleton/CardSkeleton';
 import { ButtonLoader } from '@/components/atoms/ButtonLoader/ButtonLoader';
-import { Icon } from '@/components/atoms/Icon';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { Link } from '@/i18n/navigation';
 import { EmptyState } from '@/components/molecules/EmptyState/EmptyState';
@@ -26,44 +25,51 @@ export default function HomeFeedPage() {
   const hasRec = recCards.length > 0;
   const latestCards = data?.cards ?? [];
 
-  // One feed, two streams, and whichever reaches the reader first leads:
-  //  - today's picks, when they're ready by then: picks first (no section
-  //    header, no page title), and「載入更多」reveals the
-  //    latest public cards deduped against them;
-  //  - otherwise the latest cards, the moment they arrive. Picks that come in
-  //    after that never reshuffle what the reader is looking at: a small hint
-  //    offers them, and only a click puts them on top.
-  // Decided once (adjusting state during render, so no frame shows the other
-  // order), and never back to the skeleton after.
+  // One feed, two streams: today's picks head it, then the latest public
+  // cards deduped against them. Whichever reaches the reader first shows
+  // first (decided once, adjusting state during render, so no frame shows the
+  // other order; never back to the skeleton after):
+  //  - picks ready by then: picks first (no section header, no page title),
+  //    and「載入更多」reveals the latest cards under them;
+  //  - otherwise the latest cards, the moment they arrive — and picks that
+  //    come in after them go on top at once (no pill to ask for them). A
+  //    reader still at the top sees them; one who has scrolled into the feed
+  //    keeps what they are looking at where it is, the picks above it.
   const [lead, setLead] = useState<Lead | null>(null);
   const nextLead: Lead | null = lead ?? (hasRec ? 'recommended' : latestCards.length > 0 ? 'latest' : null);
   if (nextLead !== lead) setLead(nextLead);
 
   const [showLatest, setShowLatest] = useState(false);
-  const [picksRevealed, setPicksRevealed] = useState(false);
-  const feedTopRef = useRef<HTMLDivElement>(null);
 
   const recIds = new Set(recCards.map((c) => c.id));
   const latestDeduped = latestCards.filter((c) => !recIds.has(c.id));
-  const picksOnTop = nextLead === 'recommended' || (nextLead === 'latest' && picksRevealed && hasRec);
-  const latestVisible = !picksOnTop || nextLead === 'latest' || showLatest;
-  const feedCards = picksOnTop
-    ? latestVisible
-      ? [...recCards, ...latestDeduped]
-      : recCards
-    : latestCards;
+  const latestVisible = !hasRec || nextLead === 'latest' || showLatest;
+  const feedCards = hasRec ? (latestVisible ? [...recCards, ...latestDeduped] : recCards) : latestCards;
   const feedAuthors = { ...(data?.authors ?? {}), ...(rec?.authors ?? {}) };
-  const picksWaiting = nextLead === 'latest' && hasRec && !picksRevealed;
+
+  // Picks landing over cards already on screen: where the card the reader is
+  // looking at stood, taken before the picks go in (read during this render,
+  // while the page still shows the old order), and put back after.
+  const picksShown = useRef(hasRec);
+  const keepInView = useRef<{ id: string; top: number } | null>(null);
+  if (hasRec !== picksShown.current) {
+    picksShown.current = hasRec;
+    if (hasRec && lead === 'latest' && typeof window !== 'undefined') keepInView.current = cardInView();
+  }
+  useLayoutEffect(() => {
+    const kept = keepInView.current;
+    keepInView.current = null;
+    if (!kept) return;
+    const el = [...document.querySelectorAll<HTMLElement>('[data-card-grid] [data-card-id]')].find((c) => c.dataset.cardId === kept.id);
+    const moved = el ? el.getBoundingClientRect().top - kept.top : 0;
+    // A browser that anchors scrolling itself has kept it already (moved is 0).
+    if (Math.abs(moved) >= 1) window.scrollBy(0, moved);
+  }, [hasRec]);
 
   // Nothing to show yet: the skeleton, until either stream has cards — or
   // both have answered with none (the empty state).
   const loading = nextLead === null && (isLoading || recLoading);
   const isEmpty = nextLead === null && !loading;
-
-  function revealPicks() {
-    setPicksRevealed(true);
-    feedTopRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-  }
 
   return (
     <div className={styles.page}>
@@ -88,19 +94,6 @@ export default function HomeFeedPage() {
         />
       ) : (
         <>
-          <div ref={feedTopRef} className={styles.feedTop} />
-          {picksWaiting && (
-            // Takes no room of its own: the pill floats over the first card, under the bar.
-            <div className={styles.picksHint}>
-              <OrganicButton variant="primary" size="sm" onClick={revealPicks}>
-                <span className={styles.picksHintLabel}>
-                  <Icon name="sparkle" size={16} />
-                  {t('recommended.ready')}
-                </span>
-              </OrganicButton>
-            </div>
-          )}
-
           {/* The recommender's reasons are deliberately not shown — an
               unexplained pick keeps the surprise of opening the card. */}
           {feedCards.length > 0 && <CardLinkGrid cards={feedCards} authors={feedAuthors} seamTop />}
@@ -121,6 +114,21 @@ export default function HomeFeedPage() {
       )}
     </div>
   );
+}
+
+/**
+ * The card the reader is looking at — the first one reaching below the bar —
+ * and where it stands; none while the page is at its top (the picks then show
+ * where the reader is).
+ */
+function cardInView(): { id: string; top: number } | null {
+  if (window.scrollY <= 4) return null;
+  const bar = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-header-h')) || 0;
+  for (const el of document.querySelectorAll<HTMLElement>('[data-card-grid] [data-card-id]')) {
+    const box = el.getBoundingClientRect();
+    if (box.bottom > bar) return { id: el.dataset.cardId!, top: box.top };
+  }
+  return null;
 }
 
 /**
