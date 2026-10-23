@@ -419,8 +419,6 @@ public enum L10n {
         public enum Recommended {
             /// The insights you write decide which stories find you
             public static var hint: String { Strings.shared.string("home.recommended.hint") }
-            /// Today's picks are ready
-            public static var ready: String { Strings.shared.string("home.recommended.ready") }
         }
         public enum ColdStart {
             /// Your first card becomes the point this world starts arranging itself around
@@ -1013,18 +1011,6 @@ public enum L10n {
             public static var failed: String { Strings.shared.string("write.publishPanel.failed") }
             /// That's the limit for today — try again tomorrow
             public static var rateLimited: String { Strings.shared.string("write.publishPanel.rateLimited") }
-        }
-        public enum FirstCard {
-            /// Write your first card
-            public static var title: String { Strings.shared.string("write.firstCard.title") }
-            /// Not sure where to start? Pick a question and write what surfaces.
-            public static var intro: String { Strings.shared.string("write.firstCard.intro") }
-            /// What small moment recently changed how you see something?
-            public static var q1: String { Strings.shared.string("write.firstCard.q1") }
-            /// What is one thing you wish you could tell your past self?
-            public static var q2: String { Strings.shared.string("write.firstCard.q2") }
-            /// Which failure taught you something nobody else ever did?
-            public static var q3: String { Strings.shared.string("write.firstCard.q3") }
         }
         /// Remove tag
         public static var removeTag: String { Strings.shared.string("write.removeTag") }

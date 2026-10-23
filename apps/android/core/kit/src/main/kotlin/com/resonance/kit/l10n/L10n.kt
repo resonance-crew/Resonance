@@ -421,8 +421,6 @@ object L10n {
         object Recommended {
             /** The insights you write decide which stories find you */
             val hint: String get() = Strings.string("home.recommended.hint")
-            /** Today's picks are ready */
-            val ready: String get() = Strings.string("home.recommended.ready")
         }
         object ColdStart {
             /** Your first card becomes the point this world starts arranging itself around */
@@ -1015,18 +1013,6 @@ object L10n {
             val failed: String get() = Strings.string("write.publishPanel.failed")
             /** That's the limit for today — try again tomorrow */
             val rateLimited: String get() = Strings.string("write.publishPanel.rateLimited")
-        }
-        object FirstCard {
-            /** Write your first card */
-            val title: String get() = Strings.string("write.firstCard.title")
-            /** Not sure where to start? Pick a question and write what surfaces. */
-            val intro: String get() = Strings.string("write.firstCard.intro")
-            /** What small moment recently changed how you see something? */
-            val q1: String get() = Strings.string("write.firstCard.q1")
-            /** What is one thing you wish you could tell your past self? */
-            val q2: String get() = Strings.string("write.firstCard.q2")
-            /** Which failure taught you something nobody else ever did? */
-            val q3: String get() = Strings.string("write.firstCard.q3")
         }
         /** Remove tag */
         val removeTag: String get() = Strings.string("write.removeTag")
