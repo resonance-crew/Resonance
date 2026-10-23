@@ -166,8 +166,6 @@ final class WriteModel {
     /// What the last write handed to Firestore stores — on the device from that moment; an
     /// unchanged working copy isn't written again.
     @ObservationIgnored private var lastStored: DraftValues?
-    /// The first-card guide's question as it was seeded: a starting point, not writing.
-    @ObservationIgnored private var seeded: DraftValues?
 
     /// CardEditor's AUTOSAVE_DELAY_MS (leaving or going to the background saves at once).
     static let autosaveDelay: Duration = .milliseconds(1500)
@@ -211,10 +209,10 @@ final class WriteModel {
     var routeKey: String? { slug ?? draftId }
 
     /// Whether going back would put something away: words, tags or a cover in a
-    /// draft (the guide's seeded question isn't), or a published card's revision —
-    /// kept in its buffer or still being typed. The writer asks first.
+    /// draft, or a published card's revision — kept in its buffer or still being
+    /// typed. The writer asks first.
     var holdsWriting: Bool {
-        isPublished ? hasPendingEdit || needsSave : !values.isEmpty && values != seeded
+        isPublished ? hasPendingEdit || needsSave : !values.isEmpty
     }
 
     /// Typed since the last write stored anything (autosave is still a moment away).
@@ -330,16 +328,6 @@ final class WriteModel {
         }
         if lastStored == v { lastStored = lastSaved }
         if created == nil { _ = await confirmTrashed(error) }
-    }
-
-    /// The first-card guide's question, as the story to write against: it is
-    /// the starting point, not writing — nothing is saved until the user adds to it.
-    func seed(story: String) {
-        editor.setMarkdown(story)
-        values.story = story
-        lastSaved = values
-        lastStored = values
-        seeded = values
     }
 
     /// One line of plain reassurance under the page title: what has happened

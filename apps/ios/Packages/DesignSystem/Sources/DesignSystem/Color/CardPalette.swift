@@ -76,6 +76,23 @@ public nonisolated struct CardPalette: Sendable {
         return out
     }
 
+    /// The families of cards put on top of a list already shown and coloured (`below`, which keeps its
+    /// own: the feed's picks that came after its latest cards). The rule run upward from where the two
+    /// meet: from the last of them to the first, a card keeps its preference (by its place among them)
+    /// unless one of the ``window`` cards after it wears that family — the next of them, then the first
+    /// of `below` — and takes the first of ``order`` none of those wears. Whichever way a pair is
+    /// visited, the later card checked the earlier, so four cards in a row still differ, across the
+    /// seam too, and `below` keeps every colour it had.
+    public static func palettes(_ accentHues: [Double?], over below: [Int]) -> [Int] {
+        var out = [Int](repeating: 0, count: accentHues.count)
+        for i in accentHues.indices.reversed() {
+            let after = Array((out[(i + 1)...] + below).prefix(window))
+            let own = preferred(accentHue: accentHues[i], position: i)
+            out[i] = after.contains(own) ? (order[own].first { !after.contains($0) } ?? own) : own
+        }
+        return out
+    }
+
     static func nearest(_ hue: Double) -> Int {
         hues.indices.min { distance(hue, hues[$0]) < distance(hue, hues[$1]) } ?? 0
     }

@@ -146,8 +146,9 @@ account (`devices/*` in the emulator), and `xcrun simctl push booted
 com.resonance.stories <file.apns>` with top-level `route` and `notificationId`
 keys checks where tapping a push leads.
 
-`-feedPicksDelay <seconds>` holds back the recommended feed, to see the
-late-picks hint.
+`-feedPicksDelay <seconds>` holds back the recommended feed, to see late picks
+go on top of the latest cards; `-feedPicks <id,id,…>` stands those cards in for
+the picks (the emulator's recommender has none).
 
 iPad: the app runs on iPhone (portrait only) and iPad (every orientation,
 resizable windows, one scene). Every layout decision is made from the window's
@@ -190,8 +191,12 @@ author). Reports go through the server (`POST /api/v1/reports`, `…/cards/{key}
 deletion comes with the account (`Me.deletion`, the kept one on a cold start): no separate request,
 and a cancel clears it from the kept account too. The home feed asks for the latest and the recommended cards together.
 Picks that arrive within `FeedModel.defaultPatience` (800 ms) lead the feed;
-later ones wait behind the "今天的推薦準備好了" pill (TabScreen's `banner`)
-and never rearrange what's on screen. Cards seen in lists stay in
+later ones go on top of the latest cards at once (`FeedModel.picksOnTop`), leaving out
+those the latest cards already show: the cards are the scroll's targets (CardColumns `ids`),
+so a reader further down keeps the card they are reading where it is, and one at the top
+(TabScreen's `head`) sees the first pick there; a grid keeps them in rows of their
+own above, the latest cards keeping their columns, colours and shapes
+(`CardPalette.palettes(_:over:)`). Cards seen in lists stay in
 `SessionStore.cardPreviews` (memory only, per account, emptied on sign-out
 and on any block change) as the card page's placeholder — the page always
 refetches. `Route.thread(handle:uid:note:)` takes the uid whenever the caller
@@ -237,7 +242,12 @@ that go straight to Firestore). Back in the foreground after 15 minutes or on a
 new UTC day, `SessionStore.awayRefreshes` refreshes saved screens. The editor
 island is served from `resonance-editor://editor/editor.html` by
 `EditorPageHandler` with a hash-based CSP: if `scripts/native/build-editor.mjs`
-starts loading anything new, update `EditorPage`.
+starts loading anything new, update `EditorPage`. A note typed and not sent
+(`NoteDrafts`, Application Support/NoteDrafts/<sha256(uid)>.json, out of backups)
+is kept per card as it is typed and however the composer closes, and the composer
+opens from it again; it goes once the note is sent (201) or handed to a resonance,
+when emptied, and on sign-out, account switch or scheduled deletion — at most 50,
+none older than 30 days.
 
 Writing (writer.spec, `WriteScreen`): two steps on one page. Writing is the bare
 title (the story's title type, by the script the island posts) over the island in

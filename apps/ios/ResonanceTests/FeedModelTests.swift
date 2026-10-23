@@ -1,11 +1,13 @@
+import DesignSystem
 import Foundation
 import ResonanceKit
 import Testing
 @testable import Resonance
 
 /// The home feed never waits on today's picks: the latest cards show as soon
-/// as they arrive, picks that come in time lead, and picks that come later
-/// wait behind the hint instead of moving what's on screen.
+/// as they arrive, picks that come in time lead, and picks that come later go
+/// on top of the latest cards at once — deduped against them, so none of the
+/// cards already on screen moves or goes — with no hint to tap.
 @MainActor @Suite struct FeedModelTests {
     let a = Fixture.card("a"), b = Fixture.card("b"), c = Fixture.card("c"), x = Fixture.card("x")
 
@@ -21,7 +23,8 @@ import Testing
         #expect(model.phase == .loaded)
         #expect(ids(model.cards) == ["x", "b"])
         #expect(!model.latestVisible)
-        #expect(!model.picksReady)
+        #expect(!model.picksOnTop)
+        #expect(model.leadingPicks == 2)
         // The picks ended the wait: nobody sat out the whole patience.
         #expect(ContinuousClock.now - started < .seconds(4))
 
@@ -30,7 +33,7 @@ import Testing
         #expect(ids(model.cards) == ["x", "b", "a", "c"])
     }
 
-    @Test func latePicksWaitBehindTheHintWithoutMovingTheFeed() async {
+    @Test func latePicksGoOnTopOfTheLatestAtOnceDedupedAgainstThem() async {
         let (a, b, c, x) = (a, b, c, x)
         let picks = Gate<[FeedCard]>()
         let model = FeedModel(feed: { _ in Fixture.page([a, b, c]) }, recommended: { await picks.wait() },
@@ -40,18 +43,58 @@ import Testing
         // The latest cards didn't wait for the picks.
         #expect(model.phase == .loaded)
         #expect(ids(model.cards) == ["a", "b", "c"])
-        #expect(!model.picksReady)
+        #expect(!model.picksOnTop)
 
         await picks.open([x, b])
-        #expect(await eventually { model.picksReady })
-        // On screen, nothing moved.
-        #expect(ids(model.cards) == ["a", "b", "c"])
-
-        // Asked for, they head the feed over the cards already read.
-        model.revealPicks()
-        #expect(!model.picksReady)
+        // On top at once, nothing to ask for: x heads the feed, and b — on screen already among the
+        // latest cards — stays where the reader has it, never twice and never moved.
+        #expect(await eventually { model.picksOnTop })
+        #expect(ids(model.cards) == ["x", "a", "b", "c"])
+        #expect(model.leadingPicks == 1)
         #expect(model.latestVisible)
-        #expect(ids(model.cards) == ["x", "b", "a", "c"])
+        // The latest cards stay showing under them: "load more" fetches the next page, it reveals nothing.
+        #expect(!model.canLoadMore)
+    }
+
+    /// Drawn on top as a block of their own, the picks leave the latest cards under them in the colours
+    /// they wore before the picks came — and no four cards in a row share one, across the seam too.
+    @Test func theCardsUnderPicksPutOnTopKeepTheirColours() {
+        let latest = ["a", "b", "c", "d"].map { Fixture.card($0) }
+        let before = StoryCardList.families(latest, splitAt: nil)
+        let after = StoryCardList.families(["x", "y"].map { Fixture.card($0) } + latest, splitAt: 2)
+        #expect(Array(after.suffix(latest.count)) == before)
+        for i in after.indices {
+            for j in max(0, i - CardPalette.window)..<i { #expect(after[i] != after[j]) }
+        }
+        // Nothing put on top: the list's one colouring.
+        #expect(StoryCardList.families(latest, splitAt: 0) == CardPalette.palettes(latest.map(\.accentHue)))
+    }
+
+    @Test func latePicksAllOnScreenAlreadyAddNothing() async {
+        let (a, b) = (a, b)
+        let picks = Gate<[FeedCard]>()
+        let model = FeedModel(feed: { _ in Fixture.page([a, b]) }, recommended: { await picks.wait() },
+                              patience: .milliseconds(10))
+
+        await model.load()
+        await picks.open([b, a])
+        #expect(await eventually { model.picksOnTop })
+        #expect(ids(model.cards) == ["a", "b"])
+        #expect(model.leadingPicks == 0)
+    }
+
+    @Test func latePicksLeaveOutWhomTheReaderBlocked() async {
+        let (a, b) = (a, b)
+        let y = Fixture.card("y", by: "mallory")
+        let picks = Gate<[FeedCard]>()
+        let model = FeedModel(feed: { _ in Fixture.page([a, b]) }, recommended: { await picks.wait() },
+                              patience: .milliseconds(10), blocked: { ["mallory"] })
+
+        await model.load()
+        await picks.open([y, Fixture.card("x")])
+        #expect(await eventually { model.picksOnTop })
+        #expect(ids(model.cards) == ["x", "a", "b"])
+        #expect(model.leadingPicks == 1)
     }
 
     @Test func picksHereFirstLeadWhileTheLatestAreSlow() async {
@@ -72,7 +115,7 @@ import Testing
         #expect(ids(model.cards) == ["x", "a"])
     }
 
-    @Test func emptyPicksShowNoHint() async {
+    @Test func emptyPicksPutNothingOnTop() async {
         let (a, b) = (a, b)
         let picks = Gate<[FeedCard]>()
         let model = FeedModel(feed: { _ in Fixture.page([a, b]) }, recommended: { await picks.wait() },
@@ -81,7 +124,7 @@ import Testing
         await model.load()
         await picks.open([])
         try? await Task.sleep(for: .milliseconds(50))
-        #expect(!model.picksReady)
+        #expect(!model.picksOnTop)
         #expect(ids(model.cards) == ["a", "b"])
     }
 
@@ -179,7 +222,7 @@ import Testing
         // The first load's picks, late: moot.
         await first.open([x])
         try? await Task.sleep(for: .milliseconds(50))
-        #expect(!model.picksReady)
+        #expect(!model.picksOnTop)
         #expect(ids(model.cards) == ["b", "c", "a"])
     }
 
@@ -293,7 +336,7 @@ import Testing
         #expect(model.refreshFailure == nil)
     }
 
-    @Test func picksThatMissThePullsPatienceWaitBehindTheHint() async {
+    @Test func picksThatMissThePullsPatienceGoOnTopOfTheLatest() async {
         let (a, b, x) = (a, b, x)
         let pulled = Gate<[FeedCard]>()
         let asked = Calls<Int>()
@@ -308,7 +351,9 @@ import Testing
         // The latest came and the picks didn't in time: the feed is the latest's.
         #expect(model.refreshFailure == nil)
         await pulled.open([x, b])
-        #expect(await eventually { model.picksReady })
-        #expect(ids(model.cards) == ["a"])
+        // Late for the pull, they go on top of the latest card on screen, as late picks do.
+        #expect(await eventually { model.picksOnTop })
+        #expect(ids(model.cards) == ["x", "b", "a"])
+        #expect(model.leadingPicks == 2)
     }
 }

@@ -262,6 +262,42 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(server.insights.count == 1)
     }
 
+    /// A phone's preview band is home's first card under the bar (no rule of its own, started at the
+    /// bar's line) only with nothing above it: not while the mirror's line is on its way or shown, not
+    /// under 更新這張卡片's hint, never in the split's pane (its heading) or as a wider window's card.
+    @Test func aPhonesBandLeadsUnderTheBarOnlyWithNothingAboveIt() async {
+        let quiet = ServerCalls()
+        quiet.insightAnswer = nil
+        let draft = WriteModel(drafts: RecordingDraftStore(), writing: writing(), calls: quiet.calls, opened: card())
+        #expect(await draft.goNext())
+        // The mirror's line is on its way above the band.
+        #expect(draft.insight == .loading)
+        #expect(!PublishStep.bandUnderBar(draft, showsBar: true, compact: true))
+        #expect(PublishStep.topPadding(draft, showsBar: true, compact: true) == 16)
+        // Nothing to say: the line collapses, and the band is the first thing under the bar.
+        #expect(await eventually { draft.insight == WriteModel.Insight.none })
+        #expect(PublishStep.bandUnderBar(draft, showsBar: true, compact: true))
+        #expect(PublishStep.topPadding(draft, showsBar: true, compact: true) == 0)
+        // The split's pane heads the step with its own row; a wider window draws a bordered card.
+        #expect(!PublishStep.bandUnderBar(draft, showsBar: false, compact: true))
+        #expect(PublishStep.topPadding(draft, showsBar: false, compact: true) == WriteWorkspace.paneTop)
+        #expect(!PublishStep.bandUnderBar(draft, showsBar: true, compact: false))
+        #expect(PublishStep.topPadding(draft, showsBar: true, compact: false) == 16)
+
+        // A mirror line shown stays above the band, which keeps its rule.
+        let mirrored = WriteModel(drafts: RecordingDraftStore(), writing: writing(), calls: ServerCalls().calls, opened: card())
+        #expect(await mirrored.goNext())
+        #expect(await eventually { mirrored.insight == .shown("被理解之前，先被看見") })
+        #expect(!PublishStep.bandUnderBar(mirrored, showsBar: true, compact: true))
+        #expect(PublishStep.topPadding(mirrored, showsBar: true, compact: true) == 16)
+
+        // A live card's step says 更新這張卡片's hint above the band.
+        let live = WriteModel(drafts: RecordingDraftStore(), writing: writing(), calls: quiet.calls, opened: card(published: true))
+        #expect(await live.goNext())
+        #expect(!PublishStep.bandUnderBar(live, showsBar: true, compact: true))
+        #expect(PublishStep.topPadding(live, showsBar: true, compact: true) == 16)
+    }
+
     @Test func theAudienceChosenInTheStepIsSavedAndKeptGoingBack() async {
         let store = RecordingDraftStore()
         let model = WriteModel(drafts: store, writing: writing(), calls: ServerCalls().calls, opened: card())

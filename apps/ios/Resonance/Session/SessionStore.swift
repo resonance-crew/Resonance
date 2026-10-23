@@ -85,6 +85,8 @@ final class SessionStore {
     let httpCache = APIHTTPCache.standard()
     /// The answers a cold start draws before the network has said anything.
     let kept = APICache.standard()
+    /// Notes typed and not sent, per card (the signed-in account's only): the composer starts from them.
+    let noteDrafts = NoteDrafts.standard()
     let api: Client
     let account: AccountAPI
     let writing: WritingAPI
@@ -262,6 +264,7 @@ final class SessionStore {
             throw error
         }
         kept.removeAll()
+        noteDrafts.retainOnly(nil)
         httpCache.use(account: nil)
         signedOutForDeletion = true
         signOut()
@@ -300,9 +303,10 @@ final class SessionStore {
         let previous = uid
         uid = newUID
         // Only this account's answers are kept from now on: the last one's
-        // (signed out, or switched from) go, HTTP cache and all.
+        // (signed out, or switched from) go, HTTP cache and all — its unsent notes too.
         httpCache.use(account: newUID)
         kept.retainOnly(newUID)
+        noteDrafts.retainOnly(newUID)
         keptBlocked = newUID.flatMap { kept.value(.blocked, uid: $0) }.map(Set.init) ?? []
         foreground = ForegroundRefresh(last: .now)
         // Drawn until the API answers (the card box's header on a cold start).

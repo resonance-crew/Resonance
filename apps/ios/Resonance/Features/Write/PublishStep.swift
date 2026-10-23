@@ -38,6 +38,28 @@ struct PublishStep: View {
         !model.isPublished || model.hasPendingEdit || model.needsSave
     }
 
+    /// Whether the preview's band is the first thing under the writer's bar: on a phone, with nothing
+    /// above it — no heading of the step's own (the split's pane has no bar), no 更新這張卡片 hint, no
+    /// mirror line on its way or shown. It is then drawn as home's first card is (`underBar`): the
+    /// bar's pen line is its top edge, with no rule of its own under it, and its paper tucked under
+    /// the bar's wave (the writer's bar ends on the same HeaderEdge as home's); the page starts it right
+    /// at the bar (``topPadding(_:showsBar:compact:)``). With anything above it, the band keeps its
+    /// own rule, as a card under another does.
+    static func bandUnderBar(_ model: WriteModel, showsBar: Bool, compact: Bool) -> Bool {
+        guard compact, showsBar, !model.isPublished else { return false }
+        switch model.insight {
+        case .loading?, .shown?: return false
+        case .none?, nil: return true
+        }
+    }
+
+    /// Where the step's content starts under the bar: right at its line when the band leads (its paper
+    /// reaching up under the wave), else 16 below it; in the split's pane, level with the map's Leave.
+    static func topPadding(_ model: WriteModel, showsBar: Bool, compact: Bool) -> CGFloat {
+        guard showsBar else { return WriteWorkspace.paneTop }
+        return bandUnderBar(model, showsBar: showsBar, compact: compact) ? 0 : 16
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Self.sectionGap) {
             if inlineHeading || updating {
@@ -120,8 +142,10 @@ struct PublishStep: View {
         return VStack(alignment: .leading, spacing: 8) {
             Group {
                 if compact {
-                    // A phone: the list's own full-bleed band, edge to edge of the window.
-                    StoryCardView(content, position: 0, isLast: true)
+                    // A phone: the list's own full-bleed band, edge to edge of the window — the first
+                    // card under the bar, as home's, when nothing stands above it.
+                    StoryCardView(content, position: 0, isLast: true,
+                                  underBar: Self.bandUnderBar(model, showsBar: !inlineHeading, compact: compact))
                         .coverSlot { CoverSlot(model: model, onPick: onPickCover) }
                         .preview()
                         .padding(.horizontal, -20)

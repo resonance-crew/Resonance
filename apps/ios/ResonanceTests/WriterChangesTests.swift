@@ -113,14 +113,6 @@ import Testing
         #expect(model.holdsWriting)
     }
 
-    @Test func theGuidesSeededQuestionIsNotWritingUntilTheWriterAddsToIt() {
-        let model = model()
-        model.seed(story: "> What stayed with you?\n\n")
-        #expect(!model.holdsWriting)
-        model.values.story += "The rain."
-        #expect(model.holdsWriting)
-    }
-
     @Test func aSavedDraftKeepsItsWordsAndASavedBlankIsStillSaved() {
         // A saved draft with words is still words to put away.
         #expect(model(opened: card(published: false)).holdsWriting)
