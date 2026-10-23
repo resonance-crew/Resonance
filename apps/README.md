@@ -405,6 +405,11 @@ is a Custom Tab. The build registers the `chat-push` capability, so the server s
 "messages" channel, silent while that thread is resumed). Debug builds fake one:
 `--es pushChatBody "…" --es pushChatConversation alice_bob --es pushChatId m1 --es pushFromUserId bob --es pushRoute /messages/bob`.
 
+A note (小紙條, `NoteComposer`) keeps its unsent words on the device per account and card (`NoteDrafts` in `:core:kit`,
+`note-drafts.xml` via `NoteDraftPrefs`, outside the backup): written a moment after typing stops, as the app leaves the screen
+and as the composer closes (a tap beside it, back, 取消), and opened on again for that card; cleared once the server answers
+201, when the text is emptied, and with the account's other local data on sign-out. At most 50 are kept, none past 30 days.
+
 The thread screen (`ThreadScreen`, `ThreadList`, `ThreadActions`, `ThreadSearch`, `ThreadComposer`) draws that model.
 The bar is an `OrganicInlineBar` over the list (cream stops on the pen line, content scrolls up under it; half ink
 until messages are under it). `ThreadRows` lays the messages out in runs — same sender, under 3 minutes apart, same

@@ -10,6 +10,7 @@ import com.resonance.design.AppFonts
 import com.resonance.design.Grain
 import com.resonance.kit.api.AppHttp
 import com.resonance.kit.api.HttpCaching
+import com.resonance.kit.chat.NoteDrafts
 import com.resonance.kit.l10n.Strings
 import com.resonance.kit.reading.ApiCache
 import com.resonance.app.ui.share.ShareFiles
@@ -35,6 +36,8 @@ class ResonanceApp : Application(), SingletonImageLoader.Factory {
         // What the screens a cold start opens on last showed, per account (cache: never backed up).
         kept = ApiCache(File(cacheDir, "api")),
         shareFiles = File(cacheDir, ShareFiles.DIR),
+        // Notes not sent yet, per account and card: they outlive the app being killed, not the account's sign-out.
+        noteDraftStore = NoteDrafts(NoteDraftPrefs(getSharedPreferences(NoteDraftPrefs.FILE, MODE_PRIVATE))),
     ).also {
         session = it
         it.start { it.loadMe() }

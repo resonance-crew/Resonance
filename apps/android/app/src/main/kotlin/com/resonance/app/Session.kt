@@ -25,6 +25,7 @@ import com.resonance.kit.api.PushApi
 import com.resonance.kit.api.ReadingApi
 import com.resonance.kit.api.SafetyApi
 import com.resonance.kit.api.WritingApi
+import com.resonance.kit.chat.NoteDrafts
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
 import com.resonance.kit.push.NotificationSwitches
@@ -71,6 +72,8 @@ class Session(
     private val kept: ApiCache? = null,
     /** Where a card's share pictures are written (cacheDir/share, ui/share/ShareFiles): emptied with the account. */
     private val shareFiles: File? = null,
+    /** Notes written and not sent yet, per account and card (note-drafts.xml): emptied with the account. */
+    private val noteDraftStore: NoteDrafts? = null,
 ) {
     enum class Phase { Restoring, SignedOut, SignedIn }
     sealed interface Profile {
@@ -220,6 +223,8 @@ class Session(
     val bookmarks: BookmarkService? get() = uid?.let(::BookmarkService)
     val drafts: DraftService? get() = uid?.let(::DraftService)
     val hints: HintService? get() = uid?.let { HintService(it, prefs) }
+    /** The signed-in account's unsent notes, by card (the note composer's words, kept until sent). */
+    val noteDrafts: NoteDrafts.Account? get() = uid?.let { noteDraftStore?.of(it) }
     /** The signed-in profile once loaded (the publish panel's card head). */
     val me: Me? get() = (_profile.value as? Profile.Loaded)?.me
     /** The sign-in email and phone, shown read-only on the account screen. */
@@ -317,8 +322,8 @@ class Session(
     }
 
     /**
-     * Empties what the account left on the device: the HTTP cache and what the screens kept. Its
-     * calls still running stop at once, before the next account's first call goes out.
+     * Empties what the account left on the device: the HTTP cache, what the screens kept and its
+     * unsent notes. Its calls still running stop at once, before the next account's first call goes out.
      */
     private fun forget(who: String): Job {
         httpCaching.cancelCalls()
@@ -328,6 +333,8 @@ class Session(
             // The last share's pictures (a card picture names its author).
             shareFiles?.let(ShareFiles::clear)
         }
+        // The notes it wrote and didn't send: words to someone, kept for this account alone.
+        noteDraftStore?.forget(who)
         // The pushes it got, still in the shade, what this install told the server, and the mark that it has a profile.
         PushCenter.clearDelivered()
         PushCenter.lastRegistration = null
