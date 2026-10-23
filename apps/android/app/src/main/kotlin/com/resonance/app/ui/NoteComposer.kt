@@ -141,7 +141,11 @@ fun NoteComposer(session: Session, cardId: String, onClose: () -> Unit, onUpgrad
             BasicText(
                 L10n.Card.Note.upgrade,
                 style = AppFonts.body(13f, lineHeight = 1.3f, color = Tokens.Terracotta).copy(textDecoration = TextDecoration.Underline),
-                modifier = Modifier.padding(top = 2.dp, bottom = 10.dp).plainClickable(role = Role.Button) { onUpgrade(text) },
+                modifier = Modifier.padding(top = 2.dp, bottom = 10.dp).plainClickable(role = Role.Button) {
+                    // Carried into a card of its own (the web's rule): the writer keeps the words from here.
+                    draft.sent()
+                    onUpgrade(text)
+                },
             )
         }
         // Why it didn't go: the dialogs' error line (13, danger red), ModalErrorGap over the foot as in

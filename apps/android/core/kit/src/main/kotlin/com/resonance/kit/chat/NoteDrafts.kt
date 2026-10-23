@@ -101,7 +101,7 @@ class NoteDraft(private val drafts: NoteDrafts.Account?, private val cardId: Str
         kept = text
     }
 
-    /** The note went (the server's 201): its draft goes, and nothing more is kept for it from this composer. */
+    /** The note went (the server's 201, or carried into a card of its own): its draft goes, and nothing more is kept for it from this composer. */
     fun sent() {
         sent = true
         drafts?.clear(cardId)
