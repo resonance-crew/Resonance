@@ -146,8 +146,9 @@ account (`devices/*` in the emulator), and `xcrun simctl push booted
 com.resonance.stories <file.apns>` with top-level `route` and `notificationId`
 keys checks where tapping a push leads.
 
-`-feedPicksDelay <seconds>` holds back the recommended feed, to see the
-late-picks hint.
+`-feedPicksDelay <seconds>` holds back the recommended feed, to see late picks
+go on top of the latest cards; `-feedPicks <id,id,…>` stands those cards in for
+the picks (the emulator's recommender has none).
 
 iPad: the app runs on iPhone (portrait only) and iPad (every orientation,
 resizable windows, one scene). Every layout decision is made from the window's
@@ -190,8 +191,12 @@ author). Reports go through the server (`POST /api/v1/reports`, `…/cards/{key}
 deletion comes with the account (`Me.deletion`, the kept one on a cold start): no separate request,
 and a cancel clears it from the kept account too. The home feed asks for the latest and the recommended cards together.
 Picks that arrive within `FeedModel.defaultPatience` (800 ms) lead the feed;
-later ones wait behind the "今天的推薦準備好了" pill (TabScreen's `banner`)
-and never rearrange what's on screen. Cards seen in lists stay in
+later ones go on top of the latest cards at once (`FeedModel.picksOnTop`), leaving out
+those the latest cards already show: the cards are the scroll's targets (CardColumns `ids`),
+so a reader further down keeps the card they are reading where it is, and one at the top
+(TabScreen's `head`) sees the first pick there; a grid keeps them in rows of their
+own above, the latest cards keeping their columns, colours and shapes
+(`CardPalette.palettes(_:over:)`). Cards seen in lists stay in
 `SessionStore.cardPreviews` (memory only, per account, emptied on sign-out
 and on any block change) as the card page's placeholder — the page always
 refetches. `Route.thread(handle:uid:note:)` takes the uid whenever the caller

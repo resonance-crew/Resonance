@@ -8,8 +8,10 @@ import ResonanceKit
 /// The two are asked for together, but the feed never waits long for the
 /// picks: the latest cards show as soon as they arrive (after a short
 /// `patience`, so picks that are nearly there still lead). Picks that arrive
-/// once the latest cards are on screen don't rearrange them — they wait
-/// behind a hint (`picksReady`) until the reader asks for them.
+/// once the latest cards are on screen go on top of them at once, the latest
+/// cards deduped against them and still showing (`picksOnTop`): a reader at
+/// the top sees the first pick there, one further down keeps what they are
+/// reading where it is (the screen anchors its scroll), with no hint to tap.
 ///
 /// A cold start draws the feed the last run kept (`FeedKeeping`) at once and
 /// asks the server again behind it (`revalidate`); so does a return to the
@@ -27,8 +29,10 @@ final class FeedModel {
     private(set) var latest: [FeedCard] = []
     private(set) var showLatest = false
     private(set) var isLoadingMore = false
-    /// Picks that arrived after the latest cards were already showing.
-    private(set) var heldPicks: [FeedCard] = []
+    /// The picks heading the feed came after the latest cards were showing, and were put on top of
+    /// them: a grid keeps them in rows of their own (`leadingPicks` of `cards`), so the cards already
+    /// there keep their columns.
+    private(set) var picksOnTop = false
     /// The last pull to refresh brought nothing back (and why): the feed on screen stayed as it
     /// was. Cleared when the next answer arrives.
     private(set) var refreshFailure: RefreshFailure?
@@ -73,8 +77,12 @@ final class FeedModel {
                   keeping: keeping, blocked: blocked)
     }
 
-    /// What the feed shows, in order.
+    /// What the feed shows, in order: the picks, then the latest cards. Picks that lead (they came
+    /// first) push their twins out of the latest cards; picks put on top of the latest cards leave
+    /// those as they are and drop the ones already among them, so nothing the reader has in front of
+    /// them moves or goes.
     var cards: [FeedCard] {
+        if picksOnTop { return visible(shownPicks + latest) }
         let picks = Set(recommended.map(\.id))
         let rest = latest.filter { !picks.contains($0.id) }
         return visible(latestVisible ? recommended + rest : recommended)
@@ -84,8 +92,16 @@ final class FeedModel {
     var latestVisible: Bool { recommended.isEmpty || showLatest }
     var canLoadMore: Bool { !latestVisible || hasMorePages }
     var isEmpty: Bool { phase == .loaded && cards.isEmpty }
-    /// Today's picks are here, waiting for the reader (the hint above the feed).
-    var picksReady: Bool { !visible(heldPicks).isEmpty }
+    /// How many of `cards` are the picks heading them.
+    var leadingPicks: Int { visible(shownPicks).count }
+
+    /// The picks as they head the feed: those put on top of the latest cards without the ones the
+    /// latest cards already show.
+    private var shownPicks: [FeedCard] {
+        guard picksOnTop else { return recommended }
+        let shown = Set(latest.map(\.id))
+        return recommended.filter { !shown.contains($0.id) }
+    }
 
     /// Returns once there is something to show (or nothing will come); the
     /// picks may still be on their way, however long they take. On a cold
@@ -101,7 +117,7 @@ final class FeedModel {
         phase = .loading
         refreshFailure = nil
         recommended = []
-        heldPicks = []
+        picksOnTop = false
         arrivedPicks = nil
         latestLoaded = false
         extraPages = 0
@@ -153,8 +169,8 @@ final class FeedModel {
     /// Pulled to refresh: both are asked for again, with the feed kept on screen meanwhile (no
     /// skeleton). The answers take their places as a fresh load's do — today's picks heading the
     /// feed and the first page of the latest cards behind "load more" (picks nearly there still
-    /// lead; later ones wait behind the hint, as late picks do) — and one that fails leaves its
-    /// part as it was. When nothing comes back the feed stays as it is and `refreshFailure` says
+    /// lead; later ones go on top of the latest cards, as late picks do) — and one that fails leaves
+    /// its part as it was. When nothing comes back the feed stays as it is and `refreshFailure` says
     /// why. Nothing on screen yet: an ordinary load, its failure the page's.
     func refresh() async {
         guard phase == .loaded else {
@@ -220,8 +236,8 @@ final class FeedModel {
     /// Asks the server again without taking down what's on screen (the kept
     /// feed of a cold start, a feed left a while ago). Each answer takes its
     /// part's place as it comes; a failed one leaves its part as it was. Picks
-    /// that come to a feed led by the latest cards wait behind the hint, as
-    /// late picks do. Nothing shown yet: an ordinary `load` (unless one is on its way).
+    /// that come to a feed led by the latest cards go on top of them, as late
+    /// picks do. Nothing shown yet: an ordinary `load` (unless one is on its way).
     func revalidate() async {
         switch phase {
         case .loaded: break
@@ -247,8 +263,8 @@ final class FeedModel {
     /// Refreshed where the reader is, away from the list's top (VoiceOver's Refresh further down):
     /// both are asked for again and each answer takes its part's place as `revalidate`'s do — the
     /// new latest cards on top of the pages read (all of them kept), the latest left showing, picks
-    /// for a feed the latest cards lead waiting behind the hint — so the cards round the reader's
-    /// place stay. When nothing comes back the feed stays as it is and `refreshFailure` says why.
+    /// for a feed the latest cards lead put on top of them — so the cards round the reader's place
+    /// stay. When nothing comes back the feed stays as it is and `refreshFailure` says why.
     /// Nothing on screen yet: an ordinary refresh.
     func refreshInPlace() async {
         guard phase == .loaded else { return await refresh() }
@@ -274,14 +290,6 @@ final class FeedModel {
         let failure = await latest.value
         guard asked == generation, !pickedUp, let failure else { return }
         refreshFailure = RefreshFailure(failure)
-    }
-
-    /// The hint's tap: the held picks head the feed, over the cards already read.
-    func revealPicks() {
-        guard !heldPicks.isEmpty else { return }
-        recommended = heldPicks
-        heldPicks = []
-        showLatest = true
     }
 
     /// First reveals the latest cards; after that, fetches the next page.
@@ -322,7 +330,7 @@ final class FeedModel {
         guard page != nil || !picks.isEmpty else { return false }
         generation += 1
         recommended = picks
-        heldPicks = []
+        picksOnTop = false
         latest = page?.cards ?? []
         nextPage = page?.next
         hasMorePages = page.map { $0.next != nil } ?? true
@@ -337,10 +345,11 @@ final class FeedModel {
         refreshFailure = nil
         keeping?.keepPicks(picks)
         if recommended.isEmpty, !picks.isEmpty, !latest.isEmpty {
-            // The latest cards lead what's on screen: don't move them.
-            heldPicks = picks
+            // The latest cards lead what's on screen: the picks go on top of them.
+            putOnTop(picks)
         } else {
             recommended = picks
+            if picks.isEmpty { picksOnTop = false }
         }
     }
 
@@ -378,8 +387,16 @@ final class FeedModel {
         keeping?.keepPicks(picks)
         refreshFailure = nil
         recommended = picks
-        heldPicks = []
+        picksOnTop = false
         showLatest = false
+    }
+
+    /// Picks that came once the latest cards were showing: on top of them at once, the latest cards
+    /// still showing under them (deduped against them). The screen keeps the reader's place.
+    private func putOnTop(_ picks: [FeedCard]) {
+        recommended = picks
+        showLatest = true
+        picksOnTop = true
     }
 
     private func keep(picks: [FeedCard], for asked: Int) {
@@ -404,8 +421,8 @@ final class FeedModel {
             if !picks.isEmpty || latestLoaded { show(picks: picks) }
             patienceWait?.cancel()
         case .loaded:
-            // The latest cards are on screen: don't move them. The picks wait for the reader.
-            if recommended.isEmpty, !picks.isEmpty { heldPicks = picks }
+            // The latest cards are on screen: the picks go on top of them, the reader's place kept.
+            if recommended.isEmpty, !picks.isEmpty { putOnTop(picks) }
         case .failed:
             // The latest cards failed; the picks are something to read.
             if !picks.isEmpty {

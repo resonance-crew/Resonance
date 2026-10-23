@@ -410,6 +410,12 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
     /// list, whose panes are fixed).
     var phoneTop: CGFloat
     var tabletGap: Bool
+    /// The list's first item as it is now (the feed's first card), for lists whose items anchor the
+    /// scroll (a scroll target layout: a reader further down keeps the item they are reading where it
+    /// is when items come in above it). When it changes while the list rests at its top — picks put
+    /// on top of the feed, a pull that brought others — the list goes on showing its top, the new first
+    /// item, rather than the item it had there.
+    var head: String?
     let trailing: Trailing
     let banner: Banner
     let content: Content
@@ -422,7 +428,9 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
     /// A tap on this tab while it is chosen and here: back to the top.
     @Environment(\.scrollToTop) private var toTop
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var position = ScrollPosition(edge: .top)
+    @State private var position = ScrollPosition(idType: String.self, edge: .top)
+    /// The list rests at its top (nothing scrolled under the bar).
+    @State private var atTop = true
     @State private var scrolled = false
     /// How far the brand bar has slid up (0…`travel`).
     @State private var hidden: CGFloat = 0
@@ -446,13 +454,14 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
     private var bottomRoom: CGFloat { window.topTabs ? 0 : OrganicTabBar<AppTab>.height + HeaderEdge.height }
 
     init(_ title: String, headerSpacing: CGFloat = 20, titleInBar: Bool = false, phoneTop: CGFloat = 16, tabletGap: Bool = true,
-         @ViewBuilder trailing: () -> Trailing = { EmptyView() },
+         head: String? = nil, @ViewBuilder trailing: () -> Trailing = { EmptyView() },
          @ViewBuilder banner: () -> Banner, @ViewBuilder content: () -> Content) {
         self.title = title
         self.headerSpacing = headerSpacing
         self.titleInBar = titleInBar
         self.phoneTop = phoneTop
         self.tabletGap = tabletGap
+        self.head = head
         self.trailing = trailing()
         self.banner = banner()
         self.content = content()
@@ -482,6 +491,14 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
         .onChange(of: toTop) {
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) { position.scrollTo(edge: .top) }
             withAnimation(.easeOut(duration: 0.18)) { hidden = 0 }
+        }
+        // A new first item: at the top the list shows it; further down the anchored scroll has kept the
+        // reader's item where it was.
+        .onScrollGeometryChange(for: Bool.self) { geo in geo.contentOffset.y + geo.contentInsets.top <= 1 } action: { _, top in
+            atTop = top
+        }
+        .onChange(of: head) {
+            if atTop { position.scrollTo(edge: .top) }
         }
         .onHeaderScroll($scrolled)
         .onChange(of: scrolled) { _, now in headerAbove?.scrolled(now) }
@@ -523,8 +540,8 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
 
 extension TabScreen where Banner == EmptyView {
     init(_ title: String, headerSpacing: CGFloat = 20, titleInBar: Bool = false, phoneTop: CGFloat = 16, tabletGap: Bool = true,
-         @ViewBuilder trailing: () -> Trailing = { EmptyView() }, @ViewBuilder content: () -> Content) {
+         head: String? = nil, @ViewBuilder trailing: () -> Trailing = { EmptyView() }, @ViewBuilder content: () -> Content) {
         self.init(title, headerSpacing: headerSpacing, titleInBar: titleInBar, phoneTop: phoneTop, tabletGap: tabletGap,
-                  trailing: trailing, banner: { EmptyView() }, content: content)
+                  head: head, trailing: trailing, banner: { EmptyView() }, content: content)
     }
 }

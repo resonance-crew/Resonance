@@ -104,17 +104,18 @@ import Testing
         #expect(cache.value(.latest, uid: "alice")?.cards.map(\.id) == ["a", "b"])
     }
 
-    @Test func picksForAFeedLedByTheLatestWaitBehindTheHint() async {
+    @Test func picksForAFeedLedByTheLatestGoOnTopOfIt() async {
         let (b, c, x) = (b, c, x)
         // Yesterday's picks are gone with their UTC day; the latest cards were kept.
         cache.save(Fixture.page([b, c]), as: .latest, uid: "alice")
-        let model = FeedModel(feed: { _ in Fixture.page([b, c]) }, recommended: { [x] },
+        let model = FeedModel(feed: { _ in Fixture.page([b, c]) }, recommended: { [x, c] },
                               keeping: FeedKeeping(cache, uid: "alice"))
         await model.load()
-        #expect(ids(model.cards) == ["b", "c"])
-        #expect(model.picksReady)
-        model.revealPicks()
+        // Today's picks came to the kept latest cards on screen: on top of them at once, c (shown
+        // already) left where it is.
+        #expect(model.picksOnTop)
         #expect(ids(model.cards) == ["x", "b", "c"])
+        #expect(model.leadingPicks == 1)
     }
 
     @Test func comingBackAsksAgainBehindWhatIsShown() async throws {

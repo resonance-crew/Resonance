@@ -5,23 +5,21 @@ import SwiftUI
 /// The home feed (home/page.tsx): today's picks right under the brand bar (no
 /// page title: the first card's top edge is the bar's pen line), then "load
 /// more" for the latest cards, a quiet end mark once nothing more can load, and
-/// the prompt to write. Picks that come after the latest cards are showing wait
-/// behind a hint.
+/// the prompt to write. Picks that come after the latest cards are showing go
+/// on top of them at once: a reader at the top sees the first of them there, one
+/// further down keeps the cards in front of them where they are (the list anchors
+/// its scroll on them, a grid keeps the picks in rows of their own above).
 struct FeedScreen: View {
     @Environment(SessionStore.self) private var session
     @Environment(WriteLauncher.self) private var writer
     @Environment(\.window) private var window
     @State private var model: FeedModel?
-    private static let listTop = "feed.top"
 
     var body: some View {
-        ScrollViewReader { proxy in
-            TabScreen("", banner: { picksHint(proxy) }) {
-                content.id(Self.listTop)
-            }
-            .animation(.easeInOut(duration: 0.25), value: model?.picksReady ?? false)
-            .animation(.easeInOut(duration: 0.25), value: model?.refreshFailure)
+        TabScreen("", head: model?.cards.first?.id) {
+            content
         }
+        .animation(.easeInOut(duration: 0.25), value: model?.refreshFailure)
         // A pull's gap wears the first band's paper (round 5 B1).
         .pullPaper(pullPaper)
         .refreshable {
@@ -47,21 +45,6 @@ struct FeedScreen: View {
         }
     }
 
-    /// Picks that came after the latest cards were showing: they head the feed
-    /// once asked for, and the feed goes up to meet them.
-    @ViewBuilder private func picksHint(_ proxy: ScrollViewProxy) -> some View {
-        if let model, model.picksReady {
-            OrganicButton(L10n.Home.Recommended.ready, icon: .sparkle, size: .sm) {
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    model.revealPicks()
-                    proxy.scrollTo(Self.listTop, anchor: .top)
-                }
-            }
-            .padding(.top, 10)
-            .transition(.move(edge: .top).combined(with: .opacity))
-        }
-    }
-
     /// The paper of the band at the bar's line, when the feed's top is one: the first card's family
     /// (the list's colouring gives the first card its own preference), or the first skeleton's. None
     /// over the bordered grid, an empty or failed feed, or a refresh note above the cards.
@@ -73,9 +56,15 @@ struct FeedScreen: View {
         case .failed:
             return nil
         case .loaded:
-            guard let model, !model.isEmpty, model.refreshFailure == nil, let first = model.cards.first else { return nil }
-            return CardPalette(index: CardPalette.palettes([first.accentHue])[0])
+            guard let model, !model.isEmpty, model.refreshFailure == nil,
+                  let first = StoryCardList.families(model.cards, splitAt: splitAt(model)).first else { return nil }
+            return CardPalette(index: first)
         }
+    }
+
+    /// Picks put on top of the latest cards are a block of their own above them.
+    private func splitAt(_ model: FeedModel) -> Int? {
+        model.picksOnTop ? model.leadingPicks : nil
     }
 
     private func makeModel() -> FeedModel {
@@ -84,13 +73,23 @@ struct FeedScreen: View {
         let keeping = session.uid.map { FeedKeeping(session.kept, uid: $0) }
         let blocked = { [session] in session.blockedIds }
         #if DEBUG
-        // `-feedPicksDelay <seconds>` holds today's picks back (screen checks of the late-picks hint).
+        // `-feedPicksDelay <seconds>` holds today's picks back (screen checks of picks put on top of the
+        // latest cards), and `-feedPicks <id,id,…>` stands those cards in for them (the emulator has none):
+        // cards of their own — ids marked, as the latest cards hold the real ones — with a reason, as picks have.
         let delay = UserDefaults.standard.double(forKey: "feedPicksDelay")
-        if delay > 0 {
+        let standIns = UserDefaults.standard.string(forKey: "feedPicks")?.split(separator: ",").map(String.init)
+        if delay > 0 || standIns != nil {
             return FeedModel(feed: { try await api.feed(after: $0) }, recommended: {
-                try? await Task.sleep(for: .seconds(delay))
-                return try await api.recommended()
-            }, keeping: keeping, blocked: blocked)
+                if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+                guard let standIns else { return try await api.recommended() }
+                return try await api.cards(keys: standIns).map { card in
+                    var pick = card
+                    pick.id = "pick-\(card.id)"
+                    pick.reason = "stand-in pick"
+                    return pick
+                }
+            // Stand-ins are kept nowhere (nor is a kept feed drawn first): each launch is a cold load.
+            }, keeping: standIns == nil ? keeping : nil, blocked: blocked)
         }
         #endif
         return FeedModel(api: api, keeping: keeping, blocked: blocked)
@@ -116,7 +115,9 @@ struct FeedScreen: View {
                     // (the first card then starts below it, with its own top rule).
                     RefreshNote(text: failure.message).padding(.top, 28)
                 }
-                StoryCardList(cards: model.cards, underBar: model.refreshFailure == nil)
+                // The scroll anchors on the cards, so picks put on top of them never move the one being read.
+                StoryCardList(cards: model.cards, underBar: model.refreshFailure == nil, anchorsScroll: true,
+                              splitAt: splitAt(model))
                 footer(model)
             }
         }
