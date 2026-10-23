@@ -251,6 +251,9 @@ export function PublishStep({
         : tPanel('resonanceQuiet');
 
   const title = updating ? tPanel('updateTitle') : tPanel('title');
+  // Nothing above the preview (no heading of its own, no hint, no mirror line): on a phone its
+  // band is the first thing under the bar, which it meets as the feed's first card does.
+  const underBar = !inlineHeading && !updating && (!insight || insight.state === 'none');
 
   return (
     <section
@@ -306,11 +309,12 @@ export function PublishStep({
 
       <fieldset className={styles.fieldset} disabled={pending}>
         {/* 2 — the card as a list shows it; its picture is the cover editor */}
-        <div className={styles.previewBlock}>
+        <div className={styles.previewBlock} data-under-bar={underBar || undefined}>
           <div className={styles.preview}>
             <StoryCard
               story={preview}
               preview
+              isFirst={underBar}
               labelledBy={captionId}
               bleed="var(--page-pad-x)"
               coverSlot={<CoverFrame cover={cover} />}

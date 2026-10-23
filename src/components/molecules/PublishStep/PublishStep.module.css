@@ -129,6 +129,13 @@
   .preview {
     max-width: none;
   }
+
+  /* First under the bar, the band takes the column's space above it (its host's
+     --column-pad-top): no rule of its own, its paper begins on the bar's pen
+     line as the feed's first card's does (StoryCard's data-first). */
+  .previewBlock[data-under-bar] {
+    margin-top: calc(-1 * var(--column-pad-top, 0px));
+  }
 }
 
 .caption {

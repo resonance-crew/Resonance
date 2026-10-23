@@ -133,6 +133,30 @@ describe('PublishStep', () => {
     expect(insightCalls()).toHaveLength(0);
   });
 
+  // On a phone the preview is the feed's band: right under the bar it draws no rule of its own — the bar's
+  // pen line is its edge, as the feed's first card's is — and keeps it while something sits above it.
+  it('meets the bar as the feed’s first card does when nothing sits above the preview', async () => {
+    const preview = () => screen.getByRole('group', { name: en.write.previewCaption });
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ coreInsight: 'Small kindnesses add up' }) });
+    const view = renderWithIntl(<Step />);
+    // The mirror on its way, then its line: above the preview, which keeps its rule.
+    expect(preview()).not.toHaveAttribute('data-first');
+    expect(await screen.findByText(/Small kindnesses add up/)).toBeInTheDocument();
+    expect(preview()).not.toHaveAttribute('data-first');
+    view.unmount();
+
+    // Nothing to reflect: the line folds away and the band is first under the bar.
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ coreInsight: null }) });
+    const quiet = renderWithIntl(<Step />);
+    await echoSettled();
+    await waitFor(() => expect(preview()).toHaveAttribute('data-first'));
+    quiet.unmount();
+
+    // A live card's step says what saving does first.
+    renderWithIntl(<Step mode="update" />);
+    expect(preview()).not.toHaveAttribute('data-first');
+  });
+
   it('shows the mirror when React mounts the step twice (dev), not a loading line for good', async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ coreInsight: 'Small kindnesses add up' }) });
     renderWithIntl(

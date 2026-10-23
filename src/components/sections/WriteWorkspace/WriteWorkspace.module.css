@@ -268,7 +268,10 @@
   width: 100%;
   max-width: var(--page-max-w-narrow);
   margin: 0 auto;
-  padding: calc(var(--app-header-h) + var(--editor-pad-top)) var(--page-pad-x) var(--page-pad-bottom);
+  /* The space between the bar's foot and the column's first line: a band that
+     begins on the bar's pen line (the publish step's preview) takes it back. */
+  --column-pad-top: var(--editor-pad-top);
+  padding: calc(var(--app-header-h) + var(--column-pad-top)) var(--page-pad-x) var(--page-pad-bottom);
 }
 
 /* The draft's save state, where the page title's subtitle was: the bar has
@@ -345,7 +348,8 @@
 
 /* Under its own header the pane's first line needs no page-sized gap above it. */
 .paneHeader + .paneBody .editorCol {
-  padding-top: clamp(16px, 2.5vh, 24px);
+  --column-pad-top: clamp(16px, 2.5vh, 24px);
+  padding-top: var(--column-pad-top);
 }
 
 /* The header (below the split only): on the pane's paper, above the body (its
