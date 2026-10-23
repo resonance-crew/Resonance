@@ -442,7 +442,8 @@ struct WriteScreen: View {
                         onSubmit: { Task { await submit(model) } },
                         onSecondary: { Task { await secondary(model) } })
                 .padding(.horizontal, window.layoutClass == .compact ? 20 : window.pad)
-                .padding(.top, showsBar ? 16 : WriteWorkspace.paneTop)
+                // A phone's preview band with nothing above it starts right at the bar's line, as home's first card.
+                .padding(.top, PublishStep.topPadding(model, showsBar: showsBar, compact: window.layoutClass == .compact))
                 .padding(.bottom, 48)
                 .frame(maxWidth: window.layoutClass == .compact ? .infinity : Tokens.measure + 2 * window.pad)
                 .frame(maxWidth: .infinity)
