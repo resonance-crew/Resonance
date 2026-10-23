@@ -17,6 +17,9 @@
   --split-pen: color-mix(in oklch, var(--field-border-hover) 35%, var(--color-cream));
   column-gap: var(--msg-gap);
   height: 100vh;
+  /* What the browser shows now: a phone's 100vh counts the room under its
+     address and tool bars, which hid the composer below the screen's foot. */
+  height: 100dvh;
   padding: var(--app-header-h) 0 0;
   /* The vertical rule deliberately runs past the viewport bottom. */
   overflow: hidden;
