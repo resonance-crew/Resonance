@@ -6,13 +6,17 @@ import SwiftUI
 /// author — the only reader it will ever have. Four lines to write in, the
 /// privacy hint for the first few times, the count, and past 200 characters
 /// an offer to make it a resonance card instead. Sending replaces the form
-/// with a quiet confirmation.
+/// with a quiet confirmation. Words typed and not sent are kept on the device
+/// (``NoteDrafts``) as they are typed and however the composer closes — a tap
+/// beside it, 取消, the app going away — and it opens again from them on this
+/// card; they go once the note is sent, or handed to a resonance.
 struct NoteComposer: View {
     let cardId: String
     let onClose: () -> Void
     /// 紙條 → 共振: the text becomes the story of a resonance to this card.
     let onUpgrade: (String) -> Void
     @Environment(SessionStore.self) private var session
+    @Environment(\.scenePhase) private var scenePhase
     @State private var text = ""
     @State private var pending = false
     @State private var sent = false
@@ -24,10 +28,18 @@ struct NoteComposer: View {
     /// The words the server refused (three notes already wait, a block): the same words sent again
     /// would only be refused again, so Send waits for an edit (and the refusal stays said until then).
     @State private var refused: String?
+    /// Who is writing: the account signed in as the composer opened, whose draft it keeps.
+    @State private var author: String?
+    /// The words went on (sent, or into a resonance): nothing of them is kept any more.
+    @State private var letGo = false
+    /// The draft kept a moment after typing stops.
+    @State private var keeping: Task<Void, Never>?
     @FocusState private var focused: Bool
 
     static let maxLength = 2000
     static let upgradeThreshold = 200
+    /// How long after the last keystroke the words are kept (closing keeps them at once).
+    static let keepDelay: Duration = .milliseconds(400)
 
     /// The web counts the trimmed text in UTF-16 units.
     private var count: Int { words.utf16.count }
@@ -35,6 +47,14 @@ struct NoteComposer: View {
     private var valid: Bool { count > 0 && count <= Self.maxLength && session.me != nil && words != refused }
 
     var body: some View {
+        content
+            .onAppear(perform: restoreDraft)
+            // However the composer goes — 取消, a tap beside it, the card's page leaving — what is typed is kept.
+            .onDisappear(perform: keepDraft)
+            .onChange(of: scenePhase) { _, phase in if phase != .active { keepDraft() } }
+    }
+
+    @ViewBuilder private var content: some View {
         if sent {
             VStack(spacing: 0) {
                 HStack(spacing: 10) {
@@ -70,6 +90,12 @@ struct NoteComposer: View {
                         self.refused = nil
                         error = nil
                     }
+                    // Kept a moment after typing stops (emptied, the draft goes).
+                    keeping?.cancel()
+                    keeping = Task {
+                        try? await Task.sleep(for: Self.keepDelay)
+                        if !Task.isCancelled { keepDraft() }
+                    }
                 }
             HStack(alignment: .top, spacing: 12) {
                 if showsHint {
@@ -82,7 +108,11 @@ struct NoteComposer: View {
             }
             .padding(.top, 6)
             if count > Self.upgradeThreshold {
-                Button { onUpgrade(text) } label: {
+                Button {
+                    // The words become the resonance's story, which the writer keeps from here.
+                    letDraftGo()
+                    onUpgrade(text)
+                } label: {
                     Text(L10n.Card.Note.upgrade).font(AppFonts.body(13)).foregroundStyle(Tokens.terracotta).underline()
                 }
                 .buttonStyle(.plain)
@@ -113,8 +143,14 @@ struct NoteComposer: View {
         error = nil
         defer { pending = false }
         let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Taken now: the composer may be closed before the server answers.
+        let drafts = session.noteDrafts, uid = author, cardId = cardId
         do {
             _ = try await attempt.send(cardId: cardId, text: words) { try await session.messaging.sendNote(cardId: cardId, text: words, clientId: $0) }
+            // The server has it (201): its draft goes — even when the composer was closed meanwhile.
+            keeping?.cancel()
+            letGo = true
+            if let uid { drafts.clear(uid: uid, cardId: cardId) }
             sent = true
             PushCenter.shared.reachedOut()
         } catch {
@@ -122,6 +158,30 @@ struct NoteComposer: View {
             self.error = failure.message
             if failure.refused { refused = words }
         }
+    }
+
+    // MARK: The draft kept on the device
+
+    /// Opening on this card: the words left unsent here, if any (for the account signed in now).
+    private func restoreDraft() {
+        guard author == nil, let uid = session.uid else { return }
+        author = uid
+        if text.isEmpty, let kept = session.noteDrafts.text(uid: uid, cardId: cardId) { text = kept }
+    }
+
+    /// The words as they are now, kept — or, emptied, let go — for the account that typed them, while
+    /// it is still the one signed in (a sign-out has cleared the device of it). Nothing once they went on.
+    private func keepDraft() {
+        keeping?.cancel()
+        guard !letGo, let author, session.uid == author else { return }
+        session.noteDrafts.keep(text, uid: author, cardId: cardId)
+    }
+
+    /// The words went on (the note sent, or made a resonance's story): nothing of them is kept.
+    private func letDraftGo() {
+        keeping?.cancel()
+        letGo = true
+        if let author { session.noteDrafts.clear(uid: author, cardId: cardId) }
     }
 }
 

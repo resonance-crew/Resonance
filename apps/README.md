@@ -237,7 +237,12 @@ that go straight to Firestore). Back in the foreground after 15 minutes or on a
 new UTC day, `SessionStore.awayRefreshes` refreshes saved screens. The editor
 island is served from `resonance-editor://editor/editor.html` by
 `EditorPageHandler` with a hash-based CSP: if `scripts/native/build-editor.mjs`
-starts loading anything new, update `EditorPage`.
+starts loading anything new, update `EditorPage`. A note typed and not sent
+(`NoteDrafts`, Application Support/NoteDrafts/<sha256(uid)>.json, out of backups)
+is kept per card as it is typed and however the composer closes, and the composer
+opens from it again; it goes once the note is sent (201) or handed to a resonance,
+when emptied, and on sign-out, account switch or scheduled deletion — at most 50,
+none older than 30 days.
 
 Writing (writer.spec, `WriteScreen`): two steps on one page. Writing is the bare
 title (the story's title type, by the script the island posts) over the island in
