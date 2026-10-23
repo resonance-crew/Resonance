@@ -115,6 +115,7 @@ import com.resonance.design.CoverFrame
 import com.resonance.design.CssText
 import com.resonance.design.EmptyAction
 import com.resonance.design.HandDrawnAvatar
+import com.resonance.design.HeaderEdgeHeight
 import com.resonance.design.ImageRemoveButton
 import com.resonance.design.LayoutClass
 import com.resonance.design.LocalToasts
@@ -784,14 +785,21 @@ private fun PublishStep(
     val updating = model.isPublished
     val pending = model.pending
     val reduced = LocalContext.current.prefersReducedMotion()
+    // The mirror line is on screen while it is asked or answers — and while it folds away (composed till then).
+    var lineComposed by remember { mutableStateOf(false) }
+    val mirrorShows = !updating && model.mirror.let { it is Mirror.Loading || it is Mirror.Shown }
+    // A phone's band under the bar may be the first thing there; with nothing above it, it is the feed's first card.
+    val tucks = bar && compact && !updating
+    val underBar = bandUnderBar(bar, compact, updating, mirrorOnScreen = mirrorShows || lineComposed)
     // Every section keeps its gap above it, so one that folds away (the mirror with nothing to say) takes its gap along.
     Column(
         Modifier
             .fillMaxSize()
             .verticalScroll(scroll)
             .then(if (compact) Modifier else Modifier.fillMaxWidth().wrapContentWidth().widthIn(max = columnMax))
-            .padding(top = if (bar) inlineBarTop() else splitTop())
-            .padding(start = pad, end = pad, top = if (bar) 16.dp else 0.dp, bottom = 48.dp),
+            // Where a band may tuck under the bar, the column starts at the bar's wave; what sits above the band keeps clear of it.
+            .padding(top = if (bar) inlineBarTop() - (if (tucks) HeaderEdgeHeight else 0.dp) else splitTop())
+            .padding(start = pad, end = pad, top = if (bar && !tucks) 16.dp else 0.dp, bottom = 48.dp),
     ) {
         if (!bar) {
             StepHeading(model)
@@ -801,11 +809,13 @@ private fun PublishStep(
             BasicText(L10n.Write.PublishPanel.updateHint, style = AppFonts.body(14f, lineHeight = 1.7f, color = Tokens.TextMuted))
             Spacer(Modifier.height(STEP_GAP))
         }
-        if (!updating) MirrorLine(model.mirror, reduced)
+        // The mirror line over the band: the band starts under the wave, as it does at the end of the line's folding.
+        if (tucks && !underBar) Spacer(Modifier.height(HeaderEdgeHeight))
+        if (!updating) MirrorLine(model.mirror, reduced, lead = if (tucks) 16.dp else 0.dp) { lineComposed = it }
 
         // While it publishes, nothing in the step takes a tap (the web's fieldset disabled).
         Column(Modifier.holdWhile(pending).graphicsLayer { alpha = if (pending) 0.7f else 1f }) {
-            Preview(session, model, compact, pad, pickCover, dismissKeyboard)
+            Preview(session, model, compact, pad, underBar, pickCover, dismissKeyboard)
             Spacer(Modifier.height(STEP_GAP))
             Tags(model, dismissKeyboard)
             Spacer(Modifier.height(STEP_GAP))
@@ -868,6 +878,17 @@ private fun PublishStep(
 /** The step's gap between its sections (the web's clamp(22px, 3vw, 32px); the apps' 28). */
 private val STEP_GAP = 28.dp
 
+/**
+ * Whether the publish step's card band is the first thing under the writer's bar, and so drawn as
+ * the home feed's first card is (StoryCard `isFirst`): its paper running up under the bar's wave,
+ * the bar's pen line its top edge — not a rule of its own just below that line. Only a phone's band
+ * ([compact]) under the bar (at the split the step's heading leads), for a first publication (a
+ * live card's update hint stands above it), with no mirror line on screen — asked, answered or still
+ * folding away.
+ */
+internal fun bandUnderBar(bar: Boolean, compact: Boolean, updating: Boolean, mirrorOnScreen: Boolean): Boolean =
+    bar && compact && !updating && !mirrorOnScreen
+
 /** At the split, the pane's first row: as tall as the floating pill and the Leave over the map. */
 private val SPLIT_ROW_HEIGHT = 38.dp
 
@@ -893,19 +914,26 @@ private fun StepHeading(model: WriteModel) {
  * The mirror moment (publish only): the loader and 正在讀你的故事⋯ while it is asked, the sparkle and
  * 你想說的，也許是——「…」 once it answers; an answer of nothing folds the line away with its gap
  * (200 ms; at once with the system's animations off). The line grows as it changes, so what is under
- * it glides rather than jumps.
+ * it glides rather than jumps. [lead]: air above the line that folds with it (a phone's, under the
+ * bar); [onComposed] says when the line is on screen and when it has gone, folding done.
  */
 @Composable
-private fun MirrorLine(mirror: Mirror?, reduced: Boolean) {
+private fun MirrorLine(mirror: Mirror?, reduced: Boolean, lead: Dp = 0.dp, onComposed: (Boolean) -> Unit = {}) {
     // What it last had to say stays drawn while the line folds away.
     var said by remember { mutableStateOf<Mirror?>(null) }
     if (mirror is Mirror.Loading || mirror is Mirror.Shown) said = mirror
+    val composed by rememberUpdatedState(onComposed)
     AnimatedVisibility(
         mirror is Mirror.Loading || mirror is Mirror.Shown,
         enter = if (reduced) EnterTransition.None else fadeIn(tween(200)) + expandVertically(tween(200)),
         exit = if (reduced) ExitTransition.None else fadeOut(tween(200)) + shrinkVertically(tween(200, easing = Ease)),
     ) {
+        DisposableEffect(Unit) {
+            composed(true)
+            onDispose { composed(false) }
+        }
         Column(Modifier.fillMaxWidth().animateContentSize(if (reduced) snap() else tween(200, easing = Ease))) {
+            if (lead > 0.dp) Spacer(Modifier.height(lead))
             when (val m = said) {
                 is Mirror.Shown -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OrganicIcon(IconName.Sparkle, Modifier.padding(top = 3.dp), size = 16.dp, color = Tokens.Terracotta)
@@ -923,17 +951,18 @@ private fun MirrorLine(mirror: Mirror?, reduced: Boolean) {
 
 /**
  * The card as a list will show it, from what is on screen (writer.spec §2.1.3): a phone's feed band
- * edge to edge, a wider window's bordered card at most 360, start-aligned — the viewer's byline, or
- * the anonymous one — its picture the cover editor ([CoverSlot]); under it 卡片在列表裡的樣子, then
- * 換一張圖片 once there is one, and why the last picture didn't work.
+ * edge to edge — the first card under the bar when nothing stands above it ([underBar]) — a wider
+ * window's bordered card at most 360, start-aligned — the viewer's byline, or the anonymous one —
+ * its picture the cover editor ([CoverSlot]); under it 卡片在列表裡的樣子, then 換一張圖片 once there
+ * is one, and why the last picture didn't work.
  */
 @Composable
-private fun Preview(session: Session, model: WriteModel, compact: Boolean, pad: Dp, pickCover: () -> Unit, dismissKeyboard: () -> Unit) {
+private fun Preview(session: Session, model: WriteModel, compact: Boolean, pad: Dp, underBar: Boolean, pickCover: () -> Unit, dismissKeyboard: () -> Unit) {
     val content = previewContent(model, session.me)
     val cover: @Composable BoxScope.(CoverFrame) -> Unit = { frame -> CoverSlot(frame, model, pickCover, dismissKeyboard) }
     Column(Modifier.fillMaxWidth().semantics { isTraversalGroup = true }) {
         Box(Modifier.semantics { contentDescription = L10n.Write.previewCaption }) {
-            if (compact) StoryCard(content, 0, isLast = true, modifier = Modifier.bleed(pad), inset = pad + 18.dp, cover = cover, preview = true)
+            if (compact) StoryCard(content, 0, isLast = true, modifier = Modifier.bleed(pad), isFirst = underBar, inset = pad + 18.dp, cover = cover, preview = true)
             else BorderedStoryCard(content, 0, Modifier.widthIn(max = 360.dp), cover = cover, preview = true)
         }
         BasicText(L10n.Write.previewCaption, style = AppFonts.body(12f, lineHeight = 1.5f, color = Tokens.TextMuted), modifier = Modifier.padding(top = 8.dp).clearAndSetSemantics { })
