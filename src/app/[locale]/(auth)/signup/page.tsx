@@ -144,9 +144,11 @@ export default function SignUpPage() {
     setError(null);
     try {
       await createCurrentUserProfile({ handle: handle.trim(), region, primaryLocale });
-      // On to the first card (or `next`); the writer's way out goes to the
-      // feed, not back here — the card can wait (useLeaveWriter).
-      replacePage(afterSignupPath(sanitizeNextPath(nextParam()) ?? `/${locale}/write`));
+      // On to the feed (or `next`): a new account starts by reading, not by
+      // being handed the writer. A `next` into the writer (an answer begun
+      // before signing up) is marked so its way out goes to the feed, not
+      // back here (useLeaveWriter).
+      replacePage(afterSignupPath(sanitizeNextPath(nextParam()) ?? `/${locale}/home`));
     } catch (err) {
       // Someone took the name between the check and the save.
       if (isHandleTaken(err)) setHandleState('taken');

@@ -274,20 +274,6 @@ export async function getPublicCardsByAuthor(authorId: string): Promise<Card[]> 
     .filter((c) => c.publishedAt && !c.anonymous);
 }
 
-/**
- * Whether the signed-in viewer has written any card at all (draft or
- * published). Drives the guided-first-card moments (ux §5): the write page's
- * question prompts and the feed's cold-start block.
- */
-export async function hasAnyOwnCards(): Promise<boolean> {
-  const uid = getFirebaseClientAuth().currentUser?.uid;
-  if (!uid) return false;
-  const snap = await getDocs(
-    query(collection(getClientDb(), 'cards'), where('authorId', '==', uid), fbLimit(1))
-  );
-  return !snap.empty;
-}
-
 // --- users ---
 
 // Profiles are public (`users/*` allows get and list to anyone), and every

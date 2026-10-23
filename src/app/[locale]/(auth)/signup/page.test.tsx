@@ -75,9 +75,9 @@ describe('the sign-up page', () => {
     await waitFor(() => expect(pages.replacePage).toHaveBeenCalledWith('/en/messages'));
   });
 
-  // Finishing replaces this page with the writer, so no way back from the
-  // writer (its Leave, saving for later, the browser's back) lands here.
-  it('finishes into the writer, leaving this page out of the history', async () => {
+  // Finishing replaces this page with the feed — a new account starts by
+  // reading, not in the writer — so no way back lands here.
+  it('finishes on the home feed, leaving this page out of the history', async () => {
     window.history.replaceState(null, '', '/en/signup?step=profile');
     auth.user = { id: 'u1' };
     profile.getCurrentUserHandle.mockResolvedValue(null);
@@ -89,9 +89,25 @@ describe('the sign-up page', () => {
     const finish = screen.getByRole('button', { name: en.auth.finish });
     await waitFor(() => expect(finish).not.toBeDisabled());
     await userEvent.click(finish);
-    // The writer, marked as a new account's first card: its way out opens the feed.
-    await waitFor(() => expect(pages.replacePage).toHaveBeenCalledWith('/en/write?from=signup'));
+    await waitFor(() => expect(pages.replacePage).toHaveBeenCalledWith('/en/home'));
     expect(profile.createCurrentUserProfile).toHaveBeenCalledWith({ handle: 'Nian', region: 'TW', primaryLocale: 'zh-TW' });
+  });
+
+  // An answer begun before signing up (`next` into the writer) still opens
+  // it, marked so its way out goes to the feed rather than back here.
+  it('finishes into the writer a `next` names, marked as coming from the sign-up', async () => {
+    window.history.replaceState(null, '', '/en/signup?step=profile&next=%2Fen%2Fwrite%3FreferenceCardId%3Dc1');
+    auth.user = { id: 'u1' };
+    profile.getCurrentUserHandle.mockResolvedValue(null);
+    profile.checkHandleAvailable.mockResolvedValue(true);
+    profile.createCurrentUserProfile.mockResolvedValue({});
+    renderWithIntl(<SignUpPage />);
+
+    fireEvent.change(await screen.findByLabelText(en.auth.handleLabel), { target: { value: 'Nian' } });
+    const finish = screen.getByRole('button', { name: en.auth.finish });
+    await waitFor(() => expect(finish).not.toBeDisabled());
+    await userEvent.click(finish);
+    await waitFor(() => expect(pages.replacePage).toHaveBeenCalledWith('/en/write?referenceCardId=c1&from=signup'));
   });
 
   // Stepped back to from the browser's page cache, the page came back as it

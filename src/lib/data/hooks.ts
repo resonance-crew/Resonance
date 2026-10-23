@@ -17,7 +17,6 @@ import {
   getRelatedCards,
   getResonanceCards,
   getUserById,
-  hasAnyOwnCards,
   getUserByHandle,
   getUsersByIds,
   isConnected,
@@ -418,20 +417,6 @@ export function useRelated(id: string | undefined) {
   return useSWR<CardsWithAuthors>(id ? `related:${id}` : null, async () => {
     return withAuthors(getRelatedCards(id!, 3));
   });
-}
-
-/**
- * Whether the signed-in viewer has written any card yet — `undefined` while
- * loading, `false` only once we know they haven't. Anonymous viewers resolve
- * to `true` (they get the sign-in prompt elsewhere, not the first-card guide).
- */
-export function useHasWrittenCards() {
-  const { user, loading } = useAuth();
-  return useSWR<boolean>(
-    !loading ? `hasCards:${user?.id ?? 'anon'}` : null,
-    () => (user ? hasAnyOwnCards() : true),
-    OWN_CONTENT,
-  );
 }
 
 /**

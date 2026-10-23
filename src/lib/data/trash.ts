@@ -55,8 +55,7 @@ export function useTrashActions(): TrashActions {
         key.startsWith(`cardbox:${uid}:`) ||
         key === `profileCards:${uid}` ||
         (key.startsWith('profilePage:') && key.endsWith(`:${uid}`)) ||
-        key === `thoughtmap:${uid}` ||
-        key === `hasCards:${uid}`;
+        key === `thoughtmap:${uid}`;
       const named = new Set(
         card
           ? [

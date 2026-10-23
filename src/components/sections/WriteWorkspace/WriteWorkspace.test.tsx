@@ -66,9 +66,6 @@ Object.defineProperty(window.history, 'length', { configurable: true, get: () =>
 vi.mock('@/components/providers/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 'me' } }),
 }));
-vi.mock('@/lib/data/hooks', () => ({
-  useHasWrittenCards: () => ({ data: true }),
-}));
 
 /** Cards on the map: one of the viewer's own, an original they resonated with, and the draft's own (`draft`). */
 const mine = { id: 'mine', authorId: 'me', thoughtCore: 'My older card', publishedAt: new Date('2026-09-01') } as Card;

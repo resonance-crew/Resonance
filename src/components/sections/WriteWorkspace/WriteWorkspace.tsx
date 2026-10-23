@@ -10,13 +10,11 @@ import {
   type WriterStep,
 } from '@/components/molecules/CardEditor/CardEditor';
 import { ConfirmModal } from '@/components/molecules/ConfirmModal/ConfirmModal';
-import { FirstCardGuide } from '@/components/molecules/FirstCardGuide/FirstCardGuide';
 import { OpenedCardPane } from './OpenedCardPane';
 import { PaneActionButton } from './PaneActionButton';
 import { OriginalCardPanel } from './LazyOriginalCardPanel';
 import { WorkspaceShell } from './WorkspaceShell';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { useHasWrittenCards } from '@/lib/data/hooks';
 import { useLeaveWriter } from '@/lib/hooks/useLeaveWriter';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { useRouter } from '@/i18n/navigation';
@@ -58,10 +56,6 @@ function stepIn(search: string): WriterStep {
  * The way out leaves the page, asking first when that leaves written work
  * behind (the apps' rule and words: it is kept either way). 存成草稿，稍後再寫
  * in the publish step is already that choice, so it doesn't ask.
- *
- * For a brand-new writer (no cards at all) a small guide with 2–3 questions
- * sits above the editor (ux §5); picking one seeds it into the story as a
- * quote (remounting the editor via a nonce key) and the guide steps aside.
  */
 export function WriteWorkspace({
   title,
@@ -74,8 +68,6 @@ export function WriteWorkspace({
   const { user } = useAuth();
   const router = useRouter();
   const split = useMediaQuery('(min-width: 1200px)');
-  const { data: hasWritten } = useHasWrittenCards();
-  const [seed, setSeed] = useState<{ story: string; nonce: number } | null>(null);
   // A card opened from the map takes over the pane (in-memory Card → no
   // loading); never the draft's own card, which keeps the live editor.
   const [openedCard, setOpenedCard] = useState<Card | null>(null);
@@ -90,8 +82,6 @@ export function WriteWorkspace({
   // The arrow and the dialog can both land before the page has gone: it leaves once.
   const leaving = useRef(false);
   const showOpened = openedCard != null;
-  // Only the very first card, started fresh (not edits, not resonances).
-  const showGuide = hasWritten === false && !seed && !initial && !referenceCardId && !seedStory;
   const isPublished = initial?.publishedAt != null;
 
   // ---- The draft's step, in the address ------------------------------------
@@ -269,23 +259,10 @@ export function WriteWorkspace({
         <div className={styles.paneLayer} hidden={showOpened}>
           <div className={styles.editorCol} data-action={(step === 'write' && draftAction != null) || undefined}>
             {step === 'write' && saveStatus && <p className={styles.saveStatus}>{saveStatus}</p>}
-            {step === 'write' && showGuide && (
-              <div style={{ marginBottom: 28 }}>
-                <FirstCardGuide
-                  onPick={(question) =>
-                    setSeed((prev) => ({
-                      story: `> ${question}\n\n`,
-                      nonce: (prev?.nonce ?? 0) + 1,
-                    }))
-                  }
-                />
-              </div>
-            )}
             <CardEditor
-              key={seed?.nonce ?? 0}
               ref={editor}
-              initial={seed ? { story: seed.story } : initial}
-              seedStory={seed ? undefined : seedStory}
+              initial={initial}
+              seedStory={seedStory}
               locale={locale}
               referenceCardId={referenceCardId}
               onSaveStatusChange={setSaveStatus}
