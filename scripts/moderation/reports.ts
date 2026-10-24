@@ -6,6 +6,7 @@
  *   npm run moderation -- list --all           every report
  *   npm run moderation -- show <id>            one report and everything kept of what it was about
  *   npm run moderation -- resolve <id> "note"  mark handled, with a note
+ *   npm run moderation -- picture <imageId> [file]  save a picture a reported message carried (its `image.id`)
  *
  * What a report was about is kept as it read when it was filed
  * (reportEvidence/{id}, written by the server beside the report): the card,
@@ -93,7 +94,25 @@ async function main() {
     return;
   }
 
-  throw new Error(`Unknown command "${command}" (use list | show | resolve)`);
+  if (command === 'picture') {
+    // A chat picture is in no public place (lib/storage/chatImages): its record names its file.
+    const [imageId, out = `picture-${imageId}.webp`] = rest;
+    if (!imageId) throw new Error('Usage: picture <imageId> [file]');
+    const record = await db.doc(`chatImages/${imageId}`).get();
+    const key = record.get('key');
+    if (typeof key !== 'string') throw new Error(`No picture ${imageId}`);
+    const { getChatImageStore } = await import('../../src/lib/storage/chatImages');
+    const store = getChatImageStore();
+    if (!store) throw new Error('No chat picture store: set R2_CHAT_BUCKET (or use --emulator)');
+    const bytes = await store.get(key);
+    if (!bytes) throw new Error(`The file of picture ${imageId} is gone`);
+    const { writeFile } = await import('node:fs/promises');
+    await writeFile(out, bytes);
+    console.log(`Saved ${out} (sent by ${record.get('senderId')} in ${record.get('pair')}).`);
+    return;
+  }
+
+  throw new Error(`Unknown command "${command}" (use list | show | resolve | picture)`);
 }
 
 /** One line on a reported card as it is now: live, private, in its author's trash (and until when), or gone. */

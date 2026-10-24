@@ -347,6 +347,23 @@ describe('pushMessage', () => {
     expect(at['old-en'].notification?.body).toBe('Shared a card');
   });
 
+  it('says "sent a photo" in the device\'s own language for a message that is only a picture', async () => {
+    await db.doc('chatImages/pic1').set({ senderId: 'alice', pair: 'alice_bob', key: 'chat/k.webp', thumbKey: 'chat/k-thumb.webp', width: 4, height: 3, unsent: true });
+    const push = await send('', { image: 'pic1' });
+    const fcm = fakeFcm();
+    await pushMessage(db, push, fcm.sender);
+    const at = deliveries(fcm.sent);
+    expect(at['pixel-zh'].data?.body).toBe('傳送了一張圖片');
+    expect(at['pixel-en'].data?.body).toBe('Sent a photo');
+    expect(at['iphone-zh'].notification?.body).toBe('傳送了一張圖片');
+    // With words, the words are the body.
+    await db.doc('chatImages/pic2').set({ senderId: 'alice', pair: 'alice_bob', key: 'chat/l.webp', thumbKey: 'chat/l-thumb.webp', width: 4, height: 3, unsent: true });
+    const worded = await send('the sky tonight', { image: 'pic2' });
+    const again = fakeFcm();
+    await pushMessage(db, worded, again.sender);
+    expect(deliveries(again.sent)['pixel-en'].data?.body).toBe('the sky tonight');
+  });
+
   it(`carries at most ${PUSH_BODY_CHARS} characters of the message, never cutting through an emoji`, async () => {
     const fcm = fakeFcm();
     await pushMessage(db, await send('🌧️'.repeat(150)), fcm.sender);

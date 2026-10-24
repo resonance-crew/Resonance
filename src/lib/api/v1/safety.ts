@@ -1,5 +1,6 @@
 import { FieldValue, Timestamp, type DocumentData, type Firestore } from 'firebase-admin/firestore';
 import type { Card } from '@/lib/db/types';
+import { messageImageOf } from './chatImages';
 import { ApiFailure } from './http';
 import { visibleCard } from './reads';
 import type { CreateReportInput, ReportCardInput } from './schemas';
@@ -156,6 +157,8 @@ export async function createReport(db: Firestore, reporterId: string, input: Cre
     ...(m.noteRef && typeof m.noteRef === 'object' ? { noteRef: m.noteRef } : {}),
     // A note carried into the thread (`kind: 'note'`, its card in cardRef): what the reported words were left on.
     ...(typeof m.kind === 'string' ? { kind: m.kind } : {}),
+    // A picture sent with it: its id, which `npm run moderation` opens (chatImages/{id} names its files).
+    ...(messageImageOf(m.image) ? { image: messageImageOf(m.image) } : {}),
   });
   const sent = await db.doc(`users/${sender}`).get();
   return file(

@@ -44,9 +44,9 @@ export interface MessagePush {
 const DOC_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 
-/** "Shared a card" in the device's language: what a message with no words says. */
-function cardLine(locale: DeviceLocale): string {
-  return createTranslator({ locale, messages: MESSAGES[locale], namespace: 'app.notifications' })('messageCard');
+/** "Shared a card" / "Sent a photo" in the device's language: what a message with no words says. */
+function attachmentLine(locale: DeviceLocale, picture: boolean): string {
+  return createTranslator({ locale, messages: MESSAGES[locale], namespace: 'app.notifications' })(picture ? 'messageImage' : 'messageCard');
 }
 
 /** Whether `muted` (connections/{pair}.muted: `{ by }[]`) holds the recipient. */
@@ -101,6 +101,7 @@ export async function pushMessage(db: Firestore, push: MessagePush, sender: Push
   const route = pushRoute('message', { fromHandle: handle });
   const sentAt = String(epochMillis(message.get('sentAt')));
   const kind: Record<string, string> = message.get('kind') === NOTE_MESSAGE_KIND ? { kind: NOTE_MESSAGE_KIND } : {};
+  const picture = message.get('image') != null;
 
   let sent = 0;
   const dead: DocumentReference[] = [];
@@ -111,7 +112,7 @@ export async function pushMessage(db: Firestore, push: MessagePush, sender: Push
   };
 
   for (const [locale, targets] of groupByLocale(deviceTargets(devices.docs))) {
-    const body = words || cardLine(locale);
+    const body = words || attachmentLine(locale, picture);
     // Only Android builds draw their own notification; a build on another platform that names the capability still gets a push the system shows.
     const draws = (t: DeviceTarget) => t.platform === 'android' && t.capabilities.includes(CHAT_PUSH_CAPABILITY);
     const own = targets.filter(draws);

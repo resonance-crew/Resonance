@@ -412,11 +412,12 @@ export function buildOpenApi(): Json {
           description:
             'The picture is kept upright, at most 2048 px on its longest side, as WebP without its metadata (place, camera); ' +
             'an animated GIF stays animated. Only the two people of the conversation can read it, once it is sent ' +
-            '(`getChatImage`). Checked in this order: your picture budget (`429`); the form (`400`: no file, a file over 4 MB, ' +
-            'not a JPEG, PNG, WebP or GIF, a picture of more than 50 megapixels, a `clientId` that is not one); a `clientId` ' +
-            'already used — yours answers `201` as it was first uploaded, someone else\'s is `400`; your pen name (`403 ' +
-            'forbidden`); a block either way (`403 blocked`); whether you may message `to` at all (`403 forbidden`, as ' +
-            '`sendMessage` says it). A picture never sent is deleted after a day.',
+            '(`getChatImage`). Checked in this order: a request over 4 MB (`400`); your picture budget (`429`); the form ' +
+            '(`400`: no file, a file over 4 MB, a `to` or `clientId` that is not one); a `clientId` already used — yours ' +
+            'answers `201` as it was first uploaded, someone else\'s is `400`; your pen name (`403 forbidden`); a block either ' +
+            'way (`403 blocked`); whether you may message `to` at all (`403 forbidden`, as `sendMessage` says it); the ' +
+            'picture itself (`400`: not a JPEG, PNG, WebP or GIF, or more than 50 megapixels). A picture never sent is ' +
+            'deleted after a day.',
           requestBody: {
             required: true,
             content: {

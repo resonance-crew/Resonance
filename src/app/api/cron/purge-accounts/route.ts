@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAdminAuth } from '@/lib/auth/firebase/server';
 import { getAdminDb } from '@/lib/db/firestore/admin';
 import { getStorageProvider } from '@/lib/storage';
+import { getChatImageStore } from '@/lib/storage/chatImages';
 import { purgeDueAccounts } from '@/lib/account/deletion';
 import { revalidateLocalized } from '@/lib/api/revalidate';
 import { cronAuthorized } from '@/lib/api/cronAuth';
@@ -29,6 +30,9 @@ export async function GET(req: Request) {
       deleteAuthUser: (uid) => getAdminAuth().deleteUser(uid),
       deleteStoragePrefix: (prefix) => getStorageProvider().deletePrefix(prefix),
       deleteStorageObject: (key) => getStorageProvider().deleteObject(key),
+      deleteChatImageFile: async (key) => {
+        await getChatImageStore()?.delete(key);
+      },
       // The deleted writing must not live on in cached card and profile pages.
       revalidate: revalidateLocalized,
     },
