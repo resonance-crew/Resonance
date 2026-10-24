@@ -444,7 +444,7 @@ object L10n {
         val modify: String get() = Strings.string("card.modify")
         /** Publish */
         val publishResonance: String get() = Strings.string("card.publishResonance")
-        /** Save draft */
+        /** Save as private */
         val saveResonanceDraft: String get() = Strings.string("card.saveResonanceDraft")
         /** Cards linked to this */
         val linkedCards: String get() = Strings.string("card.linkedCards")
@@ -503,6 +503,8 @@ object L10n {
             val sourceTitle: String get() = Strings.string("card.resonanceSection.sourceTitle")
             /** No one has resonated with this card yet — be the first */
             val empty: String get() = Strings.string("card.resonanceSection.empty")
+            /** Show all {count} */
+            fun showAll(count: Int): String = Strings.format("card.resonanceSection.showAll", mapOf("count" to count))
         }
         object LinkModal {
             /** Link with a card */
@@ -572,7 +574,7 @@ object L10n {
         val verified: String get() = Strings.string("card.verified")
         /** Share */
         val share: String get() = Strings.string("card.share")
-        /** Draft */
+        /** Private */
         val private: String get() = Strings.string("card.private")
         /** Connections only */
         val connections: String get() = Strings.string("card.connections")
@@ -816,7 +818,7 @@ object L10n {
         val finish: String get() = Strings.string("write.finish")
         /** New card */
         val title: String get() = Strings.string("write.title")
-        /** Edit draft */
+        /** Edit private card */
         val editTitle: String get() = Strings.string("write.editTitle")
         /** Edit card */
         val editPublishedTitle: String get() = Strings.string("write.editPublishedTitle")
@@ -828,7 +830,7 @@ object L10n {
         val releaseToClose: String get() = Strings.string("write.releaseToClose")
         /** Leave for now? */
         val leaveTitle: String get() = Strings.string("write.leaveTitle")
-        /** What you've written is saved as a draft. You can pick it up again from My Card Box. */
+        /** What you've written is saved as a private card. You can pick it up again from My Card Box. */
         val leaveBody: String get() = Strings.string("write.leaveBody")
         /** Your changes are saved, but not yet applied to the published card. */
         val leaveBodyRevision: String get() = Strings.string("write.leaveBodyRevision")
@@ -894,6 +896,10 @@ object L10n {
                 val empty: String get() = Strings.string("write.editor.cardModal.empty")
                 /** Cancel */
                 val cancel: String get() = Strings.string("write.editor.cardModal.cancel")
+                /** Couldn't load your cards */
+                val failed: String get() = Strings.string("write.editor.cardModal.failed")
+                /** Try again */
+                val retry: String get() = Strings.string("write.editor.cardModal.retry")
             }
         }
         /** Tags */
@@ -951,7 +957,7 @@ object L10n {
             val connections: String get() = Strings.string("write.visibility.connections")
             /** Only me */
             val private: String get() = Strings.string("write.visibility.private")
-            /** Draft */
+            /** Private */
             val draft: String get() = Strings.string("write.visibility.draft")
             /** Anonymous */
             val anonymous: String get() = Strings.string("write.visibility.anonymous")
@@ -1045,11 +1051,11 @@ object L10n {
             val failed: String get() = Strings.string("write.publishPanel.failed")
             /** That's the limit for today — try again tomorrow */
             val rateLimited: String get() = Strings.string("write.publishPanel.rateLimited")
-            /** Save draft */
+            /** Save private card */
             val saveTitle: String get() = Strings.string("write.publishPanel.saveTitle")
             /** Save */
             val save: String get() = Strings.string("write.publishPanel.save")
-            /** Move to drafts */
+            /** Make private */
             val makeDraft: String get() = Strings.string("write.publishPanel.makeDraft")
             /** Publish anonymously */
             val publishAnonymously: String get() = Strings.string("write.publishPanel.publishAnonymously")
@@ -1079,7 +1085,7 @@ object L10n {
         object Tabs {
             /** Published */
             val published: String get() = Strings.string("me.tabs.published")
-            /** Drafts */
+            /** Private */
             val draft: String get() = Strings.string("me.tabs.draft")
             /** Resonated */
             val resonated: String get() = Strings.string("me.tabs.resonated")
@@ -1138,7 +1144,7 @@ object L10n {
         }
         /** Your first card becomes the point this world starts arranging itself around */
         val emptyPublished: String get() = Strings.string("me.emptyPublished")
-        /** No drafts */
+        /** No private cards */
         val emptyDraft: String get() = Strings.string("me.emptyDraft")
         /** No one has linked a card to you yet */
         val emptyLinked: String get() = Strings.string("me.emptyLinked")
@@ -1155,9 +1161,9 @@ object L10n {
         /** Cards you delete wait here for {days} days */
         fun emptyTrashLine(days: Int): String = Strings.format("me.emptyTrashLine", mapOf("days" to days))
         object TrashFrom {
-            /** Draft */
+            /** Private card */
             val draft: String get() = Strings.string("me.trashFrom.draft")
-            /** Draft */
+            /** Private card */
             val private: String get() = Strings.string("me.trashFrom.private")
             /** Public again when restored */
             val public: String get() = Strings.string("me.trashFrom.public")
@@ -1173,7 +1179,7 @@ object L10n {
             val menuLabel: String get() = Strings.string("me.actions.menuLabel")
             /** Edit */
             val edit: String get() = Strings.string("me.actions.edit")
-            /** Move to drafts */
+            /** Make private */
             val makePrivate: String get() = Strings.string("me.actions.makePrivate")
             /** Delete */
             val delete: String get() = Strings.string("me.actions.delete")
@@ -1231,6 +1237,8 @@ object L10n {
             val emptyTrashTitle: String get() = Strings.string("me.actions.emptyTrashTitle")
             /** Every card in the trash will be deleted forever. This can't be undone. */
             val emptyTrashBody: String get() = Strings.string("me.actions.emptyTrashBody")
+            /** Empty */
+            val emptyTrashShort: String get() = Strings.string("me.actions.emptyTrashShort")
         }
         /** Anonymous */
         val anonymousBadge: String get() = Strings.string("me.anonymousBadge")

@@ -78,7 +78,7 @@ enum class IconName(val key: String) {
                 IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 4.4f, 11.8f, 2f, 8.7f, 13.3f, 14.9f, 10.7f, 19.6f, 12.2f)),
             ))
             Check -> IconGlyph(24f, fillable = false, strokes = listOf(
-                IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 4.3f, 12.7f, 2f, 6.4f, 13.1f, 8.1f, 15.1f, 10.2f, 17.8f, 2f, 13.1f, 13.5f, 16.2f, 9.6f, 19.7f, 6.4f)),
+                IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 3.8f, 13.6f, 2f, 5.2f, 12.6f, 6.9f, 13.7f, 8.3f, 15.6f, 2f, 8.9f, 16.4f, 9.5f, 17.4f, 10f, 18.2f, 2f, 10.3f, 18.7f, 10.8f, 18.6f, 11f, 18f, 2f, 12f, 15f, 13.3f, 12f, 15.2f, 9.5f, 2f, 16.8f, 7.4f, 18.6f, 5.9f, 20.6f, 4.9f)),
             ))
             ArrowRight -> IconGlyph(24f, fillable = false, strokes = listOf(
                 IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 3.9f, 11.8f, 2f, 8.2f, 13.7f, 14.8f, 10.2f, 19.2f, 12.3f)),

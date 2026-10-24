@@ -291,7 +291,8 @@
     "resonanceSection": {
       "title": "與此文共振的文章",
       "sourceTitle": "此文共振自",
-      "empty": "還沒有人與這篇文章共振，成為第一個吧"
+      "empty": "還沒有人與這篇文章共振，成為第一個吧",
+      "showAll": "查看全部 {count} 篇"
     },
     "linkModal": {
       "title": "用一張卡片連結",
@@ -499,7 +500,9 @@
         "title": "插入卡片連結",
         "subtitle": "選一張你公開發表過的卡片，連結會插入在游標位置",
         "empty": "你還沒有公開發表的卡片",
-        "cancel": "取消"
+        "cancel": "取消",
+        "failed": "沒能讀到你的卡片",
+        "retry": "再試一次"
       }
     },
     "tagsLabel": "標籤",
@@ -678,7 +681,8 @@
       "trashResonanceConfirm": "移到垃圾桶",
       "emptyTrash": "清空垃圾桶",
       "emptyTrashTitle": "清空垃圾桶？",
-      "emptyTrashBody": "垃圾桶裡的卡片都會永久刪除，無法復原"
+      "emptyTrashBody": "垃圾桶裡的卡片都會永久刪除，無法復原",
+      "emptyTrashShort": "清空"
     },
     "anonymousBadge": "匿名發布",
     "emptyPublishedCta": "寫下一個故事",

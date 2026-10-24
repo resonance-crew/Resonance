@@ -75,7 +75,7 @@ extension IconName {
             IconStroke(filled: false, width: 1, commands: [0, 4.4, 11.8, 2, 8.7, 13.3, 14.9, 10.7, 19.6, 12.2]),
         ])
         case .check: IconGlyph(viewBox: 24, fillable: false, strokes: [
-            IconStroke(filled: false, width: 1, commands: [0, 4.3, 12.7, 2, 6.4, 13.1, 8.1, 15.1, 10.2, 17.8, 2, 13.1, 13.5, 16.2, 9.6, 19.7, 6.4]),
+            IconStroke(filled: false, width: 1, commands: [0, 3.8, 13.6, 2, 5.2, 12.6, 6.9, 13.7, 8.3, 15.6, 2, 8.9, 16.4, 9.5, 17.4, 10, 18.2, 2, 10.3, 18.7, 10.8, 18.6, 11, 18, 2, 12, 15, 13.3, 12, 15.2, 9.5, 2, 16.8, 7.4, 18.6, 5.9, 20.6, 4.9]),
         ])
         case .arrowRight: IconGlyph(viewBox: 24, fillable: false, strokes: [
             IconStroke(filled: false, width: 1, commands: [0, 3.9, 11.8, 2, 8.2, 13.7, 14.8, 10.2, 19.2, 12.3]),

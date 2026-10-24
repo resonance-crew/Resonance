@@ -197,16 +197,26 @@ public nonisolated enum Tokens {
     public static let storyRuleGap: CGFloat = 40
     /// --story-rule-gap-compact
     public static let storyRuleGapCompact: CGFloat = 32
+    /// --story-head-gap
+    public static let storyHeadGap: CGFloat = 64
+    /// --story-head-gap-compact
+    public static let storyHeadGapCompact: CGFloat = 48
+    /// --story-head-cover-gap
+    public static let storyHeadCoverGap: CGFloat = 72
+    /// --story-head-cover-gap-compact
+    public static let storyHeadCoverGapCompact: CGFloat = 56
     /// --story-cover-gap
-    public static let storyCoverGap: CGFloat = 28
+    public static let storyCoverGap: CGFloat = 32
     /// --story-cover-gap-compact
-    public static let storyCoverGapCompact: CGFloat = 20
+    public static let storyCoverGapCompact: CGFloat = 24
     /// --story-meta-gap
-    public static let storyMetaGap: CGFloat = 16
+    public static let storyMetaGap: CGFloat = 24
+    /// --story-meta-gap-compact
+    public static let storyMetaGapCompact: CGFloat = 20
     /// --story-lead-gap
-    public static let storyLeadGap: CGFloat = 40
+    public static let storyLeadGap: CGFloat = 48
     /// --story-lead-gap-compact
-    public static let storyLeadGapCompact: CGFloat = 32
+    public static let storyLeadGapCompact: CGFloat = 40
     /// --story-end-gap
     public static let storyEndGap: CGFloat = 40
     /// --story-end-gap-compact
@@ -219,6 +229,12 @@ public nonisolated enum Tokens {
     public static let storyBylineAvatar: CGFloat = 40
     /// --story-rail-gap
     public static let storyRailGap: CGFloat = 80
+    /// --people-head-gap
+    public static let peopleHeadGap: CGFloat = 56
+    /// --people-head-gap-compact
+    public static let peopleHeadGapCompact: CGFloat = 40
+    /// --people-name-gap
+    public static let peopleNameGap: CGFloat = 16
     /// --radius-sm
     public static let radiusSm: CGFloat = 12
     /// --radius-md

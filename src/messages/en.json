@@ -291,7 +291,8 @@
     "resonanceSection": {
       "title": "Cards resonating with this",
       "sourceTitle": "Resonating with",
-      "empty": "No one has resonated with this card yet — be the first"
+      "empty": "No one has resonated with this card yet — be the first",
+      "showAll": "Show all {count}"
     },
     "linkModal": {
       "title": "Link with a card",
@@ -499,7 +500,9 @@
         "title": "Insert a card link",
         "subtitle": "Pick one of your public cards — the link lands at your cursor",
         "empty": "You have no public cards yet",
-        "cancel": "Cancel"
+        "cancel": "Cancel",
+        "failed": "Couldn't load your cards",
+        "retry": "Try again"
       }
     },
     "tagsLabel": "Tags",
@@ -678,7 +681,8 @@
       "trashResonanceConfirm": "Move to trash",
       "emptyTrash": "Empty trash",
       "emptyTrashTitle": "Empty the trash?",
-      "emptyTrashBody": "Every card in the trash will be deleted forever. This can't be undone."
+      "emptyTrashBody": "Every card in the trash will be deleted forever. This can't be undone.",
+      "emptyTrashShort": "Empty"
     },
     "anonymousBadge": "Anonymous",
     "emptyPublishedCta": "Write a story",

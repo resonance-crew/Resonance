@@ -159,18 +159,30 @@
   --story-block-gap-compact: 24px;
   --story-rule-gap: 40px;
   --story-rule-gap-compact: 32px;
-  /* The card page's head and foot around the story. */
-  --story-cover-gap: 28px;         /* cover → title */
-  --story-cover-gap-compact: 20px;
-  --story-meta-gap: 16px;          /* title → byline / meta row */
-  --story-lead-gap: 40px;          /* byline / meta row → story */
-  --story-lead-gap-compact: 32px;
+  /* The card page's head and foot around the story — the reading head (round 9 §2):
+     the title and its byline one unit, its inner gap smaller than the air around it.
+     The head gaps are measured from the header's pen line (its wavy rule), not its box. */
+  --story-head-gap: 64px;          /* the header's pen line → the title's line box */
+  --story-head-gap-compact: 48px;
+  --story-head-cover-gap: 72px;    /* the header's pen line → the cover's top edge */
+  --story-head-cover-gap-compact: 56px;
+  --story-cover-gap: 32px;         /* cover → title */
+  --story-cover-gap-compact: 24px;
+  --story-meta-gap: 24px;          /* title → byline / meta row */
+  --story-meta-gap-compact: 20px;
+  --story-lead-gap: 48px;          /* byline / meta row → story */
+  --story-lead-gap-compact: 40px;
   --story-end-gap: 40px;           /* story → tags */
   --story-end-gap-compact: 32px;
   --story-meta-size: 14px;
   --story-meta-size-compact: 13px;
   --story-byline-avatar: 40px;
   --story-rail-gap: 80px;          /* the text → the contents' rail */
+  /* A person's page and the card box — the people head (round 9 §9): from the
+     header's pen line to the avatar's top, then the avatar → the pen name. */
+  --people-head-gap: 56px;
+  --people-head-gap-compact: 40px;
+  --people-name-gap: 16px;
   /* Inline code and code blocks: the ink at a whisper. Story CSS only (the
      island resolves it to an rgb() of its own, the apps their own tint). */
   --story-code-tint: color-mix(in oklch, var(--color-text) 6%, transparent);

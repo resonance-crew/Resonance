@@ -442,7 +442,7 @@ public enum L10n {
         public static var modify: String { Strings.shared.string("card.modify") }
         /// Publish
         public static var publishResonance: String { Strings.shared.string("card.publishResonance") }
-        /// Save draft
+        /// Save as private
         public static var saveResonanceDraft: String { Strings.shared.string("card.saveResonanceDraft") }
         /// Cards linked to this
         public static var linkedCards: String { Strings.shared.string("card.linkedCards") }
@@ -501,6 +501,8 @@ public enum L10n {
             public static var sourceTitle: String { Strings.shared.string("card.resonanceSection.sourceTitle") }
             /// No one has resonated with this card yet — be the first
             public static var empty: String { Strings.shared.string("card.resonanceSection.empty") }
+            /// Show all {count}
+            public static func showAll(count: Int) -> String { Strings.shared.format("card.resonanceSection.showAll", ["count": count]) }
         }
         public enum LinkModal {
             /// Link with a card
@@ -570,7 +572,7 @@ public enum L10n {
         public static var verified: String { Strings.shared.string("card.verified") }
         /// Share
         public static var share: String { Strings.shared.string("card.share") }
-        /// Draft
+        /// Private
         public static var `private`: String { Strings.shared.string("card.private") }
         /// Connections only
         public static var connections: String { Strings.shared.string("card.connections") }
@@ -814,7 +816,7 @@ public enum L10n {
         public static var finish: String { Strings.shared.string("write.finish") }
         /// New card
         public static var title: String { Strings.shared.string("write.title") }
-        /// Edit draft
+        /// Edit private card
         public static var editTitle: String { Strings.shared.string("write.editTitle") }
         /// Edit card
         public static var editPublishedTitle: String { Strings.shared.string("write.editPublishedTitle") }
@@ -826,7 +828,7 @@ public enum L10n {
         public static var releaseToClose: String { Strings.shared.string("write.releaseToClose") }
         /// Leave for now?
         public static var leaveTitle: String { Strings.shared.string("write.leaveTitle") }
-        /// What you've written is saved as a draft. You can pick it up again from My Card Box.
+        /// What you've written is saved as a private card. You can pick it up again from My Card Box.
         public static var leaveBody: String { Strings.shared.string("write.leaveBody") }
         /// Your changes are saved, but not yet applied to the published card.
         public static var leaveBodyRevision: String { Strings.shared.string("write.leaveBodyRevision") }
@@ -892,6 +894,10 @@ public enum L10n {
                 public static var empty: String { Strings.shared.string("write.editor.cardModal.empty") }
                 /// Cancel
                 public static var cancel: String { Strings.shared.string("write.editor.cardModal.cancel") }
+                /// Couldn't load your cards
+                public static var failed: String { Strings.shared.string("write.editor.cardModal.failed") }
+                /// Try again
+                public static var retry: String { Strings.shared.string("write.editor.cardModal.retry") }
             }
         }
         /// Tags
@@ -949,7 +955,7 @@ public enum L10n {
             public static var connections: String { Strings.shared.string("write.visibility.connections") }
             /// Only me
             public static var `private`: String { Strings.shared.string("write.visibility.private") }
-            /// Draft
+            /// Private
             public static var draft: String { Strings.shared.string("write.visibility.draft") }
             /// Anonymous
             public static var anonymous: String { Strings.shared.string("write.visibility.anonymous") }
@@ -1043,11 +1049,11 @@ public enum L10n {
             public static var failed: String { Strings.shared.string("write.publishPanel.failed") }
             /// That's the limit for today — try again tomorrow
             public static var rateLimited: String { Strings.shared.string("write.publishPanel.rateLimited") }
-            /// Save draft
+            /// Save private card
             public static var saveTitle: String { Strings.shared.string("write.publishPanel.saveTitle") }
             /// Save
             public static var save: String { Strings.shared.string("write.publishPanel.save") }
-            /// Move to drafts
+            /// Make private
             public static var makeDraft: String { Strings.shared.string("write.publishPanel.makeDraft") }
             /// Publish anonymously
             public static var publishAnonymously: String { Strings.shared.string("write.publishPanel.publishAnonymously") }
@@ -1077,7 +1083,7 @@ public enum L10n {
         public enum Tabs {
             /// Published
             public static var published: String { Strings.shared.string("me.tabs.published") }
-            /// Drafts
+            /// Private
             public static var draft: String { Strings.shared.string("me.tabs.draft") }
             /// Resonated
             public static var resonated: String { Strings.shared.string("me.tabs.resonated") }
@@ -1136,7 +1142,7 @@ public enum L10n {
         }
         /// Your first card becomes the point this world starts arranging itself around
         public static var emptyPublished: String { Strings.shared.string("me.emptyPublished") }
-        /// No drafts
+        /// No private cards
         public static var emptyDraft: String { Strings.shared.string("me.emptyDraft") }
         /// No one has linked a card to you yet
         public static var emptyLinked: String { Strings.shared.string("me.emptyLinked") }
@@ -1153,9 +1159,9 @@ public enum L10n {
         /// Cards you delete wait here for {days} days
         public static func emptyTrashLine(days: Int) -> String { Strings.shared.format("me.emptyTrashLine", ["days": days]) }
         public enum TrashFrom {
-            /// Draft
+            /// Private card
             public static var draft: String { Strings.shared.string("me.trashFrom.draft") }
-            /// Draft
+            /// Private card
             public static var `private`: String { Strings.shared.string("me.trashFrom.private") }
             /// Public again when restored
             public static var `public`: String { Strings.shared.string("me.trashFrom.public") }
@@ -1171,7 +1177,7 @@ public enum L10n {
             public static var menuLabel: String { Strings.shared.string("me.actions.menuLabel") }
             /// Edit
             public static var edit: String { Strings.shared.string("me.actions.edit") }
-            /// Move to drafts
+            /// Make private
             public static var makePrivate: String { Strings.shared.string("me.actions.makePrivate") }
             /// Delete
             public static var delete: String { Strings.shared.string("me.actions.delete") }
@@ -1229,6 +1235,8 @@ public enum L10n {
             public static var emptyTrashTitle: String { Strings.shared.string("me.actions.emptyTrashTitle") }
             /// Every card in the trash will be deleted forever. This can't be undone.
             public static var emptyTrashBody: String { Strings.shared.string("me.actions.emptyTrashBody") }
+            /// Empty
+            public static var emptyTrashShort: String { Strings.shared.string("me.actions.emptyTrashShort") }
         }
         /// Anonymous
         public static var anonymousBadge: String { Strings.shared.string("me.anonymousBadge") }

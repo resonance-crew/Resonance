@@ -201,16 +201,26 @@ object Tokens {
     const val StoryRuleGap = 40f
     /** --story-rule-gap-compact */
     const val StoryRuleGapCompact = 32f
+    /** --story-head-gap */
+    const val StoryHeadGap = 64f
+    /** --story-head-gap-compact */
+    const val StoryHeadGapCompact = 48f
+    /** --story-head-cover-gap */
+    const val StoryHeadCoverGap = 72f
+    /** --story-head-cover-gap-compact */
+    const val StoryHeadCoverGapCompact = 56f
     /** --story-cover-gap */
-    const val StoryCoverGap = 28f
+    const val StoryCoverGap = 32f
     /** --story-cover-gap-compact */
-    const val StoryCoverGapCompact = 20f
+    const val StoryCoverGapCompact = 24f
     /** --story-meta-gap */
-    const val StoryMetaGap = 16f
+    const val StoryMetaGap = 24f
+    /** --story-meta-gap-compact */
+    const val StoryMetaGapCompact = 20f
     /** --story-lead-gap */
-    const val StoryLeadGap = 40f
+    const val StoryLeadGap = 48f
     /** --story-lead-gap-compact */
-    const val StoryLeadGapCompact = 32f
+    const val StoryLeadGapCompact = 40f
     /** --story-end-gap */
     const val StoryEndGap = 40f
     /** --story-end-gap-compact */
@@ -223,6 +233,12 @@ object Tokens {
     const val StoryBylineAvatar = 40f
     /** --story-rail-gap */
     const val StoryRailGap = 80f
+    /** --people-head-gap */
+    const val PeopleHeadGap = 56f
+    /** --people-head-gap-compact */
+    const val PeopleHeadGapCompact = 40f
+    /** --people-name-gap */
+    const val PeopleNameGap = 16f
     /** --radius-sm */
     const val RadiusSm = 12f
     /** --radius-md */
