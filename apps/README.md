@@ -496,7 +496,8 @@ The card page reads in the story's type (reading-type §5–§8): `StoryMarkdown
 `Tokens.Story*` (no prose number is written in Kotlin: `ProseMetrics` in `core/kit` collapses story.css's margins
 from the `ProseSpacing` the type resolves), and sit inside `ReadingTextScale` — the cards a story embeds go back
 under `CappedTextScale`. The head is cover → title → byline (avatar and pen name over 「6 分鐘 · 日期」, at every
-width); share and the ⋯ are in the bar and again at the end of the story's one action row.
+width); share and the ⋯ end that byline under a tablet's header (`cardActionsSlot`, the bar keeping none) and sit in
+a phone's bar, and come again at the end of the story's one action row.
 `WindowLayout.cardPage(rail)` is §4's formula (the 680 measure, centred; on an expanded window with contents their
 rail `Tokens.StoryRailGap` — 80 — past it; without, the column centred).
 Sharing a card (share.spec, Owner revision; `ui/share`) is one glyph, shown only for a published, public card out
@@ -535,9 +536,9 @@ live region that gives way first) and ends on ✓ (`OrganicIconButton` with `ena
 stands before the floating ✓, and at the end of the step's heading. The step's 卡片類型 is 公開 · 匿名公開 · 草稿 with no
 line under it and one button by `stepVerb` (a kept 草稿 is written, never published; 轉為草稿 applies the edit and
 leaves; a published private card made public goes through its edit). The card box's 草稿 shelf is the private
-and draft shelves merged by `editedAt` (`draftShelf`, at most 40), and the ⋯'s only visibility row is 轉為草稿 on a
-card readers have (`seenByReaders`). An emptying that failed reads the trash again (`TrashCalls.trashLeft`): empty is
-done; DELETE /me/trash waits 70 s (`WritingApi.EMPTY_TRASH_TIMEOUT_SECONDS`). The story's WebView reports its
+and draft shelves merged by `editedAt` (`draftShelf`, at most 40), every card on it opening the writer (`managedTap`),
+and the ⋯'s only visibility row is 轉為草稿 on a card readers have (`seenByReaders`). An emptying that failed reads the
+trash again (`TrashCalls.trashLeft`): empty is done; DELETE /me/trash waits 70 s (`WritingApi.EMPTY_TRASH_TIMEOUT_SECONDS`). The story's WebView reports its
 caret's line as its focused area (`StoryWebView.getFocusedRect`), so Compose's keep-the-focused-thing-in-view as the
 keyboard rises keeps the line being typed above the format bar, not the story's top; the caret follow looks again
 once the page or the bar has settled; the canvas' least height follows the page, not the keyboard; the photo and
