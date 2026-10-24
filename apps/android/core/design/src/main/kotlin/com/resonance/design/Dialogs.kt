@@ -70,6 +70,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.dismiss
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -485,8 +486,9 @@ enum class MenuTrigger { Chip, Bare }
  * the menu's pen (or a card's hue) at 0.53 of the chip, or bare at 20dp in the
  * text ink. A press washes an organic squircle — never a rectangle. Not [enabled], it looks the
  * same and takes no tap (a thread's ⋯ while the conversation is still being read). [busy]: the
- * pen loop draws itself in the glyph's place and taps wait (the card's share while its picture is
- * made).
+ * button loop ([ButtonLoader], the small in-button one a button at work shows — never the big
+ * SketchLoader) draws itself in the glyph's place at the glyph's size, the trigger keeps its size,
+ * taps wait and TalkBack hears it as busy (the card's share while its picture is made).
  */
 @Composable
 fun OrganicMenuChip(
@@ -507,10 +509,13 @@ fun OrganicMenuChip(
             Modifier
                 .size(BareHitBox)
                 .clickable(interactionSource = null, indication = OrganicIndication(inset = BareWashInset), enabled = enabled && !busy, role = Role.Button, onClickLabel = label, onClick = onClick)
-                .semantics { contentDescription = label },
+                .semantics {
+                    contentDescription = label
+                    if (busy) stateDescription = L10n.App.busy
+                },
             contentAlignment = Alignment.Center,
         ) {
-            if (busy) SketchLoader(20.dp, Tokens.Text)
+            if (busy) ButtonLoader(Tokens.Text, 20.dp)
             else OrganicIcon(icon, size = 20.dp, color = if (expanded) Tokens.Terracotta else Tokens.Text)
         }
         return
@@ -520,7 +525,10 @@ fun OrganicMenuChip(
         Modifier
             .size(MenuHitBox)
             .clickable(interactionSource = null, indication = OrganicIndication(inset = (MenuHitBox - size) / 2), enabled = enabled && !busy, role = Role.Button, onClickLabel = label, onClick = onClick)
-            .semantics { contentDescription = label },
+            .semantics {
+                contentDescription = label
+                if (busy) stateDescription = L10n.App.busy
+            },
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -533,7 +541,7 @@ fun OrganicMenuChip(
             },
             contentAlignment = Alignment.Center,
         ) {
-            if (busy) SketchLoader((size.value * 0.53f).roundToInt().dp, ink)
+            if (busy) ButtonLoader(ink, (size.value * 0.53f).roundToInt().dp)
             else OrganicIcon(icon, size = (size.value * 0.53f).roundToInt().dp, color = ink, strokeWidth = Tokens.Ink.value)
         }
     }

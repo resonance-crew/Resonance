@@ -13,6 +13,10 @@ import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.AlignmentLine
+import androidx.compose.ui.layout.FirstBaseline
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.animation.core.snap
 import androidx.compose.ui.unit.Constraints
@@ -613,6 +617,13 @@ fun OrganicInlineBar(
     centre: (@Composable RowScope.() -> Unit)? = null,
     /** [title] is the page's own (a card's, risen from the article): a tablet's header sets it a step larger and bold ([TabletPageTitle]). */
     pageTitle: Boolean = false,
+    /**
+     * The bar says a save state after its [title] (the writer's, round 8 §2.1): [status], or nothing
+     * yet — its live region stands from the start, so TalkBack hears the first word too.
+     */
+    hasStatus: Boolean = false,
+    /** The save state's word ([hasStatus]); null: nothing to say now. */
+    status: BarStatus? = null,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
     val chrome = LocalHeaderChrome.current
@@ -656,7 +667,7 @@ fun OrganicInlineBar(
             if (title != null) {
                 Spacer(Modifier.width(4.dp))
                 // Level with the arrow: no brand-place drop here (barTitleDrop).
-                titleText(Modifier.weight(1f))
+                if (hasStatus) TitleWithStatus(titleText, status, Modifier.weight(1f)) else titleText(Modifier.weight(1f))
             } else {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     leading()
@@ -674,7 +685,7 @@ fun OrganicInlineBar(
         contents = listOf(
             { Row(verticalAlignment = Alignment.CenterVertically) { back(); leading() } },
             {
-                if (title != null) titleText(Modifier)
+                if (title != null) { if (hasStatus) TitleWithStatus(titleText, status, Modifier) else titleText(Modifier) }
                 else if (centre != null) Row(verticalAlignment = Alignment.CenterVertically, content = centre)
             },
             { Row(verticalAlignment = Alignment.CenterVertically, content = trailing) },
@@ -715,6 +726,71 @@ object InlineBarCentre {
         return if (r >= MIN) r else null
     }
 }
+
+/**
+ * A save state as a bar says it (the writer's, round 8 §2.1): 儲存中⋯ · 已儲存 · 修改已暫存 · 未儲存 —
+ * one word, never a sentence or a time; [failed] (the last write didn't land) in the error ink.
+ */
+@Immutable
+data class BarStatus(val text: String, val failed: Boolean = false)
+
+/**
+ * A save state ([BarStatus]): 13 in the muted ink — the error ink when it [BarStatus.failed] — one
+ * line, a polite live region, so TalkBack hears each change; empty while there is nothing to say
+ * (the region stays, and hears the first word too). In a bar after its title ([OrganicInlineBar]'s
+ * `status`), and where there is no bar (the writer's split) before its ✓ or at the end of its step's heading.
+ */
+@Composable
+fun SaveStateText(status: BarStatus?, modifier: Modifier = Modifier) {
+    BasicText(
+        status?.text.orEmpty(),
+        maxLines = 1,
+        softWrap = false,
+        style = AppFonts.body(SaveStateSize, lineHeight = 1.3f, color = if (status?.failed == true) Mixes.Danger else Tokens.TextMuted),
+        modifier = modifier.semantics { liveRegion = LiveRegionMode.Polite },
+    )
+}
+
+/** A save state's size (13 px/pt on every platform). */
+const val SaveStateSize = 13f
+
+/**
+ * A bar's title with its save state after it on the same line, their baselines level: the state
+ * gives way first — when the two don't fit, it goes ([statusFits]) and the title keeps the whole
+ * room, truncated only once it alone doesn't fit.
+ */
+@Composable
+private fun TitleWithStatus(title: @Composable (Modifier) -> Unit, status: BarStatus?, modifier: Modifier) {
+    Layout(contents = listOf({ title(Modifier) }, { SaveStateText(status) }), modifier) { (t, s), constraints ->
+        val gap = StatusGap.roundToPx()
+        val titleM = t.first()
+        val statusP = s.first().measure(Constraints(maxHeight = constraints.maxHeight))
+        val room = constraints.maxWidth
+        val fits = statusFits(titleM.maxIntrinsicWidth(constraints.maxHeight), statusP.width, gap, room)
+        val titleP = titleM.measure(Constraints(maxWidth = if (fits) room - gap - statusP.width else room, maxHeight = constraints.maxHeight))
+        val width = if (fits) titleP.width + gap + statusP.width else titleP.width
+        val height = max(titleP.height, statusP.height)
+        layout(if (constraints.hasFixedWidth) constraints.maxWidth else width, height) {
+            val titleY = (height - titleP.height) / 2
+            titleP.place(0, titleY)
+            if (fits) {
+                val tb = titleP[FirstBaseline]
+                val sb = statusP[FirstBaseline]
+                val y = if (tb == AlignmentLine.Unspecified || sb == AlignmentLine.Unspecified) (height - statusP.height) / 2 else titleY + tb - sb
+                statusP.place(titleP.width + gap, y)
+            }
+        }
+    }
+}
+
+/** The room between a bar's title and its save state. */
+private val StatusGap = 8.dp
+
+/**
+ * Whether a save state [status] wide fits after a title [title] wide (as it would lay out whole) in
+ * [room], [gap] apart — else it is the first thing to go. Nothing to say (0 wide) never fits.
+ */
+fun statusFits(title: Int, status: Int, gap: Int, room: Int): Boolean = status > 0 && title + gap + status <= room
 
 /**
  * A card's title in the middle of a tablet's header, once the article's own has gone up under it:

@@ -690,19 +690,37 @@ class OrganicButtonShape(private val seed: Double) : Shape {
 /**
  * A bare hand-drawn glyph with a 48dp hit area — the web header's back
  * control (arrow-right mirrored, 18px, no frame); `mirrored` flips it. The
- * header's other actions (share, ⋯) are bare glyphs too: a bar is chrome
- * enough, so nothing in it draws a frame of its own.
+ * header's other actions (share, ⋯, the writer's ✓) are bare glyphs too: a bar is chrome
+ * enough, so nothing in it draws a frame of its own. Not [enabled], the glyph fades to a
+ * button's disabled 0.45 and takes no tap; [busy], the button loop draws itself in the glyph's
+ * place at its size ([ButtonLoader]: never the big SketchLoader) and taps wait — TalkBack hears it
+ * as busy.
  */
 @Composable
-fun OrganicIconButton(icon: IconName, label: String, mirrored: Boolean = false, size: Dp = 18.dp, color: Color = Tokens.Text, onClick: () -> Unit) {
+fun OrganicIconButton(
+    icon: IconName,
+    label: String,
+    mirrored: Boolean = false,
+    size: Dp = 18.dp,
+    color: Color = Tokens.Text,
+    enabled: Boolean = true,
+    busy: Boolean = false,
+    onClick: () -> Unit,
+) {
     Box(
         Modifier
             .size(48.dp)
             // A press washes a wobbly squircle round the glyph, inside the hit box.
-            .clickable(interactionSource = null, indication = OrganicIndication(inset = 4.dp), role = Role.Button, onClickLabel = label, onClick = onClick)
-            .semantics { contentDescription = label },
+            .clickable(interactionSource = null, indication = OrganicIndication(inset = 4.dp), enabled = enabled && !busy, role = Role.Button, onClickLabel = label, onClick = onClick)
+            .semantics {
+                contentDescription = label
+                if (busy) stateDescription = L10n.App.busy
+            },
         contentAlignment = Alignment.Center,
-    ) { OrganicIcon(icon, size = size, color = color, mirrored = mirrored) }
+    ) {
+        if (busy) ButtonLoader(color, size)
+        else OrganicIcon(icon, Modifier.fade(if (enabled) 1f else ButtonFace.DISABLED_ALPHA), size = size, color = color, mirrored = mirrored)
+    }
 }
 
 /**
