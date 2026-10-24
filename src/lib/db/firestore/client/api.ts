@@ -35,6 +35,21 @@ export async function callApi<T>(path: string, init: { method?: string; body?: u
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
     credentials: 'same-origin',
   });
+  return answer<T>(res);
+}
+
+/** callApi for a multipart form (an upload): the same token, App Check and errors; the browser sets the boundary. */
+export async function callApiForm<T>(path: string, form: FormData): Promise<T> {
+  const user = getFirebaseClientAuth().currentUser;
+  const [idToken, appCheck] = await Promise.all([user?.getIdToken(), appCheckHeaders()]);
+  const headers: Record<string, string> = { ...appCheck };
+  if (idToken) headers.Authorization = `Bearer ${idToken}`;
+  const res = await fetch(path, { method: 'POST', headers, body: form, credentials: 'same-origin' });
+  return answer<T>(res);
+}
+
+/** A v1 answer's JSON, or the ApiError a non-2xx answer is. */
+async function answer<T>(res: Response): Promise<T> {
   const json = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
   if (!res.ok) {
     throw new ApiError(res.status, json?.error?.code ?? 'error', json?.error?.message ?? `Request failed (${res.status})`);

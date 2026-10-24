@@ -56,6 +56,7 @@ vi.mock('@/lib/db/firestore/client/reads', () => ({
 }));
 
 const mockSendMessage = vi.fn();
+const mockUploadChatImage = vi.fn();
 const mockGetConversation = vi.fn();
 const mockMarkRead = vi.fn();
 const mockDeleteConversation = vi.fn();
@@ -77,6 +78,8 @@ vi.mock('@/lib/db/firestore/client/messages', () => ({
   getConversation: () => mockGetConversation(),
   markConversationRead: (pairId: string) => mockMarkRead(pairId),
   sendMessage: (...args: unknown[]) => mockSendMessage(...args),
+  uploadChatImage: (...args: unknown[]) => mockUploadChatImage(...args),
+  chatImageUrl: (id: string, size: 'thumb' | 'full') => `/api/v1/chat-images/${id}${size === 'thumb' ? '?size=thumb' : ''}`,
   listenThread: (pairId: string, onWindow: (window: unknown) => void) => {
     server.listening.push(pairId);
     server.emit = onWindow;
@@ -86,6 +89,14 @@ vi.mock('@/lib/db/firestore/client/messages', () => ({
   getOlderMessages: async () => [],
 }));
 const deliver = (messages: Message[]) => act(() => server.emit!(server.windowOf(messages)));
+// A picture is made ready on the device (scaled, re-encoded): here it is taken as it is, 1200 × 900.
+vi.mock('@/lib/chat/preparePicture', () => ({
+  UnsupportedImage: class UnsupportedImage extends Error {},
+  preparePicture: async (file: File) => {
+    if (file.type === 'image/heic') throw new (class UnsupportedImage extends Error {})();
+    return { file, width: 1200, height: 900 };
+  },
+}));
 
 // The card picker + the shared-card embed touch further read paths; stub them
 // down to their contract so the thread tests stay about attach/send/render.
@@ -166,6 +177,9 @@ function conversation(overrides: Partial<Conversation> = {}): Conversation {
 }
 
 beforeEach(() => {
+  // jsdom draws no blobs: a picture on the device is drawn from a stand-in address.
+  URL.createObjectURL = vi.fn(() => 'blob:local/picture');
+  URL.revokeObjectURL = vi.fn();
   mockUseMyProfile.mockReturnValue({ data: viewer });
   mockUseAuth.mockReturnValue({ user: viewer, loading: false });
   mockUseConversations.mockReturnValue({
@@ -204,6 +218,19 @@ describe('MessagesPage list', () => {
     // bob has no conversation yet — listed under the starter section
     expect(screen.getByText('Connected — no conversation yet')).toBeInTheDocument();
     expect(screen.getByText('bob')).toBeInTheDocument();
+  });
+
+  it('previews a picture sent without words as one', () => {
+    mockUseConversations.mockReturnValueOnce({
+      data: {
+        conversations: [conversation({ lastMessage: { text: '', senderId: 'me', sentAt: new Date(), image: true } })],
+        people: { alice, bob },
+        connectedWithoutConversation: [],
+        unreadTotal: 0,
+      },
+    });
+    renderPage(<MessagesPage />);
+    expect(screen.getByText('You: Sent a photo')).toBeInTheDocument();
   });
 
   it('says "no conversations yet" with the shared empty state, and asks to pick one once there are some', () => {
@@ -347,9 +374,10 @@ describe('MessagesPage thread', () => {
   it('attaches a picked card and sends it as a cardRef', async () => {
     renderPage(<MessagesPage activeHandle="alice" />);
     const u = userEvent.setup({ pointerEventsCheck: 0 });
-    await waitFor(() => expect(screen.getByLabelText('Attach a card')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Attach a photo or a card' })).toBeInTheDocument());
 
-    await u.click(screen.getByLabelText('Attach a card'));
+    await u.click(screen.getByRole('button', { name: 'Attach a photo or a card' }));
+    await u.click(screen.getByRole('menuitem', { name: 'Card' }));
     await u.click(await screen.findByRole('button', { name: 'pick-card' }));
     // The attached card shows as a chip before sending.
     expect(screen.getByText('A shared thought')).toBeInTheDocument();
@@ -362,6 +390,66 @@ describe('MessagesPage thread', () => {
         expect.objectContaining({ cardRef: 'card-42' }),
       ),
     );
+  });
+
+  // A picture goes the way a card does: from the 「＋」, shown above the field, sent with the words —
+  // uploaded first under the message's own client id, then the message names it.
+  it('attaches a picture from the 「＋」, shows it above the field, and sends it uploaded first', async () => {
+    mockUploadChatImage.mockImplementation(async (_file: Blob, _to: string, opts: { clientId: string }) => ({ id: opts.clientId, width: 1200, height: 900 }));
+    const { container } = renderPage(<MessagesPage activeHandle="alice" />);
+    const u = userEvent.setup({ pointerEventsCheck: 0 });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Attach a photo or a card' })).toBeInTheDocument());
+    await u.click(screen.getByRole('button', { name: 'Attach a photo or a card' }));
+    expect(screen.getByRole('menuitem', { name: 'Photo' })).toBeInTheDocument();
+    await u.click(screen.getByRole('menuitem', { name: 'Photo' }));
+
+    const file = new File(['jpeg'], 'sky.jpg', { type: 'image/jpeg' });
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
+    expect(await screen.findByRole('img', { name: 'Photo' })).toHaveAttribute('src', 'blob:local/picture');
+    await u.type(screen.getByRole('textbox', { name: 'Conversation with alice' }), 'the sky tonight');
+    await u.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => expect(mockSendMessage).toHaveBeenCalled());
+    const [uploaded, to, opts] = mockUploadChatImage.mock.calls[0];
+    expect([uploaded, to, opts.as]).toEqual([file, 'alice', 'me']);
+    expect(mockSendMessage).toHaveBeenCalledWith('alice', 'the sky tonight', expect.objectContaining({ image: opts.clientId, clientId: opts.clientId }));
+    // Drawn in the thread at once, from the device; the chip is gone.
+    expect(screen.getByRole('button', { name: 'View photo' })).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'Photo' })).toBeNull();
+  });
+
+  it('holds one of the two — a card picked takes the picture\'s place — and says when a file is not a picture it can send', async () => {
+    const { container } = renderPage(<MessagesPage activeHandle="alice" />);
+    const u = userEvent.setup({ pointerEventsCheck: 0 });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Attach a photo or a card' })).toBeInTheDocument());
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    fireEvent.change(input, { target: { files: [new File(['jpeg'], 'sky.jpg', { type: 'image/jpeg' })] } });
+    expect(await screen.findByRole('img', { name: 'Photo' })).toBeInTheDocument();
+
+    await u.click(screen.getByRole('button', { name: 'Attach a photo or a card' }));
+    await u.click(screen.getByRole('menuitem', { name: 'Card' }));
+    await u.click(await screen.findByRole('button', { name: 'pick-card' }));
+    expect(screen.getByText('A shared thought')).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'Photo' })).toBeNull();
+  });
+
+  it('draws a picture message in its bubble, opens it whole, and quotes it as a photo', async () => {
+    mockUseAuth.mockReturnValue({ user: viewer, loading: false, sessionReady: true });
+    server.messages = [
+      { id: 'p1', senderId: 'alice', text: 'look up', sentAt: new Date(), image: { id: 'pic-1', width: 800, height: 1200 } },
+      { id: 'p2', senderId: 'me', text: 'wow', sentAt: new Date(), replyTo: { id: 'p1', senderId: 'alice', text: '', image: true } },
+    ];
+    renderPage(<MessagesPage activeHandle="alice" />);
+    const picture = await screen.findByRole('button', { name: 'View photo' });
+    expect(picture.querySelector('img')).toHaveAttribute('src', '/api/v1/chat-images/pic-1?size=thumb');
+    expect(screen.getByText('look up')).toBeInTheDocument();
+    expect(screen.getByText('A photo')).toBeInTheDocument();
+
+    await userEvent.click(picture);
+    const viewer_ = screen.getByRole('dialog', { name: 'View photo' });
+    expect(viewer_.querySelector('img')).toHaveAttribute('src', '/api/v1/chat-images/pic-1');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'View photo' })).toBeNull();
   });
 
   it('renders a shared card and a note-reply quote in the thread', async () => {

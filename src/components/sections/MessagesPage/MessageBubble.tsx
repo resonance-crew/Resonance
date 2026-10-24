@@ -80,8 +80,10 @@ export interface MessageBubbleProps {
   seedKey: string;
   own: boolean;
   position?: RunPosition;
-  /** It carries a link's preview (280 px wide) or a shared card (300): one bubble of a fixed width. */
-  width?: 'preview' | 'card';
+  /** It carries a link's preview (280 px wide) or a shared card (300): one bubble of a fixed width; a picture, its own (`pictureWidth`). */
+  width?: 'preview' | 'card' | 'picture';
+  /** For `picture`: the bubble's width (PicturePart's pictureBox). */
+  pictureWidth?: number;
   /** Its plain stand-in (a rounded box, nothing measured) — while the card it carries is read. */
   plain?: boolean;
   /** Washes terracotta for a moment: the message a reply's quote jumped to. */
@@ -108,6 +110,7 @@ export function MessageBubble({
   own,
   position = 'single',
   width,
+  pictureWidth,
   plain = false,
   flash = false,
   hitWhole = false,
@@ -118,7 +121,10 @@ export function MessageBubble({
   const ref = useRef<HTMLDivElement>(null);
   const opts = { own, run: position };
   const clip = useBubbleClip(ref, seedFromId(seedKey), opts, !plain);
-  const style: CSSProperties = clip ? { clipPath: clip } : { borderRadius: bubbleStandInRadius(opts) };
+  const style: CSSProperties = {
+    ...(clip ? { clipPath: clip } : { borderRadius: bubbleStandInRadius(opts) }),
+    ...(width === 'picture' && pictureWidth ? ({ '--picture-w': `${pictureWidth}px` } as CSSProperties) : {}),
+  };
   return (
     <div
       ref={ref}

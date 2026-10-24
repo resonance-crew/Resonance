@@ -62,7 +62,8 @@ export function MessagesPage({ activeHandle, replyNote }: MessagesPageProps) {
   const rowFor = (person: User, convo?: Conversation) => {
     const unread = convo ? (convo.unread[user.id] ?? 0) : 0;
     const preview = convo?.lastMessage
-      ? (convo.lastMessage.senderId === user.id ? t('youPrefix') : '') + convo.lastMessage.text
+      ? (convo.lastMessage.senderId === user.id ? t('youPrefix') : '') +
+        (convo.lastMessage.text || (convo.lastMessage.image ? t('imageShared') : ''))
       : t('noMessagesYet');
     return (
       <Link

@@ -264,6 +264,11 @@
   width: 300px;
 }
 
+/* A picture sets its bubble's width (pictureBox): edge to edge, the wobble its edge. */
+.bubble[data-width='picture'] {
+  width: var(--picture-w, 280px);
+}
+
 /* A message that didn't go, dimmed (its「未送出」line under it). */
 .row[data-delivery='failed'] .bubble,
 .row[data-delivery='failed'] .quote {
@@ -919,6 +924,44 @@
   color: var(--color-terracotta);
 }
 
+/* A picture waiting to go: its thumbnail, rounded as the chips are, its × on its corner. */
+.attachPicture {
+  position: relative;
+  display: inline-block;
+  width: 52px;
+  height: 52px;
+}
+
+.attachPicture img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px 14px 12px 14px;
+  background: color-mix(in oklch, var(--color-text) 6%, transparent);
+}
+
+.attachPictureRemove {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-text);
+  color: var(--color-cream);
+  cursor: pointer;
+}
+
+.fileInput {
+  display: none;
+}
+
 .composer {
   display: flex;
   align-items: flex-end;
@@ -1025,4 +1068,73 @@
   .attachments {
     padding-right: 0;
   }
+}
+
+/* ── A picture sent in the thread, and its viewer ─────────────────── */
+
+.sentPicture {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  background: color-mix(in oklch, var(--color-text) 6%, transparent);
+  cursor: zoom-in;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sentPicture[data-failed] {
+  cursor: pointer;
+}
+
+.sentPicture img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sentPicture:focus-visible {
+  outline: 2px solid var(--field-border-focus, var(--color-terracotta));
+  outline-offset: -4px;
+}
+
+.sentPictureGlyph {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-muted);
+}
+
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 56px 16px 24px;
+  background: oklch(12% 0.01 60 / 0.9);
+}
+
+.viewerPicture {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.viewerClose {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: oklch(96% 0.01 75);
+}
+
+.viewerClose button {
+  color: inherit;
 }

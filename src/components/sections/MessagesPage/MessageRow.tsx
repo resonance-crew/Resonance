@@ -18,6 +18,7 @@ import type { User } from '@/lib/db/types';
 import { firstLinkOf, parseLink } from '@/lib/links/linkify';
 import { BubbleWords, MessageBubble, type MessageLink } from './MessageBubble';
 import { LinkPreviewPart } from './BubbleParts';
+import { PicturePart, pictureBox } from './PicturePart';
 import { NoteQuote } from './NoteQuote';
 import { ReplyQuote } from './ReplyQuote';
 import { chooseMenuItem, messageMenuItems, useThreadActions } from './threadActions';
@@ -55,12 +56,13 @@ export function MessageCore({ message: m, own, position, carried, highlights, hi
   const t = useTranslations('messages');
   const actions = useThreadActions();
   const onLink = interactive ? actions.openLink : null;
-  const words = carriedWords(m, carried);
+  // Beside a picture the words are all its own (no card stands in for a link in them).
+  const words = m.image ? m.text : carriedWords(m, carried);
   const note = m.noteRef ? t('quotedNote') : undefined;
   const hasWords = !!words || !!note;
-  // A preview whose address the link rules refuse shows nothing of itself.
-  const previewLink = carried.kind === 'preview' ? parseLink(carried.preview.url) : null;
-  const carries = carried.kind === 'card' || carried.kind === 'cardLoading' ? 'card' : previewLink ? 'preview' : undefined;
+  // A preview whose address the link rules refuse shows nothing of itself; a picture's bubble shows the picture, not a link's.
+  const previewLink = carried.kind === 'preview' && !m.image ? parseLink(carried.preview.url) : null;
+  const carries = m.image ? 'picture' : carried.kind === 'card' || carried.kind === 'cardLoading' ? 'card' : previewLink ? 'preview' : undefined;
 
   // A note left on a card: the card over it, as a reply's quote is; its bubble holds its words alone.
   if (m.kind === 'note') {
@@ -94,20 +96,23 @@ export function MessageCore({ message: m, own, position, carried, highlights, hi
           own={own}
           position={position}
           width={carries}
-          plain={carried.kind === 'cardLoading'}
+          pictureWidth={m.image ? pictureBox(m.image.width, m.image.height).w : undefined}
+          plain={carried.kind === 'cardLoading' && !m.image}
           flash={flash}
           // A hit in words the bubble doesn't show (the link standing for its card) marks the whole bubble.
           hitWhole={hitStrong && words !== m.text}
           overQuote={!!m.replyTo}
           title={title}
         >
+          {/* A picture leads its bubble, its words under it. */}
+          {m.image && <PicturePart image={m.image} interactive={interactive} />}
           {hasWords && (
             <BubbleWords
               text={words}
               note={note}
               ranges={words === m.text ? highlights : undefined}
               strong={hitStrong}
-              followed={!!carries}
+              followed={!!carries && carries !== 'picture'}
               onLink={onLink}
             />
           )}
@@ -115,10 +120,10 @@ export function MessageCore({ message: m, own, position, carried, highlights, hi
             // Keyed by its picture: a picture that failed is tried again when the preview brings another.
             <LinkPreviewPart key={carried.preview.image ?? ''} preview={carried.preview} link={previewLink} afterWords={hasWords} onLink={onLink} />
           )}
-          {carried.kind === 'card' && (
+          {carried.kind === 'card' && !m.image && (
             <SharedCardPart key={carried.card.media?.url ?? ''} card={carried.card} author={carried.author} interactive={interactive} />
           )}
-          {carried.kind === 'cardLoading' && <SharedCardSkeleton />}
+          {carried.kind === 'cardLoading' && !m.image && <SharedCardSkeleton />}
         </MessageBubble>
         {aside}
       </div>
