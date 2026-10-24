@@ -1,14 +1,34 @@
+/* The card box. Its head is the people head (round 9 §9), measured from the
+   header's pen line — its wavy rule, HeaderChrome's HEADER_STROKE_Y (72.9 in
+   the 82 bar), 9 above the bar's box — to the avatar's top: --people-head-gap,
+   40 on a phone, as a person's page (u/[handle]). */
+.page {
+  max-width: var(--page-max-w-wide);
+  margin: 0 auto;
+  padding: calc(var(--app-header-h) - 9px + var(--people-head-gap)) var(--page-pad-x) var(--page-pad-bottom);
+}
+@media (max-width: 640px) {
+  .page {
+    padding-top: calc(var(--app-header-h) - 9px + var(--people-head-gap-compact));
+  }
+}
+
 /* Where the way to the profile settings sits (B5). Both are in the HTML; the
    width shows one, so the first paint is already the right one. */
 
-/* Wide: a labelled tonal button at the identity row's end, centred on the avatar. */
+/* Wide: a labelled tonal button at the identity row's end, centred on the avatar (72 tall: the row hangs
+   from the avatar's top). */
 .editWide {
   display: flex;
+  align-items: center;
+  height: 72px;
 }
 
 /* Phone: the bare glyph at the identity row's end, as in the apps. */
 .editPhone {
   display: none;
+  align-items: center;
+  height: 72px;
 }
 
 @media (max-width: 640px) {

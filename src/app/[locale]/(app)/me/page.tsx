@@ -16,7 +16,7 @@ import styles from './page.module.css';
 // Answering an older invite — none are sent any more — loads after the page.
 const InvitesInbox = dynamic(() => import('@/components/molecules/InvitesInbox/InvitesInbox').then((m) => m.InvitesInbox));
 
-// 草稿 holds the cards no one else reads: drafts, and published cards kept private (round 8 §1.1).
+// 私人卡 holds the cards no one else reads: never published, and published cards kept private (round 9 §1).
 const tabs: TabKey[] = ['published', 'draft', 'resonated', 'linked', 'bookmarks', 'trash', 'thoughtMap'];
 
 export default function MyCardBoxPage() {
@@ -34,18 +34,14 @@ export default function MyCardBoxPage() {
   const publicHref = user ? (`/u/${user.handle}` as const) : undefined;
 
   return (
-    <div
-      style={{
-        maxWidth: 'var(--page-max-w-wide)',
-        margin: '0 auto',
-        padding:
-          'calc(var(--app-header-h) + var(--page-pad-top)) var(--page-pad-x) var(--page-pad-bottom)',
-      }}
-    >
+    // The people head (round 9 §9): the avatar --people-head-gap below the header's pen line (page.module.css).
+    <div className={styles.page}>
+      {/* The avatar's top is the people head's line (round 9 §9): the row hangs from it, the profile's
+          lines beside it, and the way to the settings centred on the avatar. */}
       <header
         style={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           gap: 20,
           marginBottom: 40,
           flexWrap: 'wrap',

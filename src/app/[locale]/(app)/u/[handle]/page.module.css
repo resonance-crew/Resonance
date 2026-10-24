@@ -1,13 +1,27 @@
 /* Blog-style public profile — a centered "personal homepage" masthead above
    the author's published cards. */
 
+/* The people head (round 9 §9), measured from the header's pen line — its
+   wavy rule, HeaderChrome's HEADER_STROKE_Y (72.9 in the 82 bar), 9 above the
+   bar's box — to the avatar's top: --people-head-gap, 40 on a phone. PageShell
+   takes it as its top padding (page.tsx PEOPLE_HEAD_TOP). */
+.shell {
+  --people-head-top: calc(var(--app-header-h) - 9px + var(--people-head-gap));
+}
+@media (max-width: 640px) {
+  .shell {
+    --people-head-top: calc(var(--app-header-h) - 9px + var(--people-head-gap-compact));
+  }
+}
+
 .hero {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 16px;
+  /* The avatar → the pen name is the people head's --people-name-gap (16); the lines under it keep it too. */
+  gap: var(--people-name-gap);
   margin-bottom: clamp(8px, 2vw, 16px);
 }
 

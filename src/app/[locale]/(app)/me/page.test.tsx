@@ -94,13 +94,14 @@ describe('the card box', () => {
     expect(callApi).not.toHaveBeenCalled();
   });
 
-  // The 私人卡 shelf is part of 草稿 (round 8 §1.1): no tab of its own, and one left on it opens 草稿.
-  it('has one 草稿 shelf for drafts and private cards, and opens it for a viewer who left on 私人卡', async () => {
+  // One 私人卡 shelf holds every card only its author sees — never published, or kept private (round 8 §1.1,
+  // round 9 §1) — and one left on the old private shelf opens it.
+  it('has one 私人卡 shelf for drafts and private cards, and opens it for a viewer who left on the old one', async () => {
     window.sessionStorage.setItem('me:cardbox-tab', 'private');
     renderPage();
     expect((await screen.findAllByText('Card d1')).length).toBeGreaterThan(0);
-    expect(screen.queryByRole('tab', { name: 'Private' })).toBeNull();
-    expect(screen.getByRole('tab', { name: 'Drafts' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getAllByRole('tab', { name: 'Private' })).toHaveLength(1);
+    expect(screen.getByRole('tab', { name: 'Private' })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('reads the next shelf when its tab is opened', async () => {
@@ -108,7 +109,7 @@ describe('the card box', () => {
     expect((await screen.findAllByText('Card published-1')).length).toBeGreaterThan(0);
     expect(vi.mocked(getCardsByAuthor).mock.calls.map((c) => c[1])).toEqual(['published']);
 
-    await userEvent.setup().click(screen.getByRole('tab', { name: 'Drafts' }));
+    await userEvent.setup().click(screen.getByRole('tab', { name: 'Private' }));
     expect((await screen.findAllByText('Card d1')).length).toBeGreaterThan(0);
     expect(getMyDrafts).toHaveBeenCalledTimes(1);
   });

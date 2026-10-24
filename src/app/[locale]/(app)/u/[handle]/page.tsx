@@ -32,6 +32,12 @@ function decodeHandle(raw: string | undefined): string | undefined {
   }
 }
 
+/**
+ * The people head (round 9 §9): the avatar's top --people-head-gap below the header's pen line, 40 on a
+ * phone and 56 wider (page.module.css .shell sets it) — the page and its skeleton alike, so nothing jumps.
+ */
+const PEOPLE_HEAD_TOP = 'var(--people-head-top)';
+
 export default function PublicProfilePage() {
   const params = useParams<{ handle: string }>();
   const handle = decodeHandle(params?.handle);
@@ -49,7 +55,7 @@ export default function PublicProfilePage() {
 
   if (isLoading || cardsPending) {
     return (
-      <PageShell width="wide">
+      <PageShell width="wide" className={styles.shell} topPad={PEOPLE_HEAD_TOP}>
         <div className={styles.hero} role="status" aria-label="Loading profile">
           <div className={`${styles.skelBlock} ${styles.skelAvatar}`} />
           <div className={`${styles.skelBlock} ${styles.skelName}`} />
@@ -89,7 +95,7 @@ export default function PublicProfilePage() {
   });
 
   return (
-    <PageShell width="wide">
+    <PageShell width="wide" className={styles.shell} topPad={PEOPLE_HEAD_TOP}>
       <header className={styles.hero}>
         <HandDrawnAvatar
           src={user.avatarUrl}
