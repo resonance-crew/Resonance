@@ -7,7 +7,8 @@ import SwiftUI
 /// write a new card in answer, or pick one already written — or, once you have answered this card,
 /// 已共振 opening your published resonance (修改 while it is a draft, back to the writer); then the
 /// note (寄小紙條, its full words its name for VoiceOver) and the bookmark (tonal), which drops its
-/// words for its glyph when the row has no room for them. (The row fades in once scrolled to.)
+/// words for its glyph when the row has no room for them — then the note too (round 9 §3), so only
+/// the verb keeps its words. (The row fades in once scrolled to.)
 struct CardViewerActions: View {
     let cardId: String
     /// The card this one answers itself: never offered in the picker.
@@ -87,7 +88,10 @@ struct CardViewerActions: View {
     }
 
     private var noteSegment: SegmentSpec {
-        SegmentSpec(id: "note", icon: .note, label: L10n.Card.Note.entryShort, accessibilityLabel: L10n.Card.Note.entry) {
+        // The second to give way (round 9 §3): once the bookmark is a glyph and the row still doesn't
+        // fit, 寄小紙條 is one too — only the verb keeps its words; its full words stay its name.
+        SegmentSpec(id: "note", icon: .note, label: L10n.Card.Note.entryShort, accessibilityLabel: L10n.Card.Note.entry,
+                    collapsesAt: 2) {
             writingNote = true
         }
     }
