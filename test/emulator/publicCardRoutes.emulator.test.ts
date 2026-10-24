@@ -3,6 +3,7 @@ import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
 import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import type { CardSeed } from '@/lib/data/cardSeed';
 import type { FeedPageBody } from '@/lib/api/v1/schemas';
+import { OG_COVER_PATH } from '@/lib/og';
 
 // What a signed-out browser asks the server for, now that the rules keep an
 // anonymous card (whose document names its author) out of its own reads:
@@ -154,7 +155,7 @@ describe('GET /api/og/card/{id} and /api/og/user/{id}', () => {
       await userImage(new Request('http://localhost/api/og/user/__x__'), { params: Promise.resolve({ id: '__x__' }) }),
     ]) {
       expect(res.status).toBe(302);
-      expect(res.headers.get('location')).toBe('/og-cover.jpg');
+      expect(res.headers.get('location')).toBe(OG_COVER_PATH);
     }
   });
 });

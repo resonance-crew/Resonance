@@ -145,6 +145,35 @@ describe('Markdown pasted', () => {
     expect(paste('那天', { text: '**真的**很好', html: '<span>**真的**很好</span>' }).markdown).toBe('那天**真的**很好');
   });
 
+  // A paste with plain text alone (a paste key, a long-press 貼上) was tiptap-markdown's: an open slice, its first
+  // block merged into the line — a heading lost its ##, a table became words.
+  it('puts plain text alone in as Markdown too, its blocks standing on their own', () => {
+    const out = paste('雨剛停。', { text: '## 那天\n\n- 一\n- 二' });
+    expect(out.handled).toBe(true);
+    expect(out.markdown).toBe('雨剛停。\n\n## 那天\n\n- 一\n- 二');
+    const table = '| 地點 | 時間 |\n| --- | --- |\n| 台北 | 傍晚 |';
+    expect(paste('前言', { text: table }).markdown).toBe(`前言\n\n${table}`);
+    // Words that read as no Markdown are left to the paste as it was.
+    expect(paste('前言', { text: '只是兩行\n字而已' }).handled).toBe(false);
+  });
+
+  // Gboard's clipboard chip types its clip in (an insertText input) rather than pasting it.
+  it('reads a typed run of lines that reads as Markdown as Markdown, as its paste would be', () => {
+    const editor = new Editor({ extensions: storyExtensions(), content: '雨剛停。' });
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+    const typed = (data: string) => {
+      const event = new InputEvent('beforeinput', { inputType: 'insertText', data, cancelable: true, bubbles: true });
+      editor.view.dom.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(typed('## 那天\n\n| a | b |\n| - | - |\n| 1 | 2 |')).toBe(true);
+    expect(getMarkdown(editor)).toBe('雨剛停。\n\n## 那天\n\n| a | b |\n| - | - |\n| 1 | 2 |');
+    // One line, or lines that read as no Markdown: typing as ever.
+    expect(typed('**一行**')).toBe(false);
+    expect(typed('兩行\n普通的字')).toBe(false);
+    editor.destroy();
+  });
+
   it('keeps a table pasted that way exactly as it was written', () => {
     const table = '| 地點 | 時間 |\n|:-----|-----:|\n| 台北 | 早上 |';
     const out = paste('', { text: table, html: `<pre style="font-family:monospace">${table}</pre>`.replace('<pre', '<div').replace('</pre>', '</div>') });
