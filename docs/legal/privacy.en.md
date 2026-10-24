@@ -1,7 +1,7 @@
 ---
 title: Privacy Policy
 description: What Resonance collects, why, who processes it, and how to download or delete it.
-updated: 2026-10-20
+updated: 2026-10-24
 ---
 
 Resonance is a place to share stories as cards, made up of the website resonance.channel and the iOS and Android apps. It is built and run by the Resonance team ("we"). This policy explains what we collect, why, who processes it for us, and how you can manage or delete it.
@@ -16,7 +16,7 @@ Resonance is a place to share stories as cards, made up of the website resonance
 
 - **Account**: the email address you sign in with (provided by Google or Apple if you use them; Apple may give us a private relay address) and an account ID the system creates.
 - **Profile**: your pen name, bio, region, preferred languages and avatar. These are shown publicly on your profile page.
-- **What you write**: cards (title, story, tags, images) and drafts, resonances, links between cards, notes to authors, messages with your connections, your thought map, bookmarks, your block list, and reports you send.
+- **What you write**: cards (title, story, tags, images) and drafts, resonances, links between cards, notes to authors, messages with your connections (including the pictures sent in them), your thought map, bookmarks, your block list, and reports you send.
 - **Interactions**: who you're connected with and the notifications you receive.
 - **Device (apps only)**: a push token, an ID for this installation, the app version, platform, interface language and time zone, so notifications reach your phone in your language. They are removed when you sign out.
 - **Technical logs**: our hosting provider keeps connection logs (such as IP address, browser type and time) for operations and abuse prevention. The website only uses the cookie that keeps you signed in; interface preferences (such as which tips you've seen) are stored in your browser or on your device.
@@ -37,7 +37,7 @@ Each card can be **public**, **connections only** or **only me**. Public cards c
 We share only what each service needs to run Resonance:
 
 - **Google Firebase** (Authentication, Cloud Firestore, Cloud Messaging, App Check): your account, all written content, push delivery, and checking that requests come from our real website and apps.
-- **Cloudflare R2**: images you upload or generate. Images are served from public addresses; anyone with the address can see them.
+- **Cloudflare R2**: images you upload or generate. Images in cards and stories, and profile photos, are served from public addresses; anyone with the address can see them. Pictures sent in messages are kept apart, with no public address: only the two people in the conversation can see them, through our service.
 - **OpenAI**: for the AI features above, a card's title and text are sent to OpenAI's API. Under OpenAI's API policy this data is not used to train its models.
 - **Vercel**: hosting for the website and API.
 - **Cloudflare Turnstile**: on the website, checks in the background that requests come from a browser a person is using rather than an automated script (no challenge is shown). To do so it processes your IP address and technical information about your browser and device, under the [Cloudflare Turnstile Privacy Addendum](https://www.cloudflare.com/turnstile-privacy-policy/).
@@ -51,7 +51,7 @@ We keep your data until you delete it or delete your account.
 
 On the website, and in versions of the apps that have a trash, a card you delete first moves to your trash, where only you can see it and can restore it for 30 days; it is deleted for good after 30 days, or as soon as you choose Delete forever or Empty trash. When an anonymous card goes to the trash, the notes other people left on it are deleted at once and don't come back if you restore it. Versions of the apps without a trash delete a card for good straight away, as their confirmation says.
 
-You can delete your account at any time under Settings → Delete account (on the website and in the apps). You're signed out right away, and signing back in within 7 days cancels it. After 7 days your account, profile, cards and drafts, resonances, notes, every conversation you took part in (including the other person's messages in it), connections, notifications, notification settings and the record of what we've sent you, thought map, push devices and uploaded images are deleted for good.
+You can delete your account at any time under Settings → Delete account (on the website and in the apps). You're signed out right away, and signing back in within 7 days cancels it. After 7 days your account, profile, cards and drafts, resonances, notes, every conversation you took part in (including the other person's messages and pictures in it), connections, notifications, notification settings and the record of what we've sent you, thought map, push devices and uploaded images are deleted for good.
 
 We keep reports other people made about you (safety and moderation records). Cards other people wrote in response to yours belong to them and stay, but no longer link to your card.
 
