@@ -94,6 +94,12 @@ struct ThoughtMapScreen: View {
     /// A 私人卡: never published, or published and kept private.
     static func isPrivate(_ card: MapCard) -> Bool { card.publishedAt == nil || card.visibility == "private" }
 
+    /// A tray row's mark: the wave for a card I resonated with, the lock for a 私人卡 (as its node wears
+    /// it, C4), the cards glyph for one of mine readers have.
+    static func trayIcon(_ card: MapCard, resonated: Bool) -> IconName {
+        resonated ? .wave : isPrivate(card) ? .lock : .cards
+    }
+
     @ViewBuilder private func chrome(insets: EdgeInsets, size: CGSize) -> some View {
         let top = insets.top + 8
         ZStack(alignment: .topLeading) {
@@ -238,7 +244,7 @@ struct MapTray: View {
                         if i > 0 { WavyDivider(seed: 31 + Double(i) * 7) }
                         Button { store.addCard(card) } label: {
                             HStack(spacing: 10) {
-                                OrganicIcon(store.resonated.contains(card.id) ? .wave : card.publishedAt != nil ? .cards : .pen, size: 15)
+                                OrganicIcon(ThoughtMapScreen.trayIcon(card, resonated: store.resonated.contains(card.id)), size: 15)
                                     .foregroundStyle(Tokens.textMuted)
                                 Text(card.title)
                                     .font(AppFonts.body(13.5))
