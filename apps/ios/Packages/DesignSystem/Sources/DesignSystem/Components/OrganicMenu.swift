@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Menu
 
@@ -61,16 +62,34 @@ public struct OrganicMenu: View {
     }
 
     @State private var open = false
+    /// Where the trigger is, as the layout last reported it (a fallback: a trigger rebuilt a moment ago
+    /// — a branch swapped, an `.id` changed, a step sliding in — reports again only after its layout).
     @State private var anchor: CGRect = .zero
+    /// The trigger itself, read at the moment of the tap (C3): what the panel hangs from.
+    @State private var probe = MenuTriggerProbe()
+    /// The trigger's frame the open panel was placed from, fixed at the tap.
+    @State private var presentedFrom: CGRect = .zero
     @State private var panelSeed: Double = 0
+    /// A pill wearing its card's colours (round 9 §8: 更換封面 on a card's picture).
+    var pillPalette: CardPalette?
+
+    /// The pill trigger in a card's colours — the family's fill, its pen line, its deep words — and the
+    /// panel it drops in the same hue.
+    public func pill(palette: CardPalette?) -> OrganicMenu {
+        var copy = self
+        copy.pillPalette = palette
+        if let palette { copy.hue = palette.hue }
+        return copy
+    }
 
     public var body: some View {
         let colors = MenuColors(hue: hue)
         triggerView(colors)
             .accessibilityLabel(label)
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { anchor = $0 }
+            .background { MenuTriggerProbeView(probe: probe).accessibilityHidden(true) }
             .fullScreenCover(isPresented: $open) {
-                MenuStage(items: items, seed: panelSeed, colors: colors, face: face) { item in
+                MenuStage(items: items, seed: panelSeed, colors: colors, face: face(presentedFrom)) { item in
                     withTransaction(\.disablesAnimations, true) { open = false }
                     // After the cover is gone, so a dialog the row opens can present.
                     if let item {
@@ -87,15 +106,23 @@ public struct OrganicMenu: View {
     @ViewBuilder private func triggerView(_ colors: MenuColors) -> some View {
         switch trigger {
         case let .pill(title, glyph):
-            // The paper button itself, with its own ink and haptic: what it opens says so in words.
-            OrganicButton(title, icon: glyph, variant: .paper, size: .sm, action: show)
-                .fixedSize()
-                .frame(minHeight: 44)
+            // The paper button itself, with its own ink and haptic: what it opens says so in words — or,
+            // over a card's picture, the button in that card's colours.
+            Group {
+                if let pillPalette {
+                    OrganicButton(title, icon: glyph, variant: .paper, size: .sm, action: show)
+                        .face(.cardChip(pillPalette), outline: pillPalette.border)
+                } else {
+                    OrganicButton(title, icon: glyph, variant: .paper, size: .sm, action: show)
+                }
+            }
+            .fixedSize()
+            .frame(minHeight: 44)
         case .chip, .bare:
             Button(action: show) {
                 Group {
                     if trigger == .bare {
-                        OrganicIcon(icon, size: 20, color: open ? Tokens.terracotta : Tokens.text)
+                        OrganicIcon(icon, size: 20, color: open ? Tokens.terracotta : Tokens.text, strokeWidth: OrganicIconButton.restingStroke)
                     } else {
                         OrganicMenuChip(size: triggerSize, seed: seed, icon: icon, colors: colors, active: open)
                     }
@@ -107,21 +134,90 @@ public struct OrganicMenu: View {
         }
     }
 
+    /// The tap: the panel is placed from where the trigger is now — read off the trigger itself, else
+    /// from where the layout last put it — and never from a frame that isn't one (C3: a trigger rebuilt
+    /// under the finger reported `.zero`, and the panel hung from the screen's top-left corner). With
+    /// neither yet, it waits a layout pass or two and reads the trigger again.
     private func show() {
         // A fresh panel each time, like the web's.
         panelSeed = Double(Int.random(in: 0..<10_000))
+        if present() { return }
+        Task { @MainActor in
+            for _ in 0..<3 {
+                try? await Task.sleep(for: .milliseconds(17))
+                if present() { return }
+            }
+        }
+    }
+
+    /// Opens the panel when the trigger's frame is one to hang it from (answered whether it did).
+    private func present() -> Bool {
+        guard let frame = MenuAnchor.resolve(live: probe.frame(), stored: anchor, screen: probe.screen()) else { return false }
+        presentedFrom = frame
         withTransaction(\.disablesAnimations, true) { open = true }
+        return true
     }
 
     /// What the panel hangs from: a chip centred in its 44 box, a bare glyph's 36 wash in its box, a
     /// pill's own face.
-    private var face: CGRect {
+    private func face(_ anchor: CGRect) -> CGRect {
         switch trigger {
         case .pill: anchor
         case .bare: anchor.insetBy(dx: max(0, (anchor.width - 36) / 2), dy: max(0, (anchor.height - 36) / 2))
         case .chip: anchor.insetBy(dx: max(0, (anchor.width - triggerSize) / 2), dy: max(0, (anchor.height - triggerSize) / 2))
         }
     }
+}
+
+/// Where a menu's trigger is, read when it is tapped (C3): the frame the layout last reported can be
+/// stale or `.zero` — the trigger rebuilt a moment before (a branch swapped under a GeometryReader, an
+/// `.id` changed, the publish step's slide still running) — so the trigger's own view is asked.
+public nonisolated enum MenuAnchor {
+    /// A frame a panel can hang from: a real size, on the screen — never `.zero` (which pinned the
+    /// panel to the top-left corner) nor a frame left behind somewhere off the window.
+    public static func usable(_ frame: CGRect, screen: CGRect?) -> Bool {
+        guard !frame.isNull, !frame.isInfinite, frame.width >= 1, frame.height >= 1,
+              frame.minX.isFinite, frame.minY.isFinite else { return false }
+        guard let screen, !screen.isEmpty else { return true }
+        return screen.intersects(frame)
+    }
+
+    /// The frame to place the panel from at the tap: the trigger's own (`live`), else the layout's last
+    /// report (`stored`) — whichever is a frame at all; nil, neither: wait for the layout and ask again.
+    public static func resolve(live: CGRect?, stored: CGRect, screen: CGRect?) -> CGRect? {
+        if let live, usable(live, screen: screen) { return live }
+        if usable(stored, screen: screen) { return stored }
+        return nil
+    }
+}
+
+/// The trigger's own view, kept to ask where it is.
+@MainActor final class MenuTriggerProbe {
+    weak var view: UIView?
+
+    /// The trigger's frame in its window (SwiftUI's `.global` there), nil while it isn't in one.
+    func frame() -> CGRect? {
+        guard let view, view.window != nil else { return nil }
+        return view.convert(view.bounds, to: nil)
+    }
+
+    /// The window's bounds, the screen the panel is placed in.
+    func screen() -> CGRect? { view?.window?.bounds }
+}
+
+/// A view laid out exactly over the trigger (its background), holding nothing.
+private struct MenuTriggerProbeView: UIViewRepresentable {
+    let probe: MenuTriggerProbe
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        probe.view = view
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) { probe.view = view }
 }
 
 /// OrganicMenu's trigger as a face of its own, for other header actions that
@@ -145,7 +241,7 @@ public struct OrganicChipFace: View {
     public var body: some View {
         Group {
             if trigger == .bare {
-                OrganicIcon(icon, size: 20, color: Tokens.text)
+                OrganicIcon(icon, size: 20, color: Tokens.text, strokeWidth: OrganicIconButton.restingStroke)
             } else {
                 OrganicMenuChip(size: size, seed: seed, icon: icon, colors: MenuColors(hue: hue), active: false)
             }
@@ -187,7 +283,8 @@ struct MenuStage: View {
     var body: some View {
         GeometryReader { geo in
             let screen = geo.frame(in: .global)
-            let above = MenuDrop.above(face: face, screen: screen, panelHeight: MenuPanelShape.height(rows: items.count))
+            let place = MenuDrop.place(face: face, screen: screen, panelHeight: MenuPanelShape.height(rows: items.count))
+            let above = place.above
             ZStack(alignment: above ? .bottomTrailing : .topTrailing) {
                 Color.black.opacity(0.001)
                     .onTapGesture { close(nil) }
@@ -196,8 +293,8 @@ struct MenuStage: View {
                     .scaleEffect(shown ? 1 : 0.94, anchor: above ? .bottomTrailing : .topTrailing)
                     .offset(y: shown ? 0 : (above ? 4 : -4))
                     .opacity(shown ? 1 : 0)
-                    .padding(above ? .bottom : .top, above ? screen.maxY - face.minY + MenuDrop.gap : face.maxY + MenuDrop.gap - screen.minY)
-                    .padding(.trailing, max(MenuDrop.margin, screen.maxX - face.maxX))
+                    .padding(above ? .bottom : .top, place.vertical)
+                    .padding(.trailing, place.trailing)
             }
         }
         .ignoresSafeArea()
@@ -213,14 +310,30 @@ struct MenuStage: View {
 
 /// Where a dropped panel goes from its trigger: 8 under it, unless that runs past the screen's foot
 /// (12 from it) while there is room over it.
-nonisolated enum MenuDrop {
-    static let gap: CGFloat = 8
-    static let margin: CGFloat = 12
+public nonisolated enum MenuDrop {
+    public static let gap: CGFloat = 8
+    public static let margin: CGFloat = 12
 
-    static func above(face: CGRect, screen: CGRect, panelHeight: CGFloat) -> Bool {
+    public static func above(face: CGRect, screen: CGRect, panelHeight: CGFloat) -> Bool {
         let fitsBelow = face.maxY + gap + panelHeight <= screen.maxY - margin
         let fitsAbove = face.minY - gap - panelHeight >= screen.minY + margin
         return !fitsBelow && fitsAbove
+    }
+
+    /// Where the panel stands in the screen: over or under the trigger, the padding from the screen's
+    /// top (under) or bottom (over), and from its trailing edge — the panel's trailing edge on the
+    /// trigger's, never closer than `margin` to the screen's.
+    public struct Placement: Equatable, Sendable {
+        public var above: Bool
+        public var vertical: CGFloat
+        public var trailing: CGFloat
+    }
+
+    public static func place(face: CGRect, screen: CGRect, panelHeight: CGFloat) -> Placement {
+        let above = above(face: face, screen: screen, panelHeight: panelHeight)
+        return Placement(above: above,
+                         vertical: above ? screen.maxY - face.minY + gap : face.maxY + gap - screen.minY,
+                         trailing: max(margin, screen.maxX - face.maxX))
     }
 }
 

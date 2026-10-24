@@ -12,6 +12,26 @@ public nonisolated struct CardPalette: Sendable {
     public var hue: Double { Self.hues[index] }
     public var fill: Color { Tokens.cardFills[index] }
     public var border: Color { Tokens.cardBorders[index] }
+    /// The family's deep pen (`CARD_BORDERS[f][1]`): the face of a control in the card's colours
+    /// (round 9 §8, the cover's 加一張圖片 · 生成圖片) and the ink of one on its fill (更換封面).
+    public var deep: Color {
+        switch index {
+        case 1: Tokens.cardBorder1Dark
+        case 2: Tokens.cardBorder2Dark
+        case 3: Tokens.cardBorder3Dark
+        case 4: Tokens.cardBorder4Dark
+        case 5: Tokens.cardBorder5Dark
+        default: Tokens.cardBorder0Dark
+        }
+    }
+
+    /// A card's own family from its id (round 9 §8): `seedFromId(id) % 6`, the bubbles' hash twinned on
+    /// all three platforms — what the publish step's preview of a card with no cover wears, so its
+    /// cover buttons take that card's colours rather than the first family's on every card. The feed
+    /// still colours a coverless card by its place in the list.
+    public static func family(id: String) -> Int {
+        Int(seedFromId(id)) % hues.count
+    }
     /// `oklch(97.5% 0.012 hue)` — the card's paper.
     public var interior: Color { OKLCHColor.parse("oklch(97.5% 0.012 \(hue))") ?? Tokens.cardBg }
     /// `oklch(92.5% 0.024 hue)` — the bordered card's paper under a pointer (the web's BrushWash).
@@ -101,5 +121,29 @@ public nonisolated struct CardPalette: Sendable {
     static func distance(_ a: Double, _ b: Double) -> Double {
         let d = abs(a - b).truncatingRemainder(dividingBy: 360)
         return min(d, 360 - d)
+    }
+}
+
+// MARK: - Controls in a card's colours (round 9 §8)
+
+extension OrganicButtonFace {
+    /// 加一張圖片 · 生成圖片 over a coverless card's striped picture: the family's deep pen as the face,
+    /// its words and glyph in the family's paper, the buttons' grain; a press darkens it as every solid
+    /// face's does.
+    public static func cardDeep(_ palette: CardPalette) -> OrganicButtonFace {
+        OrganicButtonFace(fill: palette.deep, label: palette.interior, pressInk: .black.opacity(0.14), seed: 3)
+    }
+
+    /// The same button while it can't be pressed (生成圖片 with no story yet): the family's tonal step as
+    /// the face with the muted words — never the alpha fade, which the stripes would show through.
+    public static func cardDeepDisabled(_ palette: CardPalette) -> OrganicButtonFace {
+        OrganicButtonFace(fill: palette.accent, label: Tokens.textMuted, pressInk: .clear, seed: 3)
+    }
+
+    /// 更換封面 on a card's picture: the family's fill, opaque, its words and glyph in the family's deep
+    /// pen (its pen line, the family's own at INK, is the button's `outline`), the cards' grain.
+    public static func cardChip(_ palette: CardPalette) -> OrganicButtonFace {
+        OrganicButtonFace(fill: palette.fill, label: palette.deep, pressInk: palette.border.opacity(0.16), seed: 401,
+                          grain: "grain-card", grainOpacity: 0.3)
     }
 }
