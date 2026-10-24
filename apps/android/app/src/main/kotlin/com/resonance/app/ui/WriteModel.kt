@@ -286,8 +286,11 @@ class WriteModel(
             else -> L10n.Write.PublishPanel.publish
         }
 
-    /** A live card's 「按下之後，讀者看到的就會是這個版本…」: only while it is chosen public — a private card has no readers. */
-    val showsUpdateHint: Boolean get() = isPublished && values.visibility == "public"
+    /**
+     * A live card's 「按下之後，讀者看到的就會是這個版本…」: only while it has readers — not for 只有自己 (a card kept
+     * for connections still has them), as the web says it.
+     */
+    val showsUpdateHint: Boolean get() = isPublished && values.visibility != "private"
 
     /** The card's page: its slug, or its id (a draft, or a card without one). */
     val routeKey: String? get() = slug ?: draftId

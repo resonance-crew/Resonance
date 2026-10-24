@@ -290,13 +290,15 @@ class WriterStepsTest {
         assertEquals("沒儲存成功，再試一次", m.publishError)
     }
 
-    @Test fun theUpdateHintShowsOnlyWhileTheLiveCardIsPublic() {
+    @Test fun theUpdateHintShowsOnlyWhileTheLiveCardHasReaders() {
         val m = model(live(written))
         assertTrue(m.showsUpdateHint)
         m.choose(Audience.Private)
         assertFalse(m.showsUpdateHint)
         m.choose(Audience.Anonymous)
         assertTrue(m.showsUpdateHint)
+        // An older card kept for connections has readers too (none of the three chosen).
+        assertTrue(model(live(written.copy(visibility = "connections"))).showsUpdateHint)
         assertFalse(model(draft(written)).showsUpdateHint)
     }
 
