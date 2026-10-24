@@ -38,6 +38,9 @@ class ResonanceApp : Application(), SingletonImageLoader.Factory {
         shareFiles = File(cacheDir, ShareFiles.DIR),
         // Notes not sent yet, per account and card: they outlive the app being killed, not the account's sign-out.
         noteDraftStore = NoteDrafts(NoteDraftPrefs(getSharedPreferences(NoteDraftPrefs.FILE, MODE_PRIVATE))),
+        // Chat pictures: through the app's client with the token, kept in a folder of their own (cache: never backed up).
+        pictureHttp = http,
+        pictureLoader = { client -> ChatPictures.loader(this, File(cacheDir, "chat-pictures"), client) },
     ).also {
         session = it
         it.start { it.loadMe() }

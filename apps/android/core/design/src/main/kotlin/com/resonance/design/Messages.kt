@@ -14,6 +14,7 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.TypefaceSpan
 import android.graphics.text.LineBreaker
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -37,6 +38,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.StrokeCap
@@ -57,6 +60,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RectangleShape
@@ -83,10 +87,12 @@ import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import coil3.ImageLoader
 import coil3.compose.AsyncImage
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
@@ -205,9 +211,9 @@ fun Modifier.bubbleSurface(shape: Shape, fill: Color, flash: () -> Float = { 0f 
 /**
  * A message's bubble (MessageBubble.tsx): 15/1.4 text, padding 9×14, your own on
  * [Tokens.BubbleMine], theirs on [Tokens.BubbleTheirs], no outline. It hugs its words, unless it
- * carries more ([attachment]: a link's preview, a shared card), which makes it one bubble of a
- * fixed [width] — the words, then what it carries edge to edge. A reply to a note wears a small
- * italic header (`quoteLabel`).
+ * carries more ([attachment]: a link's preview, a shared card; [header]: a picture sent, over the
+ * words), which makes it one bubble of a fixed [width] — what leads it, the words, then what it
+ * carries, edge to edge. A reply to a note wears a small italic header (`quoteLabel`).
  *
  * The words are drawn by [ChatText]: [links] (ranges of [text]) wear the story's pen wave under
  * them, in the tonal buttons' deep terracotta in either bubble, and a tap on one calls [onLinkTap] with its index;
@@ -234,6 +240,8 @@ fun MessageBubble(
     fill: Color? = null,
     onLinkTap: ((Int) -> Unit)? = null,
     onLongPress: ((Int?) -> Unit)? = null,
+    /** What leads the bubble, over its words (a picture sent: [ChatPictureSection]). */
+    header: (@Composable ColumnScope.() -> Unit)? = null,
     attachment: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
     val longPress by rememberUpdatedState(onLongPress)
@@ -253,6 +261,7 @@ fun MessageBubble(
                 else Modifier,
             ),
     ) {
+        header?.invoke(this)
         if (text.isNotEmpty() || quoteLabel != null) {
             Column(
                 // What it carries brings its own air above it.
@@ -584,6 +593,78 @@ fun ColumnScope.LinkPreviewSection(
                 BasicText(host, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(12f, lineHeight = 1.3f, color = Tokens.TextMuted))
             }
         }
+    }
+}
+
+/** Where a picture sent in chat is drawn from. */
+sealed interface ChatPictureSource {
+    /** One sent from this device: its own copy — the thread's [preview], and the whole picture as it went up ([bytes], for the viewer). */
+    class Local(val preview: ImageBitmap, val bytes: ByteArray) : ChatPictureSource
+
+    /** One the server keeps: the thread's size ([thumb]) and the whole of it ([full]), read with the viewer's token. */
+    data class Remote(val thumb: String, val full: String) : ChatPictureSource
+}
+
+/**
+ * A picture a message sends, heading its bubble (round 7 §4.3): edge to edge — drawn [PictureBleed]
+ * past the bubble's sides and top, and its foot when nothing follows it ([last]), so the bubble's
+ * wobbly outline, not the picture, ends it — at the place it was given before it loaded ([width] ×
+ * [height]: PictureBox; the picture fills it and is cut at its ends past 2:1). While it loads, the
+ * paper-dark fill; one that won't load keeps its place with the picture glyph, and a tap asks for it
+ * again. [loader] reads a [ChatPictureSource.Remote] with the viewer's token — never the app's plain
+ * image loader. A tap opens it whole ([onOpen], named [label]); a hold is the message's menu.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun ColumnScope.ChatPictureSection(
+    picture: ChatPictureSource,
+    loader: ImageLoader?,
+    width: Dp,
+    height: Dp,
+    last: Boolean,
+    label: String,
+    onOpen: (() -> Unit)?,
+    onLongPress: (() -> Unit)?,
+) {
+    var attempt by remember(picture) { mutableIntStateOf(0) }
+    var failed by remember(picture) { mutableStateOf(false) }
+    val retry = { attempt++; failed = false }
+    Box(
+        Modifier
+            .layout { measurable, _ ->
+                val w = width.roundToPx()
+                val h = height.roundToPx()
+                val b = PictureBleed.roundToPx()
+                val drawn = measurable.measure(Constraints.fixed(w + 2 * b, h + b + if (last) b else 0))
+                layout(w, h) { drawn.place(-b, -b) }
+            }
+            .background(Tokens.CreamDark)
+            .then(
+                if (onOpen == null) Modifier
+                else Modifier.combinedClickable(
+                    interactionSource = null,
+                    indication = null,
+                    role = Role.Button,
+                    onClickLabel = label,
+                    onLongClick = onLongPress,
+                    onClick = { if (failed) retry() else onOpen() },
+                ),
+            )
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        when (picture) {
+            is ChatPictureSource.Local -> Image(picture.preview, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            is ChatPictureSource.Remote -> if (loader != null) key(attempt) {
+                AsyncImage(
+                    model = picture.thumb, contentDescription = null, imageLoader = loader,
+                    modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
+                    onSuccess = { failed = false },
+                    onError = { failed = true },
+                )
+            }
+        }
+        if (failed) OrganicIcon(IconName.Image, size = 26.dp, color = Tokens.TextMuted)
     }
 }
 

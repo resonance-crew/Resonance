@@ -7,6 +7,7 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
+import coil3.ImageLoader
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
@@ -18,6 +19,7 @@ import com.resonance.kit.api.AccountApi
 import com.resonance.kit.api.ApiConfiguration
 import com.resonance.kit.api.ApiFailure
 import com.resonance.kit.api.HttpCaching
+import com.resonance.kit.api.ChatPicturesApi
 import com.resonance.kit.api.MessagingApi
 import com.resonance.kit.api.NotificationSettingsApi
 import com.resonance.kit.api.ProfileApi
@@ -74,6 +76,10 @@ class Session(
     private val shareFiles: File? = null,
     /** Notes written and not sent yet, per account and card (note-drafts.xml): emptied with the account. */
     private val noteDraftStore: NoteDrafts? = null,
+    /** The app's client without the API's HTTP cache: chat pictures go up and are read through it, with the token ([pictures]). */
+    pictureHttp: OkHttpClient = OkHttpClient(),
+    /** The loader the thread's pictures are read with, over [pictures]' client (ChatPictures.loader); null: none (a test). */
+    pictureLoader: ((OkHttpClient) -> ImageLoader)? = null,
 ) {
     enum class Phase { Restoring, SignedOut, SignedIn }
     sealed interface Profile {
@@ -121,6 +127,10 @@ class Session(
     val account = AccountApi(api, http)
     val writing = WritingApi(api, http)
     val messaging = MessagingApi(api, http)
+    /** Pictures in chat: sent up and read back with the account's token, never through a plain image loader. */
+    val pictures = ChatPicturesApi(api, pictureHttp)
+    /** The thread's pictures on this device: their loader and caches, and the ones sent from here (emptied with the account). */
+    val chatPictures: ChatPictures? = pictureLoader?.let { ChatPictures(it(pictures.client)) }
     val pushApi = PushApi(api, http)
     private val notificationSettings = NotificationSettingsApi(api, http)
     val profiles = ProfileApi(api, http)
@@ -235,7 +245,7 @@ class Session(
     private val scope = MainScope()
 
     /** Messages on their way, per conversation: they outlive the thread screen (see [ChatOutboxes]). */
-    val outboxes = ChatOutboxes(scope, messaging) { PushCenter.reachedOut() }
+    val outboxes = ChatOutboxes(scope, messaging, pictures) { PushCenter.reachedOut() }
 
     /**
      * Whom the person has blocked: live once Firestore has said, until then as last read. Lists
@@ -332,6 +342,8 @@ class Session(
             kept?.clear(who)
             // The last share's pictures (a card picture names its author).
             shareFiles?.let(ShareFiles::clear)
+            // The pictures of its conversations: read, and sent from here.
+            chatPictures?.clear()
         }
         // The notes it wrote and didn't send: words to someone, kept for this account alone.
         noteDraftStore?.forget(who)

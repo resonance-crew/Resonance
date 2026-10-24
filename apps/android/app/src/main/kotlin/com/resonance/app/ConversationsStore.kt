@@ -60,6 +60,8 @@ class ConversationsStore {
         val lastFromMe: Boolean,
         val sentAt: Date?,
         val unread: Int,
+        /** The last message sent a picture (`lastMessage.image`): without words, it previews as 傳送了一張圖片. */
+        val lastImage: Boolean = false,
     )
 
     data class State(
@@ -232,6 +234,7 @@ class ConversationsStore {
                 lastFromMe = last?.get("senderId") == uid,
                 sentAt = (last?.get("sentAt") as? Timestamp)?.toDate(),
                 unread = unread,
+                lastImage = last?.get("image") == true,
             )
         }
         val talking = conversations.map { it.other.id }.toSet()
