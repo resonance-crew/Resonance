@@ -419,7 +419,8 @@ Navigation and caches: routes are @Serializable NavKeys and each tab's NavBackSt
 after 15 minutes. cacheDir/api is `ApiCache` (per account; cleared on sign-out, deletion or account switch;
 the feed filtered by the block list); cacheDir/http is the OkHttp cache via `HttpCaching` (private
 max-age/ETag honoured, opted in with `X-Resonance-Cache: 1`; no-cache after the viewer's writes or a block
-change; evicted on sign-out). Coil shares the app's OkHttpClient; below Android 12 AVIF goes through the
+change; evicted on sign-out). Coil shares the app's OkHttpClient and keeps only pictures on disk (`PicturesOnly`, as the
+chat pictures do: a cover that answered an error once is asked for again); below Android 12 AVIF goes through the
 app's libavif decoder (`--ez avifDecoder true` forces it on any version). The editor WebView loads only
 the bundled island; external links open in the in-app browser.
 
