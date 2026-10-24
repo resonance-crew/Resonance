@@ -416,6 +416,11 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
     /// on top of the feed, a pull that brought others — the list goes on showing its top, the new first
     /// item, rather than the item it had there.
     var head: String?
+    /// Each change takes the list back to its top, as a tap on its chosen tab does (the feed's
+    /// 今天的推薦來了 · 往上看).
+    var toTopRequests = 0
+    /// Told whether the list rests at its top, each time that changes.
+    var onAtTop: (Bool) -> Void = { _ in }
     let trailing: Trailing
     let banner: Banner
     let content: Content
@@ -454,7 +459,8 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
     private var bottomRoom: CGFloat { window.topTabs ? 0 : OrganicTabBar<AppTab>.height + HeaderEdge.height }
 
     init(_ title: String, headerSpacing: CGFloat = 20, titleInBar: Bool = false, phoneTop: CGFloat = 16, tabletGap: Bool = true,
-         head: String? = nil, @ViewBuilder trailing: () -> Trailing = { EmptyView() },
+         head: String? = nil, toTopRequests: Int = 0, onAtTop: @escaping (Bool) -> Void = { _ in },
+         @ViewBuilder trailing: () -> Trailing = { EmptyView() },
          @ViewBuilder banner: () -> Banner, @ViewBuilder content: () -> Content) {
         self.title = title
         self.headerSpacing = headerSpacing
@@ -462,6 +468,8 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
         self.phoneTop = phoneTop
         self.tabletGap = tabletGap
         self.head = head
+        self.toTopRequests = toTopRequests
+        self.onAtTop = onAtTop
         self.trailing = trailing()
         self.banner = banner()
         self.content = content()
@@ -488,14 +496,13 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
             .sketchRefreshAction(named: L10n.Native.refresh)
         }
         .scrollPosition($position)
-        .onChange(of: toTop) {
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) { position.scrollTo(edge: .top) }
-            withAnimation(.easeOut(duration: 0.18)) { hidden = 0 }
-        }
+        .onChange(of: toTop) { backToTop() }
+        .onChange(of: toTopRequests) { backToTop() }
         // A new first item: at the top the list shows it; further down the anchored scroll has kept the
         // reader's item where it was.
         .onScrollGeometryChange(for: Bool.self) { geo in geo.contentOffset.y + geo.contentInsets.top <= 1 } action: { _, top in
             atTop = top
+            onAtTop(top)
         }
         .onChange(of: head) {
             if atTop { position.scrollTo(edge: .top) }
@@ -536,12 +543,20 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
             Color.clear.frame(height: 0).background(Tokens.cream.ignoresSafeArea(edges: .top))
         }
     }
+
+    /// Back to the list's top — gliding there, or at once under Reduce Motion — with the bar shown.
+    private func backToTop() {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) { position.scrollTo(edge: .top) }
+        withAnimation(.easeOut(duration: 0.18)) { hidden = 0 }
+    }
 }
 
 extension TabScreen where Banner == EmptyView {
     init(_ title: String, headerSpacing: CGFloat = 20, titleInBar: Bool = false, phoneTop: CGFloat = 16, tabletGap: Bool = true,
-         head: String? = nil, @ViewBuilder trailing: () -> Trailing = { EmptyView() }, @ViewBuilder content: () -> Content) {
+         head: String? = nil, toTopRequests: Int = 0, onAtTop: @escaping (Bool) -> Void = { _ in },
+         @ViewBuilder trailing: () -> Trailing = { EmptyView() }, @ViewBuilder content: () -> Content) {
         self.init(title, headerSpacing: headerSpacing, titleInBar: titleInBar, phoneTop: phoneTop, tabletGap: tabletGap,
-                  head: head, trailing: trailing, banner: { EmptyView() }, content: content)
+                  head: head, toTopRequests: toTopRequests, onAtTop: onAtTop, trailing: trailing, banner: { EmptyView() },
+                  content: content)
     }
 }

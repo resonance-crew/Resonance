@@ -196,7 +196,11 @@ those the latest cards already show: the cards are the scroll's targets (CardCol
 so a reader further down keeps the card they are reading where it is, and one at the top
 (TabScreen's `head`) sees the first pick there; a grid keeps them in rows of their
 own above, the latest cards keeping their columns, colours and shapes
-(`CardPalette.palettes(_:over:)`). Cards seen in lists stay in
+(`CardPalette.palettes(_:over:)`). The reader further down hears of them from the
+shell's toast, 今天的推薦來了 · 往上看 (`FeedModel.picksLanded`, `PicksNotice`): the
+pill takes the feed to its top (TabScreen's `toTopRequests`), reaching the top by hand
+takes it down, and picks that land while the feed is out of sight are told of once it is
+back. `-feedPicksDelay 15 -feedPicks …` and a scroll down shows it. Cards seen in lists stay in
 `SessionStore.cardPreviews` (memory only, per account, emptied on sign-out
 and on any block change) as the card page's placeholder — the page always
 refetches. `Route.thread(handle:uid:note:)` takes the uid whenever the caller

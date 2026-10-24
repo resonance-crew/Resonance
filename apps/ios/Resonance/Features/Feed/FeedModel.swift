@@ -33,6 +33,10 @@ final class FeedModel {
     /// them: a grid keeps them in rows of their own (`leadingPicks` of `cards`), so the cards already
     /// there keep their columns.
     private(set) var picksOnTop = false
+    /// How many times picks came once the latest cards were showing and went on top of them with
+    /// something new to read there (round 7 §2): a reader scrolled down hears of them (今天的推薦來了 ·
+    /// 往上看), since the screen keeps their place and the picks land out of sight above it.
+    private(set) var picksLanded = 0
     /// The last pull to refresh brought nothing back (and why): the feed on screen stayed as it
     /// was. Cleared when the next answer arrives.
     private(set) var refreshFailure: RefreshFailure?
@@ -392,11 +396,13 @@ final class FeedModel {
     }
 
     /// Picks that came once the latest cards were showing: on top of them at once, the latest cards
-    /// still showing under them (deduped against them). The screen keeps the reader's place.
+    /// still showing under them (deduped against them). The screen keeps the reader's place; picks
+    /// the latest cards all show already put nothing new above it, and land unannounced.
     private func putOnTop(_ picks: [FeedCard]) {
         recommended = picks
         showLatest = true
         picksOnTop = true
+        if leadingPicks > 0 { picksLanded += 1 }
     }
 
     private func keep(picks: [FeedCard], for asked: Int) {
