@@ -4,6 +4,7 @@ import Image from '@tiptap/extension-image';
 import Paragraph from '@tiptap/extension-paragraph';
 import { DOMParser as PMDOMParser, Slice, type Node as PMNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey, Selection } from '@tiptap/pm/state';
+import type { EditorView } from '@tiptap/pm/view';
 import StarterKit from '@tiptap/starter-kit';
 import { Markdown } from 'tiptap-markdown';
 import { BLANK_PARAGRAPH } from './blankLines';
@@ -365,21 +366,46 @@ export function readsAsMarkdown(text: string): boolean {
   return MARKDOWN_SIGNS.some((sign) => sign.test(text));
 }
 
+/** tiptap-markdown's parser, as it hangs on the editor's storage. */
+type MarkdownParserLike = { parse(content: string, opts?: { inline?: boolean }): string };
+
+/**
+ * Markdown put in at the selection as its own formatting: words alone
+ * (emphasis, a link) join the line they land in, as typed ones would; blocks
+ * — a heading, a list, a table — stand on their own, the line split before
+ * them, never merged into it (a table would turn to words).
+ */
+function insertMarkdown(view: EditorView, parser: MarkdownParserLike, text: string, uiEvent: string) {
+  const { $from } = view.state.selection;
+  const schema = PMDOMParser.fromSchema(view.state.schema);
+  const blocks = elementFromString(parser.parse(text));
+  const words = blocks.children.length === 1 && blocks.firstElementChild?.tagName === 'P';
+  const slice = words
+    ? schema.parseSlice(elementFromString(parser.parse(text, { inline: true })), { preserveWhitespace: true, context: $from })
+    : new Slice(schema.parse(blocks, { preserveWhitespace: true }).content, 0, 0);
+  view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView().setMeta('paste', uiEvent === 'paste').setMeta('uiEvent', uiEvent));
+}
+
 /**
  * Markdown pasted becomes formatting wherever it is copied from (round 8 §4).
- * A paste with plain text alone is read as Markdown already (tiptap-markdown's
- * `transformPastedText`); one that brings HTML too — what phones, notes apps
- * and code editors put on the clipboard — was taken as that HTML, so its `##`
- * and `**` stayed on the page as characters. When the HTML says nothing the
- * plain text doesn't (htmlAddsNothing) and the text reads as Markdown, the
- * text is read as Markdown instead; a paste whose HTML has formatting of its
- * own keeps it, and inside a code block or a table's source it stays text.
+ * tiptap-markdown reads a paste with plain text alone as Markdown, but as an
+ * open slice — its first block merged into the line it lands in — and a paste
+ * that brings HTML too (what phones, notes apps and code editors put on the
+ * clipboard) was taken as that HTML, its ## and ** left on the page as
+ * characters. Here a paste whose text reads as Markdown, with no HTML or HTML
+ * that says nothing the text doesn't (htmlAddsNothing), goes in as Markdown
+ * (insertMarkdown); one whose HTML has formatting of its own keeps it, and
+ * inside a code block or a table's source it stays text. Gboard's clipboard
+ * chip types its clip in rather than pasting it (an `insertText` input of
+ * several lines, each line break a new paragraph): such an input that reads
+ * as Markdown goes in the same way, as its paste would have.
  */
 export const MarkdownPaste = Extension.create({
   name: 'markdownPaste',
 
   addProseMirrorPlugins() {
     const editor = this.editor;
+    const parserOf = () => (editor.storage as { markdown?: { parser?: MarkdownParserLike } }).markdown?.parser;
     return [
       new Plugin({
         key: new PluginKey('markdownPaste'),
@@ -387,22 +413,25 @@ export const MarkdownPaste = Extension.create({
           handlePaste(view, event) {
             const text = event.clipboardData?.getData('text/plain');
             const html = event.clipboardData?.getData('text/html');
-            const { $from } = view.state.selection;
-            if (!text || !html || $from.parent.type.spec.code) return false;
-            if (!readsAsMarkdown(text) || !htmlAddsNothing(html)) return false;
-            const parser = (editor.storage as { markdown?: { parser?: { parse(content: string, opts?: { inline?: boolean }): string } } })
-              .markdown?.parser;
+            if (!text || view.state.selection.$from.parent.type.spec.code) return false;
+            if (!readsAsMarkdown(text) || (html && !htmlAddsNothing(html))) return false;
+            const parser = parserOf();
             if (!parser) return false;
-            const schema = PMDOMParser.fromSchema(view.state.schema);
-            const blocks = elementFromString(parser.parse(text));
-            // Words alone (emphasis, a link) join the line they land in, as typed ones would; blocks — a
-            // heading, a list, a table — stand on their own, never merged into it (a table would turn to words).
-            const words = blocks.children.length === 1 && blocks.firstElementChild?.tagName === 'P';
-            const slice = words
-              ? schema.parseSlice(elementFromString(parser.parse(text, { inline: true })), { preserveWhitespace: true, context: $from })
-              : new Slice(schema.parse(blocks, { preserveWhitespace: true }).content, 0, 0);
-            view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView().setMeta('paste', true).setMeta('uiEvent', 'paste'));
+            insertMarkdown(view, parser, text, 'paste');
             return true;
+          },
+          handleDOMEvents: {
+            beforeinput(view, event) {
+              const input = event as InputEvent;
+              const text = input.data;
+              if (input.inputType !== 'insertText' || !input.cancelable || !text || !/\r?\n/.test(text)) return false;
+              if (view.state.selection.$from.parent.type.spec.code || !readsAsMarkdown(text)) return false;
+              const parser = parserOf();
+              if (!parser) return false;
+              input.preventDefault();
+              insertMarkdown(view, parser, text.replace(/\r\n?/g, '\n'), 'paste');
+              return true;
+            },
           },
         },
       }),
