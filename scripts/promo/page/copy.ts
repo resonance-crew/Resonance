@@ -36,8 +36,11 @@ function pick(m: Messages) {
     visibilityLabel: m.write.visibility.label,
     visibilityPublic: m.write.visibility.public,
     visibilityPrivate: m.write.visibility.private,
-    anonymousToggle: m.write.publishPanel.anonymousToggle,
-    anonymousHint: m.write.publishPanel.anonymousHint,
+    // The step as the rendered video shows it (a switch beside the choice): the app now asks 公開 · 匿名公開 ·
+    // 只有自己 in one choice, and these words left src/messages with the switch. Re-render the visibility scene
+    // against write.visibility.anonymous / anonymousLine when the video is made again.
+    anonymousToggle: m === zhTW ? '以匿名發布' : 'Publish anonymously',
+    anonymousHint: m === zhTW ? '匿名卡不會出現在你的個人頁' : 'Anonymous cards never appear on your profile',
     publishCancel: m.write.publishPanel.cancel,
     publish: m.write.publishPanel.publish,
     anonymousAuthor: m.card.anonymousAuthor,
