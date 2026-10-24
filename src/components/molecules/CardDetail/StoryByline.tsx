@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { HandDrawnAvatar } from '@/components/atoms/HandDrawnAvatar/HandDrawnAvatar';
 import { HandDrawnCheckmark } from '@/components/atoms/HandDrawnCheckmark/HandDrawnCheckmark';
+import { Icon } from '@/components/atoms/Icon';
+import { INK } from '@/lib/design/strokes';
 import { SquareFlag } from '@/components/atoms/SquareFlag/SquareFlag';
 import { Link } from '@/i18n/navigation';
 import type { User } from '@/lib/db/types';
@@ -50,8 +52,13 @@ export interface StoryBylineProps {
   anonymous?: boolean;
   /** The story's read time, in minutes (lib/readTime). */
   minutes: number;
-  /** When the card was published, as the page formats it; null for a draft, which shows its read time alone. */
+  /** When the card was published, as the page formats it; null for one never published, which shows its read time alone. */
   published: CardPublished | null;
+  /**
+   * A 私人卡 (round 9 §1), on its owner's page: the meta line ends with a lock and 私人卡, muted — no one
+   * else sees this card.
+   */
+  privateCard?: boolean;
   /**
    * What the row ends with — the card page's ShareMenu, then its ⋯. Never
    * shrinks; nothing when the page offers nothing (a signed-out reader of a
@@ -74,7 +81,7 @@ export interface StoryBylineProps {
  * At 320px the pen name stays on one line (an ellipsis), the meta line may
  * wrap, and the row grows rather than clips (min-height, never height).
  */
-export function StoryByline({ author, anonymous = false, minutes, published, actions, className }: StoryBylineProps) {
+export function StoryByline({ author, anonymous = false, minutes, published, privateCard = false, actions, className }: StoryBylineProps) {
   const t = useTranslations('card');
   const tApp = useTranslations('app');
   return (
@@ -112,6 +119,15 @@ export function StoryByline({ author, anonymous = false, minutes, published, act
             <>
               {' · '}
               <CardPublishedDate published={published} />
+            </>
+          )}
+          {privateCard && (
+            <>
+              {' · '}
+              <span className={styles.private}>
+                <Icon name="lock" size={14} strokeWidth={INK} />
+                {t('private')}
+              </span>
             </>
           )}
         </p>

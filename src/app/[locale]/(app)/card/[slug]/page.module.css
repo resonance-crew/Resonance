@@ -1,3 +1,25 @@
+/* The article's own box: the window's width less the page's gutters, no 1200
+   cap — the grid inside it (.layout) centres the story's column and keeps the
+   rail beside it. Its top is the reading head (round 9 §2), measured from the
+   header's pen line — its wavy rule, HeaderChrome's HEADER_STROKE_Y (72.9 in
+   the 82 bar), 9 above the bar's box — never from the box: to the title's line
+   box --story-head-gap, to a cover's top edge --story-head-cover-gap. */
+.articleWrap {
+  --pen-line-y: calc(var(--app-header-h) - 9px);
+  padding: calc(var(--pen-line-y) + var(--story-head-gap)) var(--page-pad-x) clamp(40px, 6vw, 80px);
+}
+.articleWrap[data-head='cover'] {
+  padding-top: calc(var(--pen-line-y) + var(--story-head-cover-gap));
+}
+@media (max-width: 640px) {
+  .articleWrap {
+    padding-top: calc(var(--pen-line-y) + var(--story-head-gap-compact));
+  }
+  .articleWrap[data-head='cover'] {
+    padding-top: calc(var(--pen-line-y) + var(--story-head-cover-gap-compact));
+  }
+}
+
 /* The article grid: the story's column (--measure, 680) in the middle — the
    byline under the title names the author at every width (round 8 §10.1). A
    story without headings has no rail: its column is centred at every width.
@@ -61,6 +83,12 @@
     gap: 0;
   }
 }
+/* Below 1200 its author's own card has no end row (round 9 §3): its share and ⋯ are in the byline. */
+@media (max-width: 1199px) {
+  .endActions {
+    display: none;
+  }
+}
 
 /* Right rail: the story's contents; sticks while the article scrolls.
    It never runs past the window: a long ToC scrolls inside it (CardToc). */
@@ -102,6 +130,7 @@
   }
 
   .byline {
+    margin-top: var(--story-meta-gap-compact);
     margin-bottom: var(--story-lead-gap-compact);
   }
 

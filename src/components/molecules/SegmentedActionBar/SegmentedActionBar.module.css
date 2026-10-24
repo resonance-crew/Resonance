@@ -3,6 +3,9 @@
   display: inline-flex;
   align-items: stretch;
   max-width: 100%;
+  /* An icon-only segment's padding on either side, read by the bar as it weighs its steps (a plain
+     length there; anything else stands for the segment's own padding). */
+  --seg-icon-pad: auto;
 }
 
 .backdrop {
@@ -101,9 +104,13 @@
     padding-inline: clamp(8px, 2vw, 14px);
   }
 
+  .bar {
+    --seg-icon-pad: 16px;
+  }
+
   /* An icon alone takes only its own room, the words beside it the rest. */
   .seg[data-icon-only] {
     flex: none;
-    padding-inline: 16px;
+    padding-inline: var(--seg-icon-pad);
   }
 }

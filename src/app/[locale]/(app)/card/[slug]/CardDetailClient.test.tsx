@@ -20,8 +20,8 @@ const mockPush = vi.fn();
 const mockReplace = vi.fn();
 vi.mock('@/components/providers/AuthProvider', () => ({ useAuth: () => mockUseAuth() }));
 vi.mock('@/i18n/navigation', () => ({
-  Link: ({ href, children, className }: { href: string; children: ReactNode; className?: string }) => (
-    <a href={href} className={className}>
+  Link: ({ href, children, ...rest }: { href: string; children: ReactNode } & Record<string, unknown>) => (
+    <a href={href} {...rest}>
       {children}
     </a>
   ),
@@ -805,12 +805,30 @@ describe('the head: title, byline and actions', () => {
     expect(within(bylineRow()).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Manage card']);
   });
 
-  it('a draft’s meta line is its read time alone', async () => {
+  // Round 9 §1: a 私人卡 — never published, or published and kept private — is read on its page by its owner,
+  // which says no one else sees it and offers its pen where share would be.
+  it.each([
+    ['never published', { publishedAt: null }, '1 min · Private'],
+    ['published and kept private', { visibility: 'private' as const }, '1 min · Jan 1, 2026 · Private'],
+  ])('reads a 私人卡 (%s) to its owner: 🔒 私人卡 in the meta line, the pen before the ⋯', async (_, extra, meta) => {
     asOwner();
-    vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1', { publishedAt: null }));
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1', extra));
     renderPage({ slug: 'c1' });
     await screen.findByRole('heading', { level: 1 });
-    expect(metaLine().textContent).toBe('1 min');
+    expect(metaLine().textContent).toBe(meta);
+    const edit = within(bylineRow()).getByRole('link', { name: 'Edit' });
+    expect(edit).toHaveAttribute('href', '/write/c1');
+    const manage = within(bylineRow()).getByRole('button', { name: 'Manage card' });
+    expect(edit.compareDocumentPosition(manage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('says nothing of 私人卡 on a card readers have, and offers its pen only in the ⋯', async () => {
+    asOwner();
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1', { visibility: 'connections' }));
+    renderPage({ slug: 'c1' });
+    await screen.findByRole('heading', { level: 1 });
+    expect(metaLine().textContent).toBe('1 min · Jan 1, 2026');
+    expect(within(bylineRow()).queryByRole('link', { name: 'Edit' })).toBeNull();
   });
 
   it('shows its owner an anonymous card under the anonymous byline, shared by its id with a word on what sharing it may say', async () => {

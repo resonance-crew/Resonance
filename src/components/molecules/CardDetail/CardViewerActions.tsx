@@ -145,6 +145,8 @@ export function CardViewerActions({
       ),
       hoverOverlay: 'color-mix(in oklch, var(--color-terracotta) 14%, transparent)',
       onClick: onOpenNote,
+      // The third step (round 9 §3): only the verb keeps its words when even the bookmark's going isn't enough.
+      collapsibleLast: true,
     },
     {
       key: 'bookmark',

@@ -58,6 +58,19 @@
   color: var(--color-text-muted);
 }
 
+/* 🔒 私人卡 after the read time (and the date): the meta line's own muted ink and size; the lock sits on
+   the words' middle and never parts from them. */
+.private {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+.private svg {
+  flex: none;
+}
+
 /* Share, then the ⋯: at the row's far end, never squeezed. The glyphs' own
    hit areas part them under a coarse pointer (44px each). */
 .actions {

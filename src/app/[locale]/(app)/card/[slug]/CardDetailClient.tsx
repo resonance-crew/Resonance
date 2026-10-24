@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
+import { BareIconButton } from '@/components/atoms/BareIconButton/BareIconButton';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { TagPill } from '@/components/atoms/TagPill/TagPill';
 import { CardDetailSkeleton } from '@/components/molecules/CardDetail/CardDetailSkeleton';
@@ -44,15 +45,6 @@ const wrapStyle = {
     'calc(var(--app-header-h) + var(--page-pad-top)) var(--page-pad-x) var(--page-pad-bottom)',
 } as const;
 
-/**
- * The article's own box: the window's width less the page's gutters, no
- * 1200 cap — the grid inside it (page.module.css .layout) centres the
- * story's column and keeps the rail beside it. The sections under it keep
- * their 1200 box.
- */
-const articleWrapStyle = {
-  padding: 'calc(var(--app-header-h) + var(--page-pad-top)) var(--page-pad-x) clamp(40px, 6vw, 80px)',
-} as const;
 
 /**
  * Whether the card may show yet, for a reader who may have blocked its author.
@@ -117,6 +109,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   const locale = useLocale();
   const t = useTranslations('card');
   const tShare = useTranslations('share');
+  const tMe = useTranslations('me.actions');
 
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -160,9 +153,11 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
     setHeadings(tocHeadings(root));
   }, [story]);
 
+  // The article's box (page.module.css .articleWrap): the reading head from the header's pen line. The
+  // skeleton draws a cover, so it stands at a cover's depth.
   if (isLoading) {
     return (
-      <div style={articleWrapStyle}>
+      <div className={styles.articleWrap} data-head="cover">
         <CardDetailSkeleton />
       </div>
     );
@@ -212,6 +207,9 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   // anonymous one as well (its link names no one). Never by the viewer, a
   // connection or a block: sharing must not tell anyone anything.
   const shareable = !!card.publishedAt && card.visibility === 'public';
+  // A 私人卡 (round 9 §1): a card only its author sees — never published, or published and kept private.
+  // Its page is its owner's reader of it: the meta line says so, and its pen (where share would be) edits it.
+  const privateCard = isOwner && (!card.publishedAt || card.visibility === 'private');
 
   // The card's share and ⋯: under its title (the byline's end) and again at its story's end (round 8 §10.2).
   const cardActions = (
@@ -229,6 +227,16 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
           seed={hue + 5}
           // Its owner, sharing it from their own account, may give away that it is theirs.
           hint={isOwner && card.anonymous ? tShare('anonymousHint') : undefined}
+        />
+      )}
+      {privateCard && !trashed && (
+        <BareIconButton
+          icon="pen"
+          label={tMe('edit')}
+          href={`/write/${card.id}`}
+          iconSize={22}
+          tipAlign="end"
+          seed={hue + 7}
         />
       )}
       {isOwner && !trashed && (
@@ -279,7 +287,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
       aria-busy={held || undefined}
     >
       <ReadingProgress targetRef={storyRef} />
-      <div style={articleWrapStyle}>
+      <div className={styles.articleWrap} data-head={card.media?.url && !trashed ? 'cover' : 'title'}>
         <div className={styles.layout} data-contents={contents || undefined}>
           <article className={styles.article}>
             {trashed && <TrashedCardBanner card={card} focusTitle={trashedHere} />}
@@ -305,6 +313,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
               anonymous={card.anonymous}
               minutes={readMinutes(card.story)}
               published={published}
+              privateCard={privateCard}
               actions={cardActions}
             />
 

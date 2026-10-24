@@ -33,6 +33,13 @@ export interface SegmentSpec {
    */
   collapsible?: boolean;
   /**
+   * The third step (round 9 §3): this segment drops its words too, but only
+   * once the `collapsible` ones have and the bar still doesn't fit (320 wide,
+   * English, large text) — so only the verb keeps its words. Nothing ever
+   * overflows the bar's container for want of a step.
+   */
+  collapsibleLast?: boolean;
+  /**
    * Its action is on its way (B6, as OrganicButton's `loading`): a pen loop
    * in place of its icon (else just before its label), no click, aria-busy;
    * the segment keeps its size and colour.
@@ -71,6 +78,40 @@ function naturalWidth(seg: HTMLElement): number {
     0,
   );
   return px(cs.paddingLeft) + px(cs.paddingRight) + content + px(cs.columnGap) * Math.max(0, kids.length - 1);
+}
+
+/**
+ * A segment's width with its icon alone: the icon-only padding (the CSS's
+ * `--seg-icon-pad`, where it is a plain length — else the segment's own) on
+ * either side of what isn't its label.
+ */
+function iconOnlyWidth(seg: HTMLElement, iconPad: number): number {
+  const cs = getComputedStyle(seg);
+  const pad = Number.isFinite(iconPad) ? iconPad * 2 : (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+  const kids = Array.from(seg.children) as HTMLElement[];
+  const icons = kids.filter((k) => !k.hasAttribute('data-label'));
+  const content = icons.reduce((sum, k) => sum + k.getBoundingClientRect().width, 0);
+  return pad + content + (parseFloat(cs.columnGap) || 0) * Math.max(0, icons.length - 1);
+}
+
+/**
+ * How many steps a bar takes to fit `room` (round 9 §3): 0 every label shown,
+ * 1 the `collapsible` segments' icons alone, 2 the `collapsibleLast` ones' too.
+ * `widths` are each segment's natural and icon-only widths.
+ */
+export function collapseStep(
+  room: number,
+  widths: { natural: number; iconOnly: number; collapsible?: boolean; collapsibleLast?: boolean }[],
+): 0 | 1 | 2 {
+  if (room <= 0) return 0;
+  const need = (step: number) =>
+    widths.reduce(
+      (sum, w) => sum + ((w.collapsible && step >= 1) || (w.collapsibleLast && step >= 2) ? w.iconOnly : w.natural),
+      0,
+    );
+  if (need(0) <= room + 0.5) return 0;
+  if (!widths.some((w) => w.collapsibleLast) || need(1) <= room + 0.5) return 1;
+  return 2;
 }
 
 // A gently wobbly vertical boundary, returned as a point list so the fill edge
@@ -129,9 +170,13 @@ export function SegmentedActionBar({
   const [hovered, setHovered] = useState<number | null>(null);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const maskId = useId().replace(/:/g, '');
-  // Too narrow for every label: the collapsible segments show their icon alone.
-  const [tight, setTight] = useState(false);
-  const collapsible = segments.some((s) => s.collapsible);
+  // Too narrow for every label: the collapsible segments show their icon alone (step 1), then the
+  // collapsibleLast ones too (step 2) — the verb always keeps its words.
+  const [tight, setTight] = useState<0 | 1 | 2>(0);
+  const collapsible = segments.some((s) => s.collapsible || s.collapsibleLast);
+  // Read in the measuring callback, which must not change with every render's segment objects.
+  const specs = useRef(segments);
+  specs.current = segments;
 
   const fit = useCallback(() => {
     const bar = barRef.current;
@@ -141,8 +186,14 @@ export function SegmentedActionBar({
     // bar's own width, which shrinks with the words it hides.
     const cs = getComputedStyle(box);
     const room = box.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
-    const need = segRefs.current.reduce((sum, el) => sum + (el ? naturalWidth(el) : 0), 0);
-    const next = room > 0 && need > room + 0.5;
+    const iconPad = parseFloat(getComputedStyle(bar).getPropertyValue('--seg-icon-pad'));
+    const widths = segRefs.current.map((el, i) => ({
+      natural: el ? naturalWidth(el) : 0,
+      iconOnly: el ? iconOnlyWidth(el, iconPad) : 0,
+      collapsible: specs.current[i]?.collapsible,
+      collapsibleLast: specs.current[i]?.collapsibleLast,
+    }));
+    const next = collapseStep(room, widths);
     setTight((cur) => (cur === next ? cur : next));
   }, [collapsible]);
 
@@ -311,7 +362,7 @@ export function SegmentedActionBar({
           aria-busy={s.loading || undefined}
           aria-disabled={s.loading || undefined}
           className={styles.seg}
-          data-icon-only={(s.collapsible && tight) || undefined}
+          data-icon-only={(s.collapsible && tight >= 1) || (s.collapsibleLast && tight >= 2) || undefined}
           style={{ color: s.textColor ?? 'var(--button-on-tonal)' }}
         >
           {s.loading && s.icon ? <ButtonLoader size={iconBox} /> : s.icon}

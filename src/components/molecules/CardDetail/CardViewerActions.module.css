@@ -28,6 +28,15 @@
     gap: 0;
   }
 }
+/* Below 1200 the end row is the response bar alone (round 9 §3): the card's
+   share and ⋯ are in its byline (and the header's), and beside a bar that
+   already gives way on a narrow screen they only crowd it. At the desktop's
+   width, far from the byline after a long story, they stay. */
+@media (max-width: 1199px) {
+  .trailing {
+    display: none;
+  }
+}
 
 /* The viewer's own answer is still being read: nothing to press yet, so a
    second answer can't be started in passing. */

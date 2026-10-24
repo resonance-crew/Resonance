@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, userEvent } from '@/../test/render';
 import { mockElementSize, penLines } from '@/../test/organic';
-import { SegmentedActionBar, type SegmentSpec } from './SegmentedActionBar';
+import { SegmentedActionBar, collapseStep, type SegmentSpec } from './SegmentedActionBar';
 
 // The bar measures itself and its segments before it draws.
 mockElementSize(120, 44);
@@ -131,6 +131,29 @@ describe('SegmentedActionBar', () => {
       expect(screen.getByRole('button', { name: 'Save' })).not.toHaveAttribute('data-icon-only');
     });
 
+    // Round 9 §3: a third step when the bookmark's going isn't enough (320 wide, English, large text) —
+    // the note drops its words too, so only the verb keeps its own; nothing ever overflows.
+    const threeSteps = (): SegmentSpec[] =>
+      segments().map((s) =>
+        s.key === 'bookmark' ? { ...s, collapsible: true } : s.key === 'note' ? { ...s, collapsibleLast: true } : s,
+      );
+
+    it('takes the second step only while the first one leaves the row too narrow', () => {
+      // 96 + 136 + 16 = 248px with the bookmark's icon alone.
+      layout(260);
+      render(<SegmentedActionBar segments={threeSteps()} />);
+      expect(screen.getByRole('button', { name: 'Bookmark' })).toHaveAttribute('data-icon-only');
+      expect(screen.getByRole('button', { name: 'Leave a note' })).not.toHaveAttribute('data-icon-only');
+    });
+
+    it('leaves the verb its words alone at the last step, every hidden word still a name', () => {
+      layout(200);
+      render(<SegmentedActionBar segments={threeSteps()} />);
+      expect(screen.getByRole('button', { name: 'Bookmark' })).toHaveAttribute('data-icon-only');
+      expect(screen.getByRole('button', { name: 'Leave a note' })).toHaveAttribute('data-icon-only');
+      expect(screen.getByRole('button', { name: 'Resonate' })).not.toHaveAttribute('data-icon-only');
+    });
+
     // Every pointer move over the bar re-renders it (the hover wash follows
     // the pointer); weighing the room reads style and layout, so it waits for
     // a resize or new segments rather than running on each move.
@@ -180,5 +203,26 @@ describe('SegmentedActionBar in progress', () => {
     expect(label).toHaveAttribute('data-loading-shift');
     expect(label.style.getPropertyValue('--loader-shift')).toBe('11px');
     expect(label.querySelector('[data-button-loader]')).toHaveAttribute('width', '16');
+  });
+});
+
+describe('collapseStep', () => {
+  const w = (natural: number, iconOnly: number, extra: Partial<{ collapsible: boolean; collapsibleLast: boolean }> = {}) => ({
+    natural,
+    iconOnly,
+    ...extra,
+  });
+  const bar = [w(120, 40), w(150, 44, { collapsibleLast: true }), w(110, 44, { collapsible: true })];
+  it('weighs every label, then the collapsible icons, then the last ones', () => {
+    expect(collapseStep(400, bar)).toBe(0);
+    expect(collapseStep(320, bar)).toBe(1);
+    expect(collapseStep(300, bar)).toBe(2);
+    // Past the last step nothing more gives way (and nothing pretends to).
+    expect(collapseStep(100, bar)).toBe(2);
+    // No room known yet (unmeasured): every label.
+    expect(collapseStep(0, bar)).toBe(0);
+  });
+  it('stops at the first step when no segment collapses last', () => {
+    expect(collapseStep(100, [w(120, 40), w(110, 44, { collapsible: true })])).toBe(1);
   });
 });
