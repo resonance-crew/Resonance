@@ -2,6 +2,33 @@
   margin-bottom: 40px;
 }
 
+/* One row (round 8 §10.2): the response bar at its start — it gives way first
+   on a phone (its bookmark drops its words) — and the card's share and ⋯ at
+   its end, right-aligned, never squeezed. */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bar {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.trailing {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+@media (pointer: coarse) {
+  .trailing {
+    gap: 0;
+  }
+}
+
 /* The viewer's own answer is still being read: nothing to press yet, so a
    second answer can't be started in passing. */
 .bar[data-waiting] {

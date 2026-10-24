@@ -34,3 +34,14 @@ describe('tocHeadings', () => {
     ]);
   });
 });
+
+describe('storyHasContents', () => {
+  it('is whether the story has a heading of its own — never one in a code fence', async () => {
+    const { storyHasContents } = await import('./CardToc');
+    expect(storyHasContents('## 那年夏天\n\n內文')).toBe(true);
+    expect(storyHasContents('前言\n\n   ### 小標\n')).toBe(true);
+    expect(storyHasContents('沒有標題的故事')).toBe(false);
+    expect(storyHasContents('#標籤 不是標題')).toBe(false);
+    expect(storyHasContents('```\n## 不是標題\n```\n內文')).toBe(false);
+  });
+});

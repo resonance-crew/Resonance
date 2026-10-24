@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Modal } from '@/components/molecules/Modal/Modal';
 import { NoteComposer } from '@/components/molecules/NoteComposer/NoteComposer';
@@ -16,6 +16,8 @@ export interface ReadAfterAreaProps {
   referenceCardId?: string;
   author: { id: string; handle: string; initials: string; accentColor: string };
   coreInsight?: string;
+  /** What ends the response row, aligned right: the card's share and ⋯ (round 8 §10.2). */
+  trailing?: ReactNode;
 }
 
 /**
@@ -28,7 +30,7 @@ export interface ReadAfterAreaProps {
  * Also the junction for the up/downgrade paths: note ↔ resonance drafts move
  * in both directions, so choosing the wrong door costs nothing.
  */
-export function ReadAfterArea({ cardId, cardTitle, referenceCardId, author }: ReadAfterAreaProps) {
+export function ReadAfterArea({ cardId, cardTitle, referenceCardId, author, trailing }: ReadAfterAreaProps) {
   const t = useTranslations('card.note');
   const router = useRouter();
   const { user, loading } = useAuth();
@@ -98,6 +100,7 @@ export function ReadAfterArea({ cardId, cardTitle, referenceCardId, author }: Re
         referenceCardId={referenceCardId}
         author={author}
         onOpenNote={() => openNote()}
+        trailing={trailing}
       />
 
       {user && (

@@ -54,7 +54,7 @@ describe('StoryByline', () => {
     expect(css).toMatch(/\.handle \{[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap;/);
     expect(css).not.toMatch(/\.meta \{[^}]*nowrap/);
     expect(css).toMatch(/\.actions \{[^}]*flex: none;/);
-    // From 901px the rail names the author: the row keeps its meta line.
-    expect(css).toMatch(/@media \(min-width: 901px\) \{\s*\.avatar,\s*\.name \{\s*display: none;/);
+    // The row names the author at every width (round 8 §10.1): nothing hides the avatar or the pen name.
+    expect(css).not.toMatch(/\.(avatar|name)[^{]*\{[^}]*display: none/);
   });
 });

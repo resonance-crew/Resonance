@@ -218,7 +218,7 @@ public nonisolated enum Tokens {
     /// --story-byline-avatar
     public static let storyBylineAvatar: CGFloat = 40
     /// --story-rail-gap
-    public static let storyRailGap: CGFloat = 48
+    public static let storyRailGap: CGFloat = 80
     /// --radius-sm
     public static let radiusSm: CGFloat = 12
     /// --radius-md

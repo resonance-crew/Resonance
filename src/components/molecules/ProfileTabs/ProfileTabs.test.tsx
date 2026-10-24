@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderWithIntl, screen, userEvent } from '@/../test/render';
+import { renderWithIntl, screen, userEvent, waitFor } from '@/../test/render';
 import type { Card, User } from '@/lib/db/types';
 
 vi.mock('@/components/providers/AuthProvider', () => ({
@@ -217,7 +217,7 @@ describe('ProfileTabs — the trash', () => {
     expect(screen.queryByText('When an anonymous card goes to the trash, the notes left on it are deleted')).toBeNull();
     expect(screen.getByText('Public again when restored · Deleted forever in 23 days')).toBeInTheDocument();
     expect(screen.getByText('Draft · Deleted forever in 29 days')).toBeInTheDocument();
-    expect(screen.getByText('Private · Deleted forever within a day')).toBeInTheDocument();
+    expect(screen.getByText('Draft · Deleted forever within a day')).toBeInTheDocument();
     expect(screen.getByText('Connections only when restored · Deleted forever in 23 days')).toBeInTheDocument();
     // A published card opens its page (its banner), a draft the writer (its notice).
     expect(screen.getAllByText('Thought public-one')[0].closest('a')).toHaveAttribute('href', '/card/public-one');
@@ -235,6 +235,22 @@ describe('ProfileTabs — the trash', () => {
     expect(verb).toHaveAttribute('data-variant', 'danger');
     await userEvent.click(verb);
     expect(mockEmptyTrash).toHaveBeenCalledTimes(1);
+  });
+
+  // The server deleted everything, then the answer was lost (a 500 after the deletes, a timeout): the trash read
+  // again is empty, so the question goes as if it had worked — never stuck saying it didn't (round 8 §6.2).
+  it('lets an emptying that failed go once the trash read again is empty, and keeps the question while cards are left', async () => {
+    mockEmptyTrash.mockRejectedValueOnce(new Error('timeout'));
+    const data = { trash: [inTrash('public-one', { publishedAt: new Date('2026-09-01') })] };
+    const view = renderWithIntl(<ProfileTabs manageable tabs={['trash']} authors={{ me }} data={data} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Empty trash' }));
+    await userEvent.click(Array.from(screen.getByRole('dialog').querySelectorAll('button')).find((b) => b.textContent === 'Empty trash')!);
+    // Still holding a card: the question stays, saying it didn't go through.
+    expect(await screen.findByRole('alert')).toHaveTextContent("That didn't work — try again");
+    // Read again, empty: the question is gone and the empty state shows.
+    view.rerender(<ProfileTabs manageable tabs={['trash']} authors={{ me }} data={{ trash: [] }} />);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('heading', { level: 2, name: 'The trash is empty' })).toBeInTheDocument();
   });
 
   it('says the notes on an anonymous card went with it, while one is there', () => {

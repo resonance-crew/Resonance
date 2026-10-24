@@ -8,11 +8,10 @@ import { CardDetailSkeleton } from '@/components/molecules/CardDetail/CardDetail
 import { LoadError } from '@/components/molecules/LoadError/LoadError';
 import { CardLinkGrid } from '@/components/molecules/CardLinkGrid/CardLinkGrid';
 import { MiniCardGrid } from '@/components/molecules/MiniStoryCard/MiniCardGrid';
-import { CardAuthorAside } from '@/components/molecules/CardDetail/CardAuthorAside';
 import { publishedDate } from '@/lib/publishedDate';
 import { readMinutes } from '@/lib/readTime';
 import { storyType } from '@/lib/text/script';
-import { CardToc, tocHeadings, type TocHeading } from '@/components/molecules/CardDetail/CardToc';
+import { CardToc, storyHasContents, tocHeadings, type TocHeading } from '@/components/molecules/CardDetail/CardToc';
 import { LatinMarkText } from '@/components/molecules/CardDetail/LatinMarkText';
 import { StoryByline } from '@/components/molecules/CardDetail/StoryByline';
 import { ShareMenu } from '@/components/molecules/ShareMenu/ShareMenu';
@@ -206,11 +205,69 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   const hasResonance = resonances.cards.length > 0;
   // How the title and story are set (src/styles/story.css), read off both together, the same on the server and here.
   const type = storyType(card.thoughtCore, card.story);
+  // Whether the story has a contents list beside it, read off its Markdown: the column is laid out once, in the
+  // server's HTML too — centred alone, or beside the rail.
+  const contents = storyHasContents(card.story);
   // Only a published, public card can be opened by whoever gets its link; an
   // anonymous one as well (its link names no one). Never by the viewer, a
   // connection or a block: sharing must not tell anyone anything.
   const shareable = !!card.publishedAt && card.visibility === 'public';
 
+  // The card's share and ⋯: under its title (the byline's end) and again at its story's end (round 8 §10.2).
+  const cardActions = (
+    <>
+      {shareable && !trashed && (
+        <ShareMenu
+          target={{
+            kind: 'card',
+            id: card.id,
+            slug: card.slug,
+            title: card.thoughtCore,
+            anonymous: !!card.anonymous,
+            handle: card.anonymous ? undefined : author.handle,
+          }}
+          seed={hue + 5}
+          // Its owner, sharing it from their own account, may give away that it is theirs.
+          hint={isOwner && card.anonymous ? tShare('anonymousHint') : undefined}
+        />
+      )}
+      {isOwner && !trashed && (
+        <CardActionsMenu
+          card={{
+            id: card.id,
+            visibility: card.visibility,
+            slug: card.slug,
+            referenceCardId: card.referenceCardId,
+            title: card.thoughtCore,
+            published: !!card.publishedAt,
+            anonymous: card.anonymous === true,
+          }}
+          // The card it resonates with heads the resonance list, when the viewer may read it.
+          referenceTitle={resonances.cards.find((c) => c.id === card.referenceCardId)?.thoughtCore}
+          referenceAnonymous={resonances.cards.find((c) => c.id === card.referenceCardId)?.anonymous}
+          seed={hue + 3}
+          bare
+          // Re-read this card so the visibility chip/state reflects the change.
+          onChanged={() => void mutate(cardKey(slug, user!.id))}
+          // Moved to the trash: the page stays, and shows its banner (the card read again).
+          trashFeedback="page"
+          onTrashed={() => {
+            setTrashedHere(true);
+            void mutate(cardKey(slug, user!.id));
+          }}
+        />
+      )}
+      {/* Someone else's anonymous card names no author: it can be reported, not its author blocked. */}
+      {user && !isOwner && (card.authorId || (card.anonymous && !fromServer)) && (
+        <CardSafetyMenu
+          card={{ id: card.id, authorId: card.authorId, anonymous: card.anonymous }}
+          authorHandle={author.handle}
+          seed={hue + 3}
+          bare
+        />
+      )}
+    </>
+  );
   const held = gate === 'hold';
   return (
     <div
@@ -223,7 +280,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
     >
       <ReadingProgress targetRef={storyRef} />
       <div style={articleWrapStyle}>
-        <div className={styles.layout}>
+        <div className={styles.layout} data-contents={contents || undefined}>
           <article className={styles.article}>
             {trashed && <TrashedCardBanner card={card} focusTitle={trashedHere} />}
             {card.media?.url && (
@@ -248,60 +305,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
               anonymous={card.anonymous}
               minutes={readMinutes(card.story)}
               published={published}
-              actions={
-                <>
-                  {shareable && !trashed && (
-                    <ShareMenu
-                      target={{
-                        kind: 'card',
-                        id: card.id,
-                        slug: card.slug,
-                        title: card.thoughtCore,
-                        anonymous: !!card.anonymous,
-                        handle: card.anonymous ? undefined : author.handle,
-                      }}
-                      seed={hue + 5}
-                      // Its owner, sharing it from their own account, may give away that it is theirs.
-                      hint={isOwner && card.anonymous ? tShare('anonymousHint') : undefined}
-                    />
-                  )}
-                  {isOwner && !trashed && (
-                    <CardActionsMenu
-                      card={{
-                        id: card.id,
-                        visibility: card.visibility,
-                        slug: card.slug,
-                        referenceCardId: card.referenceCardId,
-                        title: card.thoughtCore,
-                        published: !!card.publishedAt,
-                        anonymous: card.anonymous === true,
-                      }}
-                      // The card it resonates with heads the resonance list, when the viewer may read it.
-                      referenceTitle={resonances.cards.find((c) => c.id === card.referenceCardId)?.thoughtCore}
-                      referenceAnonymous={resonances.cards.find((c) => c.id === card.referenceCardId)?.anonymous}
-                      seed={hue + 3}
-                      bare
-                      // Re-read this card so the visibility chip/state reflects the change.
-                      onChanged={() => void mutate(cardKey(slug, user!.id))}
-                      // Moved to the trash: the page stays, and shows its banner (the card read again).
-                      trashFeedback="page"
-                      onTrashed={() => {
-                        setTrashedHere(true);
-                        void mutate(cardKey(slug, user!.id));
-                      }}
-                    />
-                  )}
-                  {/* Someone else's anonymous card names no author: it can be reported, not its author blocked. */}
-                  {user && !isOwner && (card.authorId || (card.anonymous && !fromServer)) && (
-                    <CardSafetyMenu
-                      card={{ id: card.id, authorId: card.authorId, anonymous: card.anonymous }}
-                      authorHandle={author.handle}
-                      seed={hue + 3}
-                      bare
-                    />
-                  )}
-                </>
-              }
+              actions={cardActions}
             />
 
             <div ref={storyRef} className={styles.story}>
@@ -323,18 +327,24 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
               ))}
             </div>
 
-            <ReadAfterArea
-              cardId={card.id}
-              cardTitle={card.thoughtCore}
-              referenceCardId={card.referenceCardId}
-              author={{
-                id: author.id,
-                handle: author.handle,
-                initials: author.initials,
-                accentColor: author.accentColor,
-              }}
-              coreInsight={card.signature?.coreInsight}
-            />
+            {/* The story's end: the response row, the card's share and ⋯ at its end — its author's alone. */}
+            {isOwner ? (
+              <div className={styles.endActions}>{cardActions}</div>
+            ) : (
+              <ReadAfterArea
+                cardId={card.id}
+                cardTitle={card.thoughtCore}
+                referenceCardId={card.referenceCardId}
+                author={{
+                  id: author.id,
+                  handle: author.handle,
+                  initials: author.initials,
+                  accentColor: author.accentColor,
+                }}
+                coreInsight={card.signature?.coreInsight}
+                trailing={cardActions}
+              />
+            )}
 
             {!trashed && linked && linked.cards.length > 0 && (
               <section style={{ marginBottom: 40 }}>
@@ -345,15 +355,12 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
 
           </article>
 
-          <aside className={styles.aside}>
-            <CardAuthorAside
-              author={author}
-              verifiedLabel={t('verified')}
-              anonymous={card.anonymous}
-              isOwner={isOwner}
-            />
-            <CardToc headings={headings} title={t('toc')} />
-          </aside>
+          {/* The rail holds the story's contents alone (the byline names the author): only a story with headings has one. */}
+          {contents && (
+            <aside className={styles.aside}>
+              <CardToc headings={headings} title={t('toc')} />
+            </aside>
+          )}
         </div>
       </div>
       {isOwner && <RestoredAloneNotice />}

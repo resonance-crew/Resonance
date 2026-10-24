@@ -89,6 +89,8 @@ export function ProfileTabs({
     } catch {
       // Storage blocked: start on the first tab.
     }
+    // The 私人卡 shelf is part of 草稿 now (round 8 §1.1): one left on it opens 草稿.
+    if (saved === 'private' && !tabs.includes('private') && tabs.includes('draft')) saved = 'draft';
     if (saved && saved !== 'thoughtMap' && tabs.includes(saved)) setActiveState(saved);
     setRestored(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
