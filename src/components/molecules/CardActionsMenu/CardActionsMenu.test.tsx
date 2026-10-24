@@ -114,7 +114,7 @@ describe('CardActionsMenu', () => {
     await waitFor(() => expect(boxReads).toHaveBeenCalledTimes(1));
 
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
-    await userEvent.click(screen.getByText('Make private'));
+    await userEvent.click(screen.getByText('Move to drafts'));
 
     await waitFor(() =>
       expect(mockCallApi).toHaveBeenCalledWith('/api/v1/cards/c1', { method: 'PATCH', body: { visibility: 'private' } }),
@@ -130,28 +130,16 @@ describe('CardActionsMenu', () => {
     expect(screen.queryByRole('menu')).toBeNull();
   });
 
-  it('offers Make public on a private card', async () => {
-    renderMenu(<CardActionsMenu card={{ id: 'c2', visibility: 'private' }} />);
-
+  // A 草稿 is published from the writer's step, never from here — one kept private as much as a draft (round 8 §1.2).
+  it.each([
+    ['a private card', { id: 'c2', visibility: 'private' as const }],
+    ['a private anonymous card', { id: 'c2', visibility: 'private' as const, anonymous: true }],
+  ])('offers nothing to make %s public', async (_what, card) => {
+    renderMenu(<CardActionsMenu card={{ ...card, published: true }} />);
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
-    await userEvent.click(screen.getByText('Make public'));
-
-    await waitFor(() =>
-      expect(mockCallApi).toHaveBeenCalledWith('/api/v1/cards/c2', { method: 'PATCH', body: { visibility: 'public' } }),
-    );
-  });
-
-  // Made public again, an anonymous card stays anonymous (only its visibility changes): the verb says so.
-  it('offers Make public anonymously on a private anonymous card', async () => {
-    renderMenu(<CardActionsMenu card={{ id: 'c2', visibility: 'private', anonymous: true }} />);
-
-    await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Edit', 'Delete']);
     expect(screen.queryByText('Make public')).toBeNull();
-    await userEvent.click(screen.getByText('Make public anonymously'));
-
-    await waitFor(() =>
-      expect(mockCallApi).toHaveBeenCalledWith('/api/v1/cards/c2', { method: 'PATCH', body: { visibility: 'public' } }),
-    );
+    expect(screen.queryByText('Make public anonymously')).toBeNull();
   });
 
   // A draft publishes nothing from here: its audience is chosen in the writer's publish step.
@@ -166,10 +154,9 @@ describe('CardActionsMenu', () => {
   });
 
   it.each([
-    ['a published public card', { id: 'c1', visibility: 'public' as const }, 'Make private'],
-    ['a published private card', { id: 'c2', visibility: 'private' as const }, 'Make public'],
-    ['a published private anonymous card', { id: 'c2', visibility: 'private' as const, anonymous: true }, 'Make public anonymously'],
-  ])('keeps the visibility row on %s', async (_what, card, row) => {
+    ['a published public card', { id: 'c1', visibility: 'public' as const }, 'Move to drafts'],
+    ['a published card kept for connections', { id: 'c3', visibility: 'connections' as const }, 'Move to drafts'],
+  ])('offers 轉為草稿 on %s', async (_what, card, row) => {
     renderMenu(<CardActionsMenu card={{ ...card, published: true }} />);
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
     expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Edit', row, 'Delete']);
@@ -310,7 +297,7 @@ describe('CardActionsMenu', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
     expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual([
       'Edit',
-      'Make private',
+      'Move to drafts',
       'Stop resonating',
       'Delete',
     ]);
@@ -391,7 +378,7 @@ describe('CardActionsMenu', () => {
 
   // A take-back by another way: hiding or deleting a resonance can end the connection with the original's author.
   it.each([
-    ['making it private', 'Make private', null],
+    ['making it private', 'Move to drafts', null],
     ['moving it to the trash', 'Delete', 'Move to trash'],
   ])('reads again what turns on the viewer’s connections after %s', async (_how, item, confirm) => {
     renderMenu(<CardActionsMenu card={reaching} referenceTitle="A walk" referenceAnonymous={false} />);
@@ -413,7 +400,7 @@ describe('CardActionsMenu', () => {
     renderMenu(<CardActionsMenu card={{ id: 'c1', visibility: 'public' }} />);
     await waitFor(() => expect(connectionReads.people).toHaveBeenCalledTimes(1));
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
-    await userEvent.click(screen.getByText('Make private'));
+    await userEvent.click(screen.getByText('Move to drafts'));
     await waitFor(() => expect(boxReads).toHaveBeenCalledTimes(2));
     expect(connectionReads.people).toHaveBeenCalledTimes(1);
   });
@@ -434,9 +421,9 @@ describe('CardActionsMenu', () => {
     renderMenu(<CardActionsMenu card={{ id: 'c1', visibility: 'public' }} onChanged={onChanged} />);
     await waitFor(() => expect(boxReads).toHaveBeenCalledTimes(1));
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
-    await userEvent.click(screen.getByText('Make private'));
+    await userEvent.click(screen.getByText('Move to drafts'));
 
-    const notice = await screen.findByRole('dialog', { name: 'Make private' });
+    const notice = await screen.findByRole('dialog', { name: 'Move to drafts' });
     expect(notice).toHaveTextContent("That didn't work — try again");
     expect(onChanged).not.toHaveBeenCalled();
     expect(boxReads).toHaveBeenCalledTimes(1);

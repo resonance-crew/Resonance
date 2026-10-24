@@ -27,11 +27,12 @@ vi.mock('firebase/firestore/lite', () => ({
   },
 }));
 
-import { getDoc, getDocs } from 'firebase/firestore/lite';
+import { getDoc, getDocs, Timestamp } from 'firebase/firestore/lite';
 import {
   forgetCachedUser,
   getCardById,
   getCardsByAuthor,
+  getMyDrafts,
   getCurrentUserProfile,
   getLatestPublishedFeed,
   getPublicCardsByAuthor,
@@ -274,5 +275,44 @@ describe('getCardsByAuthor: the card box shelves read through the rules', () => 
     const docs = Array.from({ length: 60 }, (_, i) => doc(`p${i}`, { visibility: 'private', publishedAt: published }));
     vi.mocked(getDocs).mockResolvedValue({ docs } as never);
     expect(await getCardsByAuthor('me', 'private')).toHaveLength(40);
+  });
+});
+
+describe('getMyDrafts: the 草稿 shelf — drafts and the cards kept private, together', () => {
+  beforeEach(() => vi.clearAllMocks());
+  const published = new Date('2026-09-01T08:00:00Z');
+  const stamp = (iso: string) =>
+    Object.assign(new (Timestamp as unknown as new () => object)(), { toMillis: () => Date.parse(iso), toDate: () => new Date(iso) });
+  const doc = (id: string, data: Record<string, unknown>) => ({ id, data: () => ({ authorId: 'me', thoughtCore: id, story: '', ...data }) });
+  const trashed = { trashedAt: new Date('2026-10-01T08:00:00Z'), trashedFrom: { visibility: 'public', referenceCardId: null } };
+
+  it('reads the draft and private shelves’ own queries and lists their cards as one, the most recently changed first', async () => {
+    const privateDraft = doc('draft-kept-private', { publishedAt: null, visibility: 'private', updatedAt: stamp('2026-10-20T00:00:00Z') });
+    vi.mocked(getDocs)
+      .mockResolvedValueOnce({
+        docs: [doc('draft-old', { publishedAt: null, visibility: 'public', updatedAt: stamp('2026-10-01T00:00:00Z') }), privateDraft],
+      } as never)
+      .mockResolvedValueOnce({
+        docs: [
+          doc('trashed', { publishedAt: published, visibility: 'private', updatedAt: stamp('2026-10-30T00:00:00Z'), ...trashed }),
+          doc('kept-private', { publishedAt: published, visibility: 'private', updatedAt: stamp('2026-10-10T00:00:00Z') }),
+          // A private draft answers both queries: listed once.
+          privateDraft,
+        ],
+      } as never);
+    expect((await getMyDrafts('me')).map((c) => c.id)).toEqual(['draft-kept-private', 'kept-private', 'draft-old']);
+    const asked = vi.mocked(getDocs).mock.calls.map(([q]) => (q as unknown as { filters: unknown[] }).filters);
+    expect(asked[0]).toContainEqual({ field: 'publishedAt', op: '==', value: null });
+    expect(asked[1]).toContainEqual({ field: 'visibility', op: 'in', value: ['private'] });
+  });
+
+  it('keeps the newest forty', async () => {
+    const drafts = Array.from({ length: 30 }, (_, i) => doc(`d${i}`, { publishedAt: null, updatedAt: stamp(`2026-10-${String(i + 1).padStart(2, '0')}T00:00:00Z`) }));
+    const kept = Array.from({ length: 30 }, (_, i) => doc(`p${i}`, { publishedAt: published, visibility: 'private', updatedAt: stamp(`2026-09-${String(i + 1).padStart(2, '0')}T00:00:00Z`) }));
+    vi.mocked(getDocs).mockResolvedValueOnce({ docs: drafts } as never).mockResolvedValueOnce({ docs: kept } as never);
+    const cards = await getMyDrafts('me');
+    expect(cards).toHaveLength(40);
+    expect(cards[0].id).toBe('d29');
+    expect(cards.at(-1)!.id).toBe('p20');
   });
 });

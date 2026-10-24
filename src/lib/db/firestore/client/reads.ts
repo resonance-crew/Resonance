@@ -239,6 +239,32 @@ export async function getCardsByAuthor(authorId: string, tab: CardBoxTab): Promi
     .slice(0, BOX_LIMIT);
 }
 
+/**
+ * The card box's 草稿 shelf (round 8 §1.1): the viewer's cards no one else
+ * reads — drafts never published and published cards kept private, which are
+ * drafts to their author — the most recently changed first, at most
+ * BOX_LIMIT. The two reads are the draft and private shelves' own (no new
+ * index); a card in the trash is on the trash shelf alone.
+ */
+export async function getMyDrafts(authorId: string): Promise<Card[]> {
+  const db = getClientDb();
+  const own = [collection(db, 'cards'), where('authorId', '==', authorId)] as const;
+  const [drafts, kept] = await Promise.all([
+    getDocs(query(...own, where('publishedAt', '==', null), fbLimit(DRAFT_SCAN))),
+    getDocs(query(...own, where('visibility', 'in', ['private']), orderBy('publishedAt', 'desc'), fbLimit(BOX_LIMIT * 2))),
+  ]);
+  const edited = (d: (typeof drafts.docs)[number]) => {
+    const at = d.data().updatedAt;
+    return at instanceof Timestamp ? at.toMillis() : 0;
+  };
+  const seen = new Set<string>();
+  return [...drafts.docs, ...kept.docs.filter((d) => d.data().publishedAt)]
+    .filter((d) => d.data().trashedAt == null && !seen.has(d.id) && seen.add(d.id))
+    .sort((a, b) => edited(b) - edited(a))
+    .slice(0, BOX_LIMIT)
+    .map((d) => mapCard(d.id, d.data()));
+}
+
 /** A card box shelf's size, and how many drafts are read to find the latest ones. */
 const BOX_LIMIT = 40;
 const DRAFT_SCAN = 200;
