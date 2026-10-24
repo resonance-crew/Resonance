@@ -556,6 +556,8 @@ object L10n {
         val related: String get() = Strings.string("card.related")
         /** Contents */
         val toc: String get() = Strings.string("card.toc")
+        /** Table */
+        val table: String get() = Strings.string("card.table")
         object AuthorMetrics {
             /** Only you see this */
             val title: String get() = Strings.string("card.authorMetrics.title")
@@ -570,7 +572,7 @@ object L10n {
         val verified: String get() = Strings.string("card.verified")
         /** Share */
         val share: String get() = Strings.string("card.share")
-        /** Private */
+        /** Draft */
         val private: String get() = Strings.string("card.private")
         /** Connections only */
         val connections: String get() = Strings.string("card.connections")
@@ -619,6 +621,8 @@ object L10n {
         object Image {
             /** Couldn’t open Instagram */
             val storiesFailed: String get() = Strings.string("share.image.storiesFailed")
+            /** Link copied. Add a Link sticker to your story and paste it, so people can tap through to the card. */
+            val storiesLinkCopied: String get() = Strings.string("share.image.storiesLinkCopied")
             /** Save image */
             val save: String get() = Strings.string("share.image.save")
             /** Image saved */
@@ -812,11 +816,13 @@ object L10n {
         val titleRequired: String get() = Strings.string("write.titleRequired")
         /** Next */
         val next: String get() = Strings.string("write.next")
+        /** Done */
+        val finish: String get() = Strings.string("write.finish")
         /** New card */
         val title: String get() = Strings.string("write.title")
         /** Edit draft */
         val editTitle: String get() = Strings.string("write.editTitle")
-        /** Edit a published card */
+        /** Edit card */
         val editPublishedTitle: String get() = Strings.string("write.editPublishedTitle")
         /** Hide the editor */
         val closeEditor: String get() = Strings.string("write.closeEditor")
@@ -943,7 +949,7 @@ object L10n {
         /** Change cover */
         val coverChange: String get() = Strings.string("write.coverChange")
         object Visibility {
-            /** Who can see */
+            /** Card type */
             val label: String get() = Strings.string("write.visibility.label")
             /** Public */
             val public: String get() = Strings.string("write.visibility.public")
@@ -951,6 +957,8 @@ object L10n {
             val connections: String get() = Strings.string("write.visibility.connections")
             /** Only me */
             val private: String get() = Strings.string("write.visibility.private")
+            /** Draft */
+            val draft: String get() = Strings.string("write.visibility.draft")
             /** Anonymous */
             val anonymous: String get() = Strings.string("write.visibility.anonymous")
             /** Anyone can read it, signed {handle} */
@@ -998,6 +1006,18 @@ object L10n {
         fun editBuffered(time: String): String = Strings.format("write.editBuffered", mapOf("time" to time))
         /** You have unsaved changes here — only you can see them */
         val editBufferedIdle: String get() = Strings.string("write.editBufferedIdle")
+        object Status {
+            /** Saving… */
+            val saving: String get() = Strings.string("write.status.saving")
+            /** Saved */
+            val saved: String get() = Strings.string("write.status.saved")
+            /** Saved privately */
+            val savedLive: String get() = Strings.string("write.status.savedLive")
+            /** Not saved */
+            val failed: String get() = Strings.string("write.status.failed")
+            /** {status} · {time} */
+            fun at(status: String, time: String): String = Strings.format("write.status.at", mapOf("status" to status, "time" to time))
+        }
         /** Save draft and leave */
         val saveDraftAndLeave: String get() = Strings.string("write.saveDraftAndLeave")
         /** Save changes */
@@ -1041,10 +1061,12 @@ object L10n {
             val failed: String get() = Strings.string("write.publishPanel.failed")
             /** That's the limit for today — try again tomorrow */
             val rateLimited: String get() = Strings.string("write.publishPanel.rateLimited")
-            /** Save this card */
+            /** Save draft */
             val saveTitle: String get() = Strings.string("write.publishPanel.saveTitle")
             /** Save */
             val save: String get() = Strings.string("write.publishPanel.save")
+            /** Move to drafts */
+            val makeDraft: String get() = Strings.string("write.publishPanel.makeDraft")
             /** Publish anonymously */
             val publishAnonymously: String get() = Strings.string("write.publishPanel.publishAnonymously")
             /** Couldn't save — try again */
@@ -1155,7 +1177,7 @@ object L10n {
         object TrashFrom {
             /** Draft */
             val draft: String get() = Strings.string("me.trashFrom.draft")
-            /** Private */
+            /** Draft */
             val private: String get() = Strings.string("me.trashFrom.private")
             /** Public again when restored */
             val public: String get() = Strings.string("me.trashFrom.public")
@@ -1173,7 +1195,7 @@ object L10n {
             val edit: String get() = Strings.string("me.actions.edit")
             /** Make public */
             val makePublic: String get() = Strings.string("me.actions.makePublic")
-            /** Make private */
+            /** Move to drafts */
             val makePrivate: String get() = Strings.string("me.actions.makePrivate")
             /** Make public anonymously */
             val makePublicAnonymous: String get() = Strings.string("me.actions.makePublicAnonymous")

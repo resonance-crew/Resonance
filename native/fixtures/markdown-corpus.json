@@ -110,6 +110,36 @@
       "id": "long-paragraph",
       "markdown": "水溫太高，粉也磨得太細，但那是第一次覺得早晨是屬於自己的。水溫太高，粉也磨得太細，但那是第一次覺得早晨是屬於自己的。The quiet after moving out was the loudest thing I had ever heard, and I kept it. 水溫太高，粉也磨得太細，但那是第一次覺得早晨是屬於自己的。",
       "canonical": "水溫太高，粉也磨得太細，但那是第一次覺得早晨是屬於自己的。水溫太高，粉也磨得太細，但那是第一次覺得早晨是屬於自己的。The quiet after moving out was the loudest thing I had ever heard, and I kept it. 水溫太高，粉也磨得太細，但那是第一次覺得早晨是屬於自己的。"
+    },
+    {
+      "id": "table-basic",
+      "markdown": "前言\n\n| 名稱 | 數量 |\n| --- | ---: |\n| 蘋果 | 3 |\n| 香蕉 | 12 |\n\n結尾",
+      "canonical": "前言\n\n| 名稱 | 數量 |\n| --- | ---: |\n| 蘋果 | 3 |\n| 香蕉 | 12 |\n\n結尾"
+    },
+    {
+      "id": "table-padded-and-marked",
+      "markdown": "| 地點     | 時間 | 心情   |\n|:---------|:----:|-------:|\n| **台北** | 早上 | 好     |\n| [高雄](https://example.com) | 晚上 | `普通` |",
+      "canonical": "| 地點     | 時間 | 心情   |\n|:---------|:----:|-------:|\n| **台北** | 早上 | 好     |\n| [高雄](https://example.com) | 晚上 | `普通` |"
+    },
+    {
+      "id": "table-escaped-pipe",
+      "markdown": "| 符號 | 意思 |\n| --- | --- |\n| a \\| b | 或 |",
+      "canonical": "| 符號 | 意思 |\n| --- | --- |\n| a \\| b | 或 |"
+    },
+    {
+      "id": "table-after-a-line",
+      "markdown": "下面是清單：\n| 項目 | 說明 |\n| --- | --- |\n| 一 | 第一項 |",
+      "canonical": "下面是清單：\n\n| 項目 | 說明 |\n| --- | --- |\n| 一 | 第一項 |"
+    },
+    {
+      "id": "table-in-quote",
+      "markdown": "> | 年 | 事 |\n> | --- | --- |\n> | 2024 | 搬家 |",
+      "canonical": "> | 年 | 事 |\n> | --- | --- |\n> | 2024 | 搬家 |"
+    },
+    {
+      "id": "table-then-text",
+      "markdown": "| a | b |\n| --- | --- |\n| 1 | 2 |\n\n表格之後的一段話。",
+      "canonical": "| a | b |\n| --- | --- |\n| 1 | 2 |\n\n表格之後的一段話。"
     }
   ]
 }

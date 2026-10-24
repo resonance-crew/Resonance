@@ -554,6 +554,8 @@ public enum L10n {
         public static var related: String { Strings.shared.string("card.related") }
         /// Contents
         public static var toc: String { Strings.shared.string("card.toc") }
+        /// Table
+        public static var table: String { Strings.shared.string("card.table") }
         public enum AuthorMetrics {
             /// Only you see this
             public static var title: String { Strings.shared.string("card.authorMetrics.title") }
@@ -568,7 +570,7 @@ public enum L10n {
         public static var verified: String { Strings.shared.string("card.verified") }
         /// Share
         public static var share: String { Strings.shared.string("card.share") }
-        /// Private
+        /// Draft
         public static var `private`: String { Strings.shared.string("card.private") }
         /// Connections only
         public static var connections: String { Strings.shared.string("card.connections") }
@@ -617,6 +619,8 @@ public enum L10n {
         public enum Image {
             /// Couldn’t open Instagram
             public static var storiesFailed: String { Strings.shared.string("share.image.storiesFailed") }
+            /// Link copied. Add a Link sticker to your story and paste it, so people can tap through to the card.
+            public static var storiesLinkCopied: String { Strings.shared.string("share.image.storiesLinkCopied") }
             /// Save image
             public static var save: String { Strings.shared.string("share.image.save") }
             /// Image saved
@@ -810,11 +814,13 @@ public enum L10n {
         public static var titleRequired: String { Strings.shared.string("write.titleRequired") }
         /// Next
         public static var next: String { Strings.shared.string("write.next") }
+        /// Done
+        public static var finish: String { Strings.shared.string("write.finish") }
         /// New card
         public static var title: String { Strings.shared.string("write.title") }
         /// Edit draft
         public static var editTitle: String { Strings.shared.string("write.editTitle") }
-        /// Edit a published card
+        /// Edit card
         public static var editPublishedTitle: String { Strings.shared.string("write.editPublishedTitle") }
         /// Hide the editor
         public static var closeEditor: String { Strings.shared.string("write.closeEditor") }
@@ -941,7 +947,7 @@ public enum L10n {
         /// Change cover
         public static var coverChange: String { Strings.shared.string("write.coverChange") }
         public enum Visibility {
-            /// Who can see
+            /// Card type
             public static var label: String { Strings.shared.string("write.visibility.label") }
             /// Public
             public static var `public`: String { Strings.shared.string("write.visibility.public") }
@@ -949,6 +955,8 @@ public enum L10n {
             public static var connections: String { Strings.shared.string("write.visibility.connections") }
             /// Only me
             public static var `private`: String { Strings.shared.string("write.visibility.private") }
+            /// Draft
+            public static var draft: String { Strings.shared.string("write.visibility.draft") }
             /// Anonymous
             public static var anonymous: String { Strings.shared.string("write.visibility.anonymous") }
             /// Anyone can read it, signed {handle}
@@ -996,6 +1004,18 @@ public enum L10n {
         public static func editBuffered(time: String) -> String { Strings.shared.format("write.editBuffered", ["time": time]) }
         /// You have unsaved changes here — only you can see them
         public static var editBufferedIdle: String { Strings.shared.string("write.editBufferedIdle") }
+        public enum Status {
+            /// Saving…
+            public static var saving: String { Strings.shared.string("write.status.saving") }
+            /// Saved
+            public static var saved: String { Strings.shared.string("write.status.saved") }
+            /// Saved privately
+            public static var savedLive: String { Strings.shared.string("write.status.savedLive") }
+            /// Not saved
+            public static var failed: String { Strings.shared.string("write.status.failed") }
+            /// {status} · {time}
+            public static func at(status: String, time: String) -> String { Strings.shared.format("write.status.at", ["status": status, "time": time]) }
+        }
         /// Save draft and leave
         public static var saveDraftAndLeave: String { Strings.shared.string("write.saveDraftAndLeave") }
         /// Save changes
@@ -1039,10 +1059,12 @@ public enum L10n {
             public static var failed: String { Strings.shared.string("write.publishPanel.failed") }
             /// That's the limit for today — try again tomorrow
             public static var rateLimited: String { Strings.shared.string("write.publishPanel.rateLimited") }
-            /// Save this card
+            /// Save draft
             public static var saveTitle: String { Strings.shared.string("write.publishPanel.saveTitle") }
             /// Save
             public static var save: String { Strings.shared.string("write.publishPanel.save") }
+            /// Move to drafts
+            public static var makeDraft: String { Strings.shared.string("write.publishPanel.makeDraft") }
             /// Publish anonymously
             public static var publishAnonymously: String { Strings.shared.string("write.publishPanel.publishAnonymously") }
             /// Couldn't save — try again
@@ -1153,7 +1175,7 @@ public enum L10n {
         public enum TrashFrom {
             /// Draft
             public static var draft: String { Strings.shared.string("me.trashFrom.draft") }
-            /// Private
+            /// Draft
             public static var `private`: String { Strings.shared.string("me.trashFrom.private") }
             /// Public again when restored
             public static var `public`: String { Strings.shared.string("me.trashFrom.public") }
@@ -1171,7 +1193,7 @@ public enum L10n {
             public static var edit: String { Strings.shared.string("me.actions.edit") }
             /// Make public
             public static var makePublic: String { Strings.shared.string("me.actions.makePublic") }
-            /// Make private
+            /// Move to drafts
             public static var makePrivate: String { Strings.shared.string("me.actions.makePrivate") }
             /// Make public anonymously
             public static var makePublicAnonymous: String { Strings.shared.string("me.actions.makePublicAnonymous") }

@@ -10,6 +10,7 @@ import { OrganicStoryImage } from '@/components/atoms/OrganicImage/OrganicStoryI
 import { CardEmbedLink } from '@/components/molecules/EmbedStoryCard/CardEmbedLink';
 import { StoryLinkCard } from '@/components/molecules/StoryLinkCard/StoryLinkCard';
 import { StoryLinkPreviewsContext } from '@/components/molecules/StoryLinkCard/StoryLinkPreviews';
+import { StoryTable } from './StoryTable';
 import type { LinkPreview } from '@/lib/db/types';
 import { isBlankParagraph } from '@/lib/markdown/blankLines';
 import { SITE_HOSTS, soleLinkParagraphs } from '@/lib/links/storyLinks';
@@ -75,6 +76,18 @@ const AWAY = { target: '_blank', rel: 'noopener noreferrer nofollow ugc' } as co
 const components: Components = {
   // A story's `#` is drawn as the reader's h2, and is one: the page has one h1, the card's title.
   h1: ({ node: _node, ...rest }) => <h2 {...rest} />,
+  // A table scrolls sideways in a box of its own; each cell's words wrap between 4em and 18em (story.css).
+  table: ({ children }) => <StoryTable>{children}</StoryTable>,
+  th: ({ node: _node, children, ...rest }) => (
+    <th {...rest}>
+      <div className="story-cell">{children}</div>
+    </th>
+  ),
+  td: ({ node: _node, children, ...rest }) => (
+    <td {...rest}>
+      <div className="story-cell">{children}</div>
+    </td>
+  ),
   // Links wear the pen's wavy underline as a repeating background, so a link
   // that wraps gets a stroke under every line (OrganicLink's absolutely
   // positioned svg can't follow a wrapped inline box). One to another site

@@ -2575,6 +2575,10 @@
               "connections",
               "private"
             ]
+          },
+          "editedAt": {
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [

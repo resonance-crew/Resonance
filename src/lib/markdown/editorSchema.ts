@@ -1,8 +1,9 @@
-import { Node, type AnyExtension } from '@tiptap/core';
+import { Extension, Node, elementFromString, type AnyExtension } from '@tiptap/core';
 import Blockquote from '@tiptap/extension-blockquote';
 import Image from '@tiptap/extension-image';
 import Paragraph from '@tiptap/extension-paragraph';
-import type { Node as PMNode } from '@tiptap/pm/model';
+import { DOMParser as PMDOMParser, type Node as PMNode } from '@tiptap/pm/model';
+import { Plugin, PluginKey, Selection } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import { Markdown } from 'tiptap-markdown';
 import { BLANK_PARAGRAPH } from './blankLines';
@@ -23,6 +24,8 @@ interface MarkdownSerializerState {
   write(content: string): void;
   closeBlock(node: PMNode): void;
   esc(text: string): string;
+  /** Writes text line by line (a quote's or a list's marker before each), escaped unless told not to. */
+  text(text: string, escape?: boolean): void;
 }
 
 /**
@@ -155,11 +158,258 @@ export const CardEmbed = Node.create({
   },
 });
 
+/** The slice of a markdown-it token the table rule reads and writes. */
+interface MdToken {
+  type: string;
+  level: number;
+  map: [number, number] | null;
+  content: string;
+  block: boolean;
+  attrGet(name: string): string | null;
+}
+
+/** The slice of markdown-it (its core state, its rules, its renderer) the table rule uses. */
+interface MdLike {
+  core: {
+    ruler: {
+      after(after: string, name: string, fn: (state: { src: string; tokens: MdToken[]; Token: new (type: string, tag: string, nesting: number) => MdToken }) => void): void;
+    };
+  };
+  renderer: { rules: Record<string, (tokens: MdToken[], idx: number) => string> };
+  utils: { escapeHtml(text: string): string };
+}
+
+/** The markdown-it instances already reading tables as their source: tiptap-markdown runs every `setup` on every parse. */
+const tableSourced = new WeakSet<object>();
+
+/** A cell's alignment as markdown-it writes it (`style="text-align:…"`). */
+function alignOf(token: MdToken): string {
+  return /text-align:\s*(left|center|right)/.exec(token.attrGet('style') ?? '')?.[1] ?? '';
+}
+
+/**
+ * A table written again from its tokens, for one whose lines can't be taken
+ * as they are (inside a quote or a list, where each line carries its
+ * container's marker): its rows, each cell's source (a pipe in it escaped
+ * again), and the alignments of its delimiter row.
+ */
+function tableFromTokens(tokens: MdToken[]): string {
+  const rows: string[][] = [];
+  const aligns: string[] = [];
+  let row: string[] | null = null;
+  let head = false;
+  for (const t of tokens) {
+    if (t.type === 'thead_open') head = true;
+    else if (t.type === 'thead_close') head = false;
+    else if (t.type === 'tr_open') row = [];
+    else if (t.type === 'tr_close') {
+      if (row) rows.push(row);
+      row = null;
+    } else if (t.type === 'th_open' && head) aligns.push(alignOf(t));
+    else if (t.type === 'inline' && row) row.push(t.content.replace(/\|/g, '\\|'));
+  }
+  const line = (cells: string[]) => `| ${cells.join(' | ')} |`;
+  const delimiter = aligns.map((a) => (a === 'center' ? ':---:' : a === 'right' ? '---:' : a === 'left' ? ':---' : '---'));
+  return [line(rows[0] ?? []), line(delimiter), ...rows.slice(1).map(line)].join('\n');
+}
+
+/**
+ * markdown-it reads a GFM table as rows and cells; the story editor keeps it
+ * as its Markdown instead (MarkdownTable): after the block rules, each table's
+ * tokens become one `md_table` token holding its source — its own lines as
+ * written when it stands at the top of the story, written again from its
+ * cells inside a quote or a list — drawn as `<pre data-md-table>`.
+ */
+function readTablesAsSource(md: MdLike) {
+  if (tableSourced.has(md)) return;
+  tableSourced.add(md);
+  md.core.ruler.after('block', 'md_table_source', (state) => {
+    if (!state.tokens.some((t) => t.type === 'table_open')) return;
+    const lines = state.src.split('\n');
+    const out: MdToken[] = [];
+    for (let i = 0; i < state.tokens.length; i++) {
+      const open = state.tokens[i];
+      if (open.type !== 'table_open') {
+        out.push(open);
+        continue;
+      }
+      let end = i + 1;
+      for (let depth = 1; end < state.tokens.length; end++) {
+        const type = state.tokens[end].type;
+        if (type === 'table_open') depth++;
+        else if (type === 'table_close' && --depth === 0) break;
+      }
+      const token = new state.Token('md_table', 'pre', 0);
+      token.block = true;
+      token.level = open.level;
+      token.map = open.map;
+      token.content =
+        open.level === 0 && open.map
+          ? lines.slice(open.map[0], open.map[1]).join('\n').replace(/\s+$/, '')
+          : tableFromTokens(state.tokens.slice(i, end + 1));
+      out.push(token);
+      i = end;
+    }
+    state.tokens = out;
+  });
+  md.renderer.rules.md_table = (tokens, idx) => `<pre data-md-table>${md.utils.escapeHtml(tokens[idx].content)}</pre>\n`;
+}
+
+/**
+ * A GFM table, held as its Markdown (round 8 §5.1): the editor shows the
+ * source in the story's code type and writes it back exactly as it is — never
+ * a grid to edit; the reader draws it as a table. It comes from a stored
+ * story or a paste (markdown-it reads it, `readTablesAsSource` keeps its
+ * lines); inside it Enter starts a new line, and two empty lines at its end
+ * (or the down arrow there) leave it for a paragraph, as a code block's do.
+ */
+export const MarkdownTable = Node.create({
+  name: 'markdownTable',
+  group: 'block',
+  content: 'text*',
+  marks: '',
+  code: true,
+  defining: true,
+
+  parseHTML() {
+    return [{ tag: 'pre[data-md-table]', preserveWhitespace: 'full', priority: 60 }];
+  },
+
+  renderHTML() {
+    return ['pre', { 'data-md-table': '', class: 'story-md-table', spellcheck: 'false' }, 0];
+  },
+
+  addKeyboardShortcuts() {
+    return {
+      Enter: ({ editor }) => {
+        const { $from, empty } = editor.state.selection;
+        if (!empty || $from.parent.type !== this.type) return false;
+        const atEnd = $from.parentOffset === $from.parent.nodeSize - 2;
+        if (!atEnd || !$from.parent.textContent.endsWith('\n\n')) return false;
+        return editor
+          .chain()
+          .command(({ tr }) => {
+            tr.delete($from.pos - 2, $from.pos);
+            return true;
+          })
+          .exitCode()
+          .run();
+      },
+      ArrowDown: ({ editor }) => {
+        const { state } = editor;
+        const { $from, empty } = state.selection;
+        if (!empty || $from.parent.type !== this.type || $from.parentOffset !== $from.parent.nodeSize - 2) return false;
+        const after = $from.after();
+        if (state.doc.nodeAt(after)) {
+          return editor.commands.command(({ tr }) => {
+            tr.setSelection(Selection.near(state.doc.resolve(after)));
+            return true;
+          });
+        }
+        return editor.commands.exitCode();
+      },
+      // Emptied, it becomes a paragraph again.
+      Backspace: ({ editor }) => {
+        const { $anchor, empty } = editor.state.selection;
+        if (!empty || $anchor.parent.type !== this.type || $anchor.parent.textContent.length > 0) return false;
+        return editor.commands.clearNodes();
+      },
+    };
+  },
+
+  addStorage() {
+    return {
+      markdown: {
+        serialize(state: MarkdownSerializerState, node: PMNode) {
+          state.text(node.textContent, false);
+          state.closeBlock(node);
+        },
+        parse: {
+          setup(md: MdLike) {
+            readTablesAsSource(md);
+          },
+        },
+      },
+    };
+  },
+});
+
+/** What makes HTML say more than its plain text: a heading, a list, a quote, emphasis, a link, a picture, a table, code. */
+const FORMATTING = 'h1,h2,h3,h4,h5,h6,strong,b,em,i,u,s,del,strike,a[href],img,ul,ol,li,blockquote,pre,code,table,hr,sub,sup,mark';
+
+/**
+ * Whether a clipboard's HTML carries no formatting of its own — only words,
+ * paragraphs, line breaks and styled `div`s or `span`s: what a phone, a notes
+ * app or a code editor puts beside the plain text it copied.
+ */
+export function htmlAddsNothing(html: string): boolean {
+  return elementFromString(html).querySelector(FORMATTING) == null;
+}
+
+/** The signs of Markdown in plain text: a heading, a list, a quote, a fence, a rule, a table, emphasis, strikethrough, a link or picture, code. */
+const MARKDOWN_SIGNS: readonly RegExp[] = [
+  /^ {0,3}#{1,6}[ \t]+\S/m,
+  /^ {0,3}(?:[-*+]|\d{1,9}[.)])[ \t]+\S/m,
+  /^ {0,3}>/m,
+  /^ {0,3}(?:```|~~~)/m,
+  /^ {0,3}(?:[-*_][ \t]*){3,}$/m,
+  /^ {0,3}\|?[^\n|]*\|[^\n]*\n {0,3}\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/m,
+  /\*\*[^*\s][^*\n]*\*\*|__[^_\s][^_\n]*__/,
+  /~~[^~\s][^~\n]*~~/,
+  /!?\[[^\]\n]+\]\([^)\s]+\)/,
+  /`[^`\n]+`/,
+];
+
+/** Whether plain text reads as Markdown (any one sign of it). */
+export function readsAsMarkdown(text: string): boolean {
+  return MARKDOWN_SIGNS.some((sign) => sign.test(text));
+}
+
+/**
+ * Markdown pasted becomes formatting wherever it is copied from (round 8 §4).
+ * A paste with plain text alone is read as Markdown already (tiptap-markdown's
+ * `transformPastedText`); one that brings HTML too — what phones, notes apps
+ * and code editors put on the clipboard — was taken as that HTML, so its `##`
+ * and `**` stayed on the page as characters. When the HTML says nothing the
+ * plain text doesn't (htmlAddsNothing) and the text reads as Markdown, the
+ * text is read as Markdown instead; a paste whose HTML has formatting of its
+ * own keeps it, and inside a code block or a table's source it stays text.
+ */
+export const MarkdownPaste = Extension.create({
+  name: 'markdownPaste',
+
+  addProseMirrorPlugins() {
+    const editor = this.editor;
+    return [
+      new Plugin({
+        key: new PluginKey('markdownPaste'),
+        props: {
+          handlePaste(view, event) {
+            const text = event.clipboardData?.getData('text/plain');
+            const html = event.clipboardData?.getData('text/html');
+            const { $from } = view.state.selection;
+            if (!text || !html || $from.parent.type.spec.code) return false;
+            if (!readsAsMarkdown(text) || !htmlAddsNothing(html)) return false;
+            const parser = (editor.storage as { markdown?: { parser?: { parse(content: string, opts?: { inline?: boolean }): string } } })
+              .markdown?.parser;
+            if (!parser) return false;
+            const dom = elementFromString(parser.parse(text, { inline: true }));
+            const slice = PMDOMParser.fromSchema(view.state.schema).parseSlice(dom, { preserveWhitespace: true, context: $from });
+            view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView().setMeta('paste', true).setMeta('uiEvent', 'paste'));
+            return true;
+          },
+        },
+      }),
+    ];
+  },
+});
+
 export interface StorySchemaNodes {
   paragraph?: AnyExtension;
   blockquote?: AnyExtension;
   image?: AnyExtension;
   cardEmbed?: AnyExtension;
+  markdownTable?: AnyExtension;
 }
 
 /**
@@ -173,6 +423,8 @@ export function storyExtensions(nodes: StorySchemaNodes = {}): AnyExtension[] {
     nodes.blockquote ?? Blockquote,
     nodes.image ?? BlockImage,
     nodes.cardEmbed ?? CardEmbed,
+    nodes.markdownTable ?? MarkdownTable,
+    MarkdownPaste,
     Markdown.configure({ html: false, transformPastedText: true, transformCopiedText: true }),
   ];
 }

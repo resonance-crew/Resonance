@@ -571,8 +571,9 @@ export async function getCardBoxShelves(
 
   const box: CardBoxBody = {};
   own.forEach((s, i) => {
-    // The trash shelf's cards say when they went in, when they go and what restoring brings back.
-    box[s] = { cards: ownCards[i].map((c) => toFeedCard(c, me?.data(), { deanonymize: true, own: s === 'trash' })) };
+    // The trash shelf's cards say when they went in, when they go and what restoring brings back; the
+    // others when each was last changed (the apps' 草稿 shelf holds drafts and private cards together).
+    box[s] = { cards: ownCards[i].map((c) => toFeedCard(c, me?.data(), { deanonymize: true, own: s === 'trash', edited: s !== 'trash' })) };
   });
   others.forEach((s, i) => {
     box[s] = { cards: presented[i] };

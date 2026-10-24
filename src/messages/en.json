@@ -323,6 +323,7 @@
     "showOriginal": "Show original",
     "related": "Extended cards",
     "toc": "Contents",
+    "table": "Table",
     "authorMetrics": {
       "title": "Only you see this",
       "reads": "Reads",
@@ -331,7 +332,7 @@
     },
     "verified": "Verified",
     "share": "Share",
-    "private": "Private",
+    "private": "Draft",
     "connections": "Connections only",
     "notFound": {
       "title": "This card can't be found",
@@ -359,6 +360,7 @@
     "anonymousTitle": "Share an anonymous card",
     "image": {
       "storiesFailed": "Couldn’t open Instagram",
+      "storiesLinkCopied": "Link copied. Add a Link sticker to your story and paste it, so people can tap through to the card.",
       "save": "Save image",
       "saved": "Image saved",
       "saveFailed": "Couldn’t save the image",
@@ -458,9 +460,10 @@
   "write": {
     "titleRequired": "Give it a one-line title first",
     "next": "Next",
+    "finish": "Done",
     "title": "New card",
     "editTitle": "Edit draft",
-    "editPublishedTitle": "Edit a published card",
+    "editPublishedTitle": "Edit card",
     "closeEditor": "Hide the editor",
     "openEditor": "Show the editor",
     "releaseToClose": "Release to hide the editor",
@@ -526,10 +529,11 @@
     "previewCaption": "How the card looks in a list",
     "coverChange": "Change cover",
     "visibility": {
-      "label": "Who can see",
+      "label": "Card type",
       "public": "Public",
       "connections": "Connections only",
       "private": "Only me",
+      "draft": "Draft",
       "anonymous": "Anonymous",
       "publicLine": "Anyone can read it, signed {handle}",
       "anonymousLine": "Anyone can read it, but no one will know it's yours",
@@ -555,6 +559,13 @@
     "editLiveHint": "This card is live — changes stay private until you save them",
     "editBuffered": "Changes saved privately · {time} (readers still see the old version)",
     "editBufferedIdle": "You have unsaved changes here — only you can see them",
+    "status": {
+      "saving": "Saving…",
+      "saved": "Saved",
+      "savedLive": "Saved privately",
+      "failed": "Not saved",
+      "at": "{status} · {time}"
+    },
     "saveDraftAndLeave": "Save draft and leave",
     "saveChanges": "Save changes",
     "saveShort": "Save",
@@ -577,8 +588,9 @@
       "resonanceQuiet": "The original's author won't be notified",
       "failed": "Couldn't publish — try again",
       "rateLimited": "That's the limit for today — try again tomorrow",
-      "saveTitle": "Save this card",
+      "saveTitle": "Save draft",
       "save": "Save",
+      "makeDraft": "Move to drafts",
       "publishAnonymously": "Publish anonymously",
       "saveFailed": "Couldn't save — try again"
     },
@@ -639,7 +651,7 @@
     "emptyTrashLine": "Cards you delete wait here for {days} days",
     "trashFrom": {
       "draft": "Draft",
-      "private": "Private",
+      "private": "Draft",
       "public": "Public again when restored",
       "connections": "Connections only when restored"
     },
@@ -649,7 +661,7 @@
       "menuLabel": "Manage card",
       "edit": "Edit",
       "makePublic": "Make public",
-      "makePrivate": "Make private",
+      "makePrivate": "Move to drafts",
       "makePublicAnonymous": "Make public anonymously",
       "delete": "Delete",
       "deleteConfirmTitle": "Delete this card?",

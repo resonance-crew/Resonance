@@ -239,3 +239,29 @@ describe('StoryMarkdown link cards', () => {
     expect(cardLinks()).toEqual(['https://www.example.org/notes']);
   });
 });
+
+describe('StoryMarkdown tables', () => {
+  it('draws a table in a named box of its own that scrolls sideways, its alignments kept and each cell wrapped', () => {
+    const { container } = renderWithIntl(
+      <StoryMarkdown source={'前言\n\n| 地點 | 次數 |\n|:--|--:|\n| 台北 | 3 |\n| 高雄 | 12 |'} script="cjk" lang="zh-TW" />,
+    );
+    const region = screen.getByRole('region', { name: 'Table' });
+    expect(region).toHaveClass('story-table');
+    expect(region).toHaveAttribute('tabindex', '0');
+    const table = region.querySelector('table')!;
+    expect(table.querySelectorAll('th')).toHaveLength(2);
+    expect(table.querySelectorAll('tbody tr')).toHaveLength(2);
+    expect(table.querySelector('td:last-child')?.getAttribute('style')).toMatch(/text-align:\s*right/);
+    expect(container.querySelectorAll('.story-cell')).toHaveLength(6);
+  });
+});
+
+describe('tableMore', () => {
+  it('says which side of a table wider than its box has more to see', async () => {
+    const { tableMore } = await import('./StoryTable');
+    expect(tableMore(0, 300, 300)).toBeNull();
+    expect(tableMore(0, 600, 300)).toBe('end');
+    expect(tableMore(150, 600, 300)).toBe('both');
+    expect(tableMore(300, 600, 300)).toBe('start');
+  });
+});

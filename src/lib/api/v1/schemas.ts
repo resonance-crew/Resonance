@@ -132,6 +132,13 @@ export const FeedCard = named(
      * private while in the trash) — say so before a restore republishes it.
      */
     restoresTo: z.enum(['public', 'connections', 'private']).nullable().optional(),
+    /**
+     * Your own card on your own card box shelves only (published, private,
+     * draft): when it was last changed (ISO 8601) — the 草稿 shelf lists drafts
+     * and private cards together by it. Absent everywhere else: when a card is
+     * edited is no one else's to read.
+     */
+    editedAt: z.string().nullable().optional(),
   }),
   'FeedCard',
 );

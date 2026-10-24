@@ -268,8 +268,12 @@ function alignPendingEdit(
 /** How many cards a call empties from the trash, and how many at once. */
 const EMPTY_PAGE = 50;
 const EMPTY_AT_ONCE = 4;
-/** A call starts no new delete after this long (its route's maxDuration is 60 s). */
-const EMPTY_BUDGET_MS = 40_000;
+/**
+ * A call starts no new delete after this long (its route's maxDuration is 60 s): well inside the
+ * apps' 30 s request timeout, so a long page answers before an app gives up on it while the server
+ * goes on deleting (the dialog then said 沒完成 over an empty trash). Clients call again for the rest.
+ */
+const EMPTY_BUDGET_MS = 20_000;
 
 export interface EmptiedTrashResult {
   deleted: number;

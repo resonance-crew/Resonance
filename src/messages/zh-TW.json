@@ -53,7 +53,7 @@
     "metaTitle": "關於我們",
     "metaDescription": "我們相信人人都是故事的分享者。在共振，讀到觸動你的故事時，回應不是按讚，而是寫下自己的卡片去共振它。",
     "tag": "✦ 關於我們",
-    "title": "我們相信\n人人都是\u200b故事的分享者",
+    "title": "我們相信\n人人都是​故事的分享者",
     "lead": "每個人都生而立體、獨一無二，帶著只屬於自己的經驗和體悟；而故事，是串起人與人、讓生命影響生命最好的方式——這是我們打造「共振」的原因",
     "belief": {
       "kicker": "我們的使命",
@@ -323,6 +323,7 @@
     "showOriginal": "顯示原文",
     "related": "延伸的卡片",
     "toc": "目錄",
+    "table": "表格",
     "authorMetrics": {
       "title": "只有你看得到",
       "reads": "被閱讀",
@@ -331,7 +332,7 @@
     },
     "verified": "已驗證",
     "share": "分享",
-    "private": "私人卡片",
+    "private": "草稿",
     "connections": "僅連結可見",
     "notFound": {
       "title": "找不到這張卡片",
@@ -359,6 +360,7 @@
     "anonymousTitle": "分享匿名卡片",
     "image": {
       "storiesFailed": "無法開啟 Instagram",
+      "storiesLinkCopied": "連結已複製。在限時動態加上「連結」貼紙並貼上，看的人就能點回這張卡片。",
       "save": "儲存圖片",
       "saved": "已儲存圖片",
       "saveFailed": "無法儲存圖片",
@@ -458,9 +460,10 @@
   "write": {
     "titleRequired": "先寫下一句話標題",
     "next": "下一步",
-    "title": "寫一張新卡片",
+    "finish": "完成",
+    "title": "新卡片",
     "editTitle": "編輯草稿",
-    "editPublishedTitle": "編輯已發布的卡片",
+    "editPublishedTitle": "編輯卡片",
     "closeEditor": "收起編輯區",
     "openEditor": "展開編輯區",
     "releaseToClose": "放開以收起編輯區",
@@ -526,10 +529,11 @@
     "previewCaption": "卡片在列表裡的樣子",
     "coverChange": "更換封面",
     "visibility": {
-      "label": "誰可以看見",
+      "label": "卡片類型",
       "public": "公開",
       "connections": "僅連結的人",
       "private": "只有自己",
+      "draft": "草稿",
       "anonymous": "匿名公開",
       "publicLine": "所有人都看得到，署名 {handle}",
       "anonymousLine": "所有人都看得到，但不會知道是你寫的",
@@ -555,6 +559,13 @@
     "editLiveHint": "這張卡片已經發布，修改會先私下暫存，儲存後才會更新給讀者",
     "editBuffered": "修改已暫存 · {time}　（讀者還看不到）",
     "editBufferedIdle": "有一份還沒儲存的修改，只有你看得到",
+    "status": {
+      "saving": "儲存中⋯",
+      "saved": "已儲存",
+      "savedLive": "修改已暫存",
+      "failed": "未儲存",
+      "at": "{status} · {time}"
+    },
     "saveDraftAndLeave": "存成草稿，稍後再寫",
     "saveChanges": "儲存修改",
     "saveShort": "儲存",
@@ -577,8 +588,9 @@
       "resonanceQuiet": "這張共振不會通知原作者",
       "failed": "沒發布成功，再試一次",
       "rateLimited": "今天的次數用完了，明天再試",
-      "saveTitle": "儲存這張卡片",
+      "saveTitle": "儲存草稿",
       "save": "儲存",
+      "makeDraft": "轉為草稿",
       "publishAnonymously": "匿名發布",
       "saveFailed": "沒儲存成功，再試一次"
     },
@@ -639,7 +651,7 @@
     "emptyTrashLine": "刪除的卡片會在這裡保留 {days} 天",
     "trashFrom": {
       "draft": "草稿",
-      "private": "私人卡",
+      "private": "草稿",
       "public": "還原後公開",
       "connections": "還原後只給連結看"
     },
@@ -649,7 +661,7 @@
       "menuLabel": "管理卡片",
       "edit": "編輯",
       "makePublic": "轉為公開",
-      "makePrivate": "轉為私人",
+      "makePrivate": "轉為草稿",
       "makePublicAnonymous": "轉為匿名公開",
       "delete": "刪除",
       "deleteConfirmTitle": "刪除這張卡片？",

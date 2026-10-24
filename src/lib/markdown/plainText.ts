@@ -96,6 +96,44 @@ export function firstPicture(markdown: string): string | null {
   return WEB_PICTURE.exec(markdown)?.[1] ?? null;
 }
 
+/** A GFM table's delimiter row (`| --- | :-: |`): one line, each cell one dash run, so no line is read twice. */
+const TABLE_DELIMITER = /^[ \t]*\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/;
+
+/** A table row's cells, their words joined by 「 · 」 (the pipes at its ends are the row's, not a cell's). */
+function rowWords(line: string): string {
+  let row = line.trim();
+  if (row.startsWith('|')) row = row.slice(1);
+  if (row.endsWith('|')) row = row.slice(0, -1);
+  return row
+    .split('|')
+    .map((cell) => cell.trim())
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/**
+ * A GFM table read as its cells' words (round 8 §5.2): its delimiter row gone,
+ * each row's cells joined by 「 · 」 — never the pipes and dashes. A table is a
+ * header row with a pipe, the delimiter row (with a pipe: `a` over `---` is a
+ * heading) and the rows with a pipe after it, up to a blank line; an escaped
+ * pipe (`\|`) is a cell's own (literals() set it aside). One pass over the
+ * lines.
+ */
+function tableWords(text: string): string {
+  if (!text.includes('|')) return text;
+  const lines = text.split('\n');
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.includes('|') || !lines[i - 1].includes('|') || !TABLE_DELIMITER.test(line)) continue;
+    lines[i - 1] = rowWords(lines[i - 1]);
+    lines[i] = '';
+    let next = i + 1;
+    for (; next < lines.length && lines[next].includes('|') && lines[next].trim(); next++) lines[next] = rowWords(lines[next]);
+    i = next - 1;
+  }
+  return lines.join('\n');
+}
+
 /**
  * A story's prose without Markdown syntax (links keep their text), as a
  * reader sees it: character references decoded (`-&gt;` reads `->`) and
@@ -106,11 +144,12 @@ export function firstPicture(markdown: string): string | null {
  */
 export function plainText(markdown: string): string {
   const text = literals(markdown.replace(LITERALS, '').replace(/```[\s\S]*?```/g, ' '));
+  const prose = withoutLinks(text.replace(PICTURE, ' ').replace(LINK, '$1'))
+    // After the addresses go: an address's `_`, `~` and `*` are not emphasis.
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^>\s?/gm, '');
   return restore(
-    withoutLinks(text.replace(PICTURE, ' ').replace(LINK, '$1'))
-      // After the addresses go: an address's `_`, `~` and `*` are not emphasis.
-      .replace(/^#{1,6}\s+/gm, '')
-      .replace(/^>\s?/gm, '')
+    tableWords(prose)
       // A marker's indent is spaces and tabs on its own line: `^\s*` would read on across every blank line after it, at each one (quadratic).
       .replace(/^[ \t]*(?:[-*+]|\d+\.)\s+/gm, '')
       .replace(/^[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*$/gm, '')

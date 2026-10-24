@@ -114,6 +114,25 @@ describe('plainText', () => {
   });
 });
 
+describe('plainText of a table', () => {
+  it('reads a table as its cells’ words — the delimiter row gone, a row’s cells joined by ·, never pipes', () => {
+    expect(plainText('前言\n\n| 名稱 | 數量 |\n| --- | ---: |\n| 蘋果 | 3 |\n| 香蕉 | 12 |\n\n結尾')).toBe('前言 名稱 · 數量 蘋果 · 3 香蕉 · 12 結尾');
+    expect(plainText('| **台北** | [高雄](https://x.y) |\n|:--|--:|\n| `a` | b |')).toBe('台北 · 高雄 a · b');
+    // A cell's own escaped pipe stays a pipe; a quote's table reads the same.
+    expect(plainText('| a \\| b | c |\n| - | - |')).toBe('a | b · c');
+    expect(plainText('> | 年 | 事 |\n> | --- | --- |\n> | 2024 | 搬家 |')).toBe('年 · 事 2024 · 搬家');
+  });
+
+  it('leaves a pipe in a sentence, and a heading over dashes, as they were', () => {
+    expect(plainText('A | B 是兩個選項')).toBe('A | B 是兩個選項');
+    expect(plainText('標題\n---\n內文')).toBe('標題 內文');
+    const started = performance.now();
+    expect(plainText('|\n'.repeat(50_000)).length).toBeGreaterThan(0);
+    expect(plainText('| - |\n'.repeat(50_000)).length).toBeGreaterThanOrEqual(0);
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+});
+
 describe('firstPicture', () => {
   it("is the address of the story's first picture on the web, and quick to say there is none", () => {
     expect(firstPicture('text ![rain](https://cdn.example.com/a.avif) and ![b](https://x.y/b.png)')).toBe('https://cdn.example.com/a.avif');

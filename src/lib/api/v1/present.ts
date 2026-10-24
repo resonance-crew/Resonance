@@ -67,6 +67,19 @@ export interface FeedCardOptions {
    * card in the trash is absent anyway.
    */
   own?: boolean;
+  /**
+   * The viewer's own shelf of their own cards (published, private, draft):
+   * when each was last changed (`editedAt`), which the apps' 草稿 shelf orders
+   * drafts and private cards together by. Never on anyone else's answer: when
+   * a card is edited is its author's to know.
+   */
+  edited?: boolean;
+}
+
+/** When a card was last changed, as a valid date; null without one. */
+function editedAtOf(c: Pick<Card, 'updatedAt'>): string | null {
+  const at = c.updatedAt;
+  return at instanceof Date && !Number.isNaN(at.getTime()) ? at.toISOString() : null;
 }
 
 /** When a card went into the trash, as a valid date; null for a card that isn't there. */
@@ -109,6 +122,7 @@ export function toFeedCard(c: ListCard, author: DocumentData | undefined, opts: 
     referenceCardId: str(c.referenceCardId),
     reason: opts.reason ?? null,
     ...(opts.own ? trashFields(c) : {}),
+    ...(opts.edited ? { editedAt: editedAtOf(c) } : {}),
   };
 }
 
