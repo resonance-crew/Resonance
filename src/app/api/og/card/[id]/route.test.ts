@@ -96,7 +96,7 @@ async function expectJpeg(res: Response, width: number, height: number) {
 
 function expectPlatformCover(res: Response) {
   expect(res.status).toBe(302);
-  expect(res.headers.get('location')).toBe('/og-cover.jpg');
+  expect(res.headers.get('location')).toBe('/og-cover.jpg?v=2');
   expect(res.headers.get('cache-control')).toBe('public, max-age=60, s-maxage=60');
 }
 

@@ -5,9 +5,22 @@ import { storageKeyOf } from '@/lib/storage/publicUrl';
 import { imageVersion } from '@/lib/linkImage/version';
 import { LINK_IMAGE_SIZE, coverVersion, drawnCard, drawnCardVersion } from '@/lib/linkImage/model';
 
-/** Absolute-URL default share image (the platform cover). */
-export const OG_COVER_PATH = '/og-cover.jpg';
-export const OG_COVER_SIZE = { width: 2640, height: 1416 } as const;
+/**
+ * The site's own share image (the platform cover), one per language: drawn by
+ * docs/store/graphics/render.ts `og` (the App Store header's line between
+ * story cards, under the brand). Bump the version when it is redrawn: chat
+ * apps keep a preview by its picture's address.
+ */
+const OG_COVER_VERSION = '2';
+export const OG_COVER_SIZE = { width: 1200, height: 630 } as const;
+
+/** The platform cover for a page in `locale` (site-relative, versioned). */
+export function ogCoverPath(locale?: Locale): string {
+  return `/og-cover${locale === 'en' ? '.en' : ''}.jpg?v=${OG_COVER_VERSION}`;
+}
+
+/** The platform cover where no page's language is known (a share image with nothing to share). */
+export const OG_COVER_PATH = ogCoverPath();
 
 export { imageVersion };
 
@@ -140,7 +153,7 @@ export function buildProfileMetadata(opts: {
 }): Metadata {
   const { user, locale, base, title, description, storageBases } = opts;
   const hasAvatar = Boolean(user.avatarUrl);
-  const image = hasAvatar ? shareImage(base, 'user', user.id, user.avatarUrl!, storageBases) : `${base}${OG_COVER_PATH}`;
+  const image = hasAvatar ? shareImage(base, 'user', user.id, user.avatarUrl!, storageBases) : `${base}${ogCoverPath(locale)}`;
   const url = `${base}/${locale}/u/${encodeURIComponent(user.handle)}`;
 
   return {

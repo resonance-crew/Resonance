@@ -190,7 +190,7 @@ describe('buildProfileMetadata', () => {
       title: 'mira · Resonance',
       description: 'mira 在 Resonance 分享的生命故事',
     });
-    expect((meta.openGraph?.images as { url: string }[])[0].url).toBe('https://resonance.example/og-cover.jpg');
+    expect((meta.openGraph?.images as { url: string }[])[0].url).toBe('https://resonance.example/og-cover.jpg?v=2');
     expect((meta.twitter as { card?: string }).card).toBe('summary_large_image');
   });
 

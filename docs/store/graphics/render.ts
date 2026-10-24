@@ -3,7 +3,8 @@
  * feature graphic and the Play icon, in Traditional Chinese (zh-TW) and English (en-US).
  *
  *   npx tsx docs/store/graphics/render.ts                 # everything, both languages
- *   npx tsx docs/store/graphics/render.ts ios             # one target: ios | android | ipad | tablet | play | header
+ *   npx tsx docs/store/graphics/render.ts ios             # one target: ios | android | ipad | tablet | play | header | og
+ *   npx tsx docs/store/graphics/render.ts og              # the site's share image → public/og-cover[.en].jpg (only by name)
  *   npx tsx docs/store/graphics/render.ts ios --only=feed,card
  *   npx tsx docs/store/graphics/render.ts --lang=en       # one language: --lang=zh-TW | --lang=en (default: both)
  *   npx tsx docs/store/graphics/render.ts ios android --lang=en --check
@@ -637,12 +638,13 @@ function assetCss(T: Tokens, W: number, H: number, lang: Lang, A: Accent, size: 
 }
 
 /** Doodles per asset, as canvas fractions, all clear of the brand line's band. */
-const ASSET_DOODLES: Record<'header' | 'search', { ring: [number, number]; squiggle: [number, number]; sparkles: [number, number][]; dots: [number, number] }> = {
+const ASSET_DOODLES: Record<'header' | 'search' | 'og', { ring: [number, number]; squiggle: [number, number]; sparkles: [number, number][]; dots: [number, number] }> = {
   header: { ring: [0.335, 0.12], squiggle: [0.63, 0.1], sparkles: [[0.4, 0.8], [0.61, 0.84]], dots: [0.7, 0.16] },
   search: { ring: [0.17, 0.36], squiggle: [0.84, 0.34], sparkles: [[0.09, 0.47], [0.93, 0.47]], dots: [0.79, 0.24] },
+  og: { ring: [0.3, 0.13], squiggle: [0.66, 0.11], sparkles: [[0.33, 0.86], [0.68, 0.88]], dots: [0.72, 0.17] },
 };
 
-function backdrop(W: number, H: number, U: number, A: Record<AccentName, Accent>, centreBlob: { y: number; r: number }, kind: 'header' | 'search') {
+function backdrop(W: number, H: number, U: number, A: Record<AccentName, Accent>, centreBlob: { y: number; r: number }, kind: 'header' | 'search' | 'og') {
   const d = ASSET_DOODLES[kind];
   const s = (U / 390) * 0.62;
   const pen = INK * s;
@@ -747,6 +749,99 @@ async function renderHeader(T: Tokens, fonts: string, fontsEn: string, langs: La
       console.log(`  ${path.relative(ROOT, out)}  ${Math.round(fs.statSync(out).size / 1024)} KB`);
       if (check) report(`appstore/${name}`, SLIDE_FONTS[lang].slice(0, 1), await measure(htmlPath, w, h), w, h, job.safe);
     }
+  }
+}
+
+/* ── the site's share image (og:image) ────────────────────────────────── */
+
+/**
+ * The picture a link to the site itself (the landing page, a profile without a photo, any page with no
+ * picture of its own) shows in a chat or a feed: 1200 × 630, drawn at twice that. The App Store header's
+ * recipe — its line 用故事回應故事 between scattered story cards — with the brand lockup over it, so a
+ * preview says both whose it is and what is done there (og:title already says 讓生命影響生命). The
+ * lockup and the line stay inside the middle square, where a platform that crops the picture square
+ * keeps them; the cards are decoration either side. Written to public/, one per language.
+ */
+const OG = { w: 2400, h: 1260 };
+const OG_SAFE = { l: (OG.w - OG.h) / 2, t: 120, r: (OG.w + OG.h) / 2, b: OG.h - 120 };
+/**
+ * The line's size (px, at 2×), under the brand as its subtitle: about as wide as the brand in either language
+ * (Latin runs about half as wide as CJK, so English is set smaller).
+ */
+const OG_LINE: Record<Lang, number> = { 'zh-TW': 108, en: 64 };
+/** The brand's scale against the header's (wordmark 22 → 110 px at 2×). */
+const OG_BRAND_K = 5;
+/** Two cards either side, whole: a card cut at the edge would show half its title. */
+const OG_CARDS: { id: string; x: number; y: number; deg: number }[] = [
+  { id: 'first-lamp-in-my-rental', x: 0.115, y: 0.3, deg: -7 },
+  { id: 'fathers-old-bicycle', x: 0.175, y: 0.74, deg: 5 },
+  { id: 'first-morning-after-quitting', x: 0.885, y: 0.29, deg: 6 },
+  { id: 'mothers-phone-call', x: 0.825, y: 0.74, deg: -5 },
+];
+/** What is written: half the drawing's size, the size platforms ask for (a retina preview is about 1080 wide). */
+const OG_OUT = { w: 1200, h: 630 };
+/**
+ * The brand as the app header sets it (AppHeader's logo: ResonanceIcon at 38 beside the wordmark at 22,
+ * 10 apart): the bare wave mark in the accent, no tile, and the Latin name alone — scaled by `k`.
+ */
+function headerBrand(k: number, stroke: string) {
+  const icon = 38 * k;
+  return (
+    `<div class="brand" data-measure="brand" data-safe="1" style="gap:${num(10 * k)}px">` +
+    `<svg width="${num(icon)}" height="${num(icon)}" viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="${INK}" stroke-linecap="round" stroke-linejoin="round" style="flex:none;transform:translateY(7%)">` +
+    '<path d="M3.4,8.2 C5.4,5.9 7.3,5.8 9.2,8.0 C11.1,10.2 13.0,10.3 15.0,8.1 C16.9,6.0 18.8,5.9 20.7,8.1"/>' +
+    '<path d="M3.0,12.1 C5.1,9.7 7.1,9.8 9.0,12.0 C10.9,14.2 12.9,14.3 14.9,12.1 C16.8,9.9 18.8,9.8 20.9,12.0"/>' +
+    '<path d="M3.5,16.0 C5.4,13.8 7.4,13.7 9.3,15.9 C11.2,18.1 13.1,18.2 15.1,16.0 C17.0,13.9 18.9,13.8 20.8,16.0"/></svg>' +
+    `<span class="name" style="font-size:${num(22 * k)}px">${esc(BRAND.latin)}</span></div>`
+  );
+}
+
+async function ogHtml(T: Tokens, fonts: string, A: Record<AccentName, Accent>, lang: Lang): Promise<string> {
+  const { w: W, h: H } = OG;
+  const U = H;
+  const en = lang === 'en';
+  const terra = A.terracotta;
+  const cardW = Math.round(W * 0.15);
+  const cards = await Promise.all(OG_CARDS.map((c, i) => storyCard(c.id, lang, cardW, 70 + i * 7, U)));
+  const shadow = `filter:drop-shadow(0 ${Math.round(U * 0.016)}px ${Math.round(U * 0.026)}px oklch(20% 0.04 60 / 0.2))`;
+  const cardHtml = OG_CARDS.map((c, i) => {
+    const k = cards[i];
+    return `<div class="abs" style="left:${Math.round(W * c.x - k.w / 2)}px;top:${Math.round(H * c.y - k.h / 2)}px;transform:rotate(${c.deg}deg);${shadow}">${k.svg}</div>`;
+  }).join('\n  ');
+  const size = OG_LINE[lang];
+  const copy = BRAND_LINE[lang];
+  const [b1, b2] = copy.text.split(copy.em);
+  const body = `<div class="canvas">
+  ${backdrop(W, H, U, A, { y: H * 0.56, r: U * 0.46 }, 'og')}
+  ${cardHtml}
+  <div class="text" style="top:50%;transform:translateY(-46%)">
+    ${headerBrand(OG_BRAND_K, terra.mid)}
+    <h1><span class="fitbox" data-max="${OG_SAFE.r - OG_SAFE.l - 80}" data-fs="${size}" data-measure="ogline" data-safe="1">${esc(b1)}<span class="em" style="color:${terra.ink}">${esc(copy.em)}${underline(waveUnits(copy.em, lang), 9, terra.mid)}</span>${esc(b2)}</span></h1>
+  </div>
+</div>`;
+  const css = `${assetCss(T, W, H, lang, terra, size, 0)}
+  .brand{display:inline-flex;align-items:center;margin-bottom:${Math.round(size * (en ? 1.25 : 0.78))}px}
+  .name{font-family:'Playfair Display',serif;font-weight:700;line-height:1.1;letter-spacing:-.02em;color:var(--ink);white-space:nowrap}`;
+  return htmlDoc(`Resonance share image ${lang}`, css, fonts, body, en ? 'en' : 'zh-Hant-TW');
+}
+
+/** public/og-cover.jpg (zh-TW) and public/og-cover.en.jpg (en): the site's own share image. */
+async function renderOg(T: Tokens, fonts: string, fontsEn: string, langs: Lang[], check: boolean) {
+  console.log('\nog (the site\'s share image)');
+  const A = accentsFrom(T);
+  const { w, h } = OG;
+  for (const lang of langs) {
+    const name = lang === 'en' ? 'og-cover.en' : 'og-cover';
+    const htmlPath = path.join(BUILD, 'og', `${name}.html`);
+    const png = path.join(BUILD, 'og', `${name}.png`);
+    const jpg = path.join(ROOT, 'public', `${name}.jpg`);
+    mkdirp(path.dirname(htmlPath));
+    fs.writeFileSync(htmlPath, await ogHtml(T, lang === 'en' ? fontsEn : fonts, A, lang));
+    await screenshot(htmlPath, png, w, h);
+    await sharp(png).flatten({ background: '#faf2e9' }).resize(OG_OUT.w, OG_OUT.h, { kernel: 'lanczos3' }).jpeg({ quality: 86, mozjpeg: true }).toFile(jpg);
+    assertSize(jpg, OG_OUT.w, OG_OUT.h);
+    console.log(`  ${path.relative(ROOT, jpg)}  ${Math.round(fs.statSync(jpg).size / 1024)} KB`);
+    if (check) report(`og/${name}`, lang === 'en' ? ['Playfair Display'] : ['Noto Serif TC', 'Playfair Display'], await measure(htmlPath, w, h), w, h, OG_SAFE);
   }
 }
 
@@ -937,13 +1032,15 @@ async function renderPlay(T: Tokens, fonts: string, langs: Lang[], check: boolea
 
 async function main() {
   const argv = process.argv.slice(2);
-  const targets = (['ios', 'android', 'ipad', 'tablet', 'play', 'header'] as const).filter((t) => argv.includes(t));
-  const run = targets.length ? targets : (['ios', 'android', 'ipad', 'tablet', 'play', 'header'] as const);
+  const all = ['ios', 'android', 'ipad', 'tablet', 'play', 'header', 'og'] as const;
+  const targets: readonly (typeof all)[number][] = all.filter((t) => argv.includes(t));
+  // The share image writes into the site's public/: only when asked for by name.
+  const run = targets.length ? targets : all.filter((t) => t !== 'og');
   const only = argv.find((a) => a.startsWith('--only='))?.slice(7).split(',') ?? null;
   const check = argv.includes('--check');
   const regen = argv.includes('--regen-placeholders');
   const langs = parseLangs(argv);
-  const screens = run.filter((t): t is Platform => t !== 'play' && t !== 'header');
+  const screens = run.filter((t): t is Platform => t !== 'play' && t !== 'header' && t !== 'og');
   if (only) for (const k of only) if (!(KEYS as readonly string[]).includes(k)) throw new Error(`unknown key "${k}"`);
 
   mkdirp(BUILD);
@@ -959,7 +1056,7 @@ async function main() {
     ' 0123456789',
   ].join('');
   const fonts =
-    langs.includes('zh-TW') || run.includes('play')
+    langs.includes('zh-TW') || run.includes('play') || run.includes('og')
       ? await embeddedFonts([
           { family: 'Noto Serif TC', weights: [700, 900], text: copy },
           { family: 'Noto Sans TC', weights: [400, 500], text: copy },
@@ -970,10 +1067,11 @@ async function main() {
   const copyEn = [
     ...SLIDES.flatMap((s) => [s.copy.en, s.tabletCopy?.en].flatMap((c) => (c ? [c.headline, c.subline] : []))),
     ...assetCopy('en'),
+    BRAND.latin,
     ' 0123456789',
   ].join('');
   const fontsEn =
-    langs.includes('en') && (screens.length || run.includes('header'))
+    langs.includes('en') && (screens.length || run.includes('header') || run.includes('og'))
       ? await embeddedFonts([
           { family: 'Playfair Display', weights: [700], text: copyEn },
           { family: 'DM Sans', weights: [400, 500], text: copyEn },
@@ -983,6 +1081,7 @@ async function main() {
   for (const t of run) {
     if (t === 'play') await renderPlay(T, fonts, langs, check);
     else if (t === 'header') await renderHeader(T, fonts, fontsEn, langs, check);
+    else if (t === 'og') await renderOg(T, fonts, fontsEn, langs, check);
     else {
       for (const lang of langs) await renderScreens(t, lang, T, lang === 'en' ? fontsEn : fonts, only, check, regen);
     }

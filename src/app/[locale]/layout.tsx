@@ -6,8 +6,9 @@ import { NextIntlProvider } from '@/components/providers/NextIntlProvider';
 import { AuthProvider } from '@/components/providers/AuthProvider';
 import { SWRProvider } from '@/components/providers/SWRProvider';
 import TweaksPanel from '@/components/providers/TweaksPanel';
-import { OG_COVER_PATH, OG_COVER_SIZE } from '@/lib/og';
+import { OG_COVER_SIZE, ogCoverPath } from '@/lib/og';
 import { siteUrl } from '@/lib/site';
+import type { Locale } from '@/lib/db/types';
 import { fontVariables } from '@/styles/fonts';
 import '@/styles/globals.css';
 
@@ -55,13 +56,13 @@ export async function generateMetadata({
       url: `${base}/${locale}`,
       siteName: 'Resonance',
       locale,
-      images: [{ url: OG_COVER_PATH, width: OG_COVER_SIZE.width, height: OG_COVER_SIZE.height, alt: title }],
+      images: [{ url: ogCoverPath(locale as Locale), width: OG_COVER_SIZE.width, height: OG_COVER_SIZE.height, alt: title }],
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
-      images: [OG_COVER_PATH],
+      images: [ogCoverPath(locale as Locale)],
     },
   };
 }
