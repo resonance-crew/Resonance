@@ -5,6 +5,7 @@ import android.os.Build
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
+import coil3.annotation.ExperimentalCoilApi
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.resonance.design.AppFonts
 import com.resonance.design.Grain
@@ -15,6 +16,7 @@ import com.resonance.kit.l10n.Strings
 import com.resonance.kit.reading.ApiCache
 import com.resonance.app.ui.share.ShareFiles
 import okhttp3.Cache
+import okhttp3.OkHttpClient
 import java.io.File
 
 class ResonanceApp : Application(), SingletonImageLoader.Factory {
@@ -46,17 +48,7 @@ class ResonanceApp : Application(), SingletonImageLoader.Factory {
         it.start { it.loadMe() }
     }
 
-    /**
-     * Coil reads the pictures through the app's client (its own disk cache keeps them; their
-     * addresses never change). AVIF — the AI illustrations — needs its own decoder before
-     * Android 12.
-     */
-    override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)
-        .components {
-            add(OkHttpNetworkFetcherFactory(callFactory = { http }))
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || (BuildConfig.DEBUG && DebugLaunch.avifDecoder)) add(AvifDecoder.Factory())
-        }
-        .build()
+    override fun newImageLoader(context: PlatformContext): ImageLoader = imageLoader(context, http)
 
     override fun onCreate() {
         super.onCreate()
@@ -69,5 +61,21 @@ class ResonanceApp : Application(), SingletonImageLoader.Factory {
             ?: Strings.Language.preferred(resources.configuration.locales.let { l -> List(l.size()) { l[it].toLanguageTag() } })
         // The "activity" channel (named in the language just chosen) exists before any push can arrive.
         PushCenter.init(this)
+    }
+
+    companion object {
+        /**
+         * Coil reads the pictures — covers, avatars, story and link pictures — through the app's
+         * [client] (its own disk cache keeps them; their addresses never change), and keeps only a
+         * picture ([PicturesOnly]): a cover that failed once is asked for again when its card is
+         * opened again. AVIF — the AI illustrations — needs its own decoder before Android 12.
+         */
+        @OptIn(ExperimentalCoilApi::class)
+        fun imageLoader(context: PlatformContext, client: OkHttpClient): ImageLoader = ImageLoader.Builder(context)
+            .components {
+                add(OkHttpNetworkFetcherFactory(callFactory = { client }, cacheStrategy = { PicturesOnly }))
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || (BuildConfig.DEBUG && DebugLaunch.avifDecoder)) add(AvifDecoder.Factory())
+            }
+            .build()
     }
 }

@@ -163,11 +163,12 @@ class ChatPictures(val loader: ImageLoader) {
 }
 
 /**
- * What the pictures' disk cache keeps: a picture (a 2xx answer, which never changes) and nothing
- * else. Coil's own strategy keeps any answer and gives it back for good — a 404 (the picture read a
- * moment before its message was sent, say) would stand for the picture on this device from then on,
- * and a tap to try again would never reach the server. Anything kept from before that isn't a
- * picture is asked for again.
+ * What the pictures' disk caches keep — the chat pictures' and the app's own (ResonanceApp.imageLoader):
+ * a picture (a 2xx answer, which never changes) and nothing else. Coil's own strategy keeps a 404
+ * (and the other answers HTTP calls cacheable) and gives it back for good — a chat picture read a
+ * moment before its message was sent, or a link picture the server couldn't fetch just then, would
+ * stand for the picture on this device from then on, and asking again would never reach the server.
+ * Anything kept from before that isn't a picture is asked for again.
  */
 @OptIn(ExperimentalCoilApi::class)
 internal object PicturesOnly : CacheStrategy {
