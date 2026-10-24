@@ -77,8 +77,8 @@ export interface FeedCardOptions {
 }
 
 /** When a card was last changed, as a valid date; null without one. */
-function editedAtOf(c: Pick<Card, 'updatedAt'>): string | null {
-  const at = c.updatedAt;
+function editedAtOf(c: ListCard): string | null {
+  const at = c.editedAt;
   return at instanceof Date && !Number.isNaN(at.getTime()) ? at.toISOString() : null;
 }
 

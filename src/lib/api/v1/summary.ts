@@ -85,12 +85,17 @@ export function storedSummary(data: DocumentData | undefined): StorySummary | nu
  * A card as a list holds it: read with LIST_FIELDS (no story) and carrying
  * its stored summary when that is current — or read whole, with its story.
  */
-export type ListCard = Card & { listing?: StorySummary };
+export type ListCard = Card & {
+  listing?: StorySummary;
+  /** When the card was last changed (its `updatedAt`): the owner's shelves say it (FeedCard.editedAt). */
+  editedAt?: Date;
+};
 
 export function listCard(id: string, data: DocumentData): ListCard {
   const card: ListCard = mapCard(id, data);
   const stored = storedSummary(data);
   if (stored) card.listing = stored;
+  if (data.updatedAt instanceof Timestamp) card.editedAt = data.updatedAt.toDate();
   return card;
 }
 
