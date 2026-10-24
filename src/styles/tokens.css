@@ -170,7 +170,7 @@
   --story-meta-size: 14px;
   --story-meta-size-compact: 13px;
   --story-byline-avatar: 40px;
-  --story-rail-gap: 48px;          /* the text → the author rail */
+  --story-rail-gap: 80px;          /* the text → the contents' rail */
   /* Inline code and code blocks: the ink at a whisper. Story CSS only (the
      island resolves it to an rgb() of its own, the apps their own tint). */
   --story-code-tint: color-mix(in oklch, var(--color-text) 6%, transparent);

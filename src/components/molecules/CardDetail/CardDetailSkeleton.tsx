@@ -4,13 +4,13 @@ import styles from './CardDetailSkeleton.module.css';
 
 /**
  * Loading state for the card detail page. Reuses the real article layout —
- * the grid (the story's column and the sticky author/ToC rail beside it) and
- * the head's order and gaps (cover → title → byline / meta row → story →
- * tags) — so nothing moves when the card arrives; only the avatar, picture,
- * text and tags are grey blocks, at the title's and the story's own line
- * heights (36 and 18 tall; 28 and 17 on a phone). Up to 900px the byline
- * holds the author's avatar and pen name as the real one does; from 901px the
- * meta line alone, the rail holding the author.
+ * the grid (the story's column, centred: whether a contents rail stands
+ * beside it is the story's, unknown yet) and the head's order and gaps
+ * (cover → title → byline → story → tags) — so the head doesn't move when
+ * the card arrives; only the avatar, picture, text and tags are grey blocks,
+ * at the title's and the story's own line heights (36 and 18 tall; 28 and 17
+ * on a phone). The byline holds the author's avatar and pen name at every
+ * width, as the real one does (round 8 §10.1).
  */
 export function CardDetailSkeleton() {
   return (
@@ -50,23 +50,6 @@ export function CardDetailSkeleton() {
         </div>
       </article>
 
-      {/* Right rail: author intro on top, ToC below — desktop only. */}
-      <aside className={pageStyles.aside}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Skeleton width={56} height={56} circle />
-          <Skeleton width={120} height={16} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
-            <Skeleton height={13} />
-            <Skeleton height={13} width="80%" />
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Skeleton width="60%" height={14} />
-          <Skeleton width="85%" height={13} />
-          <Skeleton width="70%" height={13} />
-          <Skeleton width="78%" height={13} />
-        </div>
-      </aside>
     </div>
   );
 }

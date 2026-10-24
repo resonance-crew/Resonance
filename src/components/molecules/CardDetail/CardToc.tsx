@@ -17,6 +17,25 @@ export interface TocHeading {
  * anchor (a story's `#` is rendered as an h2), in reading order — an h2 at
  * the first level, every smaller one at the second, as the apps' ToCs do.
  */
+/** An ATX heading line (`#` to `######`), the only kind the editor writes. */
+const HEADING_LINE = /^ {0,3}#{1,6}[ \t]+\S/;
+const FENCE = /^ {0,3}(```|~~~)/;
+
+/**
+ * Whether a story has a table of contents (round 8 §10.1), read off its
+ * Markdown — the same in the server's HTML and the browser's, so the page
+ * lays its column out once: centred alone, or beside the contents' rail. A
+ * heading inside a code fence is the code's.
+ */
+export function storyHasContents(markdown: string): boolean {
+  let fenced = false;
+  for (const line of markdown.split('\n')) {
+    if (FENCE.test(line)) fenced = !fenced;
+    else if (!fenced && HEADING_LINE.test(line)) return true;
+  }
+  return false;
+}
+
 export function tocHeadings(root: ParentNode): TocHeading[] {
   return Array.from(root.querySelectorAll<HTMLHeadingElement>('h2, h3, h4, h5, h6'))
     .map((el) => ({ id: el.id, text: el.textContent ?? '', level: el.tagName === 'H2' ? (2 as const) : (3 as const) }))
