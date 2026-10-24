@@ -18,3 +18,51 @@
   margin: 0 0 clamp(40px, 5vw, 64px);
   text-align: center;
 }
+
+/* On a phone the cards are full-bleed bands under a wavy rule: the heading
+   keeps the related section's distance from the first (page.module.css
+   .relatedHeading). */
+@media (max-width: 640px) {
+  .heading {
+    margin-bottom: 56px;
+  }
+}
+
+/* Under the third card: 查看全部 {count} 篇, the feed's Load more's language
+   (home's FeedMore) — the label alone, in the tonal label's ink. */
+.foot {
+  margin-top: 40px;
+  display: flex;
+  justify-content: center;
+}
+
+.more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 16px;
+  background: none;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--button-on-tonal);
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+.more:hover {
+  text-decoration: underline;
+}
+
+.more:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: 2px;
+}
+
+.more:active {
+  opacity: 0.7;
+}
