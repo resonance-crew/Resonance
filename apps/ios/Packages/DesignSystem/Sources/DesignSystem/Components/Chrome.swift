@@ -729,6 +729,8 @@ public struct OrganicInlineBar<Leading: View, Trailing: View>: View {
     private var showsBack = true
     private var progress: CGFloat?
     private var inset: CGFloat = 0
+    /// The title keeps its room before `leading` gets any (``titleFirst()``).
+    private var titleLeads = false
     /// The page's actions as drawn (a tablet centres the context clear of them).
     @State private var trailingWidth: CGFloat = 0
     /// The window's controls in the row's corner (an iPad's app in a window): the arrow and the actions clear them.
@@ -762,6 +764,16 @@ public struct OrganicInlineBar<Leading: View, Trailing: View>: View {
     public func leadingInset(_ inset: CGFloat) -> Self {
         var bar = self
         bar.inset = inset
+        return bar
+    }
+
+    /// The title is laid out first and `leading` after it gets what is left (the writer's save state,
+    /// round 8 §2.1: the quiet word after the title goes before the title gives way). Give `leading`
+    /// a layout priority between this one's and the row's spacer (0.5): above the spacer it is offered
+    /// what the title left, before the spacer takes it.
+    public func titleFirst() -> Self {
+        var bar = self
+        bar.titleLeads = true
         return bar
     }
 
@@ -848,6 +860,7 @@ public struct OrganicInlineBar<Leading: View, Trailing: View>: View {
                 .foregroundStyle(Tokens.text)
                 .offset(y: chrome != nil ? 0 : barTitleBesideArrow(title, size: size))
                 .accessibilityAddTraits(.isHeader)
+                .layoutPriority(titleLeads ? 1 : 0)
         }
     }
 }
@@ -1013,6 +1026,9 @@ public struct OrganicIconButton: View {
     /// Drawn flipped left-to-right (the web's back arrow is arrow-right mirrored).
     var mirrored: Bool
     let action: () -> Void
+    private var isLoading = false
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.organicBusyLabel) private var busyLabel
 
     public init(_ icon: IconName, label: String, size: CGFloat = 22, mirrored: Bool = false, action: @escaping () -> Void) {
         self.icon = icon
@@ -1022,17 +1038,33 @@ public struct OrganicIconButton: View {
         self.action = action
     }
 
+    /// At work (the writer's ✓ while a new card's first save runs, round 8 §2.1): the glyph gives its
+    /// place to the buttons' own small pen loop, at its size, and a tap does nothing — the button
+    /// keeps its 44.
+    public func loading(_ loading: Bool) -> OrganicIconButton {
+        var copy = self
+        copy.isLoading = loading
+        return copy
+    }
+
     public var body: some View {
-        Button(action: action) {
+        Button { if !isLoading { action() } } label: {
             OrganicIcon(icon, size: size)
                 .scaleEffect(x: mirrored ? -1 : 1)
                 .foregroundStyle(Tokens.text)
+                .opacity(isLoading ? 0 : 1)
+                // The glyph goes at once and the loop fades in where it was, never over it.
+                .animation(nil, value: isLoading)
+                .overlay { if isLoading { ButtonLoader(size: size, color: Tokens.text).transition(.opacity) } }
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
+                // Not pressable yet (the web's BareIconButton: 0.4).
+                .opacity(isEnabled ? 1 : 0.4)
         }
         // A press washes a wobbly squircle round the glyph, like every other control's.
         .buttonStyle(OrganicPressStyle())
         .accessibilityLabel(label)
+        .accessibilityValue(isLoading ? busyLabel : "")
     }
 }
 

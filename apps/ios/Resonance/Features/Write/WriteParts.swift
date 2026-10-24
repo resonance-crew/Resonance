@@ -116,6 +116,42 @@ private struct TagFlow: Layout {
     }
 }
 
+/// The writer's save state as its bar says it (round 8 §2.1): one quiet word after the title —
+/// 儲存中⋯ · 已儲存 · 修改已暫存, or 未儲存 in the error ink — 13 in the muted ink, on one line. It goes
+/// before the title gives way (the bar's `titleFirst`): shown whole, or not at all. Nothing before the
+/// card's first write. (VoiceOver hears each new word from the writer, `announce(_:)`.)
+struct SaveStateWord: View {
+    let state: WriteModel.SaveState?
+    /// What a pointer resting on it reads: the word with the last write's time (``WriteModel/saveStateHelp``).
+    var help: String? = nil
+
+    var body: some View {
+        if let state {
+            ViewThatFits(in: .horizontal) {
+                Text(state.label)
+                    .font(AppFonts.body(13))
+                    .foregroundStyle(state == .failed ? Tokens.terracotta : Tokens.textMuted)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .contentTransition(.opacity)
+                    .animation(.easeOut(duration: 0.16), value: state)
+                Color.clear.frame(width: 0, height: 0)
+            }
+            .help(help ?? state.label)
+            // Offered what the title left, before the bar's spacer takes it.
+            .layoutPriority(0.5)
+        }
+    }
+
+    /// A polite live region's word: queued behind whatever VoiceOver is saying, never cutting it off.
+    static func announce(_ state: WriteModel.SaveState?) {
+        guard let state else { return }
+        var words = AttributedString(state.label)
+        words.accessibilitySpeechAnnouncementPriority = .low
+        AccessibilityNotification.Announcement(words).post()
+    }
+}
+
 /// One half of the image surface (upload or illustrate): the terracotta glyph,
 /// the muted title and its fainter hint, centred.
 struct MediaHalf: View {

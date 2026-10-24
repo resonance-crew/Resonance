@@ -118,8 +118,17 @@ struct DraftService: DraftStore {
         /// edit's): whether saving makes a resonance reach its original.
         var liveVisibility: String? = nil
         var liveAnonymous: Bool? = nil
+        /// In the trash: the audience a restore gives it back (`trashedFrom.visibility`; the trash
+        /// keeps it private meanwhile).
+        var restoresTo: String? = nil
         /// Where it lives once published: the slug, or the id.
         var routeKey: String { slug ?? id }
+
+        /// Readers have it (round 8 §1): published and not kept private — a published private card is
+        /// a 草稿, as one never published is. One in the trash, as its restore would leave it.
+        var readersSee: Bool {
+            isPublished && (trashedAt == nil ? liveVisibility ?? "public" : restoresTo ?? "private") != "private"
+        }
     }
 
     /// Your card by id, or nil when it is missing or someone else's (rules deny → nil) — or in the
@@ -143,7 +152,8 @@ struct DraftService: DraftStore {
         return OpenedCard(id: id, values: values(pending ?? data), isPublished: isPublished, slug: data["slug"] as? String,
                           referenceCardId: data["referenceCardId"] as? String, hasPendingEdit: pending != nil,
                           trashedAt: trashedAt, liveVisibility: data["visibility"] as? String ?? "public",
-                          liveAnonymous: data["anonymous"] as? Bool ?? false)
+                          liveAnonymous: data["anonymous"] as? Bool ?? false,
+                          restoresTo: (data["trashedFrom"] as? [String: Any])?["visibility"] as? String)
     }
 
     /// Whether your card is in the trash now (`trashedAt`, written by the server alone).

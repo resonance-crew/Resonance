@@ -3,15 +3,16 @@ import ResonanceKit
 import SwiftUI
 import UIKit
 
-/// The writer's second step (writer.spec §2, the web's PublishStep): 發布這張卡片 — 儲存這張卡片 for
-/// a draft kept to its author, 更新這張卡片 for a live card — on one screen in the editor's place,
-/// the publish panel grown into a page (publishing is still two taps: 下一步 → 發布). Top to bottom:
-/// the mirror line (first publication only), the card as a list will show it with its cover edited
-/// on the picture itself (round 7 §1.3), 標籤, 誰可以看見 — one choice of 公開 · 匿名公開 · 只有自己
-/// with the one line that says what it means (§1.1) —, a line saying whether a resonance reaches its
-/// original, then the foot — 存成草稿，稍後再寫 | 發布 · 匿名發布 · 儲存, by the audience (捨棄修改 |
-/// 儲存修改 for a live card). Every choice is the model's own value and autosaves with the draft or
-/// the live card's pending edit.
+/// The writer's second step (writer.spec §2, the web's PublishStep): 發布這張卡片 — 儲存草稿 while 草稿 is
+/// chosen, 更新這張卡片 for a card readers have — on one screen in the editor's place, the publish
+/// panel grown into a page (publishing is still two taps: ✓ → 發布). Top to bottom: the mirror line
+/// (first publication only), the card as a list will show it with its cover edited on the picture
+/// itself (round 7 §1.3; what went wrong with a cover said there too, round 8 §3), 標籤, 卡片類型 — one
+/// choice of 公開 · 匿名公開 · 草稿, no line under it: the preview's byline follows the choice (round 8
+/// §2.2) —, a line saying whether a resonance reaches its original, then the foot: one button whose
+/// verb follows the card and the choice (§2.3), and 捨棄修改 beside it only for a published card's
+/// revision. Every choice is the model's own value and autosaves with the draft or the live card's
+/// pending edit.
 struct PublishStep: View {
     let model: WriteModel
     /// At the split the pane has no bar: the step names itself in its own first row (← 繼續寫 and
@@ -27,10 +28,16 @@ struct PublishStep: View {
     private var updating: Bool { model.isPublished }
     private var compact: Bool { window.layoutClass == .compact }
 
-    /// The way out beside the verb: always for a draft (存成草稿，稍後再寫); for a live card only while
-    /// there is a revision to drop (捨棄修改).
+    /// The only second button left (round 8 §2.3): 捨棄修改, for a published card while it has a
+    /// revision to drop. A draft's choices are its one button (草稿 is one of them).
     static func showsSecondary(_ model: WriteModel) -> Bool {
-        !model.isPublished || model.hasPendingEdit || model.needsSave
+        model.isPublished && (model.hasPendingEdit || model.needsSave)
+    }
+
+    /// The paper of the preview's band (a phone's: the list's first card, by the cover's hue), which
+    /// the gap a pull opens over it wears while it leads under the bar (round 8 §6.3).
+    static func bandPalette(_ model: WriteModel) -> CardPalette {
+        CardPalette(accentHue: model.values.accentHue, position: 0)
     }
 
     /// Whether the preview's band is the first thing under the writer's bar: on a phone, with nothing
@@ -88,6 +95,8 @@ struct PublishStep: View {
 
     // MARK: The heading at the split
 
+    /// ← 繼續寫, the step's name, and the save state ending the row — where the bar would say it below
+    /// the split (round 8 §2.1).
     private var headingRow: some View {
         HStack(spacing: 8) {
             OrganicIconButton(.arrowRight, label: L10n.Write.leaveStay, size: 18, mirrored: true, action: onBack)
@@ -99,6 +108,9 @@ struct PublishStep: View {
                 .foregroundStyle(Tokens.text)
                 .lineLimit(2)
                 .accessibilityAddTraits(.isHeader)
+                .layoutPriority(1)
+            Spacer(minLength: 8)
+            SaveStateWord(state: model.saveState, help: model.saveStateHelp)
         }
         .frame(minHeight: 38)
     }
@@ -133,32 +145,26 @@ struct PublishStep: View {
 
     private var preview: some View {
         let content = model.preview(me: session.me)
-        return VStack(alignment: .leading, spacing: 8) {
-            Group {
-                if compact {
-                    // A phone: the list's own full-bleed band, edge to edge of the window — the first
-                    // card under the bar, as home's, when nothing stands above it.
-                    StoryCardView(content, position: 0, isLast: true,
-                                  underBar: Self.bandUnderBar(model, showsBar: !inlineHeading, compact: compact))
-                        .coverSlot { CoverSlot(model: model, onPick: onPickCover) }
-                        .preview()
-                        .padding(.horizontal, -20)
-                } else {
-                    StoryCardView(content, position: 0, bordered: true)
-                        .coverSlot { CoverSlot(model: model, onPick: onPickCover) }
-                        .preview()
-                        .frame(maxWidth: Self.previewMaxWidth, alignment: .leading)
-                }
-            }
-            // What it is, said once: the card as a list will show it (the caption under it is gone).
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(L10n.Write.previewCaption)
-            // Why the last picture didn't come: one line, only while there is one.
-            if let error = model.mediaError {
-                Text(error).font(AppFonts.body(12)).foregroundStyle(Tokens.terracotta)
-                    .fixedSize(horizontal: false, vertical: true)
+        // Nothing under the preview: why a cover didn't come is said on the picture (``CoverSlot``).
+        return Group {
+            if compact {
+                // A phone: the list's own full-bleed band, edge to edge of the window — the first
+                // card under the bar, as home's, when nothing stands above it.
+                StoryCardView(content, position: 0, isLast: true,
+                              underBar: Self.bandUnderBar(model, showsBar: !inlineHeading, compact: compact))
+                    .coverSlot { CoverSlot(model: model, onPick: onPickCover) }
+                    .preview()
+                    .padding(.horizontal, -20)
+            } else {
+                StoryCardView(content, position: 0, bordered: true)
+                    .coverSlot { CoverSlot(model: model, onPick: onPickCover) }
+                    .preview()
+                    .frame(maxWidth: Self.previewMaxWidth, alignment: .leading)
             }
         }
+        // What it is, said once: the card as a list will show it (the caption under it is gone).
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(L10n.Write.previewCaption)
     }
 
     /// Wider than a phone, the preview keeps to a list column's card.
@@ -175,31 +181,31 @@ struct PublishStep: View {
                          suggesting: model.suggestingTags, onRemove: model.removeTag, onAdd: model.addTag,
                          onSuggest: { Task { await model.suggestTags() } })
                     .onChange(of: model.tagDraft) { _, text in model.typedTag(text) }
-                Text(model.tagError ?? L10n.Write.tagsHelp)
-                    .font(AppFonts.body(Tokens.hintSize))
-                    .foregroundStyle(model.tagError == nil ? Tokens.textMuted : Tokens.terracotta)
+                // No help line under the field (round 8 §2.2): the slot shows only an error.
+                if let error = model.tagError {
+                    Text(error)
+                        .font(AppFonts.body(Tokens.hintSize))
+                        .foregroundStyle(Tokens.terracotta)
+                }
             }
         }
     }
 
-    // MARK: 4 — who can see it, and under whose name
+    // MARK: 4 — the card's type
 
     private var audience: some View {
         VStack(alignment: .leading, spacing: Self.labelGap) {
             label(L10n.Write.Visibility.label)
             // A segmented choice with no pen line (its options are buttons): a quiet paper-dark track
             // shows the control's extent, the chosen segment wears the tonal peach with the deep label.
-            // Anonymity is a way of being public, so it is one of the three. A card kept for connections
-            // only (older ones) shows none chosen and keeps its audience until one is.
+            // Anonymity is a way of being shared, so it is one of the three; 草稿 is the author's alone. A
+            // card kept for connections only (older ones) shows none chosen and keeps its audience until
+            // one is. No line under it: the preview's byline above already follows the choice.
             SegmentedActionBar([
                 audienceOption(.public, L10n.Write.Visibility.`public`, icon: .globe),
                 audienceOption(.anonymous, L10n.Write.Visibility.anonymous, icon: .mask),
-                audienceOption(.private, L10n.Write.Visibility.`private`, icon: .lock),
+                audienceOption(.private, L10n.Write.Visibility.draft, icon: .lock),
             ], fill: Tokens.creamDark)
-            // One line that says what the choice means — the preview above already wears the byline.
-            hint(model.audienceLine(handle: session.me?.handle ?? ""))
-                .contentTransition(.opacity)
-                .animation(.easeOut(duration: 0.16), value: model.audience)
             // A resonance's line stays with the choice it follows.
             if let line = model.resonanceLine { resonance(line).padding(.top, 2) }
         }
@@ -268,15 +274,15 @@ struct PublishStep: View {
     }
 
     private var verb: OrganicButton {
-        // The verb follows the audience: 發布, 匿名發布, or 儲存 for a card kept to its author.
+        // The one button follows the card and its type: 發布 · 匿名發布 · 儲存 · 儲存修改 · 轉為草稿.
         OrganicButton(model.verbTitle, variant: .solid, size: .sm, action: onSubmit)
             .loading(model.pending && model.busyVerb == .publish)
-            .workingLabel(updating ? L10n.Write.saveShort : nil)
+            .workingLabel(model.verbTitle == L10n.Write.PublishPanel.update ? L10n.Write.saveShort : nil)
     }
 
+    /// 捨棄修改: a published card's revision dropped.
     private var secondary: OrganicButton {
-        OrganicButton(updating ? L10n.Write.discardChanges : L10n.Write.saveDraftAndLeave, variant: .tonal, size: .sm,
-                      action: onSecondary)
+        OrganicButton(L10n.Write.discardChanges, variant: .tonal, size: .sm, action: onSecondary)
             .loading(model.pending && model.busyVerb == .leave)
     }
 
@@ -286,11 +292,6 @@ struct PublishStep: View {
             .tracking(Tokens.labelSize * 0.06)
             .foregroundStyle(Tokens.textMuted)
             .accessibilityAddTraits(.isHeader)
-    }
-
-    private func hint(_ text: String) -> some View {
-        Text(text).font(AppFonts.body(Tokens.hintSize)).foregroundStyle(Tokens.textMuted)
-            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -305,46 +306,69 @@ extension PublishStep {
 /// 加一張圖片 · 生成圖片, the second waiting for a story — the pen's loader while one is on its way
 /// (over the model's blurred, washed rough pass while it paints), and once there is one, the picture
 /// is where it is changed (round 7 §1.3): one 更換封面 chip on its bottom-right corner, its menu
-/// another picture · a drawn one · none.
+/// another picture · a drawn one · none. What went wrong with the last try is said here too (round 8
+/// §3): under the empty picture's pills, or on a paper chip at the top-left of the cover that stays.
 private struct CoverSlot: View {
     let model: WriteModel
     var onPick: () -> Void
 
     var body: some View {
-        ZStack {
-            if model.mediaBusy {
-                if model.generating, let partial = model.partialPreview {
-                    Image(uiImage: partial).resizable().scaledToFill()
-                        .blur(radius: 14)
-                    Tokens.cream.opacity(0.45)
-                }
-                VStack(spacing: 6) {
-                    SketchLoader(size: 64)
-                    Text(model.generating ? L10n.Write.mediaGenerating : L10n.Write.mediaUploading)
-                        .font(AppFonts.body(14, weight: .semibold))
-                        .foregroundStyle(Tokens.text)
-                }
-                .accessibilityElement(children: .combine)
-            } else if model.values.imageURL != nil {
-                Color.clear
-                    .overlay(alignment: .bottomTrailing) { changeChip.padding(10) }
-            } else {
-                VStack(spacing: 8) {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 8) { pills }
-                        VStack(spacing: 8) { pills }
+        GeometryReader { geo in
+            ZStack {
+                if model.mediaBusy {
+                    if model.generating, let partial = model.partialPreview {
+                        Image(uiImage: partial).resizable().scaledToFill()
+                            .blur(radius: 14)
+                        Tokens.cream.opacity(0.45)
                     }
-                    if !model.canGenerate {
-                        Text(L10n.Write.mediaGenerateNeedStory)
-                            .font(AppFonts.body(12))
-                            .foregroundStyle(Tokens.textMuted)
-                            .multilineTextAlignment(.center)
+                    VStack(spacing: 6) {
+                        SketchLoader(size: 64)
+                        Text(model.generating ? L10n.Write.mediaGenerating : L10n.Write.mediaUploading)
+                            .font(AppFonts.body(14, weight: .semibold))
+                            .foregroundStyle(Tokens.text)
                     }
+                    .accessibilityElement(children: .combine)
+                } else if model.values.imageURL != nil {
+                    Color.clear
+                        .overlay(alignment: .bottomTrailing) { changeChip.padding(10) }
+                        // A replacement or a drawn one failed: the old cover stays, and a chip over it says why.
+                        .overlay(alignment: .topLeading) {
+                            if let error = model.mediaError {
+                                CoverErrorChip(message: error)
+                                    .frame(maxWidth: geo.size.width * CoverErrorChip.widthShare, alignment: .leading)
+                                    .padding(.top, 14)
+                                    .padding(.leading, 16)
+                                    .transition(.opacity)
+                            }
+                        }
+                } else {
+                    VStack(spacing: 8) {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 8) { pills }
+                            VStack(spacing: 8) { pills }
+                        }
+                        // The last try's trouble, in the error's ink, in place of the hint while there is one.
+                        if let error = model.mediaError {
+                            Text(error)
+                                .font(AppFonts.body(12))
+                                .foregroundStyle(Tokens.terracotta)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityAddTraits(.isStaticText)
+                                .onAppear { AccessibilityNotification.Announcement(error).post() }
+                        } else if !model.canGenerate {
+                            Text(L10n.Write.mediaGenerateNeedStory)
+                                .font(AppFonts.body(12))
+                                .foregroundStyle(Tokens.textMuted)
+                                .multilineTextAlignment(.center)
+                        }
+                    }
+                    .padding(12)
                 }
-                .padding(12)
             }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .animation(.easeOut(duration: 0.16), value: model.mediaError)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder private var pills: some View {
@@ -364,6 +388,45 @@ private struct CoverSlot: View {
                                                   generate: { Task { await model.generateCover() } },
                                                   remove: { model.removeCover() }),
                     label: L10n.Write.coverChange, seed: 36, trigger: .pill(L10n.Write.coverChange, .image))
+    }
+}
+
+/// Why the last try at a cover didn't work, over the cover that stays (round 8 §3): the 更換封面
+/// chip's sibling — paper with the hand-drawn edge (the web's CoverErrorChip: the menu chip's
+/// squircle in the cream at 94 %, a soft shadow under it) — its words in the error's ink, 12
+/// semibold, wrapping within 70 % of the picture's width. It goes with the next cover action.
+private struct CoverErrorChip: View {
+    let message: String
+    /// The most of the picture's width it takes before its words wrap.
+    static let widthShare: CGFloat = 0.7
+
+    var body: some View {
+        Text(message)
+            .font(AppFonts.body(12, weight: .semibold))
+            .lineSpacing(3)
+            .foregroundStyle(Tokens.terracotta)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background {
+                CoverErrorChipShape()
+                    .fill(Tokens.cream.opacity(0.94))
+                    .shadow(color: .black.opacity(0.22), radius: 1.5, y: 1)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isStaticText)
+            .onAppear { AccessibilityNotification.Announcement(message).post() }
+    }
+}
+
+/// The error chip's edge: the menu chip's squircle grown into a pill (radius 0.42 of its height,
+/// at most 16; two turns along, one across).
+private nonisolated struct CoverErrorChipShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let h = Double(rect.height)
+        return WobRectShape(radius: min(h * 0.42, 16), seed: 43, mag: min(h, 34) * 0.03, options: WobRectOptions(
+            curve: 1.4, cornerJitter: 2.4, segmentsH: .count(2), segmentsV: .count(1)
+        )).path(in: rect)
     }
 }
 
