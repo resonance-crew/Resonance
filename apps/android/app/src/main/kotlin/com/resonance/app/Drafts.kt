@@ -49,6 +49,9 @@ interface DraftStore {
 
     suspend fun discardEdit(id: String)
 
+    /** A draft let go of: deleted (the rules let its writer delete a card never published, never one that was). */
+    suspend fun delete(id: String)
+
     /**
      * Whether your card is in the trash now (`trashedAt`), read again: a write refused for it is
      * then said as such. False when it isn't (or is gone); a read that fails throws.
@@ -110,6 +113,10 @@ class DraftService(private val uid: String) : DraftStore {
         data["accentHue"] = v.accentHue
         data["updatedAt"] = FieldValue.serverTimestamp()
         cards.document(id).set(data, SetOptions.merge()).await()
+    }
+
+    override suspend fun delete(id: String) {
+        cards.document(id).delete().await()
     }
 
     // Opening a card to edit

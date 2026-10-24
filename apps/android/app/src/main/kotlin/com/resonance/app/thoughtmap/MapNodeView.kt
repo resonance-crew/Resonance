@@ -151,6 +151,9 @@ class NodeTextLayout private constructor(val lines: List<Line>) {
 
 private val FadeIn = CubicBezierEasing(0f, 0f, 0.58f, 1f) // CSS ease-out
 
+/** A node's visibility glyph: the lock for a 私人卡 (never published too — no pen for a draft any more), else who reads it. */
+fun mapNodeIcon(card: MapCard): IconName = if (card.isPrivateCard) IconName.Lock else visibilityIcon(card.visibility)
+
 fun visibilityIcon(v: String): IconName = when (v) {
     "connections" -> IconName.Users
     "private" -> IconName.Lock
@@ -238,13 +241,14 @@ fun MapNodeView(
             },
     ) {
         if (thumb != null) MapThumb(thumb, hue, seed, Modifier.offset((16 + NodeTextLayout.width - 56).dp, (14 + 2).dp))
-        // The meta row: the visibility glyph (a pen for a draft) and the tags, 8 apart, under the body's 126 and the 8 gap.
+        // The meta row: the visibility glyph (the lock for every 私人卡, published or not: round 9 C4) and the tags,
+        // 8 apart, under the body's 126 and the 8 gap.
         Row(
             Modifier.offset(16.dp, (14 + 126 + 8).dp).requiredSize(200.dp, 18.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
         ) {
-            OrganicIcon(if (card.publishedAt == null) IconName.Pen else visibilityIcon(card.visibility), size = 14.dp, color = Tokens.TextMuted)
+            OrganicIcon(mapNodeIcon(card), size = 14.dp, color = Tokens.TextMuted)
             BasicText(
                 card.tags.joinToString(" ") { "#$it" },
                 style = AppFonts.body(11.5f, 400, lineHeight = 1.4f, color = Tokens.TextMuted),

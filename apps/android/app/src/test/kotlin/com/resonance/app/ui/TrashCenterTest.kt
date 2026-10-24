@@ -142,12 +142,12 @@ class TrashCenterTest {
             restoresTo = restoresTo,
         )
         assertEquals("還原後公開 · 23 天後永久刪除", TrashWords.caption(card(true, FeedCard.RestoresTo.`public`, 7.0), now))
-        assertEquals("草稿 · 29 天後永久刪除", TrashWords.caption(card(false, FeedCard.RestoresTo.`private`, 1.0), now))
-        assertEquals("草稿 · 30 天後永久刪除", TrashWords.caption(card(false, null, 0.5), now))
-        assertEquals("草稿 · 一天內永久刪除", TrashWords.caption(card(true, FeedCard.RestoresTo.`private`, 29.5), now))
+        assertEquals("私人卡 · 29 天後永久刪除", TrashWords.caption(card(false, FeedCard.RestoresTo.`private`, 1.0), now))
+        assertEquals("私人卡 · 30 天後永久刪除", TrashWords.caption(card(false, null, 0.5), now))
+        assertEquals("私人卡 · 一天內永久刪除", TrashWords.caption(card(true, FeedCard.RestoresTo.`private`, 29.5), now))
         assertEquals("還原後只給連結看 · 12 天後永久刪除", TrashWords.caption(card(true, FeedCard.RestoresTo.connections, 18.0), now))
         // A visibility no reader knows comes back private, as the server restores it.
-        assertEquals("草稿 · 12 天後永久刪除", TrashWords.caption(card(true, null, 18.0), now))
+        assertEquals("私人卡 · 12 天後永久刪除", TrashWords.caption(card(true, null, 18.0), now))
     }
 
     private class FakeTrashCalls : TrashCalls {

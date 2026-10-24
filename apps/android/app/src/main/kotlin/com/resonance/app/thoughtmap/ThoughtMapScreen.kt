@@ -139,13 +139,16 @@ fun ThoughtMapScreen(
     // The last settling handled, saved with the page: coming back to it (or rotating) moves nothing.
     var centred by rememberSaveable { mutableIntStateOf(0) }
 
-    // A card of mine opens in the writer (a published one with its pending edit); a card I resonated with opens on its page.
+    // A card of mine opens in the writer (a published one with its pending edit) — at the split in the pane beside
+    // the map, as every card of mine; below it a 私人卡 opens its page, as it does from the card box (round 9 §1). A
+    // card I resonated with opens on its page.
     LaunchedEffect(store, uid) {
         store.onOpen = { card ->
             val mine = currentOpenMine
             when {
                 card.authorId != uid -> currentOpen(Route.Card(card.slug ?: card.id))
                 mine != null -> mine(card.id)
+                card.isPrivateCard -> currentOpen(Route.Card(card.slug ?: card.id))
                 else -> currentOpen(Route.Write(cardId = card.id, showsCard = false))
             }
         }
@@ -382,8 +385,9 @@ fun MapTray(store: ThoughtMapStore) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
+                    // A card I resonated with, a 私人卡 (its lock, as on its node: round 9 C4), or a shared card of mine.
                     OrganicIcon(
-                        if (card.id in store.resonated) IconName.Wave else if (card.publishedAt != null) IconName.Cards else IconName.Pen,
+                        if (card.id in store.resonated) IconName.Wave else if (card.isPrivateCard) IconName.Lock else IconName.Cards,
                         size = 15.dp, color = Tokens.TextMuted,
                     )
                     BasicText(
