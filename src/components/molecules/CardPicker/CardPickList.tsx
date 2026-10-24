@@ -4,6 +4,7 @@ import { useId, useMemo, useRef, type ReactNode } from 'react';
 import { useLocale } from 'next-intl';
 import { Icon } from '@/components/atoms/Icon';
 import { ShapeGrain } from '@/components/atoms/ShapeGrain/ShapeGrain';
+import { Skeleton } from '@/components/atoms/Skeleton/Skeleton';
 import { OrganicScrollbar, organicScrollTarget } from '@/components/atoms/OrganicScrollbar/OrganicScrollbar';
 import { wobRect } from '@/lib/design/wobRect';
 import { INK } from '@/lib/design/strokes';
@@ -30,6 +31,11 @@ export interface CardPickListProps {
   label?: string;
   /** No row can be pressed (a request is on its way). */
   disabled?: boolean;
+  /**
+   * The cards are being read: four rows' footprint stands where the rows will
+   * (a thumb, a title, a date — plain CSS chrome, nothing measured), never "…".
+   */
+  loading?: boolean;
   /** Leads an anonymous card's meta line (「匿名 · 9月28日」); without it nothing marks one. */
   anonymousLabel?: string;
   /** Drawn in place of the rows when there are no cards; without it, no cards draw nothing (no empty list). */
@@ -66,6 +72,7 @@ export function CardPickList({
   selectedId,
   label,
   disabled = false,
+  loading = false,
   anonymousLabel,
   empty,
   footnote,
@@ -80,9 +87,11 @@ export function CardPickList({
 
   return (
     <div className={styles.listArea}>
-      <div ref={scrollEdges} className={`${styles.scroll} ${organicScrollTarget}`}>
+      <div ref={scrollEdges} className={`${styles.scroll} ${organicScrollTarget}`} aria-busy={loading || undefined}>
         {lead}
-        {cards.length === 0 ? (
+        {loading ? (
+          <PickSkeleton />
+        ) : cards.length === 0 ? (
           empty ? (
             <div className={styles.empty}>{empty}</div>
           ) : null
@@ -132,6 +141,34 @@ export function CardPickList({
       </div>
       <OrganicScrollbar targetRef={scrollRef} seed={61} />
     </div>
+  );
+}
+
+/** How many rows stand in while the cards are read. */
+export const PICK_SKELETON_ROWS = 4;
+
+/**
+ * The rows' footprint while the cards are read, each where a row will stand:
+ * the thumb as a plain rounded block a little out of true (a skeleton draws no
+ * measured shape), a title bar over a shorter date bar, the skeleton's pulse.
+ */
+function PickSkeleton() {
+  return (
+    <ul className={styles.list} aria-hidden data-skeleton>
+      {Array.from({ length: PICK_SKELETON_ROWS }, (_, i) => (
+        <li key={i} className={styles.skeletonRow}>
+          <Skeleton width={THUMB} height={THUMB} style={{ borderRadius: '11px 9px 12px 10px' }} />
+          <span className={styles.rowText}>
+            <span className={styles.skeletonTitle}>
+              <Skeleton width="60%" height={14} />
+            </span>
+            <span className={styles.skeletonMeta}>
+              <Skeleton width="35%" height={11} />
+            </span>
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

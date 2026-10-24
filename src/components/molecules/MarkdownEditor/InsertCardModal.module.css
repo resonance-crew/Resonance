@@ -12,9 +12,11 @@
   margin: 0 0 12px;
 }
 
-.muted {
-  color: var(--color-text-muted);
-  font-size: 14px;
-  padding: 12px 0;
+/* A read that failed: what happened, and the way to try again beside it (it wraps under on a narrow phone). */
+.failed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
 }
 

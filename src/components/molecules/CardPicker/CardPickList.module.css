@@ -178,6 +178,29 @@
   text-overflow: ellipsis;
 }
 
+/* While the cards are read: each row's footprint where the row will stand —
+   its padding, its 40px thumb, the title's and the date's line boxes. */
+.skeletonRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 6px;
+}
+
+.skeletonTitle,
+.skeletonMeta {
+  display: flex;
+  align-items: center;
+}
+
+.skeletonTitle {
+  height: calc(15px * 1.35);
+}
+
+.skeletonMeta {
+  height: calc(13px * 1.35);
+}
+
 .empty {
   color: var(--color-text-muted);
   font-size: 14px;
