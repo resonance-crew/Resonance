@@ -125,7 +125,11 @@ function Writer(props: Omit<CardEditorProps, 'onPrimaryActionChange'> & { editor
 const next = () => screen.getByRole('button', { name: en.write.next });
 const title = () => screen.getByLabelText('One-line title');
 const story = () => screen.getByLabelText('Story');
-const inStep = () => screen.queryByRole('button', { name: en.write.publishPanel.publish }) != null;
+/** The publish step is up: its verb, whichever the audience makes it (發布 · 匿名發布 · 儲存). */
+const inStep = () =>
+  [en.write.publishPanel.publish, en.write.publishPanel.publishAnonymously, en.write.publishPanel.save].some(
+    (name) => screen.queryByRole('button', { name }) != null,
+  );
 
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
@@ -312,7 +316,7 @@ describe('CardEditor — the publish step', () => {
   });
 
   // An anonymous card is public or private, never for connections only: no write is ever both.
-  it('makes a connections draft anonymous and public in one write', async () => {
+  it('makes a connections draft anonymous and public in one write (匿名公開)', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       renderWithIntl(
@@ -320,7 +324,7 @@ describe('CardEditor — the publish step', () => {
       );
       await userEvent.click(next());
       await waitFor(() => expect(inStep()).toBe(true));
-      await userEvent.click(screen.getByRole('switch', { name: en.write.publishPanel.anonymousToggle }));
+      await userEvent.click(screen.getByRole('button', { name: en.write.visibility.anonymous }));
       await act(() => vi.advanceTimersByTimeAsync(2000));
       const writes = vi.mocked(updateCardDraft).mock.calls.map(([, patch]) => patch);
       expect(writes).toEqual([expect.objectContaining({ anonymous: true, visibility: 'public' })]);
@@ -328,6 +332,19 @@ describe('CardEditor — the publish step', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // Kept to its author, a card is saved, not published: the host's bar, the verb and a failure all say so.
+  it('names the step after its audience for the host, and says a failed save as one', async () => {
+    const onStepTitleChange = vi.fn();
+    vi.mocked(publishCard).mockRejectedValueOnce(new Error('offline'));
+    renderWithIntl(<Writer locale="en" onStepTitleChange={onStepTitleChange} />);
+    await toPublishStep();
+    expect(onStepTitleChange).toHaveBeenLastCalledWith(en.write.publishPanel.title);
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.private }));
+    expect(onStepTitleChange).toHaveBeenLastCalledWith(en.write.publishPanel.saveTitle);
+    await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.save }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(en.write.publishPanel.saveFailed);
   });
 
   it('saves the draft for later from the step’s foot, by the host’s way out', async () => {
@@ -421,8 +438,9 @@ describe('CardEditor — editing a published card', () => {
     // The same step, in update dress: no mirror moment, and it says plainly what the button is about to do.
     expect(await screen.findByRole('region', { name: en.write.publishPanel.updateTitle })).toBeInTheDocument();
     expect(screen.getByText(en.write.publishPanel.updateHint)).toBeInTheDocument();
+    // Anonymous for everyone, then kept to its author: a live card keeps its anonymity while it is private.
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.anonymous }));
     await userEvent.click(screen.getByRole('button', { name: en.write.visibility.private }));
-    await userEvent.click(screen.getByRole('switch', { name: en.write.publishPanel.anonymousToggle }));
     await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.update }));
 
     await waitFor(() =>

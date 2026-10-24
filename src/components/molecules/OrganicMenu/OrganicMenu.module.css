@@ -30,6 +30,30 @@
   display: flex;
 }
 
+/* A labelled chip: glyph and words on the paper pill, in ink (the words carry it). */
+.pill {
+  gap: 6px;
+  padding: 0 13px 0 11px;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+.pill:hover,
+.pill[data-open] {
+  color: var(--color-text);
+}
+/* It sits on a picture, light or dark: a soft shadow keeps the paper from melting into a pale one. */
+.pill > svg {
+  filter: drop-shadow(0 1px 3px oklch(0% 0 0 / 0.22));
+}
+.triggerLabel {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+}
+
 /* ── Bare trigger: the glyph on the page's own paper ───────────────
    No chip and no rim; muted ink at rest so it doesn't read as an accent
    ornament, full ink with a soft disc under it on hover, keyboard focus and

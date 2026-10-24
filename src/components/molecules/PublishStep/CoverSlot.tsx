@@ -7,7 +7,7 @@ import { HandDrawnDashedSurface } from '@/components/atoms/HandDrawnDashedBorder
 import { Icon } from '@/components/atoms/Icon';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { SketchLoader } from '@/components/atoms/SketchLoader/SketchLoader';
-import { NodeRemoveButton } from '@/components/molecules/MarkdownEditor/NodeRemoveButton';
+import { OrganicMenu, type OrganicMenuItem } from '@/components/molecules/OrganicMenu/OrganicMenu';
 import type { GenerateImageEvent } from '@/app/api/generate-image/route';
 import type { CardMedia } from '@/lib/db/types';
 import { extractAccentHue } from '@/lib/images/accentHue';
@@ -157,12 +157,20 @@ export function useCoverEditor({
  * (加一張圖片 · 生成圖片, the second waiting for a story), a dashed frame while
  * a file is dragged over (dropped, it uploads), the pen's loader while one is
  * on its way — over the model's blurred, washed rough pass while it paints —
- * and once there is one, the editor's × to take it away.
+ * and once there is one, one chip on it that says so (更換封面), whose menu
+ * holds everything a cover can become: another picture, one drawn from the
+ * story, none. The picture is where it is changed — no second control for it
+ * under the preview.
  */
 export function CoverFrame({ cover }: { cover: CoverEditor }) {
   const t = useTranslations('write');
   const { media, uploading, generating, partial, dragOver, canGenerate } = cover;
   const busy = uploading || generating;
+  const menu: OrganicMenuItem[] = [
+    { key: 'replace', icon: 'image', label: t('mediaReplace') },
+    ...(canGenerate ? [{ key: 'generate', icon: 'sparkle' as const, label: t('mediaGenerate') }] : []),
+    { key: 'remove', icon: 'trash', label: t('mediaRemove'), danger: true },
+  ];
   return (
     <div
       className={styles.cover}
@@ -187,8 +195,21 @@ export function CoverFrame({ cover }: { cover: CoverEditor }) {
           <span className={styles.coverBusyText}>{generating ? t('mediaGenerating') : t('mediaUploading')}</span>
         </span>
       ) : media ? (
-        <span className={styles.coverRemove}>
-          <NodeRemoveButton label={t('mediaRemove')} onClick={cover.remove} />
+        <span className={styles.coverMenu}>
+          <OrganicMenu
+            items={menu}
+            label={t('coverChange')}
+            triggerLabel={t('coverChange')}
+            triggerIcon="image"
+            triggerSize={34}
+            seed={41}
+            floating
+            onChoose={(key) => {
+              if (key === 'replace') cover.pick();
+              else if (key === 'generate') cover.generate();
+              else if (key === 'remove') cover.remove();
+            }}
+          />
         </span>
       ) : (
         <span className={styles.coverEmpty}>
@@ -225,19 +246,12 @@ export function CoverFrame({ cover }: { cover: CoverEditor }) {
   );
 }
 
-/** Under the caption: another picture for one that is there, and why the last try didn't work. */
-export function CoverBelow({ cover }: { cover: CoverEditor }) {
-  const t = useTranslations('write');
-  const busy = cover.uploading || cover.generating;
-  if (!cover.error && !(cover.media && !busy)) return null;
+/** Under the preview, only while there is one: why the last try at a cover didn't work. */
+export function CoverError({ cover }: { cover: CoverEditor }) {
+  if (!cover.error) return null;
   return (
     <div className={styles.coverBelow}>
-      {cover.media && !busy && (
-        <OrganicButton variant="tonal" size="sm" onClick={cover.pick}>
-          {t('mediaReplace')}
-        </OrganicButton>
-      )}
-      {cover.error && <FieldHint tone="error">{cover.error}</FieldHint>}
+      <FieldHint tone="error">{cover.error}</FieldHint>
     </div>
   );
 }

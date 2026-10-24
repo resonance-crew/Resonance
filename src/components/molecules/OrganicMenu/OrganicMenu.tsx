@@ -14,6 +14,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
+import { useElementSize } from '@/lib/hooks/useElementSize';
 import { Icon, type IconName } from '@/components/atoms/Icon';
 import { RowInkWash, useRowInk } from '@/components/atoms/RowInk/RowInk';
 import { wobRect } from '@/lib/design/wobRect';
@@ -47,6 +48,12 @@ export interface OrganicMenuProps {
   busy?: boolean;
   triggerIcon?: IconName;
   triggerSize?: number;
+  /**
+   * The chip says what it does in words beside its glyph (「更換封面」): a
+   * pill `triggerSize` tall, as wide as its words — for a menu nothing else
+   * on the page names (a glyph alone on a picture reads as decoration).
+   */
+  triggerLabel?: string;
   /**
    * A bare glyph on the page's own paper (no chip): muted ink at rest, a soft
    * disc of ink under it on hover, focus and while open, and `label` shown
@@ -135,6 +142,7 @@ export function OrganicMenu({
   busy = false,
   triggerIcon = 'dots',
   triggerSize = 38,
+  triggerLabel,
   bare = false,
   tone = 'muted',
   tip = 'above',
@@ -161,6 +169,18 @@ export function OrganicMenu({
   const [panelSeed, setPanelSeed] = useState(seed);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  // A pill's width is its words': its outline is drawn once it is measured (only a pill is watched — a
+  // thread holds a menu per message).
+  const pill = !bare && triggerLabel !== undefined;
+  const pillRef = useRef<HTMLButtonElement | null>(null);
+  const setTrigger = useCallback(
+    (el: HTMLButtonElement | null) => {
+      triggerRef.current = el;
+      pillRef.current = pill ? el : null;
+    },
+    [pill],
+  );
+  const { w: pillW } = useElementSize(pillRef, 0, 0, [triggerLabel, pill]);
   // Opened from the keyboard: the focus goes to the first row (a pointer's opening leaves no ring on it).
   const [byKeyboard, setByKeyboard] = useState(false);
   /** Closes it — and, when the focus was in the panel, puts it back on the trigger, where the reader was. */
@@ -223,10 +243,10 @@ export function OrganicMenu({
       style={styleOverrides}
     >
       <button
-        ref={triggerRef}
+        ref={setTrigger}
         type="button"
-        className={bare ? `${styles.trigger} ${styles.bare}` : styles.trigger}
-        style={bare ? undefined : { width: triggerSize, height: triggerSize }}
+        className={bare ? `${styles.trigger} ${styles.bare}` : pill ? `${styles.trigger} ${styles.pill}` : styles.trigger}
+        style={bare ? undefined : pill ? { height: triggerSize } : { width: triggerSize, height: triggerSize }}
         data-open={open || undefined}
         data-tone={bare ? tone : undefined}
         data-icon={triggerIcon}
@@ -254,6 +274,21 @@ export function OrganicMenu({
       >
         {bare ? (
           <BareWash seed={seed} />
+        ) : pill ? (
+          pillW > 0 && (
+            <HandDrawnBorder
+              w={pillW}
+              h={triggerSize}
+              R={triggerSize * 0.42}
+              seed={seed}
+              mag={triggerSize * 0.03}
+              fillColor="color-mix(in oklch, var(--menu-cream) 94%, transparent)"
+              segmentsH={2}
+              segmentsV={1}
+              curve={1.4}
+              cornerJitter={2.4}
+            />
+          )
         ) : (
           <HandDrawnBorder
             w={triggerSize}
@@ -269,8 +304,9 @@ export function OrganicMenu({
           />
         )}
         <span className={styles.triggerIcon}>
-          <Icon name={triggerIcon} size={bare ? 22 : Math.round(triggerSize * 0.53)} strokeWidth={INK} />
+          <Icon name={triggerIcon} size={bare ? 22 : pill ? 16 : Math.round(triggerSize * 0.53)} strokeWidth={INK} />
         </span>
+        {pill && <span className={styles.triggerLabel}>{triggerLabel}</span>}
       </button>
       {bare && (
         <span className={styles.tip} aria-hidden="true" data-side={tip} data-dismissed={tipDismissed || undefined}>

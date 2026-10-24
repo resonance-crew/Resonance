@@ -142,6 +142,9 @@ export function WriteWorkspace({
   const [openedStep, setOpenedStep] = useState<WriterStep>('write');
   const [draftPending, setDraftPending] = useState(false);
   const [openedPending, setOpenedPending] = useState(false);
+  // The publish step's name as each editor says it (it follows who the card is for).
+  const [draftStepTitle, setDraftStepTitle] = useState<string | null>(null);
+  const [openedStepTitle, setOpenedStepTitle] = useState<string | null>(null);
   const shownAction = showOpened ? openedAction : draftAction;
   const shownStep = showOpened ? openedStep : step;
   const shownPending = showOpened ? openedPending : draftPending;
@@ -155,9 +158,8 @@ export function WriteWorkspace({
   const shownPublished = showOpened ? openedCard.publishedAt != null : isPublished;
   const barTitle =
     shownStep === 'publish'
-      ? shownPublished
-        ? t('publishPanel.updateTitle')
-        : t('publishPanel.title')
+      ? ((showOpened ? openedStepTitle : draftStepTitle) ??
+        (shownPublished ? t('publishPanel.updateTitle') : t('publishPanel.title')))
       : !showOpened
         ? title
         : openedCard.authorId !== user?.id
@@ -270,6 +272,7 @@ export function WriteWorkspace({
               onStepChange={changeStep}
               onPrimaryActionChange={setDraftAction}
               onPendingChange={setDraftPending}
+              onStepTitleChange={setDraftStepTitle}
               inlineStepHeading={split === true}
               focusStepHeading={focusBarTitle}
               onLeave={() => outOfStep(leaveWriter)}
@@ -286,6 +289,7 @@ export function WriteWorkspace({
                 onStepChange: setOpenedStep,
                 onPrimaryActionChange: setOpenedAction,
                 onPendingChange: setOpenedPending,
+                onStepTitleChange: setOpenedStepTitle,
                 inlineStepHeading: split === true,
                 focusStepHeading: focusBarTitle,
               }}
