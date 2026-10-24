@@ -17,7 +17,8 @@ public enum Delivery: Equatable, Sendable {
 
 /// What a reply carries of the message it answers (the server's `replyTo` snapshot, kept on the
 /// reply): the quote is read from here, never from the original, which may be far up the thread
-/// or gone. `text` is at most `maxText` code points; empty when the original was a card alone.
+/// or gone. `text` is at most `maxText` code points; empty when the original was a card or a
+/// picture alone (`image`: it carried one — a quote is words, so only that it did).
 public struct ReplyQuote: Equatable, Hashable, Sendable {
     public static let maxText = 140
 
@@ -25,17 +26,27 @@ public struct ReplyQuote: Equatable, Hashable, Sendable {
     public let senderId: String
     public let text: String
     public let cardRef: String?
+    public let image: Bool
 
-    public init(id: String, senderId: String, text: String, cardRef: String? = nil) {
+    public init(id: String, senderId: String, text: String, cardRef: String? = nil, image: Bool = false) {
         self.id = id
         self.senderId = senderId
         self.text = text
         self.cardRef = cardRef
+        self.image = image
     }
 
     /// The quote a reply to `message` carries (the same cut the server makes).
     public static func of(_ message: ChatMessage) -> ReplyQuote {
-        ReplyQuote(id: message.id, senderId: message.senderId, text: cut(message.text), cardRef: message.cardRef)
+        ReplyQuote(id: message.id, senderId: message.senderId, text: cut(message.text), cardRef: message.cardRef,
+                   image: message.image != nil)
+    }
+
+    /// What the quote says: its words — or, with none, what the message was: a picture
+    /// (`picture`, 一張圖片) or a card (`card`, 一張卡片).
+    public func summary(picture: String, card: String) -> String {
+        guard text.isEmpty else { return text }
+        return image ? picture : card
     }
 
     /// At most `maxText` code points (Unicode scalars, so never half of a surrogate pair).
@@ -45,6 +56,30 @@ public struct ReplyQuote: Equatable, Hashable, Sendable {
         var out = String.UnicodeScalarView()
         out.append(contentsOf: scalars.prefix(maxText))
         return String(out)
+    }
+}
+
+/// A picture sent in a message (its document's `image: { id, width, height }`): read through the
+/// API with the viewer's credentials (GET /api/v1/chat-images/{id}), never a plain address, and
+/// only by the two people of its conversation. Its size as kept lets the bubble take its shape
+/// before the picture arrives. For a message still on its way the id is its client id, which the
+/// server makes the picture's id.
+public struct ChatImage: Equatable, Hashable, Identifiable, Sendable {
+    public let id: String
+    public let width: Int
+    public let height: Int
+
+    public init(id: String, width: Int, height: Int) {
+        self.id = id
+        self.width = width
+        self.height = height
+    }
+
+    /// The `image` field of a message document, or nil for none (or one without an id).
+    public static func from(_ map: [String: Any]?) -> ChatImage? {
+        guard let map, let id = map["id"] as? String, !id.isEmpty else { return nil }
+        func side(_ key: String) -> Int { max(0, (map[key] as? NSNumber)?.intValue ?? 0) }
+        return ChatImage(id: id, width: side("width"), height: side("height"))
     }
 }
 
@@ -96,12 +131,14 @@ public struct ChatMessage: Equatable, Sendable {
     public var replyTo: ReplyQuote?
     /// The first link's page; the server writes it a moment after the message.
     public var preview: LinkPreview?
+    /// A picture sent with it (a message carries a card or a picture, never both).
+    public let image: ChatImage?
     public var delivery: Delivery
     public var key: String
 
     public init(id: String, senderId: String, text: String, sentAt: Date, cardRef: String? = nil, noteRef: MessagingAPI.NoteRef? = nil,
-                isNote: Bool = false, replyTo: ReplyQuote? = nil, preview: LinkPreview? = nil, delivery: Delivery = .delivered,
-                key: String? = nil) {
+                isNote: Bool = false, replyTo: ReplyQuote? = nil, preview: LinkPreview? = nil, image: ChatImage? = nil,
+                delivery: Delivery = .delivered, key: String? = nil) {
         self.id = id
         self.senderId = senderId
         self.text = text
@@ -111,6 +148,7 @@ public struct ChatMessage: Equatable, Sendable {
         self.isNote = isNote
         self.replyTo = replyTo
         self.preview = preview
+        self.image = image
         self.delivery = delivery
         self.key = key ?? id
     }
@@ -145,14 +183,16 @@ public struct ChatMessage: Equatable, Sendable {
             // A note without the card it was left on would be about nothing: drawn as plain words.
             isNote: fields["kind"] as? String == "note" && cardRef != nil,
             replyTo: quote(fields["replyTo"] as? [String: Any]),
-            preview: preview(fields["preview"] as? [String: Any], origin: origin)
+            preview: preview(fields["preview"] as? [String: Any], origin: origin),
+            image: ChatImage.from(fields["image"] as? [String: Any])
         )
     }
 
     private static func quote(_ map: [String: Any]?) -> ReplyQuote? {
         guard let map, let id = map["id"] as? String, !id.isEmpty else { return nil }
         return ReplyQuote(id: id, senderId: map["senderId"] as? String ?? "", text: ReplyQuote.cut(map["text"] as? String ?? ""),
-                          cardRef: (map["cardRef"] as? String).flatMap { $0.isEmpty ? nil : $0 })
+                          cardRef: (map["cardRef"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+                          image: map["image"] as? Bool == true)
     }
 
     private static func preview(_ map: [String: Any]?, origin: URL) -> LinkPreview? {

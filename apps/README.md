@@ -276,6 +276,26 @@ map's Leave at the split leaves from either step. A save the rules refuse, or a
 publish answered 409, is read again: a card moved to the trash meanwhile says so
 where the save line was, with 還原, keeping what is typed.
 
+Pictures in chat: the composer's ＋ opens 圖片 · 卡片 (`AttachMenuOverlay`, the
+screen's own layer, so the keyboard stays up). 圖片 is the system's `PhotosPicker`
+(one picture, `.current` encoding; no library access is asked for), readied off
+the main thread by `ChatPictures.prepare` — a JPEG at most 2048 px on its longest
+side, upright; a GIF up to 4 MB goes as it is — and held above the field
+(`ThreadModel.pendingPicture`: picking a card drops it, and the other way round).
+Sending draws it at once from the device (`ChatImageStore.keep`, under the
+message's client id) while `ChatOutboxes` uploads it (`POST /api/v1/chat-images`
+with that client id, once per message, however often it is retried) and then
+sends the message naming it. Pictures are read only through
+`MessagingAPI.chatImage`, the account's HTTP stack with its token — never a
+plain image loader: the thread's size for a bubble (`MessagePictureSize`: as
+wide as the bubble, at most 320 tall, its shape held between 1:2 and 2:1) and
+the full one in `ChatPictureViewer` (pinch or double-tap to zoom; a pull down or
+its ✕ closes it). `FreshnessMiddleware` never asks for one again (its bytes
+never change); `ChatImageStore` keeps them decoded, per account. One that
+couldn't be read keeps its fill with the picture glyph, and a tap asks again.
+A reply to a picture quotes 一張圖片 (`ReplyQuote.summary`), and the Messages
+list says 傳送了一張圖片 for one sent without words.
+
 The app hosts its unit tests; run them with `xcodebuild test … -destination
 'id=<udid>'`. Under XCTest the app points at a local stack that isn't there
 (no backend, not even a simulator's saved account on production) unless the

@@ -1,13 +1,15 @@
 import DesignSystem
+import PhotosUI
 import ResonanceKit
 import SwiftUI
 
 /// A conversation (ThreadView.tsx, phone): the person in the bar over the messages — newest at the
-/// bottom, stacked in runs, with the quotes of replies and the previews of links, older ones read
-/// in as the thread is scrolled — then attachments and the composer. A long-press lifts a message
-/// with its actions, a drag toward the middle replies. The ⋯ holds search, what's been shared,
-/// report, block and delete; search lists the matches over the thread and steps through them. The
-/// twin of Android's ThreadScreen.
+/// bottom, stacked in runs, with the quotes of replies, the previews of links and the pictures sent,
+/// older ones read in as the thread is scrolled — then attachments and the composer, whose ＋ offers
+/// a picture from the library or a card. A long-press lifts a message with its actions, a drag
+/// toward the middle replies, a tap on a picture opens it full screen. The ⋯ holds search, what's
+/// been shared, report, block and delete; search lists the matches over the thread and steps
+/// through them. The twin of Android's ThreadScreen.
 struct ThreadScreen: View {
     let handle: String
     /// The other person's uid, when the place it was opened from knew it.
@@ -32,6 +34,12 @@ struct ThreadScreen: View {
     @State private var currentHit: String?
     @State private var showingMedia = false
     @State private var pickingCard = false
+    /// The composer's ＋ is open: where it is, for its menu to hang from.
+    @State private var attachMenu: CGRect?
+    @State private var pickingPhoto = false
+    @State private var photoItem: PhotosPickerItem?
+    /// The picture open full screen.
+    @State private var viewing: ChatImage?
     @State private var reporting = false
     @State private var sendingReport = false
     @State private var confirmingBlock = false
@@ -158,6 +166,9 @@ struct ThreadScreen: View {
                                                      copied: { say(L10n.Messages.copied) }),
                                    footer: Self.full(menu.row.message.sentAt), safe: safe) { self.menu = nil }
             }
+            if let attachMenu {
+                AttachMenuOverlay(anchor: attachMenu, items: attachItems) { self.attachMenu = nil }
+            }
         }
         .background(Tokens.cream)
         .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { safe = $0 }
@@ -245,7 +256,7 @@ struct ThreadScreen: View {
                         ThreadFootNote(text: L10n.Messages.replyToConnect(handle: model.displayHandle), size: 12.5)
                             .padding(.top, 10)
                     }
-                    ThreadComposer(model: model, composing: $composing) { pickingCard = true }
+                    ThreadComposer(model: model, composing: $composing) { attachMenu = $0 }
                 }
                 .padding(.horizontal, 14)
                 .padding(.bottom, 14)
@@ -289,8 +300,18 @@ struct ThreadScreen: View {
             onReply: reply,
             onQuote: { jump(to: $0, pulse: true) },
             openLink: openLink,
-            openRoute: { openRoute($0) }
+            openRoute: { openRoute($0) },
+            // Over the thread with no slide: the viewer fades itself in and out.
+            openPicture: { picture in withTransaction(\.disablesAnimations, true) { viewing = picture } }
         )
+    }
+
+    /// What the composer's ＋ offers: a picture from the library, or one of the viewer's cards.
+    private var attachItems: [OrganicMenuItem] {
+        [
+            OrganicMenuItem(id: "picture", title: L10n.Messages.attachImage, icon: .image) { pickingPhoto = true },
+            OrganicMenuItem(id: "card", title: L10n.Messages.attachCardShort, icon: .cards) { pickingCard = true },
+        ]
     }
 
     /// Says `text` over the composer for a moment.
@@ -512,6 +533,20 @@ struct ThreadScreen: View {
                     pickingCard = false
                 } onCancel: { pickingCard = false }
                 .withSession(session)
+            }
+            // One picture from the library (the system's picker, out of the app's process: no library access asked for).
+            .photosPicker(isPresented: $pickingPhoto, selection: $photoItem, matching: .images, preferredItemEncoding: .current)
+            .onChange(of: photoItem) { _, item in
+                guard let item, let model else { return }
+                photoItem = nil
+                Task { await model.attachPicture { try? await item.loadTransferable(type: Data.self) } }
+            }
+            .fullScreenCover(item: $viewing) { picture in
+                if let model {
+                    ChatPictureViewer(picture: picture, store: model.pictures) {
+                        withTransaction(\.disablesAnimations, true) { viewing = nil }
+                    }
+                }
             }
     }
 

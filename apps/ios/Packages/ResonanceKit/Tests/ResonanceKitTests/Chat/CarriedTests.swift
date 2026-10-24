@@ -30,6 +30,20 @@ import Testing
         #expect(carried(button, .found("card")).words(of: button) == "read this")
     }
 
+    /// A picture is what its message carries, whatever its words link to: the bubble is the
+    /// picture's, the words (all of them) under it.
+    @Test func aPictureIsWhatItsMessageCarries() {
+        let image = ChatImage(id: "p1", width: 800, height: 600)
+        let alone = ChatMessage(id: "m1", senderId: "bob", text: "", sentAt: at, image: image)
+        #expect(carried(alone, .hidden) == .picture(image))
+        #expect(carried(alone, .hidden).words(of: alone).isEmpty)
+        #expect(!carried(alone, .found("card")).isCard)
+        let linked = ChatMessage(id: "m2", senderId: "bob", text: "看 https://resonance.channel/card/a-walk", sentAt: at,
+                                 preview: preview, image: image)
+        #expect(carried(linked, .found("card")) == .picture(image))
+        #expect(carried(linked, .found("card")).words(of: linked) == linked.text)
+    }
+
     @Test func aCardOnItsWayIsItsStandIn() {
         let linked = message("https://resonance.channel/card/a-walk", preview: preview)
         #expect(carried(linked, .loading).isCard)

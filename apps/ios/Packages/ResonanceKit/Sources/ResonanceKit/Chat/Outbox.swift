@@ -23,6 +23,33 @@ import Observation
 public final class Outbox {
     public enum Status: Equatable, Sendable { case queued, sending, sent, failed }
 
+    /// A picture sent with a message: the bytes to upload (prepared on the device — at most 2048 px
+    /// on its longest side, or a GIF as it was) with their type and size in pixels. The server
+    /// keeps it under the message's own client id.
+    public struct Picture: Equatable, Sendable {
+        public let data: Data
+        public let contentType: String
+        public let width: Int
+        public let height: Int
+
+        public init(data: Data, contentType: String, width: Int, height: Int) {
+            self.data = data
+            self.contentType = contentType
+            self.width = width
+            self.height = height
+        }
+
+        /// The upload's file name, by its type (the server reads the bytes, not the name).
+        public var filename: String {
+            switch contentType {
+            case "image/gif": "picture.gif"
+            case "image/png": "picture.png"
+            case "image/webp": "picture.webp"
+            default: "picture.jpg"
+            }
+        }
+    }
+
     /// A message from this person: what the composer held when they sent it.
     public struct Outgoing: Equatable, Sendable {
         public let clientId: String
@@ -32,6 +59,8 @@ public final class Outbox {
         public let noteRef: MessagingAPI.NoteRef?
         /// The message it answers; the server makes its own snapshot of it.
         public let replyTo: ReplyQuote?
+        /// A picture to upload, then send with the words (never beside a card).
+        public let picture: Picture?
         public let queuedAt: Date
         public var status: Status
         /// The document id the server answered with (once `sent`); the client id, from a server that uses it.
@@ -40,20 +69,23 @@ public final class Outbox {
         public var refused: Bool
 
         public init(clientId: String, senderId: String, text: String, cardRef: String? = nil, noteRef: MessagingAPI.NoteRef? = nil,
-                    replyTo: ReplyQuote? = nil, queuedAt: Date = Date(), status: Status = .queued, serverId: String? = nil, refused: Bool = false) {
+                    replyTo: ReplyQuote? = nil, picture: Picture? = nil, queuedAt: Date = Date(), status: Status = .queued,
+                    serverId: String? = nil, refused: Bool = false) {
             self.clientId = clientId
             self.senderId = senderId
             self.text = text
             self.cardRef = cardRef
             self.noteRef = noteRef
             self.replyTo = replyTo
+            self.picture = picture
             self.queuedAt = queuedAt
             self.status = status
             self.serverId = serverId
             self.refused = refused
         }
 
-        /// The message as the thread draws it while it is on its way.
+        /// The message as the thread draws it while it is on its way: its picture under its client
+        /// id, which the server keeps it under (the screen draws the picture from the device meanwhile).
         public var message: ChatMessage {
             let delivery: Delivery = switch status {
             case .queued, .sending: .sending
@@ -61,7 +93,8 @@ public final class Outbox {
             case .failed: .failed
             }
             return ChatMessage(id: clientId, senderId: senderId, text: text, sentAt: queuedAt, cardRef: cardRef, noteRef: noteRef,
-                               replyTo: replyTo, delivery: delivery)
+                               replyTo: replyTo, image: picture.map { ChatImage(id: clientId, width: $0.width, height: $0.height) },
+                               delivery: delivery)
         }
 
         /// Whether the conversation's own document of this message is in `history`.

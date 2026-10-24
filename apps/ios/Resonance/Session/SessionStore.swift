@@ -104,6 +104,8 @@ final class SessionStore {
     /// The messages this account sent that are still on their way, one queue per conversation
     /// (they outlive the thread that sent them; emptied when the account changes).
     let outboxes: ChatOutboxes
+    /// The pictures of this account's conversations, read with its credentials (emptied when the account changes).
+    let chatImages: ChatImageStore
     /// The account's thought map, kept between visits so opening it again within a
     /// while shows it at once without reading a hundred cards (ThoughtMapStore.open).
     private(set) var thoughtMap: ThoughtMapStore
@@ -117,6 +119,7 @@ final class SessionStore {
         let client = ResonanceClient.make(configuration, cache: httpCache)
         api = client
         outboxes = ChatOutboxes(messaging: { MessagingAPI(client: client) }, sent: { PushCenter.shared.reachedOut() })
+        chatImages = ChatImageStore { id, size in try await MessagingAPI(client: client).chatImage(id, thumb: size == .thumb) }
         account = AccountAPI(configuration)
         writing = WritingAPI(client: api, configuration: configuration)
         thoughtMap = ThoughtMapStore(api: ReadingAPI(client: api))
@@ -312,8 +315,9 @@ final class SessionStore {
         // Drawn until the API answers (the card box's header on a cold start).
         me = newUID.flatMap { kept.value(.me, uid: $0) }
         cardPreviews.clear()
-        // Messages still on their way were the last account's; so was a toast's undo.
+        // Messages still on their way were the last account's, and the pictures read; so was a toast's undo.
         outboxes.clear()
+        chatImages.clear()
         toasts.dismiss()
         restoredAloneNotice = false
         push.signedIn = newUID

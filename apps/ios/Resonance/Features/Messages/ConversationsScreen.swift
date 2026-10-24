@@ -71,8 +71,15 @@ struct ConversationsScreen: View {
     }
 
     private func preview(_ convo: ConversationsStore.Conversation) -> String {
-        guard let text = convo.lastText else { return L10n.Messages.noMessagesYet }
-        return (convo.lastFromMe ? L10n.Messages.youPrefix : "") + text
+        Self.preview(text: convo.lastText, image: convo.lastImage, fromMe: convo.lastFromMe)
+    }
+
+    /// A row's line: the last message's words — 傳送了一張圖片 for a picture sent without any — after
+    /// 你： when it was the viewer's; 還沒有訊息 before the first.
+    static func preview(text: String?, image: Bool, fromMe: Bool) -> String {
+        guard let text else { return L10n.Messages.noMessagesYet }
+        let shown = text.isEmpty && image ? L10n.Messages.imageShared : text
+        return (fromMe ? L10n.Messages.youPrefix : "") + shown
     }
 
     /// Today: the time, two-digit hour as the web's Intl (下午03:04); earlier: the date (9/29).

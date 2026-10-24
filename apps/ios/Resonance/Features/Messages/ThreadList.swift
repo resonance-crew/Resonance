@@ -30,6 +30,8 @@ struct ThreadContext {
     /// A link in a message was tapped: a card of this site opens in the app, anything else by the link rules.
     let openLink: (URL) -> Void
     let openRoute: (Route) -> Void
+    /// A picture was tapped: it opens full screen.
+    let openPicture: (ChatImage) -> Void
 }
 
 /// The message the thread just jumped to from a reply's quote pulses once.
@@ -490,6 +492,8 @@ struct MessageCore: View {
                 width: note ? nil : width(carried),
                 plain: !note && carried.isCard && carried.card == nil,
                 carries: !note && carried.carriesMore,
+                // A picture leads its bubble, the words under it.
+                attachmentFirst: carried.picture != nil,
                 onLinkTap: interactive ? { ctx.openLink($0) } : nil
             ) {
                 if !note {
@@ -526,6 +530,7 @@ struct MessageCore: View {
 
     private func width(_ carried: Carried<FeedCard>) -> CGFloat? {
         switch carried {
+        case let .picture(image): MessagePictureSize.of(width: image.width, height: image.height, maxWidth: ctx.rowMax).width
         case .preview: min(previewWidth, ctx.rowMax)
         case .card, .cardLoading: min(cardWidth, ctx.rowMax)
         case .words, .nothing: nil
@@ -548,10 +553,16 @@ extension Carried<FeedCard> {
         return nil
     }
 
-    /// It carries a preview or a card (or the card's stand-in) under its words.
+    /// The picture it carries.
+    var picture: ChatImage? {
+        if case let .picture(image) = self { return image }
+        return nil
+    }
+
+    /// It carries a picture, a preview or a card (or the card's stand-in) beside its words.
     var carriesMore: Bool {
         switch self {
-        case .preview, .card, .cardLoading: true
+        case .picture, .preview, .card, .cardLoading: true
         case .words, .nothing: false
         }
     }
@@ -561,7 +572,7 @@ extension Carried<FeedCard> {
         switch self {
         case let .preview(preview): preview.url
         case let .card(_, share), let .cardLoading(share): share.link?.url
-        case .words, .nothing: ChatLinks.links(in: message.text).first?.url
+        case .words, .picture, .nothing: ChatLinks.links(in: message.text).first?.url
         }
     }
 }
@@ -575,6 +586,9 @@ private struct CarriedPart: View {
 
     var body: some View {
         switch carried {
+        case let .picture(image):
+            // With no words under it (none, and no note header) the picture is the bubble's foot too.
+            MessagePicture(image: image, endsBubble: !afterWords, ctx: ctx, interactive: interactive)
         case let .preview(preview):
             LinkPreviewSection(title: preview.title, description: preview.description,
                                host: preview.link.host.replacingOccurrences(of: "www.", with: "", options: .anchored),
@@ -586,6 +600,57 @@ private struct CarriedPart: View {
             SharedCardSkeleton()
         case .words, .nothing:
             EmptyView()
+        }
+    }
+}
+
+/// A message's picture across the top of its bubble (round 7 §4.3): its shape from its size before
+/// it arrives (nothing moves), the paper-dark fill while it is read — one sent from here is at hand
+/// at once — then the picture, cover-cropped. One that couldn't be read keeps the fill with the
+/// picture glyph, and a tap tries again; a tap on the picture opens it full screen. A hold is the
+/// message's menu.
+private struct MessagePicture: View {
+    let image: ChatImage
+    let endsBubble: Bool
+    let ctx: ThreadContext
+    let interactive: Bool
+    @State private var loaded: UIImage?
+    @State private var failed = false
+    /// Each tap on a picture that couldn't be read asks again.
+    @State private var attempt = 0
+
+    var body: some View {
+        let store = ctx.model.pictures
+        let shown = loaded ?? store.cached(image.id, .thumb)
+        MessagePictureSection(size: MessagePictureSize.of(width: image.width, height: image.height, maxWidth: ctx.rowMax),
+                              endsBubble: endsBubble, label: L10n.Messages.openImage, onOpen: interactive ? { open(shown) } : nil) {
+            ZStack {
+                Tokens.creamDark
+                if let shown {
+                    Image(uiImage: shown).resizable().scaledToFill()
+                } else if failed {
+                    OrganicIcon(.image, size: 22, color: Tokens.textMuted)
+                }
+            }
+        }
+        .task(id: "\(image.id)#\(attempt)") {
+            // What the store has is this row's now (it may have come in for another row drawing this message).
+            if let kept = store.cached(image.id, .thumb) {
+                loaded = kept
+                return
+            }
+            failed = false
+            let picture = await store.image(image.id, .thumb)
+            loaded = picture
+            failed = picture == nil && !Task.isCancelled
+        }
+    }
+
+    private func open(_ shown: UIImage?) {
+        if shown != nil {
+            ctx.openPicture(image)
+        } else if failed {
+            attempt += 1
         }
     }
 }
@@ -649,7 +714,7 @@ private struct NotedCard: View {
                 CardQuote(seed: seed, width: width) { SharedCard(card: card, ctx: ctx, interactive: interactive) }
             case .cardLoading:
                 CardQuote(seed: seed, width: width, plain: true) { SharedCardSkeleton() }
-            case .words, .preview, .nothing:
+            case .words, .picture, .preview, .nothing:
                 QuoteBubble(text: L10n.Messages.replyCard, seed: seed)
             }
         }
@@ -669,8 +734,8 @@ private struct QuotedReply: View {
         let model = ctx.model
         VStack(alignment: mine ? .trailing : .leading, spacing: 0) {
             SpokenCaption(ThreadCaptions.reply(mine: mine, quotedMine: quote.senderId == model.me, handle: model.displayHandle))
-            QuoteBubble(text: quote.text.isEmpty ? L10n.Messages.replyCard : quote.text, seed: seedFromId(quote.id, start: 19),
-                        onTap: interactive ? { ctx.onQuote(quote.id) } : nil)
+            QuoteBubble(text: quote.summary(picture: L10n.Messages.replyImage, card: L10n.Messages.replyCard),
+                        seed: seedFromId(quote.id, start: 19), onTap: interactive ? { ctx.onQuote(quote.id) } : nil)
         }
     }
 }
