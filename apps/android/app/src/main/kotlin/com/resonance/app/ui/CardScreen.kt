@@ -302,6 +302,9 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     // it (round 5, part C): where the title ends below the article's top, and whether it has.
     val chrome = LocalHeaderChrome.current
     val heading = remember { HeadingUnderBar() }
+    // Where the card's share and ⋯ sit at the top (round 8 §10.1): a phone's bar keeps them, as phone apps
+    // do; under a tablet's header they end the byline, beside the author and the read time · date.
+    val actionsSlot = cardActionsSlot(tabletHeader = chrome != null)
     val titleGone by remember(list) {
         derivedStateOf { scrolledUnderBar(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset, heading.bottom) }
     }
@@ -379,7 +382,12 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                         val type = StoryType.of(text.script, cls)
                         Column(heading.onItem.then(byline.onItem).onPlaced { articleCoords = it }.padding(start = columns.start, end = columns.end).padding(top = articleTop)) {
                             if (trashedOwn) TrashedCardBanner(card, d.anonymous, compact = cls == LayoutClass.Compact, focusTicket = trashedHere, onDeleted = popToRoot)
-                            ArticleHead(card, d.anonymous, type, text.lang, titleModifier = heading.onHeading, bylineModifier = byline.onHeading) { open(Route.Author(it)) }
+                            ArticleHead(
+                                card, d.anonymous, type, text.lang, titleModifier = heading.onHeading, bylineModifier = byline.onHeading,
+                                actions = if (actionsSlot == CardActionsSlot.Byline && !trashedOwn) {
+                                    { CardPageActions(session, d, sharing, open, onShare = share, onTrashed = { trashedHere++ }, seed = card.accentHue ?: 55.0) }
+                                } else null,
+                            ) { open(Route.Author(it)) }
                             // The story alone is what the bar's progress measures (not the cover, title or lists).
                             Box(Modifier.onGloballyPositioned(progress::story)) {
                                 // Its words follow the system's text size up to 2× (the cards in it keep the interface's).
@@ -447,9 +455,10 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
         leading = { if (chrome == null) detail?.let { d -> BarAuthor(d.card, d.anonymous, visible = phase == "loaded" && bylineGone) { open(Route.Author(it)) } } },
         progress = if (phase == "loaded") progress::shown else null,
     ) {
-        // The owner's card in the trash has neither: its banner holds the way back (and nothing is shared from it).
-        // The page's actions live in the bar, as phone apps keep them — and again at the story's end.
-        detail?.takeUnless(::ownTrashed)?.let { d ->
+        // A phone's bar holds the page's actions, as phone apps keep them (a tablet's byline holds them instead),
+        // and they come again at the story's end. The owner's card in the trash has neither: its banner holds
+        // the way back (and nothing is shared from it).
+        if (actionsSlot == CardActionsSlot.Bar) detail?.takeUnless(::ownTrashed)?.let { d ->
             CardPageActions(session, d, sharing, open, onShare = share, onTrashed = { trashedHere++ }, seed = d.card.accentHue ?: 55.0)
         }
     }
@@ -533,8 +542,8 @@ private fun BarAuthor(card: FeedCard, anonymous: Boolean, visible: Boolean, open
  * The article's head (reading-type §5): the cover at its 0.52 ratio, then the title alone in the
  * column in the story's own type (the title follows the system's text size up to 2×), then the
  * byline under it at every width — the author's avatar and pen name over the meta line (round 8
- * §10.1) — and the room before the story. The page's actions (share, the ⋯) live in the bar, and
- * again at the story's end.
+ * §10.1), ending, under a tablet's header, with the page's share and ⋯ ([actions]; a phone keeps
+ * them in its bar) — and the room before the story. They come again at the story's end.
  */
 @Composable
 private fun ArticleHead(
@@ -546,6 +555,8 @@ private fun ArticleHead(
     titleModifier: Modifier = Modifier,
     /** On the byline: the bar names the author once it has gone up under it. */
     bylineModifier: Modifier = Modifier,
+    /** The page's share and ⋯ at the byline's end, under a tablet's header ([cardActionsSlot]); null on a phone. */
+    actions: (@Composable () -> Unit)? = null,
     openAuthor: (String) -> Unit,
 ) {
     if (card.imageUrl != null) {
@@ -561,7 +572,7 @@ private fun ArticleHead(
         StoryTitle(card.title, type, lang, titleModifier.semantics { heading() })
     }
     Spacer(Modifier.height(type.metaGap.dp))
-    StoryByline(card, anonymous, bylineModifier, openAuthor)
+    StoryByline(card, anonymous, bylineModifier, actions, openAuthor)
     Spacer(Modifier.height(type.leadGap.dp))
 }
 
@@ -585,10 +596,17 @@ private fun CardPreview(card: FeedCard, columns: CardPageColumns, openAuthor: (S
  * author's avatar (40), pen name (→ their page; one line, an ellipsis), region flag and verified
  * mark over the meta line — 「6 分鐘 · 2026年10月10日」, 13 muted. An anonymous card shows the
  * neutral「·」and 匿名 in muted ink, linking nowhere — to its owner too. At least 44 tall, growing
- * with large text and a wrapping meta line.
+ * with large text and a wrapping meta line. Under a tablet's header it ends with the page's share
+ * and ⋯ ([actions]), as the web's byline does.
  */
 @Composable
-private fun StoryByline(card: FeedCard, anonymous: Boolean, modifier: Modifier = Modifier, openAuthor: (String) -> Unit) {
+private fun StoryByline(
+    card: FeedCard,
+    anonymous: Boolean,
+    modifier: Modifier = Modifier,
+    actions: (@Composable () -> Unit)? = null,
+    openAuthor: (String) -> Unit,
+) {
     val author = card.author
     val named = author != null && !anonymous
     Row(
@@ -620,6 +638,7 @@ private fun StoryByline(card: FeedCard, anonymous: Boolean, modifier: Modifier =
                 style = AppFonts.body(Tokens.StoryMetaSizeCompact, lineHeight = 1.4f, color = Tokens.TextMuted),
             )
         }
+        actions?.invoke()
     }
 }
 
@@ -680,9 +699,22 @@ private fun ContentsRail(
     }
 }
 
+/** Where the card page's share and ⋯ sit at its top (round 8 §10.1). */
+internal enum class CardActionsSlot { Bar, Byline }
+
 /**
- * The card's share and ⋯ (round 8 §10): in the bar, and again at the end of the story's one action
- * row — the bar's bare glyphs, each a finger's target. Share only for a card whoever gets its link
+ * A phone's page — and a page in a tablet's pane, which wears a phone's bar — keeps them in its
+ * bar, as phone apps do; under a tablet's header ([tabletHeader]: a medium or expanded window,
+ * `LayoutClass.topTabs`) they end the byline under the title, with the author and the read time ·
+ * date, as the web's byline holds them, and the bar has none. Either way they come again at the
+ * story's end.
+ */
+internal fun cardActionsSlot(tabletHeader: Boolean): CardActionsSlot = if (tabletHeader) CardActionsSlot.Byline else CardActionsSlot.Bar
+
+/**
+ * The card's share and ⋯ (round 8 §10): in a phone's bar or at the end of a tablet's byline
+ * ([cardActionsSlot]), and again at the end of the story's one action row — bare glyphs, each a
+ * finger's target. Share only for a card whoever gets its link
  * can open (published, public, not in the trash: [ShareLinks.canShare]), its glyph the small loop
  * while the picture is made; the ⋯ the owner's [CardActionsMenu] (its 刪除 leaves the page where it
  * is, which shows the trash banner: [onTrashed]) or a reader's safety menu.
