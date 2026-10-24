@@ -1,8 +1,8 @@
 /**
  * The promo's drawing kit: the site's own pieces — story card, tag pill,
- * avatar, buttons, segmented bar, modal sheet, bubble, toggle — redrawn from
- * the same geometry (src/lib/design) and tokens (src/styles/tokens.css) at
- * the web's own 1× sizes. A scene sets them at video size with CSS `zoom`,
+ * avatar, buttons, segmented bar, bubble — redrawn from the same geometry
+ * (src/lib/design) and tokens (src/styles/tokens.css) at the web's own 1×
+ * sizes. A scene sets them at video size with CSS `zoom`,
  * so text and pen lines stay crisp.
  *
  * Every builder measures its content once (fonts are loaded before any
@@ -152,6 +152,13 @@ export const ICONS = {
       'M7.6,11.5 C6.9,9.2 7.7,6.4 9.6,5.3 C11.5,4.2 13.7,4.5 15.0,5.9 C16.5,7.4 16.7,9.5 16.3,11.5',
     ],
     filled: ['M11.6,14.3 C12.4,14.0 13.1,14.7 12.8,15.5 C12.6,16.0 12.6,16.6 12.4,17.0 C12.0,17.0 11.7,16.4 11.5,15.8 C11.3,15.2 11.2,14.6 11.6,14.3 Z'],
+  },
+  mask: {
+    d: [
+      'M2.8,9.6 C5.2,7.6 9.2,7.9 12.0,9.6 C14.9,7.9 18.9,7.6 21.2,9.7 C21.7,12.8 20.3,16.1 17.2,16.3 C15.0,16.4 13.5,14.9 12.0,13.6 C10.5,14.9 8.9,16.4 6.8,16.2 C3.7,16.0 2.3,12.7 2.8,9.6 Z',
+      'M5.7,11.9 C6.6,10.8 8.6,10.7 9.6,11.9 C8.6,13.1 6.7,13.2 5.7,11.9 Z',
+      'M14.4,11.9 C15.4,10.7 17.4,10.8 18.3,11.9 C17.3,13.2 15.4,13.1 14.4,11.9 Z',
+    ],
   },
   users: {
     d: [
@@ -582,25 +589,11 @@ export function segmentedBar(segments: SegmentSpec[], o: { mode?: 'actions' | 'c
   return { el, w, h, setFilled, setState, centre, segments: segEls };
 }
 
-/** Modal: a chalked card-bg sheet with grain and a pen outline; no ✕. */
-export function modalSheet(width: number, content: HTMLElement[], o: { seed?: number; pad?: string } = {}) {
-  const seed = o.seed ?? 29;
-  const inner = html('div', { class: 'sheet-content', style: { width, padding: o.pad ?? '32px 28px' } }, content);
-  const el = html('div', { class: 'sheet', style: { width } }, [inner]);
-  const { h } = measure(el);
-  const d = wobRect(width, h, 26, seed, Math.min(width, h) * 0.025, { segmentsH: [3, 4], segmentsV: [5, 6], curve: 0.6, cornerJitter: 0.9, cornerOffset: 5 });
-  const paper = face(d, width, h, { fill: C.cardBg, chalkSeed: seed + 1, grain: { opacity: 0.3, frequency: 0.88, seed } });
-  const pen = face(d, width, h, { stroke: C.sheetPen, strokeWidth: INK });
-  el.prepend(paper.el, pen.el);
-  css(el, { height: h });
-  return { el, w: width, h, inner, paper, pen };
-}
-
 /**
  * The page dimmed behind a dialog, kept to the demonstration: a light warm
  * shade fading out from the sheet's centre (cx, cy) in an ellipse rx × ry, so
  * it has no edge against the narration or the header. `set(p)` fades it 0 → 1.
- * Visibility and notes share it, so the film's two dialogs dim the page alike.
+ * The notes scene's dialog dims the page with it.
  */
 export function scrim(cx: number, cy: number, rx = 760, ry = 560) {
   const mask = `radial-gradient(ellipse ${rx}px ${ry}px at ${cx}px ${cy}px, #000 70%, transparent 100%)`;
@@ -609,27 +602,6 @@ export function scrim(cx: number, cy: number, rx = 760, ry = 560) {
     style: { left: 0, top: 0, width: 1920, height: 1080, background: 'oklch(30% 0.02 75 / 0.16)', maskImage: mask, webkitMaskImage: mask, pointerEvents: 'none' },
   });
   const set = (p: number) => place(el, { opacity: p });
-  set(0);
-  return { el, set };
-}
-
-/** ToggleSwitch: a wobbly track and knob; `on` 0 → 1 slides the knob and fills the track terracotta. */
-export function toggle(seed = 57) {
-  const track = wobRect(50, 28, 12.5, seed, 2.4, { curve: 2.8, segmentsH: 2, segmentsV: 1, cornerJitter: 2, cornerOffset: 1.4 });
-  const knobD = wobCircle(10, 10, 10, seed + 5, { segments: 6, mag: 1, cpJitter: 0.5 });
-  const trackPath = svg('path', { d: track, 'stroke-width': INK_LIGHT, 'stroke-linejoin': 'round' });
-  const grain = svg('path', { d: track, fill: 'black', filter: shapeGrain(0.38, 1.1, 3) });
-  const knobPath = svg('path', { d: knobD, fill: C.cream, 'stroke-width': INK_LIGHT });
-  const knob = svg('g', {}, [knobPath]);
-  const el = html('span', { class: 'toggle', style: { width: 50, height: 28 } }, [shapeSvg(50, 28, [trackPath, grain, knob])]);
-  const set = (on: number) => {
-    const fill = `color-mix(in oklch, ${C.terracotta} ${Math.round(on * 100)}%, ${C.creamDark})`;
-    const ink = `color-mix(in oklch, color-mix(in oklch, ${C.terracotta}, black 25%) ${Math.round(on * 100)}%, ${C.muted})`;
-    trackPath.setAttribute('fill', fill);
-    trackPath.setAttribute('stroke', ink);
-    knobPath.setAttribute('stroke', ink);
-    knob.setAttribute('transform', `translate(${(4 + 22 * on).toFixed(2)},4)`);
-  };
   set(0);
   return { el, set };
 }

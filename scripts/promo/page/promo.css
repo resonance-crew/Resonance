@@ -124,11 +124,6 @@ body {
 }
 .seg-state { grid-area: 1 / 1; display: inline-flex; align-items: center; gap: 6px; padding: 0 28px; }
 
-.sheet { position: relative; }
-.sheet-content { position: relative; z-index: 2; }
-
-.toggle { position: relative; display: inline-block; flex-shrink: 0; }
-
 .bubble { position: relative; display: inline-block; }
 .bubble-words {
   position: relative;
