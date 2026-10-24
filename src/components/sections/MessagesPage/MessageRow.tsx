@@ -216,8 +216,8 @@ export const MessageRow = memo(function MessageRow({
   );
 
   // A card the viewer can't see, shared alone: nothing to draw (not even their face beside it) — only its
-  // place, which the scroller still finds it by.
-  if (carried.kind === 'nothing') return <div data-message-id={m.id} data-message-key={m.key} aria-hidden />;
+  // place, which the scroller still finds it by. (A picture sent alone has no words and no card, and is all there.)
+  if (carried.kind === 'nothing' && !m.image) return <div data-message-id={m.id} data-message-key={m.key} aria-hidden />;
 
   const aside = (
     <span className={styles.actions} data-own={own || undefined} data-open={menuOpen || undefined}>
