@@ -129,7 +129,7 @@ fun CardActionsMenu(
     val items = listOf(
         OrganicMenuItem(L10n.Me.Actions.edit, IconName.Pen) { open(Route.Write(cardId = cardId, showsCard = showsCard)) },
         OrganicMenuItem(
-            if (isPrivate) L10n.Me.Actions.makePublic else L10n.Me.Actions.makePrivate,
+            visibilityAction(isPrivate, anonymous),
             if (isPrivate) IconName.Globe else IconName.Lock,
         ) {
             if (busy) return@OrganicMenuItem
@@ -215,6 +215,16 @@ fun CardActionsMenu(
 private fun rememberFallbackTrash(session: Session): TrashCenter {
     val scope = rememberCoroutineScope()
     return remember(session) { TrashCenter(session.writing.trashCalls(), session::noteCardChange, Toasts(), scope) }
+}
+
+/**
+ * The ⋯'s visibility row: 轉為私人 for a card others read; 轉為公開 for a private one — 轉為匿名公開
+ * when it is anonymous, since that is how it comes back (the server keeps its anonymity).
+ */
+internal fun visibilityAction(isPrivate: Boolean, anonymous: Boolean): String = when {
+    !isPrivate -> L10n.Me.Actions.makePrivate
+    anonymous -> L10n.Me.Actions.makePublicAnonymous
+    else -> L10n.Me.Actions.makePublic
 }
 
 /**

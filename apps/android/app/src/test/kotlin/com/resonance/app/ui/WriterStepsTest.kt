@@ -219,6 +219,87 @@ class WriterStepsTest {
         assertEquals("d2" to stored.copy(visibility = "public"), store.updates.last())
     }
 
+    // 誰可以看見: 公開 · 匿名公開 · 只有自己 (round 7 §1)
+
+    @Test fun eachOfTheThreeWritesWhoAndUnderWhoseNameInOneChange() = runBlocking {
+        val m = model(draft(written))
+        m.next()
+        m.choose(Audience.Anonymous)
+        assertEquals("public" to true, m.values.visibility to m.values.anonymous)
+        assertEquals(Audience.Anonymous, m.audience)
+        m.choose(Audience.Public)
+        assertEquals("public" to false, m.values.visibility to m.values.anonymous)
+        m.choose(Audience.Anonymous)
+        // A draft kept for its writer is simply theirs: no anonymous flag left over from trying 匿名公開.
+        m.choose(Audience.Private)
+        assertEquals("private" to false, m.values.visibility to m.values.anonymous)
+        assertEquals(Audience.Private, m.audience)
+        m.saveNow()
+        assertEquals(written.copy(visibility = "private"), store.updates.last().second)
+        assertTrue(store.updates.none { (_, v) -> v.anonymous && v.visibility == "connections" })
+    }
+
+    @Test fun onlyMeKeepsALiveCardsAnonymitySoItComesBackAnonymous() {
+        // Made private, then public again from its ⋯, an anonymous card must never come back under its author's name.
+        val anonymous = model(live(written.copy(anonymous = true)))
+        anonymous.choose(Audience.Private)
+        assertEquals("private" to true, anonymous.values.visibility to anonymous.values.anonymous)
+        assertEquals(Audience.Private, anonymous.audience)
+        val named = model(live(written))
+        named.choose(Audience.Private)
+        assertEquals("private" to false, named.values.visibility to named.values.anonymous)
+    }
+
+    @Test fun aCardKeptForConnectionsShowsNoneChosenAndReadsAsPublishing() {
+        assertNull(audienceOf("connections", anonymous = false))
+        assertEquals(Audience.Private, audienceOf("private", anonymous = true))
+        val m = model(draft(written.copy(visibility = "connections")))
+        assertNull(m.audience)
+        assertEquals("發布", m.verb)
+        assertEquals("發布這張卡片", m.stepTitle)
+    }
+
+    @Test fun theVerbAndTheStepsTitleFollowTheAudience() {
+        val m = model(draft(written))
+        assertEquals("發布" to "發布這張卡片", m.verb to m.stepTitle)
+        m.choose(Audience.Anonymous)
+        assertEquals("匿名發布" to "發布這張卡片", m.verb to m.stepTitle)
+        m.choose(Audience.Private)
+        assertEquals("儲存" to "儲存這張卡片", m.verb to m.stepTitle)
+        // A live card is updated whoever it is for.
+        val live = model(live(written))
+        live.choose(Audience.Private)
+        assertEquals("儲存修改" to "更新這張卡片", live.verb to live.stepTitle)
+    }
+
+    @Test fun keptForYourselfAFailureSaysItDidntSave() = runBlocking {
+        val m = model(draft(written))
+        m.next()
+        calls.publishFails = ApiFailure("internal", "Something went wrong.", 500)
+        m.choose(Audience.Private)
+        assertNull(m.publish())
+        assertEquals("沒儲存成功，再試一次", m.publishError)
+        m.choose(Audience.Anonymous)
+        assertNull(m.publish())
+        assertEquals("沒發布成功，再試一次", m.publishError)
+        // The save it waited on, refused: the same words.
+        calls.publishFails = null
+        store.failWith = IOException("offline")
+        m.choose(Audience.Private)
+        assertNull(m.publish())
+        assertEquals("沒儲存成功，再試一次", m.publishError)
+    }
+
+    @Test fun theUpdateHintShowsOnlyWhileTheLiveCardIsPublic() {
+        val m = model(live(written))
+        assertTrue(m.showsUpdateHint)
+        m.choose(Audience.Private)
+        assertFalse(m.showsUpdateHint)
+        m.choose(Audience.Anonymous)
+        assertTrue(m.showsUpdateHint)
+        assertFalse(model(draft(written)).showsUpdateHint)
+    }
+
     @Test fun aLiveCardAlreadyAnonymousForConnectionsKeepsBoth() = runBlocking {
         val m = model(live(written.copy(visibility = "connections", anonymous = true)))
         assertTrue(m.next())
