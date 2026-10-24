@@ -12,6 +12,7 @@ import android.content.pm.PackageInfo
 import android.net.Uri
 import android.os.Parcelable
 import android.service.chooser.ChooserAction
+import android.widget.Toast
 import com.resonance.app.R
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
@@ -28,16 +29,18 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowToast
 import org.robolectric.annotation.Config
 import java.io.File
 
 /**
- * The system sheet a card's share opens (share.spec, Owner revision), payload by payload: the link
- * for every app that takes text, the card picture as the alternate for an app that takes only
- * pictures, the app's own Instagram 限時動態 and 儲存圖片 actions (ChooserActions on API 34+,
- * LabeledIntents to its own unexported activity on 29–33), the link alone when there is no picture;
- * Instagram's Stories intent (its keys, the backdrop as data, the sticker, the grants), the link
- * copied for its link sticker first; and a profile's plain link.
+ * The system sheet a card's share opens (share.spec, Owner revision; round 8 §9.2), payload by
+ * payload: the link for every app — Instagram's targets too, no picture as an alternate — the app's
+ * own Instagram 限時動態 and 儲存圖片 actions wearing the app's own glyphs (ChooserActions on API
+ * 34+, LabeledIntents to its own unexported activity on 29–33), the link alone when there is no
+ * picture; Instagram's Stories intent (its keys, the backdrop as data, the sticker, the grants), the
+ * link copied for its link sticker first and a toast saying what it is for; Instagram's glyph its one
+ * path from native/brand/instagram.svg; and a profile's plain link.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
@@ -63,22 +66,17 @@ class ShareIntentsTest {
         assertNull(intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java))
     }
 
-    @Test fun thePictureGoesToTheAppsThatTakeOnlyPictures() {
+    @Test fun everyAppInTheSheetGetsTheLinkInstagramToo() {
         val chooser = ShareIntents.cardChooser(link, "外婆的醃梅子", picture)
         assertEquals(Intent.ACTION_CHOOSER, chooser.action)
         val target = chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!
         assertEquals("text/plain", target.type)
         assertEquals(link, target.getStringExtra(Intent.EXTRA_TEXT))
-        val alternates = chooser.getParcelableArrayExtra(Intent.EXTRA_ALTERNATE_INTENTS, Intent::class.java)!!
-        assertEquals(1, alternates.size)
-        val image = alternates[0]
-        assertEquals(Intent.ACTION_SEND, image.action)
-        assertEquals("image/jpeg", image.type)
-        assertEquals(picture, image.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java))
-        assertEquals(picture, image.clipData!!.getItemAt(0).uri)
-        assertTrue(image.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
-        // No link in the picture's intent: an app that takes it gets the picture alone.
-        assertNull(image.getStringExtra(Intent.EXTRA_TEXT))
+        // No picture as an alternate: Instagram (whose own picker never says Story or Message) takes the link,
+        // and an app that takes only pictures isn't listed. The picture is only the sheet's preview.
+        assertFalse(chooser.hasExtra(Intent.EXTRA_ALTERNATE_INTENTS))
+        assertNull(target.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java))
+        assertEquals(picture, target.clipData!!.getItemAt(0).uri)
     }
 
     @Test fun withoutAPictureTheSheetCarriesTheLinkAlone() {
@@ -135,8 +133,9 @@ class ShareIntentsTest {
         assertNull(actions.initial)
         val custom = actions.custom!!.map { it as ChooserAction }
         assertEquals(listOf(L10n.Share.toStories, L10n.Share.Image.save), custom.map { it.label.toString() })
-        // Stories wears Instagram's own app icon; Save the app's picture glyph.
-        assertEquals(ShareIntents.INSTAGRAM, custom[0].icon.resPackage)
+        // Both wear the app's own drawables: Instagram's glyph (its adaptive app icon drew blank), the picture glyph.
+        assertEquals(app.packageName, custom[0].icon.resPackage)
+        assertEquals(R.drawable.ic_share_instagram, custom[0].icon.resId)
         assertEquals(R.drawable.ic_share_save, custom[1].icon.resId)
         // Each reaches the app's own activity, told what to do with this share.
         val stories = shadowOf(custom[0].action).savedIntent
@@ -160,8 +159,8 @@ class ShareIntentsTest {
         assertNull(actions.custom)
         val initial = actions.initial!!.map { it as LabeledIntent }
         assertEquals(listOf(L10n.Share.toStories, L10n.Share.Image.save), initial.map { it.nonLocalizedLabel.toString() })
-        assertEquals(ShareIntents.INSTAGRAM, initial[0].sourcePackage)
-        assertEquals(0x7f080001, initial[0].iconResource)
+        assertEquals(app.packageName, initial[0].sourcePackage)
+        assertEquals(R.drawable.ic_share_instagram, initial[0].iconResource)
         assertEquals(app.packageName, initial[1].sourcePackage)
         assertEquals(R.drawable.ic_share_save, initial[1].iconResource)
         assertEquals(ComponentName(app, ShareActionActivity::class.java), initial[0].component)
@@ -196,6 +195,23 @@ class ShareIntentsTest {
         assertTrue(started.data!!.path!!.endsWith(ShareFiles.BACKDROP))
         assertTrue(started.getParcelableExtra(ShareIntents.INTERACTIVE_ASSET, Uri::class.java)!!.path!!.endsWith(ShareFiles.STICKER))
         assertNull(ShareFeedback.take())
+        // As Instagram opens, the system's toast says what the copied link is for, long enough to read.
+        assertEquals(L10n.Share.Image.storiesLinkCopied, ShadowToast.getTextOfLatestToast())
+        assertEquals(Toast.LENGTH_LONG, ShadowToast.getLatestToast().duration)
+    }
+
+    @Test fun instagramsGlyphIsItsOnePathFromTheBrandFile() {
+        val svg = File("../../../native/brand/instagram.svg").readText()
+        val brand = Regex("""<path d="([^"]+)"""").find(svg)!!.groupValues[1]
+        val drawable = File("src/main/res/drawable/ic_share_instagram.xml").readText()
+        val path = Regex("""android:pathData="([^"]+)"""").findAll(drawable).map { it.groupValues[1] }.toList()
+        // One path, verbatim: never redrawn, never split, never recoloured (one fill).
+        assertEquals(listOf(brand), path)
+        assertEquals(1, Regex("""android:fillColor=""").findAll(drawable).count())
+        assertTrue(Regex("""android:viewportWidth="24"""").containsMatchIn(drawable))
+        // And the platform reads it as a path.
+        assertNotNull(androidx.core.graphics.PathParser.createPathFromPathData(brand))
+        assertNotNull(app.getDrawable(R.drawable.ic_share_instagram))
     }
 
     @Test fun withoutItsFilesStoriesSaysItCouldNotOpenInstagram() {
