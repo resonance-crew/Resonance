@@ -39,7 +39,10 @@ data class MapCard(
     val publishedAt: Long?,
     val mediaUrl: String?,
     val accentHue: Double?,
-)
+) {
+    /** A 私人卡 (round 9 §1): one only its author sees — never published, or published and kept private. */
+    val isPrivateCard: Boolean get() = publishedAt == null || visibility == "private"
+}
 
 /**
  * The thought map (thoughtMaps/{uid}/nodes|edges|groups), read and written

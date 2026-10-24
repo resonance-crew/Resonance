@@ -55,7 +55,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.resonance.design.SquareFlag
 import com.resonance.design.inlineBarTop
 import com.resonance.design.LocalWindowLayout
-import com.resonance.design.firstContentGap
+import com.resonance.design.peopleHeadGap
 import com.resonance.design.ButtonVariant
 import com.resonance.design.EmptyAction
 import com.resonance.design.OrganicButton
@@ -161,7 +161,8 @@ fun AuthorScreen(session: Session, handle: String, open: (Route) -> Unit, back: 
     // The bar lies over the page, so what scrolls shows right up to its pen line.
     val top = inlineBarTop()
     val layout = cardListLayout()
-    val profileTop = LocalWindowLayout.current.cls.firstContentGap(20.dp)
+    // The people head (round 9 §9): the avatar 40 under the bar's pen line on a phone, 56 wider.
+    val profileTop = LocalWindowLayout.current.cls.peopleHeadGap()
     Box(Modifier.fillMaxSize().cream()) {
     Column(Modifier.fillMaxSize()) {
         when (phase) {
@@ -180,9 +181,9 @@ fun AuthorScreen(session: Session, handle: String, open: (Route) -> Unit, back: 
                 val a = p.author
                 LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(top = top, bottom = 48.dp)) {
                     item {
-                        // A tablet's profile starts 32 under the header's pen line (round 5 E2).
-                        Column(heading.onItem.fillMaxWidth().padding(horizontal = 24.dp).padding(top = profileTop, bottom = 20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                            HandDrawnAvatar(a.initials, a.avatarUrl, a.accent(), 96.dp, a.avatarSeedValue())
+                        Column(heading.onItem.fillMaxWidth().padding(horizontal = 24.dp).padding(top = profileTop, bottom = 20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(ProfileHeroGap)) {
+                            // The avatar, then the pen name 16 under it (`--people-name-gap`).
+                            Box(Modifier.padding(bottom = PeopleNameGap - ProfileHeroGap)) { HandDrawnAvatar(a.initials, a.avatarUrl, a.accent(), 96.dp, a.avatarSeedValue()) }
                             BasicText(a.handle, style = AppFonts.heading(32f, lineHeight = 1.2f), modifier = heading.onHeading)
                             BasicText(p.bio ?: L10n.Profile.bioEmpty, style = AppFonts.body(15f, lineHeight = 1.6f, color = Tokens.TextMuted).copy(textAlign = TextAlign.Center))
                             // page.module.css .meta: centred, 6 × 14 apart, 13 muted; the count leads with the cards glyph.
@@ -287,15 +288,19 @@ private fun BlockedNotice(session: Session, userId: String, handle: String, onUn
     }
 }
 
-/** The profile masthead while it loads (the web's skel blocks): avatar, name, two bio lines, the meta line. */
+/**
+ * The profile masthead while it loads (the web's skel blocks): avatar, name, two bio lines, the meta
+ * line — the avatar where the page's will be (the people head), the name's block centred on its line.
+ */
 @Composable
 private fun ProfileHeroSkeleton() {
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = LocalWindowLayout.current.cls.firstContentGap(20.dp), bottom = 20.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = LocalWindowLayout.current.cls.peopleHeadGap(), bottom = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Skeleton(height = 96.dp, circle = true)
+        // The name's line is 38.4 (32 × 1.2); its 34 block sits in its middle, 16 under the avatar.
+        Skeleton(Modifier.padding(bottom = PeopleNameGap - 16.dp + 2.dp), height = 96.dp, circle = true)
         Skeleton(Modifier.fillMaxWidth(0.6f).widthIn(max = 220.dp), height = 34.dp, radius = 10.dp)
         Skeleton(Modifier.fillMaxWidth(0.8f).widthIn(max = 440.dp), height = 16.dp, radius = 8.dp)
         Skeleton(Modifier.fillMaxWidth(0.6f).widthIn(max = 300.dp), height = 16.dp, radius = 8.dp)
@@ -303,6 +308,12 @@ private fun ProfileHeroSkeleton() {
     }
     Spacer(Modifier.height(28.dp))
 }
+
+/** A profile's masthead rows are this far apart; the pen name sits [PeopleNameGap] under the avatar. */
+private val ProfileHeroGap = 14.dp
+
+/** Avatar → pen name on a profile (`--people-name-gap`, round 9 §9). */
+private val PeopleNameGap = Tokens.PeopleNameGap.dp
 
 /** "TW" → "台灣" in the interface language (its SquareFlag is drawn beside it); free text stays as it is. */
 fun regionLabel(region: String): String = Regions.label(region)

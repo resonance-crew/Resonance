@@ -2,6 +2,7 @@ package com.resonance.app.ui
 
 import com.resonance.design.LayoutClass
 import com.resonance.design.LocalWindowLayout
+import com.resonance.design.peopleHeadGap
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -12,6 +13,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -58,6 +64,11 @@ import com.resonance.design.CardPalette
 import com.resonance.design.StoryCard
 import com.resonance.design.HandDrawnAvatar
 import com.resonance.design.OklchColor
+import com.resonance.design.Mixes
+import com.resonance.design.OrganicIcon
+import com.resonance.design.OrganicIndication
+import com.resonance.design.OrganicButtonShape
+import com.resonance.design.labelInkDrop
 import com.resonance.design.OrganicEmptyState
 import com.resonance.design.EmptyAction
 import com.resonance.design.OrganicIconButton
@@ -277,7 +288,8 @@ fun CardBoxScreen(session: Session, open: (Route) -> Unit) {
     TabScreen(
         L10n.App.Nav.me,
         titleInBar = true,
-        phoneExtraTop = air.extraTop,
+        // Who I am heads the page: the avatar 40 under the bar's pen line on a phone, 56 wider (round 9 §9).
+        headGap = cls.peopleHeadGap(),
         // Pulled down: who I am and the shelf in view, read again now from the server rather than the HTTP cache.
         // Nothing back for the shelf: it stays, and says why — read out only while that shelf is still the one
         // on screen (another chosen meanwhile, the failure isn't about what is shown).
@@ -328,7 +340,7 @@ fun CardBoxScreen(session: Session, open: (Route) -> Unit) {
         when {
             cards == null && failed -> item { OrganicEmptyState(L10n.Native.loadError, L10n.Native.retry, { model.refresh(shelf, changes, retry = true) }, action = EmptyAction.Outline) }
             cards == null -> storyCardSkeletons(if (layout.isGrid) layout.columns * 2 else 6, layout = layout)
-            shelf == TabGetCardBox.trash -> trashShelf(cards, open, layout, compact = cls == LayoutClass.Compact) { emptying = Emptying.Asking }
+            shelf == TabGetCardBox.trash -> trashShelf(cards, open, layout, air) { emptying = Emptying.Asking }
             // An empty shelf: the shared empty state (its own words as the title; the bookmarks' as its line),
             // and the empty published shelf points at the first story (ux §4).
             cards.isEmpty() -> item {
@@ -397,11 +409,11 @@ private fun EmptyTrashDialog(state: Emptying, set: (Emptying?) -> Unit) {
  * The trash shelf (TrashShelf.tsx): what I deleted, the latest in first — never one past its days,
  * which is gone to me too. Over it how long cards wait (and, while an anonymous card is here, that
  * its notes went with it) with 清空垃圾桶; each card says where it came from and when it goes
- * ([TrashWords]) and wears the trash's ⋯ (還原 · 永久刪除). A published card opens its page (its
- * trash banner), a draft the writer (its trashed notice) — never prefilled: a summary isn't the card.
+ * ([TrashWords]) and wears the trash's ⋯ (還原 · 永久刪除). Every card opens its page, with its
+ * trash banner ([trashTap]).
  * Empty, the trash's own empty state.
  */
-private fun LazyListScope.trashShelf(cards: List<FeedCard>, open: (Route) -> Unit, layout: CardListLayout, compact: Boolean, onEmpty: () -> Unit) {
+private fun LazyListScope.trashShelf(cards: List<FeedCard>, open: (Route) -> Unit, layout: CardListLayout, air: CardBoxAir, onEmpty: () -> Unit) {
     val now = Instant.now()
     val shown = inTrash(cards, now)
     if (shown.isEmpty()) {
@@ -413,7 +425,7 @@ private fun LazyListScope.trashShelf(cards: List<FeedCard>, open: (Route) -> Uni
         }
         return
     }
-    item { TrashHeader(anonymousHere = shown.any { it.anonymous && it.publishedAt != null }, inset = layout.headerInset, compact = compact, onEmpty = onEmpty) }
+    item { TrashHeader(anonymousHere = shown.any { it.anonymous && it.publishedAt != null }, inset = layout.headerInset, air = air, grid = layout.isGrid, onEmpty = onEmpty) }
     val tap: (FeedCard) -> Route = ::trashTap
     val palettes = cardFamilies(shown)
     val caption: @Composable (FeedCard) -> Unit = { card ->
@@ -447,46 +459,91 @@ private fun LazyListScope.trashShelf(cards: List<FeedCard>, open: (Route) -> Uni
 internal fun inTrash(cards: List<FeedCard>, now: Instant = Instant.now()): List<FeedCard> =
     cards.filter { c -> c.purgeInstant?.let { !Trash.expired(it, now) } ?: true }
 
-/** Where a card in the trash opens: a published one its page (the banner), a draft the writer (its notice). */
-internal fun trashTap(card: FeedCard): Route = if (card.publishedAt != null) Route.Card(card.routeKey) else Route.Write(cardId = card.id)
+/**
+ * Where a card in the trash opens: its page, with the trash's banner — published or never (round 9
+ * §1: the server shows a card in the trash to its author, a 私人卡 never published too, by its id) —
+ * never prefilled: a summary isn't the card.
+ */
+internal fun trashTap(card: FeedCard): Route = Route.Card(card.routeKey)
 
 /**
- * The trash shelf's head: 卡片會在垃圾桶保留 30 天，之後永久刪除 (and, while an anonymous card is here,
- * 匿名卡片移到垃圾桶時，留在上面的紙條會一併刪除) at 13 muted, and 清空垃圾桶 in the tonal red at its
- * end — on a phone under the lines, at their start. It only opens a question, which is red.
+ * The trash shelf's head (round 9 §5): one row, no container — the hint at its start (卡片會在垃圾桶保留
+ * 30 天，之後永久刪除, and while an anonymous card is here 匿名卡片移到垃圾桶時，留在上面的紙條會一併刪除
+ * under it, both 13 muted, wrapping) and 🗑 清空 at its end, vertically centred on the hint
+ * ([EmptyTrashAction]). It keeps the shelf picker's gutters and end edge, [TrashRowAbove] under the
+ * picker, and [TrashRowBelow] over the first band (a grid's: [TrashRowBelowGrid]).
  */
 @Composable
-private fun TrashHeader(anonymousHere: Boolean, inset: Dp, compact: Boolean, onEmpty: () -> Unit) {
-    val lines: @Composable () -> Unit = {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+private fun TrashHeader(anonymousHere: Boolean, inset: Dp, air: CardBoxAir, grid: Boolean, onEmpty: () -> Unit) {
+    // The picker's strip keeps its own air under it (round 5 E2); this row takes 24 of it, tucking up the rest.
+    val tuck = air.shelvesBottom + ShelfStripPadY - TrashRowAbove
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                val up = tuck.roundToPx()
+                layout(placeable.width, (placeable.height - up).coerceAtLeast(0)) { placeable.place(0, -up) }
+            }
+            .padding(start = inset, end = inset - EmptyActionPadX, bottom = if (grid) TrashRowBelowGrid else TrashRowBelow),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             BasicText(L10n.Me.trashHint(Trash.DAYS), style = AppFonts.body(13f, lineHeight = 1.5f, color = Tokens.TextMuted))
+            // A privacy statement: as large as the line over it.
             if (anonymousHere) BasicText(L10n.Me.trashAnonymousNotes, style = AppFonts.body(13f, lineHeight = 1.5f, color = Tokens.TextMuted))
         }
-    }
-    val empty: @Composable () -> Unit = {
-        OrganicButton(L10n.Me.Actions.emptyTrash, variant = ButtonVariant.DangerTonal, small = true, onClick = onEmpty)
-    }
-    if (compact) Column(Modifier.padding(horizontal = inset).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        lines()
-        empty()
-    } else Row(Modifier.padding(horizontal = inset).padding(bottom = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box(Modifier.weight(1f)) { lines() }
-        empty()
+        EmptyTrashAction(onEmpty)
     }
 }
+
+/**
+ * 🗑 清空 (round 9 §5): a text button in the danger ink — the trash glyph 16 before the short word,
+ * no fill, a press washing the danger ink at low strength — at least 48 tall; TalkBack calls it by
+ * its whole name, 清空垃圾桶. It only opens the red question ([EmptyTrashDialog]).
+ */
+@Composable
+private fun EmptyTrashAction(onClick: () -> Unit) {
+    val shape = remember { OrganicButtonShape(601.0) }
+    Row(
+        Modifier
+            .heightIn(min = 48.dp)
+            .clickable(interactionSource = null, indication = remember(shape) { OrganicIndication(EmptyPress, shape = shape) }, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = L10n.Me.Actions.emptyTrash }
+            .padding(horizontal = EmptyActionPadX),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        OrganicIcon(IconName.Trash, Modifier.offset(y = labelInkDrop(14f)), size = 16.dp, color = Mixes.Danger, strokeWidth = Tokens.Ink.value)
+        BasicText(
+            L10n.Me.Actions.emptyTrashShort,
+            style = AppFonts.body(14f, 600, lineHeight = 1.3f, color = Mixes.Danger),
+            modifier = Modifier.clearAndSetSemantics { },
+        )
+    }
+}
+
+/** The danger ink a press of 清空 spreads. */
+private val EmptyPress = Mixes.Danger.copy(alpha = 0.12f)
+
+/** 清空's padding a side (its words end that far in from its wash's edge, which reaches the gutter's end). */
+private val EmptyActionPadX = 12.dp
+
+/** The shelf picker's strip → the trash row; the row → the first band, or the grid's first row. */
+internal val TrashRowAbove = 24.dp
+internal val TrashRowBelow = 16.dp
+internal val TrashRowBelowGrid = 24.dp
 
 /** The shelves of my own cards (OWNED_TABS): each card gets its ⋯. Read together, in this order. */
 private val OwnedShelves = listOf(TabGetCardBox.published, TabGetCardBox.`private`, TabGetCardBox.draft)
 
 /**
- * Where one of my own cards opens from [shelf]: on 草稿, every card opens the writer — a draft
- * resumes, a published private card is edited there, where it is published from (round 8 §1, the
- * web's /write/{id}); on 已發布, its page. A draft has no page, wherever it is.
+ * Where one of my own cards opens: its page, from every shelf (round 9 §1) — a 私人卡 too, never
+ * published or published and kept private, which its author reads there like any card (by its id
+ * before it has a slug) and edits from its 編輯 pen. Prefilled with the card as the shelf had it.
  */
-internal fun managedTap(card: FeedCard, shelf: TabGetCardBox): Route = when {
-    shelf == TabGetCardBox.draft || shelf == TabGetCardBox.`private` || card.publishedAt == null -> Route.Write(cardId = card.id)
-    else -> Route.Card(card.routeKey, card)
-}
+internal fun managedTap(card: FeedCard): Route = Route.Card(card.routeKey, card)
 
 /** The shelf a choice shows: one kept from before 草稿 was one shelf (`private`) is 草稿. */
 internal fun shelfShown(chosen: TabGetCardBox): TabGetCardBox = if (chosen == TabGetCardBox.`private`) TabGetCardBox.draft else chosen
@@ -494,12 +551,11 @@ internal fun shelfShown(chosen: TabGetCardBox): TabGetCardBox = if (chosen == Ta
 /**
  * My own cards (ProfileTabs' managed shelves): each with the owner's ⋯ over
  * its top-right corner. An anonymous one wears the anonymous byline exactly
- * as everyone else sees it ([story]) — that is its mark here, no badge. On
- * the 草稿 shelf a tap opens the writer, a published private card's too; on
- * 已發布 a card's page ([managedTap]).
+ * as everyone else sees it ([story]) — that is its mark here, no badge. A tap
+ * opens the card's page, a 私人卡's too ([managedTap]).
  */
 private fun LazyListScope.managedCards(session: Session, cards: List<FeedCard>, open: (Route) -> Unit, shelf: TabGetCardBox, layout: CardListLayout) {
-    val tap: (FeedCard) -> Route = { managedTap(it, shelf) }
+    val tap: (FeedCard) -> Route = ::managedTap
     val palettes = cardFamilies(cards)
     if (layout.isGrid) return borderedCards(cards, open, null, false, layout, tap, overlay = { card, i ->
         val hue = CardPalette.of(palettes[i]).hue
@@ -537,18 +593,20 @@ private fun CardMenu(session: Session, card: FeedCard, open: (Route) -> Unit, hu
 }
 
 /**
- * My Card Box's air (round 5 E2): on a phone 8 more under the bar's line than the other tabs (in
- * [TabScreen]), and 8 more above and below the shelves' strip; a tablet's page starts as every
- * tablet page does (32 under the header's pen line) and keeps the strip's 20 / 28.
+ * My Card Box's air around the shelves' strip (round 5 E2): 28 / 36 above and below it on a phone,
+ * 20 / 28 on a tablet. The page itself starts at the people head ([peopleHeadGap], round 9 §9).
  */
-internal data class CardBoxAir(val extraTop: Dp, val shelvesTop: Dp, val shelvesBottom: Dp) {
+internal data class CardBoxAir(val shelvesTop: Dp, val shelvesBottom: Dp) {
     companion object {
         fun of(cls: LayoutClass): CardBoxAir =
-            if (cls == LayoutClass.Compact) CardBoxAir(8.dp, 28.dp, 36.dp) else CardBoxAir(0.dp, 20.dp, 28.dp)
+            if (cls == LayoutClass.Compact) CardBoxAir(28.dp, 36.dp) else CardBoxAir(20.dp, 28.dp)
     }
 }
 
-/** The shelves in the strip's order (OrganicTabs'), the trash always last before the thought map: no 私人卡 shelf (it is 草稿's). */
+/** The shelves' strip's own padding above and below its tabs. */
+private val ShelfStripPadY = 7.dp
+
+/** The shelves in the strip's order (OrganicTabs'), the trash always last before the thought map: no shelf of its own for the private cards (they are 私人卡's, the `draft` key). */
 internal val ShelfOrder = listOf(
     TabGetCardBox.published, TabGetCardBox.draft, TabGetCardBox.resonated, TabGetCardBox.linked,
     TabGetCardBox.bookmarks, TabGetCardBox.trash,
@@ -565,7 +623,7 @@ private fun ShelfTabs(selection: TabGetCardBox, edge: Dp, air: CardBoxAir, openM
     val haptic = LocalHapticFeedback.current
     val scroll = rememberScrollState()
     Row(
-        Modifier.fadingEdges(scroll).horizontalScroll(scroll).padding(horizontal = edge, vertical = 7.dp).padding(top = air.shelvesTop, bottom = air.shelvesBottom),
+        Modifier.fadingEdges(scroll).horizontalScroll(scroll).padding(horizontal = edge, vertical = ShelfStripPadY).padding(top = air.shelvesTop, bottom = air.shelvesBottom),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         ShelfOrder.forEach { s ->

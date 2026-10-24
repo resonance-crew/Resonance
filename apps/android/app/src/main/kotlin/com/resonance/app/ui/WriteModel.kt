@@ -64,17 +64,20 @@ internal fun saveStateWord(state: SaveState): String = when (state) {
 }
 
 /**
- * The publish step's one button (round 8 §2.3), from the card and the choice: a 草稿 (never
+ * The publish step's one button (round 8 §2.3), from the card and the choice: a 私人卡 (never
  * published, or published and kept private) is [Publish]ed or [PublishAnonymously] by its choice,
- * or kept one with [Save]; a card readers have now is [Update]d — or, 草稿 chosen, turned back into
- * one ([MakeDraft]).
+ * or kept one with [Save]; a card readers have now is [Update]d — or, 私人卡 chosen, turned back
+ * into one ([MakeDraft], 轉為私人卡).
  */
 enum class StepVerb { Publish, PublishAnonymously, Save, Update, MakeDraft }
 
-/** Where the writer goes once the step's verb went through: the card's page, or back where it came from. */
+/**
+ * Where the writer goes once the step's verb went through: the card's page (its slug, or its id
+ * before it has one) — whatever the verb, a 私人卡 kept or made one too (round 9 §1). The page takes
+ * the writer's place, so back from it goes where the writer came from.
+ */
 sealed interface StepDone {
     data class Page(val key: String) : StepDone
-    data object Leave : StepDone
 }
 
 /** What the publish step's mirror line shows: the question on its way, its answer, or nothing to say. */
@@ -494,16 +497,50 @@ class WriteModel(
         return draftId
     }
 
-    /** The screen is going away: the last edit is saved, then the model stops. */
+    /**
+     * The screen is going away: the last edit is saved — or, a card begun here and emptied again,
+     * let go of ([dropIfEmpty]) — then the model stops.
+     */
     fun leave() {
         scope.launch {
             try {
                 saveNow()
+                dropIfEmpty()
             } finally {
                 editor.destroy()
                 scope.cancel()
             }
         }
+    }
+
+    /**
+     * No empty 私人卡 (round 9 §1): a card is only made once something is written in it, and one begun
+     * in this writer (not a card of yours opened here) left with nothing in it — no title, no story, no
+     * tags, no cover: written, then taken out again — is deleted on the way out, so it isn't left on
+     * the 私人卡 shelf or the thought map's tray. A card that couldn't be deleted (offline) stays, as
+     * any draft. Returns whether it went.
+     */
+    internal suspend fun dropIfEmpty(): Boolean {
+        val id = draftId ?: return false
+        val drafts = drafts ?: return false
+        if (editing || isPublished || closed || trashed || !values.isEmpty) return false
+        val gone = writes.withLock {
+            withContext(NonCancellable) {
+                try {
+                    drafts.delete(id)
+                    true
+                } catch (e: Exception) {
+                    false
+                }
+            }
+        }
+        if (gone) {
+            draftId = null
+            lastSaved = null
+            closed = true
+            onWrote(id)
+        }
+        return gone
     }
 
     // Moving between the steps
@@ -625,23 +662,24 @@ class WriteModel(
     // The publish step's verbs
 
     /**
-     * The step's one button ([stepVerb]), and where the writer goes once it went through (null: it
-     * didn't — [publishError] or [trashed] says why): a 草稿 published (發布 · 匿名發布: a draft through
-     * the publish call, a published private card through its pending edit, keeping its first date) goes
-     * to its page; a draft kept one (儲存) is written as it is on screen — never published, not even to
-     * its writer alone — and the writer goes back where it came from; a card readers have is updated
-     * (儲存修改: to its page) or turned back into a 草稿 (轉為草稿: the edit applied, now private, and
-     * back). Saying why it failed: 沒發布成功 for a publish, 沒儲存成功 for the rest.
+     * The step's one button ([stepVerb]), and the card's page the writer goes to once it went through
+     * (null: it didn't — [publishError] or [trashed] says why): a 私人卡 published (發布 · 匿名發布: a
+     * draft through the publish call, a published private card through its pending edit, keeping its
+     * first date); a 私人卡 kept one (儲存: a draft written as it is on screen — never published, not
+     * even to its writer alone — or a published private card's edit applied); a card readers have
+     * updated (儲存修改) or turned back into a 私人卡 (轉為私人卡: the edit applied, now private). Every
+     * one lands on the card's page (round 9 §1). Saying why it failed: 沒發布成功 for a publish, 沒儲存成功
+     * for the rest.
      */
-    suspend fun finish(): StepDone? {
+    suspend fun finish(): StepDone.Page? {
         val failed = failureFallback(stepVerb)
-        return when (stepVerb) {
-            StepVerb.Publish, StepVerb.PublishAnonymously ->
-                (if (isPublished) applyEdit(failed, publishes = true) else publish(failed))?.let(StepDone::Page)
-            StepVerb.Save -> if (isPublished) applyEdit(failed)?.let { StepDone.Leave } else if (keepDraft(failed)) StepDone.Leave else null
-            StepVerb.Update -> applyEdit(failed)?.let(StepDone::Page)
-            StepVerb.MakeDraft -> applyEdit(failed)?.let { StepDone.Leave }
+        val key = when (stepVerb) {
+            StepVerb.Publish, StepVerb.PublishAnonymously -> if (isPublished) applyEdit(failed, publishes = true) else publish(failed)
+            // A 私人卡 kept one: written as it is on screen (never published), or a published one's edit applied.
+            StepVerb.Save -> if (isPublished) applyEdit(failed) else if (keepDraft(failed)) routeKey else null
+            StepVerb.Update, StepVerb.MakeDraft -> applyEdit(failed)
         }
+        return key?.let(StepDone::Page)
     }
 
     /**

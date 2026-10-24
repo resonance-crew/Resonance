@@ -38,11 +38,11 @@ class PublishVisibilityTest {
     }
 
     @Test fun theThreeChoicesAreWhatTheCardIs() {
-        assertEquals(listOf("公開", "匿名公開", "草稿"), Audience.entries.map(::audienceLabel))
+        assertEquals(listOf("公開", "匿名公開", "私人卡"), Audience.entries.map(::audienceLabel))
         assertEquals("卡片類型", com.resonance.kit.l10n.L10n.Write.Visibility.label)
     }
 
     @Test fun theMenusVisibilityRowMakesACardReadersHaveADraft() {
-        assertEquals("轉為草稿", com.resonance.kit.l10n.L10n.Me.Actions.makePrivate)
+        assertEquals("轉為私人卡", com.resonance.kit.l10n.L10n.Me.Actions.makePrivate)
     }
 }

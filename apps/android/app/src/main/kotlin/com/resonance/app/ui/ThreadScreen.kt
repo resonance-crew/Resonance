@@ -17,8 +17,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -85,6 +88,8 @@ import com.resonance.design.OrganicMenuItem
 import com.resonance.design.OrganicModal
 import com.resonance.design.WavyDivider
 import com.resonance.design.cream
+import com.resonance.design.floatingGroup
+import com.resonance.design.floatingSlip
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.inlineBarTop
@@ -173,7 +178,15 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     // The bar lies over the thread, so what scrolls shows right up to its pen line.
     val top = inlineBarTop()
     val topPx = with(density) { top.roundToPx() }
-    val scroll = remember(list) { ThreadScroll(list, { rowsNow }, { topPx }) }
+    // The composer floats over the thread's foot (round 9 §4): the room it takes, which the thread keeps clear.
+    val navigationBars = WindowInsets.navigationBars
+    val imeInsets = WindowInsets.ime
+    val footInsets = remember(navigationBars, imeInsets) { navigationBars.union(imeInsets) }
+    val room = remember(footInsets, density) { ComposerRoom(footInsets, density) }
+    // The letter's line under the newest message, when answering their letter is what connects you.
+    val notice = if (model.foot == ThreadFoot.Answer) L10n.Messages.replyToConnect(model.other?.handle ?: handle) else null
+    val noticeNow by rememberUpdatedState(notice)
+    val scroll = remember(list) { ThreadScroll(list, { rowsNow }, { topPx }, { room.clear }, { if (noticeNow != null) 1 else 0 }) }
 
     // The words typed are searched for a moment after the last key; a blank field is no search.
     LaunchedEffect(query, searching) {
@@ -243,31 +256,36 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     }
 
     Box(Modifier.fillMaxSize().cream().onSizeChanged { listWidth = with(density) { it.width.toDp() } }) {
-        Column(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
-            when (model.phase) {
-                // One layout while it is found and once it is: what the thread always has is there from the
-                // start (the bar's back and ⋯, the composer), and only what isn't known yet is in the shimmer.
-                ThreadModel.Phase.Loading, ThreadModel.Phase.Ready -> {
-                    val ready = model.phase == ThreadModel.Phase.Ready
-                    val foot = model.foot
-                    Box(Modifier.weight(1f).fillMaxWidth()) {
-                        if (ready) MessageList(rows, ctx, list, top, Modifier.fillMaxSize(), pillVisible = !(searching && showResults), sayEmpty = foot.composes)
-                        // Who it is with, or the first read, still on its way: the thread's shapes until the messages take their place.
-                        if (!ready || !model.threadReady) ThreadSkeleton(Modifier.padding(top = top))
-                        if (ready && searching && showResults) SearchResults(model, query, top, resultsList, pick)
-                    }
-                    // While they are found the composer is there already (nothing to send to until they are): a
-                    // thread mostly is somewhere to write, and the field stays put — what was typed, the keyboard.
-                    // In a wide pane the composer keeps to a column of its own, centred under the thread.
-                    val padded = Modifier.readableColumn(ComposerMax).padding(horizontal = 14.dp).padding(bottom = 14.dp)
+        when (model.phase) {
+            // One layout while it is found and once it is: what the thread always has is there from the
+            // start (the bar's back and ⋯, the composer), and only what isn't known yet is in the shimmer.
+            ThreadModel.Phase.Loading, ThreadModel.Phase.Ready -> {
+                val ready = model.phase == ThreadModel.Phase.Ready
+                val foot = model.foot
+                // The thread runs to the screen's foot; the composer floats over it.
+                Box(Modifier.fillMaxSize()) {
+                    if (ready) MessageList(rows, ctx, list, top, Modifier.fillMaxSize(), pillVisible = !(searching && showResults), sayEmpty = foot.composes, room = room, notice = notice)
+                    // Who it is with, or the first read, still on its way: the thread's shapes until the messages take their place.
+                    if (!ready || !model.threadReady) ThreadSkeleton(room, Modifier.padding(top = top))
+                    if (ready && searching && showResults) SearchResults(model, query, top, resultsList, pick, bottom = with(density) { room.clear.toDp() })
+                }
+                // While they are found the composer is there already (nothing to send to until they are): a
+                // thread mostly is somewhere to write, and the field stays put — what was typed, the keyboard.
+                // It floats 8 over the navigation bar or the keyboard, the page's gutter at its sides; in a wide
+                // pane it keeps to a column of its own, centred under the thread.
+                Box(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .windowInsetsPadding(footInsets)
+                        .padding(bottom = ComposerGap)
+                        .onSizeChanged { room.foot = it.height },
+                ) {
+                    val padded = Modifier.readableColumn(ComposerMax).padding(horizontal = ComposerGutter)
                     when (foot) {
-                        ThreadFoot.Composer -> Composer(model, handle, composerFocus, onPickImage = pickImage, onPickCard = { pickingCard = true }, padded)
-                        ThreadFoot.Answer -> Composer(
-                            model, handle, composerFocus, onPickImage = pickImage, onPickCard = { pickingCard = true }, padded,
-                            lead = L10n.Messages.replyToConnect(model.other?.handle ?: handle),
-                        )
-                        ThreadFoot.Awaiting -> FootNote(L10n.Messages.awaitingReply)
-                        ThreadFoot.Closed -> FootNote(L10n.Messages.notConnected) {
+                        ThreadFoot.Composer, ThreadFoot.Answer -> Composer(model, handle, composerFocus, onPickImage = pickImage, onPickCard = { pickingCard = true }, padded)
+                        ThreadFoot.Awaiting -> FootNote(L10n.Messages.awaitingReply, padded)
+                        ThreadFoot.Closed -> FootNote(L10n.Messages.notConnected, padded) {
                             BasicText(
                                 L10n.Messages.viewProfile,
                                 style = AppFonts.body(13f, lineHeight = 1.3f, color = Tokens.Terracotta).copy(textDecoration = TextDecoration.Underline),
@@ -281,17 +299,17 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                         ThreadFoot.Pending -> {}
                     }
                 }
-                ThreadModel.Phase.Missing -> {
-                    BasicText(
-                        L10n.Messages.userNotFound,
-                        style = AppFonts.body(13f, lineHeight = 1.3f, color = Tokens.TextMuted),
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).padding(top = top + 20.dp),
-                    )
-                }
-                // Who they are couldn't be asked (offline): a retry, never "user not found".
-                ThreadModel.Phase.Failed -> Box(Modifier.padding(top = top)) {
-                    OrganicEmptyState(L10n.Native.loadError, L10n.Native.retry, { scope.launch { model.load() } }, action = EmptyAction.Outline)
-                }
+            }
+            ThreadModel.Phase.Missing -> {
+                BasicText(
+                    L10n.Messages.userNotFound,
+                    style = AppFonts.body(13f, lineHeight = 1.3f, color = Tokens.TextMuted),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).padding(top = top + 20.dp),
+                )
+            }
+            // Who they are couldn't be asked (offline): a retry, never "user not found".
+            ThreadModel.Phase.Failed -> Box(Modifier.padding(top = top)) {
+                OrganicEmptyState(L10n.Native.loadError, L10n.Native.retry, { scope.launch { model.load() } }, action = EmptyAction.Outline)
             }
         }
 
@@ -400,12 +418,13 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
 
 /**
  * The thread's foot where there is no composer: a calm line, centred — a note of yours waiting for
- * its answer, or why you can't write here — and what can be done about it, if anything.
+ * its answer, or why you can't write here — and what can be done about it, if anything; floating in
+ * the composer's place on an opaque slip with the capsule's paper halo (round 9 §4).
  */
 @Composable
-private fun FootNote(text: String, action: (@Composable () -> Unit)? = null) {
+private fun FootNote(text: String, modifier: Modifier = Modifier, action: (@Composable () -> Unit)? = null) {
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 28.dp).padding(top = 14.dp, bottom = 22.dp),
+        modifier.fillMaxWidth().floatingGroup().floatingSlip(seed = 31.0).padding(horizontal = 18.dp).padding(top = 12.dp, bottom = if (action != null) 4.dp else 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
@@ -661,3 +680,6 @@ private fun MediaHead(text: String) {
 
 /** The widest the composer runs in a wide thread pane. */
 private val ComposerMax = 720.dp
+
+/** The composer's sides: the page's gutter. */
+private val ComposerGutter = 14.dp

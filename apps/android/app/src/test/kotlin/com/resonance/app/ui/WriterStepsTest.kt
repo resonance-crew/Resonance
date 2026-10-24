@@ -270,19 +270,19 @@ class WriterStepsTest {
         m.choose(Audience.Anonymous)
         assertEquals(Triple(StepVerb.PublishAnonymously, "匿名發布", "發布這張卡片"), Triple(m.stepVerb, m.verb, m.stepTitle))
         m.choose(Audience.Private)
-        assertEquals(Triple(StepVerb.Save, "儲存", "儲存草稿"), Triple(m.stepVerb, m.verb, m.stepTitle))
+        assertEquals(Triple(StepVerb.Save, "儲存", "儲存私人卡"), Triple(m.stepVerb, m.verb, m.stepTitle))
         // A card readers have: 儲存修改 while it stays theirs, 轉為草稿 once 草稿 is chosen — 更新這張卡片 either way.
         val live = model(live(written))
         assertEquals(Triple(StepVerb.Update, "儲存修改", "更新這張卡片"), Triple(live.stepVerb, live.verb, live.stepTitle))
         live.choose(Audience.Anonymous)
         assertEquals(StepVerb.Update, live.stepVerb)
         live.choose(Audience.Private)
-        assertEquals(Triple(StepVerb.MakeDraft, "轉為草稿", "更新這張卡片"), Triple(live.stepVerb, live.verb, live.stepTitle))
+        assertEquals(Triple(StepVerb.MakeDraft, "轉為私人卡", "更新這張卡片"), Triple(live.stepVerb, live.verb, live.stepTitle))
         // An older card kept for connections, none of the three chosen: an update.
         assertEquals(StepVerb.Update, model(live(written.copy(visibility = "connections"))).stepVerb)
         // A published card kept private is a 草稿: published again by its choice, or kept one.
         val kept = model(live(written.copy(visibility = "private")))
-        assertEquals(Triple(StepVerb.Save, "儲存", "儲存草稿"), Triple(kept.stepVerb, kept.verb, kept.stepTitle))
+        assertEquals(Triple(StepVerb.Save, "儲存", "儲存私人卡"), Triple(kept.stepVerb, kept.verb, kept.stepTitle))
         kept.choose(Audience.Public)
         assertEquals(Triple(StepVerb.Publish, "發布", "發布這張卡片"), Triple(kept.stepVerb, kept.verb, kept.stepTitle))
         kept.choose(Audience.Anonymous)
@@ -294,11 +294,12 @@ class WriterStepsTest {
         assertNull(kept.verbBusyLabel)
     }
 
-    @Test fun aDraftKeptOneIsWrittenAndNeverPublishedNotEvenToItsWriter() = runBlocking {
+    @Test fun aDraftKeptOneIsWrittenAndNeverPublishedNotEvenToItsWriterThenItsPageOpens() = runBlocking {
         val m = model(draft(written))
         m.next()
         m.choose(Audience.Private)
-        assertEquals(StepDone.Leave, m.finish())
+        // Round 9 §1: 儲存 lands on the 私人卡's page, by its id (it has no slug).
+        assertEquals(StepDone.Page("d1"), m.finish())
         assertEquals(written.copy(visibility = "private"), store.updates.last().second)
         assertTrue(calls.published.isEmpty())
         assertTrue(calls.applied.isEmpty())
@@ -310,11 +311,40 @@ class WriterStepsTest {
         assertTrue(calls.published.isEmpty())
     }
 
-    @Test fun aCardReadersHaveMadeADraftIsAppliedThenTheWriterLeaves() = runBlocking {
+    @Test fun aWriterLeftWithNothingInItLeavesNoPrivateCard() = runBlocking {
+        // Round 9 §1: nothing written, nothing made.
+        val blank = model()
+        blank.saveNow()
+        assertFalse(blank.dropIfEmpty())
+        assertTrue(store.created.isEmpty())
+        // Written, then taken out again: the card begun here goes on the way out.
+        val m = model()
+        m.setTitle("雨")
+        m.saveNow()
+        assertEquals("d-new", m.draftId)
+        m.setTitle("")
+        m.saveNow()
+        assertTrue(m.dropIfEmpty())
+        assertEquals(listOf("d-new"), store.deleted)
+        assertNull(m.draftId)
+        assertEquals("d-new", wrote.last())
+        // A card of yours opened here and emptied stays yours to keep; so does one with anything left in it.
+        val opened = model(draft(written))
+        opened.setTitle("")
+        opened.update { copy(story = "") }
+        assertFalse(opened.dropIfEmpty())
+        val kept = model()
+        kept.setTitle("雨")
+        kept.saveNow()
+        assertFalse(kept.dropIfEmpty())
+        assertEquals(listOf("d-new"), store.deleted)
+    }
+
+    @Test fun aCardReadersHaveMadePrivateIsAppliedThenItsPageOpens() = runBlocking {
         val m = model(live(written))
         m.next()
         m.choose(Audience.Private)
-        assertEquals(StepDone.Leave, m.finish())
+        assertEquals(StepDone.Page("a-walk"), m.finish())
         assertEquals(listOf("c1" to written.copy(visibility = "private")), store.edits)
         assertEquals(listOf("c1"), calls.applied)
         assertTrue(calls.published.isEmpty())
@@ -332,10 +362,10 @@ class WriterStepsTest {
         assertEquals(listOf("c1"), calls.applied)
         assertTrue(calls.published.isEmpty())
         assertEquals(1, reachedOut)
-        // 儲存: applied as it is, and the writer leaves.
+        // 儲存: applied as it is, and its page opens.
         val again = model(kept)
         again.next()
-        assertEquals(StepDone.Leave, again.finish())
+        assertEquals(StepDone.Page("a-walk"), again.finish())
         assertEquals(listOf("c1", "c1"), calls.applied)
         assertEquals(1, reachedOut)
     }
@@ -386,11 +416,11 @@ class WriterStepsTest {
 
     @Test fun theWritersTitleIsShortAndSaysWhatTheCardIs() {
         assertEquals("新卡片", model().title)
-        assertEquals("編輯草稿", model(draft(written)).title)
+        assertEquals("編輯私人卡", model(draft(written)).title)
         assertEquals("編輯卡片", model(live(written)).title)
         assertEquals("編輯卡片", model(live(written.copy(visibility = "connections"))).title)
         // A published card kept private is a 草稿, whatever its pending edit says now.
-        assertEquals("編輯草稿", model(live(written, liveVisibility = "private")).title)
+        assertEquals("編輯私人卡", model(live(written, liveVisibility = "private")).title)
         // A new card stays a new card after its first save in this visit — the screen coming back too (a rotation).
         val m = model()
         m.setTitle("雨中散步")
@@ -618,7 +648,7 @@ class WriterStepsTest {
         assertEquals(LeaveQuestion.Draft, model(draft(written)).leaveQuestion)
         assertNull(model(live(written)).leaveQuestion)
         assertEquals(LeaveQuestion.Revision, model(live(written, pendingEdit = true)).leaveQuestion)
-        assertEquals("寫下的內容已經存成草稿，之後可以在「我的卡片盒」接著寫", leaveBody(LeaveQuestion.Draft))
+        assertEquals("寫下的內容已經存成私人卡，之後可以在「我的卡片盒」接著寫", leaveBody(LeaveQuestion.Draft))
         assertEquals("你的修改已經存起來了，還沒套用到已發布的卡片", leaveBody(LeaveQuestion.Revision))
     }
 
@@ -776,6 +806,12 @@ class WriterStepsTest {
 
         override suspend fun discardEdit(id: String) {
             discarded++
+        }
+
+        val deleted = mutableListOf<String>()
+        override suspend fun delete(id: String) {
+            failWith?.let { throw it }
+            deleted += id
         }
 
         override suspend fun isTrashed(id: String): Boolean {

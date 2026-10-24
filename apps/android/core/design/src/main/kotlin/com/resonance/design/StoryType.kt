@@ -97,8 +97,8 @@ data class StoryType(val script: StoryScript, val compact: Boolean) {
 
     /** Cover → title. */
     val coverGap: Float get() = if (compact) Tokens.StoryCoverGapCompact else Tokens.StoryCoverGap
-    /** Title → the byline / meta row. */
-    val metaGap: Float get() = Tokens.StoryMetaGap
+    /** Title → the byline / meta row (round 9 §2: 20 on a phone, 24 wider). */
+    val metaGap: Float get() = if (compact) Tokens.StoryMetaGapCompact else Tokens.StoryMetaGap
     /** The byline / meta row → the story. */
     val leadGap: Float get() = if (compact) Tokens.StoryLeadGapCompact else Tokens.StoryLeadGap
     /** The story → its tags. */

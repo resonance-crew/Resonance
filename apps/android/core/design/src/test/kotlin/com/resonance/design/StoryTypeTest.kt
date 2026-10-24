@@ -107,6 +107,16 @@ class StoryTypeTest {
         assertEquals(token("--story-meta-size-compact"), cjkPhone.metaSize)
         assertEquals(token("--story-meta-size"), cjkWide.metaSize)
         assertEquals(token("--story-meta-gap"), cjkWide.metaGap)
+        // Round 9 §2: title → byline 20 on a phone, 24 wider; byline → story 40 / 48; cover → title 24 / 32.
+        assertEquals(token("--story-meta-gap-compact"), cjkPhone.metaGap)
+        assertEquals(20f, cjkPhone.metaGap)
+        assertEquals(24f, cjkWide.metaGap)
+        assertEquals(40f, cjkPhone.leadGap)
+        assertEquals(48f, cjkWide.leadGap)
+        assertEquals(24f, cjkPhone.coverGap)
+        assertEquals(32f, cjkWide.coverGap)
+        // The meta line is 14 at every regular width (it used to be 13 everywhere).
+        assertEquals(14f, cjkWide.metaSize)
         assertEquals(token("--story-byline-avatar"), cjkWide.bylineAvatar)
         assertEquals(token("--story-rail-gap"), cjkWide.railGap)
         // A window is a phone's only in the compact class.

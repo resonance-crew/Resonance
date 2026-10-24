@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,6 +40,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableFloatStateOf
@@ -66,7 +68,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
@@ -76,8 +80,6 @@ import com.resonance.design.ButtonVariant
 import com.resonance.design.CardByline
 import com.resonance.design.ChatPictureSection
 import com.resonance.design.ChatPictureSource
-import com.resonance.design.ComposerFade
-import com.resonance.design.ComposerFadeHeight
 import com.resonance.design.HandDrawnAvatar
 import com.resonance.design.LinkPreviewSection
 import com.resonance.design.MessageBubble
@@ -175,8 +177,52 @@ internal class Flash {
 /** A message pressed and held: the row, where its bubble is on the screen, and the link under the finger. */
 internal class MessageMenu(val row: ThreadRow, val bounds: Rect, val link: String?)
 
+/**
+ * Where the floating composer stands (round 9 §4): the room it takes at the screen's foot — the
+ * navigation bar or the keyboard ([insets]), [ComposerGap] of air, then the capsule and its slip as
+ * drawn ([foot]) — read while laying out, so the thread follows the keyboard frame by frame and the
+ * composer as it grows, without composing again.
+ */
+@Stable
+internal class ComposerRoom(private val insets: WindowInsets, private val density: Density) {
+    /** How tall the composer is as drawn — the capsule and its slip, or a notice in their place (px; 0 with none). */
+    var foot by mutableIntStateOf(0)
+
+    /** From the screen's foot to the composer's top (px). */
+    val above: Int get() = insets.getBottom(density) + with(density) { ComposerGap.roundToPx() } + foot
+
+    /** From the screen's foot to where the newest message may rest, and the pill: [ComposerClear] over the composer (px). */
+    val clear: Int get() = above + with(density) { ComposerClear.roundToPx() }
+}
+
+/** The composer floats this far over the navigation bar or the keyboard. */
+internal val ComposerGap = 8.dp
+
+/** What the thread keeps clear over the composer: its newest message, the jump pill. */
+internal val ComposerClear = 12.dp
+
+/**
+ * The thread's padding, its foot following the composer ([ComposerRoom.clear]) — read by the list
+ * while it measures, so a keyboard rising or the field growing moves the messages with it.
+ */
+@Stable
+private class ThreadPadding(private val top: Dp, private val side: Dp, private val room: ComposerRoom, private val density: Density) : PaddingValues {
+    override fun calculateLeftPadding(layoutDirection: LayoutDirection): Dp = side
+    override fun calculateRightPadding(layoutDirection: LayoutDirection): Dp = side
+    override fun calculateTopPadding(): Dp = top
+    override fun calculateBottomPadding(): Dp = with(density) { room.clear.toDp() }
+}
+
 /** Scrolls the thread to a message. */
-internal class ThreadScroll(val list: LazyListState, private val rows: () -> List<ThreadRow>, private val topInset: () -> Int) {
+internal class ThreadScroll(
+    val list: LazyListState,
+    private val rows: () -> List<ThreadRow>,
+    private val topInset: () -> Int,
+    /** What the composer covers at the foot (px): the middle is the middle of what is left. */
+    private val bottomInset: () -> Int = { 0 },
+    /** Items the list draws under the newest message (a notice): a message's place in the list is after them. */
+    private val leading: () -> Int = { 0 },
+) {
     /** Where each message on screen is (by id and by key), for the ones the list has composed. */
     private val cores = HashMap<String, () -> LayoutCoordinates?>()
     /** The list's own box, to know the middle of what the person can see. */
@@ -204,14 +250,14 @@ internal class ThreadScroll(val list: LazyListState, private val rows: () -> Lis
         val index = withTimeoutOrNull(1500) { snapshotFlow { indexOf(id) }.first { it >= 0 } } ?: return false
         withFrameNanos { }
         // To the bottom edge, where it is composed; then its bubble is moved to the middle.
-        list.scrollToItem(index)
+        list.scrollToItem(index + leading())
         withFrameNanos { }
         val core = cores[id]?.invoke()?.takeIf { it.isAttached }
         val box = area?.takeIf { it.isAttached }
         if (core != null && box != null) {
             val bounds = core.boundsInRoot()
             val seen = box.boundsInRoot()
-            val middle = (seen.top + topInset() + seen.bottom) / 2f
+            val middle = (seen.top + topInset() + seen.bottom - bottomInset()) / 2f
             val move = middle - (bounds.top + bounds.bottom) / 2f
             if (abs(move) > 1f) list.scrollBy(move)
         }
@@ -231,6 +277,10 @@ internal fun MessageList(
     pillVisible: Boolean = true,
     /** An empty thread says so — not where the foot already says why nothing can be written. */
     sayEmpty: Boolean = true,
+    /** Where the floating composer stands: the newest message and the pill keep clear of it. */
+    room: ComposerRoom,
+    /** A line under the newest message, scrolling with the thread (answering their letter connects you). */
+    notice: String? = null,
 ) {
     val model = ctx.model
     val newestFirst = remember(rows) { rows.asReversed() }
@@ -264,14 +314,17 @@ internal fun MessageList(
             if (last >= 0 && last >= list.layoutInfo.totalItemsCount - OLDER_AHEAD) model.loadOlder()
         }
     }
+    val padding = remember(top, room, density) { ThreadPadding(top + 4.dp, 16.dp, room, density) }
     Box(modifier.onGloballyPositioned { ctx.scroll.area = it }) {
         LazyColumn(
             Modifier.fillMaxSize(),
             state = list,
             reverseLayout = true,
-            // The latest message rests clear of the composer's soft edge; only what scrolls under it fades.
-            contentPadding = PaddingValues(top = top + 4.dp, bottom = 10.dp + ComposerFadeHeight, start = 16.dp, end = 16.dp),
+            // The thread runs to the screen's foot, under the floating composer; the newest message rests 12 over it.
+            contentPadding = padding,
         ) {
+            // The letter's line is the thread's last item: it scrolls with the messages (round 9 §4).
+            if (notice != null) item(key = "notice") { ThreadNotice(notice) }
             // The key a row had while it was sending is the one its document comes under, so it doesn't jump.
             itemsIndexed(newestFirst, key = { _, r -> r.message.key }) { i, row ->
                 val gap = rowGap(labelled = row.dayLabel || row.timeLabel, joinsAbove = row.joinsAbove, quoted = row.message.replyTo != null || row.message.isNote)
@@ -286,12 +339,10 @@ internal fun MessageList(
             if (quiet != null) item(key = "quiet") { QuietNote(quiet) }
             else if (model.threadReady && rows.isNotEmpty()) item(key = "older") { OlderRow(model) }
         }
-        // Where the thread meets the composer it dissolves into the paper instead of ending on a cut;
-        // the pill (and anything laid over the thread) stays above it.
-        ComposerFade(Modifier.align(Alignment.BottomCenter))
+        // The pill rests 12 over the composer (or its slip), wherever the keyboard has taken it.
         AnimatedVisibility(
             visible = pillVisible && (unseen > 0 || farUp) && !atBottom,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
+            modifier = Modifier.align(Alignment.BottomCenter).offset { IntOffset(0, -room.clear) },
             enter = fadeIn(tween(160)) + scaleIn(tween(160), initialScale = 0.9f),
             exit = fadeOut(tween(120)) + scaleOut(tween(120), targetScale = 0.9f),
         ) {
@@ -311,7 +362,7 @@ internal fun MessageList(
  * answers at once doesn't flash it. iOS's ThreadSkeleton.
  */
 @Composable
-internal fun ThreadSkeleton(modifier: Modifier = Modifier) {
+internal fun ThreadSkeleton(room: ComposerRoom, modifier: Modifier = Modifier) {
     val shown by produceState(false) {
         delay(SKELETON_DELAY_MILLIS)
         value = true
@@ -322,7 +373,7 @@ internal fun ThreadSkeleton(modifier: Modifier = Modifier) {
             .fillMaxSize()
             .graphicsLayer { this.alpha = alpha }
             .semantics { contentDescription = L10n.Home.moreLoading }
-            .padding(start = 16.dp, end = 16.dp, bottom = 10.dp + ComposerFadeHeight),
+            .padding(start = 16.dp, end = 16.dp, bottom = with(LocalDensity.current) { room.clear.toDp() }),
         verticalArrangement = Arrangement.Bottom,
     ) {
         SKELETON_BUBBLES.forEachIndexed { i, (mine, width, height) ->
@@ -390,6 +441,19 @@ private fun Label(text: String) {
         text,
         style = AppFonts.body(11.5f, lineHeight = 1.3f, color = Tokens.TextMuted).copy(textAlign = TextAlign.Center),
         modifier = Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 6.dp),
+    )
+}
+
+/**
+ * A letter's line under the newest message (round 9 §4: it used to sit over the composer, and
+ * floating text over moving bubbles needs a band, which is gone): centred, 12.5 muted.
+ */
+@Composable
+private fun ThreadNotice(text: String) {
+    BasicText(
+        text,
+        style = AppFonts.body(12.5f, lineHeight = 1.5f, color = Tokens.TextMuted).copy(textAlign = TextAlign.Center),
+        modifier = Modifier.fillMaxWidth().padding(top = 14.dp, start = 12.dp, end = 12.dp),
     )
 }
 

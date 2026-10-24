@@ -11,6 +11,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
+import com.resonance.design.generated.Tokens
 import java.io.File
 
 /**
@@ -65,5 +66,24 @@ class CardColoursTest {
         assertEquals(family, CardPalette.of(family).index)
         assertEquals(CardPalette.HUES[family], CardPalette.of(family).hue, 0.0)
         assertEquals(CardPalette(55.0, 1).index, CardPalette.preferred(55.0, 1))
+    }
+
+    @Test
+    fun aCoverlessCardInTheWriterWearsAStableFamilyFromItsId() {
+        // Round 9 §8: the bubbles' hash (seedFromId, from 7) mod 6 — "m1" is 183, so family 3; no id yet, family 0.
+        assertEquals(3, CardPalette.ofId("m1"))
+        assertEquals(seedFromId("draft-42").toInt() % 6, CardPalette.ofId("draft-42"))
+        assertEquals(0, CardPalette.ofId(null))
+        assertEquals(0, CardPalette.ofId(""))
+        // The same id, the same family, every time; every family reachable.
+        assertEquals(CardPalette.ofId("x9Lr2"), CardPalette.ofId("x9Lr2"))
+        assertEquals((0 until 6).toSet(), (0 until 400).map { CardPalette.ofId("card-$it") }.toSet())
+    }
+
+    @Test
+    fun eachFamilyHasItsDeeperPen() {
+        val deep = listOf(Tokens.CardBorder0Dark, Tokens.CardBorder1Dark, Tokens.CardBorder2Dark, Tokens.CardBorder3Dark, Tokens.CardBorder4Dark, Tokens.CardBorder5Dark)
+        for (i in 0 until 6) assertEquals(deep[i], CardPalette.of(i).deep)
+        assertNotEquals(CardPalette.of(0).border, CardPalette.of(0).deep)
     }
 }

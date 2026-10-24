@@ -125,6 +125,8 @@ internal fun SearchResults(
     state: LazyListState,
     onPick: (SearchHit) -> Unit,
     modifier: Modifier = Modifier,
+    /** What the floating composer covers at the foot: the last result keeps clear of it. */
+    bottom: Dp = 24.dp,
 ) {
     val hits = model.searchHits
     val byId = remember(model.messages) { model.messages.associateBy { it.id } }
@@ -137,7 +139,7 @@ internal fun SearchResults(
                 modifier = Modifier.fillMaxWidth().padding(top = top + 48.dp, start = 40.dp, end = 40.dp),
             )
         } else {
-            LazyColumn(Modifier.fillMaxSize(), state = state, contentPadding = PaddingValues(top = top + 4.dp, bottom = 24.dp)) {
+            LazyColumn(Modifier.fillMaxSize(), state = state, contentPadding = PaddingValues(top = top + 4.dp, bottom = maxOf(bottom, 24.dp))) {
                 item(key = "count") {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),

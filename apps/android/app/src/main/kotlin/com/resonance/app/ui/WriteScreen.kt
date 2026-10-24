@@ -114,6 +114,8 @@ import com.resonance.design.AppFonts
 import com.resonance.design.BarStatus
 import com.resonance.design.BorderedStoryCard
 import com.resonance.design.ButtonFace
+import com.resonance.design.CardPalette
+import com.resonance.design.OrganicIndication
 import com.resonance.design.ButtonVariant
 import com.resonance.design.CoverFrame
 import com.resonance.design.CssText
@@ -541,7 +543,6 @@ private fun WriteForm(
                 status = status,
                 pickCover = { coverPicker.launch(images) },
                 dismissKeyboard = dismissKeyboard,
-                onLeave = leave,
                 onFinished = { key ->
                     bridge.releaseKeyboard()
                     onFinished(key)
@@ -863,7 +864,6 @@ private fun PublishStep(
     status: BarStatus?,
     pickCover: () -> Unit,
     dismissKeyboard: () -> Unit,
-    onLeave: () -> Unit,
     onFinished: (String) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -948,11 +948,7 @@ private fun PublishStep(
                 onVerb = {
                     dismissKeyboard()
                     scope.launch {
-                        when (val done = model.finish()) {
-                            is StepDone.Page -> onFinished(done.key)
-                            StepDone.Leave -> onLeave()
-                            null -> {}
-                        }
+                        model.finish()?.let { done -> onFinished(done.key) }
                     }
                 },
                 onWayOut = {
@@ -1053,14 +1049,25 @@ private fun MirrorLine(mirror: Mirror?, reduced: Boolean, lead: Dp = 0.dp, onCom
 @Composable
 private fun Preview(session: Session, model: WriteModel, compact: Boolean, pad: Dp, underBar: Boolean, pickCover: () -> Unit, dismissKeyboard: () -> Unit) {
     val content = previewContent(model, session.me)
-    val cover: @Composable BoxScope.(CoverFrame) -> Unit = { frame -> CoverSlot(frame, model, pickCover, dismissKeyboard) }
+    // The card's own family (round 9 §8): its cover's hue, else a stable one from its id — so a coverless card,
+    // and its cover buttons, wear one of the six rather than always the first.
+    val family = previewFamily(model.values.accentHue, model.draftId)
+    val cover: @Composable BoxScope.(CoverFrame) -> Unit = { frame -> CoverSlot(frame, CardPalette.of(family), model, pickCover, dismissKeyboard) }
     Column(Modifier.fillMaxWidth().semantics { isTraversalGroup = true }) {
         Box(Modifier.semantics { contentDescription = L10n.Write.previewCaption }) {
-            if (compact) StoryCard(content, 0, isLast = true, modifier = Modifier.bleed(pad), isFirst = underBar, inset = pad + 18.dp, cover = cover, preview = true)
-            else BorderedStoryCard(content, 0, Modifier.widthIn(max = 360.dp), cover = cover, preview = true)
+            if (compact) StoryCard(content, 0, isLast = true, modifier = Modifier.bleed(pad), isFirst = underBar, inset = pad + 18.dp, cover = cover, preview = true, palette = family)
+            else BorderedStoryCard(content, 0, Modifier.widthIn(max = 360.dp), cover = cover, preview = true, palette = family)
         }
     }
 }
+
+/**
+ * The publish step's preview's colour family (round 9 §8): the family nearest its cover's hue, as any
+ * card's; a coverless card's from its id ([CardPalette.ofId]: the bubbles' hash, the web's and iOS's
+ * twin), family 0 until it has one. The feed keeps colouring coverless cards by their place in it.
+ */
+internal fun previewFamily(accentHue: Double?, cardId: String?): Int =
+    accentHue?.let(CardPalette::nearest) ?: CardPalette.ofId(cardId)
 
 /** What the preview shows of the card being written: StoryCard's content from the live values (cardToStory's rules). */
 internal fun previewContent(model: WriteModel, me: com.resonance.api.models.Me?): StoryCardContent {
@@ -1094,7 +1101,7 @@ internal fun previewContent(model: WriteModel, me: com.resonance.api.models.Me?)
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun BoxScope.CoverSlot(frame: CoverFrame, model: WriteModel, pickCover: () -> Unit, dismissKeyboard: () -> Unit) {
+private fun BoxScope.CoverSlot(frame: CoverFrame, palette: CardPalette, model: WriteModel, pickCover: () -> Unit, dismissKeyboard: () -> Unit) {
     val url = model.values.imageUrl
     val partial = model.partialPreview
     val busy = model.mediaBusy
@@ -1119,12 +1126,17 @@ private fun BoxScope.CoverSlot(frame: CoverFrame, model: WriteModel, pickCover: 
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
+                        // In the card's own family (round 9 §8): its deep pen as the face, its paper as the words.
+                        val faces = remember(palette.index) { CoverFaces.of(palette) }
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OrganicButton(L10n.Write.mediaPlaceholder, variant = ButtonVariant.Tonal, icon = IconName.Image, small = true) {
+                            OrganicButton(L10n.Write.mediaPlaceholder, icon = IconName.Image, small = true, face = faces.solid) {
                                 dismissKeyboard()
                                 pickCover()
                             }
-                            OrganicButton(L10n.Write.mediaGenerate, variant = ButtonVariant.Tonal, icon = IconName.Sparkle, small = true, enabled = model.canGenerate) {
+                            OrganicButton(
+                                L10n.Write.mediaGenerate, icon = IconName.Sparkle, small = true, enabled = model.canGenerate,
+                                face = faces.solid, disabledFace = faces.resting,
+                            ) {
                                 dismissKeyboard()
                                 model.generateCover()
                             }
@@ -1145,7 +1157,7 @@ private fun BoxScope.CoverSlot(frame: CoverFrame, model: WriteModel, pickCover: 
     )
     if (url != null && !busy) {
         Box(Modifier.align(Alignment.BottomEnd).padding(10.dp)) {
-            CoverMenu(model, frame.seed, pickCover, dismissKeyboard)
+            CoverMenu(model, frame.seed, palette, pickCover, dismissKeyboard)
         }
         model.mediaError?.let { error ->
             BoxWithConstraints(Modifier.matchParentSize().padding(10.dp), contentAlignment = Alignment.TopStart) {
@@ -1184,21 +1196,41 @@ private fun CoverErrorChip(text: String, maxWidth: Dp, seed: Double) {
 }
 
 /**
- * 更換封面 (round 7 §1.3): the paper pill on a cover's corner — solid, so it reads on any picture —
- * opening the organic menu: 換一張圖片 · 生成圖片 (faded with no story to draw from) · 移除圖片.
+ * 更換封面 (round 7 §1.3; round 9 §8): a chip on a cover's corner in the card's own colours — its
+ * family's fill, opaque, its pen line round it at INK (a chip floating over a picture), the words and
+ * glyph in the family's deep pen — opening the organic menu in the same hue: 換一張圖片 · 生成圖片
+ * (faded with no story to draw from) · 移除圖片.
  */
 @Composable
-private fun CoverMenu(model: WriteModel, seed: Double, pickCover: () -> Unit, dismissKeyboard: () -> Unit) {
+private fun CoverMenu(model: WriteModel, seed: Double, palette: CardPalette, pickCover: () -> Unit, dismissKeyboard: () -> Unit) {
     val items = listOf(
         OrganicMenuItem(L10n.Write.mediaReplace, IconName.Image) { pickCover() },
         OrganicMenuItem(L10n.Write.mediaGenerate, IconName.Sparkle, enabled = model.canGenerate) { model.generateCover() },
         OrganicMenuItem(L10n.Write.mediaRemove, IconName.Trash, destructive = true) { model.removeCover() },
     )
-    OrganicMenuFrom(items, seed = seed + 11) { _, toggle ->
-        OrganicButton(L10n.Write.coverChange, variant = ButtonVariant.Paper, icon = IconName.Image, small = true) {
+    val faces = remember(palette.index) { CoverFaces.of(palette) }
+    OrganicMenuFrom(items, seed = seed + 11, hue = palette.hue) { _, toggle ->
+        OrganicButton(L10n.Write.coverChange, icon = IconName.Image, small = true, face = faces.chip, outline = palette.border) {
             dismissKeyboard()
             toggle()
         }
+    }
+}
+
+/**
+ * The writer's cover controls in a card's family (round 9 §8): [solid] — 加一張圖片 · 生成圖片 on a
+ * coverless card — the family's deep pen as the face and its paper as the words; [resting], 生成圖片
+ * with no story to draw from yet, the family's tonal step with a muted label (never alpha); [chip],
+ * 更換封面 over the picture, the family's fill with its deep pen for the words. A press washes black at
+ * 0.14 on the deep face, the family's own ink on the light ones.
+ */
+internal class CoverFaces private constructor(val solid: ButtonFace, val resting: ButtonFace, val chip: ButtonFace) {
+    companion object {
+        fun of(palette: CardPalette): CoverFaces = CoverFaces(
+            solid = ButtonFace.custom(palette.deep, palette.interior, OrganicIndication.OnFill, seed = 3.0),
+            resting = ButtonFace.custom(palette.accent, Tokens.TextMuted, OrganicIndication.OnFill, seed = 3.0),
+            chip = ButtonFace.custom(palette.fill, palette.deep, palette.deep.copy(alpha = 0.14f), seed = 401.0),
+        )
     }
 }
 

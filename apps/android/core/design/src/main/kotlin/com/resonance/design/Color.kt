@@ -62,6 +62,8 @@ class CardPalette private constructor(val index: Int) {
     val hue: Double get() = HUES[index]
     val fill: Color get() = Tokens.CardFills[index]
     val border: Color get() = Tokens.CardBorders[index]
+    /** The family's deeper pen (`CARD_BORDERS[f][1]`): the face of the writer's cover buttons (round 9 §8). */
+    val deep: Color get() = DEEP[index]
     /** `oklch(97.5% 0.012 hue)` — the card's paper. */
     val interior: Color get() = OklchColor.parse("oklch(97.5% 0.012 $hue)") ?: Tokens.CardBg
     /** `oklch(55% 0.04 hue / 0.4)` — the wavy rule above the byline. */
@@ -76,6 +78,16 @@ class CardPalette private constructor(val index: Int) {
     companion object {
         /** CARD_HUES, in palette order. */
         val HUES = listOf(55.0, 290.0, 140.0, 88.0, 215.0, 18.0)
+        /** CARD_BORDERS' deeper twins, in palette order. */
+        private val DEEP = listOf(Tokens.CardBorder0Dark, Tokens.CardBorder1Dark, Tokens.CardBorder2Dark, Tokens.CardBorder3Dark, Tokens.CardBorder4Dark, Tokens.CardBorder5Dark)
+
+        /**
+         * A card's own family before it has a cover (round 9 §8): from its id, by the bubbles' hash
+         * ([seedFromId] % 6, twinned on the web and iOS), so the writer's preview of a coverless card
+         * — and its cover buttons — wear one stable family of the six, not always the first; a card
+         * with no id yet keeps family 0. A cover's hue, when it has one, still wins ([preferred]).
+         */
+        fun ofId(id: String?): Int = if (id.isNullOrEmpty()) 0 else seedFromId(id).toInt() % HUES.size
         /** CARD_FILLS' lightness (%) and chroma, in palette order. */
         private val FILL_LC = listOf(90.0 to 0.065, 94.0 to 0.032, 93.0 to 0.042, 92.0 to 0.075, 92.0 to 0.033, 89.0 to 0.047)
 

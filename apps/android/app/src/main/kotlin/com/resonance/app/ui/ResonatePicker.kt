@@ -4,7 +4,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -39,16 +38,13 @@ import com.resonance.api.apis.DefaultApi.TabGetCardBox
 import com.resonance.api.models.FeedCard
 import com.resonance.app.Session
 import com.resonance.design.AppFonts
-import com.resonance.design.ButtonVariant
 import com.resonance.design.Mixes
 import com.resonance.design.ModalActions
 import com.resonance.design.ModalError
 import com.resonance.design.ModalTitle
 import com.resonance.design.OklchColor
-import com.resonance.design.OrganicButton
 import com.resonance.design.OrganicIcon
 import com.resonance.design.OrganicModal
-import com.resonance.design.Skeleton
 import com.resonance.design.WavyDivider
 import com.resonance.design.fade
 import com.resonance.design.generated.IconName
@@ -178,15 +174,8 @@ fun ResonatePicker(
                         ResonateChoices.Empty.AllAnswerAnother -> PickNote(L10n.Card.ResonatePicker.hiddenNote)
                         ResonateChoices.Empty.Nothing, null -> {}
                     }
-                    readFailed -> Row(
-                        Modifier.padding(start = 6.dp, top = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        BasicText(L10n.Native.loadError, style = AppFonts.body(14f, lineHeight = 1.5f, color = Tokens.TextMuted), modifier = Modifier.weight(1f, fill = false))
-                        OrganicButton(L10n.Native.retry, variant = ButtonVariant.Tonal, small = true) { reads++ }
-                    }
-                    else -> PickSkeleton()
+                    readFailed -> PickFailed(L10n.Native.loadError, L10n.Native.retry) { reads++ }
+                    else -> PickSkeleton(rows = 3)
                 }
             },
             footnote = if (choices?.footnote == true) L10n.Card.ResonatePicker.hiddenNote else null,
@@ -268,18 +257,3 @@ private fun WriteNewRow(enabled: Boolean, onClick: () -> Unit) {
 /** The words pressed: color-mix(terracotta, black 34%). */
 private val WriteNewPressed = OklchColor.parse("oklch(40.92% 0.0924 45)") ?: Tokens.TerracottaInk
 
-/** The rows' footprint while the shelf is read: plain shimmering blocks, nothing measured — a 40 thumb, a title bar and a meta bar. */
-@Composable
-private fun PickSkeleton() {
-    Column(Modifier.padding(start = 6.dp, end = 6.dp, top = 10.dp, bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        repeat(3) { i ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Skeleton(Modifier.size(40.dp), height = 40.dp, radius = 12.dp)
-                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                    Skeleton(Modifier.fillMaxWidth(0.7f - i * 0.12f), height = 14.dp)
-                    Skeleton(Modifier.width(64.dp), height = 11.dp)
-                }
-            }
-        }
-    }
-}

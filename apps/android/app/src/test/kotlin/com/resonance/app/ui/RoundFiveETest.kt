@@ -33,12 +33,8 @@ class RoundFiveETest {
     @Test fun aTabletsTitledTabsStart32UnderThePenLineButMessagesKeepsItsPanes() {
         val penLine = 1.4f + 1.8f
         assertEquals(16f, titledBarGap(LayoutClass.Compact, tabletAir = true).value, 0.001f)
-        // My Card Box on a phone: 8 more.
-        assertEquals(24f, titledBarGap(LayoutClass.Compact, tabletAir = true, phoneExtra = 8.dp).value, 0.001f)
         for (cls in listOf(LayoutClass.Medium, LayoutClass.Expanded)) {
             assertEquals(32f - penLine, titledBarGap(cls, tabletAir = true).value, 0.001f)
-            // The phone's extra is the phone's alone.
-            assertEquals(32f - penLine, titledBarGap(cls, tabletAir = true, phoneExtra = 8.dp).value, 0.001f)
             assertEquals(16f, titledBarGap(cls, tabletAir = false).value, 0.001f)
         }
     }
@@ -55,9 +51,9 @@ class RoundFiveETest {
     }
 
     @Test fun aPhonesCardBoxHasMoreAirAroundItsShelves() {
-        assertEquals(CardBoxAir(8.dp, 28.dp, 36.dp), CardBoxAir.of(LayoutClass.Compact))
-        assertEquals(CardBoxAir(0.dp, 20.dp, 28.dp), CardBoxAir.of(LayoutClass.Medium))
-        assertEquals(CardBoxAir(0.dp, 20.dp, 28.dp), CardBoxAir.of(LayoutClass.Expanded))
+        assertEquals(CardBoxAir(28.dp, 36.dp), CardBoxAir.of(LayoutClass.Compact))
+        assertEquals(CardBoxAir(20.dp, 28.dp), CardBoxAir.of(LayoutClass.Medium))
+        assertEquals(CardBoxAir(20.dp, 28.dp), CardBoxAir.of(LayoutClass.Expanded))
     }
 
     // E3

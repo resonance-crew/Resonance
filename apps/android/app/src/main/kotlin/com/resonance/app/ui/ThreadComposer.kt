@@ -12,6 +12,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,11 +43,12 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.resonance.design.AppFonts
@@ -54,12 +56,14 @@ import com.resonance.design.OrganicIcon
 import com.resonance.design.OrganicImageShape
 import com.resonance.design.OrganicMenuFrom
 import com.resonance.design.OrganicMenuItem
-import com.resonance.design.OrganicSendButton
-import com.resonance.design.SendHeight
+import com.resonance.design.ComposerCapsule
+import com.resonance.design.ComposerHeight
+import com.resonance.design.OrganicIndication
+import com.resonance.design.floatingGroup
+import com.resonance.design.floatingSlip
 import com.resonance.design.ReplyRule
 import com.resonance.design.SketchLoader
 import com.resonance.design.fieldHintStyle
-import com.resonance.design.fieldSurface
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.plainClickable
@@ -67,13 +71,14 @@ import com.resonance.kit.chat.ReplyQuote
 import com.resonance.kit.l10n.L10n
 
 /**
- * The message being written: what is attached (the note being answered, a card or a picture), the
- * reply it carries and the field with Send beside it — and before the field 「＋」, the organic menu
- * of what can go with it (圖片 · 卡片; one or the other). Sending never holds the composer — a
- * message goes to the outbox and the field is empty for the next one, with its keyboard still up.
- * [lead] is a quiet line over all of it (answering their note is what connects you).
+ * The message being written (round 9 §4): one floating capsule ([ComposerCapsule]) — 「＋」 at its
+ * start (the organic menu of what can go with it: 圖片 · 卡片, one or the other), the field, and Send
+ * as its end segment — and, 6 above it on a slip of its own ([ComposerSlip]), what rides with the
+ * message: the reply it carries, the note being answered, the card or picture attached, why the
+ * last one didn't go. The capsule keeps its geometry whatever rides with it. Sending never holds the
+ * composer — a message goes to the outbox and the field is empty for the next one, with its
+ * keyboard still up.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun Composer(
     model: ThreadModel,
@@ -82,54 +87,29 @@ internal fun Composer(
     onPickImage: () -> Unit,
     onPickCard: () -> Unit,
     modifier: Modifier = Modifier,
-    lead: String? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
-    Column(modifier.fillMaxWidth()) {
-        lead?.let {
-            BasicText(
-                it,
-                style = AppFonts.body(12.5f, lineHeight = 1.5f, color = Tokens.TextMuted).copy(textAlign = TextAlign.Center),
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, start = 8.dp, end = 8.dp),
-            )
-        }
-        val picture = model.pendingImage
-        if (model.noteRef != null || model.pendingCard != null || picture != null || model.preparingImage) {
-            FlowRow(
-                Modifier.padding(top = 10.dp).padding(horizontal = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                itemVerticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (model.noteRef != null) AttachmentChip(IconName.Note, L10n.Messages.quotedNote) { model.noteRef = null }
-                model.pendingCard?.let { card -> AttachmentChip(IconName.Cards, card.title) { model.pendingCard = null } }
-                if (picture != null || model.preparingImage) PictureChip(picture?.preview) { model.removeImage() }
-            }
-        }
-        model.replyingTo?.let { ReplyBar(model, it) }
-        // One line high, the field is Send's height and the two stand level (iOS's composer); as the
-        // field grows, Send stays at its foot.
-        Row(
-            Modifier.padding(top = 12.dp),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Box(Modifier.padding(bottom = (SendHeight - 40.dp) / 2)) {
-                AttachMenu(onPickImage, onPickCard)
-            }
-            Box(
-                Modifier
-                    .weight(1f)
-                    .fieldSurface(17.0, { focused })
-                    // A 24 line (15 at 1.6) and 10 above and below: 44, Send's height.
-                    .padding(horizontal = Tokens.FieldPadX.dp, vertical = (SendHeight - COMPOSER_LINE) / 2),
-            ) {
-                if (model.draft.isEmpty()) BasicText(L10n.Messages.placeholder, style = fieldHintStyle())
+    // One floating group: the slip's and the capsule's halos go under each other's pen lines.
+    Column(modifier.fillMaxWidth().floatingGroup(), verticalArrangement = Arrangement.spacedBy(SLIP_GAP)) {
+        ComposerSlip(model)
+        ComposerCapsule(
+            canSend = model.canSend,
+            sendLabel = L10n.Messages.send,
+            onSend = { model.send() },
+            focused = { focused },
+            textStyle = ComposerText,
+            leading = { AttachMenu(onPickImage, onPickCard) },
+        ) { vertical ->
+            Box(Modifier.fillMaxWidth().padding(vertical = vertical)) {
+                if (model.draft.isEmpty()) {
+                    BasicText(L10n.Messages.placeholder, style = fieldHintStyle(ComposerText.fontSize.value, COMPOSER_LEADING), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
                 BasicTextField(
                     model.draft, { model.draft = capped(it, NOTE_MAX_LENGTH) },
-                    textStyle = AppFonts.body(15f, lineHeight = 1.6f),
+                    textStyle = ComposerText,
                     cursorBrush = SolidColor(Tokens.Text),
                     minLines = 1,
+                    // Five lines, then it scrolls in place.
                     maxLines = 5,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -142,34 +122,67 @@ internal fun Composer(
                         .semantics { contentDescription = L10n.Messages.threadWith(handle) },
                 )
             }
-            OrganicSendButton(L10n.Messages.send, enabled = model.canSend) { model.send() }
         }
-        model.error?.let { BasicText(it, style = AppFonts.body(12f, lineHeight = 1.3f, color = Tokens.Terracotta), modifier = Modifier.padding(top = 6.dp)) }
     }
 }
 
-/** One line of the composer's text (15 at a 1.6 line height), at the default text size. */
-private val COMPOSER_LINE = 24.dp
+/** The composer's words: 16 (× the interface's text size, capped at 1.25), 1.5 apart. */
+private const val COMPOSER_LEADING = 1.5f
+internal val ComposerText: TextStyle get() = AppFonts.body(16f, lineHeight = COMPOSER_LEADING)
 
-/** Over the field while replying: a wavy terracotta rule, whom to and a line of what, and a ✕. */
+/** The slip → the capsule. */
+private val SLIP_GAP = 6.dp
+
+/**
+ * What rides with the message, on a slip directly above the capsule (round 9 §4), the capsule's
+ * width, opaque: the reply it carries ([ReplyBar]), then the chips — the note being answered, the
+ * card or the picture — and why the last message didn't go. Nothing riding, no slip.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ComposerSlip(model: ThreadModel) {
+    val picture = model.pendingImage
+    val chips = model.noteRef != null || model.pendingCard != null || picture != null || model.preparingImage
+    val reply = model.replyingTo
+    val error = model.error
+    if (!chips && reply == null && error == null) return
+    Column(
+        Modifier.fillMaxWidth().floatingSlip(seed = 29.0).padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+    ) {
+        reply?.let { ReplyBar(model, it) }
+        if (chips) FlowRow(
+            Modifier.padding(top = 6.dp, bottom = 6.dp, end = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (model.noteRef != null) AttachmentChip(IconName.Note, L10n.Messages.quotedNote) { model.noteRef = null }
+            model.pendingCard?.let { card -> AttachmentChip(IconName.Cards, card.title) { model.pendingCard = null } }
+            if (picture != null || model.preparingImage) PictureChip(picture?.preview) { model.removeImage() }
+        }
+        error?.let { BasicText(it, style = AppFonts.body(12f, lineHeight = 1.3f, color = Tokens.Terracotta), modifier = Modifier.padding(top = 4.dp, bottom = 6.dp, end = 6.dp)) }
+    }
+}
+
+/** On the slip while replying: a wavy terracotta rule, whom to (12/600) over a line of what (12.5), and a 44 ✕. */
 @Composable
 private fun ReplyBar(model: ThreadModel, quote: ReplyQuote) {
     val toSelf = quote.senderId == model.me
     val who = if (toSelf) L10n.Messages.replyingToSelf else L10n.Messages.replyingTo(model.other?.handle.orEmpty())
     val what = quote.text.replace('\n', ' ').ifEmpty { quoteStandIn(quote) }
     Row(
-        Modifier.fillMaxWidth().padding(top = 12.dp, start = 4.dp).heightIn(min = 36.dp),
+        Modifier.fillMaxWidth().heightIn(min = 44.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        ReplyRule(Modifier.height(34.dp))
+        ReplyRule(Modifier.height(32.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             BasicText(who, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(12f, 600, lineHeight = 1.35f, color = Tokens.Text))
             BasicText(what, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(12.5f, lineHeight = 1.35f, color = Tokens.TextMuted))
         }
         Box(
             Modifier
-                .size(40.dp)
+                .size(44.dp)
                 .plainClickable(role = Role.Button, onClickLabel = L10n.Messages.replyCancel) { model.cancelReply() }
                 .semantics { contentDescription = L10n.Messages.replyCancel },
             contentAlignment = Alignment.Center,
@@ -178,8 +191,9 @@ private fun ReplyBar(model: ThreadModel, quote: ReplyQuote) {
 }
 
 /**
- * 「＋」 (附上圖片或卡片): the organic menu, over it and lined up with its start — 圖片 (the system's
- * photo picker) · 卡片 (the card picker). The glyph takes the terracotta while the menu is open.
+ * 「＋」 (附上圖片或卡片), the capsule's ghost button (48 × 48, the glyph 22 in the muted ink): the
+ * organic menu, over it and lined up with its start — 圖片 (the system's photo picker) · 卡片 (the
+ * card picker). The glyph takes the terracotta while the menu is open.
  */
 @Composable
 private fun AttachMenu(onPickImage: () -> Unit, onPickCard: () -> Unit) {
@@ -190,11 +204,11 @@ private fun AttachMenu(onPickImage: () -> Unit, onPickCard: () -> Unit) {
     OrganicMenuFrom(items, seed = 43.0, above = true, alignStart = true) { open, toggle ->
         Box(
             Modifier
-                .size(40.dp)
-                .plainClickable(role = Role.Button, onClickLabel = L10n.Messages.attach, onClick = toggle)
+                .size(ComposerHeight)
+                .clickable(interactionSource = null, indication = OrganicIndication(inset = 6.dp), role = Role.Button, onClickLabel = L10n.Messages.attach, onClick = toggle)
                 .semantics { contentDescription = L10n.Messages.attach },
             contentAlignment = Alignment.Center,
-        ) { OrganicIcon(IconName.Plus, size = 18.dp, color = if (open) Tokens.Terracotta else Tokens.TextMuted) }
+        ) { OrganicIcon(IconName.Plus, size = 22.dp, color = if (open) Tokens.Terracotta else Tokens.TextMuted, strokeWidth = Tokens.Ink.value) }
     }
 }
 
@@ -206,7 +220,7 @@ private fun AttachMenu(onPickImage: () -> Unit, onPickCard: () -> Unit) {
 private fun PictureChip(preview: ImageBitmap?, onRemove: () -> Unit) {
     Row(
         Modifier
-            .background(Tokens.TerracottaLight.copy(alpha = 0.4f), RoundedCornerShape(topStart = 12.dp, topEnd = 14.dp, bottomEnd = 12.dp, bottomStart = 14.dp))
+            .background(ChipFace, RoundedCornerShape(topStart = 12.dp, topEnd = 14.dp, bottomEnd = 12.dp, bottomStart = 14.dp))
             .padding(start = 5.dp, end = 8.dp, top = 5.dp, bottom = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -230,12 +244,15 @@ private fun PictureChip(preview: ImageBitmap?, onRemove: () -> Unit) {
 /** The picked picture's thumbnail over the field. */
 private val PictureThumb = 44.dp
 
+/** A chip's face on the slip: the light terracotta at 0.4 laid on the cream, opaque. */
+private val ChipFace = Tokens.TerracottaLight.copy(alpha = 0.4f).compositeOver(Tokens.Cream)
+
 /** A pending attachment above the composer: its glyph, its name, and a ✕. */
 @Composable
 private fun AttachmentChip(icon: IconName, title: String, onRemove: () -> Unit) {
     Row(
         Modifier
-            .background(Tokens.TerracottaLight.copy(alpha = 0.4f), RoundedCornerShape(topStart = 12.dp, topEnd = 14.dp, bottomEnd = 12.dp, bottomStart = 14.dp))
+            .background(ChipFace, RoundedCornerShape(topStart = 12.dp, topEnd = 14.dp, bottomEnd = 12.dp, bottomStart = 14.dp))
             .padding(start = 10.dp, end = 8.dp, top = 5.dp, bottom = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),

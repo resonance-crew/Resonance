@@ -409,13 +409,23 @@ fun OrganicButton(
      * centred, one line — so the button never grows and the loader has air.
      */
     loadingTitle: String? = null,
+    /** A face of its own instead of [variant]'s (a card's family: the writer's cover controls, round 9 §8). */
+    face: ButtonFace? = null,
+    /**
+     * Not [enabled], this face instead of the faded one — never alpha (the cover's 生成圖片 with no story
+     * yet: its family's tonal step, a muted label).
+     */
+    disabledFace: ButtonFace? = null,
+    /** A pen line round the pill at INK (a chip floating over a picture: 更換封面); buttons have none. */
+    outline: Color? = null,
     onClick: () -> Unit,
 ) {
     val active = enabled && !loading
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val haptic = LocalHapticFeedback.current
-    val face = ButtonFace.of(variant)
+    val solidDisabled = !enabled && !loading && disabledFace != null
+    val face = if (solidDisabled) disabledFace!! else face ?: ButtonFace.of(variant)
     val text = face.label
     val overlay = face.press
     val shape = remember(variant) { OrganicButtonShape(face.seed) }
@@ -464,14 +474,16 @@ fun OrganicButton(
     Row(
         modifier
             .then(if (block) Modifier.fillMaxWidth().heightIn(min = 52.dp) else Modifier)
-            .fade(if (loading || enabled) 1f else ButtonFace.DISABLED_ALPHA)
+            .fade(if (loading || enabled || solidDisabled) 1f else ButtonFace.DISABLED_ALPHA)
             .scale(if (pressed) 0.97f else 1f)
             .drawWithCache {
                 val o = shape.createOutline(size, layoutDirection, this)
                 val grain = Grain.brush(GrainMode.Tile, face.grainTile, size, density, face.grainAlpha)
+                val pen = outline?.let { Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round) }
                 onDrawBehind {
                     drawOutline(o, face.fill)
                     grain?.let { drawOutline(o, it, alpha = face.grainAlpha) }
+                    if (outline != null && pen != null) drawOutline(o, outline, style = pen)
                 }
             }
             // The web's hover brush as a press: ink spreading from the finger, inside the pill.
@@ -656,6 +668,13 @@ class ButtonFace private constructor(
         /** Not pressable yet: the face stays, faded (the web's `:disabled`). */
         const val DISABLED_ALPHA = 0.45f
 
+        /**
+         * A face of the caller's own colours (a card's family), with the buttons' grain and a solid
+         * button's wobble: [press] is the ink a press spreads (black at 0.14 on a deep face).
+         */
+        fun custom(fill: Color, label: Color, press: Color = OrganicIndication.OnFill, seed: Double = 3.0): ButtonFace =
+            ButtonFace(fill, label, press, seed)
+
         private val Solid = ButtonFace(Mixes.ButtonFill, Tokens.Cream, OrganicIndication.OnFill, 3.0)
         private fun tonal(seed: Double) = ButtonFace(Mixes.ButtonTonal, Mixes.ButtonOnTonal, OrganicIndication.Wash, seed)
 
@@ -719,7 +738,8 @@ fun OrganicIconButton(
         contentAlignment = Alignment.Center,
     ) {
         if (busy) ButtonLoader(color, size)
-        else OrganicIcon(icon, Modifier.fade(if (enabled) 1f else ButtonFace.DISABLED_ALPHA), size = size, color = color, mirrored = mirrored)
+        // At rest the glyph is drawn with the one pen (INK 1.8), as the web's BareIconButton; INK_STRONG is for focus.
+        else OrganicIcon(icon, Modifier.fade(if (enabled) 1f else ButtonFace.DISABLED_ALPHA), size = size, color = color, mirrored = mirrored, strokeWidth = Tokens.Ink.value)
     }
 }
 

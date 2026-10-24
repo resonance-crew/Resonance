@@ -56,8 +56,9 @@ import kotlin.math.min
  * bar's) and label colour ([textColor]); the ink a press spreads ([press]); what a screen reader
  * calls it when that isn't its words ([contentDescription]; a segment that shows words is named
  * by them, WCAG 2.5.3); and, for a choice, whether it is the chosen option ([selected]: a radio, not a
- * button). A [collapsible] segment shows its glyph alone when the bar has no room for every
- * label (the card page's bookmark on a narrow phone), its words kept for a screen reader.
+ * button). A segment that may give up its words ([collapse]: the step at which it does, 1 or 2; 0
+ * never) shows its glyph alone when the bar has no room for every label — the card page's bookmark
+ * first, then its note (round 9 §3) — its words kept for a screen reader.
  */
 class Segment(
     val key: String,
@@ -67,7 +68,8 @@ class Segment(
     val textColor: Color = Mixes.ButtonOnTonal,
     val press: Color = OrganicIndication.Wash,
     val contentDescription: String? = null,
-    val collapsible: Boolean = false,
+    /** The step at which it shows its glyph alone when the labels don't fit ([SegmentedLayout.steps]): 0 never. */
+    val collapse: Int = 0,
     val selected: Boolean? = null,
     /** The glyph drawn filled (a saved bookmark), and its pen. */
     val iconFill: Color? = null,
@@ -85,9 +87,10 @@ class Segment(
  * A press spreads its ink from the finger inside its own segment.
  *
  * On a phone (narrower than 560) the bar spans its column and the segments share it evenly; wider,
- * it stands at its own width. When every label no longer fits, the [Segment.collapsible] ones
- * show their glyph alone and take only their own room ([SegmentedLayout]). Each segment is at
- * least 48 tall. Not [enabled] (the viewer's own answer still being read), it fades to 0.6 and
+ * it stands at its own width. When every label no longer fits, the segments give up their words a
+ * step at a time ([Segment.collapse]: the first step's, then the second's) and take only their own
+ * room; past the last step the rest share what is left, their words cut with an ellipsis — the bar
+ * never runs past the width it has ([SegmentedLayout]). Each segment is at least 48 tall. Not [enabled] (the viewer's own answer still being read), it fades to 0.6 and
  * takes no tap.
  */
 @Composable
@@ -108,10 +111,10 @@ fun SegmentedActionBar(
         val labels = segments.map { seg ->
             with(density) { measurer.measure(seg.label, style, softWrap = false, maxLines = 1).size.width.toDp().value }
         }
-        val widths = SegmentedLayout.widths(
-            labels, segments.map { it.icon != null }, segments.map { it.collapsible }, room, spread,
-        )
-        val iconOnly = SegmentedLayout.collapses(labels, segments.map { it.icon != null }, room, spread)
+        val icons = segments.map { it.icon != null }
+        val collapse = segments.map { it.collapse }
+        val widths = SegmentedLayout.widths(labels, icons, collapse, room, spread)
+        val step = SegmentedLayout.steps(labels, icons, collapse, room, spread)
         val lefts = widths.runningFold(0f) { x, w -> x + w }.dropLast(1)
         val scope = rememberCoroutineScope()
         val ink = remember { InkSpread() }
@@ -162,7 +165,7 @@ fun SegmentedActionBar(
                         }
                     }
                 }
-                val collapsed = iconOnly && seg.collapsible
+                val collapsed = SegmentedLayout.alone(seg.collapse, seg.icon != null, step)
                 Row(
                     Modifier
                         .width(widths[i].dp)
@@ -188,8 +191,9 @@ fun SegmentedActionBar(
                     if (!collapsed) BasicText(
                         seg.label, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis,
                         style = style.copy(color = seg.textColor),
-                        // The short label stands for the full words, which are read instead.
-                        modifier = if (seg.contentDescription != null) Modifier.clearAndSetSemantics { } else Modifier,
+                        // The short label stands for the full words, which are read instead; past the last step
+                        // the words may be cut, never the glyph.
+                        modifier = (if (seg.contentDescription != null) Modifier.clearAndSetSemantics { } else Modifier).weight(1f, fill = false),
                     )
                 }
             }
@@ -200,8 +204,11 @@ fun SegmentedActionBar(
 /**
  * How a [SegmentedActionBar] shares its width (dp), apart from Compose so it can be tested — the
  * web's: a segment's own width is its padding, glyph, gap and label; on a phone the bar spans
- * the room and the segments share it evenly, a glyph alone taking only its own; the collapsible
- * segments drop their words once the labels (at their own widths) need more than the room.
+ * the room and the segments share it evenly, a glyph alone taking only its own. When the labels (at
+ * their own widths) need more than the room, the segments give up their words a step at a time
+ * ([steps]: first those of step 1, then step 2's too), and when even the last step doesn't fit, the
+ * segments still showing words share what is left — the narrowest keeping its own width, the rest
+ * an even share, cut with an ellipsis — so the bar is never wider than its room (round 9 §3).
  */
 object SegmentedLayout {
     /** Narrower than this the bar spans its column (the web's 560px). */
@@ -219,30 +226,61 @@ object SegmentedLayout {
     /** A segment's own width: its padding, glyph, gap and label — and a dp to spare, so rounding to pixels never cuts the label. */
     private fun natural(label: Float, icon: Boolean, pad: Float) = 2 * pad + label + (if (icon) ICON + GAP else 0f) + 1f
 
-    /** Whether the collapsible segments show their glyph alone: every label at its own width needs more than [room]. */
-    fun collapses(labels: List<Float>, icons: List<Boolean>, room: Float, spread: Boolean): Boolean {
+    /** Whether a segment that gives up its words at [collapse] shows its glyph alone at [step] (it has a glyph to show). */
+    fun alone(collapse: Int, icon: Boolean, step: Int): Boolean = icon && collapse in 1..step
+
+    /** What the segments need at [step], each at its own width or its glyph alone. */
+    private fun need(labels: List<Float>, icons: List<Boolean>, collapse: List<Int>, step: Int, pad: Float): Float =
+        labels.indices.sumOf { (if (alone(collapse[it], icons[it], step)) ICON_ONLY else natural(labels[it], icons[it], pad)).toDouble() }.toFloat()
+
+    /**
+     * How many steps the bar takes to fit [room]: 0, every label; 1, step 1's segments their glyph
+     * alone; 2, step 2's too — the last step there is, when even that doesn't fit.
+     */
+    fun steps(labels: List<Float>, icons: List<Boolean>, collapse: List<Int>, room: Float, spread: Boolean): Int {
         val pad = if (spread) PAD else WIDE_PAD
-        return labels.indices.sumOf { natural(labels[it], icons[it], pad).toDouble() } > room + 0.5
+        val last = collapse.maxOrNull() ?: 0
+        for (step in 0..last) if (need(labels, icons, collapse, step, pad) <= room + 0.5f) return step
+        return last
     }
 
-    fun widths(labels: List<Float>, icons: List<Boolean>, collapsible: List<Boolean>, room: Float, spread: Boolean): List<Float> {
-        val tight = collapses(labels, icons, room, spread)
-        val alone = labels.indices.map { tight && collapsible[it] && icons[it] }
-        if (!spread) return labels.indices.map { if (alone[it]) ICON_ONLY else natural(labels[it], icons[it], WIDE_PAD) }
-        // Shared evenly (the web's `flex: 1`), but never narrower than a segment's own words (its min-content):
-        // one that needs more than an even share keeps its own width, and the rest is shared again.
+    /** Whether any segment shows its glyph alone ([steps] past 0). */
+    fun collapses(labels: List<Float>, icons: List<Boolean>, collapse: List<Int>, room: Float, spread: Boolean): Boolean =
+        steps(labels, icons, collapse, room, spread) > 0
+
+    fun widths(labels: List<Float>, icons: List<Boolean>, collapse: List<Int>, room: Float, spread: Boolean): List<Float> {
+        val step = steps(labels, icons, collapse, room, spread)
+        val alone = labels.indices.map { alone(collapse[it], icons[it], step) }
+        val pad = if (spread) PAD else WIDE_PAD
+        val own = labels.indices.map { if (alone[it]) ICON_ONLY else natural(labels[it], icons[it], pad) }
+        // Wider, each at its own width — unless even that runs past the room, when it shares as a phone's does.
+        if (!spread && own.sum() <= room + 0.5f) return own
         val widths = labels.indices.map { if (alone[it]) ICON_ONLY else 0f }.toMutableList()
         val open = labels.indices.filter { !alone[it] }.toMutableList()
         var rest = room - alone.count { it } * ICON_ONLY
+        val naturalPad = if (spread) PAD else WIDE_PAD
+        if (open.sumOf { natural(labels[it], icons[it], naturalPad).toDouble() } > rest + 0.5) {
+            // Past the last step: the narrowest keep their own width while an even share holds them, the rest
+            // share what is left (their words cut) — never more than the room.
+            for (i in open.sortedBy { natural(labels[it], icons[it], naturalPad) }) {
+                val share = (rest / open.size).coerceAtLeast(0f)
+                widths[i] = minOf(natural(labels[i], icons[i], naturalPad), share)
+                rest -= widths[i]
+                open.remove(i)
+            }
+            return widths
+        }
+        // Shared evenly (the web's `flex: 1`), but never narrower than a segment's own words (its min-content):
+        // one that needs more than an even share keeps its own width, and the rest is shared again.
         while (open.isNotEmpty()) {
             val share = rest / open.size
-            val wide = open.filter { natural(labels[it], icons[it], PAD) > share }
+            val wide = open.filter { natural(labels[it], icons[it], naturalPad) > share }
             if (wide.isEmpty()) {
                 open.forEach { widths[it] = share }
                 break
             }
             wide.forEach {
-                widths[it] = natural(labels[it], icons[it], PAD)
+                widths[it] = natural(labels[it], icons[it], naturalPad)
                 rest -= widths[it]
                 open.remove(it)
             }

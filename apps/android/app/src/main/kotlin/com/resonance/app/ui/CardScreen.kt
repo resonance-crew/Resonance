@@ -41,7 +41,13 @@ import androidx.compose.ui.unit.Dp
 import com.resonance.design.prefersReducedMotion
 import com.resonance.design.readingProgress
 import com.resonance.design.LayoutClass
-import com.resonance.design.firstContentGap
+import com.resonance.design.storyHeadGap
+import com.resonance.design.StoryMetaLine
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.resonance.design.ButtonVariant
+import com.resonance.design.OrganicButton
+import com.resonance.design.OrganicIconButton
+import com.resonance.kit.api.isTrashed
 import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.abs
 import androidx.compose.animation.AnimatedVisibility
@@ -303,8 +309,11 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     val chrome = LocalHeaderChrome.current
     val heading = remember { HeadingUnderBar() }
     // Where the card's share and ⋯ sit at the top (round 8 §10.1): a phone's bar keeps them, as phone apps
-    // do; under a tablet's header they end the byline, beside the author and the read time · date.
+    // do; under a tablet's header they end the byline, beside the author and the read time · date — and
+    // come into the bar once the byline has scrolled under it (round 9 §3).
     val actionsSlot = cardActionsSlot(tabletHeader = chrome != null)
+    // The resonances beyond the first three show once asked for (round 9 C1).
+    var allResonances by rememberSaveable(key) { mutableStateOf(false) }
     val titleGone by remember(list) {
         derivedStateOf { scrolledUnderBar(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset, heading.bottom) }
     }
@@ -350,9 +359,9 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
             }
         }
     }
-    // A tablet's article starts 32 under the header's pen line; its lists' headings have more air (round 5 E2).
+    // The reading head (round 9 §2): the article's first thing — a cover, the trash's banner, else the title's
+    // line box — that far under the bar's pen line; its lists' headings have more air on a tablet (round 5 E2).
     val cls = LocalWindowLayout.current.cls
-    val articleTop = cls.firstContentGap(16.dp)
     // Moved to the trash on this page a moment ago: the banner's title takes the focus as it comes.
     var trashedHere by remember { mutableIntStateOf(0) }
     Box(Modifier.fillMaxSize().cream().onGloballyPositioned { progress.page = it }) {
@@ -361,8 +370,9 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
             // The card as the list drew it, the story still shimmering below; or, knowing nothing yet,
             // CardDetailSkeleton: the article's own layout in shimmering blocks.
             "loading" -> if (placeholder != null) CardPreview(placeholder, columns) { open(Route.Author(it)) }
+                // The skeleton heads with a cover's block: it stands where a cover would.
                 else CardDetailSkeleton(
-                    Modifier.padding(start = columns.start, end = columns.end).padding(top = articleTop),
+                    Modifier.padding(start = columns.start, end = columns.end).padding(top = cls.storyHeadGap(cover = true)),
                     compact = cls == LayoutClass.Compact, byline = true,
                 )
             "notFound" -> OrganicEmptyState(title = L10n.Card.NotFound.title, titleSize = 24f, actionTitle = L10n.Card.NotFound.back, onAction = back, action = EmptyAction.Outline)
@@ -371,6 +381,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                 val card = d.card
                 // The owner's card in the trash (trash.spec §5.4): the banner first, no share, no ⋯, no lists.
                 val trashedOwn = ownTrashed(d)
+                val articleTop = articleTop(cls, card, trashedOwn)
                 val resonance = if (trashedOwn) emptyList() else (listOfNotNull(d.referenceCard) + resonances).distinctBy { it.id }
                 // Related cards are the feed's kind of list: bands, or the bordered grid when expanded;
                 // the page's other lists follow it.
@@ -387,6 +398,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                 actions = if (actionsSlot == CardActionsSlot.Byline && !trashedOwn) {
                                     { CardPageActions(session, d, sharing, open, onShare = share, onTrashed = { trashedHere++ }, seed = card.accentHue ?: 55.0) }
                                 } else null,
+                                privateCard = isPrivateCard(d),
                             ) { open(Route.Author(it)) }
                             // The story alone is what the bar's progress measures (not the cover, title or lists).
                             Box(Modifier.onGloballyPositioned(progress::story)) {
@@ -400,19 +412,16 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                             FlowRow(Modifier.padding(top = type.endGap.dp, bottom = 40.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 card.tags.forEach { TagPill(it, fill = Tokens.TerracottaLight) }
                             }
-                            // The story's end is one row (round 8 §10.2): the response bar at its start, the card's
-                            // share and ⋯ at its end — the bar's two — or, the author's own card, those two alone.
-                            if (!trashedOwn) Row(Modifier.fillMaxWidth().padding(bottom = 40.dp), verticalAlignment = Alignment.CenterVertically) {
-                                if (!d.isOwner) CardViewerActions(
-                                    session, card.id, card.referenceCardId,
-                                    onWriteNew = { open(Route.Write(referenceCardId = card.id)) },
-                                    onModify = { mine -> open(Route.Write(cardId = mine)) },
-                                    onOpenMine = { key -> open(Route.Card(key)) },
-                                    onUpgradeNote = { words -> open(Route.Write(referenceCardId = card.id, story = words)) },
-                                    modifier = Modifier.weight(1f),
-                                ) else Spacer(Modifier.weight(1f))
-                                CardPageActions(session, d, sharing, open, onShare = share, onTrashed = { trashedHere++ }, seed = (card.accentHue ?: 55.0) + 7)
-                            }
+                            // The story's end is the response bar alone (round 9 §3: share and ⋯ are in the bar,
+                            // or the byline); the author's own card has no end row.
+                            if (!trashedOwn && !d.isOwner) CardViewerActions(
+                                session, card.id, card.referenceCardId,
+                                onWriteNew = { open(Route.Write(referenceCardId = card.id)) },
+                                onModify = { mine -> open(Route.Write(cardId = mine)) },
+                                onOpenMine = { key -> open(Route.Card(key)) },
+                                onUpgradeNote = { words -> open(Route.Write(referenceCardId = card.id, story = words)) },
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 40.dp),
+                            )
                         }
                     }
                     // The owner's linked cards and the resonances take the related list's layout (round 5 D3).
@@ -428,9 +437,16 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                         answerCards(linked, open, keyPrefix = "linked:", related = relatedLayout)
                         item { Spacer(Modifier.height(40.dp)) }
                     }
+                    // 與此文共振: the related list's full cards at every width (round 9 C1) — three, then 查看全部 for the rest, in place.
                     if (resonance.isNotEmpty()) {
                         sectionHeading(L10n.Card.ResonanceSection.title, cardSectionAir(cls, phoneBelow = 40))
-                        answerCards(resonance, open, keyPrefix = "resonance:", related = relatedLayout)
+                        val shown = resonancesShown(resonance, allResonances)
+                        storyCards(shown, open, layout = relatedLayout, keyPrefix = "resonance:")
+                        if (shown.size < resonance.size) item(key = "resonance:all") {
+                            Box(Modifier.fillMaxWidth().padding(top = 24.dp), contentAlignment = Alignment.Center) {
+                                OrganicButton(L10n.Card.ResonanceSection.showAll(resonance.size), variant = ButtonVariant.Tonal, small = true) { allResonances = true }
+                            }
+                        }
                         item { Spacer(Modifier.height(16.dp)) }
                     }
                     if (related.isNotEmpty() && !trashedOwn) {
@@ -445,7 +461,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     // The contents' rail beside the article (an expanded window, a story with headings): pinned under the bar
     // while the article scrolls, leaving with its end. The author is under the title at every width (round 8 §10.1).
     val railStart = columns.railStart
-    if (railStart != null && detail != null) ContentsRail(railStart, list, top, headings, tapped ?: reading, onHeading)
+    if (railStart != null && detail != null) ContentsRail(railStart, list, top + articleTop(cls, detail.card, ownTrashed(detail)), headings, tapped ?: reading, onHeading)
     OrganicInlineBar(
         L10n.App.Nav.back, back, scrolled = list.scrolledPast20(),
         // A tablet's header has the card's title in its middle instead of the author beside the arrow.
@@ -455,11 +471,19 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
         leading = { if (chrome == null) detail?.let { d -> BarAuthor(d.card, d.anonymous, visible = phase == "loaded" && bylineGone) { open(Route.Author(it)) } } },
         progress = if (phase == "loaded") progress::shown else null,
     ) {
-        // A phone's bar holds the page's actions, as phone apps keep them (a tablet's byline holds them instead),
-        // and they come again at the story's end. The owner's card in the trash has neither: its banner holds
-        // the way back (and nothing is shared from it).
-        if (actionsSlot == CardActionsSlot.Bar) detail?.takeUnless(::ownTrashed)?.let { d ->
-            CardPageActions(session, d, sharing, open, onShare = share, onTrashed = { trashedHere++ }, seed = d.card.accentHue ?: 55.0)
+        // A phone's bar holds the page's actions, as phone apps keep them; a tablet's byline holds them, and the
+        // bar takes them while the byline is under it (round 9 §3). The owner's card in the trash has neither:
+        // its banner holds the way back (and nothing is shared from it).
+        detail?.takeUnless(::ownTrashed)?.let { d ->
+            val actions: @Composable () -> Unit = {
+                CardPageActions(session, d, sharing, open, onShare = share, onTrashed = { trashedHere++ }, seed = d.card.accentHue ?: 55.0)
+            }
+            if (actionsSlot == CardActionsSlot.Bar) actions()
+            else AnimatedVisibility(
+                phase == "loaded" && bylineGone,
+                enter = fadeIn(tween(180)),
+                exit = fadeOut(tween(140)),
+            ) { actions() }
         }
     }
     // Where the share card is drawn into its pictures: out of sight, taking no room.
@@ -557,6 +581,8 @@ private fun ArticleHead(
     bylineModifier: Modifier = Modifier,
     /** The page's share and ⋯ at the byline's end, under a tablet's header ([cardActionsSlot]); null on a phone. */
     actions: (@Composable () -> Unit)? = null,
+    /** The owner's 私人卡: its meta line ends with the lock and 私人卡 (round 9 §1). */
+    privateCard: Boolean = false,
     openAuthor: (String) -> Unit,
 ) {
     if (card.imageUrl != null) {
@@ -572,7 +598,7 @@ private fun ArticleHead(
         StoryTitle(card.title, type, lang, titleModifier.semantics { heading() })
     }
     Spacer(Modifier.height(type.metaGap.dp))
-    StoryByline(card, anonymous, bylineModifier, actions, openAuthor)
+    StoryByline(card, anonymous, type, bylineModifier, actions, privateCard, openAuthor)
     Spacer(Modifier.height(type.leadGap.dp))
 }
 
@@ -585,7 +611,7 @@ private fun ArticleHead(
 private fun CardPreview(card: FeedCard, columns: CardPageColumns, openAuthor: (String) -> Unit) {
     val cls = LocalWindowLayout.current.cls
     val text = remember(card.title, card.excerpt) { StoryScripts.storyType(card.title, card.excerpt) }
-    Column(Modifier.fillMaxSize().padding(start = columns.start, end = columns.end).padding(top = cls.firstContentGap(16.dp))) {
+    Column(Modifier.fillMaxSize().padding(start = columns.start, end = columns.end).padding(top = articleTop(cls, card, trashed = false))) {
         ArticleHead(card, card.anonymous, StoryType.of(text.script, cls), text.lang, openAuthor = openAuthor)
         StorySkeleton(Modifier.semantics { contentDescription = L10n.Home.moreLoading }, compact = cls == LayoutClass.Compact)
     }
@@ -603,8 +629,10 @@ private fun CardPreview(card: FeedCard, columns: CardPageColumns, openAuthor: (S
 private fun StoryByline(
     card: FeedCard,
     anonymous: Boolean,
+    type: StoryType,
     modifier: Modifier = Modifier,
     actions: (@Composable () -> Unit)? = null,
+    privateCard: Boolean = false,
     openAuthor: (String) -> Unit,
 ) {
     val author = card.author
@@ -633,14 +661,31 @@ private fun StoryByline(
                     BasicText(L10n.Card.anonymousAuthor, maxLines = 1, style = AppFonts.body(15f, 600, lineHeight = 1.35f, color = Tokens.TextMuted))
                 }
             }
-            BasicText(
-                metaLine(card.readMinutes, card.publishedAt),
-                style = AppFonts.body(Tokens.StoryMetaSizeCompact, lineHeight = 1.4f, color = Tokens.TextMuted),
-            )
+            // 13 on a phone, 14 wider (round 9 §2); the owner's 私人卡 ends it with the lock and its name.
+            StoryMetaLine(metaLine(card.readMinutes, card.publishedAt), type.metaSize, lock = if (privateCard) L10n.Card.private else null)
         }
         actions?.invoke()
     }
 }
+
+
+/**
+ * The owner's 私人卡 (round 9 §1): a card only its author sees — never published, or published and
+ * kept private — out of the trash (which says where the card stands itself). Its page wears the lock
+ * in its meta line and the 編輯 pen where share would be.
+ */
+internal fun isPrivateCard(d: com.resonance.api.models.CardDetail): Boolean =
+    d.isOwner && !d.card.isTrashed && (d.card.publishedAt == null || d.card.visibility == FeedCard.Visibility.`private`)
+
+/** How far under the bar's foot the article starts (round 9 §2): to a cover's (or the trash banner's) top edge, else the title's line box. */
+internal fun articleTop(cls: LayoutClass, card: FeedCard, trashed: Boolean): Dp =
+    cls.storyHeadGap(cover = card.imageUrl != null || trashed)
+
+/** The resonances shown (round 9 C1): the first [RESONANCES_SHOWN], or all once 查看全部 was pressed. */
+internal fun resonancesShown(cards: List<FeedCard>, all: Boolean): List<FeedCard> = if (all) cards else cards.take(RESONANCES_SHOWN)
+
+/** How many resonances a card page shows before 查看全部. */
+internal const val RESONANCES_SHOWN = 3
 
 /** 「6 分鐘 · 2026年10月10日」 / "6 min · Oct 10, 2026": the read time, then the published day (a draft's read time alone). */
 internal fun metaLine(minutes: Int, publishedAt: String?): String =
@@ -671,8 +716,8 @@ private fun ContentsRail(
 ) {
     val density = LocalDensity.current
     var height by remember { mutableIntStateOf(0) }
-    // Level with the article's first line (a tablet's 32 under the header's pen line, round 5 E2).
-    val pinned = with(density) { (top + LocalWindowLayout.current.cls.firstContentGap(24.dp)).roundToPx() }
+    // Level with the article's first thing ([top]: the bar's foot and the reading head under it).
+    val pinned = with(density) { top.roundToPx() }
     val foot = with(density) { (RailFootRoom + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()).roundToPx() }
     val y by remember(list, pinned) {
         derivedStateOf {
@@ -731,6 +776,10 @@ private fun CardPageActions(
 ) {
     val card = d.card
     Row(verticalAlignment = Alignment.CenterVertically) {
+        // The owner's 私人卡 is never shared: its pen opens the writer on it where share would be (round 9 §1).
+        if (isPrivateCard(d)) OrganicIconButton(IconName.Pen, L10n.Me.Actions.edit, size = 20.dp) {
+            open(Route.Write(cardId = card.id, showsCard = false))
+        }
         if (ShareLinks.canShare(d)) {
             OrganicMenuChip(IconName.Share, L10n.Card.share, seed = seed + 5, trigger = MenuTrigger.Bare, busy = sharing.busy) { onShare(d) }
         }

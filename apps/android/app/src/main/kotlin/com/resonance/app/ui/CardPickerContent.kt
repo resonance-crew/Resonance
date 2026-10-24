@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -24,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -55,6 +57,11 @@ import com.resonance.design.ModalTitle
 import com.resonance.design.OklchColor
 import com.resonance.design.OrganicIcon
 import com.resonance.design.fade
+import com.resonance.design.Skeleton
+import com.resonance.design.OrganicButton
+import com.resonance.design.ButtonVariant
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.plainClickable
@@ -75,25 +82,27 @@ import java.time.format.DateTimeFormatter
  */
 @Composable
 fun CardPickerContent(session: Session, title: String, subtitle: String, onPick: (FeedCard) -> Unit, onCancel: () -> Unit) {
-    var cards by remember { mutableStateOf<List<FeedCard>?>(null) }
-    // getCardsByAuthor(me, 'published'), public ones only.
-    LaunchedEffect(Unit) {
-        cards = try {
-            session.reading.cardBox(TabGetCardBox.published).filter { it.visibility == FeedCard.Visibility.`public` && it.publishedAt != null }
+    var read by remember { mutableStateOf<PickRead>(PickRead.Loading) }
+    var reads by remember { mutableIntStateOf(0) }
+    // getCardsByAuthor(me, 'published'), public ones only — a read that fails says so, never "no cards" (round 9 C2).
+    LaunchedEffect(reads) {
+        read = PickRead.Loading
+        read = try {
+            PickRead.Loaded(publicCards(session.reading.cardBox(TabGetCardBox.published)))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            emptyList()
+            PickRead.Failed
         }
     }
     Column(Modifier.fillMaxWidth()) {
         Box(Modifier.padding(bottom = 4.dp)) { ModalTitle(title) }
         BasicText(subtitle, style = AppFonts.body(14f, lineHeight = 1.3f, color = Tokens.TextMuted), modifier = Modifier.padding(bottom = 12.dp))
-        val list = cards
-        if (list == null) {
-            BasicText("…", style = AppFonts.body(14f, lineHeight = 1.3f, color = Tokens.TextMuted), modifier = Modifier.padding(vertical = 12.dp))
-        } else {
-            CardPickList(list, onPick, empty = { PickNote(L10n.Write.Editor.CardModal.empty) })
+        when (val r = read) {
+            // Four rows in the shimmer, shaped as the rows they stand for — never "…".
+            PickRead.Loading -> PickSkeleton(rows = 4)
+            PickRead.Failed -> PickFailed(L10n.Write.Editor.CardModal.failed, L10n.Write.Editor.CardModal.retry) { reads++ }
+            is PickRead.Loaded -> CardPickList(r.cards, onPick, empty = { PickNote(L10n.Write.Editor.CardModal.empty) })
         }
         // A list to pick from, its one way out under it at the right — the modal's gap given here, in a column of its own.
         ModalCloseButton(L10n.Write.Editor.CardModal.cancel, onCancel, Modifier.padding(top = ModalGap))
@@ -184,12 +193,7 @@ private fun CardPickRow(card: FeedCard, index: Int, choosing: Boolean, chosen: B
  */
 @Composable
 private fun PickThumb(url: String?, hue: Double, seed: Double, chosen: Boolean) {
-    val shape = remember(seed) {
-        WobRectShape(
-            10.0, seed, mag = 0.88,
-            options = WobRectOptions(curve = 1.3, cornerJitter = 3.2, cornerOffset = 2.4, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0)),
-        )
-    }
+    val shape = remember(seed) { pickThumbShape(seed) }
     val cover = OklchColor.parse("oklch(90% 0.06 $hue)") ?: Tokens.TerracottaLight
     Box(
         Modifier
@@ -222,6 +226,12 @@ private fun PickThumb(url: String?, hue: Double, seed: Double, chosen: Boolean) 
     }
 }
 
+/** A pick row's thumb outline: HandDrawnAvatar's lopsided square at R 10, one turn a side. */
+internal fun pickThumbShape(seed: Double) = WobRectShape(
+    10.0, seed, mag = 0.88,
+    options = WobRectOptions(curve = 1.3, cornerJitter = 3.2, cornerOffset = 2.4, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0)),
+)
+
 /**
  * A pick row's muted line: when the card came out ([pickDate]), led by [anonymousLabel] for an
  * anonymous card (「匿名 · 9月28日」/ "Anonymous · Sep 28"); null when there is nothing to say.
@@ -244,6 +254,59 @@ internal fun pickDate(iso: String?, today: LocalDate = LocalDate.now()): String?
         }
         day.format(DateTimeFormatter.ofPattern(pattern, Strings.language.locale))
     }.getOrNull()
+}
+
+/** The picker's read of your cards: on its way, failed, or what it brought. */
+internal sealed interface PickRead {
+    data object Loading : PickRead
+    data object Failed : PickRead
+    data class Loaded(val cards: List<FeedCard>) : PickRead
+}
+
+/** The cards a picker offers: published public ones (a 私人卡 or a card for connections can't be shared or embedded). */
+internal fun publicCards(cards: List<FeedCard>): List<FeedCard> =
+    cards.filter { it.visibility == FeedCard.Visibility.`public` && it.publishedAt != null }
+
+/**
+ * The rows' footprint while the cards are read (round 9 C2): shimmering rows shaped as the real ones
+ * — the 40 thumb in its own lopsided square, a title bar 60 % wide on the title's line and a date bar
+ * 35 % on the meta line, the rows' own padding — so nothing moves when the cards come.
+ */
+@Composable
+internal fun PickSkeleton(rows: Int) {
+    Column(Modifier.semantics { contentDescription = L10n.Home.moreLoading }) {
+        repeat(rows) { i ->
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 10.dp, horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Skeleton(Modifier.size(40.dp), height = 40.dp, shape = remember(i) { pickThumbShape((i * 7 + 3).toDouble()) })
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    // As tall as the title's line (15 × 1.3) and the meta's (13 × 1.4), a bar in the middle of each.
+                    Box(Modifier.fillMaxWidth().height(19.5.dp), contentAlignment = Alignment.CenterStart) {
+                        Skeleton(Modifier.fillMaxWidth(0.6f), height = 14.dp)
+                    }
+                    Box(Modifier.fillMaxWidth().height(18.2.dp), contentAlignment = Alignment.CenterStart) {
+                        Skeleton(Modifier.fillMaxWidth(0.35f), height = 11.dp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The read failed: said so (沒能讀到你的卡片), with 再試一次 beside it. */
+@Composable
+internal fun PickFailed(text: String, retry: String, onRetry: () -> Unit) {
+    Row(
+        Modifier.padding(start = 6.dp, top = 6.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        BasicText(text, style = AppFonts.body(14f, lineHeight = 1.5f, color = Tokens.TextMuted), modifier = Modifier.weight(1f, fill = false))
+        OrganicButton(retry, variant = ButtonVariant.Tonal, small = true, onClick = onRetry)
+    }
 }
 
 /** A quiet line where the rows would be (none to pick). */

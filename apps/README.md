@@ -529,8 +529,8 @@ The card page reads in the story's type (reading-type §5–§8): `StoryMarkdown
 `Tokens.Story*` (no prose number is written in Kotlin: `ProseMetrics` in `core/kit` collapses story.css's margins
 from the `ProseSpacing` the type resolves), and sit inside `ReadingTextScale` — the cards a story embeds go back
 under `CappedTextScale`. The head is cover → title → byline (avatar and pen name over 「6 分鐘 · 日期」, at every
-width); share and the ⋯ end that byline under a tablet's header (`cardActionsSlot`, the bar keeping none) and sit in
-a phone's bar, and come again at the end of the story's one action row.
+width); share and the ⋯ end that byline under a tablet's header (`cardActionsSlot`) — the bar taking them while the
+byline is scrolled under it — and sit in a phone's bar; the story's end is the response bar alone (round 9 §3).
 `WindowLayout.cardPage(rail)` is §4's formula (the 680 measure, centred; on an expanded window with contents their
 rail `Tokens.StoryRailGap` — 80 — past it; without, the column centred).
 Sharing a card (share.spec, Owner revision; `ui/share`) is one glyph, shown only for a published, public card out
@@ -567,10 +567,10 @@ Round 8 (2026-10-24): the writer's bar says ← · its short title (新卡片 ·
 kept (`WriteModel.saveState`: 儲存中⋯ only for a write past 400 ms, 已儲存, 修改已暫存, 未儲存; `SaveStateText`, a polite
 live region that gives way first) and ends on ✓ (`OrganicIconButton` with `enabled`/`busy`); at the split the state
 stands before the floating ✓, and at the end of the step's heading. The step's 卡片類型 is 公開 · 匿名公開 · 草稿 with no
-line under it and one button by `stepVerb` (a kept 草稿 is written, never published; 轉為草稿 applies the edit and
-leaves; a published private card made public goes through its edit). The card box's 草稿 shelf is the private
-and draft shelves merged by `editedAt` (`draftShelf`, at most 40), every card on it opening the writer (`managedTap`),
-and the ⋯'s only visibility row is 轉為草稿 on a card readers have (`seenByReaders`). An emptying that failed reads the
+line under it and one button by `stepVerb` (a kept 草稿 is written, never published; a published private card made public goes
+through its edit). The card box's 草稿 shelf is the private and draft shelves merged by `editedAt` (`draftShelf`, at
+most 40), and the ⋯'s only visibility row is 轉為草稿 on a card readers have (`seenByReaders`) — both renamed 私人卡 in
+round 9, below. An emptying that failed reads the
 trash again (`TrashCalls.trashLeft`): empty is done; DELETE /me/trash waits 70 s (`WritingApi.EMPTY_TRASH_TIMEOUT_SECONDS`). The story's WebView reports its
 caret's line as its focused area (`StoryWebView.getFocusedRect`), so Compose's keep-the-focused-thing-in-view as the
 keyboard rises keeps the line being typed above the format bar, not the story's top; the caret follow looks again
@@ -581,3 +581,22 @@ table is `StoryBlock.Table` (head, rows, alignments) drawn by `StoryTable` (rule
 sideways scroll with a fading edge, 表格 to TalkBack); excerpts read it as its cells' words. Instagram 限時動態 wears
 `ic_share_instagram` (native/brand/instagram.svg, pinned by ShareIntentsTest) and says what the copied link is for in
 a system toast.
+
+Round 9 (2026-10-24): a card only its author sees is a 私人卡 (never published, or published and private; the data
+unchanged). Every card in the card box opens its page (`managedTap`), the trash's too, never published included
+(`trashTap`: the server shows a card in the trash to its author by id, banner first); the owner's 私人卡 page ends
+its meta line with the lock and 私人卡 (`StoryMetaLine`) and has a 編輯 pen where share would be (a phone's bar, a
+tablet's byline); every step verb lands on the card's page (`WriteModel.finish`), and a card begun in a writer and
+emptied again is deleted on the way out (`dropIfEmpty`). The map locks every 私人卡 (`mapNodeIcon`, its tray too) and
+opens one below the split on its page. The card page's head is measured from the bar's pen line (`storyHeadGap`:
+48/64 to the title, 56/72 to a cover; title → byline 20/24, byline → story 40/48, the meta 14 wider), the profile's
+and My Card Box's from it to the avatar (`peopleHeadGap`: 40/56, avatar → name 16), skeletons alike. The response
+bar gives up its words in two steps (`SegmentedLayout.steps`: the bookmark, then the note) and never runs past its
+room. The chat composer floats over the thread (`ComposerCapsule` in `core/design`: ＋, the field and Send's segment
+in one field shape, 48 tall for one line at any text size up to the 1.25 cap; what rides with the message on a slip
+over it, `floatingSlip`; both drawn in a `floatingGroup` whose paper halos go under each other's pen lines), the
+thread running under it with its foot following it and the keyboard (`ComposerRoom`), a letter's line as the
+thread's last item. 與此文共振 lists full cards, three then 查看全部; the card picker shows four skeleton rows and says
+when its read failed; tables set every cell at its start under hand-drawn rules (`tableRule`); the trash's head is one
+row (the hint, 🗑 清空); the writer's cover controls wear the card's family (`CoverFaces`; a coverless card's from its
+id, `CardPalette.ofId`), 更換封面 with its menu in the same hue. Bare icon buttons draw at INK at rest.
