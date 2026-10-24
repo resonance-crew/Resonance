@@ -31,7 +31,8 @@ import org.junit.Test
  * that showed the card read again — the card and the card it answers — whether it went through or
  * not; the undo toast says 已移到垃圾桶 · 復原, names the card for TalkBack, and its 復原 restores
  * the card after the menu that trashed it is gone; a restore says 已還原, or the one-exit notice
- * when a resonance came back on its own, or 沒能還原 when it didn't.
+ * when a resonance came back on its own, or 沒能還原 when it didn't; an emptying that failed is read
+ * again first, and a trash found empty is done (round 8 §6.2).
  */
 class TrashCenterTest {
     private val language = Strings.language
@@ -110,6 +111,26 @@ class TrashCenterTest {
         assertEquals(Session.CardChange(), changes.last())
     }
 
+    @Test fun anEmptyingThatFailedIsReadAgainBeforeItIsSaid() = runBlocking {
+        // The server emptied the trash and only its answer was lost: done, as if it had worked.
+        calls.emptyFails = IOException("timeout")
+        calls.left = 0
+        assertEquals(WritingApi.EmptiedTrash(deleted = 0, remaining = 0), trash.emptyTrash())
+        assertEquals(1, calls.reads)
+        assertEquals(Session.CardChange(), changes.last())
+        // Cards still in it: the failure stands, and the question says so.
+        calls.left = 2
+        assertThrows(IOException::class.java) { runBlocking { trash.emptyTrash() } }
+        // Nor can it be read: the failure stands too.
+        calls.left = null
+        assertThrows(IOException::class.java) { runBlocking { trash.emptyTrash() } }
+        assertEquals(3, calls.reads)
+        // An emptying that went through reads nothing more.
+        calls.emptyFails = null
+        trash.emptyTrash()
+        assertEquals(3, calls.reads)
+    }
+
     @Test fun aShelfCaptionSaysWhereTheCardComesBackAndWhenItGoes() {
         val now = Instant.parse("2026-10-20T08:00:00Z")
         fun card(published: Boolean, restoresTo: FeedCard.RestoresTo?, trashedDaysAgo: Double) = FeedCard(
@@ -123,10 +144,10 @@ class TrashCenterTest {
         assertEquals("還原後公開 · 23 天後永久刪除", TrashWords.caption(card(true, FeedCard.RestoresTo.`public`, 7.0), now))
         assertEquals("草稿 · 29 天後永久刪除", TrashWords.caption(card(false, FeedCard.RestoresTo.`private`, 1.0), now))
         assertEquals("草稿 · 30 天後永久刪除", TrashWords.caption(card(false, null, 0.5), now))
-        assertEquals("私人卡 · 一天內永久刪除", TrashWords.caption(card(true, FeedCard.RestoresTo.`private`, 29.5), now))
+        assertEquals("草稿 · 一天內永久刪除", TrashWords.caption(card(true, FeedCard.RestoresTo.`private`, 29.5), now))
         assertEquals("還原後只給連結看 · 12 天後永久刪除", TrashWords.caption(card(true, FeedCard.RestoresTo.connections, 18.0), now))
         // A visibility no reader knows comes back private, as the server restores it.
-        assertEquals("私人卡 · 12 天後永久刪除", TrashWords.caption(card(true, null, 18.0), now))
+        assertEquals("草稿 · 12 天後永久刪除", TrashWords.caption(card(true, null, 18.0), now))
     }
 
     private class FakeTrashCalls : TrashCalls {
@@ -159,6 +180,19 @@ class TrashCenterTest {
             deleted += cardId
         }
 
-        override suspend fun emptyTrash() = WritingApi.EmptiedTrash(deleted = 3, remaining = 0)
+        var emptyFails: Exception? = null
+        /** What the trash holds when read again (null: the read fails). */
+        var left: Int? = 0
+        var reads = 0
+
+        override suspend fun emptyTrash(): WritingApi.EmptiedTrash {
+            emptyFails?.let { throw it }
+            return WritingApi.EmptiedTrash(deleted = 3, remaining = 0)
+        }
+
+        override suspend fun trashLeft(): Int {
+            reads++
+            return left ?: throw IOException("offline")
+        }
     }
 }

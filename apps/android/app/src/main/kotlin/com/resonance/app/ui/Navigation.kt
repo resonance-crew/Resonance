@@ -441,7 +441,7 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
     val toasts = remember { Toasts() }
     // The trash's moves, which outlive the control that asked (a toast's 復原 after its card left the shelf).
     val shellScope = rememberCoroutineScope()
-    val trash = remember(session) { TrashCenter(session.writing.trashCalls(), session::noteCardChange, toasts, shellScope) }
+    val trash = remember(session) { TrashCenter(session.writing.trashCalls(session.reading), session::noteCardChange, toasts, shellScope) }
     // It moves with the tab bar as a page is pushed over a tab's root or popped back to it.
     val toastBottom by animateDpAsState(toastClearance(cls, tabBarShown = !topTabs && stack.size == 1), label = "toastBottom")
 

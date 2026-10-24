@@ -34,6 +34,16 @@ import java.util.concurrent.TimeUnit
 class WritingApi(private val configuration: ApiConfiguration, http: OkHttpClient = OkHttpClient()) {
     private val http = apiClient(http, configuration)
     private val api = DefaultApi(configuration.apiUrl, this.http)
+    /**
+     * DELETE /me/trash's own client: a page of the trash may take the server most of its 20 s and
+     * still answer (round 8 §6.1–6.2) — a call the app's 30 s read timeout cut short left the trash
+     * emptied behind a failure — so it waits [EMPTY_TRASH_TIMEOUT_SECONDS] for its answer.
+     */
+    private val trashHttp = this.http.newBuilder().readTimeout(EMPTY_TRASH_TIMEOUT_SECONDS, TimeUnit.SECONDS).build()
+    private val trashApi = DefaultApi(configuration.apiUrl, trashHttp)
+
+    /** How long DELETE /me/trash waits for its answer (ms), for tests. */
+    internal val emptyTrashTimeoutMillis: Int get() = trashHttp.readTimeoutMillis
 
     /**
      * Publishes one of your cards: stamps it once, gives it its slug, and
@@ -101,14 +111,15 @@ class WritingApi(private val configuration: ApiConfiguration, http: OkHttpClient
      * in the trash at that moment (its answer's `before`), each next one passes that `before` on, so
      * a card trashed while it runs stays. It asks again while cards remain and the last call
      * deleted some, at most [EMPTY_TRASH_CALLS] times; the shelf is then read again by the caller.
-     * Every call spends the `trash` budget (429 `rate_limited` stops it, and is thrown).
+     * Every call spends the `trash` budget (429 `rate_limited` stops it, and is thrown). Each waits
+     * up to [EMPTY_TRASH_TIMEOUT_SECONDS] for its answer, not the app's 30.
      */
     suspend fun emptyTrash(): EmptiedTrash {
         var deleted = 0
         var remaining = 0
         var before: OffsetDateTime? = null
         for (page in 1..EMPTY_TRASH_CALLS) {
-            val answer = call { api.emptyTrash(before) }
+            val answer = call { trashApi.emptyTrash(before) }
             deleted += answer.deleted
             remaining = answer.remaining.coerceAtLeast(0)
             // Every next page is the first one's moment, never "now" again.
@@ -226,6 +237,8 @@ class WritingApi(private val configuration: ApiConfiguration, http: OkHttpClient
     companion object {
         /** How many pages [emptyTrash] asks for at most before it leaves the rest to a later try. */
         const val EMPTY_TRASH_CALLS = 20
+        /** How long one DELETE /me/trash waits for its answer (iOS's 70 too): the server starts nothing new past 20 s. */
+        const val EMPTY_TRASH_TIMEOUT_SECONDS = 70L
 
         private val json = Json { ignoreUnknownKeys = true }
         private val JSON = "application/json".toMediaType()

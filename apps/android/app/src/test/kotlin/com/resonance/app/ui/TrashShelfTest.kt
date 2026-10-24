@@ -8,6 +8,7 @@ import com.resonance.app.thoughtmap.ThoughtMapService.Companion.mapCardOf
 import com.resonance.app.thoughtmap.ThoughtMapStore.Companion.parkNodes
 import com.resonance.kit.api.ApiConfiguration
 import com.resonance.kit.api.ApiFailure
+import com.resonance.kit.api.ReadingApi
 import com.resonance.kit.api.WritingApi
 import com.resonance.kit.l10n.Strings
 import java.io.File
@@ -89,7 +90,8 @@ class TrashShelfTest {
 
     @Test fun theTrashIsTheLastShelfAndIsReadOnItsOwn() {
         assertEquals(TabGetCardBox.trash, ShelfOrder.last())
-        assertEquals(7, ShelfOrder.size)
+        // 已發布 · 草稿 · 我共振過的 · 被連結 · 收藏 · 垃圾桶 (no 私人卡 shelf: round 8 §1.1).
+        assertEquals(6, ShelfOrder.size)
         assertEquals(listOf(TabGetCardBox.trash), shelvesToRead(TabGetCardBox.trash) { false })
         // My own shelves are read together, the trash never among them.
         assertFalse(TabGetCardBox.trash in shelvesToRead(TabGetCardBox.published) { false })
@@ -147,7 +149,7 @@ class TrashShelfTest {
 
     @Test fun theAppsMovesSendTheTrashsCalls() = runBlocking {
         val api = WritingApi(ApiConfiguration(server.url("/").toString()) { "token" })
-        val trash = api.trashCalls()
+        val trash = api.trashCalls(ReadingApi(ApiConfiguration(server.url("/").toString()) { "token" }))
         val cardJson = """{"id":"c1","slug":null,"title":"t","excerpt":"","tags":[],"publishedAt":null,"author":null,"anonymous":false,"visibility":"private","imageUrl":null,"imageLabel":null,"accentHue":null,"readMinutes":1,"referenceCardId":null,"reason":null}"""
         fun json(body: String) = MockResponse().setHeader("Content-Type", "application/json").setBody(body)
         server.enqueue(json("""{"card":$cardJson,"changed":true}"""))
@@ -155,6 +157,10 @@ class TrashShelfTest {
         server.enqueue(MockResponse().setResponseCode(204))
         server.enqueue(json("""{"deleted":2,"remaining":0,"before":"2026-10-20T08:00:00.000Z"}"""))
         server.enqueue(json("""{"card":$cardJson,"changed":true,"droppedResonance":true}"""))
+        // The trash read again: one card in it, one past its days (gone to its owner too).
+        val trashed = cardJson.trimEnd('}') + ""","trashedAt":"2026-10-20T08:00:00.000Z","purgeAt":"2099-11-19T08:00:00.000Z","restoresTo":"private"}"""
+        val expired = cardJson.replace("\"c1\"", "\"c2\"").trimEnd('}') + ""","trashedAt":"2020-01-01T08:00:00.000Z","purgeAt":"2020-01-31T08:00:00.000Z","restoresTo":"private"}"""
+        server.enqueue(json("""{"cards":[$trashed,$expired]}"""))
 
         trash.trash("c1")
         trash.restore("c1")
@@ -162,8 +168,9 @@ class TrashShelfTest {
         assertEquals(WritingApi.EmptiedTrash(2, 0), trash.emptyTrash())
         // The writer's 還原 is the same restore.
         assertTrue(api.writerCalls().restoreCard("c1").droppedResonance)
+        assertEquals(1, trash.trashLeft())
 
-        val requests = List(5) { server.takeRequest() }.map { "${it.method} ${it.path}" }
+        val requests = List(6) { server.takeRequest() }.map { "${it.method} ${it.path}" }
         assertEquals(
             listOf(
                 "POST /api/v1/cards/c1/trash",
@@ -171,6 +178,7 @@ class TrashShelfTest {
                 "DELETE /api/v1/cards/c1?onlyIfTrashed=true",
                 "DELETE /api/v1/me/trash",
                 "POST /api/v1/cards/c1/restore",
+                "GET /api/v1/me/cards?tab=trash",
             ),
             requests,
         )

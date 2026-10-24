@@ -19,6 +19,8 @@ import java.time.OffsetDateTime
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import java.util.concurrent.TimeUnit
+import okhttp3.OkHttpClient
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -123,6 +125,18 @@ class TrashApiTest {
         repeat(WritingApi.EMPTY_TRASH_CALLS + 5) { server.enqueue(json("""{"deleted":1,"remaining":100,"before":"2026-10-20T03:00:00.000Z"}""")) }
         assertEquals(WritingApi.EmptiedTrash(deleted = WritingApi.EMPTY_TRASH_CALLS, remaining = 100), writing().emptyTrash())
         assertEquals(1 + WritingApi.EMPTY_TRASH_CALLS, server.requestCount)
+    }
+
+    @Test fun anEmptyingPageWaitsForItsAnswerPastTheAppsReadTimeout() = runBlocking {
+        // The app's client times a read out after a second here; a page of the trash answers after two.
+        val quick = OkHttpClient.Builder().readTimeout(1, TimeUnit.SECONDS).build()
+        val writing = WritingApi(ApiConfiguration(server.url("/").toString()) { "token" }, quick)
+        assertEquals(WritingApi.EMPTY_TRASH_TIMEOUT_SECONDS * 1000, writing.emptyTrashTimeoutMillis.toLong())
+        server.enqueue(json("""{"deleted":4,"remaining":0,"before":"2026-10-20T03:00:00.000Z"}""").setHeadersDelay(2, TimeUnit.SECONDS))
+        assertEquals(WritingApi.EmptiedTrash(deleted = 4, remaining = 0), writing.emptyTrash())
+        // Every other call keeps the app's own timeout.
+        server.enqueue(json("""{"card":${trashedJson("c1")},"changed":true}""").setHeadersDelay(2, TimeUnit.SECONDS))
+        assertFailsWith<java.io.InterruptedIOException> { writing.trashCard("c1") }
     }
 
     @Test fun emptyingOverBudgetIsTheContractsError() = runBlocking {
