@@ -64,18 +64,21 @@ import UIKit
 
     // MARK: Who gets what
 
-    @Test func instagramAndSaveImageGetThePictureAndEveryOtherDestinationTheLink() {
+    /// Round 8 §9.2: Save Image alone gets the picture; Instagram's share extension gets the link, as
+    /// every other app — its own picker sends it to a story, the feed or a message, and a message
+    /// must carry the link to be tapped through.
+    @Test func saveImageGetsThePictureAndEveryOtherDestinationTheLinkInstagramToo() {
         let link = URL(string: "https://resonance.channel/card/run-2400")!
         let picture = UIImage()
         let linkSource = LinkSource(link: link, title: "跑完 2400 公尺那天", image: nil)
         let imageSource = CardImageSource(picture: picture)
-        for picturesOnly in [UIActivity.ActivityType.saveToCameraRoll, CardSharing.instagramExtension] {
-            #expect(linkSource.item(for: picturesOnly) == nil, "\(picturesOnly.rawValue)")
-            #expect(imageSource.item(for: picturesOnly) as? UIImage === picture, "\(picturesOnly.rawValue)")
-        }
-        // Facebook as a post with its link card, Threads, LINE, X, Messages, Mail, Copy, AirDrop, and any app we don't know.
+        #expect(linkSource.item(for: .saveToCameraRoll) == nil)
+        #expect(imageSource.item(for: .saveToCameraRoll) as? UIImage === picture)
+        #expect(!CardSharing.takesPicture(CardSharing.instagramExtension))
+        // Instagram's extension, Facebook as a post with its link card, Threads, LINE, X, Messages, Mail, Copy, AirDrop,
+        // and any app we don't know.
         let linkTakers: [UIActivity.ActivityType] = [
-            .postToFacebook, .message, .mail, .copyToPasteboard, .airDrop, .postToTwitter,
+            CardSharing.instagramExtension, .postToFacebook, .message, .mail, .copyToPasteboard, .airDrop, .postToTwitter,
             .init("com.facebook.Facebook.ShareExtension"), .init("com.burbn.barcelona.ShareExtension"),
             .init("jp.naver.line.Share"), .init("com.atebits.Tweetie2.ShareExtension"), .init("net.whatsapp.WhatsApp.ShareExtension"),
         ]
@@ -205,9 +208,18 @@ import UIKit
         let board = Pasteboard()
         let opened = Opened()
         let now = Date(timeIntervalSince1970: 1_800_000_000)
+        // The link is copied with the sticker, the toast says so, and Instagram opens once it has been read.
+        var steps: [String] = []
         let done = await InstagramStories.share(sticker: Data([1, 2]), background: Data([3]), link: link, appID: "1115208464203859",
-                                                pasteboard: board, now: now) { opened.url = $0; return true }
+                                                pasteboard: board, now: now, told: { steps.append(board.items.isEmpty ? "told before copying" : "told") },
+                                                pause: { steps.append("paused \($0 == InstagramStories.readPause)") }) {
+            steps.append("opened")
+            opened.url = $0
+            return true
+        }
         #expect(done)
+        #expect(steps == ["told", "paused true", "opened"])
+        #expect(InstagramStories.readPause == .milliseconds(1200))
         #expect(opened.url?.absoluteString == "instagram-stories://share?source_application=1115208464203859")
         #expect(board.items.count == 1)
         let item = board.items[0]
@@ -230,7 +242,7 @@ import UIKit
         let activity = InstagramStoriesActivity(link: URL(string: "https://resonance.channel/card/run-2400")!, appID: "1115208464203859", make: {
             guard let sticker = ShareCardRenderer.sticker(content), let background = ShareCardRenderer.backdrop(palette: content.palette) else { return nil }
             return (sticker, background)
-        }, failed: {}, pasteboard: board, open: { _ in false })
+        }, failed: {}, pasteboard: board, open: { _ in false }, pause: { _ in })
         #expect(type(of: activity).activityCategory == .share)
         #expect(activity.activityTitle == L10n.Share.toStories && activity.activityImage != nil)
         #expect(await activity.handOff() == false)
@@ -238,6 +250,29 @@ import UIKit
         let sticker = board.items.first?["com.instagram.sharedSticker.stickerImage"] as? Data
         #expect(sticker.flatMap(UIImage.init(data:))?.cgImage?.width == 624)
         #expect((board.items.first?["com.instagram.sharedSticker.backgroundImage"] as? Data).flatMap(UIImage.init(data:))?.cgImage?.height == 1920)
+    }
+
+    /// Its glyph is Instagram's (round 8 §9.2): the asset `InstagramGlyph` is native/brand/instagram.svg
+    /// byte for byte (Simple Icons 16.35.0, one colour, never recoloured or redrawn), a template that
+    /// keeps its vector data — what the Stories action draws in the sheet's row.
+    @Test func theStoriesActionWearsInstagramsOwnGlyph() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../..").standardized
+        let brand = try Data(contentsOf: root.appendingPathComponent("native/brand/instagram.svg"))
+        let set = root.appendingPathComponent("apps/ios/Resonance/Resources/Assets.xcassets/InstagramGlyph.imageset")
+        #expect(try Data(contentsOf: set.appendingPathComponent("instagram.svg")) == brand)
+        // The path itself, as Simple Icons draws it: no one has touched it.
+        let svg = String(decoding: brand, as: UTF8.self)
+        #expect(svg.contains(#"viewBox="0 0 24 24""#))
+        #expect(svg.contains(#"<path d="M7.0301.084c-1.2768.0602-2.1487.264-2.911.5634"#))
+        #expect(svg.contains("M8 12.0077a4 4 0 1 1 4.008 3.9921A3.9996 3.9996 0 0 1 8 12.0077"))
+        let contents = try JSONSerialization.jsonObject(with: Data(contentsOf: set.appendingPathComponent("Contents.json"))) as? [String: Any]
+        let properties = contents?["properties"] as? [String: Any]
+        #expect(properties?["template-rendering-intent"] as? String == "template")
+        #expect(properties?["preserves-vector-representation"] as? Bool == true)
+        // In the app's catalog, and the action takes it.
+        let glyph = try #require(UIImage(named: "InstagramGlyph"))
+        #expect(glyph.renderingMode == .alwaysTemplate)
+        #expect(InstagramStoriesActivity.glyph()?.renderingMode == .alwaysTemplate)
     }
 
     // MARK: Helpers
