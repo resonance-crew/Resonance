@@ -10,7 +10,10 @@ import org.junit.Test
  * Picks that come once the latest cards are on screen go on top of them (FeedLoader), and the
  * cards already showing keep everything they had: their grid blocks and the blocks' keys (the list
  * keeps the block being read in place by its key), their colour families and their shapes' seeds.
- * A reader at the very top is shown the feed's new head; it is said once per new head.
+ * A reader at the very top is shown the feed's new head; it is said once per new head. A reader
+ * further down is told when that head is today's picks gone on top out of sight (the toast's
+ * 今天的推薦來了 · 往上看) — never for picks that lead the feed, nor for a head that changed for
+ * anything else.
  */
 class FeedRunsTest {
     private fun card(id: String, hue: Double? = null) = FeedCard(
@@ -62,5 +65,33 @@ class FeedRunsTest {
         // Emptied (everyone blocked) and back: no jump for either.
         assertFalse(lead.changedTo(null))
         assertFalse(lead.changedTo("p1"))
+    }
+
+    @Test fun picksGoneOnTopOutOfSightAreToldThoseInViewShown() {
+        // The latest came first; the reader scrolled into them; the picks then went on top.
+        val scrolled = FeedHead()
+        assertEquals(FeedHead.Move.None, scrolled.next("l1", emptyList(), atTop = true))
+        assertEquals(FeedHead.Move.OfferPicks, scrolled.next("p1", listOf("p1", "p2"), atTop = false))
+        // Said once: the same picks above again (a recomposition, a re-read keeping them) say nothing.
+        assertEquals(FeedHead.Move.None, scrolled.next("p1", listOf("p1", "p2"), atTop = false))
+        // At the very top when they come: they are simply the first thing in view.
+        val atTop = FeedHead()
+        atTop.next("l1", emptyList(), atTop = true)
+        assertEquals(FeedHead.Move.ShowTop, atTop.next("p1", listOf("p1"), atTop = true))
+    }
+
+    @Test fun aHeadThatChangedForAnythingElseIsntTodaysPicks() {
+        // Picks that came first lead the feed: nothing went on top.
+        val leading = FeedHead()
+        assertEquals(FeedHead.Move.None, leading.next("p1", emptyList(), atTop = true))
+        // A re-read's newer latest card at the head of a feed without picks on top, the reader further down.
+        assertEquals(FeedHead.Move.None, leading.next("l0", emptyList(), atTop = false))
+        // Picks on top already, and a pick the latest now hold leaves the head to the next one: nothing new arrived.
+        val above = FeedHead()
+        above.next("l1", emptyList(), atTop = true)
+        above.next("p1", listOf("p1", "p2"), atTop = false)
+        assertEquals(FeedHead.Move.None, above.next("p2", listOf("p2"), atTop = false))
+        // Tomorrow's picks in their place: today's arrived again.
+        assertEquals(FeedHead.Move.OfferPicks, above.next("q1", listOf("q1", "q2"), atTop = false))
     }
 }

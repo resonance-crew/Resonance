@@ -80,7 +80,7 @@ object SharedCards {
  * shows nothing of itself.
  */
 sealed interface Carried {
-    /** Its words alone (or a reply to a note). */
+    /** Its words alone (or a reply to a note, or a picture with or without words: [ChatMessage.image] heads the bubble). */
     data object Words : Carried
     /** A link's unfurled page. */
     data class Preview(val preview: LinkPreview) : Carried
@@ -104,7 +104,7 @@ sealed interface Carried {
             val preview = message.preview
             return when {
                 preview != null -> Preview(preview)
-                message.text.isNotEmpty() || message.noteRef != null -> Words
+                message.text.isNotEmpty() || message.noteRef != null || message.image != null -> Words
                 else -> Nothing
             }
         }

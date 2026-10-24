@@ -423,8 +423,11 @@ object ModalActionsLayout {
     }
 }
 
-/** One row of an [OrganicMenu]. */
-class OrganicMenuItem(val title: String, val icon: IconName, val destructive: Boolean = false, val onClick: () -> Unit)
+/**
+ * One row of an [OrganicMenu]. Not [enabled] (生成圖片 with no story to draw from), it stays in its
+ * place faded to the web's 0.55 and takes no tap.
+ */
+class OrganicMenuItem(val title: String, val icon: IconName, val destructive: Boolean = false, val enabled: Boolean = true, val onClick: () -> Unit)
 
 /**
  * OrganicMenu's colors (the web's `--menu-*`): the theme terracotta, or — for
@@ -549,6 +552,9 @@ private val BareWashInset = 4.dp
 /** OrganicMenu's rows are 42 tall. */
 private const val MenuRowHeight = 42.0
 
+/** A row that can't be chosen now (OrganicMenu.module.css's `.option:disabled`). */
+private const val MenuRowDisabledAlpha = 0.55f
+
 /**
  * The web's OrganicMenu: the ⋯ chip, dropping a hand-drawn cream panel 8
  * under its trailing edge — terracotta pen (or a card's `hue`), wavy dividers
@@ -566,26 +572,58 @@ fun OrganicMenu(
     trigger: MenuTrigger = MenuTrigger.Chip,
     enabled: Boolean = true,
 ) {
+    // The chip (or a bare glyph's wash) is centred in its hit box: the panel hangs from it, not from the box.
+    val inset = if (trigger == MenuTrigger.Bare) BareWashInset else (MenuHitBox - triggerSize) / 2
+    MenuHost(items, seed, hue, inset, above = false, alignStart = false) { open, toggle ->
+        OrganicMenuChip(triggerIcon, label, seed, size = triggerSize, expanded = open, hue = hue, trigger = trigger, enabled = enabled, onClick = toggle)
+    }
+}
+
+/**
+ * An [OrganicMenu] opened from a trigger of the caller's own — the writer's 更換封面 pill on its
+ * cover, the composer's ＋ — which [trigger] draws, given whether the menu is open and the toggle
+ * to call. The same panel hangs 8 from the trigger's box: under it, or over it ([above]: a trigger
+ * at the foot of the screen); on the other side when there is no room, and kept in the window.
+ * Its trailing edge lines up with the trigger's, or its leading edge ([alignStart]: a trigger at
+ * the start of its row).
+ */
+@Composable
+fun OrganicMenuFrom(
+    items: List<OrganicMenuItem>,
+    seed: Double = 7.0,
+    hue: Double? = null,
+    above: Boolean = false,
+    alignStart: Boolean = false,
+    trigger: @Composable (open: Boolean, toggle: () -> Unit) -> Unit,
+) = MenuHost(items, seed, hue, 0.dp, above, alignStart, trigger)
+
+@Composable
+private fun MenuHost(
+    items: List<OrganicMenuItem>,
+    seed: Double,
+    hue: Double?,
+    inset: Dp,
+    above: Boolean,
+    alignStart: Boolean,
+    trigger: @Composable (open: Boolean, toggle: () -> Unit) -> Unit,
+) {
     var open by remember { mutableStateOf(false) }
     var choosing by remember { mutableStateOf(false) }
     val menuScope = rememberCoroutineScope()
     val colors = remember(hue) { MenuColors(hue) }
     Box {
-        OrganicMenuChip(triggerIcon, label, seed, size = triggerSize, expanded = open, hue = hue, trigger = trigger, enabled = enabled) { open = !open }
+        trigger(open) { open = !open }
         if (open) {
             val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
-            // The chip (or a bare glyph's wash) is centred in its hit box: the panel hangs from it, not from the box.
-            val inset = with(LocalDensity.current) {
-                (if (trigger == MenuTrigger.Bare) BareWashInset else (MenuHitBox - triggerSize) / 2).roundToPx()
-            }
+            val insetPx = with(LocalDensity.current) { inset.roundToPx() }
             Popup(
-                popupPositionProvider = remember(gap, inset) { BelowTrailingEdge(gap, inset) },
+                popupPositionProvider = remember(gap, insetPx, above, alignStart) { MenuPlacement(gap, insetPx, above, alignStart) },
                 onDismissRequest = { open = false },
                 properties = PopupProperties(focusable = true),
             ) {
                 // Like a dialog, a popup is a window of its own with the system's whole text scale.
                 CappedTextScale {
-                    MenuPanel(items, seed, colors) { item ->
+                    MenuPanel(items, seed, colors, null, TransformOrigin(if (alignStart) 0f else 1f, if (above) 1f else 0f), { item ->
                         if (choosing) return@MenuPanel
                         choosing = true
                         menuScope.launch {
@@ -595,24 +633,34 @@ fun OrganicMenu(
                             choosing = false
                             item.onClick()
                         }
-                    }
+                    })
                 }
             }
         }
     }
 }
 
-/** Under the chip, its trailing edge and the panel's aligned (the web's `top: 100% + 8px; right: 0`), kept on screen. */
-private class BelowTrailingEdge(private val gap: Int, private val inset: Int) : PopupPositionProvider {
+/**
+ * Where a menu's panel goes (px): [gap] under its trigger (the web's `top: 100% + 8px`), or over it
+ * when [above] — on the other side when that side has no room and this one has, and kept in the
+ * window across; the trailing edges lined up (`right: 0`), or the leading ones when [alignStart].
+ * [inset]: how far in from the anchor's box the trigger itself is drawn.
+ */
+internal class MenuPlacement(private val gap: Int, private val inset: Int, private val above: Boolean = false, private val alignStart: Boolean = false) : PopupPositionProvider {
     override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
-        val x = (anchorBounds.right - inset - popupContentSize.width).coerceIn(0, max(0, windowSize.width - popupContentSize.width))
-        return IntOffset(x, anchorBounds.bottom - inset + gap)
+        val start = if (alignStart) anchorBounds.left + inset else anchorBounds.right - inset - popupContentSize.width
+        val x = start.coerceIn(0, max(0, windowSize.width - popupContentSize.width))
+        val under = anchorBounds.bottom - inset + gap
+        val over = anchorBounds.top + inset - gap - popupContentSize.height
+        val fitsUnder = under + popupContentSize.height <= windowSize.height
+        val fitsOver = over >= 0
+        val y = when {
+            above -> if (fitsOver || !fitsUnder) over.coerceAtLeast(0) else under
+            else -> if (fitsUnder || !fitsOver) under else over
+        }
+        return IntOffset(x, y)
     }
 }
-
-@Composable
-private fun MenuPanel(items: List<OrganicMenuItem>, seed: Double, colors: MenuColors, onChoose: (OrganicMenuItem) -> Unit) =
-    MenuPanel(items, seed, colors, null, TransformOrigin(1f, 0f), onChoose)
 
 /**
  * The panel of an [OrganicMenu] on its own, for a menu that opens somewhere other than under a ⋯
@@ -718,7 +766,9 @@ private fun MenuPanel(
                 Modifier
                     .fillMaxWidth()
                     .height(MenuRowHeight.dp)
-                    .clickable(source, indication = null, role = Role.Button) { onChoose(item) }
+                    .clickable(source, indication = null, enabled = item.enabled, role = Role.Button) { onChoose(item) }
+                    // A row that can't be chosen now keeps its place, faded (the web's `.option:disabled`).
+                    .fade(if (item.enabled) 1f else MenuRowDisabledAlpha)
                     .padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

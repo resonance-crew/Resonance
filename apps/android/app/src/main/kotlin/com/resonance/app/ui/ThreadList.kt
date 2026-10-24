@@ -74,6 +74,8 @@ import com.resonance.api.models.FeedCard
 import com.resonance.design.AppFonts
 import com.resonance.design.ButtonVariant
 import com.resonance.design.CardByline
+import com.resonance.design.ChatPictureSection
+import com.resonance.design.ChatPictureSource
 import com.resonance.design.ComposerFade
 import com.resonance.design.ComposerFadeHeight
 import com.resonance.design.HandDrawnAvatar
@@ -100,6 +102,7 @@ import com.resonance.kit.chat.ChatMessage
 import com.resonance.kit.chat.Delivery
 import com.resonance.kit.chat.LinkPreview
 import com.resonance.kit.chat.Linkify
+import com.resonance.kit.chat.PictureBox
 import com.resonance.kit.chat.Carried
 import com.resonance.kit.chat.words
 import com.resonance.kit.chat.ThreadRow
@@ -139,6 +142,8 @@ internal class ThreadContext(
     val onQuote: (String) -> Unit,
     /** The key of the message the long-press menu has lifted out of the thread: its place stays empty under the scrim. */
     val lifted: String? = null,
+    /** A picture in a message was tapped: opened whole. */
+    val onPicture: (ChatPictureSource) -> Unit = {},
 ) {
     /** A link in a message was tapped ([openLink]). */
     fun tapLink(url: String) = model.openLink(url, opener, open)
@@ -500,7 +505,7 @@ private fun ReplyQuoteView(message: ChatMessage, mine: Boolean, ctx: ThreadConte
     val spoken = replySpoken(mine, quote.senderId == model.me, model.other?.handle.orEmpty())
     Column(Modifier.semantics { contentDescription = spoken }, horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
         QuoteBubble(
-            quote.text.ifEmpty { L10n.Messages.replyCard },
+            quote.text.ifEmpty { quoteStandIn(quote) },
             seed = seedFromId(quote.id, 19),
             onClick = if (interactive) { { ctx.onQuote(quote.id) } } else null,
         )
@@ -551,6 +556,9 @@ internal fun MessageCore(row: ThreadRow, ctx: ThreadContext, interactive: Boolea
     if (carried == Carried.Nothing) return
     // A note's card goes over it, as what it answers; its own bubble carries only its words.
     val carries = if (message.isNote) Carried.Words else carried
+    // A picture heads its bubble, the bubble as wide as the picture's place (known before it loads).
+    val picture = remember(message.image?.id, message.key) { model.picture(message) }
+    val pictureBox = message.image?.takeIf { picture != null }?.let { PictureBox.of(it.width, it.height, ctx.rowMax.value) }
     val haptic = LocalHapticFeedback.current
     var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val words = carried.words(message)
@@ -596,14 +604,25 @@ internal fun MessageCore(row: ThreadRow, ctx: ThreadContext, interactive: Boolea
             highlightStrong = message.id == ctx.currentHit,
             // A search hit in words the bubble doesn't show (a card's link, standing for the card) washes the whole bubble.
             flash = if (words != message.text && message.id == ctx.currentHit) { { max(pulse.value, 0.5f) } } else { { pulse.value } },
-            width = when (carries) {
-                is Carried.Preview -> min(PREVIEW_WIDTH, ctx.rowMax)
-                is Carried.Card, is Carried.CardLoading -> min(CARD_WIDTH, ctx.rowMax)
+            width = when {
+                pictureBox != null -> pictureBox.width.dp
+                carries is Carried.Preview -> min(PREVIEW_WIDTH, ctx.rowMax)
+                carries is Carried.Card || carries is Carried.CardLoading -> min(CARD_WIDTH, ctx.rowMax)
                 else -> null
             },
             plain = carries is Carried.CardLoading,
             onLinkTap = if (interactive) { i -> links.getOrNull(i)?.let { ctx.tapLink(it.url) } } else null,
             onLongPress = if (interactive) { i -> press(i?.let { links.getOrNull(it)?.url }) } else null,
+            header = if (picture == null || pictureBox == null) null else { {
+                ChatPictureSection(
+                    picture, model.pictureLoader, pictureBox.width.dp, pictureBox.height.dp,
+                    // Nothing under it: it runs to the bubble's foot too.
+                    last = words.isEmpty() && message.noteRef == null && carries !is Carried.Preview,
+                    label = L10n.Messages.openImage,
+                    onOpen = if (interactive) { { ctx.onPicture(picture) } } else null,
+                    onLongPress = if (interactive) { { press(null) } } else null,
+                )
+            } },
             attachment = when (carries) {
                 is Carried.Preview -> { { PreviewPart(carries.preview, afterWords = words.isNotEmpty() || message.noteRef != null, ctx, interactive, press) } }
                 is Carried.Card -> { { CardPart(carries.card, ctx, interactive, press) } }

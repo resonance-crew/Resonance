@@ -18,14 +18,15 @@ enum class Delivery {
 /**
  * What a reply carries of the message it answers (the server's `replyTo` snapshot, kept on the
  * reply): the quote is read from here, never from the original, which may be far up the thread
- * or gone. [text] is at most [MAX_TEXT] code points; empty when the original was a card alone.
+ * or gone. [text] is at most [MAX_TEXT] code points; empty when the original was a card or a
+ * picture alone ([image]: it carried one — the quote is words, so it says 「一張圖片」 then).
  */
-data class ReplyQuote(val id: String, val senderId: String, val text: String, val cardRef: String? = null) {
+data class ReplyQuote(val id: String, val senderId: String, val text: String, val cardRef: String? = null, val image: Boolean = false) {
     companion object {
         const val MAX_TEXT = 140
 
         /** The quote a reply to [message] carries (the same cut the server makes). */
-        fun of(message: ChatMessage) = ReplyQuote(message.id, message.senderId, cut(message.text), message.cardRef)
+        fun of(message: ChatMessage) = ReplyQuote(message.id, message.senderId, cut(message.text), message.cardRef, image = message.image != null)
 
         /** At most [MAX_TEXT] code points, never splitting a surrogate pair. */
         fun cut(text: String): String {
@@ -62,6 +63,8 @@ data class ChatMessage(
     val noteRef: MessagingApi.Note? = null,
     val replyTo: ReplyQuote? = null,
     val preview: LinkPreview? = null,
+    /** A picture it carries (never with a card): drawn at the head of its bubble, its words under it. */
+    val image: ChatImage? = null,
     val delivery: Delivery = Delivery.Delivered,
     val key: String = id,
     /**
@@ -97,6 +100,7 @@ data class ChatMessage(
                 noteRef = if (noteCard != null && noteId != null) MessagingApi.Note(noteCard, noteId) else null,
                 replyTo = quote(fields["replyTo"] as? Map<*, *>),
                 preview = preview(fields["preview"] as? Map<*, *>, origin),
+                image = ChatImage.from(fields["image"] as? Map<*, *>),
                 isNote = fields["kind"] == "note",
             )
         }
@@ -108,6 +112,7 @@ data class ChatMessage(
                 senderId = map["senderId"] as? String ?: "",
                 text = ReplyQuote.cut(map["text"] as? String ?: ""),
                 cardRef = (map["cardRef"] as? String)?.takeIf { it.isNotEmpty() },
+                image = map["image"] == true,
             )
         }
 

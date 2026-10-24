@@ -37,6 +37,8 @@ class MessagingApi(private val api: DefaultApi) {
      * A message to someone you're connected with. [replyTo] is the id of a message of that conversation
      * it answers; [clientId] is the sender's own id for it, which the server makes the document's id — sending
      * the same one again (a retry after an answer was lost) finds the message instead of writing a second.
+     * [image] is a picture uploaded for this conversation ([ChatPicturesApi.upload]'s id): [text] may then be
+     * empty, and a message carries a card or a picture, never both.
      */
     suspend fun sendMessage(
         to: String,
@@ -45,11 +47,12 @@ class MessagingApi(private val api: DefaultApi) {
         noteRef: Note? = null,
         replyTo: String? = null,
         clientId: String? = null,
+        image: String? = null,
     ): Sent = call {
         val sent = api.sendMessage(
             SendMessageRequest(
                 to = to, text = text, cardRef = cardRef, noteRef = noteRef?.let { NoteRef(cardId = it.cardId, noteId = it.noteId) },
-                replyTo = replyTo, clientId = clientId,
+                replyTo = replyTo, clientId = clientId, image = image,
             ),
         )
         Sent(sent.conversationId, sent.id)

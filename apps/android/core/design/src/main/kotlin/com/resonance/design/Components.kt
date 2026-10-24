@@ -45,6 +45,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -605,6 +607,19 @@ private val OneLineSteps = floatArrayOf(1f, 0.95f, 0.9f, 0.85f)
  */
 fun Modifier.fade(alpha: Float): Modifier =
     if (alpha >= 1f) this else graphicsLayer { this.alpha = alpha; compositingStrategy = CompositingStrategy.ModulateAlpha }
+
+/**
+ * While [held], nothing under this takes a touch: a form whose verb is working (the writer's publish
+ * step, the web's `<fieldset disabled>`). It fades nothing itself — the controls inside say they wait
+ * in their own way — and above all not through a layer, which is cut at this box: what a form holds
+ * runs past it (a bordered card's pen line, a phone's band out to the screen's edges), and was seen
+ * cut straight on a tablet each time 發布 was pressed.
+ */
+fun Modifier.holdWhile(held: Boolean): Modifier = if (!held) this else pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+    }
+}
 
 /**
  * A button's rank, as the web's OrganicButton names them — every one a fill, none a pen line, and

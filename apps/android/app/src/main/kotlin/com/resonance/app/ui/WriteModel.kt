@@ -59,6 +59,24 @@ sealed interface Mirror {
 /** Whether the publish step tells a resonance's writer their card reaches its original's author. */
 enum class ResonanceLine { Reaches, Quiet }
 
+/**
+ * 誰可以看見 (round 7 §1.1): who reads the card and under whose name, as one choice — 公開 (under
+ * the writer's pen name), 匿名公開, 只有自己. Anonymity is for being read: only the writer reading
+ * it needs no other name.
+ */
+enum class Audience { Public, Anonymous, Private }
+
+/**
+ * Which of the three a card's values show chosen: public under a name, public anonymous, private
+ * (either way). A card kept for connections only (older ones) shows none, and keeps its audience
+ * until one is picked.
+ */
+internal fun audienceOf(visibility: String, anonymous: Boolean): Audience? = when (visibility) {
+    "public" -> if (anonymous) Audience.Anonymous else Audience.Public
+    "private" -> Audience.Private
+    else -> null
+}
+
 /** What going back asks before the writer goes ([WriteModel.leaveQuestion]; its words: [leaveBody]). */
 enum class LeaveQuestion {
     /** 「寫下的內容已經存成草稿…」: a draft, kept on the way out. */
@@ -101,9 +119,10 @@ fun WritingApi.writerCalls(): WriterCalls {
  * The writing screen's state and its work (CardEditor): the draft's values, autosave a moment after
  * typing stops, and the writer's two steps (writer.spec). Writing: the title and the story, and one
  * 下一步 ([next]: a title asked for, a new draft saved first). Publishing: the mirror ([reflect]),
- * the card as a list will show it with its cover, tags, who can see it and under whose name — all
- * the draft's own values, autosaved like the words and kept on the way back to writing — then 發布
- * ([publish]) or 存成草稿，稍後再寫 ([saveForLater]). Opened on a published card it revises instead:
+ * the card as a list will show it with its cover, tags, who can see it and under whose name ([choose]:
+ * 公開 · 匿名公開 · 只有自己) — all the draft's own values, autosaved like the words and kept on the way
+ * back to writing — then the verb that follows them, 發布 · 匿名發布 · 儲存 ([publish], [verb]), or
+ * 存成草稿，稍後再寫 ([saveForLater]). Opened on a published card it revises instead:
  * autosave buffers the working copy privately, and the step's 儲存修改 ([applyEdit]) puts it in
  * front of readers (捨棄修改, [discardEdit], drops it).
  *
@@ -240,8 +259,38 @@ class WriteModel(
             else -> L10n.Write.editTitle
         }
 
-    /** The publish step's title: 發布這張卡片, or 更新這張卡片 for a live card. */
-    val stepTitle: String get() = if (isPublished) L10n.Write.PublishPanel.updateTitle else L10n.Write.PublishPanel.title
+    /** Who the card is for, as the step shows it chosen (null: kept for connections, none chosen). */
+    val audience: Audience? get() = audienceOf(values.visibility, values.anonymous)
+
+    /**
+     * A draft about to be kept for its writer alone (只有自己): the step saves it rather than
+     * publishing it — its title, its verb and its failure say so. A card kept for connections reads
+     * as publishing; a live card is always updated.
+     */
+    val keepsPrivate: Boolean get() = !isPublished && audience == Audience.Private
+
+    /** The publish step's title: 發布這張卡片 (儲存這張卡片 for 只有自己), or 更新這張卡片 for a live card. */
+    val stepTitle: String
+        get() = when {
+            isPublished -> L10n.Write.PublishPanel.updateTitle
+            keepsPrivate -> L10n.Write.PublishPanel.saveTitle
+            else -> L10n.Write.PublishPanel.title
+        }
+
+    /** The step's verb, which follows the audience: 發布 · 匿名發布 · 儲存 — or 儲存修改 for a live card, whoever it is for. */
+    val verb: String
+        get() = when {
+            isPublished -> L10n.Write.PublishPanel.update
+            keepsPrivate -> L10n.Write.PublishPanel.save
+            audience == Audience.Anonymous -> L10n.Write.PublishPanel.publishAnonymously
+            else -> L10n.Write.PublishPanel.publish
+        }
+
+    /**
+     * A live card's 「按下之後，讀者看到的就會是這個版本…」: only while it has readers — not for 只有自己 (a card kept
+     * for connections still has them), as the web says it.
+     */
+    val showsUpdateHint: Boolean get() = isPublished && values.visibility != "private"
 
     /** The card's page: its slug, or its id (a draft, or a card without one). */
     val routeKey: String? get() = slug ?: draftId
@@ -296,6 +345,18 @@ class WriteModel(
     /** Who can see it and under whose name, in one change — so no write is ever anonymous and for connections only. */
     fun setAudience(visibility: String, anonymous: Boolean) =
         update { copy(visibility = anonymousVisibility(visibility, anonymous), anonymous = anonymous) }
+
+    /**
+     * One of 誰可以看見's three, both fields in one change: 公開 is public under the pen name, 匿名公開
+     * public and anonymous. 只有自己 names a draft (it was never read by anyone: no anonymous flag is
+     * left over from trying 匿名公開), and leaves a live card's anonymity as it is — an anonymous card
+     * made private, then public again from its ⋯, comes back anonymous, never under its author's name.
+     */
+    fun choose(audience: Audience) = when (audience) {
+        Audience.Public -> setAudience("public", anonymous = false)
+        Audience.Anonymous -> setAudience("public", anonymous = true)
+        Audience.Private -> setAudience("private", anonymous = isPublished && values.anonymous)
+    }
 
     // Autosave
 
@@ -513,7 +574,11 @@ class WriteModel(
 
     // The publish step's verbs
 
-    /** Saves the draft, then publishes it; returns where the card lives (null: it didn't, and [publishError] or [trashed] says why). */
+    /**
+     * Saves the draft, then publishes it — for its writer alone, 只有自己, that is saving it — and
+     * returns where the card lives (null: it didn't, and [publishError] or [trashed] says why: 沒發布成功
+     * or, kept private, 沒儲存成功).
+     */
     suspend fun publish(): String? {
         if (pending) return null
         if (values.title.isBlank()) {
@@ -521,9 +586,10 @@ class WriteModel(
             return null
         }
         settleAudience()
-        return working(BusyVerb.Publish, L10n.Write.PublishPanel.failed) {
+        val failed = if (keepsPrivate) L10n.Write.PublishPanel.saveFailed else L10n.Write.PublishPanel.failed
+        return working(BusyVerb.Publish, failed) {
             val id = saveNow()
-            if (id == null || values != lastSaved) return@working saveFailed(L10n.Write.PublishPanel.failed)
+            if (id == null || values != lastSaved) return@working saveFailed(failed)
             val result = writing.publish(id)
             closed = true
             onWrote(id)

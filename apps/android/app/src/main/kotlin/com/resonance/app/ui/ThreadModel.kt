@@ -1,5 +1,7 @@
 package com.resonance.app.ui
 
+import android.content.Context
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -8,6 +10,7 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import coil3.ImageLoader
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.ListenerRegistration
@@ -16,12 +19,16 @@ import com.resonance.api.models.Author
 import com.resonance.api.models.FeedCard
 import com.resonance.api.models.Profile
 import com.resonance.app.AppFirebase
+import com.resonance.app.ChatPictures
 import com.resonance.app.FirestoreFailure
 import com.resonance.app.Person
 import com.resonance.app.PushCenter
 import com.resonance.app.Session
+import com.resonance.design.ChatPictureSource
 import com.resonance.kit.api.ApiFailure
+import com.resonance.kit.api.ChatPicturesApi
 import com.resonance.kit.api.MessagingApi
+import com.resonance.kit.chat.ChatImage
 import com.resonance.kit.chat.ChatMessage
 import com.resonance.kit.chat.Linkify
 import com.resonance.kit.chat.MessageHistory
@@ -149,7 +156,14 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
     // The composer
 
     var draft by mutableStateOf("")
+    /** A card to go with the next message (a message carries a card or a picture: [attachCard] drops a picture). */
     var pendingCard by mutableStateOf<Attachment?>(null)
+    /** A picture to go with the next message, made ready on the device ([attachImage]): the chip over the field shows it. */
+    var pendingImage by mutableStateOf<ChatPictures.Prepared?>(null)
+        private set
+    /** A picture picked is being made ready (scaled, encoded): Send waits for it. */
+    var preparingImage by mutableStateOf(false)
+        private set
     /** The note the next message answers, as a chip (an older note the thread doesn't hold; see [landOnNote]). */
     var noteRef by mutableStateOf<MessagingApi.Note?>(null)
     /** The note a link to it (`?note=`) opened the thread at, until [landOnNote] has found where it lands. */
@@ -201,11 +215,16 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
             return listOf(me, other).sorted().joinToString("_")
         }
 
-    /** ThreadView's `valid`: text or a card, within 2000, somewhere to send it. Sending in flight doesn't matter: the next message queues behind it. */
+    /**
+     * ThreadView's `valid`: words, a card or a picture, within 2000, somewhere to send it (not while a
+     * picture picked is still being made ready). Sending in flight doesn't matter: the next message
+     * queues behind it.
+     */
     val canSend: Boolean
         get() {
             val trimmed = draft.trim()
-            return (trimmed.isNotEmpty() || pendingCard != null) && trimmed.length <= NOTE_MAX_LENGTH && pairId != null
+            return (trimmed.isNotEmpty() || pendingCard != null || pendingImage != null) && !preparingImage &&
+                trimmed.length <= NOTE_MAX_LENGTH && pairId != null
         }
 
     suspend fun load() {
@@ -601,33 +620,95 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
     }
 
     /**
-     * Sends what the composer holds — the text, the card, the quoted note, the message being replied
-     * to — and clears the composer at once. The message appears in the thread as sending; failure
-     * keeps it there to [retry] or [discard]. Never waits: the next one can be written and sent while
-     * this one is on its way.
+     * Sends what the composer holds — the text, the card or the picture, the quoted note, the message
+     * being replied to — and clears the composer at once. The message appears in the thread as
+     * sending (a picture drawn from the device, under the id the server will keep it by: the
+     * message's client id); failure keeps it there to [retry] or [discard]. Never waits: the next one
+     * can be written and sent while this one is on its way.
      */
     fun send() {
         if (!canSend) return
         val me = me ?: return
         val box = outbox ?: return
         attachOutbox()
+        val clientId = Outbox.newClientId()
+        val picture = pendingImage
+        picture?.let { session.chatPictures?.keep(clientId, it) }
         box.enqueue(
             Outbox.Outgoing(
-                clientId = Outbox.newClientId(),
+                clientId = clientId,
                 senderId = me,
                 text = draft.trim(),
                 cardRef = pendingCard?.id,
                 noteRef = noteRef,
                 replyTo = replyingTo,
                 queuedAt = Date(),
+                image = picture?.image,
             ),
         )
         draft = ""
         pendingCard = null
+        pendingImage = null
         noteRef = null
         replyingTo = null
         error = null
     }
+
+    /** A card to go with the next message: in place of a picture picked before (a message carries one or the other). */
+    fun attachCard(card: Attachment) {
+        pendingCard = card
+        pendingImage = null
+    }
+
+    private var preparing: Job? = null
+
+    /**
+     * A picture picked (the system's photo picker) to go with the next message, in place of a card
+     * picked before: made ready off the main thread (ChatPictures.prepare), then shown over the field.
+     * One this phone can't read says 不支援這種圖片格式 under the composer.
+     */
+    fun attachImage(context: Context, uri: Uri) {
+        preparing?.cancel()
+        preparingImage = true
+        error = null
+        preparing = scope.launch {
+            try {
+                val ready = withContext(Dispatchers.Default) { ChatPictures.prepare(context.applicationContext, uri) }
+                pendingImage = ready
+                pendingCard = null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                error = L10n.Messages.imageUnsupported
+            } finally {
+                preparingImage = false
+            }
+        }
+    }
+
+    /** The picture over the field goes (its ✕). */
+    fun removeImage() {
+        preparing?.cancel()
+        preparingImage = false
+        pendingImage = null
+    }
+
+    /**
+     * Where [message]'s picture is drawn from: the device's own copy of one sent from here, else the
+     * server's, read with the account's token (null: it carries none).
+     */
+    fun picture(message: ChatMessage): ChatPictureSource? {
+        val image = message.image ?: return null
+        session.chatPictures?.local(image.id)?.let { return ChatPictureSource.Local(it.preview, it.image.bytes) }
+        if (!ChatImage.isValidId(image.id)) return null
+        return ChatPictureSource.Remote(
+            thumb = session.pictures.url(image.id, ChatPicturesApi.Size.Thumb),
+            full = session.pictures.url(image.id, ChatPicturesApi.Size.Full),
+        )
+    }
+
+    /** The loader the thread's pictures are read with (the account's token on each). */
+    val pictureLoader: ImageLoader? get() = session.chatPictures?.loader
 
     /**
      * Sends a message that failed again ([ChatMessage.key] or id), under the id it was first written
@@ -844,6 +925,8 @@ internal fun threadSaver(handle: String, uid: String?, session: Session): Saver<
             reply?.id.orEmpty(), reply?.senderId.orEmpty(), reply?.text.orEmpty(), reply?.cardRef.orEmpty(),
             // A note the link opened at that hadn't landed yet lands when the thread comes back.
             m.routeNote?.cardId.orEmpty(), m.routeNote?.noteId.orEmpty(),
+            // The reply quotes a picture (「一張圖片」).
+            if (reply?.image == true) "1" else "",
         )
     },
     restore = { v ->
@@ -852,7 +935,7 @@ internal fun threadSaver(handle: String, uid: String?, session: Session): Saver<
             m.draft = v[0]
             m.noteRef = note(1, 2)
             if (v[3].isNotEmpty()) m.pendingCard = ThreadModel.Attachment(v[3], v[4])
-            if (v.size >= 9 && v[5].isNotEmpty()) m.restoreReply(ReplyQuote(v[5], v[6], v[7], v[8].ifEmpty { null }))
+            if (v.size >= 9 && v[5].isNotEmpty()) m.restoreReply(ReplyQuote(v[5], v[6], v[7], v[8].ifEmpty { null }, image = v.getOrNull(11) == "1"))
         }
     },
 )

@@ -114,9 +114,15 @@ fun ConversationsScreen(session: Session, open: (Route) -> Unit) {
     }
 }
 
-private fun preview(convo: ConversationsStore.Conversation): String {
-    val text = convo.lastText ?: return L10n.Messages.noMessagesYet
-    return (if (convo.lastFromMe) L10n.Messages.youPrefix else "") + text
+private fun preview(convo: ConversationsStore.Conversation): String = conversationPreview(convo.lastText, convo.lastImage, convo.lastFromMe)
+
+/**
+ * A conversation row's line: its last message's words (a card shared alone: its title, as the
+ * server writes it) — a picture sent without words says 傳送了一張圖片 — after 你： when it was yours.
+ */
+internal fun conversationPreview(text: String?, image: Boolean, fromMe: Boolean): String {
+    val said = text?.takeIf { it.isNotEmpty() || !image } ?: if (image) L10n.Messages.imageShared else return L10n.Messages.noMessagesYet
+    return (if (fromMe) L10n.Messages.youPrefix else "") + said
 }
 
 /** Today: the time, two-digit hour as the web's Intl (下午03:04); earlier: the date (9/29). */

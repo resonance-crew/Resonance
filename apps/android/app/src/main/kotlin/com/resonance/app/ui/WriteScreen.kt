@@ -66,7 +66,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -114,9 +113,7 @@ import com.resonance.design.ButtonVariant
 import com.resonance.design.CoverFrame
 import com.resonance.design.CssText
 import com.resonance.design.EmptyAction
-import com.resonance.design.HandDrawnAvatar
 import com.resonance.design.HeaderEdgeHeight
-import com.resonance.design.ImageRemoveButton
 import com.resonance.design.LayoutClass
 import com.resonance.design.LocalToasts
 import com.resonance.design.LocalWindowLayout
@@ -129,8 +126,9 @@ import com.resonance.design.OrganicEmptyState
 import com.resonance.design.OrganicIcon
 import com.resonance.design.OrganicIconButton
 import com.resonance.design.OrganicInlineBar
+import com.resonance.design.OrganicMenuFrom
+import com.resonance.design.OrganicMenuItem
 import com.resonance.design.OrganicModal
-import com.resonance.design.OrganicToggle
 import com.resonance.design.ReadingTextScale
 import com.resonance.design.Segment
 import com.resonance.design.SegmentedActionBar
@@ -143,9 +141,9 @@ import com.resonance.design.WavyDivider
 import com.resonance.design.cream
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
+import com.resonance.design.holdWhile
 import com.resonance.design.inlineBarTop
 import com.resonance.design.prefersReducedMotion
-import com.resonance.design.toggleRow
 import com.resonance.geometry.seedFromString
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
@@ -161,9 +159,10 @@ import kotlinx.coroutines.launch
  * one-line title and the story, set as the card page will set them (the story's type, at the
  * reading scale), the save line above them, the format bar on the keyboard while the story has the
  * focus — and one 下一步 in the bar (floating at the pane's top end at the split). 下一步 opens 發布這張卡片
- * (更新這張卡片 for a live card) in the same place: the mirror, the card as a list will show it with
- * its cover editor in its picture, 標籤, 誰可以看見, 以匿名發布, whether a resonance reaches its
- * original, then 存成草稿，稍後再寫 | 發布 (捨棄修改 | 儲存修改). The story stays composed under the step,
+ * (儲存這張卡片 kept for yourself, 更新這張卡片 for a live card) in the same place: the mirror, the card
+ * as a list will show it with its cover editor in its picture, 標籤, 誰可以看見 (公開 · 匿名公開 ·
+ * 只有自己), whether a resonance reaches its original, then 存成草稿，稍後再寫 | 發布 · 匿名發布 · 儲存
+ * (捨棄修改 | 儲存修改). The story stays composed under the step,
  * so its document, undo and selection survive the round trip; everything chosen in the step is the
  * draft's own value and autosaves like the words. Back from the step returns to writing; back from
  * writing with something written asks first.
@@ -342,9 +341,6 @@ private fun WriteForm(
     // Leaving the app saves what is written now, not 1.5s later.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { model.flush() }
     var pickingCard by remember { mutableStateOf(false) }
-    // The anonymous-publishing hint, for this writer's first few visits (counted per visit, as the web).
-    var showsAnonymousHint by remember(model) { mutableStateOf(false) }
-    LaunchedEffect(model) { showsAnonymousHint = session.hints?.claim("anonymous-publish") ?: false }
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { model.setCover(context, it) } }
     val inlinePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { model.insertImage(context, it) } }
     val images = PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
@@ -513,7 +509,6 @@ private fun WriteForm(
         ) {
             PublishStep(
                 session, model, bar = bar, compact = compactWindow, pad = pad, columnMax = columnMax, scroll = publishScroll,
-                showsAnonymousHint = showsAnonymousHint,
                 pickCover = { coverPicker.launch(images) },
                 dismissKeyboard = dismissKeyboard,
                 onLeave = leave,
@@ -759,11 +754,12 @@ internal fun enteredLineBreak(before: String, after: String): Boolean {
 }
 
 /**
- * The publish step (writer.spec §2): at the split its own first row (← 繼續寫 and its name); the
- * update hint for a live card; the mirror (a first publication only); the card as a list will show
- * it, its picture the cover editor; 標籤; 誰可以看見; 以匿名發布 with the byline it gives; whether a
- * resonance reaches its original; then, under the pen rule, what the verb waits for, why the last
- * try failed, and the foot.
+ * The publish step (writer.spec §2, round 7 §1): at the split its own first row (← 繼續寫 and its
+ * name, which follows the audience: 儲存這張卡片 for 只有自己); a live card's update hint while it is
+ * public; the mirror (a first publication only); the card as a list will show it, its picture the
+ * cover editor, its byline the one the choice gives; 標籤; 誰可以看見 — 公開 · 匿名公開 · 只有自己 —
+ * and its one line; whether a resonance reaches its original; then, under the pen rule, what the
+ * verb waits for, why the last try failed, and the foot, its verb following the audience.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -775,7 +771,6 @@ private fun PublishStep(
     pad: Dp,
     columnMax: Dp,
     scroll: androidx.compose.foundation.ScrollState,
-    showsAnonymousHint: Boolean,
     pickCover: () -> Unit,
     dismissKeyboard: () -> Unit,
     onLeave: () -> Unit,
@@ -805,7 +800,7 @@ private fun PublishStep(
             StepHeading(model)
             Spacer(Modifier.height(STEP_GAP))
         }
-        if (updating) {
+        if (model.showsUpdateHint) {
             BasicText(L10n.Write.PublishPanel.updateHint, style = AppFonts.body(14f, lineHeight = 1.7f, color = Tokens.TextMuted))
             Spacer(Modifier.height(STEP_GAP))
         }
@@ -813,15 +808,15 @@ private fun PublishStep(
         if (tucks && !underBar) Spacer(Modifier.height(HeaderEdgeHeight))
         if (!updating) MirrorLine(model.mirror, reduced, lead = if (tucks) 16.dp else 0.dp) { lineComposed = it }
 
-        // While it publishes, nothing in the step takes a tap (the web's fieldset disabled).
-        Column(Modifier.holdWhile(pending).graphicsLayer { alpha = if (pending) 0.7f else 1f }) {
+        // While it publishes, nothing in the step takes a tap (the web's fieldset disabled, iOS's .disabled):
+        // the controls show it themselves. Never faded as a whole — an alpha layer is cut at this column's
+        // box, and the card's pen line (a tablet's bordered card) or band (a phone's, edge to edge) runs past it.
+        Column(Modifier.holdWhile(pending)) {
             Preview(session, model, compact, pad, underBar, pickCover, dismissKeyboard)
             Spacer(Modifier.height(STEP_GAP))
             Tags(model, dismissKeyboard)
             Spacer(Modifier.height(STEP_GAP))
-            Audience(model)
-            Spacer(Modifier.height(STEP_GAP))
-            Anonymity(session, model, showsAnonymousHint)
+            AudienceChoice(session, model)
             model.resonanceLine?.let { line ->
                 Spacer(Modifier.height(STEP_GAP))
                 Row(
@@ -852,7 +847,7 @@ private fun PublishStep(
             }
             StepFoot(
                 compact = compact,
-                verb = if (updating) L10n.Write.PublishPanel.update else L10n.Write.PublishPanel.publish,
+                verb = model.verb,
                 verbBusyLabel = if (updating) L10n.Write.saveShort else null,
                 wayOut = if (!model.showsWayOut) null else if (updating) L10n.Write.discardChanges else L10n.Write.saveDraftAndLeave,
                 verbLoading = pending && model.busyVerb == BusyVerb.Publish,
@@ -953,8 +948,8 @@ private fun MirrorLine(mirror: Mirror?, reduced: Boolean, lead: Dp = 0.dp, onCom
  * The card as a list will show it, from what is on screen (writer.spec §2.1.3): a phone's feed band
  * edge to edge — the first card under the bar when nothing stands above it ([underBar]) — a wider
  * window's bordered card at most 360, start-aligned — the viewer's byline, or the anonymous one —
- * its picture the cover editor ([CoverSlot]); under it 卡片在列表裡的樣子, then 換一張圖片 once there
- * is one, and why the last picture didn't work.
+ * its picture the cover editor ([CoverSlot]), edited where it is: nothing under it but, while there
+ * is one, why the last picture didn't work. 卡片在列表裡的樣子 is what TalkBack calls it, not a caption.
  */
 @Composable
 private fun Preview(session: Session, model: WriteModel, compact: Boolean, pad: Dp, underBar: Boolean, pickCover: () -> Unit, dismissKeyboard: () -> Unit) {
@@ -964,14 +959,6 @@ private fun Preview(session: Session, model: WriteModel, compact: Boolean, pad: 
         Box(Modifier.semantics { contentDescription = L10n.Write.previewCaption }) {
             if (compact) StoryCard(content, 0, isLast = true, modifier = Modifier.bleed(pad), isFirst = underBar, inset = pad + 18.dp, cover = cover, preview = true)
             else BorderedStoryCard(content, 0, Modifier.widthIn(max = 360.dp), cover = cover, preview = true)
-        }
-        BasicText(L10n.Write.previewCaption, style = AppFonts.body(12f, lineHeight = 1.5f, color = Tokens.TextMuted), modifier = Modifier.padding(top = 8.dp).clearAndSetSemantics { })
-        if (model.values.imageUrl != null && !model.mediaBusy) {
-            Spacer(Modifier.height(10.dp))
-            OrganicButton(L10n.Write.mediaReplace, variant = ButtonVariant.Tonal, icon = IconName.Image, small = true) {
-                dismissKeyboard()
-                pickCover()
-            }
         }
         model.mediaError?.let {
             Spacer(Modifier.height(8.dp))
@@ -1004,7 +991,8 @@ internal fun previewContent(model: WriteModel, me: com.resonance.api.models.Me?)
  * The preview's picture as the cover editor (StoryCard's cover slot): no cover — the card's stripes
  * with 加一張圖片 · 生成圖片 (the second waiting for a story); a photo going up — the loader; an
  * illustration painting — its rough pass blurred under a cream wash, and the loader; a cover — the
- * picture, with the editor's ✕ at its top end.
+ * picture, with one 更換封面 chip on its bottom end corner ([CoverMenu]) — no ✕, and nothing more
+ * under the card: the picture is where it is changed.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1051,9 +1039,27 @@ private fun BoxScope.CoverSlot(frame: CoverFrame, model: WriteModel, pickCover: 
             }
         },
     )
-    if (url != null && !busy) ImageRemoveButton(L10n.Write.mediaRemove, frame.seed + 5, Modifier.align(Alignment.TopEnd).padding(10.dp)) {
-        dismissKeyboard()
-        model.removeCover()
+    if (url != null && !busy) Box(Modifier.align(Alignment.BottomEnd).padding(10.dp)) {
+        CoverMenu(model, frame.seed, pickCover, dismissKeyboard)
+    }
+}
+
+/**
+ * 更換封面 (round 7 §1.3): the paper pill on a cover's corner — solid, so it reads on any picture —
+ * opening the organic menu: 換一張圖片 · 生成圖片 (faded with no story to draw from) · 移除圖片.
+ */
+@Composable
+private fun CoverMenu(model: WriteModel, seed: Double, pickCover: () -> Unit, dismissKeyboard: () -> Unit) {
+    val items = listOf(
+        OrganicMenuItem(L10n.Write.mediaReplace, IconName.Image) { pickCover() },
+        OrganicMenuItem(L10n.Write.mediaGenerate, IconName.Sparkle, enabled = model.canGenerate) { model.generateCover() },
+        OrganicMenuItem(L10n.Write.mediaRemove, IconName.Trash, destructive = true) { model.removeCover() },
+    )
+    OrganicMenuFrom(items, seed = seed + 11) { _, toggle ->
+        OrganicButton(L10n.Write.coverChange, variant = ButtonVariant.Paper, icon = IconName.Image, small = true) {
+            dismissKeyboard()
+            toggle()
+        }
     }
 }
 
@@ -1097,70 +1103,59 @@ private fun Tags(model: WriteModel, dismissKeyboard: () -> Unit) {
 }
 
 /**
- * 誰可以看見: a segmented choice with no pen line (its options are buttons) — a quiet paper-dark track
+ * 誰可以看見 (round 7 §1.1): who reads the card and under whose name as one segmented choice —
+ * 公開 · 匿名公開 · 只有自己 — with no pen line (its options are buttons): a quiet paper-dark track
  * shows the control's extent, the chosen side wears the tonal peach with the deep label (4.8:1), the
- * other a muted ink deep enough to read on the track. A card kept for connections only (older ones)
- * shows neither chosen, and keeps its audience until one is. Anonymous, it says it is public or yours.
+ * others a muted ink deep enough to read on the track. Under it one muted line saying what the
+ * choice means — the preview above already wears the byline it gives. A card kept for connections
+ * only (older ones) shows none chosen, and keeps its audience until one is.
  */
 @Composable
-private fun Audience(model: WriteModel) {
-    val visibility = model.values.visibility
-    val anonymous = model.values.anonymous
+private fun AudienceChoice(session: Session, model: WriteModel) {
+    val chosen = model.audience
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         StepLabel(L10n.Write.Visibility.label)
         SegmentedActionBar(
-            listOf("public" to IconName.Globe, "private" to IconName.Lock).map { (v, icon) ->
-                val chosen = visibility == v
+            Audience.entries.map { audience ->
+                val on = chosen == audience
                 Segment(
-                    v, if (v == "public") L10n.Write.Visibility.public else L10n.Write.Visibility.private, icon,
-                    fill = if (chosen) Mixes.ButtonTonal else null,
-                    textColor = if (chosen) Mixes.ButtonOnTonal else VisibilityInk,
+                    audience.name, audienceLabel(audience), audienceIcon(audience),
+                    fill = if (on) Mixes.ButtonTonal else null,
+                    textColor = if (on) Mixes.ButtonOnTonal else VisibilityInk,
                     press = Color.Black.copy(alpha = 0.05f),
-                    selected = chosen,
-                ) { model.setAudience(v, anonymous) }
+                    selected = on,
+                ) { model.choose(audience) }
             },
             fill = Tokens.CreamDark,
             enabled = !model.pending,
         )
-        // Its room is kept while it isn't said, so flipping the switch below never moves the switch under the finger.
         BasicText(
-            L10n.Write.PublishPanel.anonymousVisibility,
-            style = AppFonts.body(Tokens.HintSize, color = Tokens.TextMuted),
-            modifier = if (anonymous) Modifier else Modifier.drawWithContent { }.clearAndSetSemantics { },
+            audienceLine(chosen, session.me?.handle.orEmpty()),
+            style = AppFonts.body(Tokens.HintSize, lineHeight = 1.5f, color = Tokens.TextMuted),
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
         )
     }
 }
 
-/**
- * 以匿名發布: the whole row is the switch (a tap on the words flips it too); turning it on makes a card
- * kept for connections public in the same change. Under it the byline the world will get, and — for
- * this writer's first visits — what anonymity means.
- */
-@Composable
-private fun Anonymity(session: Session, model: WriteModel, showsHint: Boolean) {
-    val anonymous = model.values.anonymous
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(
-            Modifier.toggleRow(anonymous, enabled = !model.pending) { model.setAudience(model.values.visibility, it) },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            BasicText(L10n.Write.PublishPanel.anonymousToggle, style = AppFonts.body(14f), modifier = Modifier.weight(1f))
-            OrganicToggle(anonymous, seed = 57.0)
-        }
-        // Seeing is understanding: the exact byline the card will carry.
-        val me = session.me
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (anonymous) HandDrawnAvatar("·", color = Tokens.CreamDark, size = 34.dp, seed = 97.0)
-            else if (me != null) HandDrawnAvatar(me.initials, me.avatarUrl, OklchColor.parse(me.accentColor) ?: Tokens.TerracottaLight, 34.dp, 7.0)
-            BasicText(
-                if (anonymous) L10n.Write.PublishPanel.anonymousName else me?.handle ?: "",
-                style = AppFonts.body(14f, 600, color = if (anonymous) Tokens.TextMuted else Tokens.Text),
-            )
-        }
-        // The hint counts visits, not the toggle (useHint('anonymous-publish')).
-        if (showsHint) BasicText(L10n.Write.PublishPanel.anonymousHint, style = AppFonts.body(Tokens.HintSize, color = Tokens.TextMuted))
-    }
+/** A choice's words in 誰可以看見. */
+internal fun audienceLabel(audience: Audience): String = when (audience) {
+    Audience.Public -> L10n.Write.Visibility.public
+    Audience.Anonymous -> L10n.Write.Visibility.anonymous
+    Audience.Private -> L10n.Write.Visibility.private
+}
+
+private fun audienceIcon(audience: Audience): IconName = when (audience) {
+    Audience.Public -> IconName.Globe
+    Audience.Anonymous -> IconName.Mask
+    Audience.Private -> IconName.Lock
+}
+
+/** The one line under the choice, saying what it means (null: kept for connections, none chosen); [handle] signs a public card. */
+internal fun audienceLine(audience: Audience?, handle: String): String = when (audience) {
+    Audience.Public -> L10n.Write.Visibility.publicLine(handle)
+    Audience.Anonymous -> L10n.Write.Visibility.anonymousLine
+    Audience.Private -> L10n.Write.Visibility.privateLine
+    null -> L10n.Write.Visibility.connectionsLine
 }
 
 /**
@@ -1213,13 +1208,6 @@ private fun Modifier.onBlankTap(bridge: StoryEditorBridge, onTap: () -> Unit): M
             if (!change.pressed) break
         }
         if (bridge.lastTouchDown != down.uptimeMillis) onTap()
-    }
-}
-
-/** While [held], nothing under this takes a touch (a step whose verb is working). */
-private fun Modifier.holdWhile(held: Boolean): Modifier = if (!held) this else pointerInput(Unit) {
-    awaitPointerEventScope {
-        while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
     }
 }
 

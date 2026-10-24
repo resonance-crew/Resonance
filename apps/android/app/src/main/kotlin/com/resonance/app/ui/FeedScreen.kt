@@ -6,37 +6,53 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.resonance.app.DebugLaunch
 import com.resonance.app.Session
 import com.resonance.design.CardPalette
 import com.resonance.design.FeedEndMark
 import com.resonance.design.FeedMoreButton
 import com.resonance.design.EmptyAction
 import com.resonance.design.HeaderEdgeHeight
+import com.resonance.design.LocalToasts
 import com.resonance.design.OrganicEmptyState
+import com.resonance.design.Toasts
 import com.resonance.design.cardListLayout
+import com.resonance.design.generated.IconName
+import com.resonance.design.prefersReducedMotion
 import com.resonance.design.storyCardSkeletons
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.reading.FeedLoader
 import com.resonance.kit.reading.withoutAuthors
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * The feed's page state: kept while the feed's tab root is (always, until sign-out), and through a
  * rotation. The reader's last feed is kept on the device too, so a cold start draws it at once.
  */
 class FeedModel(session: Session) : ViewModel() {
-    val feed = FeedLoader(session.reading, viewModelScope, storeFor = { uid -> session.kept(uid) })
+    val feed = DebugLaunch.feedPicks(session.reading)?.let { standIns ->
+        // Stand-ins are kept nowhere (nor is a kept feed drawn first): each launch is a cold load.
+        FeedLoader(session.reading, viewModelScope, recommended = standIns)
+    } ?: FeedLoader(session.reading, viewModelScope, storeFor = { uid -> session.kept(uid) })
 }
 
 /**
@@ -45,7 +61,8 @@ class FeedModel(session: Session) : ViewModel() {
  * Neither waits for the other: the latest cards show as soon as they arrive,
  * and picks that come after them go on top of them at once — read from the
  * top, the feed then starts with the first of them; scrolled into it, what is
- * being read stays where it is, the picks above it. The recommender's reasons
+ * being read stays where it is, the picks above it, and the shell's toast says
+ * 今天的推薦來了 · 往上看 (a tap takes the feed to its top). The recommender's reasons
  * stay hidden, as on the web. [FeedLoader] holds it all (in [FeedModel]), so
  * coming back finds the feed as it was, scrolled where it was left, without
  * reading it again.
@@ -64,12 +81,40 @@ fun FeedScreen(session: Session, open: (Route) -> Unit) {
     val blocked by session.blocked.collectAsStateWithLifecycle()
     val cards = remember(state.cards, blocked) { state.cards.withoutAuthors(blocked) }
     // Picks that came on top of the latest cards are a run of their own (rows and colours), so the latest keep theirs.
-    val leading = remember(state, blocked) { if (state.picksAbove) state.picksShown.withoutAuthors(blocked).size else 0 }
+    val picksAbove = remember(state, blocked) { if (state.picksAbove) state.picksShown.withoutAuthors(blocked).map { it.id } else emptyList() }
+    val leading = picksAbove.size
     val leadingCard = cards.firstOrNull()?.id
-    val shownLead = remember { LeadingCard() }
+    val head = remember { FeedHead() }
+    val toasts = LocalToasts.current
+    val scope = rememberCoroutineScope()
+    val reduced = LocalContext.current.prefersReducedMotion()
+    // The toast saying today's picks went on top, out of sight (its id while it may show).
+    var picksToast by remember { mutableStateOf<Long?>(null) }
     // Before the list takes the new cards in (it keeps its first item by key, so cards put above it land out of sight):
-    // a reader at the very top sees the feed's new head; one scrolled into it keeps what they are reading.
-    SideEffect { if (shownLead.changedTo(leadingCard) && list.atVeryTop()) list.requestScrollToItem(0) }
+    // a reader at the very top sees the feed's new head; one scrolled into it keeps what they are reading, and is
+    // told when that head is today's picks — 往上看 takes them up to it.
+    SideEffect {
+        when (head.next(leadingCard, picksAbove, list.atVeryTop())) {
+            FeedHead.Move.ShowTop -> list.requestScrollToItem(0)
+            FeedHead.Move.OfferPicks -> picksToast = toasts.show(
+                L10n.Home.Recommended.arrived,
+                action = Toasts.Action(
+                    L10n.Home.Recommended.arrivedAction,
+                    "${L10n.Home.Recommended.arrived} · ${L10n.Home.Recommended.arrivedAction}",
+                    IconName.ArrowUp,
+                ) { scope.launch { if (reduced) list.scrollToItem(0) else list.animateScrollToItem(0) } },
+            )
+            FeedHead.Move.None -> {}
+        }
+    }
+    // Reaching the top by hand while it shows takes it down: its job is done. Leaving the feed takes it too.
+    LaunchedEffect(picksToast) {
+        val id = picksToast ?: return@LaunchedEffect
+        snapshotFlow { list.atVeryTop() }.first { it }
+        toasts.dismiss(id)
+        picksToast = null
+    }
+    DisposableEffect(toasts) { onDispose { picksToast?.let(toasts::dismiss) } }
     val view = LocalView.current
     // Bands on a phone, a centred column of them on a medium window, the bordered grid on an expanded one.
     val layout = cardListLayout()
@@ -123,6 +168,33 @@ fun FeedScreen(session: Session, open: (Route) -> Unit) {
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * What the feed does as its head changes (round 6; round 7 §2): a reader at the very top is shown the
+ * new head; one scrolled into the feed keeps what they are reading where it is — and when what went
+ * on top, out of their sight, is today's picks (picks the feed didn't hold above the latest before),
+ * the shell's toast says so (今天的推薦來了 · 往上看). A head that changes for anything else (a re-read's
+ * newer latest card) says nothing.
+ */
+internal class FeedHead {
+    enum class Move { None, ShowTop, OfferPicks }
+
+    private val lead = LeadingCard()
+    private var above: Set<String> = emptySet()
+
+    /** The feed now leads with [leadingCard]; [picksAbove]: the picks it shows on top of the latest (none when they lead it). */
+    fun next(leadingCard: String?, picksAbove: List<String>, atTop: Boolean): Move {
+        val changed = lead.changedTo(leadingCard)
+        val arrived = picksAbove.any { it !in above }
+        above = picksAbove.toSet()
+        return when {
+            !changed -> Move.None
+            atTop -> Move.ShowTop
+            arrived -> Move.OfferPicks
+            else -> Move.None
         }
     }
 }

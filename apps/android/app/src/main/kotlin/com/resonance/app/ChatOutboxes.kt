@@ -1,5 +1,6 @@
 package com.resonance.app
 
+import com.resonance.kit.api.ChatPicturesApi
 import com.resonance.kit.api.MessagingApi
 import com.resonance.kit.chat.Outbox
 import kotlinx.coroutines.CoroutineScope
@@ -12,15 +13,19 @@ import kotlinx.coroutines.CoroutineScope
 class ChatOutboxes(
     private val scope: CoroutineScope,
     private val messaging: MessagingApi,
+    private val pictures: ChatPicturesApi,
     /** The first message a person sends is the moment to ask for notifications (see [PushCenter.reachedOut]). */
     private val sent: () -> Unit,
 ) {
     private val boxes = HashMap<String, Outbox>()
 
-    /** The outbox of the conversation [pairId] with [to]. */
+    /**
+     * The outbox of the conversation [pairId] with [to]. A message with a picture sends it up first,
+     * under the message's own client id — a resend finds it kept — and then names it ([deliver]).
+     */
     fun of(pairId: String, to: String): Outbox = boxes.getOrPut(pairId) {
         Outbox(scope, deliver = { m ->
-            val answer = messaging.sendMessage(to, m.text, m.cardRef, m.noteRef, replyTo = m.replyTo?.id, clientId = m.clientId)
+            val answer = deliver(messaging, pictures, to, m)
             sent()
             answer.id
         })
@@ -35,4 +40,14 @@ class ChatOutboxes(
         boxes.values.forEach(Outbox::clear)
         boxes.clear()
     }
+}
+
+/**
+ * Sends [m] to [to]: its picture first, if it carries one (POST /api/v1/chat-images, under the
+ * message's client id), then the message naming it (POST /api/v1/messages). Either refusing fails
+ * the message as a refusal or a passing failure, as the outbox tells them apart.
+ */
+internal suspend fun deliver(messaging: MessagingApi, pictures: ChatPicturesApi, to: String, m: Outbox.Outgoing): MessagingApi.Sent {
+    val image = m.image?.let { pictures.upload(it.bytes, it.mimeType, to, m.clientId).id }
+    return messaging.sendMessage(to, m.text, m.cardRef, m.noteRef, replyTo = m.replyTo?.id, clientId = m.clientId, image = image)
 }

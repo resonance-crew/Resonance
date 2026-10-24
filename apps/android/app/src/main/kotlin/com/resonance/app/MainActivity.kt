@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
  *   --es pushToken …               registers that stand-in push token under the signed-in account
  *   --es pushTitle … [--es pushBody … --es pushRoute … --es pushId … --es pushFromUserId … --es pushType pick|new_card --es pushCardId …]   posts the notification a push received while open shows
  *   --ez avifDecoder true          reads AVIF with the app's own decoder (Android 10–11's path) on any version
+ *   --ei feedPicksDelay <s> [--es feedPicks <id,…>]   holds today's picks back that long, and stands those cards in for them
  *   --ez firestoreLog true         Firestore's own debug log in Logcat (tag Firestore: its streams, connectivity, targets)
  */
 class MainActivity : ComponentActivity() {
@@ -87,6 +88,8 @@ class MainActivity : ComponentActivity() {
             DebugLaunch.writeCover = intent.getStringExtra("writeCover")
             DebugLaunch.threadDraft = intent.getStringExtra("threadDraft")
             DebugLaunch.avifDecoder = intent.getBooleanExtra("avifDecoder", false)
+            DebugLaunch.feedPicksDelay = intent.getIntExtra("feedPicksDelay", 0)
+            DebugLaunch.feedPicksIds = intent.getStringExtra("feedPicks")?.split(',')?.map(String::trim)?.filter(String::isNotEmpty)
         }
         // A recreated activity (rotation, process restore) still holds the intent it was first started with,
         // and its back stacks come back as they were: the link was opened then and isn't pushed again.
@@ -211,4 +214,25 @@ object DebugLaunch {
     var threadDraft: String? = null
     /** Pictures in AVIF go through [AvifDecoder] whatever the Android version (its check on a recent emulator). */
     var avifDecoder = false
+    /** Today's picks held back this many seconds (screen checks of picks put on top of the latest cards). */
+    var feedPicksDelay = 0
+    /** Cards stood in for today's picks (the emulator's recommender has none). */
+    var feedPicksIds: List<String>? = null
+
+    /**
+     * The home feed's picks as the debug extras ask (null: as the server answers them): held back
+     * [feedPicksDelay] seconds, and — with [feedPicksIds] — those cards as picks of their own (their
+     * ids marked, as the latest cards hold the real ones), with a reason, as picks have. iOS's
+     * `-feedPicksDelay` / `-feedPicks`.
+     */
+    fun feedPicks(reading: com.resonance.kit.api.ReadingApi): (suspend () -> List<com.resonance.api.models.FeedCard>)? {
+        if (!BuildConfig.DEBUG || (feedPicksDelay <= 0 && feedPicksIds == null)) return null
+        val delay = feedPicksDelay
+        val ids = feedPicksIds
+        return {
+            if (delay > 0) kotlinx.coroutines.delay(delay * 1000L)
+            if (ids == null) reading.recommended()
+            else reading.cards(ids).map { it.copy(id = "pick-${it.id}", reason = "stand-in pick") }
+        }
+    }
 }

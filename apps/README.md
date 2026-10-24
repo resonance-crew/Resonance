@@ -361,9 +361,12 @@ adb shell am start -n com.resonance.stories/com.resonance.app.MainActivity \
 ```
 
 Reading (tests in `:core:kit`: FeedLoader, CardPageLoader, CardCache): the feed shows the latest cards
-first; picks that answer later go on top of them at once (`FeedLoader.State.picksAbove`, no hint to tap),
-less any the latest already show — the latest keep their places, rows and colours (`storyCards`' `leading`
-run), a reader at the very top sees the first pick and one scrolled into the feed stays put. A card page is one
+first; picks that answer later go on top of them at once (`FeedLoader.State.picksAbove`), less any the
+latest already show — the latest keep their places, rows and colours (`storyCards`' `leading` run), a
+reader at the very top sees the first pick and one scrolled into the feed stays put, told by the shell's
+toast 今天的推薦來了 · 往上看 (`FeedHead`; a tap goes to the top, reaching it by hand takes it down).
+`--ei feedPicksDelay <s>` holds the picks back and `--es feedPicks <id,…>` stands those cards in for
+them (the emulator's recommender has none), as iOS's `-feedPicksDelay` / `-feedPicks`. A card page is one
 `GET /api/v1/cards/{key}?include=resonances,related,links,embeds` (story embeds from `embeds`, matched
 by slug or id; an unmatched link stays plain), a person's page one `GET /users/{handle}?include=cards,links&limit=12`,
 and a thread's shared cards one `GET /cards?keys=` per batch of new ids. Lists pass their FeedCard as
@@ -416,6 +419,15 @@ is a Custom Tab. The build registers the `chat-push` capability, so the server s
 `PushCenter.showChatMessage` draws the conversation's notification itself (one `MessagingStyle` per pair id on the
 "messages" channel, silent while that thread is resumed). Debug builds fake one:
 `--es pushChatBody "…" --es pushChatConversation alice_bob --es pushChatId m1 --es pushFromUserId bob --es pushRoute /messages/bob`.
+
+Pictures in chat (round 7): the composer's 「＋」 opens 圖片 (the system's photo picker) · 卡片; a picture is made ready
+on the device (`ChatPictures.prepare`: upright, ≤ 2048, JPEG 0.85 or WebP with transparency, under 4 MB; a GIF that
+fits as it is) and goes into the outbox with its message, drawn from the device under the message's client id —
+the id the server keeps it by: `ChatOutboxes.deliver` sends it up (`ChatPicturesApi.upload`, POST /api/v1/chat-images)
+before the message names it. They are read only with the account's token, through `ChatPicturesApi.client` and their
+own Coil loader and folder (`cacheDir/chat-pictures`, emptied with the account; `PicturesOnly` keeps pictures and
+never an error answer, which Coil's own strategy would serve for good). A picture heads its bubble edge to edge in
+the place `PictureBox` gives it before it loads; a tap opens `PictureViewer` (pinch, double tap, swipe down).
 
 A note (小紙條, `NoteComposer`) keeps its unsent words on the device per account and card (`NoteDrafts` in `:core:kit`,
 `note-drafts.xml` via `NoteDraftPrefs`, outside the backup): written a moment after typing stops, as the app leaves the screen
@@ -473,7 +485,10 @@ story), with `StoryFormatBar` docked on the keyboard while the story has the foc
 the island's `caret` message (`caretScroll`); 下一步 sits in the bar (floating at the pane's top end at the split).
 The publish step (`PublishStep` in WriteScreen.kt) is composed the first time it opens and stays, the writing step
 kept composed — and drawn without a standing graphics layer, which would freeze the WebView's size — under it; its
-choices are the draft's values (`setAudience` coerces an anonymous card for connections to public in one change).
+choices are the draft's values (`setAudience` coerces an anonymous card for connections to public in one change):
+誰可以看見 is one choice of three (`WriteModel.choose`: 公開 · 匿名公開 · 只有自己, which keeps a live card's anonymity),
+and the verb and the step's title follow it (`WriteModel.verb`, `stepTitle`). While its verb works the step only
+holds its touches (`Modifier.holdWhile`) — no alpha layer, which is cut at its box and clipped the card's pen line.
 `WriteModel` takes `DraftStore` (DraftService), `WriterCalls` (`WritingApi.writerCalls()`) and `StoryEditor` (the
 bridge), so `WriterStepsTest` drives the steps with stand-ins; a write the rules refuse or a 409 'This card is in the
 trash.' is read again (`DraftStore.isTrashed`) and turns into the trashed line with 還原. The trash's moves go

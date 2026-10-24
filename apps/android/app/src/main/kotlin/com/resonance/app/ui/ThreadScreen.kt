@@ -6,6 +6,9 @@ import com.resonance.design.LocalWindowLayout
 import com.resonance.design.readableColumn
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,6 +66,7 @@ import com.resonance.app.PushCenter
 import com.resonance.app.SafetyService
 import com.resonance.app.Session
 import com.resonance.design.AppFonts
+import com.resonance.design.ChatPictureSource
 import com.resonance.design.CssText
 import com.resonance.design.EmptyAction
 import com.resonance.design.HandDrawnAvatar
@@ -155,6 +159,11 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     val composerFocus = remember { FocusRequester() }
     val searchFocus = remember { FocusRequester() }
     val flash = remember { Flash() }
+    // 圖片: the system's photo picker, one picture (no permission asked: it hands over only what was chosen).
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { model.attachImage(context, it) } }
+    val pickImage: () -> Unit = { imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+    // A picture opened whole (the viewer over everything), or null.
+    var viewing by remember { mutableStateOf<ChatPictureSource?>(null) }
 
     // Over what is drawn: a card the viewer can't see, sent alone, has no row, and shapes no run around it.
     val rows by remember(model) { derivedStateOf { ThreadRows.build(model.messages, drawn = { model.carried(it) != Carried.Nothing }) } }
@@ -229,6 +238,7 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
             onReply = reply,
             onQuote = { id -> jump(id, true) },
             lifted = lifted,
+            onPicture = { viewing = it },
         )
     }
 
@@ -251,9 +261,9 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                     // In a wide pane the composer keeps to a column of its own, centred under the thread.
                     val padded = Modifier.readableColumn(ComposerMax).padding(horizontal = 14.dp).padding(bottom = 14.dp)
                     when (foot) {
-                        ThreadFoot.Composer -> Composer(model, handle, composerFocus, onPickCard = { pickingCard = true }, padded)
+                        ThreadFoot.Composer -> Composer(model, handle, composerFocus, onPickImage = pickImage, onPickCard = { pickingCard = true }, padded)
                         ThreadFoot.Answer -> Composer(
-                            model, handle, composerFocus, onPickCard = { pickingCard = true }, padded,
+                            model, handle, composerFocus, onPickImage = pickImage, onPickCard = { pickingCard = true }, padded,
                             lead = L10n.Messages.replyToConnect(model.other?.handle ?: handle),
                         )
                         ThreadFoot.Awaiting -> FootNote(L10n.Messages.awaitingReply)
@@ -312,6 +322,7 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
             )
         }
     }
+    viewing?.let { picture -> PictureViewer(picture, model.pictureLoader) { viewing = null } }
     // Opening search puts the cursor in its field.
     LaunchedEffect(searching) { if (searching) runCatching { searchFocus.requestFocus() } }
 
@@ -381,7 +392,7 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
         seed = 53.0, maxWidth = 480.dp, closeLabel = L10n.Write.Editor.CardModal.cancel,
     ) {
         CardPickerContent(session, L10n.Messages.pickCard, L10n.Messages.pickCardSubtitle, onPick = { card ->
-            model.pendingCard = ThreadModel.Attachment(card.id, card.title)
+            model.attachCard(ThreadModel.Attachment(card.id, card.title))
             pickingCard = false
         }) { pickingCard = false }
     }
