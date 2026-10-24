@@ -259,11 +259,16 @@ above it (`CaretFollow`), and the island's own scroll view is pinned at its top
 下一步 (the bar's trailing pill; floating at the pane's top at the split) asks for
 a title, waits a moment for a new draft's first save, and opens `PublishStep` in
 place: the mirror (asked once per title and story, never for a revision), the
-card as a list shows it with its cover editor in the picture, tags, who can see
-it, the byline, the resonance line, then 存成草稿，稍後再寫 | 發布 (捨棄修改 |
-儲存修改 for a live card). Its choices are the draft's own values and autosave;
-back from it is back to writing (the bar's 繼續寫, the edge swipe), the map's
-Leave at the split leaves from either step. A save the rules refuse, or a
+card as a list shows it — its cover changed on the picture itself, one 更換封面
+chip whose menu offers another, a drawn one or none (`PublishStep.coverItems`) —,
+tags, 誰可以看見 as one choice of 公開 · 匿名公開 · 只有自己 (`WriteModel.Audience`:
+both fields in one change; 只有自己 names a draft and keeps a live card's byline)
+with the one line that says what it means, the resonance line, then
+存成草稿，稍後再寫 | 發布 · 匿名發布 · 儲存 by the audience, the step titled
+儲存這張卡片 for 只有自己 (捨棄修改 | 儲存修改 for a live card, whose 更新 hint
+shows while it has readers). Its choices are the draft's own values and
+autosave; back from it is back to writing (the bar's 繼續寫, the edge swipe), the
+map's Leave at the split leaves from either step. A save the rules refuse, or a
 publish answered 409, is read again: a card moved to the trash meanwhile says so
 where the save line was, with 還原, keeping what is typed.
 

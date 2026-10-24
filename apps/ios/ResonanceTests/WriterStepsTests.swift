@@ -302,7 +302,7 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         let store = RecordingDraftStore()
         let model = WriteModel(drafts: store, writing: writing(), calls: ServerCalls().calls, opened: card())
         #expect(await model.goNext())
-        model.choose(visibility: "private")
+        model.choose(.private)
         model.store()
         #expect(store.writes.last?.values.visibility == "private")
         model.stepBack()
@@ -310,31 +310,130 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(!model.needsSave)
     }
 
+    /// 誰可以看見 is one choice of three (round 7 §1.1): each writes both fields in one change, so no
+    /// write is ever anonymous and for connections only; a card kept for connections shows none chosen.
     @Test func anonymousOnAConnectionsDraftGoesPublicInTheSameWrite() async {
         let store = RecordingDraftStore()
         let model = WriteModel(drafts: store, writing: writing(), calls: ServerCalls().calls, opened: card(visibility: "connections"))
-        model.setAnonymous(true)
+        #expect(model.audience == nil)
+        model.choose(.anonymous)
         #expect(model.values.anonymous)
         #expect(model.values.visibility == "public")
+        #expect(model.audience == .anonymous)
         model.store()
         #expect(store.writes.count == 1)
         #expect(store.writes.allSatisfy { !($0.values.anonymous && $0.values.visibility == "connections") })
-        // Only-me stays only-me under either byline.
-        model.choose(visibility: "private")
-        model.setAnonymous(false)
-        #expect(model.values.visibility == "private")
-        // A connections card not made anonymous keeps its audience: neither side chosen.
+        model.choose(.public)
+        #expect(model.values.visibility == "public" && !model.values.anonymous)
+        #expect(model.audience == .public)
+        // A connections card left alone keeps its audience: none chosen.
         let kept = WriteModel(drafts: store, writing: writing(), calls: ServerCalls().calls, opened: card(visibility: "connections"))
         #expect(kept.values.visibility == "connections")
+        #expect(kept.audience == nil)
+    }
+
+    /// 只有自己 names a draft — nothing of 匿名公開 tried on the way is left — and keeps a live card's
+    /// byline: an anonymous card made private, then public again from its ⋯, comes back anonymous.
+    @Test func onlyMeNamesADraftAndKeepsALiveCardsByline() {
+        let draft = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card())
+        draft.choose(.anonymous)
+        draft.choose(.private)
+        #expect(draft.values.visibility == "private")
+        #expect(!draft.values.anonymous)
+        #expect(draft.audience == .private)
+        // An anonymous draft opened again: 只有自己 still names it.
+        let anonymousDraft = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card(anonymous: true))
+        anonymousDraft.choose(.private)
+        #expect(!anonymousDraft.values.anonymous)
+
+        let anonymousLive = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls,
+                                       opened: card(published: true, anonymous: true))
+        #expect(anonymousLive.audience == .anonymous)
+        anonymousLive.choose(.private)
+        #expect(anonymousLive.values.visibility == "private")
+        #expect(anonymousLive.values.anonymous)
+        #expect(anonymousLive.audience == .private)
+        // Tried under the pen name on the way: 只有自己 still keeps the byline the card had.
+        anonymousLive.choose(.public)
+        anonymousLive.choose(.private)
+        #expect(anonymousLive.values.anonymous)
+
+        let namedLive = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card(published: true))
+        namedLive.choose(.anonymous)
+        namedLive.choose(.private)
+        #expect(!namedLive.values.anonymous)
+        // A private anonymous card reads as 只有自己.
+        let privateAnonymous = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls,
+                                          opened: card(published: true, visibility: "private", anonymous: true))
+        #expect(privateAnonymous.audience == .private)
+    }
+
+    /// The one line under the choice, and the words that follow it: the verb (發布 · 匿名發布 · 儲存),
+    /// the step's heading (儲存這張卡片 for a draft kept to its author), a failure's line, and a live
+    /// card's 更新 hint only while it has readers.
+    @Test func theWordsFollowTheAudience() async {
+        let server = ServerCalls()
+        let draft = WriteModel(drafts: RecordingDraftStore(), writing: writing(), calls: server.calls, opened: card())
+        #expect(draft.audienceLine(handle: "ahzhen") == L10n.Write.Visibility.publicLine(handle: "ahzhen"))
+        #expect(draft.verbTitle == L10n.Write.PublishPanel.publish)
+        #expect(draft.stepTitle == L10n.Write.PublishPanel.title)
+        draft.choose(.anonymous)
+        #expect(draft.audienceLine(handle: "ahzhen") == L10n.Write.Visibility.anonymousLine)
+        #expect(draft.verbTitle == L10n.Write.PublishPanel.publishAnonymously)
+        #expect(draft.stepTitle == L10n.Write.PublishPanel.title)
+        draft.choose(.private)
+        #expect(draft.audienceLine(handle: "ahzhen") == L10n.Write.Visibility.privateLine)
+        #expect(draft.verbTitle == L10n.Write.PublishPanel.save)
+        #expect(draft.stepTitle == L10n.Write.PublishPanel.saveTitle)
+        #expect(!draft.showsUpdateHint)
+        server.publishError = APIFailure.unexpected(status: 502)
+        #expect(await draft.publish() == nil)
+        #expect(draft.publishError == L10n.Write.PublishPanel.saveFailed)
+        draft.choose(.public)
+        #expect(await draft.publish() == nil)
+        #expect(draft.publishError == L10n.Write.PublishPanel.failed)
+
+        // For connections (none chosen): its own line, and it reads as publishing.
+        let connections = WriteModel(drafts: nil, writing: writing(), calls: server.calls, opened: card(visibility: "connections"))
+        #expect(connections.audienceLine(handle: "ahzhen") == L10n.Write.Visibility.connectionsLine)
+        #expect(connections.verbTitle == L10n.Write.PublishPanel.publish)
+        #expect(connections.stepTitle == L10n.Write.PublishPanel.title)
+
+        // A live card: 更新這張卡片 and 儲存修改 whatever its audience; the hint only while readers have it.
+        let live = WriteModel(drafts: nil, writing: writing(), calls: server.calls, opened: card(published: true))
+        #expect(live.stepTitle == L10n.Write.PublishPanel.updateTitle)
+        #expect(live.verbTitle == L10n.Write.PublishPanel.update)
+        #expect(live.showsUpdateHint)
+        live.choose(.anonymous)
+        #expect(live.showsUpdateHint)
+        live.choose(.private)
+        #expect(!live.showsUpdateHint)
+        #expect(live.verbTitle == L10n.Write.PublishPanel.update)
+        #expect(live.stepTitle == L10n.Write.PublishPanel.updateTitle)
+        // Kept to its author with nothing above it, a phone's band leads under the bar.
+        #expect(PublishStep.bandUnderBar(live, showsBar: true, compact: true))
+    }
+
+    /// The cover is changed on the picture: one menu of another picture, a drawn one (waiting for a
+    /// story) and none, in the danger tone.
+    @Test func theCoversMenuOffersAnotherADrawnOneAndNone() {
+        var picked = 0, drawn = 0, removed = 0
+        let items = PublishStep.coverItems(canGenerate: false, pick: { picked += 1 }, generate: { drawn += 1 }, remove: { removed += 1 })
+        #expect(items.map(\.title) == [L10n.Write.mediaReplace, L10n.Write.mediaGenerate, L10n.Write.mediaRemove])
+        #expect(items.map(\.icon) == [.image, .sparkle, .trash])
+        #expect(items.map(\.disabled) == [false, true, false])
+        #expect(items.map(\.danger) == [false, false, true])
+        items.forEach { $0.action() }
+        #expect((picked, drawn, removed) == (1, 1, 1))
+        #expect(PublishStep.coverItems(canGenerate: true, pick: {}, generate: {}, remove: {})[1].disabled == false)
     }
 
     @Test func theResonanceLineFollowsTheChoice() {
         let draft = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card(reference: "original"))
         #expect(draft.resonanceLine == L10n.Write.PublishPanel.resonanceReaches)
-        draft.choose(visibility: "private")
+        draft.choose(.private)
         #expect(draft.resonanceLine == L10n.Write.PublishPanel.resonanceQuiet)
-        draft.choose(visibility: "public")
-        draft.setAnonymous(true)
+        draft.choose(.anonymous)
         #expect(draft.resonanceLine == L10n.Write.PublishPanel.resonanceQuiet)
         // Not a resonance: no line.
         #expect(WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card()).resonanceLine == nil)
@@ -342,7 +441,7 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         let hidden = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls,
                                 opened: card(published: true, visibility: "private", reference: "original"))
         #expect(hidden.resonanceLine == nil)
-        hidden.choose(visibility: "public")
+        hidden.choose(.public)
         #expect(hidden.resonanceLine == L10n.Write.PublishPanel.resonanceReaches)
         // One that reaches already (public, named, as readers have it now): nothing new to say.
         let reaching = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls,
@@ -352,7 +451,7 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         let edited = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls,
                                 opened: card(published: true, pending: true, visibility: "private", reference: "original",
                                              live: ("public", false)))
-        edited.choose(visibility: "public")
+        edited.choose(.public)
         #expect(edited.resonanceLine == nil)
     }
 
@@ -360,7 +459,7 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         let store = RecordingDraftStore()
         let server = ServerCalls()
         let model = WriteModel(drafts: store, writing: writing(), calls: server.calls, opened: card())
-        model.choose(visibility: "private")
+        model.choose(.private)
         #expect(await model.publish() == "a-walk")
         #expect(server.published == ["card-1"])
         #expect(store.writes.last?.values.visibility == "private")
@@ -444,8 +543,6 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(!PublishStep.showsSecondary(live))
         #expect(PublishStep.showsSecondary(WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls,
                                                       opened: card(published: true, pending: true))))
-        #expect(PublishStep.title(updating: false) == L10n.Write.PublishPanel.title)
-        #expect(PublishStep.title(updating: true) == L10n.Write.PublishPanel.updateTitle)
         #expect(PublishStep.verbEnabled(live))
     }
 
@@ -458,7 +555,7 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(named.excerpt == "那天下午 雨停了。")
         #expect(named.authorName == "ahzhen")
         #expect(named.tags == ["記憶", "家人", "雨", "河"])
-        model.setAnonymous(true)
+        model.choose(.anonymous)
         let anonymous = model.preview(me: Fixture.me("ahzhen"))
         #expect(anonymous.authorName == L10n.Write.PublishPanel.anonymousName)
         #expect(anonymous.authorInitials == "·")

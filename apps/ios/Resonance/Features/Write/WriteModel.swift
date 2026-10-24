@@ -93,6 +93,8 @@ final class WriteModel {
     /// A live resonance that reaches its original already (published, public and named, as readers
     /// have it now): saving its revision tells no one anything new.
     let liveReaches: Bool
+    /// The byline the card was opened with: what 只有自己 keeps on a live card.
+    private let openedAnonymous: Bool
     var tagDraft = ""
     private(set) var suggestingTags = false
     var tagError: String?
@@ -190,6 +192,7 @@ final class WriteModel {
         slug = opened?.slug
         liveReaches = (opened?.isPublished ?? false) && opened?.referenceCardId != nil
             && WriteModel.reaches(visibility: opened?.liveVisibility ?? "private", anonymous: opened?.liveAnonymous ?? true)
+        openedAnonymous = opened?.values.anonymous ?? false
         title = opened.map { $0.isPublished ? L10n.Write.editPublishedTitle : L10n.Write.editTitle } ?? L10n.Write.title
         script = ScriptRule.writerScript(current: ScriptRule.localeScript(locale), title: opened?.values.title ?? "",
                                          story: opened?.values.story ?? "")
@@ -436,18 +439,81 @@ final class WriteModel {
         visibility == "public" && !anonymous
     }
 
-    /// 公開 or 只有自己 chosen in the step.
-    func choose(visibility: String) {
-        values.visibility = Self.visibility(visibility, anonymous: values.anonymous)
+    /// 誰可以看見, the step's one choice of who reads the card and under whose name (round 7 §1.1):
+    /// anonymity is for being read by others, so it is a way of being public, not a switch beside it.
+    enum Audience: String, Equatable, CaseIterable {
+        /// 公開: everyone, under the author's pen name.
+        case `public`
+        /// 匿名公開: everyone, under 匿名.
+        case anonymous
+        /// 只有自己: the author alone.
+        case `private`
     }
 
-    /// 以匿名發布 turned on or off: one change, so no write is ever anonymous and for connections only.
-    func setAnonymous(_ anonymous: Bool) {
+    /// The segment chosen: public and named, public and anonymous, or private under either byline —
+    /// none for a card kept for connections only (older ones), which keeps its audience until one is.
+    var audience: Audience? {
+        switch values.visibility {
+        case "public": values.anonymous ? .anonymous : .public
+        case "private": .private
+        default: nil
+        }
+    }
+
+    /// A segment chosen: both fields in one change, so no write is ever anonymous and for connections
+    /// only. 只有自己 on a live card keeps the byline the card had (an anonymous card made private and
+    /// later made public from its ⋯ comes back anonymous, never suddenly under its author's name); a
+    /// draft was never public, so 只有自己 simply names it — nothing of 匿名公開 tried on the way is left.
+    func choose(_ audience: Audience) {
         var next = values
-        next.anonymous = anonymous
-        next.visibility = Self.visibility(values.visibility, anonymous: anonymous)
+        switch audience {
+        case .public:
+            next.visibility = "public"
+            next.anonymous = false
+        case .anonymous:
+            next.visibility = "public"
+            next.anonymous = true
+        case .private:
+            next.visibility = "private"
+            next.anonymous = isPublished ? openedAnonymous : false
+        }
         values = next
     }
+
+    /// The one line under the choice, saying what it means: whose name everyone reads, that no one
+    /// will know, that it is the author's alone — or, for a card kept for connections, who reads it.
+    func audienceLine(handle: String) -> String {
+        switch audience {
+        case .public?: L10n.Write.Visibility.publicLine(handle: handle)
+        case .anonymous?: L10n.Write.Visibility.anonymousLine
+        case .private?: L10n.Write.Visibility.privateLine
+        case nil: L10n.Write.Visibility.connectionsLine
+        }
+    }
+
+    /// A draft kept to its author is saved, not published (round 7 §1.2): the step's verb and heading
+    /// say 儲存 for 只有自己. A card for connections (none chosen) reads as publishing.
+    var savesPrivately: Bool { !isPublished && audience == .private }
+
+    /// The step's verb: 發布, 匿名發布 or 儲存 for a draft, by its audience; 儲存修改 for a live card.
+    var verbTitle: String {
+        if isPublished { return L10n.Write.PublishPanel.update }
+        switch audience {
+        case .anonymous?: return L10n.Write.PublishPanel.publishAnonymously
+        case .private?: return L10n.Write.PublishPanel.save
+        case .public?, nil: return L10n.Write.PublishPanel.publish
+        }
+    }
+
+    /// The step's heading: 發布這張卡片, 儲存這張卡片 for a draft kept to its author, 更新這張卡片 for a live card.
+    var stepTitle: String {
+        if isPublished { return L10n.Write.PublishPanel.updateTitle }
+        return savesPrivately ? L10n.Write.PublishPanel.saveTitle : L10n.Write.PublishPanel.title
+    }
+
+    /// 更新這張卡片's hint (「按下之後，讀者看到的就會是這個版本…」) is about readers: said for a live
+    /// card while it has some — not for one being kept to its author.
+    var showsUpdateHint: Bool { isPublished && audience != .private }
 
     /// A card about to be first published keeps no audience the server refuses: a draft stored
     /// anonymous and for connections only (the rules let a draft hold the pair, and the builds before
@@ -677,7 +743,7 @@ final class WriteModel {
             return key
         } catch {
             if await confirmTrashed(error) { return nil }
-            publishError = PublishFailure.message(error)
+            publishError = PublishFailure.message(error, saving: savesPrivately)
             return nil
         }
     }

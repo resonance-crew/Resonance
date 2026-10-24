@@ -9,13 +9,17 @@ public struct OrganicMenuItem: Identifiable {
     public let icon: IconName
     /// Destructive rows sit on the warning wash.
     public var danger: Bool
+    /// Not possible yet (生成圖片 with no story to draw from): dimmed, and it takes no tap.
+    public var disabled: Bool
     public let action: () -> Void
 
-    public init(id: String, title: String, icon: IconName, danger: Bool = false, action: @escaping () -> Void) {
+    public init(id: String, title: String, icon: IconName, danger: Bool = false, disabled: Bool = false,
+                action: @escaping () -> Void) {
         self.id = id
         self.title = title
         self.icon = icon
         self.danger = danger
+        self.disabled = disabled
         self.action = action
     }
 }
@@ -24,8 +28,13 @@ public struct OrganicMenuItem: Identifiable {
 /// `bare` glyph like the back arrow beside it — the bar is the frame. Over
 /// content (a card's cover in the card box) it is a `chip`: a wobbly cream
 /// squircle with no rim, so it stays legible over a picture without adding a
-/// pen line.
-public enum MenuTrigger: Sendable { case chip, bare }
+/// pen line. A `pill` says what it opens in words beside its glyph, on the
+/// paper button's face (the writer's 更換封面 on the cover it changes): solid
+/// paper reads on any picture.
+public enum MenuTrigger: Sendable, Equatable {
+    case chip, bare
+    case pill(String, IconName)
+}
 
 /// The web's organic「⋯」dropdown: a trigger that drops a hand-drawn panel —
 /// wavy pen lines between the rows, ink spreading from the finger under the
@@ -57,37 +66,60 @@ public struct OrganicMenu: View {
 
     public var body: some View {
         let colors = MenuColors(hue: hue)
-        Button {
-            // A fresh panel each time, like the web's.
-            panelSeed = Double(Int.random(in: 0..<10_000))
-            withTransaction(\.disablesAnimations, true) { open = true }
-        } label: {
-            Group {
-                if trigger == .bare {
-                    OrganicIcon(icon, size: 20, color: open ? Tokens.terracotta : Tokens.text)
-                } else {
-                    OrganicMenuChip(size: triggerSize, seed: seed, icon: icon, colors: colors, active: open)
-                }
-            }
-            .frame(minWidth: 44, minHeight: 44)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(OrganicPressStyle(inset: trigger == .bare ? 4 : max(0, (44 - triggerSize) / 2)))
-        .accessibilityLabel(label)
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { anchor = $0 }
-        .fullScreenCover(isPresented: $open) {
-            // A bare glyph's wash is 36 in its 44 box: the panel hangs from that, as from a chip.
-            MenuStage(items: items, seed: panelSeed, colors: colors, anchor: anchor, triggerSize: trigger == .bare ? 36 : triggerSize) { item in
-                withTransaction(\.disablesAnimations, true) { open = false }
-                // After the cover is gone, so a dialog the row opens can present.
-                if let item {
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(150))
-                        item.action()
+        triggerView(colors)
+            .accessibilityLabel(label)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { anchor = $0 }
+            .fullScreenCover(isPresented: $open) {
+                MenuStage(items: items, seed: panelSeed, colors: colors, face: face) { item in
+                    withTransaction(\.disablesAnimations, true) { open = false }
+                    // After the cover is gone, so a dialog the row opens can present.
+                    if let item {
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(150))
+                            item.action()
+                        }
                     }
                 }
+                .presentationBackground(.clear)
             }
-            .presentationBackground(.clear)
+    }
+
+    @ViewBuilder private func triggerView(_ colors: MenuColors) -> some View {
+        switch trigger {
+        case let .pill(title, glyph):
+            // The paper button itself, with its own ink and haptic: what it opens says so in words.
+            OrganicButton(title, icon: glyph, variant: .paper, size: .sm, action: show)
+                .fixedSize()
+                .frame(minHeight: 44)
+        case .chip, .bare:
+            Button(action: show) {
+                Group {
+                    if trigger == .bare {
+                        OrganicIcon(icon, size: 20, color: open ? Tokens.terracotta : Tokens.text)
+                    } else {
+                        OrganicMenuChip(size: triggerSize, seed: seed, icon: icon, colors: colors, active: open)
+                    }
+                }
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(OrganicPressStyle(inset: trigger == .bare ? 4 : max(0, (44 - triggerSize) / 2)))
+        }
+    }
+
+    private func show() {
+        // A fresh panel each time, like the web's.
+        panelSeed = Double(Int.random(in: 0..<10_000))
+        withTransaction(\.disablesAnimations, true) { open = true }
+    }
+
+    /// What the panel hangs from: a chip centred in its 44 box, a bare glyph's 36 wash in its box, a
+    /// pill's own face.
+    private var face: CGRect {
+        switch trigger {
+        case .pill: anchor
+        case .bare: anchor.insetBy(dx: max(0, (anchor.width - 36) / 2), dy: max(0, (anchor.height - 36) / 2))
+        case .chip: anchor.insetBy(dx: max(0, (anchor.width - triggerSize) / 2), dy: max(0, (anchor.height - triggerSize) / 2))
         }
     }
 }
@@ -141,31 +173,31 @@ struct OrganicMenuChip: View {
     }
 }
 
-/// The dropped panel, anchored 8 under the trigger's trailing edge; a tap
-/// anywhere else closes it.
+/// The dropped panel, anchored 8 under the trigger's trailing edge — over it instead when the
+/// screen has no room for it below (a trigger low on the page); a tap anywhere else closes it.
 struct MenuStage: View {
     let items: [OrganicMenuItem]
     let seed: Double
     let colors: MenuColors
-    let anchor: CGRect
-    let triggerSize: CGFloat
+    /// The trigger's visible face, in the screen's space.
+    let face: CGRect
     let close: (OrganicMenuItem?) -> Void
     @State private var shown = false
 
     var body: some View {
         GeometryReader { geo in
             let screen = geo.frame(in: .global)
-            ZStack(alignment: .topTrailing) {
+            let above = MenuDrop.above(face: face, screen: screen, panelHeight: MenuPanelShape.height(rows: items.count))
+            ZStack(alignment: above ? .bottomTrailing : .topTrailing) {
                 Color.black.opacity(0.001)
                     .onTapGesture { close(nil) }
                     .accessibilityHidden(true)
                 panel
-                    .scaleEffect(shown ? 1 : 0.94, anchor: .topTrailing)
-                    .offset(y: shown ? 0 : -4)
+                    .scaleEffect(shown ? 1 : 0.94, anchor: above ? .bottomTrailing : .topTrailing)
+                    .offset(y: shown ? 0 : (above ? 4 : -4))
                     .opacity(shown ? 1 : 0)
-                    // The chip is centred in its 44pt hit box.
-                    .padding(.top, anchor.midY + triggerSize / 2 + 8 - screen.minY)
-                    .padding(.trailing, max(12, screen.maxX - anchor.midX - triggerSize / 2))
+                    .padding(above ? .bottom : .top, above ? screen.maxY - face.minY + MenuDrop.gap : face.maxY + MenuDrop.gap - screen.minY)
+                    .padding(.trailing, max(MenuDrop.margin, screen.maxX - face.maxX))
             }
         }
         .ignoresSafeArea()
@@ -176,6 +208,19 @@ struct MenuStage: View {
 
     private var panel: some View {
         OrganicMenuPanel(items: items, seed: seed, colors: colors) { close($0) }
+    }
+}
+
+/// Where a dropped panel goes from its trigger: 8 under it, unless that runs past the screen's foot
+/// (12 from it) while there is room over it.
+nonisolated enum MenuDrop {
+    static let gap: CGFloat = 8
+    static let margin: CGFloat = 12
+
+    static func above(face: CGRect, screen: CGRect, panelHeight: CGFloat) -> Bool {
+        let fitsBelow = face.maxY + gap + panelHeight <= screen.maxY - margin
+        let fitsAbove = face.minY - gap - panelHeight >= screen.minY + margin
+        return !fitsBelow && fitsAbove
     }
 }
 
@@ -219,11 +264,14 @@ public struct OrganicMenuPanel: View {
                             .foregroundStyle(pressed == i ? colors.borderHover : Tokens.text)
                             .lineLimit(1)
                     }
+                    // A row not possible yet keeps its place, dimmed as a button that isn't is.
+                    .opacity(item.disabled ? 0.45 : 1)
                     .padding(.horizontal, 8)
                     .frame(maxWidth: .infinity, minHeight: MenuPanelShape.rowHeight, maxHeight: MenuPanelShape.rowHeight, alignment: .leading)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(MenuRowStyle(index: i, pressed: $pressed, ink: $ink))
+                .disabled(item.disabled)
                 // Where the finger landed, in the panel's space: the ink spreads from there.
                 .simultaneousGesture(DragGesture(minimumDistance: 0, coordinateSpace: .named(MenuPanelShape.space)).onChanged { g in
                     if g.translation == .zero { ink.origin = g.startLocation }
@@ -378,6 +426,11 @@ nonisolated struct MenuPanelShape {
     static let rowHeight: CGFloat = 42
     /// A footer line under the rows is a little shorter than a row.
     static let footerHeight: CGFloat = 38
+
+    /// A panel's height: its rows (and a footer under them).
+    static func height(rows: Int, footer: Bool = false) -> CGFloat {
+        CGFloat(rows) * rowHeight + (footer ? footerHeight : 0)
+    }
     /// The panel's coordinate space, where a row's press is placed.
     static let space = "organicMenuPanel"
     let seed: Double

@@ -9,7 +9,7 @@ import SwiftUI
 /// the split), with the formatting docked on the keyboard while the story has the focus. 下一步
 /// asks for a title, makes sure a new draft is kept, and opens the publish step in the same place
 /// (``PublishStep``): the mirror, the card as a list will show it with its cover, tags, who can see
-/// it and the byline, then 發布 — or 儲存修改 for a live card. The story stays mounted under the
+/// it and under whose name, then 發布 (匿名發布, 儲存, by the audience) — or 儲存修改 for a live card. The story stays mounted under the
 /// step, so its undo history and selection survive the round trip; drafts save themselves a moment
 /// after typing stops, in either step.
 /// A page on the tab's stack like the others: the bar's arrow (or the edge swipe) goes back from the
@@ -48,8 +48,6 @@ struct WriteScreen: View {
     @State private var inTrash: DraftService.OpenedCard?
     @State private var restoringOpened = false
     @State private var restoreOpenedFailed = false
-    /// The anonymous-publishing hint, for this writer's first few visits (counted per visit, as the web).
-    @State private var showsAnonymousHint = false
     /// The publish step has been shown (it stays mounted from then: a cover on its way, the mirror's answer).
     @State private var publishLoaded = false
     /// The format bar is on the keyboard (the story has the focus, or had it a moment ago).
@@ -174,14 +172,14 @@ struct WriteScreen: View {
             }
         }
         #endif
-        showsAnonymousHint = await session.hints?.claim("anonymous-publish") ?? false
     }
 
     // MARK: The bar
 
     private var bar: some View {
         let step = model?.step ?? .write
-        let title = step == .publish ? PublishStep.title(updating: model?.isPublished ?? false)
+        // The publish step's heading follows the audience: 發布這張卡片, or 儲存這張卡片 for a draft kept to its author.
+        let title = step == .publish ? model?.stepTitle ?? L10n.Write.PublishPanel.title
             : model?.title ?? (request.cardId == nil ? L10n.Write.title : (inTrash?.isPublished == true ? L10n.Write.editPublishedTitle : L10n.Write.editTitle))
         return OrganicInlineBar(title, backLabel: step == .publish ? L10n.Write.leaveStay : L10n.App.Nav.back,
                                 scrolled: step == .publish ? scrolledPublish : scrolledWrite) {
@@ -437,7 +435,7 @@ struct WriteScreen: View {
     /// Step 2, in its own scroll (it starts at its top each time it opens; writing keeps its place).
     private func publishStep(_ model: WriteModel) -> some View {
         ScrollView {
-            PublishStep(model: model, inlineHeading: !showsBar, showsAnonymousHint: showsAnonymousHint,
+            PublishStep(model: model, inlineHeading: !showsBar,
                         onBack: { model.stepBack() }, onPickCover: { pickingCover = true },
                         onSubmit: { Task { await submit(model) } },
                         onSecondary: { Task { await secondary(model) } })
@@ -646,15 +644,16 @@ enum CaretFollow {
 /// never the server's, which are English (nor the system's): the card gone (deleted elsewhere) is
 /// that it can't be found; the day's publishing spent (429 `rate_limited`, which trying again today
 /// would only hear again) says so and when it comes back; anything else — offline, the server's
-/// trouble, a refusal the step can't name — is a retry: the publish that didn't happen, or the
-/// changes that weren't saved. (A card without a title is said before anything is sent; one in the
-/// trash is the writer's trashed notice.)
+/// trouble, a refusal the step can't name — is a retry: the publish that didn't happen (the save,
+/// for a draft kept to its author: `saving`), or the changes that weren't saved. (A card without a
+/// title is said before anything is sent; one in the trash is the writer's trashed notice.)
 enum PublishFailure {
-    static func message(_ error: Error, updating: Bool = false) -> String {
+    static func message(_ error: Error, updating: Bool = false, saving: Bool = false) -> String {
         let failure = error as? APIFailure
         if failure?.isNotFound == true { return L10n.Card.NotFound.title }
         // The publish route documents no 429, so the generated client hands it over as an unexpected status.
         if failure?.code == "rate_limited" || failure?.status == 429 { return L10n.Write.PublishPanel.rateLimited }
-        return updating ? L10n.Native.saveError : L10n.Write.PublishPanel.failed
+        if updating { return L10n.Native.saveError }
+        return saving ? L10n.Write.PublishPanel.saveFailed : L10n.Write.PublishPanel.failed
     }
 }
