@@ -10,8 +10,9 @@ import org.junit.Test
  * The writer's bare page talks to the editor island as native/editor/src/island.ts says: the canvas
  * address (`layout=canvas`, the UI's `locale`), what the island posts — how the story is set
  * (`script`, for the title field), where the caret is (`caret`), its height and toolbar state — a
- * type it doesn't know left alone; and the page scrolls only when the caret leaves the band above
- * the keyboard's format bar.
+ * type it doesn't know left alone; the page scrolls only when the caret leaves the band above
+ * the keyboard's format bar; and the story tells the page its caret's line as its focused area, so
+ * a page shrinking under the keyboard keeps that line in view, not the story's top or foot (round 8 §6.4).
  */
 class StoryCanvasTest {
     @Test fun theWritersPageAsksForTheCanvasInTheUisLocale() {
@@ -51,6 +52,32 @@ class StoryCanvasTest {
         assertNull(IslandMessage.parse("""{"type":"selection","from":1}"""))
         assertNull(IslandMessage.parse("not json"))
         assertNull(IslandMessage.parse("""{"no":"type"}"""))
+    }
+
+    @Test fun theStorysFocusedAreaIsItsCaretsLineWithTheBarsKeptClear() {
+        // The caret's line, with what the bars cover above (the bar) and below (the format bar) kept clear of it.
+        assertEquals(300..470, focusedSpan(line = 400..430, touchY = 120, above = 100, below = 40, touchHalf = 20))
+        // Until the island says where the caret is: the line the finger came down on.
+        assertEquals(0..160, focusedSpan(line = null, touchY = 120, above = 100, below = 20, touchHalf = 20))
+        // Neither: an empty line at the story's top, which a page shrinking under the keyboard never scrolls for.
+        assertEquals(0..0, focusedSpan(line = null, touchY = null, above = 100, below = 40, touchHalf = 20))
+    }
+
+    @Test fun aRequestToShowTheWholeStoryShowsItsCaretsLineInstead() {
+        // A view taking the focus, the browser's editable taking it: (nearly) the whole 2000 px story — the caret's line instead.
+        assertEquals(300..470, requestedSpan(top = 0, bottom = 2000, height = 2000, line = 400..430, touchY = 120, above = 100, below = 40, touchHalf = 20))
+        assertEquals(300..470, requestedSpan(top = 100, bottom = 1900, height = 2000, line = 400..430, touchY = null, above = 100, below = 40, touchHalf = 20))
+        // Before the island says where the caret is: the line the finger came down on.
+        assertEquals(0..160, requestedSpan(top = 0, bottom = 2000, height = 2000, line = null, touchY = 120, above = 100, below = 20, touchHalf = 20))
+        // Neither: nothing to scroll to, so the request is dropped.
+        assertNull(requestedSpan(top = 0, bottom = 2000, height = 2000, line = null, touchY = null, above = 100, below = 40, touchHalf = 20))
+    }
+
+    @Test fun aSmallerRequestStandsWithTheBarsKeptClearOfIt() {
+        // The browser's own caret rect (or an accessibility node): as asked, plus what the bars cover.
+        assertEquals(1100..1270, requestedSpan(top = 1200, bottom = 1230, height = 2000, line = 400..430, touchY = null, above = 100, below = 40, touchHalf = 20))
+        // A story not yet laid out (0 high) asks nothing whole of anyone.
+        assertEquals(-100..70, requestedSpan(top = 0, bottom = 30, height = 0, line = null, touchY = null, above = 100, below = 40, touchHalf = 20))
     }
 
     @Test fun thePageScrollsOnlyWhenTheCaretLeavesTheBandItCanSee() {

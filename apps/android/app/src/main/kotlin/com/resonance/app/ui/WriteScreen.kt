@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
@@ -66,6 +67,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -108,11 +111,15 @@ import com.resonance.app.DebugLaunch
 import com.resonance.app.DraftService
 import com.resonance.app.Session
 import com.resonance.design.AppFonts
+import com.resonance.design.BarStatus
 import com.resonance.design.BorderedStoryCard
+import com.resonance.design.ButtonFace
 import com.resonance.design.ButtonVariant
 import com.resonance.design.CoverFrame
 import com.resonance.design.CssText
 import com.resonance.design.EmptyAction
+import com.resonance.design.Grain
+import com.resonance.design.GrainMode
 import com.resonance.design.HeaderEdgeHeight
 import com.resonance.design.LayoutClass
 import com.resonance.design.LocalToasts
@@ -121,6 +128,7 @@ import com.resonance.design.Mixes
 import com.resonance.design.ModalError
 import com.resonance.design.OklchColor
 import com.resonance.design.OrganicButton
+import com.resonance.design.OrganicButtonShape
 import com.resonance.design.OrganicConfirmDialog
 import com.resonance.design.OrganicEmptyState
 import com.resonance.design.OrganicIcon
@@ -130,6 +138,7 @@ import com.resonance.design.OrganicMenuFrom
 import com.resonance.design.OrganicMenuItem
 import com.resonance.design.OrganicModal
 import com.resonance.design.ReadingTextScale
+import com.resonance.design.SaveStateText
 import com.resonance.design.Segment
 import com.resonance.design.SegmentedActionBar
 import com.resonance.design.SketchLoader
@@ -152,17 +161,21 @@ import com.resonance.kit.story.ReadTime
 import com.resonance.kit.story.StoryScripts
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * Writing a card (the web's write page), in two steps (writer.spec). Writing: a bare page — the
- * one-line title and the story, set as the card page will set them (the story's type, at the
- * reading scale), the save line above them, the format bar on the keyboard while the story has the
- * focus — and one 下一步 in the bar (floating at the pane's top end at the split). 下一步 opens 發布這張卡片
- * (儲存這張卡片 kept for yourself, 更新這張卡片 for a live card) in the same place: the mirror, the card
- * as a list will show it with its cover editor in its picture, 標籤, 誰可以看見 (公開 · 匿名公開 ·
- * 只有自己), whether a resonance reaches its original, then 存成草稿，稍後再寫 | 發布 · 匿名發布 · 儲存
- * (捨棄修改 | 儲存修改). The story stays composed under the step,
+ * Writing a card (the web's write page), in two steps (writer.spec, round 8 §2). Writing: a bare
+ * page — the one-line title and the story, set as the card page will set them (the story's type, at
+ * the reading scale), the format bar on the keyboard while the story has the focus — under a bar
+ * that says ← · its short title · how the writing is kept (儲存中⋯ · 已儲存 · 修改已暫存 · 未儲存) …
+ * ✓ (完成; at the split no bar: the ✓ floats at the pane's top end, the state just before it). ✓
+ * opens the second step in the same place — 發布這張卡片, 儲存草稿 with 草稿 chosen, 更新這張卡片 for a
+ * card readers have: the mirror, the card as a list will show it with its cover editor in its
+ * picture, 標籤, 卡片類型 (公開 · 匿名公開 · 草稿), whether a resonance reaches its original, then one
+ * button whose verb follows the card and the choice (發布 · 匿名發布 · 儲存 · 儲存修改 · 轉為草稿; and
+ * 捨棄修改 beside it for a published card's revision). The story stays composed under the step,
  * so its document, undo and selection survive the round trip; everything chosen in the step is the
  * draft's own value and autosaves like the words. Back from the step returns to writing; back from
  * writing with something written asks first.
@@ -189,6 +202,8 @@ fun WriteScreen(
     pane: WriterHandle? = null,
     /** Its own bar and back (a page of its own, or a pane covering the map below the split); false: the split workspace's pane. */
     bar: Boolean = true,
+    /** It began on a new card in this visit, since saved as the draft [cardId] (a rotation, a restored process): still 新卡片. */
+    beganNew: Boolean = false,
     onFinished: (String) -> Unit,
 ) {
     // A new card is saved as a draft as soon as there is something to keep, and its route then names
@@ -228,7 +243,7 @@ fun WriteScreen(
             }
         }
         card.isTrashed -> TrashedWriter(session, card, bar, close) { attempt++ }
-        else -> androidx.compose.runtime.key(card) { WriteForm(session, referenceCardId, null, card, close, onFinished, pane = pane, bar = bar) }
+        else -> androidx.compose.runtime.key(card) { WriteForm(session, referenceCardId, null, card, close, onFinished, pane = pane, bar = bar, beganNew = beganNew) }
     }
 }
 
@@ -275,7 +290,7 @@ private fun TrashedWriter(session: Session, card: DraftService.OpenedCard, bar: 
                 fill = true,
             )
         }
-        if (bar) OrganicInlineBar(L10n.App.Nav.back, close, title = if (card.isPublished) L10n.Write.editPublishedTitle else L10n.Write.editTitle)
+        if (bar) OrganicInlineBar(L10n.App.Nav.back, close, title = writerTitle(editing = true, seen = card.isPublished && card.restoresVisibility != "private"))
     }
 }
 
@@ -293,6 +308,7 @@ private fun WriteForm(
     onCreated: (String) -> Unit = {},
     pane: WriterHandle? = null,
     bar: Boolean = true,
+    beganNew: Boolean = false,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -300,6 +316,7 @@ private fun WriteForm(
     val focusManager = LocalFocusManager.current
     val density = LocalDensity.current
     val trash = LocalTrash.current
+    val toasts = LocalToasts.current
     // The story's island, as the writer's bare page: an empty one in the UI's own type, one opened in its own.
     val bridge = remember(opened) {
         val tag = Strings.language.tag
@@ -314,8 +331,10 @@ private fun WriteForm(
     // The step, kept across a restored process (a new card always starts writing).
     var savedStep by rememberSaveable { mutableStateOf(WriterStep.Write) }
     val model = remember(opened) {
-        WriteModel(session.drafts, session.writing.writerCalls(), referenceCardId, bridge, opened, initialStep = savedStep).apply {
+        WriteModel(session.drafts, session.writing.writerCalls(), referenceCardId, bridge, opened, initialStep = savedStep, beganNew = beganNew).apply {
             this.onCreated = onCreated
+            // A picture for the story that didn't go in is said where the writing is, whatever has scrolled.
+            onStoryPictureError = { toasts.show(it) }
             // What the screens behind the writer read again for once it closes (nothing, if nothing was written).
             onWrote = { id -> session.writerWrote(Session.CardChange(id, this.referenceCardId)) }
             // Debug `writeTitle` / `writeStory` extras fill a new card (screen checks; the emulator's keyboard is slow to drive).
@@ -342,7 +361,11 @@ private fun WriteForm(
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { model.flush() }
     var pickingCard by remember { mutableStateOf(false) }
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { model.setCover(context, it) } }
-    val inlinePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { model.insertImage(context, it) } }
+    // Back from the picker, picked or not, the story has its caret, keyboard and format bar where they were — before the upload ends.
+    val inlinePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        bridge.refocusWhenBack()
+        uri?.let { model.insertImage(context, it) }
+    }
     val images = PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
     // The leave question showing (null: none), as it was asked: its words don't change under the person reading them.
     var confirmingLeave by remember(model) { mutableStateOf<LeaveQuestion?>(null) }
@@ -455,7 +478,7 @@ private fun WriteForm(
         }
     }
 
-    // At the split, how wide the floating 下一步 is: the save line beside it keeps clear of it.
+    // At the split, how wide the floating ✓ and its save state are: a line beside them keeps clear of them.
     var pillWidth by remember(model) { mutableIntStateOf(0) }
     // The keyboard's format bar: while the story has the focus, gone 120 ms after it lets go (a tap on a tool keeps it).
     var docked by remember(model) { mutableStateOf(false) }
@@ -466,9 +489,15 @@ private fun WriteForm(
             docked = false
         }
     }
+    // How tall the docked bar is as drawn (px; 0 while it isn't): its row, its wave, and — the keyboard down — the navigation bar its paper covers.
+    var dockPx by remember(model) { mutableIntStateOf(0) }
+    // What the bar says of the writing after its title (round 8 §2.1): its live region stands from the start.
+    val status = model.saveState?.let { BarStatus(saveStateWord(it), failed = it == SaveState.Failed) }
 
-    BoxWithConstraints(Modifier.fillMaxSize().cream().imePadding()) {
-        val viewport = maxHeight
+    BoxWithConstraints(Modifier.fillMaxSize().cream()) {
+        // The page's whole height, the keyboard up or down: the story's least height follows this, never the keyboard.
+        val page = maxHeight
+        Box(Modifier.fillMaxSize().imePadding()) {
         // Step 1: writing. Composed whatever step shows, so the story keeps its document and selection.
         Box(
             Modifier
@@ -485,7 +514,7 @@ private fun WriteForm(
         ) {
             WritingStep(
                 model, bridge, bar = bar, compact = compactWindow, pad = pad, columnMax = columnMax, scroll = writeScroll,
-                viewport = viewport, docked = docked, pillWidth = pillWidth,
+                page = page, docked = docked, dockPx = if (docked) dockPx else 0, pillWidth = pillWidth,
                 titleFocus = titleFocus, onTitleFocus = { titleFocused = it },
                 onRestore = {
                     scope.launch {
@@ -509,6 +538,7 @@ private fun WriteForm(
         ) {
             PublishStep(
                 session, model, bar = bar, compact = compactWindow, pad = pad, columnMax = columnMax, scroll = publishScroll,
+                status = status,
                 pickCover = { coverPicker.launch(images) },
                 dismissKeyboard = dismissKeyboard,
                 onLeave = leave,
@@ -518,23 +548,20 @@ private fun WriteForm(
                 },
             )
         }
-        // The format bar rides the keyboard (this box stops at it), over the page's foot.
+        // The format bar rides the keyboard (this box stops at it), over the page's foot — its paper on to the
+        // screen's edge when the keyboard is down (StoryFormatBar).
         AnimatedVisibility(
             docked,
-            Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
+            Modifier.align(Alignment.BottomCenter).onSizeChanged { dockPx = it.height },
             enter = fadeIn(tween(120)),
             exit = fadeOut(tween(80)),
         ) {
             StoryFormatBar(
                 bridge,
-                onInsertImage = {
-                    dismissKeyboard()
-                    inlinePicker.launch(images)
-                },
-                onInsertCard = {
-                    dismissKeyboard()
-                    pickingCard = true
-                },
+                // The keyboard stays the story's: the picker takes the window a moment, and the caret, the keyboard
+                // and this bar come back where they were as it closes, picked or not (refocusWhenBack).
+                onInsertImage = { inlinePicker.launch(images) },
+                onInsertCard = { pickingCard = true },
                 uploadingImage = model.uploadingInline,
             )
         }
@@ -542,15 +569,23 @@ private fun WriteForm(
             // Leaving keeps what's written: the draft is saved on the way out.
             if (step == WriterStep.Write) OrganicInlineBar(
                 L10n.App.Nav.back, goBack, title = model.title, scrolled = writeScroll.scrolledPast20(),
-                trailing = { if (model.showsNext) NextButton(model, onPress = goNext) },
+                hasStatus = true, status = status,
+                trailing = { if (model.showsNext) FinishButton(model, onPress = goNext) },
             ) else OrganicInlineBar(
                 L10n.Write.leaveStay, { model.back() }, title = model.stepTitle, scrolled = publishScroll.scrolledPast20(),
+                hasStatus = true, status = status,
             )
         } else if (model.showsNext) {
-            // At the split: no bar — 下一步 floats at the pane's top end, level with the Leave over the map, and never scrolls.
-            Box(Modifier.align(Alignment.TopEnd).padding(top = splitTop(), end = pad).onSizeChanged { pillWidth = it.width }) {
-                NextButton(model, onPress = goNext)
+            // At the split: no bar — ✓ floats at the pane's top end, level with the Leave over the map, the save state
+            // just before it on the same line, and never scrolls.
+            Row(
+                Modifier.align(Alignment.TopEnd).padding(top = splitTop() - (FINISH_BOX - SPLIT_ROW_HEIGHT) / 2, end = pad - (FINISH_BOX - 22.dp) / 2).onSizeChanged { pillWidth = it.width },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SaveStateText(status)
+                FinishButton(model, onPress = goNext)
             }
+        }
         }
     }
 
@@ -571,27 +606,44 @@ private fun WriteForm(
         },
     ) }
 
+    // 插入卡片: the modal takes the window a moment; picked or not, the story has its caret, keyboard and bar back.
     if (pickingCard) OrganicModal(
-        { pickingCard = false }, L10n.Write.Editor.CardModal.title,
+        {
+            pickingCard = false
+            bridge.refocusWhenBack()
+        },
+        L10n.Write.Editor.CardModal.title,
         seed = 53.0, closeLabel = L10n.Write.Editor.CardModal.cancel, maxWidth = 480.dp,
     ) {
         CardPickerContent(session, L10n.Write.Editor.CardModal.title, L10n.Write.Editor.CardModal.subtitle, onPick = { card ->
             pickingCard = false
             bridge.exec("insertCard", mapOf("href" to "/card/${card.slug ?: card.id}", "title" to card.title))
-        }) { pickingCard = false }
+            bridge.refocusWhenBack()
+        }) {
+            pickingCard = false
+            bridge.refocusWhenBack()
+        }
     }
 }
 
-/** 下一步: the one way forward while writing, solid and small; its loader while a new card's first save is on its way. */
+/**
+ * ✓ (完成, round 8 §2.1): the way to the second step — the bar's own bare icon button, the check
+ * glyph at 22; faded and still for a new card with nothing in it, its glyph the small pen loop while a
+ * new card's first save runs past 300 ms before the step opens.
+ */
 @Composable
-private fun NextButton(model: WriteModel, onPress: () -> Unit) {
-    OrganicButton(L10n.Write.next, small = true, enabled = model.nextEnabled, loading = model.nextLoading, onClick = onPress)
+private fun FinishButton(model: WriteModel, onPress: () -> Unit) {
+    OrganicIconButton(IconName.Check, L10n.Write.finish, size = 22.dp, enabled = model.nextEnabled, busy = model.nextLoading, onClick = onPress)
 }
 
+/** The ✓'s hit box (the bar's icon buttons'). */
+private val FINISH_BOX = 48.dp
+
 /**
- * The writing step (writer.spec §1): the save line (or, for a card moved to the trash meanwhile,
- * its line with 還原), the bare title in the card page's title type, then the story — nothing
- * else (a new writer's first card too: no guide stands between them and the page).
+ * The writing step (writer.spec §1): the bare title in the card page's title type, then the story —
+ * nothing else (a new writer's first card too: no guide stands between them and the page). Over the
+ * title only what needs saying: a card moved to the trash meanwhile (its line, with 還原), or a ✓
+ * whose new card couldn't be saved (how the writing is kept is the bar's: [SaveState]).
  */
 @Composable
 private fun WritingStep(
@@ -602,9 +654,12 @@ private fun WritingStep(
     pad: Dp,
     columnMax: Dp,
     scroll: androidx.compose.foundation.ScrollState,
-    viewport: Dp,
+    /** The page's whole height, the keyboard up or down. */
+    page: Dp,
     docked: Boolean,
-    /** At the split, how wide the floating 下一步 is (px): the save line keeps clear of it. */
+    /** The docked bar's height as drawn (px), 0 while it isn't. */
+    dockPx: Int,
+    /** At the split, how wide the floating ✓ and its save state are (px): a line beside them keeps clear of them. */
     pillWidth: Int,
     titleFocus: FocusRequester,
     onTitleFocus: (Boolean) -> Unit,
@@ -613,19 +668,38 @@ private fun WritingStep(
 ) {
     val density = LocalDensity.current
     var viewportCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var viewportPx by remember { mutableIntStateOf(0) }
     var storyCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val top = if (bar) inlineBarTop() else splitTop()
-    val dockedNow by rememberUpdatedState(docked)
-    // The caret above the keyboard's bar: the page scrolls only when the caret's line leaves the band it can see.
+    // What the bars cover of the page, the caret kept clear of it: the bar (or the split's first row) above,
+    // the docked format bar below — by the page's own follow, and by Compose's keep-the-focused-thing-in-view
+    // as the keyboard rises (the story reports its caret's line as its focused area: StoryWebView).
+    val clearAbove = with(density) { (top + CARET_CLEARANCE).roundToPx() }
+    val clearBelow = (if (docked) dockPx.takeIf { it > 0 } ?: with(density) { DOCK_BAR_HEIGHT.roundToPx() } else 0) + with(density) { CARET_CLEARANCE.roundToPx() * 2 }
+    SideEffect { bridge.keepCaretClear(clearAbove, clearBelow) }
+    val clearBelowNow by rememberUpdatedState(clearBelow)
+    // The caret above the keyboard's bar: the page scrolls only when the caret's line leaves the band it can see —
+    // looked at again whenever the caret moves, and once the page has settled after its height or the bar's changed
+    // (the keyboard rising, the bar docking), so a line they covered comes back into the band.
     LaunchedEffect(bridge, top) {
-        snapshotFlow { bridge.caret }.collect { caret ->
-            val vp = viewportCoords?.takeIf { it.isAttached } ?: return@collect
-            val story = storyCoords?.takeIf { it.isAttached } ?: return@collect
-            if (caret == null) return@collect
+        var seen: IslandMessage.Caret? = null
+        snapshotFlow { Triple(bridge.caret, viewportPx, clearBelowNow) }.collectLatest { (caret, _, below) ->
+            if (caret == null) {
+                seen = null
+                return@collectLatest
+            }
+            val moved = caret != seen
+            seen = caret
+            // A caret that moved: a moment for the next word of it (the story taking the focus first says
+            // where its old selection was, then where the finger put it). A page still resizing, or already
+            // scrolling (a finger, Compose's own follow): its end is what counts.
+            delay(if (moved) CARET_MOVE_MS else CARET_SETTLE_MS)
+            snapshotFlow { scroll.isScrollInProgress }.first { !it }
+            val vp = viewportCoords?.takeIf { it.isAttached } ?: return@collectLatest
+            val story = storyCoords?.takeIf { it.isAttached } ?: return@collectLatest
             val storyTop = vp.localPositionOf(story, Offset.Zero).y
             val px = density.density
-            val bandBottom = vp.size.height - (if (dockedNow) DOCK_BAR_HEIGHT.value * px else 0f) - 16 * px
-            val by = caretScroll(storyTop + caret.top * px, storyTop + caret.bottom * px, top.value * px + 8 * px, bandBottom)
+            val by = caretScroll(storyTop + caret.top * px, storyTop + caret.bottom * px, clearAbove.toFloat(), vp.size.height - below.toFloat())
             if (by != 0f) scroll.animateScrollBy(by)
         }
     }
@@ -633,36 +707,49 @@ private fun WritingStep(
         Modifier
             .fillMaxSize()
             .onGloballyPositioned { viewportCoords = it }
+            .onSizeChanged { viewportPx = it.height }
             .onBlankTap(bridge, dismissKeyboard)
             .verticalScroll(scroll)
             .then(if (compact) Modifier else Modifier.fillMaxWidth().wrapContentWidth().widthIn(max = columnMax))
             // The bar lies over the page, so what scrolls shows right up to its pen line.
             .padding(top = top)
-            .padding(start = pad, end = pad, top = if (bar) 16.dp else 0.dp, bottom = 48.dp + if (docked) DOCK_BAR_HEIGHT else 0.dp),
+            .padding(start = pad, end = pad, top = if (bar) 16.dp else 0.dp, bottom = 48.dp)
+            // The page's end clears what covers it: the docked bar, else the system's navigation bar (the keyboard down).
+            .then(if (docked) Modifier.padding(bottom = with(density) { dockPx.toDp() }.coerceAtLeast(DOCK_BAR_HEIGHT)) else Modifier.navigationBarsPadding()),
     ) {
-        // The save line (an unsaved draft has none), level with the floating 下一步 at the split.
-        Box(
+        // At the split, the pane's first row, level with the floating ✓ (a card in the trash's line there, or nothing).
+        val line: (@Composable () -> Unit)? = when {
+            model.trashed -> { { TrashedLine(model, onRestore) } }
+            else -> null
+        }
+        if (!bar || line != null) Box(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = if (bar) 0.dp else SPLIT_ROW_HEIGHT)
                 .padding(end = if (bar) 0.dp else with(density) { pillWidth.toDp() } + 12.dp),
             contentAlignment = Alignment.CenterStart,
-        ) {
-            if (model.trashed) TrashedLine(model, onRestore)
-            else model.saveStatus?.let { BasicText(it, style = AppFonts.body(14f, lineHeight = 1.5f, color = Tokens.TextMuted)) }
-        }
+        ) { line?.invoke() }
         model.saveError?.let {
             Spacer(Modifier.height(6.dp))
             BasicText(it, style = AppFonts.body(13f, lineHeight = 1.5f, color = Mixes.Danger), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive })
         }
-        Spacer(Modifier.height(16.dp))
+        if (!bar || line != null || model.saveError != null) Spacer(Modifier.height(16.dp))
         TitleField(model, bridge, compact, titleFocus, onTitleFocus)
         Spacer(Modifier.height(16.dp))
         Box(Modifier.onGloballyPositioned { storyCoords = it }) {
-            StoryCanvas(bridge, minHeight = maxOf(240.dp, viewport - 320.dp))
+            StoryCanvas(bridge, minHeight = maxOf(240.dp, page - 320.dp))
         }
     }
 }
+
+/** How far the caret's line keeps from what covers the page (the bar over it, the format bar under it). */
+private val CARET_CLEARANCE = 8.dp
+
+/** How long the page waits for its height to settle before it looks where the caret is again (the keyboard's rise). */
+private const val CARET_SETTLE_MS = 90L
+
+/** How long a caret that moved waits for a newer word of where it is (a frame or so) before the page follows it. */
+private const val CARET_MOVE_MS = 48L
 
 /** A card moved to the trash while open here: the save line's place says so, with 還原 beside it. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -754,12 +841,13 @@ internal fun enteredLineBreak(before: String, after: String): Boolean {
 }
 
 /**
- * The publish step (writer.spec §2, round 7 §1): at the split its own first row (← 繼續寫 and its
- * name, which follows the audience: 儲存這張卡片 for 只有自己); a live card's update hint while it is
- * public; the mirror (a first publication only); the card as a list will show it, its picture the
- * cover editor, its byline the one the choice gives; 標籤; 誰可以看見 — 公開 · 匿名公開 · 只有自己 —
- * and its one line; whether a resonance reaches its original; then, under the pen rule, what the
- * verb waits for, why the last try failed, and the foot, its verb following the audience.
+ * The publish step (writer.spec §2, round 8 §2.2–§2.3): at the split its own first row (← 繼續寫, its
+ * name — 發布這張卡片 · 儲存草稿 · 更新這張卡片, by the card and the choice — and the save state at its
+ * end); a live card's update hint while readers have it and keep it; the mirror (a first publication
+ * only); the card as a list will show it, its picture the cover editor, its byline the one the choice
+ * gives; 標籤; 卡片類型 — 公開 · 匿名公開 · 草稿, no line under it (the byline above says it); whether a
+ * resonance reaches its original; then, under the pen rule, what the verb waits for, why the last try
+ * failed, and the foot: one button ([WriteModel.stepVerb]), and 捨棄修改 for a published card's revision.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -771,6 +859,8 @@ private fun PublishStep(
     pad: Dp,
     columnMax: Dp,
     scroll: androidx.compose.foundation.ScrollState,
+    /** The writing's save state, said at the end of the step's own heading at the split (the bar says it elsewhere). */
+    status: BarStatus?,
     pickCover: () -> Unit,
     dismissKeyboard: () -> Unit,
     onLeave: () -> Unit,
@@ -784,8 +874,9 @@ private fun PublishStep(
     var lineComposed by remember { mutableStateOf(false) }
     val mirrorShows = !updating && model.mirror.let { it is Mirror.Loading || it is Mirror.Shown }
     // A phone's band under the bar may be the first thing there; with nothing above it, it is the feed's first card.
-    val tucks = bar && compact && !updating
-    val underBar = bandUnderBar(bar, compact, updating, mirrorOnScreen = mirrorShows || lineComposed)
+    val hint = model.showsUpdateHint
+    val tucks = bar && compact && !hint
+    val underBar = bandUnderBar(bar, compact, hint, mirrorOnScreen = mirrorShows || lineComposed)
     // Every section keeps its gap above it, so one that folds away (the mirror with nothing to say) takes its gap along.
     Column(
         Modifier
@@ -797,7 +888,7 @@ private fun PublishStep(
             .padding(start = pad, end = pad, top = if (bar && !tucks) 16.dp else 0.dp, bottom = 48.dp),
     ) {
         if (!bar) {
-            StepHeading(model)
+            StepHeading(model, status)
             Spacer(Modifier.height(STEP_GAP))
         }
         if (model.showsUpdateHint) {
@@ -816,7 +907,7 @@ private fun PublishStep(
             Spacer(Modifier.height(STEP_GAP))
             Tags(model, dismissKeyboard)
             Spacer(Modifier.height(STEP_GAP))
-            AudienceChoice(session, model)
+            AudienceChoice(model)
             model.resonanceLine?.let { line ->
                 Spacer(Modifier.height(STEP_GAP))
                 Row(
@@ -848,22 +939,25 @@ private fun PublishStep(
             StepFoot(
                 compact = compact,
                 verb = model.verb,
-                verbBusyLabel = if (updating) L10n.Write.saveShort else null,
-                wayOut = if (!model.showsWayOut) null else if (updating) L10n.Write.discardChanges else L10n.Write.saveDraftAndLeave,
+                verbBusyLabel = model.verbBusyLabel,
+                wayOut = if (model.showsWayOut) L10n.Write.discardChanges else null,
                 verbLoading = pending && model.busyVerb == BusyVerb.Publish,
                 verbEnabled = !model.verbWaits && !(pending && model.busyVerb != BusyVerb.Publish),
                 wayOutLoading = pending && model.busyVerb == BusyVerb.Leave,
                 wayOutEnabled = !(pending && model.busyVerb != BusyVerb.Leave),
                 onVerb = {
                     dismissKeyboard()
-                    scope.launch { (if (updating) model.applyEdit() else model.publish())?.let(onFinished) }
+                    scope.launch {
+                        when (val done = model.finish()) {
+                            is StepDone.Page -> onFinished(done.key)
+                            StepDone.Leave -> onLeave()
+                            null -> {}
+                        }
+                    }
                 },
                 onWayOut = {
                     dismissKeyboard()
-                    scope.launch {
-                        if (updating) model.discardEdit()?.let(onFinished)
-                        else if (model.saveForLater()) onLeave()
-                    }
+                    scope.launch { model.discardEdit()?.let(onFinished) }
                 },
             )
         }
@@ -877,20 +971,23 @@ private val STEP_GAP = 28.dp
  * Whether the publish step's card band is the first thing under the writer's bar, and so drawn as
  * the home feed's first card is (StoryCard `isFirst`): its paper running up under the bar's wave,
  * the bar's pen line its top edge — not a rule of its own just below that line. Only a phone's band
- * ([compact]) under the bar (at the split the step's heading leads), for a first publication (a
- * live card's update hint stands above it), with no mirror line on screen — asked, answered or still
+ * ([compact]) under the bar (at the split the step's heading leads), with no update [hint] above it
+ * (a card readers have, which keeps them) and no mirror line on screen — asked, answered or still
  * folding away.
  */
-internal fun bandUnderBar(bar: Boolean, compact: Boolean, updating: Boolean, mirrorOnScreen: Boolean): Boolean =
-    bar && compact && !updating && !mirrorOnScreen
+internal fun bandUnderBar(bar: Boolean, compact: Boolean, hint: Boolean, mirrorOnScreen: Boolean): Boolean =
+    bar && compact && !hint && !mirrorOnScreen
 
 /** At the split, the pane's first row: as tall as the floating pill and the Leave over the map. */
 private val SPLIT_ROW_HEIGHT = 38.dp
 
-/** At the split, the step's own first row: ← 繼續寫 and its name (22/1.2 bold, the bar title's style), level with the Leave. */
+/**
+ * At the split, the step's own first row: ← 繼續寫 and its name (22/1.2 bold, the bar title's style),
+ * level with the Leave, and the writing's save state at its end (no bar says it there).
+ */
 @Composable
-private fun StepHeading(model: WriteModel) {
-    Row(Modifier.heightIn(min = SPLIT_ROW_HEIGHT).padding(start = 0.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun StepHeading(model: WriteModel, status: BarStatus?) {
+    Row(Modifier.fillMaxWidth().heightIn(min = SPLIT_ROW_HEIGHT).padding(start = 0.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.layout { measurable, constraints ->
             // The arrow's 48 hit box hangs into the pad and over the row's 38 (its glyph on the column's
             // edge, level with the Leave's), the row keeping the Leave's height.
@@ -901,7 +998,9 @@ private fun StepHeading(model: WriteModel) {
             OrganicIconButton(IconName.ArrowRight, L10n.Write.leaveStay, mirrored = true) { model.back() }
         }
         Spacer(Modifier.widthIn(min = 4.dp))
-        BasicText(model.stepTitle, style = AppFonts.heading(22f, 700, lineHeight = 1.2f), modifier = Modifier.semantics { heading() })
+        BasicText(model.stepTitle, style = AppFonts.heading(22f, 700, lineHeight = 1.2f), modifier = Modifier.weight(1f).semantics { heading() })
+        Spacer(Modifier.width(12.dp))
+        SaveStateText(status)
     }
 }
 
@@ -948,8 +1047,8 @@ private fun MirrorLine(mirror: Mirror?, reduced: Boolean, lead: Dp = 0.dp, onCom
  * The card as a list will show it, from what is on screen (writer.spec §2.1.3): a phone's feed band
  * edge to edge — the first card under the bar when nothing stands above it ([underBar]) — a wider
  * window's bordered card at most 360, start-aligned — the viewer's byline, or the anonymous one —
- * its picture the cover editor ([CoverSlot]), edited where it is: nothing under it but, while there
- * is one, why the last picture didn't work. 卡片在列表裡的樣子 is what TalkBack calls it, not a caption.
+ * its picture the cover editor ([CoverSlot]), edited where it is, and where its picture's trouble is
+ * said: nothing under it (round 8 §3). 卡片在列表裡的樣子 is what TalkBack calls it, not a caption.
  */
 @Composable
 private fun Preview(session: Session, model: WriteModel, compact: Boolean, pad: Dp, underBar: Boolean, pickCover: () -> Unit, dismissKeyboard: () -> Unit) {
@@ -959,10 +1058,6 @@ private fun Preview(session: Session, model: WriteModel, compact: Boolean, pad: 
         Box(Modifier.semantics { contentDescription = L10n.Write.previewCaption }) {
             if (compact) StoryCard(content, 0, isLast = true, modifier = Modifier.bleed(pad), isFirst = underBar, inset = pad + 18.dp, cover = cover, preview = true)
             else BorderedStoryCard(content, 0, Modifier.widthIn(max = 360.dp), cover = cover, preview = true)
-        }
-        model.mediaError?.let {
-            Spacer(Modifier.height(8.dp))
-            BasicText(it, style = AppFonts.body(12f, lineHeight = 1.5f, color = Mixes.Danger), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         }
     }
 }
@@ -989,10 +1084,13 @@ internal fun previewContent(model: WriteModel, me: com.resonance.api.models.Me?)
 
 /**
  * The preview's picture as the cover editor (StoryCard's cover slot): no cover — the card's stripes
- * with 加一張圖片 · 生成圖片 (the second waiting for a story); a photo going up — the loader; an
+ * with 加一張圖片 · 生成圖片 (the second waiting for a story), and under them why the last picture
+ * didn't work, in the error ink, in place of the hint (round 8 §3); a photo going up — the loader; an
  * illustration painting — its rough pass blurred under a cream wash, and the loader; a cover — the
- * picture, with one 更換封面 chip on its bottom end corner ([CoverMenu]) — no ✕, and nothing more
- * under the card: the picture is where it is changed.
+ * picture, with one 更換封面 chip on its bottom end corner ([CoverMenu]) and, when a replacement or a
+ * drawing failed, a paper chip on its top start corner saying why ([CoverErrorChip]) — no ✕, and
+ * nothing under the card: the picture is where it is changed, and where its trouble is said. Its
+ * next action (pick, draw, remove) takes the trouble away.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1031,7 +1129,13 @@ private fun BoxScope.CoverSlot(frame: CoverFrame, model: WriteModel, pickCover: 
                                 model.generateCover()
                             }
                         }
-                        if (model.values.story.isBlank()) {
+                        val error = model.mediaError
+                        if (error != null) BasicText(
+                            error,
+                            style = AppFonts.body(12f, lineHeight = 1.4f, color = Mixes.Danger).copy(textAlign = TextAlign.Center),
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        )
+                        else if (model.values.story.isBlank()) {
                             BasicText(L10n.Write.mediaGenerateNeedStory, style = AppFonts.body(12f, lineHeight = 1.4f, color = Tokens.TextMuted).copy(textAlign = TextAlign.Center))
                         }
                     }
@@ -1039,9 +1143,44 @@ private fun BoxScope.CoverSlot(frame: CoverFrame, model: WriteModel, pickCover: 
             }
         },
     )
-    if (url != null && !busy) Box(Modifier.align(Alignment.BottomEnd).padding(10.dp)) {
-        CoverMenu(model, frame.seed, pickCover, dismissKeyboard)
+    if (url != null && !busy) {
+        Box(Modifier.align(Alignment.BottomEnd).padding(10.dp)) {
+            CoverMenu(model, frame.seed, pickCover, dismissKeyboard)
+        }
+        model.mediaError?.let { error ->
+            BoxWithConstraints(Modifier.matchParentSize().padding(10.dp), contentAlignment = Alignment.TopStart) {
+                CoverErrorChip(error, maxWidth = maxWidth * 0.7f, seed = frame.seed + 17)
+            }
+        }
     }
+}
+
+/**
+ * Why a cover's replacement (or its drawing) didn't work, on the cover that stayed (round 8 §3): the
+ * 更換封面 chip's sibling — the same paper pill with its hand-drawn edge and grain — in the error
+ * ink, its words wrapping within [maxWidth] (70 % of the picture). Not a control: TalkBack reads it
+ * politely as it comes.
+ */
+@Composable
+private fun CoverErrorChip(text: String, maxWidth: Dp, seed: Double) {
+    val face = remember { ButtonFace.of(ButtonVariant.Paper) }
+    val shape = remember(seed) { OrganicButtonShape(seed) }
+    BasicText(
+        text,
+        style = AppFonts.body(13f, 600, lineHeight = 1.35f, color = Mixes.Danger),
+        modifier = Modifier
+            .widthIn(max = maxWidth)
+            .drawWithCache {
+                val o = shape.createOutline(size, layoutDirection, this)
+                val grain = Grain.brush(GrainMode.Tile, face.grainTile, size, density, face.grainAlpha)
+                onDrawBehind {
+                    drawOutline(o, face.fill)
+                    grain?.let { drawOutline(o, it, alpha = face.grainAlpha) }
+                }
+            }
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+    )
 }
 
 /**
@@ -1071,8 +1210,8 @@ private fun StepLabel(text: String) {
 
 /**
  * 標籤 (CardEditor's TagField): one field holding the chosen tags, the input and its one action (AI
- * suggestions, or Add once something is typed), and under it a muted line on how — the error in its
- * place when there is one. Tags show in the preview at once.
+ * suggestions, or Add once something is typed) — and under it nothing but an error, when there is one
+ * (round 8 §2.2: no help line). Tags show in the preview at once.
  */
 @Composable
 private fun Tags(model: WriteModel, dismissKeyboard: () -> Unit) {
@@ -1093,25 +1232,27 @@ private fun Tags(model: WriteModel, dismissKeyboard: () -> Unit) {
                     model.suggestTags()
                 },
             )
-            val error = model.tagError
-            BasicText(
-                error ?: L10n.Write.tagsHelp,
-                style = AppFonts.body(Tokens.HintSize, lineHeight = 1.5f, color = if (error != null) Tokens.Terracotta else Tokens.TextMuted),
-            )
+            model.tagError?.let { error ->
+                BasicText(
+                    error,
+                    style = AppFonts.body(Tokens.HintSize, lineHeight = 1.5f, color = Tokens.Terracotta),
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            }
         }
     }
 }
 
 /**
- * 誰可以看見 (round 7 §1.1): who reads the card and under whose name as one segmented choice —
- * 公開 · 匿名公開 · 只有自己 — with no pen line (its options are buttons): a quiet paper-dark track
- * shows the control's extent, the chosen side wears the tonal peach with the deep label (4.8:1), the
- * others a muted ink deep enough to read on the track. Under it one muted line saying what the
- * choice means — the preview above already wears the byline it gives. A card kept for connections
- * only (older ones) shows none chosen, and keeps its audience until one is.
+ * 卡片類型 (round 8 §2.2): what the card is, as one segmented choice — 公開 · 匿名公開 · 草稿 — with
+ * no pen line (its options are buttons): a quiet paper-dark track shows the control's extent, the
+ * chosen side wears the tonal peach with the deep label (4.8:1), the others a muted ink deep enough
+ * to read on the track. No line under it: the preview's byline above follows the choice (匿名 with
+ * the「·」avatar). A card kept for connections only (older ones) shows none chosen, and keeps its
+ * audience until one is.
  */
 @Composable
-private fun AudienceChoice(session: Session, model: WriteModel) {
+private fun AudienceChoice(model: WriteModel) {
     val chosen = model.audience
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         StepLabel(L10n.Write.Visibility.label)
@@ -1129,19 +1270,14 @@ private fun AudienceChoice(session: Session, model: WriteModel) {
             fill = Tokens.CreamDark,
             enabled = !model.pending,
         )
-        BasicText(
-            audienceLine(chosen, session.me?.handle.orEmpty()),
-            style = AppFonts.body(Tokens.HintSize, lineHeight = 1.5f, color = Tokens.TextMuted),
-            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-        )
     }
 }
 
-/** A choice's words in 誰可以看見. */
+/** A choice's words in 卡片類型: 公開 · 匿名公開 · 草稿. */
 internal fun audienceLabel(audience: Audience): String = when (audience) {
     Audience.Public -> L10n.Write.Visibility.public
     Audience.Anonymous -> L10n.Write.Visibility.anonymous
-    Audience.Private -> L10n.Write.Visibility.private
+    Audience.Private -> L10n.Write.Visibility.draft
 }
 
 private fun audienceIcon(audience: Audience): IconName = when (audience) {
@@ -1150,18 +1286,10 @@ private fun audienceIcon(audience: Audience): IconName = when (audience) {
     Audience.Private -> IconName.Lock
 }
 
-/** The one line under the choice, saying what it means (null: kept for connections, none chosen); [handle] signs a public card. */
-internal fun audienceLine(audience: Audience?, handle: String): String = when (audience) {
-    Audience.Public -> L10n.Write.Visibility.publicLine(handle)
-    Audience.Anonymous -> L10n.Write.Visibility.anonymousLine
-    Audience.Private -> L10n.Write.Visibility.privateLine
-    null -> L10n.Write.Visibility.connectionsLine
-}
-
 /**
- * The step's foot: the way out tonal, the verb solid and rightmost — on a phone (a compact window,
- * the web's ≤ 640) the verb across the width on top and the way out under it, 10 apart. While one
- * works it shows its loader and the other rests.
+ * The step's foot: its one button solid and rightmost, and — only for a published card's revision —
+ * 捨棄修改 tonal beside it; on a phone (a compact window, the web's ≤ 640) the verb across the width
+ * on top and 捨棄修改 under it, 10 apart. While one works it shows its loader and the other rests.
  */
 @Composable
 private fun StepFoot(

@@ -34,32 +34,36 @@ class PublishErrorTest {
             ApiFailure("internal", "Something went wrong.", 500),
             ApiFailure("unexpected", "HTTP 502", 502),
         )
-        for (e in refusals) assertEquals("沒發布成功，再試一次", publishError(e, updating = false))
-        assertEquals("沒發布成功，再試一次", publishError(IOException("Unable to resolve host"), updating = false))
+        for (e in refusals) assertEquals("沒發布成功，再試一次", publishError(e, StepVerb.Publish))
+        assertEquals("沒發布成功，再試一次", publishError(IOException("Unable to resolve host"), StepVerb.Publish))
     }
 
     @Test fun theDaysPublishingUsedUpSaysToComeBackTomorrow() {
         // POST …/publish spends the `publish` budget (30 a day): trying again now would be refused again.
-        assertEquals("今天的次數用完了，明天再試", publishError(ApiFailure("rate_limited", "Too many requests.", 429), updating = false))
+        assertEquals("今天的次數用完了，明天再試", publishError(ApiFailure("rate_limited", "Too many requests.", 429), StepVerb.Publish))
         // By the code alone (a proxy's status lost) or the status alone (an older server's code).
-        assertEquals("今天的次數用完了，明天再試", publishError(ApiFailure("rate_limited", "Too many requests.", null), updating = false))
-        assertEquals("今天的次數用完了，明天再試", publishError(ApiFailure("unexpected", "HTTP 429", 429), updating = true))
+        assertEquals("今天的次數用完了，明天再試", publishError(ApiFailure("rate_limited", "Too many requests.", null), StepVerb.Publish))
+        assertEquals("今天的次數用完了，明天再試", publishError(ApiFailure("unexpected", "HTTP 429", 429), StepVerb.Update))
     }
 
     @Test fun savingChangesThatFailSaysTheyDidntSave() {
-        assertEquals("沒存成，再試一次", publishError(ApiFailure("internal", "Something went wrong.", 500), updating = true))
-        assertEquals("沒存成，再試一次", publishError(IOException("timeout"), updating = true))
+        assertEquals("沒儲存成功，再試一次", publishError(ApiFailure("internal", "Something went wrong.", 500), StepVerb.Update))
+        assertEquals("沒儲存成功，再試一次", publishError(IOException("timeout"), StepVerb.Update))
+        // Every verb but a publish is a save: 儲存, 轉為草稿.
+        assertEquals("沒儲存成功，再試一次", publishError(IOException("timeout"), StepVerb.Save))
+        assertEquals("沒儲存成功，再試一次", publishError(IOException("timeout"), StepVerb.MakeDraft))
+        assertEquals("沒發布成功，再試一次", publishError(IOException("timeout"), StepVerb.PublishAnonymously))
     }
 
     @Test fun aCardGoneSaysItCantBeFound() {
-        assertEquals("找不到這張卡片", publishError(ApiFailure("not_found", "No such card.", 404), updating = false))
-        assertEquals("找不到這張卡片", publishError(ApiFailure("not_found", "No such card.", null), updating = true))
+        assertEquals("找不到這張卡片", publishError(ApiFailure("not_found", "No such card.", 404), StepVerb.Publish))
+        assertEquals("找不到這張卡片", publishError(ApiFailure("not_found", "No such card.", null), StepVerb.Update))
     }
 
     @Test fun inEnglishToo() {
         Strings.language = Strings.Language.En
-        assertEquals("Couldn't publish — try again", publishError(ApiFailure("internal", "Something went wrong.", 500), updating = false))
-        assertEquals("That's the limit for today — try again tomorrow", publishError(ApiFailure("rate_limited", "Too many requests.", 429), updating = false))
+        assertEquals("Couldn't publish — try again", publishError(ApiFailure("internal", "Something went wrong.", 500), StepVerb.Publish))
+        assertEquals("That's the limit for today — try again tomorrow", publishError(ApiFailure("rate_limited", "Too many requests.", 429), StepVerb.Publish))
     }
 
     @Test fun droppingARevisionThatFailsSaysItDidntGoThrough() {

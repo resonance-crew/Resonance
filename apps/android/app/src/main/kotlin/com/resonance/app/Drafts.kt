@@ -131,11 +131,16 @@ class DraftService(private val uid: String) : DraftStore {
         /** Who reads a published card now, and under whose name (its pending edit may say otherwise). */
         val liveVisibility: String = values.visibility,
         val liveAnonymous: Boolean = values.anonymous,
+        /** Who it was for before the trash made it private (`trashedFrom.visibility`), while it is there. */
+        val trashedFromVisibility: String? = null,
     ) {
         /** Where it lives once published: the slug, or the id. */
         val routeKey: String get() = slug ?: id
 
         val isTrashed: Boolean get() = trashedAt != null
+
+        /** Who reads it once it is out of the trash (or now, out of it): the trash keeps it private meanwhile. */
+        val restoresVisibility: String get() = trashedFromVisibility ?: liveVisibility
     }
 
     /**
@@ -180,6 +185,7 @@ class DraftService(private val uid: String) : DraftStore {
                 trashedAt = trashedAt,
                 liveVisibility = live.visibility,
                 liveAnonymous = live.anonymous,
+                trashedFromVisibility = if (trashedAt == null) null else (data["trashedFrom"] as? Map<*, *>)?.get("visibility") as? String,
             )
         }
 

@@ -10,9 +10,9 @@ import java.io.File
 /**
  * An anonymous card is public or only its author's — never for connections only, which would say
  * whose it is — so turning a card kept for connections anonymous in the publish panel makes it
- * public; under a name, every audience stands. 誰可以看見 says what each of its three means in one
- * line (a card kept for connections: its own), and a private anonymous card's ⋯ says it comes back
- * anonymous.
+ * public; under a name, every audience stands. 卡片類型's three are 公開 · 匿名公開 · 草稿, with no
+ * line under them (round 8 §2.2), and the ⋯'s one visibility row turns a card readers have into a
+ * 草稿 (round 8 §1.2).
  */
 class PublishVisibilityTest {
     private val language = Strings.language
@@ -37,18 +37,12 @@ class PublishVisibilityTest {
         assertEquals("private", anonymousVisibility("private", anonymous = false))
     }
 
-    @Test fun theThreeChoicesAndTheLineUnderThem() {
-        assertEquals(listOf("公開", "匿名公開", "只有自己"), Audience.entries.map(::audienceLabel))
-        assertEquals("所有人都看得到，署名 alice", audienceLine(Audience.Public, "alice"))
-        assertEquals("所有人都看得到，但不會知道是你寫的", audienceLine(Audience.Anonymous, "alice"))
-        assertEquals("不公開，只有你看得到", audienceLine(Audience.Private, "alice"))
-        assertEquals("只有連結的人看得到", audienceLine(null, "alice"))
+    @Test fun theThreeChoicesAreWhatTheCardIs() {
+        assertEquals(listOf("公開", "匿名公開", "草稿"), Audience.entries.map(::audienceLabel))
+        assertEquals("卡片類型", com.resonance.kit.l10n.L10n.Write.Visibility.label)
     }
 
-    @Test fun aPrivateAnonymousCardsMenuSaysItComesBackAnonymous() {
-        assertEquals("轉為匿名公開", visibilityAction(isPrivate = true, anonymous = true))
-        assertEquals("轉為公開", visibilityAction(isPrivate = true, anonymous = false))
-        assertEquals("轉為私人", visibilityAction(isPrivate = false, anonymous = true))
-        assertEquals("轉為私人", visibilityAction(isPrivate = false, anonymous = false))
+    @Test fun theMenusVisibilityRowMakesACardReadersHaveADraft() {
+        assertEquals("轉為草稿", com.resonance.kit.l10n.L10n.Me.Actions.makePrivate)
     }
 }
