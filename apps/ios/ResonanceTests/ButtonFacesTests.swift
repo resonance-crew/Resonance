@@ -1,6 +1,7 @@
 import DesignSystem
 import SwiftUI
 import Testing
+import UIKit
 
 /// Every button has a fill and none draws a pen line (the owner's rule, as on the web): the verb
 /// solid, everything beside it tonal, the way into a deletion a soft red, its final confirm solid
@@ -29,5 +30,24 @@ import Testing
         #expect(OrganicButtonFace.of(.tonal).seed == 601 && OrganicButtonFace.of(.dangerTonal).seed == 601)
         // Every face carries the buttons' grain but the paper, which carries the cards'.
         #expect(OrganicButtonFace.of(.tonal).grain == "grain-button" && OrganicButtonFace.of(.paper).grain == "grain-card")
+    }
+
+    /// At work, a button keeps its idle size exactly (the web's OrganicButton): the loop stands in
+    /// a glyph's place or beside the words, which move over for it — nothing next to it moves.
+    @Test func aButtonAtWorkKeepsItsIdleSize() {
+        func size(_ button: OrganicButton) -> CGSize {
+            UIHostingController(rootView: button.fixedSize()).sizeThatFits(in: CGSize(width: 1000, height: 1000))
+        }
+        let buttons: [OrganicButton] = [
+            OrganicButton("發布", variant: .solid, size: .sm) {},
+            OrganicButton("Publish", variant: .solid, size: .md) {},
+            // The shorter word while it works, in the label's room (the publish step's 儲存修改).
+            OrganicButton("儲存修改", variant: .solid, size: .sm) {}.workingLabel("儲存"),
+            OrganicButton("AI 建議", icon: .sparkle, variant: .tonal, size: .sm) {},
+            OrganicButton(icon: .pen, label: "Edit") {},
+        ]
+        for button in buttons {
+            #expect(size(button.loading(true)) == size(button.loading(false)))
+        }
     }
 }

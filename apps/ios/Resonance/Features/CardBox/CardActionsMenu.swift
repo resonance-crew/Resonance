@@ -40,7 +40,7 @@ enum TrashFeedback: Equatable {
     case toast, page
 }
 
-/// The owner's ⋯ on a card (CardActionsMenu.tsx): 編輯 / 轉為公開·私人 /
+/// The owner's ⋯ on a card (CardActionsMenu.tsx): 編輯 / 轉為公開·私人 (a published card) /
 /// 取消共振 (a card that resonates with another) / 刪除, in the shared
 /// OrganicMenu. 刪除 moves the card to the trash, where it waits 30 days:
 /// no dialog except the one ``TrashDecision`` asks — the toast's 復原 and the
@@ -65,7 +65,7 @@ struct CardActionsMenu: View {
     var answeringTitle: String?
     /// Whether the original it answers is anonymous, when the page knows (else looked up when 刪除 needs it).
     var answeringAnonymous: Bool?
-    /// Published (a draft takes nothing back), and under the writer's name or not.
+    /// Published (a draft takes nothing back, and has no 轉為公開·私人), and under the writer's name or not.
     var isPublished = false
     var anonymous = false
     /// What the undo toast names.
@@ -131,23 +131,38 @@ struct CardActionsMenu: View {
     /// 「不再與〈title〉共振？」 — or the plain words when the title can't be read.
     private var unresonateTitle: String { asked.heading }
 
+    /// The ⋯'s rows, in order.
+    nonisolated enum Row: Equatable {
+        case edit, visibility, unresonate, delete
+    }
+
+    /// 編輯, 轉為公開·私人 — not on a draft: nothing is published from here, its audience is chosen
+    /// in the writer's publish step (公開 · 匿名公開 · 只有自己) — 取消共振 on a resonance, 刪除.
+    static func rows(published: Bool, answering: Bool) -> [Row] {
+        [.edit] + (published ? [.visibility] : []) + (answering ? [.unresonate] : []) + [.delete]
+    }
+
     private var items: [OrganicMenuItem] {
-        [
-            OrganicMenuItem(id: "edit", title: L10n.Me.Actions.edit, icon: .pen) { writer.edit(cardId, showsCard: showsCardAfterEdit) },
-            OrganicMenuItem(id: "visibility", title: visibilityLabel, icon: isPrivate ? .globe : .lock) { Task { await toggleVisibility() } },
-        ] + (answering == nil ? [] : [
-            OrganicMenuItem(id: "unresonate", title: L10n.Me.Actions.unresonate, icon: .wave) {
-                failed = false
-                // The title before the question shows, when the page or the session has it; else it is asked for,
-                // the heading held back meanwhile — never words that change under the reader.
-                asked.open(page: answeringTitle, kept: answering.flatMap { session.cardPreviews.card(for: $0)?.title })
-                unresonating = true
-            },
-        ]) + [
-            OrganicMenuItem(id: "delete", title: L10n.Me.Actions.delete, icon: .trash, danger: true) {
-                Task { await delete() }
-            },
-        ]
+        Self.rows(published: isPublished, answering: answering != nil).map { row in
+            switch row {
+            case .edit:
+                OrganicMenuItem(id: "edit", title: L10n.Me.Actions.edit, icon: .pen) { writer.edit(cardId, showsCard: showsCardAfterEdit) }
+            case .visibility:
+                OrganicMenuItem(id: "visibility", title: visibilityLabel, icon: isPrivate ? .globe : .lock) { Task { await toggleVisibility() } }
+            case .unresonate:
+                OrganicMenuItem(id: "unresonate", title: L10n.Me.Actions.unresonate, icon: .wave) {
+                    failed = false
+                    // The title before the question shows, when the page or the session has it; else it is asked for,
+                    // the heading held back meanwhile — never words that change under the reader.
+                    asked.open(page: answeringTitle, kept: answering.flatMap { session.cardPreviews.card(for: $0)?.title })
+                    unresonating = true
+                }
+            case .delete:
+                OrganicMenuItem(id: "delete", title: L10n.Me.Actions.delete, icon: .trash, danger: true) {
+                    Task { await delete() }
+                }
+            }
+        }
     }
 
     private var visibilityLabel: String { Self.visibilityLabel(private: isPrivate, anonymous: anonymous) }
