@@ -92,7 +92,7 @@ struct ResonatePickerContent: View {
                     }
                     .padding(.horizontal, 6).padding(.top, 6)
                 } else {
-                    PickSkeleton()
+                    CardPickSkeleton(rows: 3)
                 }
             }
             if let failure {
@@ -210,20 +210,3 @@ private struct WriteNewStyle: ButtonStyle {
 }
 
 /// The rows' footprint while the shelf is read: plain blocks, nothing drawn before it is measured.
-private struct PickSkeleton: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            ForEach(0..<3, id: \.self) { i in
-                HStack(spacing: 12) {
-                    SkeletonBlock(width: 40, height: 40, radius: 12)
-                    VStack(alignment: .leading, spacing: 7) {
-                        SkeletonBlock(fraction: 0.7 - Double(i) * 0.12, height: 14)
-                        SkeletonBlock(width: 64, height: 11)
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, 6).padding(.top, 10).padding(.bottom, 6)
-        .accessibilityHidden(true)
-    }
-}

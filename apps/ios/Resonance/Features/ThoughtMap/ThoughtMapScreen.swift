@@ -80,15 +80,19 @@ struct ThoughtMapScreen: View {
         }
     }
 
-    /// A card of mine opens in the writer (a published one with its pending edit); a
-    /// card I resonated with opens on its page.
+    /// Below the split: a card of mine opens in the writer (a published one with its pending edit) —
+    /// a 私人卡 on its page (round 9 §1), where its owner reads it and 編輯 is a tap away; a card I
+    /// resonated with opens on its page. (At the split every card of mine opens in the pane, `openCard`.)
     private func open(_ card: MapCard) {
-        if card.authorId == session.uid {
+        if card.authorId == session.uid, !Self.isPrivate(card) {
             writer.edit(card.id, showsCard: false)
         } else {
             openRoute(.card(card.slug ?? card.id))
         }
     }
+
+    /// A 私人卡: never published, or published and kept private.
+    static func isPrivate(_ card: MapCard) -> Bool { card.publishedAt == nil || card.visibility == "private" }
 
     @ViewBuilder private func chrome(insets: EdgeInsets, size: CGSize) -> some View {
         let top = insets.top + 8
