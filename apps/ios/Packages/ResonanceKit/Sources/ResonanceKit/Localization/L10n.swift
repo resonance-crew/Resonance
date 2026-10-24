@@ -367,6 +367,8 @@ public enum L10n {
             public static func message(handle: String) -> String { Strings.shared.format("app.notifications.message", ["handle": handle]) }
             /// Shared a card
             public static var messageCard: String { Strings.shared.string("app.notifications.messageCard") }
+            /// Sent a photo
+            public static var messageImage: String { Strings.shared.string("app.notifications.messageImage") }
             /// Unread
             public static var unread: String { Strings.shared.string("app.notifications.unread") }
             /// An invite expired
@@ -419,6 +421,10 @@ public enum L10n {
         public enum Recommended {
             /// The insights you write decide which stories find you
             public static var hint: String { Strings.shared.string("home.recommended.hint") }
+            /// Today's picks are in
+            public static var arrived: String { Strings.shared.string("home.recommended.arrived") }
+            /// See them
+            public static var arrivedAction: String { Strings.shared.string("home.recommended.arrivedAction") }
         }
         public enum ColdStart {
             /// Your first card becomes the point this world starts arranging itself around
@@ -678,6 +684,22 @@ public enum L10n {
         public static var removeCard: String { Strings.shared.string("messages.removeCard") }
         /// Shared a card
         public static var cardShared: String { Strings.shared.string("messages.cardShared") }
+        /// Attach a photo or a card
+        public static var attach: String { Strings.shared.string("messages.attach") }
+        /// Photo
+        public static var attachImage: String { Strings.shared.string("messages.attachImage") }
+        /// Card
+        public static var attachCardShort: String { Strings.shared.string("messages.attachCardShort") }
+        /// Remove photo
+        public static var removeImage: String { Strings.shared.string("messages.removeImage") }
+        /// Sent a photo
+        public static var imageShared: String { Strings.shared.string("messages.imageShared") }
+        /// A photo
+        public static var replyImage: String { Strings.shared.string("messages.replyImage") }
+        /// View photo
+        public static var openImage: String { Strings.shared.string("messages.openImage") }
+        /// This kind of image isn't supported
+        public static var imageUnsupported: String { Strings.shared.string("messages.imageUnsupported") }
         /// Share one of your cards
         public static var pickCard: String { Strings.shared.string("messages.pickCard") }
         /// Share one of your published cards in this conversation
@@ -918,6 +940,8 @@ public enum L10n {
         public static var mediaGeneratedLabel: String { Strings.shared.string("write.mediaGeneratedLabel") }
         /// How the card looks in a list
         public static var previewCaption: String { Strings.shared.string("write.previewCaption") }
+        /// Change cover
+        public static var coverChange: String { Strings.shared.string("write.coverChange") }
         public enum Visibility {
             /// Who can see
             public static var label: String { Strings.shared.string("write.visibility.label") }
@@ -927,6 +951,16 @@ public enum L10n {
             public static var connections: String { Strings.shared.string("write.visibility.connections") }
             /// Only me
             public static var `private`: String { Strings.shared.string("write.visibility.private") }
+            /// Anonymous
+            public static var anonymous: String { Strings.shared.string("write.visibility.anonymous") }
+            /// Anyone can read it, signed {handle}
+            public static func publicLine(handle: String) -> String { Strings.shared.format("write.visibility.publicLine", ["handle": handle]) }
+            /// Anyone can read it, but no one will know it's yours
+            public static var anonymousLine: String { Strings.shared.string("write.visibility.anonymousLine") }
+            /// Not shared — only you can see it
+            public static var privateLine: String { Strings.shared.string("write.visibility.privateLine") }
+            /// Only your connections can see it
+            public static var connectionsLine: String { Strings.shared.string("write.visibility.connectionsLine") }
         }
         public enum Ai {
             /// AI writing partner
@@ -1011,6 +1045,14 @@ public enum L10n {
             public static var failed: String { Strings.shared.string("write.publishPanel.failed") }
             /// That's the limit for today — try again tomorrow
             public static var rateLimited: String { Strings.shared.string("write.publishPanel.rateLimited") }
+            /// Save this card
+            public static var saveTitle: String { Strings.shared.string("write.publishPanel.saveTitle") }
+            /// Save
+            public static var save: String { Strings.shared.string("write.publishPanel.save") }
+            /// Publish anonymously
+            public static var publishAnonymously: String { Strings.shared.string("write.publishPanel.publishAnonymously") }
+            /// Couldn't save — try again
+            public static var saveFailed: String { Strings.shared.string("write.publishPanel.saveFailed") }
         }
         /// Remove tag
         public static var removeTag: String { Strings.shared.string("write.removeTag") }
@@ -1137,6 +1179,8 @@ public enum L10n {
             public static var makePublic: String { Strings.shared.string("me.actions.makePublic") }
             /// Make private
             public static var makePrivate: String { Strings.shared.string("me.actions.makePrivate") }
+            /// Make public anonymously
+            public static var makePublicAnonymous: String { Strings.shared.string("me.actions.makePublicAnonymous") }
             /// Delete
             public static var delete: String { Strings.shared.string("me.actions.delete") }
             /// Delete this card?

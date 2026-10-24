@@ -48,6 +48,8 @@ enum class IconName(val key: String) {
     Copy("copy"),
     Link("link"),
     CollapseRight("collapse-right"),
+    ArrowUp("arrow-up"),
+    Mask("mask"),
     Verified("verified"),
     ;
 
@@ -251,6 +253,15 @@ enum class IconName(val key: String) {
                 IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 3.4f, 12.1f, 2f, 6.9f, 13.5f, 11.2f, 10.9f, 15.1f, 12.2f)),
                 IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 10.4f, 7.3f, 2f, 12.3f, 8.8f, 14.1f, 10.6f, 15.2f, 12.1f, 2f, 14.3f, 13.4f, 13f, 14.9f, 10.5f, 16.8f)),
                 IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 19.6f, 4.9f, 2f, 19.2f, 9.4f, 19.8f, 14.6f, 19.3f, 19.2f)),
+            ))
+            ArrowUp -> IconGlyph(24f, fillable = false, strokes = listOf(
+                IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 11.8f, 20.1f, 2f, 13.7f, 15.8f, 10.2f, 9.2f, 12.3f, 4.8f)),
+                IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 6.2f, 11.1f, 2f, 8f, 8.6f, 10.4f, 6.2f, 12.2f, 4.8f, 2f, 13.5f, 5.8f, 15.1f, 7.3f, 17.7f, 11f)),
+            ))
+            Mask -> IconGlyph(24f, fillable = false, strokes = listOf(
+                IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 2.8f, 9.6f, 2f, 5.2f, 7.6f, 9.2f, 7.9f, 12f, 9.6f, 2f, 14.9f, 7.9f, 18.9f, 7.6f, 21.2f, 9.7f, 2f, 21.7f, 12.8f, 20.3f, 16.1f, 17.2f, 16.3f, 2f, 15f, 16.4f, 13.5f, 14.9f, 12f, 13.6f, 2f, 10.5f, 14.9f, 8.9f, 16.4f, 6.8f, 16.2f, 2f, 3.7f, 16f, 2.3f, 12.7f, 2.8f, 9.6f, 3f)),
+                IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 5.7f, 11.9f, 2f, 6.6f, 10.8f, 8.6f, 10.7f, 9.6f, 11.9f, 2f, 8.6f, 13.1f, 6.7f, 13.2f, 5.7f, 11.9f, 3f)),
+                IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 14.4f, 11.9f, 2f, 15.4f, 10.7f, 17.4f, 10.8f, 18.3f, 11.9f, 2f, 17.3f, 13.2f, 15.4f, 13.1f, 14.4f, 11.9f, 3f)),
             ))
             Verified -> IconGlyph(16f, fillable = false, strokes = listOf(
                 IconStroke(filled = false, width = 1f, commands = floatArrayOf(0f, 2.2f, 8.4f, 2f, 3.3f, 8.8f, 4.6f, 10.2f, 5.9f, 12f, 2f, 7.4f, 9.2f, 9.6f, 5.4f, 13.6f, 2.9f)),

@@ -39,6 +39,8 @@ import { RestoreIcon } from './icons/restore';
 import { CopyIcon } from './icons/copy';
 import { LinkIcon } from './icons/link';
 import { CollapseRightIcon } from './icons/collapse-right';
+import { ArrowUpIcon } from './icons/arrow-up';
+import { MaskIcon } from './icons/mask';
 import type { IconRenderer } from './types';
 
 /**
@@ -97,6 +99,8 @@ export const ICONS = {
   copy: CopyIcon,
   link: LinkIcon,
   'collapse-right': CollapseRightIcon,
+  'arrow-up': ArrowUpIcon,
+  mask: MaskIcon,
 } satisfies Record<string, IconRenderer>;
 
 export type IconName = keyof typeof ICONS;

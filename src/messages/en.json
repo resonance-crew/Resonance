@@ -215,6 +215,7 @@
       "viewAll": "View all",
       "message": "{handle} sent you a message",
       "messageCard": "Shared a card",
+      "messageImage": "Sent a photo",
       "unread": "Unread",
       "inviteExpired": "An invite expired",
       "pickTitle": "A card for tonight",
@@ -244,7 +245,9 @@
     },
     "matchReason": "because of “{reason}”",
     "recommended": {
-      "hint": "The insights you write decide which stories find you"
+      "hint": "The insights you write decide which stories find you",
+      "arrived": "Today's picks are in",
+      "arrivedAction": "See them"
     },
     "coldStart": {
       "title": "Your first card becomes the point this world starts arranging itself around",
@@ -391,6 +394,14 @@
     "attachCard": "Attach a card",
     "removeCard": "Remove card",
     "cardShared": "Shared a card",
+    "attach": "Attach a photo or a card",
+    "attachImage": "Photo",
+    "attachCardShort": "Card",
+    "removeImage": "Remove photo",
+    "imageShared": "Sent a photo",
+    "replyImage": "A photo",
+    "openImage": "View photo",
+    "imageUnsupported": "This kind of image isn't supported",
     "pickCard": "Share one of your cards",
     "pickCardSubtitle": "Share one of your published cards in this conversation",
     "moreMenu": "Conversation options",
@@ -514,11 +525,17 @@
     "mediaBusyHint": "The image is still on its way — you can publish once it's in",
     "mediaGeneratedLabel": "AI-generated illustration",
     "previewCaption": "How the card looks in a list",
+    "coverChange": "Change cover",
     "visibility": {
       "label": "Who can see",
       "public": "Public",
       "connections": "Connections only",
-      "private": "Only me"
+      "private": "Only me",
+      "anonymous": "Anonymous",
+      "publicLine": "Anyone can read it, signed {handle}",
+      "anonymousLine": "Anyone can read it, but no one will know it's yours",
+      "privateLine": "Not shared — only you can see it",
+      "connectionsLine": "Only your connections can see it"
     },
     "ai": {
       "panel": "AI writing partner",
@@ -562,7 +579,11 @@
       "resonanceReaches": "A public resonance under your name lets the original's author know it's you",
       "resonanceQuiet": "The original's author won't be notified",
       "failed": "Couldn't publish — try again",
-      "rateLimited": "That's the limit for today — try again tomorrow"
+      "rateLimited": "That's the limit for today — try again tomorrow",
+      "saveTitle": "Save this card",
+      "save": "Save",
+      "publishAnonymously": "Publish anonymously",
+      "saveFailed": "Couldn't save — try again"
     },
     "removeTag": "Remove tag",
     "trashed": {
@@ -632,6 +653,7 @@
       "edit": "Edit",
       "makePublic": "Make public",
       "makePrivate": "Make private",
+      "makePublicAnonymous": "Make public anonymously",
       "delete": "Delete",
       "deleteConfirmTitle": "Delete this card?",
       "deleteConfirmBody": "This cannot be undone — the story and its resonance links will be gone.",

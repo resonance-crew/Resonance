@@ -369,6 +369,8 @@ object L10n {
             fun message(handle: String): String = Strings.format("app.notifications.message", mapOf("handle" to handle))
             /** Shared a card */
             val messageCard: String get() = Strings.string("app.notifications.messageCard")
+            /** Sent a photo */
+            val messageImage: String get() = Strings.string("app.notifications.messageImage")
             /** Unread */
             val unread: String get() = Strings.string("app.notifications.unread")
             /** An invite expired */
@@ -421,6 +423,10 @@ object L10n {
         object Recommended {
             /** The insights you write decide which stories find you */
             val hint: String get() = Strings.string("home.recommended.hint")
+            /** Today's picks are in */
+            val arrived: String get() = Strings.string("home.recommended.arrived")
+            /** See them */
+            val arrivedAction: String get() = Strings.string("home.recommended.arrivedAction")
         }
         object ColdStart {
             /** Your first card becomes the point this world starts arranging itself around */
@@ -680,6 +686,22 @@ object L10n {
         val removeCard: String get() = Strings.string("messages.removeCard")
         /** Shared a card */
         val cardShared: String get() = Strings.string("messages.cardShared")
+        /** Attach a photo or a card */
+        val attach: String get() = Strings.string("messages.attach")
+        /** Photo */
+        val attachImage: String get() = Strings.string("messages.attachImage")
+        /** Card */
+        val attachCardShort: String get() = Strings.string("messages.attachCardShort")
+        /** Remove photo */
+        val removeImage: String get() = Strings.string("messages.removeImage")
+        /** Sent a photo */
+        val imageShared: String get() = Strings.string("messages.imageShared")
+        /** A photo */
+        val replyImage: String get() = Strings.string("messages.replyImage")
+        /** View photo */
+        val openImage: String get() = Strings.string("messages.openImage")
+        /** This kind of image isn't supported */
+        val imageUnsupported: String get() = Strings.string("messages.imageUnsupported")
         /** Share one of your cards */
         val pickCard: String get() = Strings.string("messages.pickCard")
         /** Share one of your published cards in this conversation */
@@ -920,6 +942,8 @@ object L10n {
         val mediaGeneratedLabel: String get() = Strings.string("write.mediaGeneratedLabel")
         /** How the card looks in a list */
         val previewCaption: String get() = Strings.string("write.previewCaption")
+        /** Change cover */
+        val coverChange: String get() = Strings.string("write.coverChange")
         object Visibility {
             /** Who can see */
             val label: String get() = Strings.string("write.visibility.label")
@@ -929,6 +953,16 @@ object L10n {
             val connections: String get() = Strings.string("write.visibility.connections")
             /** Only me */
             val private: String get() = Strings.string("write.visibility.private")
+            /** Anonymous */
+            val anonymous: String get() = Strings.string("write.visibility.anonymous")
+            /** Anyone can read it, signed {handle} */
+            fun publicLine(handle: String): String = Strings.format("write.visibility.publicLine", mapOf("handle" to handle))
+            /** Anyone can read it, but no one will know it's yours */
+            val anonymousLine: String get() = Strings.string("write.visibility.anonymousLine")
+            /** Not shared — only you can see it */
+            val privateLine: String get() = Strings.string("write.visibility.privateLine")
+            /** Only your connections can see it */
+            val connectionsLine: String get() = Strings.string("write.visibility.connectionsLine")
         }
         object Ai {
             /** AI writing partner */
@@ -1013,6 +1047,14 @@ object L10n {
             val failed: String get() = Strings.string("write.publishPanel.failed")
             /** That's the limit for today — try again tomorrow */
             val rateLimited: String get() = Strings.string("write.publishPanel.rateLimited")
+            /** Save this card */
+            val saveTitle: String get() = Strings.string("write.publishPanel.saveTitle")
+            /** Save */
+            val save: String get() = Strings.string("write.publishPanel.save")
+            /** Publish anonymously */
+            val publishAnonymously: String get() = Strings.string("write.publishPanel.publishAnonymously")
+            /** Couldn't save — try again */
+            val saveFailed: String get() = Strings.string("write.publishPanel.saveFailed")
         }
         /** Remove tag */
         val removeTag: String get() = Strings.string("write.removeTag")
@@ -1139,6 +1181,8 @@ object L10n {
             val makePublic: String get() = Strings.string("me.actions.makePublic")
             /** Make private */
             val makePrivate: String get() = Strings.string("me.actions.makePrivate")
+            /** Make public anonymously */
+            val makePublicAnonymous: String get() = Strings.string("me.actions.makePublicAnonymous")
             /** Delete */
             val delete: String get() = Strings.string("me.actions.delete")
             /** Delete this card? */

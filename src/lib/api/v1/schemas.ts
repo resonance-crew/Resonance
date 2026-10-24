@@ -446,10 +446,16 @@ export const SendMessageRequest = named(
   z.object({
     /** The other person's user id. */
     to: DocId,
-    /** May be empty when a card is attached. */
+    /** May be empty when a card or a picture is attached. */
     text: z.string().trim().max(MESSAGE_TEXT_MAX),
     /** A card attached to the message (its id). */
     cardRef: DocId.nullish(),
+    /**
+     * A picture sent with the message: one this sender uploaded for this
+     * conversation (POST /chat-images), by its id, sent with no other message.
+     * A message carries a card or a picture, never both.
+     */
+    image: DocId.nullish(),
     noteRef: NoteRef.nullish(),
     /** The message this one answers: one in the same conversation (its id). The thread quotes it above the reply. */
     replyTo: DocId.nullish(),
@@ -461,6 +467,22 @@ export const SendMessageRequest = named(
     clientId: ClientId.nullish(),
   }),
   'SendMessageRequest',
+);
+
+/** A sent picture's longest side as kept, and as a thread draws it (GET /chat-images/{id}?size=thumb). */
+export const CHAT_IMAGE_MAX_EDGE = 2048;
+export const CHAT_IMAGE_THUMB_EDGE = 960;
+
+export const ChatImageResponse = named(
+  z.object({
+    /** What a message names the picture by (SendMessageRequest.image) and where it is read (GET /chat-images/{id}). */
+    id: z.string(),
+    /** Its size in pixels as kept (upright, at most CHAT_IMAGE_MAX_EDGE on its longest side). */
+    width: z.number().int(),
+    height: z.number().int(),
+  }),
+  'ChatImageResponse',
+  'A picture uploaded for a conversation, ready to be sent in a message.',
 );
 
 export const SendMessageResponse = named(

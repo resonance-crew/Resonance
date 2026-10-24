@@ -1913,7 +1913,7 @@
       "post": {
         "operationId": "sendMessage",
         "summary": "Message someone you are connected with (opens the conversation; its first message rings their bell), or answer a note they left you while you weren't (`request.from` is them): that answer connects you — and answers it all the same once you are",
-        "description": "Checked in this order: the contract (`400`); your message budget (`429`); the request itself (`400`: messaging yourself, no text and no card, a `clientId` or `replyTo` Firestore keeps for itself); `cardRef` (`404` for a card you can't read); a `clientId` already used — yours answers `201` as it was first sent, someone else's is `400`; your pen name (`403 forbidden`, \"Choose a pen name first.\"); a block either way (`403 blocked`); the connection (`403 forbidden`, \"You can message people you are connected with.\", unless a letter of theirs waits in your conversation — then your answer connects you); `noteRef`, a note they left you on the card it names (else `400`, \"That is not a note they left you.\"); `replyTo`, a message of this conversation (else `400`). A reply to a note left on your anonymous card, or to a note no longer there whose card is gone too (deleting a card deletes its notes) or isn't yours, is sent without its `noteRef`, saying nothing of the card — and still answers a letter; a note no longer there on your own card, still there, is the `400`. A message from the original's author of a resonance standing between you, to its writer, answers that resonance (see `unresonateCard`).",
+        "description": "Checked in this order: the contract (`400`); your message budget (`429`); the request itself (`400`: messaging yourself, no text, no card and no picture, a card and a picture together, a `clientId` or `replyTo` Firestore keeps for itself); `cardRef` (`404` for a card you can't read); a `clientId` already used — yours answers `201` as it was first sent, someone else's is `400`; your pen name (`403 forbidden`, \"Choose a pen name first.\"); a block either way (`403 blocked`); the connection (`403 forbidden`, \"You can message people you are connected with.\", unless a letter of theirs waits in your conversation — then your answer connects you); `noteRef`, a note they left you on the card it names (else `400`, \"That is not a note they left you.\"); `replyTo`, a message of this conversation (else `400`); `image`, a picture you uploaded for this conversation and sent with no other message (else `400`, \"That is not a picture you can send here.\"). A reply to a note left on your anonymous card, or to a note no longer there whose card is gone too (deleting a card deletes its notes) or isn't yours, is sent without its `noteRef`, saying nothing of the card — and still answers a letter; a note no longer there on your own card, still there, is the `400`. A message from the original's author of a resonance standing between you, to its writer, answers that resonance (see `unresonateCard`).",
         "requestBody": {
           "required": true,
           "content": {
@@ -1956,6 +1956,159 @@
             }
           },
           "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat-images": {
+      "post": {
+        "operationId": "uploadChatImage",
+        "summary": "Upload a picture to send in a conversation (then send it: `sendMessage` with `image`)",
+        "description": "The picture is kept upright, at most 2048 px on its longest side, as WebP without its metadata (place, camera); an animated GIF stays animated. Only the two people of the conversation can read it, once it is sent (`getChatImage`). Checked in this order: your picture budget (`429`); the form (`400`: no file, a file over 4 MB, not a JPEG, PNG, WebP or GIF, a picture of more than 50 megapixels, a `clientId` that is not one); a `clientId` already used — yours answers `201` as it was first uploaded, someone else's is `400`; your pen name (`403 forbidden`); a block either way (`403 blocked`); whether you may message `to` at all (`403 forbidden`, as `sendMessage` says it). A picture never sent is deleted after a day.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file",
+                  "to"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "JPEG, PNG, WebP or GIF, at most 4 MB"
+                  },
+                  "to": {
+                    "type": "string",
+                    "description": "The other person's user id"
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "description": "The sender's own id for this picture (16–64 of A–Z a–z 0–9 _ -), kept for every retry: it becomes the picture's id, so uploading it again after a lost answer finds the one already kept"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Uploaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatImageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat-images/{id}": {
+      "get": {
+        "operationId": "getChatImage",
+        "summary": "A picture sent in one of your conversations",
+        "description": "For the two people of its conversation, while the message that carries it is there (a deleted conversation takes its pictures with it); `404` for anything else, never saying why. The bytes never change: keep them.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The picture id (a message's `image.id`)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "description": "`thumb`: at most 960 px on its longest side, for the thread; `full` (the default): as kept",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "full",
+                "thumb"
+              ],
+              "default": "full"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The picture",
+            "content": {
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
             "description": "Error",
             "content": {
               "application/json": {
@@ -2951,6 +3104,11 @@
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]{1,128}$"
           },
+          "image": {
+            "nullable": true,
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
           "noteRef": {
             "nullable": true,
             "allOf": [
@@ -2974,6 +3132,30 @@
           "to",
           "text"
         ]
+      },
+      "ChatImageResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "height": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "width",
+          "height"
+        ],
+        "description": "A picture uploaded for a conversation, ready to be sent in a message."
       },
       "SendMessageResponse": {
         "type": "object",

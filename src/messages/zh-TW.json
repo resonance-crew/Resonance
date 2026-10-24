@@ -215,6 +215,7 @@
       "viewAll": "查看全部",
       "message": "{handle} 傳了一則訊息給你",
       "messageCard": "分享了一張卡片",
+      "messageImage": "傳送了一張圖片",
       "unread": "未讀",
       "inviteExpired": "一則邀請已過期",
       "pickTitle": "今晚的一張卡片",
@@ -244,7 +245,9 @@
     },
     "matchReason": "因為「{reason}」",
     "recommended": {
-      "hint": "你寫下的體悟，決定你會遇見哪些故事"
+      "hint": "你寫下的體悟，決定你會遇見哪些故事",
+      "arrived": "今天的推薦來了",
+      "arrivedAction": "往上看"
     },
     "coldStart": {
       "title": "你的第一張卡片，會成為這個世界為你排列的起點",
@@ -391,6 +394,14 @@
     "attachCard": "附上一張卡片",
     "removeCard": "移除卡片",
     "cardShared": "分享了一張卡片",
+    "attach": "附上圖片或卡片",
+    "attachImage": "圖片",
+    "attachCardShort": "卡片",
+    "removeImage": "移除圖片",
+    "imageShared": "傳送了一張圖片",
+    "replyImage": "一張圖片",
+    "openImage": "查看圖片",
+    "imageUnsupported": "不支援這種圖片格式",
     "pickCard": "分享你的一張卡片",
     "pickCardSubtitle": "在這段對話裡分享你公開發表過的一張卡片",
     "moreMenu": "對話選項",
@@ -514,11 +525,17 @@
     "mediaBusyHint": "圖片還在處理，好了就能發布",
     "mediaGeneratedLabel": "AI 生成插圖",
     "previewCaption": "卡片在列表裡的樣子",
+    "coverChange": "更換封面",
     "visibility": {
       "label": "誰可以看見",
       "public": "公開",
       "connections": "僅連結的人",
-      "private": "只有自己"
+      "private": "只有自己",
+      "anonymous": "匿名公開",
+      "publicLine": "所有人都看得到，署名 {handle}",
+      "anonymousLine": "所有人都看得到，但不會知道是你寫的",
+      "privateLine": "不公開，只有你看得到",
+      "connectionsLine": "只有連結的人看得到"
     },
     "ai": {
       "panel": "AI 寫作夥伴",
@@ -562,7 +579,11 @@
       "resonanceReaches": "公開並署名的共振，會讓原作者知道是你",
       "resonanceQuiet": "這張共振不會通知原作者",
       "failed": "沒發布成功，再試一次",
-      "rateLimited": "今天的次數用完了，明天再試"
+      "rateLimited": "今天的次數用完了，明天再試",
+      "saveTitle": "儲存這張卡片",
+      "save": "儲存",
+      "publishAnonymously": "匿名發布",
+      "saveFailed": "沒儲存成功，再試一次"
     },
     "removeTag": "移除標籤",
     "trashed": {
@@ -632,6 +653,7 @@
       "edit": "編輯",
       "makePublic": "轉為公開",
       "makePrivate": "轉為私人",
+      "makePublicAnonymous": "轉為匿名公開",
       "delete": "刪除",
       "deleteConfirmTitle": "刪除這張卡片？",
       "deleteConfirmBody": "刪除後無法復原，卡片的故事與共振連結都會消失",
