@@ -155,20 +155,29 @@ public nonisolated struct StoryTypography: Hashable, Sendable {
     public var blockGap: CGFloat { compact ? Tokens.storyBlockGapCompact : Tokens.storyBlockGap }
     /// Above and below the pen's rule.
     public var ruleGap: CGFloat { compact ? Tokens.storyRuleGapCompact : Tokens.storyRuleGap }
+    /// The reading head (round 9 §2): from the header's pen line — the wavy rule, not the bar's box —
+    /// down to the title's line box (`--story-head-gap`, 48 / 64), or to the cover's top edge when the
+    /// card has one (`--story-head-cover-gap`, 56 / 72: a title box carries some air above its ink, a
+    /// cover none, so both reach their ink at the same depth).
+    public func headGap(cover: Bool) -> CGFloat {
+        switch (cover, compact) {
+        case (false, true): Tokens.storyHeadGapCompact
+        case (false, false): Tokens.storyHeadGap
+        case (true, true): Tokens.storyHeadCoverGapCompact
+        case (true, false): Tokens.storyHeadCoverGap
+        }
+    }
     /// The cover → the title.
     public var coverGap: CGFloat { compact ? Tokens.storyCoverGapCompact : Tokens.storyCoverGap }
     /// The title → the byline or meta row.
-    public var metaGap: CGFloat { Tokens.storyMetaGap }
+    public var metaGap: CGFloat { compact ? Tokens.storyMetaGapCompact : Tokens.storyMetaGap }
     /// The byline or meta row → the story.
     public var leadGap: CGFloat { compact ? Tokens.storyLeadGapCompact : Tokens.storyLeadGap }
     /// The story → its tags.
     public var endGap: CGFloat { compact ? Tokens.storyEndGapCompact : Tokens.storyEndGap }
-    /// The meta line's size (read time · date): interface type, under the 1.25× cap.
+    /// The meta line's size (read time · date): interface type, under the 1.25× cap — 13 on a phone,
+    /// 14 at every regular width (round 9 §0: the byline's too, which kept the phone's 13 everywhere).
     public var metaSize: CGFloat { compact ? Tokens.storyMetaSizeCompact : Tokens.storyMetaSize }
-    /// The byline's meta line under the pen name, wherever the byline stands (no author rail: the
-    /// web's ≤ 900, whose byline keeps the phone's size), and the meta row's beside the rail.
-    public static let bylineMetaSize: CGFloat = Tokens.storyMetaSizeCompact
-    public static let metaRowSize: CGFloat = Tokens.storyMetaSize
     /// The byline's avatar (a phone's head).
     public var bylineAvatar: CGFloat { Tokens.storyBylineAvatar }
     /// The text column → the author rail (expanded windows).

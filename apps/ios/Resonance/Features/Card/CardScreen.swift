@@ -26,6 +26,8 @@ struct CardScreen: View {
     @State private var meter = ReadingMeter()
     /// The owner moved the card to the trash on this page a moment ago: the banner takes the focus.
     @State private var justTrashed = false
+    /// 查看全部: every resonance shown, not the first three (C1).
+    @State private var allResonances = false
     @Environment(\.window) private var window
     /// A tablet's header (round 5 C1): the card's title fades into its centre in place of the author.
     @Environment(\.headerChrome) private var headerChrome
@@ -91,9 +93,8 @@ struct CardScreen: View {
         .frame(width: Tokens.cardRailW, alignment: .leading)
         .frame(maxHeight: .infinity, alignment: .top)
         .padding(.leading, layout.railX)
-        // 8 under the article's top, as it has been (a tablet's 32 under the header's line, round 5 E2).
-        .headerGap(phone: 16)
-        .padding(.top, 8)
+        // Level with the article's title (round 9 §2: the reading head under the header's pen line).
+        .padding(.top, PenLineGap.fromFoot(StoryTypography(script: .cjk, layout: window.layoutClass).headGap(cover: false)))
         .padding(.bottom, 24)
         .transition(.opacity)
     }
@@ -160,10 +161,12 @@ struct CardScreen: View {
                 }
             } trailing: {
                 // The owner's card in the trash has neither its share nor its ⋯: its banner is the way out.
-                // On a phone they live in the bar, as phone apps keep a page's actions (and again at the
-                // story's end); a tablet's byline holds them instead.
-                if !actionsInByline, let detail = model?.detail, !TrashedCardBanner.shows(detail) {
-                    cardActions(detail, seed: (detail.card.accentHue ?? 55) + 3)
+                // On a phone they live in the bar, as phone apps keep a page's actions; a tablet's byline holds
+                // them, and once it has scrolled under the bar they come up into it (round 9 §3).
+                if let detail = model?.detail, model?.phase == .loaded, !TrashedCardBanner.shows(detail),
+                   !actionsInByline || bylineGone {
+                    HStack(spacing: 0) { cardActions(detail, seed: (detail.card.accentHue ?? 55) + 3) }
+                        .transition(.opacity)
                 }
             }
             .readingProgress(model?.phase == .loaded ? progress : nil)
@@ -213,6 +216,11 @@ struct CardScreen: View {
         if CardShareGate.offered(detail) {
             CardShareButton(detail: detail, seed: seed + 2)
         }
+        // A 私人卡 is never shared: where share would sit, the way back into the writer (round 9 §1).
+        if Self.isPrivateCard(detail) {
+            OrganicIconButton(.pen, label: L10n.Me.Actions.edit, size: 20) { writer.edit(card.id, showsCard: false) }
+                .help(L10n.Me.Actions.edit)
+        }
         if detail.isOwner {
             // 刪除 leaves the page here, its trash banner in place of the share and the ⋯.
             CardActionsMenu(cardId: card.id, visibility: card.visibility.rawValue, seed: seed,
@@ -227,20 +235,34 @@ struct CardScreen: View {
         }
     }
 
+    /// A 私人卡 (round 9 §1): the owner's card only its author sees — never published, or published and
+    /// kept private — and not in the trash (whose banner says what it is).
+    static func isPrivateCard(_ detail: CardDetail) -> Bool {
+        detail.isOwner && !TrashedCardBanner.shows(detail) && isPrivate(detail.card)
+    }
+
+    /// A card only its author sees: never published, or published and kept private.
+    static func isPrivate(_ card: FeedCard) -> Bool {
+        card.publishedAt == nil || card.visibility == ._private
+    }
+
     private func page(_ model: CardModel, _ detail: CardDetail) -> some View {
         let card = detail.card
         let type = model.storyType
         let story = StoryTypography(script: type.script, layout: window.layoutClass)
         // The owner's card in the trash: its banner first, and nothing around the story but its tags.
         let trashed = TrashedCardBanner.shows(detail)
+        let hasCover = card.imageUrl.flatMap(URL.init(string:)) != nil
         return VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 if trashed {
                     TrashedCardBanner(card: card, focusTitle: justTrashed) { openRoute.dismissToRoot() }
                         .padding(.bottom, 24)
                 }
-                // A tablet's byline ends in the card's share and ⋯ — not the owner's card in the trash, whose banner is the way out.
-                head(card, anonymous: detail.anonymous, type: type, actions: actionsInByline && !trashed ? detail : nil)
+                // A tablet's byline ends in the card's share and ⋯ — not the owner's card in the trash, whose banner is
+                // the way out — until it scrolls under the bar, which takes them (round 9 §3).
+                head(card, anonymous: detail.anonymous, type: type, actions: actionsInByline && !trashed ? detail : nil,
+                     privateCard: Self.isPrivateCard(detail))
                 // A card the reader can't see (private, gone, blocked) is the link the story wrote, as the prose draws one.
                 StoryMarkdownView(blocks: model.blocks, typography: story, language: type.lang, onOpenURL: open) { href, _ in
                     model.embed(for: href).map { CardEmbedView(href: href, card: $0) }
@@ -274,8 +296,9 @@ struct CardScreen: View {
                     }
                     .padding(.bottom, 40)
                 }
-                // The story's end (round 8 §10.2): one row — the response bar at its start, share and ⋯ at its end.
-                if !trashed {
+                // The story's end (round 9 §3): the response bar alone — share and ⋯ are the bar's (a phone's) or
+                // the byline's (a tablet's) — and none on the author's own card.
+                if !trashed, !detail.isOwner {
                     endRow(detail).padding(.bottom, 40)
                 }
                 if !trashed, !model.links.isEmpty {
@@ -288,7 +311,8 @@ struct CardScreen: View {
                 }
             }
             .padding(.horizontal, 20)
-            .headerGap(phone: 16)
+            // The reading head (round 9 §2): the title's box 48 / 64 under the bar's pen line, a cover's top 56 / 72.
+            .padding(.top, PenLineGap.fromFoot(story.headGap(cover: hasCover && !trashed)))
 
             if !trashed, !model.links.isEmpty { MiniCardList(cards: model.links).padding(.horizontal, -bleed).padding(.bottom, 40) }
             // The article's own bottom padding — already there under a last row that keeps its own 40
@@ -297,8 +321,17 @@ struct CardScreen: View {
 
             let resonance = trashed ? [] : model.resonanceSection
             if !resonance.isEmpty {
-                section(L10n.Card.ResonanceSection.title, headingGap: tablet ? Self.tabletHeadingGap : 40) {
-                    MiniCardList(cards: resonance).padding(.horizontal, -bleed)
+                // The same full cards as 延伸的卡片 (C1): three, then 查看全部 shows the rest in place.
+                section(L10n.Card.ResonanceSection.title, headingGap: tablet ? Self.tabletHeadingGap : 56) {
+                    StoryCardList(cards: Self.shownResonances(resonance, all: allResonances)).padding(.horizontal, -bleed)
+                    if Self.resonancesHidden(resonance, all: allResonances) {
+                        OrganicButton(L10n.Card.ResonanceSection.showAll(count: resonance.count), variant: .tonal, size: .sm) {
+                            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { allResonances = true }
+                        }
+                        .fixedSize()
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 24)
+                    }
                 }
             }
             if !trashed, !model.related.isEmpty {
@@ -313,31 +346,36 @@ struct CardScreen: View {
         .coordinateSpace(.named(Self.pageSpace))
     }
 
-    /// The story's end (round 8 §10.2): the response bar (共振 · 寄小紙條 · 收藏) at the row's start, the
-    /// card's share and ⋯ at its end — the author's own card, which has no response bar, the two
-    /// alone. A phone keeps it one line: the response bar gives way first (the bookmark drops its
-    /// words), the glyphs keep their 44. It fades in once scrolled to.
+    /// The resonances shown (C1): the first three, all of them once 查看全部 is pressed.
+    static let resonancesShownFirst = 3
+
+    static func shownResonances(_ cards: [FeedCard], all: Bool) -> [FeedCard] {
+        all ? cards : Array(cards.prefix(resonancesShownFirst))
+    }
+
+    /// Whether some are left for 查看全部 to show.
+    static func resonancesHidden(_ cards: [FeedCard], all: Bool) -> Bool {
+        !all && cards.count > resonancesShownFirst
+    }
+
+    /// The story's end (round 9 §3): the reader's response bar (共振 · 寄小紙條 · 收藏) alone — the card's
+    /// share and ⋯ are in the bar or the byline already. A phone spreads it across the column; wider, it
+    /// keeps its own width at the row's start. It fades in once scrolled to.
     private func endRow(_ detail: CardDetail) -> some View {
         let card = detail.card
-        return HStack(spacing: 4) {
-            if detail.isOwner {
-                Spacer(minLength: 0)
-            } else {
-                CardViewerActions(cardId: card.id, referenceCardId: card.referenceCardId)
-                    .padding(.trailing, 4)
-            }
-            cardActions(detail, seed: (card.accentHue ?? 55) + 23)
-        }
-        // The glyphs' own pads sit in the margin, their ink on the column's edge (as the bar's).
-        .padding(.trailing, -12)
-        .revealedOnScroll()
+        return CardViewerActions(cardId: card.id, referenceCardId: card.referenceCardId)
+            .frame(maxWidth: window.layoutClass == .compact ? .infinity : nil, alignment: .leading)
+            .fixedSize(horizontal: window.layoutClass != .compact, vertical: false)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .revealedOnScroll()
     }
 
     /// Cover, title and byline: what a list already knows of the card. The cover, `coverGap`, the
     /// title in the story's type, `metaGap`, then the byline at every width — the author over the
     /// read time and date (round 8 §10.1), ending on a tablet in the card's share and ⋯ (`actions`,
     /// once the card has loaded) — and `leadGap` down to the story.
-    private func head(_ card: FeedCard, anonymous: Bool, type: StoryType, actions detail: CardDetail? = nil) -> some View {
+    private func head(_ card: FeedCard, anonymous: Bool, type: StoryType, actions detail: CardDetail? = nil,
+                      privateCard: Bool = false) -> some View {
         let hue = card.accentHue ?? 55
         let story = StoryTypography(script: type.script, layout: window.layoutClass)
         return VStack(alignment: .leading, spacing: 0) {
@@ -353,11 +391,16 @@ struct CardScreen: View {
                 // Where the title ends, for the tablet header's centre (it fades in once this is under the line).
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.pageSpace)).maxY } action: { meter.titleBottom = $0 }
                 .padding(.bottom, story.metaGap)
-            StoryBylineRow(card: card, anonymous: anonymous, avatar: story.bylineAvatar) {
+            StoryBylineRow(card: card, anonymous: anonymous, avatar: story.bylineAvatar, metaSize: story.metaSize,
+                           privateCard: privateCard) {
                 if let detail {
                     HStack(spacing: 4) { cardActions(detail, seed: (card.accentHue ?? 55) + 3) }
-                        // The glyphs' own pads sit in the margin, their ink on the column's edge (as the end row's).
+                        // The glyphs' own pads sit in the margin, their ink on the column's edge.
                         .padding(.trailing, -12)
+                        // Under the bar they are the bar's (round 9 §3): kept in place here, out of sight and reach.
+                        .opacity(bylineGone ? 0 : 1)
+                        .allowsHitTesting(!bylineGone)
+                        .accessibilityHidden(bylineGone)
                 }
             }
                 // Where the byline ends: past it, the bar names the author.
@@ -370,12 +413,14 @@ struct CardScreen: View {
     /// story still loading.
     private func placeholderPage(_ card: FeedCard) -> some View {
         let type = model?.storyType ?? StoryType(script: .cjk, lang: nil)
+        let story = StoryTypography(script: type.script, layout: window.layoutClass)
         return VStack(alignment: .leading, spacing: 0) {
-            head(card, anonymous: card.anonymous, type: type)
-            StorySkeleton(typography: StoryTypography(script: type.script, layout: window.layoutClass))
+            head(card, anonymous: card.anonymous, type: type,
+                 privateCard: card.author?.value1.id == session.uid && Self.isPrivate(card))
+            StorySkeleton(typography: story)
         }
         .padding(.horizontal, 20)
-        .headerGap(phone: 16)
+        .padding(.top, PenLineGap.fromFoot(story.headGap(cover: card.imageUrl.flatMap(URL.init(string:)) != nil)))
     }
 
     /// A section under the article. On phones the web drops the tinted band
@@ -452,6 +497,10 @@ struct StoryBylineRow<Actions: View>: View {
     let anonymous: Bool
     /// The avatar's size (`StoryTypography.bylineAvatar`).
     var avatar: CGFloat = 40
+    /// The meta line's size: 13 on a phone, 14 wider (`StoryTypography.metaSize`).
+    var metaSize: CGFloat = Tokens.storyMetaSizeCompact
+    /// The owner's 私人卡: the meta line ends with the lock and 私人卡 (round 9 §1).
+    var privateCard = false
     /// What ends the row, after the author's words: a tablet's share and ⋯ (nothing on a phone).
     @ViewBuilder var actions: Actions
     @Environment(\.openRoute) private var openRoute
@@ -487,7 +536,7 @@ struct StoryBylineRow<Actions: View>: View {
                             .lineLimit(1)
                     }
                 }
-                StoryMetaLine(card: card, size: StoryTypography.bylineMetaSize)
+                StoryMetaLine(card: card, size: metaSize, privateCard: privateCard)
             }
             Spacer(minLength: 0)
             actions
@@ -498,28 +547,44 @@ struct StoryBylineRow<Actions: View>: View {
 
 extension StoryBylineRow where Actions == EmptyView {
     /// The byline alone: the author and the read time · date.
-    init(card: FeedCard, anonymous: Bool, avatar: CGFloat = 40) {
-        self.init(card: card, anonymous: anonymous, avatar: avatar) { EmptyView() }
+    init(card: FeedCard, anonymous: Bool, avatar: CGFloat = 40, metaSize: CGFloat = Tokens.storyMetaSizeCompact) {
+        self.init(card: card, anonymous: anonymous, avatar: avatar, metaSize: metaSize) { EmptyView() }
     }
 }
 
 /// 「6 分鐘 · 2026年10月10日」: the read time and the published date in the reader's language, muted
-/// interface type that may wrap (a draft shows its read time alone).
+/// interface type that may wrap (a draft shows its read time alone). On the owner's 私人卡 it ends with
+/// a lock and 「私人卡」 (round 9 §1): 「6 分鐘 · 🔒 私人卡」, the date between them when it has one.
 struct StoryMetaLine: View {
     let card: FeedCard
     let size: CGFloat
+    var privateCard = false
 
     static func text(_ card: FeedCard) -> String {
         let minutes = L10n.App.readMinutes(count: card.readMinutes)
         return publishedDate(card).map { "\(minutes) · \($0)" } ?? minutes
     }
 
+    /// What VoiceOver reads: the line, and that it is a 私人卡.
+    static func spoken(_ card: FeedCard, privateCard: Bool) -> String {
+        privateCard ? "\(text(card)), \(L10n.Card.private)" : text(card)
+    }
+
     var body: some View {
-        Text(Self.text(card))
-            .font(AppFonts.body(size))
-            .lineSpacing(size * 0.4)
-            .foregroundStyle(Tokens.textMuted)
-            .fixedSize(horizontal: false, vertical: true)
+        Group {
+            if privateCard {
+                let lock = OrganicIcon.image(.lock, size: (size * 0.95).rounded())
+                Text("\(Text(verbatim: Self.text(card))) · \(Text(lock).baselineOffset(-size * 0.12)) \(Text(verbatim: L10n.Card.private))")
+            } else {
+                Text(Self.text(card))
+            }
+        }
+        .font(AppFonts.body(size))
+        .lineSpacing(size * 0.4)
+        .foregroundStyle(Tokens.textMuted)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Self.spoken(card, privateCard: privateCard))
     }
 }
 
@@ -577,7 +642,7 @@ private struct CardDetailSkeleton: View {
                 SkeletonBlock(width: story.bylineAvatar, circle: true)
                 VStack(alignment: .leading, spacing: 7) {
                     SkeletonBlock(width: 120, height: 15)
-                    SkeletonBlock(width: 160, height: StoryTypography.bylineMetaSize)
+                    SkeletonBlock(width: 160, height: story.metaSize)
                 }
             }
             .frame(minHeight: 44, alignment: .leading)
@@ -585,7 +650,8 @@ private struct CardDetailSkeleton: View {
             StorySkeleton(typography: story)
         }
         .padding(.horizontal, 20)
-        .headerGap(phone: 16)
+        // The reading head as the page will stand (round 9 §2): a cover's top 56 / 72 under the pen line.
+        .padding(.top, PenLineGap.fromFoot(story.headGap(cover: true)))
         .accessibilityElement()
         .accessibilityLabel("Loading")
     }
@@ -648,8 +714,9 @@ final class ReadingMeter {
     /// The byline's bottom in the page: once it is under the bar, the bar names the author (only the
     /// scroll's own check reads it).
     @ObservationIgnored var bylineBottom: CGFloat?
-    /// Where a phone's byline ends before it is measured: a two-line title under no cover, 16 of air, the 44 row.
-    static let bylineBottomGuess: CGFloat = 16 + 2 * 39 + 16 + 44
+    /// Where a phone's byline ends before it is measured: the reading head over a two-line title under
+    /// no cover, its 20 to the byline, the 44 row.
+    static let bylineBottomGuess: CGFloat = PenLineGap.fromFoot(Tokens.storyHeadGapCompact) + 2 * 39.2 + Tokens.storyMetaGapCompact + 44
     var viewport = Viewport(top: 0, height: 0) { didSet { update() } }
     /// The table of contents' headings by their tops in the page, in reading order.
     var headings: [TocReading.Heading] = [] { didSet { update() } }

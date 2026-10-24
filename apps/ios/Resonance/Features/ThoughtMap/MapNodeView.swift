@@ -182,7 +182,7 @@ struct MapNodeView: View, Equatable {
 
     private var meta: some View {
         HStack(spacing: 8) {
-            OrganicIcon(card.publishedAt == nil ? .pen : Self.visibilityIcon(card.visibility), size: 14)
+            OrganicIcon(Self.metaIcon(card), size: 14)
                 .foregroundStyle(Tokens.textMuted)
             Text(card.tags.map { "#\($0)" }.joined(separator: " "))
                 .font(Font(NodeTextLayout.excerptFont))
@@ -192,6 +192,12 @@ struct MapNodeView: View, Equatable {
             Spacer(minLength: 0)
         }
         .frame(height: 18)
+    }
+
+    /// The node's mark (C4): a 私人卡 — never published, or published and kept private — wears the
+    /// lock (no pen for a draft any more); a shared card, its audience's glyph.
+    static func metaIcon(_ card: MapCard) -> IconName {
+        card.publishedAt == nil ? .lock : visibilityIcon(card.visibility)
     }
 
     static func visibilityIcon(_ v: String) -> IconName {

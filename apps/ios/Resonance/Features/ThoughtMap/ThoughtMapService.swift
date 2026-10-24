@@ -183,22 +183,44 @@ struct ThoughtMapService {
 
     // MARK: - The cards the map can hold (useMyThoughtMap)
 
-    /// My own cards (getCardsByAuthor: the newest 40, drafts among them) and
-    /// the originals I resonated with (my latest 60 cards' references, read as
-    /// `read` reads them — one nobody lets me read any more just isn't there).
+    /// How many of my own cards the map reads: the newest 40 published, and as many never published.
+    static let ownLimit = 40
+    /// How many never-published cards are read to find the most recently edited (Android's DRAFT_SCAN).
+    static let draftScan = 200
+
+    /// My own cards — the newest 40 published (getCardsByAuthor) and, in a query of their own, the 40
+    /// never-published 私人卡 most recently edited (C4: in a `publishedAt` order a draft's null sorts
+    /// last, so past 40 published cards none reached the tray) — and the originals I resonated with
+    /// (my latest 60 cards' references, read as `read` reads them — one nobody lets me read any more
+    /// just isn't there).
     func cards() async throws -> (cards: [String: MapCard], resonated: Set<String>) {
         let cardsCol = db.collection("cards")
         async let ownSnap = cardsCol.whereField("authorId", isEqualTo: uid)
-            .order(by: "publishedAt", descending: true).limit(to: 40).getDocuments()
+            .order(by: "publishedAt", descending: true).limit(to: Self.ownLimit).getDocuments()
+        async let draftSnap = cardsCol.whereField("authorId", isEqualTo: uid).whereField("publishedAt", isEqualTo: NSNull())
+            .limit(to: Self.draftScan).getDocuments()
         async let replySnap = cardsCol.whereField("authorId", isEqualTo: uid).limit(to: 60).getDocuments()
-        let (own, replies) = try await (ownSnap, replySnap)
+        let (own, drafts, replies) = try await (ownSnap, draftSnap, replySnap)
         let refs = Array(Set(replies.documents.compactMap { $0.get("referenceCardId") as? String }))
         let originals = await read(refs)
         var byId: [String: MapCard] = [:]
         for c in originals { byId[c.id] = c }
-        for d in own.documents { if let c = Self.card(d) { byId[c.id] = c } }
+        for d in own.documents { if let c = Self.card(d), c.publishedAt != nil { byId[c.id] = c } }
+        for c in Self.newestDrafts(drafts.documents.map { (id: $0.documentID, data: $0.data()) }, keep: Self.ownLimit) {
+            byId[c.id] = c
+        }
         let resonated = Set(originals.filter { $0.authorId != uid }.map(\.id))
         return (byId, resonated)
+    }
+
+    /// The never-published cards the map holds: the `keep` most recently edited (`updatedAt`, newest
+    /// first; one without a date after those with one), the trash's left out.
+    nonisolated static func newestDrafts(_ docs: [(id: String, data: [String: Any])], keep: Int) -> [MapCard] {
+        let dated = docs.map { doc in (doc, ((doc.data["updatedAt"] as? Timestamp)?.dateValue()) ?? .distantPast) }
+        return dated.sorted { $0.1 > $1.1 }
+            .compactMap { pair in card(id: pair.0.id, data: pair.0.data) }
+            .prefix(keep)
+            .map { $0 }
     }
 
     /// One card as it is now: nil when it is gone, or no longer readable by me (deleted, made

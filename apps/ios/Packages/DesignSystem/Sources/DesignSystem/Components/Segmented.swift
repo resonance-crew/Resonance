@@ -16,8 +16,13 @@ public struct SegmentSpec: Identifiable {
     public var ink: Color
     public var pressInk: Color
     /// Drops its words for its glyph alone when the bar has no room for every label (the words stay
-    /// its name for VoiceOver).
-    public var collapsible: Bool
+    /// its name for VoiceOver): at the bar's first step that gives way (`collapsesAt` 1), or only at a
+    /// later one, once those of the steps before it have gone to their glyphs and the row still
+    /// doesn't fit (round 9 §3: the bookmark first, then 寄小紙條, so only the verb keeps its words).
+    /// Nil keeps its words always.
+    public var collapsesAt: Int?
+    /// Whether it ever drops its words.
+    public var collapsible: Bool { collapsesAt != nil }
     /// One option of a choice (the publish panel's audience): whether it is the chosen one.
     public var selected: Bool?
     /// Working on the last tap: the pen inks where its glyph was, and a tap does nothing.
@@ -26,7 +31,8 @@ public struct SegmentSpec: Identifiable {
 
     public init(id: String, icon: IconName? = nil, iconFilled: Bool = false, label: String, accessibilityLabel: String? = nil,
                 fill: Color? = nil, ink: Color = Tokens.buttonOnTonal, pressInk: Color = Tokens.terracotta.opacity(0.14),
-                collapsible: Bool = false, selected: Bool? = nil, working: Bool = false, action: @escaping () -> Void) {
+                collapsible: Bool = false, collapsesAt: Int? = nil, selected: Bool? = nil, working: Bool = false,
+                action: @escaping () -> Void) {
         self.id = id
         self.icon = icon
         self.iconFilled = iconFilled
@@ -35,7 +41,7 @@ public struct SegmentSpec: Identifiable {
         self.fill = fill
         self.ink = ink
         self.pressInk = pressInk
-        self.collapsible = collapsible
+        self.collapsesAt = collapsesAt ?? (collapsible ? 1 : nil)
         self.selected = selected
         self.working = working
         self.action = action
@@ -56,7 +62,9 @@ public struct SegmentSpec: Identifiable {
 /// in the paper's colour, and the buttons' grain lies over it all.
 ///
 /// It spans its column in one row, the segments sharing it evenly (none narrower than its words);
-/// when every label no longer fits, the `collapsible` segments show their glyph alone.
+/// when every label no longer fits, the `collapsible` segments show their glyph alone — step by step,
+/// by their `collapsesAt` — and past the last step the row still never runs wider than it is offered:
+/// its segments share what there is and the words left (the verb's) end in an ellipsis.
 public struct SegmentedActionBar: View {
     let segments: [SegmentSpec]
     var seed: Double
@@ -71,21 +79,39 @@ public struct SegmentedActionBar: View {
     }
 
     public var body: some View {
-        // The first row whose words all fit: every label, then every label on a little less air, else
-        // the collapsible ones as their glyph.
+        // The first row whose words all fit: every label, then every label on a little less air, then
+        // step by step the collapsible ones as their glyph. The last row is taken whatever it measures.
+        // Each row its own candidate (a ForEach here is weighed as one): at most three steps give way.
+        let steps = Self.steps(segments)
         ViewThatFits(in: .horizontal) {
-            row(collapsed: false)
-            row(collapsed: false, tight: true)
-            if segments.contains(where: \.collapsible) { row(collapsed: true) }
+            row(through: 0, squeezes: false)
+            row(through: 0, tight: true, squeezes: steps.isEmpty)
+            if steps.count > 0 { row(through: steps[0], squeezes: steps.count == 1) }
+            if steps.count > 1 { row(through: steps[1], squeezes: steps.count == 2) }
+            if steps.count > 2 { row(through: steps[steps.count - 1], squeezes: true) }
         }
         .accessibilityElement(children: .contain)
     }
 
-    private func row(collapsed: Bool, tight: Bool = false) -> some View {
-        SegmentRowLayout(flexible: segments.map { !(collapsed && $0.collapsible) }) {
+    /// The steps at which segments drop their words, in order (1, 2 …; none when nothing collapses).
+    public nonisolated static func steps(_ segments: [SegmentSpec]) -> [Int] {
+        Array(Set(segments.compactMap(\.collapsesAt))).sorted()
+    }
+
+    /// Whether a segment shows its glyph alone in the row that has given way through `step`.
+    public nonisolated static func iconOnly(_ spec: SegmentSpec, through step: Int) -> Bool {
+        guard let at = spec.collapsesAt, spec.icon != nil else { return false }
+        return at <= step
+    }
+
+    /// The row with every segment collapsing at or before `step` as its glyph (0: all their words).
+    /// `squeezes`: the bar's last row, which ``ViewThatFits`` takes even when it doesn't fit — its
+    /// segments then share what there is and the words left end in an ellipsis, never past its edge.
+    private func row(through step: Int, tight: Bool = false, squeezes: Bool) -> some View {
+        SegmentRowLayout(flexible: segments.map { !Self.iconOnly($0, through: step) }) {
             ForEach(Array(segments.enumerated()), id: \.element.id) { i, spec in
-                SegmentButton(spec: spec, iconOnly: collapsed && spec.collapsible, tight: tight, index: i, count: segments.count,
-                              barSeed: seed, barFill: fill, seam: seam)
+                SegmentButton(spec: spec, iconOnly: Self.iconOnly(spec, through: step), tight: tight, squeezes: squeezes,
+                              index: i, count: segments.count, barSeed: seed, barFill: fill, seam: seam)
             }
         }
         .clipShape(SegmentedBarShape(seed: seed))
@@ -137,6 +163,17 @@ public nonisolated enum SegmentWidths {
     public static func overflows(ideal: [CGFloat], room: CGFloat) -> Bool {
         ideal.reduce(0, +) > room + 0.5
     }
+
+    /// The widths in a row exactly `total` wide: shared as ``resolve(ideal:flexible:total:)`` shares
+    /// them while the segments' own widths fit side by side; past that (the bar's last row, at 320 in
+    /// English at the largest interface text) each keeps its share of what there is, in proportion to
+    /// what it asked — never a row wider than offered.
+    public static func fit(ideal: [CGFloat], flexible: [Bool], total: CGFloat) -> [CGFloat] {
+        let asked = ideal.reduce(0, +)
+        guard asked > total, asked > 0 else { return resolve(ideal: ideal, flexible: flexible, total: total) }
+        let scale = max(0, total) / asked
+        return ideal.map { $0 * scale }
+    }
 }
 
 /// One row of segments: at its ideal size the segments' own widths side by side (what
@@ -149,12 +186,14 @@ struct SegmentRowLayout: Layout {
         let height = ideal.map(\.height).max() ?? 0
         let natural = ideal.reduce(0) { $0 + $1.width }
         guard let width = proposal.width, width.isFinite else { return CGSize(width: natural, height: height) }
-        return CGSize(width: max(width, natural), height: height)
+        // Offered a width it fills it — and never takes more (round 9 §3): a row that can't fit is the
+        // bar's last, whose segments share what there is (``SegmentWidths/fit(ideal:flexible:total:)``).
+        return CGSize(width: width, height: height)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let ideal = subviews.map { $0.sizeThatFits(.unspecified) }
-        let widths = SegmentWidths.resolve(ideal: ideal.map(\.width), flexible: flexible, total: bounds.width)
+        let widths = SegmentWidths.fit(ideal: ideal.map(\.width), flexible: flexible, total: bounds.width)
         var x = bounds.minX
         for (i, subview) in subviews.enumerated() {
             subview.place(at: CGPoint(x: x, y: bounds.minY), proposal: ProposedViewSize(width: widths[i], height: bounds.height))
@@ -171,6 +210,8 @@ private struct SegmentButton: View {
     let iconOnly: Bool
     /// The words' row a little closer to the seams (8 instead of 12), before a label gives way to its glyph.
     var tight = false
+    /// The bar's last row: offered less than its words, they end in an ellipsis inside the segment.
+    var squeezes = false
     let index: Int
     let count: Int
     let barSeed: Double
@@ -196,7 +237,9 @@ private struct SegmentButton: View {
                         .font(AppFonts.body(14, weight: .semibold))
                         .foregroundStyle(spec.ink)
                         .lineLimit(1)
-                        .fixedSize()
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: !squeezes, vertical: true)
+                        .layoutPriority(1)
                         .overlay(alignment: .leading) {
                             if beside {
                                 ButtonLoader(size: box, color: spec.ink).offset(x: -(box + OrganicButtonStyle.iconGap)).transition(.opacity)

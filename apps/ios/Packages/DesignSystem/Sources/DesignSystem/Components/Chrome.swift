@@ -199,6 +199,43 @@ private struct HeaderGap: ViewModifier {
     }
 }
 
+/// The two heads a page opens with under its bar (round 9 §0), each measured from the header's pen
+/// line — the wavy rule — never from the bar's box: a page's scrolled content starts at the bar's
+/// foot, which lies ``HeaderEdge/lineDepth`` (3.2) under that line on a phone and a tablet alike.
+public nonisolated enum PenLineGap {
+    /// What a page pads under its bar's foot for its first content to stand `gap` under the pen line.
+    public static func fromFoot(_ gap: CGFloat) -> CGFloat { max(0, gap - HeaderEdge.lineDepth) }
+
+    /// The people head (`--people-head-gap`): the pen line → a profile's avatar, 40 on a phone, 56 on
+    /// a tablet — on a person's page, on Me (the card box's head) and on their skeletons.
+    public static func people(compact: Bool) -> CGFloat {
+        compact ? Tokens.peopleHeadGapCompact : Tokens.peopleHeadGap
+    }
+}
+
+extension View {
+    /// The air above a page's first content under its bar, `compact` (a phone's window) or `regular`
+    /// (everything wider) points under the bar's pen line.
+    public func penLineGap(compact: CGFloat, regular: CGFloat) -> some View {
+        modifier(PenLineGapModifier(compact: compact, regular: regular))
+    }
+
+    /// The people head (round 9 §9): a profile's avatar 40 / 56 under the bar's pen line.
+    public func peopleHeadGap() -> some View {
+        penLineGap(compact: Tokens.peopleHeadGapCompact, regular: Tokens.peopleHeadGap)
+    }
+}
+
+private struct PenLineGapModifier: ViewModifier {
+    let compact: CGFloat
+    let regular: CGFloat
+    @Environment(\.window) private var window
+
+    func body(content: Content) -> some View {
+        content.padding(.top, PenLineGap.fromFoot(window.layoutClass == .compact ? compact : regular))
+    }
+}
+
 /// When a pushed page's context (the card's title, the person's name) fades into its header: once
 /// the page's own heading has scrolled wholly under the header's line (round 5 C1).
 public nonisolated enum HeaderContext {
@@ -1047,9 +1084,13 @@ public struct OrganicIconButton: View {
         return copy
     }
 
+    /// The glyph's pen at rest (round 9): INK, as the web's BareIconButton draws it — INK_STRONG
+    /// (`OrganicIcon`'s default) is the weight of a focused or active mark, not of a resting tool.
+    public static let restingStroke: CGFloat = Tokens.ink
+
     public var body: some View {
         Button { if !isLoading { action() } } label: {
-            OrganicIcon(icon, size: size)
+            OrganicIcon(icon, size: size, strokeWidth: Self.restingStroke)
                 .scaleEffect(x: mirrored ? -1 : 1)
                 .foregroundStyle(Tokens.text)
                 .opacity(isLoading ? 0 : 1)

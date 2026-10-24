@@ -144,6 +144,22 @@ public struct OrganicButton: View {
         return copy
     }
 
+    /// A face of its own instead of its rank's (round 9 §8: the cover's buttons in their card's
+    /// colours): `face`; while it can't be pressed, `disabled` — a face of its own too, so it is never
+    /// the alpha fade (a picture or a stripe would show through) — and `outline`, a pen line round it
+    /// at INK (a control floating over a picture).
+    var ownFace: OrganicButtonFace?
+    var ownDisabledFace: OrganicButtonFace?
+    var outlineInk: Color?
+
+    public func face(_ face: OrganicButtonFace, disabled: OrganicButtonFace? = nil, outline: Color? = nil) -> OrganicButton {
+        var copy = self
+        copy.ownFace = face
+        copy.ownDisabledFace = disabled
+        copy.outlineInk = outline
+        return copy
+    }
+
     /// Its own `loading`, or its dialog's foot's (``ModalActions`` `busy` puts the verb to work).
     private var showsLoader: Bool { isLoading || footLoading }
     /// Takes a tap now: not while it works, nor while its dialog's foot waits on the last tap.
@@ -168,7 +184,8 @@ public struct OrganicButton: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public var body: some View {
-        let style = OrganicButtonStyle(variant: variant, size: size, minHeight: minHeight)
+        let style = OrganicButtonStyle(variant: variant, size: size, minHeight: minHeight,
+                                       own: isEnabled ? ownFace : ownDisabledFace ?? ownFace)
         let shape = OrganicButtonShape(seed: style.seed)
         face(style)
             .frame(maxWidth: fillsWidth ? .infinity : nil, maxHeight: fillsHeight ? .infinity : nil)
@@ -176,6 +193,9 @@ public struct OrganicButton: View {
                 GeometryReader { geo in
                     ZStack {
                         style.fillLayers(shape)
+                        if let outlineInk {
+                            shape.stroke(outlineInk, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
+                        }
                         // Ink reveal from the touch point. The circle is always there (at nothing), so a
                         // press grows it from 0 rather than inserting it at full size.
                         let p = pressPoint ?? CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
@@ -190,8 +210,8 @@ public struct OrganicButton: View {
                 }
             }
             // The web dims the whole button (fill, grain, ink, label) while it isn't pressable yet; one at
-            // work keeps its colour.
-            .opacity(!isEnabled ? 0.45 : 1)
+            // work keeps its colour, and one with a disabled face of its own wears that instead.
+            .opacity(!isEnabled && ownDisabledFace == nil ? 0.45 : 1)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: showsLoader)
             .scaleEffect(pressed ? 0.97 : 1)
             .contentShape(shape)
@@ -330,7 +350,7 @@ public struct OrganicButtonFace: Equatable, Sendable {
     static let tonal = OrganicButtonFace(fill: Tokens.buttonTonal, label: Tokens.buttonOnTonal,
                                          pressInk: Tokens.terracotta.opacity(0.14), seed: 601)
 
-    init(fill: Color, label: Color, pressInk: Color, seed: Double, grain: String = "grain-button", grainOpacity: Double = 0.38) {
+    public init(fill: Color, label: Color, pressInk: Color, seed: Double, grain: String = "grain-button", grainOpacity: Double = 0.38) {
         self.fill = fill
         self.label = label
         self.pressInk = pressInk
@@ -363,11 +383,13 @@ struct OrganicButtonStyle {
     let size: OrganicButton.Size
     /// The least height a dialog's foot asks of its buttons (44pt: a finger's), if any.
     var minHeight: CGFloat? = nil
+    /// A face of the button's own (``OrganicButton/face(_:disabled:outline:)``), else its rank's.
+    var own: OrganicButtonFace? = nil
 
     /// A glyph beside its words, every button and segment alike (design §7: was 7, the segments' 8).
     static let iconGap: CGFloat = 6
 
-    var face: OrganicButtonFace { .of(variant) }
+    var face: OrganicButtonFace { own ?? .of(variant) }
     var seed: Double { face.seed }
     var textColor: Color { face.label }
 

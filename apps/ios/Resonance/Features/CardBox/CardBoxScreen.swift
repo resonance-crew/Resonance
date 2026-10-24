@@ -2,9 +2,9 @@ import DesignSystem
 import ResonanceKit
 import SwiftUI
 
-/// My card box (me/page.tsx): who I am, then my cards on six shelves — published, 草稿 (drafts and
-/// published private cards together, round 8 §1.1), the cards I resonated with, cards linking to
-/// mine, bookmarks, and the trash (always last, before the thought map).
+/// My card box (me/page.tsx): who I am, then my cards on six shelves — published, 私人卡 (cards never
+/// published and published cards kept private together, round 8 §1.1 / round 9 §1), the cards I
+/// resonated with, cards linking to mine, bookmarks, and the trash (always last, before the thought map).
 struct CardBoxScreen: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.window) private var window
@@ -29,23 +29,25 @@ struct CardBoxScreen: View {
 
     /// The shelves in the strip's order: the trash always last (trash.spec §4), shown even while empty —
     /// it is read only when chosen, never to decide whether it shows. No 私人卡 shelf: a published
-    /// private card is a 草稿, on the 草稿 shelf (`.draft`, which shows both — ``draftShelf(private:drafts:)``).
+    /// private card is a 私人卡, on that shelf (`.draft`, which shows both — ``draftShelf(private:drafts:)``).
     static let order: [ReadingAPI.CardBoxShelf] = [.published, .draft, .resonated, .linked, .bookmarks, .trash]
     #if DEBUG
     private static var choseLaunchShelf = false
     #endif
     /// The shelves of my own cards (OWNED_TABS), asked for together: each card gets its ⋯.
     static let owned: Set<ReadingAPI.CardBoxShelf> = [.published, ._private, .draft]
-    /// The most the 草稿 shelf shows (each of its two lists is the server's newest 40).
+    /// The most the 私人卡 shelf shows (each of its two lists is the server's newest 40).
     static let draftShelfMax = 40
 
     private var phone: Bool { window.layoutClass == .compact }
 
     var body: some View {
-        // A phone's card box keeps 8 more air under the bar's line and around the shelf tabs (round 5 E2).
-        TabScreen(L10n.App.Nav.me, titleInBar: true, phoneTop: 24) {
+        // The people head (round 9 §9): the avatar 40 / 56 under the bar's pen line, as on a person's page.
+        TabScreen(L10n.App.Nav.me, titleInBar: true, phoneTop: PenLineGap.fromFoot(Tokens.peopleHeadGapCompact),
+                  tabletTop: PenLineGap.fromFoot(Tokens.peopleHeadGap)) {
             header.alignedWithCardGrid().padding(.bottom, phone ? 32 : 24)
-            tabs.padding(.bottom, phone ? 36 : 28)
+            // The trash's line stands 24 under the shelf strip's washes (round 9 §5; the strip pads them 7).
+            tabs.padding(.bottom, shelf == .trash && cards(.trash)?.isEmpty == false ? 24 - Self.tabsInnerPad : (phone ? 36 : 28))
             shelfContent
         }
         .refreshable {
@@ -63,7 +65,7 @@ struct CardBoxScreen: View {
         }
         #if DEBUG
         .task {
-            // `-cardBoxShelf <web key>` opens on that shelf (screen checks); `private` opens 草稿.
+            // `-cardBoxShelf <web key>` opens on that shelf (screen checks); `private` opens 私人卡.
             guard !Self.choseLaunchShelf, let key = UserDefaults.standard.string(forKey: "cardBoxShelf"),
                   let chosen = Self.shelf(forKey: key) else { return }
             Self.choseLaunchShelf = true
@@ -108,6 +110,9 @@ struct CardBoxScreen: View {
         }
     }
 
+    /// The shelf strip's own air over and under its washes.
+    static let tabsInnerPad: CGFloat = 7
+
     @ViewBuilder private var header: some View {
         if let me = session.me {
             HStack(spacing: 16) {
@@ -136,6 +141,18 @@ struct CardBoxScreen: View {
             OrganicEmptyState(message: L10n.Native.loadError, actionTitle: L10n.Native.retry, actionStyle: .outline) {
                 Task { await session.loadMe() }
             }
+        } else {
+            // Who I am, still on its way: the head's shapes where they will land, so nothing moves (round 9 §9).
+            HStack(spacing: 16) {
+                SkeletonBlock(width: 72, circle: true)
+                VStack(alignment: .leading, spacing: 10) {
+                    SkeletonBlock(width: 120, height: 24, radius: 8)
+                    SkeletonBlock(width: 180, height: 14)
+                }
+                Spacer(minLength: 0)
+            }
+            .accessibilityElement()
+            .accessibilityLabel("Loading")
         }
     }
 
@@ -180,7 +197,7 @@ struct CardBoxScreen: View {
             // Room for the wobble, which bleeds a few points past the tab; on a wide window the strip
             // starts where the head and the grid do.
             .padding(.horizontal, window.layoutClass == .compact ? 20 : max(0, (window.contentWidth - 1200) / 2) + window.pad)
-            .padding(.vertical, 7)
+            .padding(.vertical, Self.tabsInnerPad)
         }
         .scrollIndicators(.hidden)
         // The shelf chosen is in view (the trash, last, is off a phone's edge).
@@ -191,7 +208,7 @@ struct CardBoxScreen: View {
         .sensoryFeedback(.selection, trigger: shelf)
     }
 
-    /// What shelf `s` shows, as far as it is known: the 草稿 shelf is the drafts and the published
+    /// What shelf `s` shows, as far as it is known: the 私人卡 shelf is the drafts and the published
     /// private cards together (both must be known), every other shelf its own list.
     private func cards(_ s: ReadingAPI.CardBoxShelf) -> [FeedCard]? {
         guard s == .draft else { return shelves[s] }
@@ -245,7 +262,7 @@ struct CardBoxScreen: View {
                 unconfirmed.insert(s)
             }
         }
-        // The 草稿 shelf waits on both of its lists.
+        // The 私人卡 shelf waits on both of its lists.
         let waiting = s == .draft ? unconfirmed.contains(.draft) || unconfirmed.contains(._private) : unconfirmed.contains(s)
         guard force || cards(s) == nil || waiting else { return nil }
         let asked = Self.asked(with: s, force: force, known: Set(shelves.keys), unconfirmed: unconfirmed)
@@ -263,7 +280,7 @@ struct CardBoxScreen: View {
             }
             // Taken over: the newer read says what there is to say about this shelf.
             guard reads.current(s, read) else { return nil }
-            // The 草稿 shelf shows the private cards too: missing while they are known nowhere.
+            // The 私人卡 shelf shows the private cards too: missing while they are known nowhere.
             let missing = answered[s] == nil || (s == .draft && answered[._private] == nil && shelves[._private] == nil)
             // The page-wide state is the shelf on screen's: a shelf left behind can't turn another's skeleton into an error.
             if s == shelf { failed = missing }
@@ -307,7 +324,7 @@ struct CardBoxScreen: View {
         return owned.filter { force || !known.contains($0) || unconfirmed.contains($0) }.union([s])
     }
 
-    /// The 草稿 shelf (round 8 §1.1): the drafts never published and the published private cards
+    /// The 私人卡 shelf (round 8 §1.1): the drafts never published and the published private cards
     /// together, the most recently changed first — by `editedAt`, a card without one by `publishedAt`
     /// (one with neither after those that have one, in the order it came) — each card once, at most
     /// `draftShelfMax`. Nil until both lists are known.
@@ -328,14 +345,7 @@ struct CardBoxScreen: View {
         return Array(ordered.prefix(draftShelfMax).map(\.card))
     }
 
-    /// What a tap on one of my cards opens (round 8 §1.1): the writer for a 草稿 — a card never
-    /// published, or published and kept private, is something its author goes on writing (the web
-    /// sends both to /write/{id}, as the ⋯'s 編輯 does) — and the card's page for one readers have.
-    static func opensWriter(_ card: FeedCard) -> Bool {
-        !CardActionsMenu.readersSee(published: card.publishedAt != nil, visibility: card.visibility.rawValue)
-    }
-
-    /// The shelf a web key names — `private` (the 私人卡 shelf there was) opens 草稿.
+    /// The shelf a web key names — `private` (the 私人卡 shelf there was) opens 私人卡.
     static func shelf(forKey key: String) -> ReadingAPI.CardBoxShelf? {
         key == webKey(._private) ? .draft : order.first { webKey($0) == key }
     }
@@ -381,13 +391,11 @@ struct CardBoxScreen: View {
 
 /// My own cards (ProfileTabs' managed shelves): each with the owner's ⋯ over
 /// its top-right corner. An anonymous one wears the anonymous byline exactly as
-/// everyone else sees it (design §13) — that is its marker, no badge. A tap on a
-/// 草稿 — never published, or published and kept private — goes on writing it, as
-/// its ⋯ 編輯 does (round 8 §1.1, the web's /write/{id}); a card readers have
-/// opens its page (``CardBoxScreen/opensWriter(_:)``).
+/// everyone else sees it (design §13) — that is its marker, no badge. A tap opens
+/// the card's page, a 私人卡 too (round 9 §1): the owner reads it there, its 編輯
+/// a tap away in the bar, as on every card.
 private struct ManagedCardList: View {
     let cards: [FeedCard]
-    @Environment(WriteLauncher.self) private var writer
     @Environment(SessionStore.self) private var session
 
     var body: some View {
@@ -396,18 +404,10 @@ private struct ManagedCardList: View {
         CardColumns(count: cards.count) { i, bordered in
             let card = cards[i]
             let hue = CardPalette(index: palettes[i]).hue
-            Group {
-                if CardBoxScreen.opensWriter(card) {
-                    Button { writer.edit(card.id) } label: {
-                        StoryCardView(card.publicStory, position: i, isLast: i == cards.count - 1, bordered: bordered, palette: palettes[i])
-                    }
-                } else {
-                    NavigationLink(value: Route.card(card.routeKey)) {
-                        StoryCardView(card.publicStory, position: i, isLast: i == cards.count - 1, bordered: bordered, palette: palettes[i])
-                    }
-                    .onAppear { session.cardPreviews.remember(card) }
-                }
+            NavigationLink(value: Route.card(card.routeKey)) {
+                StoryCardView(card.publicStory, position: i, isLast: i == cards.count - 1, bordered: bordered, palette: palettes[i])
             }
+            .onAppear { session.cardPreviews.remember(card) }
             .buttonStyle(.plain)
             // .actions: the chip 14 in from the card's corner (a band's box sits 20 in from the screen;
             // a bordered card's corner is its own); the trigger's 44pt hit box reaches 3 past the 38pt chip.
@@ -423,10 +423,10 @@ private struct ManagedCardList: View {
 }
 
 /// The card box's 垃圾桶 (the web's TrashShelf): what I deleted, the latest in first, for 30 days —
-/// each saying where it came from and when it goes (``TrashCaption``). A published card opens its
-/// page (its trash banner), a draft the writer (its trashed notice). Its ⋯ restores it or deletes it
-/// for good; 清空垃圾桶 deletes them all, asked first in red. Over the cards, how long the trash
-/// keeps them — and, while an anonymous card is here, that the notes left on it went with it.
+/// each saying where it came from and when it goes (``TrashCaption``) — every card opening its page,
+/// with its trash banner (round 9 §1). Its ⋯ restores it or deletes it for good. Over the cards one row,
+/// no container (round 9 §5): how long the trash keeps them at its start — and, while an anonymous card
+/// is here, that the notes left on it went with it — and 清空 at its end.
 private struct TrashShelf: View {
     let cards: [FeedCard]
     /// 清空垃圾桶: the question is the card box's (it outlives the shelf reading again).
@@ -434,35 +434,54 @@ private struct TrashShelf: View {
     @Environment(\.window) private var window
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        // 16 down to a phone's first band, 24 to a grid (whose own top keeps 4).
+        VStack(alignment: .leading, spacing: window.layoutClass == .expanded ? 20 : 16) {
             header.alignedWithCardGrid()
             TrashCardList(cards: cards)
         }
     }
 
-    @ViewBuilder private var header: some View {
-        let lines = VStack(alignment: .leading, spacing: 4) {
-            Text(L10n.Me.trashHint(days: CardTrash.days))
-            if TrashCaption.holdsAnonymous(cards) { Text(L10n.Me.trashAnonymousNotes) }
-        }
-        .font(AppFonts.body(13))
-        .foregroundStyle(Tokens.textMuted)
-        .fixedSize(horizontal: false, vertical: true)
-        // It only opens a question, which is red: the tonal red, as Settings' 刪除帳號.
-        let button = OrganicButton(L10n.Me.Actions.emptyTrash, variant: .dangerTonal, size: .sm) { onEmpty() }
-        .fixedSize()
-        if window.layoutClass == .compact {
-            // A phone: the button under the lines, at their start.
-            VStack(alignment: .leading, spacing: 12) {
-                lines
-                button
+    private var header: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.Me.trashHint(days: CardTrash.days))
+                // A privacy statement: the same size as the line over it.
+                if TrashCaption.holdsAnonymous(cards) { Text(L10n.Me.trashAnonymousNotes) }
             }
-        } else {
-            HStack(alignment: .center, spacing: 12) {
-                lines.frame(maxWidth: .infinity, alignment: .leading)
-                button
-            }
+            .font(AppFonts.body(13))
+            .lineSpacing(13 * 0.35)
+            .foregroundStyle(Tokens.textMuted)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            EmptyTrashButton(action: onEmpty)
         }
+    }
+}
+
+/// 🗑 清空 (round 9 §5): a text button in the danger ink — the trash glyph before its word, no fill —
+/// whose press washes the danger ink faintly round it, a finger tall; named 清空垃圾桶 for VoiceOver.
+/// It only opens the question (in red).
+struct EmptyTrashButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                OrganicIcon(.trash, size: 16, color: Tokens.danger, strokeWidth: Tokens.ink)
+                Text(L10n.Me.Actions.emptyTrashShort)
+                    .font(AppFonts.body(14, weight: .semibold))
+                    .foregroundStyle(Tokens.danger)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            .padding(.horizontal, 10)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(OrganicPressStyle(inset: 2, color: Tokens.danger.opacity(0.12)))
+        // The glyph's own room sits in the margin, its ink on the shelf strip's end edge.
+        .padding(.trailing, -10)
+        .accessibilityLabel(L10n.Me.Actions.emptyTrash)
     }
 }
 
@@ -523,11 +542,10 @@ final class ShelfReads {
 
 /// The trash's cards (ProfileTabs' trash shelf): each with its caption under the byline and the
 /// trash's ⋯ over its top-right corner; an anonymous one wears the anonymous byline, as on the other
-/// owned shelves. A published card opens its page; a draft, the writer.
+/// owned shelves. Every one opens its page — its trash banner there, published or never (round 9 §1:
+/// the server answers its author for both).
 private struct TrashCardList: View {
     let cards: [FeedCard]
-    @Environment(WriteLauncher.self) private var writer
-    @Environment(SessionStore.self) private var session
 
     var body: some View {
         let palettes = CardPalette.palettes(cards.map(\.accentHue))
@@ -538,15 +556,9 @@ private struct TrashCardList: View {
             let face = StoryCardView(card.publicStory, position: i, isLast: i == cards.count - 1, bordered: bordered,
                                      palette: palettes[i])
                 .footnote(TrashCaption.text(card, now: now))
-            Group {
-                if card.publishedAt == nil {
-                    Button { writer.edit(card.id) } label: { face }
-                } else {
-                    // Never prefilled from the shelf: a trash summary isn't the card's page.
-                    NavigationLink(value: Route.card(card.routeKey)) { face }
-                }
-            }
-            .buttonStyle(.plain)
+            // Never prefilled from the shelf: a trash summary isn't the card's page.
+            NavigationLink(value: Route.card(card.routeKey)) { face }
+                .buttonStyle(.plain)
             .overlay(alignment: .topTrailing) {
                 TrashActionsMenu(cardId: card.id, seed: hue, hue: hue)
                     .padding(.top, 14 - 3)

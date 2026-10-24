@@ -62,6 +62,12 @@ struct ThreadScreen: View {
     /// A word over the composer for a moment ("Copied").
     @State private var toast: String?
     @State private var resultsUnderBar = false
+    /// How much of the thread's foot the floating foot covers — the capsule and its slip (or a notice in
+    /// their place), the 8 under them and the home indicator under that (round 9 §4) — measured as how far
+    /// the thread layer, which runs under it, reaches past what shows above it.
+    /// The thread layer's foot, and the height left over the floating foot, in the thread's own space.
+    @State private var threadBottom: CGFloat = 0
+    @State private var shownHeight: CGFloat = 0
     @FocusState private var composing: Bool
     @FocusState private var searchFocused: Bool
 
@@ -213,73 +219,104 @@ struct ThreadScreen: View {
         }
     }
 
-    /// The messages over the foot. The messages show whoever may write: only the foot changes with it.
+    /// How far up from the thread's foot its newest message, the pill and 已複製 stand (round 9 §4):
+    /// past whatever floats over it there — the capsule and its slip, the bottom safe area or the
+    /// keyboard under them, the 8 between — and 12 more. Measured live: the field grows, a slip comes.
+    private var bottomRoom: CGFloat {
+        ThreadFoot.room(threadBottom: threadBottom, shownHeight: shownHeight) + ComposerMetrics.clearance
+    }
+
+    /// The messages run to the screen's foot, and the foot floats over them (round 9 §4: no band, no
+    /// fade). The messages show whoever may write: only the foot changes with it.
     @ViewBuilder private func thread(_ model: ThreadModel) -> some View {
         let ready = model.phase == .ready
         ZStack(alignment: .bottom) {
-            if ready {
-                MessageList(rows: model.rows, ctx: context(model), position: $scroll, topMargin: barHeight,
-                            pillVisible: !(searching && showResults) && toast == nil, underBar: $underBar)
-                    // Under the search's list of matches the thread is out of sight: out of VoiceOver's reach too.
-                    .accessibilityHidden(searching && showResults)
+            ZStack(alignment: .bottom) {
+                if ready {
+                    MessageList(rows: model.rows, ctx: context(model), position: $scroll, topMargin: barHeight,
+                                bottomRoom: bottomRoom, notice: listNotice(model),
+                                pillVisible: !(searching && showResults) && toast == nil, underBar: $underBar)
+                        // Under the search's list of matches the thread is out of sight: out of VoiceOver's reach too.
+                        .accessibilityHidden(searching && showResults)
+                }
+                // Who it is with, or the first read, still on its way: the thread's shapes until the messages take their place.
+                if !ready || !model.threadReady {
+                    ThreadSkeleton(bottomRoom: bottomRoom).transition(.opacity)
+                }
+                if ready && searching && showResults {
+                    ThreadSearchResults(model: model, query: query, topMargin: barHeight, bottomMargin: bottomRoom,
+                                        underBar: $resultsUnderBar) { pick($0) }
+                }
+                if let toast {
+                    // Without an action, a word that something was done (「已複製」), said aloud as it shows (`say`).
+                    OrganicPill(icon: .check, text: toast)
+                        .padding(.bottom, bottomRoom)
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                }
             }
-            // Who it is with, or the first read, still on its way: the thread's shapes until the messages take their place.
-            if !ready || !model.threadReady {
-                ThreadSkeleton().transition(.opacity)
-            }
-            if ready && searching && showResults {
-                ThreadSearchResults(model: model, query: query, topMargin: barHeight, underBar: $resultsUnderBar) { pick($0) }
-            }
-            if let toast {
-                // Without an action, a word that something was done (「已複製」), said aloud as it shows (`say`).
-                OrganicPill(icon: .check, text: toast)
-                    .padding(.bottom, 10)
-                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
-            }
+            .frame(maxHeight: .infinity)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listWidth = $0 }
+            // How far it runs past what shows over the foot: the foot's inset and the home indicator under it
+            // (over a keyboard the thread stops at the keyboard and keeps its place, as it always has).
+            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.footSpace)).maxY.rounded() } action: { threadBottom = $0 }
+            .ignoresSafeArea(.container, edges: .bottom)
         }
-        .frame(maxHeight: .infinity)
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listWidth = $0 }
+        // The room over the foot, whatever the thread inside it holds: what is measured never follows from
+        // the room it measures (a skeleton padded by it once made the two chase each other).
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height.rounded() } action: { shownHeight = $0 }
+        .coordinateSpace(.named(Self.footSpace))
         // While they are found the composer is there already (nothing to send to until they are): a thread
         // mostly is somewhere to write, and the field stays put — what was typed, the keyboard — once they are.
-        foot(model)
+        // Floating over the messages: an inset of the screen's foot that the thread runs under (the list is
+        // drawn upside down, so it is told this as its top margin rather than taking it as its bottom).
+        .safeAreaInset(edge: .bottom, spacing: 0) { foot(model) }
     }
 
-    /// Under the messages: the composer — with a quiet line over it when answering their note
-    /// connects the two — or, where there is nothing to write, a calm line in its place: the wait
-    /// for an answer to one's own note, or why messages can't be sent here. Nothing while that isn't known yet.
+    /// The thread and the room over its floating foot, measured against each other.
+    private static let footSpace = "thread.foot"
+
+    /// A line about the conversation that scrolls with it as its last item (round 9 §4): answering
+    /// their letter connects the two — said over a composer that floats, not on a band of its own.
+    private func listNotice(_ model: ThreadModel) -> String? {
+        guard model.accessKnown, model.access == .replyToConnect else { return nil }
+        return L10n.Messages.replyToConnect(handle: model.displayHandle)
+    }
+
+    /// Floating over the messages' foot, 8 over the bottom safe area or the keyboard: the composer — or,
+    /// where there is nothing to write, a slip in its place with a calm line: the wait for an answer to
+    /// one's own note, or why messages can't be sent here. Nothing while that isn't known yet.
     @ViewBuilder private func foot(_ model: ThreadModel) -> some View {
-        if model.accessKnown {
-            switch model.access {
-            case .open, .replyToConnect:
-                VStack(spacing: 0) {
-                    if model.access == .replyToConnect {
-                        ThreadFootNote(text: L10n.Messages.replyToConnect(handle: model.displayHandle), size: 12.5)
-                            .padding(.top, 10)
-                    }
+        VStack(spacing: 0) {
+            if model.accessKnown {
+                switch model.access {
+                case .open, .replyToConnect:
                     ThreadComposer(model: model, composing: $composing) { attachMenu = $0 }
+                case .awaitingReply:
+                    ComposerSlip(seed: 29) {
+                        ThreadFootNote(text: L10n.Messages.awaitingReply)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 14)
+                    }
+                case .notConnected:
+                    ComposerSlip(seed: 31) {
+                        VStack(spacing: 6) {
+                            ThreadFootNote(text: L10n.Messages.notConnected)
+                            Button(L10n.Messages.viewProfile) { openRoute(.author(model.displayHandle)) }
+                                .font(AppFonts.body(13)).foregroundStyle(Tokens.terracotta).underline().buttonStyle(.plain)
+                                .frame(minHeight: 32)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                    }
                 }
-                .padding(.horizontal, 14)
-                .padding(.bottom, 14)
-                // A wide pane keeps the field to a writing width, centred under the thread.
-                .frame(maxWidth: 720)
-                .frame(maxWidth: .infinity)
-            case .awaitingReply:
-                ThreadFootNote(text: L10n.Messages.awaitingReply)
-                    .padding(.horizontal, 28)
-                    .padding(.top, 14)
-                    .padding(.bottom, 22)
-            case .notConnected:
-                VStack(spacing: 6) {
-                    ThreadFootNote(text: L10n.Messages.notConnected)
-                    Button(L10n.Messages.viewProfile) { openRoute(.author(model.displayHandle)) }
-                        .font(AppFonts.body(13)).foregroundStyle(Tokens.terracotta).underline().buttonStyle(.plain)
-                        .frame(minHeight: 32)
-                }
-                .padding(.horizontal, 28)
-                .padding(.top, 14)
-                .padding(.bottom, 16)
             }
         }
+        .padding(.horizontal, ComposerMetrics.gutter)
+        .padding(.bottom, ComposerMetrics.bottomGap)
+        // A wide pane keeps the field to a writing width, centred under the thread.
+        .frame(maxWidth: ComposerMetrics.maxWidth)
+        .frame(maxWidth: .infinity)
     }
 
     private func context(_ model: ThreadModel) -> ThreadContext {
@@ -686,5 +723,16 @@ private struct PersonPlaceholder: View {
             Text(handle).font(AppFonts.heading(18)).foregroundStyle(Tokens.text).lineLimit(1)
                 .accessibilityAddTraits(.isHeader)
         }
+    }
+}
+
+/// The floating foot's room over the thread (round 9 §4).
+nonisolated enum ThreadFoot {
+    /// How much of the thread the foot covers: how far the thread layer's foot (`threadBottom`) lies past
+    /// the room shown over the foot (`shownHeight`), both in the thread's own space — never less than
+    /// nothing, and never more than the thread itself (a measure taken mid-layout can't run away).
+    static func room(threadBottom: CGFloat, shownHeight: CGFloat) -> CGFloat {
+        guard shownHeight > 0, threadBottom > 0 else { return 0 }
+        return min(max(0, threadBottom - shownHeight), threadBottom / 2)
     }
 }

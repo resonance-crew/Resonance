@@ -37,7 +37,15 @@ struct PublishStep: View {
     /// The paper of the preview's band (a phone's: the list's first card, by the cover's hue), which
     /// the gap a pull opens over it wears while it leads under the bar (round 8 §6.3).
     static func bandPalette(_ model: WriteModel) -> CardPalette {
-        CardPalette(accentHue: model.values.accentHue, position: 0)
+        previewPalette(accentHue: model.values.accentHue, cardId: model.draftId)
+    }
+
+    /// The preview's family (round 9 §8): a card with a cover, its cover's hue's; one without, its own
+    /// from its id (`seedFromId(id) % 6`), so its cover buttons wear that card's colours — the first
+    /// family's only while it has no id yet. (A list still colours a coverless card by its place.)
+    static func previewPalette(accentHue: Double?, cardId: String?) -> CardPalette {
+        if accentHue != nil { return CardPalette(accentHue: accentHue, position: 0) }
+        return CardPalette(index: cardId.map(CardPalette.family(id:)) ?? 0)
     }
 
     /// Whether the preview's band is the first thing under the writer's bar: on a phone, with nothing
@@ -145,19 +153,20 @@ struct PublishStep: View {
 
     private var preview: some View {
         let content = model.preview(me: session.me)
+        let palette = Self.bandPalette(model)
         // Nothing under the preview: why a cover didn't come is said on the picture (``CoverSlot``).
         return Group {
             if compact {
                 // A phone: the list's own full-bleed band, edge to edge of the window — the first
                 // card under the bar, as home's, when nothing stands above it.
                 StoryCardView(content, position: 0, isLast: true,
-                              underBar: Self.bandUnderBar(model, showsBar: !inlineHeading, compact: compact))
-                    .coverSlot { CoverSlot(model: model, onPick: onPickCover) }
+                              underBar: Self.bandUnderBar(model, showsBar: !inlineHeading, compact: compact), palette: palette.index)
+                    .coverSlot { CoverSlot(model: model, palette: palette, onPick: onPickCover) }
                     .preview()
                     .padding(.horizontal, -20)
             } else {
-                StoryCardView(content, position: 0, bordered: true)
-                    .coverSlot { CoverSlot(model: model, onPick: onPickCover) }
+                StoryCardView(content, position: 0, bordered: true, palette: palette.index)
+                    .coverSlot { CoverSlot(model: model, palette: palette, onPick: onPickCover) }
                     .preview()
                     .frame(maxWidth: Self.previewMaxWidth, alignment: .leading)
             }
@@ -310,6 +319,8 @@ extension PublishStep {
 /// §3): under the empty picture's pills, or on a paper chip at the top-left of the cover that stays.
 private struct CoverSlot: View {
     let model: WriteModel
+    /// The preview's family: the cover's controls wear it (round 9 §8).
+    let palette: CardPalette
     var onPick: () -> Void
 
     var body: some View {
@@ -371,23 +382,29 @@ private struct CoverSlot: View {
         }
     }
 
+    /// 加一張圖片 · 生成圖片 in the card's own colours (round 9 §8): the family's deep pen as the face,
+    /// its paper's words; 生成圖片 waiting for a story wears the family's tonal step and the muted words.
     @ViewBuilder private var pills: some View {
-        OrganicButton(L10n.Write.mediaPlaceholder, icon: .image, variant: .tonal, size: .sm, action: onPick)
+        OrganicButton(L10n.Write.mediaPlaceholder, icon: .image, variant: .solid, size: .sm, action: onPick)
+            .face(.cardDeep(palette))
             .fixedSize()
-        OrganicButton(L10n.Write.mediaGenerate, icon: .sparkle, variant: .tonal, size: .sm) {
+        OrganicButton(L10n.Write.mediaGenerate, icon: .sparkle, variant: .solid, size: .sm) {
             Task { await model.generateCover() }
         }
+        .face(.cardDeep(palette), disabled: .cardDeepDisabled(palette))
         .fixedSize()
         .disabled(!model.canGenerate)
     }
 
-    /// 更換封面: the paper chip on the picture's corner, and what it offers — another picture, one drawn
-    /// from the story (waiting for a story), or none.
+    /// 更換封面: the chip on the picture's corner in the card's colours — its fill, its pen line, its deep
+    /// words — and what it offers, on a panel of the same hue: another picture, one drawn from the story
+    /// (waiting for a story), or none.
     private var changeChip: some View {
         OrganicMenu(items: PublishStep.coverItems(canGenerate: model.canGenerate, pick: onPick,
                                                   generate: { Task { await model.generateCover() } },
                                                   remove: { model.removeCover() }),
                     label: L10n.Write.coverChange, seed: 36, trigger: .pill(L10n.Write.coverChange, .image))
+            .pill(palette: palette)
     }
 }
 

@@ -410,6 +410,8 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
     /// list, whose panes are fixed).
     var phoneTop: CGFloat
     var tabletGap: Bool
+    /// A tablet's own air under the header in place of its 32 under the pen line (Me's people head, round 9 §9).
+    var tabletTop: CGFloat?
     /// The list's first item as it is now (the feed's first card), for lists whose items anchor the
     /// scroll (a scroll target layout: a reader further down keeps the item they are reading where it
     /// is when items come in above it). When it changes while the list rests at its top — picks put
@@ -453,13 +455,13 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
     private var travel: CGFloat { window.topTabs ? 0 : 48 }
     private var topPadding: CGFloat {
         guard titleInBar else { return title.isEmpty ? 0 : 40 }
-        return window.topTabs && tabletGap ? HeaderChrome.contentTop : phoneTop
+        return window.topTabs && tabletGap ? tabletTop ?? HeaderChrome.contentTop : phoneTop
     }
     /// What the tab bar takes at the foot (nothing when the tabs are in the header).
     private var bottomRoom: CGFloat { window.topTabs ? 0 : OrganicTabBar<AppTab>.height + HeaderEdge.height }
 
     init(_ title: String, headerSpacing: CGFloat = 20, titleInBar: Bool = false, phoneTop: CGFloat = 16, tabletGap: Bool = true,
-         head: String? = nil, toTopRequests: Int = 0, onAtTop: @escaping (Bool) -> Void = { _ in },
+         tabletTop: CGFloat? = nil, head: String? = nil, toTopRequests: Int = 0, onAtTop: @escaping (Bool) -> Void = { _ in },
          @ViewBuilder trailing: () -> Trailing = { EmptyView() },
          @ViewBuilder banner: () -> Banner, @ViewBuilder content: () -> Content) {
         self.title = title
@@ -467,6 +469,7 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
         self.titleInBar = titleInBar
         self.phoneTop = phoneTop
         self.tabletGap = tabletGap
+        self.tabletTop = tabletTop
         self.head = head
         self.toTopRequests = toTopRequests
         self.onAtTop = onAtTop
@@ -553,10 +556,10 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
 
 extension TabScreen where Banner == EmptyView {
     init(_ title: String, headerSpacing: CGFloat = 20, titleInBar: Bool = false, phoneTop: CGFloat = 16, tabletGap: Bool = true,
-         head: String? = nil, toTopRequests: Int = 0, onAtTop: @escaping (Bool) -> Void = { _ in },
+         tabletTop: CGFloat? = nil, head: String? = nil, toTopRequests: Int = 0, onAtTop: @escaping (Bool) -> Void = { _ in },
          @ViewBuilder trailing: () -> Trailing = { EmptyView() }, @ViewBuilder content: () -> Content) {
         self.init(title, headerSpacing: headerSpacing, titleInBar: titleInBar, phoneTop: phoneTop, tabletGap: tabletGap,
-                  head: head, toTopRequests: toTopRequests, onAtTop: onAtTop, trailing: trailing, banner: { EmptyView() },
+                  tabletTop: tabletTop, head: head, toTopRequests: toTopRequests, onAtTop: onAtTop, trailing: trailing, banner: { EmptyView() },
                   content: content)
     }
 }

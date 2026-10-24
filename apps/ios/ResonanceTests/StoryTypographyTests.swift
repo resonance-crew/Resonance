@@ -63,16 +63,20 @@ import UIKit
     @Test func thePhoneTakesTheCompactNumbersAndEveryWiderWindowTheOthers() {
         let phone = StoryTypography(script: .cjk, layout: .compact)
         #expect(phone.compact)
-        #expect(phone.blockGap == 24 && phone.ruleGap == 32 && phone.coverGap == 20 && phone.leadGap == 32 && phone.endGap == 32)
+        #expect(phone.blockGap == 24 && phone.ruleGap == 32 && phone.coverGap == 24 && phone.leadGap == 40 && phone.endGap == 32)
         #expect(phone.metaSize == 13)
+        // The reading head (round 9 §2): pen line → title 48, → cover 56; title → byline 20.
+        #expect(phone.headGap(cover: false) == 48 && phone.headGap(cover: true) == 56 && phone.metaGap == 20)
         for layout in [LayoutClass.medium, .expanded] {
             let wide = StoryTypography(script: .cjk, layout: layout)
             #expect(!wide.compact)
-            #expect(wide.blockGap == 32 && wide.ruleGap == 40 && wide.coverGap == 28 && wide.leadGap == 40 && wide.endGap == 40)
+            #expect(wide.blockGap == 32 && wide.ruleGap == 40 && wide.coverGap == 32 && wide.leadGap == 48 && wide.endGap == 40)
+            // The byline's meta line is 14 at every regular width now, as the web's.
             #expect(wide.metaSize == 14)
+            #expect(wide.headGap(cover: false) == 64 && wide.headGap(cover: true) == 72 && wide.metaGap == 24)
         }
         // The contents' rail stands 80 past the text (round 8 §10.1; 48 while it held the author).
-        #expect(phone.metaGap == 16 && phone.bylineAvatar == 40 && phone.railGap == 80)
+        #expect(phone.bylineAvatar == 40 && phone.railGap == 80)
         #expect(phone.listIndent == 1.6 && phone.itemGap == 0.3 && phone.codeScale == 0.88)
         #expect(StoryTypography.measure == 680)
     }

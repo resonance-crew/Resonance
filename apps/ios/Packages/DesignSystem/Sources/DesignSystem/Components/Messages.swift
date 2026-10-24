@@ -652,72 +652,226 @@ public struct SharedCardSkeleton: View {
 
 // MARK: - Composer
 
-/// The composer's Send: a wobbly terracotta rounded rectangle — one lopsided turn a side and
-/// drifting corners, on one seed on every platform — with the paper plane in cream. It is the verb
-/// of the bar, so it is a solid face with the buttons' grain and no pen line of its own. Dimmed
-/// and deaf until there is something to send — never held by a send in flight.
-public struct OrganicSendButton: View {
-    let label: String
-    let enabled: Bool
-    var width: CGFloat
-    var height: CGFloat
-    let action: () -> Void
+/// The chat composer's measures (round 9 §4), the same on the web and Android: one floating capsule
+/// exactly 48 tall for a line of text at any text size, ＋ (44 wide) at its start, Send as its 52-wide
+/// end segment; 14 from the screen's sides, 8 over the bottom safe area (or the keyboard), at most 720
+/// wide; what rides with the message on a slip 6 above it; a 4-point halo of the page's paper round
+/// both, so they read as paper cut out over any bubble — never a shadow, never a face with alpha.
+public nonisolated enum ComposerMetrics {
+    /// The capsule with one line in it, whatever the text size (only more lines make it taller).
+    public static let height: CGFloat = 48
+    /// ＋'s room at the capsule's start (its glyph 22).
+    public static let attachWidth: CGFloat = 44
+    public static let attachGlyph: CGFloat = 22
+    /// The send segment, the capsule's end.
+    public static let sendWidth: CGFloat = 52
+    public static let sendGlyph: CGFloat = 20
+    /// The paper round a floating face (outside its pen line).
+    public static let halo: CGFloat = 4
+    /// The capsule over the bottom safe area or the keyboard.
+    public static let bottomGap: CGFloat = 8
+    /// The slip over the capsule.
+    public static let slipGap: CGFloat = 6
+    /// The screen's sides (the page gutter) and the widest the capsule is.
+    public static let gutter: CGFloat = 14
+    public static let maxWidth: CGFloat = 720
+    /// The text's size (× the interface scale) and its most lines before it scrolls.
+    public static let textSize: CGFloat = 16
+    public static let maxLines = 5
+    /// The air from the capsule's (or the slip's) top to the newest message, the jump pill and 已複製.
+    public static let clearance: CGFloat = 12
+    /// The capsule's corner (the field's) and the slip's.
+    public static let radius: CGFloat = Tokens.radiusMd
+    public static let slipRadius: CGFloat = 14
+    /// The text's room after its words, before the send segment's seam.
+    public static let textTrailing: CGFloat = 10
 
-    public init(label: String, enabled: Bool, width: CGFloat = 52, height: CGFloat = 44, action: @escaping () -> Void) {
-        self.label = label
-        self.enabled = enabled
-        self.width = width
-        self.height = height
-        self.action = action
+    /// The text's padding above and below so a line `lineHeight` tall sits centred in the 48 —
+    /// computed from the line the text really draws at its size, so the capsule never grows from the
+    /// font (Telegram's composer, the owner's example), only from more lines.
+    public static func textPadding(lineHeight: CGFloat) -> CGFloat {
+        max(0, (height - lineHeight) / 2)
+    }
+
+    /// The stroke that draws the halo under a pen line `pen` wide: `halo` of paper past the pen's outer edge.
+    public static func haloStroke(pen: CGFloat) -> CGFloat { pen + 2 * halo }
+
+    /// The send segment's seam: SegmentedActionBar's seed for the seam after the text.
+    static func seamSeed(_ seed: Double) -> Double { seed + 11 }
+}
+
+/// The composer's capsule (round 9 §4): one hand-drawn field shape — the field's wobble, the cream
+/// paper, its pen at INK turning terracotta while it is being written in — with a 4-point halo of the
+/// page's paper under its pen line. Inside, ＋ as a ghost at its start, the text (`field`, no border of
+/// its own), and Send as its end segment: a wavy seam cut across the capsule in the paper's colour (the
+/// segmented bar's language), the segment's face the tonal peach with a terracotta plane at rest and
+/// the solid terracotta with a cream plane once there is something to send (a 140 ms change). Send
+/// is disabled by its semantics, never faded. ＋ and the plane sit on the last line's row: a field grown
+/// to more lines keeps them at its foot.
+public struct ComposerCapsule<Field: View>: View {
+    let focused: Bool
+    let canSend: Bool
+    let seed: Double
+    let attachLabel: String
+    let sendLabel: String
+    let onAttach: (CGRect) -> Void
+    let onSend: () -> Void
+    @ViewBuilder let field: Field
+    @State private var attachFrame: CGRect = .zero
+    @State private var sendPressed = false
+
+    public init(focused: Bool, canSend: Bool, seed: Double = 17, attachLabel: String, sendLabel: String,
+                onAttach: @escaping (CGRect) -> Void, onSend: @escaping () -> Void, @ViewBuilder field: () -> Field) {
+        self.focused = focused
+        self.canSend = canSend
+        self.seed = seed
+        self.attachLabel = attachLabel
+        self.sendLabel = sendLabel
+        self.onAttach = onAttach
+        self.onSend = onSend
+        self.field = field()
     }
 
     public var body: some View {
-        Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            action()
-        } label: {
-            SendFace(width: width, height: height)
+        HStack(alignment: .bottom, spacing: 0) {
+            Button { onAttach(attachFrame) } label: {
+                OrganicIcon(.plus, size: ComposerMetrics.attachGlyph, color: Tokens.textMuted, strokeWidth: Tokens.ink)
+                    .frame(width: ComposerMetrics.attachWidth, height: ComposerMetrics.height)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(OrganicPressStyle(inset: 2))
+            .accessibilityLabel(attachLabel)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { attachFrame = $0 }
+            field
+                .frame(maxWidth: .infinity, minHeight: ComposerMetrics.height, alignment: .leading)
+                .padding(.trailing, ComposerMetrics.textTrailing)
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                onSend()
+            } label: {
+                OrganicIcon(.send, size: ComposerMetrics.sendGlyph, color: canSend ? Tokens.cream : Tokens.terracotta,
+                            strokeWidth: Tokens.ink)
+                    .frame(width: ComposerMetrics.sendWidth, height: ComposerMetrics.height)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .contentShape(Rectangle())
+                    .animation(.easeOut(duration: 0.14), value: canSend)
+            }
+            .buttonStyle(PressReport(pressed: $sendPressed))
+            .disabled(!canSend)
+            .accessibilityLabel(sendLabel)
         }
-        .buttonStyle(SendPressStyle())
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.45)
-        .animation(.easeOut(duration: 0.15), value: enabled)
-        .accessibilityLabel(label)
+        .frame(minHeight: ComposerMetrics.height)
+        // As tall as its text asks (and the segment with it) — never the height it is offered.
+        .fixedSize(horizontal: false, vertical: true)
+        .background {
+            ComposerCapsuleFace(seed: seed, focused: focused, canSend: canSend, pressed: sendPressed)
+        }
     }
 }
 
-private struct SendFace: View {
-    let width: CGFloat
-    let height: CGFloat
-    @Environment(\.sendPressed) private var pressed
+/// The capsule's own shape: the field's wobble (FieldSurface's), radius 16.
+public nonisolated struct ComposerCapsuleShape: Shape {
+    public var seed: Double
+
+    public init(seed: Double) {
+        self.seed = seed
+    }
+
+    public func path(in rect: CGRect) -> Path {
+        WobRectShape(radius: ComposerMetrics.radius, seed: seed).path(in: rect)
+    }
+}
+
+/// The capsule drawn: the halo, the paper, the send segment's face, its seam, the grain over the
+/// segment, and the pen line over all.
+private struct ComposerCapsuleFace: View {
+    let seed: Double
+    let focused: Bool
+    let canSend: Bool
+    let pressed: Bool
 
     var body: some View {
-        // The web's 48×40 wobRect(…, 12, 23, 1.0, …) at the apps' size: the same seed, so the same hand.
-        let shape = WobRectShape(radius: 13, seed: 23, mag: 1.1, options: WobRectOptions(
-            curve: 1.3, cornerJitter: 2.4, cornerOffset: 2.2, segmentsH: .count(1), segmentsV: .count(1)))
-        // The plane is drawn optically centred in its own box: it sits in the middle as it is.
-        OrganicIcon(.send, size: 20, color: Tokens.cream)
-            .frame(width: width, height: height)
-            .background {
-                shape.fill(Tokens.terracotta)
-                GrainLayer(shape: shape, mode: .tile, opacity: 0.38, tile: "grain-button")
-                shape.fill(Color.black.opacity(pressed ? 0.14 : 0))
+        let shape = ComposerCapsuleShape(seed: seed)
+        let segment = ComposerSendSegment(seed: seed)
+        ZStack {
+            shape.stroke(Tokens.cream, style: StrokeStyle(lineWidth: ComposerMetrics.haloStroke(pen: Tokens.ink), lineJoin: .round))
+            shape.fill(Tokens.cream)
+            ZStack {
+                segment.fill(canSend ? Tokens.buttonFill : Tokens.buttonTonal)
+                GrainLayer(shape: segment, mode: .tile, opacity: 0.38, tile: "grain-button", overflow: 16)
+                segment.fill(canSend ? Color.black.opacity(0.14) : Tokens.terracotta.opacity(0.14)).opacity(pressed ? 1 : 0)
+                ComposerSendSeam(seed: seed).stroke(Tokens.cream, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round))
             }
-            .contentShape(shape)
+            .clipShape(shape)
+            .animation(.easeOut(duration: 0.14), value: canSend)
+            .animation(.easeOut(duration: 0.12), value: pressed)
+            shape.stroke(focused ? Tokens.terracotta : Tokens.fieldBorder,
+                         style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
+                .animation(.easeOut(duration: 0.15), value: focused)
+        }
+        .accessibilityHidden(true)
     }
 }
 
-private struct SendPressStyle: ButtonStyle {
+/// The send segment's region in the capsule's frame: the last 52, cut from the text by the seam (the
+/// capsule's outline trims it).
+nonisolated struct ComposerSendSegment: Shape {
+    let seed: Double
+
+    func path(in rect: CGRect) -> Path {
+        SegmentRegion(left: ComposerMetrics.seamSeed(seed), right: nil).path(in: Self.frame(in: rect))
+    }
+
+    static func frame(in rect: CGRect) -> CGRect {
+        CGRect(x: rect.maxX - ComposerMetrics.sendWidth, y: rect.minY, width: ComposerMetrics.sendWidth, height: rect.height)
+    }
+}
+
+/// The seam at the send segment's start, across the capsule.
+nonisolated struct ComposerSendSeam: Shape {
+    let seed: Double
+
+    func path(in rect: CGRect) -> Path {
+        SegmentRegion.leftSeam(seed: ComposerMetrics.seamSeed(seed)).path(in: ComposerSendSegment.frame(in: rect))
+    }
+}
+
+/// What rides with the message, on a slip directly over the capsule (round 9 §4): the same width,
+/// opaque paper, its pen INK_LIGHT in the muted ink — a secondary surface — the field's wobble at a
+/// radius of 14, and the same halo. The capsule under it keeps its exact geometry whatever the slip
+/// holds. A notice that takes the composer's place is one too, alone in the capsule's place.
+public struct ComposerSlip<Content: View>: View {
+    var seed: Double
+    @ViewBuilder let content: Content
+
+    public init(seed: Double = 23, @ViewBuilder content: () -> Content) {
+        self.seed = seed
+        self.content = content()
+    }
+
+    public var body: some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                let shape = WobRectShape(radius: ComposerMetrics.slipRadius, seed: seed)
+                ZStack {
+                    shape.stroke(Tokens.cream, style: StrokeStyle(lineWidth: ComposerMetrics.haloStroke(pen: Tokens.inkLight), lineJoin: .round))
+                    shape.fill(Tokens.cream)
+                    shape.stroke(Tokens.textMuted, style: StrokeStyle(lineWidth: Tokens.inkLight, lineCap: .round, lineJoin: .round))
+                }
+                .accessibilityHidden(true)
+            }
+    }
+}
+
+/// A button style that only reports its press (the face is drawn by the view around it).
+private struct PressReport: ButtonStyle {
+    @Binding var pressed: Bool
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .environment(\.sendPressed, configuration.isPressed)
-            .scaleEffect(configuration.isPressed ? 0.95 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, now in pressed = now }
     }
-}
-
-private extension EnvironmentValues {
-    @Entry var sendPressed = false
 }
 
 /// A reply's rule in the composer: a short vertical pen line in terracotta, wavy like the headers' edges.

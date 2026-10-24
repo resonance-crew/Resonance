@@ -164,9 +164,14 @@ public struct HandDrawnThumb: View {
         self.chosen = chosen
     }
 
-    public var body: some View {
-        let shape = WobRectShape(radius: size * 0.25, seed: seed, mag: size * 0.022, options: WobRectOptions(
+    /// The thumb's wobbly square (a picker row's, and its skeleton's).
+    public static func shape(size: CGFloat, seed: Double) -> WobRectShape {
+        WobRectShape(radius: size * 0.25, seed: seed, mag: size * 0.022, options: WobRectOptions(
             curve: 1.3, cornerJitter: 3.2, cornerOffset: size * 0.06, segmentsH: .count(1), segmentsV: .count(1)))
+    }
+
+    public var body: some View {
+        let shape = Self.shape(size: size, seed: seed)
         ZStack {
             shape.fill(fill)
             if let url { OrganicAvatarPhoto(url: url).clipShape(shape) }

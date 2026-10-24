@@ -40,10 +40,14 @@ protocol DraftStore {
     func discardEdit(_ id: String) async throws
     /// Whether the card is in the trash now (read again when a save was refused).
     func isTrashed(_ id: String) async throws -> Bool
+    /// Deletes a draft never published (the rules let its author delete a draft, never a published card):
+    /// a card the writer began and left empty (round 9 §1).
+    func deleteDraft(_ id: String) async throws
 }
 
 extension DraftStore {
     func isTrashed(_ id: String) async throws -> Bool { false }
+    func deleteDraft(_ id: String) async throws {}
 }
 
 /// Drafts, written straight to Firestore like the web editor's client
@@ -195,6 +199,10 @@ struct DraftService: DraftStore {
     /// discardPendingCardEdit: the live card is left exactly as it was.
     func discardEdit(_ id: String) async throws {
         try await editRef(id).delete()
+    }
+
+    func deleteDraft(_ id: String) async throws {
+        try await db.collection("cards").document(id).delete()
     }
 
     // MARK: Reads of your own cards

@@ -65,6 +65,8 @@ struct ThreadSearchResults: View {
     let query: String
     /// The bar lies over the top of the list.
     let topMargin: CGFloat
+    /// The composer floats over its foot (round 9 §4): the last result clears it.
+    var bottomMargin: CGFloat = 24
     /// Whether results are scrolled under the bar (its pen line darkens).
     @Binding var underBar: Bool
     let onPick: (SearchHit) -> Void
@@ -108,7 +110,7 @@ struct ThreadSearchResults: View {
                     }
                 }
                 .contentMargins(.top, topMargin + 4, for: .scrollContent)
-                .contentMargins(.bottom, 24, for: .scrollContent)
+                .contentMargins(.bottom, max(24, bottomMargin), for: .scrollContent)
                 .scrollDismissesKeyboard(.interactively)
                 .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 1 } action: { _, under in
                     underBar = under

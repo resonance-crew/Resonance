@@ -276,8 +276,9 @@ import UIKit
         #expect(StoryTable.more(offset: 0, content: 600, container: 320) == .end)
         #expect(StoryTable.more(offset: 140, content: 600, container: 320) == .both)
         #expect(StoryTable.more(offset: 280, content: 600, container: 320) == .start)
-        #expect(StoryTable.alignment(.start) == .natural && StoryTable.alignment(.left) == .left)
-        #expect(StoryTable.alignment(.center) == .center && StoryTable.alignment(.right) == .right)
+        // Round 9 §6: every cell at its start edge, whatever the delimiter row's colons say.
+        #expect(StoryTable.alignment(.start) == .natural && StoryTable.alignment(.left) == .natural)
+        #expect(StoryTable.alignment(.center) == .natural && StoryTable.alignment(.right) == .natural)
     }
 
     /// The reader draws a parsed table — its cells' words, each in its own line box, under one region
@@ -316,12 +317,14 @@ import UIKit
         #expect(EnvironmentValues().storyTableLabel == "Table")
         // Its height: the header row and two rows, each 8 above and below its 1.6 lines, and the rules
         // between (1.2 under the header, 1 between the rows); as wide as its columns (4 em at the least),
-        // in a box of its own that scrolls sideways.
+        // in a box of its own that scrolls sideways — with room at either end for the header rule's
+        // overshoot (round 9 §6), which the box reaches out over by as much.
         let box = try #require(scrolls.first)
         let line = 17 * 0.94 * 1.6
         #expect(abs(box.frame.height - (3 * (line + 2 * StoryTable.cellPadV) + StoryTable.headRule + StoryTable.rowRule)) < 2,
                 "\(box.frame)")
-        #expect(abs(box.contentSize.width - (2 * 4 * 17 * 0.94 + 2 * StoryTable.cellPadH)) < 2, "\(box.contentSize)")
+        #expect(abs(box.contentSize.width - (2 * 4 * 17 * 0.94 + 2 * StoryTable.cellPadH + 2 * (StoryTable.headRuleOvershoot + 1))) < 2,
+                "\(box.contentSize)")
     }
 
     // MARK: The page

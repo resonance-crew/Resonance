@@ -14,7 +14,8 @@ import Testing
     @Test func aCardReadersCanSeeMovesToTheDrafts() {
         #expect(CardActionsMenu.rows(readersSee: true, answering: false) == [.edit, .visibility, .delete])
         #expect(CardActionsMenu.rows(readersSee: true, answering: true) == [.edit, .visibility, .unresonate, .delete])
-        #expect(L10n.Me.Actions.makePrivate == "轉為草稿" || L10n.Me.Actions.makePrivate == "Move to drafts")
+        // Round 9 §1: a card only its author sees is a 私人卡.
+        #expect(L10n.Me.Actions.makePrivate == "轉為私人卡" || L10n.Me.Actions.makePrivate == "Make private")
     }
 
     @Test func aPublishedPrivateCardIsADraftToo() {

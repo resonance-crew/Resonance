@@ -75,8 +75,6 @@ struct MessageMenu {
 private let farUpScreens: CGFloat = 1.5
 /// How close to the oldest message held the list comes (in messages) before the next page is read.
 private let olderAhead = 6
-/// How tall the fade is where the thread meets its foot (the composer, the reply bar over it, a line in its place).
-private let edgeFade: CGFloat = 12
 private let runGap: CGFloat = 2
 private let betweenRuns: CGFloat = 12
 /// Between runs when the new one leads with what it answers (a reply's quote, a note's card): a
@@ -97,6 +95,11 @@ struct MessageList: View {
     @Binding var position: ScrollPosition
     /// The bar lies over the top of the list: what scrolls shows right up to its pen line.
     let topMargin: CGFloat
+    /// What floats over the list's foot, and 12 of air (round 9 §4): the newest message rests clear of
+    /// the composer, as does the pill.
+    let bottomRoom: CGFloat
+    /// A line about the conversation as its last item (answering their letter connects the two).
+    var notice: String? = nil
     /// The floating pill (new messages, back to the latest) is for the list alone, not under search results.
     let pillVisible: Bool
     /// Whether messages are scrolled under the bar (its pen line darkens).
@@ -112,6 +115,13 @@ struct MessageList: View {
         ZStack(alignment: .bottom) {
             ScrollView {
                 LazyVStack(spacing: 0) {
+                    // The conversation's notice: under the newest message, scrolling with the thread.
+                    if let notice, model.threadReady {
+                        ThreadFootNote(text: notice, size: 12.5)
+                            .padding(.horizontal, 12)
+                            .padding(.top, 16)
+                            .upsideDown()
+                    }
                     ForEach(Array(newestFirst.enumerated()), id: \.element.id) { i, row in
                         // A run still on its way says so once, under its newest message: the stack stays one stack.
                         let sendingBelow = row.position.joinsBelow && i > 0 && newestFirst[i - 1].message.delivery == .sending
@@ -141,14 +151,14 @@ struct MessageList: View {
             .scrollPosition($position, anchor: .center)
             .upsideDown()
             .scrollIndicators(.hidden)
-            // The thread draws its own edges (the bar's paper, FootEdge): no system scroll edge effect — on a
+            // The thread draws its own edge (the bar's paper): no system scroll edge effect — on a
             // Mac, under the pointer, the flipped list's spread over the whole thread and blurred it.
             .withoutScrollEdgeEffect()
             .scrollDismissesKeyboard(.interactively)
-            // Upside down, the list's bottom margin is the room under the bar, its top the air over the
-            // composer — with the fade's height besides, so the newest message rests clear of it.
+            // Upside down, the list's bottom margin is the room under the bar, its top what floats over its
+            // foot (the composer, its slip, the safe area or keyboard under them) and 12 of air.
             .contentMargins(.bottom, topMargin + 4, for: .scrollContent)
-            .contentMargins(.top, 10 + edgeFade, for: .scrollContent)
+            .contentMargins(.top, bottomRoom, for: .scrollContent)
             // A vertical list has nothing to move sideways to: if anything ever leaves it scrolled aside — the
             // owner saw the whole thread 16 to the left, their face cut by the screen's edge, after replying
             // by a swipe — it goes straight back to its own edge, where it is otherwise held (no drag can
@@ -181,15 +191,13 @@ struct MessageList: View {
                     unseen += 1
                 }
             }
-            // Over the messages, under the pill: what scrolls down to the foot dissolves into the paper.
-            FootEdge()
             if pillVisible && (unseen > 0 || farUp) && !atBottom {
-                // The small pill over the composer: the way back to the latest message (DesignSystem's OrganicPill).
+                // The small pill 12 over the composer (or its slip): the way back to the latest message.
                 OrganicPill(icon: .chevronDown, text: unseen > 0 ? L10n.Messages.newMessages : L10n.Messages.jumpToLatest) {
                     unseen = 0
                     toLatest()
                 }
-                .padding(.bottom, 10)
+                .padding(.bottom, bottomRoom)
                 .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
         }
@@ -220,6 +228,8 @@ extension MessageList {
 /// mostly opened for what they just sent. It shows only after a moment, so a thread the cache
 /// answers at once doesn't flash it. Android's ThreadSkeleton.
 struct ThreadSkeleton: View {
+    /// What floats over the thread's foot, as the list keeps clear of it.
+    var bottomRoom: CGFloat = 0
     private struct Bubble { let mine: Bool; let width: CGFloat; let height: CGFloat }
     /// Oldest first; a change of side starts a new run.
     private static let bubbles = [
@@ -248,7 +258,7 @@ struct ThreadSkeleton: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.bottom, 10 + edgeFade)
+        .padding(.bottom, bottomRoom)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .opacity(shown ? 1 : 0)
         .allowsHitTesting(false)
@@ -259,24 +269,6 @@ struct ThreadSkeleton: View {
             guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: 0.2)) { shown = true }
         }
-    }
-}
-
-/// The thread's edge over its foot: no rule (it would be busy) but a narrow band of the paper fading
-/// up into the messages, eased so neither of its own edges shows — the foot dissolving upward, not a
-/// shadow. It catches no touch; the pill, the search results and the long-press layer lie over it.
-private struct FootEdge: View {
-    var body: some View {
-        LinearGradient(stops: [
-            .init(color: Tokens.cream, location: 0),
-            .init(color: Tokens.cream.opacity(0.75), location: 0.35),
-            .init(color: Tokens.cream.opacity(0.3), location: 0.7),
-            .init(color: Tokens.cream.opacity(0), location: 1),
-        ], startPoint: .bottom, endPoint: .top)
-        .frame(height: edgeFade)
-        .frame(maxWidth: .infinity)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 }
 

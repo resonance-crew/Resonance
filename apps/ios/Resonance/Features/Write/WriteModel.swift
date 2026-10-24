@@ -83,6 +83,8 @@ final class WriteModel {
         }
     }
     private(set) var draftId: String?
+    /// The card was begun on this visit (its document made by this writer's first save).
+    private(set) var begunHere = false
     private(set) var savedAt: Date?
     /// Something was written this visit (a draft or revision saved, published,
     /// applied or dropped): what the screens behind the writer read again for.
@@ -272,6 +274,27 @@ final class WriteModel {
         return isPublished ? .revision : .draft
     }
 
+    /// A card this visit began, then emptied again — no title, no story, no tags, no cover — leaves
+    /// nothing behind as the writer goes (round 9 §1: no empty 私人卡 in the card box or the thought
+    /// map's tray). Nothing is made before the first real write; this is for one written and wiped.
+    /// Answers whether it was deleted.
+    func dropIfEmpty() async -> Bool {
+        guard begunHere, !isPublished, !trashed, values.isEmpty, let id = draftId, let drafts else { return false }
+        saveTask?.cancel()
+        // Behind every write on its way, so none of them makes it again.
+        await chain?.value
+        do {
+            try await drafts.deleteDraft(id)
+        } catch {
+            return false
+        }
+        draftId = nil
+        begunHere = false
+        lastStored = nil
+        lastSaved = nil
+        return true
+    }
+
     /// What this visit changed, for the screens behind the writer; nil when it wrote nothing.
     var change: WriteLauncher.Change? {
         wrote ? WriteLauncher.Change(cardId: draftId, referenceCardId: referenceCardId) : nil
@@ -324,6 +347,7 @@ final class WriteModel {
             write = drafts.create(v, id: id, locale: Strings.shared.language.rawValue, referenceCardId: referenceCardId)
             draftId = id
             created = id
+            begunHere = true
         }
         lastStored = v
         wrote = true
@@ -828,38 +852,40 @@ final class WriteModel {
 
     // MARK: Step 2: the one button, and 捨棄修改
 
-    /// Where the writer goes once the step's button has done its work: the card's page while it is
-    /// shared, or back where it came from once it is a 草稿.
+    /// Where the writer goes once the step's button has done its work: the card's page (round 9 §1:
+    /// a 私人卡's too, which its owner reads there), or back where it came from — a 私人卡 kept on the
+    /// device only, whose page the server can't show yet.
     enum Finish: Equatable {
         case card(String)
         case leave
     }
 
-    /// The step's one button (round 8 §2.3), by the card and the choice: a draft shared is published
-    /// (發布 · 匿名發布 → its page); a draft kept a 草稿 is saved and left (儲存 — never the publish call);
-    /// a published card's revision is applied — then to its page while it is shared (儲存修改, or a
-    /// published 草稿's 發布 · 匿名發布), back where the writer came from once it is a 草稿 (轉為草稿 ·
-    /// 儲存). Nil when it didn't go (`publishError` says why, or the card turned out to be in the trash).
+    /// The step's one button (round 8 §2.3, round 9 §1), by the card and the choice: a draft shared is
+    /// published (發布 · 匿名發布 → its page); a draft kept a 私人卡 is saved (儲存 — never the publish
+    /// call) and its page opens; a published card's revision is applied — 儲存修改, a published 私人卡's
+    /// 發布 · 匿名發布 or 儲存, a shared card's 轉為私人卡 — and its page opens. Nil when it didn't go
+    /// (`publishError` says why, or the card turned out to be in the trash).
     func submit() async -> Finish? {
         if isPublished {
             guard let key = await applyEdit() else { return nil }
-            return keepsDraft ? .leave : .card(key)
+            return .card(key)
         }
-        if keepsDraft { return await keepDraft() ? .leave : nil }
+        if keepsDraft { return await keepDraft() }
         return await publish().map(Finish.card)
     }
 
-    /// 儲存 for a draft kept a 草稿: what is on screen is written now (not left to the pause in the
-    /// typing) — never published, a draft is its author's alone — and the writer may leave once the
-    /// server has it, or once `keepWait` has passed (it is on the device from the moment it is
-    /// written, and goes up when the network lets it). A write the server refused keeps the writer
-    /// here, saying so; one the trash explains is the writer's trashed notice. True when it may leave.
-    func keepDraft() async -> Bool {
-        guard !pending else { return false }
+    /// 儲存 for a draft kept a 私人卡: what is on screen is written now (not left to the pause in the
+    /// typing) — never published, it is its author's alone — and its page opens once the server has it;
+    /// once `keepWait` has passed without an answer the writer leaves instead (it is on the device from
+    /// the moment it is written, and goes up when the network lets it — a page read from the server
+    /// would say there is no such card). A write the server refused keeps the writer here, saying so;
+    /// one the trash explains is the writer's trashed notice. Nil while it stays.
+    func keepDraft() async -> Finish? {
+        guard !pending else { return nil }
         guard !values.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             titleError = true
             step = .write
-            return false
+            return nil
         }
         busyVerb = .publish
         pending = true
@@ -867,13 +893,13 @@ final class WriteModel {
         defer { pending = false }
         store()
         // Not answered yet (offline, a slow network): kept on the device all the same.
-        guard await settled(within: Self.keepWait) else { return true }
-        if trashed { return false }
-        guard draftId != nil, values == lastSaved else {
+        guard await settled(within: Self.keepWait) else { return .leave }
+        if trashed { return nil }
+        guard let id = draftId, values == lastSaved else {
             publishError = L10n.Write.PublishPanel.saveFailed
-            return false
+            return nil
         }
-        return true
+        return .card(id)
     }
 
     /// 發布: the draft as it is (with the step's choices, already its own) is saved, then

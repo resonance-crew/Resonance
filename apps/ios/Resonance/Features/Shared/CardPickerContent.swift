@@ -12,6 +12,8 @@ struct CardPickerContent: View {
     let onCancel: () -> Void
     @Environment(SessionStore.self) private var session
     @State private var cards: [FeedCard]?
+    /// The read didn't come back: said so, with 再試一次 (C2) — never "no cards".
+    @State private var failed = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -20,14 +22,66 @@ struct CardPickerContent: View {
             CardPickList(cards: cards ?? [], onPick: onPick) {
                 EmptyView()
             } empty: {
-                Text(cards == nil ? "…" : L10n.Write.Editor.CardModal.empty)
-                    .font(AppFonts.body(14)).foregroundStyle(Tokens.textMuted).padding(.vertical, 12)
+                if cards != nil {
+                    Text(L10n.Write.Editor.CardModal.empty)
+                        .font(AppFonts.body(14)).foregroundStyle(Tokens.textMuted).padding(.vertical, 12)
+                } else if failed {
+                    // Why there is nothing to pick, and the way to ask again.
+                    HStack(spacing: 10) {
+                        Text(L10n.Write.Editor.CardModal.failed).font(AppFonts.body(14)).foregroundStyle(Tokens.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                        OrganicButton(L10n.Write.Editor.CardModal.retry, variant: .tonal, size: .sm) { Task { await load() } }
+                            .fixedSize()
+                    }
+                    .padding(.horizontal, 6).padding(.vertical, 8)
+                } else {
+                    // On its way: the rows' shapes where they will land (C2), never "…".
+                    CardPickSkeleton(rows: 4)
+                }
             }
             // A list to pick from: its one way out, under it at the right.
             ModalCloseButton(L10n.Write.Editor.CardModal.cancel, action: onCancel)
         }
-        // getCardsByAuthor(me, 'published'), public ones only.
-        .task { cards = ((try? await session.reading.cardBox(.published)) ?? []).filter { $0.visibility == ._public && $0.publishedAt != nil } }
+        .task { await load() }
+    }
+
+    /// getCardsByAuthor(me, 'published'), public ones only.
+    private func load() async {
+        failed = false
+        do {
+            cards = Self.pickable(try await session.reading.cardBox(.published))
+        } catch {
+            failed = true
+        }
+    }
+
+    /// What can be picked: the published, public cards.
+    static func pickable(_ cards: [FeedCard]) -> [FeedCard] {
+        cards.filter { $0.visibility == ._public && $0.publishedAt != nil }
+    }
+}
+
+/// A card list still on its way (C2): rows shaped as the real ones — a 40 wobbly thumb, a title bar
+/// 60 % of the row and a date bar 35 % — in the app's shimmer, the rows' own padding round them.
+struct CardPickSkeleton: View {
+    var rows = 4
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(0..<rows, id: \.self) { i in
+                HStack(spacing: 12) {
+                    SkeletonBlock(width: 40, height: 40, radius: 0)
+                        .clipShape(HandDrawnThumb.shape(size: 40, seed: Double(i * 7 + 3)))
+                    VStack(alignment: .leading, spacing: 8) {
+                        SkeletonBlock(fraction: 0.6, height: 14)
+                        SkeletonBlock(fraction: 0.35, height: 11)
+                    }
+                }
+                .padding(.vertical, 10).padding(.horizontal, 6)
+            }
+        }
+        .accessibilityElement()
+        .accessibilityLabel(L10n.Home.moreLoading)
     }
 }
 
@@ -80,14 +134,21 @@ struct CardPickList<Lead: View, Empty: View>: View {
                         .padding(.horizontal, 6).padding(.top, 10).padding(.bottom, 2)
                 }
             }
+            // Room inside the scroll for a row's focus ring (an iPad's keyboard), which the scroll's edges
+            // would otherwise cut (C2); the scroll reaches as far out, so the rows keep their place.
+            .padding(Self.ringRoom)
         }
         // Its ends fade while there is more that way (the web's useEdgeFades).
         .scrollEdgeFades()
-        .frame(maxHeight: window.height * 0.5)
+        .frame(maxHeight: window.height * 0.5 + 2 * Self.ringRoom)
         .fixedSize(horizontal: false, vertical: true)
         .scrollIndicators(.hidden)
+        .padding(-Self.ringRoom)
         .padding(.bottom, choosing ? 18 : 0)
     }
+
+    /// How far a focus ring reaches past a row: the room the list keeps inside its scroll.
+    static var ringRoom: CGFloat { 6 }
 
     /// A row's muted line: when the card came out (「10月5日」/ "Oct 5", the year too before this
     /// one), led by 「匿名 · 」/ "Anonymous · " for an anonymous card when the list marks them.

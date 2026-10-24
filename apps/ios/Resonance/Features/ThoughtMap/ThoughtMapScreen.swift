@@ -80,14 +80,24 @@ struct ThoughtMapScreen: View {
         }
     }
 
-    /// A card of mine opens in the writer (a published one with its pending edit); a
-    /// card I resonated with opens on its page.
+    /// Below the split: a card of mine opens in the writer (a published one with its pending edit) —
+    /// a 私人卡 on its page (round 9 §1), where its owner reads it and 編輯 is a tap away; a card I
+    /// resonated with opens on its page. (At the split every card of mine opens in the pane, `openCard`.)
     private func open(_ card: MapCard) {
-        if card.authorId == session.uid {
+        if card.authorId == session.uid, !Self.isPrivate(card) {
             writer.edit(card.id, showsCard: false)
         } else {
             openRoute(.card(card.slug ?? card.id))
         }
+    }
+
+    /// A 私人卡: never published, or published and kept private.
+    static func isPrivate(_ card: MapCard) -> Bool { card.publishedAt == nil || card.visibility == "private" }
+
+    /// A tray row's mark: the wave for a card I resonated with, the lock for a 私人卡 (as its node wears
+    /// it, C4), the cards glyph for one of mine readers have.
+    static func trayIcon(_ card: MapCard, resonated: Bool) -> IconName {
+        resonated ? .wave : isPrivate(card) ? .lock : .cards
     }
 
     @ViewBuilder private func chrome(insets: EdgeInsets, size: CGSize) -> some View {
@@ -234,7 +244,7 @@ struct MapTray: View {
                         if i > 0 { WavyDivider(seed: 31 + Double(i) * 7) }
                         Button { store.addCard(card) } label: {
                             HStack(spacing: 10) {
-                                OrganicIcon(store.resonated.contains(card.id) ? .wave : card.publishedAt != nil ? .cards : .pen, size: 15)
+                                OrganicIcon(ThoughtMapScreen.trayIcon(card, resonated: store.resonated.contains(card.id)), size: 15)
                                     .foregroundStyle(Tokens.textMuted)
                                 Text(card.title)
                                     .font(AppFonts.body(13.5))
