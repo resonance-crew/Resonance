@@ -238,6 +238,92 @@ import UIKit
         #expect(family(attributes(text, at: 8)[.font]) == "Playfair Display")
     }
 
+    // MARK: Tables (round 8 §5.2)
+
+    /// A table's cell: the body's face at 0.94 em on 1.6 lines, set as its column says (never
+    /// justified, even in a CJK story), figures tabular; the header row in the story's bold.
+    @Test func aTablesCellIsTheBodysFaceSmallerSetAsItsColumnSaysWithTabularFigures() {
+        let body = ProseStyle.body(zhPhone, language: "zh-TW")
+        let cell = body.tableCell(header: false, alignment: .right)
+        #expect(cell.font.familyName == "Noto Sans TC")
+        #expect(abs(cell.font.pointSize - 17 * 0.94) < 0.01)
+        #expect(cell.lineHeight == 1.6)
+        let text = cell.attributed([InlineRun("2400")])
+        let paragraph = attributes(text)[.paragraphStyle] as? NSParagraphStyle
+        #expect(paragraph?.alignment == .right)
+        #expect(abs((paragraph?.minimumLineHeight ?? 0) - 17 * 0.94 * 1.6) < 0.01)
+        // Tabular figures: every digit as wide as every other.
+        func width(_ digits: String) -> CGFloat { (digits as NSString).size(withAttributes: [.font: cell.font]).width }
+        #expect(abs(width("1111") - width("8888")) < 0.01, "\(width("1111")) vs \(width("8888"))")
+        let header = body.tableCell(header: true, alignment: .natural)
+        #expect(header.font.fontName == AppFonts.uiFont(.bodyCJK, size: header.font.pointSize, weight: zhPhone.boldWeight).fontName)
+        #expect((attributes(header.attributed([InlineRun("名稱")]))[.paragraphStyle] as? NSParagraphStyle)?.alignment == .natural)
+        // A quote's table keeps the quote's ink.
+        #expect(same(attributes(body.quoted.tableCell(header: false, alignment: .natural).attributed([InlineRun("年")]))[.foregroundColor],
+                     Tokens.textMuted))
+    }
+
+    /// Each column as wide as its widest cell's words on one line, between 4 and 18 em; the side of a
+    /// table wider than its column that has more to see fades; GFM's alignments become the cells'.
+    @Test func aTablesColumnsTakeTheirWordsBetweenFourAndEighteenEm() {
+        let em: CGFloat = 16
+        #expect(StoryTable.columnWidths([[10, 400], [120, 30]], em: em) == [120, 18 * 16])
+        #expect(StoryTable.columnWidths([[10, 20]], em: em) == [64, 64])
+        // A short row (none here) still has its column.
+        #expect(StoryTable.columnWidths([[100, 100, 100], [90]], em: em).count == 3)
+        #expect(StoryTable.width([100, 120, 80]) == 300 + 4 * StoryTable.cellPadH)
+        #expect(StoryTable.more(offset: 0, content: 300, container: 320) == .none)
+        #expect(StoryTable.more(offset: 0, content: 600, container: 320) == .end)
+        #expect(StoryTable.more(offset: 140, content: 600, container: 320) == .both)
+        #expect(StoryTable.more(offset: 280, content: 600, container: 320) == .start)
+        #expect(StoryTable.alignment(.start) == .natural && StoryTable.alignment(.left) == .left)
+        #expect(StoryTable.alignment(.center) == .center && StoryTable.alignment(.right) == .right)
+    }
+
+    /// The reader draws a parsed table — its cells' words, each in its own line box, under one region
+    /// named 表格 — no longer the paragraph of words it was flattened into.
+    @Test func theReaderDrawsATableAsANamedRegionOfItsCells() throws {
+        let blocks = StoryParser.parse("| 名稱 | 數量 |\n| --- | ---: |\n| 蘋果 | 3 |\n| 香蕉 | 12 |")
+        guard case .table = blocks.first else { return #expect(Bool(false)) }
+        let story = StoryMarkdownView(blocks: blocks, typography: zhPhone, onOpenURL: { _ in }) { _, _ in EmptyView?.none }
+            .environment(\.storyTableLabel, L10n.Card.table)
+        let on = AccessibilityOn()
+        defer { on.restore() }
+        let host = UIHostingController(rootView: story.frame(width: 335))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 335, height: 800))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        host.view.layoutIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        // Every cell's words, drawn as the story's text is (one CSS-line-boxed text view a cell), no pipes.
+        var texts: [String] = []
+        var heights: [CGFloat] = []
+        var scrolls: [UIScrollView] = []
+        func views(_ view: UIView) {
+            if let text = view as? UITextView {
+                texts.append(text.text)
+                heights.append(text.bounds.height)
+            } else if let scroll = view as? UIScrollView {
+                scrolls.append(scroll)
+            }
+            view.subviews.forEach(views)
+        }
+        views(host.view)
+        #expect(heights.allSatisfy { abs($0 - 17 * 0.94 * 1.6) < 1.5 }, "\(heights)")
+        #expect(texts.sorted() == ["12", "3", "名稱", "數量", "蘋果", "香蕉"], "\(texts)")
+        // VoiceOver names the region from the page's word (表格 / Table), the reader's own default otherwise.
+        #expect(EnvironmentValues().storyTableLabel == "Table")
+        // Its height: the header row and two rows, each 8 above and below its 1.6 lines, and the rules
+        // between (1.2 under the header, 1 between the rows); as wide as its columns (4 em at the least),
+        // in a box of its own that scrolls sideways.
+        let box = try #require(scrolls.first)
+        let line = 17 * 0.94 * 1.6
+        #expect(abs(box.frame.height - (3 * (line + 2 * StoryTable.cellPadV) + StoryTable.headRule + StoryTable.rowRule)) < 2,
+                "\(box.frame)")
+        #expect(abs(box.contentSize.width - (2 * 4 * 17 * 0.94 + 2 * StoryTable.cellPadH)) < 2, "\(box.contentSize)")
+    }
+
     // MARK: The page
 
     @Test func theCardModelReadsTheScriptOffTheTitleAndStoryTogether() async {

@@ -6,7 +6,7 @@ import Markdown
 /// StoryMarkdown (react-markdown + remark-gfm) produces, with its paragraph
 /// rules: a paragraph holding only a card link is an embedded card, only a
 /// photo is an image block, only a web link may be that page's preview card,
-/// only the blank marker (U+00A0) is extra space.
+/// only the blank marker (U+00A0) is extra space; a GFM table is a table.
 public nonisolated indirect enum StoryBlock: Hashable, Sendable {
     case heading(level: Int, [InlineRun])
     case paragraph([InlineRun])
@@ -25,6 +25,16 @@ public nonisolated indirect enum StoryBlock: Hashable, Sendable {
     case list(ordered: Bool, start: Int, items: [[StoryBlock]])
     case rule
     case code(String)
+    /// A GFM table (round 8 §5.2, remark-gfm's): its header row's cells and each body row's — every
+    /// cell's runs, as a paragraph's — and each column's alignment. Every row holds as many cells as
+    /// the header (GFM's own rule: a short row ends in empty cells, a long one's extra cells go).
+    case table(head: [[InlineRun]], rows: [[[InlineRun]]], alignments: [TableAlignment])
+}
+
+/// How a table's column sets its cells (GFM's delimiter row): `:--` left, `:-:` centre, `--:` right,
+/// none (`---`) the start of the line, as the table itself is set.
+public nonisolated enum TableAlignment: Hashable, Sendable {
+    case start, left, center, right
 }
 
 /// A run of inline text with its marks.
@@ -103,13 +113,30 @@ public nonisolated enum StoryParser {
             // The site renders stories without raw HTML: it shows as text.
             return .paragraph([InlineRun(h.rawHTML.trimmingCharacters(in: .newlines))])
         case let t as Markdown.Table:
-            // Tables are rare in stories; keep their text, a row per line.
-            let rows = ([t.head.cells.map(\.plainText)] + t.body.rows.map { $0.cells.map(\.plainText) })
-                .map { $0.joined(separator: "  ·  ") }
-            return .paragraph([InlineRun(rows.joined(separator: "\n"))])
+            return table(t)
         default:
             return nil
         }
+    }
+
+    /// A table as the reader draws it: its cells' runs (marks, links and code as a paragraph's), the
+    /// header deciding how many columns there are, and the delimiter row's alignments.
+    static func table(_ t: Markdown.Table) -> StoryBlock {
+        let columns = max(t.head.childCount, 1)
+        func row(_ cells: [Markdown.Table.Cell]) -> [[InlineRun]] {
+            var runs = cells.prefix(columns).map { inlines($0) }
+            while runs.count < columns { runs.append([]) }
+            return runs
+        }
+        let alignments = (0..<columns).map { i -> TableAlignment in
+            switch i < t.columnAlignments.count ? t.columnAlignments[i] : nil {
+            case .left?: .left
+            case .center?: .center
+            case .right?: .right
+            case nil: .start
+            }
+        }
+        return .table(head: row(Array(t.head.cells)), rows: t.body.rows.map { row(Array($0.cells)) }, alignments: alignments)
     }
 
     /// The web's `p` override (StoryMarkdown.tsx).
@@ -264,6 +291,9 @@ nonisolated extension StoryBlock {
         case let .soleLink(href, text, runs): return .soleLink(href: href, text: text, runs: link(runs))
         case let .quote(children): return .quote(Self.linkingAddresses(children, find: find))
         case let .list(ordered, start, items): return .list(ordered: ordered, start: start, items: items.map { Self.linkingAddresses($0, find: find) })
+        case let .table(head, rows, alignments):
+            // A cell's bare address is a link, as GFM makes one there too.
+            return .table(head: head.map(link), rows: rows.map { $0.map(link) }, alignments: alignments)
         case .blank, .image, .cardEmbed, .rule, .code: return self
         }
     }
@@ -330,7 +360,8 @@ public nonisolated enum ProseMetrics {
             let size = rhythm.heading(level: level)
             return (rhythm.headingAbove * size, (level <= 2 ? rhythm.h2Below : rhythm.h3Below) * size)
         case .blank: return (0, 0)
-        case .image, .cardEmbed: return (rhythm.blockGap, rhythm.blockGap)
+        // A table is a block with its own air, as a picture is (`.story-table`'s `--s-block`).
+        case .image, .cardEmbed, .table: return (rhythm.blockGap, rhythm.blockGap)
         case .rule: return (rhythm.ruleGap, rhythm.ruleGap)
         case .soleLink: return asCard ? (rhythm.blockGap, rhythm.blockGap) : paragraph
         case .paragraph, .quote, .list, .code: return paragraph

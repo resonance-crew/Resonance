@@ -146,6 +146,51 @@ public nonisolated enum StoryProse {
     private static let webPicture = try! NSRegularExpression(
         pattern: "!\\[[^\\]\\n]{0,\(linkTextMax)}+\\]\\((https?://[^\\s)]{1,\(ChatLinks.maxLength)}+)\\)")
 
+    /// A GFM table's delimiter row (`| --- | :-: |`): one line, each cell one dash run (plainText.ts's
+    /// TABLE_DELIMITER), so no line is read twice.
+    private static let tableDelimiter = try! NSRegularExpression(
+        pattern: #"^[ \t]*\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$"#)
+
+    /// A table row's cells, their words joined by 「 · 」 (the pipes at its ends are the row's, not a cell's).
+    private static func rowWords(_ line: String) -> String {
+        var row = Substring(line.trimmingCharacters(in: .whitespacesAndNewlines))
+        if row.hasPrefix("|") { row = row.dropFirst() }
+        if row.hasSuffix("|") { row = row.dropLast() }
+        return row.split(separator: "|", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+    }
+
+    /// A GFM table read as its cells' words (round 8 §5.2, plainText.ts's tableWords): its delimiter
+    /// row gone, each row's cells joined by 「 · 」 — never the pipes and dashes. A table is a header
+    /// row with a pipe, the delimiter row (with a pipe: `a` over `---` is a heading) and the rows with
+    /// a pipe after it, up to a blank line; an escaped pipe (`\|`) is a cell's own (`literals` set it
+    /// aside). One pass over the lines.
+    static func tableWords(_ text: String) -> String {
+        guard text.contains("|") else { return text }
+        var lines = text.components(separatedBy: "\n")
+        var i = 1
+        while i < lines.count {
+            let line = lines[i]
+            let ns = line as NSString
+            guard line.contains("|"), lines[i - 1].contains("|"),
+                  tableDelimiter.firstMatch(in: line, range: NSRange(location: 0, length: ns.length)) != nil else {
+                i += 1
+                continue
+            }
+            lines[i - 1] = rowWords(lines[i - 1])
+            lines[i] = ""
+            var next = i + 1
+            while next < lines.count, lines[next].contains("|"), !lines[next].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                lines[next] = rowWords(lines[next])
+                next += 1
+            }
+            i = next
+        }
+        return lines.joined(separator: "\n")
+    }
+
     /// The address of the story's first picture on the web — a node's little visual — or nil (plainText.ts's firstPicture).
     public static func firstPicture(_ markdown: String) -> String? {
         let ns = markdown as NSString
@@ -169,6 +214,8 @@ public nonisolated enum StoryProse {
         t = withoutLinks(t)
         t = replace(t, "^#{1,6}\\s+", "", lines: true)
         t = replace(t, "^>\\s?", "", lines: true)
+        // A table, a quote's too, as its cells' words.
+        t = tableWords(t)
         // A marker's indent is spaces and tabs on its own line: `^\s*` would read on across every blank line after it, at each one (quadratic).
         t = replace(t, "^[ \\t]*(?:[-*+]|[0-9]+\\.)\\s+", "", lines: true)
         t = replace(t, "^[ \\t]*(?:-{3,}|\\*{3,}|_{3,})[ \\t]*$", "", lines: true)
