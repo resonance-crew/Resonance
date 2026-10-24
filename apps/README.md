@@ -164,7 +164,8 @@ device. Medium and up: a full-width header with the four tabs centred in it
 bordered feed grid, two-pane Messages (`MessagesPanes`: the conversation at the
 foot of the Messages stack is the detail pane), the card page's contents rail
 (for a story with a table of contents only; the byline is under the title at every
-width).
+width), and the card's share · ⋯ at the end of that byline instead of in the bar,
+which keeps them on a compact window (`CardPageLayout.actionsInByline`).
 The simulator can't be turned or split from the command line:
 `-debugWindow 1376x1032` (any `WxH`) lays the app out at that size, scaled into
 the screen, for layout checks only (the safe areas stay the screen's).
@@ -236,8 +237,9 @@ browser breaks between any two characters, so a line can end a character
 earlier than the web's. A story's words grow with the system's text size up
 to 2× (`TextScale.readingFactor`); the byline and the rest stay under 1.25×.
 
-Share: a card's bar, and the row that ends its story, show the share glyph only
-for a published, public card not in the trash (`CardShareGate`); the glyph draws
+Share: a card's bar on a phone (its byline on a tablet), and the row that ends its
+story, show the share glyph only for a published, public card not in the trash
+(`CardShareGate`); the glyph draws
 its own loader while the picture is made. It opens the system sheet with the link
 (`LinkSource`, with its `LPLinkMetadata`) and the 1080 × 1920 picture drawn
 on the phone (`CardImageSource`; DesignSystem's `ShareCardView` /

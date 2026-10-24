@@ -6,9 +6,10 @@ import SwiftUI
 /// it at every width (round 8 §10.1), the story, tags, then one row — the reader's response bar at
 /// its start, the card's share and ⋯ at its end (§10.2); then the resonance and related sections,
 /// set straight on the page. The title and story are set by their script (`CardModel.storyType` →
-/// ``StoryTypography``); the share and the ⋯ also live in the bar, as phone apps keep a page's
-/// actions. A wide window's rail holds the story's table of contents, when it has one; a story with
-/// none is centred.
+/// ``StoryTypography``). The share and the ⋯ head the page too: on a phone in the bar, as phone apps
+/// keep a page's actions; on a tablet at the end of the byline, with the author and the read time ·
+/// date (the web's byline, §10.1: ``CardPageLayout/actionsInByline(window:)``). A wide window's rail
+/// holds the story's table of contents, when it has one; a story with none is centred.
 struct CardScreen: View {
     let key: String
     @Environment(SessionStore.self) private var session
@@ -47,6 +48,8 @@ struct CardScreen: View {
 
     /// The story's table of contents, once the card has loaded.
     private var contents: [TocEntry] { model?.phase == .loaded ? model?.toc ?? [] : [] }
+    /// A tablet's window: the card's share and ⋯ end the byline row, not the bar (round 8 §10.1).
+    private var actionsInByline: Bool { CardPageLayout.actionsInByline(window: window.width) }
     /// How far the lists under the story reach out of the article's column on either side: on a
     /// phone and down a medium window's middle they are bands, whose paper and wavy rules run from
     /// edge to edge of the page while the cards keep to their measure inside (``StoryBand``) — as a
@@ -157,8 +160,9 @@ struct CardScreen: View {
                 }
             } trailing: {
                 // The owner's card in the trash has neither its share nor its ⋯: its banner is the way out.
-                if let detail = model?.detail, !TrashedCardBanner.shows(detail) {
-                    // The ⋯ lives in the bar, as phone apps keep a page's actions (and again at the story's end).
+                // On a phone they live in the bar, as phone apps keep a page's actions (and again at the
+                // story's end); a tablet's byline holds them instead.
+                if !actionsInByline, let detail = model?.detail, !TrashedCardBanner.shows(detail) {
                     cardActions(detail, seed: (detail.card.accentHue ?? 55) + 3)
                 }
             }
@@ -202,7 +206,8 @@ struct CardScreen: View {
     /// The card's share and its ⋯, as the bar's ghost glyphs: the share only for a card whoever gets its
     /// link can open (published and public, share.spec §1: the system's sheet, with the card's link and
     /// its picture); the owner's ⋯, or the reader's safety menu — anonymous cards included (App Store
-    /// 1.2), whose author only the server knows: Report alone. The bar's and the story's end's alike.
+    /// 1.2), whose author only the server knows: Report alone. The bar's (a phone's) or the byline's (a
+    /// tablet's), and the story's end's, alike.
     @ViewBuilder fileprivate func cardActions(_ detail: CardDetail, seed: Double) -> some View {
         let card = detail.card
         if CardShareGate.offered(detail) {
@@ -234,7 +239,8 @@ struct CardScreen: View {
                     TrashedCardBanner(card: card, focusTitle: justTrashed) { openRoute.dismissToRoot() }
                         .padding(.bottom, 24)
                 }
-                head(card, anonymous: detail.anonymous, type: type)
+                // A tablet's byline ends in the card's share and ⋯ — not the owner's card in the trash, whose banner is the way out.
+                head(card, anonymous: detail.anonymous, type: type, actions: actionsInByline && !trashed ? detail : nil)
                 // A card the reader can't see (private, gone, blocked) is the link the story wrote, as the prose draws one.
                 StoryMarkdownView(blocks: model.blocks, typography: story, language: type.lang, onOpenURL: open) { href, _ in
                     model.embed(for: href).map { CardEmbedView(href: href, card: $0) }
@@ -329,8 +335,9 @@ struct CardScreen: View {
 
     /// Cover, title and byline: what a list already knows of the card. The cover, `coverGap`, the
     /// title in the story's type, `metaGap`, then the byline at every width — the author over the
-    /// read time and date (round 8 §10.1) — and `leadGap` down to the story.
-    private func head(_ card: FeedCard, anonymous: Bool, type: StoryType) -> some View {
+    /// read time and date (round 8 §10.1), ending on a tablet in the card's share and ⋯ (`actions`,
+    /// once the card has loaded) — and `leadGap` down to the story.
+    private func head(_ card: FeedCard, anonymous: Bool, type: StoryType, actions detail: CardDetail? = nil) -> some View {
         let hue = card.accentHue ?? 55
         let story = StoryTypography(script: type.script, layout: window.layoutClass)
         return VStack(alignment: .leading, spacing: 0) {
@@ -346,7 +353,13 @@ struct CardScreen: View {
                 // Where the title ends, for the tablet header's centre (it fades in once this is under the line).
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.pageSpace)).maxY } action: { meter.titleBottom = $0 }
                 .padding(.bottom, story.metaGap)
-            StoryBylineRow(card: card, anonymous: anonymous, avatar: story.bylineAvatar)
+            StoryBylineRow(card: card, anonymous: anonymous, avatar: story.bylineAvatar) {
+                if let detail {
+                    HStack(spacing: 4) { cardActions(detail, seed: (card.accentHue ?? 55) + 3) }
+                        // The glyphs' own pads sit in the margin, their ink on the column's edge (as the end row's).
+                        .padding(.trailing, -12)
+                }
+            }
                 // Where the byline ends: past it, the bar names the author.
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.pageSpace)).maxY } action: { meter.bylineBottom = $0 }
                 .padding(.bottom, story.leadGap)
@@ -432,12 +445,15 @@ private struct CardScroll: ViewModifier {
 /// avatar (40), pen name (→ their page; one line, its end cut with an ellipsis), the region's flag
 /// and the verified mark, over the meta line. An anonymous card shows the neutral 「·」
 /// and 「匿名」 in muted ink, linking nowhere, to everyone — its owner too. The row grows with large
-/// text and a wrapping meta line (at least 44, never a fixed height); its actions are the bar's.
-struct StoryBylineRow: View {
+/// text and a wrapping meta line (at least 44, never a fixed height). On a tablet it ends in the card's
+/// share and ⋯ (`actions`, the page's); a phone's are the bar's.
+struct StoryBylineRow<Actions: View>: View {
     let card: FeedCard
     let anonymous: Bool
     /// The avatar's size (`StoryTypography.bylineAvatar`).
     var avatar: CGFloat = 40
+    /// What ends the row, after the author's words: a tablet's share and ⋯ (nothing on a phone).
+    @ViewBuilder var actions: Actions
     @Environment(\.openRoute) private var openRoute
 
     var body: some View {
@@ -474,8 +490,16 @@ struct StoryBylineRow: View {
                 StoryMetaLine(card: card, size: StoryTypography.bylineMetaSize)
             }
             Spacer(minLength: 0)
+            actions
         }
         .frame(minHeight: 44)
+    }
+}
+
+extension StoryBylineRow where Actions == EmptyView {
+    /// The byline alone: the author and the read time · date.
+    init(card: FeedCard, anonymous: Bool, avatar: CGFloat = 40) {
+        self.init(card: card, anonymous: anonymous, avatar: avatar) { EmptyView() }
     }
 }
 

@@ -150,6 +150,13 @@ public nonisolated struct CardPageLayout: Sendable, Equatable {
         }
     }
 
+    /// Where a card page's share and ⋯ stand (round 8 §10.1), by the window: on a tablet's — medium and
+    /// up — at the end of the byline under the title, with the author and the read time · date, as the
+    /// web's byline holds them at every width, and not in the bar; on a phone's (compact, an iPad's
+    /// narrow split too) in the bar, as phone apps keep a page's actions. The story's end row holds
+    /// them at every width.
+    public static func actionsInByline(window: CGFloat) -> Bool { LayoutClass.of(window) != .compact }
+
     /// One column of the measure (or the width less its pads), centred; no rail.
     private static func centred(width: CGFloat, pad: CGFloat) -> CardPageLayout {
         let text = max(0, min(Tokens.measure, width - 2 * pad))

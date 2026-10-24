@@ -209,6 +209,23 @@ import Testing
         #expect(!CardPageLayout.of(width: 402, window: 402, contents: true).rail)
     }
 
+    /// Round 8 §10.1 (the owner: on a computer and a tablet the author goes under the title, together
+    /// with the read time, the share and the ⋯): on a tablet's window the card's share and ⋯ end the
+    /// byline row and leave the bar; a phone's — and an iPad's narrow split, as compact as one — keeps
+    /// them in the bar.
+    @Test func theCardsActionsEndTheBylineOnATabletAndStayInThePhonesBar() {
+        // Phones, and an iPad's window at a third of the screen.
+        for w: CGFloat in [320, 375, 402, 440, 599] {
+            #expect(!CardPageLayout.actionsInByline(window: w), "\(w)")
+        }
+        // An iPad's half split, an iPad mini, an 11" and a 13" iPad standing and lying down.
+        for w: CGFloat in [600, 694, 744, 834, 1032, 1194, 1376] {
+            #expect(CardPageLayout.actionsInByline(window: w), "\(w)")
+        }
+        // The same line as the window's class (never the device): compact below 600.
+        #expect(CardPageLayout.actionsInByline(window: 599.5) == (LayoutClass.of(599.5) != .compact))
+    }
+
     @Test func twoPanesDrawTheConversationBesideTheListAndPushOnlyWhatIsOverIt() {
         let ben = Route.thread(handle: "ben", uid: "u-ben", note: nil)
         let cyd = Route.thread(handle: "cyd", uid: "u-cyd", note: nil)
