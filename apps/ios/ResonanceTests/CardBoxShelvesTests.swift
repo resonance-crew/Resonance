@@ -89,6 +89,17 @@ import Testing
         #expect(CardBoxScreen.shelf(forKey: "nowhere") == nil)
     }
 
+    /// Round 8 §1.1 (the web sends both to /write/{id}): every card on 草稿 opens the writer — a
+    /// published card kept private as a draft never published, as its ⋯ 編輯 does — and a card
+    /// readers have, on 已發布, its page.
+    @Test func everyDraftOpensTheWriterAndACardReadersHaveItsPage() {
+        #expect(CardBoxScreen.opensWriter(ownCard("d", published: nil, edited: nil)))
+        #expect(CardBoxScreen.opensWriter(ownCard("d", published: nil, edited: nil, visibility: "public")))
+        #expect(CardBoxScreen.opensWriter(ownCard("p", published: "2026-10-01T08:00:00.000Z", edited: nil)))
+        #expect(!CardBoxScreen.opensWriter(ownCard("q", published: "2026-10-01T08:00:00.000Z", edited: nil, visibility: "public")))
+        #expect(!CardBoxScreen.opensWriter(ownCard("c", published: "2026-10-01T08:00:00.000Z", edited: nil, visibility: "connections")))
+    }
+
     @Test func aRefreshThatFailedSpeaksOnlyOverTheShelfItWasFor() throws {
         // Pulled on the published shelf, then Bookmarks chosen while the request was on its way; it failed.
         #expect(CardBoxScreen.afterRefresh(of: .published, showing: true, failure: .offline, shown: .bookmarks) == nil)

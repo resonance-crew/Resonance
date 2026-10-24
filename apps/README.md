@@ -196,8 +196,9 @@ a page without one falls back to `nextCursor`). The card box asks for my own she
 private, drafts) in one `GET /api/v1/me/cardbox?shelves=`, the others' when shown; whichever answer
 brings the published shelf is what's kept. There is no 私人卡 shelf: 草稿 holds the drafts and the
 published cards kept private together, the latest changed first (`CardBoxScreen.draftShelf`, by
-`editedAt`, else `publishedAt`), and a card's ⋯ offers 轉為草稿 only on a card readers have
-(`CardActionsMenu.rows(readersSee:answering:)`). The thought map reads its cards under the rules and asks
+`editedAt`, else `publishedAt`), every card on it opening the writer — a published one kept
+private too (`CardBoxScreen.opensWriter`), a card readers have its page — and a card's ⋯ offers
+轉為草稿 only on a card readers have (`CardActionsMenu.rows(readersSee:answering:)`). The thought map reads its cards under the rules and asks
 `GET /api/v1/cards?keys=` for the ones they refuse (someone else's anonymous original, without its
 author). Reports go through the server (`POST /api/v1/reports`, `…/cards/{key}/report`). A scheduled
 deletion comes with the account (`Me.deletion`, the kept one on a cold start): no separate request,

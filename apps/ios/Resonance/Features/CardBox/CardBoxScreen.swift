@@ -328,6 +328,13 @@ struct CardBoxScreen: View {
         return Array(ordered.prefix(draftShelfMax).map(\.card))
     }
 
+    /// What a tap on one of my cards opens (round 8 §1.1): the writer for a 草稿 — a card never
+    /// published, or published and kept private, is something its author goes on writing (the web
+    /// sends both to /write/{id}, as the ⋯'s 編輯 does) — and the card's page for one readers have.
+    static func opensWriter(_ card: FeedCard) -> Bool {
+        !CardActionsMenu.readersSee(published: card.publishedAt != nil, visibility: card.visibility.rawValue)
+    }
+
     /// The shelf a web key names — `private` (the 私人卡 shelf there was) opens 草稿.
     static func shelf(forKey key: String) -> ReadingAPI.CardBoxShelf? {
         key == webKey(._private) ? .draft : order.first { webKey($0) == key }
@@ -373,9 +380,10 @@ struct CardBoxScreen: View {
 
 /// My own cards (ProfileTabs' managed shelves): each with the owner's ⋯ over
 /// its top-right corner. An anonymous one wears the anonymous byline exactly as
-/// everyone else sees it (design §13) — that is its marker, no badge. A draft
-/// never published has no page yet, so tapping it resumes writing; a published
-/// one (a private card on the 草稿 shelf too) opens its page.
+/// everyone else sees it (design §13) — that is its marker, no badge. A tap on a
+/// 草稿 — never published, or published and kept private — goes on writing it, as
+/// its ⋯ 編輯 does (round 8 §1.1, the web's /write/{id}); a card readers have
+/// opens its page (``CardBoxScreen/opensWriter(_:)``).
 private struct ManagedCardList: View {
     let cards: [FeedCard]
     @Environment(WriteLauncher.self) private var writer
@@ -388,7 +396,7 @@ private struct ManagedCardList: View {
             let card = cards[i]
             let hue = CardPalette(index: palettes[i]).hue
             Group {
-                if card.publishedAt == nil {
+                if CardBoxScreen.opensWriter(card) {
                     Button { writer.edit(card.id) } label: {
                         StoryCardView(card.publicStory, position: i, isLast: i == cards.count - 1, bordered: bordered, palette: palettes[i])
                     }
