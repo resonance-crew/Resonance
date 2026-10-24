@@ -229,6 +229,24 @@ actor TokenLog {
         }
     }
 
+    /// Emptying goes through the slow client the app hands over (`AppHTTP.slowSession`'s 70 s, round 8
+    /// §6.2); every other call keeps the app's own.
+    @Test func emptyingGoesThroughTheSlowClientAndNothingElseDoes() async throws {
+        let configuration = APIConfiguration(origin: URL(string: "https://example.test")!) { _ in "token" }
+        func client(_ transport: StubTransport) -> Client {
+            ResonanceClient.make(configuration, transport: transport, middlewares: [BearerAuthMiddleware(idToken: configuration.idToken)])
+        }
+        let usual = StubTransport(status: .noContent, body: "")
+        let slow = StubTransport(body: #"{"deleted":3,"remaining":0,"before":"2026-10-20T10:00:00.000Z"}"#)
+        let api = WritingAPI(client: client(usual), configuration: configuration, slowClient: client(slow))
+        #expect(try await api.emptyTrash() == WritingAPI.EmptiedTrash(deleted: 3, remaining: 0))
+        #expect(slow.requests.map(\.bare) == ["/me/trash"])
+        #expect(usual.requests.isEmpty)
+        try await api.deleteCard("c1", onlyIfTrashed: true)
+        #expect(usual.requests.map(\.bare) == ["/cards/c1"])
+        #expect(slow.requests.count == 1)
+    }
+
     @Test func resonatesWithAnExistingCardThroughTheContract() async throws {
         let transport = StubTransport(body: #"{"card":\#(ReadingAPITests.card),"changed":true}"#)
         let result = try await api(transport).resonate(with: "target", cardId: "c1")

@@ -17,11 +17,15 @@ public struct WritingAPI: Sendable {
     let client: Client
     let configuration: APIConfiguration
     let session: URLSession
+    /// The client for the calls that may answer slowly (emptying the trash): the app's, through
+    /// `AppHTTP.slowSession`; `client` when none is given.
+    let slowClient: Client
 
-    public init(client: Client, configuration: APIConfiguration, session: URLSession = AppHTTP.session) {
+    public init(client: Client, configuration: APIConfiguration, session: URLSession = AppHTTP.session, slowClient: Client? = nil) {
         self.client = client
         self.configuration = configuration
         self.session = session
+        self.slowClient = slowClient ?? client
     }
 
     /// Publishes one of your cards: stamps it once, gives it its slug, and
@@ -140,13 +144,14 @@ public struct WritingAPI: Sendable {
     /// Empties your trash for good (DELETE /api/v1/me/trash), a page at a time: the first call fixes
     /// the cut-off (now) and the next ones send it back, so a card moved to the trash meanwhile is
     /// never taken; it stops once nothing is left, or once a call deleted nothing (a card that keeps
-    /// failing must not keep it going) — the web's `emptyTrash`, call for call.
+    /// failing must not keep it going) — the web's `emptyTrash`, call for call. Each call through the
+    /// slow client (`slowClient`: a page of deletes may take longer than the app's 30 s).
     public func emptyTrash() async throws -> EmptiedTrash {
         var before: Date?
         var result = EmptiedTrash(deleted: 0, remaining: 0)
         for _ in 0..<Self.emptyTrashCalls {
             let page: Components.Schemas.EmptiedTrash
-            switch try await client.emptyTrash(query: .init(before: before)) {
+            switch try await slowClient.emptyTrash(query: .init(before: before)) {
             case let .ok(r): page = try r.body.json
             case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
             case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)

@@ -7,6 +7,9 @@ import Foundation
 public enum AppHTTP {
     /// Between two packets of an answer (the illustration's stream sets its own, longer one).
     public static let requestTimeout: TimeInterval = 30
+    /// For the calls whose answer can take longer (emptying the trash: a page of deletes, round 8
+    /// §6.2) — past the 30 s the server's page could outlast, an answer lost while it went on deleting.
+    public static let slowRequestTimeout: TimeInterval = 70
 
     /// `Resonance/2.0.0 (iOS 18.5; build 3)`.
     public static func userAgent(version: String, build: String, os: String) -> String {
@@ -35,6 +38,15 @@ public enum AppHTTP {
     public static let session: URLSession = {
         let configuration = URLSessionConfiguration.default
         configure(configuration)
+        configuration.urlCache = nil
+        return URLSession(configuration: configuration)
+    }()
+
+    /// `session`, waiting `slowRequestTimeout` between packets: for the slow calls only, nothing stored.
+    public static let slowSession: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configure(configuration)
+        configuration.timeoutIntervalForRequest = slowRequestTimeout
         configuration.urlCache = nil
         return URLSession(configuration: configuration)
     }()

@@ -121,7 +121,9 @@ final class SessionStore {
         outboxes = ChatOutboxes(messaging: { MessagingAPI(client: client) }, sent: { PushCenter.shared.reachedOut() })
         chatImages = ChatImageStore { id, size in try await MessagingAPI(client: client).chatImage(id, thumb: size == .thumb) }
         account = AccountAPI(configuration)
-        writing = WritingAPI(client: api, configuration: configuration)
+        // Emptying the trash waits 70 s for each page's answer, not the app's 30 (round 8 §6.2).
+        writing = WritingAPI(client: api, configuration: configuration,
+                             slowClient: ResonanceClient.make(configuration, cache: httpCache, session: AppHTTP.slowSession))
         thoughtMap = ThoughtMapStore(api: ReadingAPI(client: api))
         if let saved = UserDefaults.standard.string(forKey: Self.languageKey), let language = Strings.Language(rawValue: saved) {
             Strings.shared.language = language
