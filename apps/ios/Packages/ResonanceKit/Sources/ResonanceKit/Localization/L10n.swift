@@ -582,8 +582,6 @@ public enum L10n {
         }
         /// Anonymous
         public static var anonymousAuthor: String { Strings.shared.string("card.anonymousAuthor") }
-        /// This card was published anonymously — your pen name isn't shown on it or on your profile
-        public static var anonymousOwnerNote: String { Strings.shared.string("card.anonymousOwnerNote") }
         public enum Trashed {
             /// This card is in the trash
             public static var title: String { Strings.shared.string("card.trashed.title") }
@@ -812,8 +810,6 @@ public enum L10n {
     public enum Write {
         /// Give it a one-line title first
         public static var titleRequired: String { Strings.shared.string("write.titleRequired") }
-        /// Next
-        public static var next: String { Strings.shared.string("write.next") }
         /// Done
         public static var finish: String { Strings.shared.string("write.finish") }
         /// New card
@@ -910,8 +906,6 @@ public enum L10n {
         public static var tagsPlaceholder: String { Strings.shared.string("write.tagsPlaceholder") }
         /// Add
         public static var tagsAdd: String { Strings.shared.string("write.tagsAdd") }
-        /// Press Enter to add one, or let AI suggest from your story
-        public static var tagsHelp: String { Strings.shared.string("write.tagsHelp") }
         /// Image (optional)
         public static var mediaLabel: String { Strings.shared.string("write.mediaLabel") }
         /// Remove image
@@ -963,10 +957,6 @@ public enum L10n {
             public static func publicLine(handle: String) -> String { Strings.shared.format("write.visibility.publicLine", ["handle": handle]) }
             /// Anyone can read it, but no one will know it's yours
             public static var anonymousLine: String { Strings.shared.string("write.visibility.anonymousLine") }
-            /// Not shared — only you can see it
-            public static var privateLine: String { Strings.shared.string("write.visibility.privateLine") }
-            /// Only your connections can see it
-            public static var connectionsLine: String { Strings.shared.string("write.visibility.connectionsLine") }
         }
         public enum Ai {
             /// AI writing partner
@@ -998,12 +988,6 @@ public enum L10n {
         public static var publishing: String { Strings.shared.string("write.publishing") }
         /// Draft saved · {time}
         public static func autosaved(time: String) -> String { Strings.shared.format("write.autosaved", ["time": time]) }
-        /// This card is live — changes stay private until you save them
-        public static var editLiveHint: String { Strings.shared.string("write.editLiveHint") }
-        /// Changes saved privately · {time} (readers still see the old version)
-        public static func editBuffered(time: String) -> String { Strings.shared.format("write.editBuffered", ["time": time]) }
-        /// You have unsaved changes here — only you can see them
-        public static var editBufferedIdle: String { Strings.shared.string("write.editBufferedIdle") }
         public enum Status {
             /// Saving…
             public static var saving: String { Strings.shared.string("write.status.saving") }
@@ -1093,8 +1077,6 @@ public enum L10n {
         public enum Tabs {
             /// Published
             public static var published: String { Strings.shared.string("me.tabs.published") }
-            /// Private
-            public static var `private`: String { Strings.shared.string("me.tabs.private") }
             /// Drafts
             public static var draft: String { Strings.shared.string("me.tabs.draft") }
             /// Resonated
@@ -1154,8 +1136,6 @@ public enum L10n {
         }
         /// Your first card becomes the point this world starts arranging itself around
         public static var emptyPublished: String { Strings.shared.string("me.emptyPublished") }
-        /// No private cards
-        public static var emptyPrivate: String { Strings.shared.string("me.emptyPrivate") }
         /// No drafts
         public static var emptyDraft: String { Strings.shared.string("me.emptyDraft") }
         /// No one has linked a card to you yet
@@ -1191,12 +1171,8 @@ public enum L10n {
             public static var menuLabel: String { Strings.shared.string("me.actions.menuLabel") }
             /// Edit
             public static var edit: String { Strings.shared.string("me.actions.edit") }
-            /// Make public
-            public static var makePublic: String { Strings.shared.string("me.actions.makePublic") }
             /// Move to drafts
             public static var makePrivate: String { Strings.shared.string("me.actions.makePrivate") }
-            /// Make public anonymously
-            public static var makePublicAnonymous: String { Strings.shared.string("me.actions.makePublicAnonymous") }
             /// Delete
             public static var delete: String { Strings.shared.string("me.actions.delete") }
             /// Delete this card?

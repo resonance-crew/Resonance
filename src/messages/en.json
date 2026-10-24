@@ -339,7 +339,6 @@
       "back": "Back to home"
     },
     "anonymousAuthor": "Anonymous",
-    "anonymousOwnerNote": "This card was published anonymously — your pen name isn't shown on it or on your profile",
     "trashed": {
       "title": "This card is in the trash",
       "onlyYou": "Only you can see it",
@@ -459,7 +458,6 @@
   },
   "write": {
     "titleRequired": "Give it a one-line title first",
-    "next": "Next",
     "finish": "Done",
     "title": "New card",
     "editTitle": "Edit draft",
@@ -510,7 +508,6 @@
     "tagsSuggestError": "Couldn’t suggest tags — please try again",
     "tagsPlaceholder": "Type a tag…",
     "tagsAdd": "Add",
-    "tagsHelp": "Press Enter to add one, or let AI suggest from your story",
     "mediaLabel": "Image (optional)",
     "mediaRemove": "Remove image",
     "mediaReplace": "Change image",
@@ -536,9 +533,7 @@
       "draft": "Draft",
       "anonymous": "Anonymous",
       "publicLine": "Anyone can read it, signed {handle}",
-      "anonymousLine": "Anyone can read it, but no one will know it's yours",
-      "privateLine": "Not shared — only you can see it",
-      "connectionsLine": "Only your connections can see it"
+      "anonymousLine": "Anyone can read it, but no one will know it's yours"
     },
     "ai": {
       "panel": "AI writing partner",
@@ -556,9 +551,6 @@
     "publish": "Publish",
     "publishing": "Publishing…",
     "autosaved": "Draft saved · {time}",
-    "editLiveHint": "This card is live — changes stay private until you save them",
-    "editBuffered": "Changes saved privately · {time} (readers still see the old version)",
-    "editBufferedIdle": "You have unsaved changes here — only you can see them",
     "status": {
       "saving": "Saving…",
       "saved": "Saved",
@@ -608,7 +600,6 @@
     "bioEmpty": "No bio yet",
     "tabs": {
       "published": "Published",
-      "private": "Private",
       "draft": "Drafts",
       "resonated": "Resonated",
       "linked": "Linked",
@@ -640,7 +631,6 @@
       "leave": "Leave"
     },
     "emptyPublished": "Your first card becomes the point this world starts arranging itself around",
-    "emptyPrivate": "No private cards",
     "emptyDraft": "No drafts",
     "emptyLinked": "No one has linked a card to you yet",
     "emptyResonated": "No resonances yet",
@@ -660,9 +650,7 @@
     "actions": {
       "menuLabel": "Manage card",
       "edit": "Edit",
-      "makePublic": "Make public",
       "makePrivate": "Move to drafts",
-      "makePublicAnonymous": "Make public anonymously",
       "delete": "Delete",
       "deleteConfirmTitle": "Delete this card?",
       "deleteConfirmBody": "This cannot be undone — the story and its resonance links will be gone.",

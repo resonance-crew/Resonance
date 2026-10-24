@@ -14,7 +14,7 @@ const editor = vi.hoisted(() => ({
   cardId: vi.fn((): string | undefined => undefined),
   stepBack: vi.fn(() => false),
 }));
-// It reports its 下一步 to the page, which draws it; pressed, it asks for the publish step, and the bar's back
+// It reports its ✓ to the page, which draws it; pressed, it asks for the publish step, and the bar's back
 // from there asks for writing again (CardEditor's own contract, its suite's).
 vi.mock('@/components/molecules/CardEditor/CardEditor', () => ({
   CardEditor: ({
@@ -41,7 +41,7 @@ vi.mock('@/components/molecules/CardEditor/CardEditor', () => ({
     }));
     React.useEffect(() => {
       onPrimaryActionChange?.(
-        step === 'write' ? { label: 'Next', disabled: false, loading: false, onPress: () => onStepChange?.('publish') } : null,
+        step === 'write' ? { label: 'Done', disabled: false, loading: false, onPress: () => onStepChange?.('publish') } : null,
       );
     }, [step, onStepChange, onPrimaryActionChange]);
     return (
@@ -221,17 +221,17 @@ describe('the writer below the split', () => {
   });
 });
 
-// 下一步 opens the publish step in place, and the address says so: the browser's back returns to writing.
+// ✓ opens the publish step in place, and the address says so: the browser's back returns to writing.
 describe('the publish step', () => {
-  const nextButton = () => screen.getByRole('button', { name: en.write.next });
+  const nextButton = () => screen.getByRole('button', { name: en.write.finish });
   beforeEach(() => {
     window.history.replaceState(null, '', '/en/write/draft');
   });
 
-  it('puts 下一步 at the end of the bar below the split, and floats it over the pane at the split', () => {
+  it('puts ✓ at the end of the bar below the split, and floats it over the pane at the split', () => {
     screenAtSplit(false);
     const { unmount } = renderWithIntl(<WriteWorkspace title={en.write.editTitle} locale="en" initial={{ id: 'draft', story: 'x' }} />);
-    expect(within(screen.getByRole('banner')).getByRole('button', { name: en.write.next })).toBeInTheDocument();
+    expect(within(screen.getByRole('banner')).getByRole('button', { name: en.write.finish })).toBeInTheDocument();
     unmount();
     screenAtSplit(true);
     renderWithIntl(<WriteWorkspace title={en.write.editTitle} locale="en" initial={{ id: 'draft', story: 'x' }} />);
@@ -248,7 +248,7 @@ describe('the publish step', () => {
     // The bar names the step, its back is the way back to writing, and the step's foot has the verb.
     expect(screen.getByRole('heading', { level: 1, name: en.write.publishPanel.title })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: en.write.leaveStay })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: en.write.next })).toBeNull();
+    expect(screen.queryByRole('button', { name: en.write.finish })).toBeNull();
 
     act(() => window.history.back());
     await waitFor(() => expect(screen.getByText('step: write')).toBeInTheDocument());

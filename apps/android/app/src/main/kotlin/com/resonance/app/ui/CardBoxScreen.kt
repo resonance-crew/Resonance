@@ -601,7 +601,8 @@ private fun ShelfTabs(selection: TabGetCardBox, edge: Dp, air: CardBoxAir, openM
 
 private fun shelfTitle(s: TabGetCardBox) = when (s) {
     TabGetCardBox.published -> L10n.Me.Tabs.published
-    TabGetCardBox.`private` -> L10n.Me.Tabs.private
+    // Never a shelf of its own any more: its cards are on 草稿 (round 8 §1.1).
+    TabGetCardBox.`private` -> L10n.Me.Tabs.draft
     TabGetCardBox.draft -> L10n.Me.Tabs.draft
     TabGetCardBox.resonated -> L10n.Me.Tabs.resonated
     TabGetCardBox.linked -> L10n.Me.Tabs.linked
@@ -613,7 +614,7 @@ private fun shelfTitle(s: TabGetCardBox) = when (s) {
 
 private fun emptyText(s: TabGetCardBox) = when (s) {
     TabGetCardBox.published -> L10n.Me.emptyPublished
-    TabGetCardBox.`private` -> L10n.Me.emptyPrivate
+    TabGetCardBox.`private` -> L10n.Me.emptyDraft
     TabGetCardBox.draft -> L10n.Me.emptyDraft
     TabGetCardBox.resonated -> L10n.Me.emptyResonated
     TabGetCardBox.linked -> L10n.Me.emptyLinked

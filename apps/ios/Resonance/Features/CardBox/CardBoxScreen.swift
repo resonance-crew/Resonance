@@ -343,7 +343,8 @@ struct CardBoxScreen: View {
     static func title(_ s: ReadingAPI.CardBoxShelf) -> String {
         switch s {
         case .published: L10n.Me.Tabs.published
-        case ._private: L10n.Me.Tabs.`private`
+        // Never a shelf of its own any more: its cards are on 草稿 (round 8 §1.1).
+        case ._private: L10n.Me.Tabs.draft
         case .draft: L10n.Me.Tabs.draft
         case .resonated: L10n.Me.Tabs.resonated
         case .linked: L10n.Me.Tabs.linked
@@ -368,7 +369,7 @@ struct CardBoxScreen: View {
     static func empty(_ s: ReadingAPI.CardBoxShelf) -> String {
         switch s {
         case .published: L10n.Me.emptyPublished
-        case ._private: L10n.Me.emptyPrivate
+        case ._private: L10n.Me.emptyDraft
         case .draft: L10n.Me.emptyDraft
         case .resonated: L10n.Me.emptyResonated
         case .linked: L10n.Me.emptyLinked

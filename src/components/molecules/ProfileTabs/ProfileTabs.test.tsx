@@ -94,7 +94,7 @@ describe('ProfileTabs — the card box shelves', () => {
       <ProfileTabs
         manageable
         loading
-        tabs={['published', 'private', 'draft']}
+        tabs={['published', 'draft']}
       />,
     );
 
@@ -104,12 +104,12 @@ describe('ProfileTabs — the card box shelves', () => {
     expect(washWrapper.querySelectorAll(':scope > svg path[fill]')).toHaveLength(1);
     expect(strokedShapePaths(washWrapper)).toHaveLength(0);
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Private' }));
-    expect(screen.getByRole('tab', { name: 'Private' })).toHaveAttribute('aria-selected', 'true');
+    await userEvent.click(screen.getByRole('tab', { name: 'Drafts' }));
+    expect(screen.getByRole('tab', { name: 'Drafts' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: 'Published' }).parentElement).toBe(
       screen.getByRole('tablist'),
     );
-    const moved = screen.getByRole('tab', { name: 'Private' }).parentElement!.parentElement!;
+    const moved = screen.getByRole('tab', { name: 'Drafts' }).parentElement!.parentElement!;
     expect(strokedShapePaths(moved)).toHaveLength(0);
   });
 
@@ -149,7 +149,7 @@ describe('ProfileTabs — the card box shelves', () => {
 });
 
 describe('ProfileTabs — focus as a card leaves the shelf', () => {
-  const shelf = (cards: Card[]) => <ProfileTabs manageable tabs={['published', 'private']} authors={{ me }} data={{ published: cards }} />;
+  const shelf = (cards: Card[]) => <ProfileTabs manageable tabs={['published', 'draft']} authors={{ me }} data={{ published: cards }} />;
 
   it('moves on to the next card, else the one before it, else the shelf control — never left on nothing', async () => {
     const { rerender } = renderWithIntl(shelf([card('a'), card('b'), card('c')]));
@@ -188,7 +188,7 @@ describe('ProfileTabs — the trash', () => {
       trashedFrom: { visibility: 'public', referenceCardId: null },
       ...extra,
     });
-  const TABS = ['published', 'private', 'draft', 'resonated', 'linked', 'bookmarks', 'trash', 'thoughtMap'] as const;
+  const TABS = ['published', 'draft', 'resonated', 'linked', 'bookmarks', 'trash', 'thoughtMap'] as const;
 
   it('is a shelf of its own, always there, last before the thought map', () => {
     renderWithIntl(<ProfileTabs manageable loading tabs={[...TABS]} thoughtMapHref="/me/thought-map" />);

@@ -20,7 +20,6 @@ import { TrashShelf } from './TrashShelf';
 
 export type TabKey =
   | 'published'
-  | 'private'
   | 'draft'
   | 'resonated'
   | 'linked'
@@ -29,7 +28,7 @@ export type TabKey =
   | 'thoughtMap';
 
 /** Tabs whose cards belong to the viewer and therefore carry the「⋯」menu. */
-const OWNED_TABS: ReadonlySet<TabKey> = new Set(['published', 'private', 'draft']);
+const OWNED_TABS: ReadonlySet<TabKey> = new Set(['published', 'draft']);
 
 export interface ProfileTabsProps {
   tabs: TabKey[];
@@ -83,14 +82,14 @@ export function ProfileTabs({
   // render agree; write-through on every change.
   useEffect(() => {
     if (!persistKey) return;
-    let saved: TabKey | null = null;
+    let stored: string | null = null;
     try {
-      saved = window.sessionStorage.getItem(persistKey) as TabKey | null;
+      stored = window.sessionStorage.getItem(persistKey);
     } catch {
       // Storage blocked: start on the first tab.
     }
     // The 私人卡 shelf is part of 草稿 now (round 8 §1.1): one left on it opens 草稿.
-    if (saved === 'private' && !tabs.includes('private') && tabs.includes('draft')) saved = 'draft';
+    const saved = (stored === 'private' ? 'draft' : stored) as TabKey | null;
     if (saved && saved !== 'thoughtMap' && tabs.includes(saved)) setActiveState(saved);
     setRestored(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -215,8 +214,6 @@ export function ProfileTabs({
             title={t(
               active === 'published'
                 ? 'emptyPublished'
-                : active === 'private'
-                ? 'emptyPrivate'
                 : active === 'draft'
                 ? 'emptyDraft'
                 : active === 'linked'

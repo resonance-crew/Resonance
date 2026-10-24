@@ -290,7 +290,7 @@ describe('CardEditor — the publish step', () => {
     renderWithIntl(<Writer locale="en" />);
     await toPublishStep();
     // The writing step's way forward goes with it: the step's foot has the verb.
-    expect(screen.queryByRole('button', { name: en.write.next })).toBeNull();
+    expect(screen.queryByRole('button', { name: en.write.finish })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.publish }));
     await waitFor(() => expect(publishCard).toHaveBeenCalledWith('draft-1'));
     expect(createCardDraft).toHaveBeenCalledWith(
@@ -636,7 +636,7 @@ describe('CardEditor — a card trashed elsewhere', () => {
     expect(getCardById).toHaveBeenCalledWith('draft-9');
     expect(inStep()).toBe(false);
     expect(story()).toHaveValue('Words typed after it went.');
-    expect(screen.queryByRole('button', { name: en.write.next })).toBeNull();
+    expect(screen.queryByRole('button', { name: en.write.finish })).toBeNull();
 
     // 還原: out of the trash, and what was typed is written at once.
     vi.mocked(updateCardDraft).mockResolvedValue({ id: 'draft-9' } as never);

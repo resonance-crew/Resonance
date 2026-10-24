@@ -185,7 +185,6 @@ describe('PublishStep', () => {
       expect(segment(name)).toHaveAttribute('aria-pressed', 'false');
     }
     expect(screen.getByText(en.write.visibility.label)).toBeInTheDocument();
-    expect(screen.queryByText(en.write.visibility.connectionsLine)).toBeNull();
     expect(screen.queryByRole('switch')).toBeNull();
 
     await userEvent.click(segment(en.write.visibility.anonymous));
@@ -216,7 +215,6 @@ describe('PublishStep', () => {
     await userEvent.click(mine);
     expect(onAudience).toHaveBeenLastCalledWith({ visibility: 'private', anonymous: false });
     expect(mine).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.queryByText(en.write.visibility.privateLine)).toBeNull();
     // A 草稿: nothing is published — it is saved.
     expect(screen.getByRole('button', { name: en.write.publishPanel.save })).toHaveAttribute('data-variant', 'solid');
     expect(screen.queryByRole('button', { name: en.write.publishPanel.publish })).toBeNull();

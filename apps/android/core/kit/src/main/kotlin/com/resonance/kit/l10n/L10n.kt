@@ -584,8 +584,6 @@ object L10n {
         }
         /** Anonymous */
         val anonymousAuthor: String get() = Strings.string("card.anonymousAuthor")
-        /** This card was published anonymously — your pen name isn't shown on it or on your profile */
-        val anonymousOwnerNote: String get() = Strings.string("card.anonymousOwnerNote")
         object Trashed {
             /** This card is in the trash */
             val title: String get() = Strings.string("card.trashed.title")
@@ -814,8 +812,6 @@ object L10n {
     object Write {
         /** Give it a one-line title first */
         val titleRequired: String get() = Strings.string("write.titleRequired")
-        /** Next */
-        val next: String get() = Strings.string("write.next")
         /** Done */
         val finish: String get() = Strings.string("write.finish")
         /** New card */
@@ -912,8 +908,6 @@ object L10n {
         val tagsPlaceholder: String get() = Strings.string("write.tagsPlaceholder")
         /** Add */
         val tagsAdd: String get() = Strings.string("write.tagsAdd")
-        /** Press Enter to add one, or let AI suggest from your story */
-        val tagsHelp: String get() = Strings.string("write.tagsHelp")
         /** Image (optional) */
         val mediaLabel: String get() = Strings.string("write.mediaLabel")
         /** Remove image */
@@ -965,10 +959,6 @@ object L10n {
             fun publicLine(handle: String): String = Strings.format("write.visibility.publicLine", mapOf("handle" to handle))
             /** Anyone can read it, but no one will know it's yours */
             val anonymousLine: String get() = Strings.string("write.visibility.anonymousLine")
-            /** Not shared — only you can see it */
-            val privateLine: String get() = Strings.string("write.visibility.privateLine")
-            /** Only your connections can see it */
-            val connectionsLine: String get() = Strings.string("write.visibility.connectionsLine")
         }
         object Ai {
             /** AI writing partner */
@@ -1000,12 +990,6 @@ object L10n {
         val publishing: String get() = Strings.string("write.publishing")
         /** Draft saved · {time} */
         fun autosaved(time: String): String = Strings.format("write.autosaved", mapOf("time" to time))
-        /** This card is live — changes stay private until you save them */
-        val editLiveHint: String get() = Strings.string("write.editLiveHint")
-        /** Changes saved privately · {time} (readers still see the old version) */
-        fun editBuffered(time: String): String = Strings.format("write.editBuffered", mapOf("time" to time))
-        /** You have unsaved changes here — only you can see them */
-        val editBufferedIdle: String get() = Strings.string("write.editBufferedIdle")
         object Status {
             /** Saving… */
             val saving: String get() = Strings.string("write.status.saving")
@@ -1095,8 +1079,6 @@ object L10n {
         object Tabs {
             /** Published */
             val published: String get() = Strings.string("me.tabs.published")
-            /** Private */
-            val private: String get() = Strings.string("me.tabs.private")
             /** Drafts */
             val draft: String get() = Strings.string("me.tabs.draft")
             /** Resonated */
@@ -1156,8 +1138,6 @@ object L10n {
         }
         /** Your first card becomes the point this world starts arranging itself around */
         val emptyPublished: String get() = Strings.string("me.emptyPublished")
-        /** No private cards */
-        val emptyPrivate: String get() = Strings.string("me.emptyPrivate")
         /** No drafts */
         val emptyDraft: String get() = Strings.string("me.emptyDraft")
         /** No one has linked a card to you yet */
@@ -1193,12 +1173,8 @@ object L10n {
             val menuLabel: String get() = Strings.string("me.actions.menuLabel")
             /** Edit */
             val edit: String get() = Strings.string("me.actions.edit")
-            /** Make public */
-            val makePublic: String get() = Strings.string("me.actions.makePublic")
             /** Move to drafts */
             val makePrivate: String get() = Strings.string("me.actions.makePrivate")
-            /** Make public anonymously */
-            val makePublicAnonymous: String get() = Strings.string("me.actions.makePublicAnonymous")
             /** Delete */
             val delete: String get() = Strings.string("me.actions.delete")
             /** Delete this card? */

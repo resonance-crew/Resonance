@@ -339,7 +339,6 @@
       "back": "回到首頁"
     },
     "anonymousAuthor": "匿名",
-    "anonymousOwnerNote": "這張卡以匿名發布——卡片和你的個人頁都不會顯示你的筆名",
     "trashed": {
       "title": "這張卡片在垃圾桶裡",
       "onlyYou": "只有你看得到",
@@ -459,7 +458,6 @@
   },
   "write": {
     "titleRequired": "先寫下一句話標題",
-    "next": "下一步",
     "finish": "完成",
     "title": "新卡片",
     "editTitle": "編輯草稿",
@@ -510,7 +508,6 @@
     "tagsSuggestError": "標籤建議失敗，請再試一次",
     "tagsPlaceholder": "輸入標籤⋯",
     "tagsAdd": "新增",
-    "tagsHelp": "按 Enter 新增，或讓 AI 從故事裡建議",
     "mediaLabel": "搭配一張圖片（選填）",
     "mediaRemove": "移除圖片",
     "mediaReplace": "換一張圖片",
@@ -536,9 +533,7 @@
       "draft": "草稿",
       "anonymous": "匿名公開",
       "publicLine": "所有人都看得到，署名 {handle}",
-      "anonymousLine": "所有人都看得到，但不會知道是你寫的",
-      "privateLine": "不公開，只有你看得到",
-      "connectionsLine": "只有連結的人看得到"
+      "anonymousLine": "所有人都看得到，但不會知道是你寫的"
     },
     "ai": {
       "panel": "AI 寫作夥伴",
@@ -556,9 +551,6 @@
     "publish": "發布",
     "publishing": "發布中⋯",
     "autosaved": "草稿已自動儲存 · {time}",
-    "editLiveHint": "這張卡片已經發布，修改會先私下暫存，儲存後才會更新給讀者",
-    "editBuffered": "修改已暫存 · {time}　（讀者還看不到）",
-    "editBufferedIdle": "有一份還沒儲存的修改，只有你看得到",
     "status": {
       "saving": "儲存中⋯",
       "saved": "已儲存",
@@ -608,7 +600,6 @@
     "bioEmpty": "還沒寫下一句話關於自己",
     "tabs": {
       "published": "已發布",
-      "private": "私人卡",
       "draft": "草稿",
       "resonated": "我共振過的",
       "linked": "被連結",
@@ -640,7 +631,6 @@
       "leave": "離開"
     },
     "emptyPublished": "你的第一張卡片，會成為這個世界為你排列的起點",
-    "emptyPrivate": "還沒有私人卡片",
     "emptyDraft": "沒有草稿",
     "emptyResonated": "還沒共振過別人的卡片",
     "emptyLinked": "還沒有人用卡片連結你",
@@ -660,9 +650,7 @@
     "actions": {
       "menuLabel": "管理卡片",
       "edit": "編輯",
-      "makePublic": "轉為公開",
       "makePrivate": "轉為草稿",
-      "makePublicAnonymous": "轉為匿名公開",
       "delete": "刪除",
       "deleteConfirmTitle": "刪除這張卡片？",
       "deleteConfirmBody": "刪除後無法復原，卡片的故事與共振連結都會消失",
