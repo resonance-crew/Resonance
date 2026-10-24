@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { describe, expect, it } from 'vitest';
 import { Editor } from '@tiptap/core';
 import { Slice } from '@tiptap/pm/model';
-import { getMarkdown, htmlAddsNothing, readsAsMarkdown, storyExtensions } from './editorSchema';
+import { getMarkdown, htmlAddsNothing, MarkdownTable, opensTable, readsAsMarkdown, storyExtensions } from './editorSchema';
 
 // The story editor's storage format, pinned. Every case in the corpus is
 // loaded into the editor schema and written back; the result must equal the
@@ -97,18 +101,234 @@ describe('a table, kept as its Markdown', () => {
     ]);
   });
 
-  it('leaves its block on Enter twice at its end, as a code block does', () => {
+  it('leaves its block on Enter twice at its end: a new row, then Enter on it', () => {
     const editor = new Editor({ extensions: storyExtensions(), content: '| a | b |\n| - | - |\n| 1 | 2 |' });
     editor.commands.setTextSelection(editor.state.doc.content.size - 1);
-    // Two new lines inside it, then the third Enter leaves it.
-    for (let i = 0; i < 3; i++) editor.commands.keyboardShortcut('Enter');
+    // A new, empty row inside it; Enter there leaves it (an empty line ends a GFM table).
+    for (let i = 0; i < 2; i++) editor.commands.keyboardShortcut('Enter');
     const blocks: [string, string][] = [];
     editor.state.doc.forEach((n) => blocks.push([n.type.name, n.textContent]));
-    // The two empty lines go with it: the table ends on its last row.
+    // The empty row goes with it: the table ends on its last row.
     expect(blocks).toEqual([
       ['markdownTable', '| a | b |\n| - | - |\n| 1 | 2 |'],
       ['paragraph', ''],
     ]);
+    editor.destroy();
+  });
+
+  it('wears its label only when the writer gives it one', () => {
+    const pre = (extensions = storyExtensions()) => {
+      const editor = new Editor({ extensions, content: '| a |\n| - |' });
+      const el = editor.view.dom.querySelector('pre[data-md-table]');
+      const out = { label: el?.getAttribute('data-label') ?? null, markdown: getMarkdown(editor) };
+      editor.destroy();
+      return out;
+    };
+    expect(pre()).toEqual({ label: null, markdown: '| a |\n| - |' });
+    // The label is the writer's alone: the stored Markdown is the same.
+    expect(pre(storyExtensions({ markdownTable: MarkdownTable.configure({ label: '表格' }) }))).toEqual({ label: '表格', markdown: '| a |\n| - |' });
+  });
+});
+
+describe('a table typed by hand', () => {
+  const mod = /Mac|iP(hone|[oa]d)/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true };
+
+  /** An editor holding `content`, the caret at its end. */
+  function editorWith(content = '') {
+    const editor = new Editor({ extensions: storyExtensions(), content });
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+    return editor;
+  }
+  /** Types as a keyboard does: each character through the input rules, else into the text. */
+  function type(editor: Editor, text: string) {
+    for (const ch of text) {
+      const { from, to } = editor.state.selection;
+      const view = editor.view;
+      if (!view.someProp('handleTextInput', (f) => f(view, from, to, ch, () => view.state.tr.insertText(ch, from, to)))) {
+        view.dispatch(view.state.tr.insertText(ch, from, to));
+      }
+    }
+  }
+  /** Presses a key through the editor's own keymaps, as a keyboard does. */
+  function press(editor: Editor, key: string, modifiers: KeyboardEventInit = {}) {
+    const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...modifiers });
+    return !!editor.view.someProp('handleKeyDown', (f) => f(editor.view, event));
+  }
+  function blocks(editor: Editor) {
+    const out: [string, string][] = [];
+    editor.state.doc.forEach((n) => out.push([n.type.name, n.textContent]));
+    return out;
+  }
+  /** The empty line TrailingNode keeps after a story's last block when that is no paragraph. */
+  const REST: [string, string] = ['paragraph', ''];
+  /** The block the caret is in, and whether it is at that block's end. */
+  function caret(editor: Editor) {
+    const { $from } = editor.state.selection;
+    return { in: $from.parent.type.name, atEnd: $from.parentOffset === $from.parent.content.size };
+  }
+  /** How the reader (react-markdown with GFM) draws a story: its blocks' tags. */
+  function readerBlocks(markdown: string) {
+    const html = renderToStaticMarkup(createElement(Markdown, { remarkPlugins: [remarkGfm] }, markdown));
+    return Array.from(new DOMParser().parseFromString(html, 'text/html').body.children, (el) => el.tagName.toLowerCase());
+  }
+
+  it('becomes one table block on Enter after its delimiter row, the caret on its new, empty row', () => {
+    const editor = editorWith();
+    type(editor, '| 地點 | 時間 |');
+    press(editor, 'Enter');
+    type(editor, '| --- | --- |');
+    press(editor, 'Enter');
+    expect(blocks(editor)).toEqual([['markdownTable', '| 地點 | 時間 |\n| --- | --- |\n'], REST]);
+    expect(caret(editor)).toEqual({ in: 'markdownTable', atEnd: true });
+
+    // Its rows are typed inside it; Enter on the empty row after the last leaves it, for the line below.
+    type(editor, '| 台北 | 六點 |');
+    press(editor, 'Enter');
+    press(editor, 'Enter');
+    expect(blocks(editor)).toEqual([['markdownTable', '| 地點 | 時間 |\n| --- | --- |\n| 台北 | 六點 |'], REST]);
+    expect(caret(editor)).toEqual({ in: 'paragraph', atEnd: true });
+    type(editor, '那天的雨。');
+    expect(blocks(editor)).toEqual([
+      ['markdownTable', '| 地點 | 時間 |\n| --- | --- |\n| 台北 | 六點 |'],
+      ['paragraph', '那天的雨。'],
+    ]);
+    const markdown = getMarkdown(editor);
+    expect(markdown).toBe('| 地點 | 時間 |\n| --- | --- |\n| 台北 | 六點 |\n\n那天的雨。');
+    expect(readerBlocks(markdown)).toEqual(['table', 'p']);
+    editor.destroy();
+  });
+
+  it('becomes one too when a line break (Shift+Enter) parts its header from its delimiter row', () => {
+    const editor = editorWith('前言');
+    press(editor, 'Enter');
+    type(editor, '名稱 | 數量');
+    press(editor, 'Enter', { shiftKey: true });
+    type(editor, ':--- | ---:');
+    expect(blocks(editor)).toEqual([
+      ['paragraph', '前言'],
+      ['paragraph', '名稱 | 數量:--- | ---:'],
+    ]);
+    press(editor, 'Enter');
+    expect(blocks(editor)).toEqual([['paragraph', '前言'], ['markdownTable', '名稱 | 數量\n:--- | ---:\n'], REST]);
+    expect(caret(editor)).toEqual({ in: 'markdownTable', atEnd: true });
+    editor.destroy();
+  });
+
+  it('stays words when the rows are not a table’s header and delimiter', () => {
+    /** Types each line as a paragraph of its own (Enter after each, the last one's Enter the one asked about). */
+    const typed = (lines: string[], content = '') => {
+      const editor = editorWith(content);
+      for (const line of lines) {
+        type(editor, line);
+        press(editor, 'Enter');
+      }
+      const out = blocks(editor);
+      editor.destroy();
+      return out;
+    };
+    // The header has more cells than the delimiter row.
+    expect(typed(['| a | b | c |', '| --- | --- |'])).toEqual([
+      ['paragraph', '| a | b | c |'],
+      ['paragraph', '| --- | --- |'],
+      ['paragraph', ''],
+    ]);
+    // A delimiter row with no header row before it.
+    expect(typed(['| --- | --- |'])).toEqual([
+      ['paragraph', '| --- | --- |'],
+      ['paragraph', ''],
+    ]);
+    // A header without a pipe, or a delimiter row that isn't one.
+    expect(typed(['地點 時間', '| --- |']).map(([t]) => t)).toEqual(['paragraph', 'paragraph', 'paragraph']);
+    expect(typed(['| a | b |', '| --- | -x- |']).map(([t]) => t)).toEqual(['paragraph', 'paragraph', 'paragraph']);
+    // A header of two lines (a line break inside it).
+    const editor = editorWith();
+    type(editor, '前言');
+    press(editor, 'Enter', { shiftKey: true });
+    type(editor, '| a | b |');
+    press(editor, 'Enter');
+    type(editor, '| - | - |');
+    press(editor, 'Enter');
+    expect(blocks(editor).map(([t]) => t)).toEqual(['paragraph', 'paragraph', 'paragraph']);
+    editor.destroy();
+    // Inside a code block it is code.
+    const code = editorWith('```\n| a | b |\n| - | - |\n```');
+    press(code, 'Enter');
+    expect(blocks(code)).toEqual([['codeBlock', '| a | b |\n| - | - |\n'], REST]);
+    code.destroy();
+    // Enter inside the delimiter row, not at its end, splits the line as ever.
+    const middle = editorWith('| a | b |\n\n| - | - |');
+    middle.commands.setTextSelection(middle.state.doc.content.size - 3);
+    press(middle, 'Enter');
+    expect(blocks(middle).map(([t]) => t)).toEqual(['paragraph', 'paragraph', 'paragraph']);
+    middle.destroy();
+  });
+
+  it('comes undone in one step (Mod-z) back to the two rows as typed', () => {
+    const editor = editorWith();
+    type(editor, '| a | b |');
+    press(editor, 'Enter');
+    type(editor, '|:-|-:|');
+    press(editor, 'Enter');
+    expect(blocks(editor)).toEqual([['markdownTable', '| a | b |\n|:-|-:|\n'], REST]);
+    press(editor, 'z', mod);
+    expect(blocks(editor)).toEqual([
+      ['paragraph', '| a | b |'],
+      ['paragraph', '|:-|-:|'],
+    ]);
+    expect(caret(editor)).toEqual({ in: 'paragraph', atEnd: true });
+    editor.destroy();
+  });
+
+  it('becomes a paragraph again on Backspace once emptied', () => {
+    const editor = editorWith();
+    type(editor, '| a |');
+    press(editor, 'Enter');
+    type(editor, '| - |');
+    press(editor, 'Enter');
+    expect(blocks(editor)).toEqual([['markdownTable', '| a |\n| - |\n'], REST]);
+    // Emptied (the browser deletes characters itself), then one more Backspace at its start:
+    // the block goes, the caret on the line below — one empty line, never two.
+    editor.view.dispatch(editor.state.tr.delete(1, editor.state.selection.from));
+    expect(blocks(editor)).toEqual([['markdownTable', ''], REST]);
+    expect(press(editor, 'Backspace')).toBe(true);
+    expect(blocks(editor)).toEqual([REST]);
+    expect(caret(editor)).toEqual({ in: 'paragraph', atEnd: true });
+    // Mid-story, an emptied one becomes a paragraph where it stood.
+    const mid = editorWith('前言\n\n| a |\n| - |\n\n結尾');
+    let start = 0;
+    mid.state.doc.forEach((n, pos) => {
+      if (n.type.name === 'markdownTable') start = pos + 1;
+    });
+    mid.view.dispatch(mid.state.tr.delete(start, start + '| a |\n| - |'.length));
+    mid.commands.setTextSelection(start);
+    press(mid, 'Backspace');
+    expect(blocks(mid)).toEqual([['paragraph', '前言'], ['paragraph', ''], ['paragraph', '結尾']]);
+    mid.destroy();
+    editor.destroy();
+  });
+
+  it('reads a header and a delimiter row as markdown-it does, which reads the story back', () => {
+    const editor = new Editor({ extensions: storyExtensions() });
+    const parser = (editor.storage as unknown as { markdown: { parser: { parse(md: string): string } } }).markdown.parser;
+    const pairs: [string, string][] = [
+      ['| a | b |', '| --- | --- |'],
+      ['a | b', '--- | ---'],
+      ['| a |', '|-|'],
+      ['| a |', '| :-: |'],
+      ['a \\| b | c', '- | -'],
+      ['a \\| b | c', '-- | --'],
+      ['| a | b |', '| --- |'],
+      ['| a | b |', '| --- || --- |'],
+      ['a', '---'],
+      ['|', '|-|'],
+      ['| a | b |', '| ---  ---: |'],
+      ['| a | b |', '|---|---|  '],
+      ['| a | b |', '| -- | -:- |'],
+    ];
+    for (const [header, delimiter] of pairs) {
+      const read = /^<pre data-md-table/.test(parser.parse(`${header}\n${delimiter}`));
+      expect(opensTable(header, delimiter), `${header} / ${delimiter}`).toBe(read);
+    }
     editor.destroy();
   });
 });

@@ -17,7 +17,7 @@ import { useKeyboardInset } from '@/lib/hooks/useKeyboardInset';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { UnsupportedImage, uploadImageFile } from '@/lib/images/upload';
 import type { Card } from '@/lib/db/types';
-import { getMarkdown, storyExtensions } from '@/lib/markdown/editorSchema';
+import { getMarkdown, MarkdownTable, storyExtensions } from '@/lib/markdown/editorSchema';
 import { LatinMarks } from '@/lib/markdown/latinMarks';
 import type { StoryScript } from '@/lib/text/script';
 import '@/styles/story.css';
@@ -125,6 +125,7 @@ export function MarkdownEditor({
   onFocusChange,
 }: MarkdownEditorProps) {
   const t = useTranslations('write.editor');
+  const tCard = useTranslations('card');
   const canvas = variant === 'canvas';
   const toast = useToast();
   const [hover, setHover] = useState(false);
@@ -157,7 +158,13 @@ export function MarkdownEditor({
     // The schema and its Markdown come from editorSchema (shared with the
     // native apps' editor island); only the node views are the web's own.
     extensions: [
-      ...storyExtensions({ blockquote: CurvedBlockquoteNode, image: OrganicImageNode, cardEmbed: CardEmbedNode }),
+      ...storyExtensions({
+        blockquote: CurvedBlockquoteNode,
+        image: OrganicImageNode,
+        cardEmbed: CardEmbedNode,
+        // A table's source wears 表格 / Table, so it reads as a table the reader will draw, not code.
+        markdownTable: MarkdownTable.configure({ label: tCard('table') }),
+      }),
       LatinMarks,
       Placeholder.configure({ placeholder: placeholder ?? '' }),
     ],

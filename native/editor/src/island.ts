@@ -11,7 +11,8 @@
  *   host); ?layout=canvas the writer's bare page (no frame, no padding — the
  *   host sizes the view and scrolls it); ?locale= the UI's locale, whose type
  *   an empty story starts in (default zh-TW); ?script=cjk|latin sets the story
- *   in that type for good (the host decides); ?placeholder=, ?fonts=.
+ *   in that type for good (the host decides); ?placeholder=, ?fonts=. A table's
+ *   source is labelled in ?locale='s language (card.table: 表格 / Table).
  * Bridge (native → island): window.ResonanceEditor.{setMarkdown, getMarkdown, roundtrip, focus, blur, exec,
  *   setTitle, setScript}
  *   exec(command, args?) runs a toolbar command (the web MarkdownEditor's set:
@@ -35,9 +36,12 @@ import { wavyVertical } from '../../../src/lib/design/wavyPath';
 import { wobRect } from '../../../src/lib/design/wobRect';
 import { seedFromString } from '../../../src/lib/design/prng';
 import { storyLinkWaveVars } from '../../../src/lib/design/storyLinkWave';
-import { BlockImage, CardEmbed, getMarkdown, storyExtensions } from '../../../src/lib/markdown/editorSchema';
+import { BlockImage, CardEmbed, getMarkdown, MarkdownTable, storyExtensions } from '../../../src/lib/markdown/editorSchema';
 import { LatinMarks } from '../../../src/lib/markdown/latinMarks';
 import { localeScript, storyLang, writerScript, type StoryScript } from '../../../src/lib/text/script';
+// Only `card` of each is bundled (esbuild keeps a JSON file's top-level keys that are imported).
+import { card as cardEn } from '../../../src/messages/en.json';
+import { card as cardZhTW } from '../../../src/messages/zh-TW.json';
 
 /** Which toolbar buttons show as on, and whether undo/redo can run — the web toolbar's activeStates. */
 type ToolbarState = {
@@ -159,8 +163,16 @@ if (params.get('embed') === '1') document.documentElement.classList.add('embed')
 if (params.get('layout') === 'canvas') document.documentElement.classList.add('canvas');
 // The pen wave every link in the story wears (island.css), as the web editor's.
 for (const [name, value] of Object.entries(storyLinkWaveVars('editor'))) document.documentElement.style.setProperty(name, value);
+// A table's source wears 表格 / Table (the web writer's card.table), in the UI's language: ?locale=, which
+// the writer's page passes (the island's zh-TW without it, as its placeholder and type).
+const tableLabel = (params.get('locale') ?? 'zh-TW').startsWith('en') ? cardEn.table : cardZhTW.table;
 const extensions = [
-  ...storyExtensions({ blockquote: IslandBlockquote, image: IslandImage, cardEmbed: IslandCardEmbed }),
+  ...storyExtensions({
+    blockquote: IslandBlockquote,
+    image: IslandImage,
+    cardEmbed: IslandCardEmbed,
+    markdownTable: MarkdownTable.configure({ label: tableLabel }),
+  }),
   // The apostrophes inside Latin words, set in the Latin face (a decoration: the stored story is untouched).
   LatinMarks,
   Placeholder.configure({ placeholder: params.get('placeholder') ?? '寫下你的故事…' }),

@@ -259,6 +259,33 @@
   tab-size: 4;
 }
 
+/* The writers' block names itself (`data-label`, MarkdownTable's label: 表格 /
+   Table), so its source reads as a table the reader will draw, not code — in
+   the UI's type, small and muted, in the top end corner above the first row:
+   the block's extra top padding is its room, so it never sits on the source. */
+.story-prose .story-md-table[data-label] {
+  position: relative;
+  padding-top: 30px;
+}
+
+.story-prose .story-md-table[data-label]::before {
+  content: attr(data-label);
+  position: absolute;
+  top: 10px;
+  inset-inline-end: 16px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 500;
+  line-height: 14px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .story-prose .story-table {
   --story-table-fade: 24px;
   margin-top: var(--s-block);

@@ -2,8 +2,9 @@ import { Extension, Node, elementFromString, type AnyExtension } from '@tiptap/c
 import Blockquote from '@tiptap/extension-blockquote';
 import Image from '@tiptap/extension-image';
 import Paragraph from '@tiptap/extension-paragraph';
-import { DOMParser as PMDOMParser, Slice, type Node as PMNode } from '@tiptap/pm/model';
-import { Plugin, PluginKey, Selection } from '@tiptap/pm/state';
+import { closeHistory } from '@tiptap/pm/history';
+import { DOMParser as PMDOMParser, Slice, type Node as PMNode, type NodeType, type ResolvedPos } from '@tiptap/pm/model';
+import { Plugin, PluginKey, Selection, TextSelection, type EditorState } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import StarterKit from '@tiptap/starter-kit';
 import { Markdown } from 'tiptap-markdown';
@@ -257,14 +258,127 @@ function readTablesAsSource(md: MdLike) {
 }
 
 /**
+ * How many cells a GFM delimiter row has (`| --- | :-: |`, its end pipes
+ * optional, a colon at either end of a cell, spaces around), or null for a
+ * line that is no delimiter row — markdown-it's rule, which reads the story
+ * back: only `-`, `:`, `|` and spaces, at least one `-` in every cell, no
+ * empty cell between two others, and no `-` then a space first (a list).
+ */
+export function delimiterCells(line: string): number | null {
+  const text = line.trim();
+  if (text.length < 2 || !/^[-:|][-:| \t]*$/.test(text) || /^-[ \t]/.test(text)) return null;
+  const cells = text.split('|');
+  let count = 0;
+  for (let i = 0; i < cells.length; i++) {
+    const cell = cells[i].trim();
+    if (!cell) {
+      if (i === 0 || i === cells.length - 1) continue;
+      return null;
+    }
+    if (!/^:?-+:?$/.test(cell)) return null;
+    count++;
+  }
+  return count || null;
+}
+
+/** How many cells a GFM header row splits into — at each pipe not escaped, its end pipes optional — or 0 for a line with no pipe. */
+export function headerCells(line: string): number {
+  const text = line.trim();
+  if (!text.includes('|')) return 0;
+  const cells = [''];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '|' && text[i - 1] !== '\\') cells.push('');
+    else cells[cells.length - 1] += text[i];
+  }
+  if (cells[0] === '') cells.shift();
+  if (cells.length > 0 && cells[cells.length - 1] === '') cells.pop();
+  return cells.length;
+}
+
+/** Whether a header line and a delimiter line open a GFM table: a pipe in the header, and as many cells in it as the delimiter row has. */
+export function opensTable(header: string, delimiter: string): boolean {
+  const cells = delimiterCells(delimiter);
+  return cells != null && headerCells(header) === cells;
+}
+
+/**
+ * A paragraph's lines (split at its line breaks), as plain text — its marks
+ * dropped, a no-break space read as the space it was typed as — or null when
+ * it holds anything but words and line breaks.
+ */
+function linesOf(paragraph: PMNode): string[] | null {
+  const lines = [''];
+  let plain = true;
+  paragraph.forEach((child) => {
+    if (child.isText) lines[lines.length - 1] += (child.text ?? '').replace(/\u00a0/g, ' ');
+    else if (child.type.name === 'hardBreak') lines.push('');
+    else plain = false;
+  });
+  return plain ? lines : null;
+}
+
+/**
+ * A table typed by hand, as Enter at the end of its delimiter row finds it:
+ * the header row the paragraph before (one line of words), or the line before
+ * in the same paragraph (Shift+Enter between them, the delimiter row its last
+ * line). What one table block replaces, and that block's source — both rows,
+ * then the empty row the caret goes on to; null for anything else.
+ */
+function typedTable(state: EditorState, table: NodeType): { from: number; to: number; source: string } | null {
+  const { $from, empty } = state.selection;
+  const paragraph = $from.parent;
+  if (!empty || paragraph.type.name !== 'paragraph' || $from.parentOffset !== paragraph.content.size) return null;
+  const lines = linesOf(paragraph);
+  if (!lines || lines.length > 2) return null;
+  const container = $from.node($from.depth - 1);
+  const index = $from.index($from.depth - 1);
+  let header: string;
+  let first = index;
+  let from = $from.before();
+  if (lines.length === 2) {
+    header = lines[0];
+  } else {
+    const before = index > 0 ? container.child(index - 1) : null;
+    const above = before?.type === paragraph.type ? linesOf(before) : null;
+    if (!before || !above || above.length !== 1) return null;
+    header = above[0];
+    first = index - 1;
+    from -= before.nodeSize;
+  }
+  const delimiter = lines[lines.length - 1];
+  if (!opensTable(header, delimiter) || !container.canReplaceWith(first, index + 1, table)) return null;
+  return { from, to: $from.after(), source: `${header.trim()}\n${delimiter.trim()}\n` };
+}
+
+/**
+ * Whether the block after the one holding `$pos` is an empty paragraph that
+ * ends their container: the line TrailingNode keeps after a story's last
+ * block when that is a table, where the caret goes on leaving one (never a
+ * second empty line beside it, which would be stored as a blank line).
+ */
+function restingLineBelow($pos: ResolvedPos): boolean {
+  const container = $pos.node(-1);
+  const last = container.lastChild;
+  return $pos.indexAfter(-1) === container.childCount - 1 && last?.type.name === 'paragraph' && last.content.size === 0;
+}
+
+export interface MarkdownTableOptions {
+  /** A word the writer's block wears (`data-label`, drawn by story.css) so it reads as a table the reader will draw, not code. */
+  label?: string;
+}
+
+/**
  * A GFM table, held as its Markdown (round 8 §5.1): the editor shows the
  * source in the story's code type and writes it back exactly as it is — never
  * a grid to edit; the reader draws it as a table. It comes from a stored
- * story or a paste (markdown-it reads it, `readTablesAsSource` keeps its
- * lines); inside it Enter starts a new line, and two empty lines at its end
- * (or the down arrow there) leave it for a paragraph, as a code block's do.
+ * story, a paste (markdown-it reads it, `readTablesAsSource` keeps its
+ * lines), or a table typed by hand: Enter at the end of a delimiter row under
+ * a header row turns the two into this block (typedTable), one undo step.
+ * Inside it Enter starts a new row, and Enter on an empty last row (or the
+ * down arrow at its end) leaves it for a paragraph — an empty line ends a GFM
+ * table, so the block never holds one.
  */
-export const MarkdownTable = Node.create({
+export const MarkdownTable = Node.create<MarkdownTableOptions>({
   name: 'markdownTable',
   group: 'block',
   content: 'text*',
@@ -272,29 +386,48 @@ export const MarkdownTable = Node.create({
   code: true,
   defining: true,
 
+  addOptions() {
+    return { label: undefined };
+  },
+
   parseHTML() {
     return [{ tag: 'pre[data-md-table]', preserveWhitespace: 'full', priority: 60 }];
   },
 
   renderHTML() {
-    return ['pre', { 'data-md-table': '', class: 'story-md-table', spellcheck: 'false' }, 0];
+    const label = this.options.label;
+    return ['pre', { 'data-md-table': '', class: 'story-md-table', spellcheck: 'false', ...(label ? { 'data-label': label } : {}) }, 0];
   },
 
   addKeyboardShortcuts() {
     return {
       Enter: ({ editor }) => {
-        const { $from, empty } = editor.state.selection;
-        if (!empty || $from.parent.type !== this.type) return false;
+        const { state, view } = editor;
+        const { $from, empty } = state.selection;
+        if (!empty) return false;
+        if ($from.parent.type !== this.type) {
+          const typed = typedTable(state, this.type);
+          // Only what markdown-it reads back as a table, so the block is still one when the story is opened again.
+          const parser = (editor.storage as { markdown?: { parser?: MarkdownParserLike } }).markdown?.parser;
+          if (!typed || (parser && !/^<pre data-md-table/.test(parser.parse(typed.source)))) return false;
+          const tr = state.tr.replaceWith(typed.from, typed.to, this.type.create(null, state.schema.text(typed.source)));
+          tr.setSelection(TextSelection.create(tr.doc, typed.from + 1 + typed.source.length)).scrollIntoView();
+          // One undo step of its own: the rows' typing before it and after it are other steps.
+          view.dispatch(closeHistory(tr));
+          view.dispatch(closeHistory(view.state.tr));
+          return true;
+        }
         const atEnd = $from.parentOffset === $from.parent.nodeSize - 2;
-        if (!atEnd || !$from.parent.textContent.endsWith('\n\n')) return false;
-        return editor
-          .chain()
-          .command(({ tr }) => {
-            tr.delete($from.pos - 2, $from.pos);
-            return true;
-          })
-          .exitCode()
-          .run();
+        if (!atEnd || !$from.parent.textContent.endsWith('\n')) return false;
+        // The empty row goes, and the caret to the resting line below, else to a new paragraph.
+        const resting = restingLineBelow($from);
+        const after = $from.after();
+        const chain = editor.chain().command(({ tr }) => {
+          tr.delete($from.pos - 1, $from.pos);
+          if (resting) tr.setSelection(Selection.near(tr.doc.resolve(tr.mapping.map(after)), 1)).scrollIntoView();
+          return true;
+        });
+        return resting ? chain.run() : chain.exitCode().run();
       },
       ArrowDown: ({ editor }) => {
         const { state } = editor;
@@ -309,11 +442,16 @@ export const MarkdownTable = Node.create({
         }
         return editor.commands.exitCode();
       },
-      // Emptied, it becomes a paragraph again.
+      // Emptied, it becomes a paragraph again — or goes, the caret on the resting line below.
       Backspace: ({ editor }) => {
         const { $anchor, empty } = editor.state.selection;
         if (!empty || $anchor.parent.type !== this.type || $anchor.parent.textContent.length > 0) return false;
-        return editor.commands.clearNodes();
+        if (!restingLineBelow($anchor)) return editor.commands.clearNodes();
+        return editor.commands.command(({ tr }) => {
+          tr.delete($anchor.before(), $anchor.after());
+          tr.setSelection(Selection.near(tr.doc.resolve($anchor.before()), 1));
+          return true;
+        });
       },
     };
   },
