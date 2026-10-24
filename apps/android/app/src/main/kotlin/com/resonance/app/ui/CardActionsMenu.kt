@@ -49,11 +49,11 @@ internal fun trashAsk(referenceCardId: String?, published: Boolean, visibility: 
 }
 
 /**
- * The owner's ⋯ on a card (CardActionsMenu.tsx): 編輯 / 轉為公開·私人 / 取消共振 (for a card answering
- * another, [referenceCardId]) / 刪除, in the shared OrganicMenu. 刪除 moves the card to the trash
- * (POST /api/v1/cards/{id}/trash): no dialog — the toast's 復原 ([TrashFeedback.Toast]) or the page's
- * banner ([TrashFeedback.Page]) and the trash shelf are the way back — but for the one resonance that
- * asks first ([trashAsk]). Visibility and 取消共振 go through the server too (PATCH, DELETE
+ * The owner's ⋯ on a card (CardActionsMenu.tsx): 編輯 / 轉為公開·私人 (a [published] card) / 取消共振
+ * (for a card answering another, [referenceCardId]) / 刪除, in the shared OrganicMenu ([menuRows]).
+ * 刪除 moves the card to the trash (POST /api/v1/cards/{id}/trash): no dialog — the toast's 復原
+ * ([TrashFeedback.Toast]) or the page's banner ([TrashFeedback.Page]) and the trash shelf are the way
+ * back — but for the one resonance that asks first ([trashAsk]). Visibility and 取消共振 go through the server too (PATCH, DELETE
  * …/{original}/resonances/{id}) — never straight to Firestore, whose rules refuse them on a
  * published card — which also refreshes the site's cached pages that showed the card. One that
  * fails says so and changes nothing: the card stays where it is listed. Any of them may end a
@@ -80,7 +80,7 @@ fun CardActionsMenu(
     referenceTitle: String? = null,
     /** Whether that card is anonymous, when the page knows it (else looked up when 刪除 needs it). */
     referenceAnonymous: Boolean? = null,
-    /** The card is published (a draft's 刪除 never asks). */
+    /** The card is published (a draft's 刪除 never asks, and it has no 轉為公開·私人). */
     published: Boolean = true,
     /** The card is anonymous (its 刪除 takes back no connection). */
     anonymous: Boolean = false,
@@ -126,61 +126,62 @@ fun CardActionsMenu(
         }
     }
 
-    val items = listOf(
-        OrganicMenuItem(L10n.Me.Actions.edit, IconName.Pen) { open(Route.Write(cardId = cardId, showsCard = showsCard)) },
-        OrganicMenuItem(
-            visibilityAction(isPrivate, anonymous),
-            if (isPrivate) IconName.Globe else IconName.Lock,
-        ) {
-            if (busy) return@OrganicMenuItem
-            busy = true
-            scope.launch {
-                try {
-                    session.writing.updateCard(cardId, visibility = if (isPrivate) "public" else "private")
-                    session.noteCardChange(menuChange(cardId, referenceCardId))
-                    onChanged()
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    // Nothing changed: the card stays as it was, and says so.
-                    changeFailed = true
-                } finally {
-                    busy = false
+    val items = menuRows(published, answering = referenceCardId != null).map { row ->
+        when (row) {
+            MenuRow.Edit -> OrganicMenuItem(L10n.Me.Actions.edit, IconName.Pen) { open(Route.Write(cardId = cardId, showsCard = showsCard)) }
+            MenuRow.Visibility -> OrganicMenuItem(
+                visibilityAction(isPrivate, anonymous),
+                if (isPrivate) IconName.Globe else IconName.Lock,
+            ) {
+                if (busy) return@OrganicMenuItem
+                busy = true
+                scope.launch {
+                    try {
+                        session.writing.updateCard(cardId, visibility = if (isPrivate) "public" else "private")
+                        session.noteCardChange(menuChange(cardId, referenceCardId))
+                        onChanged()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // Nothing changed: the card stays as it was, and says so.
+                        changeFailed = true
+                    } finally {
+                        busy = false
+                    }
                 }
             }
-        },
-    ) + listOfNotNull(
-        referenceCardId?.let { OrganicMenuItem(L10n.Me.Actions.unresonate, IconName.Wave) { unresonating = true } },
-        OrganicMenuItem(L10n.Me.Actions.delete, IconName.Trash, destructive = true) {
-            if (busy) return@OrganicMenuItem
-            when (trashAsk(referenceCardId, published, visibility, anonymous, referenceAnonymous)) {
-                TrashAsk.AtOnce -> trashNow()
-                TrashAsk.Ask -> {
-                    trashFailed = false
-                    confirmingTrash = true
-                }
-                // Whether the original is anonymous, read first (the ⋯ waits meanwhile).
-                TrashAsk.LookUp -> {
-                    busy = true
-                    scope.launch {
-                        val originalAnonymous = try {
-                            referenceCardId?.let { session.reading.cardsByKey(listOf(it))[it]?.anonymous }
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            null
-                        }
-                        busy = false
-                        if (originalAnonymous == true) trashNow()
-                        else {
-                            trashFailed = false
-                            confirmingTrash = true
+            MenuRow.Unresonate -> OrganicMenuItem(L10n.Me.Actions.unresonate, IconName.Wave) { unresonating = true }
+            MenuRow.Delete -> OrganicMenuItem(L10n.Me.Actions.delete, IconName.Trash, destructive = true) {
+                if (busy) return@OrganicMenuItem
+                when (trashAsk(referenceCardId, published, visibility, anonymous, referenceAnonymous)) {
+                    TrashAsk.AtOnce -> trashNow()
+                    TrashAsk.Ask -> {
+                        trashFailed = false
+                        confirmingTrash = true
+                    }
+                    // Whether the original is anonymous, read first (the ⋯ waits meanwhile).
+                    TrashAsk.LookUp -> {
+                        busy = true
+                        scope.launch {
+                            val originalAnonymous = try {
+                                referenceCardId?.let { session.reading.cardsByKey(listOf(it))[it]?.anonymous }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                null
+                            }
+                            busy = false
+                            if (originalAnonymous == true) trashNow()
+                            else {
+                                trashFailed = false
+                                confirmingTrash = true
+                            }
                         }
                     }
                 }
             }
-        },
-    )
+        }
+    }
 
     Box(Modifier.fade(if (busy && !confirmingTrash && !unresonating) 0.6f else 1f)) {
         OrganicMenu(items, L10n.Me.Actions.menuLabel, seed, hue = hue, trigger = trigger)
@@ -216,6 +217,19 @@ private fun rememberFallbackTrash(session: Session): TrashCenter {
     val scope = rememberCoroutineScope()
     return remember(session) { TrashCenter(session.writing.trashCalls(), session::noteCardChange, Toasts(), scope) }
 }
+
+/** The ⋯'s rows, in order. */
+internal enum class MenuRow { Edit, Visibility, Unresonate, Delete }
+
+/**
+ * 編輯, 轉為公開·私人 — not on a draft: nothing is published from here, its audience is chosen in the
+ * writer's publish step (公開 · 匿名公開 · 只有自己) — 取消共振 on a resonance, 刪除. As on the web and iOS.
+ */
+internal fun menuRows(published: Boolean, answering: Boolean): List<MenuRow> =
+    listOf(MenuRow.Edit) + listOfNotNull(
+        MenuRow.Visibility.takeIf { published },
+        MenuRow.Unresonate.takeIf { answering },
+    ) + MenuRow.Delete
 
 /**
  * The ⋯'s visibility row: 轉為私人 for a card others read; 轉為公開 for a private one — 轉為匿名公開
