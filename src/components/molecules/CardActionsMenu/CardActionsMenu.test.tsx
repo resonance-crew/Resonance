@@ -154,6 +154,27 @@ describe('CardActionsMenu', () => {
     );
   });
 
+  // A draft publishes nothing from here: its audience is chosen in the writer's publish step.
+  it.each([
+    ['a draft', { id: 'd1', visibility: 'public' as const, published: false }, ['Edit', 'Delete']],
+    ['a draft kept private', { id: 'd2', visibility: 'private' as const, published: false, anonymous: true }, ['Edit', 'Delete']],
+    ['a draft resonance', { ...reaching, published: false }, ['Edit', 'Stop resonating', 'Delete']],
+  ])('offers no Make public / Make private on %s', async (_what, card, rows) => {
+    renderMenu(<CardActionsMenu card={card} referenceTitle="A walk" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(rows);
+  });
+
+  it.each([
+    ['a published public card', { id: 'c1', visibility: 'public' as const }, 'Make private'],
+    ['a published private card', { id: 'c2', visibility: 'private' as const }, 'Make public'],
+    ['a published private anonymous card', { id: 'c2', visibility: 'private' as const, anonymous: true }, 'Make public anonymously'],
+  ])('keeps the visibility row on %s', async (_what, card, row) => {
+    renderMenu(<CardActionsMenu card={{ ...card, published: true }} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Edit', row, 'Delete']);
+  });
+
   it("moves a card to the trash at once — no question — reads its lists again, and the toast's Undo brings it back", async () => {
     const onTrashed = vi.fn();
     const onRestored = vi.fn();
