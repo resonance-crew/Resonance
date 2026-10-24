@@ -32,14 +32,17 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * The writer's two steps (writer.spec), driven through its model the way the screen drives it:
- * 下一步 asks for a title and waits a moment for a new card's first save before the publish step
- * opens (never longer: offline, the server's yes never comes until the network does); the step's
- * choices are the draft's own values, autosaved and kept on the way back to writing, never
- * anonymous and for connections only in any write — a draft stored that way goes out public; the
- * mirror is asked once per text and never for a live card; 發布 and 儲存修改 save first; and a card
- * moved to the trash while it is open (its saves refused, its publish 409) goes back to writing and
- * says so, keeping what was typed, until 還原 writes it — and leaving never says that was kept.
+ * The writer's two steps (writer.spec, round 8 §2), driven through its model the way the screen
+ * drives it: ✓ asks for a title and waits a moment for a new card's first save before the publish
+ * step opens (never longer: offline, the server's yes never comes until the network does); the bar
+ * says how the writing is kept (儲存中⋯ only for a write past 400 ms, 已儲存, 修改已暫存, 未儲存); the
+ * step's choices are the draft's own values, autosaved and kept on the way back to writing, never
+ * anonymous and for connections only in any write — a draft stored that way goes out public; its one
+ * button follows the card and the choice (a 草稿 kept one is written, never published); the mirror is
+ * asked once per text and never for a live card; every verb saves first; a story's picture that fails
+ * is said where the writing is, never in the cover's slot; and a card moved to the trash while it is
+ * open (its saves refused, its publish 409) goes back to writing and says so, keeping what was typed,
+ * until 還原 writes it — and leaving never says that was kept.
  */
 class WriterStepsTest {
     private val language = Strings.language
@@ -65,7 +68,8 @@ class WriterStepsTest {
         referenceCardId: String? = null,
         initialStep: WriterStep = WriterStep.Write,
         nextWait: Long = WriteModel.NEXT_WAIT_MS,
-    ) = WriteModel(store, calls, referenceCardId, editor, opened, initialStep, scope, reachedOut = { reachedOut++ }, locale = { "zh-TW" }, nextWait = nextWait)
+        beganNew: Boolean = false,
+    ) = WriteModel(store, calls, referenceCardId, editor, opened, initialStep, scope, reachedOut = { reachedOut++ }, locale = { "zh-TW" }, nextWait = nextWait, beganNew = beganNew)
         .apply { onWrote = { wrote += it } }
 
     private fun draft(values: DraftValues, id: String = "d1") =
@@ -208,18 +212,18 @@ class WriterStepsTest {
         // The step shows 公開 chosen, and the draft says so in the write on the way.
         assertEquals("public", m.values.visibility)
         assertTrue(m.values.anonymous)
-        assertEquals("rain-walk", m.publish())
+        assertEquals(StepDone.Page("rain-walk"), m.finish())
         assertEquals(stored.copy(visibility = "public"), store.updates.last().second)
         assertTrue(store.updates.none { (_, v) -> v.anonymous && v.visibility == "connections" })
 
         // Opened on the step itself (a restored process): 發布 settles it all the same.
         store.updates.clear()
         val restored = model(draft(stored, id = "d2"), initialStep = WriterStep.Publish)
-        assertEquals("rain-walk", restored.publish())
+        assertEquals(StepDone.Page("rain-walk"), restored.finish())
         assertEquals("d2" to stored.copy(visibility = "public"), store.updates.last())
     }
 
-    // 誰可以看見: 公開 · 匿名公開 · 只有自己 (round 7 §1)
+    // 卡片類型: 公開 · 匿名公開 · 草稿 (round 7 §1, round 8 §2.2)
 
     @Test fun eachOfTheThreeWritesWhoAndUnderWhoseNameInOneChange() = runBlocking {
         val m = model(draft(written))
@@ -239,8 +243,8 @@ class WriterStepsTest {
         assertTrue(store.updates.none { (_, v) -> v.anonymous && v.visibility == "connections" })
     }
 
-    @Test fun onlyMeKeepsALiveCardsAnonymitySoItComesBackAnonymous() {
-        // Made private, then public again from its ⋯, an anonymous card must never come back under its author's name.
+    @Test fun aDraftChosenKeepsALiveCardsAnonymitySoItComesBackAnonymous() {
+        // Made a 草稿, then public again, an anonymous card must never come back under its author's name.
         val anonymous = model(live(written.copy(anonymous = true)))
         anonymous.choose(Audience.Private)
         assertEquals("private" to true, anonymous.values.visibility to anonymous.values.anonymous)
@@ -259,38 +263,112 @@ class WriterStepsTest {
         assertEquals("發布這張卡片", m.stepTitle)
     }
 
-    @Test fun theVerbAndTheStepsTitleFollowTheAudience() {
+    @Test fun theStepsTitleAndItsOneButtonFollowTheCardAndTheChoice() {
+        // Never published: 發布 · 匿名發布 by the choice, or 儲存 to keep it a 草稿.
         val m = model(draft(written))
-        assertEquals("發布" to "發布這張卡片", m.verb to m.stepTitle)
+        assertEquals(Triple(StepVerb.Publish, "發布", "發布這張卡片"), Triple(m.stepVerb, m.verb, m.stepTitle))
         m.choose(Audience.Anonymous)
-        assertEquals("匿名發布" to "發布這張卡片", m.verb to m.stepTitle)
+        assertEquals(Triple(StepVerb.PublishAnonymously, "匿名發布", "發布這張卡片"), Triple(m.stepVerb, m.verb, m.stepTitle))
         m.choose(Audience.Private)
-        assertEquals("儲存" to "儲存這張卡片", m.verb to m.stepTitle)
-        // A live card is updated whoever it is for.
+        assertEquals(Triple(StepVerb.Save, "儲存", "儲存草稿"), Triple(m.stepVerb, m.verb, m.stepTitle))
+        // A card readers have: 儲存修改 while it stays theirs, 轉為草稿 once 草稿 is chosen — 更新這張卡片 either way.
         val live = model(live(written))
+        assertEquals(Triple(StepVerb.Update, "儲存修改", "更新這張卡片"), Triple(live.stepVerb, live.verb, live.stepTitle))
+        live.choose(Audience.Anonymous)
+        assertEquals(StepVerb.Update, live.stepVerb)
         live.choose(Audience.Private)
-        assertEquals("儲存修改" to "更新這張卡片", live.verb to live.stepTitle)
+        assertEquals(Triple(StepVerb.MakeDraft, "轉為草稿", "更新這張卡片"), Triple(live.stepVerb, live.verb, live.stepTitle))
+        // An older card kept for connections, none of the three chosen: an update.
+        assertEquals(StepVerb.Update, model(live(written.copy(visibility = "connections"))).stepVerb)
+        // A published card kept private is a 草稿: published again by its choice, or kept one.
+        val kept = model(live(written.copy(visibility = "private")))
+        assertEquals(Triple(StepVerb.Save, "儲存", "儲存草稿"), Triple(kept.stepVerb, kept.verb, kept.stepTitle))
+        kept.choose(Audience.Public)
+        assertEquals(Triple(StepVerb.Publish, "發布", "發布這張卡片"), Triple(kept.stepVerb, kept.verb, kept.stepTitle))
+        kept.choose(Audience.Anonymous)
+        assertEquals(Triple(StepVerb.PublishAnonymously, "匿名發布", "發布這張卡片"), Triple(kept.stepVerb, kept.verb, kept.stepTitle))
+        // Only 儲存修改 has shorter words at work (儲存).
+        assertNull(live.verbBusyLabel)
+        live.choose(Audience.Public)
+        assertEquals("儲存", live.verbBusyLabel)
+        assertNull(kept.verbBusyLabel)
     }
 
-    @Test fun keptForYourselfAFailureSaysItDidntSave() = runBlocking {
+    @Test fun aDraftKeptOneIsWrittenAndNeverPublishedNotEvenToItsWriter() = runBlocking {
         val m = model(draft(written))
         m.next()
-        calls.publishFails = ApiFailure("internal", "Something went wrong.", 500)
         m.choose(Audience.Private)
-        assertNull(m.publish())
-        assertEquals("沒儲存成功，再試一次", m.publishError)
-        m.choose(Audience.Anonymous)
-        assertNull(m.publish())
-        assertEquals("沒發布成功，再試一次", m.publishError)
-        // The save it waited on, refused: the same words.
-        calls.publishFails = null
+        assertEquals(StepDone.Leave, m.finish())
+        assertEquals(written.copy(visibility = "private"), store.updates.last().second)
+        assertTrue(calls.published.isEmpty())
+        assertTrue(calls.applied.isEmpty())
+        // Its save refused: 沒儲存成功, and the writer stays.
         store.failWith = IOException("offline")
-        m.choose(Audience.Private)
-        assertNull(m.publish())
+        m.update { copy(tags = listOf("夜")) }
+        assertNull(m.finish())
         assertEquals("沒儲存成功，再試一次", m.publishError)
+        assertTrue(calls.published.isEmpty())
     }
 
-    @Test fun theUpdateHintShowsOnlyWhileTheLiveCardHasReaders() {
+    @Test fun aCardReadersHaveMadeADraftIsAppliedThenTheWriterLeaves() = runBlocking {
+        val m = model(live(written))
+        m.next()
+        m.choose(Audience.Private)
+        assertEquals(StepDone.Leave, m.finish())
+        assertEquals(listOf("c1" to written.copy(visibility = "private")), store.edits)
+        assertEquals(listOf("c1"), calls.applied)
+        assertTrue(calls.published.isEmpty())
+        assertEquals(0, reachedOut)
+    }
+
+    @Test fun aPublishedPrivateCardIsPublishedAgainThroughItsEditOrKeptOne() = runBlocking {
+        val kept = live(written.copy(visibility = "private"))
+        // 公開: the pending edit applied, now public — its page next; the publish call is never made (its first date stays).
+        val m = model(kept)
+        m.next()
+        m.choose(Audience.Public)
+        assertEquals(StepDone.Page("a-walk"), m.finish())
+        assertEquals(written, store.edits.last().second)
+        assertEquals(listOf("c1"), calls.applied)
+        assertTrue(calls.published.isEmpty())
+        assertEquals(1, reachedOut)
+        // 儲存: applied as it is, and the writer leaves.
+        val again = model(kept)
+        again.next()
+        assertEquals(StepDone.Leave, again.finish())
+        assertEquals(listOf("c1", "c1"), calls.applied)
+        assertEquals(1, reachedOut)
+    }
+
+    @Test fun aPublishThatFailsSaysItDidntPublishEveryOtherVerbThatItDidntSave() = runBlocking {
+        calls.publishFails = ApiFailure("internal", "Something went wrong.", 500)
+        calls.applyFails = ApiFailure("internal", "Something went wrong.", 500)
+        val m = model(draft(written))
+        m.next()
+        m.choose(Audience.Anonymous)
+        assertNull(m.finish())
+        assertEquals("沒發布成功，再試一次", m.publishError)
+        // A published private card made public was being published.
+        val kept = model(live(written.copy(visibility = "private")))
+        kept.choose(Audience.Public)
+        assertNull(kept.finish())
+        assertEquals("沒發布成功，再試一次", kept.publishError)
+        // 儲存修改 and 轉為草稿 were saving.
+        val live = model(live(written))
+        assertNull(live.finish())
+        assertEquals("沒儲存成功，再試一次", live.publishError)
+        live.choose(Audience.Private)
+        assertNull(live.finish())
+        assertEquals("沒儲存成功，再試一次", live.publishError)
+        // The save a publish waited on, refused: 沒發布成功 all the same.
+        calls.publishFails = null
+        store.failWith = IOException("offline")
+        m.update { copy(tags = listOf("夜")) }
+        assertNull(m.finish())
+        assertEquals("沒發布成功，再試一次", m.publishError)
+    }
+
+    @Test fun theUpdateHintShowsOnlyWhileReadersHaveTheCardAndKeepIt() {
         val m = model(live(written))
         assertTrue(m.showsUpdateHint)
         m.choose(Audience.Private)
@@ -300,13 +378,32 @@ class WriterStepsTest {
         // An older card kept for connections has readers too (none of the three chosen).
         assertTrue(model(live(written.copy(visibility = "connections"))).showsUpdateHint)
         assertFalse(model(draft(written)).showsUpdateHint)
+        // A published private card has none: choosing 公開 publishes it.
+        val kept = model(live(written.copy(visibility = "private")))
+        kept.choose(Audience.Public)
+        assertFalse(kept.showsUpdateHint)
+    }
+
+    @Test fun theWritersTitleIsShortAndSaysWhatTheCardIs() {
+        assertEquals("新卡片", model().title)
+        assertEquals("編輯草稿", model(draft(written)).title)
+        assertEquals("編輯卡片", model(live(written)).title)
+        assertEquals("編輯卡片", model(live(written.copy(visibility = "connections"))).title)
+        // A published card kept private is a 草稿, whatever its pending edit says now.
+        assertEquals("編輯草稿", model(live(written, liveVisibility = "private")).title)
+        // A new card stays a new card after its first save in this visit — the screen coming back too (a rotation).
+        val m = model()
+        m.setTitle("雨中散步")
+        runBlocking { m.saveNow() }
+        assertEquals("新卡片", m.title)
+        assertEquals("新卡片", model(draft(written), beganNew = true).title)
     }
 
     @Test fun aLiveCardAlreadyAnonymousForConnectionsKeepsBoth() = runBlocking {
         val m = model(live(written.copy(visibility = "connections", anonymous = true)))
         assertTrue(m.next())
         assertEquals("connections", m.values.visibility)
-        assertEquals("a-walk", m.applyEdit())
+        assertEquals(StepDone.Page("a-walk"), m.finish())
         assertEquals("connections", store.edits.last().second.visibility)
     }
 
@@ -373,7 +470,7 @@ class WriterStepsTest {
         val m = model(draft(written))
         m.next()
         m.update { copy(tags = listOf("雨")) }
-        assertEquals("rain-walk", m.publish())
+        assertEquals(StepDone.Page("rain-walk"), m.finish())
         assertEquals(listOf("d1"), calls.published)
         assertEquals(listOf("雨"), store.updates.last().second.tags)
         assertEquals(1, reachedOut)
@@ -385,11 +482,11 @@ class WriterStepsTest {
         val m = model(draft(written))
         m.next()
         calls.publishFails = ApiFailure("rate_limited", "Too many requests.", 429)
-        assertNull(m.publish())
+        assertNull(m.finish())
         assertEquals("今天的次數用完了，明天再試", m.publishError)
         assertEquals(WriterStep.Publish, m.step)
         calls.publishFails = ApiFailure("conflict", "Pick a pen name first.", 409)
-        assertNull(m.publish())
+        assertNull(m.finish())
         assertEquals("沒發布成功，再試一次", m.publishError)
         assertFalse(m.trashed)
     }
@@ -397,7 +494,7 @@ class WriterStepsTest {
     @Test fun aLiveCardSavesItsChangesThroughTheBufferEvenUntouched() = runBlocking {
         val m = model(live(written))
         m.next()
-        assertEquals("a-walk", m.applyEdit())
+        assertEquals(StepDone.Page("a-walk"), m.finish())
         // Nothing changed since it opened, and the buffer was written all the same before the apply.
         assertEquals(listOf("c1" to written), store.edits)
         assertEquals(listOf("c1"), calls.applied)
@@ -408,30 +505,22 @@ class WriterStepsTest {
         val m = model(live(written))
         m.setTitle("雨中散步（改）")
         m.next()
-        assertNull(m.applyEdit())
-        assertEquals("沒存成，再試一次", m.publishError)
+        assertNull(m.finish())
+        assertEquals("沒儲存成功，再試一次", m.publishError)
         assertTrue(m.hasWork)
     }
 
-    @Test fun discardShowsOnlyWithARevisionAndSaveForLaterAlways() = runBlocking {
-        assertTrue(model(draft(written)).showsWayOut)
+    @Test fun theOnlyOtherButtonIsAPublishedCardsDiscardWhileItHasARevision() = runBlocking {
+        // A draft's choices are its one button: no 存成草稿，稍後再寫 any more.
+        assertFalse(model(draft(written)).showsWayOut)
+        assertFalse(model().showsWayOut)
         val untouched = model(live(written))
         assertFalse(untouched.showsWayOut)
         untouched.setTitle("改了")
         assertTrue(untouched.showsWayOut)
         assertTrue(model(live(written, pendingEdit = true)).showsWayOut)
-    }
-
-    @Test fun saveForLaterWritesWhatIsOnScreen() = runBlocking {
-        val m = model(draft(written))
-        m.next()
-        m.setAudience("private", anonymous = false)
-        assertTrue(m.saveForLater())
-        assertEquals("private", store.updates.last().second.visibility)
-        store.failWith = IOException("offline")
-        m.update { copy(tags = listOf("夜")) }
-        assertFalse(m.saveForLater())
-        assertEquals("沒存成，再試一次", m.publishError)
+        // A published card kept private too.
+        assertTrue(model(live(written.copy(visibility = "private"), pendingEdit = true)).showsWayOut)
     }
 
     // The trash
@@ -441,13 +530,13 @@ class WriterStepsTest {
         m.next()
         store.trashed = true
         calls.publishFails = ApiFailure("conflict", ApiFailure.IN_TRASH_MESSAGE, 409)
-        assertNull(m.publish())
+        assertNull(m.finish())
         assertTrue(m.trashed)
         assertEquals(WriterStep.Write, m.step)
         assertNull(m.publishError)
-        // No 下一步 for a card in the trash, and its line stands in for the save line.
+        // No ✓ for a card in the trash, and the bar says nothing: its line in the page says it.
         assertFalse(m.showsNext)
-        assertNull(m.saveStatus)
+        assertNull(m.saveState)
         assertTrue(m.hasWork)
     }
 
@@ -456,7 +545,7 @@ class WriterStepsTest {
         m.next()
         store.readFails = true
         calls.applyFails = ApiFailure("conflict", ApiFailure.IN_TRASH_MESSAGE, 409)
-        assertNull(m.applyEdit())
+        assertNull(m.finish())
         assertTrue(m.trashed)
         assertEquals(WriterStep.Write, m.step)
     }
@@ -519,7 +608,7 @@ class WriterStepsTest {
         val untouched = model(draft(written, id = "d2"))
         untouched.next()
         calls.publishFails = ApiFailure("conflict", ApiFailure.IN_TRASH_MESSAGE, 409)
-        untouched.publish()
+        untouched.finish()
         assertTrue(untouched.trashed)
         assertNull(untouched.leaveQuestion)
     }
@@ -543,6 +632,85 @@ class WriterStepsTest {
         assertNull(m.restore())
         assertTrue(m.trashed)
         assertEquals("沒完成，再試一次", m.restoreError)
+    }
+
+    // The bar's save state (round 8 §2.1)
+
+    @Test fun theBarSaysNothingUntilTheFirstWriteThenSavingOnlyForASlowOne() = runBlocking {
+        val m = model(draft(written))
+        assertNull(m.saveState)
+        // A quick write goes straight to 已儲存: no 儲存中⋯ flicker before it, nor after.
+        m.update { copy(story = "那天下午雨停了，路燈亮起來。") }
+        m.saveNow()
+        assertEquals(SaveState.Saved, m.saveState)
+        delay(WriteModel.SAVING_SHOWN_MS + 150)
+        assertEquals(SaveState.Saved, m.saveState)
+        // One still on its way past 400 ms says 儲存中⋯ until it lands.
+        val gate = CompletableDeferred<Unit>()
+        store.updateGate = gate
+        m.update { copy(tags = listOf("雨")) }
+        val saving = async(Dispatchers.Default) { m.saveNow() }
+        delay(WriteModel.SAVING_SHOWN_MS / 2)
+        assertEquals(SaveState.Saved, m.saveState)
+        delay(WriteModel.SAVING_SHOWN_MS)
+        assertEquals(SaveState.Saving, m.saveState)
+        gate.complete(Unit)
+        saving.await()
+        assertEquals(SaveState.Saved, m.saveState)
+        assertEquals("已儲存", saveStateWord(m.saveState!!))
+    }
+
+    @Test fun aWriteThatFailsSaysNotSavedUntilOneGoesThrough() = runBlocking {
+        val m = model(draft(written))
+        store.failWith = IOException("offline")
+        m.update { copy(story = "又寫了一句。") }
+        m.saveNow()
+        assertEquals(SaveState.Failed, m.saveState)
+        assertEquals("未儲存", saveStateWord(SaveState.Failed))
+        store.failWith = null
+        m.update { copy(story = "再一句。") }
+        m.saveNow()
+        assertEquals(SaveState.Saved, m.saveState)
+    }
+
+    @Test fun aPublishedCardsWritesAreSavedPrivatelyFromTheStartWithARevision() = runBlocking {
+        // Nothing written in this visit, nothing buffered: nothing to say.
+        val m = model(live(written))
+        assertNull(m.saveState)
+        m.setTitle("雨中散步（改）")
+        m.saveNow()
+        assertEquals(SaveState.SavedLive, m.saveState)
+        assertEquals("修改已暫存", saveStateWord(SaveState.SavedLive))
+        // Opened with a revision buffered: said at once.
+        assertEquals(SaveState.SavedLive, model(live(written, pendingEdit = true)).saveState)
+        // A new card's first save is a draft's.
+        val fresh = model()
+        fresh.setTitle("雨中散步")
+        fresh.saveNow()
+        assertEquals(SaveState.Saved, fresh.saveState)
+    }
+
+    // Pictures (round 8 §3)
+
+    @Test fun aStorysPictureThatFailsIsSaidWhereTheWritingIsNeverInTheCoversSlot() = runBlocking {
+        val m = model(draft(written))
+        val said = mutableListOf<String>()
+        m.onStoryPictureError = { said += it }
+        // Unreadable (or not encodable): 讀不出這張圖片.
+        m.insertPicture { throw IllegalStateException("not a picture") }
+        withTimeout(2_000) { while (m.uploadingInline) delay(10) }
+        // Read, but its upload failed: 圖片上傳失敗.
+        calls.uploadFails = IOException("offline")
+        m.insertPicture { byteArrayOf(1, 2, 3) }
+        withTimeout(2_000) { while (m.uploadingInline) delay(10) }
+        assertEquals(listOf("讀不出這張圖片，請換成 JPG 或 PNG", "圖片上傳失敗，請再試一次"), said)
+        assertNull(m.mediaError)
+        assertTrue(editor.commands.isEmpty())
+        // One that goes up is put at the caret.
+        calls.uploadFails = null
+        m.insertPicture { byteArrayOf(1, 2, 3) }
+        withTimeout(2_000) { while (m.uploadingInline) delay(10) }
+        assertEquals(listOf("insertImage" to mapOf("src" to "https://img.example/photo.jpg", "alt" to "photo.jpg")), editor.commands)
     }
 
     // The title
@@ -581,6 +749,7 @@ class WriterStepsTest {
         val edits = mutableListOf<Pair<String, DraftValues>>()
         var discarded = 0
         var createGate: CompletableDeferred<Unit>? = null
+        var updateGate: CompletableDeferred<Unit>? = null
         var failWith: Exception? = null
         var trashed = false
         var readFails = false
@@ -595,6 +764,7 @@ class WriterStepsTest {
         }
 
         override suspend fun update(id: String, v: DraftValues) {
+            updateGate?.await()
             failWith?.let { throw it }
             updates += id to v
         }
@@ -624,6 +794,7 @@ class WriterStepsTest {
         var applyFails: Exception? = null
         var restoreFails: Exception? = null
         var restoreDropped = false
+        var uploadFails: Exception? = null
         var applyResult = ApplyEditResponse("c1", "a-walk", applied = true)
         var insights = 0
         var insightAnswer: String? = "你想說的是雨"
@@ -653,7 +824,10 @@ class WriterStepsTest {
             return insightAnswer
         }
 
-        override suspend fun upload(image: ByteArray, filename: String) = "https://img.example/$filename"
+        override suspend fun upload(image: ByteArray, filename: String): String {
+            uploadFails?.let { throw it }
+            return "https://img.example/$filename"
+        }
 
         override fun illustrate(story: String): Flow<WritingApi.IllustrationEvent> = emptyFlow()
 
@@ -668,10 +842,13 @@ class WriterStepsTest {
         override var onChange: (String) -> Unit = {}
         var story = ""
         val titles = mutableListOf<String>()
+        val commands = mutableListOf<Pair<String, Map<String, String>>>()
         override fun setMarkdown(markdown: String) {
             story = markdown
         }
-        override fun exec(command: String, args: Map<String, String>) {}
+        override fun exec(command: String, args: Map<String, String>) {
+            commands += command to args
+        }
         override fun setTitle(title: String) {
             titles += title
         }

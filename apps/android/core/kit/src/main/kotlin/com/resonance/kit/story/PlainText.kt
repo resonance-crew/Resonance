@@ -169,6 +169,55 @@ object PlainText {
     }
 
     private val CodeFence = Regex("```[\\s\\S]*?```")
+
+    /** A GFM table's delimiter row (`| --- | :-: |`): one line, each cell one dash run, so no line is read twice. */
+    private val TableDelimiter = Regex("[ \\t]*\\|?[ \\t]*:?-+:?[ \\t]*(?:\\|[ \\t]*:?-+:?[ \\t]*)*\\|?[ \\t]*")
+
+    /** JavaScript's trim: its `\s` off both ends ([isSpace]; Kotlin's trim takes U+001C–U+001F too). */
+    private fun jsTrim(text: String): String {
+        var start = 0
+        var end = text.length
+        while (start < end && isSpace(text[start])) start++
+        while (end > start && isSpace(text[end - 1])) end--
+        return text.substring(start, end)
+    }
+
+    /** A table row's cells, their words joined by 「 · 」 (the pipes at its ends are the row's, not a cell's). */
+    private fun rowWords(line: String): String {
+        var row = jsTrim(line)
+        if (row.startsWith('|')) row = row.substring(1)
+        if (row.endsWith('|')) row = row.substring(0, row.length - 1)
+        return row.split('|').map(::jsTrim).filter { it.isNotEmpty() }.joinToString(" · ")
+    }
+
+    /**
+     * A GFM table read as its cells' words (round 8 §5.2; plainText.ts's `tableWords`): its delimiter
+     * row gone, each row's cells joined by 「 · 」 — never the pipes and dashes. A table is a header row
+     * with a pipe, the delimiter row (with a pipe: `a` over `---` is a heading) and the rows with a pipe
+     * after it, up to a blank line; an escaped pipe (`\|`) is a cell's own ([literals] set it aside).
+     * One pass over the lines (split at `\n` alone, as JavaScript's split is).
+     */
+    private fun tableWords(text: String): String {
+        if ('|' !in text) return text
+        val lines = text.split('\n').toMutableList()
+        var i = 1
+        while (i < lines.size) {
+            val line = lines[i]
+            if ('|' !in line || '|' !in lines[i - 1] || !TableDelimiter.matches(line)) {
+                i++
+                continue
+            }
+            lines[i - 1] = rowWords(lines[i - 1])
+            lines[i] = ""
+            var next = i + 1
+            while (next < lines.size && '|' in lines[next] && jsTrim(lines[next]).isNotEmpty()) {
+                lines[next] = rowWords(lines[next])
+                next++
+            }
+            i = next
+        }
+        return lines.joinToString("\n")
+    }
     private val Heading = Regex("$BOL#{1,6}$S+")
     private val Quote = Regex("$BOL>$S?")
     // A marker's indent is spaces and tabs on its own line: `^\s*` would read on across every blank line after it, at each one (quadratic).
@@ -210,17 +259,19 @@ object PlainText {
     }
 
     /**
-     * A story's prose without Markdown syntax (links keep their text), as a reader sees it: character
-     * references decoded (`-&gt;` reads `->`) and backslash escapes gone (`\*` reads `*`), without
-     * either ever making syntax. A bare address is left out ([withoutLinks]): the story shows it as a
+     * A story's prose without Markdown syntax (links keep their text, a table its cells' words), as a
+     * reader sees it: character references decoded (`-&gt;` reads `->`) and backslash escapes gone
+     * (`\*` reads `*`), without either ever making syntax. A bare address is left out ([withoutLinks]): the story shows it as a
      * link or its page's card, and in an excerpt it is only a string of characters taking the prose's place.
      */
     fun plainText(markdown: String): String {
         val text = literals(markdown.replace(Literals, "").replace(CodeFence, " "))
         // After the addresses go: an address's `_`, `~` and `*` are not emphasis.
-        val prose = withoutLinks(replaceFitting(replaceFitting(text, Picture) { " " }, Link) { it.group(1) })
+        val lines = withoutLinks(replaceFitting(replaceFitting(text, Picture) { " " }, Link) { it.group(1) })
             .replace(Heading, "")
             .replace(Quote, "")
+        // A table reads as its cells' words, before the list and rule marks go (its delimiter row is dashes).
+        val prose = tableWords(lines)
             .replace(ListMarker, "")
             .replace(Rule, "")
             .replace(Marks, "")

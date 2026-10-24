@@ -128,6 +128,25 @@ class PlainTextTest {
 
     // firstPicture
 
+    // A table (plainText.test.ts's 'plainText of a table')
+
+    @Test fun readsATableAsItsCellsWordsTheDelimiterRowGoneARowsCellsJoinedNeverPipes() {
+        assertEquals("前言 名稱 · 數量 蘋果 · 3 香蕉 · 12 結尾", PlainText.plainText("前言\n\n| 名稱 | 數量 |\n| --- | ---: |\n| 蘋果 | 3 |\n| 香蕉 | 12 |\n\n結尾"))
+        assertEquals("台北 · 高雄 a · b", PlainText.plainText("| **台北** | [高雄](https://x.y) |\n|:--|--:|\n| `a` | b |"))
+        // A cell's own escaped pipe stays a pipe; a quote's table reads the same.
+        assertEquals("a | b · c", PlainText.plainText("| a \\| b | c |\n| - | - |"))
+        assertEquals("年 · 事 2024 · 搬家", PlainText.plainText("> | 年 | 事 |\n> | --- | --- |\n> | 2024 | 搬家 |"))
+    }
+
+    @Test fun leavesAPipeInASentenceAndAHeadingOverDashesAsTheyWere() {
+        assertEquals("A | B 是兩個選項", PlainText.plainText("A | B 是兩個選項"))
+        assertEquals("標題 內文", PlainText.plainText("標題\n---\n內文"))
+        val started = System.nanoTime()
+        assertTrue(PlainText.plainText("|\n".repeat(50_000)).isNotEmpty())
+        assertTrue(PlainText.plainText("| - |\n".repeat(50_000)).length >= 0)
+        assertTrue((System.nanoTime() - started) / 1_000_000 < 2_000)
+    }
+
     @Test fun isTheAddressOfTheStorysFirstPictureOnTheWebAndQuickToSayThereIsNone() {
         assertEquals("https://cdn.example.com/a.avif", PlainText.firstPicture("text ![rain](https://cdn.example.com/a.avif) and ![b](https://x.y/b.png)"))
         assertNull(PlainText.firstPicture("[a link](https://x.y) ![local](/p.png) ![](ftp://x.y/p.png)"))

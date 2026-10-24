@@ -80,7 +80,15 @@ import kotlin.math.roundToInt
  * or one of mine opened on the map ([fromMap]). [slot] names the writer in the pane — it stays
  * while a new card is first saved as a draft, so the writer isn't rebuilt under the person typing.
  */
-internal data class PaneCard(val slot: String, val referenceCardId: String?, val cardId: String?, val story: String?, val fromMap: Boolean)
+internal data class PaneCard(
+    val slot: String,
+    val referenceCardId: String?,
+    val cardId: String?,
+    val story: String?,
+    val fromMap: Boolean,
+    /** The writer began on a new card in this visit, since saved as the draft [cardId]: it is still 新卡片 (round 8 §2.1). */
+    val beganNew: Boolean = false,
+)
 
 internal const val ROUTE_SLOT = "route"
 
@@ -144,10 +152,10 @@ internal class PaneState(card: PaneCard?, open: Boolean, frac: Float, settled: I
 
     companion object {
         val Saver = listSaver<PaneState, Any?>(
-            save = { listOf(it.card?.slot, it.card?.referenceCardId, it.card?.cardId, it.card?.story, it.card?.fromMap, it.open, it.frac, it.settled) },
+            save = { listOf(it.card?.slot, it.card?.referenceCardId, it.card?.cardId, it.card?.story, it.card?.fromMap, it.open, it.frac, it.settled, it.card?.beganNew) },
             restore = {
                 val slot = it[0] as String?
-                val card = slot?.let { s -> PaneCard(s, it[1] as String?, it[2] as String?, it[3] as String?, it[4] as Boolean? ?: false) }
+                val card = slot?.let { s -> PaneCard(s, it[1] as String?, it[2] as String?, it[3] as String?, it[4] as Boolean? ?: false, beganNew = it.getOrNull(8) as Boolean? ?: false) }
                 PaneState(card, it[5] as Boolean, it[6] as Float, it[7] as Int)
             },
         )
@@ -188,7 +196,7 @@ internal fun Workspace(
     val split = LocalWindowLayout.current.writerSplit
     val mapShown = split || writer == null
     val pane = rememberSaveable(saver = PaneState.Saver) {
-        PaneState(writer?.let { PaneCard(ROUTE_SLOT, it.referenceCardId, it.cardId, it.story, fromMap = false) }, open = writer != null, frac = PaneDrag.MAX)
+        PaneState(writer?.let { PaneCard(ROUTE_SLOT, it.referenceCardId, it.cardId, it.story, fromMap = false, beganNew = it.savedNew) }, open = writer != null, frac = PaneDrag.MAX)
     }
     val handle = remember { WriterHandle() }
     val scope = rememberCoroutineScope()
@@ -343,8 +351,9 @@ internal fun Workspace(
                     WriteScreen(
                         session, card.referenceCardId, card.cardId, card.story,
                         close = { closeCard(card) },
+                        beganNew = card.beganNew,
                         onCreated = { id ->
-                            pane.card = pane.card?.takeIf { it.slot == card.slot }?.copy(cardId = id, story = null) ?: pane.card
+                            pane.card = pane.card?.takeIf { it.slot == card.slot }?.copy(cardId = id, story = null, beganNew = true) ?: pane.card
                             if (!card.fromMap) onCreated(id)
                         },
                         pane = handle,

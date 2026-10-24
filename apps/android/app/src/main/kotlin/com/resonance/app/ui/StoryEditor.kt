@@ -4,9 +4,13 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color as AndroidColor
 import android.net.Uri
+import android.graphics.Rect
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewTreeObserver
 import android.view.inputmethod.InputMethodManager
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -20,6 +24,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -48,6 +53,13 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect as ComposeRect
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.requireLayoutCoordinates
+import androidx.compose.ui.relocation.BringIntoViewModifierNode
+import androidx.compose.ui.relocation.bringIntoView
 import com.resonance.design.AppFonts
 import com.resonance.design.OrganicIcon
 import com.resonance.design.OrganicVerticalRule
@@ -156,7 +168,7 @@ class StoryEditorBridge(
     private var pendingTitle: String? = null
     private var minHeight: Int? = null
 
-    val webView: WebView = WebView(context).apply {
+    val webView: StoryWebView = StoryWebView(context).apply {
         settings.javaScriptEnabled = true
         // Assets are readable from file:///android_asset regardless of allowFileAccess (the fonts
         // sit at the asset root, apps/shared/fonts): nothing else on the device is.
@@ -172,11 +184,21 @@ class StoryEditorBridge(
         // The writing screen scrolls; the island only grows.
         isVerticalScrollBarEnabled = false
         overScrollMode = View.OVER_SCROLL_NEVER
-        setOnTouchListener { _, e ->
-            if (e.actionMasked == MotionEvent.ACTION_DOWN) lastTouchDown = e.downTime
+        setOnTouchListener { v, e ->
+            if (e.actionMasked == MotionEvent.ACTION_DOWN) {
+                lastTouchDown = e.downTime
+                // Where the caret is about to be, until the island says (StoryWebView.getFocusedRect).
+                (v as StoryWebView).touchY = e.y.roundToInt()
+            }
             false
         }
         addJavascriptInterface(Bridge(), "ResonanceBridge")
+        // The page around the story places it and keeps its caret in view (round 8 §6.4). Told of the
+        // keyboard (the insets the AndroidView hands its view, measured from a story that runs on
+        // past the screen), the browser shrank its own viewport and panned the story inside its frame
+        // to show the caret — on top of the page's scroll: the line typed ended up ~200 px higher than
+        // the keyboard needed. It is told of no insets at all.
+        ViewCompat.setOnApplyWindowInsetsListener(this) { _, _ -> WindowInsetsCompat.CONSUMED }
         loadUrl("file://" + editorQuery(placeholder, canvas, locale))
     }
 
@@ -245,6 +267,36 @@ class StoryEditorBridge(
     }
 
     /**
+     * Back from something that took the window a moment (the photo picker, the card picker — picked
+     * or not): the story takes its caret, its selection, the keyboard and its format bar back where
+     * they were, as soon as the window is the app's again (a keyboard can't be shown to a window
+     * without the focus, and a picker's answer comes before the window has it back).
+     */
+    fun refocusWhenBack() {
+        if (webView.hasWindowFocus()) {
+            webView.post { refocus() }
+            return
+        }
+        webView.viewTreeObserver.addOnWindowFocusChangeListener(object : ViewTreeObserver.OnWindowFocusChangeListener {
+            override fun onWindowFocusChanged(hasFocus: Boolean) {
+                if (!hasFocus) return
+                webView.viewTreeObserver.removeOnWindowFocusChangeListener(this)
+                webView.post { refocus() }
+            }
+        })
+    }
+
+    /**
+     * The room the page keeps clear of the caret's line (px): [above] under the bar over the page,
+     * [below] over the keyboard's format bar — the same band the page's own caret follow keeps it
+     * in ([caretScroll]), so the page's keep-the-focused-thing-in-view lands it there too.
+     */
+    fun keepCaretClear(above: Int, below: Int) {
+        webView.clearAbove = above
+        webView.clearBelow = below
+    }
+
+    /**
      * Lets go of the keyboard while the page is still on screen (leaving the
      * writer, a tap beside the fields, an action below the story): unlike a
      * Compose field, a WebView keeps the IME up after it leaves the composition.
@@ -307,13 +359,21 @@ class StoryEditorBridge(
             is IslandMessage.State -> active = m.active
             is IslandMessage.Focus -> {
                 focused = m.focused
-                if (!m.focused) caret = null
+                if (!m.focused) {
+                    caret = null
+                    webView.caretLine = null
+                    webView.touchY = null
+                }
             }
             is IslandMessage.Script -> {
                 script = m.script
                 lang = m.lang
             }
-            is IslandMessage.Caret -> caret = m
+            is IslandMessage.Caret -> {
+                caret = m
+                val px = webView.resources.displayMetrics.density
+                webView.caretLine = (m.top * px).roundToInt()..(m.bottom * px).roundToInt()
+            }
         }
     }
 
@@ -342,6 +402,94 @@ class StoryEditorBridge(
         /** A query value, percent-encoded as Uri.encode does it (a space as %20). */
         private fun encode(value: String): String = java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
     }
+}
+
+/**
+ * The island's WebView, telling the page around it where its caret is. As the keyboard shrinks the
+ * page, Compose keeps the focused thing in view (foundation's ContentInViewNode), and a focused
+ * View's area is its [getFocusedRect] — for a WebView the whole of it, so the page lined up the
+ * story's top under the bar (or its foot over the format bar) and the line being typed went out of
+ * sight. Here that area is the caret's line ([caretLine], px in this view) with the room the page's
+ * bars cover above and below it ([clearAbove], [clearBelow]); until the island has said where the
+ * caret is, the line the finger came down on ([touchY]); with neither, an empty line at the story's
+ * top, which no shrinking page moves for.
+ */
+@SuppressLint("ViewConstructor")
+class StoryWebView(context: Context) : WebView(context) {
+    var caretLine: IntRange? = null
+    var touchY: Int? = null
+    var clearAbove = 0
+    var clearBelow = 0
+
+    override fun getFocusedRect(r: Rect) {
+        val span = focusedSpan(caretLine, touchY, clearAbove, clearBelow, (TOUCH_LINE_DP * resources.displayMetrics.density).roundToInt())
+        r.set(0, span.first, width, span.last)
+    }
+
+    internal companion object {
+        /** Half a line around a touch (dp), the caret's line until the island says. */
+        const val TOUCH_LINE_DP = 14
+    }
+}
+
+/**
+ * Between the story's WebView and the page that scrolls it (round 8 §6.4): a view taking the focus
+ * asks for all of itself to be on screen (View.onFocusChanged → requestRectangleOnScreen), and so
+ * does the browser as its editable takes the focus (Chromium's ImeAdapter, focusedNodeChanged) — and
+ * the AndroidView brings what its view asks for into view. For a story taller than what the keyboard
+ * leaves of the page, the page then lined up the story's top under the bar, and the line tapped went
+ * with it (seen on a Pixel 10 Pro: a 560 px jump for a tap on a line already in view). This node,
+ * ahead of the AndroidView's own, takes such a request first: (nearly) all of the story is the caret's
+ * line instead ([requestedSpan]) — or nothing, with no line known — and every request keeps the room
+ * the bars cover clear around it.
+ */
+private class StoryBringIntoViewElement(val web: StoryWebView) : ModifierNodeElement<StoryBringIntoView>() {
+    override fun create() = StoryBringIntoView(web)
+    override fun update(node: StoryBringIntoView) {
+        node.web = web
+    }
+    override fun hashCode() = web.hashCode()
+    override fun equals(other: Any?) = other is StoryBringIntoViewElement && other.web === web
+}
+
+private class StoryBringIntoView(var web: StoryWebView) : Modifier.Node(), BringIntoViewModifierNode {
+    override suspend fun bringIntoView(childCoordinates: LayoutCoordinates, boundsProvider: () -> ComposeRect?) {
+        val touchHalf = (StoryWebView.TOUCH_LINE_DP * web.resources.displayMetrics.density).roundToInt()
+        fun shown(): ComposeRect? {
+            val r = boundsProvider() ?: return null
+            val span = requestedSpan(r.top.roundToInt(), r.bottom.roundToInt(), web.height, web.caretLine, web.touchY, web.clearAbove, web.clearBelow, touchHalf)
+                ?: return null
+            val mine = requireLayoutCoordinates()
+            val at = if (childCoordinates.isAttached && mine.isAttached) mine.localPositionOf(childCoordinates, Offset.Zero) else Offset.Zero
+            return ComposeRect(r.left + at.x, span.first + at.y, r.right + at.x, span.last + at.y)
+        }
+        if (shown() == null) return
+        bringIntoView { shown() }
+    }
+}
+
+/**
+ * What a request to show [top]…[bottom] of the story (px, in a view [height] tall) asks the page for:
+ * (nearly) the whole story — a view taking the focus, the browser's editable taking it — is no place
+ * to scroll to, so it is the caret's [line] (or the line the finger came down on, [touchY]) instead,
+ * or nothing (null) with neither; anything smaller (the browser's own caret, an accessibility node)
+ * stands. Either way [above] and [below] are kept clear of it (the bars over the page).
+ */
+internal fun requestedSpan(top: Int, bottom: Int, height: Int, line: IntRange?, touchY: Int?, above: Int, below: Int, touchHalf: Int): IntRange? {
+    val whole = height > 0 && bottom - top >= height * 9 / 10
+    if (!whole) return (top - above)..(bottom + below)
+    if (line == null && touchY == null) return null
+    return focusedSpan(line, touchY, above, below, touchHalf)
+}
+
+/**
+ * The top and bottom of [StoryWebView]'s focused area, px in its own frame: the caret's [line] — or
+ * a line [touchHalf] round [touchY] — with [above] and [below] kept clear of it; with neither, an
+ * empty line at the top.
+ */
+internal fun focusedSpan(line: IntRange?, touchY: Int?, above: Int, below: Int, touchHalf: Int): IntRange {
+    val known = line ?: touchY?.let { (it - touchHalf)..(it + touchHalf) } ?: return 0..0
+    return (known.first - above)..(known.last + below)
 }
 
 /** What the island posts (native/editor/src/island.ts `Message`); a type it doesn't know is left alone. */
@@ -401,7 +549,12 @@ fun StoryCanvas(bridge: StoryEditorBridge, minHeight: Dp, modifier: Modifier = M
     SideEffect { bridge.setMinHeight(minHeight.value.roundToInt()) }
     AndroidView(
         factory = { bridge.webView },
-        modifier = modifier.fillMaxWidth().height(bridge.height.dp).semantics { contentDescription = L10n.Write.storyLabel },
+        modifier = modifier
+            .fillMaxWidth()
+            .height(bridge.height.dp)
+            .semantics { contentDescription = L10n.Write.storyLabel }
+            // Ahead of the AndroidView's own bring-into-view: what the story asks to be shown, it is shown as (requestedSpan).
+            .then(StoryBringIntoViewElement(bridge.webView)),
     )
 }
 
@@ -409,7 +562,10 @@ fun StoryCanvas(bridge: StoryEditorBridge, minHeight: Dp, modifier: Modifier = M
  * The format bar on the keyboard (writer.spec §1.5, touch): while the story has the focus, a cream
  * strip rides the keyboard with the toolbar's wave as its top edge — 插入圖片 · 插入卡片 ┆ 粗體 ·
  * 斜體 ┆ H2 · H3 ┆ 引言 · 清單 · 編號 in one row that scrolls sideways (fading where more lies), and
- * 收起鍵盤 pinned at its end. Its buttons never take the focus from the story.
+ * 收起鍵盤 pinned at its end. Its buttons never take the focus from the story. With the keyboard down
+ * (the story still holding the focus) its paper runs on to the screen's bottom edge, under the
+ * system's navigation bar — gesture or three-button — the row standing above it (the inset is the
+ * paper's own padding, never air below it the story would show through).
  */
 @Composable
 fun StoryFormatBar(
@@ -424,6 +580,8 @@ fun StoryFormatBar(
         modifier
             .fillMaxWidth()
             .dockedWave(EDITOR_SEED + 5)
+            // Inside the paper: an inset the keyboard (consumed above, imePadding) doesn't cover.
+            .navigationBarsPadding()
             .padding(top = DOCK_WAVE_ROOM)
             .height(DOCK_ROW_HEIGHT)
             // A near miss between the tools is no tap on the page (which lets go of the keyboard).

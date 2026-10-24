@@ -49,8 +49,11 @@ internal fun trashAsk(referenceCardId: String?, published: Boolean, visibility: 
 }
 
 /**
- * The owner's ⋯ on a card (CardActionsMenu.tsx): 編輯 / 轉為公開·私人 (a [published] card) / 取消共振
- * (for a card answering another, [referenceCardId]) / 刪除, in the shared OrganicMenu ([menuRows]).
+ * The owner's ⋯ on a card (CardActionsMenu.tsx): 編輯 / 轉為草稿 (a card readers have: published,
+ * and not private — round 8 §1.2) / 取消共振 (for a card answering another, [referenceCardId]) /
+ * 刪除, in the shared OrganicMenu ([menuRows]). Every 草稿 — never published, or published and kept
+ * private — has the same three: it is published from the writer's step, where its tags, cover and
+ * type are.
  * 刪除 moves the card to the trash (POST /api/v1/cards/{id}/trash): no dialog — the toast's 復原
  * ([TrashFeedback.Toast]) or the page's banner ([TrashFeedback.Page]) and the trash shelf are the way
  * back — but for the one resonance that asks first ([trashAsk]). Visibility and 取消共振 go through the server too (PATCH, DELETE
@@ -80,7 +83,7 @@ fun CardActionsMenu(
     referenceTitle: String? = null,
     /** Whether that card is anonymous, when the page knows it (else looked up when 刪除 needs it). */
     referenceAnonymous: Boolean? = null,
-    /** The card is published (a draft's 刪除 never asks, and it has no 轉為公開·私人). */
+    /** The card is published (a draft's 刪除 never asks; a draft, like a published private card, has no 轉為草稿). */
     published: Boolean = true,
     /** The card is anonymous (its 刪除 takes back no connection). */
     anonymous: Boolean = false,
@@ -100,7 +103,6 @@ fun CardActionsMenu(
     /** The trash didn't take it, asked or not: said in its dialog (which stays for another try), else in a notice. */
     var trashFailed by remember { mutableStateOf(false) }
     var trashNotice by remember { mutableStateOf(false) }
-    val isPrivate = visibility == "private"
     val ref = TrashRef(cardId, title, referenceCardId)
 
     // To the trash, then said so: the toast and its 復原, or the page's own banner. Run in the shell's
@@ -126,18 +128,16 @@ fun CardActionsMenu(
         }
     }
 
-    val items = menuRows(published, answering = referenceCardId != null).map { row ->
+    val items = menuRows(seen = seenByReaders(published, visibility), answering = referenceCardId != null).map { row ->
         when (row) {
             MenuRow.Edit -> OrganicMenuItem(L10n.Me.Actions.edit, IconName.Pen) { open(Route.Write(cardId = cardId, showsCard = showsCard)) }
-            MenuRow.Visibility -> OrganicMenuItem(
-                visibilityAction(isPrivate, anonymous),
-                if (isPrivate) IconName.Globe else IconName.Lock,
-            ) {
+            // 轉為草稿: private, as 轉為私人 was (its byline kept, so it comes back as it went).
+            MenuRow.Visibility -> OrganicMenuItem(L10n.Me.Actions.makePrivate, IconName.Lock) {
                 if (busy) return@OrganicMenuItem
                 busy = true
                 scope.launch {
                     try {
-                        session.writing.updateCard(cardId, visibility = if (isPrivate) "public" else "private")
+                        session.writing.updateCard(cardId, visibility = "private")
                         session.noteCardChange(menuChange(cardId, referenceCardId))
                         onChanged()
                     } catch (e: CancellationException) {
@@ -215,31 +215,25 @@ fun CardActionsMenu(
 @Composable
 private fun rememberFallbackTrash(session: Session): TrashCenter {
     val scope = rememberCoroutineScope()
-    return remember(session) { TrashCenter(session.writing.trashCalls(), session::noteCardChange, Toasts(), scope) }
+    return remember(session) { TrashCenter(session.writing.trashCalls(session.reading), session::noteCardChange, Toasts(), scope) }
 }
 
 /** The ⋯'s rows, in order. */
 internal enum class MenuRow { Edit, Visibility, Unresonate, Delete }
 
-/**
- * 編輯, 轉為公開·私人 — not on a draft: nothing is published from here, its audience is chosen in the
- * writer's publish step (公開 · 匿名公開 · 只有自己) — 取消共振 on a resonance, 刪除. As on the web and iOS.
- */
-internal fun menuRows(published: Boolean, answering: Boolean): List<MenuRow> =
-    listOf(MenuRow.Edit) + listOfNotNull(
-        MenuRow.Visibility.takeIf { published },
-        MenuRow.Unresonate.takeIf { answering },
-    ) + MenuRow.Delete
+/** Whether readers have a card: published, and not private (a published private card is a 草稿 to them all, round 8 §1). */
+internal fun seenByReaders(published: Boolean, visibility: String): Boolean = published && visibility != "private"
 
 /**
- * The ⋯'s visibility row: 轉為私人 for a card others read; 轉為公開 for a private one — 轉為匿名公開
- * when it is anonymous, since that is how it comes back (the server keeps its anonymity).
+ * 編輯, 轉為草稿 — only on a card readers have ([seen]): a 草稿 (never published, or published and
+ * kept private) is published from the writer's step, never from here — 取消共振 on a resonance, 刪除.
+ * As on the web and iOS.
  */
-internal fun visibilityAction(isPrivate: Boolean, anonymous: Boolean): String = when {
-    !isPrivate -> L10n.Me.Actions.makePrivate
-    anonymous -> L10n.Me.Actions.makePublicAnonymous
-    else -> L10n.Me.Actions.makePublic
-}
+internal fun menuRows(seen: Boolean, answering: Boolean): List<MenuRow> =
+    listOf(MenuRow.Edit) + listOfNotNull(
+        MenuRow.Visibility.takeIf { seen },
+        MenuRow.Unresonate.takeIf { answering },
+    ) + MenuRow.Delete
 
 /**
  * What a change made from the ⋯ is about: the card — and, for a resonance, the card it answers,

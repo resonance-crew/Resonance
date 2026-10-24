@@ -528,14 +528,16 @@ The card page reads in the story's type (reading-type §5–§8): `StoryMarkdown
 `StoryTitle` take `StoryType.of(script, class)` and the story's language, set every block from the generated
 `Tokens.Story*` (no prose number is written in Kotlin: `ProseMetrics` in `core/kit` collapses story.css's margins
 from the `ProseSpacing` the type resolves), and sit inside `ReadingTextScale` — the cards a story embeds go back
-under `CappedTextScale`. The head is cover → title → byline (avatar and pen name over 「6 分鐘 · 日期」; the meta line
-alone beside an expanded window's rail, which no longer shows the date); share and the ⋯ stay in the bar.
-`WindowLayout.cardPage()` is §4's formula (the 680 measure, centred; on an expanded window the rail 48 past it).
+under `CappedTextScale`. The head is cover → title → byline (avatar and pen name over 「6 分鐘 · 日期」, at every
+width); share and the ⋯ end that byline under a tablet's header (`cardActionsSlot`, the bar keeping none) and sit in
+a phone's bar, and come again at the end of the story's one action row.
+`WindowLayout.cardPage(rail)` is §4's formula (the 680 measure, centred; on an expanded window with contents their
+rail `Tokens.StoryRailGap` — 80 — past it; without, the column centred).
 Sharing a card (share.spec, Owner revision; `ui/share`) is one glyph, shown only for a published, public card out
 of the trash (`ShareLinks.canShare`), straight to the system sheet: `ShareIntents.cardChooser` carries the link
-(an anonymous card's by its id) with the card picture as its alternate intent, and the app's own Instagram 限時動態
-and 儲存圖片 actions (ChooserActions on 34+, LabeledIntents on 29–33, both reaching the unexported
-`ShareActionActivity`). The picture is drawn on the device — `ShareCardCanvas` / `ShareCardSticker` /
+(an anonymous card's by its id) for every app, Instagram's targets too, and the app's own Instagram 限時動態
+and 儲存圖片 actions — the only ways the picture leaves the app (ChooserActions on 34+, LabeledIntents on 29–33,
+both reaching the unexported `ShareActionActivity`, both wearing the app's own drawables). The picture is drawn on the device — `ShareCardCanvas` / `ShareCardSticker` /
 `ShareCardBackdrop` in `core/design`, recorded off screen by `ShareCardRenderer` into GraphicsLayers at
 Density(3, fontScale 1) — and written to `cacheDir/share` (the `{applicationId}.share` FileProvider; emptied
 before each share and on sign-out). Stories needs `AppConfig.metaAppId` and Instagram installed; the owner of an
@@ -545,12 +547,12 @@ The writer (writer.spec, Android): `WriteScreen` is two steps over one `WriteMod
 (`StoryType`'s title style, by the script the island reports) and the island as the bare page (`StoryCanvas`:
 `?layout=canvas&locale=`, its editable root's min-height set by the host so a tap under the words lands in the
 story), with `StoryFormatBar` docked on the keyboard while the story has the focus and the page kept above it from
-the island's `caret` message (`caretScroll`); 下一步 sits in the bar (floating at the pane's top end at the split).
+the island's `caret` message (`caretScroll`); ✓ sits in the bar (floating at the pane's top end at the split).
 The publish step (`PublishStep` in WriteScreen.kt) is composed the first time it opens and stays, the writing step
 kept composed — and drawn without a standing graphics layer, which would freeze the WebView's size — under it; its
 choices are the draft's values (`setAudience` coerces an anonymous card for connections to public in one change):
-誰可以看見 is one choice of three (`WriteModel.choose`: 公開 · 匿名公開 · 只有自己, which keeps a live card's anonymity),
-and the verb and the step's title follow it (`WriteModel.verb`, `stepTitle`). While its verb works the step only
+卡片類型 is one choice of three (`WriteModel.choose`: 公開 · 匿名公開 · 草稿, which keeps a live card's anonymity),
+and the one button and the step's title follow it and the card (`WriteModel.stepVerb`, `stepTitle`, `finish`). While its verb works the step only
 holds its touches (`Modifier.holdWhile`) — no alpha layer, which is cut at its box and clipped the card's pen line.
 `WriteModel` takes `DraftStore` (DraftService), `WriterCalls` (`WritingApi.writerCalls()`) and `StoryEditor` (the
 bridge), so `WriterStepsTest` drives the steps with stand-ins; a write the rules refuse or a 409 'This card is in the
@@ -560,3 +562,22 @@ a toast's 復原 outlives the card's ⋯; `CardActionsMenu`'s 刪除 trashes (as
 `TrashActionsMenu` restores or deletes for good, the card box's last shelf is 垃圾桶, `TrashedCardBanner` heads the
 owner's trashed card page, and the thought map parks a trashed card's node (`ThoughtMapStore.parkNodes`) so a
 restore puts it back in place.
+
+Round 8 (2026-10-24): the writer's bar says ← · its short title (新卡片 · 編輯草稿 · 編輯卡片) · how the writing is
+kept (`WriteModel.saveState`: 儲存中⋯ only for a write past 400 ms, 已儲存, 修改已暫存, 未儲存; `SaveStateText`, a polite
+live region that gives way first) and ends on ✓ (`OrganicIconButton` with `enabled`/`busy`); at the split the state
+stands before the floating ✓, and at the end of the step's heading. The step's 卡片類型 is 公開 · 匿名公開 · 草稿 with no
+line under it and one button by `stepVerb` (a kept 草稿 is written, never published; 轉為草稿 applies the edit and
+leaves; a published private card made public goes through its edit). The card box's 草稿 shelf is the private
+and draft shelves merged by `editedAt` (`draftShelf`, at most 40), every card on it opening the writer (`managedTap`),
+and the ⋯'s only visibility row is 轉為草稿 on a card readers have (`seenByReaders`). An emptying that failed reads the
+trash again (`TrashCalls.trashLeft`): empty is done; DELETE /me/trash waits 70 s (`WritingApi.EMPTY_TRASH_TIMEOUT_SECONDS`). The story's WebView reports its
+caret's line as its focused area (`StoryWebView.getFocusedRect`), so Compose's keep-the-focused-thing-in-view as the
+keyboard rises keeps the line being typed above the format bar, not the story's top; the caret follow looks again
+once the page or the bar has settled; the canvas' least height follows the page, not the keyboard; the photo and
+card pickers hand the caret, keyboard and bar back (`refocusWhenBack`); the format bar's paper runs under the
+navigation bar. A story picture that fails is the shell's toast, a cover's failure is said on the picture. A GFM
+table is `StoryBlock.Table` (head, rows, alignments) drawn by `StoryTable` (rules not boxes, 4–18 em columns,
+sideways scroll with a fading edge, 表格 to TalkBack); excerpts read it as its cells' words. Instagram 限時動態 wears
+`ic_share_instagram` (native/brand/instagram.svg, pinned by ShareIntentsTest) and says what the copied link is for in
+a system toast.

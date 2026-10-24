@@ -13,8 +13,11 @@ import android.text.style.CharacterStyle
 import android.text.style.ForegroundColorSpan
 import android.text.style.MetricAffectingSpan
 import android.text.style.StrikethroughSpan
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -41,7 +44,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.translate
@@ -53,7 +63,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CollectionInfo
+import androidx.compose.ui.semantics.CollectionItemInfo
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.collectionInfo
+import androidx.compose.ui.semantics.collectionItemInfo
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.text
@@ -71,8 +86,10 @@ import com.resonance.geometry.wavyVertical
 import com.resonance.kit.chat.LinkPreview
 import com.resonance.kit.story.InlineRun
 import com.resonance.kit.story.ProseMetrics
+import com.resonance.kit.l10n.L10n
 import com.resonance.kit.story.StoryBlock
 import com.resonance.kit.story.StoryScripts
+import com.resonance.kit.story.TableAlign
 import java.util.Locale
 import com.resonance.geometry.seedFromString
 import kotlin.math.max
@@ -109,6 +126,10 @@ data class ProseStyle(
     val lang: String? = null,
     /** Inline code's size, × the text around it (`--story-code`). */
     val codeScale: Float = 1f,
+    /** Where its lines sit in their box: the start, as running text does; a table's column may centre them or end them. */
+    val align: Layout.Alignment = Layout.Alignment.ALIGN_NORMAL,
+    /** Tabular figures (`font-variant-numeric: tabular-nums`): a table's numbers stand in columns. */
+    val tabular: Boolean = false,
 ) {
     /** A quote's words: muted and upright (no slanted Chinese), still the body's size and type. */
     val quoted get() = copy(color = Tokens.TextMuted, italic = false, inQuote = true)
@@ -241,7 +262,11 @@ private fun linkStrokes(layout: Layout, spanned: Spanned, sizePx: Float, density
  * API 35+, strict CJK breaks on API 33+, balanced lines for a title or a heading — as story.css
  * sets them. [breakAt] are offsets a line must start at (a title's clauses, [TitleClauses]).
  */
-internal fun buildRichLayout(runs: List<InlineRun>, style: ProseStyle, widthPx: Int, density: Density): Pair<StaticLayout, Spanned> {
+internal fun buildRichLayout(runs: List<InlineRun>, style: ProseStyle, widthPx: Int, density: Density): Pair<StaticLayout, Spanned> =
+    layoutProse(richText(runs, style), runs, style, widthPx, density)
+
+/** [runs] as one text with their marks as spans (bold, italic, strikethrough, code, links), before [layoutProse] lays it out. */
+private fun richText(runs: List<InlineRun>, style: ProseStyle): SpannableStringBuilder {
     val text = SpannableStringBuilder()
     for (run in runs) {
         val start = text.length
@@ -260,7 +285,17 @@ internal fun buildRichLayout(runs: List<InlineRun>, style: ProseStyle, widthPx: 
         run.link?.let { text.setSpan(LinkSpan(it, Mixes.ButtonOnTonal.toArgb()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
         if (run.code) text.setSpan(ForegroundColorSpan(style.color.toArgb()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
-    return layoutProse(text, runs, style, widthPx, density)
+    return text
+}
+
+/**
+ * How wide [runs] lie in [style] on lines of their own (px): the widest of their lines unbroken —
+ * a table cell's max-content, which its column is measured from ([StoryTable]).
+ */
+internal fun richDesiredWidth(runs: List<InlineRun>, style: ProseStyle, density: Density): Float {
+    val text = richText(runs, style)
+    if (style.latinMarks) markLatin(text, runs, style)
+    return Layout.getDesiredWidth(text, prosePaint(style, density))
 }
 
 /** [text] (with its runs' spans already on it) laid out in [style]'s CSS line boxes and breaking. */
@@ -269,7 +304,7 @@ private fun layoutProse(text: SpannableStringBuilder, runs: List<InlineRun>, sty
     if (style.latinMarks) markLatin(text, runs, style)
     text.setSpan(CssLineHeightSpan(paint.textSize * style.lineHeight, paint.fontMetrics), 0, text.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
     val b = StaticLayout.Builder.obtain(text, 0, text.length, paint, max(1, widthPx))
-        .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+        .setAlignment(style.align)
         .setIncludePad(false)
         .setUseLineSpacingFromFallbacks(false)
         .setBreakStrategy(if (style.balanced) LineBreaker.BREAK_STRATEGY_BALANCED else LineBreaker.BREAK_STRATEGY_SIMPLE)
@@ -285,7 +320,8 @@ internal fun prosePaint(style: ProseStyle, density: Density): TextPaint = TextPa
     textSize = density.cssFontPx(style.size)
     color = style.color.toArgb()
     letterSpacing = style.tracking
-    if (style.lining) fontFeatureSettings = "'${StoryType.LINING_FIGURES}'"
+    val features = listOfNotNull(StoryType.LINING_FIGURES.takeIf { style.lining }, TABULAR_FIGURES.takeIf { style.tabular })
+    if (features.isNotEmpty()) fontFeatureSettings = features.joinToString(", ") { "'$it'" }
     style.lang?.let { textLocale = Locale.forLanguageTag(it) }
 }
 
@@ -314,6 +350,9 @@ private fun markLatin(text: SpannableStringBuilder, runs: List<InlineRun>, style
 internal fun proseSemantics(plain: String, lang: String?): AnnotatedString =
     if (lang == null || plain.isEmpty()) AnnotatedString(plain)
     else AnnotatedString(plain, listOf(AnnotatedString.Range(SpanStyle(localeList = LocaleList(lang)), 0, plain.length)))
+
+/** OpenType's tabular figures: every digit one width, so a column of numbers lines up. */
+private const val TABULAR_FIGURES = "tnum"
 
 /** Rich story text in exact CSS line boxes, with tappable links. */
 @Composable
@@ -474,7 +513,8 @@ class StoryLinkCards(
  * Serif TC headings; a Latin story's DM Sans under Playfair — headings h2–h6 (`#` drawn as h2),
  * the curved quote rail beside upright muted words, lists in a 1.6em gutter, photos in organic
  * clips, card links as embedded cards, a link standing alone as its page's card when [links] has
- * a preview for it, blank-line markers as air; vertical rhythm from story.css's margins,
+ * a preview for it, tables as rules rather than boxes ([StoryTable]), blank-line markers as air;
+ * vertical rhythm from story.css's margins,
  * collapsing between blocks ([ProseMetrics]). [lang] is the story's language (StoryScripts).
  *
  * Put it inside [ReadingTextScale]: its words, and the room between them, follow the system's
@@ -597,6 +637,7 @@ private fun Block(block: StoryBlock, style: ProseStyle, story: Story) {
             }
         }
         StoryBlock.Rule -> WavyDivider(seed = 23.0)
+        is StoryBlock.Table -> StoryTable(block, style, onOpenUrl)
         // A block of code: monospace at the inline code's size, 1.6 apart, on the code tint, never justified or tracked.
         is StoryBlock.CodeBlock -> BasicText(
             block.code,
@@ -655,3 +696,134 @@ private fun Centred(atStart: Boolean, content: @Composable () -> Unit) {
 
 /** The quote rail's strip: the web Divider's width (amplitude and pen, twice each). */
 private val QuoteRailWidth = 5.2.dp
+
+/**
+ * A story's table, quietly (round 8 §5.2; story.css `.story-table`): rules, not boxes — no frame and
+ * no lines between columns, the story's pen rule under the head row (1.2, the muted ink at 0.5) and a
+ * hairline between body rows (1, the same ink at 0.22), nothing after the last, all straight (a
+ * wobble would make a row hard to follow). Its words are the story's at 0.94 em, 1.6 apart, set and
+ * not justified, the head row in the story's bold, numbers in tabular figures, each column aligned as
+ * its delimiter says. A cell pads 8 × 14 — the first column's start and the last column's end flush
+ * with the text column — and a column is its cells' widest words, at least 4 em and at most 18 em
+ * before they wrap ([tableColumns]). Wider than the column, it scrolls sideways inside it (never the
+ * page), the side with more fading into the paper over 24 until scrolled to that end; TalkBack meets
+ * it as 表格, a table of its rows and columns.
+ */
+@Composable
+private fun StoryTable(table: StoryBlock.Table, style: ProseStyle, onOpenUrl: (String) -> Unit) {
+    val columns = table.align.size
+    if (columns == 0) return
+    val density = LocalDensity.current
+    val body = remember(style) { style.copy(size = style.size * TABLE_SIZE, lineHeight = TABLE_LEADING, justified = false, balanced = false, tabular = true) }
+    val head = remember(body) { body.copy(weight = body.boldWeight) }
+    val cellStyles = remember(body, head, table.align) {
+        table.align.map { a -> body.copy(align = a.layoutAlignment) } to table.align.map { a -> head.copy(align = a.layoutAlignment) }
+    }
+    val (bodyStyles, headStyles) = cellStyles
+    val em = density.cssFontPx(body.size)
+    val widths = remember(table, body, head, density, density.fontScale) {
+        tableColumns(
+            columns,
+            natural = { row, col ->
+                val cell = if (row < 0) table.head.getOrNull(col) else table.rows[row].getOrNull(col)
+                cell?.let { richDesiredWidth(it, if (row < 0) headStyles[col] else bodyStyles[col], density) } ?: 0f
+            },
+            rows = table.rows.size,
+            min = TABLE_COLUMN_MIN_EM * em,
+            max = TABLE_COLUMN_MAX_EM * em,
+        )
+    }
+    val padX = with(density) { TABLE_CELL_PAD_X.toPx() }
+    val padY = with(density) { TABLE_CELL_PAD_Y.toPx() }
+    val scroll = rememberScrollState()
+    val headRule = TableHeadRuleInk
+    val rowRule = TableRowRuleInk
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .tableFade(scroll, TABLE_FADE)
+            .semantics {
+                contentDescription = L10n.Card.table
+                collectionInfo = CollectionInfo(rowCount = table.rows.size + 1, columnCount = columns)
+            }
+            .horizontalScroll(scroll),
+    ) {
+        Column {
+            val rows = listOf(table.head) + table.rows
+            rows.forEachIndexed { r, cells ->
+                Row(
+                    Modifier.drawBehind {
+                        // The head's pen line under it; a hairline above each body row after the first.
+                        if (r == 0) drawLine(headRule, Offset(0f, size.height - TABLE_HEAD_RULE.toPx() / 2), Offset(size.width, size.height - TABLE_HEAD_RULE.toPx() / 2), strokeWidth = TABLE_HEAD_RULE.toPx())
+                        if (r >= 2) drawLine(rowRule, Offset(0f, TABLE_ROW_RULE.toPx() / 2), Offset(size.width, TABLE_ROW_RULE.toPx() / 2), strokeWidth = TABLE_ROW_RULE.toPx())
+                    },
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    for (c in 0 until columns) {
+                        val start = if (c == 0) 0f else padX
+                        val end = if (c == columns - 1) 0f else padX
+                        Box(
+                            Modifier
+                                .width(with(density) { (widths[c] + start + end).toDp() })
+                                .padding(
+                                    start = with(density) { start.toDp() }, end = with(density) { end.toDp() },
+                                    top = with(density) { padY.toDp() }, bottom = with(density) { padY.toDp() },
+                                )
+                                .semantics { collectionItemInfo = CollectionItemInfo(rowIndex = r, rowSpan = 1, columnIndex = c, columnSpan = 1) },
+                        ) {
+                            RichCssText(cells.getOrNull(c).orEmpty(), if (r == 0) headStyles[c] else bodyStyles[c], onOpenUrl)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A table's words, × the story's (`font-size: 0.94em`), and their leading. */
+private const val TABLE_SIZE = 0.94f
+private const val TABLE_LEADING = 1.6f
+/** A column's least and most width before its words wrap, in the table's em. */
+internal const val TABLE_COLUMN_MIN_EM = 4f
+internal const val TABLE_COLUMN_MAX_EM = 18f
+private val TABLE_CELL_PAD_X = 14.dp
+private val TABLE_CELL_PAD_Y = 8.dp
+private val TABLE_HEAD_RULE = 1.2.dp
+private val TABLE_ROW_RULE = 1.dp
+/** How far a table's side with more fades into the paper. */
+private val TABLE_FADE = 24.dp
+private val TableHeadRuleInk = Tokens.TextMuted.copy(alpha = 0.5f)
+private val TableRowRuleInk = Tokens.TextMuted.copy(alpha = 0.22f)
+
+private val TableAlign.layoutAlignment: Layout.Alignment
+    get() = when (this) {
+        TableAlign.Start -> Layout.Alignment.ALIGN_NORMAL
+        TableAlign.Center -> Layout.Alignment.ALIGN_CENTER
+        TableAlign.End -> Layout.Alignment.ALIGN_OPPOSITE
+    }
+
+/**
+ * A table's column widths (px, the cells' content without their padding): each column its cells'
+ * widest unbroken words ([natural] of the head, row -1, and each body row), at least [min] and at most
+ * [max] — past it the words wrap (CSS's max-content table, `.story-cell`'s 4–18 em).
+ */
+internal fun tableColumns(columns: Int, natural: (row: Int, col: Int) -> Float, rows: Int, min: Float, max: Float): List<Float> =
+    List(columns) { c ->
+        val widest = (-1 until rows).maxOfOrNull { r -> natural(r, c) } ?: 0f
+        kotlin.math.ceil(widest.coerceIn(min, max))
+    }
+
+/** The side of a sideways-scrolling table with more to see fades into the paper over [width] (story.css `data-more`). */
+private fun Modifier.tableFade(scroll: ScrollState, width: Dp): Modifier =
+    graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
+        drawContent()
+        val w = width.toPx()
+        if (scroll.canScrollForward) drawRect(
+            Brush.horizontalGradient(listOf(Color.Transparent, Color.Black), startX = size.width - w, endX = size.width),
+            topLeft = Offset(size.width - w, 0f), size = Size(w, size.height), blendMode = BlendMode.DstOut,
+        )
+        if (scroll.canScrollBackward) drawRect(
+            Brush.horizontalGradient(listOf(Color.Black, Color.Transparent), startX = 0f, endX = w),
+            size = Size(w, size.height), blendMode = BlendMode.DstOut,
+        )
+    }

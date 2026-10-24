@@ -92,25 +92,27 @@ data class WindowLayout(val width: Dp) {
         if (cls == LayoutClass.Compact) 0.dp else LayoutClass.columnInset(width.value, pad.value, measure.value).dp
 
     /**
-     * The card page's columns (reading-type §4), from the content area's start: the story's
-     * column is at most [Tokens.Measure] (680) wide. A phone keeps its 20 a side; a medium window
-     * centres the column inside the pad. An expanded window holds, inside the pad, the column (T)
-     * and — [Tokens.StoryRailGap] past it — the author's rail ([Tokens.CardRailW]): with
-     * R = gap + rail, T = min(680, W − R) of the width W inside the pad, the column centred in W
-     * while R still fits to its right (S = max(0, min((W − T) / 2, W − T − R))) and sliding toward
-     * the start once it doesn't, so the rail always stands 48 past the text — the web's three-track
-     * grid, exactly centred from a 1392 window.
+     * The card page's columns (reading-type §4, round 8 §10.1), from the content area's start: the
+     * story's column is at most [Tokens.Measure] (680) wide, the byline under its title at every
+     * width. A phone keeps its 20 a side; a medium window — and an expanded one whose story has no
+     * contents ([rail] false) — centres the column inside the pad. An expanded window with a contents
+     * list holds, inside the pad, the column (T) and — [Tokens.StoryRailGap] (80) past it — the
+     * contents' rail ([Tokens.CardRailW]): with R = gap + rail, T = min(680, W − R) of the width W
+     * inside the pad, the column centred in W while R still fits to its right
+     * (S = max(0, min((W − T) / 2, W − T − R))) and sliding toward the start once it doesn't, so the
+     * rail always stands its gap past the text — the web's three-track grid.
      */
-    fun cardPage(): CardPageColumns = cardPage(contentWidth, cls, pad)
+    fun cardPage(rail: Boolean = true): CardPageColumns = cardPage(contentWidth, cls, pad, rail)
 
     companion object {
         /** The card page's columns in a content area [width] wide of class [cls] with [pad] at each side (see [WindowLayout.cardPage]). */
-        fun cardPage(width: Dp, cls: LayoutClass, pad: Dp): CardPageColumns {
+        fun cardPage(width: Dp, cls: LayoutClass, pad: Dp, rail: Boolean = true): CardPageColumns {
             val measure = Tokens.Measure.dp
+            val centred = { LayoutClass.columnInset(width.value, pad.value, measure.value).dp.let { CardPageColumns(it, it, null) } }
             return when (cls) {
                 LayoutClass.Compact -> CardPageColumns(CardPhoneMargin, CardPhoneMargin, null)
-                LayoutClass.Medium -> LayoutClass.columnInset(width.value, pad.value, measure.value).dp.let { CardPageColumns(it, it, null) }
-                LayoutClass.Expanded -> {
+                LayoutClass.Medium -> centred()
+                LayoutClass.Expanded -> if (!rail) centred() else {
                     val inner = (width - pad * 2).coerceAtLeast(0.dp)
                     val rail = CardRailGap + Tokens.CardRailW.dp
                     val text = minOf(measure, (inner - rail).coerceAtLeast(0.dp))
@@ -123,7 +125,7 @@ data class WindowLayout(val width: Dp) {
 
         /** A phone's card page: 20 at each side of the story. */
         val CardPhoneMargin = 20.dp
-        /** The story's column → the author's rail. */
+        /** The story's column → the contents' rail. */
         val CardRailGap = Tokens.StoryRailGap.dp
 
         /** The web's `--page-max-w-wide`: the widest a page's content runs. */
@@ -133,7 +135,7 @@ data class WindowLayout(val width: Dp) {
     }
 }
 
-/** Where the card page's article sits ([start] and [end] in from the content area's edges) and, when it has one, its rail. */
+/** Where the card page's article sits ([start] and [end] in from the content area's edges) and, when it has one, its contents' rail. */
 @Immutable
 data class CardPageColumns(val start: Dp, val end: Dp, val railStart: Dp?)
 

@@ -24,8 +24,6 @@ import com.resonance.kit.l10n.Strings
 import java.io.ByteArrayOutputStream
 import java.net.URL
 import java.time.LocalTime
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -46,8 +44,38 @@ import kotlinx.coroutines.withTimeoutOrNull
 /** The writer's two steps (writer.spec §0): writing the title and the story, then 發布這張卡片 / 更新這張卡片. */
 enum class WriterStep { Write, Publish }
 
-/** Which of the publish step's two buttons the work on its way is for: its loader shows, the other rests. */
+/** Which of the publish step's buttons the work on its way is for — its one verb, or 捨棄修改: its loader shows, the other rests. */
 enum class BusyVerb { Publish, Leave }
+
+/**
+ * The save state the writer's bar says after its title (round 8 §2.1): [Saving] once a write has
+ * been on its way past [WriteModel.SAVING_SHOWN_MS] (a quicker one goes straight to the next word),
+ * [Saved] after a draft's write, [SavedLive] after a published card's write to its pending edit
+ * (and from the start when it opens with one), [Failed] when the last write didn't land.
+ */
+enum class SaveState { Saving, Saved, SavedLive, Failed }
+
+/** The word for a save state (`write.status.*`). */
+internal fun saveStateWord(state: SaveState): String = when (state) {
+    SaveState.Saving -> L10n.Write.Status.saving
+    SaveState.Saved -> L10n.Write.Status.saved
+    SaveState.SavedLive -> L10n.Write.Status.savedLive
+    SaveState.Failed -> L10n.Write.Status.failed
+}
+
+/**
+ * The publish step's one button (round 8 §2.3), from the card and the choice: a 草稿 (never
+ * published, or published and kept private) is [Publish]ed or [PublishAnonymously] by its choice,
+ * or kept one with [Save]; a card readers have now is [Update]d — or, 草稿 chosen, turned back into
+ * one ([MakeDraft]).
+ */
+enum class StepVerb { Publish, PublishAnonymously, Save, Update, MakeDraft }
+
+/** Where the writer goes once the step's verb went through: the card's page, or back where it came from. */
+sealed interface StepDone {
+    data class Page(val key: String) : StepDone
+    data object Leave : StepDone
+}
 
 /** What the publish step's mirror line shows: the question on its way, its answer, or nothing to say. */
 sealed interface Mirror {
@@ -60,9 +88,9 @@ sealed interface Mirror {
 enum class ResonanceLine { Reaches, Quiet }
 
 /**
- * 誰可以看見 (round 7 §1.1): who reads the card and under whose name, as one choice — 公開 (under
- * the writer's pen name), 匿名公開, 只有自己. Anonymity is for being read: only the writer reading
- * it needs no other name.
+ * 卡片類型 (round 8 §2.2; round 7's 誰可以看見): what the card is, as one choice — 公開 (under the
+ * writer's pen name), 匿名公開, 草稿 ([Private]: its writer's alone, finished or not). Anonymity is
+ * for being read: only the writer reading it needs no other name.
  */
 enum class Audience { Public, Anonymous, Private }
 
@@ -118,13 +146,14 @@ fun WritingApi.writerCalls(): WriterCalls {
 /**
  * The writing screen's state and its work (CardEditor): the draft's values, autosave a moment after
  * typing stops, and the writer's two steps (writer.spec). Writing: the title and the story, and one
- * 下一步 ([next]: a title asked for, a new draft saved first). Publishing: the mirror ([reflect]),
- * the card as a list will show it with its cover, tags, who can see it and under whose name ([choose]:
- * 公開 · 匿名公開 · 只有自己) — all the draft's own values, autosaved like the words and kept on the way
- * back to writing — then the verb that follows them, 發布 · 匿名發布 · 儲存 ([publish], [verb]), or
- * 存成草稿，稍後再寫 ([saveForLater]). Opened on a published card it revises instead:
- * autosave buffers the working copy privately, and the step's 儲存修改 ([applyEdit]) puts it in
- * front of readers (捨棄修改, [discardEdit], drops it).
+ * ✓ ([next]: a title asked for, a new draft saved first). Publishing: the mirror ([reflect]),
+ * the card as a list will show it with its cover, tags, what the card is ([choose]: 公開 · 匿名公開 ·
+ * 草稿) — all the draft's own values, autosaved like the words and kept on the way back to
+ * writing — then one button whose verb follows the card and the choice ([finish], [stepVerb]):
+ * 發布 · 匿名發布 a 草稿, 儲存 one kept a 草稿 (written, never published), 儲存修改 a card readers
+ * have, or 轉為草稿 when 草稿 is chosen for it. Opened on a published card it revises: autosave
+ * buffers the working copy privately, the verb applies it ([applyEdit]), and 捨棄修改
+ * ([discardEdit]) drops it. The bar says how the writing is kept ([saveState]).
  *
  * A card moved to the trash elsewhere while it is open here (its saves refused, 409 'This card is in
  * the trash.') is read again, and the writer says so ([trashed]) back on the writing step, keeping
@@ -145,8 +174,10 @@ class WriteModel(
     private val reachedOut: () -> Unit = { PushCenter.reachedOut() },
     /** The UI's language, a new card's. */
     private val locale: () -> String = { Strings.language.tag },
-    /** How long 下一步 waits for the server to take a new draft ([NEXT_WAIT_MS]; shorter under test). */
+    /** How long ✓ waits for the server to take a new draft ([NEXT_WAIT_MS]; shorter under test). */
     private val nextWait: Long = NEXT_WAIT_MS,
+    /** [opened] is a draft this writer began as a new card in this visit (the screen came back: a rotation, a restored process): its title stays 新卡片. */
+    beganNew: Boolean = false,
 ) {
     /** The card this one resonates with, if any (a response card). */
     val referenceCardId: String? = opened?.referenceCardId ?: referenceCardId
@@ -169,7 +200,13 @@ class WriteModel(
     val slug: String? = opened?.slug
     /** The live card already reaches its original: published, public and under its author's name (saving tells no one anything new). */
     val liveReaches: Boolean = opened != null && opened.isPublished && opened.liveVisibility == "public" && !opened.liveAnonymous
-    private val editing = opened != null
+    /**
+     * Readers have the card now: published and not kept private — a published private card is a 草稿
+     * to everyone, its writer too (round 8 §1). Fixed for the model's lifetime, as [isPublished].
+     */
+    val liveSeen: Boolean = opened != null && opened.isPublished && opened.liveVisibility != "private"
+    /** Opened on a card of yours (not one begun here in this visit): its title says what it is. */
+    private val editing = opened != null && !beganNew
     var tagDraft by mutableStateOf("")
     var suggestingTags by mutableStateOf(false)
         private set
@@ -184,8 +221,21 @@ class WriteModel(
     /** The illustration's in-progress pass while it renders. */
     var partialPreview by mutableStateOf<Bitmap?>(null)
         private set
+    /** Why the cover's last picture didn't work (pick, upload, illustration): said on the picture itself, gone with its next action. */
     var mediaError by mutableStateOf<String?>(null)
         private set
+    /**
+     * A picture for the story didn't go in (it couldn't be read, or its upload failed): said where the
+     * writing is, as the shell's toast — never in the cover's slot ([mediaError]).
+     */
+    var onStoryPictureError: (String) -> Unit = {}
+
+    // The save state ([saveState])
+
+    /** A write has been on its way past [SAVING_SHOWN_MS]. */
+    private var savingShown by mutableStateOf(false)
+    /** The last write didn't land (the next pause tries again). */
+    private var writeFailed by mutableStateOf(false)
 
     // The steps
 
@@ -251,46 +301,52 @@ class WriteModel(
         editor.onChange = { story -> update { copy(story = story) } }
     }
 
-    /** The page title: a new card, a draft being resumed, or a live card being revised. */
+    /**
+     * The page title, short at every size: 新卡片 (kept after its first save in this visit), 編輯草稿
+     * for a 草稿 (never published, or published and private), 編輯卡片 for a card readers have.
+     */
     val title: String
-        get() = when {
-            !editing -> L10n.Write.title
-            isPublished -> L10n.Write.editPublishedTitle
-            else -> L10n.Write.editTitle
-        }
+        get() = writerTitle(editing, liveSeen)
 
     /** Who the card is for, as the step shows it chosen (null: kept for connections, none chosen). */
     val audience: Audience? get() = audienceOf(values.visibility, values.anonymous)
 
     /**
-     * A draft about to be kept for its writer alone (只有自己): the step saves it rather than
-     * publishing it — its title, its verb and its failure say so. A card kept for connections reads
-     * as publishing; a live card is always updated.
+     * The step's one button (round 8 §2.3): a card readers have is updated (儲存修改), or made a 草稿
+     * again (轉為草稿) when that is chosen; a 草稿 is published by its choice (發布 · 匿名發布), or kept
+     * one (儲存). A card kept for connections only (older ones, none of the three chosen) reads as
+     * publishing — or, live, as an update.
      */
-    val keepsPrivate: Boolean get() = !isPublished && audience == Audience.Private
+    val stepVerb: StepVerb get() = stepVerbOf(liveSeen, audience)
 
-    /** The publish step's title: 發布這張卡片 (儲存這張卡片 for 只有自己), or 更新這張卡片 for a live card. */
-    val stepTitle: String
-        get() = when {
-            isPublished -> L10n.Write.PublishPanel.updateTitle
-            keepsPrivate -> L10n.Write.PublishPanel.saveTitle
-            else -> L10n.Write.PublishPanel.title
-        }
+    /** The publish step's title: 更新這張卡片 for a card readers have, else 儲存草稿 with 草稿 chosen and 發布這張卡片 otherwise. */
+    val stepTitle: String get() = stepTitleOf(liveSeen, audience)
 
-    /** The step's verb, which follows the audience: 發布 · 匿名發布 · 儲存 — or 儲存修改 for a live card, whoever it is for. */
-    val verb: String
-        get() = when {
-            isPublished -> L10n.Write.PublishPanel.update
-            keepsPrivate -> L10n.Write.PublishPanel.save
-            audience == Audience.Anonymous -> L10n.Write.PublishPanel.publishAnonymously
-            else -> L10n.Write.PublishPanel.publish
-        }
+    /** The step's one button's words ([stepVerb]). */
+    val verb: String get() = verbWords(stepVerb)
+
+    /** The verb's shorter words while it works (儲存修改 → 儲存), or none. */
+    val verbBusyLabel: String? get() = if (stepVerb == StepVerb.Update) L10n.Write.saveShort else null
 
     /**
-     * A live card's 「按下之後，讀者看到的就會是這個版本…」: only while it has readers — not for 只有自己 (a card kept
-     * for connections still has them), as the web says it.
+     * A live card's 「按下之後，讀者看到的就會是這個版本…」: only for a card readers have whose choice keeps
+     * it theirs (公開 · 匿名公開; an older card kept for connections, none chosen, still has them).
      */
-    val showsUpdateHint: Boolean get() = isPublished && values.visibility != "private"
+    val showsUpdateHint: Boolean get() = liveSeen && values.visibility != "private"
+
+    /**
+     * What the bar says of the writing after its title (null: nothing yet — before the card's first
+     * write in this visit, and for a card in the trash, which keeps its own line in the page).
+     */
+    val saveState: SaveState?
+        get() = when {
+            trashed -> null
+            savingShown -> SaveState.Saving
+            writeFailed -> SaveState.Failed
+            isPublished -> if (savedAt != null || hasPendingEdit) SaveState.SavedLive else null
+            savedAt != null -> SaveState.Saved
+            else -> null
+        }
 
     /** The card's page: its slug, or its id (a draft, or a card without one). */
     val routeKey: String? get() = slug ?: draftId
@@ -314,14 +370,14 @@ class WriteModel(
     /** What is on screen differs from what was last written, and is worth writing (a blank new card isn't). */
     val needsSave: Boolean get() = values != lastSaved && !(draftId == null && values.isEmpty)
 
-    /** 下一步 shows: while writing, and not for a card in the trash. */
+    /** ✓ shows: while writing, and not for a card in the trash. */
     val showsNext: Boolean get() = step == WriterStep.Write && !trashed
 
-    /** 下一步 can be pressed: a draft needs something written (a title, words, tags or a cover); a live card always can. */
+    /** ✓ can be pressed: a draft needs something written (a title, words, tags or a cover); a live card always can. */
     val nextEnabled: Boolean get() = isPublished || !values.isEmpty
 
-    /** The step's way out: 存成草稿，稍後再寫 always; a live card's 捨棄修改 only while there is a revision. */
-    val showsWayOut: Boolean get() = !isPublished || hasPendingEdit || values != lastSaved
+    /** 捨棄修改, the step's one other button: a published card's, only while it has a revision to drop. */
+    val showsWayOut: Boolean get() = isPublished && (hasPendingEdit || values != lastSaved)
 
     /** The publish step's resonance line (null: none). */
     val resonanceLine: ResonanceLine?
@@ -347,10 +403,10 @@ class WriteModel(
         update { copy(visibility = anonymousVisibility(visibility, anonymous), anonymous = anonymous) }
 
     /**
-     * One of 誰可以看見's three, both fields in one change: 公開 is public under the pen name, 匿名公開
-     * public and anonymous. 只有自己 names a draft (it was never read by anyone: no anonymous flag is
-     * left over from trying 匿名公開), and leaves a live card's anonymity as it is — an anonymous card
-     * made private, then public again from its ⋯, comes back anonymous, never under its author's name.
+     * One of 卡片類型's three, both fields in one change: 公開 is public under the pen name, 匿名公開
+     * public and anonymous. 草稿 names a draft (it was never read by anyone: no anonymous flag is
+     * left over from trying 匿名公開), and leaves a published card's anonymity as it is — an anonymous
+     * card made a 草稿, then public again, comes back anonymous, never under its author's name.
      */
     fun choose(audience: Audience) = when (audience) {
         Audience.Public -> setAudience("public", anonymous = false)
@@ -395,6 +451,11 @@ class WriteModel(
         val v = values
         if (v.isEmpty && draftId == null) return null
         if (v == lastSaved && !force) return draftId
+        // Said in the bar only once it runs long; whether it went through, always.
+        val shown = scope.launch {
+            delay(SAVING_SHOWN_MS)
+            savingShown = true
+        }
         try {
             val id = draftId
             if (isPublished && id != null) {
@@ -419,11 +480,16 @@ class WriteModel(
             }
             lastSaved = v
             lastFailure = null
+            writeFailed = false
             savedAt = LocalTime.now()
             draftId?.let(onWrote)
         } catch (e: Exception) {
             // Kept in memory; the next edit (or leaving) tries again.
             lastFailure = e
+            writeFailed = true
+        } finally {
+            shown.cancel()
+            savingShown = false
         }
         return draftId
     }
@@ -440,22 +506,6 @@ class WriteModel(
         }
     }
 
-    /**
-     * One line of plain reassurance under the page title: what has happened
-     * and, for a live card, what has not happened yet. A draft says nothing
-     * until it has been saved; a card in the trash has its own line, with 還原.
-     */
-    val saveStatus: String?
-        get() {
-            if (trashed) return null
-            val time = savedAt?.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(Strings.language.locale))
-            if (isPublished) {
-                if (time != null) return L10n.Write.editBuffered(time)
-                return if (hasPendingEdit) L10n.Write.editBufferedIdle else L10n.Write.editLiveHint
-            }
-            return time?.let { L10n.Write.autosaved(it) }
-        }
-
     // Moving between the steps
 
     /** No title: back on the writing step, the title asking for one. */
@@ -466,7 +516,7 @@ class WriteModel(
     }
 
     /**
-     * 下一步: asks for a title, makes sure a new card is saved as a draft first (its writer is then a
+     * ✓ (完成): asks for a title, makes sure a new card is saved as a draft first (its writer is then a
      * draft's, as a reload or the system's back must find it), and opens the publish step. A new
      * draft's create is issued and the server's answer waited on at most [nextWait] — a refusal keeps
      * the writer here and says so; past it (offline: Firestore holds the write until the network
@@ -575,21 +625,39 @@ class WriteModel(
     // The publish step's verbs
 
     /**
-     * Saves the draft, then publishes it — for its writer alone, 只有自己, that is saving it — and
-     * returns where the card lives (null: it didn't, and [publishError] or [trashed] says why: 沒發布成功
-     * or, kept private, 沒儲存成功).
+     * The step's one button ([stepVerb]), and where the writer goes once it went through (null: it
+     * didn't — [publishError] or [trashed] says why): a 草稿 published (發布 · 匿名發布: a draft through
+     * the publish call, a published private card through its pending edit, keeping its first date) goes
+     * to its page; a draft kept one (儲存) is written as it is on screen — never published, not even to
+     * its writer alone — and the writer goes back where it came from; a card readers have is updated
+     * (儲存修改: to its page) or turned back into a 草稿 (轉為草稿: the edit applied, now private, and
+     * back). Saying why it failed: 沒發布成功 for a publish, 沒儲存成功 for the rest.
      */
-    suspend fun publish(): String? {
+    suspend fun finish(): StepDone? {
+        val failed = failureFallback(stepVerb)
+        return when (stepVerb) {
+            StepVerb.Publish, StepVerb.PublishAnonymously ->
+                (if (isPublished) applyEdit(failed, publishes = true) else publish(failed))?.let(StepDone::Page)
+            StepVerb.Save -> if (isPublished) applyEdit(failed)?.let { StepDone.Leave } else if (keepDraft(failed)) StepDone.Leave else null
+            StepVerb.Update -> applyEdit(failed)?.let(StepDone::Page)
+            StepVerb.MakeDraft -> applyEdit(failed)?.let { StepDone.Leave }
+        }
+    }
+
+    /**
+     * Saves the draft, then publishes it, and returns where the card lives (null: it didn't, and
+     * [publishError] or [trashed] says why, [failed] for anything else).
+     */
+    private suspend fun publish(failed: String): String? {
         if (pending) return null
         if (values.title.isBlank()) {
             askForTitle()
             return null
         }
         settleAudience()
-        val failed = if (keepsPrivate) L10n.Write.PublishPanel.saveFailed else L10n.Write.PublishPanel.failed
         return working(BusyVerb.Publish, failed) {
             val id = saveNow()
-            if (id == null || values != lastSaved) return@working saveFailed(failed)
+            if (id == null || values != lastSaved) return@working failedSave(failed)
             val result = writing.publish(id)
             closed = true
             onWrote(id)
@@ -599,33 +667,35 @@ class WriteModel(
     }
 
     /**
-     * 儲存修改: the working copy (with the step's choices) goes into the buffer, then the server makes
-     * it the live card — the moment an edit reaches readers. The publish date stays. Returns where
-     * the card lives (null: it didn't, and [publishError] or [trashed] says why).
+     * A published card's working copy (with the step's choices) goes into its buffer, then the server
+     * makes it the card — the moment an edit reaches readers, or (made a 草稿) leaves them, or ([publishes]:
+     * a published private card made public) reaches them again. The publish date stays. Returns where
+     * the card lives (null: it didn't, and [publishError] or [trashed] says why, [failed] for anything else).
      */
-    suspend fun applyEdit(): String? {
+    private suspend fun applyEdit(failed: String, publishes: Boolean = false): String? {
         val id = draftId ?: return null
         if (pending) return null
         if (values.title.isBlank()) {
             askForTitle()
             return null
         }
-        return working(BusyVerb.Publish, L10n.Native.saveError) {
+        return working(BusyVerb.Publish, failed) {
             // The server applies what is in the buffer: written now, even when nothing changed since the last save.
             saveJob?.cancel()
             save(force = true)
-            if (values != lastSaved || lastFailure != null) return@working saveFailed(L10n.Native.saveError)
+            if (values != lastSaved || lastFailure != null) return@working failedSave(failed)
             val result = writing.applyEdit(id)
             if (!result.applied) {
                 // The buffer was gone by then (applied or dropped elsewhere): the words on screen may not be
                 // live and are kept nowhere — owed a save again, so a retry or leaving writes them.
                 lastSaved = null
-                publishError = L10n.Native.saveError
+                publishError = failed
                 return@working null
             }
             closed = true
             onWrote(id)
             hasPendingEdit = false
+            if (publishes) reachedOut()
             result.slug ?: slug ?: id
         }
     }
@@ -647,13 +717,20 @@ class WriteModel(
         }
     }
 
-    /** 存成草稿，稍後再寫: what is on screen is written; true once it is, and the writer may go. */
-    suspend fun saveForLater(): Boolean {
+    /**
+     * 儲存 for a draft never published, 草稿 chosen: what is on screen is written now (not left to the
+     * pause) and nothing more — true once it is, and the writer may go.
+     */
+    private suspend fun keepDraft(failed: String): Boolean {
         if (pending) return false
-        return working(BusyVerb.Leave, L10n.Native.saveError) {
+        if (values.title.isBlank()) {
+            askForTitle()
+            return false
+        }
+        return working(BusyVerb.Publish, failed) {
             if (needsSave) {
                 saveNow()
-                if (values != lastSaved) return@working saveFailed(L10n.Native.saveError)
+                if (values != lastSaved) return@working failedSave(failed)
             }
             true
         } == true
@@ -681,7 +758,7 @@ class WriteModel(
     }
 
     /** The save the verb waited on didn't land: the trash, or [fallback]. Null either way. */
-    private suspend fun saveFailed(fallback: String): Nothing? {
+    private suspend fun failedSave(fallback: String): Nothing? {
         val failure = lastFailure
         if (!confirmTrashed(failure)) publishError = failureText(failure, fallback)
         return null
@@ -854,21 +931,41 @@ class WriteModel(
         }
     }
 
-    fun removeCover() = update { copy(imageUrl = null, imageLabel = null, accentHue = null) }
+    /** No cover: the card's stripes again, and whatever the last picture's failure said goes with it. */
+    fun removeCover() {
+        mediaError = null
+        update { copy(imageUrl = null, imageLabel = null, accentHue = null) }
+    }
 
-    /** A photo inside the story (the format bar's 插入圖片). */
-    fun insertImage(context: Context, uri: Uri) {
+    /** A photo inside the story (the format bar's 插入圖片), read on the device first. */
+    fun insertImage(context: Context, uri: Uri) =
+        insertPicture { withContext(Dispatchers.Default) { CoverImage.jpeg(CoverImage.decode(context, uri)) } }
+
+    /**
+     * A picture inside the story: [read] makes it ready (a JPEG), then it is uploaded and the island
+     * puts it at the story's caret. One that can't be read or encoded says 讀不出這張圖片; an upload
+     * that fails says 圖片上傳失敗 — both where the writing is ([onStoryPictureError], the shell's
+     * toast), never in the cover's slot.
+     */
+    internal fun insertPicture(read: suspend () -> ByteArray) {
         if (uploadingInline) return
         uploadingInline = true
         scope.launch {
             try {
-                val jpeg = withContext(Dispatchers.Default) { CoverImage.jpeg(CoverImage.decode(context, uri)) }
+                val jpeg = try {
+                    read().takeIf { it.isNotEmpty() } ?: throw IllegalArgumentException("empty picture")
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    onStoryPictureError(L10n.Write.Editor.imageUnsupported)
+                    return@launch
+                }
                 val url = writing.upload(jpeg, "photo.jpg")
                 editor.exec("insertImage", mapOf("src" to url, "alt" to "photo.jpg"))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                mediaError = L10n.Write.Editor.imageUploadError
+                onStoryPictureError(L10n.Write.Editor.imageUploadError)
             } finally {
                 uploadingInline = false
             }
@@ -879,14 +976,56 @@ class WriteModel(
         /** CardEditor's AUTOSAVE_DELAY_MS (leaving, or going to the background, saves at once). */
         const val AUTOSAVE_DELAY_MS = 1500L
         const val TITLE_MAX = 60
-        /** How long 下一步 waits on a new draft's first save before it shows its loader. */
+        /** How long ✓ waits on a new draft's first save before its glyph becomes the loader. */
         const val NEXT_LOADER_MS = 300L
+        /** How long a write runs before the bar says 儲存中⋯ (a quicker one goes straight to its next word: no flicker). */
+        const val SAVING_SHOWN_MS = 400L
         /**
          * How long 下一步 waits for the server to take a new draft (iOS's nextWait): the draft is on the
          * device either way, so past this the step opens, and publishing waits for the network as it always has.
          */
         const val NEXT_WAIT_MS = 3000L
     }
+}
+
+/**
+ * The writer's title (round 8 §2.1), short at every size: 新卡片 for a new card ([editing] false),
+ * 編輯卡片 for a card readers have ([seen]), 編輯草稿 for a 草稿 — a draft, or a published card kept private.
+ */
+internal fun writerTitle(editing: Boolean, seen: Boolean): String = when {
+    !editing -> L10n.Write.title
+    seen -> L10n.Write.editPublishedTitle
+    else -> L10n.Write.editTitle
+}
+
+/** The step's one button for a card readers have or not ([seen]) and what is chosen ([audience]; null: kept for connections). */
+internal fun stepVerbOf(seen: Boolean, audience: Audience?): StepVerb = when {
+    seen -> if (audience == Audience.Private) StepVerb.MakeDraft else StepVerb.Update
+    audience == Audience.Private -> StepVerb.Save
+    audience == Audience.Anonymous -> StepVerb.PublishAnonymously
+    else -> StepVerb.Publish
+}
+
+/** The step's title: 更新這張卡片 for a card readers have; else 儲存草稿 with 草稿 chosen, 發布這張卡片 otherwise. */
+internal fun stepTitleOf(seen: Boolean, audience: Audience?): String = when {
+    seen -> L10n.Write.PublishPanel.updateTitle
+    audience == Audience.Private -> L10n.Write.PublishPanel.saveTitle
+    else -> L10n.Write.PublishPanel.title
+}
+
+/** A step verb's words: 發布 · 匿名發布 · 儲存 · 儲存修改 · 轉為草稿. */
+internal fun verbWords(verb: StepVerb): String = when (verb) {
+    StepVerb.Publish -> L10n.Write.PublishPanel.publish
+    StepVerb.PublishAnonymously -> L10n.Write.PublishPanel.publishAnonymously
+    StepVerb.Save -> L10n.Write.PublishPanel.save
+    StepVerb.Update -> L10n.Write.PublishPanel.update
+    StepVerb.MakeDraft -> L10n.Write.PublishPanel.makeDraft
+}
+
+/** What a verb that didn't go through says (the day's limit and a gone card aside, [failureText]): 沒發布成功 for a publish, 沒儲存成功 otherwise. */
+internal fun failureFallback(verb: StepVerb): String = when (verb) {
+    StepVerb.Publish, StepVerb.PublishAnonymously -> L10n.Write.PublishPanel.failed
+    else -> L10n.Write.PublishPanel.saveFailed
 }
 
 /** What a one-line title holds in place of a line break (a pasted one). */
@@ -957,11 +1096,10 @@ internal fun failureText(e: Throwable?, fallback: String): String = when {
 }
 
 /**
- * Why publishing (or saving the changes to a published card, [updating]) didn't go through, in the
- * step's own words: [failureText] with "didn't publish" (an update: "didn't save") for anything else.
+ * Why the step's [verb] didn't go through, in the step's own words: [failureText] with "didn't
+ * publish" for a publish and "didn't save" for anything else ([failureFallback]).
  */
-internal fun publishError(e: Exception, updating: Boolean): String =
-    failureText(e, if (updating) L10n.Native.saveError else L10n.Write.PublishPanel.failed)
+internal fun publishError(e: Exception, verb: StepVerb): String = failureText(e, failureFallback(verb))
 
 /**
  * A photo on its way up: decoded small enough, re-encoded on the device as

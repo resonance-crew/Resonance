@@ -4,7 +4,10 @@ import com.resonance.kit.chat.Linkify
 import org.commonmark.ext.gfm.strikethrough.Strikethrough
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
 import org.commonmark.ext.gfm.tables.TableBlock
+import org.commonmark.ext.gfm.tables.TableBody
 import org.commonmark.ext.gfm.tables.TableCell
+import org.commonmark.ext.gfm.tables.TableHead
+import org.commonmark.ext.gfm.tables.TableRow
 import org.commonmark.ext.gfm.tables.TablesExtension
 import org.commonmark.node.BlockQuote
 import org.commonmark.node.BulletList
@@ -35,7 +38,8 @@ import org.commonmark.parser.Parser
  * photo is an image block, only a link of the web is a standalone link (drawn
  * as its page's card when the card page brought a preview for it), only the
  * blank marker (U+00A0) is extra space. A web address written bare in the text
- * is a link, as remark-gfm makes it. The twin of iOS's StoryFormat.
+ * is a link, as remark-gfm makes it; a GFM table is a table (round 8 §5.2). The
+ * twin of iOS's StoryFormat.
  */
 sealed interface StoryBlock {
     data class Heading(val level: Int, val runs: List<InlineRun>) : StoryBlock
@@ -52,7 +56,16 @@ sealed interface StoryBlock {
     data class ListBlock(val ordered: Boolean, val start: Int, val items: List<List<StoryBlock>>) : StoryBlock
     data object Rule : StoryBlock
     data class CodeBlock(val code: String) : StoryBlock
+    /**
+     * A GFM table (round 8 §5.2): its [head] row's cells and its body [rows]' (every row as many cells
+     * as the head — a short one filled with empty cells, a long one cut, as GFM reads it), each cell
+     * its runs, and each column's [align]ment from the delimiter row (`:--`, `:-:`, `--:`).
+     */
+    data class Table(val head: List<List<InlineRun>>, val rows: List<List<List<InlineRun>>>, val align: List<TableAlign>) : StoryBlock
 }
+
+/** A table column's alignment: none written (or `:--`) is the text's start, `:-:` the middle, `--:` its end. */
+enum class TableAlign { Start, Center, End }
 
 data class InlineRun(
     val text: String,
@@ -83,8 +96,28 @@ object StoryParser {
         is IndentedCodeBlock -> StoryBlock.CodeBlock(node.literal.removeSuffix("\n"))
         // The site renders stories without raw HTML: it shows as text.
         is HtmlBlock -> StoryBlock.Paragraph(listOf(InlineRun(node.literal.trim('\n'))))
-        is TableBlock -> StoryBlock.Paragraph(listOf(InlineRun(tableText(node))))
+        is TableBlock -> table(node)
         else -> null
+    }
+
+    /** A GFM table: its head's cells, its body's rows, each column's alignment (from the head's cells). */
+    private fun table(node: TableBlock): StoryBlock.Table {
+        val sections = children(node)
+        val headRow = sections.filterIsInstance<TableHead>().flatMap(::children).filterIsInstance<TableRow>().firstOrNull()
+        val headCells = headRow?.let(::children)?.filterIsInstance<TableCell>().orEmpty()
+        val columns = headCells.size
+        val rows = sections.filterIsInstance<TableBody>().flatMap(::children).filterIsInstance<TableRow>().map { row ->
+            val cells = children(row).filterIsInstance<TableCell>().map(::inlines)
+            List(columns) { i -> cells.getOrElse(i) { emptyList() } }
+        }
+        val align = headCells.map { cell ->
+            when (cell.alignment) {
+                TableCell.Alignment.CENTER -> TableAlign.Center
+                TableCell.Alignment.RIGHT -> TableAlign.End
+                else -> TableAlign.Start
+            }
+        }
+        return StoryBlock.Table(headCells.map(::inlines), rows, align)
     }
 
     /** The web's `p` override (StoryMarkdown.tsx). */
@@ -164,18 +197,6 @@ object StoryParser {
     private fun plain(node: Node): String = inlines(node).joinToString("") { it.text }
 
     private fun holdsImage(node: Node): Boolean = node is Image || children(node).any(::holdsImage)
-
-    private fun tableText(table: TableBlock): String {
-        val rows = ArrayList<String>()
-        fun walk(n: Node) {
-            for (c in children(n)) {
-                if (c.javaClass.simpleName == "TableRow") rows += children(c).filterIsInstance<TableCell>().joinToString("  ·  ") { plain(it) }
-                else walk(c)
-            }
-        }
-        walk(table)
-        return rows.joinToString("\n")
-    }
 }
 
 /**
@@ -183,8 +204,8 @@ object StoryParser {
  * text size, as the story's type resolves them (the design layer's `StoryType.spacing()`, from the
  * generated tokens; this module sees no tokens): [paragraph] after a paragraph, a list, a quote, a
  * code block (1.3em of the body); a heading's room above and below in its own em (`#` and `##`
- * as the reader's h2, `###` and below as its h3); [block] around a picture, a link card or an
- * embedded card; [rule] around the pen rule; [blank] a blank line's own height (1.6em); [item]
+ * as the reader's h2, `###` and below as its h3); [block] around a picture, a link card, an
+ * embedded card or a table; [rule] around the pen rule; [blank] a blank line's own height (1.6em); [item]
  * above and below each list item.
  */
 data class ProseSpacing(
@@ -210,7 +231,7 @@ object ProseMetrics {
     fun margins(block: StoryBlock, spacing: ProseSpacing, drawnAsCard: (StoryBlock.SoleLink) -> Boolean = { false }): Pair<Float, Float> = when (block) {
         is StoryBlock.Heading -> if (block.level <= 2) spacing.h2Above to spacing.h2Below else spacing.h3Above to spacing.h3Below
         StoryBlock.Blank -> 0f to 0f
-        is StoryBlock.Image, is StoryBlock.CardEmbed -> spacing.block to spacing.block
+        is StoryBlock.Image, is StoryBlock.CardEmbed, is StoryBlock.Table -> spacing.block to spacing.block
         is StoryBlock.SoleLink -> if (drawnAsCard(block)) spacing.block to spacing.block else 0f to spacing.paragraph
         StoryBlock.Rule -> spacing.rule to spacing.rule
         // A list's first item's room collapses through the list's own top (it has no border or padding there).

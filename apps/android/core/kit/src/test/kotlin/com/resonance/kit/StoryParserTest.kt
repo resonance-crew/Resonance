@@ -7,6 +7,7 @@ import com.resonance.kit.story.ProseSpacing
 import com.resonance.kit.story.StoryBlock
 import com.resonance.kit.story.StoryLinks
 import com.resonance.kit.story.StoryParser
+import com.resonance.kit.story.TableAlign
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -29,6 +30,63 @@ class StoryParserTest {
 
     private fun blocks(id: String) = StoryParser.parse(corpus.getValue(id))
     private fun text(block: StoryBlock) = (block as StoryBlock.Paragraph).runs.joinToString("") { it.text }
+
+    // Tables (round 8 §5.2): a GFM table is a table block — its head, its rows, each column's alignment.
+
+    private fun cells(row: List<List<InlineRun>>) = row.map { cell -> cell.joinToString("") { it.text } }
+
+    @Test fun aTableIsItsHeadItsRowsAndItsColumnsAlignments() {
+        val b = blocks("table-basic")
+        assertEquals(3, b.size)
+        assertEquals("前言", text(b[0]))
+        val t = assertIs<StoryBlock.Table>(b[1])
+        assertEquals(listOf("名稱", "數量"), cells(t.head))
+        assertEquals(listOf(listOf("蘋果", "3"), listOf("香蕉", "12")), t.rows.map(::cells))
+        // None written reads from the start; `---:` at the end.
+        assertEquals(listOf(TableAlign.Start, TableAlign.End), t.align)
+        assertEquals("結尾", text(b[2]))
+    }
+
+    @Test fun aTablesCellsKeepTheirMarksAndEachColumnItsAlignment() {
+        val t = assertIs<StoryBlock.Table>(blocks("table-padded-and-marked").single())
+        assertEquals(listOf(TableAlign.Start, TableAlign.Center, TableAlign.End), t.align)
+        assertEquals(listOf("地點", "時間", "心情"), cells(t.head))
+        assertEquals(listOf(InlineRun("台北", bold = true)), t.rows[0][0])
+        assertEquals(listOf(InlineRun("高雄", link = "https://example.com")), t.rows[1][0])
+        assertEquals(listOf(InlineRun("普通", code = true)), t.rows[1][2])
+    }
+
+    @Test fun anEscapedPipeIsACellsOwn() {
+        val t = assertIs<StoryBlock.Table>(blocks("table-escaped-pipe").single())
+        assertEquals(listOf(listOf("a | b", "或")), t.rows.map(::cells))
+    }
+
+    @Test fun aTableInAQuoteAndTextAroundOneStayWhereTheyAre() {
+        val quote = assertIs<StoryBlock.Quote>(blocks("table-in-quote").single())
+        val t = assertIs<StoryBlock.Table>(quote.children.single())
+        assertEquals(listOf(listOf("2024", "搬家")), t.rows.map(::cells))
+        val after = blocks("table-then-text")
+        assertIs<StoryBlock.Table>(after[0])
+        assertEquals("表格之後的一段話。", text(after[1]))
+        val before = blocks("table-after-a-line")
+        assertEquals("下面是清單：", text(before[0]))
+        assertEquals(listOf("項目", "說明"), cells(assertIs<StoryBlock.Table>(before[1]).head))
+    }
+
+    @Test fun everyRowHasAsManyCellsAsTheHead() {
+        // A short row is filled with empty cells, a long one cut, as GFM reads it.
+        val t = assertIs<StoryBlock.Table>(StoryParser.parse("| a | b | c |\n| - | - | - |\n| 1 |\n| 1 | 2 | 3 | 4 |").single())
+        assertEquals(listOf(listOf("1", "", ""), listOf("1", "2", "3")), t.rows.map(::cells))
+        // A head with no rows is a table all the same.
+        assertEquals(emptyList(), assertIs<StoryBlock.Table>(StoryParser.parse("| a | b |\n|:-:|:-|").single()).rows)
+    }
+
+    @Test fun aTableKeepsABlocksAirAsAPictureDoes() {
+        val spacing = ProseSpacing(paragraph = 20f, h2Above = 40f, h2Below = 16f, h3Above = 30f, h3Below = 12f, block = 28f, rule = 36f, blank = 24f, item = 4f)
+        val gaps = ProseMetrics.gaps(blocks("table-basic"), spacing)
+        // Above it the larger of the paragraph's 20 and its 28; below, its 28 over the next paragraph's 0.
+        assertEquals(listOf(0f, 28f, 28f), gaps)
+    }
 
     @Test fun aLoneCardLinkIsAnEmbeddedCard() {
         val b = blocks("card-embed")

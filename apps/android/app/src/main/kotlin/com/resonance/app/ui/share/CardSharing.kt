@@ -35,9 +35,9 @@ import kotlinx.coroutines.withTimeoutOrNull
  * author's photo as the page already has them (a cover that doesn't come at once is left out: the
  * card is drawn without one), the card recorded by [renderer] — writes it (and, when Instagram
  * Stories can be offered, the sticker and its backdrop) to [ShareFiles], and opens the sheet with
- * the link for the apps that take text, the picture for the ones that take only pictures, and the
- * app's own Stories and Save actions. When the picture can't be made, the sheet opens with the link
- * alone. [busy] while it is made (the glyph shows the pen loop).
+ * the link for every app (Instagram too: round 8 §9.2) and the app's own Stories and Save actions,
+ * which alone carry the picture. When the picture can't be made, the sheet opens with the link
+ * alone. [busy] while it is made (the glyph shows the small button loop in its place, its size kept).
  */
 @Stable
 class CardSharing(private val context: Context, private val config: AppConfig, val renderer: ShareCardRenderer) {

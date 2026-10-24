@@ -102,7 +102,7 @@ class SharePassagesTest {
     @Test fun theStoryIsReadWithoutGfmAsTheServerReadsIt() {
         // Pictures on two lines of one paragraph are still pictures alone (the line break is text there).
         assertEquals("真的寫得夠長了吧。", SharePassages.opening("![a](x)\n![b](y)\n\n真的寫得夠長了吧。"))
-        // A table is a paragraph of pipes without GFM, as the server's opening has it.
-        assertEquals("| a | b | |---|---| | 一二三四五六 | 七 |", SharePassages.opening("| a | b |\n|---|---|\n| 一二三四五六 | 七 |"))
+        // A table is one paragraph without GFM, read as its cells' words (plainText, round 8 §5.2), as the server's opening has it.
+        assertEquals("a · b 一二三四五六 · 七", SharePassages.opening("| a | b |\n|---|---|\n| 一二三四五六 | 七 |"))
     }
 }

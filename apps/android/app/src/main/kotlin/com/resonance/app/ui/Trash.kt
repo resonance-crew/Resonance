@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.resonance.api.apis.DefaultApi
 import com.resonance.api.models.FeedCard
 import com.resonance.api.models.RestoredCard
 import com.resonance.api.models.TrashedCard
@@ -20,6 +21,7 @@ import com.resonance.design.ModalTitle
 import com.resonance.design.OrganicModal
 import com.resonance.design.Toasts
 import com.resonance.design.generated.IconName
+import com.resonance.kit.api.ReadingApi
 import com.resonance.kit.api.Trash
 import com.resonance.kit.api.WritingApi
 import com.resonance.kit.api.purgeInstant
@@ -43,16 +45,20 @@ interface TrashCalls {
 
     /** DELETE /api/v1/me/trash, page after page. */
     suspend fun emptyTrash(): WritingApi.EmptiedTrash
+
+    /** How many cards the trash holds now, read again (GET /me/cards?tab=trash: none past its days). */
+    suspend fun trashLeft(): Int
 }
 
-/** The trash's calls through the app's [WritingApi]. */
-fun WritingApi.trashCalls(): TrashCalls {
+/** The trash's calls through the app's [WritingApi], the trash read again through its [ReadingApi]. */
+fun WritingApi.trashCalls(reading: ReadingApi): TrashCalls {
     val api = this
     return object : TrashCalls {
         override suspend fun trash(cardId: String) = api.trashCard(cardId)
         override suspend fun restore(cardId: String) = api.restoreCard(cardId)
         override suspend fun deleteForever(cardId: String) = api.deleteCard(cardId, onlyIfTrashed = true)
         override suspend fun emptyTrash() = api.emptyTrash()
+        override suspend fun trashLeft() = inTrash(reading.cardBox(DefaultApi.TabGetCardBox.trash)).size
     }
 }
 
@@ -151,10 +157,30 @@ class TrashCenter(
         }
     }
 
-    /** 清空垃圾桶: every card in it for good; the shelf reads again to what is left, whatever happened. */
+    /**
+     * 清空垃圾桶: every card in it for good; the shelf reads again to what is left, whatever happened.
+     * A failure is looked into before it is said (round 8 §6.2): the trash read again and found empty
+     * is done — the server emptied it, and only its answer was lost (it ran past the app's wait, the
+     * network went) — so the question closes as if it had worked; still holding cards, or not read,
+     * the failure stands and the question says so.
+     */
     suspend fun emptyTrash(): WritingApi.EmptiedTrash =
         try {
-            calls.emptyTrash()
+            try {
+                calls.emptyTrash()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val left = try {
+                    calls.trashLeft()
+                } catch (c: CancellationException) {
+                    throw c
+                } catch (_: Exception) {
+                    null
+                }
+                if (left != 0) throw e
+                WritingApi.EmptiedTrash(deleted = 0, remaining = 0)
+            }
         } finally {
             noteChange(Session.CardChange())
         }

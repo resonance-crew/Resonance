@@ -91,9 +91,10 @@ import kotlinx.coroutines.launch
  * back to a shelf shows it as it was. A change to a card (or the blocks) has every shelf read
  * again, the one in view at once, still showing meanwhile; so does a shelf read long ago. My own
  * shelves (published, private, drafts) are read together, in one request (GET /me/cardbox), so
- * moving between them shows each at once. The published shelf is also kept on the device, so a
- * cold start draws it at once. A refresh asked for by hand that brings nothing back for the shelf
- * on screen keeps it, and says why over that shelf only ([refreshFailure]).
+ * moving between them shows each at once — the private and draft shelves always together, since
+ * they are one 草稿 shelf on screen ([cardsOf], round 8 §1.1). The published shelf is also kept on
+ * the device, so a cold start draws it at once. A refresh asked for by hand that brings nothing back
+ * for the shelf on screen keeps it, and says why over that shelf only ([refreshFailure]).
  */
 class CardBoxModel internal constructor(
     private val uid: String?,
@@ -132,7 +133,14 @@ class CardBoxModel internal constructor(
 
     /** Why the last refresh of [shelf] by hand brought nothing back — said over that shelf only, while it shows. */
     fun failureOver(shelf: TabGetCardBox): RefreshFailure? =
-        refreshFailure?.takeIf { it.shelf == shelf && shown == shelf && shelves[shelf] != null }?.failure
+        refreshFailure?.takeIf { it.shelf == shelf && shown == shelf && cardsOf(shelf) != null }?.failure
+
+    /**
+     * What [shelf] shows (null: not read yet): 草稿 ([TabGetCardBox.draft]) is the drafts and the
+     * published private cards together ([draftShelf]); every other shelf as it was read.
+     */
+    fun cardsOf(shelf: TabGetCardBox): List<FeedCard>? =
+        if (shelf == TabGetCardBox.draft) draftShelf(shelves[TabGetCardBox.`private`], shelves[TabGetCardBox.draft]) else shelves[shelf]
 
     /** [shelf] is the one on screen: what a refresh of the one before couldn't bring is no longer said. */
     fun shelfShown(shelf: TabGetCardBox) {
@@ -161,10 +169,10 @@ class CardBoxModel internal constructor(
             readAt.clear()
         }
         val current = { s: TabGetCardBox -> readAt[s]?.let { now - it < FeedLoader.STALE_AFTER.inWholeMilliseconds } == true }
-        if (!retry && current(shelf)) return null
+        if (!retry && shelvesOnScreen(shelf).all(current)) return null
         val asked = shelvesToRead(shelf, current)
         val read = ++reads
-        val pulled = retry && shelves[shelf] != null
+        val pulled = retry && cardsOf(shelf) != null
         for (s in asked) {
             readAt[s] = now
             readBy[s] = read
@@ -198,24 +206,57 @@ class CardBoxModel internal constructor(
 }
 
 /**
- * The shelves a read of `shelf` asks for: it, and — one of my own shelves — the others of them not
- * read lately (`current`), which the server reads side by side with it.
+ * The shelves a read of `shelf` asks for: what it shows ([shelvesOnScreen]: 草稿 is the private and
+ * draft shelves both), and — one of my own shelves — the others of them not read lately (`current`),
+ * which the server reads side by side with it.
  */
-internal fun shelvesToRead(shelf: TabGetCardBox, current: (TabGetCardBox) -> Boolean): List<TabGetCardBox> =
-    if (shelf !in OwnedShelves) listOf(shelf)
-    else listOf(shelf) + ShelfOrder.filter { it in OwnedShelves && it != shelf && !current(it) }
+internal fun shelvesToRead(shelf: TabGetCardBox, current: (TabGetCardBox) -> Boolean): List<TabGetCardBox> {
+    val shown = shelvesOnScreen(shelf)
+    return if (shelf !in OwnedShelves) shown
+    else shown + OwnedShelves.filter { it !in shown && !current(it) }
+}
+
+/** The shelves the server answers for what [shelf] shows: 草稿 is the drafts and the published private cards. */
+internal fun shelvesOnScreen(shelf: TabGetCardBox): List<TabGetCardBox> = when (shelf) {
+    TabGetCardBox.draft, TabGetCardBox.`private` -> listOf(TabGetCardBox.draft, TabGetCardBox.`private`)
+    else -> listOf(shelf)
+}
+
+/** The 草稿 shelf's most: the drafts' and the private cards' 40 each, cut to one shelf's. */
+internal const val DRAFT_SHELF_MAX = 40
 
 /**
- * My card box (me/page.tsx): who I am, then my cards on seven shelves —
- * published, private, drafts, the cards I resonated with, cards linking to
- * mine, bookmarks, and the trash (垃圾桶, always last: what I deleted, for
- * 30 days). The twin of iOS's CardBoxScreen; [CardBoxModel] keeps the shelves.
+ * The one 草稿 shelf (round 8 §1.1): the drafts and the published private cards together — every
+ * card only its writer sees, finished or not — the most recently changed first ([FeedCard.editedAt];
+ * a card without it by when it was published; one with neither last, as it came), at most
+ * [DRAFT_SHELF_MAX]. Null until either has been read.
+ */
+internal fun draftShelf(private: List<FeedCard>?, drafts: List<FeedCard>?): List<FeedCard>? {
+    if (private == null && drafts == null) return null
+    return (drafts.orEmpty() + private.orEmpty())
+        .distinctBy { it.id }
+        .sortedWith(compareByDescending(nullsFirst()) { card: FeedCard -> instantOf(card.editedAt) ?: instantOf(card.publishedAt) })
+        .take(DRAFT_SHELF_MAX)
+}
+
+/** An ISO 8601 time as the contract writes it (`Z` or an offset), or null. */
+private fun instantOf(value: String?): Instant? = value?.let {
+    runCatching { Instant.parse(it) }.getOrNull() ?: runCatching { java.time.OffsetDateTime.parse(it).toInstant() }.getOrNull()
+}
+
+/**
+ * My card box (me/page.tsx): who I am, then my cards on six shelves — 已發布, 草稿 (drafts and
+ * private cards, one shelf: round 8 §1.1), the cards I resonated with, cards linking to mine,
+ * bookmarks, and the trash (垃圾桶, always last: what I deleted, for 30 days). The twin of iOS's
+ * CardBoxScreen; [CardBoxModel] keeps the shelves.
  */
 @Composable
 fun CardBoxScreen(session: Session, open: (Route) -> Unit) {
     val profile by session.profile.collectAsStateWithLifecycle()
     val model = viewModel { CardBoxModel(session) }
-    var shelf by rememberSaveable { mutableStateOf(TabGetCardBox.published) }
+    var chosen by rememberSaveable { mutableStateOf(TabGetCardBox.published) }
+    // A shelf kept from before there was one 草稿 shelf (私人卡, restored with the process) opens 草稿.
+    val shelf = shelfShown(chosen)
     // The writer, a card's ⋯ or a block changed something: every shelf may have moved, so they are read again.
     val changes by session.cardChanges.collectAsStateWithLifecycle()
     val foregrounded by session.foregrounded.collectAsStateWithLifecycle()
@@ -281,9 +322,9 @@ fun CardBoxScreen(session: Session, open: (Route) -> Unit) {
                 }
             }
         }
-        item { ShelfTabs(shelf, layout.headerInset, air, openMap = { open(Route.ThoughtMap) }) { shelf = it } }
+        item { ShelfTabs(shelf, layout.headerInset, air, openMap = { open(Route.ThoughtMap) }) { chosen = it } }
         refreshNote(model.failureOver(shelf))
-        val cards = shelves[shelf]
+        val cards = model.cardsOf(shelf)
         when {
             cards == null && failed -> item { OrganicEmptyState(L10n.Native.loadError, L10n.Native.retry, { model.refresh(shelf, changes, retry = true) }, action = EmptyAction.Outline) }
             cards == null -> storyCardSkeletons(if (layout.isGrid) layout.columns * 2 else 6, layout = layout)
@@ -304,7 +345,7 @@ fun CardBoxScreen(session: Session, open: (Route) -> Unit) {
             }
             // The linked shelf lists the pared-back cards, as the web's MiniCardGrid does.
             shelf == TabGetCardBox.linked -> miniCards(cards, open, keyPrefix = "linked:")
-            shelf in OwnedShelves -> managedCards(session, cards, open, resumesDrafts = shelf == TabGetCardBox.draft, layout = layout)
+            shelf in OwnedShelves -> managedCards(session, cards, open, shelf, layout = layout)
             else -> storyCards(cards, open, layout = layout)
         }
     }
@@ -316,8 +357,10 @@ internal enum class Emptying { Asking, Busy, Failed }
 
 /**
  * 清空垃圾桶？ · 垃圾桶裡的卡片都會永久刪除，無法復原 · 先留著 | 清空垃圾桶, the verb red. It stays,
- * working, while the trash is emptied page by page; done, the shelf reads again and shows it empty;
- * a failure says so in the question, the shelf reading again to what is left.
+ * working, while the trash is emptied page by page; done, the shelf reads again and shows it empty.
+ * A failure is read again first ([TrashCenter.emptyTrash]): a trash found empty closes the question
+ * as if it had worked (the shelf its empty state); one still holding cards keeps it, saying so with
+ * its buttons, until 先留著.
  */
 @Composable
 private fun EmptyTrashDialog(state: Emptying, set: (Emptying?) -> Unit) {
@@ -432,17 +475,31 @@ private fun TrashHeader(anonymousHere: Boolean, inset: Dp, compact: Boolean, onE
     }
 }
 
-/** The shelves of my own cards (OWNED_TABS): each card gets its ⋯. */
-private val OwnedShelves = setOf(TabGetCardBox.published, TabGetCardBox.`private`, TabGetCardBox.draft)
+/** The shelves of my own cards (OWNED_TABS): each card gets its ⋯. Read together, in this order. */
+private val OwnedShelves = listOf(TabGetCardBox.published, TabGetCardBox.`private`, TabGetCardBox.draft)
+
+/**
+ * Where one of my own cards opens from [shelf]: on 草稿, every card opens the writer — a draft
+ * resumes, a published private card is edited there, where it is published from (round 8 §1, the
+ * web's /write/{id}); on 已發布, its page. A draft has no page, wherever it is.
+ */
+internal fun managedTap(card: FeedCard, shelf: TabGetCardBox): Route = when {
+    shelf == TabGetCardBox.draft || shelf == TabGetCardBox.`private` || card.publishedAt == null -> Route.Write(cardId = card.id)
+    else -> Route.Card(card.routeKey, card)
+}
+
+/** The shelf a choice shows: one kept from before 草稿 was one shelf (`private`) is 草稿. */
+internal fun shelfShown(chosen: TabGetCardBox): TabGetCardBox = if (chosen == TabGetCardBox.`private`) TabGetCardBox.draft else chosen
 
 /**
  * My own cards (ProfileTabs' managed shelves): each with the owner's ⋯ over
  * its top-right corner. An anonymous one wears the anonymous byline exactly
- * as everyone else sees it ([story]) — that is its mark here, no badge. A
- * draft has no page yet, so tapping it resumes writing.
+ * as everyone else sees it ([story]) — that is its mark here, no badge. On
+ * the 草稿 shelf a tap opens the writer, a published private card's too; on
+ * 已發布 a card's page ([managedTap]).
  */
-private fun LazyListScope.managedCards(session: Session, cards: List<FeedCard>, open: (Route) -> Unit, resumesDrafts: Boolean, layout: CardListLayout) {
-    val tap: (FeedCard) -> Route = { card -> if (resumesDrafts) Route.Write(cardId = card.id) else Route.Card(card.routeKey, card) }
+private fun LazyListScope.managedCards(session: Session, cards: List<FeedCard>, open: (Route) -> Unit, shelf: TabGetCardBox, layout: CardListLayout) {
+    val tap: (FeedCard) -> Route = { managedTap(it, shelf) }
     val palettes = cardFamilies(cards)
     if (layout.isGrid) return borderedCards(cards, open, null, false, layout, tap, overlay = { card, i ->
         val hue = CardPalette.of(palettes[i]).hue
@@ -491,9 +548,9 @@ internal data class CardBoxAir(val extraTop: Dp, val shelvesTop: Dp, val shelves
     }
 }
 
-/** The shelves in the strip's order (OrganicTabs'), the trash always last before the thought map. */
+/** The shelves in the strip's order (OrganicTabs'), the trash always last before the thought map: no 私人卡 shelf (it is 草稿's). */
 internal val ShelfOrder = listOf(
-    TabGetCardBox.published, TabGetCardBox.`private`, TabGetCardBox.draft, TabGetCardBox.resonated, TabGetCardBox.linked,
+    TabGetCardBox.published, TabGetCardBox.draft, TabGetCardBox.resonated, TabGetCardBox.linked,
     TabGetCardBox.bookmarks, TabGetCardBox.trash,
 )
 

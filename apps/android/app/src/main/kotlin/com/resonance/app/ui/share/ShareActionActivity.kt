@@ -9,12 +9,12 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.LabeledIntent
-import android.content.pm.PackageManager
 import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Bundle
 import android.os.Parcelable
 import android.service.chooser.ChooserAction
+import android.widget.Toast
 import androidx.annotation.RequiresApi
 import com.resonance.app.R
 import com.resonance.kit.l10n.L10n
@@ -28,13 +28,17 @@ import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 
 /**
- * The app's own actions in the system share sheet (share.spec, Owner revision): Instagram 限時動態
- * and 儲存圖片. The sheet starts this activity — not exported, so nothing but the app's own
- * PendingIntents (API 34+'s ChooserActions) and LabeledIntents (API 29–33's initial intents) can —
- * which does the one thing and finishes at once, before it is ever drawn:
+ * The app's own actions in the system share sheet (share.spec, Owner revision; round 8 §9.2):
+ * Instagram 限時動態 and 儲存圖片 — the only ways the card's picture leaves the app. The sheet starts
+ * this activity — not exported, so nothing but the app's own PendingIntents (API 34+'s
+ * ChooserActions) and LabeledIntents (API 29–33's initial intents) can — which does the one thing and
+ * finishes at once, before it is ever drawn:
  *
  * - Stories copies the card's link (for Instagram's own link sticker: a third-party app can't attach
- *   one) and opens Instagram's Stories composer with the card as a movable sticker over its backdrop;
+ *   one — Meta's Stories API takes a picture, a sticker, colours and the app id, no link) and opens
+ *   Instagram's Stories composer with the card as a movable sticker over its backdrop, saying as it
+ *   opens, in a system toast over Instagram, what the copied link is for
+ *   (`share.image.storiesLinkCopied`: add a Link sticker and paste it, so the story taps through);
  * - Save writes the card picture into Pictures/Resonance.
  *
  * What it has to say (saved, couldn't save, couldn't open Instagram) waits in [ShareFeedback] for the
@@ -66,6 +70,8 @@ class ShareActionActivity : Activity() {
         try {
             if (stories.resolveActivity(packageManager) == null) throw ActivityNotFoundException()
             startActivity(stories)
+            // A text toast: the system draws it, over Instagram, as Instagram opens.
+            Toast.makeText(applicationContext, L10n.Share.Image.storiesLinkCopied, Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
             ShareFeedback.say(L10n.Share.Image.storiesFailed)
         }
@@ -107,38 +113,38 @@ class ShareActionActivity : Activity() {
 
         /**
          * The actions the sheet offers for [share] on this device: Stories when [share] has its sticker
-         * and backdrop (a Meta app id, Instagram's Stories composer installed), then Save — as
+         * and backdrop (a Meta app id) and Instagram's Stories composer is here, then Save — as
          * ChooserActions on API 34+ (the sheet's own row of actions), else as LabeledIntents the
-         * sheet lists first (API 29–33). Stories wears Instagram's own app icon, as the sheet draws
-         * every app's; Save the app's picture glyph.
+         * sheet lists first (API 29–33). Both wear the app's own drawables: Stories Instagram's glyph
+         * (`ic_share_instagram`, native/brand/instagram.svg — Instagram's adaptive app icon, from
+         * another package, drew blank in the sheet's row), Save the app's picture glyph.
          */
         fun actions(context: Context, share: SharedCard, sdk: Int = Build.VERSION.SDK_INT): ShareActions {
-            val pm = context.packageManager
-            val instagramIcon = if (share.stories) instagramIcon(pm) else 0
-            val stories = share.stories && instagramIcon != 0
+            val stories = share.stories && ShareIntents.storiesProbe().resolveActivity(context.packageManager) != null
             val labels = listOfNotNull(if (stories) STORIES else null, SAVE)
             if (sdk >= 34 && Build.VERSION.SDK_INT >= 34) {
-                return ShareActions(custom = chooserActions(context, share, labels, instagramIcon), initial = null)
+                return ShareActions(custom = chooserActions(context, share, labels), initial = null)
             }
             val initial: List<LabeledIntent> = labels.map { action ->
-                val (source, icon) = if (action == STORIES) ShareIntents.INSTAGRAM to instagramIcon else context.packageName to R.drawable.ic_share_save
-                LabeledIntent(intent(context, action, share), source, label(action), icon)
+                LabeledIntent(intent(context, action, share), context.packageName, label(action), icon(action))
             }
             return ShareActions(custom = null, initial = initial.toTypedArray())
         }
 
         /** The sheet's own row of actions (API 34+): each a PendingIntent to this activity. */
         @RequiresApi(34)
-        private fun chooserActions(context: Context, share: SharedCard, labels: List<String>, instagramIcon: Int): Array<ChooserAction> =
+        private fun chooserActions(context: Context, share: SharedCard, labels: List<String>): Array<ChooserAction> =
             labels.map { action ->
                 val pending = PendingIntent.getActivity(
                     context, action.hashCode(), intent(context, action, share).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                     // A fresh one per share (an earlier share's, kept by the system, would keep its own extras and options).
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_CANCEL_CURRENT, startedFromTheSheet(),
                 )
-                val icon = if (action == STORIES) Icon.createWithResource(ShareIntents.INSTAGRAM, instagramIcon) else Icon.createWithResource(context, R.drawable.ic_share_save)
-                ChooserAction.Builder(icon, label(action), pending).build()
+                ChooserAction.Builder(Icon.createWithResource(context, icon(action)), label(action), pending).build()
             }.toTypedArray()
+
+        /** An action's glyph, the app's own drawable: Instagram's for Stories, the picture glyph for Save. */
+        private fun icon(action: String): Int = if (action == STORIES) R.drawable.ic_share_instagram else R.drawable.ic_share_save
 
         /**
          * The creator's leave for the sheet to start this activity: from API 34 an app's PendingIntent
@@ -155,9 +161,6 @@ class ShareActionActivity : Activity() {
         }.toBundle()
 
         private fun label(action: String): String = if (action == STORIES) L10n.Share.toStories else L10n.Share.Image.save
-
-        private fun instagramIcon(pm: PackageManager): Int =
-            runCatching { pm.getApplicationInfo(ShareIntents.INSTAGRAM, 0).icon }.getOrDefault(0)
     }
 }
 

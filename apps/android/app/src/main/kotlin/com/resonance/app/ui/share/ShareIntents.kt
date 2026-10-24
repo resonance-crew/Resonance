@@ -6,12 +6,13 @@ import android.net.Uri
 import android.os.Parcelable
 
 /**
- * The intents a share hands the system (share.spec, Owner revision): one sheet, and each app in it
- * takes what fits — the link for every app that takes text (Facebook as a feed post with its link
- * card, Threads, LINE, X, Messages, Copy…), the 1080 × 1920 card picture for one that takes only
- * pictures (Instagram's feed and Stories targets), and the app's own actions — Instagram 限時動態
- * (the card as a movable sticker over its backdrop) and 儲存圖片 — first in the sheet. Pure: the
- * caller makes the files, their content URIs and the actions' intents.
+ * The intents a share hands the system (share.spec, Owner revision; round 8 §9.2): one sheet, and
+ * every app in it gets the card's link — Facebook as a feed post with its link card, Threads, LINE,
+ * X, Messages, Copy, and Instagram too, whose own picker (Story · Feed · Message) never tells which it
+ * chose, so a message sent through it carries a link that can be tapped (with its og image). The
+ * 1080 × 1920 card picture goes only through the app's own two actions, first in the sheet: Instagram
+ * 限時動態 (the card as a movable sticker over its backdrop) and 儲存圖片. Pure: the caller makes the
+ * files, their content URIs and the actions' intents.
  */
 object ShareIntents {
     const val JPEG = "image/jpeg"
@@ -35,20 +36,13 @@ object ShareIntents {
         }
     }
 
-    /** The card picture — what an app that takes only pictures (Instagram's feed and Stories) gets. */
-    fun image(image: Uri, title: String): Intent = Intent(Intent.ACTION_SEND).apply {
-        type = JPEG
-        putExtra(Intent.EXTRA_STREAM, image)
-        clipData = imageClip(title, image)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-
     /**
-     * The system sheet for a card: the [link] intent, with the [image] intent as its alternate
-     * (EXTRA_ALTERNATE_INTENTS: an app that takes text keeps the link, one that takes only images
-     * gets the picture), and the app's own actions in front of it — [customActions] (ChooserActions,
-     * API 34+) or [initialIntents] (LabeledIntents to the app's own activity, API 29–33). Without a
-     * picture (it couldn't be made) the sheet carries the link alone.
+     * The system sheet for a card: the [link] intent for every app — no picture as an alternate
+     * (EXTRA_ALTERNATE_INTENTS once handed Instagram the picture, a story that couldn't be tapped and a
+     * message without a link); an app that takes only pictures simply isn't listed — the card picture
+     * the sheet's preview beside the title, and the app's own actions in front, which carry it —
+     * [customActions] (ChooserActions, API 34+) or [initialIntents] (LabeledIntents to the app's own
+     * activity, API 29–33). Without a picture (it couldn't be made) the sheet carries the link alone.
      */
     fun cardChooser(
         link: String,
@@ -59,7 +53,6 @@ object ShareIntents {
     ): Intent {
         val chooser = Intent.createChooser(link(link, title, image), title)
         if (image != null) {
-            chooser.putExtra(Intent.EXTRA_ALTERNATE_INTENTS, arrayOf(image(image, title)))
             if (!customActions.isNullOrEmpty()) chooser.putExtra(Intent.EXTRA_CHOOSER_CUSTOM_ACTIONS, customActions)
             if (!initialIntents.isNullOrEmpty()) chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, initialIntents)
         }
