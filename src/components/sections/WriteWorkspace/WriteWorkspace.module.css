@@ -274,30 +274,6 @@
   padding: calc(var(--app-header-h) + var(--column-pad-top)) var(--page-pad-x) var(--page-pad-bottom);
 }
 
-/* The draft's save state, where the page title's subtitle was: the bar has
-   the title now (the apps' writer: "the save state stays here"). */
-.saveStatus {
-  margin: 0 0 clamp(16px, 2.4vw, 24px);
-  font-family: var(--font-body);
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--color-text-muted);
-}
-
-/* At the split it is the column's first row, on one line with the floating
-   下一步 (and the Leave over the map): as tall as the pill, and clear of it. */
-@media (min-width: 1200px) {
-  .saveStatus {
-    display: flex;
-    align-items: center;
-    min-height: 38px;
-  }
-
-  .editorCol[data-action] .saveStatus {
-    padding-right: 112px;
-  }
-}
-
 /* Each thing the writer's pane can show (the draft, a card opened from the
    map) scrolls on its own: going back to the draft finds it where it was left. */
 .paneLayer {
@@ -315,6 +291,10 @@
   z-index: 7;
   top: var(--editor-pad-top);
   right: var(--page-pad-x);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 2 * var(--page-pad-x));
 }
 
 /* A finger needs 44px to land on (the small pill is about 38px). */

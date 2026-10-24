@@ -9,15 +9,15 @@ vi.mock('@/components/providers/AuthProvider', () => ({
 }));
 vi.mock('@/lib/db/firestore/client/cardEdits', () => ({ getPendingCardEdit: vi.fn(async () => null) }));
 vi.mock('./LazyOriginalCardPanel', () => ({ OriginalCardPanel: () => <p>reading</p> }));
-// The editor (its own suite): what the pane hands it, and its save line and step, which it reports.
+// The editor (its own suite): what the pane hands it, and its save state and step, which it reports.
 const seen = vi.hoisted(() => ({ props: null as null | Record<string, unknown> }));
 vi.mock('@/components/molecules/CardEditor/CardEditor', () => ({
   CardEditor: (props: {
-    onSaveStatusChange?: (s: string | null) => void;
+    onSaveStatusChange?: (s: { label: string } | null) => void;
     onStepChange?: (s: 'write' | 'publish') => void;
   }) => {
     seen.props = props;
-    React.useEffect(() => props.onSaveStatusChange?.('Draft saved · 10:00'), []); // eslint-disable-line react-hooks/exhaustive-deps
+    React.useEffect(() => props.onSaveStatusChange?.({ label: 'Saved' }), []); // eslint-disable-line react-hooks/exhaustive-deps
     return <button onClick={() => props.onStepChange?.('publish')}>to the step</button>;
   },
 }));
@@ -27,15 +27,27 @@ import { OpenedCardPane } from './OpenedCardPane';
 afterEach(() => vi.clearAllMocks());
 
 describe('OpenedCardPane', () => {
-  // The thought map's pane shows the editor's save line over the writing, as the writer's page does.
-  it('shows the editor’s save line while writing, and none in the publish step', async () => {
+  // The save state is the host's to show, in its bar (round 8 §2.1): the pane hands it up and draws none.
+  it('hands the editor’s save state and step to its host, drawing no save line of its own', async () => {
     const onStepChange = vi.fn();
+    const onSaveStatusChange = vi.fn();
     const card = { id: 'c1', authorId: 'me', thoughtCore: 'Mine', visibility: 'private', anonymous: false } as Card;
-    renderWithIntl(<OpenedCardPane card={card} titled={false} editorProps={{ onStepChange }} />);
-    expect(await screen.findByText('Draft saved · 10:00')).toBeInTheDocument();
+    renderWithIntl(<OpenedCardPane card={card} titled={false} editorProps={{ onStepChange, onSaveStatusChange }} />);
+    await screen.findByRole('button', { name: 'to the step' });
+    expect(onSaveStatusChange).toHaveBeenCalledWith({ label: 'Saved' });
+    expect(screen.queryByText('Saved')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'to the step' }));
-    expect(screen.queryByText('Draft saved · 10:00')).toBeNull();
     expect(onStepChange).toHaveBeenCalledWith('publish');
+  });
+
+  // A published card kept private is a 草稿 to its author, and its title says so.
+  it('names a published private card a draft, and a card readers have an edit of it', async () => {
+    const draftLike = { id: 'c2', authorId: 'me', thoughtCore: 'Kept', visibility: 'private', anonymous: false, publishedAt: new Date('2026-09-01') } as Card;
+    const view = renderWithIntl(<OpenedCardPane card={draftLike} />);
+    expect(await screen.findByText('Edit draft')).toBeInTheDocument();
+    view.unmount();
+    renderWithIntl(<OpenedCardPane card={{ ...draftLike, id: 'c3', visibility: 'public' }} />);
+    expect(await screen.findByText('Edit card')).toBeInTheDocument();
   });
 
   // Whether saving makes a resonance reach its original turns on the live card, not on its pending copy.

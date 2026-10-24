@@ -39,7 +39,9 @@ export interface PaneHeaderProps {
   scrolled: boolean;
   /** The arrow waits (a request on its way that leaving would cut short). */
   backDisabled?: boolean;
-  /** What closes the row on the right (the editor's 下一步), as the writer's bar has it: the title gives way. */
+  /** A quiet word after the title (the editor's save state), as the writer's bar has it: it gives way first. */
+  status?: ReactNode;
+  /** What closes the row on the right (the editor's ✓), as the writer's bar has it: the title gives way. */
   trailing?: ReactNode;
   /** The title, for a host that moves the focus to it (the publish step names itself here). */
   titleRef?: Ref<HTMLHeadingElement>;
@@ -55,7 +57,7 @@ export interface PaneHeaderProps {
  * and what the editor does next at the row's end (下一步), as the bar has it.
  * At the split the pane has no header: its divider hides it.
  */
-export function PaneHeader({ title, backLabel, onBack, scrolled, backDisabled = false, trailing, titleRef }: PaneHeaderProps) {
+export function PaneHeader({ title, backLabel, onBack, scrolled, backDisabled = false, status, trailing, titleRef }: PaneHeaderProps) {
   const { strokeD, paperD } = useMemo(wavePaths, []);
   return (
     <header
@@ -80,6 +82,7 @@ export function PaneHeader({ title, backLabel, onBack, scrolled, backDisabled = 
         <h2 ref={titleRef} tabIndex={titleRef ? -1 : undefined} className={barStyles.title}>
           {title}
         </h2>
+        {status}
         {trailing != null && <div className={barStyles.trailing}>{trailing}</div>}
       </div>
       <svg

@@ -1,0 +1,23 @@
+/* The bar's quiet word: it ellipsizes before the title beside it does
+   (a shrink far above the title's), and never wraps. */
+.state {
+  flex: 0 1000 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.state:empty {
+  display: none;
+}
+
+.state[data-failed] {
+  color: var(--color-terracotta);
+}

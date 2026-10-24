@@ -14,20 +14,23 @@ import {
 } from '@/components/molecules/SegmentedActionBar/SegmentedActionBar';
 import { StoryCard, type Story } from '@/components/molecules/StoryCard/StoryCard';
 import { TagField } from '@/components/molecules/TagField/TagField';
+import { SaveState, type SaveStatus } from '@/components/molecules/CardEditor/SaveState';
 import { useMyProfile } from '@/lib/data/hooks';
 import type { CardMedia, Visibility } from '@/lib/db/types';
 import { excerpt, plainText } from '@/lib/markdown/plainText';
 import { readMinutes } from '@/lib/readTime';
-import { CoverError, CoverFrame, useCoverEditor } from './CoverSlot';
+import { CoverFrame, useCoverEditor } from './CoverSlot';
 import modalStyles from '@/components/molecules/Modal/Modal.module.css';
 import styles from './PublishStep.module.css';
 
 /**
- * Who a card is for, as the step offers it: everyone under the author's pen
- * name, everyone with no name on it, or the author alone. Anonymity is only
- * ever a question for a card others read, so it is one of the three, not a
- * switch beside them (an anonymous card is public or private, never for
- * connections only — the server refuses that).
+ * What a card is, as the step offers it (卡片類型, round 8 §2.2): shared under
+ * the author's pen name, shared with no name on it, or a 草稿 — the author's
+ * alone, finished or not (`private`: a draft, or a published card made
+ * private, which people see as one). Anonymity is only ever a question for a
+ * card others read, so it is one of the three, not a switch beside them (an
+ * anonymous card is public or private, never for connections only — the
+ * server refuses that).
  */
 export type Audience = 'public' | 'anonymous' | 'private';
 
@@ -53,13 +56,40 @@ export function audienceFields(audience: Audience, current: { anonymous: boolean
   return { visibility: 'public', anonymous: audience === 'anonymous' };
 }
 
+/** Whether readers have a card now: a published private card is a 草稿 to them all but its author. */
+function seen(visibility: Visibility): boolean {
+  return visibility !== 'private';
+}
+
 /**
- * The step's name: 發布這張卡片 — 儲存這張卡片 for a draft only its author
- * will see (nothing is published to anyone) — or 更新這張卡片 for a live card.
+ * The step's name (round 8 §2.3): 更新這張卡片 for a card readers have now
+ * (whatever is chosen); else 儲存草稿 while 草稿 is chosen and 發布這張卡片
+ * otherwise — a draft, or a published card kept private, is a 草稿 to its
+ * author: choosing 公開 publishes it, to them.
  */
-export function stepTitleKey(mode: 'publish' | 'update', visibility: Visibility): 'title' | 'saveTitle' | 'updateTitle' {
-  if (mode === 'update') return 'updateTitle';
+export function stepTitleKey(
+  mode: 'publish' | 'update',
+  visibility: Visibility,
+  liveVisibility: Visibility = visibility,
+): 'title' | 'saveTitle' | 'updateTitle' {
+  if (mode === 'update' && seen(liveVisibility)) return 'updateTitle';
   return visibility === 'private' ? 'saveTitle' : 'title';
+}
+
+/**
+ * The step's one button (round 8 §2.3): for a card readers have now, 儲存修改 —
+ * or 轉為草稿 when 草稿 is chosen; for a 草稿 (never published, or kept private),
+ * 發布 · 匿名發布 by the choice, or 儲存 to keep it one.
+ */
+export function stepVerb(
+  mode: 'publish' | 'update',
+  visibility: Visibility,
+  anonymous: boolean,
+  liveVisibility: Visibility = visibility,
+): 'publish' | 'publishAnonymously' | 'save' | 'update' | 'makeDraft' {
+  if (mode === 'update' && seen(liveVisibility)) return visibility === 'private' ? 'makeDraft' : 'update';
+  if (visibility === 'private') return 'save';
+  return visibility === 'public' && anonymous ? 'publishAnonymously' : 'publish';
 }
 
 /** Whether a card in this audience reaches the card it answers: public and under its author's name. */
@@ -107,6 +137,10 @@ export interface PublishStepProps {
   onCoverChange: (media: CardMedia | undefined, accentHue: number | null) => void;
   /** The card answers another (it is a resonance). */
   resonance: boolean;
+  /** For `update`: how readers have the card now (a private one is a 草稿 to them). */
+  liveVisibility?: Visibility;
+  /** The editor's save state, said at the end of the inline heading row (at the split, where there is no bar). */
+  saveStatus?: SaveStatus | null;
   /**
    * For `update`: the live card reaches its original already (published,
    * public and named) — saving tells no one anything new.
@@ -120,11 +154,11 @@ export interface PublishStepProps {
   busyVerb: 'publish' | 'leave';
   /** Why the last try didn't go through. */
   error: string | null;
-  /** 發布 / 儲存修改. */
+  /** The one button: 發布 · 匿名發布 · 儲存 · 儲存修改 · 轉為草稿. */
   onSubmit: () => void;
-  /** 存成草稿，稍後再寫 / 捨棄修改. */
+  /** 捨棄修改: a live card's revision dropped. */
   onSecondary: () => void;
-  /** Whether the way out shows (a live card's 捨棄修改 only while there is a revision). */
+  /** Whether 捨棄修改 shows (a live card, only while there is a revision). */
   showSecondary: boolean;
 }
 
@@ -135,16 +169,17 @@ interface Reflection {
 }
 
 /**
- * The writer's second step, 發布這張卡片 (儲存這張卡片 for a card only its
- * author will see, 更新這張卡片 for a live card): one screen in place of the
- * editor — the publish panel grown into a page (ux §6 單一畫面鐵律: publishing
- * is still two taps). Top to bottom: the mirror line (publish only), the card
- * as a list will show it with its cover edited on its picture, 標籤, 誰可以看見
- * (公開 · 匿名公開 · 只有自己, with one line saying what the choice means), a
- * line saying whether a resonance reaches its original, then the foot, whose
- * verb follows the audience (發布 · 匿名發布 · 儲存). Every choice here is the
- * editor's own value and autosaves with the draft (or the live card's pending
- * edit); going back to writing keeps them.
+ * The writer's second step, 發布這張卡片 (儲存草稿 while 草稿 is chosen,
+ * 更新這張卡片 for a card readers have): one screen in place of the editor —
+ * the publish panel grown into a page (ux §6 單一畫面鐵律: publishing is still
+ * two taps, ✓ then 發布). Top to bottom: the mirror line (publish only), the
+ * card as a list will show it with its cover edited on its picture, 標籤,
+ * 卡片類型 (公開 · 匿名公開 · 草稿 — no line under it: the preview's byline
+ * follows the choice), a line saying whether a resonance reaches its
+ * original, then the foot: one button whose verb follows the card and the
+ * choice (stepVerb), and 捨棄修改 beside it only for a live card's revision.
+ * Every choice here is the editor's own value and autosaves with the draft
+ * (or the live card's pending edit); going back to writing keeps them.
  */
 export function PublishStep({
   mode,
@@ -157,6 +192,8 @@ export function PublishStep({
   onAudienceChange,
   onCoverChange,
   resonance,
+  liveVisibility,
+  saveStatus = null,
   liveReaches = false,
   storyBusy,
   pending,
@@ -274,12 +311,15 @@ export function PublishStep({
         ? tPanel('resonanceReaches')
         : tPanel('resonanceQuiet');
 
-  const title = tPanel(stepTitleKey(mode, visibility));
+  const live = liveVisibility ?? visibility;
+  const title = tPanel(stepTitleKey(mode, visibility, live));
   const audience = audienceOf(visibility, anonymous);
-  const verb = updating ? 'update' : audience === 'private' ? 'save' : audience === 'anonymous' ? 'publishAnonymously' : 'publish';
+  const verb = stepVerb(mode, visibility, anonymous, live);
+  // About readers: only for a card they have now, which stays theirs.
+  const showsUpdateHint = updating && live !== 'private' && visibility !== 'private';
   // Nothing above the preview (no heading of its own, no hint, no mirror line): on a phone its
   // band is the first thing under the bar, which it meets as the feed's first card does.
-  const underBar = !inlineHeading && !updating && (!insight || insight.state === 'none');
+  const underBar = !inlineHeading && !showsUpdateHint && (!insight || insight.state === 'none');
 
   return (
     <section
@@ -306,10 +346,11 @@ export function PublishStep({
           <h2 id={headingId} ref={headingRef} tabIndex={-1} className={styles.heading}>
             {title}
           </h2>
+          <SaveState status={saveStatus} className={styles.headingState} />
         </div>
       )}
-      {/* What readers will see changes: said only while there are readers. */}
-      {updating && visibility !== 'private' && <p className={styles.hint}>{tPanel('updateHint')}</p>}
+      {/* What readers will see changes: said only while there are readers, and they stay. */}
+      {showsUpdateHint && <p className={styles.hint}>{tPanel('updateHint')}</p>}
 
       {/* 1 — the mirror moment (first publication only) */}
       {!updating && insight && (
@@ -350,7 +391,6 @@ export function PublishStep({
           <p id={captionId} className={styles.caption}>
             {t('previewCaption')}
           </p>
-          <CoverError cover={cover} />
         </div>
 
         {/* 3 — tags */}
@@ -368,7 +408,7 @@ export function PublishStep({
           />
         </div>
 
-        {/* 4 — who can see it, and under whose name: one choice of three, and what it means */}
+        {/* 4 — what the card is: shared under its author's name, shared with none, or a 草稿 */}
         <div className={styles.group}>
           <span className={styles.label}>{tVis('label')}</span>
           <div className={styles.choice}>
@@ -388,7 +428,7 @@ export function PublishStep({
                 return {
                   key: a,
                   icon: <Icon name={AUDIENCE_ICON[a]} size={16} color={ink} />,
-                  label: tVis(a),
+                  label: tVis(a === 'private' ? 'draft' : a),
                   fill: chosen ? 'var(--button-tonal)' : 'transparent',
                   textColor: ink,
                   hoverOverlay: 'oklch(0% 0 0 / 0.05)',
@@ -398,15 +438,6 @@ export function PublishStep({
               })}
             />
           </div>
-          <p className={styles.audienceLine} aria-live="polite">
-            {audience === 'public'
-              ? tVis('publicLine', { handle: me?.handle ?? '' })
-              : audience === 'anonymous'
-                ? tVis('anonymousLine')
-                : audience === 'private'
-                  ? tVis('privateLine')
-                  : tVis('connectionsLine')}
-          </p>
         </div>
 
         {/* 6 — whether a resonance tells its original's author */}
@@ -435,7 +466,7 @@ export function PublishStep({
         )}
         <div className={styles.foot}>
           <ModalActions busy={pending}>
-            {showSecondary && (
+            {updating && showSecondary && (
               <OrganicButton
                 variant="tonal"
                 size="sm"
@@ -443,7 +474,7 @@ export function PublishStep({
                 disabled={pending && busyVerb !== 'leave'}
                 onClick={onSecondary}
               >
-                {updating ? t('discardChanges') : t('saveDraftAndLeave')}
+                {t('discardChanges')}
               </OrganicButton>
             )}
             <OrganicButton

@@ -84,21 +84,27 @@ const echoSettled = () =>
   waitFor(() => expect(screen.queryByText(en.write.publishPanel.insightLoading)).not.toBeInTheDocument());
 
 describe('PublishStep', () => {
-  // Its foot is a dialog's: the way out tonal, the verb solid and rightmost.
-  it('publishes with a solid verb, rightmost, and saves for later with a tonal one', async () => {
+  // One button (草稿 is a choice of its own now): only a live card's revision has a way out beside it.
+  it('has one solid button, and 捨棄修改 tonal before it only for a live card’s revision', async () => {
     const onSubmit = vi.fn();
     const onSecondary = vi.fn();
-    renderWithIntl(<Step onSubmit={onSubmit} onSecondary={onSecondary} />);
+    const view = renderWithIntl(<Step onSubmit={onSubmit} onSecondary={onSecondary} />);
     const publish = screen.getByRole('button', { name: en.write.publishPanel.publish });
-    const later = screen.getByRole('button', { name: en.write.saveDraftAndLeave });
     expect(publish).toHaveAttribute('data-variant', 'solid');
-    expect(later).toHaveAttribute('data-variant', 'tonal');
-    expect(Array.from(publish.parentElement!.children)).toEqual([later, publish]);
-    await userEvent.click(later);
-    expect(onSecondary).toHaveBeenCalledTimes(1);
+    expect(Array.from(publish.parentElement!.children)).toEqual([publish]);
+    expect(screen.queryByRole('button', { name: en.write.saveDraftAndLeave })).toBeNull();
     await userEvent.click(publish);
     expect(onSubmit).toHaveBeenCalledTimes(1);
     await echoSettled();
+    view.unmount();
+
+    renderWithIntl(<Step mode="update" liveVisibility="public" onSecondary={onSecondary} />);
+    const update = screen.getByRole('button', { name: en.write.publishPanel.update });
+    const discard = screen.getByRole('button', { name: en.write.discardChanges });
+    expect(discard).toHaveAttribute('data-variant', 'tonal');
+    expect(Array.from(update.parentElement!.children)).toEqual([discard, update]);
+    await userEvent.click(discard);
+    expect(onSecondary).toHaveBeenCalledTimes(1);
   });
 
   // The mirror is a grace note, asked once per text: coming back to the step with the same words reuses it.
@@ -121,13 +127,14 @@ describe('PublishStep', () => {
   });
 
   it('never asks the mirror for an update, or for a card with no title', async () => {
-    const view = renderWithIntl(<Step mode="update" />);
+    const view = renderWithIntl(<Step mode="update" liveVisibility="public" />);
     expect(screen.getByText(en.write.publishPanel.updateHint)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: en.write.publishPanel.update })).toHaveAttribute('data-variant', 'solid');
-    // Kept to its author, the card has no readers to see the new version: nothing to say about them.
-    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.private }));
+    // Made a 草稿, the card will have no readers to see the new version: nothing to say about them, and
+    // the one button says what it does.
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
     expect(screen.queryByText(en.write.publishPanel.updateHint)).toBeNull();
-    expect(screen.getByRole('button', { name: en.write.publishPanel.update })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: en.write.publishPanel.makeDraft })).toBeInTheDocument();
     view.unmount();
     renderWithIntl(<Step start={{ thoughtCore: '  ' }} />);
     await act(() => new Promise((r) => setTimeout(r, 0)));
@@ -154,7 +161,7 @@ describe('PublishStep', () => {
     quiet.unmount();
 
     // A live card's step says what saving does first.
-    renderWithIntl(<Step mode="update" />);
+    renderWithIntl(<Step mode="update" liveVisibility="public" />);
     expect(preview()).not.toHaveAttribute('data-first');
   });
 
@@ -174,41 +181,43 @@ describe('PublishStep', () => {
     const onAudience = vi.fn();
     renderWithIntl(<Step start={{ visibility: 'connections' }} onAudience={onAudience} />);
     const segment = (name: string) => screen.getByRole('button', { name });
-    for (const name of [en.write.visibility.public, en.write.visibility.anonymous, en.write.visibility.private]) {
+    for (const name of [en.write.visibility.public, en.write.visibility.anonymous, en.write.visibility.draft]) {
       expect(segment(name)).toHaveAttribute('aria-pressed', 'false');
     }
-    expect(screen.getByText(en.write.visibility.connectionsLine)).toBeInTheDocument();
+    expect(screen.getByText(en.write.visibility.label)).toBeInTheDocument();
+    expect(screen.queryByText(en.write.visibility.connectionsLine)).toBeNull();
     expect(screen.queryByRole('switch')).toBeNull();
 
     await userEvent.click(segment(en.write.visibility.anonymous));
     expect(onAudience).toHaveBeenCalledTimes(1);
     expect(onAudience).toHaveBeenLastCalledWith({ visibility: 'public', anonymous: true });
     expect(segment(en.write.visibility.anonymous)).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText(en.write.visibility.anonymousLine)).toBeInTheDocument();
+    // No line under the choice: the preview's byline says it.
+    expect(screen.queryByText(en.write.visibility.anonymousLine)).toBeNull();
     // The preview's byline is the world's; the old notes are gone.
     expect(within(screen.getByRole('group', { name: en.write.previewCaption })).getByText(en.write.publishPanel.anonymousName)).toBeInTheDocument();
     expect(screen.queryByText(en.write.publishPanel.anonymousVisibility)).toBeNull();
     await echoSettled();
   });
 
-  it('says in one line what each audience means, and names the verb and the step after it', async () => {
+  it('names the verb and the step after the card’s type, with no line under the choice', async () => {
     const onAudience = vi.fn();
     renderWithIntl(<Step inlineHeading onAudience={onAudience} />);
     const pub = screen.getByRole('button', { name: en.write.visibility.public });
     expect(pub).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText(en.write.visibility.publicLine.replace('{handle}', 'my-handle'))).toBeInTheDocument();
+    expect(screen.queryByText(en.write.visibility.publicLine.replace('{handle}', 'my-handle'))).toBeNull();
     expect(screen.getByRole('button', { name: en.write.publishPanel.publish })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: en.write.publishPanel.title })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: en.write.visibility.anonymous }));
     expect(screen.getByRole('button', { name: en.write.publishPanel.publishAnonymously })).toBeInTheDocument();
 
-    const mine = screen.getByRole('button', { name: en.write.visibility.private });
+    const mine = screen.getByRole('button', { name: en.write.visibility.draft });
     await userEvent.click(mine);
     expect(onAudience).toHaveBeenLastCalledWith({ visibility: 'private', anonymous: false });
     expect(mine).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText(en.write.visibility.privateLine)).toBeInTheDocument();
-    // Only its author will see it: nothing is published — it is saved.
+    expect(screen.queryByText(en.write.visibility.privateLine)).toBeNull();
+    // A 草稿: nothing is published — it is saved.
     expect(screen.getByRole('button', { name: en.write.publishPanel.save })).toHaveAttribute('data-variant', 'solid');
     expect(screen.queryByRole('button', { name: en.write.publishPanel.publish })).toBeNull();
     expect(screen.getByRole('heading', { level: 2, name: en.write.publishPanel.saveTitle })).toBeInTheDocument();
@@ -218,22 +227,39 @@ describe('PublishStep', () => {
   // 只有自己 names a draft; a live anonymous card kept to its author stays anonymous for when it is shown again.
   it('keeps a live card anonymous when it is kept to its author, and names a draft', async () => {
     const onAudience = vi.fn();
-    const view = renderWithIntl(<Step mode="update" start={{ anonymous: true }} onAudience={onAudience} />);
-    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.private }));
+    const view = renderWithIntl(<Step mode="update" liveVisibility="public" start={{ anonymous: true }} onAudience={onAudience} />);
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
     expect(onAudience).toHaveBeenLastCalledWith({ visibility: 'private', anonymous: true });
     view.unmount();
 
     renderWithIntl(<Step start={{ anonymous: true }} onAudience={onAudience} />);
-    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.private }));
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
     expect(onAudience).toHaveBeenLastCalledWith({ visibility: 'private', anonymous: false });
     await echoSettled();
+  });
+
+  // A published card kept private is a 草稿 to its author: 儲存草稿, or 發布 by choosing to share it.
+  it('saves or publishes a card readers don’t have, and turns one they have into a 草稿', async () => {
+    const view = renderWithIntl(<Step mode="update" liveVisibility="private" start={{ visibility: 'private' }} />);
+    expect(screen.getByRole('region', { name: en.write.publishPanel.saveTitle })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: en.write.publishPanel.save })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.anonymous }));
+    expect(screen.getByRole('region', { name: en.write.publishPanel.title })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: en.write.publishPanel.publishAnonymously })).toBeInTheDocument();
+    view.unmount();
+
+    renderWithIntl(<Step mode="update" liveVisibility="public" />);
+    expect(screen.getByRole('region', { name: en.write.publishPanel.updateTitle })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
+    expect(screen.getByRole('region', { name: en.write.publishPanel.updateTitle })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: en.write.publishPanel.makeDraft })).toBeInTheDocument();
   });
 
   // Whether a resonance reaches the card it answers is said where the choice is made.
   it('says whether a resonance tells its original’s author, following the choice', async () => {
     renderWithIntl(<Step resonance />);
     expect(screen.getByText(en.write.publishPanel.resonanceReaches)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.private }));
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
     expect(screen.getByText(en.write.publishPanel.resonanceQuiet)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: en.write.visibility.anonymous }));
     expect(screen.getByText(en.write.publishPanel.resonanceQuiet)).toBeInTheDocument();
@@ -242,14 +268,14 @@ describe('PublishStep', () => {
 
   // A live resonance made public and named by this save reaches its original after it (PATCH's becameReachable).
   it('says so for a live resonance only when the save makes a hidden one public and named', async () => {
-    const view = renderWithIntl(<Step mode="update" resonance liveReaches={false} start={{ visibility: 'private' }} />);
+    const view = renderWithIntl(<Step mode="update" liveVisibility="private" resonance liveReaches={false} start={{ visibility: 'private' }} />);
     expect(screen.queryByText(en.write.publishPanel.resonanceReaches)).toBeNull();
     expect(screen.queryByText(en.write.publishPanel.resonanceQuiet)).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: en.write.visibility.public }));
     expect(screen.getByText(en.write.publishPanel.resonanceReaches)).toBeInTheDocument();
     view.unmount();
 
-    renderWithIntl(<Step mode="update" resonance liveReaches />);
+    renderWithIntl(<Step mode="update" liveVisibility="public" resonance liveReaches />);
     expect(screen.queryByText(en.write.publishPanel.resonanceReaches)).toBeNull();
   });
 
@@ -288,6 +314,30 @@ describe('PublishStep', () => {
     expect(screen.getByRole('button', { name: en.write.mediaPlaceholder })).toBeInTheDocument();
   });
 
+  // Said where the picture is (round 8 §3): under the empty picture's pills, or on a chip over the cover that stays.
+  it('says a failed upload in the picture — under its pills, or on a chip over the cover it keeps', async () => {
+    vi.mocked(uploadImageFile).mockRejectedValue(new Error('offline'));
+    const view = renderWithIntl(<Step />);
+    const pick = () => view.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    fireEvent.change(pick(), { target: { files: [new File(['x'], 'rain.webp', { type: 'image/webp' })] } });
+    const empty = await screen.findByRole('alert');
+    expect(empty).toHaveTextContent(en.write.mediaUploadError);
+    // Nothing under the preview any more: the message is inside the card's picture.
+    expect(within(screen.getByRole('group', { name: en.write.previewCaption })).getByRole('alert')).toBe(empty);
+    view.unmount();
+
+    const cover: CardMedia = { type: 'image', url: 'https://img.example.com/old.webp', label: 'old' };
+    const withCover = renderWithIntl(<Step start={{ media: cover }} />);
+    fireEvent.change(withCover.container.querySelector<HTMLInputElement>('input[type="file"]')!, {
+      target: { files: [new File(['x'], 'next.webp', { type: 'image/webp' })] },
+    });
+    const chip = await screen.findByRole('alert');
+    expect(chip).toHaveTextContent(en.write.mediaUploadError);
+    expect(withCover.container.querySelector('img[src="https://img.example.com/old.webp"]')).toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: en.write.previewCaption })).getByRole('alert')).toBe(chip);
+    await echoSettled();
+  });
+
   it('waits for a story before it offers to draw a cover', async () => {
     renderWithIntl(<Step start={{ story: '' }} />);
     expect(screen.getByRole('button', { name: en.write.mediaGenerate })).toBeDisabled();
@@ -306,7 +356,6 @@ describe('PublishStep', () => {
 
     view.rerender(<Step pending onSubmit={onSubmit} />);
     expect(screen.getByRole('button', { name: en.write.publishPanel.publish })).toHaveAttribute('aria-busy', 'true');
-    expect(screen.getByRole('button', { name: en.write.saveDraftAndLeave })).toBeDisabled();
     // Every choice holds still.
     expect(screen.getByRole('button', { name: en.write.visibility.anonymous })).toBeDisabled();
     await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.publish }));
@@ -314,10 +363,12 @@ describe('PublishStep', () => {
     await echoSettled();
   });
 
-  it('names itself in its own row at the split, with the way back to writing', async () => {
+  it('names itself in its own row at the split, with the save state and the way back to writing', async () => {
     const onBack = vi.fn();
-    renderWithIntl(<Step inlineHeading onBack={onBack} />);
+    renderWithIntl(<Step inlineHeading onBack={onBack} saveStatus={{ label: en.write.status.saved, title: 'Saved · 14:32' }} />);
     expect(screen.getByRole('heading', { level: 2, name: en.write.publishPanel.title })).toBeInTheDocument();
+    const state = screen.getAllByRole('status').find((el) => el.textContent === en.write.status.saved);
+    expect(state).toHaveAttribute('title', 'Saved · 14:32');
     await userEvent.click(screen.getByRole('button', { name: en.write.leaveStay }));
     expect(onBack).toHaveBeenCalled();
     await echoSettled();

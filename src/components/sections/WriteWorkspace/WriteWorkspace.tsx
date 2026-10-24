@@ -10,6 +10,8 @@ import {
   type WriterStep,
 } from '@/components/molecules/CardEditor/CardEditor';
 import { ConfirmModal } from '@/components/molecules/ConfirmModal/ConfirmModal';
+import { SaveState, type SaveStatus } from '@/components/molecules/CardEditor/SaveState';
+import { editTitleKey } from '@/components/molecules/CardEditor/writerTitle';
 import { OpenedCardPane } from './OpenedCardPane';
 import { PaneActionButton } from './PaneActionButton';
 import { OriginalCardPanel } from './LazyOriginalCardPanel';
@@ -71,10 +73,11 @@ export function WriteWorkspace({
   // A card opened from the map takes over the pane (in-memory Card → no
   // loading); never the draft's own card, which keeps the live editor.
   const [openedCard, setOpenedCard] = useState<Card | null>(null);
-  // The editor's own save state, lifted so it sits at the top of the pane.
-  // At the bottom of a long form it was invisible to exactly the people who
-  // needed it — the ones wondering whether it is safe to walk away.
-  const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  // The editor's own save state, lifted into the bar beside the title (or before the ✓ at the split): it
+  // has to be in view wherever the story is scrolled — the people who need it are the ones wondering
+  // whether it is safe to walk away. A card opened over the draft says its own.
+  const [saveStatus, setSaveStatus] = useState<SaveStatus | null>(null);
+  const [openedStatus, setOpenedStatus] = useState<SaveStatus | null>(null);
   const editor = useRef<CardEditorHandle>(null);
   // The editor of a card opened from the map (the viewer's own).
   const opened = useRef<CardEditorHandle>(null);
@@ -164,9 +167,7 @@ export function WriteWorkspace({
         ? title
         : openedCard.authorId !== user?.id
           ? t('referenceCard')
-          : openedCard.publishedAt
-            ? t('editPublishedTitle')
-            : t('editTitle');
+          : t(editTitleKey(openedCard));
 
   /** Saves what is written in the pane now — the draft, and a card opened over it — not left to the debounce. */
   const saveAll = async () => {
@@ -252,6 +253,7 @@ export function WriteWorkspace({
         onOpenCard={openCard}
         // The card opened over the draft, else the draft's own (a fresh one is on no map yet).
         focusCardId={openedCard?.id ?? initial?.id}
+        paneStatus={<SaveState status={showOpened ? openedStatus : saveStatus} />}
         paneAction={shownAction ? <PaneActionButton action={shownAction} /> : undefined}
         titleRef={titleRef}
       >
@@ -259,8 +261,7 @@ export function WriteWorkspace({
             own card brings it back as it was — remounted from `initial`, a new
             card would start over without its draft and write a second one. */}
         <div className={styles.paneLayer} hidden={showOpened}>
-          <div className={styles.editorCol} data-action={(step === 'write' && draftAction != null) || undefined}>
-            {step === 'write' && saveStatus && <p className={styles.saveStatus}>{saveStatus}</p>}
+          <div className={styles.editorCol}>
             <CardEditor
               ref={editor}
               initial={initial}
@@ -290,6 +291,7 @@ export function WriteWorkspace({
                 onPrimaryActionChange: setOpenedAction,
                 onPendingChange: setOpenedPending,
                 onStepTitleChange: setOpenedStepTitle,
+                onSaveStatusChange: setOpenedStatus,
                 inlineStepHeading: split === true,
                 focusStepHeading: focusBarTitle,
               }}

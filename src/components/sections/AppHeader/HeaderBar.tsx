@@ -17,7 +17,11 @@ export interface HeaderBarProps {
   /** The title is the page's own heading (the writer has no other), not a label over one. */
   heading?: boolean;
   /**
-   * What closes the row on the right (the writer's 下一步): it keeps its size, and the title gives way —
+   * A quiet word after the title (the writer's save state): it gives way before the title does.
+   */
+  status?: ReactNode;
+  /**
+   * What closes the row on the right (the writer's ✓): it keeps its size, and the title gives way —
    * it ellipsizes first, down to 320px.
    */
   trailing?: ReactNode;
@@ -42,6 +46,7 @@ export function HeaderBar({
   backDisabled = false,
   scrolled = false,
   heading = false,
+  status,
   trailing,
   titleRef,
 }: HeaderBarProps) {
@@ -69,6 +74,7 @@ export function HeaderBar({
         ) : (
           <span className={styles.title}>{title}</span>
         )}
+        {status}
         {trailing != null && <div className={styles.trailing}>{trailing}</div>}
       </div>
     </header>

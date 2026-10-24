@@ -174,8 +174,9 @@ export function TagField({ tags, onChange, onSuggest, suggesting, error, id }: T
           </div>
         </div>
       </HandDrawnDashedSurface>
+      {/* Only why the model's suggestion failed (round 8 §2.2: no help line — the field and its button say it). */}
       <div id={helpId} aria-live="polite">
-        <FieldHint tone={error ? 'error' : 'default'}>{error ?? t('tagsHelp')}</FieldHint>
+        {error && <FieldHint tone="error">{error}</FieldHint>}
       </div>
     </div>
   );

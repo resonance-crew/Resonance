@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, renderWithIntl, screen, userEvent, waitFor, within } from '@/../test/render';
 import type { Editor } from '@tiptap/core';
 import en from '@/messages/en.json';
+import { uploadImageFile } from '@/lib/images/upload';
 import { MarkdownEditor } from './MarkdownEditor';
 
 // The card picker reads the viewer's cards; it isn't opened here.
@@ -13,6 +14,9 @@ vi.mock('@/lib/images/upload', () => ({
   UnsupportedImage: class extends Error {},
   uploadImageFile: vi.fn(async (file: File) => ({ publicUrl: `https://img.example.com/${file.name}` })),
 }));
+// The shell's toast: what a picture that didn't go up says on the writer's page.
+const toast = vi.hoisted(() => ({ show: vi.fn(() => 1), dismiss: vi.fn() }));
+vi.mock('@/components/providers/ToastProvider', () => ({ useToast: () => toast }));
 
 // jsdom lays nothing out: ProseMirror measures the caret (scrolling it into view, placing a menu) with
 // ranges it can't measure.
@@ -204,6 +208,18 @@ describe('the canvas', () => {
     expect(md.indexOf('postbox')).toBeLessThan(md.indexOf('Second line'));
     expect(onUploadingChange).toHaveBeenCalledWith(true);
     await waitFor(() => expect(onUploadingChange).toHaveBeenLastCalledWith(false));
+  });
+
+  // On the writer's page the story may be scrolled far from where the picture was going: the toast says it in view.
+  it('says a picture that didn’t go up with the shell’s toast on the writer’s page', async () => {
+    pointer(false);
+    vi.mocked(uploadImageFile).mockRejectedValueOnce(new Error('offline'));
+    const { container } = renderWithIntl(<MarkdownEditor variant="canvas" value="A line" onChange={vi.fn()} ariaLabel="Story" />);
+    const story = await screen.findByRole('textbox', { name: 'Story' });
+    act(() => void editorOf(story).chain().focus().setTextSelection(3).run());
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    fireEvent.change(input, { target: { files: [new File(['x'], 'lost.webp', { type: 'image/webp' })] } });
+    await waitFor(() => expect(toast.show).toHaveBeenCalledWith({ message: en.write.editor.imageUploadError }));
   });
 
   it('opens the card picker from the keyboard bar', async () => {
