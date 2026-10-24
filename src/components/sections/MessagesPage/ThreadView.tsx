@@ -38,7 +38,9 @@ import { messageLinkProps } from './MessageBubble';
 import { MessageRow } from './MessageRow';
 import { MessageMenuOverlay } from './MessageMenuOverlay';
 import { SearchResults } from './ThreadSearch';
+import { FloatingSlip } from './FloatingSlip';
 import { ThreadComposer } from './ThreadComposer';
+import { useDockInset } from './useDockInset';
 import { ThreadHeaderChrome } from './ThreadHeaderChrome';
 import { ThreadActionsContext, type PressedMessage, type ThreadActions } from './threadActions';
 import { centerRow, useThreadScroll } from './useThreadScroll';
@@ -311,6 +313,8 @@ export function ThreadView({ handle, replyNote }: ThreadViewProps) {
     };
   }, [scrollerEl]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // The floating foot and the body that runs on under it.
+  const { bodyRef, dockRef } = useDockInset();
   // The「卡片與連結」modal's scroll area (hand-drawn rail replaces the native bar).
   const mediaScrollRef = useRef<HTMLDivElement>(null);
   const mediaEdges = useEdgeFades(mediaScrollRef);
@@ -731,7 +735,7 @@ export function ThreadView({ handle, replyNote }: ThreadViewProps) {
           convo === null && notConnected
         ) : (
           <>
-            <div className={styles.body}>
+            <div ref={bodyRef} className={styles.body}>
               <div
                 ref={(el) => {
                   scrollerRef.current = el;
@@ -781,9 +785,10 @@ export function ThreadView({ handle, replyNote }: ThreadViewProps) {
                     fullTime={r.fullTime}
                   />
                 ))}
+                {/* Answering their letter is what connects the two: said as the thread's last word, scrolling
+                    with it — floating words over moving bubbles would be read on no paper. */}
+                {foot === 'answer' && tail && <p className={styles.letterHint}>{t('replyToConnect', { handle: other.handle })}</p>}
               </div>
-              {/* Where the thread meets what is fixed under it: the paper dissolving upward over the messages. */}
-              <div className={styles.edge} aria-hidden />
               {/* The small pill over the foot of the thread: the way back to the latest message, or a word that something was copied. */}
               {showPill && (
                 <InkPill
@@ -808,14 +813,26 @@ export function ThreadView({ handle, replyNote }: ThreadViewProps) {
               )}
             </div>
 
-            {foot === 'awaiting' ? (
-              // Their answer is what connects the two: until it comes, nothing more to write here.
-              <p className={styles.letterLine}>{t('awaitingReply')}</p>
-            ) : foot === 'closed' ? (
-              notConnected
-            ) : (
-              <>
-                {foot === 'answer' && <p className={styles.letterHint}>{t('replyToConnect', { handle: other.handle })}</p>}
+            {/* The foot floats over the thread, which runs on under it to the screen's edge (round 9 §4): the
+                composer — or, where there is none to write in, the notice in its place — on the page's paper. It
+                stays in the column's flow (iOS Safari's keyboard keeps it in view so); the thread's body reaches
+                under it by its measured height (useDockInset). */}
+            <div ref={dockRef} className={styles.dock}>
+              {error && (
+                <FloatingSlip seed={43} pen="field" className={styles.noticeSlip} role="alert">
+                  <p className={styles.error}>{error}</p>
+                </FloatingSlip>
+              )}
+              {foot === 'awaiting' ? (
+                // Their answer is what connects the two: until it comes, nothing more to write here.
+                <FloatingSlip seed={37} pen="field" className={styles.noticeSlip}>
+                  <p className={styles.letterLine}>{t('awaitingReply')}</p>
+                </FloatingSlip>
+              ) : foot === 'closed' ? (
+                <FloatingSlip seed={41} pen="field" className={styles.noticeSlip}>
+                  {notConnected}
+                </FloatingSlip>
+              ) : (
                 <ThreadComposer
                   inputRef={inputRef}
                   otherHandle={other.handle}
@@ -826,9 +843,8 @@ export function ThreadView({ handle, replyNote }: ThreadViewProps) {
                   send={thread.send}
                   ready={!!pairId}
                 />
-              </>
-            )}
-            {error && <p className={styles.error}>{error}</p>}
+              )}
+            </div>
 
             {pressed && (
               <MessageMenuOverlay

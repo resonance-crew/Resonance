@@ -4,8 +4,10 @@
    messages sent close together stack in runs — 2px apart, 12px between runs —
    their face beside the last bubble of each of their runs. */
 
-/* The thread's body between its header and the composer: the messages, and
-   what floats over them (the way back down, the search's list). */
+/* The thread's body, from under its header to the screen's foot: the
+   messages, and what floats over them (the way back down, the search's list).
+   It runs on under the floating composer (.dock, after it in the column) by
+   the composer's measured height, --dock-h (useDockInset). */
 .body {
   position: relative;
   flex: 1;
@@ -15,6 +17,7 @@
   /* Up under the thread header's row (THREAD_HEADER_H), so the messages pass
      beneath its paper and vanish at its wave. */
   margin-top: -58px;
+  margin-bottom: calc(-1 * var(--dock-h, 64px));
 }
 
 .scroller {
@@ -29,32 +32,9 @@
   overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
-  /* The foot is the edge's 12px deeper than the air under the last bubble:
-     at rest the newest message sits clear of the fade. */
-  /* The top clears the header's row and its wave (58 + 12). */
-  padding: 70px 16px 26px 4px;
-}
-
-/* Where the thread meets the composer (or the reply bar over it): no line —
-   the paper dissolving upward over the messages scrolling under it, eased so
-   no band edge shows, while the composer stays opaque on the same paper. It
-   catches no pointer; the way back down, the search's list and the
-   long-press menu lie over it. */
-.edge {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 2;
-  height: 12px;
-  pointer-events: none;
-  background: linear-gradient(
-    to top,
-    var(--color-cream) 0%,
-    color-mix(in oklch, var(--color-cream) 75%, transparent) 35%,
-    color-mix(in oklch, var(--color-cream) 30%, transparent) 70%,
-    transparent 100%
-  );
+  /* The top clears the header's row and its wave (58 + 12); the foot, the
+     floating composer and 12 of air, so the newest message always clears it. */
+  padding: 70px 16px calc(var(--dock-h, 64px) + 12px) 4px;
 }
 
 /* ── Rows ─────────────────────────────────────────────────────────── */
@@ -599,7 +579,8 @@
    where it sits and how it arrives; the face is InkPill's. */
 .pill {
   position: absolute;
-  bottom: 12px;
+  /* 12 over the floating composer (or the slip over it), not at the list's foot under it. */
+  bottom: calc(var(--dock-h, 64px) + 12px);
   left: 50%;
   z-index: 3;
   transform: translateX(-50%);
@@ -705,8 +686,8 @@
   z-index: 4;
   overflow-y: auto;
   overscroll-behavior: contain;
-  /* Under the header's paper too, as the messages are. */
-  padding: 70px 16px 24px 4px;
+  /* Under the header's paper too, as the messages are — and its end clear of the floating composer. */
+  padding: 70px 16px calc(var(--dock-h, 64px) + 24px) 4px;
   background: var(--color-cream);
 }
 
@@ -806,12 +787,98 @@
   box-decoration-break: clone;
 }
 
-/* ── The composer ─────────────────────────────────────────────────── */
+/* ── The composer: floating over the thread (round 9 §4) ──────────── */
 
-/* Between two people who aren't connected, in the composer's place or over
-   it: a calm line — the viewer's letter waits for its answer, or the way to
-   them is their profile — or, over the composer, that answering their letter
-   is what connects the two. */
+/* The thread's foot, floating: no band and no fade — the thread runs on under
+   it to the screen's edge. It stays in the column's flow (iOS Safari keeps a
+   focused field in view so), the page's gutter at its sides, 8 over the safe
+   area (or the keyboard), centred and at most 720 wide. Only what is drawn in
+   it takes the pointer: the air round it is the thread's. */
+.dock {
+  position: relative;
+  z-index: 5;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: calc(720px + 28px);
+  margin: 0 auto;
+  padding: 0 14px calc(8px + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+}
+
+.dock > * {
+  pointer-events: auto;
+}
+
+/* Paper laid over the thread: the page's cream cut out round the pen line (the
+   halo), no shadow and nothing see-through — it reads over any bubble, a dark
+   photo's too. Shared by the capsule and the slips. */
+.paperHalo {
+  fill: none;
+  stroke: var(--color-cream);
+  stroke-linejoin: round;
+}
+
+.paperFill {
+  fill: var(--color-cream);
+}
+
+/* A slip (FloatingSlip): what rides with the next message, over the capsule —
+   a secondary surface, its pen a step lighter in the muted ink — or a notice
+   standing in the composer's place, in the field's pen. */
+.slip {
+  position: relative;
+  --shape-fill: var(--color-cream);
+  --shape-ink: color-mix(in oklch, var(--color-text-muted) 55%, var(--color-cream));
+}
+
+.slip[data-pen='field'] {
+  --shape-ink: var(--field-border);
+}
+
+.slipShape {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.slipPen {
+  fill: none;
+  stroke: var(--shape-ink);
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.slipContent {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* A notice in the composer's place: a line or two, centred, on its slip. */
+.noticeSlip .slipContent {
+  padding: 10px 16px;
+}
+
+.noticeSlip .letterLine {
+  padding: 0;
+}
+
+.noticeSlip .error {
+  margin: 0;
+  text-align: center;
+}
+
+/* Between two people who aren't connected: a calm line — the viewer's letter
+   waits for its answer, or the way to them is their profile (in the
+   composer's place) — or that answering their letter is what connects the two
+   (the thread's last word, over the composer). */
 .letterLine {
   display: flex;
   flex-direction: column;
@@ -836,20 +903,22 @@
 }
 
 .letterHint {
+  flex-shrink: 0;
   margin: 0;
-  padding: 10px 14px 0;
+  padding: 18px 14px 0;
   text-align: center;
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--color-text-muted);
 }
 
-/* Replying: a short wavy pen rule in terracotta, whom, and the words. */
+/* Replying: a short wavy pen rule in terracotta, whom, the words, and a 44 ✕. */
 .replyBar {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 14px 0 6px;
+  min-height: 52px;
+  padding: 4px 0 4px 12px;
 }
 
 .replyRule {
@@ -857,6 +926,7 @@
   flex-shrink: 0;
   align-self: stretch;
   width: 6px;
+  margin: 4px 0;
 }
 
 .replyBarText {
@@ -883,14 +953,31 @@
   white-space: nowrap;
 }
 
-/* A note or a card riding the next message. */
+.replyClose {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.replyClose > button,
+.replyClose > a {
+  width: 44px;
+  height: 44px;
+}
+
+/* A note, a card or a picture riding the next message. The slip leaves room
+   round them for their rings (and a picture's ✕ on its corner): nothing cuts one. */
 .attachments {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 10px 14px 0 2px;
+  padding: 12px;
 }
 
+.replyBar + .attachments {
+  padding-top: 4px;
+}
+
+/* On the opaque slip, opaque itself: the terracotta tint mixed into the paper. */
 .attachChip {
   display: inline-flex;
   align-items: center;
@@ -898,7 +985,7 @@
   padding: 5px 8px 5px 10px;
   font-size: 12px;
   color: var(--color-text);
-  background: color-mix(in oklch, var(--color-terracotta-light) 40%, transparent);
+  background: color-mix(in oklch, var(--color-terracotta-light) 40%, var(--color-cream));
   border-radius: 12px 14px 12px 14px;
 }
 
@@ -915,6 +1002,7 @@
   justify-content: center;
   padding: 2px;
   border: none;
+  border-radius: 50%;
   background: none;
   color: var(--color-text-muted);
   cursor: pointer;
@@ -922,6 +1010,13 @@
 
 .attachRemove:hover {
   color: var(--color-terracotta);
+}
+
+/* Their rings, whole: outside the glyph, inside the slip's padding. */
+.attachRemove:focus-visible,
+.attachPictureRemove:focus-visible {
+  outline: 2px solid var(--field-border-focus, var(--color-terracotta));
+  outline-offset: 1px;
 }
 
 /* A picture waiting to go: its thumbnail, rounded as the chips are, its × on its corner. */
@@ -938,7 +1033,7 @@
   height: 100%;
   object-fit: cover;
   border-radius: 12px 14px 12px 14px;
-  background: color-mix(in oklch, var(--color-text) 6%, transparent);
+  background: color-mix(in oklch, var(--color-text) 6%, var(--color-cream));
 }
 
 .attachPictureRemove {
@@ -962,89 +1057,184 @@
   display: none;
 }
 
-.composer {
+/* The capsule (ComposerCapsule): one field holding the ＋, the text and Send.
+   One line is exactly 48 tall at any text size — the field's padding comes
+   from its own line height — and only more lines grow it. */
+.capsule {
+  position: relative;
   display: flex;
   align-items: flex-end;
-  gap: 8px;
-  padding: 12px 14px 0 0;
+  min-height: 48px;
+  --shape-fill: var(--color-cream);
+  --shape-ink: var(--field-border);
 }
 
+.capsuleShape {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.capsuleSegmentLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* What is in it sits over its drawing. */
+.capsule > :not(.capsuleShape):not(.capsuleSegmentLayer) {
+  position: relative;
+  z-index: 1;
+}
+
+/* The field's pen: soft ink at rest, darker under the pointer, terracotta while written in. */
+.capsulePen {
+  fill: none;
+  stroke: var(--field-border);
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  transition: stroke 140ms ease;
+}
+
+.capsule:hover .capsulePen {
+  stroke: var(--field-border-hover);
+}
+
+.capsule[data-focus] .capsulePen {
+  stroke: var(--field-border-focus);
+}
+
+/* The ＋: a ghost glyph at the capsule's start, its target 44 × 48, on the last line's row. */
+.plusSlot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 48px;
+}
+
+.plusSlot [data-icon='plus'] {
+  width: 44px;
+  height: 48px;
+}
+
+/* The text: no frame of its own, 16 (iOS Safari doesn't zoom into it), one
+   line centred in 48 — (48 − its line) / 2 above and below, on the field's
+   room, not the field, so a scrolled field's lines stop there — growing to
+   five, then scrolling. The element + class outrank the field's own rules. */
 .composerField {
   flex: 1;
   min-width: 0;
+  padding: 12px 10px 12px 0;
+  padding-block: calc((48px - 1lh) / 2);
+  font-size: 16px;
+  line-height: 1.5;
+  cursor: text;
 }
 
-/* The field: one line at rest, growing with what is written (its height is
-   set from scrollHeight), scrolling past ~6 lines. The element+class
-   selector outranks the base `textarea.field` rule's min-height. */
-.composer textarea.composerInput {
+.capsule textarea.composerInput {
+  display: block;
+  width: 100%;
   min-height: 0;
-  max-height: 168px;
+  max-height: 120px;
+  max-height: 5lh;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  font-size: inherit;
+  line-height: inherit;
   overflow-y: auto;
   resize: none;
-  /* It still scrolls past its height, without a bar inside the hand-drawn border. */
+  /* It still scrolls past five lines, without a bar inside the hand-drawn line. */
   scrollbar-width: none;
 }
 
-.composer textarea.composerInput::-webkit-scrollbar {
+.capsule textarea.composerInput::-webkit-scrollbar {
   display: none;
 }
 
-/* The tools on either side sit on the field's first line as it grows. */
-.composer > :first-child {
-  margin-bottom: 6px;
+.capsule textarea.composerInput:focus-visible {
+  border: none;
+  box-shadow: none;
 }
 
-/* Send: a wobbly terracotta rounded rectangle, the plane in cream. */
+/* Send: the capsule's end segment, the full height of the field. Its face is
+   drawn (.sendFace): the tonal peach with a terracotta plane at rest, the
+   verb's terracotta with a cream plane once there is something to send. */
 .send {
   position: relative;
-  flex-shrink: 0;
-  width: 48px;
-  height: 40px;
-  margin-bottom: 4px;
+  flex: none;
+  align-self: stretch;
+  width: 52px;
   padding: 0;
   border: none;
   background: none;
+  color: var(--button-on-tonal);
   cursor: pointer;
-  transition:
-    opacity 140ms ease,
-    transform 120ms ease;
+  transition: color 140ms ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.send:not([data-enabled]) {
-  opacity: 0.45;
+.capsule[data-ready] .send {
+  color: var(--color-cream);
+}
+
+.send[aria-disabled='true'] {
   cursor: default;
 }
 
-.send[data-enabled]:active {
-  transform: scale(0.95);
-}
-
+/* Tab-focused, it is ringed inside, in its plane's own ink (as a segment of the bar). */
 .send:focus-visible {
-  outline: none;
+  outline: 2px solid currentColor;
+  outline-offset: -6px;
+  border-radius: 14px;
 }
 
 .sendFace {
-  position: absolute;
-  inset: 0;
-  overflow: visible;
-  fill: var(--color-terracotta);
+  fill: var(--button-tonal);
+  transition: fill 140ms ease;
 }
 
-.send:focus-visible .sendFace {
-  stroke: var(--field-border-focus);
-  stroke-width: 2px;
-  paint-order: stroke;
+.capsule[data-ready] .sendFace {
+  fill: var(--button-fill);
 }
 
+.sendSeam {
+  fill: none;
+  stroke: var(--color-cream);
+  stroke-linecap: round;
+}
+
+/* The plane on the last line's row, beside the ＋. */
 .sendGlyph {
-  position: relative;
-  z-index: 2;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  height: 100%;
+  height: 48px;
+  transition: transform 120ms ease;
+}
+
+.capsule[data-ready] .send:active .sendGlyph {
+  transform: scale(0.92);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .capsulePen,
+  .send,
+  .sendFace,
+  .sendGlyph {
+    transition: none;
+  }
 }
 
 /* ── Phones ───────────────────────────────────────────────────────── */
@@ -1063,10 +1253,10 @@
     padding-left: 0;
   }
 
-  .composer,
-  .replyBar,
-  .attachments {
+  /* The page's own 14px side padding is the composer's gutter on a phone. */
+  .dock {
     padding-right: 0;
+    padding-left: 0;
   }
 }
 

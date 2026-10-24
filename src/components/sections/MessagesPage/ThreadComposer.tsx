@@ -1,23 +1,22 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { BareIconButton } from '@/components/atoms/BareIconButton/BareIconButton';
-import { BrushWash } from '@/components/atoms/BrushWash/BrushWash';
 import { Divider } from '@/components/atoms/Divider/Divider';
 import { Textarea } from '@/components/atoms/Field/Field';
 import { Icon } from '@/components/atoms/Icon';
-import { ShapeGrain } from '@/components/atoms/ShapeGrain/ShapeGrain';
 import { OrganicMenu } from '@/components/molecules/OrganicMenu/OrganicMenu';
 import { useToast } from '@/components/providers/ToastProvider';
 import { preparePicture, UnsupportedImage, type PreparedPicture } from '@/lib/chat/preparePicture';
 import { INK } from '@/lib/design/strokes';
-import { wobRect } from '@/lib/design/wobRect';
 import { useOpenedOnce } from '@/lib/hooks/useOpenedOnce';
 import { MESSAGE_MAX_LENGTH } from '@/lib/db/firestore/client/messages';
 import type { Card, MessageReplyQuote } from '@/lib/db/types';
 import type { ThreadDraft } from '@/lib/data/thread';
+import { ComposerCapsule } from './ComposerCapsule';
+import { FloatingSlip } from './FloatingSlip';
 import styles from './Thread.module.css';
 
 // The card picker loads when it is first opened, not with the thread.
@@ -48,14 +47,16 @@ interface PendingPicture extends PreparedPicture {
 }
 
 /**
- * The thread's composer: what the next message carries (the message it
- * answers, a note it quotes, a card or a picture — one of the two), the
- * 「＋」 that attaches them (圖片 · 卡片, the one organic menu; a picture can be
- * pasted too), the field — one line at rest, growing with what is written —
- * and the send button. Its draft lives here, so typing never draws the thread
- * above it again; sending never holds it (the message goes out behind any
- * still on their way, and the field is ready at once — a picture goes up as
- * it is sent).
+ * The thread's composer, floating over the thread's foot (round 9 §4): one
+ * capsule holding the 「＋」 that attaches (圖片 · 卡片, the one organic menu;
+ * a picture can be pasted too), the field — one line at rest, growing to five
+ * with what is written — and Send as the capsule's end segment
+ * (ComposerCapsule). What the next message carries (the message it answers, a
+ * note it quotes, a card or a picture — one of the two) rides on a slip of
+ * its own just over it. Its draft lives here, so typing never draws the
+ * thread above it again; sending never holds it (the message goes out behind
+ * any still on their way, and the field is ready at once — a picture goes up
+ * as it is sent).
  */
 export function ThreadComposer({ inputRef, otherHandle, replyingTo, replyHandle, onCancelReply, replyNote, send, ready }: ThreadComposerProps) {
   const t = useTranslations('messages');
@@ -114,73 +115,86 @@ export function ThreadComposer({ inputRef, otherHandle, replyingTo, replyHandle,
     inputRef.current?.focus();
   }
 
+  // The pen of the field: terracotta while it is written in, as every field's.
+  const [focused, setFocused] = useState(false);
+  const carries = !!(replyingTo || noteRef || pendingCard || picture);
+
   return (
     <>
-      {/* What rides the next message: the message it answers, a note, a card. */}
-      {replyingTo && (
-        <div className={styles.replyBar}>
-          <span className={styles.replyRule} aria-hidden>
-            <Divider orientation="vertical" seed={31} amplitude={1.1} strokeWidth={INK} color="var(--color-terracotta)" spacing={0} />
-          </span>
-          <span className={styles.replyBarText}>
-            <span className={styles.replyBarWho}>
-              {replyHandle ? t('replyingTo', { handle: replyHandle }) : t('replyingToSelf')}
-            </span>
-            <span className={styles.replyBarQuote}>{replyingTo.text || t('replyCard')}</span>
-          </span>
-          <BareIconButton icon="close" label={t('replyCancel')} iconSize={16} tipAlign="end" onClick={onCancelReply} />
-        </div>
-      )}
-      {(noteRef || pendingCard || picture) && (
-        <div className={styles.attachments}>
-          {noteRef && (
-            <span className={styles.attachChip}>
-              <Icon name="note" size={14} />
-              {t('quotedNote')}
-              <button type="button" aria-label={t('removeCard')} className={styles.attachRemove} onClick={() => setNoteRef(undefined)}>
-                <Icon name="close" size={13} />
-              </button>
-            </span>
+      {/* What rides the next message — the message it answers, a note, a card or a picture — on a slip of its own
+          over the capsule, so the capsule keeps its exact shape whatever it carries. */}
+      {carries && (
+        <FloatingSlip seed={31} className={styles.carrySlip}>
+          {replyingTo && (
+            <div className={styles.replyBar}>
+              <span className={styles.replyRule} aria-hidden>
+                <Divider orientation="vertical" seed={31} amplitude={1.1} strokeWidth={INK} color="var(--color-terracotta)" spacing={0} />
+              </span>
+              <span className={styles.replyBarText}>
+                <span className={styles.replyBarWho}>
+                  {replyHandle ? t('replyingTo', { handle: replyHandle }) : t('replyingToSelf')}
+                </span>
+                <span className={styles.replyBarQuote}>{replyingTo.text || t('replyCard')}</span>
+              </span>
+              <span className={styles.replyClose}>
+                <BareIconButton icon="close" label={t('replyCancel')} iconSize={16} tipAlign="end" onClick={onCancelReply} />
+              </span>
+            </div>
           )}
-          {pendingCard && (
-            <span className={styles.attachChip}>
-              <Icon name="cards" size={14} />
-              <span className={styles.attachTitle}>{pendingCard.thoughtCore}</span>
-              <button type="button" aria-label={t('removeCard')} className={styles.attachRemove} onClick={() => setPendingCard(null)}>
-                <Icon name="close" size={13} />
-              </button>
-            </span>
+          {(noteRef || pendingCard || picture) && (
+            <div className={styles.attachments}>
+              {noteRef && (
+                <span className={styles.attachChip}>
+                  <Icon name="note" size={14} />
+                  {t('quotedNote')}
+                  <button type="button" aria-label={t('removeCard')} className={styles.attachRemove} onClick={() => setNoteRef(undefined)}>
+                    <Icon name="close" size={13} />
+                  </button>
+                </span>
+              )}
+              {pendingCard && (
+                <span className={styles.attachChip}>
+                  <Icon name="cards" size={14} />
+                  <span className={styles.attachTitle}>{pendingCard.thoughtCore}</span>
+                  <button type="button" aria-label={t('removeCard')} className={styles.attachRemove} onClick={() => setPendingCard(null)}>
+                    <Icon name="close" size={13} />
+                  </button>
+                </span>
+              )}
+              {picture && (
+                <span className={styles.attachPicture}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={picture.previewUrl} alt={t('attachImage')} />
+                  <button type="button" aria-label={t('removeImage')} className={styles.attachPictureRemove} onClick={() => setPicture(null)}>
+                    <Icon name="close" size={13} />
+                  </button>
+                </span>
+              )}
+            </div>
           )}
-          {picture && (
-            <span className={styles.attachPicture}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={picture.previewUrl} alt={t('attachImage')} />
-              <button type="button" aria-label={t('removeImage')} className={styles.attachPictureRemove} onClick={() => setPicture(null)}>
-                <Icon name="close" size={13} />
-              </button>
-            </span>
-          )}
-        </div>
+        </FloatingSlip>
       )}
 
-      <div className={styles.composer}>
-        <OrganicMenu
-          bare
-          tone="muted"
-          triggerIcon="plus"
-          label={t('attach')}
-          floating
-          align="start"
-          seed={17}
-          items={[
-            { key: 'image', icon: 'image', label: t('attachImage') },
-            { key: 'card', icon: 'cards', label: t('attachCardShort') },
-          ]}
-          onChoose={(key) => {
-            if (key === 'image') fileRef.current?.click();
-            else setCardModalOpen(true);
-          }}
-        />
+      <ComposerCapsule focused={focused} ready={valid} sendLabel={t('send')} onSend={submit}>
+        <span className={styles.plusSlot}>
+          <OrganicMenu
+            bare
+            tone="muted"
+            triggerIcon="plus"
+            label={t('attach')}
+            floating
+            align="start"
+            seed={17}
+            items={[
+              { key: 'image', icon: 'image', label: t('attachImage') },
+              { key: 'card', icon: 'cards', label: t('attachCardShort') },
+            ]}
+            onChoose={(key) => {
+              if (key === 'image') fileRef.current?.click();
+              else setCardModalOpen(true);
+            }}
+          />
+        </span>
         <input
           ref={fileRef}
           type="file"
@@ -194,12 +208,25 @@ export function ThreadComposer({ inputRef, otherHandle, replyingTo, replyHandle,
             e.currentTarget.value = '';
           }}
         />
-        <div className={styles.composerField}>
+        {/* The field's room: one line centred in the capsule's 48 by its own padding, so a scrolled field's
+            lines stop at it, never under the capsule's pen. A press in that room writes in the field. */}
+        <div
+          className={styles.composerField}
+          onMouseDown={(e) => {
+            if (e.target !== e.currentTarget) return;
+            e.preventDefault();
+            inputRef.current?.focus();
+          }}
+        >
           <Textarea
             ref={inputRef}
+            // No frame of its own: the capsule is its frame (the underline variant, its line taken off here).
+            variant="subtle"
             className={styles.composerInput}
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             onPaste={(e) => {
               // A picture pasted is attached, as one picked is; words paste as words.
               const file = [...e.clipboardData.files].find((f) => f.type.startsWith('image/'));
@@ -225,8 +252,7 @@ export function ThreadComposer({ inputRef, otherHandle, replyingTo, replyHandle,
             maxLength={MESSAGE_MAX_LENGTH}
           />
         </div>
-        <SendButton label={t('send')} enabled={valid} onClick={submit} />
-      </div>
+      </ComposerCapsule>
 
       {cardModalLoaded && (
         <InsertCardModal
@@ -243,56 +269,5 @@ export function ThreadComposer({ inputRef, otherHandle, replyingTo, replyHandle,
         />
       )}
     </>
-  );
-}
-
-/** The send button's size: a little wider than tall, the field's height. */
-export const SEND_W = 48;
-export const SEND_H = 40;
-
-/**
- * The send button's outline — a wobbly rounded rectangle on one seed, the
- * apps' (WobRectShape(13, 23, …) at 52×44 there), so the three draw the same
- * hand. Its grain and hover wash take the same path.
- */
-export function sendButtonPath(): string {
-  return wobRect(SEND_W, SEND_H, 12, 23, 1.0, { segmentsH: 1, segmentsV: 1, curve: 1.3, cornerJitter: 2.4, cornerOffset: 2 });
-}
-
-/**
- * The composer's Send: a wobbly terracotta rounded rectangle with the paper
- * plane in cream, centred as it is drawn (the glyph is optically centred in
- * its own box). It is the verb of the bar, so a solid face with the buttons'
- * grain and no pen line of its own (the apps' OrganicSendButton). Dimmed and
- * deaf until there is something to send — never held by a send in flight.
- */
-function SendButton({ label, enabled, onClick }: { label: string; enabled: boolean; onClick: () => void }) {
-  const d = useMemo(sendButtonPath, []);
-  const [hover, setHover] = useState<{ x: number; y: number; on: boolean }>({ x: SEND_W / 2, y: SEND_H / 2, on: false });
-  const at = (e: React.MouseEvent<HTMLButtonElement>, on: boolean) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    setHover({ x: e.clientX - r.left, y: e.clientY - r.top, on });
-  };
-  return (
-    <button
-      type="button"
-      className={styles.send}
-      aria-label={label}
-      title={label}
-      aria-disabled={!enabled || undefined}
-      data-enabled={enabled || undefined}
-      onClick={() => enabled && onClick()}
-      onMouseEnter={(e) => at(e, true)}
-      onMouseLeave={(e) => at(e, false)}
-    >
-      <svg className={styles.sendFace} width={SEND_W} height={SEND_H} viewBox={`0 0 ${SEND_W} ${SEND_H}`} aria-hidden="true">
-        <path d={d} />
-      </svg>
-      <ShapeGrain w={SEND_W} h={SEND_H} d={d} seed={23} opacity={0.38} frequency={1.1} />
-      <BrushWash w={SEND_W} h={SEND_H} d={d} color="oklch(0% 0 0 / 0.14)" x={hover.x} y={hover.y} on={enabled && hover.on} duration={340} overshoot={4} />
-      <span className={styles.sendGlyph}>
-        <Icon name="send" size={20} color="var(--color-cream)" strokeWidth={INK} />
-      </span>
-    </button>
   );
 }

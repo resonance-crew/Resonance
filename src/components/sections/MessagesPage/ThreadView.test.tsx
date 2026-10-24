@@ -70,7 +70,6 @@ import { blockUser, getMyBlockedIds, unblockUser } from '@/lib/db/firestore/clie
 import { forgetOutboxes } from '@/lib/data/thread';
 import { useConnectionRefresh } from '@/lib/data/resonate';
 import { SWR_DEFAULTS } from '@/components/providers/SWRProvider';
-import { wobRect } from '@/lib/design/wobRect';
 import { ThreadView } from './ThreadView';
 
 const alice: User = {
@@ -689,7 +688,10 @@ describe('a letter: notes between two people who aren’t connected', () => {
     const user = (await import('@testing-library/user-event')).default.setup();
     renderWithIntl(thread());
 
-    expect(await screen.findByText("They'll see your note. Once they reply, you can keep talking.")).toBeInTheDocument();
+    const waiting = await screen.findByText("They'll see your note. Once they reply, you can keep talking.");
+    // In the composer's place, floating on a slip of its own (round 9 §4).
+    expect(waiting.closest('[class*="dock"]')).toBeTruthy();
+    expect(waiting.closest('[class*="slip"]')).toBeTruthy();
     expect(screen.getByText('Your walk stayed with me.')).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Conversation with alice' })).not.toBeInTheDocument();
     // Taking the letter back is deleting the conversation, still offered.
@@ -705,7 +707,10 @@ describe('a letter: notes between two people who aren’t connected', () => {
     vi.mocked(sendMessage).mockResolvedValue({ conversationId: 'alice_me', id: 'r1' });
     renderWithIntl(thread());
 
-    expect(await screen.findByText('Reply to start talking with alice')).toBeInTheDocument();
+    const hint = await screen.findByText('Reply to start talking with alice');
+    // Said as the thread's last word, scrolling with it (round 9 §4) — not floating over the composer.
+    expect(hint.parentElement!.querySelector('[data-message-key]')).toBeTruthy();
+    expect(hint.parentElement!.lastElementChild).toBe(hint);
     const field = screen.getByRole('textbox', { name: 'Conversation with alice' });
     const asked = vi.mocked(isConnected).mock.calls.length;
     vi.mocked(isConnected).mockResolvedValue(true);
@@ -836,7 +841,10 @@ describe('a letter: notes between two people who aren’t connected', () => {
     vi.mocked(callApi).mockResolvedValue({ cards: [] });
     renderWithIntl(thread());
 
-    expect(await screen.findByText("They'll see your note. Once they reply, you can keep talking.")).toBeInTheDocument();
+    const waiting = await screen.findByText("They'll see your note. Once they reply, you can keep talking.");
+    // In the composer's place, floating on a slip of its own (round 9 §4).
+    expect(waiting.closest('[class*="dock"]')).toBeTruthy();
+    expect(waiting.closest('[class*="slip"]')).toBeTruthy();
     expect(screen.getByText('Your walk stayed with me.')).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Conversation with alice' })).not.toBeInTheDocument();
   });
@@ -977,18 +985,38 @@ describe('around the thread', () => {
     expect(within(links).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['https://example.com/post']);
   });
 
-  // The apps draw the same outline (WobRectShape on seed 23), a little wider than tall, the plane centred as drawn.
-  it('draws Send as a wobbly rounded rectangle, the field’s height', async () => {
+  // Round 9 §4: no band and no fade — the thread runs on under the floating composer, which stays in the column's
+  // flow (iOS Safari's keyboard) as the body's next sibling; the body reaches under it by its measured height.
+  it('floats the composer over the thread, the body running on under it by its measured height', async () => {
     vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    server.messages = [message('m1')];
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const h = this.className.includes('dock') ? 56 : 0;
+      return { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: h, width: 0, height: h, toJSON: () => ({}) } as DOMRect;
+    });
+    onTestFinished(() => rect.mockRestore());
     renderWithIntl(thread());
-    const send = await screen.findByRole('button', { name: 'Send' });
-    const face = send.querySelector('svg')!;
-    expect(face).toHaveAttribute('width', '48');
-    expect(face).toHaveAttribute('height', '40');
-    expect(face.querySelector('path')).toHaveAttribute(
-      'd',
-      wobRect(48, 40, 12, 23, 1.0, { segmentsH: 1, segmentsV: 1, curve: 1.3, cornerJitter: 2.4, cornerOffset: 2 }),
-    );
+    const field = await screen.findByRole('textbox', { name: 'Conversation with alice' });
+    const dock = field.closest<HTMLElement>('[class*="dock"]')!;
+    expect(dock).toBeTruthy();
+    const body = dock.previousElementSibling as HTMLElement;
+    expect(body.querySelector('[data-message-key]')).toBeTruthy();
+    // Written straight onto the body (no render of the thread for it): what the CSS pulls it down and pads its list by.
+    await waitFor(() => expect(body.style.getPropertyValue('--dock-h')).toBe('56px'));
+    // The old fade over the thread's foot is gone.
+    expect(body.querySelector('[class*="edge"]')).toBeNull();
+  });
+
+  it('says a picture sent alone, with no words and no card, by drawing it', async () => {
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    server.messages = [
+      { id: 'p1', senderId: 'alice', text: '', sentAt: new Date('2026-03-01T10:00:00Z'), image: { id: 'pic1', width: 800, height: 600 } },
+    ];
+    const { container } = renderWithIntl(thread());
+    await waitFor(() => expect(container.querySelector('[data-message-key="p1"]')).toBeTruthy());
+    const row = container.querySelector('[data-message-key="p1"]')!;
+    expect(row.getAttribute('aria-hidden')).toBeNull();
+    expect(row.childElementCount).toBeGreaterThan(0);
   });
 });
 

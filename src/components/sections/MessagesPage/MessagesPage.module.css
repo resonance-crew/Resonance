@@ -90,8 +90,9 @@
      edge. Content insets live on the scroller / composer rows instead. No top
      padding either: the header carries its own symmetric vertical padding, so
      an extra strip above it would push the header content low against the
-     divider (it read as vertically off-centre). */
-  padding: 0 0 14px;
+     divider (it read as vertically off-centre). No bottom padding: the thread
+     runs to the screen's foot under its floating composer (Thread.module.css .dock). */
+  padding: 0;
 }
 
 /* One conversation row: avatar, name + preview, time + unread badge. No

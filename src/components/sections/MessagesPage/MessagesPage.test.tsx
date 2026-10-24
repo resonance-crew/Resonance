@@ -264,11 +264,13 @@ describe('MessagesPage thread', () => {
     await waitFor(() => expect(screen.getByText('hello from alice')).toBeInTheDocument());
     expect(screen.getByText('hi back')).toBeInTheDocument();
 
+    // Nothing to send yet: Send says so by its semantics (never a fade).
+    expect(screen.getByRole('button', { name: 'Send' })).toHaveAttribute('aria-disabled', 'true');
     fireEvent.change(screen.getByPlaceholderText('Write a message…'), {
       target: { value: 'a reply' },
     });
     // The send button wakes once there is something to send.
-    expect(screen.getByRole('button', { name: 'Send' })).toHaveAttribute('data-enabled');
+    expect(screen.getByRole('button', { name: 'Send' })).not.toHaveAttribute('aria-disabled');
     await userEvent.setup({ pointerEventsCheck: 0 }).click(
       screen.getByRole('button', { name: 'Send' }),
     );
