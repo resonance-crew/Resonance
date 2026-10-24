@@ -35,11 +35,15 @@ export const LIMITS = {
   /** Messages (only the first of a conversation rings). */
   message: { max: 300, windowMs: HOUR },
   report: { max: 20, windowMs: DAY },
-  /** /api/upload: files, and their bytes (see `weight`) — POST /api/v1/chat-images spends the bytes too. */
+  /** /api/upload: files, and their bytes (see `weight`). */
   upload: { max: 50, windowMs: DAY },
   uploadBytes: { max: 200 * 1024 * 1024, windowMs: DAY },
-  /** Pictures sent in chat (POST /api/v1/chat-images): two re-encodes each, kept until the account goes. */
+  /**
+   * Pictures sent in chat (POST /api/v1/chat-images): two re-encodes each, kept until the account goes;
+   * their bytes apart from the covers' and stories' (a day of pictures never stops a cover).
+   */
   chatImage: { max: 100, windowMs: DAY },
+  chatImageBytes: { max: 300 * 1024 * 1024, windowMs: DAY },
   /** Accepting a legacy invite rings its sender. */
   invite: { max: 60, windowMs: HOUR },
   /** /api/account/export: reads everything the account ever wrote. */

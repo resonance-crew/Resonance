@@ -9,8 +9,9 @@ import { ApiFailure } from './http';
  * chat store (lib/storage/chatImages): as kept (≤ 2048 px) and as a thread
  * draws it (≤ 960 px), both WebP re-encoded from the upload with no metadata.
  *
- * `{ senderId, pair, key, thumbKey, width, height, bytes, animated, createdAt }`
- * and, until a message carries it, `unsent: true`; then `messageId`. A
+ * `{ senderId, to, pair, key, thumbKey, width, height, bytes, animated, createdAt }`
+ * and, until a message carries it, `unsentAt` (when it was uploaded); then
+ * `messageId`. A
  * picture belongs to one conversation and one message: only its sender may
  * send it, only there, only once (a resend of that message is that message).
  * It is read by the two people of its conversation while that message is
@@ -23,6 +24,9 @@ export const CHAT_IMAGES = 'chatImages';
 
 /** How long an uploaded picture waits for its message before it is deleted. */
 export const UNSENT_KEEP_MS = 24 * 60 * 60 * 1000;
+
+/** A picture's id is a document id of ours (a slash would name another document). */
+const PICTURE_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
 /** What a message keeps of the picture it carries (its document's `image`). */
 export interface MessageImage {
@@ -46,7 +50,7 @@ export function pictureToSend(picture: DocumentSnapshot, uid: string, pair: stri
     !picture.exists ||
     picture.get('senderId') !== uid ||
     picture.get('pair') !== pair ||
-    (picture.get('unsent') !== true && sent !== messageId)
+    (picture.get('unsentAt') == null && sent !== messageId)
   ) {
     throw new ApiFailure('invalid_request', 'That is not a picture you can send here.');
   }
@@ -65,8 +69,10 @@ export function messageImageOf(value: unknown): MessageImage | null {
 /**
  * A sent picture's bytes for `uid` — `thumb` the thread's size, else as kept —
  * or null for anything they may not read: no such picture, never sent, not
- * in a conversation of theirs, or its message gone (a deleted conversation).
- * Never says which.
+ * in a conversation of theirs, or its message gone (a deleted conversation) —
+ * or older than the conversation it is in now (one that outlived its
+ * conversation's deletion, the client deleting messages before the
+ * conversation, is not shown again when the two talk again). Never says which.
  */
 export async function readChatImage(
   db: Firestore,
@@ -75,11 +81,13 @@ export async function readChatImage(
   id: string,
   size: 'full' | 'thumb',
 ): Promise<Uint8Array | null> {
-  if (isReservedId(id)) return null;
+  if (!PICTURE_ID.test(id) || isReservedId(id)) return null;
   const picture = await chatImageRef(db, id).get();
   const pair = picture.get('pair');
   const messageId = picture.get('messageId');
-  if (!picture.exists || typeof pair !== 'string' || typeof messageId !== 'string' || isReservedId(messageId)) return null;
+  if (!picture.exists || typeof pair !== 'string' || typeof messageId !== 'string' || !PICTURE_ID.test(messageId) || isReservedId(messageId)) {
+    return null;
+  }
   const [convo, message] = await Promise.all([
     db.doc(`conversations/${pair}`).get(),
     db.doc(`conversations/${pair}/messages/${messageId}`).get(),
@@ -87,6 +95,9 @@ export async function readChatImage(
   const participants = convo.get('participants');
   if (!convo.exists || !Array.isArray(participants) || !participants.includes(uid)) return null;
   if (!message.exists || messageImageOf(message.get('image'))?.id !== id) return null;
+  const sentAt = message.get('sentAt');
+  const since = convo.get('createdAt');
+  if (sentAt instanceof Timestamp && since instanceof Timestamp && sentAt.toMillis() < since.toMillis()) return null;
   const key = picture.get(size === 'thumb' ? 'thumbKey' : 'key');
   return typeof key === 'string' ? store.get(key) : null;
 }
@@ -101,42 +112,50 @@ export interface UnsentPurge {
   failed: number;
 }
 
+/** How many unsent pictures a page of the purge reads. */
+const UNSENT_PAGE = 100;
+
 /**
  * Deletes the pictures uploaded more than UNSENT_KEEP_MS ago that no message
- * carries (a picture picked and never sent, a send refused after its upload):
- * each record only while it is still unsent — one sent meanwhile stays — then
- * its files. Starts none past `deadline`.
+ * carries (a picture picked and never sent, a send refused after its upload),
+ * the longest waiting first, page after page: each record only while it is
+ * still unsent — one sent meanwhile stays — then its files. Starts none past
+ * `deadline`.
  */
 export async function purgeUnsentChatImages(
   db: Firestore,
   store: ChatImageStore,
   { now = Date.now(), deadline = Infinity, clock = Date.now }: { now?: number; deadline?: number; clock?: () => number } = {},
 ): Promise<UnsentPurge> {
-  const cutoff = now - UNSENT_KEEP_MS;
-  // Few at any time (sent pictures leave this query): no index beyond the field's own.
-  const unsent = await db.collection(CHAT_IMAGES).where('unsent', '==', true).limit(500).get();
+  const cutoff = Timestamp.fromMillis(now - UNSENT_KEEP_MS);
   let deleted = 0;
   let failed = 0;
-  for (const d of unsent.docs) {
-    if (clock() > deadline) break;
-    const at = d.get('createdAt');
-    if (!(at instanceof Timestamp) || at.toMillis() > cutoff) continue;
-    try {
-      const gone = await db.runTransaction(async (tx) => {
-        const fresh = await tx.get(d.ref);
-        if (!fresh.exists || fresh.get('unsent') !== true) return false;
-        tx.delete(d.ref);
-        return true;
-      });
-      if (!gone) continue;
-      // The record went first, so no message can take the picture now; its files follow (best effort).
-      const results = await Promise.allSettled(chatImageFiles([d]).map((key) => store.delete(key)));
-      if (results.some((r) => r.status === 'rejected')) console.error(`[chatImages] files of ${d.id} not deleted`);
-      deleted++;
-    } catch (err) {
-      failed++;
-      console.error(`[chatImages] unsent ${d.id} not purged`, err);
+  let after: DocumentSnapshot | null = null;
+  for (;;) {
+    let page = db.collection(CHAT_IMAGES).where('unsentAt', '<=', cutoff).orderBy('unsentAt').limit(UNSENT_PAGE);
+    // Past the ones that failed: one that keeps failing never pins the head.
+    if (after) page = page.startAfter(after);
+    const unsent = await page.get();
+    for (const d of unsent.docs) {
+      if (clock() > deadline) return { deleted, failed };
+      try {
+        const gone = await db.runTransaction(async (tx) => {
+          const fresh = await tx.get(d.ref);
+          if (!fresh.exists || fresh.get('unsentAt') == null) return false;
+          tx.delete(d.ref);
+          return true;
+        });
+        if (!gone) continue;
+        // The record went first, so no message can take the picture now; its files follow (best effort).
+        const results = await Promise.allSettled(chatImageFiles([d]).map((key) => store.delete(key)));
+        if (results.some((r) => r.status === 'rejected')) console.error(`[chatImages] files of ${d.id} not deleted`);
+        deleted++;
+      } catch (err) {
+        failed++;
+        console.error(`[chatImages] unsent ${d.id} not purged`, err);
+      }
     }
+    if (unsent.size < UNSENT_PAGE || clock() > deadline) return { deleted, failed };
+    after = unsent.docs[unsent.docs.length - 1];
   }
-  return { deleted, failed };
 }

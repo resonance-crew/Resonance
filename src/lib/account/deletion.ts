@@ -179,16 +179,16 @@ async function collectAccountData(db: Firestore, uid: string) {
     db.collection('rateLimits').where('userId', '==', uid), // API budgets (lib/api/rateLimit)
     db.collection(HANDLES).where('uid', '==', uid), // the pen name's reservation (lib/db/firestore/handles)
     db.collection(UPLOADS).where('ownerId', '==', uid), // whose each stored picture is (lib/storage/uploads)
-    db.collection(CHAT_IMAGES).where('senderId', '==', uid), // pictures they sent in chat (lib/api/v1/chatImages)
+    // Pictures sent in chat, by them and to them (lib/api/v1/chatImages): purgeAccount takes them with their files
+    // first; any left (a purge without the chat store) go here.
+    db.collection(CHAT_IMAGES).where('senderId', '==', uid),
+    db.collection(CHAT_IMAGES).where('to', '==', uid),
     db.collection('reportEvidence').where('reporterId', '==', uid),
     db.collection('reportEvidence').where('targetUserId', '==', uid),
     // A pending edit outlives its card when an older app deleted the card
     // straight from the client; the ones that carry their author are found here.
     db.collectionGroup('edits').where('authorId', '==', uid),
   ];
-  // The pictures sent to them in their conversations go with the conversations.
-  const pairs = conversations.docs.map((d) => d.id);
-  for (let i = 0; i < pairs.length; i += IN_CHUNK) queries.push(db.collection(CHAT_IMAGES).where('pair', 'in', pairs.slice(i, i + IN_CHUNK)));
   // Records found through one of the cards (see above): other readers'
   // resonance records on them, and every note left on them.
   const cardIds = cards.docs.map((d) => d.id);
@@ -307,17 +307,39 @@ export async function purgeAccountData(db: Firestore, uid: string, opts: PurgeOp
   return { trees: trees.length + roots.length, documents: singles.length + records, pages, complete };
 }
 
+/** How many chat pictures a page of the account purge takes. */
+const CHAT_PAGE = 200;
+
 /**
- * The files of the pictures sent in chat that go with the account: the ones
- * they sent, and the ones sent to them in their conversations (which go too).
+ * The pictures sent in chat that go with the account — the ones they sent
+ * and the ones sent to them, in any conversation, deleted since or not — a
+ * page at a time: the page's files (one request), then its records, so a
+ * purge cut short never does the same work twice, and no record is left
+ * naming files that are gone. Starts no page past the deadline; answers
+ * whether every one went. Files are best effort, as the other uploads'.
  */
-async function chatImageFilesOf(db: Firestore, uid: string): Promise<string[]> {
-  const conversations = await db.collection('conversations').where('participants', 'array-contains', uid).select().get();
-  const pairs = conversations.docs.map((d) => d.id);
-  const queries = [db.collection(CHAT_IMAGES).where('senderId', '==', uid)];
-  for (let i = 0; i < pairs.length; i += IN_CHUNK) queries.push(db.collection(CHAT_IMAGES).where('pair', 'in', pairs.slice(i, i + IN_CHUNK)));
-  const snaps = await Promise.all(queries.map((q) => q.select('key', 'thumbKey').get()));
-  return [...new Set(chatImageFiles(snaps.flatMap((s) => s.docs)))];
+async function purgeChatPictures(
+  db: Firestore,
+  deleteFiles: (keys: string[]) => Promise<void>,
+  uid: string,
+  late: () => boolean,
+): Promise<boolean> {
+  for (const field of ['senderId', 'to'] as const) {
+    for (;;) {
+      if (late()) return false;
+      const page = await db.collection(CHAT_IMAGES).where(field, '==', uid).select('key', 'thumbKey').limit(CHAT_PAGE).get();
+      if (page.empty) break;
+      try {
+        await deleteFiles(chatImageFiles(page.docs));
+      } catch (err) {
+        console.error(`Account purge: chat picture files of ${uid} not deleted`, err);
+      }
+      const batch = db.batch();
+      for (const d of page.docs) batch.delete(d.ref);
+      await batch.commit();
+    }
+  }
+  return true;
 }
 
 export interface PurgeDeps {
@@ -328,8 +350,8 @@ export interface PurgeDeps {
   deleteStoragePrefix?: (prefix: string) => Promise<number>;
   /** Removes one uploaded file (the ones `uploads/*` records as the user's); failures are logged, not fatal. */
   deleteStorageObject?: (key: string) => Promise<void>;
-  /** Removes one chat picture's file (lib/storage/chatImages); failures are logged, not fatal. */
-  deleteChatImageFile?: (key: string) => Promise<void>;
+  /** Removes chat pictures' files (lib/storage/chatImages, a page's at once); failures are logged, not fatal. */
+  deleteChatImageFiles?: (keys: string[]) => Promise<void>;
   /** Drops cached pages (logical paths, `revalidateLocalized` in the cron); failures are logged, not fatal. */
   revalidate?: (paths: string[]) => unknown;
 }
@@ -353,13 +375,12 @@ export async function purgeAccount(deps: PurgeDeps, uid: string, opts: PurgeOpti
       }
     }
   }
-  if (deps.deleteChatImageFile) {
-    for (const key of await chatImageFilesOf(deps.db, uid)) {
-      try {
-        await deps.deleteChatImageFile(key);
-      } catch (err) {
-        console.error(`Account purge: chat picture cleanup failed for ${key}`, err);
-      }
+  if (deps.deleteChatImageFiles) {
+    const clock = opts.clock ?? Date.now;
+    const late = () => opts.deadline !== undefined && clock() >= opts.deadline;
+    // Cut short, the rest of the account waits: its records would otherwise go before their files.
+    if (!(await purgeChatPictures(deps.db, deps.deleteChatImageFiles, uid, late))) {
+      return { trees: 0, documents: 0, pages: [], complete: false };
     }
   }
   const report = await purgeAccountData(deps.db, uid, opts);

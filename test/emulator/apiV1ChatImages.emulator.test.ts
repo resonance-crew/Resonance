@@ -95,7 +95,8 @@ describe('uploading a picture', () => {
     // Turned upright by its orientation (6: a quarter turn), then fitted into 2048.
     expect([width, height]).toEqual([1365, 2048]);
     const record = (await db.doc(`chatImages/${id}`).get()).data()!;
-    expect(record).toMatchObject({ senderId: 'alice', pair: 'alice_bob', width: 1365, height: 2048, unsent: true, animated: false });
+    expect(record).toMatchObject({ senderId: 'alice', to: 'bob', pair: 'alice_bob', width: 1365, height: 2048, animated: false });
+    expect(record.unsentAt).toBeInstanceOf(Timestamp);
     expect(record.key).toMatch(/^chat\/\d{4}-\d{2}\/[0-9a-f-]{36}\.webp$/);
     expect(record.thumbKey).toBe(record.key.replace(/\.webp$/, '-thumb.webp'));
     const full = await sharp(Buffer.from((await store.get(record.key))!)).metadata();
@@ -150,7 +151,7 @@ describe('sending it', () => {
     expect(message).toMatchObject({ senderId: 'alice', text: '', image: { id: picture.id, width: 1365, height: 2048 } });
     const record = (await db.doc(`chatImages/${picture.id}`).get()).data()!;
     expect(record.messageId).toBe('messageOfAlice0001');
-    expect(record.unsent).toBeUndefined();
+    expect(record.unsentAt).toBeUndefined();
     expect((await db.doc('conversations/alice_bob').get()).get('lastMessage')).toMatchObject({ text: '', senderId: 'alice', image: true });
 
     await sendMessage(db, 'bob', { to: 'alice', text: 'what a sky' });
@@ -192,6 +193,16 @@ describe('sending it', () => {
 });
 
 describe('reading it', () => {
+  // A message can outlive its conversation's deletion (the client deletes the messages, then the conversation):
+  // when the two talk again, its picture is not shown again.
+  it('shows nothing of a message older than the conversation it is in now', async () => {
+    const picture = await upload();
+    await sendMessage(db, 'alice', { to: 'bob', text: '', image: picture.id });
+    expect(await readChatImage(db, store, 'bob', picture.id, 'thumb')).not.toBeNull();
+    await db.doc('conversations/alice_bob').update({ createdAt: Timestamp.fromMillis(Date.now() + 60_000) });
+    expect(await readChatImage(db, store, 'bob', picture.id, 'thumb')).toBeNull();
+  });
+
   it('is for the two people of the conversation, while its message is there — never before it is sent', async () => {
     const picture = await upload();
     expect(await readChatImage(db, store, 'alice', picture.id, 'full')).toBeNull();
@@ -248,6 +259,17 @@ describe('the routes', () => {
     expect((await read(uploaded.id)).status).toBe(404);
   });
 
+  it('answers a resend of a picture already kept without spending the budget, and a slash in an id with a 404', async () => {
+    const first = await uploadRoute.POST(form({ file: new Blob([Buffer.from(await photo())], { type: 'image/jpeg' }), to: 'bob', clientId: 'routeClientId00002' }));
+    expect(first.status).toBe(201);
+    const spent = async () => (await db.doc('rateLimits/alice_chatImage').get()).get('used');
+    expect(await spent()).toBe(1);
+    const again = await uploadRoute.POST(form({ file: new Blob([Buffer.from(await photo())], { type: 'image/jpeg' }), to: 'bob', clientId: 'routeClientId00002' }));
+    expect(again.status).toBe(201);
+    expect(await spent()).toBe(1);
+    expect((await read('a/b')).status).toBe(404);
+  });
+
   it('refuses a form without a file or with a bad recipient, and says so', async () => {
     const noFile = await uploadRoute.POST(form({ to: 'bob' }));
     expect(noFile.status).toBe(400);
@@ -270,7 +292,8 @@ describe('what goes', () => {
     await sendMessage(db, 'alice', { to: 'bob', text: '', image: sentOld.id });
     const fresh = await upload();
     const dayAgo = Timestamp.fromMillis(Date.now() - UNSENT_KEEP_MS - 60_000);
-    await Promise.all([old.id, sentOld.id].map((id) => db.doc(`chatImages/${id}`).update({ createdAt: dayAgo })));
+    await db.doc(`chatImages/${old.id}`).update({ unsentAt: dayAgo });
+    await db.doc(`chatImages/${sentOld.id}`).update({ createdAt: dayAgo });
 
     expect(await purgeUnsentChatImages(db, store)).toEqual({ deleted: 1, failed: 0 });
     expect((await db.doc(`chatImages/${old.id}`).get()).exists).toBe(false);
@@ -279,21 +302,61 @@ describe('what goes', () => {
     expect(await files()).toHaveLength(4);
   });
 
-  it('takes the pictures of a deleted account with it: the ones it sent, and the ones sent to it in its conversations', async () => {
+  // Found by age, the longest waiting first, past any number of fresh ones (ids an uploader chooses sort first).
+  it('reaches an old unsent picture whatever its id, past a page of fresh ones', async () => {
+    const old = await upload('alice', 'bob', 'zzzzzzzzzzzzzzzzzzzz');
+    await db.doc(`chatImages/${old.id}`).update({ unsentAt: Timestamp.fromMillis(Date.now() - 3 * UNSENT_KEEP_MS) });
+    const fresh = Timestamp.now();
+    const writes = db.bulkWriter();
+    for (let i = 0; i < 150; i++) {
+      void writes.set(db.doc(`chatImages/----------${String(i).padStart(10, '0')}`), { senderId: 'bob', to: 'alice', pair: 'alice_bob', key: `chat/x/${i}.webp`, thumbKey: `chat/x/${i}-t.webp`, unsentAt: fresh });
+    }
+    await writes.close();
+    expect(await purgeUnsentChatImages(db, store)).toEqual({ deleted: 1, failed: 0 });
+    expect((await db.doc(`chatImages/${old.id}`).get()).exists).toBe(false);
+  });
+
+  it('takes the pictures of a deleted account with it: the ones it sent, and the ones sent to it — even in a conversation deleted before', async () => {
     const mine = await upload('alice', 'bob');
     await sendMessage(db, 'alice', { to: 'bob', text: '', image: mine.id });
     const toMe = await upload('bob', 'alice');
     await sendMessage(db, 'bob', { to: 'alice', text: '', image: toMe.id });
+    await db.doc('connections/alice_carol').set({ userIds: ['alice', 'carol'] });
+    const fromCarol = await upload('carol', 'alice');
+    await sendMessage(db, 'carol', { to: 'alice', text: '', image: fromCarol.id });
+    // Carol and Alice's conversation is deleted (the client deletes its messages, then it).
+    await db.recursiveDelete(db.doc('conversations/alice_carol'));
     await db.doc('connections/bob_carol').set({ userIds: ['bob', 'carol'] });
     const notMine = await upload('bob', 'carol');
     await sendMessage(db, 'bob', { to: 'carol', text: '', image: notMine.id });
 
     const deleted: string[] = [];
-    await purgeAccount({ db, deleteAuthUser: async () => {}, deleteChatImageFile: async (key) => { deleted.push(key); await store.delete(key); } }, 'alice');
-    expect(deleted).toHaveLength(4);
-    expect((await db.doc(`chatImages/${mine.id}`).get()).exists).toBe(false);
-    expect((await db.doc(`chatImages/${toMe.id}`).get()).exists).toBe(false);
+    const deleteChatImageFiles = async (keys: string[]) => {
+      deleted.push(...keys);
+      await store.deleteMany(keys);
+    };
+    await purgeAccount({ db, deleteAuthUser: async () => {}, deleteChatImageFiles }, 'alice');
+    expect(deleted).toHaveLength(6);
+    for (const id of [mine.id, toMe.id, fromCarol.id]) expect((await db.doc(`chatImages/${id}`).get()).exists).toBe(false);
     expect((await db.doc(`chatImages/${notMine.id}`).get()).exists).toBe(true);
     expect(await files()).toHaveLength(2);
+  });
+
+  // Cut short, a purge leaves no record naming files that are gone, and the next run goes on from there.
+  it('stops at the deadline between pages of pictures, the rest of the account waiting, and goes on next time', async () => {
+    const mine = await upload('alice', 'bob');
+    await sendMessage(db, 'alice', { to: 'bob', text: '', image: mine.id });
+    let calls = 0;
+    const deleteChatImageFiles = (keys: string[]) => store.deleteMany(keys);
+    const late = await purgeAccount({ db, deleteAuthUser: async () => {}, deleteChatImageFiles }, 'alice', { deadline: 0, clock: () => ++calls });
+    expect(late.complete).toBe(false);
+    expect((await db.doc(`chatImages/${mine.id}`).get()).exists).toBe(true);
+    expect(await files()).toHaveLength(2);
+    expect((await db.doc('users/alice').get()).exists).toBe(true);
+
+    const done = await purgeAccount({ db, deleteAuthUser: async () => {}, deleteChatImageFiles }, 'alice');
+    expect(done.complete).toBe(true);
+    expect((await db.doc(`chatImages/${mine.id}`).get()).exists).toBe(false);
+    expect(await files()).toHaveLength(0);
   });
 });

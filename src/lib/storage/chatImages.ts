@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, type S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, DeleteObjectsCommand, GetObjectCommand, PutObjectCommand, type S3Client } from '@aws-sdk/client-s3';
 import { r2Client } from './r2';
 
 /**
@@ -22,6 +22,8 @@ export interface ChatImageStore {
   get(key: string): Promise<Uint8Array | null>;
   /** Removes it (one already gone is no error). */
   delete(key: string): Promise<void>;
+  /** Removes all of them, as few requests as the store allows (an account's pictures). */
+  deleteMany(keys: string[]): Promise<void>;
 }
 
 /** `chat/{yyyy-mm}/{uuid}.webp` and its `-thumb` — a fresh name that says nothing of who sent it, or to whom. */
@@ -57,6 +59,14 @@ class R2ChatImages implements ChatImageStore {
   async delete(key: string): Promise<void> {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
+
+  async deleteMany(keys: string[]): Promise<void> {
+    // R2 takes a thousand keys a request.
+    for (let i = 0; i < keys.length; i += 1000) {
+      const Objects = keys.slice(i, i + 1000).map((Key) => ({ Key }));
+      await this.client.send(new DeleteObjectsCommand({ Bucket: this.bucket, Delete: { Objects, Quiet: true } }));
+    }
+  }
 }
 
 /** A folder standing in for the bucket (emulator builds, tests): `chat/…` keys become paths inside it. */
@@ -87,6 +97,10 @@ export class LocalChatImages implements ChatImageStore {
 
   async delete(key: string): Promise<void> {
     await rm(this.path(key), { force: true });
+  }
+
+  async deleteMany(keys: string[]): Promise<void> {
+    for (const key of keys) await this.delete(key);
   }
 }
 

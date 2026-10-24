@@ -23,7 +23,7 @@ function call(authorization?: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(purgeExpiredTrash).mockResolvedValue({ purged: 3, skipped: 1, failed: 0, deferred: 2, stale: ['/card/a'] });
-  vi.mocked(getChatImageStore).mockReturnValue({ put: vi.fn(), get: vi.fn(), delete: vi.fn() });
+  vi.mocked(getChatImageStore).mockReturnValue({ put: vi.fn(), get: vi.fn(), delete: vi.fn(), deleteMany: vi.fn() });
   vi.mocked(purgeUnsentChatImages).mockResolvedValue({ deleted: 4, failed: 0 });
 });
 afterEach(() => {

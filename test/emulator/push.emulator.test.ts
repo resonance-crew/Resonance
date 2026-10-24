@@ -348,7 +348,7 @@ describe('pushMessage', () => {
   });
 
   it('says "sent a photo" in the device\'s own language for a message that is only a picture', async () => {
-    await db.doc('chatImages/pic1').set({ senderId: 'alice', pair: 'alice_bob', key: 'chat/k.webp', thumbKey: 'chat/k-thumb.webp', width: 4, height: 3, unsent: true });
+    await db.doc('chatImages/pic1').set({ senderId: 'alice', pair: 'alice_bob', key: 'chat/k.webp', thumbKey: 'chat/k-thumb.webp', width: 4, height: 3, unsentAt: Timestamp.now() });
     const push = await send('', { image: 'pic1' });
     const fcm = fakeFcm();
     await pushMessage(db, push, fcm.sender);
@@ -357,7 +357,7 @@ describe('pushMessage', () => {
     expect(at['pixel-en'].data?.body).toBe('Sent a photo');
     expect(at['iphone-zh'].notification?.body).toBe('傳送了一張圖片');
     // With words, the words are the body.
-    await db.doc('chatImages/pic2').set({ senderId: 'alice', pair: 'alice_bob', key: 'chat/l.webp', thumbKey: 'chat/l-thumb.webp', width: 4, height: 3, unsent: true });
+    await db.doc('chatImages/pic2').set({ senderId: 'alice', pair: 'alice_bob', key: 'chat/l.webp', thumbKey: 'chat/l-thumb.webp', width: 4, height: 3, unsentAt: Timestamp.now() });
     const worded = await send('the sky tonight', { image: 'pic2' });
     const again = fakeFcm();
     await pushMessage(db, worded, again.sender);

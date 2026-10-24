@@ -542,7 +542,7 @@ export async function sendMessage(
       ...(picture ? { image: picture } : {}),
     });
     // Sent: the picture is this message's from now on (and no longer one the unsent purge looks at).
-    if (picture) tx.update(chatImageRef(db, picture.id), { messageId: message.id, unsent: FieldValue.delete() });
+    if (picture) tx.update(chatImageRef(db, picture.id), { messageId: message.id, unsentAt: FieldValue.delete() });
     // The list's preview: the text, or the attached card's title when there is none; a picture says so
     // (`image`, written or taken away every time — the preview is merged into the one before).
     tx.set(conversation, {

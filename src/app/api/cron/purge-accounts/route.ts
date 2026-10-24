@@ -30,8 +30,8 @@ export async function GET(req: Request) {
       deleteAuthUser: (uid) => getAdminAuth().deleteUser(uid),
       deleteStoragePrefix: (prefix) => getStorageProvider().deletePrefix(prefix),
       deleteStorageObject: (key) => getStorageProvider().deleteObject(key),
-      deleteChatImageFile: async (key) => {
-        await getChatImageStore()?.delete(key);
+      deleteChatImageFiles: async (keys) => {
+        await getChatImageStore()?.deleteMany(keys);
       },
       // The deleted writing must not live on in cached card and profile pages.
       revalidate: revalidateLocalized,
