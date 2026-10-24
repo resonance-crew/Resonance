@@ -135,6 +135,16 @@ describe('Markdown pasted', () => {
     expect(out.markdown).toBe('## 那天\n\n- 第一件事\n- 第二件事\n\n**真的**很好');
   });
 
+  it('splits the line it lands at the end of: the words before it stay theirs, the pasted blocks follow', () => {
+    const out = paste('雨剛停，我慢慢走回家。', { text: '## 那天\n\n- 一\n- 二', html: '<div><span>## 那天</span></div>' });
+    expect(out.handled).toBe(true);
+    expect(out.markdown).toBe('雨剛停，我慢慢走回家。\n\n## 那天\n\n- 一\n- 二');
+    const table = '| 地點 | 時間 |\n|:-----|-----:|\n| 台北 | 傍晚 |';
+    expect(paste('雨剛停。', { text: table, html: `<div>${table}</div>` }).markdown).toBe(`雨剛停。\n\n${table}`);
+    // Words alone join the line, as typed ones would.
+    expect(paste('那天', { text: '**真的**很好', html: '<span>**真的**很好</span>' }).markdown).toBe('那天**真的**很好');
+  });
+
   it('keeps a table pasted that way exactly as it was written', () => {
     const table = '| 地點 | 時間 |\n|:-----|-----:|\n| 台北 | 早上 |';
     const out = paste('', { text: table, html: `<pre style="font-family:monospace">${table}</pre>`.replace('<pre', '<div').replace('</pre>', '</div>') });
