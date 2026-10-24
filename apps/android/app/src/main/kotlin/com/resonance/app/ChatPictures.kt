@@ -20,6 +20,7 @@ import com.resonance.kit.chat.OutgoingImage
 import okhttp3.OkHttpClient
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.nio.ByteBuffer
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -97,7 +98,8 @@ class ChatPictures(val loader: ImageLoader) {
                     val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: throw Unsupported()
                     if (bytes.size <= MAX_BYTES) {
                         var size = 0 to 0
-                        val first = ImageDecoder.decodeBitmap(ImageDecoder.createSource(bytes)) { decoder, info, _ ->
+                        // A ByteBuffer source (API 28): the byte-array one is Android 12's.
+                        val first = ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) { decoder, info, _ ->
                             size = info.size.width to info.size.height
                             decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
                             decoder.scaleWithin(info.size.width, info.size.height, PREVIEW_SIDE)

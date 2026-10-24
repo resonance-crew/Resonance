@@ -10,6 +10,7 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import coil3.ImageLoader
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.ListenerRegistration
@@ -17,7 +18,6 @@ import com.google.firebase.firestore.Query
 import com.resonance.api.models.Author
 import com.resonance.api.models.FeedCard
 import com.resonance.api.models.Profile
-import coil3.ImageLoader
 import com.resonance.app.AppFirebase
 import com.resonance.app.ChatPictures
 import com.resonance.app.FirestoreFailure
