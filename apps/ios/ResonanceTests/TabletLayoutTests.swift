@@ -186,6 +186,24 @@ import Testing
         #expect(!phone.rail && phone.article == 402 && phone.leading == 0 && phone.text == 362)
     }
 
+    /// Round 8 §10.1: the byline is under the title at every width, so the rail holds the story's
+    /// table of contents alone — a story with none has no rail, and its column is centred, at every width.
+    @Test func aStoryWithNoContentsHasNoRailAndItsColumnIsCentred() {
+        for w: CGFloat in [1440, 1376, 1032, 901] {
+            let l = CardPageLayout.of(width: w, window: w, contents: false)
+            #expect(!l.rail, "\(w)")
+            #expect(l.text == min(Tokens.measure, w - 2 * LayoutClass.pad(w)), "\(w)")
+            // Centred: as much room before the column as after it.
+            #expect(abs((l.leading + CardPageLayout.articleInset) * 2 + l.text - w) < 0.01, "\(w)")
+            // With contents, the rail beside it.
+            #expect(CardPageLayout.of(width: w, window: w, contents: true).rail)
+        }
+        // Medium and compact never had one.
+        #expect(!CardPageLayout.of(width: 768, window: 768, contents: true).rail)
+        #expect(CardPageLayout.of(width: 768, window: 768, contents: true) == CardPageLayout.of(width: 768, window: 768, contents: false))
+        #expect(!CardPageLayout.of(width: 402, window: 402, contents: true).rail)
+    }
+
     @Test func twoPanesDrawTheConversationBesideTheListAndPushOnlyWhatIsOverIt() {
         let ben = Route.thread(handle: "ben", uid: "u-ben", note: nil)
         let cyd = Route.thread(handle: "cyd", uid: "u-cyd", note: nil)

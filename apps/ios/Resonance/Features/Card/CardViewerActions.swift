@@ -3,11 +3,11 @@ import ResonanceKit
 import SwiftUI
 
 /// The reader's actions under a story (ReadAfterArea → CardViewerActions): one segmented bar,
-/// spanning the column in one row — 共振 (the verb, solid), opening the picker: write a new card in
-/// answer, or pick one already written — or, once you have answered this card, 已共振 opening your
-/// published resonance (修改 while it is a draft, back to the writer); then the note (寄小紙條, its
-/// full words its name for VoiceOver) and the bookmark (tonal), which drops its words for its glyph
-/// when the row has no room for them. Fades in once scrolled to.
+/// at the start of the story's end row (round 8 §10.2) — 共振 (the verb, solid), opening the picker:
+/// write a new card in answer, or pick one already written — or, once you have answered this card,
+/// 已共振 opening your published resonance (修改 while it is a draft, back to the writer); then the
+/// note (寄小紙條, its full words its name for VoiceOver) and the bookmark (tonal), which drops its
+/// words for its glyph when the row has no room for them. (The row fades in once scrolled to.)
 struct CardViewerActions: View {
     let cardId: String
     /// The card this one answers itself: never offered in the picker.
@@ -15,7 +15,6 @@ struct CardViewerActions: View {
     @Environment(SessionStore.self) private var session
     @Environment(WriteLauncher.self) private var writer
     @Environment(\.openRoute) private var openRoute
-    @State private var shown = false
     /// Your card answering this one, as far as it is known (`.found(nil)`: none).
     @State private var lookup = ResonanceLookup()
     @State private var writingNote = false
@@ -34,8 +33,6 @@ struct CardViewerActions: View {
                 Text(L10n.Native.loadError).font(AppFonts.body(13)).foregroundStyle(Tokens.textMuted)
             }
         }
-        .opacity(shown ? 1 : 0)
-        .offset(y: shown ? 0 : 10)
         .organicModal(isPresented: $writingNote, seed: 17, maxWidth: 520, closeLabel: L10n.Card.Note.close) {
             NoteComposer(cardId: cardId) { writingNote = false } onUpgrade: { text in
                 writingNote = false
@@ -66,10 +63,6 @@ struct CardViewerActions: View {
         }
         .task(id: cardId) {
             bookmark.found((try? await session.bookmarks?.isBookmarked(cardId)) ?? false)
-        }
-        .onScrollVisibilityChange(threshold: 0.08) { visible in
-            guard visible, !shown else { return }
-            withAnimation(.easeOut(duration: 0.6)) { shown = true }
         }
     }
 
@@ -107,6 +100,25 @@ struct CardViewerActions: View {
             let saving = bookmark.flip()
             Task { bookmark.settled(saving: saving, result: try? await bookmarks.toggle(cardId)) }
         }
+    }
+}
+
+extension View {
+    /// Fades in (and rises 10) once scrolled to — the story's end row, as the web's ReadAfterArea.
+    func revealedOnScroll() -> some View { modifier(RevealedOnScroll()) }
+}
+
+private struct RevealedOnScroll: ViewModifier {
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .offset(y: shown ? 0 : 10)
+            .onScrollVisibilityChange(threshold: 0.08) { visible in
+                guard visible, !shown else { return }
+                withAnimation(.easeOut(duration: 0.6)) { shown = true }
+            }
     }
 }
 

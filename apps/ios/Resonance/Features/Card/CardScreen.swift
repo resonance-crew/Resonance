@@ -2,11 +2,13 @@ import DesignSystem
 import ResonanceKit
 import SwiftUI
 
-/// A card's page (card/[slug]/page.tsx): the cover, the title in the story's type, the byline (or,
-/// beside a wide window's author rail, the meta line) under it, the story, tags, what a reader can do
-/// next; then the resonance and related sections, set straight on the page. The title and story are
-/// set by their script (`CardModel.storyType` → ``StoryTypography``); the share and the ⋯ live in the
-/// bar, as phone apps keep a page's actions.
+/// A card's page (card/[slug]/page.tsx): the cover, the title in the story's type, the byline under
+/// it at every width (round 8 §10.1), the story, tags, then one row — the reader's response bar at
+/// its start, the card's share and ⋯ at its end (§10.2); then the resonance and related sections,
+/// set straight on the page. The title and story are set by their script (`CardModel.storyType` →
+/// ``StoryTypography``); the share and the ⋯ also live in the bar, as phone apps keep a page's
+/// actions. A wide window's rail holds the story's table of contents, when it has one; a story with
+/// none is centred.
 struct CardScreen: View {
     let key: String
     @Environment(SessionStore.self) private var session
@@ -37,13 +39,19 @@ struct CardScreen: View {
     static let tabletHeadingAbove: CGFloat = 64
     static let tabletHeadingGap: CGFloat = 56
 
-    /// The article's column, and the author rail beside it on a wide window.
-    private var layout: CardPageLayout { .of(width: width ?? window.contentWidth, window: window.width) }
+    /// The article's column, and beside it on a wide window the rail of the story's table of contents
+    /// — only when the story has one (until it has loaded, the column is centred).
+    private var layout: CardPageLayout {
+        .of(width: width ?? window.contentWidth, window: window.width, contents: !contents.isEmpty)
+    }
+
+    /// The story's table of contents, once the card has loaded.
+    private var contents: [TocEntry] { model?.phase == .loaded ? model?.toc ?? [] : [] }
     /// How far the lists under the story reach out of the article's column on either side: on a
     /// phone and down a medium window's middle they are bands, whose paper and wavy rules run from
     /// edge to edge of the page while the cards keep to their measure inside (``StoryBand``) — as a
-    /// phone's do. Beside the rail they stay in the column (the bordered grid's).
-    private var bleed: CGFloat { layout.rail ? 0 : max(0, layout.leading) }
+    /// phone's do. On an expanded window they stay in the column (the bordered grid's), rail or none.
+    private var bleed: CGFloat { window.layoutClass == .expanded ? 0 : max(0, layout.leading) }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -54,32 +62,27 @@ struct CardScreen: View {
             // The page's own scroll (the bar's line and progress): on the page's scroll view alone, not
             // on the rail's table of contents, which scrolls by itself.
             .modifier(CardScroll(screen: self))
-            // The author's rail stays put beside the article as it scrolls (the web's sticky aside).
+            // The contents' rail stays put beside the article as it scrolls (the web's sticky aside).
             .overlay(alignment: .topLeading) {
-                if layout.rail, let model, let card = model.detail?.card ?? model.placeholder {
-                    rail(model, card: card, proxy: proxy)
-                }
+                if layout.rail { rail(contents, proxy: proxy) }
             }
+            // A story with a table of contents slides over from the centre to make room for its rail.
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: layout)
             .modifier(CardChrome(screen: self))
         }
     }
 
-    /// The author, and under them the story's table of contents (the web's aside: 28 apart). It never
-    /// runs past the window: it ends 24 above the foot, as the web's `max-height` keeps it, and a long
-    /// table of contents scrolls in what is left.
-    private func rail(_ model: CardModel, card: FeedCard, proxy: ScrollViewProxy) -> some View {
-        let toc = model.phase == .loaded ? model.toc : []
-        return VStack(alignment: .leading, spacing: 28) {
-            CardAuthorRail(card: card, anonymous: model.detail?.anonymous ?? card.anonymous, isOwner: model.detail?.isOwner ?? false)
-            if !toc.isEmpty {
-                CardToc(entries: toc, title: L10n.Card.toc, meter: meter) { entry in
-                    meter.choose(entry.index)
-                    // The heading 16 under the bar's line (the web's scroll-margin-top), smoothly unless motion is reduced.
-                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) {
-                        proxy.scrollTo(StoryHeadingAnchor(index: entry.index), anchor: .top)
-                    }
+    /// The story's table of contents beside a wide window's article (the web's aside; the author is
+    /// the byline's, under the title). It never runs past the window: it ends 24 above the foot, as
+    /// the web's `max-height` keeps it, and a long table of contents scrolls in what is left.
+    private func rail(_ toc: [TocEntry], proxy: ScrollViewProxy) -> some View {
+        VStack(alignment: .leading, spacing: 28) {
+            CardToc(entries: toc, title: L10n.Card.toc, meter: meter) { entry in
+                meter.choose(entry.index)
+                // The heading 16 under the bar's line (the web's scroll-margin-top), smoothly unless motion is reduced.
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) {
+                    proxy.scrollTo(StoryHeadingAnchor(index: entry.index), anchor: .top)
                 }
-                .transition(.opacity)
             }
         }
         .frame(width: Tokens.cardRailW, alignment: .leading)
@@ -98,7 +101,7 @@ struct CardScreen: View {
             switch model?.phase ?? .loading {
             case .loading:
                 // Opened from a list: that list's byline, cover and title at once; the rest while it loads.
-                if let card = model?.placeholder { placeholderPage(card) } else { CardDetailSkeleton(rail: layout.rail) }
+                if let card = model?.placeholder { placeholderPage(card) } else { CardDetailSkeleton() }
             case .notFound:
                 OrganicEmptyState(title: L10n.Card.NotFound.title, titleSize: 24, actionTitle: L10n.Card.NotFound.back,
                                   actionStyle: .link) { openRoute.dismissToRoot() }
@@ -147,35 +150,16 @@ struct CardScreen: View {
                 if headerChrome != nil {
                     // A tablet's header centres the card's title once the article's own has scrolled under it.
                     HeaderContextTitle(model?.detail?.card.title ?? "", shown: titleGone && model?.phase == .loaded)
-                } else if let detail = model?.detail, model?.phase == .loaded, bylineGone, !layout.rail {
-                    // Beside a rail the author is always in view: the bar has no need to name them.
+                } else if let detail = model?.detail, model?.phase == .loaded, bylineGone {
+                    // The byline has scrolled under the bar: the bar names the author.
                     BarAuthor(card: detail.card, anonymous: detail.anonymous)
                         .transition(.opacity.combined(with: .offset(y: 8)))
                 }
             } trailing: {
                 // The owner's card in the trash has neither its share nor its ⋯: its banner is the way out.
                 if let detail = model?.detail, !TrashedCardBanner.shows(detail) {
-                    let card = detail.card
-                    let hue = card.accentHue ?? 55
-                    // Only a published, public card can be opened by whoever gets its link (share.spec §1):
-                    // the system's sheet, with the card's link and its picture.
-                    if CardShareGate.offered(detail) {
-                        CardShareButton(detail: detail, seed: hue + 5)
-                    }
-                    // The ⋯ lives in the bar, as phone apps keep a page's actions: the owner's, or the reader's safety menu —
-                    // anonymous cards included (App Store 1.2), whose author only the server knows: Report alone.
-                    if detail.isOwner {
-                        // 刪除 leaves the page here, its trash banner in place of the share and the ⋯.
-                        CardActionsMenu(cardId: card.id, visibility: card.visibility.rawValue, seed: hue + 3,
-                                        answering: card.referenceCardId, answeringTitle: detail.referenceCard?.value1.title,
-                                        answeringAnonymous: detail.referenceCard?.value1.anonymous,
-                                        isPublished: card.publishedAt != nil, anonymous: detail.anonymous, title: card.title,
-                                        trashFeedback: .page, showsCardAfterEdit: false, onTrashed: { justTrashed = true },
-                                        trigger: .bare)
-                    } else {
-                        let author = detail.anonymous ? nil : card.author?.value1
-                        SafetyMenu(target: .card(id: card.id, authorId: author?.id), handle: author?.handle, seed: hue + 3)
-                    }
+                    // The ⋯ lives in the bar, as phone apps keep a page's actions (and again at the story's end).
+                    cardActions(detail, seed: (detail.card.accentHue ?? 55) + 3)
                 }
             }
             .readingProgress(model?.phase == .loaded ? progress : nil)
@@ -215,6 +199,29 @@ struct CardScreen: View {
         }
     }
 
+    /// The card's share and its ⋯, as the bar's ghost glyphs: the share only for a card whoever gets its
+    /// link can open (published and public, share.spec §1: the system's sheet, with the card's link and
+    /// its picture); the owner's ⋯, or the reader's safety menu — anonymous cards included (App Store
+    /// 1.2), whose author only the server knows: Report alone. The bar's and the story's end's alike.
+    @ViewBuilder fileprivate func cardActions(_ detail: CardDetail, seed: Double) -> some View {
+        let card = detail.card
+        if CardShareGate.offered(detail) {
+            CardShareButton(detail: detail, seed: seed + 2)
+        }
+        if detail.isOwner {
+            // 刪除 leaves the page here, its trash banner in place of the share and the ⋯.
+            CardActionsMenu(cardId: card.id, visibility: card.visibility.rawValue, seed: seed,
+                            answering: card.referenceCardId, answeringTitle: detail.referenceCard?.value1.title,
+                            answeringAnonymous: detail.referenceCard?.value1.anonymous,
+                            isPublished: card.publishedAt != nil, anonymous: detail.anonymous, title: card.title,
+                            trashFeedback: .page, showsCardAfterEdit: false, onTrashed: { justTrashed = true },
+                            trigger: .bare)
+        } else {
+            let author = detail.anonymous ? nil : card.author?.value1
+            SafetyMenu(target: .card(id: card.id, authorId: author?.id), handle: author?.handle, seed: seed)
+        }
+    }
+
     private func page(_ model: CardModel, _ detail: CardDetail) -> some View {
         let card = detail.card
         let type = model.storyType
@@ -243,6 +250,8 @@ struct CardScreen: View {
                 // Its headings are where the rail's table of contents takes the page, and where they
                 // are says which one is being read.
                 .anchoringHeadings(in: Self.pageSpace)
+                // What VoiceOver names a table in it.
+                .environment(\.storyTableLabel, L10n.Card.table)
                 .onPreferenceChange(StoryHeadingTops.self) { tops in
                     let wanted = Set(model.toc.map(\.index))
                     meter.headings = tops.filter { wanted.contains($0.key) }
@@ -259,8 +268,9 @@ struct CardScreen: View {
                     }
                     .padding(.bottom, 40)
                 }
-                if !detail.isOwner {
-                    CardViewerActions(cardId: card.id, referenceCardId: card.referenceCardId).padding(.bottom, 40)
+                // The story's end (round 8 §10.2): one row — the response bar at its start, share and ⋯ at its end.
+                if !trashed {
+                    endRow(detail).padding(.bottom, 40)
                 }
                 if !trashed, !model.links.isEmpty {
                     Text(L10n.Card.linkedCards)
@@ -276,8 +286,8 @@ struct CardScreen: View {
 
             if !trashed, !model.links.isEmpty { MiniCardList(cards: model.links).padding(.horizontal, -bleed).padding(.bottom, 40) }
             // The article's own bottom padding — already there under a last row that keeps its own 40
-            // (the reader's actions, the tags, the linked cards): not a second band of air.
-            if detail.isOwner && card.tags.isEmpty && (trashed || model.links.isEmpty) { Color.clear.frame(height: 8) }
+            // (the story's end row, the tags, the linked cards): not a second band of air.
+            if trashed && card.tags.isEmpty { Color.clear.frame(height: 8) }
 
             let resonance = trashed ? [] : model.resonanceSection
             if !resonance.isEmpty {
@@ -297,10 +307,29 @@ struct CardScreen: View {
         .coordinateSpace(.named(Self.pageSpace))
     }
 
-    /// Cover, title and byline: what a list already knows of the card (its actions live in the bar).
-    /// The cover, `coverGap`, the title in the story's type, `metaGap`, then the byline where no rail
-    /// names the author (a phone, a medium window) or the meta line alone beside the rail, and
-    /// `leadGap` down to the story.
+    /// The story's end (round 8 §10.2): the response bar (共振 · 寄小紙條 · 收藏) at the row's start, the
+    /// card's share and ⋯ at its end — the author's own card, which has no response bar, the two
+    /// alone. A phone keeps it one line: the response bar gives way first (the bookmark drops its
+    /// words), the glyphs keep their 44. It fades in once scrolled to.
+    private func endRow(_ detail: CardDetail) -> some View {
+        let card = detail.card
+        return HStack(spacing: 4) {
+            if detail.isOwner {
+                Spacer(minLength: 0)
+            } else {
+                CardViewerActions(cardId: card.id, referenceCardId: card.referenceCardId)
+                    .padding(.trailing, 4)
+            }
+            cardActions(detail, seed: (card.accentHue ?? 55) + 23)
+        }
+        // The glyphs' own pads sit in the margin, their ink on the column's edge (as the bar's).
+        .padding(.trailing, -12)
+        .revealedOnScroll()
+    }
+
+    /// Cover, title and byline: what a list already knows of the card. The cover, `coverGap`, the
+    /// title in the story's type, `metaGap`, then the byline at every width — the author over the
+    /// read time and date (round 8 §10.1) — and `leadGap` down to the story.
     private func head(_ card: FeedCard, anonymous: Bool, type: StoryType) -> some View {
         let hue = card.accentHue ?? 55
         let story = StoryTypography(script: type.script, layout: window.layoutClass)
@@ -317,18 +346,10 @@ struct CardScreen: View {
                 // Where the title ends, for the tablet header's centre (it fades in once this is under the line).
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.pageSpace)).maxY } action: { meter.titleBottom = $0 }
                 .padding(.bottom, story.metaGap)
-            Group {
-                if layout.rail {
-                    // The rail names the author: the row keeps its meta line alone.
-                    StoryMetaLine(card: card, size: StoryTypography.metaRowSize)
-                        .frame(minHeight: 44, alignment: .leading)
-                } else {
-                    StoryBylineRow(card: card, anonymous: anonymous, avatar: story.bylineAvatar)
-                        // Where the byline ends: past it, the bar names the author.
-                        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.pageSpace)).maxY } action: { meter.bylineBottom = $0 }
-                }
-            }
-            .padding(.bottom, story.leadGap)
+            StoryBylineRow(card: card, anonymous: anonymous, avatar: story.bylineAvatar)
+                // Where the byline ends: past it, the bar names the author.
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.pageSpace)).maxY } action: { meter.bylineBottom = $0 }
+                .padding(.bottom, story.leadGap)
         }
     }
 
@@ -407,56 +428,9 @@ private struct CardScroll: ViewModifier {
     func body(content: Content) -> some View { screen.scroll(content) }
 }
 
-/// The author beside a wide window's article (the web's CardAuthorAside, design §11): their avatar,
-/// pen name (→ their page) with the region's flag and the verified mark; an anonymous card's dot and
-/// 「匿名」, with a word for its owner. The date is under the title (the meta line), not here. No
-/// way to message from here: that is the profile's.
-private struct CardAuthorRail: View {
-    let card: FeedCard
-    let anonymous: Bool
-    let isOwner: Bool
-    @Environment(\.openRoute) private var openRoute
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let author = card.author?.value1, !anonymous {
-                Button { openRoute(.author(author.handle)) } label: {
-                    HandDrawnAvatar(initials: author.initials, imageURL: author.avatarUrl.flatMap(URL.init(string:)),
-                                    color: author.accent, size: 56, seed: author.avatarSeedValue)
-                }
-                .buttonStyle(.plain)
-                .accessibilityHidden(true)
-                .padding(.bottom, 8)
-                HStack(spacing: 6) {
-                    Button(author.handle) { openRoute(.author(author.handle)) }
-                        .font(AppFonts.body(16, weight: .semibold))
-                        .foregroundStyle(Tokens.text)
-                        .buttonStyle(.plain)
-                    AuthorRegionFlag(region: author.region, size: 15)
-                    if author.verified {
-                        OrganicIcon(.verified, size: 14, color: Tokens.sage, strokeWidth: 1.8)
-                            .accessibilityLabel(L10n.Card.verified)
-                    }
-                }
-            } else {
-                HandDrawnAvatar(initials: "·", color: Tokens.creamDark, size: 56, seed: 97)
-                    .accessibilityHidden(true)
-                    .padding(.bottom, 8)
-                Text(L10n.Card.anonymousAuthor).font(AppFonts.body(16, weight: .semibold)).foregroundStyle(Tokens.textMuted)
-                if isOwner {
-                    Text(L10n.Card.anonymousOwnerNote)
-                        .font(AppFonts.body(14)).lineSpacing(14 * 0.6).foregroundStyle(Tokens.textMuted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-        .accessibilityElement(children: .contain)
-    }
-}
-
-/// The line under the title where no rail names the author (the web's StoryByline up to 900): the
-/// author's avatar (40), pen name (→ their page; one line, its end cut with an ellipsis), the
-/// region's flag and the verified mark, over the meta line. An anonymous card shows the neutral 「·」
+/// The line under the title, at every width (the web's StoryByline; round 8 §10.1): the author's
+/// avatar (40), pen name (→ their page; one line, its end cut with an ellipsis), the region's flag
+/// and the verified mark, over the meta line. An anonymous card shows the neutral 「·」
 /// and 「匿名」 in muted ink, linking nowhere, to everyone — its owner too. The row grows with large
 /// text and a wrapping meta line (at least 44, never a fixed height); its actions are the bar's.
 struct StoryBylineRow: View {
@@ -560,11 +534,10 @@ private struct BarAuthor: View {
     }
 }
 
-/// CardDetailSkeleton: the cover, the title, the byline (the meta line beside a rail), the story and
-/// its tags as shimmering blocks where they will land — the title's bars its line box's size apart,
-/// the story's the body's (its script unknown yet: a CJK story's, the site's own).
+/// CardDetailSkeleton: the cover, the title, the byline, the story and its tags as shimmering blocks
+/// where they will land — the title's bars its line box's size apart, the story's the body's (its
+/// script unknown yet: a CJK story's, the site's own).
 private struct CardDetailSkeleton: View {
-    var rail = false
     @Environment(\.window) private var window
 
     var body: some View {
@@ -576,17 +549,11 @@ private struct CardDetailSkeleton: View {
                 SkeletonBlock(fraction: 0.55, height: story.titleSize)
             }
             .padding(.bottom, story.metaGap)
-            Group {
-                if rail {
-                    SkeletonBlock(width: 160, height: StoryTypography.metaRowSize)
-                } else {
-                    HStack(spacing: 12) {
-                        SkeletonBlock(width: story.bylineAvatar, circle: true)
-                        VStack(alignment: .leading, spacing: 7) {
-                            SkeletonBlock(width: 120, height: 15)
-                            SkeletonBlock(width: 160, height: StoryTypography.bylineMetaSize)
-                        }
-                    }
+            HStack(spacing: 12) {
+                SkeletonBlock(width: story.bylineAvatar, circle: true)
+                VStack(alignment: .leading, spacing: 7) {
+                    SkeletonBlock(width: 120, height: 15)
+                    SkeletonBlock(width: 160, height: StoryTypography.bylineMetaSize)
                 }
             }
             .frame(minHeight: 44, alignment: .leading)
