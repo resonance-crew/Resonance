@@ -77,13 +77,16 @@ const components: Components = {
   // A story's `#` is drawn as the reader's h2, and is one: the page has one h1, the card's title.
   h1: ({ node: _node, ...rest }) => <h2 {...rest} />,
   // A table scrolls sideways in a box of its own; each cell's words wrap between 4em and 18em (story.css).
-  table: ({ children }) => <StoryTable>{children}</StoryTable>,
-  th: ({ node: _node, children, ...rest }) => (
+  // Its pen rules are seeded by where it sits in the story, so a story draws its tables the same way every time.
+  table: ({ node, children }) => <StoryTable seed={node?.position?.start.offset ?? 0}>{children}</StoryTable>,
+  // Every cell starts at the start edge (round 9 §6): the alignment GFM writes on a cell from the
+  // delimiter row's colons (`style="text-align:…"`, or `align`) is left in the source, not drawn.
+  th: ({ node: _node, children, style: _style, align: _align, ...rest }) => (
     <th {...rest}>
       <div className="story-cell">{children}</div>
     </th>
   ),
-  td: ({ node: _node, children, ...rest }) => (
+  td: ({ node: _node, children, style: _style, align: _align, ...rest }) => (
     <td {...rest}>
       <div className="story-cell">{children}</div>
     </td>

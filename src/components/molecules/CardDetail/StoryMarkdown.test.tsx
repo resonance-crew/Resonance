@@ -241,7 +241,7 @@ describe('StoryMarkdown link cards', () => {
 });
 
 describe('StoryMarkdown tables', () => {
-  it('draws a table in a named box of its own that scrolls sideways, its alignments kept and each cell wrapped', () => {
+  it('draws a table in a named box of its own that scrolls sideways, each cell wrapped', () => {
     const { container } = renderWithIntl(
       <StoryMarkdown source={'前言\n\n| 地點 | 次數 |\n|:--|--:|\n| 台北 | 3 |\n| 高雄 | 12 |'} script="cjk" lang="zh-TW" />,
     );
@@ -251,8 +251,23 @@ describe('StoryMarkdown tables', () => {
     const table = region.querySelector('table')!;
     expect(table.querySelectorAll('th')).toHaveLength(2);
     expect(table.querySelectorAll('tbody tr')).toHaveLength(2);
-    expect(table.querySelector('td:last-child')?.getAttribute('style')).toMatch(/text-align:\s*right/);
     expect(container.querySelectorAll('.story-cell')).toHaveLength(6);
+  });
+
+  // Round 9 §6: every cell starts at the start edge, the header's too, whatever the colons say — the
+  // alignment GFM writes on a cell is left in the source, and story.css sets `start` on the cells
+  // themselves (on the table, the browser's own `th { text-align: center }` would win).
+  it('starts every cell at the start edge, dropping the alignment the colons asked for', () => {
+    renderWithIntl(<StoryMarkdown source={'| 地點 | 說明 | 次數 |\n|:--|:-:|--:|\n| 台北 | 雨 | 3 |'} />);
+    const cells = [...screen.getByRole('region', { name: 'Table' }).querySelectorAll('th, td')];
+    expect(cells).toHaveLength(6);
+    for (const cell of cells) {
+      expect(cell.getAttribute('style')).toBeNull();
+      expect(cell.getAttribute('align')).toBeNull();
+    }
+    const css = readFileSync(join(process.cwd(), 'src/styles/story.css'), 'utf8');
+    const cellRule = css.match(/\.story-prose \.story-table :is\(th, td\) \{[^}]*\}/)?.[0] ?? '';
+    expect(cellRule).toMatch(/text-align:\s*start/);
   });
 });
 

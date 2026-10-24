@@ -250,9 +250,12 @@
    The writer keeps a table as its Markdown, in the code type (.story-md-table,
    the editors' block, scrolling sideways instead of wrapping its rows); the
    reader draws it: no frame, no lines between columns — the story's pen rule
-   under the header row and a hairline between rows, straight, so the eye stays
-   on its row. A table wider than the column scrolls inside it, the side with
-   more fading into the paper (`data-more`, set by the reader as it scrolls). */
+   under the header row and a hairline between rows, drawn by hand with a small
+   wobble (round 9 §6: StoryTable's overlay, lib/design/tableRules), so the eye
+   stays on its row. Every cell starts at the start edge, the header's too,
+   whatever the delimiter row's colons say (the source keeps them). A table
+   wider than the column scrolls inside it, the side with more fading into the
+   paper (`data-more`, set by the reader as it scrolls). */
 
 .story-prose .story-md-table {
   white-space: pre;
@@ -288,8 +291,14 @@
 
 .story-prose .story-table {
   --story-table-fade: 24px;
+  /* Room for the header rule's overshoot at both ends, the table itself still
+     on the text's edges: the box reaches 2px past the column each side. */
+  --story-table-reach: 2px;
+  position: relative;
   margin-top: var(--s-block);
   margin-bottom: var(--s-block);
+  margin-inline: calc(-1 * var(--story-table-reach));
+  padding-inline: var(--story-table-reach);
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scrollbar-width: thin;
@@ -324,13 +333,16 @@
   font-size: 0.94em;
   line-height: 1.6;
   font-variant-numeric: tabular-nums;
-  /* A table's words are set, not justified: its columns are its own measure. */
-  text-align: start;
 }
 
+/* A table's words are set, not justified, and start where their column does:
+   on the cells themselves, header included — on the table, the browser's own
+   `th { text-align: center }` would win. (The reader drops the alignment GFM
+   writes on each cell.) */
 .story-prose .story-table :is(th, td) {
   padding: 8px 14px;
   vertical-align: top;
+  text-align: start;
 }
 
 /* The first column starts on the text's edge, the last ends on it. */
@@ -341,13 +353,33 @@
   padding-inline-end: 0;
 }
 
+/* Straight rules stand in until the pen's are measured and drawn (`data-ruled`):
+   the borders then turn clear, keeping their room, so no row moves. */
 .story-prose .story-table th {
   font-weight: var(--story-bold);
-  border-bottom: 1.2px solid color-mix(in oklch, var(--color-text-muted) 50%, transparent);
+  border-bottom: 1.2px solid color-mix(in oklch, var(--color-text-muted) 60%, transparent);
 }
 
 .story-prose .story-table tbody tr + tr td {
-  border-top: 1px solid color-mix(in oklch, var(--color-text-muted) 22%, transparent);
+  border-top: 1px solid color-mix(in oklch, var(--color-text-muted) 30%, transparent);
+}
+
+.story-prose .story-table[data-ruled] :is(th, td) {
+  border-color: transparent;
+}
+
+/* The pen's rules (StoryTable): over the table, inside the scroller — they
+   move with the columns and fade with them — and never in the way of a tap. */
+.story-prose .story-table-rules {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+}
+.story-prose .story-table-rules path[data-kind='head'] {
+  stroke: color-mix(in oklch, var(--color-text-muted) 60%, transparent);
+}
+.story-prose .story-table-rules path[data-kind='row'] {
+  stroke: color-mix(in oklch, var(--color-text-muted) 30%, transparent);
 }
 
 /* A column is at least 4em and at most 18em wide before its words wrap. */
