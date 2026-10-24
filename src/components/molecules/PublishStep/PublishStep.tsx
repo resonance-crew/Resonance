@@ -16,6 +16,7 @@ import { StoryCard, type Story } from '@/components/molecules/StoryCard/StoryCar
 import { TagField } from '@/components/molecules/TagField/TagField';
 import { SaveState, type SaveStatus } from '@/components/molecules/CardEditor/SaveState';
 import { useMyProfile } from '@/lib/data/hooks';
+import { previewPalette } from '@/lib/design/cardColours';
 import type { CardMedia, Visibility } from '@/lib/db/types';
 import { excerpt, plainText } from '@/lib/markdown/plainText';
 import { readMinutes } from '@/lib/readTime';
@@ -25,7 +26,7 @@ import styles from './PublishStep.module.css';
 
 /**
  * What a card is, as the step offers it (卡片類型, round 8 §2.2): shared under
- * the author's pen name, shared with no name on it, or a 草稿 — the author's
+ * the author's pen name, shared with no name on it, or a 私人卡 — the author's
  * alone, finished or not (`private`: a draft, or a published card made
  * private, which people see as one). Anonymity is only ever a question for a
  * card others read, so it is one of the three, not a switch beside them (an
@@ -56,15 +57,15 @@ export function audienceFields(audience: Audience, current: { anonymous: boolean
   return { visibility: 'public', anonymous: audience === 'anonymous' };
 }
 
-/** Whether readers have a card now: a published private card is a 草稿 to them all but its author. */
+/** Whether readers have a card now: a published private card is a 私人卡 to them all but its author. */
 function seen(visibility: Visibility): boolean {
   return visibility !== 'private';
 }
 
 /**
  * The step's name (round 8 §2.3): 更新這張卡片 for a card readers have now
- * (whatever is chosen); else 儲存草稿 while 草稿 is chosen and 發布這張卡片
- * otherwise — a draft, or a published card kept private, is a 草稿 to its
+ * (whatever is chosen); else 儲存私人卡 while 私人卡 is chosen and 發布這張卡片
+ * otherwise — a draft, or a published card kept private, is a 私人卡 to its
  * author: choosing 公開 publishes it, to them.
  */
 export function stepTitleKey(
@@ -78,7 +79,7 @@ export function stepTitleKey(
 
 /**
  * The step's one button (round 8 §2.3): for a card readers have now, 儲存修改 —
- * or 轉為草稿 when 草稿 is chosen; for a 草稿 (never published, or kept private),
+ * or 轉為私人卡 when 私人卡 is chosen; for a 私人卡 (never published, or kept private),
  * 發布 · 匿名發布 by the choice, or 儲存 to keep it one.
  */
 export function stepVerb(
@@ -115,6 +116,8 @@ export interface PublishStepProps {
    * belongs to first publication), the verb 儲存修改.
    */
   mode: 'publish' | 'update';
+  /** The card's id, once it has one: a coverless card's preview wears a family of its own from it (round 9 §8). */
+  cardId?: string;
   /**
    * The step is on screen. It stays mounted while the writer writes (what it
    * holds — a cover on its way, the mirror's answer — is kept): it asks the
@@ -137,7 +140,7 @@ export interface PublishStepProps {
   onCoverChange: (media: CardMedia | undefined, accentHue: number | null) => void;
   /** The card answers another (it is a resonance). */
   resonance: boolean;
-  /** For `update`: how readers have the card now (a private one is a 草稿 to them). */
+  /** For `update`: how readers have the card now (a private one is a 私人卡 to them). */
   liveVisibility?: Visibility;
   /** The editor's save state, said at the end of the inline heading row (at the split, where there is no bar). */
   saveStatus?: SaveStatus | null;
@@ -154,7 +157,7 @@ export interface PublishStepProps {
   busyVerb: 'publish' | 'leave';
   /** Why the last try didn't go through. */
   error: string | null;
-  /** The one button: 發布 · 匿名發布 · 儲存 · 儲存修改 · 轉為草稿. */
+  /** The one button: 發布 · 匿名發布 · 儲存 · 儲存修改 · 轉為私人卡. */
   onSubmit: () => void;
   /** 捨棄修改: a live card's revision dropped. */
   onSecondary: () => void;
@@ -169,12 +172,12 @@ interface Reflection {
 }
 
 /**
- * The writer's second step, 發布這張卡片 (儲存草稿 while 草稿 is chosen,
+ * The writer's second step, 發布這張卡片 (儲存私人卡 while 私人卡 is chosen,
  * 更新這張卡片 for a card readers have): one screen in place of the editor —
  * the publish panel grown into a page (ux §6 單一畫面鐵律: publishing is still
  * two taps, ✓ then 發布). Top to bottom: the mirror line (publish only), the
  * card as a list will show it with its cover edited on its picture, 標籤,
- * 卡片類型 (公開 · 匿名公開 · 草稿 — no line under it: the preview's byline
+ * 卡片類型 (公開 · 匿名公開 · 私人卡 — no line under it: the preview's byline
  * follows the choice), a line saying whether a resonance reaches its
  * original, then the foot: one button whose verb follows the card and the
  * choice (stepVerb), and 捨棄修改 beside it only for a live card's revision.
@@ -183,6 +186,7 @@ interface Reflection {
  */
 export function PublishStep({
   mode,
+  cardId,
   active,
   inlineHeading,
   headingRef,
@@ -209,6 +213,9 @@ export function PublishStep({
   const { data: me } = useMyProfile();
   const updating = mode === 'update';
   const { thoughtCore, story, tags, visibility, anonymous, media, accentHue } = values;
+  // The preview's colour family: its cover's, else its own from its id (never the first family on every card),
+  // which the cover's controls wear too.
+  const palette = previewPalette(accentHue, cardId);
   const captionId = useId();
   const tagsId = useId();
   const headingId = useId();
@@ -385,7 +392,8 @@ export function PublishStep({
               isFirst={underBar}
               labelledBy={captionId}
               bleed="var(--page-pad-x)"
-              coverSlot={<CoverFrame cover={cover} />}
+              palette={palette}
+              coverSlot={<CoverFrame cover={cover} palette={palette} />}
             />
           </div>
           <p id={captionId} className={styles.caption}>
@@ -408,7 +416,7 @@ export function PublishStep({
           />
         </div>
 
-        {/* 4 — what the card is: shared under its author's name, shared with none, or a 草稿 */}
+        {/* 4 — what the card is: shared under its author's name, shared with none, or a 私人卡 */}
         <div className={styles.group}>
           <span className={styles.label}>{tVis('label')}</span>
           <div className={styles.choice}>

@@ -10,6 +10,8 @@ import { SketchLoader } from '@/components/atoms/SketchLoader/SketchLoader';
 import { OrganicMenu, type OrganicMenuItem } from '@/components/molecules/OrganicMenu/OrganicMenu';
 import type { GenerateImageEvent } from '@/app/api/generate-image/route';
 import type { CardMedia } from '@/lib/db/types';
+import { CARD_BORDERS, CARD_FILLS } from '@/lib/design/cardColours';
+import { CARD_HUES } from '@/lib/design/dominantHue';
 import { extractAccentHue } from '@/lib/images/accentHue';
 import { UnsupportedImage, uploadImageFile } from '@/lib/images/upload';
 import { useElementSize } from '@/lib/hooks/useElementSize';
@@ -165,9 +167,10 @@ export function useCoverEditor({
  * under the two pills while there is no cover, on a paper chip at the
  * picture's top-left over one that stays; the next try takes it away.
  */
-export function CoverFrame({ cover }: { cover: CoverEditor }) {
+export function CoverFrame({ cover, palette = 0 }: { cover: CoverEditor; palette?: number }) {
   const t = useTranslations('write');
   const { media, uploading, generating, partial, dragOver, canGenerate } = cover;
+  const colors = coverColors(palette);
   const busy = uploading || generating;
   const menu: OrganicMenuItem[] = [
     { key: 'replace', icon: 'image', label: t('mediaReplace') },
@@ -207,6 +210,8 @@ export function CoverFrame({ cover }: { cover: CoverEditor }) {
             triggerLabel={t('coverChange')}
             triggerIcon="image"
             triggerSize={34}
+            triggerColors={colors.chip}
+            hue={colors.hue}
             seed={41}
             floating
             onChoose={(key) => {
@@ -220,13 +225,20 @@ export function CoverFrame({ cover }: { cover: CoverEditor }) {
       ) : (
         <span className={styles.coverEmpty}>
           <span className={styles.coverPills}>
-            <OrganicButton variant="tonal" size="sm" onClick={cover.pick}>
+            <OrganicButton variant="solid" size="sm" className={styles.coverPill} style={colors.pill} onClick={cover.pick}>
               <span className={styles.pillIcon}>
                 <Icon name="image" size={16} />
               </span>
               {t('mediaPlaceholder')}
             </OrganicButton>
-            <OrganicButton variant="tonal" size="sm" disabled={!canGenerate} onClick={cover.generate}>
+            <OrganicButton
+              variant="solid"
+              size="sm"
+              className={styles.coverPill}
+              style={canGenerate ? colors.pill : colors.pillResting}
+              disabled={!canGenerate}
+              onClick={cover.generate}
+            >
               <span className={styles.pillIcon}>
                 <Icon name="sparkle" size={16} />
               </span>
@@ -256,6 +268,27 @@ export function CoverFrame({ cover }: { cover: CoverEditor }) {
       )}
     </div>
   );
+}
+
+/**
+ * The cover's controls in the card's own colours (round 9 §8), from its family
+ * (the preview's: its cover's, else its id's): 加一張圖片 / 生成圖片 on the
+ * striped placeholder are the family's deep pen with its paper for words (the
+ * solid's black wash under a pointer); 生成圖片 waiting for a story, the
+ * family's tonal step with muted words — never faded. 更換封面 over a picture
+ * is the family's fill, opaque, with its pen line and its deep pen for words;
+ * its menu takes the family's hue.
+ */
+export function coverColors(palette: number) {
+  const hue = CARD_HUES[palette] ?? CARD_HUES[0];
+  const [pen, deep] = CARD_BORDERS[palette] ?? CARD_BORDERS[0];
+  const paper = `oklch(97.5% 0.012 ${hue})`;
+  return {
+    hue,
+    pill: { fillColor: deep, color: paper },
+    pillResting: { fillColor: `oklch(90% 0.06 ${hue})`, color: `oklch(50% 0.04 ${hue})` },
+    chip: { fill: CARD_FILLS[palette] ?? CARD_FILLS[0], pen, ink: deep },
+  };
 }
 
 /** Why the last try at a cover didn't work, over the cover that stays: the 更換封面 chip's paper, in the error's ink. */

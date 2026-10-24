@@ -78,8 +78,16 @@ export default function EditCardPage() {
   const pending = data?.pending ?? null;
 
   // Until there is a card to write in, the writer's bar stands over the page all the same (the app header
-  // steps aside for the writer): the back arrow, and what the page is for.
-  const bar = <HeaderBar title={t('editTitle')} backLabel={tNav('back')} onBack={leaveWriter} heading />;
+  // steps aside for the writer): the back arrow, and what the page is for — 編輯 alone until the card is read
+  // (whether it is a 私人卡 or a shared card isn't known before).
+  const bar = (
+    <HeaderBar
+      title={card && card.authorId === user?.id ? t(editTitleKey(card)) : tActions('edit')}
+      backLabel={tNav('back')}
+      onBack={leaveWriter}
+      heading
+    />
+  );
 
   const settled = data !== undefined || (!loading && !user);
   if (!settled) {

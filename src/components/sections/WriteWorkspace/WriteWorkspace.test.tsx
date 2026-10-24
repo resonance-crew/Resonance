@@ -22,13 +22,13 @@ vi.mock('@/components/molecules/CardEditor/CardEditor', () => ({
     step = 'write',
     onStepChange,
     onPrimaryActionChange,
-    onLeave,
+    onShowCard,
   }: {
     ref?: React.Ref<unknown>;
     step?: 'write' | 'publish';
     onStepChange?: (s: 'write' | 'publish') => void;
     onPrimaryActionChange?: (a: unknown) => void;
-    onLeave?: () => void;
+    onShowCard?: (href: string) => void;
   }) => {
     React.useImperativeHandle(ref, () => ({
       ...editor,
@@ -48,7 +48,7 @@ vi.mock('@/components/molecules/CardEditor/CardEditor', () => ({
       <>
         <textarea aria-label="Draft" />
         <p>step: {step}</p>
-        {step === 'publish' && <button onClick={onLeave}>Save draft and leave</button>}
+        {step === 'publish' && <button onClick={() => onShowCard?.('/card/draft')}>Keep as a private card</button>}
       </>
     );
   },
@@ -270,14 +270,17 @@ describe('the publish step', () => {
     expect(screen.getByRole('dialog', { name: en.write.leaveTitle })).toBeInTheDocument();
   });
 
-  // Saved for later from the step: its entry is popped first, so the way out isn't back to it.
-  it('leaves from the step past its own entry', async () => {
+  // Kept as a 私人卡 from the step (round 9 §1): its entry is popped first, then the card's page takes the
+  // writer's own — so back from the card goes where the writer came from, never to the writer or its step.
+  it('shows a kept 私人卡’s page in the writer’s entry, past the step’s own', async () => {
     renderWithIntl(<WriteWorkspace title={en.write.editTitle} locale="en" initial={{ id: 'draft', story: 'x' }} />);
     await userEvent.click(nextButton());
     expect(window.location.search).toBe('?step=publish');
-    await userEvent.click(screen.getByRole('button', { name: 'Save draft and leave' }));
-    await waitFor(() => expect(back).toHaveBeenCalledTimes(1));
+    await userEvent.click(screen.getByRole('button', { name: 'Keep as a private card' }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/card/draft'));
     expect(window.location.search).toBe('');
+    expect(back).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
   });
 
   it('opens at the step when its address says so (a reload), and loses the step from it in place', async () => {

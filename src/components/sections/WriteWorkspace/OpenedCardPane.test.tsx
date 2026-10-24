@@ -3,6 +3,7 @@ import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithIntl, screen, userEvent } from '@/../test/render';
 import type { Card } from '@/lib/db/types';
+import en from '@/messages/en.json';
 
 vi.mock('@/components/providers/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 'me' } }),
@@ -41,10 +42,10 @@ describe('OpenedCardPane', () => {
   });
 
   // A published card kept private is a 草稿 to its author, and its title says so.
-  it('names a published private card a draft, and a card readers have an edit of it', async () => {
+  it('names a published private card a 私人卡, and a card readers have an edit of it', async () => {
     const draftLike = { id: 'c2', authorId: 'me', thoughtCore: 'Kept', visibility: 'private', anonymous: false, publishedAt: new Date('2026-09-01') } as Card;
     const view = renderWithIntl(<OpenedCardPane card={draftLike} />);
-    expect(await screen.findByText('Edit draft')).toBeInTheDocument();
+    expect(await screen.findByText(en.write.editTitle)).toBeInTheDocument();
     view.unmount();
     renderWithIntl(<OpenedCardPane card={{ ...draftLike, id: 'c3', visibility: 'public' }} />);
     expect(await screen.findByText('Edit card')).toBeInTheDocument();

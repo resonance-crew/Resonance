@@ -250,6 +250,12 @@
   display: inline-flex;
 }
 
+/* 生成圖片 waiting for a story wears the family's tonal step (CoverSlot's
+   coverColors) — never faded, as a disabled button otherwise is. */
+.coverPills .coverPill:disabled {
+  opacity: 1;
+}
+
 .coverNeed {
   font-family: var(--font-body);
   font-size: 12px;

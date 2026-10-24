@@ -22,6 +22,7 @@ vi.mock('@/lib/db/firestore/client/cards', () => ({
   createCardDraft: vi.fn(),
   updateCardDraft: vi.fn(),
   publishCard: vi.fn(),
+  deleteCardForever: vi.fn(),
 }));
 vi.mock('@/lib/db/firestore/client/cardEdits', () => ({
   savePendingCardEdit: vi.fn(),
@@ -81,7 +82,7 @@ vi.mock('@/components/molecules/MarkdownEditor/MarkdownEditor', () => ({
   },
 }));
 
-import { createCardDraft, updateCardDraft, publishCard } from '@/lib/db/firestore/client/cards';
+import { createCardDraft, deleteCardForever, updateCardDraft, publishCard } from '@/lib/db/firestore/client/cards';
 import { ApiError } from '@/lib/db/firestore/client/api';
 import { getCardById } from '@/lib/db/firestore/client/reads';
 import { restoreTrashedCard } from './trashedCard';
@@ -140,6 +141,7 @@ beforeEach(() => {
   vi.mocked(createCardDraft).mockResolvedValue({ id: 'draft-1' } as never);
   vi.mocked(updateCardDraft).mockResolvedValue({ id: 'draft-1' } as never);
   vi.mocked(publishCard).mockResolvedValue({ id: 'pub-1' } as never);
+  vi.mocked(deleteCardForever).mockResolvedValue(undefined);
   vi.mocked(savePendingCardEdit).mockResolvedValue(undefined);
   vi.mocked(discardPendingCardEdit).mockResolvedValue(undefined);
   vi.mocked(applyPendingCardEdit).mockResolvedValue({ id: 'card-1', slug: 'a-quiet-thought', applied: true });
@@ -355,25 +357,28 @@ describe('CardEditor — the publish step', () => {
     expect(publishCard).not.toHaveBeenCalled();
   });
 
-  it('keeps a 草稿 as a draft with its one button, by the host’s way out — never publishing it', async () => {
-    const onLeave = vi.fn();
-    renderWithIntl(<Writer locale="en" onLeave={onLeave} />);
+  // Round 9 §1: a 私人卡 kept opens its card page — the owner's reader of it — by the host's way (which
+  // replaces the writer's entry), never published.
+  it('keeps a 私人卡 with its one button and shows its card page by the host’s way — never publishing it', async () => {
+    const onShowCard = vi.fn();
+    renderWithIntl(<Writer locale="en" onShowCard={onShowCard} />);
     await toPublishStep('Enough for today');
     await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
     await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.save }));
-    await waitFor(() => expect(onLeave).toHaveBeenCalled());
+    await waitFor(() => expect(onShowCard).toHaveBeenCalledWith('/card/draft-1'));
     expect(createCardDraft).toHaveBeenCalledWith(expect.objectContaining({ thoughtCore: 'Enough for today' }));
     expect(updateCardDraft).toHaveBeenLastCalledWith('draft-1', expect.objectContaining({ visibility: 'private' }));
     expect(publishCard).not.toHaveBeenCalled();
+    expect(back).not.toHaveBeenCalled();
   });
 
-  it('leaves back where the writer came from without a host’s way out', async () => {
+  it('opens a kept 私人卡’s page in the writer’s place without a host’s way', async () => {
     renderWithIntl(<Writer locale="en" />);
     await toPublishStep('Enough for today');
     await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
     await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.save }));
-    // A writer opened in a tab of its own has nothing to go back to: the card box, where the draft now is.
-    await waitFor(() => expect(replace).toHaveBeenCalledWith('/me'));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/card/draft-1'));
+    expect(back).not.toHaveBeenCalled();
   });
 
   describe('a publish that does not go through', () => {
@@ -471,8 +476,9 @@ describe('CardEditor — editing a published card', () => {
     expect(applyPendingCardEdit).not.toHaveBeenCalled();
     await act(async () => release());
 
-    // A 草稿 now: back where the writer came from (the card box, in a tab of its own), not to its page.
-    await waitFor(() => expect(replace).toHaveBeenCalledWith('/me'));
+    // A 私人卡 now: its page, the owner's reader of it (round 9 §1) — no longer back where the writer came from.
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/card/a-quiet-thought'));
+    expect(back).not.toHaveBeenCalled();
     // The id is all it sends: the server reads the buffer, never the browser's say-so.
     expect(applyPendingCardEdit).toHaveBeenCalledTimes(1);
     expect(applyPendingCardEdit).toHaveBeenCalledWith('card-1');
@@ -709,6 +715,48 @@ describe('CardEditor — autosave', () => {
     });
     unmount();
     expect(createCardDraft).not.toHaveBeenCalled();
+  });
+
+  // Round 9 §1: no empty 私人卡 — a card this writer made, then emptied, goes with the writer.
+  it('deletes the card it made once emptied again, as the writer is left — and only then', async () => {
+    vi.useFakeTimers();
+    const { unmount } = renderWithIntl(<Writer locale="en" />);
+    fireEvent.change(title(), { target: { value: 'A false start' } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(createCardDraft).toHaveBeenCalledTimes(1);
+    fireEvent.change(title(), { target: { value: '' } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    // Emptied while the writer stays: nothing is deleted yet (the writer may go on).
+    expect(deleteCardForever).not.toHaveBeenCalled();
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(deleteCardForever).toHaveBeenCalledWith('draft-1');
+  });
+
+  it('keeps a card it opened, even empty, and one it made that still holds words', async () => {
+    vi.useFakeTimers();
+    const opened = renderWithIntl(<Writer locale="en" initial={{ id: 'old-1', thoughtCore: 'Old', story: '' }} />);
+    fireEvent.change(title(), { target: { value: '' } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    opened.unmount();
+    const fresh = renderWithIntl(<Writer locale="en" />);
+    fireEvent.change(title(), { target: { value: 'Kept' } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    fresh.unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(deleteCardForever).not.toHaveBeenCalled();
   });
 
   it('flushes pending edits when the editor unmounts (leaving is safe)', async () => {

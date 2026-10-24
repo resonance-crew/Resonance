@@ -56,8 +56,9 @@ function stepIn(search: string): WriterStep {
  * from the map keeps its step to itself (no address of its own).
  *
  * The way out leaves the page, asking first when that leaves written work
- * behind (the apps' rule and words: it is kept either way). 存成草稿，稍後再寫
- * in the publish step is already that choice, so it doesn't ask.
+ * behind (the apps' rule and words: it is kept either way). 私人卡 + 儲存 in
+ * the publish step is already that choice, so it doesn't ask: it opens the
+ * card's page in the writer's place (round 9 §1).
  */
 export function WriteWorkspace({
   title,
@@ -276,7 +277,8 @@ export function WriteWorkspace({
               onStepTitleChange={setDraftStepTitle}
               inlineStepHeading={split === true}
               focusStepHeading={focusBarTitle}
-              onLeave={() => outOfStep(leaveWriter)}
+              // A 私人卡 kept opens its page in the writer's own entry: from the step, its entry is popped first.
+              onShowCard={(href) => outOfStep(() => router.replace(href))}
             />
           </div>
         </div>

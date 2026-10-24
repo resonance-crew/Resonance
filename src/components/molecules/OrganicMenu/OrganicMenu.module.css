@@ -45,6 +45,10 @@
 .pill > svg {
   filter: drop-shadow(0 1px 3px oklch(0% 0 0 / 0.22));
 }
+/* A chip in colours of its own (triggerColors): opaque, and its pen line parts it from the picture — no shadow. */
+.pill[data-colored] > svg {
+  filter: none;
+}
 .triggerLabel {
   position: relative;
   z-index: 1;

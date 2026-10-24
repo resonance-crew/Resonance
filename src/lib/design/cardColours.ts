@@ -22,6 +22,7 @@
  * Pinned by native/fixtures/card-colours.json, which the apps' tests run too
  * (Android CardPalette / iOS CardPalette).
  */
+import { seedFromId } from './bubble';
 import { CARD_HUES, cardHueIndex, hueDistance, nearestCardHue } from './dominantHue';
 
 /** The fills of the six palette families, in CARD_HUES order (a shared card's band in a thread draws with them too). */
@@ -62,6 +63,18 @@ export function preferredPalette(accentHue: number | null | undefined, position:
   if (accentHue != null) return cardHueIndex(nearestCardHue(accentHue));
   const n = CARD_HUES.length;
   return ((position % n) + n) % n;
+}
+
+/**
+ * The writer's preview of a card (round 9 §8): a cover's family, else one of
+ * its own from its id — the bubbles' hash (`seedFromId`, the apps' twin) mod
+ * six — so 加一張圖片 / 生成圖片 wear the card's colours, not always the first
+ * family's. A card not saved yet (no id) keeps the first until it has one.
+ * Lists still colour a coverless card by its position (`preferredPalette`).
+ */
+export function previewPalette(accentHue: number | null | undefined, cardId: string | null | undefined): number {
+  if (accentHue != null) return preferredPalette(accentHue, 0);
+  return cardId ? seedFromId(cardId) % CARD_HUES.length : 0;
 }
 
 /**

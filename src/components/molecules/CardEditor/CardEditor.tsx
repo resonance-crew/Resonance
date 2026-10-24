@@ -17,7 +17,7 @@ import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { MarkdownEditor, type MarkdownEditorHandle } from '@/components/molecules/MarkdownEditor/MarkdownEditor';
 import { PublishStep, reachesOriginal, stepTitleKey } from '@/components/molecules/PublishStep/PublishStep';
 import type { SaveStatus } from './SaveState';
-import { createCardDraft, publishCard, updateCardDraft } from '@/lib/db/firestore/client/cards';
+import { createCardDraft, deleteCardForever, publishCard, updateCardDraft } from '@/lib/db/firestore/client/cards';
 import {
   applyPendingCardEdit,
   discardPendingCardEdit,
@@ -27,7 +27,6 @@ import { getCardById } from '@/lib/db/firestore/client/reads';
 import type { Card, CardMedia, Visibility, Locale } from '@/lib/db/types';
 import { useRouter } from '@/i18n/navigation';
 import { ApiError } from '@/lib/db/firestore/client/api';
-import { useLeaveWriter } from '@/lib/hooks/useLeaveWriter';
 import { useOpenedOnce } from '@/lib/hooks/useOpenedOnce';
 import { useConnectionRefresh } from '@/lib/data/resonate';
 import { localeScript, storyLang, writerScript, type StoryScript } from '@/lib/text/script';
@@ -125,8 +124,12 @@ export interface CardEditorProps {
    */
   inlineStepHeading?: boolean;
   focusStepHeading?: () => void;
-  /** The way out once the draft is saved for later (the host's; by default back where the writer came from). */
-  onLeave?: () => void;
+  /**
+   * Shows the card's page once it is kept as a 私人卡 (round 9 §1: 儲存 / 轉為私人卡 land on it, as 發布 does).
+   * The host's way, which replaces the writer's entry (back from the card goes where the writer came from);
+   * by default the card's page replaces this one.
+   */
+  onShowCard?: (href: string) => void;
   /** Publishing, saving or leaving is on its way: the host's back waits with the step's buttons. */
   onPendingChange?: (pending: boolean) => void;
   /**
@@ -235,7 +238,7 @@ export function CardEditor({
   onPrimaryActionChange,
   inlineStepHeading = false,
   focusStepHeading,
-  onLeave,
+  onShowCard,
   onPendingChange,
   onStepTitleChange,
   ref,
@@ -247,8 +250,8 @@ export function CardEditor({
   const tMe = useTranslations('me.actions');
   const router = useRouter();
   const refreshConnections = useConnectionRefresh();
-  // Back where the writer came from — or, in a tab of its own, to the card box, where the draft now is.
-  const leaveWriter = useLeaveWriter('/me');
+  // A 私人卡 kept (儲存, 轉為私人卡) opens its card page, the reader's view of it (round 9 §1).
+  const showCard = (href: string) => (onShowCard ? onShowCard(href) : router.replace(href));
 
   const [thoughtCore, setThoughtCore] = useState(initial?.thoughtCore ?? '');
   const [story, setStory] = useState(initial?.story ?? seedStory ?? '');
@@ -326,7 +329,7 @@ export function CardEditor({
     reportPending.current?.(pending);
   }, [pending]);
 
-  // How readers have the card now (a pending edit may be what is on screen): a private one is a 草稿 to them.
+  // How readers have the card now (a pending edit may be what is on screen): a private one is a 私人卡 to them.
   const liveVisibility: Visibility = initial?.live?.visibility ?? initial?.visibility ?? 'public';
   const stepTitle = t(`publishPanel.${stepTitleKey(isPublished ? 'update' : 'publish', visibility, liveVisibility)}`);
   const reportStepTitle = useRef(onStepTitleChange);
@@ -349,6 +352,8 @@ export function CardEditor({
   // Everything the save needs travels through refs so the debounce timer, the
   // unmount flush, and the publish path all write the same latest values.
   const draftIdRef = useRef(initial?.id);
+  // The same id, for what is drawn from it (the preview's colours): a new card has one from its first save.
+  const [cardId, setCardId] = useState(initial?.id);
   const values: DraftValues = { thoughtCore, story, tags, visibility, anonymous, media, accentHue };
   const valuesRef = useRef(values);
   valuesRef.current = values;
@@ -371,6 +376,33 @@ export function CardEditor({
   const closedRef = useRef(false);
   const trashedRef = useRef(false);
   trashedRef.current = trashed;
+  // The card's document was made by this writer (a new card's first save), not opened from somewhere.
+  const createdHereRef = useRef(false);
+
+  /**
+   * No empty 私人卡 (round 9 §1): a new card's document is only made at its first real write, and one this
+   * writer made and then emptied again — no title, no story, no cover — goes as the writer goes (its
+   * unmount: left, or replaced by another page), instead of waiting in the card box and the thought map's
+   * tray as a blank. Never while it stays (a card opened over it, the pane hidden, the tab in the background).
+   */
+  function emptiedHere(): boolean {
+    return (
+      createdHereRef.current &&
+      !isPublished &&
+      draftIdRef.current != null &&
+      !closedRef.current &&
+      !trashedRef.current &&
+      isEmptyDraft(valuesRef.current)
+    );
+  }
+  /** Deletes the card this writer made and emptied (after any write still on its way), and closes the writer. */
+  function dropEmptied(): Promise<void> {
+    const id = draftIdRef.current!;
+    closedRef.current = true;
+    const run = writeChainRef.current.then(() => deleteCardForever(id));
+    writeChainRef.current = run.catch(() => undefined);
+    return run;
+  }
 
   /**
    * The save state in a word, for the host's bar (round 8 §2.1): 儲存中⋯ while
@@ -450,6 +482,7 @@ export function CardEditor({
       ? await updateCardDraft(draftIdRef.current, payload)
       : await createCardDraft({ ...payload, originalLocale: locale, referenceCardId });
     if (!draftIdRef.current) {
+      createdHereRef.current = true;
       // First save of a fresh draft: swap /write for /write/{id} in place
       // (Next integrates native replaceState) so a reload or a later
       // traversal reopens this draft instead of a blank editor — before the
@@ -462,6 +495,7 @@ export function CardEditor({
       }
     }
     draftIdRef.current = card.id;
+    setCardId(card.id);
     lastSavedRef.current = draftSnapshot(v);
     setSavedAt(new Date());
     return card;
@@ -507,6 +541,10 @@ export function CardEditor({
   }
   const autosaveNowRef = useRef(autosaveNow);
   autosaveNowRef.current = autosaveNow;
+  const emptiedRef = useRef(emptiedHere);
+  emptiedRef.current = emptiedHere;
+  const dropEmptiedRef = useRef(dropEmptied);
+  dropEmptiedRef.current = dropEmptied;
 
   // Debounce: save AUTOSAVE_DELAY_MS after the last edit.
   useEffect(() => {
@@ -526,7 +564,9 @@ export function CardEditor({
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
-      flush();
+      // Left emptied: the card it made goes (never a blank 私人卡); otherwise what is on screen is written.
+      if (emptiedRef.current()) void dropEmptiedRef.current().catch((err) => console.error('Dropping an empty card failed:', err));
+      else flush();
     };
   }, []);
 
@@ -652,7 +692,7 @@ export function CardEditor({
       askForTitle();
       return;
     }
-    // 草稿: kept as it is — nothing is published to anyone, not even to its author alone.
+    // 私人卡: kept as it is — nothing is published to anyone, not even to its author alone.
     if (valuesRef.current.visibility === 'private') {
       await keepDraft();
       return;
@@ -725,14 +765,16 @@ export function CardEditor({
       // A resonance these changes hid or unnamed was taken back with them: the connection with the original's
       // author may have ended, so what turns on the viewer's connections is read again.
       if (referenceCardId) refreshConnections();
-      // Kept as a 草稿 now: the writer goes back where it came from, as a draft's 儲存 does; shared, to its page.
-      if (valuesRef.current.visibility === 'private') (onLeave ?? leaveWriter)();
-      else router.replace(`/card/${result.slug ?? initial?.slug ?? id}`);
+      // To its page — kept as a 私人卡 (儲存, 轉為私人卡) in the place of the writer's own entry; shared, in the
+      // step's, as publishing does.
+      const href = `/card/${result.slug ?? initial?.slug ?? id}`;
+      if (valuesRef.current.visibility === 'private') showCard(href);
+      else router.replace(href);
     } catch (err) {
       closedRef.current = false;
       if (await confirmTrashed(err)) return;
       console.error('Save changes failed:', err);
-      // A 草稿 made public was being published; anything else, saved.
+      // A 私人卡 made public was being published; anything else, saved.
       const publishing = liveVisibility === 'private' && valuesRef.current.visibility !== 'private';
       setPublishError(failure(err, t(publishing ? 'publishPanel.failed' : 'publishPanel.saveFailed')));
     } finally {
@@ -764,9 +806,10 @@ export function CardEditor({
   }
 
   /**
-   * 草稿 + 儲存 for a card never published: what is on screen is written (not
-   * left to the debounce) and the writer goes back where it came from. Never
-   * the publish call — a draft is its author's alone, finished or not.
+   * 私人卡 + 儲存 for a card never published: what is on screen is written
+   * (not left to the debounce) and its card page opens — the owner's reader
+   * of it (round 9 §1). Never the publish call — a 私人卡 is its author's
+   * alone, finished or not.
    */
   async function keepDraft() {
     setBusyVerb('publish');
@@ -774,8 +817,10 @@ export function CardEditor({
     setPublishError(null);
     try {
       if (needsSave()) await saveDraft();
+      const id = draftIdRef.current;
+      if (!id) throw new Error('Draft was not saved');
       closedRef.current = true;
-      (onLeave ?? leaveWriter)();
+      showCard(`/card/${initial?.slug ?? id}`);
     } catch (err) {
       closedRef.current = false;
       if (await confirmTrashed(err)) return;
@@ -908,6 +953,7 @@ export function CardEditor({
           <div className={styles.publish} hidden={step !== 'publish'}>
             <PublishStep
               mode={isPublished ? 'update' : 'publish'}
+              cardId={cardId}
               active={step === 'publish'}
               inlineHeading={inlineStepHeading}
               headingRef={setHeading}

@@ -172,7 +172,8 @@ describe('EditCardPage (client-fetched)', () => {
     window.history.pushState({}, '', window.location.href);
     mockUseAuth.mockReturnValue({ user: null, loading: true });
     const { unmount } = renderPage();
-    expect(screen.getByRole('heading', { level: 1, name: en.write.editTitle })).toBeInTheDocument();
+    // 編輯 alone until the card is read: whether it is a 私人卡 isn't known yet.
+    expect(screen.getByRole('heading', { level: 1, name: en.me.actions.edit })).toBeInTheDocument();
     screen.getByRole('button', { name: en.app.nav.back }).click();
     expect(back).toHaveBeenCalledTimes(1);
     unmount();

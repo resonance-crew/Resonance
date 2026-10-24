@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import fixture from '../../../native/fixtures/card-colours.json';
 import { CARD_HUES } from './dominantHue';
-import { CARD_COLOUR_WINDOW, CARD_FAMILY_ORDER, cardPalettes, preferredPalette } from './cardColours';
+import { CARD_COLOUR_WINDOW, CARD_FAMILY_ORDER, cardPalettes, preferredPalette, previewPalette } from './cardColours';
+import { seedFromId } from './bubble';
 
 /** Card i's neighbours in a grid of `columns` filled row by row: the cards before it in its row, and the one above. */
 function neighboursBefore(i: number, columns: number): number[] {
@@ -63,5 +64,19 @@ describe('card colours in a list (native/fixtures/card-colours.json, shared with
     expect(preferredPalette(350, 0)).toBe(5); // across 0° → 18
     expect(preferredPalette(null, 7)).toBe(1);
     expect(preferredPalette(undefined, -1)).toBe(5);
+  });
+});
+
+// Round 9 §8: the writer's preview of a coverless card wears a family of its own from its id (the bubbles'
+// hash, twinned in the apps), so the cover buttons take the card's colours; a cover's hue still decides.
+describe('previewPalette', () => {
+  it('takes a cover’s family, else its id’s, else the first', () => {
+    expect(previewPalette(140, 'any-id')).toBe(CARD_HUES.indexOf(140));
+    expect(previewPalette(null, 'm1')).toBe(seedFromId('m1') % 6);
+    expect(previewPalette(undefined, undefined)).toBe(0);
+    // Stable per card, and not always the first family.
+    const families = new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((id) => previewPalette(null, `card-${id}`)));
+    expect(families.size).toBeGreaterThan(1);
+    expect(previewPalette(null, 'card-a')).toBe(previewPalette(null, 'card-a'));
   });
 });

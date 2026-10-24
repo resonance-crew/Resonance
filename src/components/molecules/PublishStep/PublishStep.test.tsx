@@ -5,6 +5,8 @@ import { act, fireEvent, renderWithIntl, screen, userEvent, waitFor, within } fr
 import en from '@/messages/en.json';
 import type { CardMedia, Visibility } from '@/lib/db/types';
 import { PublishStep, type PublishStepProps, type PublishStepValues } from './PublishStep';
+import { CARD_BORDERS, previewPalette } from '@/lib/design/cardColours';
+import { CARD_HUES } from '@/lib/design/dominantHue';
 
 vi.mock('@/lib/data/hooks', () => ({
   useMyProfile: () => ({ data: { id: 'me', handle: 'my-handle', initials: 'MH', accentColor: 'oklch(88% 0.08 55)' } }),
@@ -333,6 +335,46 @@ describe('PublishStep', () => {
     expect(chip).toHaveTextContent(en.write.mediaUploadError);
     expect(withCover.container.querySelector('img[src="https://img.example.com/old.webp"]')).toBeInTheDocument();
     expect(within(screen.getByRole('group', { name: en.write.previewCaption })).getByRole('alert')).toBe(chip);
+    await echoSettled();
+  });
+
+  /** A colour as the browser writes it back (jsdom normalises oklch's percentages). */
+  const asColor = (c: string) => {
+    const el = document.createElement('i');
+    el.style.color = c;
+    return el.style.color;
+  };
+
+  // Round 9 §8: the cover's controls wear the card's own colours — a coverless card's family from its id, not the
+  // first family on every card — the pills the family's deep pen with its paper for words, never faded.
+  it('colours the cover’s pills by the card’s family — from its id while it has no cover', async () => {
+    const pills = () => [en.write.mediaPlaceholder, en.write.mediaGenerate].map((name) => screen.getByRole('button', { name }));
+    const familyOf = (id: string) => previewPalette(null, id);
+    const ids = ['card-a', 'card-b', 'card-c', 'card-d'];
+    const id = ids.find((x) => familyOf(x) !== 0)!;
+    const f = familyOf(id);
+    const view = renderWithIntl(<Step cardId={id} />);
+    for (const pill of pills()) {
+      expect(pill.style.getPropertyValue('--shape-fill')).toBe(CARD_BORDERS[f][1]);
+      expect(pill.style.color).toBe(asColor(`oklch(97.5% 0.012 ${CARD_HUES[f]})`));
+    }
+    view.unmount();
+
+    // Waiting for a story: the family's tonal step, muted words — the face never faded.
+    renderWithIntl(<Step cardId={id} start={{ story: '' }} />);
+    const resting = screen.getByRole('button', { name: en.write.mediaGenerate });
+    expect(resting).toBeDisabled();
+    expect(resting.style.getPropertyValue('--shape-fill')).toBe(`oklch(90% 0.06 ${CARD_HUES[f]})`);
+    await echoSettled();
+  });
+
+  it('dresses 更換封面 in its cover’s family: its fill, its pen line, its deep ink', async () => {
+    const cover: CardMedia = { type: 'image', url: 'https://img.example.com/green.webp', label: 'green' };
+    renderWithIntl(<Step cardId="card-a" start={{ media: cover, accentHue: 140 }} />);
+    const chip = screen.getByRole('button', { name: en.write.coverChange });
+    const f = CARD_HUES.indexOf(140);
+    expect(chip.style.color).toBe(asColor(CARD_BORDERS[f][1]));
+    expect(chip).toHaveAttribute('data-colored');
     await echoSettled();
   });
 

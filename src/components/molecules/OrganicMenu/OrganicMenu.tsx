@@ -55,6 +55,13 @@ export interface OrganicMenuProps {
    */
   triggerLabel?: string;
   /**
+   * For a labelled chip: its own colours instead of the paper (round 9 §8 — the
+   * 更換封面 chip wears its card's family): an opaque `fill`, a `pen` line at
+   * INK round it (it floats over a picture: the line, not a shadow, parts it
+   * from one), and the `ink` of its glyph and words.
+   */
+  triggerColors?: { fill: string; pen: string; ink: string };
+  /**
    * A bare glyph on the page's own paper (no chip): muted ink at rest, a soft
    * disc of ink under it on hover, focus and while open, and `label` shown
    * as a tooltip on hover and keyboard focus — the frameless trigger has to
@@ -143,6 +150,7 @@ export function OrganicMenu({
   triggerIcon = 'dots',
   triggerSize = 38,
   triggerLabel,
+  triggerColors,
   bare = false,
   tone = 'muted',
   tip = 'above',
@@ -246,7 +254,14 @@ export function OrganicMenu({
         ref={setTrigger}
         type="button"
         className={bare ? `${styles.trigger} ${styles.bare}` : pill ? `${styles.trigger} ${styles.pill}` : styles.trigger}
-        style={bare ? undefined : pill ? { height: triggerSize } : { width: triggerSize, height: triggerSize }}
+        style={
+          bare
+            ? undefined
+            : pill
+              ? { height: triggerSize, ...(triggerColors ? { color: triggerColors.ink } : {}) }
+              : { width: triggerSize, height: triggerSize }
+        }
+        data-colored={(pill && triggerColors) || undefined}
         data-open={open || undefined}
         data-tone={bare ? tone : undefined}
         data-icon={triggerIcon}
@@ -282,7 +297,9 @@ export function OrganicMenu({
               R={triggerSize * 0.42}
               seed={seed}
               mag={triggerSize * 0.03}
-              fillColor="color-mix(in oklch, var(--menu-cream) 94%, transparent)"
+              fillColor={triggerColors?.fill ?? 'color-mix(in oklch, var(--menu-cream) 94%, transparent)'}
+              strokeColor={triggerColors?.pen}
+              strokeWidth={INK}
               segmentsH={2}
               segmentsV={1}
               curve={1.4}
