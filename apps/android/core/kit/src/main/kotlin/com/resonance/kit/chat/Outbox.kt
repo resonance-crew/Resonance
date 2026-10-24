@@ -55,10 +55,16 @@ class Outbox(
         val serverId: String? = null,
         /** [Status.Failed] because the server said no to this message itself, not because the line stopped. */
         val refused: Boolean = false,
+        /**
+         * A picture it carries, sent up as the message goes (under the message's client id, so a resend
+         * finds it kept) — drawn meanwhile from the device, under that same id the server keeps it by.
+         */
+        val image: OutgoingImage? = null,
     ) {
         /** The message as the thread draws it while it is on its way. */
         fun toMessage() = ChatMessage(
             id = clientId, senderId = senderId, text = text, sentAt = queuedAt, cardRef = cardRef, noteRef = noteRef, replyTo = replyTo,
+            image = image?.let { ChatImage(clientId, it.width, it.height) },
             delivery = when (status) {
                 Status.Queued, Status.Sending -> Delivery.Sending
                 Status.Sent -> Delivery.Sent
