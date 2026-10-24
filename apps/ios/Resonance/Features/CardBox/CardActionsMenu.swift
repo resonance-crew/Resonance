@@ -40,8 +40,8 @@ enum TrashFeedback: Equatable {
     case toast, page
 }
 
-/// The owner's ⋯ on a card (CardActionsMenu.tsx): 編輯 / 轉為公開·私人 (a published card) /
-/// 取消共振 (a card that resonates with another) / 刪除, in the shared
+/// The owner's ⋯ on a card (CardActionsMenu.tsx): 編輯 / 轉為草稿 (a card readers can see, round 8
+/// §1.2) / 取消共振 (a card that resonates with another) / 刪除, in the shared
 /// OrganicMenu. 刪除 moves the card to the trash, where it waits 30 days:
 /// no dialog except the one ``TrashDecision`` asks — the toast's 復原 and the
 /// trash shelf are the way back. Taking a resonance back asks first, in the
@@ -65,7 +65,7 @@ struct CardActionsMenu: View {
     var answeringTitle: String?
     /// Whether the original it answers is anonymous, when the page knows (else looked up when 刪除 needs it).
     var answeringAnonymous: Bool?
-    /// Published (a draft takes nothing back, and has no 轉為公開·私人), and under the writer's name or not.
+    /// Published (a draft takes nothing back), and under the writer's name or not.
     var isPublished = false
     var anonymous = false
     /// What the undo toast names.
@@ -92,7 +92,13 @@ struct CardActionsMenu: View {
     /// The answered card's title, asked for when the page didn't have it.
     @State private var asked = AnsweredTitle()
 
-    private var isPrivate: Bool { visibility == "private" }
+    /// Readers can see it (published, and public or for connections): the only card with a visibility
+    /// row — every 草稿 (never published, or kept private) is published from the writer's step.
+    private var readersSee: Bool { Self.readersSee(published: isPublished, visibility: visibility) }
+
+    nonisolated static func readersSee(published: Bool, visibility: String) -> Bool {
+        published && visibility != "private"
+    }
 
     var body: some View {
         OrganicMenu(items: items, label: L10n.Me.Actions.menuLabel, seed: seed, hue: hue, trigger: trigger)
@@ -114,9 +120,9 @@ struct CardActionsMenu: View {
                             titlePending: asked.looking, seed: seed + 9) {
                 Task { await unresonate() }
             }
-            // Turning public or private didn't go through: the card is as it was. Said in a notice with one way
+            // Moving it to the drafts didn't go through: the card is as it was. Said in a notice with one way
             // out, as every refusal is (the web's, Android's): the menu is still there to try again from.
-            .organicNotice(isPresented: $visibilityFailed, title: visibilityLabel, message: L10n.Safety.actionError,
+            .organicNotice(isPresented: $visibilityFailed, title: L10n.Me.Actions.makePrivate, message: L10n.Safety.actionError,
                            closeLabel: L10n.Safety.Report.close, seed: seed + 11)
             .organicNotice(isPresented: $trashFailed, title: L10n.Me.Actions.delete, message: L10n.Safety.actionError,
                            closeLabel: L10n.Safety.Report.close, seed: seed + 13)
@@ -136,19 +142,20 @@ struct CardActionsMenu: View {
         case edit, visibility, unresonate, delete
     }
 
-    /// 編輯, 轉為公開·私人 — not on a draft: nothing is published from here, its audience is chosen
-    /// in the writer's publish step (公開 · 匿名公開 · 只有自己) — 取消共振 on a resonance, 刪除.
-    static func rows(published: Bool, answering: Bool) -> [Row] {
-        [.edit] + (published ? [.visibility] : []) + (answering ? [.unresonate] : []) + [.delete]
+    /// 編輯, 轉為草稿 — only on a card readers can see (round 8 §1.2): nothing is published from here, a
+    /// 草稿's type is chosen in the writer's publish step (公開 · 匿名公開 · 草稿), so every 草稿's ⋯ is the
+    /// same — 取消共振 on a resonance, 刪除.
+    static func rows(readersSee: Bool, answering: Bool) -> [Row] {
+        [.edit] + (readersSee ? [.visibility] : []) + (answering ? [.unresonate] : []) + [.delete]
     }
 
     private var items: [OrganicMenuItem] {
-        Self.rows(published: isPublished, answering: answering != nil).map { row in
+        Self.rows(readersSee: readersSee, answering: answering != nil).map { row in
             switch row {
             case .edit:
                 OrganicMenuItem(id: "edit", title: L10n.Me.Actions.edit, icon: .pen) { writer.edit(cardId, showsCard: showsCardAfterEdit) }
             case .visibility:
-                OrganicMenuItem(id: "visibility", title: visibilityLabel, icon: isPrivate ? .globe : .lock) { Task { await toggleVisibility() } }
+                OrganicMenuItem(id: "visibility", title: L10n.Me.Actions.makePrivate, icon: .lock) { Task { await makeDraft() } }
             case .unresonate:
                 OrganicMenuItem(id: "unresonate", title: L10n.Me.Actions.unresonate, icon: .wave) {
                     failed = false
@@ -165,23 +172,15 @@ struct CardActionsMenu: View {
         }
     }
 
-    private var visibilityLabel: String { Self.visibilityLabel(private: isPrivate, anonymous: anonymous) }
-
-    /// 轉為公開 / 轉為私人 — and, on a private card that is anonymous, 轉為匿名公開: it does come back
-    /// anonymous (the server keeps its byline), and the words say so.
-    static func visibilityLabel(private isPrivate: Bool, anonymous: Bool) -> String {
-        guard isPrivate else { return L10n.Me.Actions.makePrivate }
-        return anonymous ? L10n.Me.Actions.makePublicAnonymous : L10n.Me.Actions.makePublic
-    }
-
     /// What changed: this card, and on a resonance the card it answers (its page lists it).
     private var change: WriteLauncher.Change { .init(cardId: cardId, referenceCardId: answering) }
 
-    private func toggleVisibility() async {
+    /// 轉為草稿: the card kept to its author (PATCH visibility private, as 轉為私人 was); its byline stays.
+    private func makeDraft() async {
         guard !busy else { return }
         busy = true
         defer { busy = false }
-        guard let card = try? await session.writing.updateCard(cardId, visibility: isPrivate ? ._public : ._private) else {
+        guard let card = try? await session.writing.updateCard(cardId, visibility: ._private) else {
             visibilityFailed = true
             return
         }
