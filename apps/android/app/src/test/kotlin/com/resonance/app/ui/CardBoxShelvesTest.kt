@@ -12,7 +12,7 @@ import org.junit.Test
  * view, and the others of them not read lately; the others' shelves one at a time, when shown. The
  * private and draft shelves are one 草稿 shelf on screen (round 8 §1.1): always read together, merged
  * by when each card was last changed, at most 40; there is no 私人卡 shelf, and one kept from before
- * opens 草稿.
+ * opens 草稿 — where every card opens the writer.
  */
 class CardBoxShelvesTest {
     @Test fun anOwnShelfBringsTheOtherOwnShelvesThatAreDue() {
@@ -83,9 +83,15 @@ class CardBoxShelvesTest {
         assertEquals(listOf("x"), draftShelf(listOf(card("x", "2026-10-02T00:00:00Z")), listOf(card("x", "2026-10-01T00:00:00Z")))!!.map { it.id })
     }
 
-    @Test fun aDraftResumesTheWriterAPublishedCardOpensItsPage() {
-        assertEquals(Route.Write(cardId = "d1"), managedTap(card("d1", null)))
+    @Test fun onDraftsEveryCardOpensTheWriterAPublishedPrivateOneToo() {
+        // 草稿: a draft resumes, and a published card kept private is edited where it is published from (the web's /write/{id}).
+        assertEquals(Route.Write(cardId = "d1"), managedTap(card("d1", null), TabGetCardBox.draft))
         val kept = card("p1", null, publishedAt = "2026-09-01T00:00:00Z")
-        assertEquals(Route.Card("p1", kept), managedTap(kept))
+        assertEquals(Route.Write(cardId = "p1"), managedTap(kept, TabGetCardBox.draft))
+        // 已發布: a card's page.
+        val live = card("l1", null, publishedAt = "2026-09-02T00:00:00Z").copy(visibility = FeedCard.Visibility.`public`)
+        assertEquals(Route.Card("l1", live), managedTap(live, TabGetCardBox.published))
+        // A draft has no page, whatever shelf it is on.
+        assertEquals(Route.Write(cardId = "d2"), managedTap(card("d2", null), TabGetCardBox.published))
     }
 }

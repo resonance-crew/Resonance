@@ -345,7 +345,7 @@ fun CardBoxScreen(session: Session, open: (Route) -> Unit) {
             }
             // The linked shelf lists the pared-back cards, as the web's MiniCardGrid does.
             shelf == TabGetCardBox.linked -> miniCards(cards, open, keyPrefix = "linked:")
-            shelf in OwnedShelves -> managedCards(session, cards, open, layout = layout)
+            shelf in OwnedShelves -> managedCards(session, cards, open, shelf, layout = layout)
             else -> storyCards(cards, open, layout = layout)
         }
     }
@@ -478,8 +478,15 @@ private fun TrashHeader(anonymousHere: Boolean, inset: Dp, compact: Boolean, onE
 /** The shelves of my own cards (OWNED_TABS): each card gets its ⋯. Read together, in this order. */
 private val OwnedShelves = listOf(TabGetCardBox.published, TabGetCardBox.`private`, TabGetCardBox.draft)
 
-/** Where one of my own cards opens: a draft resumes the writer; a published card (private or not) its page. */
-internal fun managedTap(card: FeedCard): Route = if (card.publishedAt == null) Route.Write(cardId = card.id) else Route.Card(card.routeKey, card)
+/**
+ * Where one of my own cards opens from [shelf]: on 草稿, every card opens the writer — a draft
+ * resumes, a published private card is edited there, where it is published from (round 8 §1, the
+ * web's /write/{id}); on 已發布, its page. A draft has no page, wherever it is.
+ */
+internal fun managedTap(card: FeedCard, shelf: TabGetCardBox): Route = when {
+    shelf == TabGetCardBox.draft || shelf == TabGetCardBox.`private` || card.publishedAt == null -> Route.Write(cardId = card.id)
+    else -> Route.Card(card.routeKey, card)
+}
 
 /** The shelf a choice shows: one kept from before 草稿 was one shelf (`private`) is 草稿. */
 internal fun shelfShown(chosen: TabGetCardBox): TabGetCardBox = if (chosen == TabGetCardBox.`private`) TabGetCardBox.draft else chosen
@@ -487,12 +494,12 @@ internal fun shelfShown(chosen: TabGetCardBox): TabGetCardBox = if (chosen == Ta
 /**
  * My own cards (ProfileTabs' managed shelves): each with the owner's ⋯ over
  * its top-right corner. An anonymous one wears the anonymous byline exactly
- * as everyone else sees it ([story]) — that is its mark here, no badge. A
- * draft has no page yet, so tapping it resumes writing ([managedTap]); a
- * published card (a private one on the 草稿 shelf too) opens its page.
+ * as everyone else sees it ([story]) — that is its mark here, no badge. On
+ * the 草稿 shelf a tap opens the writer, a published private card's too; on
+ * 已發布 a card's page ([managedTap]).
  */
-private fun LazyListScope.managedCards(session: Session, cards: List<FeedCard>, open: (Route) -> Unit, layout: CardListLayout) {
-    val tap: (FeedCard) -> Route = ::managedTap
+private fun LazyListScope.managedCards(session: Session, cards: List<FeedCard>, open: (Route) -> Unit, shelf: TabGetCardBox, layout: CardListLayout) {
+    val tap: (FeedCard) -> Route = { managedTap(it, shelf) }
     val palettes = cardFamilies(cards)
     if (layout.isGrid) return borderedCards(cards, open, null, false, layout, tap, overlay = { card, i ->
         val hue = CardPalette.of(palettes[i]).hue
