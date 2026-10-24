@@ -61,15 +61,16 @@ public struct OrganicMenu: View {
         self.trigger = trigger
     }
 
-    @State private var open = false
+    /// The open panel and the trigger's frame it hangs from, fixed at the tap — carried by the
+    /// presentation itself: a cover built from `isPresented` reads the state as it was before the tap,
+    /// and so hung the panel from the frame of a moment before — `.zero` for a trigger just rebuilt.
+    @State private var presented: MenuPresentation?
+    private var open: Bool { presented != nil }
     /// Where the trigger is, as the layout last reported it (a fallback: a trigger rebuilt a moment ago
     /// — a branch swapped, an `.id` changed, a step sliding in — reports again only after its layout).
     @State private var anchor: CGRect = .zero
     /// The trigger itself, read at the moment of the tap (C3): what the panel hangs from.
     @State private var probe = MenuTriggerProbe()
-    /// The trigger's frame the open panel was placed from, fixed at the tap.
-    @State private var presentedFrom: CGRect = .zero
-    @State private var panelSeed: Double = 0
     /// A pill wearing its card's colours (round 9 §8: 更換封面 on a card's picture).
     var pillPalette: CardPalette?
 
@@ -88,9 +89,9 @@ public struct OrganicMenu: View {
             .accessibilityLabel(label)
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { anchor = $0 }
             .background { MenuTriggerProbeView(probe: probe).accessibilityHidden(true) }
-            .fullScreenCover(isPresented: $open) {
-                MenuStage(items: items, seed: panelSeed, colors: colors, face: face(presentedFrom)) { item in
-                    withTransaction(\.disablesAnimations, true) { open = false }
+            .fullScreenCover(item: $presented) { presentation in
+                MenuStage(items: items, seed: presentation.seed, colors: colors, face: face(presentation.trigger)) { item in
+                    withTransaction(\.disablesAnimations, true) { presented = nil }
                     // After the cover is gone, so a dialog the row opens can present.
                     if let item {
                         Task { @MainActor in
@@ -139,8 +140,6 @@ public struct OrganicMenu: View {
     /// under the finger reported `.zero`, and the panel hung from the screen's top-left corner). With
     /// neither yet, it waits a layout pass or two and reads the trigger again.
     private func show() {
-        // A fresh panel each time, like the web's.
-        panelSeed = Double(Int.random(in: 0..<10_000))
         if present() { return }
         Task { @MainActor in
             for _ in 0..<3 {
@@ -153,8 +152,9 @@ public struct OrganicMenu: View {
     /// Opens the panel when the trigger's frame is one to hang it from (answered whether it did).
     private func present() -> Bool {
         guard let frame = MenuAnchor.resolve(live: probe.frame(), stored: anchor, screen: probe.screen()) else { return false }
-        presentedFrom = frame
-        withTransaction(\.disablesAnimations, true) { open = true }
+        // A fresh panel each time, like the web's.
+        let presentation = MenuPresentation(trigger: frame, seed: Double(Int.random(in: 0..<10_000)))
+        withTransaction(\.disablesAnimations, true) { presented = presentation }
         return true
     }
 
@@ -167,6 +167,13 @@ public struct OrganicMenu: View {
         case .chip: anchor.insetBy(dx: max(0, (anchor.width - triggerSize) / 2), dy: max(0, (anchor.height - triggerSize) / 2))
         }
     }
+}
+
+/// An open menu: the trigger's frame at the tap, and the panel's seed.
+struct MenuPresentation: Identifiable {
+    let id = UUID()
+    let trigger: CGRect
+    let seed: Double
 }
 
 /// Where a menu's trigger is, read when it is tapped (C3): the frame the layout last reported can be
