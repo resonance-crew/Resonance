@@ -145,28 +145,33 @@ import Testing
         #expect(WindowLayout(width: 1376, height: 1032).writerSplit)
     }
 
-    @Test func aWideCardPageSetsItsTextInTheMeasureAndTheRail48PastIt() {
-        // reading-type §4's worked widths (the web's three-track grid): the text's span, the rail's start.
+    @Test func aWideCardPageSetsItsTextInTheMeasureAndTheRailTheGapPastIt() {
+        // reading-type §4's worked widths (the web's three-track grid) for the contents' rail, 80 past
+        // the text (round 8 §10.1: --story-rail-gap, 48 before): the text's span, the rail's start.
+        #expect(Tokens.storyRailGap == 80 && CardPageLayout.railReach == 340)
         func text(_ l: CardPageLayout) -> ClosedRange<CGFloat> {
             (l.leading + CardPageLayout.articleInset)...(l.leading + CardPageLayout.articleInset + l.text)
         }
         func near(_ a: ClosedRange<CGFloat>, _ b: ClosedRange<CGFloat>) -> Bool {
             abs(a.lowerBound - b.lowerBound) < 0.6 && abs(a.upperBound - b.upperBound) < 0.6
         }
-        // 1440: the 680 column centred (380–1060), the rail 1108–1368.
+        // 1456: the first width where the 680 column is exactly centred (both sides 340 + 48, the web's
+        // "centred from 1456px"): 388–1068, the rail 1148–1408, ending on the page's pad.
+        let w1456 = CardPageLayout.of(width: 1456, window: 1456)
+        #expect(w1456.rail && w1456.text == Tokens.measure)
+        #expect(near(text(w1456), 388...1068))
+        #expect(w1456.railX == 1148 && w1456.railX + Tokens.cardRailW == 1456 - 48)
+        // Wider, it stays centred: 1600's column is 460–1140.
+        #expect(near(text(CardPageLayout.of(width: 1600, window: 1600)), 460...1140))
+        // 1440: it slides left (372–1052, not the centre's 380–1060) so the rail still fits beside it.
         let w1440 = CardPageLayout.of(width: 1440, window: 1440)
-        #expect(w1440.rail && w1440.text == Tokens.measure)
-        #expect(near(text(w1440), 380...1060))
-        #expect(w1440.railX == 1108 && w1440.railX + Tokens.cardRailW == 1368)
-        // 1392: the first width where it is exactly centred (both sides 308 + 48).
-        let w1392 = CardPageLayout.of(width: 1392, window: 1392)
-        #expect(near(text(w1392), 356...1036))
-        #expect(abs(w1392.railX + Tokens.cardRailW - (1392 - 48)) < 0.01, "\(w1392)")
-        // 1280: it slides left so the rail still fits beside it.
-        #expect(near(text(CardPageLayout.of(width: 1280, window: 1280)), 244...924))
-        // 1024: the text narrows to what the rail leaves (41–675), the rail 723–983.
+        #expect(near(text(w1440), 372...1052))
+        #expect(abs(w1440.railX + Tokens.cardRailW - (1440 - 48)) < 0.01, "\(w1440)")
+        // 1280: further left, 212–892.
+        #expect(near(text(CardPageLayout.of(width: 1280, window: 1280)), 212...892))
+        // 1024: the text narrows to what the rail leaves (41–643), the rail 723–983.
         let w1024 = CardPageLayout.of(width: 1024, window: 1024)
-        #expect(near(text(w1024), 41...675))
+        #expect(near(text(w1024), 41...643))
         #expect(abs(w1024.railX - 723) < 0.6 && abs(w1024.railX + Tokens.cardRailW - 983) < 0.6)
         // iPad Pro 13" lying down (1376) and standing (1032): the rail ends on the page's pad.
         for w: CGFloat in [1376, 1032, 901] {
