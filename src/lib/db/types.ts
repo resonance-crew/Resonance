@@ -261,6 +261,8 @@ export interface Conversation {
     text: string;
     senderId: string;
     sentAt: Date;
+    /** It carried a picture (its words, if any, are `text`). */
+    image?: boolean;
   } | null;
   /** Per-participant unread counters; sender increments the other side's. */
   unread: Record<string, number>;
@@ -299,6 +301,11 @@ export interface Message {
   /** The first link's title and picture, which the server adds a moment after the message. */
   preview?: MessageLinkPreview;
   /**
+   * A picture sent with it (POST /api/v1/chat-images): read only through
+   * GET /api/v1/chat-images/{id}, by the two people of the conversation.
+   */
+  image?: MessageImage;
+  /**
    * What the message is beyond words and a card: `note` — a note (小紙條)
    * its sender left on the other's card (`cardRef`), carried into the
    * thread. A kind this build doesn't know reads as a plain message.
@@ -309,9 +316,18 @@ export interface Message {
 export interface MessageReplyQuote {
   id: string;
   senderId: string;
-  /** Up to 140 characters of the quoted text; empty when it was only a card. */
+  /** Up to 140 characters of the quoted text; empty when it was only a card or a picture. */
   text: string;
   cardRef?: string;
+  /** The quoted message carried a picture. */
+  image?: boolean;
+}
+
+/** A picture a message carries: its id, and its size as kept (for drawing its place before it loads). */
+export interface MessageImage {
+  id: string;
+  width: number;
+  height: number;
 }
 
 /**

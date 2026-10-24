@@ -37,7 +37,7 @@ export function ReplyQuote({ quote, own, viewerId, otherHandle, onJump }: ReplyQ
     : quotesViewer
       ? t('repliedToYou', { handle: otherHandle })
       : t('repliedToThemselves', { handle: otherHandle });
-  const words = quote.text || t('replyCard');
+  const words = quote.text || (quote.image ? t('replyImage') : t('replyCard'));
   const ref = useRef<HTMLButtonElement>(null);
   const clip = useBubbleClip(ref, seedFromId(quote.id, 19), { maxRadius: QUOTE_RADIUS });
 

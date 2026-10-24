@@ -1,5 +1,6 @@
 import type { BulkWriter, DocumentReference, Firestore, Query } from 'firebase-admin/firestore';
 import { cardPagePaths, landingPagePaths, profilePagePaths } from '@/lib/api/revalidate';
+import { CHAT_IMAGES, chatImageFiles } from '@/lib/api/v1/chatImages';
 import { HANDLES } from '@/lib/db/firestore/handles';
 import { UPLOADS, uploadedKeys } from '@/lib/storage/uploads';
 import { DELETION_GRACE_DAYS } from './constants';
@@ -178,12 +179,16 @@ async function collectAccountData(db: Firestore, uid: string) {
     db.collection('rateLimits').where('userId', '==', uid), // API budgets (lib/api/rateLimit)
     db.collection(HANDLES).where('uid', '==', uid), // the pen name's reservation (lib/db/firestore/handles)
     db.collection(UPLOADS).where('ownerId', '==', uid), // whose each stored picture is (lib/storage/uploads)
+    db.collection(CHAT_IMAGES).where('senderId', '==', uid), // pictures they sent in chat (lib/api/v1/chatImages)
     db.collection('reportEvidence').where('reporterId', '==', uid),
     db.collection('reportEvidence').where('targetUserId', '==', uid),
     // A pending edit outlives its card when an older app deleted the card
     // straight from the client; the ones that carry their author are found here.
     db.collectionGroup('edits').where('authorId', '==', uid),
   ];
+  // The pictures sent to them in their conversations go with the conversations.
+  const pairs = conversations.docs.map((d) => d.id);
+  for (let i = 0; i < pairs.length; i += IN_CHUNK) queries.push(db.collection(CHAT_IMAGES).where('pair', 'in', pairs.slice(i, i + IN_CHUNK)));
   // Records found through one of the cards (see above): other readers'
   // resonance records on them, and every note left on them.
   const cardIds = cards.docs.map((d) => d.id);
@@ -302,6 +307,19 @@ export async function purgeAccountData(db: Firestore, uid: string, opts: PurgeOp
   return { trees: trees.length + roots.length, documents: singles.length + records, pages, complete };
 }
 
+/**
+ * The files of the pictures sent in chat that go with the account: the ones
+ * they sent, and the ones sent to them in their conversations (which go too).
+ */
+async function chatImageFilesOf(db: Firestore, uid: string): Promise<string[]> {
+  const conversations = await db.collection('conversations').where('participants', 'array-contains', uid).select().get();
+  const pairs = conversations.docs.map((d) => d.id);
+  const queries = [db.collection(CHAT_IMAGES).where('senderId', '==', uid)];
+  for (let i = 0; i < pairs.length; i += IN_CHUNK) queries.push(db.collection(CHAT_IMAGES).where('pair', 'in', pairs.slice(i, i + IN_CHUNK)));
+  const snaps = await Promise.all(queries.map((q) => q.select('key', 'thumbKey').get()));
+  return [...new Set(chatImageFiles(snaps.flatMap((s) => s.docs)))];
+}
+
 export interface PurgeDeps {
   db: Firestore;
   /** Removes the sign-in account (firebase-admin `auth.deleteUser`). */
@@ -310,6 +328,8 @@ export interface PurgeDeps {
   deleteStoragePrefix?: (prefix: string) => Promise<number>;
   /** Removes one uploaded file (the ones `uploads/*` records as the user's); failures are logged, not fatal. */
   deleteStorageObject?: (key: string) => Promise<void>;
+  /** Removes one chat picture's file (lib/storage/chatImages); failures are logged, not fatal. */
+  deleteChatImageFile?: (key: string) => Promise<void>;
   /** Drops cached pages (logical paths, `revalidateLocalized` in the cron); failures are logged, not fatal. */
   revalidate?: (paths: string[]) => unknown;
 }
@@ -330,6 +350,15 @@ export async function purgeAccount(deps: PurgeDeps, uid: string, opts: PurgeOpti
         await deps.deleteStorageObject(key);
       } catch (err) {
         console.error(`Account purge: storage cleanup failed for ${key}`, err);
+      }
+    }
+  }
+  if (deps.deleteChatImageFile) {
+    for (const key of await chatImageFilesOf(deps.db, uid)) {
+      try {
+        await deps.deleteChatImageFile(key);
+      } catch (err) {
+        console.error(`Account purge: chat picture cleanup failed for ${key}`, err);
       }
     }
   }

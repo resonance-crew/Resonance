@@ -9,9 +9,6 @@ import { PublishStep, type PublishStepProps, type PublishStepValues } from './Pu
 vi.mock('@/lib/data/hooks', () => ({
   useMyProfile: () => ({ data: { id: 'me', handle: 'my-handle', initials: 'MH', accentColor: 'oklch(88% 0.08 55)' } }),
 }));
-vi.mock('@/lib/hints', () => ({
-  useHint: () => ({ visible: false, dismiss: vi.fn() }),
-}));
 vi.mock('@/lib/images/upload', () => ({
   UnsupportedImage: class extends Error {},
   uploadImageFile: vi.fn(),
@@ -127,6 +124,10 @@ describe('PublishStep', () => {
     const view = renderWithIntl(<Step mode="update" />);
     expect(screen.getByText(en.write.publishPanel.updateHint)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: en.write.publishPanel.update })).toHaveAttribute('data-variant', 'solid');
+    // Kept to its author, the card has no readers to see the new version: nothing to say about them.
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.private }));
+    expect(screen.queryByText(en.write.publishPanel.updateHint)).toBeNull();
+    expect(screen.getByRole('button', { name: en.write.publishPanel.update })).toBeInTheDocument();
     view.unmount();
     renderWithIntl(<Step start={{ thoughtCore: '  ' }} />);
     await act(() => new Promise((r) => setTimeout(r, 0)));
@@ -168,32 +169,63 @@ describe('PublishStep', () => {
     expect(screen.queryByText(en.write.publishPanel.insightLoading)).not.toBeInTheDocument();
   });
 
-  // An anonymous card is public or only yours: for connections only, its few readers would know who wrote it.
-  it('turns a card kept for connections public in the same change that makes it anonymous', async () => {
+  // Anonymity is only a question for a card others read: one choice of three, never a switch beside them.
+  it('offers three audiences — a card kept for connections shows none chosen, and 匿名公開 makes it public and anonymous in one change', async () => {
     const onAudience = vi.fn();
     renderWithIntl(<Step start={{ visibility: 'connections' }} onAudience={onAudience} />);
-    // A legacy connections card: neither side is chosen until one is.
-    expect(screen.getByRole('button', { name: en.write.visibility.public })).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByRole('button', { name: en.write.visibility.private })).toHaveAttribute('aria-pressed', 'false');
+    const segment = (name: string) => screen.getByRole('button', { name });
+    for (const name of [en.write.visibility.public, en.write.visibility.anonymous, en.write.visibility.private]) {
+      expect(segment(name)).toHaveAttribute('aria-pressed', 'false');
+    }
+    expect(screen.getByText(en.write.visibility.connectionsLine)).toBeInTheDocument();
+    expect(screen.queryByRole('switch')).toBeNull();
 
-    await userEvent.click(screen.getByRole('switch', { name: en.write.publishPanel.anonymousToggle }));
+    await userEvent.click(segment(en.write.visibility.anonymous));
     expect(onAudience).toHaveBeenCalledTimes(1);
     expect(onAudience).toHaveBeenLastCalledWith({ visibility: 'public', anonymous: true });
-    expect(screen.getByText(en.write.publishPanel.anonymousVisibility)).toBeInTheDocument();
-    // The preview's byline is the world's.
+    expect(segment(en.write.visibility.anonymous)).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText(en.write.visibility.anonymousLine)).toBeInTheDocument();
+    // The preview's byline is the world's; the old notes are gone.
     expect(within(screen.getByRole('group', { name: en.write.previewCaption })).getByText(en.write.publishPanel.anonymousName)).toBeInTheDocument();
+    expect(screen.queryByText(en.write.publishPanel.anonymousVisibility)).toBeNull();
     await echoSettled();
   });
 
-  it('tells which audience is chosen, and changes it', async () => {
+  it('says in one line what each audience means, and names the verb and the step after it', async () => {
     const onAudience = vi.fn();
-    renderWithIntl(<Step onAudience={onAudience} />);
+    renderWithIntl(<Step inlineHeading onAudience={onAudience} />);
     const pub = screen.getByRole('button', { name: en.write.visibility.public });
-    const mine = screen.getByRole('button', { name: en.write.visibility.private });
     expect(pub).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText(en.write.visibility.publicLine.replace('{handle}', 'my-handle'))).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: en.write.publishPanel.publish })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: en.write.publishPanel.title })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.anonymous }));
+    expect(screen.getByRole('button', { name: en.write.publishPanel.publishAnonymously })).toBeInTheDocument();
+
+    const mine = screen.getByRole('button', { name: en.write.visibility.private });
     await userEvent.click(mine);
     expect(onAudience).toHaveBeenLastCalledWith({ visibility: 'private', anonymous: false });
     expect(mine).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText(en.write.visibility.privateLine)).toBeInTheDocument();
+    // Only its author will see it: nothing is published — it is saved.
+    expect(screen.getByRole('button', { name: en.write.publishPanel.save })).toHaveAttribute('data-variant', 'solid');
+    expect(screen.queryByRole('button', { name: en.write.publishPanel.publish })).toBeNull();
+    expect(screen.getByRole('heading', { level: 2, name: en.write.publishPanel.saveTitle })).toBeInTheDocument();
+    await echoSettled();
+  });
+
+  // 只有自己 names a draft; a live anonymous card kept to its author stays anonymous for when it is shown again.
+  it('keeps a live card anonymous when it is kept to its author, and names a draft', async () => {
+    const onAudience = vi.fn();
+    const view = renderWithIntl(<Step mode="update" start={{ anonymous: true }} onAudience={onAudience} />);
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.private }));
+    expect(onAudience).toHaveBeenLastCalledWith({ visibility: 'private', anonymous: true });
+    view.unmount();
+
+    renderWithIntl(<Step start={{ anonymous: true }} onAudience={onAudience} />);
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.private }));
+    expect(onAudience).toHaveBeenLastCalledWith({ visibility: 'private', anonymous: false });
     await echoSettled();
   });
 
@@ -203,8 +235,7 @@ describe('PublishStep', () => {
     expect(screen.getByText(en.write.publishPanel.resonanceReaches)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: en.write.visibility.private }));
     expect(screen.getByText(en.write.publishPanel.resonanceQuiet)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.public }));
-    await userEvent.click(screen.getByRole('switch', { name: en.write.publishPanel.anonymousToggle }));
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.anonymous }));
     expect(screen.getByText(en.write.publishPanel.resonanceQuiet)).toBeInTheDocument();
     await echoSettled();
   });
@@ -244,8 +275,17 @@ describe('PublishStep', () => {
     await act(async () => land({ publicUrl: 'https://img.example.com/rain.webp', key: 'cover/2026-10/rain.webp' }));
     await waitFor(() => expect(screen.queryByText(en.write.mediaBusyHint)).toBeNull());
     expect(container.querySelector('img[src="https://img.example.com/rain.webp"]')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: en.write.mediaReplace })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: en.write.mediaRemove })).toBeInTheDocument();
+    // The picture is where it is changed: one chip on it that says so, and nothing for it under the preview.
+    const chip = screen.getByRole('button', { name: en.write.coverChange });
+    expect(chip).toHaveTextContent(en.write.coverChange);
+    expect(screen.queryByRole('button', { name: en.write.mediaReplace })).toBeNull();
+    expect(screen.queryByRole('button', { name: en.write.mediaRemove })).toBeNull();
+    await userEvent.click(chip);
+    expect(screen.getByRole('menuitem', { name: en.write.mediaReplace })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: en.write.mediaGenerate })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('menuitem', { name: en.write.mediaRemove }));
+    expect(container.querySelector('img[src="https://img.example.com/rain.webp"]')).toBeNull();
+    expect(screen.getByRole('button', { name: en.write.mediaPlaceholder })).toBeInTheDocument();
   });
 
   it('waits for a story before it offers to draw a cover', async () => {
@@ -268,7 +308,7 @@ describe('PublishStep', () => {
     expect(screen.getByRole('button', { name: en.write.publishPanel.publish })).toHaveAttribute('aria-busy', 'true');
     expect(screen.getByRole('button', { name: en.write.saveDraftAndLeave })).toBeDisabled();
     // Every choice holds still.
-    expect(screen.getByRole('switch', { name: en.write.publishPanel.anonymousToggle })).toBeDisabled();
+    expect(screen.getByRole('button', { name: en.write.visibility.anonymous })).toBeDisabled();
     await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.publish }));
     expect(onSubmit).not.toHaveBeenCalled();
     await echoSettled();

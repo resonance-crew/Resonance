@@ -4,11 +4,9 @@ import { useEffect, useId, useRef, useState, type Dispatch, type Ref, type SetSt
 import { useTranslations } from 'next-intl';
 import { BareIconButton } from '@/components/atoms/BareIconButton/BareIconButton';
 import { Divider } from '@/components/atoms/Divider/Divider';
-import { HandDrawnAvatar } from '@/components/atoms/HandDrawnAvatar/HandDrawnAvatar';
-import { Icon } from '@/components/atoms/Icon';
+import { Icon, type IconName } from '@/components/atoms/Icon';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { SketchLoader } from '@/components/atoms/SketchLoader/SketchLoader';
-import { ToggleSwitch } from '@/components/atoms/ToggleSwitch/ToggleSwitch';
 import { ModalActions } from '@/components/molecules/Modal/ModalActions';
 import {
   SegmentedActionBar,
@@ -18,25 +16,50 @@ import { StoryCard, type Story } from '@/components/molecules/StoryCard/StoryCar
 import { TagField } from '@/components/molecules/TagField/TagField';
 import { useMyProfile } from '@/lib/data/hooks';
 import type { CardMedia, Visibility } from '@/lib/db/types';
-import { useHint } from '@/lib/hints';
 import { excerpt, plainText } from '@/lib/markdown/plainText';
 import { readMinutes } from '@/lib/readTime';
-import { CoverBelow, CoverFrame, useCoverEditor } from './CoverSlot';
+import { CoverError, CoverFrame, useCoverEditor } from './CoverSlot';
 import modalStyles from '@/components/molecules/Modal/Modal.module.css';
 import styles from './PublishStep.module.css';
 
-const VISIBILITY_ICON: Record<'public' | 'private', 'globe' | 'lock'> = {
-  public: 'globe',
-  private: 'lock',
-};
+/**
+ * Who a card is for, as the step offers it: everyone under the author's pen
+ * name, everyone with no name on it, or the author alone. Anonymity is only
+ * ever a question for a card others read, so it is one of the three, not a
+ * switch beside them (an anonymous card is public or private, never for
+ * connections only — the server refuses that).
+ */
+export type Audience = 'public' | 'anonymous' | 'private';
+
+export const AUDIENCES: readonly Audience[] = ['public', 'anonymous', 'private'];
+
+const AUDIENCE_ICON: Record<Audience, IconName> = { public: 'globe', anonymous: 'mask', private: 'lock' };
+
+/** The audience a card's two fields make — none for one kept for connections only (older cards). */
+export function audienceOf(visibility: Visibility, anonymous: boolean): Audience | null {
+  if (visibility === 'private') return 'private';
+  if (visibility === 'public') return anonymous ? 'anonymous' : 'public';
+  return null;
+}
 
 /**
- * An anonymous card is public or only its author's — never for connections
- * only, which would tell those few who wrote it (the server refuses it): one
- * asked for connections while anonymous is public instead.
+ * The two fields an audience writes. 只有自己 names a draft (it was never
+ * read anonymously: no anonymity is left over from trying 匿名公開), and keeps
+ * a live card's as it is — one made private while anonymous must come back
+ * anonymous when it is made public again (the card's ⋯ 轉為匿名公開).
  */
-export function anonymousVisibility(visibility: Visibility, anonymous: boolean): Visibility {
-  return anonymous && visibility === 'connections' ? 'public' : visibility;
+export function audienceFields(audience: Audience, current: { anonymous: boolean; live: boolean }): { visibility: Visibility; anonymous: boolean } {
+  if (audience === 'private') return { visibility: 'private', anonymous: current.live ? current.anonymous : false };
+  return { visibility: 'public', anonymous: audience === 'anonymous' };
+}
+
+/**
+ * The step's name: 發布這張卡片 — 儲存這張卡片 for a draft only its author
+ * will see (nothing is published to anyone) — or 更新這張卡片 for a live card.
+ */
+export function stepTitleKey(mode: 'publish' | 'update', visibility: Visibility): 'title' | 'saveTitle' | 'updateTitle' {
+  if (mode === 'update') return 'updateTitle';
+  return visibility === 'private' ? 'saveTitle' : 'title';
 }
 
 /** Whether a card in this audience reaches the card it answers: public and under its author's name. */
@@ -79,7 +102,7 @@ export interface PublishStepProps {
   onBack: () => void;
   values: PublishStepValues;
   onTagsChange: Dispatch<SetStateAction<string[]>>;
-  /** Who can see it, and under whose name: one change, so no write is ever anonymous and for connections only. */
+  /** Who can see it, and under whose name (audienceFields): one change, so no write is ever anonymous and for connections only. */
   onAudienceChange: (next: { visibility: Visibility; anonymous: boolean }) => void;
   onCoverChange: (media: CardMedia | undefined, accentHue: number | null) => void;
   /** The card answers another (it is a resonance). */
@@ -112,14 +135,16 @@ interface Reflection {
 }
 
 /**
- * The writer's second step, 發布這張卡片 (更新這張卡片 for a live card): one
- * screen in place of the editor — the publish panel grown into a page (ux §6
- * 單一畫面鐵律: publishing is still two taps). Top to bottom: the mirror line
- * (publish only), the card as a list will show it with its cover editor in
- * its picture, 標籤, 誰可以看見, 以匿名發布 with its byline, a line saying
- * whether a resonance reaches its original, then the foot. Every choice here
- * is the editor's own value and autosaves with the draft (or the live card's
- * pending edit); going back to writing keeps them.
+ * The writer's second step, 發布這張卡片 (儲存這張卡片 for a card only its
+ * author will see, 更新這張卡片 for a live card): one screen in place of the
+ * editor — the publish panel grown into a page (ux §6 單一畫面鐵律: publishing
+ * is still two taps). Top to bottom: the mirror line (publish only), the card
+ * as a list will show it with its cover edited on its picture, 標籤, 誰可以看見
+ * (公開 · 匿名公開 · 只有自己, with one line saying what the choice means), a
+ * line saying whether a resonance reaches its original, then the foot, whose
+ * verb follows the audience (發布 · 匿名發布 · 儲存). Every choice here is the
+ * editor's own value and autosaves with the draft (or the live card's pending
+ * edit); going back to writing keeps them.
  */
 export function PublishStep({
   mode,
@@ -145,7 +170,6 @@ export function PublishStep({
   const tPanel = useTranslations('write.publishPanel');
   const tVis = useTranslations('write.visibility');
   const { data: me } = useMyProfile();
-  const anonymousHint = useHint('anonymous-publish');
   const updating = mode === 'update';
   const { thoughtCore, story, tags, visibility, anonymous, media, accentHue } = values;
   const captionId = useId();
@@ -250,7 +274,9 @@ export function PublishStep({
         ? tPanel('resonanceReaches')
         : tPanel('resonanceQuiet');
 
-  const title = updating ? tPanel('updateTitle') : tPanel('title');
+  const title = tPanel(stepTitleKey(mode, visibility));
+  const audience = audienceOf(visibility, anonymous);
+  const verb = updating ? 'update' : audience === 'private' ? 'save' : audience === 'anonymous' ? 'publishAnonymously' : 'publish';
   // Nothing above the preview (no heading of its own, no hint, no mirror line): on a phone its
   // band is the first thing under the bar, which it meets as the feed's first card does.
   const underBar = !inlineHeading && !updating && (!insight || insight.state === 'none');
@@ -282,7 +308,8 @@ export function PublishStep({
           </h2>
         </div>
       )}
-      {updating && <p className={styles.hint}>{tPanel('updateHint')}</p>}
+      {/* What readers will see changes: said only while there are readers. */}
+      {updating && visibility !== 'private' && <p className={styles.hint}>{tPanel('updateHint')}</p>}
 
       {/* 1 — the mirror moment (first publication only) */}
       {!updating && insight && (
@@ -323,7 +350,7 @@ export function PublishStep({
           <p id={captionId} className={styles.caption}>
             {t('previewCaption')}
           </p>
-          <CoverBelow cover={cover} />
+          <CoverError cover={cover} />
         </div>
 
         {/* 3 — tags */}
@@ -341,70 +368,45 @@ export function PublishStep({
           />
         </div>
 
-        {/* 4 — who can see it */}
+        {/* 4 — who can see it, and under whose name: one choice of three, and what it means */}
         <div className={styles.group}>
           <span className={styles.label}>{tVis('label')}</span>
           <div className={styles.choice}>
             {/* A segmented choice with no pen line (its options are buttons):
                 a quiet paper-dark track shows the control's extent, and the
                 chosen side wears the tonal peach with the deep terracotta
-                label (4.8:1); the other keeps a muted ink deep enough to read
+                label (4.8:1); the others keep a muted ink deep enough to read
                 on the track. A card kept for connections only (older ones)
-                shows neither side chosen and keeps its audience until one is. */}
+                shows none chosen and keeps its audience until one is. */}
             <SegmentedActionBar
               fill="var(--color-cream-dark)"
-              segments={(['public', 'private'] as const).map((v) => {
-                const chosen = visibility === v;
+              segments={AUDIENCES.map((a) => {
+                const chosen = audience === a;
                 const ink = chosen
                   ? 'var(--button-on-tonal)'
                   : 'color-mix(in oklch, var(--color-text-muted), black 10%)';
                 return {
-                  key: v,
-                  icon: <Icon name={VISIBILITY_ICON[v]} size={16} color={ink} />,
-                  label: tVis(v),
+                  key: a,
+                  icon: <Icon name={AUDIENCE_ICON[a]} size={16} color={ink} />,
+                  label: tVis(a),
                   fill: chosen ? 'var(--button-tonal)' : 'transparent',
                   textColor: ink,
                   hoverOverlay: 'oklch(0% 0 0 / 0.05)',
                   pressed: chosen,
-                  onClick: () => onAudienceChange({ visibility: v, anonymous }),
+                  onClick: () => onAudienceChange(audienceFields(a, { anonymous, live: updating })),
                 } satisfies SegmentSpec;
               })}
             />
           </div>
-          {/* Never for connections only: who could read it would say who wrote it. */}
-          {anonymous && <p className={styles.note}>{tPanel('anonymousVisibility')}</p>}
-        </div>
-
-        {/* 5 — publish anonymously, with the byline the world will get */}
-        <div className={styles.group}>
-          <label className={styles.toggleRow}>
-            {tPanel('anonymousToggle')}
-            <ToggleSwitch
-              checked={anonymous}
-              onChange={() =>
-                onAudienceChange({ visibility: anonymousVisibility(visibility, !anonymous), anonymous: !anonymous })
-              }
-              ariaLabel={tPanel('anonymousToggle')}
-              seed={57}
-            />
-          </label>
-          <div className={styles.byline}>
-            {anonymous ? (
-              <HandDrawnAvatar initials="·" size={34} color="var(--color-cream-dark)" seed={97} />
-            ) : (
-              <HandDrawnAvatar
-                src={me?.avatarUrl}
-                initials={me?.initials ?? '?'}
-                size={34}
-                color={me?.accentColor ?? 'oklch(88% 0.08 55)'}
-                seed={Number(me?.avatarSeed ?? 0)}
-              />
-            )}
-            <span className={styles.name} data-anonymous={anonymous || undefined}>
-              {anonymous ? tPanel('anonymousName') : (me?.handle ?? '')}
-            </span>
-          </div>
-          {anonymousHint.visible && <p className={styles.note}>{tPanel('anonymousHint')}</p>}
+          <p className={styles.audienceLine} aria-live="polite">
+            {audience === 'public'
+              ? tVis('publicLine', { handle: me?.handle ?? '' })
+              : audience === 'anonymous'
+                ? tVis('anonymousLine')
+                : audience === 'private'
+                  ? tVis('privateLine')
+                  : tVis('connectionsLine')}
+          </p>
         </div>
 
         {/* 6 — whether a resonance tells its original's author */}
@@ -451,7 +453,7 @@ export function PublishStep({
               disabled={mediaBusy || (pending && busyVerb !== 'publish')}
               onClick={onSubmit}
             >
-              {updating ? tPanel('update') : tPanel('publish')}
+              {tPanel(verb)}
             </OrganicButton>
           </ModalActions>
         </div>

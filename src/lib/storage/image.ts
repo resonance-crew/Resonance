@@ -10,8 +10,8 @@ export async function convertToAvif(buffer: Uint8Array | Buffer): Promise<Buffer
     .toBuffer();
 }
 
-/** What an uploaded picture is for: a story's or cover's image, or a profile photo. */
-export type UploadPurpose = 'image' | 'avatar';
+/** What an uploaded picture is for: a story's or cover's image (or a picture sent in chat), a profile photo, or a chat picture as its thread draws it. */
+export type UploadPurpose = 'image' | 'avatar' | 'thumb';
 
 /**
  * The most pixels an upload may decode to (all of an animation's frames
@@ -24,6 +24,8 @@ export const MAX_INPUT_PIXELS = 50_000_000;
 export const IMAGE_MAX_EDGE = 2048;
 /** A profile photo: filled into this square (it is drawn at 30–120 px). */
 export const AVATAR_EDGE = 256;
+/** A chat picture as the thread draws it (GET /api/v1/chat-images/{id}?size=thumb): a bubble is at most 520 px wide. */
+export const THUMB_EDGE = 960;
 
 const ACCEPTED = new Set(['jpeg', 'png', 'webp', 'gif']);
 
@@ -61,12 +63,14 @@ export async function normalizeUpload(input: Uint8Array, purpose: UploadPurpose)
   const animated = (meta.pages ?? 1) > 1;
   // EXIF orientation is a still photo's; an animation has none to apply.
   let image = animated ? open(true) : open(false).rotate();
+  const edge = purpose === 'thumb' ? THUMB_EDGE : IMAGE_MAX_EDGE;
   image =
     purpose === 'avatar'
       ? image.resize(AVATAR_EDGE, AVATAR_EDGE, { fit: 'cover', withoutEnlargement: true })
-      : image.resize(IMAGE_MAX_EDGE, IMAGE_MAX_EDGE, { fit: 'inside', withoutEnlargement: true });
+      : image.resize(edge, edge, { fit: 'inside', withoutEnlargement: true });
+  const quality = animated ? 75 : purpose === 'thumb' ? 78 : 82;
   try {
-    const { data, info } = await image.webp({ quality: animated ? 75 : 82, effort: 4 }).toBuffer({ resolveWithObject: true });
+    const { data, info } = await image.webp({ quality, effort: 4 }).toBuffer({ resolveWithObject: true });
     return {
       data,
       contentType: 'image/webp',

@@ -98,6 +98,21 @@ describe('Outbox', () => {
     expect(outgoingMessage({ ...box.entries[0], status: 'queued' }).delivery).toBe('sending');
   });
 
+  // A picture goes with its message (its deliver uploads it first); the thread draws it meanwhile under the
+  // id the server will keep it by — the message's own.
+  it('carries a picture to its delivery, and draws it under the message\'s own id', async () => {
+    const seen: Outgoing[] = [];
+    const box = new Outbox(async (m) => {
+      seen.push(m);
+      return 'd';
+    });
+    const file = new Blob(['jpeg'], { type: 'image/jpeg' });
+    box.enqueue(out('', { image: { file, width: 1200, height: 900 } }));
+    await until(() => expect(statuses(box)).toEqual(['sent']));
+    expect(seen[0].image).toEqual({ file, width: 1200, height: 900 });
+    expect(outgoingMessage(box.entries[0])).toMatchObject({ text: '', image: { id: 'id-', width: 1200, height: 900 } });
+  });
+
   it('stops the line on a failure that will pass, and a retry keeps the order and the ids', async () => {
     let down = true;
     const tries: string[] = [];

@@ -469,15 +469,18 @@ export const SendMessageRequest = named(
   'SendMessageRequest',
 );
 
-/** A sent picture's longest side as kept, and as a thread draws it (GET /chat-images/{id}?size=thumb). */
-export const CHAT_IMAGE_MAX_EDGE = 2048;
-export const CHAT_IMAGE_THUMB_EDGE = 960;
+/** POST /chat-images's form fields beside its `file` (multipart, so not a JSON body: described in openapi.ts). */
+export const ChatImageUploadForm = z.object({
+  /** The other person's user id. */
+  to: DocId,
+  clientId: ClientId.nullish(),
+});
 
 export const ChatImageResponse = named(
   z.object({
     /** What a message names the picture by (SendMessageRequest.image) and where it is read (GET /chat-images/{id}). */
     id: z.string(),
-    /** Its size in pixels as kept (upright, at most CHAT_IMAGE_MAX_EDGE on its longest side). */
+    /** Its size in pixels as kept (upright, at most 2048 on its longest side: lib/storage/image). */
     width: z.number().int(),
     height: z.number().int(),
   }),

@@ -13,12 +13,21 @@ export interface Outgoing {
   noteRef?: { cardId: string; noteId: string };
   /** The message it answers; the server makes its own snapshot of it. */
   replyTo?: MessageReplyQuote;
+  /** A picture it carries, uploaded as it is sent (under the message's client id, so a resend finds it). */
+  image?: OutgoingImage;
   queuedAt: Date;
   status: OutgoingStatus;
   /** The document id the server answered with (once `sent`): the client id, from a server that uses it. */
   serverId?: string;
   /** `failed` because the server said no to this message itself, not because the line stopped. */
   refused?: boolean;
+}
+
+/** A picture on its way: what goes up, and its size for the thread to draw it meanwhile (from the device: ./localPictures). */
+export interface OutgoingImage {
+  file: Blob;
+  width: number;
+  height: number;
 }
 
 /** What the composer hands the outbox; the outbox keeps the rest. */
@@ -205,6 +214,8 @@ export function outgoingMessage(message: Outgoing): ChatMessage {
     ...(message.cardRef ? { cardRef: message.cardRef } : {}),
     ...(message.noteRef ? { noteRef: message.noteRef } : {}),
     ...(message.replyTo ? { replyTo: message.replyTo } : {}),
+    // Its picture's id will be the message's own (see outboxOf): the thread draws it from the device meanwhile.
+    ...(message.image ? { image: { id: message.clientId, width: message.image.width, height: message.image.height } } : {}),
   };
   return { ...drawn, key: message.clientId, delivery: toDelivery[message.status] };
 }

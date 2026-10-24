@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderWithIntl, screen, userEvent } from '@/../test/render';
+import { act, fireEvent, renderWithIntl, screen, userEvent, waitFor } from '@/../test/render';
+import { ToastProvider } from '@/components/providers/ToastProvider';
 import type { Card, User } from '@/lib/db/types';
 
 // The page's data boundary is the SWR hooks. We mock them to drive the page
@@ -29,6 +30,15 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 
 import HomeFeedPage from './page';
+
+/** The page inside the signed-in shell's toast, as AppShell mounts it. */
+function WithToasts() {
+  return (
+    <ToastProvider>
+      <HomeFeedPage />
+    </ToastProvider>
+  );
+}
 
 function card(id: string, authorId: string, thoughtCore: string): Card {
   return {
@@ -252,6 +262,16 @@ describe('HomeFeedPage — latest first, picks when they come', () => {
     expect(screen.queryByRole('button', { name: "Today's picks are ready" })).not.toBeInTheDocument();
   });
 
+  it('says nothing more when the picks come in at the top, where the reader sees them', () => {
+    mockUseFeed.mockReturnValue(latest);
+    mockUseRecommendedFeed.mockReturnValue({ data: undefined, isLoading: true });
+    const { rerender } = renderWithIntl(<WithToasts />);
+    mockUseRecommendedFeed.mockReturnValue(picks);
+    rerender(<WithToasts />);
+    expect(shown()).toEqual(['/card/r1', '/card/l1', '/card/l2']);
+    expect(screen.queryByRole('button', { name: /Today's picks are in/ })).toBeNull();
+  });
+
   // Scrolled into the feed, the reader keeps the card they are looking at where it stood: the picks go in above.
   it('keeps the card a scrolled reader is looking at where it stood as the picks go in above it', () => {
     mockUseFeed.mockReturnValue(latest);
@@ -277,6 +297,46 @@ describe('HomeFeedPage — latest first, picks when they come', () => {
       scrollBy.mockRestore();
       Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
     }
+  });
+
+  // The picks went in out of sight: the shell's toast says they came, and takes the reader up to them.
+  describe('when the picks come in above a scrolled reader', () => {
+    async function picksAboveTheReader() {
+      mockUseFeed.mockReturnValue(latest);
+      mockUseRecommendedFeed.mockReturnValue({ data: undefined, isLoading: true });
+      const view = renderWithIntl(<WithToasts />);
+      vi.spyOn(window, 'scrollBy').mockImplementation(() => {});
+      Object.defineProperty(window, 'scrollY', { value: 900, configurable: true });
+      // l1 under the bar, the reader's card.
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+        () => ({ top: 120, bottom: 620, left: 0, right: 0, width: 0, height: 500, x: 0, y: 120, toJSON: () => ({}) }) as DOMRect,
+      );
+      mockUseRecommendedFeed.mockReturnValue(picks);
+      view.rerender(<WithToasts />);
+      return screen.findByRole('button', { name: "Today's picks are in · See them" });
+    }
+    afterEach(() => {
+      vi.restoreAllMocks();
+      Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
+    });
+
+    it('says so in the toast, whose tap scrolls up to them', async () => {
+      const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+      const toast = await picksAboveTheReader();
+      expect(toast).toHaveTextContent("Today's picks are in");
+      await userEvent.click(toast);
+      expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 0 }));
+      await waitFor(() => expect(screen.queryByRole('button', { name: "Today's picks are in · See them" })).toBeNull());
+    });
+
+    it('takes the toast down when the reader scrolls up to the picks themselves', async () => {
+      await picksAboveTheReader();
+      Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
+      act(() => {
+        fireEvent.scroll(window);
+      });
+      await waitFor(() => expect(screen.queryByRole('button', { name: "Today's picks are in · See them" })).toBeNull());
+    });
   });
 
   it('never falls back to the skeleton once cards are showing', () => {

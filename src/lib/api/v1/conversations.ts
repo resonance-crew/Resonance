@@ -2,6 +2,7 @@ import { FieldValue, type DocumentSnapshot, type Firestore, type Transaction } f
 import { mapCard } from '@/lib/db/firestore/mapper';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
 import type { MessagePush } from '@/lib/push/chat';
+import { chatImageRef, messageImageOf, pictureToSend } from './chatImages';
 import { ApiFailure } from './http';
 import { addReason, answeredBy, connect, letterReason, originsRef } from './origins';
 import { cardVisible } from './present';
@@ -114,6 +115,28 @@ export function hasPenName(me: DocumentSnapshot | null | undefined): boolean {
 
 /** The refusal for someone without a pen name (see hasPenName). */
 export const noPenName = () => new ApiFailure('forbidden', 'Choose a pen name first.');
+
+/**
+ * Whether `uid` may message `other` now, as sendMessage asks it (outside a
+ * transaction: the message's own send asks again). A pen name, no block
+ * either way, and a connection — or a letter of theirs waiting for this answer.
+ */
+export async function mayMessage(db: Firestore, uid: string, other: string): Promise<void> {
+  if (other === uid) throw new ApiFailure('invalid_request', 'You cannot message yourself.');
+  const pair = pairOf(uid, other);
+  const [me, blockOut, blockIn, connection, convo] = await Promise.all([
+    db.doc(`users/${uid}`).get(),
+    db.doc(`users/${uid}/blocks/${other}`).get(),
+    db.doc(`users/${other}/blocks/${uid}`).get(),
+    db.doc(`connections/${pair}`).get(),
+    db.doc(`conversations/${pair}`).get(),
+  ]);
+  if (!hasPenName(me)) throw noPenName();
+  if (blockOut.exists || blockIn.exists) throw new ApiFailure('blocked', 'You cannot message this person.');
+  if (!connection.exists && openRequest(convo)?.from !== other) {
+    throw new ApiFailure('forbidden', 'You can message people you are connected with.');
+  }
+}
 
 /**
  * Send a note (小紙條) to a card's author: what the web's sendNote() does from
@@ -332,7 +355,8 @@ export async function sendNote(
       kind: NOTE_MESSAGE_KIND,
     });
     tx.set(conversation, {
-      lastMessage: { text: cut(input.text, LAST_MESSAGE_PREVIEW), senderId: uid, sentAt: FieldValue.serverTimestamp() },
+      // `image` goes: the preview is merged into the one before, which may have been a picture.
+      lastMessage: { text: cut(input.text, LAST_MESSAGE_PREVIEW), senderId: uid, sentAt: FieldValue.serverTimestamp(), image: FieldValue.delete() },
       updatedAt: FieldValue.serverTimestamp(),
       unread: { [author]: FieldValue.increment(1) },
       // A letter waits for its answer; the answer leaves none waiting. Anything else leaves it as it is.
@@ -418,11 +442,15 @@ export async function sendMessage(
     noteRef?: { cardId: string; noteId: string } | null;
     replyTo?: string | null;
     clientId?: string | null;
+    image?: string | null;
   },
 ): Promise<SentMessage> {
   const other = input.to;
   if (other === uid) throw new ApiFailure('invalid_request', 'You cannot message yourself.');
-  if (!input.text && !input.cardRef) throw new ApiFailure('invalid_request', 'A message needs text or a card.');
+  if (!input.text && !input.cardRef && !input.image) throw new ApiFailure('invalid_request', 'A message needs text, a card or a picture.');
+  if (input.cardRef && input.image) throw new ApiFailure('invalid_request', 'A message carries a card or a picture, not both.');
+  // An id Firestore keeps for itself names no picture.
+  if (input.image && isReservedId(input.image)) throw new ApiFailure('invalid_request', 'That is not a picture you can send here.');
   if (input.clientId && isReservedId(input.clientId)) throw new ApiFailure('invalid_request', 'Not a valid client id.');
   // An id Firestore keeps for itself names no message (and would throw if asked for as a document).
   if (input.replyTo && isReservedId(input.replyTo)) throw new ApiFailure('invalid_request', 'No such message to reply to.');
@@ -437,7 +465,7 @@ export async function sendMessage(
   const message = input.clientId ? messages.doc(input.clientId) : messages.doc();
 
   return db.runTransaction(async (tx) => {
-    const [me, blockOut, blockIn, connection, convo, origins, note, noteCard, existing, replied] = await Promise.all([
+    const [me, blockOut, blockIn, connection, convo, origins, note, noteCard, existing, replied, sentPicture] = await Promise.all([
       tx.get(db.doc(`users/${uid}`)),
       tx.get(db.doc(`users/${uid}/blocks/${other}`)),
       tx.get(db.doc(`users/${other}/blocks/${uid}`)),
@@ -448,6 +476,7 @@ export async function sendMessage(
       noteRef ? tx.get(db.doc(`cards/${noteRef.cardId}`)) : Promise.resolve(null),
       input.clientId ? tx.get(message) : Promise.resolve(null),
       input.replyTo ? tx.get(messages.doc(input.replyTo)) : Promise.resolve(null),
+      input.image ? tx.get(chatImageRef(db, input.image)) : Promise.resolve(null),
     ]);
     // The same message again: what the first send wrote is the answer, whatever has changed since.
     if (existing?.exists) {
@@ -482,6 +511,8 @@ export async function sendMessage(
     const keptNoteRef = noteRef && note?.exists && noteCard?.exists && noteCard.get('anonymous') !== true ? noteRef : null;
     // A reply answers a message of this conversation (the path alone keeps it from being anyone else's).
     if (replied && !replied.exists) throw new ApiFailure('invalid_request', 'No such message to reply to.');
+    // A picture: this sender's own upload for this conversation, not sent in another message.
+    const picture = sentPicture ? pictureToSend(sentPicture, uid, pair, message.id) : null;
 
     // Connected: the letter of theirs this answers, and a resonance of theirs
     // on a card of yours it answers, are reasons you stay so (a take-back
@@ -508,10 +539,19 @@ export async function sendMessage(
       ...(card ? { cardRef: card.id } : {}),
       ...(keptNoteRef ? { noteRef: { cardId: keptNoteRef.cardId, noteId: keptNoteRef.noteId } } : {}),
       ...(quoted ? { replyTo: quoted } : {}),
+      ...(picture ? { image: picture } : {}),
     });
-    // The list's preview: the text, or the attached card's title when there is none.
+    // Sent: the picture is this message's from now on (and no longer one the unsent purge looks at).
+    if (picture) tx.update(chatImageRef(db, picture.id), { messageId: message.id, unsent: FieldValue.delete() });
+    // The list's preview: the text, or the attached card's title when there is none; a picture says so
+    // (`image`, written or taken away every time — the preview is merged into the one before).
     tx.set(conversation, {
-      lastMessage: { text: cut(input.text || card?.thoughtCore || '', LAST_MESSAGE_PREVIEW), senderId: uid, sentAt: FieldValue.serverTimestamp() },
+      lastMessage: {
+        text: cut(input.text || card?.thoughtCore || '', LAST_MESSAGE_PREVIEW),
+        senderId: uid,
+        sentAt: FieldValue.serverTimestamp(),
+        image: picture ? true : FieldValue.delete(),
+      },
       updatedAt: FieldValue.serverTimestamp(),
       unread: { [other]: FieldValue.increment(1) },
       // Their letter answered: it waits no more. One of yours waits on (only they answer it).
@@ -538,13 +578,14 @@ export async function sendMessage(
   });
 }
 
-/** What a reply keeps of the message it answers. */
-function replyQuote(original: DocumentSnapshot): { id: string; senderId: string; text: string; cardRef?: string } {
+/** What a reply keeps of the message it answers (a picture only as `image: true`: the quote is words). */
+function replyQuote(original: DocumentSnapshot): { id: string; senderId: string; text: string; cardRef?: string; image?: true } {
   const cardRef = original.get('cardRef');
   return {
     id: original.id,
     senderId: String(original.get('senderId') ?? ''),
     text: cut(String(original.get('text') ?? ''), REPLY_QUOTE_CHARS),
     ...(typeof cardRef === 'string' && cardRef ? { cardRef } : {}),
+    ...(messageImageOf(original.get('image')) ? { image: true as const } : {}),
   };
 }

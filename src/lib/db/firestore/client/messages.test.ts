@@ -57,6 +57,7 @@ import {
   listenThread,
   otherParticipant,
   sendMessage,
+  uploadChatImage,
   type ThreadWindow,
 } from './messages';
 
@@ -91,7 +92,7 @@ describe('sendMessage', () => {
     expect(url).toBe('/api/v1/messages');
     expect(init?.method).toBe('POST');
     expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer id-token');
-    expect(sent()).toEqual({ to: 'aaa', text: 'hello there', cardRef: null, noteRef: null, replyTo: null, clientId: null });
+    expect(sent()).toEqual({ to: 'aaa', text: 'hello there', cardRef: null, noteRef: null, replyTo: null, clientId: null, image: null });
     expect(batch.commit).not.toHaveBeenCalled();
   });
 
@@ -110,7 +111,31 @@ describe('sendMessage', () => {
       noteRef: { cardId: 'card-9', noteId: 'note-9' },
       replyTo: null,
       clientId: null,
+      image: null,
     });
+  });
+
+  it('sends a picture uploaded for the conversation, with or without words', async () => {
+    await sendMessage('aaa', '', { image: 'Abcdefghij0123456789', clientId: 'Abcdefghij0123456789' });
+    expect(sent()).toMatchObject({ text: '', image: 'Abcdefghij0123456789', clientId: 'Abcdefghij0123456789' });
+  });
+
+  it('uploads a picture as a form under the message\'s client id, with the ID token', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'Abcdefghij0123456789', width: 1200, height: 900 }) } as unknown as Response);
+    const file = new Blob(['jpeg'], { type: 'image/jpeg' });
+    await expect(uploadChatImage(file, 'aaa', { clientId: 'Abcdefghij0123456789' })).resolves.toEqual({
+      id: 'Abcdefghij0123456789',
+      width: 1200,
+      height: 900,
+    });
+    const [url, init] = fetchMock.mock.calls.at(-1)!;
+    expect(url).toBe('/api/v1/chat-images');
+    expect(init?.method).toBe('POST');
+    expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer id-token');
+    const form = init?.body as FormData;
+    expect([form.get('to'), form.get('clientId'), form.get('file') instanceof Blob]).toEqual(['aaa', 'Abcdefghij0123456789', true]);
+    // The browser sets the multipart boundary itself.
+    expect((init?.headers as Record<string, string>)['Content-Type']).toBeUndefined();
   });
 
   it('names the message it answers and the id it was written under', async () => {
@@ -243,6 +268,32 @@ describe('the listeners (thread, conversations)', () => {
     expect(note.noteRef).toBeUndefined();
     expect(later.kind).toBeUndefined();
     expect('kind' in later).toBe(false);
+  });
+
+  // A picture a message carries is heard with its size (what its place is drawn from before it loads);
+  // a reply to one says so, as the list's preview does.
+  it('hears a picture with its size, a reply to one, and a list preview of one', async () => {
+    const heard = vi.fn();
+    listenThread('aaa_bbb', heard);
+    await vi.waitFor(() => expect(listener.listenNewest).toHaveBeenCalled());
+    const sentAt = fullSdkTimestamp('2026-09-01T08:00:00Z');
+    listener.onDocs!([
+      { id: 'r1', data: { senderId: 'bbb', text: 'wow', sentAt, replyTo: { id: 'p1', senderId: 'aaa', text: '', image: true } } },
+      { id: 'p1', data: { senderId: 'aaa', text: '', sentAt, image: { id: 'pic-1', width: 800, height: 1200 } } },
+      { id: 'p0', data: { senderId: 'aaa', text: 'odd', sentAt, image: { id: 'pic-0', width: 'wide' } } },
+    ]);
+    const [reply, picture, odd] = heardMessages(heard);
+    expect(picture.image).toEqual({ id: 'pic-1', width: 800, height: 1200 });
+    expect(odd.image).toEqual({ id: 'pic-0', width: 0, height: 0 });
+    expect(reply.replyTo).toEqual({ id: 'p1', senderId: 'aaa', text: '', image: true });
+
+    const lists = vi.fn();
+    listenConversations('bbb', lists);
+    await vi.waitFor(() => expect(listener.listenNewest).toHaveBeenCalledTimes(2));
+    listener.onDocs!([
+      { id: 'aaa_bbb', data: { participants: ['aaa', 'bbb'], lastMessage: { text: '', senderId: 'aaa', sentAt, image: true }, unread: {} } },
+    ]);
+    expect(lists.mock.calls[0][0][0].lastMessage).toMatchObject({ text: '', image: true });
   });
 
   // The header's unread badge and the messages list: one listener on the

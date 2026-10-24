@@ -15,7 +15,7 @@ import { useTranslations } from 'next-intl';
 import { CharCount, FieldHint, Textarea } from '@/components/atoms/Field/Field';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { MarkdownEditor, type MarkdownEditorHandle } from '@/components/molecules/MarkdownEditor/MarkdownEditor';
-import { PublishStep, reachesOriginal } from '@/components/molecules/PublishStep/PublishStep';
+import { PublishStep, reachesOriginal, stepTitleKey } from '@/components/molecules/PublishStep/PublishStep';
 import { createCardDraft, publishCard, updateCardDraft } from '@/lib/db/firestore/client/cards';
 import {
   applyPendingCardEdit,
@@ -124,6 +124,11 @@ export interface CardEditorProps {
   onLeave?: () => void;
   /** Publishing, saving or leaving is on its way: the host's back waits with the step's buttons. */
   onPendingChange?: (pending: boolean) => void;
+  /**
+   * The publish step's name, which follows who the card is for (發布這張卡片 ·
+   * 儲存這張卡片 · 更新這張卡片): for the host's bar, which names the step below the split.
+   */
+  onStepTitleChange?: (title: string) => void;
   /** What the page around it asks as it goes (the writer's back arrow). */
   ref?: Ref<CardEditorHandle>;
 }
@@ -227,6 +232,7 @@ export function CardEditor({
   focusStepHeading,
   onLeave,
   onPendingChange,
+  onStepTitleChange,
   ref,
 }: CardEditorProps) {
   const t = useTranslations('write');
@@ -311,6 +317,13 @@ export function CardEditor({
   useEffect(() => {
     reportPending.current?.(pending);
   }, [pending]);
+
+  const stepTitle = t(`publishPanel.${stepTitleKey(isPublished ? 'update' : 'publish', visibility)}`);
+  const reportStepTitle = useRef(onStepTitleChange);
+  reportStepTitle.current = onStepTitleChange;
+  useEffect(() => {
+    reportStepTitle.current?.(stepTitle);
+  }, [stepTitle]);
 
   useEffect(() => {
     onStoryChange?.(story);
@@ -629,7 +642,8 @@ export function CardEditor({
     } catch (err) {
       if (await confirmTrashed(err)) return;
       console.error('Publish failed:', err);
-      setPublishError(failure(err, t('publishPanel.failed')));
+      // Only its author will see it: it was being saved, not published.
+      setPublishError(failure(err, t(valuesRef.current.visibility === 'private' ? 'publishPanel.saveFailed' : 'publishPanel.failed')));
     } finally {
       setPending(false);
     }

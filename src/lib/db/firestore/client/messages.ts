@@ -17,7 +17,7 @@ import {
 import type { Conversation, Message } from '@/lib/db/types';
 import { getFirebaseClientAuth } from '@/lib/auth/firebase/client';
 import { getClientDb } from './init';
-import { callApi } from './api';
+import { callApi, callApiForm } from './api';
 import { isAbsent } from './errors';
 import { listenLazily } from './listen';
 import { linkPreviewOf } from '@/lib/links/previewShape';
@@ -65,6 +65,7 @@ function mapConversation(id: string, data: Record<string, unknown>): Conversatio
           text: String(last.text ?? ''),
           senderId: String(last.senderId ?? ''),
           sentAt: tsToDate(last.sentAt) ?? new Date(0),
+          ...(last.image === true ? { image: true } : {}),
         }
       : null,
     unread: (data.unread as Record<string, number>) ?? {},
@@ -102,6 +103,7 @@ function mapMessage(id: string, data: Record<string, unknown>): Message {
     noteRef: data.noteRef as Message['noteRef'],
     replyTo: mapReplyQuote(data.replyTo),
     preview: mapPreview(data.preview),
+    image: mapImage(data.image),
     // A kind this build doesn't know is a plain message.
     ...(data.kind === 'note' ? { kind: 'note' as const } : {}),
   };
@@ -119,7 +121,18 @@ function mapReplyQuote(v: unknown): Message['replyTo'] {
     senderId: String(q.senderId ?? ''),
     text: typeof q.text === 'string' ? q.text : '',
     cardRef: str(q.cardRef),
+    ...(q.image === true ? { image: true } : {}),
   };
+}
+
+/** A message's picture: an id, and a size that is a size (0 when the server wrote none: drawn square). */
+function mapImage(v: unknown): Message['image'] {
+  if (!v || typeof v !== 'object') return undefined;
+  const p = v as Record<string, unknown>;
+  const id = str(p.id);
+  if (!id) return undefined;
+  const size = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : 0);
+  return { id, width: size(p.width), height: size(p.height) };
 }
 
 /**
@@ -138,6 +151,8 @@ export interface MessageExtras {
   noteRef?: { cardId: string; noteId: string };
   /** The message this one answers (its id, in the same conversation): the server keeps a quote of it on the reply. */
   replyTo?: string;
+  /** A picture uploaded for this conversation (uploadChatImage), by its id. */
+  image?: string;
   /**
    * The id this message was given before it was sent (lib/chat/outbox's
    * `newClientId`): the server makes it the document's id, so sending it
@@ -171,7 +186,7 @@ export async function sendMessage(
   const uid = requireUid();
   if (extras.as && extras.as !== uid) throw new Error('Signed in as someone else');
   const trimmed = text.trim();
-  if (!trimmed && !extras.cardRef) throw new Error('Message is empty');
+  if (!trimmed && !extras.cardRef && !extras.image) throw new Error('Message is empty');
   if (trimmed.length > MESSAGE_MAX_LENGTH) throw new Error('Message too long');
   return callApi('/api/v1/messages', {
     method: 'POST',
@@ -182,8 +197,34 @@ export async function sendMessage(
       noteRef: extras.noteRef ?? null,
       replyTo: extras.replyTo ?? null,
       clientId: extras.clientId ?? null,
+      image: extras.image ?? null,
     },
   });
+}
+
+/**
+ * Keep a picture to send to `toUserId` (POST /api/v1/chat-images): the
+ * server re-encodes it and answers its id for sendMessage's `image`. The
+ * message's own client id goes with it, so sending it again after a lost
+ * answer finds the picture already kept. Only while `as` is the one signed in.
+ */
+export async function uploadChatImage(
+  file: Blob,
+  toUserId: string,
+  opts: { clientId: string; as?: string },
+): Promise<{ id: string; width: number; height: number }> {
+  const uid = requireUid();
+  if (opts.as && opts.as !== uid) throw new Error('Signed in as someone else');
+  const form = new FormData();
+  form.append('file', file, 'picture');
+  form.append('to', toUserId);
+  form.append('clientId', opts.clientId);
+  return callApiForm('/api/v1/chat-images', form);
+}
+
+/** Where a picture a message carries is read (the session cookie names the reader): `thumb` the thread's size. */
+export function chatImageUrl(id: string, size: 'thumb' | 'full'): string {
+  return `/api/v1/chat-images/${encodeURIComponent(id)}${size === 'thumb' ? '?size=thumb' : ''}`;
 }
 
 /** Zero the viewer's own unread counter on a conversation. */

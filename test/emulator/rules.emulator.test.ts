@@ -1053,6 +1053,20 @@ describe('server-only records', () => {
     await assertFails(setDoc(doc(as('alice'), 'config', 'storage'), { host: 'tracker.example' }));
   });
 
+  // A chat picture's record names its files: its sender and the person it
+  // went to read the picture through GET /api/v1/chat-images/{id}, never here.
+  it("chat pictures' records are the server's alone, their sender's and recipient's too", async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'chatImages', 'p1'), { senderId: 'alice', pair: 'alice_bob', key: 'chat/2026-10/p1.webp', messageId: 'm1' });
+    });
+    await assertFails(getDoc(doc(as('alice'), 'chatImages', 'p1')));
+    await assertFails(getDoc(doc(as('bob'), 'chatImages', 'p1')));
+    await assertFails(getDocs(query(collection(as('bob'), 'chatImages'), where('pair', '==', 'alice_bob'))));
+    await assertFails(setDoc(doc(as('alice'), 'chatImages', 'p2'), { senderId: 'alice', pair: 'alice_bob', key: 'x' }));
+    await assertFails(updateDoc(doc(as('alice'), 'chatImages', 'p1'), { messageId: 'm2' }));
+    await assertFails(deleteDoc(doc(as('bob'), 'chatImages', 'p1')));
+  });
+
   // A person's push switches (and when they agreed), and what was pushed to
   // them: the server's alone, the person's own included — the switches change
   // through PATCH /api/v1/me/notifications only.

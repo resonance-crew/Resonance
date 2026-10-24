@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/db/firestore/admin';
 import { purgeExpiredTrash } from '@/lib/api/v1/trash';
+import { purgeUnsentChatImages } from '@/lib/api/v1/chatImages';
+import { getChatImageStore } from '@/lib/storage/chatImages';
 import { revalidateLocalized } from '@/lib/api/revalidate';
 import { cronAuthorized } from '@/lib/api/cronAuth';
 
@@ -12,16 +14,22 @@ const PURGE_BUDGET_MS = (maxDuration - 30) * 1000;
 /**
  * Daily purge of the trash (vercel.json, 02:30 Taipei — half an hour after
  * the account purge): every card in it for 30 days or more is deleted for
- * good (purgeExpiredTrash). Vercel Cron sends `Authorization: Bearer
+ * good (purgeExpiredTrash). Then, in the time left, the pictures uploaded for
+ * a chat message more than a day ago that no message carries
+ * (purgeUnsentChatImages). Vercel Cron sends `Authorization: Bearer
  * $CRON_SECRET`; any other caller is refused, and so is every caller when the
  * secret is unset.
  */
 export async function GET(req: Request) {
   if (!cronAuthorized(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const run = await purgeExpiredTrash(getAdminDb(), {
+  const started = Date.now();
+  const db = getAdminDb();
+  const run = await purgeExpiredTrash(db, {
     budgetMs: PURGE_BUDGET_MS,
     // A purged card must not live on in its cached pages.
     revalidate: revalidateLocalized,
   });
-  return NextResponse.json({ purged: run.purged, skipped: run.skipped, failed: run.failed, deferred: run.deferred });
+  const store = getChatImageStore();
+  const unsent = store ? await purgeUnsentChatImages(db, store, { deadline: started + PURGE_BUDGET_MS }) : null;
+  return NextResponse.json({ purged: run.purged, skipped: run.skipped, failed: run.failed, deferred: run.deferred, unsentPictures: unsent });
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useState, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { BareIconButton } from '@/components/atoms/BareIconButton/BareIconButton';
@@ -9,6 +9,9 @@ import { Divider } from '@/components/atoms/Divider/Divider';
 import { Textarea } from '@/components/atoms/Field/Field';
 import { Icon } from '@/components/atoms/Icon';
 import { ShapeGrain } from '@/components/atoms/ShapeGrain/ShapeGrain';
+import { OrganicMenu } from '@/components/molecules/OrganicMenu/OrganicMenu';
+import { useToast } from '@/components/providers/ToastProvider';
+import { preparePicture, UnsupportedImage, type PreparedPicture } from '@/lib/chat/preparePicture';
 import { INK } from '@/lib/design/strokes';
 import { wobRect } from '@/lib/design/wobRect';
 import { useOpenedOnce } from '@/lib/hooks/useOpenedOnce';
@@ -39,17 +42,50 @@ export interface ThreadComposerProps {
   ready: boolean;
 }
 
+/** A picture waiting in the composer: ready to go up, and where its chip draws it from. */
+interface PendingPicture extends PreparedPicture {
+  previewUrl: string;
+}
+
 /**
  * The thread's composer: what the next message carries (the message it
- * answers, a note it quotes, a card), the field — one line at rest, growing
- * with what is written — and the send button. Its draft lives here, so typing
- * never draws the thread above it again; sending never holds it (the message
- * goes out behind any still on their way, and the field is ready at once).
+ * answers, a note it quotes, a card or a picture — one of the two), the
+ * 「＋」 that attaches them (圖片 · 卡片, the one organic menu; a picture can be
+ * pasted too), the field — one line at rest, growing with what is written —
+ * and the send button. Its draft lives here, so typing never draws the thread
+ * above it again; sending never holds it (the message goes out behind any
+ * still on their way, and the field is ready at once — a picture goes up as
+ * it is sent).
  */
 export function ThreadComposer({ inputRef, otherHandle, replyingTo, replyHandle, onCancelReply, replyNote, send, ready }: ThreadComposerProps) {
   const t = useTranslations('messages');
+  const toast = useToast();
   const [text, setText] = useState('');
   const [pendingCard, setPendingCard] = useState<Card | null>(null);
+  const [picture, setPicture] = useState<PendingPicture | null>(null);
+  // A picture being made ready (scaled on the device): sending waits for it.
+  const [preparing, setPreparing] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  // The chip's own copy of the picture goes when it does.
+  useEffect(() => () => {
+    if (picture) URL.revokeObjectURL(picture.previewUrl);
+  }, [picture]);
+
+  /** Attach `file` in place of a card or a picture before it; one the browser can't read is said so, and nothing changes. */
+  async function attachPicture(file: File) {
+    setPreparing(true);
+    try {
+      const ready = await preparePicture(file);
+      setPendingCard(null);
+      setPicture({ ...ready, previewUrl: URL.createObjectURL(ready.file) });
+      inputRef.current?.focus();
+    } catch (e) {
+      if (!(e instanceof UnsupportedImage)) console.error('Picture not prepared:', e);
+      toast.show({ message: t('imageUnsupported') });
+    } finally {
+      setPreparing(false);
+    }
+  }
   const [cardModalOpen, setCardModalOpen] = useState(false);
   const cardModalLoaded = useOpenedOnce(cardModalOpen);
   // The note-reply quote rides the next message; dismissable if reconsidered.
@@ -65,13 +101,15 @@ export function ThreadComposer({ inputRef, otherHandle, replyingTo, replyHandle,
   }, [text, inputRef]);
 
   const trimmed = text.trim();
-  const valid = ready && (trimmed.length > 0 || !!pendingCard) && trimmed.length <= MESSAGE_MAX_LENGTH;
+  const valid = ready && !preparing && (trimmed.length > 0 || !!pendingCard || !!picture) && trimmed.length <= MESSAGE_MAX_LENGTH;
 
   function submit() {
     if (!valid) return;
-    if (!send({ text: trimmed, cardRef: pendingCard?.id, noteRef })) return;
+    const image = picture ? { file: picture.file, width: picture.width, height: picture.height } : undefined;
+    if (!send({ text: trimmed, cardRef: pendingCard?.id, noteRef, image })) return;
     setText('');
     setPendingCard(null);
+    setPicture(null);
     setNoteRef(undefined);
     inputRef.current?.focus();
   }
@@ -93,7 +131,7 @@ export function ThreadComposer({ inputRef, otherHandle, replyingTo, replyHandle,
           <BareIconButton icon="close" label={t('replyCancel')} iconSize={16} tipAlign="end" onClick={onCancelReply} />
         </div>
       )}
-      {(noteRef || pendingCard) && (
+      {(noteRef || pendingCard || picture) && (
         <div className={styles.attachments}>
           {noteRef && (
             <span className={styles.attachChip}>
@@ -113,17 +151,62 @@ export function ThreadComposer({ inputRef, otherHandle, replyingTo, replyHandle,
               </button>
             </span>
           )}
+          {picture && (
+            <span className={styles.attachPicture}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={picture.previewUrl} alt={t('attachImage')} />
+              <button type="button" aria-label={t('removeImage')} className={styles.attachPictureRemove} onClick={() => setPicture(null)}>
+                <Icon name="close" size={13} />
+              </button>
+            </span>
+          )}
         </div>
       )}
 
       <div className={styles.composer}>
-        <BareIconButton icon="cards" label={t('attachCard')} iconSize={19} tipAlign="start" onClick={() => setCardModalOpen(true)} />
+        <OrganicMenu
+          bare
+          tone="muted"
+          triggerIcon="plus"
+          label={t('attach')}
+          floating
+          align="start"
+          seed={17}
+          items={[
+            { key: 'image', icon: 'image', label: t('attachImage') },
+            { key: 'card', icon: 'cards', label: t('attachCardShort') },
+          ]}
+          onChoose={(key) => {
+            if (key === 'image') fileRef.current?.click();
+            else setCardModalOpen(true);
+          }}
+        />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className={styles.fileInput}
+          tabIndex={-1}
+          aria-hidden
+          onChange={(e) => {
+            const file = e.currentTarget.files?.[0];
+            if (file) void attachPicture(file);
+            e.currentTarget.value = '';
+          }}
+        />
         <div className={styles.composerField}>
           <Textarea
             ref={inputRef}
             className={styles.composerInput}
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onPaste={(e) => {
+              // A picture pasted is attached, as one picked is; words paste as words.
+              const file = [...e.clipboardData.files].find((f) => f.type.startsWith('image/'));
+              if (!file) return;
+              e.preventDefault();
+              void attachPicture(file);
+            }}
             onKeyDown={(e) => {
               // The Enter that commits a word being composed (Zhuyin, Pinyin) isn't a send: Safari hands it
               // over after the composition ended, known only by its key code.
@@ -152,6 +235,8 @@ export function ThreadComposer({ inputRef, otherHandle, replyingTo, replyHandle,
           title={t('pickCard')}
           subtitle={t('pickCardSubtitle')}
           onPick={(card) => {
+            // One of the two: a card in place of a picture.
+            setPicture(null);
             setPendingCard(card);
             setCardModalOpen(false);
           }}

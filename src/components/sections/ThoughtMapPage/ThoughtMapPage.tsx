@@ -48,6 +48,8 @@ export function ThoughtMapPage() {
   const [step, setStep] = useState<WriterStep>('write');
   const [action, setAction] = useState<PrimaryAction | null>(null);
   const [pending, setPending] = useState(false);
+  // The publish step's name as the editor says it (it follows who the card is for).
+  const [stepTitle, setStepTitle] = useState<string | null>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const focusTitle = useCallback(() => titleRef.current?.focus({ preventScroll: true }), []);
   const openCard = (card: Card) => {
@@ -64,9 +66,7 @@ export function ThoughtMapPage() {
     : openedCard.authorId !== user?.id
       ? t('referenceCard')
       : step === 'publish'
-        ? openedCard.publishedAt
-          ? t('publishPanel.updateTitle')
-          : t('publishPanel.title')
+        ? (stepTitle ?? (openedCard.publishedAt ? t('publishPanel.updateTitle') : t('publishPanel.title')))
         : openedCard.publishedAt
           ? t('editPublishedTitle')
           : t('editTitle');
@@ -98,6 +98,7 @@ export function ThoughtMapPage() {
             onStepChange: setStep,
             onPrimaryActionChange: setAction,
             onPendingChange: setPending,
+            onStepTitleChange: setStepTitle,
             inlineStepHeading: split === true,
             focusStepHeading: focusTitle,
           }}

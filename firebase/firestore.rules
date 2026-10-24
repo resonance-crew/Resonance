@@ -686,6 +686,15 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // --- chat pictures (server-only) ---
+    // Whose each picture sent in chat is, which conversation and message it
+    // belongs to, and where its files are (lib/api/v1/chatImages): read by
+    // the two people of the conversation through GET /api/v1/chat-images/{id}
+    // only, never from here.
+    match /chatImages/{imageId} {
+      allow read, write: if false;
+    }
+
     // --- configuration (server-only) ---
     // config/storage: the storage's public host (and, during a move, the
     // hosts it was served from before: formerHosts), which storedFile() holds

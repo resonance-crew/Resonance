@@ -141,6 +141,19 @@ describe('CardActionsMenu', () => {
     );
   });
 
+  // Made public again, an anonymous card stays anonymous (only its visibility changes): the verb says so.
+  it('offers Make public anonymously on a private anonymous card', async () => {
+    renderMenu(<CardActionsMenu card={{ id: 'c2', visibility: 'private', anonymous: true }} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
+    expect(screen.queryByText('Make public')).toBeNull();
+    await userEvent.click(screen.getByText('Make public anonymously'));
+
+    await waitFor(() =>
+      expect(mockCallApi).toHaveBeenCalledWith('/api/v1/cards/c2', { method: 'PATCH', body: { visibility: 'public' } }),
+    );
+  });
+
   it("moves a card to the trash at once — no question — reads its lists again, and the toast's Undo brings it back", async () => {
     const onTrashed = vi.fn();
     const onRestored = vi.fn();

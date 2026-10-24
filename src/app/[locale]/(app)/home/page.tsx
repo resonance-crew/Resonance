@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { CardLinkGrid } from '@/components/molecules/CardLinkGrid/CardLinkGrid';
 import { FeedSkeleton } from '@/components/atoms/CardSkeleton/CardSkeleton';
@@ -8,6 +8,7 @@ import { ButtonLoader } from '@/components/atoms/ButtonLoader/ButtonLoader';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { Link } from '@/i18n/navigation';
 import { EmptyState } from '@/components/molecules/EmptyState/EmptyState';
+import { useToast } from '@/components/providers/ToastProvider';
 import { penWave } from '@/lib/design/wavyPath';
 import { INK } from '@/lib/design/strokes';
 import { useFeed, useRecommendedFeed } from '@/lib/data/hooks';
@@ -19,6 +20,7 @@ type Lead = 'recommended' | 'latest';
 export default function HomeFeedPage() {
   const t = useTranslations('home');
   const tNav = useTranslations('app.nav');
+  const toast = useToast();
   const { data, isLoading, isLoadingMore, hasMore, loadMore } = useFeed();
   const { data: rec, isLoading: recLoading } = useRecommendedFeed();
   const recCards = rec?.cards ?? [];
@@ -34,7 +36,9 @@ export default function HomeFeedPage() {
   //  - otherwise the latest cards, the moment they arrive — and picks that
   //    come in after them go on top at once (no pill to ask for them). A
   //    reader still at the top sees them; one who has scrolled into the feed
-  //    keeps what they are looking at where it is, the picks above it.
+  //    keeps what they are looking at where it is, the picks above it — and
+  //    the shell's toast says they came (今天的推薦來了 · 往上看), taking them
+  //    up there on a tap.
   const [lead, setLead] = useState<Lead | null>(null);
   const nextLead: Lead | null = lead ?? (hasRec ? 'recommended' : latestCards.length > 0 ? 'latest' : null);
   if (nextLead !== lead) setLead(nextLead);
@@ -56,6 +60,8 @@ export default function HomeFeedPage() {
     picksShown.current = hasRec;
     if (hasRec && lead === 'latest' && typeof window !== 'undefined') keepInView.current = cardInView();
   }
+  // The toast saying the picks came above the reader, while it shows.
+  const picksToast = useRef<number | null>(null);
   useLayoutEffect(() => {
     const kept = keepInView.current;
     keepInView.current = null;
@@ -64,7 +70,37 @@ export default function HomeFeedPage() {
     const moved = el ? el.getBoundingClientRect().top - kept.top : 0;
     // A browser that anchors scrolling itself has kept it already (moved is 0).
     if (Math.abs(moved) >= 1) window.scrollBy(0, moved);
+    // Out of sight above them: said, with the way up.
+    const arrived = t('recommended.arrived');
+    const up = t('recommended.arrivedAction');
+    picksToast.current = toast.show({
+      message: arrived,
+      action: {
+        label: up,
+        ariaLabel: `${arrived} · ${up}`,
+        icon: 'arrow-up',
+        onAction: () => {
+          picksToast.current = null;
+          const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          window.scrollTo({ top: 0, behavior: still ? 'auto' : 'smooth' });
+        },
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasRec]);
+  // Up at the picks by hand, the toast has said what it had to; leaving the feed, it has nothing to point at.
+  useEffect(() => {
+    const atTop = () => {
+      if (picksToast.current == null || window.scrollY > 4) return;
+      toast.dismiss(picksToast.current);
+      picksToast.current = null;
+    };
+    window.addEventListener('scroll', atTop, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', atTop);
+      if (picksToast.current != null) toast.dismiss(picksToast.current);
+    };
+  }, [toast]);
 
   // Nothing to show yet: the skeleton, until either stream has cards — or
   // both have answered with none (the empty state).

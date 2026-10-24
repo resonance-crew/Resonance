@@ -134,12 +134,14 @@ export function CardActionsMenu({
     referenceTitle ?? (lookup?.status === 'ready' ? lookup.cards.cards.find((c) => c.id === original)?.thoughtCore : undefined);
 
   const isPrivate = card.visibility === 'private';
+  // Made public again, an anonymous card stays anonymous: the verb says so.
+  const makeVisible = isPrivate ? (card.anonymous === true ? t('makePublicAnonymous') : t('makePublic')) : t('makePrivate');
   const items: OrganicMenuItem[] = [
     { key: 'edit', icon: 'pen', label: t('edit') },
     {
       key: 'visibility',
       icon: isPrivate ? 'globe' : 'lock',
-      label: isPrivate ? t('makePublic') : t('makePrivate'),
+      label: makeVisible,
     },
     ...(original ? [{ key: 'unresonate', icon: 'wave' as const, label: t('unresonate') }] : []),
     { key: 'delete', icon: 'trash', label: t('delete'), danger: true },
@@ -278,7 +280,7 @@ export function CardActionsMenu({
     }
   }
 
-  const noticeTitle = notice === 'trash' ? t('delete') : isPrivate ? t('makePublic') : t('makePrivate');
+  const noticeTitle = notice === 'trash' ? t('delete') : makeVisible;
   return (
     <>
       <OrganicMenu

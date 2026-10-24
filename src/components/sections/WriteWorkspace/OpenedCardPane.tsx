@@ -47,7 +47,7 @@ export function OpenedCardPane({
   editorRef?: Ref<CardEditorHandle>;
   editorProps?: Pick<
     CardEditorProps,
-    'onStepChange' | 'onPrimaryActionChange' | 'onPendingChange' | 'inlineStepHeading' | 'focusStepHeading'
+    'onStepChange' | 'onPrimaryActionChange' | 'onPendingChange' | 'onStepTitleChange' | 'inlineStepHeading' | 'focusStepHeading'
   >;
 }) {
   const t = useTranslations('write');

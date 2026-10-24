@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { useAuth } from '@/components/providers/AuthProvider';
 import { MessageHistory } from '@/lib/chat/history';
 import { canReply, quoteOf, type ChatMessage } from '@/lib/chat/message';
-import { Outbox, isShown, newClientId, type Outgoing } from '@/lib/chat/outbox';
+import { keepLocalPicture } from '@/lib/chat/localPictures';
+import { Outbox, isShown, newClientId, type Outgoing, type OutgoingImage } from '@/lib/chat/outbox';
 import { searchMessages, type SearchHit } from '@/lib/chat/search';
 import { ThreadMessages } from '@/lib/chat/threadMessages';
 import { isAbsent } from '@/lib/db/firestore/client/errors';
@@ -13,6 +14,7 @@ import {
   getOlderMessages,
   listenThread,
   sendMessage,
+  uploadChatImage,
   type MessageCursor,
 } from '@/lib/db/firestore/client/messages';
 import type { MessageReplyQuote } from '@/lib/db/types';
@@ -49,18 +51,20 @@ export function outboxOf(uid: string, pairId: string, to: string): Outbox {
   const key = `${uid}:${pairId}`;
   let box = outboxes.get(key);
   if (!box) {
-    box = new Outbox(
-      async (m) =>
-        (
-          await sendMessage(to, m.text, {
-            cardRef: m.cardRef,
-            noteRef: m.noteRef,
-            replyTo: m.replyTo?.id,
-            clientId: m.clientId,
-            as: uid,
-          })
-        ).id,
-    );
+    box = new Outbox(async (m) => {
+      // A picture goes up first, under the message's own client id: a resend finds it kept, and the message names it.
+      const image = m.image ? (await uploadChatImage(m.image.file, to, { clientId: m.clientId, as: uid })).id : undefined;
+      return (
+        await sendMessage(to, m.text, {
+          cardRef: m.cardRef,
+          noteRef: m.noteRef,
+          replyTo: m.replyTo?.id,
+          clientId: m.clientId,
+          image,
+          as: uid,
+        })
+      ).id;
+    });
     outboxes.set(key, box);
   }
   return box;
@@ -296,6 +300,8 @@ export interface ThreadDraft {
   text: string;
   cardRef?: string;
   noteRef?: { cardId: string; noteId: string };
+  /** A picture, ready to go up (compressed on the device). A message carries a card or a picture, never both. */
+  image?: OutgoingImage;
 }
 
 /**
@@ -446,15 +452,20 @@ export function useChatThread({ pairId, to, listen, onSent }: ChatThreadOptions)
       send: (draft: ThreadDraft) => {
         if (!box || !uid) return false;
         const text = draft.text.trim();
-        if ((!text && !draft.cardRef) || text.length > MESSAGE_MAX_LENGTH) return false;
+        if ((!text && !draft.cardRef && !draft.image) || text.length > MESSAGE_MAX_LENGTH) return false;
+        if (draft.cardRef && draft.image) return false;
         const replyTo = replyingToRef.current;
+        const clientId = newClientId();
+        // Drawn from the device from now on, under the id the server will keep it by.
+        if (draft.image) keepLocalPicture(clientId, draft.image.file);
         box.enqueue({
-          clientId: newClientId(),
+          clientId,
           senderId: uid,
           text,
           ...(draft.cardRef ? { cardRef: draft.cardRef } : {}),
           ...(draft.noteRef ? { noteRef: draft.noteRef } : {}),
           ...(replyTo ? { replyTo } : {}),
+          ...(draft.image ? { image: draft.image } : {}),
           queuedAt: new Date(),
         });
         replyingToRef.current = null;

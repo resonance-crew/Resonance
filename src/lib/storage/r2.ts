@@ -25,8 +25,9 @@ function extension(filename: string) {
   return ext ? `.${ext}` : '';
 }
 
-export class R2StorageProvider implements IStorageProvider {
-  private client = new S3Client({
+/** An S3 client for R2, with the account's keys unless others are given (a bucket a key of its own reaches). */
+export function r2Client(credentials?: { accessKeyId: string; secretAccessKey: string }): S3Client {
+  return new S3Client({
     region: 'auto',
     endpoint: env('R2_ENDPOINT'),
     forcePathStyle: true,
@@ -35,11 +36,15 @@ export class R2StorageProvider implements IStorageProvider {
     // time) and rejects/garbles uploads. Only send a checksum when required.
     requestChecksumCalculation: 'WHEN_REQUIRED',
     responseChecksumValidation: 'WHEN_REQUIRED',
-    credentials: {
+    credentials: credentials ?? {
       accessKeyId: env('R2_ACCESS_KEY_ID'),
       secretAccessKey: env('R2_SECRET_ACCESS_KEY'),
     },
   });
+}
+
+export class R2StorageProvider implements IStorageProvider {
+  private client = r2Client();
 
   private bucket = env('R2_BUCKET');
   private publicBase = env('R2_PUBLIC_BASE').replace(/\/$/, '');
