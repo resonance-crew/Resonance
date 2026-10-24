@@ -177,4 +177,61 @@ import Testing
         #expect(!StoryNesting.tooDeep(atLimit))
         guard case .quote = StoryParser.parse(atLimit).first else { return #expect(Bool(false)) }
     }
+
+    // MARK: Tables (round 8 §5.2; the corpus's table-* cases)
+
+    /// A table's cells as plain words, row by row (the header first).
+    func cells(_ block: StoryBlock?) -> [[String]]? {
+        guard case let .table(head, rows, _)? = block else { return nil }
+        return ([head] + rows).map { $0.map { $0.map(\.text).joined() } }
+    }
+
+    @Test func aTableIsATableWithItsHeadItsRowsAndItsAlignments() throws {
+        let b = blocks("table-basic")
+        #expect(b.count == 3)
+        #expect(text(b[0]) == "前言")
+        #expect(cells(b[1]) == [["名稱", "數量"], ["蘋果", "3"], ["香蕉", "12"]])
+        guard case let .table(_, _, alignments) = b[1] else { return #expect(Bool(false)) }
+        // `---` is the start of the line, `---:` the right.
+        #expect(alignments == [.start, .right])
+        #expect(text(b[2]) == "結尾")
+        // A table is a block with its own air, as a picture is.
+        #expect(ProseMetrics.margins(b[1], Self.cjkDesktop) == (top: 32, bottom: 32))
+    }
+
+    @Test func aTablesCellsKeepTheirMarksAndAlignmentsAndItsEscapedPipe() throws {
+        let marked = blocks("table-padded-and-marked")
+        #expect(marked.count == 1)
+        #expect(cells(marked[0]) == [["地點", "時間", "心情"], ["台北", "早上", "好"], ["高雄", "晚上", "普通"]])
+        guard case let .table(_, rows, alignments) = marked[0] else { return #expect(Bool(false)) }
+        #expect(alignments == [.left, .center, .right])
+        #expect(rows[0][0] == [InlineRun("台北", bold: true)])
+        #expect(rows[1][0] == [InlineRun("高雄", link: "https://example.com")])
+        #expect(rows[1][2] == [InlineRun("普通", code: true)])
+        // `\|` is a cell's own pipe.
+        #expect(cells(blocks("table-escaped-pipe").first) == [["符號", "意思"], ["a | b", "或"]])
+    }
+
+    @Test func aTableAfterALineInAQuoteAndBeforeAParagraph() {
+        let after = blocks("table-after-a-line")
+        #expect(text(after[0]) == "下面是清單：")
+        #expect(cells(after[1]) == [["項目", "說明"], ["一", "第一項"]])
+        guard case let .quote(inner) = blocks("table-in-quote").first else { return #expect(Bool(false)) }
+        #expect(cells(inner.first) == [["年", "事"], ["2024", "搬家"]])
+        let then = blocks("table-then-text")
+        #expect(cells(then[0]) == [["a", "b"], ["1", "2"]])
+        #expect(text(then[1]) == "表格之後的一段話。")
+    }
+
+    @Test func aRowIsAsLongAsTheHeaderAndACellsBareAddressIsALink() {
+        // A short row ends in an empty cell; a long one's extra cell goes (GFM's rule).
+        let ragged = StoryParser.parse("| a | b |\n| - | - |\n| 1 |\n| 1 | 2 | 3 |")
+        #expect(cells(ragged.first) == [["a", "b"], ["1", ""], ["1", "2"]])
+        // A bare address in a cell is made a link, as in a paragraph.
+        let linked = StoryBlock.linkingAddresses(StoryParser.parse("| 網站 |\n| --- |\n| 見 https://example.com/rain |")) { words in
+            ChatLinks.links(in: words).map { (range: $0.range, url: $0.url.absoluteString) }
+        }
+        guard case let .table(_, rows, _)? = linked.first else { return #expect(Bool(false)) }
+        #expect(rows[0][0].contains { $0.link == "https://example.com/rain" && $0.text == "https://example.com/rain" })
+    }
 }

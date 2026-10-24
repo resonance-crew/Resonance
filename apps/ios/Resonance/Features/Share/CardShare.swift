@@ -5,23 +5,26 @@ import ResonanceKit
 import SwiftUI
 import UIKit
 
-/// A card's share (share.spec, the owner's revision): one glyph in the card's bar, straight to the
-/// system's share sheet, which carries both the card's link and its 1080 × 1920 picture — and each
-/// destination takes what fits it: Instagram's own share extension and Save Image the picture
-/// (made for Stories), every other one the link (Facebook as a post with its link card, Threads,
-/// LINE, X, Messages, Mail, Copy, AirDrop…), which opens the card where a picture would be a dead
-/// end. With a Meta App ID and Instagram installed, the sheet also offers Instagram 限時動態: the
-/// card as a movable sticker over its backdrop. The picture is made on the phone when the glyph is
-/// tapped, from the card as the page has it; should that fail, the sheet carries the link alone.
+/// A card's share (share.spec, the owner's revision; round 8 §9): one glyph in the card's bar (and
+/// at the story's end), straight to the system's share sheet, which carries both the card's link
+/// and its 1080 × 1920 picture — and each destination takes what fits it: Save Image the picture,
+/// every other one the link (Facebook as a post with its link card, Threads, LINE, X, Messages,
+/// Mail, Copy, AirDrop… and Instagram's own share extension too: whether Instagram then sends it to
+/// a story, the feed or a message is its own picker's to decide, and no app is told — a message
+/// carrying the link can be tapped through, a picture can't). The picture goes to a story only
+/// through the app's own Instagram 限時動態 (with a Meta App ID and Instagram installed): the card as
+/// a movable sticker over its backdrop, its link copied for Instagram's link sticker. The picture
+/// is made on the phone when the glyph is tapped, from the card as the page has it (the glyph's own
+/// small loader meanwhile); should that fail, the sheet carries the link alone.
 enum CardSharing {
-    /// Instagram's share extension (its Feed, Stories and Direct targets).
+    /// Instagram's share extension (its Feed, Stories and Direct targets): given the link, as the rest.
     static let instagramExtension = UIActivity.ActivityType("com.burbn.instagram.shareextension")
     /// What the sheet leaves out: nothing a card's link or picture is for.
     static let excluded: [UIActivity.ActivityType] = [.assignToContact, .addToReadingList, .print]
 
-    /// Whether `activity` gets the picture (and not the link): Instagram's extension and Save Image.
+    /// Whether `activity` gets the picture (and not the link): Save Image alone.
     static func takesPicture(_ activity: UIActivity.ActivityType?) -> Bool {
-        activity == .saveToCameraRoll || activity == instagramExtension
+        activity == .saveToCameraRoll
     }
 
     /// The pictures the card is drawn with: its cover, and its author's photo — never an anonymous
@@ -87,7 +90,8 @@ enum CardSharing {
                     return nil
                 }
                 return (sticker, background)
-            }, failed: { toasts.show(L10n.Share.Image.storiesFailed) }))
+            }, told: { toasts.show(L10n.Share.Image.storiesLinkCopied) },
+            failed: { toasts.show(L10n.Share.Image.storiesFailed) }))
         }
         let toasts = session.toasts
         ShareSheet.present(items: items, activities: activities, excluded: excluded, from: anchor) { activity, completed, error in
@@ -97,9 +101,9 @@ enum CardSharing {
     }
 }
 
-/// The card's link, for every destination but those that take the picture: the URL, and its preview
-/// (`LPLinkMetadata`: the title, the cover — else the app's icon) so the sheet's header draws without
-/// fetching the page; the title as a mail's subject.
+/// The card's link, for every destination but Save Image (Instagram's share extension included): the
+/// URL, and its preview (`LPLinkMetadata`: the title, the cover — else the app's icon) so the sheet's
+/// header draws without fetching the page; the title as a mail's subject.
 final class LinkSource: NSObject, UIActivityItemSource {
     let link: URL
     let title: String
@@ -150,8 +154,9 @@ final class LinkSource: NSObject, UIActivityItemSource {
     }
 }
 
-/// The card's picture, for Instagram's share extension and Save Image only: every other destination
-/// gets the link (a feed's link card opens the card; a 9:16 picture there is cropped and a dead end).
+/// The card's picture, for Save Image only: every other destination gets the link (a feed's link
+/// card opens the card; a 9:16 picture there is cropped and a dead end — and a message through
+/// Instagram must carry the link, which only Instagram's own picker knows it is).
 final class CardImageSource: NSObject, UIActivityItemSource {
     let picture: UIImage
 
@@ -169,8 +174,10 @@ final class CardImageSource: NSObject, UIActivityItemSource {
 }
 
 /// Instagram 限時動態 in the sheet's row of apps: the card as a sticker over its backdrop
-/// (``InstagramStories``). The sticker and backdrop are drawn when it is chosen. UIKit calls an
-/// activity on the main thread; it is declared nonisolated only because UIActivity is.
+/// (``InstagramStories``). The sticker and backdrop are drawn when it is chosen; the card's link goes
+/// on the pasteboard with them (copied, for Instagram's link sticker), the app's toast says what to
+/// do with it, and Instagram opens a moment later, once it can be read (round 8 §9.2). UIKit calls
+/// an activity on the main thread; it is declared nonisolated only because UIActivity is.
 nonisolated final class InstagramStoriesActivity: UIActivity, @unchecked Sendable {
     static let type = UIActivity.ActivityType("com.resonance.stories.instagram-stories")
 
@@ -179,21 +186,28 @@ nonisolated final class InstagramStoriesActivity: UIActivity, @unchecked Sendabl
     let title: String
     let image: UIImage?
     let make: @MainActor () -> (sticker: Data, background: Data)?
+    /// Says the link is copied and what to do with it (the toast), before Instagram opens.
+    let told: @MainActor () -> Void
     let failed: @MainActor () -> Void
     let pasteboard: StoriesPasteboard
     let open: @MainActor (URL) async -> Bool
+    let pause: @MainActor (Duration) async -> Void
 
     @MainActor init(link: URL, appID: String, make: @escaping @MainActor () -> (sticker: Data, background: Data)?,
-                    failed: @escaping @MainActor () -> Void, pasteboard: StoriesPasteboard = UIPasteboard.general,
-                    open: @escaping @MainActor (URL) async -> Bool = { await UIApplication.shared.open($0) }) {
+                    told: @escaping @MainActor () -> Void = {}, failed: @escaping @MainActor () -> Void,
+                    pasteboard: StoriesPasteboard = UIPasteboard.general,
+                    open: @escaping @MainActor (URL) async -> Bool = { await UIApplication.shared.open($0) },
+                    pause: @escaping @MainActor (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
         self.link = link
         self.appID = appID
         self.title = L10n.Share.toStories
         self.image = Self.glyph()
         self.make = make
+        self.told = told
         self.failed = failed
         self.pasteboard = pasteboard
         self.open = open
+        self.pause = pause
         super.init()
     }
 
@@ -212,15 +226,17 @@ nonisolated final class InstagramStoriesActivity: UIActivity, @unchecked Sendabl
         }
     }
 
-    /// Draws the sticker and backdrop, puts them on the pasteboard and opens Instagram.
+    /// Draws the sticker and backdrop, puts them on the pasteboard with the link (copied), says so,
+    /// and opens Instagram once that has been read.
     @MainActor func handOff() async -> Bool {
         guard let assets = make() else { return false }
         return await InstagramStories.share(sticker: assets.sticker, background: assets.background, link: link, appID: appID,
-                                            pasteboard: pasteboard, open: open)
+                                            pasteboard: pasteboard, told: told, pause: pause, open: open)
     }
 
-    /// Instagram's own glyph, unmodified, when the app carries it (`InstagramGlyph` in the asset
-    /// catalog, from Meta's brand resources); until then a plain tile with the picture glyph.
+    /// Instagram's own glyph (`InstagramGlyph` in the asset catalog: native/brand/instagram.svg,
+    /// Simple Icons' verbatim, one colour, a template); a plain tile with the picture glyph only
+    /// should the asset be missing.
     @MainActor static func glyph() -> UIImage? {
         if let official = UIImage(named: "InstagramGlyph") { return official }
         let renderer = ImageRenderer(content: ZStack {

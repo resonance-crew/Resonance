@@ -5,13 +5,13 @@ import SwiftUI
 
 /// Writing a card (the web's write page, writer.spec), in two steps on one page. Writing: a bare
 /// page — the one-line title and the story in the editor island, set as the card page sets them —
-/// nothing else on it but the save line and one 下一步 (in the bar; floating at the pane's top at
-/// the split), with the formatting docked on the keyboard while the story has the focus. 下一步
-/// asks for a title, makes sure a new draft is kept, and opens the publish step in the same place
-/// (``PublishStep``): the mirror, the card as a list will show it with its cover, tags, who can see
-/// it and under whose name, then 發布 (匿名發布, 儲存, by the audience) — or 儲存修改 for a live card. The story stays mounted under the
-/// step, so its undo history and selection survive the round trip; drafts save themselves a moment
-/// after typing stops, in either step.
+/// under the bar (back · short title · save state … ✓, round 8 §2.1; at the split the ✓ floats at
+/// the pane's top with the save state before it), with the formatting docked on the keyboard while
+/// the story has the focus. ✓ asks for a title, makes sure a new draft is kept, and opens the
+/// publish step in the same place (``PublishStep``): the mirror, the card as a list will show it
+/// with its cover, tags, the card's type (公開 · 匿名公開 · 草稿), then one button by the card and its
+/// type (§2.3). The story stays mounted under the step, so its undo history and selection survive
+/// the round trip; drafts save themselves a moment after typing stops, in either step.
 /// A page on the tab's stack like the others: the bar's arrow (or the edge swipe) goes back from the
 /// publish step to writing, and from writing out of the page, asking first when there is writing to
 /// put away. It is always the card of a ``WriteWorkspace``: alone under its bar below the split
@@ -57,6 +57,8 @@ struct WriteScreen: View {
     @State private var pickingCover = false
     @State private var inlineItem: PhotosPickerItem?
     @State private var pickingInline = false
+    /// The format bar's 插入圖片 or 插入卡片 took the keyboard from the story: given back as its picker closes.
+    @State private var storyLentFocus = false
     @FocusState private var titleFocused: Bool
     /// The title had the focus as the publish step opened: back to writing puts it there again.
     @State private var titleHadFocus = false
@@ -138,6 +140,9 @@ struct WriteScreen: View {
             model.editor.setMarkdown(story)
             model.values.story = story
         }
+        // A picture in the story that didn't go in says so in the app's toast, wherever the story is scrolled.
+        let toasts = session.toasts
+        model.tell = { toasts.show($0) }
         self.model = model
         // The workspace's Back, its edge swipe and its hiding of the pane come here.
         pane.saveNow = { [weak model, writer] in
@@ -162,6 +167,16 @@ struct WriteScreen: View {
                 model.editor.focus()
             }
         }
+        // `-writePaste "…"` (with `-writePasteHTML "…"` beside it: a rich-text source's clipboard) pastes into
+        // the story once its page is up, as the system's paste reaches it — never the person's own clipboard.
+        if let paste = defaults.string(forKey: "writePaste") {
+            let html = defaults.string(forKey: "writePasteHTML")
+            Task {
+                while !model.editor.ready { try? await Task.sleep(for: .milliseconds(100)) }
+                try? await Task.sleep(for: .seconds(1.5))
+                model.editor.debugPaste(text: paste, html: html)
+            }
+        }
         // `-writeAppend "…" -writeAppendAfter <seconds>` types onto the story a while later (a save to watch).
         if let more = defaults.string(forKey: "writeAppend") {
             let after = max(1, defaults.double(forKey: "writeAppendAfter"))
@@ -176,30 +191,34 @@ struct WriteScreen: View {
 
     // MARK: The bar
 
+    /// Back · title · save state … ✓ (round 8 §2.1): the title short at every size (新卡片, 編輯草稿,
+    /// 編輯卡片 — the step's own in the publish step), the save state after it in a quiet word that
+    /// goes before the title gives way, and ✓ at the end while writing.
     private var bar: some View {
         let step = model?.step ?? .write
-        // The publish step's heading follows the audience: 發布這張卡片, or 儲存這張卡片 for a draft kept to its author.
+        // The publish step's heading follows the card and its type: 發布這張卡片, 儲存草稿 or 更新這張卡片.
         let title = step == .publish ? model?.stepTitle ?? L10n.Write.PublishPanel.title
-            : model?.title ?? (request.cardId == nil ? L10n.Write.title : (inTrash?.isPublished == true ? L10n.Write.editPublishedTitle : L10n.Write.editTitle))
+            : model?.title ?? (request.cardId == nil ? L10n.Write.title : inTrash.map(WriteModel.pageTitle) ?? L10n.Write.editTitle)
         return OrganicInlineBar(title, backLabel: step == .publish ? L10n.Write.leaveStay : L10n.App.Nav.back,
                                 scrolled: step == .publish ? scrolledPublish : scrolledWrite) {
+            if let model { SaveStateWord(state: model.saveState, help: model.saveStateHelp) }
+        } trailing: {
             if let model, model.step == .write, !model.trashed {
-                nextButton(model)
-                    // The bar's actions sit 12 into its margin (bare glyphs); a pill keeps the page's margin.
-                    .padding(.trailing, 12)
+                finishButton(model)
             }
         }
+        .titleFirst()
         .onBack { if let model { goBack(model) } else { dismiss() } }
     }
 
-    /// 下一步: the one way forward while writing (solid, small), its loader while a new draft's first
-    /// save takes a moment; nothing written yet, it waits.
-    private func nextButton(_ model: WriteModel) -> some View {
-        OrganicButton(L10n.Write.next, variant: .solid, size: .sm) { Task { await next(model) } }
+    /// ✓ 完成: the one way forward while writing — the bar's ghost glyph, at its end (at the split,
+    /// floating at the pane's top) — to the publish step. Nothing written on a new card yet, it waits;
+    /// while a new card's first save runs past a moment, its glyph is the pen's small loop.
+    private func finishButton(_ model: WriteModel) -> some View {
+        OrganicIconButton(.check, label: L10n.Write.finish, size: 22) { Task { await next(model) } }
             .loading(model.nextLoading)
             .disabled(!model.canGoNext)
-            .fixedSize()
-            .layoutPriority(1)
+            .help(L10n.Write.finish)
     }
 
     // MARK: The two steps
@@ -232,6 +251,8 @@ struct WriteScreen: View {
             }
         }
         .onChange(of: model.titleError) { _, asking in if asking { titleFocused = true } }
+        // The bar's save state is a polite live region: each new word is heard.
+        .onChange(of: model.saveState) { _, state in SaveStateWord.announce(state) }
         .onChange(of: model.restoredAlone) { _, alone in
             guard alone else { return }
             model.restoredAlone = false
@@ -239,22 +260,43 @@ struct WriteScreen: View {
         }
         .photosPicker(isPresented: $pickingInline, selection: $inlineItem, matching: .images)
         .photosPicker(isPresented: $pickingCover, selection: $coverItem, matching: .images)
+        // The format bar's 插入圖片 lent the keyboard to the photo picker (round 8 §6.5): as the picker closes,
+        // picked or not, the story takes the focus back with its caret where it was — and with it the
+        // keyboard and the format bar — before the picture is uploaded.
+        .onChange(of: pickingInline) { _, open in
+            guard !open, storyLentFocus else { return }
+            storyLentFocus = false
+            Task {
+                try? await Task.sleep(for: Self.pickerSettle)
+                model.editor.refocus()
+            }
+        }
         .onChange(of: inlineItem) { _, item in
             guard let item else { return }
             inlineItem = nil
-            Task { if let image = await Self.load(item) { await model.insertImage(image, filename: "photo.jpg") } }
+            Task { await model.insertImage(await Self.load(item), filename: "photo.jpg") }
         }
         .onChange(of: coverItem) { _, item in
             guard let item else { return }
             coverItem = nil
-            Task { if let image = await Self.load(item) { await model.setCover(image, filename: "cover.jpg") } }
+            Task { await model.setCover(await Self.load(item), filename: "cover.jpg") }
         }
         .organicModal(isPresented: $pickingCard, seed: 53, maxWidth: 480, closeLabel: L10n.Write.Editor.CardModal.cancel) {
             CardPickerContent(title: L10n.Write.Editor.CardModal.title, subtitle: L10n.Write.Editor.CardModal.subtitle) { card in
                 pickingCard = false
+                storyLentFocus = false
                 model.editor.exec("insertCard", ["href": "/card/\(card.routeKey)", "title": card.title])
             } onCancel: { pickingCard = false }
             .withSession(session)
+        }
+        // 插入卡片 alike: closed without a card, the story takes its focus back where it was.
+        .onChange(of: pickingCard) { _, open in
+            guard !open, storyLentFocus else { return }
+            storyLentFocus = false
+            Task {
+                try? await Task.sleep(for: Self.pickerSettle)
+                model.editor.refocus()
+            }
         }
         .organicConfirm(isPresented: $leaving, title: L10n.Write.leaveTitle, message: Self.leaveMessage(model.leaveQuestion),
                         cancelLabel: L10n.Write.leaveStay, confirmLabel: L10n.Write.leaveConfirm, closeLabel: L10n.Write.leaveStay,
@@ -290,8 +332,13 @@ struct WriteScreen: View {
             .onChange(of: islandTop) { _, _ in followCaret(model) }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if formatBar {
-                    StoryFormatBar(bridge: model.editor, onInsertImage: { pickingInline = true },
-                                   onInsertCard: { pickingCard = true }, uploadingImage: model.uploadingInline)
+                    StoryFormatBar(bridge: model.editor, onInsertImage: {
+                        storyLentFocus = true
+                        pickingInline = true
+                    }, onInsertCard: {
+                        storyLentFocus = true
+                        pickingCard = true
+                    }, uploadingImage: model.uploadingInline)
                         .transition(.opacity.animation(.easeOut(duration: 0.12)))
                 }
             }
@@ -310,18 +357,23 @@ struct WriteScreen: View {
             }
         }
         .onChange(of: model.editor.script) { _, script in model.scriptChanged(script) }
-        // In the pane there is no bar: 下一步 floats at its top, mirroring the Leave on the map.
+        // In the pane there is no bar: ✓ floats at its top, mirroring the Leave on the map, the save state
+        // just before it on the same line.
         .overlay(alignment: .topTrailing) {
             if !showsBar, model.step == .write, !model.trashed {
-                nextButton(model)
-                    .environment(\.organicButtonMinHeight, Self.splitRow)
-                    .padding(.top, WriteWorkspace.paneTop)
-                    .padding(.trailing, window.pad)
+                HStack(spacing: 6) {
+                    SaveStateWord(state: model.saveState, help: model.saveStateHelp)
+                    finishButton(model)
+                }
+                .frame(height: Self.splitRow)
+                .padding(.top, WriteWorkspace.paneTop)
+                // The glyph's own pad sits in the margin, as the bar's do.
+                .padding(.trailing, window.pad - 12)
             }
         }
     }
 
-    /// At the split, the first row: the save line beside the floating 下一步, as tall as the pill.
+    /// At the split, the first row: the floating ✓ (and the save state before it), a finger tall.
     private static let splitRow: CGFloat = 44
 
     private func writeColumn(_ model: WriteModel) -> some View {
@@ -329,8 +381,8 @@ struct WriteScreen: View {
         return VStack(alignment: .leading, spacing: 0) {
             statusLine(model)
                 .frame(minHeight: showsBar ? 0 : Self.splitRow, alignment: .leading)
-                // The floating pill's room at the split.
-                .padding(.trailing, showsBar ? 0 : 120)
+                // The floating ✓ and its save state's room at the split.
+                .padding(.trailing, showsBar ? 0 : 160)
                 .padding(.bottom, statusShown(model) || !showsBar ? 16 : 0)
             titleField(model, typo: typo)
                 .padding(.bottom, 16)
@@ -354,11 +406,11 @@ struct WriteScreen: View {
     }
 
     private func statusShown(_ model: WriteModel) -> Bool {
-        model.trashed || model.saveStatus != nil || model.nextSaveError != nil
+        model.trashed || model.nextSaveError != nil
     }
 
-    /// What the page header carried under its title: the save state, in plain words — or, for a card
-    /// moved to the trash meanwhile, that it is there, with 還原. An unsaved draft has nothing to say.
+    /// Over the title, only when there is something to say there (the save state is the bar's, round 8
+    /// §2.1): a card moved to the trash meanwhile is there, with 還原; ✓'s first save didn't go through.
     @ViewBuilder
     private func statusLine(_ model: WriteModel) -> some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -376,11 +428,6 @@ struct WriteScreen: View {
                 if let error = model.restoreError {
                     Text(error).font(AppFonts.body(12)).foregroundStyle(Tokens.terracotta)
                 }
-            } else if let status = model.saveStatus {
-                Text(status)
-                    .font(AppFonts.body(14))
-                    .foregroundStyle(Tokens.textMuted)
-                    .contentTransition(.opacity)
             }
             if let error = model.nextSaveError {
                 Text(error).font(AppFonts.body(13)).foregroundStyle(Tokens.terracotta)
@@ -434,26 +481,34 @@ struct WriteScreen: View {
 
     /// Step 2, in its own scroll (it starts at its top each time it opens; writing keeps its place).
     private func publishStep(_ model: WriteModel) -> some View {
-        ScrollView {
+        let compact = window.layoutClass == .compact
+        return ScrollView {
             PublishStep(model: model, inlineHeading: !showsBar,
-                        onBack: { model.stepBack() }, onPickCover: { pickingCover = true },
+                        onBack: { model.stepBack() }, onPickCover: {
+                            model.clearCoverError()
+                            pickingCover = true
+                        },
                         onSubmit: { Task { await submit(model) } },
-                        onSecondary: { Task { await secondary(model) } })
-                .padding(.horizontal, window.layoutClass == .compact ? 20 : window.pad)
+                        onSecondary: { Task { await discard(model) } })
+                .padding(.horizontal, compact ? 20 : window.pad)
                 // A phone's preview band with nothing above it starts right at the bar's line, as home's first card.
-                .padding(.top, PublishStep.topPadding(model, showsBar: showsBar, compact: window.layoutClass == .compact))
+                .padding(.top, PublishStep.topPadding(model, showsBar: showsBar, compact: compact))
                 .padding(.bottom, 48)
-                .frame(maxWidth: window.layoutClass == .compact ? .infinity : Tokens.measure + 2 * window.pad)
+                .frame(maxWidth: compact ? .infinity : Tokens.measure + 2 * window.pad)
                 .frame(maxWidth: .infinity)
         }
         .scrollPosition($publishScroll)
         .onHeaderScroll($scrolledPublish)
         .scrollDismissesKeyboard(.interactively)
+        // Pulled down while the band leads under the bar (round 8 §6.3): the gap wears the band's own paper,
+        // as the feed's does, never the page's cream over it.
+        .overscrollPaper(PublishStep.bandUnderBar(model, showsBar: showsBar, compact: compact)
+                         ? PublishStep.bandPalette(model) : nil)
     }
 
     // MARK: Moving between the steps, and leaving
 
-    /// 下一步: the keyboard goes; the title is asked for when there is none (its field takes the focus).
+    /// ✓: the keyboard goes; the title is asked for when there is none (its field takes the focus).
     private func next(_ model: WriteModel) async {
         let hadTitle = titleFocused
         putKeyboardAway(model)
@@ -501,43 +556,42 @@ struct WriteScreen: View {
     /// Leaving keeps what's written: the draft is handed to Firestore on the way out — kept on the
     /// device at once, sent when the network lets it — and the page waits a moment for the server's
     /// yes, never longer (a write stuck behind a dead connection once held it for minutes).
-    /// `afterDialog` lets the question's cover finish going down before the page does. Leaving the
-    /// card only (`exits` false: Save draft and leave) on a card the map opened in the pane hides the
-    /// pane instead; the page stays.
-    private func leave(_ model: WriteModel, afterDialog: Bool = false, exits: Bool = true) async {
+    /// `afterDialog` lets the question's cover finish going down before the page does.
+    private func leave(_ model: WriteModel, afterDialog: Bool = false) async {
         let settle = Task { if afterDialog { try? await Task.sleep(for: Self.dialogSettle) } }
         model.store()
         _ = await model.settled(within: Self.leaveWait)
         writer.leave(model.change)
         await settle.value
-        if !exits, let onDone { onDone() } else { dismiss() }
+        dismiss()
     }
 
     /// How long leaving waits for the server to confirm the draft.
     static let leaveWait: Duration = .seconds(2)
 
-    /// 發布 / 儲存修改 in the step's foot.
+    /// How long the photo picker's sheet takes to go before the story can have the keyboard again.
+    static let pickerSettle: Duration = .milliseconds(350)
+
+    /// The step's one button (round 8 §2.3): a shared card goes to its page; a 草稿 kept leaves the
+    /// writer, back where it came from.
     private func submit(_ model: WriteModel) async {
-        let key = model.isPublished ? await model.applyEdit() : await model.publish()
-        guard let key else { return }
-        await finish(card: key, change: model.change ?? .init(cardId: model.draftId, referenceCardId: model.referenceCardId))
+        guard let finish = await model.submit() else { return }
+        let change = model.change ?? .init(cardId: model.draftId, referenceCardId: model.referenceCardId)
+        switch finish {
+        case let .card(key): self.finish(card: key, change: change)
+        case .leave: kept(change)
+        }
     }
 
-    /// 存成草稿，稍後再寫 (a draft) / 捨棄修改 (a live card's revision).
-    private func secondary(_ model: WriteModel) async {
-        if model.isPublished {
-            guard let key = await model.discardEdit() else { return }
-            await finish(card: key, change: model.change ?? .init(cardId: model.draftId))
-        } else {
-            model.leaving(true)
-            await leave(model, exits: false)
-            model.leaving(false)
-        }
+    /// 捨棄修改 (a live card's revision): its page, as the card stands.
+    private func discard(_ model: WriteModel) async {
+        guard let key = await model.discardEdit() else { return }
+        finish(card: key, change: model.change ?? .init(cardId: model.draftId))
     }
 
     /// The card went out (published, revised, or its revision dropped): its page takes the writer's
     /// place as the web goes to it, unless the card's own page is underneath.
-    private func finish(card key: String, change: WriteLauncher.Change) async {
+    private func finish(card key: String, change: WriteLauncher.Change) {
         writer.leave(change)
         if let onDone {
             onDone()
@@ -546,6 +600,13 @@ struct WriteScreen: View {
         } else {
             dismiss()
         }
+    }
+
+    /// A 草稿 kept (儲存, 轉為草稿): the writer goes back where it came from — or, for a card the map
+    /// opened in the pane, the pane hides and the page stays.
+    private func kept(_ change: WriteLauncher.Change) {
+        writer.leave(change)
+        if let onDone { onDone() } else { dismiss() }
     }
 
     /// A dialog's fade (0.16s) and the cover it rides on.
@@ -640,20 +701,24 @@ enum CaretFollow {
     }
 }
 
-/// Why a publish (or a published card's saved changes) didn't go through, in the app's words —
-/// never the server's, which are English (nor the system's): the card gone (deleted elsewhere) is
-/// that it can't be found; the day's publishing spent (429 `rate_limited`, which trying again today
-/// would only hear again) says so and when it comes back; anything else — offline, the server's
-/// trouble, a refusal the step can't name — is a retry: the publish that didn't happen (the save,
-/// for a draft kept to its author: `saving`), or the changes that weren't saved. (A card without a
-/// title is said before anything is sent; one in the trash is the writer's trashed notice.)
+/// Why the step's button didn't go through, in the app's words — never the server's, which are
+/// English (nor the system's): the card gone (deleted elsewhere) is that it can't be found; the
+/// day's publishing spent (429 `rate_limited`, which trying again today would only hear again) says
+/// so and when it comes back; anything else — offline, the server's trouble, a refusal the step
+/// can't name — is a retry (round 8 §2.3): 沒發布成功 for a publish (a draft shared, or a published
+/// 草稿 made public again: `publishing`), 沒儲存成功 for every other save. (A card without a title is
+/// said before anything is sent; one in the trash is the writer's trashed notice.)
 enum PublishFailure {
-    static func message(_ error: Error, updating: Bool = false, saving: Bool = false) -> String {
+    static func message(_ error: Error, publishing: Bool) -> String {
         let failure = error as? APIFailure
         if failure?.isNotFound == true { return L10n.Card.NotFound.title }
         // The publish route documents no 429, so the generated client hands it over as an unexpected status.
         if failure?.code == "rate_limited" || failure?.status == 429 { return L10n.Write.PublishPanel.rateLimited }
-        if updating { return L10n.Native.saveError }
-        return saving ? L10n.Write.PublishPanel.saveFailed : L10n.Write.PublishPanel.failed
+        return retry(publishing: publishing)
+    }
+
+    /// The retry's words: 沒發布成功，再試一次, or 沒儲存成功，再試一次.
+    static func retry(publishing: Bool) -> String {
+        publishing ? L10n.Write.PublishPanel.failed : L10n.Write.PublishPanel.saveFailed
     }
 }

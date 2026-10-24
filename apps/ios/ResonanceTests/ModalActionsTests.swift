@@ -40,23 +40,25 @@ import UIKit
     }
 
     @Test func aPublishThatFailsSaysSoInTheAppsWordsNeverTheServers() {
-        let gone = PublishFailure.message(APIFailure(code: "not_found", message: "No such card.", status: 404))
+        let gone = PublishFailure.message(APIFailure(code: "not_found", message: "No such card.", status: 404), publishing: true)
         #expect(gone == L10n.Card.NotFound.title)
-        let refused = PublishFailure.message(APIFailure(code: "invalid_request", message: "The edit does not fit a card.", status: 400))
+        let refused = PublishFailure.message(APIFailure(code: "invalid_request", message: "The edit does not fit a card.", status: 400),
+                                             publishing: true)
         #expect(refused == L10n.Write.PublishPanel.failed)
         #expect(refused != "The edit does not fit a card.")
-        #expect(PublishFailure.message(URLError(.notConnectedToInternet)) == L10n.Write.PublishPanel.failed)
-        #expect(PublishFailure.message(APIFailure.unexpected(status: 502)) == L10n.Write.PublishPanel.failed)
-        // Saving a published card's changes that didn't go through: the changes weren't saved.
-        #expect(PublishFailure.message(APIFailure.unexpected(status: 502), updating: true) == L10n.Native.saveError)
-        #expect(PublishFailure.message(APIFailure(code: "not_found", message: "", status: 404), updating: true) == L10n.Card.NotFound.title)
+        #expect(PublishFailure.message(URLError(.notConnectedToInternet), publishing: true) == L10n.Write.PublishPanel.failed)
+        #expect(PublishFailure.message(APIFailure.unexpected(status: 502), publishing: true) == L10n.Write.PublishPanel.failed)
+        // Every other row's (round 8 §2.3: a revision saved, a card moved to the drafts, a draft kept): 沒儲存成功.
+        #expect(PublishFailure.message(APIFailure.unexpected(status: 502), publishing: false) == L10n.Write.PublishPanel.saveFailed)
+        #expect(PublishFailure.message(APIFailure(code: "not_found", message: "", status: 404), publishing: false) == L10n.Card.NotFound.title)
     }
 
     @Test func aPublishPastTheDaysLimitSaysSoNotTryAgain() {
         // The publish route documents no 429: the generated client hands it over as an unexpected status.
-        #expect(PublishFailure.message(APIFailure.unexpected(status: 429)) == L10n.Write.PublishPanel.rateLimited)
-        #expect(PublishFailure.message(APIFailure(code: "rate_limited", message: "Too many.", status: 429)) == L10n.Write.PublishPanel.rateLimited)
-        #expect(PublishFailure.message(APIFailure.unexpected(status: 429), updating: true) == L10n.Write.PublishPanel.rateLimited)
+        #expect(PublishFailure.message(APIFailure.unexpected(status: 429), publishing: true) == L10n.Write.PublishPanel.rateLimited)
+        #expect(PublishFailure.message(APIFailure(code: "rate_limited", message: "Too many.", status: 429), publishing: true)
+            == L10n.Write.PublishPanel.rateLimited)
+        #expect(PublishFailure.message(APIFailure.unexpected(status: 429), publishing: false) == L10n.Write.PublishPanel.rateLimited)
         #expect(L10n.Write.PublishPanel.rateLimited != L10n.Write.PublishPanel.failed)
     }
 

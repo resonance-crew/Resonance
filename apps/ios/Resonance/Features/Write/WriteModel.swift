@@ -64,10 +64,13 @@ struct WriterCalls {
 /// autosave a moment after typing stops, the two steps and what moves between
 /// them, AI tags, the cover photo, publishing. Opened on a published card it
 /// revises instead: autosave buffers the working copy privately and the
-/// publish step's 儲存修改 puts it in front of readers. Everything chosen in
-/// the publish step (tags, the cover, who can see it, the byline) is the
-/// draft's own value and autosaves like the words — going back to writing
-/// keeps it.
+/// publish step's one button applies it. Everything chosen in the publish step
+/// (tags, the cover, the card's type) is the draft's own value and autosaves
+/// like the words — going back to writing keeps it.
+///
+/// A card is shared (公開 · 匿名公開) or a 草稿 (round 8 §1): only its author sees it, finished or
+/// not — a card never published, and a published card kept private, alike. Saving a 草稿 never
+/// publishes it.
 @MainActor @Observable
 final class WriteModel {
     var values = DraftValues() {
@@ -84,8 +87,12 @@ final class WriteModel {
     /// Something was written this visit (a draft or revision saved, published,
     /// applied or dropped): what the screens behind the writer read again for.
     private(set) var wrote = false
-    /// Revising a live card (fixed for the model's lifetime, as on the web).
+    /// Revising a published card (fixed for the model's lifetime, as on the web).
     let isPublished: Bool
+    /// Readers have the card now: published and not kept private — a published private card is a
+    /// 草稿 to everyone but its author (round 8 §1). Fixed for the model's lifetime: whatever this visit
+    /// makes of it, the writer leaves once it is applied.
+    let readersSee: Bool
     /// A revision is waiting in the buffer — only its author can see it.
     private(set) var hasPendingEdit: Bool
     /// The published card's slug (its page lives at slug ?? id).
@@ -93,7 +100,7 @@ final class WriteModel {
     /// A live resonance that reaches its original already (published, public and named, as readers
     /// have it now): saving its revision tells no one anything new.
     let liveReaches: Bool
-    /// The byline the card was opened with: what 只有自己 keeps on a live card.
+    /// The byline the card was opened with: what 草稿 keeps on a live card.
     private let openedAnonymous: Bool
     var tagDraft = ""
     private(set) var suggestingTags = false
@@ -103,7 +110,13 @@ final class WriteModel {
     private(set) var generating = false
     /// The illustration's in-progress pass while it renders.
     private(set) var partialPreview: UIImage?
+    /// Why the last try at a cover didn't work (round 8 §3): said on the picture itself — under the
+    /// empty picture's two pills, or on a paper chip over the cover that stays — until the next cover
+    /// action. A picture in the story says its own trouble in the writing step (`tell`), never here.
     var mediaError: String?
+    /// Says something in the app's toast (the screen hands over the shell's): why a picture in the
+    /// story didn't go in, wherever the story is scrolled.
+    @ObservationIgnored var tell: (String) -> Void = { _ in }
 
     /// Uploading or illustrating — the image surface waits either way.
     var mediaBusy: Bool { uploadingCover || generating }
@@ -125,16 +138,16 @@ final class WriteModel {
             if step == .publish { askInsight() } else { dropInsight() }
         }
     }
-    /// 下一步 found no title: the title asks for one (先寫下一句話標題) until it is typed in.
+    /// ✓ found no title: the title asks for one (先寫下一句話標題) until it is typed in.
     var titleError = false
-    /// 下一步 is waiting on a new draft's first save (the pill shows its loader after a moment).
+    /// ✓ is waiting on a new draft's first save (its glyph turns into the pen loop after a moment).
     private(set) var nextBusy = false
     private(set) var nextLoading = false
-    /// 下一步's save didn't go through (沒存成，再試一次, under the save line).
+    /// ✓'s save didn't go through (沒存成，再試一次, over the title).
     var nextSaveError: String?
-    /// Publishing, saving changes, discarding or leaving is on its way: the step waits.
+    /// The step's button, or 捨棄修改, is on its way: the step waits.
     private(set) var pending = false
-    /// What `pending` is for: its button shows the loader, the other rests.
+    /// What `pending` is for: its button shows the loader, the other rests (`leave`: 捨棄修改).
     enum BusyVerb: Equatable { case publish, leave }
     private(set) var busyVerb: BusyVerb = .publish
     /// Why the last publish, save or discard didn't go through (above the step's foot).
@@ -168,17 +181,32 @@ final class WriteModel {
     /// What the last write handed to Firestore stores — on the device from that moment; an
     /// unchanged working copy isn't written again.
     @ObservationIgnored private var lastStored: DraftValues?
+    /// Writes handed over that the server hasn't answered yet.
+    @ObservationIgnored private var inFlight = 0
+    /// Shows 儲存中⋯ once the write on its way has taken `savingShownAfter`.
+    @ObservationIgnored private var savingClock: Task<Void, Never>?
+    /// A write has been on its way for longer than `savingShownAfter` (the bar's 儲存中⋯).
+    private(set) var savingShown = false
+    /// The last write the server answered was refused: 未儲存 until one goes through (the next pause
+    /// in the typing tries again).
+    private(set) var saveFailed = false
 
     /// CardEditor's AUTOSAVE_DELAY_MS (leaving or going to the background saves at once).
     static let autosaveDelay: Duration = .milliseconds(1500)
     static let titleMax = 60
     /// From this many characters on, the title says how many it has (CharCount n / 60).
     static let titleCountFrom = 50
-    /// How long 下一步 waits on a new draft's first save before it shows its loader.
+    /// How long ✓ waits on a new draft's first save before its glyph turns into the loader.
     static let nextLoaderDelay: Duration = .milliseconds(300)
-    /// How long 下一步 waits for the server to take a new draft (the draft is on the device either
+    /// How long ✓ waits for the server to take a new draft (the draft is on the device either
     /// way: past this the step opens, and publishing waits for the network as it always has).
     static let nextWait: Duration = .seconds(3)
+    /// How long a write runs before the bar says 儲存中⋯ (a quick one goes straight to its next word:
+    /// no flicker) — the web's SAVING_SHOWN_MS.
+    static let savingShownAfter: Duration = .milliseconds(400)
+    /// How long 儲存 (a 草稿 kept a draft) waits for the server before the writer leaves all the same —
+    /// the draft is on the device from the moment it is written, and goes up when the network lets it.
+    static let keepWait: Duration = .seconds(2)
 
     init(drafts: (any DraftStore)?, writing: WritingAPI, calls: WriterCalls? = nil, referenceCardId: String? = nil,
          opened: DraftService.OpenedCard? = nil, locale: String = Strings.shared.language.rawValue,
@@ -186,14 +214,16 @@ final class WriteModel {
         self.drafts = drafts
         self.writing = writing
         self.calls = calls ?? WriterCalls(writing)
+        upload = { data, filename in try await writing.upload(data, filename: filename) }
         self.referenceCardId = opened?.referenceCardId ?? referenceCardId
         isPublished = opened?.isPublished ?? false
+        readersSee = opened?.readersSee ?? false
         hasPendingEdit = opened?.hasPendingEdit ?? false
         slug = opened?.slug
         liveReaches = (opened?.isPublished ?? false) && opened?.referenceCardId != nil
             && WriteModel.reaches(visibility: opened?.liveVisibility ?? "private", anonymous: opened?.liveAnonymous ?? true)
         openedAnonymous = opened?.values.anonymous ?? false
-        title = opened.map { $0.isPublished ? L10n.Write.editPublishedTitle : L10n.Write.editTitle } ?? L10n.Write.title
+        title = Self.pageTitle(opened)
         script = ScriptRule.writerScript(current: ScriptRule.localeScript(locale), title: opened?.values.title ?? "",
                                          story: opened?.values.story ?? "")
         editor = bridge ?? StoryEditorBridge(placeholder: L10n.Write.storyPlaceholder, layout: .canvas, locale: locale)
@@ -297,6 +327,7 @@ final class WriteModel {
         }
         lastStored = v
         wrote = true
+        began()
         let previous = chain
         chain = Task { [weak self] in
             await previous?.value
@@ -306,7 +337,29 @@ final class WriteModel {
             } catch {
                 await self?.refused(v, created: created, error: error)
             }
+            self?.answered()
         }
+    }
+
+    /// A write is handed over: 儲存中⋯ once it has run `savingShownAfter` unanswered.
+    private func began() {
+        inFlight += 1
+        guard savingClock == nil, !savingShown else { return }
+        savingClock = Task { [weak self] in
+            try? await Task.sleep(for: Self.savingShownAfter)
+            guard !Task.isCancelled, let self else { return }
+            savingClock = nil
+            if inFlight > 0 { savingShown = true }
+        }
+    }
+
+    /// A write handed over is answered (taken or refused); the last of them ends 儲存中⋯.
+    private func answered() {
+        inFlight = max(0, inFlight - 1)
+        guard inFlight == 0 else { return }
+        savingClock?.cancel()
+        savingClock = nil
+        savingShown = false
     }
 
     /// Waits at most `limit` for the server to confirm what was handed over (leaving: the draft is
@@ -319,39 +372,78 @@ final class WriteModel {
     private func confirmed(_ v: DraftValues) {
         lastSaved = v
         savedAt = Date()
+        saveFailed = false
     }
 
     /// The server refused a write (kept in memory; the next edit, or leaving, tries again): what it
-    /// held counts as unwritten — a draft it was to create has no document. A refusal the card being
-    /// in the trash would explain is looked into: if it is there, the writer says so.
+    /// held counts as unwritten — a draft it was to create has no document — and the bar says 未儲存.
+    /// A refusal the card being in the trash would explain is looked into: if it is there, the
+    /// writer says so.
     private func refused(_ v: DraftValues, created: String?, error: Error) async {
         if let created, draftId == created {
             draftId = nil
             lastSaved = nil
         }
         if lastStored == v { lastStored = lastSaved }
+        saveFailed = true
         if created == nil { _ = await confirmTrashed(error) }
     }
 
-    /// One line of plain reassurance under the page title: what has happened
-    /// and, for a live card, what has not happened yet. A draft says nothing
-    /// until it has been saved; a card in the trash has its own line.
-    var saveStatus: String? {
-        if trashed { return nil }
-        let time = savedAt?.formatted(Date.FormatStyle(date: .omitted, time: .shortened, locale: Strings.shared.locale))
-        if isPublished {
-            if let time { return L10n.Write.editBuffered(time: time) }
-            return hasPendingEdit ? L10n.Write.editBufferedIdle : L10n.Write.editLiveHint
+    /// The save state as the writer's bar says it (round 8 §2.1).
+    enum SaveState: Equatable {
+        /// 儲存中⋯: a write on its way past `savingShownAfter`.
+        case saving
+        /// 已儲存: a draft's write went through.
+        case saved
+        /// 修改已暫存: a live card's revision is in its buffer (only its author sees it yet).
+        case savedLive
+        /// 未儲存: the last write was refused; the next pause tries again.
+        case failed
+
+        var label: String {
+            switch self {
+            case .saving: L10n.Write.Status.saving
+            case .saved: L10n.Write.Status.saved
+            case .savedLive: L10n.Write.Status.savedLive
+            case .failed: L10n.Write.Status.failed
+            }
         }
-        return time.map { L10n.Write.autosaved(time: $0) }
     }
 
-    /// The page title: a new card, a draft being resumed, or a live card being revised.
+    /// What the bar says after its title: nothing until the card's first write in this visit (a live
+    /// card opened with a revision buffered says 修改已暫存 from the start), then the last write's
+    /// word — 儲存中⋯ only while one runs long, so a quick write goes straight to the next word. A
+    /// card in the trash says nothing here (its own line in the page does).
+    var saveState: SaveState? {
+        if trashed { return nil }
+        if savingShown { return .saving }
+        if saveFailed { return .failed }
+        if isPublished { return savedAt != nil || hasPendingEdit ? .savedLive : nil }
+        return savedAt != nil ? .saved : nil
+    }
+
+    /// What a pointer resting on the save state reads (the web's tooltip): the word with the last
+    /// write's time, 已儲存 · 14:32 — the word alone before any write has gone through in this visit.
+    var saveStateHelp: String? {
+        guard let state = saveState else { return nil }
+        guard state == .saved || state == .savedLive, let savedAt else { return state.label }
+        let time = savedAt.formatted(Date.FormatStyle(date: .omitted, time: .shortened, locale: Strings.shared.locale))
+        return L10n.Write.Status.at(status: state.label, time: time)
+    }
+
+    /// The page title, short at every size (round 8 §2.1): 新卡片 for a new card (kept after its first
+    /// save in this visit), 編輯草稿 for a 草稿 (a draft, or a published card kept private), 編輯卡片
+    /// for a card readers have.
     let title: String
 
-    // MARK: Step 1: the title, 下一步
+    static func pageTitle(_ opened: DraftService.OpenedCard?) -> String {
+        guard let opened else { return L10n.Write.title }
+        return opened.readersSee ? L10n.Write.editPublishedTitle : L10n.Write.editTitle
+    }
 
-    /// Whether 下一步 can be pressed: a draft once something is written on it (a live card always),
+    // MARK: Step 1: the title, ✓
+
+    /// Whether ✓ can be pressed: a draft once something is written on it (a live card always),
     /// and never while its card is in the trash (it isn't shown then).
     var canGoNext: Bool { (isPublished || !values.isEmpty) && !trashed }
 
@@ -377,7 +469,7 @@ final class WriteModel {
     /// Whether the title says how many characters it has (from 50 on, unless it is asking for one).
     var showsTitleCount: Bool { values.title.count >= Self.titleCountFrom && !titleError }
 
-    /// 下一步: a title is asked for first; a new draft is handed over (and the server's answer waited
+    /// ✓: a title is asked for first; a new draft is handed over (and the server's answer waited
     /// on a moment, so a refusal keeps the writer here) before the step opens; a kept one saves on
     /// its way. Answers whether the publish step opened.
     @discardableResult
@@ -425,7 +517,7 @@ final class WriteModel {
         return true
     }
 
-    // MARK: Step 2: who can see it
+    // MARK: Step 2: the card's type
 
     /// Who may read a card published with these choices: an anonymous card is public or its
     /// author's alone — never for connections, which would tell them who wrote it (the server
@@ -439,14 +531,15 @@ final class WriteModel {
         visibility == "public" && !anonymous
     }
 
-    /// 誰可以看見, the step's one choice of who reads the card and under whose name (round 7 §1.1):
-    /// anonymity is for being read by others, so it is a way of being public, not a switch beside it.
+    /// 卡片類型, the step's one choice of what the card is (round 8 §2.2): shared under the author's
+    /// pen name, shared with no name on it, or a 草稿 — the author's alone, finished or not. Anonymity
+    /// is for being read by others, so it is a way of being shared, not a switch beside it.
     enum Audience: String, Equatable, CaseIterable {
         /// 公開: everyone, under the author's pen name.
         case `public`
         /// 匿名公開: everyone, under 匿名.
         case anonymous
-        /// 只有自己: the author alone.
+        /// 草稿: the author alone (`private`).
         case `private`
     }
 
@@ -461,9 +554,9 @@ final class WriteModel {
     }
 
     /// A segment chosen: both fields in one change, so no write is ever anonymous and for connections
-    /// only. 只有自己 on a live card keeps the byline the card had (an anonymous card made private and
-    /// later made public from its ⋯ comes back anonymous, never suddenly under its author's name); a
-    /// draft was never public, so 只有自己 simply names it — nothing of 匿名公開 tried on the way is left.
+    /// only. 草稿 on a live card keeps the byline the card had (an anonymous card made a 草稿 and later
+    /// shared again comes back anonymous, never suddenly under its author's name); a draft was never
+    /// public, so 草稿 simply names it — nothing of 匿名公開 tried on the way is left.
     func choose(_ audience: Audience) {
         var next = values
         switch audience {
@@ -480,24 +573,16 @@ final class WriteModel {
         values = next
     }
 
-    /// The one line under the choice, saying what it means: whose name everyone reads, that no one
-    /// will know, that it is the author's alone — or, for a card kept for connections, who reads it.
-    func audienceLine(handle: String) -> String {
-        switch audience {
-        case .public?: L10n.Write.Visibility.publicLine(handle: handle)
-        case .anonymous?: L10n.Write.Visibility.anonymousLine
-        case .private?: L10n.Write.Visibility.privateLine
-        case nil: L10n.Write.Visibility.connectionsLine
-        }
-    }
+    /// 草稿 is chosen: the step keeps the card its author's — saving it, never publishing it — and the
+    /// writer leaves once it is kept, back where it came from (round 8 §2.3). A card kept for
+    /// connections (none chosen) reads as shared.
+    var keepsDraft: Bool { audience == .private }
 
-    /// A draft kept to its author is saved, not published (round 7 §1.2): the step's verb and heading
-    /// say 儲存 for 只有自己. A card for connections (none chosen) reads as publishing.
-    var savesPrivately: Bool { !isPublished && audience == .private }
-
-    /// The step's verb: 發布, 匿名發布 or 儲存 for a draft, by its audience; 儲存修改 for a live card.
+    /// The step's one button (round 8 §2.3): for a card readers have, 儲存修改 — or 轉為草稿 while 草稿 is
+    /// chosen; for a 草稿 (never published, or published and kept private), 發布 · 匿名發布 by the
+    /// choice, or 儲存 to keep it one.
     var verbTitle: String {
-        if isPublished { return L10n.Write.PublishPanel.update }
+        if readersSee { return keepsDraft ? L10n.Write.PublishPanel.makeDraft : L10n.Write.PublishPanel.update }
         switch audience {
         case .anonymous?: return L10n.Write.PublishPanel.publishAnonymously
         case .private?: return L10n.Write.PublishPanel.save
@@ -505,15 +590,20 @@ final class WriteModel {
         }
     }
 
-    /// The step's heading: 發布這張卡片, 儲存這張卡片 for a draft kept to its author, 更新這張卡片 for a live card.
+    /// The step's heading (round 8 §2.3): 更新這張卡片 for a card readers have (whatever is chosen); else
+    /// 儲存草稿 while 草稿 is chosen, 發布這張卡片 otherwise.
     var stepTitle: String {
-        if isPublished { return L10n.Write.PublishPanel.updateTitle }
-        return savesPrivately ? L10n.Write.PublishPanel.saveTitle : L10n.Write.PublishPanel.title
+        if readersSee { return L10n.Write.PublishPanel.updateTitle }
+        return keepsDraft ? L10n.Write.PublishPanel.saveTitle : L10n.Write.PublishPanel.title
     }
 
-    /// 更新這張卡片's hint (「按下之後，讀者看到的就會是這個版本…」) is about readers: said for a live
-    /// card while it has some — not for one being kept to its author.
-    var showsUpdateHint: Bool { isPublished && audience != .private }
+    /// 更新這張卡片's hint (「按下之後，讀者看到的就會是這個版本…」) is about readers: said for a card they
+    /// have now, while the choice keeps it theirs.
+    var showsUpdateHint: Bool { readersSee && !keepsDraft }
+
+    /// The button publishes — to readers, for the first time: a draft shared, or a published 草稿 made
+    /// public again. What its failure says: 沒發布成功 for these, 沒儲存成功 for every other.
+    var publishes: Bool { !readersSee && !keepsDraft }
 
     /// A card about to be first published keeps no audience the server refuses: a draft stored
     /// anonymous and for connections only (the rules let a draft hold the pair, and the builds before
@@ -645,14 +735,24 @@ final class WriteModel {
 
     // MARK: Images
 
-    /// The cover: compressed here, uploaded, and its hue read from the local pixels.
-    func setCover(_ image: UIImage, filename: String) async {
-        guard !mediaBusy, let data = CoverImage.jpeg(image) else { return }
+    /// A cover action begins (another picture is being picked): the last one's trouble goes with it.
+    func clearCoverError() {
+        mediaError = nil
+    }
+
+    /// The cover: compressed here, uploaded, and its hue read from the local pixels. A picture that
+    /// can't be read (nil) or made a JPEG says so on the picture, as a failed upload does.
+    func setCover(_ image: UIImage?, filename: String) async {
+        guard !mediaBusy else { return }
+        guard let image, let data = CoverImage.jpeg(image) else {
+            mediaError = L10n.Write.Editor.imageUnsupported
+            return
+        }
         mediaError = nil
         uploadingCover = true
         defer { uploadingCover = false }
         do {
-            let url = try await writing.upload(data, filename: filename)
+            let url = try await upload(data, filename)
             values.imageURL = url
             values.imageLabel = filename
             values.accentHue = CoverImage.accentHue(image)
@@ -705,19 +805,76 @@ final class WriteModel {
         values.accentHue = nil
     }
 
-    /// A photo inside the story (the format bar's 插入圖片).
-    func insertImage(_ image: UIImage, filename: String) async {
-        guard !uploadingInline, let data = CoverImage.jpeg(image) else { return }
+    /// A photo inside the story (the format bar's 插入圖片). Its trouble is said in the writing step,
+    /// in the app's toast (round 8 §3) — never in the cover's place: one that can't be read (nil) or
+    /// made a JPEG is 讀不出這張圖片, one the upload refused 圖片上傳失敗.
+    func insertImage(_ image: UIImage?, filename: String) async {
+        guard !uploadingInline else { return }
+        guard let image, let data = CoverImage.jpeg(image) else {
+            tell(L10n.Write.Editor.imageUnsupported)
+            return
+        }
         uploadingInline = true
         defer { uploadingInline = false }
-        if let url = try? await writing.upload(data, filename: filename) {
+        if let url = try? await upload(data, filename) {
             editor.exec("insertImage", ["src": url.absoluteString, "alt": filename])
         } else {
-            mediaError = L10n.Write.Editor.imageUploadError
+            tell(L10n.Write.Editor.imageUploadError)
         }
     }
 
-    // MARK: Step 2: publish, save changes, discard
+    /// Uploads a picture (/api/upload) and answers its address: the writing API's, or a test's stand-in.
+    @ObservationIgnored var upload: (Data, String) async throws -> URL
+
+    // MARK: Step 2: the one button, and 捨棄修改
+
+    /// Where the writer goes once the step's button has done its work: the card's page while it is
+    /// shared, or back where it came from once it is a 草稿.
+    enum Finish: Equatable {
+        case card(String)
+        case leave
+    }
+
+    /// The step's one button (round 8 §2.3), by the card and the choice: a draft shared is published
+    /// (發布 · 匿名發布 → its page); a draft kept a 草稿 is saved and left (儲存 — never the publish call);
+    /// a published card's revision is applied — then to its page while it is shared (儲存修改, or a
+    /// published 草稿's 發布 · 匿名發布), back where the writer came from once it is a 草稿 (轉為草稿 ·
+    /// 儲存). Nil when it didn't go (`publishError` says why, or the card turned out to be in the trash).
+    func submit() async -> Finish? {
+        if isPublished {
+            guard let key = await applyEdit() else { return nil }
+            return keepsDraft ? .leave : .card(key)
+        }
+        if keepsDraft { return await keepDraft() ? .leave : nil }
+        return await publish().map(Finish.card)
+    }
+
+    /// 儲存 for a draft kept a 草稿: what is on screen is written now (not left to the pause in the
+    /// typing) — never published, a draft is its author's alone — and the writer may leave once the
+    /// server has it, or once `keepWait` has passed (it is on the device from the moment it is
+    /// written, and goes up when the network lets it). A write the server refused keeps the writer
+    /// here, saying so; one the trash explains is the writer's trashed notice. True when it may leave.
+    func keepDraft() async -> Bool {
+        guard !pending else { return false }
+        guard !values.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            titleError = true
+            step = .write
+            return false
+        }
+        busyVerb = .publish
+        pending = true
+        publishError = nil
+        defer { pending = false }
+        store()
+        // Not answered yet (offline, a slow network): kept on the device all the same.
+        guard await settled(within: Self.keepWait) else { return true }
+        if trashed { return false }
+        guard draftId != nil, values == lastSaved else {
+            publishError = L10n.Write.PublishPanel.saveFailed
+            return false
+        }
+        return true
+    }
 
     /// 發布: the draft as it is (with the step's choices, already its own) is saved, then
     /// published; answers where the card lives — nil when it didn't go (`publishError` says why, or
@@ -743,16 +900,18 @@ final class WriteModel {
             return key
         } catch {
             if await confirmTrashed(error) { return nil }
-            publishError = PublishFailure.message(error, saving: savesPrivately)
+            publishError = PublishFailure.message(error, publishing: true)
             return nil
         }
     }
 
-    /// 儲存修改: the working copy goes into the buffer, then the server makes it the live card — the
-    /// moment an edit reaches readers. The publish date stays. Answers where the card lives, or nil.
-    /// The buffer is written first even when nothing changed since the last save: another device may
-    /// have applied or dropped it meanwhile, and the server applies only what is there — an answer
-    /// that there was nothing (`applied` false) is a save that didn't happen, never a finish.
+    /// A published card's revision: the working copy goes into the buffer, then the server makes it
+    /// the card — the moment an edit reaches readers (儲存修改; a published 草稿's 發布), or the card is
+    /// kept to its author (轉為草稿; a published 草稿's 儲存). The publish date stays. Answers where the
+    /// card lives, or nil. The buffer is written first even when nothing changed since the last save:
+    /// another device may have applied or dropped it meanwhile, and the server applies only what is
+    /// there — an answer that there was nothing (`applied` false) is a save that didn't happen, never
+    /// a finish.
     func applyEdit() async -> String? {
         guard !pending, let id = draftId else { return nil }
         guard !values.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -778,7 +937,7 @@ final class WriteModel {
                 lastStored = nil
                 savedAt = nil
                 hasPendingEdit = false
-                publishError = L10n.Native.saveError
+                publishError = PublishFailure.retry(publishing: publishes)
                 return nil
             }
             wrote = true
@@ -788,7 +947,7 @@ final class WriteModel {
             // The buffer's write was refused for the trash: the writer says so already.
             if trashed { return nil }
             if await confirmTrashed(error) { return nil }
-            publishError = PublishFailure.message(error, updating: true)
+            publishError = PublishFailure.message(error, publishing: publishes)
             return nil
         }
     }
@@ -814,12 +973,6 @@ final class WriteModel {
         lastSaved = values
         lastStored = values
         return slug ?? id
-    }
-
-    /// 存成草稿，稍後再寫 is on its way out (the screen hands the draft over and waits a moment).
-    func leaving(_ on: Bool) {
-        busyVerb = .leave
-        pending = on
     }
 
     // MARK: The trash

@@ -166,13 +166,17 @@ public struct FreshnessMiddleware: ClientMiddleware {
 /// URLSessionTransport through the signed-in account's session.
 public struct AccountCacheTransport: ClientTransport {
     let cache: APIHTTPCache
+    /// A session of its own instead of the account's: the slow calls' (`AppHTTP.slowSession`, which
+    /// keeps nothing — they are writes).
+    let session: URLSession?
 
-    public init(cache: APIHTTPCache) {
+    public init(cache: APIHTTPCache, session: URLSession? = nil) {
         self.cache = cache
+        self.session = session
     }
 
     public func send(_ request: HTTPRequest, body: HTTPBody?, baseURL: URL, operationID: String) async throws -> (HTTPResponse, HTTPBody?) {
-        try await URLSessionTransport(configuration: .init(session: cache.session))
+        try await URLSessionTransport(configuration: .init(session: session ?? cache.session))
             .send(request, body: body, baseURL: baseURL, operationID: operationID)
     }
 }

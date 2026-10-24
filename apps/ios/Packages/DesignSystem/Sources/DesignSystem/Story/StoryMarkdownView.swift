@@ -6,9 +6,9 @@ import SwiftUI
 /// own type (``StoryTypography``: by its script and the window, its words growing with the person's
 /// text size up to 2×): a CJK story in Noto Sans TC, justified, under Noto Serif TC headings; a Latin
 /// one in DM Sans, ragged, under Playfair. The pen's quote rail, photos in organic clips, card links
-/// as embedded cards, links standing alone as their page's card (when the story has one), and
-/// blank-line markers as air. Vertical rhythm follows CSS margins, collapsing between blocks
-/// (``ProseMetrics``).
+/// as embedded cards, links standing alone as their page's card (when the story has one), tables as
+/// rules and words (``StoryTableView``), and blank-line markers as air. Vertical rhythm follows CSS
+/// margins, collapsing between blocks (``ProseMetrics``).
 ///
 /// `embed` draws a card link's card — nil (a card the reader can't see: private, gone, by someone
 /// they blocked) draws the link the story wrote, a link of the prose's own (its face and size on the
@@ -191,6 +191,8 @@ struct BlockView<Embed: View, LinkCard: View>: View {
             WavyDivider(seed: 23)
         case let .code(code):
             CodeBlockView(code: code, typography: style.typography, size: em)
+        case let .table(head, rows, alignments):
+            StoryTableView(head: head, rows: rows, alignments: alignments, style: style, onOpenURL: onOpenURL)
         }
     }
 

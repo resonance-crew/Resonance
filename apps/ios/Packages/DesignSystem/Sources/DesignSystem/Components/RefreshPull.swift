@@ -137,6 +137,31 @@ extension View {
     public func pullPaper(_ palette: CardPalette?) -> some View {
         environment(\.pullPaper, palette)
     }
+
+    /// The same paper for a scroll view that has no refresh of its own (the writer's publish step,
+    /// round 8 §6.3): while `palette` is given — a band starts at the bar's line — the gap a pull
+    /// opens over it wears the band's interior and grain (``PullPaper``), so pulling down shows one
+    /// colour, never the page's cream over the band's paper. Nil leaves the cream. Set on the scroll
+    /// view, under the bar (as `sketchRefreshable` is).
+    public func overscrollPaper(_ palette: CardPalette?) -> some View {
+        modifier(OverscrollPaper(palette: palette))
+    }
+}
+
+/// `overscrollPaper(_:)`: how far the content stands below its resting place, and the paper in that gap.
+private struct OverscrollPaper: ViewModifier {
+    let palette: CardPalette?
+    @State private var gap: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: CGFloat.self) { -($0.contentOffset.y + $0.contentInsets.top) } action: { _, now in
+                gap = now
+            }
+            .overlay(alignment: .top) {
+                if let palette { PullPaper(palette: palette, gap: gap) }
+            }
+    }
 }
 
 /// A refresh that keeps the reader's place (`sketchRefreshInPlace`).

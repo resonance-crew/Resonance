@@ -88,4 +88,27 @@ import Testing
         #expect(StoryProse.excerpt("short", max: 96) == "short")
         #expect(StoryProse.excerpt(StoryProse.plainText("**九份**的雨 https://example.com/rain"), max: 80) == "九份的雨")
     }
+
+    /// plainText.test.ts's tables, case for case (round 8 §5.2): a table reads as its cells' words —
+    /// the delimiter row gone, a row's cells joined by 「 · 」, rows by a space — never pipes or dashes.
+    @Test func aTableReadsAsItsCellsWords() {
+        #expect(StoryProse.plainText("前言\n\n| 名稱 | 數量 |\n| --- | ---: |\n| 蘋果 | 3 |\n| 香蕉 | 12 |\n\n結尾")
+            == "前言 名稱 · 數量 蘋果 · 3 香蕉 · 12 結尾")
+        #expect(StoryProse.plainText("| **台北** | [高雄](https://x.y) |\n|:--|--:|\n| `a` | b |") == "台北 · 高雄 a · b")
+        // A cell's own escaped pipe stays a pipe; a quote's table reads the same.
+        #expect(StoryProse.plainText("| a \\| b | c |\n| - | - |") == "a | b · c")
+        #expect(StoryProse.plainText("> | 年 | 事 |\n> | --- | --- |\n> | 2024 | 搬家 |") == "年 · 事 2024 · 搬家")
+        // What the step's preview shows of a story holding one.
+        #expect(StoryProse.excerpt(StoryProse.plainText("| a | b |\n| --- | --- |\n| 1 | 2 |\n\n表格之後的一段話。"), max: 96)
+            == "a · b 1 · 2 表格之後的一段話。")
+    }
+
+    @Test func aPipeInASentenceAndAHeadingOverDashesStayAsTheyWere() {
+        #expect(StoryProse.plainText("A | B 是兩個選項") == "A | B 是兩個選項")
+        #expect(StoryProse.plainText("標題\n---\n內文") == "標題 內文")
+        let started = ContinuousClock.now
+        #expect(!StoryProse.plainText(String(repeating: "|\n", count: 50_000)).isEmpty)
+        _ = StoryProse.plainText(String(repeating: "| - |\n", count: 50_000))
+        #expect(ContinuousClock.now - started < .seconds(3))
+    }
 }

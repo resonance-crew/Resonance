@@ -13,9 +13,9 @@ extension UIPasteboard: StoriesPasteboard {}
 /// The card into Instagram Stories as a movable sticker over its backdrop (share.spec §4.8, Meta's
 /// "Sharing to Stories" for iOS): the sticker and the background on the pasteboard for five minutes,
 /// then `instagram-stories://share?source_application=` with the app's Meta App ID. A third-party app
-/// can't attach a link to a Story, so the card's link goes on the pasteboard too, as text, for
-/// Instagram's own link sticker (whether it is offered there is for a device to show), and the card
-/// prints resonance.channel.
+/// can't attach a link to a Story (Meta's partners alone can), so the card's link goes on the
+/// pasteboard too, as text — copied, for Instagram's own link sticker — and the app's toast says so
+/// (share.image.storiesLinkCopied) before Instagram opens, `readPause` later (round 8 §9.2).
 enum InstagramStories {
     static let scheme = "instagram-stories"
     /// What `canOpenURL` asks (the scheme is in LSApplicationQueriesSchemes).
@@ -24,6 +24,8 @@ enum InstagramStories {
     static let backgroundKey = "com.instagram.sharedSticker.backgroundImage"
     /// How long the payload stays on the pasteboard.
     static let lifetime: TimeInterval = 5 * 60
+    /// How long the toast saying the link is copied shows before Instagram opens over it.
+    static let readPause: Duration = .milliseconds(1200)
 
     /// The URL that hands the payload over, naming the app it comes from.
     static func url(appID: String) -> URL {
@@ -54,10 +56,15 @@ enum InstagramStories {
         [.expirationDate: now.addingTimeInterval(lifetime)]
     }
 
-    /// Puts the payload on `pasteboard` and opens Instagram; false when it didn't open.
+    /// Puts the payload on `pasteboard` — the link copied with it —, has it said (`told`: the toast),
+    /// and opens Instagram `readPause` later; false when it didn't open.
     @MainActor static func share(sticker: Data, background: Data, link: URL, appID: String, pasteboard: StoriesPasteboard,
-                                 now: Date = .now, open: @MainActor (URL) async -> Bool) async -> Bool {
+                                 now: Date = .now, told: @MainActor () -> Void = {},
+                                 pause: @MainActor (Duration) async -> Void = { try? await Task.sleep(for: $0) },
+                                 open: @MainActor (URL) async -> Bool) async -> Bool {
         pasteboard.setItems(items(sticker: sticker, background: background, link: link), options: options(now: now))
+        told()
+        await pause(readPause)
         return await open(url(appID: appID))
     }
 }

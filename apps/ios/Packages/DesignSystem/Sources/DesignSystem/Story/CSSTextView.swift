@@ -132,6 +132,25 @@ public struct ProseStyle: Sendable {
     /// The story's language (`ScriptRule.storyLang`), for VoiceOver: on the story's words only, never
     /// on what is around them.
     public var language: String?
+    /// A table's cell (round 8 §5.2, `.story-table`): the body's face at `TableCell.scale` of its size
+    /// on 1.6 lines, set as its column says (never justified), its figures tabular — a header cell in
+    /// the story's bold. Nil for every other block.
+    public var cell: TableCell?
+
+    /// How a table's cell is set.
+    public struct TableCell: Hashable, Sendable {
+        public var header: Bool
+        public var alignment: NSTextAlignment
+
+        public init(header: Bool, alignment: NSTextAlignment) {
+            self.header = header
+            self.alignment = alignment
+        }
+
+        /// The table's size × the body's (`font-size: 0.94em`) and its line height (`line-height: 1.6`).
+        public static let scale: CGFloat = 0.94
+        public static let leading: CGFloat = 1.6
+    }
 
     public init(typography: StoryTypography, role: StoryTypography.Role, level: Int = 2, color: UIColor = UIColor(Tokens.text),
                 inQuote: Bool = false, language: String? = nil) {
@@ -141,6 +160,14 @@ public struct ProseStyle: Sendable {
         self.color = color
         self.inQuote = inQuote
         self.language = language
+    }
+
+    /// This style's text in a table's cell (a quote's table keeps the quote's ink).
+    public func tableCell(header: Bool, alignment: NSTextAlignment) -> ProseStyle {
+        var s = self
+        s.role = .body
+        s.cell = TableCell(header: header, alignment: alignment)
+        return s
     }
 
     /// A story's paragraphs, list items and quoted words.
@@ -167,12 +194,21 @@ public struct ProseStyle: Sendable {
     public var family: AppFonts.Family { role == .heading ? typography.headingFamily : typography.bodyFamily }
 
     /// The CSS line height, × the font's size.
-    public var lineHeight: CGFloat { role == .heading ? typography.headingLeading : typography.bodyLeading }
+    public var lineHeight: CGFloat {
+        if cell != nil { return TableCell.leading }
+        return role == .heading ? typography.headingLeading : typography.bodyLeading
+    }
 
     /// The block's face at the person's text size: what its line boxes are measured by.
     public var font: UIFont { face() }
 
     private func face(bold: Bool = false, oblique: Bool = false) -> UIFont {
+        if let cell {
+            // The body's face, smaller; the header row in the story's bold; figures tabular.
+            let body = typography.bodyFont()
+            let weight = bold || cell.header ? typography.boldWeight : .regular
+            return Self.tabular(AppFonts.uiFont(family, size: body.pointSize * TableCell.scale, weight: weight, oblique: oblique))
+        }
         if role == .heading {
             // `strong` inside a heading takes the story's bold, as story.css says of every strong.
             guard bold else { return typography.headingFont(level: level, oblique: oblique) }
@@ -182,12 +218,20 @@ public struct ProseStyle: Sendable {
         return typography.bodyFont(bold: bold, oblique: oblique)
     }
 
+    /// `font-variant-numeric: tabular-nums`: figures of one width, so a column of numbers lines up.
+    static func tabular(_ font: UIFont) -> UIFont {
+        let features: [[UIFontDescriptor.FeatureKey: Int]] = [[.type: kNumberSpacingType, .selector: kMonospacedNumbersSelector]]
+        return UIFont(descriptor: font.fontDescriptor.addingAttributes([.featureSettings: features]), size: font.pointSize)
+    }
+
     /// The paragraph's runs as one attributed string, laid out in its CSS line boxes (``CSSTextView``
     /// sets the boxes; this the alignment and the breaking).
     public func attributed(_ runs: [InlineRun]) -> NSAttributedString {
         let base = font
         let size = base.pointSize
         let paragraph = typography.paragraphStyle(lineBox: size * lineHeight, role: role)
+        // A table's words are set, not justified: its columns are its own measure.
+        if let cell { paragraph.alignment = cell.alignment }
         let kern = typography.kern(role, pointSize: size)
         let out = NSMutableAttributedString()
         // Each run's own face, for the Latin face an apostrophe inside a Latin word takes in it.
@@ -213,7 +257,7 @@ public struct ProseStyle: Sendable {
             out.append(NSAttributedString(string: run.text, attributes: attrs))
         }
         if typography.script == .cjk, let latin = StoryTypography.latinMarkFamily(for: family) {
-            let weight = role == .heading ? typography.headingWeight : .regular
+            let weight = role == .heading ? typography.headingWeight : cell?.header == true ? typography.boldWeight : .regular
             for mark in StoryScript.latinMarks(out.string) {
                 guard let run = faces.first(where: { NSLocationInRange(mark, $0.range) }), !run.code else { continue }
                 let face = AppFonts.uiFont(latin, size: size, weight: run.bold ? typography.boldWeight : weight, oblique: run.oblique,

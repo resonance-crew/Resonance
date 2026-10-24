@@ -71,7 +71,8 @@ import UIKit
             #expect(wide.blockGap == 32 && wide.ruleGap == 40 && wide.coverGap == 28 && wide.leadGap == 40 && wide.endGap == 40)
             #expect(wide.metaSize == 14)
         }
-        #expect(phone.metaGap == 16 && phone.bylineAvatar == 40 && phone.railGap == 48)
+        // The contents' rail stands 80 past the text (round 8 §10.1; 48 while it held the author).
+        #expect(phone.metaGap == 16 && phone.bylineAvatar == 40 && phone.railGap == 80)
         #expect(phone.listIndent == 1.6 && phone.itemGap == 0.3 && phone.codeScale == 0.88)
         #expect(StoryTypography.measure == 680)
     }

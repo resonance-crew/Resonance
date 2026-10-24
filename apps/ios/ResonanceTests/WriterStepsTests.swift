@@ -1,7 +1,9 @@
+import DesignSystem
 import FirebaseFirestore
 import Foundation
 import ResonanceKit
 import Testing
+import UIKit
 @testable import Resonance
 
 /// A draft store that records every write with its values and answers each as the test says
@@ -368,50 +370,151 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(privateAnonymous.audience == .private)
     }
 
-    /// The one line under the choice, and the words that follow it: the verb (發布 · 匿名發布 · 儲存),
-    /// the step's heading (儲存這張卡片 for a draft kept to its author), a failure's line, and a live
-    /// card's 更新 hint only while it has readers.
-    @Test func theWordsFollowTheAudience() async {
-        let server = ServerCalls()
-        let draft = WriteModel(drafts: RecordingDraftStore(), writing: writing(), calls: server.calls, opened: card())
-        #expect(draft.audienceLine(handle: "ahzhen") == L10n.Write.Visibility.publicLine(handle: "ahzhen"))
-        #expect(draft.verbTitle == L10n.Write.PublishPanel.publish)
-        #expect(draft.stepTitle == L10n.Write.PublishPanel.title)
+    /// The step's title and its one button (round 8 §2.3), row by row: an unpublished card publishes
+    /// (發布 · 匿名發布) or is saved (儲存草稿 · 儲存); a card readers have is updated (更新這張卡片 · 儲存修改)
+    /// or moved to the drafts (轉為草稿); a published 草稿 is published again (發布這張卡片 · 發布) or saved.
+    /// The 更新 hint only while readers have it and keep it.
+    @Test func theTitleAndTheOneButtonFollowTheCardAndItsType() {
+        let draft = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card())
+        #expect((draft.stepTitle, draft.verbTitle) == (L10n.Write.PublishPanel.title, L10n.Write.PublishPanel.publish))
         draft.choose(.anonymous)
-        #expect(draft.audienceLine(handle: "ahzhen") == L10n.Write.Visibility.anonymousLine)
-        #expect(draft.verbTitle == L10n.Write.PublishPanel.publishAnonymously)
-        #expect(draft.stepTitle == L10n.Write.PublishPanel.title)
+        #expect((draft.stepTitle, draft.verbTitle) == (L10n.Write.PublishPanel.title, L10n.Write.PublishPanel.publishAnonymously))
         draft.choose(.private)
-        #expect(draft.audienceLine(handle: "ahzhen") == L10n.Write.Visibility.privateLine)
-        #expect(draft.verbTitle == L10n.Write.PublishPanel.save)
-        #expect(draft.stepTitle == L10n.Write.PublishPanel.saveTitle)
+        #expect((draft.stepTitle, draft.verbTitle) == (L10n.Write.PublishPanel.saveTitle, L10n.Write.PublishPanel.save))
         #expect(!draft.showsUpdateHint)
-        server.publishError = APIFailure.unexpected(status: 502)
-        #expect(await draft.publish() == nil)
-        #expect(draft.publishError == L10n.Write.PublishPanel.saveFailed)
-        draft.choose(.public)
-        #expect(await draft.publish() == nil)
-        #expect(draft.publishError == L10n.Write.PublishPanel.failed)
 
-        // For connections (none chosen): its own line, and it reads as publishing.
-        let connections = WriteModel(drafts: nil, writing: writing(), calls: server.calls, opened: card(visibility: "connections"))
-        #expect(connections.audienceLine(handle: "ahzhen") == L10n.Write.Visibility.connectionsLine)
-        #expect(connections.verbTitle == L10n.Write.PublishPanel.publish)
-        #expect(connections.stepTitle == L10n.Write.PublishPanel.title)
+        // For connections (none chosen): it reads as publishing.
+        let connections = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card(visibility: "connections"))
+        #expect((connections.stepTitle, connections.verbTitle) == (L10n.Write.PublishPanel.title, L10n.Write.PublishPanel.publish))
 
-        // A live card: 更新這張卡片 and 儲存修改 whatever its audience; the hint only while readers have it.
-        let live = WriteModel(drafts: nil, writing: writing(), calls: server.calls, opened: card(published: true))
-        #expect(live.stepTitle == L10n.Write.PublishPanel.updateTitle)
-        #expect(live.verbTitle == L10n.Write.PublishPanel.update)
+        // A card readers have: 更新這張卡片 whatever is chosen — 儲存修改, or 轉為草稿 for 草稿.
+        let live = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card(published: true))
+        #expect(live.readersSee)
+        #expect((live.stepTitle, live.verbTitle) == (L10n.Write.PublishPanel.updateTitle, L10n.Write.PublishPanel.update))
         #expect(live.showsUpdateHint)
         live.choose(.anonymous)
+        #expect(live.verbTitle == L10n.Write.PublishPanel.update)
         #expect(live.showsUpdateHint)
         live.choose(.private)
+        #expect((live.stepTitle, live.verbTitle) == (L10n.Write.PublishPanel.updateTitle, L10n.Write.PublishPanel.makeDraft))
         #expect(!live.showsUpdateHint)
-        #expect(live.verbTitle == L10n.Write.PublishPanel.update)
-        #expect(live.stepTitle == L10n.Write.PublishPanel.updateTitle)
         // Kept to its author with nothing above it, a phone's band leads under the bar.
         #expect(PublishStep.bandUnderBar(live, showsBar: true, compact: true))
+
+        // A published 草稿 (private): a 草稿 to its author — shared again it is published, kept it is saved.
+        let kept = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls,
+                              opened: card(published: true, visibility: "private"))
+        #expect(!kept.readersSee)
+        #expect((kept.stepTitle, kept.verbTitle) == (L10n.Write.PublishPanel.saveTitle, L10n.Write.PublishPanel.save))
+        #expect(!kept.showsUpdateHint)
+        kept.choose(.public)
+        #expect((kept.stepTitle, kept.verbTitle) == (L10n.Write.PublishPanel.title, L10n.Write.PublishPanel.publish))
+        #expect(!kept.showsUpdateHint)
+        kept.choose(.anonymous)
+        #expect((kept.stepTitle, kept.verbTitle) == (L10n.Write.PublishPanel.title, L10n.Write.PublishPanel.publishAnonymously))
+    }
+
+    /// The page's title, short at every size (round 8 §2.1): 新卡片, 編輯草稿 for a 草稿 (a draft, or a
+    /// published card kept private), 編輯卡片 for a card readers have.
+    @Test func thePagesTitleSaysWhatTheCardIs() {
+        #expect(WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls).title == L10n.Write.title)
+        #expect(WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card()).title == L10n.Write.editTitle)
+        #expect(WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls,
+                           opened: card(published: true, visibility: "private")).title == L10n.Write.editTitle)
+        #expect(WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card(published: true)).title
+            == L10n.Write.editPublishedTitle)
+        #expect(WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls,
+                           opened: card(published: true, visibility: "connections")).title == L10n.Write.editPublishedTitle)
+        // Its pending edit made it private, yet readers have it now: 編輯卡片.
+        #expect(WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls,
+                           opened: card(published: true, pending: true, visibility: "private", live: ("public", false))).title
+            == L10n.Write.editPublishedTitle)
+        // One in the trash, as its restore would leave it.
+        var trashed = card(published: true, visibility: "private")
+        trashed.trashedAt = Date()
+        trashed.restoresTo = "public"
+        #expect(WriteModel.pageTitle(trashed) == L10n.Write.editPublishedTitle)
+        trashed.restoresTo = "private"
+        #expect(WriteModel.pageTitle(trashed) == L10n.Write.editTitle)
+    }
+
+    /// What each row does (round 8 §2.3): an unpublished 草稿 is written and left — never published —;
+    /// shared, it is published and its page opens; a published card's revision is applied, its page
+    /// opening while it is shared and the writer leaving once it is a 草稿.
+    @Test func theOneButtonPublishesSavesOrApplies() async {
+        let store = RecordingDraftStore()
+        let server = ServerCalls()
+        let draft = WriteModel(drafts: store, writing: writing(), calls: server.calls, opened: card())
+        draft.choose(.private)
+        #expect(await draft.submit() == .leave)
+        #expect(server.published.isEmpty)
+        #expect(store.writes.last?.values.visibility == "private")
+        #expect(store.writes.last?.values.anonymous == false)
+        draft.choose(.public)
+        #expect(await draft.submit() == .card("a-walk"))
+        #expect(server.published == ["card-1"])
+
+        let live = WriteModel(drafts: store, writing: writing(), calls: server.calls, opened: card(published: true))
+        live.choose(.private)
+        #expect(await live.submit() == .leave)
+        #expect(server.applied == ["card-1"])
+        #expect(store.writes.last?.kind == .edit)
+        #expect(store.writes.last?.values.visibility == "private")
+
+        let kept = WriteModel(drafts: store, writing: writing(), calls: server.calls, opened: card(published: true, visibility: "private"))
+        kept.choose(.public)
+        #expect(await kept.submit() == .card("a-walk"))
+        #expect(server.applied == ["card-1", "card-1"])
+        #expect(server.published == ["card-1"])
+        let stillKept = WriteModel(drafts: store, writing: writing(), calls: server.calls,
+                                   opened: card(published: true, visibility: "private"))
+        #expect(await stillKept.submit() == .leave)
+        #expect(server.applied.count == 3)
+    }
+
+    /// A 草稿's 儲存 that the server refused stays, saying 沒儲存成功; one still on its way (offline)
+    /// leaves all the same — it is on the device.
+    @Test func keepingADraftThatWasRefusedStaysAndSaysSo() async {
+        let store = RecordingDraftStore()
+        store.answers = [.failure(NSError(domain: "test", code: 1))]
+        let draft = WriteModel(drafts: store, writing: writing(), calls: ServerCalls().calls, opened: card())
+        draft.choose(.private)
+        #expect(await draft.submit() == nil)
+        #expect(draft.publishError == L10n.Write.PublishPanel.saveFailed)
+        // Tried again, it goes.
+        #expect(await draft.submit() == .leave)
+        #expect(draft.publishError == nil)
+
+        let stuck = StuckDraftStore()
+        let offline = WriteModel(drafts: stuck, writing: writing(), calls: ServerCalls().calls, opened: card())
+        offline.choose(.private)
+        #expect(await offline.submit() == .leave)
+    }
+
+    /// Failure lines (round 8 §2.3): 沒發布成功 for a publish — a draft shared, a published 草稿 made
+    /// public again — and 沒儲存成功 for every other row.
+    @Test func aFailureSaysPublishOrSaveByTheRow() async {
+        let server = ServerCalls()
+        server.publishError = APIFailure.unexpected(status: 502)
+        server.applyError = APIFailure.unexpected(status: 502)
+        let draft = WriteModel(drafts: RecordingDraftStore(), writing: writing(), calls: server.calls, opened: card())
+        #expect(await draft.submit() == nil)
+        #expect(draft.publishError == L10n.Write.PublishPanel.failed)
+
+        let live = WriteModel(drafts: RecordingDraftStore(), writing: writing(), calls: server.calls, opened: card(published: true))
+        #expect(await live.submit() == nil)
+        #expect(live.publishError == L10n.Write.PublishPanel.saveFailed)
+        live.choose(.private)
+        #expect(await live.submit() == nil)
+        #expect(live.publishError == L10n.Write.PublishPanel.saveFailed)
+
+        let kept = WriteModel(drafts: RecordingDraftStore(), writing: writing(), calls: server.calls,
+                              opened: card(published: true, visibility: "private"))
+        #expect(await kept.submit() == nil)
+        #expect(kept.publishError == L10n.Write.PublishPanel.saveFailed)
+        kept.choose(.public)
+        #expect(await kept.submit() == nil)
+        #expect(kept.publishError == L10n.Write.PublishPanel.failed)
     }
 
     /// The cover is changed on the picture: one menu of another picture, a drawn one (waiting for a
@@ -459,10 +562,11 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         let store = RecordingDraftStore()
         let server = ServerCalls()
         let model = WriteModel(drafts: store, writing: writing(), calls: server.calls, opened: card())
-        model.choose(.private)
+        model.choose(.anonymous)
         #expect(await model.publish() == "a-walk")
         #expect(server.published == ["card-1"])
-        #expect(store.writes.last?.values.visibility == "private")
+        #expect(store.writes.last?.values.visibility == "public")
+        #expect(store.writes.last?.values.anonymous == true)
         let live = WriteModel(drafts: store, writing: writing(), calls: server.calls, opened: card(published: true))
         live.values.story += " Revised."
         #expect(await live.applyEdit() == "a-walk")
@@ -526,7 +630,7 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         let live = WriteModel(drafts: store, writing: writing(), calls: server.calls, opened: card(published: true, pending: true))
         #expect(await live.goNext())
         #expect(await live.applyEdit() == nil)
-        #expect(live.publishError == L10n.Native.saveError)
+        #expect(live.publishError == L10n.Write.PublishPanel.saveFailed)
         #expect(live.step == .publish)
         // The words on screen are owed a save: leaving asks and writes them, a retry writes them again.
         #expect(live.needsSave)
@@ -537,13 +641,30 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(live.publishError == nil)
     }
 
-    @Test func theWayOutBesideTheVerb() {
-        #expect(PublishStep.showsSecondary(WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card())))
+    /// One button (round 8 §2.3): the only second one left is 捨棄修改, for a published card while it
+    /// has a revision to drop — a draft's choices are its one button.
+    @Test func theOnlySecondButtonIsDiscardingARevision() {
+        let draft = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card())
+        #expect(!PublishStep.showsSecondary(draft))
+        draft.choose(.private)
+        #expect(!PublishStep.showsSecondary(draft))
         let live = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card(published: true))
         #expect(!PublishStep.showsSecondary(live))
         #expect(PublishStep.showsSecondary(WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls,
                                                       opened: card(published: true, pending: true))))
+        #expect(PublishStep.showsSecondary(WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls,
+                                                      opened: card(published: true, pending: true, visibility: "private"))))
         #expect(PublishStep.verbEnabled(live))
+    }
+
+    /// The gap a pull opens over a phone's leading band wears the band's own paper (round 8 §6.3): the
+    /// list's first card's, by the cover's hue.
+    @Test func thePullGapWearsTheBandsPaper() {
+        let model = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card())
+        #expect(PublishStep.bandPalette(model).hue == CardPalette(accentHue: nil, position: 0).hue)
+        model.values.accentHue = 215
+        #expect(PublishStep.bandPalette(model).hue == CardPalette(accentHue: 215, position: 0).hue)
+        #expect(PublishStep.bandPalette(model).hue == 215)
     }
 
     @Test func thePreviewIsTheCardAsAListWillShowIt() {
@@ -578,7 +699,8 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         model.store()
         #expect(await eventually { model.trashed })
         #expect(model.step == .write)
-        #expect(model.saveStatus == nil)
+        // The bar says nothing of its save state: the page's own line says it is in the trash.
+        #expect(model.saveState == nil)
         #expect(!model.canGoNext)
         // Nothing more is written into it; what is typed stays.
         let writes = store.writes.count
@@ -714,6 +836,122 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(opened?.values.visibility == "private")
         #expect(opened?.liveVisibility == "public")
         #expect(opened?.hasPendingEdit == true)
+    }
+}
+
+/// The save state the writer's bar says after its title (round 8 §2.1): nothing until the card's
+/// first write in this visit; 儲存中⋯ only once a write has run 400 ms (a quick one goes straight to
+/// its next word); 已儲存 after a draft's write, 修改已暫存 after a live card's — from the start when
+/// it opens with a revision buffered —, 未儲存 when the last write was refused, until one goes through.
+@MainActor @Suite struct WriterSaveStateTests {
+    @Test func nothingIsSaidBeforeTheFirstWriteThenSavingOnlyOnceItRunsLong() async {
+        let store = StuckDraftStore()
+        let model = WriteModel(drafts: store, writing: writing(), calls: ServerCalls().calls)
+        #expect(model.saveState == nil)
+        model.values.title = "A walk"
+        model.store()
+        // Under 400 ms: still nothing (no flicker).
+        #expect(model.saveState == nil)
+        #expect(await eventually { model.saveState == .saving })
+        store.answer()
+        #expect(await eventually { model.saveState == .saved })
+        #expect(model.saveState?.label == L10n.Write.Status.saved)
+        #expect(WriteModel.SaveState.saving.label == L10n.Write.Status.saving)
+    }
+
+    @Test func aQuickWriteGoesStraightToItsNextWord() async {
+        let model = WriteModel(drafts: RecordingDraftStore(), writing: writing(), calls: ServerCalls().calls, opened: card())
+        #expect(model.saveState == nil)
+        model.values.story += " More."
+        model.store()
+        #expect(await eventually { model.saveState == .saved })
+        // Long past the 400 ms: the word never turned to 儲存中⋯.
+        try? await Task.sleep(for: .milliseconds(500))
+        #expect(model.saveState == .saved)
+        #expect(!model.savingShown)
+        // A pointer resting on it reads the time too (the web's tooltip): 已儲存 · 14:32.
+        #expect(model.saveStateHelp?.hasPrefix(L10n.Write.Status.saved + " · ") == true)
+        #expect(model.saveStateHelp != L10n.Write.Status.saved)
+    }
+
+    @Test func aLiveCardSaysItsRevisionIsKeptPrivately() async {
+        let buffered = WriteModel(drafts: RecordingDraftStore(), writing: writing(), calls: ServerCalls().calls,
+                                  opened: card(published: true, pending: true))
+        #expect(buffered.saveState == .savedLive)
+        #expect(buffered.saveState?.label == L10n.Write.Status.savedLive)
+        // Nothing written in this visit yet: the word alone, no time.
+        #expect(buffered.saveStateHelp == L10n.Write.Status.savedLive)
+        let live = WriteModel(drafts: RecordingDraftStore(), writing: writing(), calls: ServerCalls().calls, opened: card(published: true))
+        #expect(live.saveState == nil)
+        live.values.story += " Revised."
+        live.store()
+        #expect(await eventually { live.saveState == .savedLive })
+    }
+
+    @Test func aRefusedWriteSaysNotSavedUntilOneGoesThrough() async {
+        let store = RecordingDraftStore()
+        store.answers = [.failure(NSError(domain: "test", code: 1))]
+        let model = WriteModel(drafts: store, writing: writing(), calls: ServerCalls().calls, opened: card())
+        model.values.story += " Refused."
+        model.store()
+        #expect(await eventually { model.saveState == .failed })
+        #expect(model.saveState?.label == L10n.Write.Status.failed)
+        // The next pause tries again (what was refused is owed a write), and a write that goes through replaces it.
+        #expect(model.needsSave)
+        model.store()
+        #expect(await eventually { model.saveState == .saved })
+    }
+}
+
+/// Pictures say what went wrong where the picture is (round 8 §3): a cover's trouble on the
+/// picture itself, until the next cover action; a story picture's in the writing step's toast —
+/// never in the cover's place — 讀不出這張圖片 for one that can't be read, 圖片上傳失敗 for one the
+/// upload refused.
+@MainActor @Suite struct WriterPictureTests {
+    private let photo: UIImage = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { context in
+        UIColor.orange.setFill()
+        context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+    }
+
+    @Test func aStoryPicturesTroubleIsSaidInTheToastNeverInTheCoversPlace() async {
+        let model = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card())
+        var told: [String] = []
+        model.tell = { told.append($0) }
+        model.upload = { _, _ in throw URLError(.notConnectedToInternet) }
+        await model.insertImage(photo, filename: "photo.jpg")
+        #expect(told == [L10n.Write.Editor.imageUploadError])
+        // One that can't be read says so too (it used to say nothing).
+        await model.insertImage(nil, filename: "photo.jpg")
+        #expect(told == [L10n.Write.Editor.imageUploadError, L10n.Write.Editor.imageUnsupported])
+        #expect(model.mediaError == nil)
+        #expect(!model.uploadingInline)
+        // Uploaded, it goes into the story and nothing is said.
+        model.upload = { _, _ in URL(string: "https://img.example.test/a.webp")! }
+        await model.insertImage(photo, filename: "photo.jpg")
+        #expect(told.count == 2)
+    }
+
+    @Test func aCoversTroubleStaysOnThePictureUntilTheNextCoverAction() async {
+        let model = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card())
+        var told: [String] = []
+        model.tell = { told.append($0) }
+        model.upload = { _, _ in throw URLError(.timedOut) }
+        await model.setCover(photo, filename: "cover.jpg")
+        #expect(model.mediaError == L10n.Write.mediaUploadError)
+        #expect(model.values.imageURL == nil)
+        // Picking another clears it, as generating or removing does.
+        model.clearCoverError()
+        #expect(model.mediaError == nil)
+        await model.setCover(nil, filename: "cover.jpg")
+        #expect(model.mediaError == L10n.Write.Editor.imageUnsupported)
+        model.removeCover()
+        #expect(model.mediaError == nil)
+        // A cover's trouble is never the toast's.
+        #expect(told.isEmpty)
+        model.upload = { _, _ in URL(string: "https://img.example.test/cover.webp")! }
+        await model.setCover(photo, filename: "cover.jpg")
+        #expect(model.values.imageURL?.absoluteString == "https://img.example.test/cover.webp")
+        #expect(model.mediaError == nil)
     }
 }
 

@@ -53,4 +53,22 @@ import Testing
         // The calls no cache keeps store nothing either.
         #expect(AppHTTP.session.configuration.urlCache == nil)
     }
+
+    /// Emptying the trash (round 8 §6.2) waits 70 s for each page's answer — a page of deletes can
+    /// outlast the 30 — through a session of its own that keeps nothing, and still says which app it
+    /// is and whose account, as every other request does.
+    @Test func theSlowCallsWaitSeventySecondsAndStoreNothing() async throws {
+        #expect(AppHTTP.slowRequestTimeout == 70)
+        #expect(AppHTTP.slowSession.configuration.timeoutIntervalForRequest == 70)
+        #expect(AppHTTP.slowSession.configuration.urlCache == nil)
+        // The account's own session is left as it was.
+        #expect(AppHTTP.session.configuration.timeoutIntervalForRequest == 30)
+        let cache = APIHTTPCache(root: FileManager.default.temporaryDirectory.appending(path: "AppHTTPTests-\(UUID().uuidString)"))
+        cache.use(account: "alice")
+        defer { cache.use(account: nil) }
+        _ = try await ReadingAPI(client: ResonanceClient.make(configuration, cache: cache, session: AppHTTP.slowSession)).feed()
+        let request = try #require(server.requests.last)
+        #expect(request.headers["user-agent"] == AppHTTP.userAgent)
+        #expect(request.headers["authorization"] == "Bearer token")
+    }
 }

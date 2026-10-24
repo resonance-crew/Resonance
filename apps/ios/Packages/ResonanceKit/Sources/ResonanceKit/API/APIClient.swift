@@ -36,6 +36,14 @@ public enum ResonanceClient {
              middlewares: [FreshnessMiddleware(freshness: cache.freshness), BearerAuthMiddleware(idToken: configuration.idToken)])
     }
 
+    /// The app's client for the calls that may answer slowly (emptying the trash, round 8 §6.2): as
+    /// `make(_:cache:)` — the same freshness after its writes — through `session` instead
+    /// (`AppHTTP.slowSession`).
+    public static func make(_ configuration: APIConfiguration, cache: APIHTTPCache, session: URLSession) -> Client {
+        make(configuration, transport: AccountCacheTransport(cache: cache, session: session),
+             middlewares: [FreshnessMiddleware(freshness: cache.freshness), BearerAuthMiddleware(idToken: configuration.idToken)])
+    }
+
     /// Every client reads answers through `OpenEnumsMiddleware`, so a value the
     /// contract adds to an enum later never fails a whole answer, and sends the
     /// App Check token at hand (`AppCheckHeader`).

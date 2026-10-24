@@ -95,13 +95,16 @@ private struct ReadableColumn: ViewModifier {
     }
 }
 
-/// Where a card page's article and its author rail sit (reading-type §4, the web's three-track grid):
+/// Where a card page's article and its rail sit (reading-type §4, the web's three-track grid). The
+/// byline is under the title at every width (round 8 §10.1): the rail holds the story's table of
+/// contents alone, so only a story that has one gets it.
 ///
-/// - expanded: in the window less the page's pads (W), the text column T = min(--measure, W − R),
-///   where R = the rail gap and the rail (48 + 260 = 308); centred while there is room for the rail
-///   beside it (S = max(0, min((W − T) / 2, W − T − R))), sliding left below that — exactly centred
-///   from 1392 wide. The rail stands 48 past the text.
-/// - medium: one centred column, T = min(--measure, width − 2 · pad); no rail.
+/// - expanded, with contents: in the window less the page's pads (W), the text column
+///   T = min(--measure, W − R), where R = the rail gap and the rail (`railReach`); centred while
+///   there is room for the rail beside it (S = max(0, min((W − T) / 2, W − T − R))), sliding left
+///   below that. The rail stands the rail gap (`--story-rail-gap`) past the text.
+/// - expanded with no contents, and medium: one centred column, T = min(--measure, width − 2 · pad);
+///   no rail.
 /// - compact: the window, 20 a side.
 ///
 /// `article` counts the article's own 20 sides (its text is `article − 40`); `leading` and `railX`
@@ -127,16 +130,17 @@ public nonisolated struct CardPageLayout: Sendable, Equatable {
     /// The text column's width (what the story is set in).
     public var text: CGFloat { max(0, article - 2 * Self.articleInset) }
 
-    /// `width`: what the page has across; `window`: the window's width.
-    public static func of(width: CGFloat, window: CGFloat) -> CardPageLayout {
+    /// `width`: what the page has across; `window`: the window's width; `contents`: the story has a
+    /// table of contents for the rail (an expanded window's only reason for one).
+    public static func of(width: CGFloat, window: CGFloat, contents: Bool = true) -> CardPageLayout {
         let pad = LayoutClass.pad(window)
         switch LayoutClass.of(window) {
         case .compact:
             return CardPageLayout(rail: false, article: width, leading: 0, railX: 0)
         case .medium:
-            let text = max(0, min(Tokens.measure, width - 2 * pad))
-            return CardPageLayout(rail: false, article: text + 2 * articleInset, leading: (width - text) / 2 - articleInset, railX: 0)
+            return centred(width: width, pad: pad)
         case .expanded:
+            guard contents else { return centred(width: width, pad: pad) }
             let inner = max(0, width - 2 * pad)
             let text = max(0, min(Tokens.measure, inner - railReach))
             let slide = max(0, min((inner - text) / 2, inner - text - railReach))
@@ -144,6 +148,19 @@ public nonisolated struct CardPageLayout: Sendable, Equatable {
             return CardPageLayout(rail: true, article: text + 2 * articleInset, leading: start - articleInset,
                                   railX: start + text + Tokens.storyRailGap)
         }
+    }
+
+    /// Where a card page's share and ⋯ stand (round 8 §10.1), by the window: on a tablet's — medium and
+    /// up — at the end of the byline under the title, with the author and the read time · date, as the
+    /// web's byline holds them at every width, and not in the bar; on a phone's (compact, an iPad's
+    /// narrow split too) in the bar, as phone apps keep a page's actions. The story's end row holds
+    /// them at every width.
+    public static func actionsInByline(window: CGFloat) -> Bool { LayoutClass.of(window) != .compact }
+
+    /// One column of the measure (or the width less its pads), centred; no rail.
+    private static func centred(width: CGFloat, pad: CGFloat) -> CardPageLayout {
+        let text = max(0, min(Tokens.measure, width - 2 * pad))
+        return CardPageLayout(rail: false, article: text + 2 * articleInset, leading: (width - text) / 2 - articleInset, railX: 0)
     }
 }
 

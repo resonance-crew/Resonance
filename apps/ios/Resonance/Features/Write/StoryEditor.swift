@@ -145,6 +145,36 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
         Task { _ = try? await webView.callAsyncJavaScript("ResonanceEditor.focus()", arguments: [:], contentWorld: .page) }
     }
 
+    /// The story's focus again with its caret (or selection) where it was — the photo picker borrowed
+    /// the keyboard (round 8 §6.5). Not `focus()`, which puts the caret at the story's end: the story's
+    /// editable root takes the focus itself, and ProseMirror, which keeps its selection while it is
+    /// blurred, puts that selection back on the page as it does.
+    func refocus() {
+        let script = "const root = document.querySelector('.ProseMirror'); if (root) root.focus({ preventScroll: true });"
+        Task { _ = try? await webView.callAsyncJavaScript(script, arguments: [:], contentWorld: .page) }
+    }
+
+    #if DEBUG
+    /// Pastes into the story as a paste from the system's pasteboard reaches it — the page's own
+    /// paste event, carrying `text` (and `html` beside it, as a rich-text source puts it) — so the
+    /// island's paste rule is checked on a simulator without the person's own clipboard (screen
+    /// checks only: `-writePaste`).
+    func debugPaste(text: String, html: String?) {
+        let script = """
+        const root = document.querySelector('.ProseMirror');
+        if (!root) return false;
+        root.focus();
+        const data = new DataTransfer();
+        data.setData('text/plain', text);
+        if (html) data.setData('text/html', html);
+        return root.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+        """
+        Task {
+            _ = try? await webView.callAsyncJavaScript(script, arguments: ["text": text, "html": html ?? NSNull()], contentWorld: .page)
+        }
+    }
+    #endif
+
     /// Lets go of the story's focus (the keyboard goes with it).
     func blur() {
         Task { _ = try? await webView.callAsyncJavaScript("ResonanceEditor.blur()", arguments: [:], contentWorld: .page) }

@@ -2,8 +2,8 @@ import DesignSystem
 import ResonanceKit
 import SwiftUI
 
-/// My card box (me/page.tsx): who I am, then my cards on seven shelves —
-/// published, private, drafts, the cards I resonated with, cards linking to
+/// My card box (me/page.tsx): who I am, then my cards on six shelves — published, 草稿 (drafts and
+/// published private cards together, round 8 §1.1), the cards I resonated with, cards linking to
 /// mine, bookmarks, and the trash (always last, before the thought map).
 struct CardBoxScreen: View {
     @Environment(SessionStore.self) private var session
@@ -28,13 +28,16 @@ struct CardBoxScreen: View {
     @State private var emptying = EmptyTrashQuestion()
 
     /// The shelves in the strip's order: the trash always last (trash.spec §4), shown even while empty —
-    /// it is read only when chosen, never to decide whether it shows.
-    static let order: [ReadingAPI.CardBoxShelf] = [.published, ._private, .draft, .resonated, .linked, .bookmarks, .trash]
+    /// it is read only when chosen, never to decide whether it shows. No 私人卡 shelf: a published
+    /// private card is a 草稿, on the 草稿 shelf (`.draft`, which shows both — ``draftShelf(private:drafts:)``).
+    static let order: [ReadingAPI.CardBoxShelf] = [.published, .draft, .resonated, .linked, .bookmarks, .trash]
     #if DEBUG
     private static var choseLaunchShelf = false
     #endif
-    /// The shelves of my own cards (OWNED_TABS): each card gets its ⋯.
+    /// The shelves of my own cards (OWNED_TABS), asked for together: each card gets its ⋯.
     static let owned: Set<ReadingAPI.CardBoxShelf> = [.published, ._private, .draft]
+    /// The most the 草稿 shelf shows (each of its two lists is the server's newest 40).
+    static let draftShelfMax = 40
 
     private var phone: Bool { window.layoutClass == .compact }
 
@@ -50,7 +53,7 @@ struct CardBoxScreen: View {
             session.httpCache.freshness.invalidate()
             await session.loadMe()
             let refreshed = shelf
-            let showing = shelves[refreshed] != nil
+            let showing = cards(refreshed) != nil
             let failure = await load(refreshed, force: true)
             // Nothing came back for a shelf on screen: it stays, a quiet line over it saying why (VoiceOver too).
             // Left for another shelf meanwhile: the answer isn't about what is on screen, and nothing is said.
@@ -60,9 +63,9 @@ struct CardBoxScreen: View {
         }
         #if DEBUG
         .task {
-            // `-cardBoxShelf <web key>` opens on that shelf (screen checks).
+            // `-cardBoxShelf <web key>` opens on that shelf (screen checks); `private` opens 草稿.
             guard !Self.choseLaunchShelf, let key = UserDefaults.standard.string(forKey: "cardBoxShelf"),
-                  let chosen = Self.order.first(where: { Self.webKey($0) == key }) else { return }
+                  let chosen = Self.shelf(forKey: key) else { return }
             Self.choseLaunchShelf = true
             shelf = chosen
         }
@@ -87,14 +90,20 @@ struct CardBoxScreen: View {
             Task { await load(shelf) }
         }
         // For good, every card here: the verb in red; busy through the whole emptying; a failure said
-        // in the question, which stays to try again.
+        // in the question, which stays to try again — unless the trash, read again, is empty after all.
         .organicConfirm(isPresented: $emptying.asking, title: L10n.Me.Actions.emptyTrashTitle, message: L10n.Me.Actions.emptyTrashBody,
                         cancelLabel: L10n.Me.Actions.deleteCancel, confirmLabel: L10n.Me.Actions.emptyTrash,
                         closeLabel: L10n.Me.Actions.deleteCancel, busy: emptying.busy,
                         error: emptying.failed ? L10n.Safety.actionError : nil, destructive: true, seed: 67) {
             Task {
-                await emptying.confirm(empty: { _ = try await session.writing.emptyTrash() },
-                                       changed: { writer.noteChange(.init()) })
+                await emptying.confirm(empty: { _ = try await session.writing.emptyTrash() }, remaining: {
+                    // Whatever went before the answer was lost: asked of the server, not the HTTP cache.
+                    session.noteOwnWrite()
+                    return try? await session.reading.cardBox(.trash).count
+                }, changed: {
+                    session.noteOwnWrite()
+                    writer.noteChange(.init())
+                })
             }
         }
     }
@@ -182,9 +191,16 @@ struct CardBoxScreen: View {
         .sensoryFeedback(.selection, trigger: shelf)
     }
 
+    /// What shelf `s` shows, as far as it is known: the 草稿 shelf is the drafts and the published
+    /// private cards together (both must be known), every other shelf its own list.
+    private func cards(_ s: ReadingAPI.CardBoxShelf) -> [FeedCard]? {
+        guard s == .draft else { return shelves[s] }
+        return Self.draftShelf(private: shelves[._private], drafts: shelves[.draft])
+    }
+
     @ViewBuilder private var shelfContent: some View {
-        if let note = refreshFailure?.over(shelf), shelves[shelf] != nil { RefreshNote(text: note.message) }
-        if let cards = shelves[shelf] {
+        if let note = refreshFailure?.over(shelf), cards(shelf) != nil { RefreshNote(text: note.message) }
+        if let cards = cards(shelf) {
             if cards.isEmpty {
                 // The shared empty state (design §1); the empty published shelf also points at the first story (ux §4).
                 if shelf == .bookmarks {
@@ -204,7 +220,7 @@ struct CardBoxScreen: View {
             } else if shelf == .linked {
                 MiniCardList(cards: cards)
             } else if Self.owned.contains(shelf) {
-                ManagedCardList(cards: cards, resumesDrafts: shelf == .draft)
+                ManagedCardList(cards: cards)
             } else {
                 StoryCardList(cards: cards)
             }
@@ -229,7 +245,9 @@ struct CardBoxScreen: View {
                 unconfirmed.insert(s)
             }
         }
-        guard force || shelves[s] == nil || unconfirmed.contains(s) else { return nil }
+        // The 草稿 shelf waits on both of its lists.
+        let waiting = s == .draft ? unconfirmed.contains(.draft) || unconfirmed.contains(._private) : unconfirmed.contains(s)
+        guard force || cards(s) == nil || waiting else { return nil }
         let asked = Self.asked(with: s, force: force, known: Set(shelves.keys), unconfirmed: unconfirmed)
         let read = reads.begin(asked)
         do {
@@ -245,7 +263,8 @@ struct CardBoxScreen: View {
             }
             // Taken over: the newer read says what there is to say about this shelf.
             guard reads.current(s, read) else { return nil }
-            let missing = answered[s] == nil
+            // The 草稿 shelf shows the private cards too: missing while they are known nowhere.
+            let missing = answered[s] == nil || (s == .draft && answered[._private] == nil && shelves[._private] == nil)
             // The page-wide state is the shelf on screen's: a shelf left behind can't turn another's skeleton into an error.
             if s == shelf { failed = missing }
             if !missing, s == shelf { refreshFailure = nil }
@@ -279,13 +298,46 @@ struct CardBoxScreen: View {
 
     /// The shelves one request asks for to show `s`: my own cards' shelves come
     /// together (one GET /me/cardbox), so opening the box brings the private
-    /// and draft shelves along with the published one — each that isn't known
+    /// and draft lists along with the published one — each that isn't known
     /// yet or is waiting to be asked again (all of them, asked for by hand).
     /// The others (cards by other people) are asked for alone, when shown.
     static func asked(with s: ReadingAPI.CardBoxShelf, force: Bool, known: Set<ReadingAPI.CardBoxShelf>,
                       unconfirmed: Set<ReadingAPI.CardBoxShelf>) -> Set<ReadingAPI.CardBoxShelf> {
         guard owned.contains(s) else { return [s] }
         return owned.filter { force || !known.contains($0) || unconfirmed.contains($0) }.union([s])
+    }
+
+    /// The 草稿 shelf (round 8 §1.1): the drafts never published and the published private cards
+    /// together, the most recently changed first — by `editedAt`, a card without one by `publishedAt`
+    /// (one with neither after those that have one, in the order it came) — each card once, at most
+    /// `draftShelfMax`. Nil until both lists are known.
+    static func draftShelf(private privateCards: [FeedCard]?, drafts: [FeedCard]?) -> [FeedCard]? {
+        guard let privateCards, let drafts else { return nil }
+        var seen = Set<String>()
+        let keyed = (drafts + privateCards).filter { seen.insert($0.id).inserted }.enumerated().map { place, card in
+            (place: place, card: card, changed: (card.editedAt ?? card.publishedAt).flatMap(ISO8601.date))
+        }
+        let ordered = keyed.sorted { a, b in
+            switch (a.changed, b.changed) {
+            case let (x?, y?): x != y ? x > y : a.place < b.place
+            case (.some, nil): true
+            case (nil, .some): false
+            case (nil, nil): a.place < b.place
+            }
+        }
+        return Array(ordered.prefix(draftShelfMax).map(\.card))
+    }
+
+    /// What a tap on one of my cards opens (round 8 §1.1): the writer for a 草稿 — a card never
+    /// published, or published and kept private, is something its author goes on writing (the web
+    /// sends both to /write/{id}, as the ⋯'s 編輯 does) — and the card's page for one readers have.
+    static func opensWriter(_ card: FeedCard) -> Bool {
+        !CardActionsMenu.readersSee(published: card.publishedAt != nil, visibility: card.visibility.rawValue)
+    }
+
+    /// The shelf a web key names — `private` (the 私人卡 shelf there was) opens 草稿.
+    static func shelf(forKey key: String) -> ReadingAPI.CardBoxShelf? {
+        key == webKey(._private) ? .draft : order.first { webKey($0) == key }
     }
 
     static func title(_ s: ReadingAPI.CardBoxShelf) -> String {
@@ -328,11 +380,12 @@ struct CardBoxScreen: View {
 
 /// My own cards (ProfileTabs' managed shelves): each with the owner's ⋯ over
 /// its top-right corner. An anonymous one wears the anonymous byline exactly as
-/// everyone else sees it (design §13) — that is its marker, no badge. A draft
-/// has no page yet, so tapping it resumes writing.
+/// everyone else sees it (design §13) — that is its marker, no badge. A tap on a
+/// 草稿 — never published, or published and kept private — goes on writing it, as
+/// its ⋯ 編輯 does (round 8 §1.1, the web's /write/{id}); a card readers have
+/// opens its page (``CardBoxScreen/opensWriter(_:)``).
 private struct ManagedCardList: View {
     let cards: [FeedCard]
-    let resumesDrafts: Bool
     @Environment(WriteLauncher.self) private var writer
     @Environment(SessionStore.self) private var session
 
@@ -343,7 +396,7 @@ private struct ManagedCardList: View {
             let card = cards[i]
             let hue = CardPalette(index: palettes[i]).hue
             Group {
-                if resumesDrafts {
+                if CardBoxScreen.opensWriter(card) {
                     Button { writer.edit(card.id) } label: {
                         StoryCardView(card.publicStory, position: i, isLast: i == cards.count - 1, bordered: bordered, palette: palettes[i])
                     }
@@ -413,8 +466,11 @@ private struct TrashShelf: View {
 }
 
 /// 清空垃圾桶's question (trash.spec §5.3): asked first, busy through the whole emptying, then gone —
-/// or, when it didn't all go, still asking with the error, to try once more. What is left is read
-/// again either way (`changed`), under the question.
+/// or, when it didn't all go, still asking with the error, to try once more (先留著 closes it). A
+/// failed emptying may have emptied the trash all the same (the server went on deleting after an
+/// answer that came too late, round 8 §6.2): the trash is read again before anything is said, and
+/// found empty, the question goes as if it had worked. What is left is read again either way
+/// (`changed`), under the question.
 @MainActor @Observable
 final class EmptyTrashQuestion {
     var asking = false
@@ -426,7 +482,8 @@ final class EmptyTrashQuestion {
         asking = true
     }
 
-    func confirm(empty: () async throws -> Void, changed: () -> Void) async {
+    /// `remaining`: how many cards the trash holds, read again after a failure (nil: it couldn't be read).
+    func confirm(empty: () async throws -> Void, remaining: () async -> Int?, changed: () -> Void) async {
         guard !busy else { return }
         busy = true
         failed = false
@@ -435,7 +492,7 @@ final class EmptyTrashQuestion {
             try await empty()
             asking = false
         } catch {
-            failed = true
+            if await remaining() == 0 { asking = false } else { failed = true }
         }
         changed()
     }

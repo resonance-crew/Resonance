@@ -62,7 +62,8 @@ import Testing
 @MainActor @Suite struct TrashShelfTests {
     @Test func theTrashIsAlwaysTheLastShelf() {
         #expect(CardBoxScreen.order.last == .trash)
-        #expect(Set(CardBoxScreen.order) == Set(ReadingAPI.CardBoxShelf.allCases))
+        // Every shelf the API has is shown — the private cards inside 草稿 (round 8 §1.1), not on their own.
+        #expect(Set(CardBoxScreen.order).union([._private]) == Set(ReadingAPI.CardBoxShelf.allCases))
         #expect(CardBoxScreen.title(.trash) == L10n.Me.Tabs.trash)
         #expect(CardBoxScreen.empty(.trash) == L10n.Me.emptyTrash)
         // Not one of my own shelves read together: it is asked for alone, when shown.
@@ -76,6 +77,8 @@ import Testing
                 == "\(L10n.Me.TrashFrom.public) · \(L10n.Me.trashDaysLeft(count: 23))")
         #expect(TrashCaption.from(trashed("b", restoresTo: "connections")) == L10n.Me.TrashFrom.connections)
         #expect(TrashCaption.from(trashed("c", restoresTo: "private")) == L10n.Me.TrashFrom.private)
+        // A published private card is a 草稿 (round 8 §1.1): it reads as a draft does.
+        #expect(L10n.Me.TrashFrom.private == L10n.Me.TrashFrom.draft)
         // A draft is a draft, whatever it would restore to.
         #expect(TrashCaption.from(trashed("d", published: false, restoresTo: "public")) == L10n.Me.TrashFrom.draft)
         // Under a day left: 「一天內永久刪除」; a part of a day counts as a whole one before that.
@@ -185,19 +188,40 @@ private let goneCard = APIFailure(code: "not_found", message: "Card not found.",
         let question = EmptyTrashQuestion()
         question.ask()
         var reads = 0
-        await question.confirm(empty: { throw Refused() }, changed: { reads += 1 })
+        var asked = 0
+        // The trash read again still holds cards: the question stays, saying so.
+        await question.confirm(empty: { throw Refused() }, remaining: { asked += 1; return 3 }, changed: { reads += 1 })
         #expect(question.asking)
         #expect(question.failed)
         #expect(!question.busy)
-        #expect(reads == 1)
-        // Tried again, it goes.
-        await question.confirm(empty: {}, changed: { reads += 1 })
+        #expect((asked, reads) == (1, 1))
+        // Tried again, it goes — and nothing is read again before the answer.
+        await question.confirm(empty: {}, remaining: { asked += 1; return 0 }, changed: { reads += 1 })
         #expect(!question.asking)
         #expect(!question.failed)
-        #expect(reads == 2)
+        #expect((asked, reads) == (1, 2))
         // Asked again later: no old error.
         question.ask()
         #expect(question.asking && !question.failed)
+    }
+
+    /// Round 8 §6.2: the emptying's answer was lost (the server went on deleting): the trash, read
+    /// again, is empty — the question goes as if it had worked, no error said.
+    @Test func aFailedEmptyingThatEmptiedTheTrashAllTheSameCloses() async {
+        let question = EmptyTrashQuestion()
+        question.ask()
+        await question.confirm(empty: { throw Refused() }, remaining: { 0 }, changed: {})
+        #expect(!question.asking)
+        #expect(!question.failed)
+    }
+
+    /// The trash couldn't be read again: nothing is known to have gone, so the question stays with its error.
+    @Test func aFailedEmptyingWhoseTrashCantBeReadKeepsAsking() async {
+        let question = EmptyTrashQuestion()
+        question.ask()
+        await question.confirm(empty: { throw Refused() }, remaining: { nil }, changed: {})
+        #expect(question.asking)
+        #expect(question.failed)
     }
 }
 

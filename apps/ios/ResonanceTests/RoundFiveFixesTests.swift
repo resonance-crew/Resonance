@@ -90,7 +90,8 @@ private struct Refused: Error {}
         // Nothing new: nothing written again.
         model.store()
         #expect(store.writes.count == 2)
-        #expect(model.saveStatus == nil)
+        // Nothing answered yet: the bar says nothing of a first write (儲存中⋯ only once one runs long).
+        #expect(model.saveState == nil)
     }
 
     @Test func leavingWaitsForTheServerOnlyAMoment() async {
@@ -102,10 +103,10 @@ private struct Refused: Error {}
         let confirmed = await model.settled(within: .milliseconds(80))
         #expect(!confirmed)
         #expect(ContinuousClock.now - start < .seconds(2))
-        // Once it answers, "Saved at …".
+        // Once it answers, 已儲存.
         store.answer()
         #expect(await model.settled(within: .seconds(2)))
-        #expect(model.saveStatus != nil)
+        #expect(model.saveState == .saved)
     }
 
     @Test func aRefusedCreateIsWrittenAgainAsANewDraft() async {
