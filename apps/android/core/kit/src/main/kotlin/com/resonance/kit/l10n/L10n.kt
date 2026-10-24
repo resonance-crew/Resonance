@@ -680,8 +680,6 @@ object L10n {
         fun noteOnYourCard(handle: String): String = Strings.format("messages.noteOnYourCard", mapOf("handle" to handle))
         /** You left a note on {handle}'s card */
         fun youLeftNote(handle: String): String = Strings.format("messages.youLeftNote", mapOf("handle" to handle))
-        /** Attach a card */
-        val attachCard: String get() = Strings.string("messages.attachCard")
         /** Remove card */
         val removeCard: String get() = Strings.string("messages.removeCard")
         /** Shared a card */
@@ -1017,12 +1015,8 @@ object L10n {
             val insightLoading: String get() = Strings.string("write.publishPanel.insightLoading")
             /** What you seem to be saying — “{coreInsight}” */
             fun insight(coreInsight: String): String = Strings.format("write.publishPanel.insight", mapOf("coreInsight" to coreInsight))
-            /** Publish anonymously */
-            val anonymousToggle: String get() = Strings.string("write.publishPanel.anonymousToggle")
             /** Anonymous */
             val anonymousName: String get() = Strings.string("write.publishPanel.anonymousName")
-            /** Anonymous cards never appear on your profile */
-            val anonymousHint: String get() = Strings.string("write.publishPanel.anonymousHint")
             /** Publish */
             val publish: String get() = Strings.string("write.publishPanel.publish")
             /** Publishing… */

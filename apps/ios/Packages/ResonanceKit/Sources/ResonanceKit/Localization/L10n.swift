@@ -678,8 +678,6 @@ public enum L10n {
         public static func noteOnYourCard(handle: String) -> String { Strings.shared.format("messages.noteOnYourCard", ["handle": handle]) }
         /// You left a note on {handle}'s card
         public static func youLeftNote(handle: String) -> String { Strings.shared.format("messages.youLeftNote", ["handle": handle]) }
-        /// Attach a card
-        public static var attachCard: String { Strings.shared.string("messages.attachCard") }
         /// Remove card
         public static var removeCard: String { Strings.shared.string("messages.removeCard") }
         /// Shared a card
@@ -1015,12 +1013,8 @@ public enum L10n {
             public static var insightLoading: String { Strings.shared.string("write.publishPanel.insightLoading") }
             /// What you seem to be saying — “{coreInsight}”
             public static func insight(coreInsight: String) -> String { Strings.shared.format("write.publishPanel.insight", ["coreInsight": coreInsight]) }
-            /// Publish anonymously
-            public static var anonymousToggle: String { Strings.shared.string("write.publishPanel.anonymousToggle") }
             /// Anonymous
             public static var anonymousName: String { Strings.shared.string("write.publishPanel.anonymousName") }
-            /// Anonymous cards never appear on your profile
-            public static var anonymousHint: String { Strings.shared.string("write.publishPanel.anonymousHint") }
             /// Publish
             public static var publish: String { Strings.shared.string("write.publishPanel.publish") }
             /// Publishing…
