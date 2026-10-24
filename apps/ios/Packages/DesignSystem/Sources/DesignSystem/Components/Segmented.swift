@@ -81,13 +81,14 @@ public struct SegmentedActionBar: View {
     public var body: some View {
         // The first row whose words all fit: every label, then every label on a little less air, then
         // step by step the collapsible ones as their glyph. The last row is taken whatever it measures.
+        // Each row its own candidate (a ForEach here is weighed as one): at most three steps give way.
         let steps = Self.steps(segments)
         ViewThatFits(in: .horizontal) {
             row(through: 0, squeezes: false)
             row(through: 0, tight: true, squeezes: steps.isEmpty)
-            ForEach(steps, id: \.self) { step in
-                row(through: step, squeezes: step == steps.last)
-            }
+            if steps.count > 0 { row(through: steps[0], squeezes: steps.count == 1) }
+            if steps.count > 1 { row(through: steps[1], squeezes: steps.count == 2) }
+            if steps.count > 2 { row(through: steps[steps.count - 1], squeezes: true) }
         }
         .accessibilityElement(children: .contain)
     }
