@@ -307,6 +307,92 @@ describe('a table typed by hand', () => {
     editor.destroy();
   });
 
+  // Round 9 §7: Enter while an input method is composing (zh-TW Zhuyin, Pinyin) picks a candidate, and is
+  // never the writer's Enter — not the conversion, not leaving the block. ProseMirror's own keydown handler
+  // guards it (`inOrNearComposition`): nothing reaches a keymap while a composition is open (Chrome and
+  // Firefox send that Enter with isComposing, keyCode 229, before compositionend), nor Safari's keyCode
+  // 229 Enter just after compositionend (once, within 500 ms). These events go through the editor's DOM, as
+  // a keyboard's do (jsdom's navigator.vendor is Apple's, so ProseMirror reads it as Safari, as WKWebView is).
+  describe('while an input method is composing', () => {
+    let clock = 1_000_000;
+    const realNow = Date.now;
+    function key(editor: Editor, init: KeyboardEventInit & { keyCode?: number }) {
+      editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init }));
+    }
+    function compose(editor: Editor, phase: 'compositionstart' | 'compositionend') {
+      editor.view.dom.dispatchEvent(new CompositionEvent(phase, { bubbles: true, data: '時間' }));
+    }
+    /** A header row, then its delimiter row typed as the paragraph after it, the caret at its end. */
+    function rowsTyped() {
+      const editor = editorWith();
+      type(editor, '| 地點 | 時間 |');
+      press(editor, 'Enter');
+      type(editor, '| --- | --- |');
+      return editor;
+    }
+    const AS_TYPED: [string, string][] = [
+      ['paragraph', '| 地點 | 時間 |'],
+      ['paragraph', '| --- | --- |'],
+    ];
+
+    it('never turns the rows into a table on the Enter that picks a candidate (isComposing, keyCode 229)', () => {
+      Date.now = () => clock;
+      try {
+        const editor = rowsTyped();
+        compose(editor, 'compositionstart');
+        key(editor, { isComposing: true, keyCode: 229 });
+        expect(blocks(editor)).toEqual(AS_TYPED);
+        compose(editor, 'compositionend');
+        // Long after, the writer's own Enter is the conversion, as ever.
+        clock += 1000;
+        key(editor, { keyCode: 13 });
+        expect(blocks(editor)).toEqual([['markdownTable', '| 地點 | 時間 |\n| --- | --- |\n'], REST]);
+        editor.destroy();
+      } finally {
+        Date.now = realNow;
+      }
+    });
+
+    it("never turns them into one on Safari's keyCode 229 Enter just after the composition ends", () => {
+      Date.now = () => clock;
+      try {
+        const editor = rowsTyped();
+        compose(editor, 'compositionstart');
+        compose(editor, 'compositionend');
+        clock += 30;
+        key(editor, { keyCode: 229 });
+        expect(blocks(editor)).toEqual(AS_TYPED);
+        clock += 1000;
+        key(editor, { keyCode: 13 });
+        expect(blocks(editor).map(([t]) => t)).toEqual(['markdownTable', 'paragraph']);
+        editor.destroy();
+      } finally {
+        Date.now = realNow;
+      }
+    });
+
+    it('never leaves the block from its empty last row while composing', () => {
+      Date.now = () => clock;
+      try {
+        const editor = rowsTyped();
+        key(editor, { keyCode: 13 });
+        expect(blocks(editor)).toEqual([['markdownTable', '| 地點 | 時間 |\n| --- | --- |\n'], REST]);
+        compose(editor, 'compositionstart');
+        key(editor, { isComposing: true, keyCode: 229 });
+        expect(blocks(editor)).toEqual([['markdownTable', '| 地點 | 時間 |\n| --- | --- |\n'], REST]);
+        expect(caret(editor)).toEqual({ in: 'markdownTable', atEnd: true });
+        compose(editor, 'compositionend');
+        clock += 1000;
+        key(editor, { keyCode: 13 });
+        expect(blocks(editor)).toEqual([['markdownTable', '| 地點 | 時間 |\n| --- | --- |'], REST]);
+        expect(caret(editor)).toEqual({ in: 'paragraph', atEnd: true });
+        editor.destroy();
+      } finally {
+        Date.now = realNow;
+      }
+    });
+  });
+
   it('reads a header and a delimiter row as markdown-it does, which reads the story back', () => {
     const editor = new Editor({ extensions: storyExtensions() });
     const parser = (editor.storage as unknown as { markdown: { parser: { parse(md: string): string } } }).markdown.parser;
