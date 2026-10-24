@@ -83,15 +83,14 @@ class CardBoxShelvesTest {
         assertEquals(listOf("x"), draftShelf(listOf(card("x", "2026-10-02T00:00:00Z")), listOf(card("x", "2026-10-01T00:00:00Z")))!!.map { it.id })
     }
 
-    @Test fun onDraftsEveryCardOpensTheWriterAPublishedPrivateOneToo() {
-        // 草稿: a draft resumes, and a published card kept private is edited where it is published from (the web's /write/{id}).
-        assertEquals(Route.Write(cardId = "d1"), managedTap(card("d1", null), TabGetCardBox.draft))
+    @Test fun everyCardOpensItsPageAPrivateCardToo() {
+        // Round 9 §1: a 私人卡 — never published, or published and kept private — opens its page like any card,
+        // by its id before it has a slug; it is edited from there (its 編輯 pen), not from the shelf.
+        val draft = card("d1", null)
+        assertEquals(Route.Card("d1", draft), managedTap(draft))
         val kept = card("p1", null, publishedAt = "2026-09-01T00:00:00Z")
-        assertEquals(Route.Write(cardId = "p1"), managedTap(kept, TabGetCardBox.draft))
-        // 已發布: a card's page.
+        assertEquals(Route.Card("p1", kept), managedTap(kept))
         val live = card("l1", null, publishedAt = "2026-09-02T00:00:00Z").copy(visibility = FeedCard.Visibility.`public`)
-        assertEquals(Route.Card("l1", live), managedTap(live, TabGetCardBox.published))
-        // A draft has no page, whatever shelf it is on.
-        assertEquals(Route.Write(cardId = "d2"), managedTap(card("d2", null), TabGetCardBox.published))
+        assertEquals(Route.Card("l1", live), managedTap(live))
     }
 }

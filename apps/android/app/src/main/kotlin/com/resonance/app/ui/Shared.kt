@@ -192,11 +192,13 @@ fun LazyListScope.storyCards(
     layout: CardListLayout = CardListLayout.Phone,
     /** How many of the first cards came on top of the others once those showed (the feed's late picks): a run of their own. */
     leading: Int = 0,
+    /** Keeps the items' keys apart from another list's in the same page (a card page's resonances and related cards). */
+    keyPrefix: String = "",
 ) {
-    if (layout.isGrid) return borderedCards(cards, open, onLast, firstUnderBar, layout, leading = leading)
+    if (layout.isGrid) return borderedCards(cards, open, onLast, firstUnderBar, layout, keyPrefix = keyPrefix, leading = leading)
     // No card wears the family of any of the three before it (design note B3), over the list as shown — each run as its own.
     val palettes = cardRunFamilies(cards, leading)
-    itemsIndexed(cards, key = { _, c -> c.id }) { i, card ->
+    itemsIndexed(cards, key = { _, c -> keyPrefix + c.id }) { i, card ->
         StoryCard(
             card.story(), runPosition(i, leading, cards.size), i == cards.lastIndex,
             Modifier.plainClickable { open(Route.Card(card.routeKey, card)) }.pointerHoverIcon(PointerIcon.Hand),
@@ -317,7 +319,7 @@ internal fun answerListStyle(related: CardListLayout): AnswerListStyle =
     if (related.isGrid) AnswerListStyle.Grid else AnswerListStyle.MiniBands
 
 /**
- * A card page's resonances or the owner's linked cards, laid out as its related list is
+ * A card page's linked cards (被連結, the owner's), laid out as its related list is
  * ([answerListStyle]): on an expanded window the same bordered card in the same columns, gutter
  * and side insets, so the page's lists line up — a lone card in the first column, start-aligned,
  * never centred or stretched (the web's MiniCardGrid) — else the mini bands.
@@ -388,8 +390,11 @@ fun TabScreen(
     pullPaper: Color? = null,
     /** Whether a tablet's page starts its first row 32 below the header's pen line (round 5 E2); Messages keeps its panes as they are. */
     tabletAir: Boolean = true,
-    /** More air under the bar's line on a phone, for this page alone (My Card Box's 8, round 5 E2). */
-    phoneExtraTop: Dp = 0.dp,
+    /**
+     * The first row's place under the bar's foot when the page heads with a person (My Card Box: the
+     * people head, round 9 §9) instead of a tab's own [titledBarGap].
+     */
+    headGap: Dp? = null,
     content: LazyListScope.() -> Unit,
 ) {
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + brandBarHeight() + HeaderEdgeHeight
@@ -413,7 +418,7 @@ fun TabScreen(
         // For whoever can't pull, the same refresh is the list's "Refresh" action (in TalkBack's Actions on any of its rows).
         val refreshAction = Modifier.sketchPullAction(pull, L10n.Native.refresh, enabled = onRefresh != null && refreshEnabled) { !list.canScrollBackward }
         val listTop = when {
-            titleInBar -> top + titledBarGap(cls, tabletAir, phoneExtraTop)
+            titleInBar -> top + (headGap ?: titledBarGap(cls, tabletAir))
             title == null -> top - HeaderEdgeHeight
             else -> top
         }
@@ -452,11 +457,11 @@ private val TitledBarGap = 16.dp
 
 /**
  * Under the bar's foot to the first row of a tab whose title is in the bar: a phone's
- * [TitledBarGap] (and the page's own [phoneExtra]); a tablet's 32 below the header's pen line
- * (round 5 E2) unless the page keeps its panes as they are (Messages: not [tabletAir]).
+ * [TitledBarGap]; a tablet's 32 below the header's pen line (round 5 E2) unless the page keeps its
+ * panes as they are (Messages: not [tabletAir]).
  */
-internal fun titledBarGap(cls: LayoutClass, tabletAir: Boolean, phoneExtra: Dp = 0.dp): Dp = when {
-    cls == LayoutClass.Compact -> TitledBarGap + phoneExtra
+internal fun titledBarGap(cls: LayoutClass, tabletAir: Boolean): Dp = when {
+    cls == LayoutClass.Compact -> TitledBarGap
     tabletAir -> cls.firstContentGap(TitledBarGap)
     else -> TitledBarGap
 }

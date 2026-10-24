@@ -32,8 +32,9 @@ import kotlinx.coroutines.launch
  * in one row — 共振 the verb (solid): or, once you have answered this card, 已共振 opening your
  * resonance (`onOpenMine`), or 修改 taking a resonance still a draft back to the writer
  * (`onModify`) — then the note and the bookmark (tonal). On a phone the note reads its short
- * words (寄小紙條 / Send a note; its full words stay its accessible name) and the bookmark shows
- * its glyph alone when the row has no room for its words. The twin of iOS's CardViewerActions.
+ * words (寄小紙條 / Send a note; its full words stay its accessible name). When the row has no
+ * room for every label the bookmark shows its glyph alone, then the note too, so only the verb
+ * keeps its words (round 9 §3: 320 wide, English, the 1.25× text cap). The twin of iOS's CardViewerActions.
  * 共振 opens the [ResonatePicker]: write a new card in answer (`onWriteNew`), or pick one already
  * written. The note opens the note composer in its modal (`onUpgradeNote`: a long note grown into
  * a resonance, its words carried into the writer). [referenceCardId] is the card this one
@@ -91,11 +92,12 @@ fun CardViewerActions(
                     else -> onModify(answered.id)
                 }
             },
-            // Named by the words it shows (WCAG 2.5.3: what is read out is what can be said to it).
-            Segment("note", if (phone) L10n.Card.Note.entryShort else L10n.Card.Note.entry, IconName.Note) { writingNote = true },
+            // Named by the words it shows (WCAG 2.5.3: what is read out is what can be said to it); the
+            // second to give its words up when even the bookmark's glyph alone leaves no room (round 9 §3).
+            Segment("note", if (phone) L10n.Card.Note.entryShort else L10n.Card.Note.entry, IconName.Note, collapse = 2) { writingNote = true },
             Segment(
                 "bookmark", if (bookmarked) L10n.Card.Bookmark.remove else L10n.Card.Bookmark.add, IconName.Bookmark,
-                collapsible = true,
+                collapse = 1,
                 iconFill = if (bookmarked) Mixes.ButtonOnTonal else null,
                 iconStroke = if (bookmarked) 2f else 1.6f,
             ) {

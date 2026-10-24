@@ -104,10 +104,11 @@ class TrashShelfTest {
         assertEquals(listOf("fresh", "last"), inTrash(listOf(fresh, lastDay, gone), now).map { it.id })
     }
 
-    @Test fun aPublishedCardOpensItsPageADraftItsWriter() {
+    @Test fun everyCardInTheTrashOpensItsPageWithTheBanner() {
         assertEquals(Route.Card("a-walk"), trashTap(card()))
         assertEquals(Route.Card("c2"), trashTap(card("c2", slug = null)))
-        assertEquals(Route.Write(cardId = "d1"), trashTap(card("d1", slug = null, published = false)))
+        // A 私人卡 never published too (round 9 §1): the server shows it to its author by its id.
+        assertEquals(Route.Card("d1"), trashTap(card("d1", slug = null, published = false)))
     }
 
     // The card page
