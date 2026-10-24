@@ -516,7 +516,8 @@ fun OrganicMenuChip(
             contentAlignment = Alignment.Center,
         ) {
             if (busy) ButtonLoader(Tokens.Text, 20.dp)
-            else OrganicIcon(icon, size = 20.dp, color = if (expanded) Tokens.Terracotta else Tokens.Text)
+            // The one pen at rest, as every bare glyph in a bar (the web's BareIconButton).
+            else OrganicIcon(icon, size = 20.dp, color = if (expanded) Tokens.Terracotta else Tokens.Text, strokeWidth = Tokens.Ink.value)
         }
         return
     }

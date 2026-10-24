@@ -31,9 +31,10 @@ import java.io.File
 
 /**
  * A story's table in the reader (round 8 §5.2): its rows and columns, the head in the story's bold,
- * each column aligned as written and 4–18 em wide before its words wrap; one that fits its column
- * stays put, one wider scrolls sideways inside it; TalkBack meets it as 表格, a table of its rows and
- * columns.
+ * every cell at its start edge whatever its delimiter says (round 9 §6), each column 4–18 em wide
+ * before its words wrap; one that fits its column stays put, one wider scrolls sideways inside it;
+ * TalkBack meets it as 表格, a table of its rows and columns. Its rules are drawn by hand with a light
+ * pen: the head's ±1.0 past the table's ends, the rows' ±0.7 short of them, a turn per ~90.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -88,12 +89,47 @@ class StoryTableTest {
         assertEquals(listOf(100f), tableColumns(1, { _, _ -> 99.2f }, rows = 0, min = 10f, max = 200f))
     }
 
-    @Test fun aTablesWordsAreSetNotJustifiedItsHeadBoldItsFiguresTabular() {
-        val body = ProseStyle.body(cjk, "zh-TW").copy(size = 15f * 0.94f, justified = false, tabular = true, align = Layout.Alignment.ALIGN_OPPOSITE)
+    @Test fun aTablesWordsAreSetNotJustifiedItsFiguresTabularEveryCellAtItsStart() {
+        // A column the delimiter row put at its end (---:) still starts its words at the cell's start edge.
+        val asked = ProseStyle.body(cjk, "zh-TW").copy(align = Layout.Alignment.ALIGN_OPPOSITE, justified = true)
+        val body = tableBodyStyle(asked)
+        assertEquals(Layout.Alignment.ALIGN_NORMAL, body.align)
+        assertEquals(false, body.justified)
+        assertEquals(asked.size * 0.94f, body.size, 1e-4f)
         val (layout, _) = buildRichLayout(listOf(InlineRun("12")), body, 200, Density(1f, 1f))
-        assertEquals(Layout.Alignment.ALIGN_OPPOSITE, layout.alignment)
         assertTrue(layout.paint.fontFeatureSettings!!.contains("'tnum'"))
-        // The number sits at its column's end.
-        assertTrue(layout.getLineLeft(0) > 100f)
+        assertEquals(0f, layout.getLineLeft(0), 0.5f)
+    }
+
+    @Test fun theRulesAreDrawnByHandAndKeepTheirWobble() {
+        fun ys(rule: List<com.resonance.geometry.PathCommand>) = rule.flatMap { c ->
+            when (c) {
+                is com.resonance.geometry.PathCommand.Move -> listOf(c.y)
+                is com.resonance.geometry.PathCommand.Cubic -> listOf(c.y)
+                else -> emptyList()
+            }
+        }
+        fun ends(rule: List<com.resonance.geometry.PathCommand>) = rule.mapNotNull { c ->
+            when (c) {
+                is com.resonance.geometry.PathCommand.Move -> c.x
+                is com.resonance.geometry.PathCommand.Cubic -> c.x
+                else -> null
+            }
+        }
+        val head = tableRule(360f, 41.0, 0, head = true)
+        val row = tableRule(360f, 41.0, 2, head = false)
+        // The head runs 1.5 past each end, a row stops 2 short: as drawn from -1.5 and 2.
+        assertEquals(363.0, ends(head).last(), 1e-6)
+        assertEquals(356.0, ends(row).last(), 1e-6)
+        // One turn per ~90, at least 3; never past ±1.0 (head) and ±0.7 (row), and never straight.
+        assertEquals(4, head.size - 1)
+        assertEquals(4, row.size - 1)
+        assertEquals(3, tableRule(120f, 41.0, 0, head = true).size - 1)
+        assertTrue(ys(head).all { kotlin.math.abs(it) <= TABLE_HEAD_AMP + 1e-9 })
+        assertTrue(ys(row).all { kotlin.math.abs(it) <= TABLE_ROW_AMP + 1e-9 })
+        assertTrue(ys(head).any { kotlin.math.abs(it) > 0.05 })
+        // Seeded by the table and the row: the same rule each time, another row's another.
+        assertEquals(row, tableRule(360f, 41.0, 2, head = false))
+        assertTrue(row != tableRule(360f, 41.0, 3, head = false))
     }
 }

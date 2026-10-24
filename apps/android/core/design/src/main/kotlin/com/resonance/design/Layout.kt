@@ -62,6 +62,28 @@ val TabletHeaderAir: Dp = 32.dp
  */
 fun LayoutClass.firstContentGap(phone: Dp): Dp = if (this == LayoutClass.Compact) phone else TabletHeaderAir - BarLineInset
 
+/**
+ * The reading head (round 9 §2, `--story-head-gap` / `--story-head-cover-gap`): from the bar's pen
+ * line to the card page's first thing — the title's line box (48 on a phone, 64 wider), or the top
+ * edge of a cover, a box with no line box of its own above its ink ([cover]: 56 / 72) — given from
+ * the bar's foot, which lies [BarLineInset] under its pen line.
+ */
+fun LayoutClass.storyHeadGap(cover: Boolean): Dp {
+    val compact = this == LayoutClass.Compact
+    val fromLine = when {
+        cover -> if (compact) Tokens.StoryHeadCoverGapCompact else Tokens.StoryHeadCoverGap
+        else -> if (compact) Tokens.StoryHeadGapCompact else Tokens.StoryHeadGap
+    }
+    return fromLine.dp - BarLineInset
+}
+
+/**
+ * The people head (round 9 §9, `--people-head-gap`): from the bar's pen line to the top of a
+ * person's avatar — a profile, My Card Box — 40 on a phone, 56 wider; given from the bar's foot.
+ */
+fun LayoutClass.peopleHeadGap(): Dp =
+    (if (this == LayoutClass.Compact) Tokens.PeopleHeadGapCompact else Tokens.PeopleHeadGap).dp - BarLineInset
+
 /** A pull to refresh on a tablet: the loader and the gap it opens half as big again as a phone's (round 5 E2). */
 fun LayoutClass.pullScale(): Float = if (this == LayoutClass.Compact) 1f else 1.5f
 

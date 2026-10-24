@@ -44,6 +44,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -89,7 +91,6 @@ import com.resonance.kit.story.ProseMetrics
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.story.StoryBlock
 import com.resonance.kit.story.StoryScripts
-import com.resonance.kit.story.TableAlign
 import java.util.Locale
 import com.resonance.geometry.seedFromString
 import kotlin.math.max
@@ -699,11 +700,13 @@ private val QuoteRailWidth = 5.2.dp
 
 /**
  * A story's table, quietly (round 8 §5.2; story.css `.story-table`): rules, not boxes — no frame and
- * no lines between columns, the story's pen rule under the head row (1.2, the muted ink at 0.5) and a
- * hairline between body rows (1, the same ink at 0.22), nothing after the last, all straight (a
- * wobble would make a row hard to follow). Its words are the story's at 0.94 em, 1.6 apart, set and
- * not justified, the head row in the story's bold, numbers in tabular figures, each column aligned as
- * its delimiter says. A cell pads 8 × 14 — the first column's start and the last column's end flush
+ * no lines between columns — drawn by hand with a light pen (round 9 §6, [tableRule]): the head row's
+ * rule (INK_LIGHT, the muted ink at 0.6, ±1.0, overshooting the table 1.5 at each end) and a rule
+ * between body rows (1, the muted ink at 0.3, ±0.7, stopping 2 short at each end), nothing after the
+ * last; one turn per ~90, seeded by the table and the row, so a story's rules keep their wobble. Its
+ * words are the story's at 0.94 em, 1.6 apart, set and not justified, the head row in the story's
+ * bold, numbers in tabular figures, every cell at its start edge — the head's too, whatever the
+ * delimiter row's colons say (round 9 §6; the source keeps them). A cell pads 8 × 14 — the first column's start and the last column's end flush
  * with the text column — and a column is its cells' widest words, at least 4 em and at most 18 em
  * before they wrap ([tableColumns]). Wider than the column, it scrolls sideways inside it (never the
  * page), the side with more fading into the paper over 24 until scrolled to that end; TalkBack meets
@@ -714,12 +717,13 @@ private fun StoryTable(table: StoryBlock.Table, style: ProseStyle, onOpenUrl: (S
     val columns = table.align.size
     if (columns == 0) return
     val density = LocalDensity.current
-    val body = remember(style) { style.copy(size = style.size * TABLE_SIZE, lineHeight = TABLE_LEADING, justified = false, balanced = false, tabular = true) }
+    // Every cell at its start edge (round 9 §6): the delimiter's colons are the source's, not the reader's.
+    val body = remember(style) { tableBodyStyle(style) }
     val head = remember(body) { body.copy(weight = body.boldWeight) }
-    val cellStyles = remember(body, head, table.align) {
-        table.align.map { a -> body.copy(align = a.layoutAlignment) } to table.align.map { a -> head.copy(align = a.layoutAlignment) }
-    }
-    val (bodyStyles, headStyles) = cellStyles
+    val bodyStyles = remember(body, columns) { List(columns) { body } }
+    val headStyles = remember(head, columns) { List(columns) { head } }
+    // The table's own seed: its head's words (stable for the story, different from its neighbour's).
+    val tableSeed = remember(table) { tableSeedOf(table) }
     val em = density.cssFontPx(body.size)
     val widths = remember(table, body, head, density, density.fontScale) {
         tableColumns(
@@ -736,11 +740,19 @@ private fun StoryTable(table: StoryBlock.Table, style: ProseStyle, onOpenUrl: (S
     val padX = with(density) { TABLE_CELL_PAD_X.toPx() }
     val padY = with(density) { TABLE_CELL_PAD_Y.toPx() }
     val scroll = rememberScrollState()
-    val headRule = TableHeadRuleInk
-    val rowRule = TableRowRuleInk
+    val headPen = with(density) { TABLE_HEAD_RULE.toPx() }
+    val rowPen = with(density) { TABLE_ROW_RULE.toPx() }
     Box(
         Modifier
             .fillMaxWidth()
+            // The scroller reaches 2 past the text column at each side, so the head's rule can run past the
+            // table's ends; the cells stay where they were (the padding inside gives the 2 back).
+            .layout { measurable, constraints ->
+                val reach = TABLE_REACH.roundToPx()
+                val wide = if (constraints.hasBoundedWidth) constraints.maxWidth + 2 * reach else constraints.maxWidth
+                val placeable = measurable.measure(constraints.copy(minWidth = wide, maxWidth = wide))
+                layout(constraints.maxWidth, placeable.height) { placeable.place(-reach, 0) }
+            }
             .tableFade(scroll, TABLE_FADE)
             .semantics {
                 contentDescription = L10n.Card.table
@@ -748,14 +760,23 @@ private fun StoryTable(table: StoryBlock.Table, style: ProseStyle, onOpenUrl: (S
             }
             .horizontalScroll(scroll),
     ) {
-        Column {
+        Column(Modifier.padding(horizontal = TABLE_REACH)) {
             val rows = listOf(table.head) + table.rows
             rows.forEachIndexed { r, cells ->
                 Row(
-                    Modifier.drawBehind {
-                        // The head's pen line under it; a hairline above each body row after the first.
-                        if (r == 0) drawLine(headRule, Offset(0f, size.height - TABLE_HEAD_RULE.toPx() / 2), Offset(size.width, size.height - TABLE_HEAD_RULE.toPx() / 2), strokeWidth = TABLE_HEAD_RULE.toPx())
-                        if (r >= 2) drawLine(rowRule, Offset(0f, TABLE_ROW_RULE.toPx() / 2), Offset(size.width, TABLE_ROW_RULE.toPx() / 2), strokeWidth = TABLE_ROW_RULE.toPx())
+                    Modifier.drawWithCache {
+                        // The head's pen line under it; a lighter one above each body row after the first — the
+                        // table's whole width (inside the sideways scroll, so they move with the columns).
+                        val d = this.density
+                        val w = size.width / d
+                        val rule = when {
+                            r == 0 -> tableRule(w, tableSeed, r, head = true).toPath(d, -TABLE_HEAD_OVERSHOOT * d, size.height - headPen / 2)
+                            r >= 2 -> tableRule(w, tableSeed, r, head = false).toPath(d, TABLE_ROW_INSET * d, rowPen / 2)
+                            else -> null
+                        }
+                        val pen = Stroke(if (r == 0) headPen else rowPen, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                        val ink = if (r == 0) TableHeadRuleInk else TableRowRuleInk
+                        onDrawBehind { rule?.let { drawPath(it, ink, style = pen) } }
                     },
                     verticalAlignment = Alignment.Top,
                 ) {
@@ -780,6 +801,13 @@ private fun StoryTable(table: StoryBlock.Table, style: ProseStyle, onOpenUrl: (S
     }
 }
 
+/**
+ * A table cell's words (round 9 §6): the story's at 0.94 em, 1.6 apart, set and not justified, tabular
+ * figures — and always at the cell's start edge, whatever the delimiter row asked for.
+ */
+internal fun tableBodyStyle(style: ProseStyle): ProseStyle =
+    style.copy(size = style.size * TABLE_SIZE, lineHeight = TABLE_LEADING, justified = false, balanced = false, tabular = true, align = Layout.Alignment.ALIGN_NORMAL)
+
 /** A table's words, × the story's (`font-size: 0.94em`), and their leading. */
 private const val TABLE_SIZE = 0.94f
 private const val TABLE_LEADING = 1.6f
@@ -788,19 +816,40 @@ internal const val TABLE_COLUMN_MIN_EM = 4f
 internal const val TABLE_COLUMN_MAX_EM = 18f
 private val TABLE_CELL_PAD_X = 14.dp
 private val TABLE_CELL_PAD_Y = 8.dp
-private val TABLE_HEAD_RULE = 1.2.dp
+private val TABLE_HEAD_RULE = Tokens.InkLight
 private val TABLE_ROW_RULE = 1.dp
 /** How far a table's side with more fades into the paper. */
 private val TABLE_FADE = 24.dp
-private val TableHeadRuleInk = Tokens.TextMuted.copy(alpha = 0.5f)
-private val TableRowRuleInk = Tokens.TextMuted.copy(alpha = 0.22f)
+private val TableHeadRuleInk = Tokens.TextMuted.copy(alpha = 0.6f)
+private val TableRowRuleInk = Tokens.TextMuted.copy(alpha = 0.3f)
 
-private val TableAlign.layoutAlignment: Layout.Alignment
-    get() = when (this) {
-        TableAlign.Start -> Layout.Alignment.ALIGN_NORMAL
-        TableAlign.Center -> Layout.Alignment.ALIGN_CENTER
-        TableAlign.End -> Layout.Alignment.ALIGN_OPPOSITE
-    }
+/** How far past the text column a table's scroller reaches at each side: room for the head's rule to overshoot. */
+private val TABLE_REACH = 2.dp
+
+/** The head's rule runs this far past the table at each end; a row's rule stops this short (dp). */
+internal const val TABLE_HEAD_OVERSHOOT = 1.5f
+internal const val TABLE_ROW_INSET = 2f
+/** How far a rule wobbles (dp): the head's, a row's — never past ±1.2. */
+internal const val TABLE_HEAD_AMP = 1.0
+internal const val TABLE_ROW_AMP = 0.7
+/** One turn of a rule per this much of its length (dp). */
+internal const val TABLE_RULE_TURN = 90.0
+
+/**
+ * One of a table's hand-drawn rules (round 9 §6), as a pen path from its own start (dp): the head's
+ * ([head]) is the table's width [w] and 1.5 more at each end, wobbling ±1.0; a body row's stops 2
+ * short of each end, ±0.7 — both one turn per ~90 (at least 3), seeded by the table ([seed]) and the
+ * row ([row]), so redrawing the story draws the same rules.
+ */
+internal fun tableRule(w: Float, seed: Double, row: Int, head: Boolean): List<com.resonance.geometry.PathCommand> {
+    val length = if (head) w + 2 * TABLE_HEAD_OVERSHOOT else (w - 2 * TABLE_ROW_INSET).coerceAtLeast(0f)
+    val steps = maxOf(3, kotlin.math.round(length / TABLE_RULE_TURN).toInt())
+    return com.resonance.geometry.wavyLine(length.toDouble(), seed + row * 31, if (head) TABLE_HEAD_AMP else TABLE_ROW_AMP, steps)
+}
+
+/** A table's seed: its head's words, so it is stable for the story and differs from the table beside it. */
+internal fun tableSeedOf(table: StoryBlock.Table): Double =
+    (kotlin.math.abs(seedFromString(table.head.joinToString("|") { cell -> cell.joinToString("") { it.text } }) % 9973) + 1).toDouble()
 
 /**
  * A table's column widths (px, the cells' content without their padding): each column its cells'

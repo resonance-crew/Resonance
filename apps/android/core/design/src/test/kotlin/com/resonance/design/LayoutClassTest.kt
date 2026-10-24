@@ -127,6 +127,21 @@ class LayoutClassTest {
         assertEquals(WindowLayout(800.dp).cardPage(), WindowLayout(800.dp).cardPage(rail = false))
     }
 
+    @Test fun theReadingHeadAndThePeopleHeadAreMeasuredFromTheBarsPenLine() {
+        // Round 9 §2 / §9: the numbers are from the pen line; the pages measure from the bar's foot, 1.4 + INK under it.
+        val line = BarLineInset.value
+        assertEquals(48f - line, LayoutClass.Compact.storyHeadGap(cover = false).value, 0.001f)
+        assertEquals(56f - line, LayoutClass.Compact.storyHeadGap(cover = true).value, 0.001f)
+        assertEquals(40f - line, LayoutClass.Compact.peopleHeadGap().value, 0.001f)
+        for (cls in listOf(LayoutClass.Medium, LayoutClass.Expanded)) {
+            assertEquals(64f - line, cls.storyHeadGap(cover = false).value, 0.001f)
+            assertEquals(72f - line, cls.storyHeadGap(cover = true).value, 0.001f)
+            assertEquals(56f - line, cls.peopleHeadGap().value, 0.001f)
+        }
+        // A cover's edge stands lower than a title's box, whose own line box holds air over its ink.
+        assertEquals(8f, (LayoutClass.Compact.storyHeadGap(true) - LayoutClass.Compact.storyHeadGap(false)).value, 0.001f)
+    }
+
     @Test fun aTabletsPagesStart32UnderTheHeadersPenLineAndAPhonesKeepTheirOwn() {
         // Round 5 E2: measured from the bar's foot, its pen line 1.4 + INK above it.
         assertEquals(16f, LayoutClass.Compact.firstContentGap(16.dp).value, 0.001f)

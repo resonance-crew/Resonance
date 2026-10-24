@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -54,9 +55,9 @@ private val Ease = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1f)
  * as plain sand. Width comes from `modifier` (full width by default).
  */
 @Composable
-fun Skeleton(modifier: Modifier = Modifier, height: Dp = 14.dp, radius: Dp = 7.dp, circle: Boolean = false) {
+fun Skeleton(modifier: Modifier = Modifier, height: Dp = 14.dp, radius: Dp = 7.dp, circle: Boolean = false, shape: Shape? = null) {
     val sized = if (circle) modifier.size(height) else modifier.fillMaxWidth().height(height)
-    Box(sized.clip(if (circle) CircleShape else RoundedCornerShape(radius)).shimmer())
+    Box(sized.clip(shape ?: if (circle) CircleShape else RoundedCornerShape(radius)).shimmer())
 }
 
 /**
