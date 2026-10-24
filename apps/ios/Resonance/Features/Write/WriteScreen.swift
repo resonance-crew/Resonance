@@ -559,6 +559,13 @@ struct WriteScreen: View {
     /// `afterDialog` lets the question's cover finish going down before the page does.
     private func leave(_ model: WriteModel, afterDialog: Bool = false) async {
         let settle = Task { if afterDialog { try? await Task.sleep(for: Self.dialogSettle) } }
+        // A card begun here and emptied again goes with the writer (round 9 §1: no empty 私人卡).
+        if await model.dropIfEmpty() {
+            writer.leave(model.change)
+            await settle.value
+            dismiss()
+            return
+        }
         model.store()
         _ = await model.settled(within: Self.leaveWait)
         writer.leave(model.change)

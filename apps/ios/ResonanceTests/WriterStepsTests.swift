@@ -43,6 +43,11 @@ import UIKit
 
     func discardEdit(_ id: String) async throws {}
 
+    /// Drafts deleted (a card begun and emptied again).
+    private(set) var deleted: [String] = []
+
+    func deleteDraft(_ id: String) async throws { deleted.append(id) }
+
     func isTrashed(_ id: String) async throws -> Bool {
         trashReads += 1
         return trashed
@@ -438,15 +443,15 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(WriteModel.pageTitle(trashed) == L10n.Write.editTitle)
     }
 
-    /// What each row does (round 8 §2.3): an unpublished 草稿 is written and left — never published —;
-    /// shared, it is published and its page opens; a published card's revision is applied, its page
-    /// opening while it is shared and the writer leaving once it is a 草稿.
+    /// What each row does (round 8 §2.3, round 9 §1): an unpublished 私人卡 is written — never published —
+    /// and its page opens; shared, it is published and its page opens; a published card's revision is
+    /// applied and its page opens, whatever it is now (a 私人卡's page is its owner's to read).
     @Test func theOneButtonPublishesSavesOrApplies() async {
         let store = RecordingDraftStore()
         let server = ServerCalls()
         let draft = WriteModel(drafts: store, writing: writing(), calls: server.calls, opened: card())
         draft.choose(.private)
-        #expect(await draft.submit() == .leave)
+        #expect(await draft.submit() == .card("card-1"))
         #expect(server.published.isEmpty)
         #expect(store.writes.last?.values.visibility == "private")
         #expect(store.writes.last?.values.anonymous == false)
@@ -456,7 +461,7 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
 
         let live = WriteModel(drafts: store, writing: writing(), calls: server.calls, opened: card(published: true))
         live.choose(.private)
-        #expect(await live.submit() == .leave)
+        #expect(await live.submit() == .card("a-walk"))
         #expect(server.applied == ["card-1"])
         #expect(store.writes.last?.kind == .edit)
         #expect(store.writes.last?.values.visibility == "private")
@@ -468,12 +473,39 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(server.published == ["card-1"])
         let stillKept = WriteModel(drafts: store, writing: writing(), calls: server.calls,
                                    opened: card(published: true, visibility: "private"))
-        #expect(await stillKept.submit() == .leave)
+        #expect(await stillKept.submit() == .card("a-walk"))
         #expect(server.applied.count == 3)
     }
 
-    /// A 草稿's 儲存 that the server refused stays, saying 沒儲存成功; one still on its way (offline)
-    /// leaves all the same — it is on the device.
+    /// No empty 私人卡 (round 9 §1): nothing is made before something is written, and a card begun on
+    /// this visit and emptied again goes as the writer leaves; a card opened from the box never does.
+    @Test func aCardBegunAndEmptiedLeavesNothingBehind() async {
+        let store = RecordingDraftStore()
+        let fresh = WriteModel(drafts: store, writing: writing(), calls: ServerCalls().calls)
+        #expect(await fresh.dropIfEmpty() == false)
+        fresh.store()
+        #expect(store.writes.isEmpty, "nothing written, nothing made")
+        fresh.values.title = "Gone soon"
+        _ = await fresh.saveNow()
+        #expect(store.writes.first?.kind == .create)
+        fresh.values.title = ""
+        #expect(await fresh.dropIfEmpty())
+        #expect(store.deleted == ["draft-1"])
+        #expect(fresh.draftId == nil)
+
+        // Written and kept: nothing deleted.
+        let kept = WriteModel(drafts: store, writing: writing(), calls: ServerCalls().calls)
+        kept.values.title = "Stays"
+        _ = await kept.saveNow()
+        #expect(await kept.dropIfEmpty() == false)
+        // Opened from the box with nothing on it: not this writer's to delete.
+        let opened = WriteModel(drafts: store, writing: writing(), calls: ServerCalls().calls, opened: card(title: "", story: ""))
+        #expect(await opened.dropIfEmpty() == false)
+        #expect(store.deleted == ["draft-1"])
+    }
+
+    /// A 私人卡's 儲存 that the server refused stays, saying 沒儲存成功; one still on its way (offline)
+    /// leaves all the same — it is on the device, its page not on the server yet.
     @Test func keepingADraftThatWasRefusedStaysAndSaysSo() async {
         let store = RecordingDraftStore()
         store.answers = [.failure(NSError(domain: "test", code: 1))]
@@ -481,8 +513,8 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         draft.choose(.private)
         #expect(await draft.submit() == nil)
         #expect(draft.publishError == L10n.Write.PublishPanel.saveFailed)
-        // Tried again, it goes.
-        #expect(await draft.submit() == .leave)
+        // Tried again, it goes — to its page.
+        #expect(await draft.submit() == .card("card-1"))
         #expect(draft.publishError == nil)
 
         let stuck = StuckDraftStore()
@@ -657,11 +689,11 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(PublishStep.verbEnabled(live))
     }
 
-    /// The gap a pull opens over a phone's leading band wears the band's own paper (round 8 §6.3): the
-    /// list's first card's, by the cover's hue.
+    /// The gap a pull opens over a phone's leading band wears the band's own paper (round 8 §6.3): by the
+    /// cover's hue — and with no cover, the card's own family from its id (round 9 §8).
     @Test func thePullGapWearsTheBandsPaper() {
         let model = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls, opened: card())
-        #expect(PublishStep.bandPalette(model).hue == CardPalette(accentHue: nil, position: 0).hue)
+        #expect(PublishStep.bandPalette(model).index == CardPalette.family(id: model.draftId ?? ""))
         model.values.accentHue = 215
         #expect(PublishStep.bandPalette(model).hue == CardPalette(accentHue: 215, position: 0).hue)
         #expect(PublishStep.bandPalette(model).hue == 215)
