@@ -46,6 +46,8 @@ class FeedLoader(
     private val picksGrace: Duration = 400.milliseconds,
     /** Where a reader's feed is kept between launches (null: nowhere). */
     private val storeFor: (viewer: String) -> FeedStore? = { null },
+    /** Today's picks (the recommended feed; a debug build's stand-ins for the emulator, which has none). */
+    private val recommended: suspend () -> List<FeedCard> = { api.recommended() },
 ) {
     enum class Phase { Loading, Loaded, Failed }
 
@@ -270,7 +272,7 @@ class FeedLoader(
     }
 
     private suspend fun picks(): List<FeedCard>? = try {
-        api.recommended()
+        recommended()
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
