@@ -142,7 +142,7 @@ beside it, as a rich-text source's clipboard holds HTML) pastes into the story
 once it is up, through the page's own paste event — the island's paste rule
 checked without the Mac's clipboard, which the simulator's follows.
 `-cardBoxShelf <key>` opens the card box on that shelf (`trash` for the trash;
-`private` and `draft` open 草稿).
+`private` and `draft` open 私人卡).
 `-route /me/thought-map` opens the thought map (the seed gives alice one:
 a region, three cards, a labelled arrow).
 `-pushToken <any>` registers a stand-in push token under the signed-in
@@ -165,7 +165,9 @@ bordered feed grid, two-pane Messages (`MessagesPanes`: the conversation at the
 foot of the Messages stack is the detail pane), the card page's contents rail
 (for a story with a table of contents only; the byline is under the title at every
 width), and the card's share · ⋯ at the end of that byline instead of in the bar,
-which keeps them on a compact window (`CardPageLayout.actionsInByline`).
+which keeps them on a compact window (`CardPageLayout.actionsInByline`) — until
+the byline scrolls under the bar, which then takes them, as a phone's bar names
+the author past the same point.
 The simulator can't be turned or split from the command line:
 `-debugWindow 1376x1032` (any `WxH`) lays the app out at that size, scaled into
 the screen, for layout checks only (the safe areas stay the screen's).
@@ -190,15 +192,20 @@ original is named), with the shell's 「已移到垃圾桶 · 復原」 toast in
 (`DELETE /me/trash`, paged by `WritingAPI.emptyTrash` through a 70 s client, `AppHTTP.slowSession`:
 a page of deletes can outlast the app's 30 s; after a failure the dialog closes once the trash,
 read again, is empty); a trashed card is left off the thought map
-(its node stays stored), and the writer opens one on a 還原並繼續寫 notice. A tapped push opens its thread by
+(its node stays stored), the trash shelf opens every card on its page (its trash banner; the server answers
+its author for a trashed card never published too), and the writer opens one on a 還原並繼續寫 notice. A tapped push opens its thread by
 `data.fromUserId`. The latest feed and a person's cards page by `nextPageToken` (`FeedPage.next`;
 a page without one falls back to `nextCursor`). The card box asks for my own shelves (published,
 private, drafts) in one `GET /api/v1/me/cardbox?shelves=`, the others' when shown; whichever answer
-brings the published shelf is what's kept. There is no 私人卡 shelf: 草稿 holds the drafts and the
-published cards kept private together, the latest changed first (`CardBoxScreen.draftShelf`, by
-`editedAt`, else `publishedAt`), every card on it opening the writer — a published one kept
-private too (`CardBoxScreen.opensWriter`), a card readers have its page — and a card's ⋯ offers
-轉為草稿 only on a card readers have (`CardActionsMenu.rows(readersSee:answering:)`). The thought map reads its cards under the rules and asks
+brings the published shelf is what's kept. The 私人卡 shelf (round 9 §1; the `draft` key) holds the cards
+never published and the published cards kept private together, the latest changed first
+(`CardBoxScreen.draftShelf`, by `editedAt`, else `publishedAt`); every card in the box opens its page, a
+私人卡 too — whose meta line ends with 🔒 私人卡 and whose bar (a phone's; a tablet's byline) has a pen to the
+writer where share would be (`CardScreen.isPrivateCard`) — and a card's ⋯ offers 轉為私人卡 only on a card
+readers have (`CardActionsMenu.rows(readersSee:answering:)`). The thought map reads its cards under the rules
+— the newest 40 published, and the 40 never-published 私人卡 most recently edited in a query of their own
+(`ThoughtMapService.newestDrafts`), wears the lock on every 私人卡's node and tray row, and opens a 私人卡 on its
+page below the split — and asks
 `GET /api/v1/cards?keys=` for the ones they refuse (someone else's anonymous original, without its
 author). Reports go through the server (`POST /api/v1/reports`, `…/cards/{key}/report`). A scheduled
 deletion comes with the account (`Me.deletion`, the kept one on a cold start): no separate request,
@@ -229,7 +236,9 @@ number comes from DesignSystem's `StoryTypography` (the generated
 680 column; on an expanded window a story with a table of contents has its rail
 `Tokens.storyRailGap` past it, one without is centred). A GFM table is
 `StoryBlock.table` (head, rows, column alignments), drawn by `StoryTableView`:
-rules rather than boxes, the body's face at 0.94 em on 1.6 lines, each column
+rules rather than boxes — calm pen lines (`StoryTable.rulePoints`: the header's ±1.0 a little past both
+ends, the rows' ±0.7 a little short), seeded by the table and the row —, every cell at its start edge
+whatever the alignments say (round 9 §6), the body's face at 0.94 em on 1.6 lines, each column
 4–18 em, wider than the column it scrolls sideways under a fading edge; its
 words count toward the excerpt and read time (`StoryProse`). Justified Chinese is spread by
 `StoryJustification` (between characters, as a browser does — TextKit's own
@@ -238,8 +247,14 @@ browser breaks between any two characters, so a line can end a character
 earlier than the web's. A story's words grow with the system's text size up
 to 2× (`TextScale.readingFactor`); the byline and the rest stay under 1.25×.
 
-Share: a card's bar on a phone (its byline on a tablet), and the row that ends its
-story, show the share glyph only for a published, public card not in the trash
+The card page's head is measured from the bar's pen line (round 9 §2, `StoryTypography.headGap`,
+`PenLineGap`): the title's box 48 / 64 under it, a cover's top 56 / 72; a person's page and Me put the
+avatar 40 / 56 under it (`peopleHeadGap()`). The story's end row is the response bar alone (none on the
+author's own card), spread across a phone; its segments give way in steps (`SegmentSpec.collapsesAt`: the
+bookmark, then the note) and the row never runs wider than offered. 與此文共振 draws full story cards, three
+and then 查看全部.
+
+Share: a card's bar on a phone (its byline on a tablet) shows the share glyph only for a published, public card not in the trash
 (`CardShareGate`); the glyph draws
 its own loader while the picture is made. It opens the system sheet with the link
 (`LinkSource`, with its `LPLinkMetadata`) and the 1080 × 1920 picture drawn
@@ -284,7 +299,7 @@ language's type), whose formatting is `StoryFormatBar`, docked on the keyboard
 while the story has the focus; the page keeps the island's caret line (`caret`)
 above it (`CaretFollow`), and the island's own scroll view is pinned at its top
 (WebKit would otherwise slide the story out of its frame to show the caret).
-The bar is back · a short title (編輯草稿 for a published card kept private) · the
+The bar is back · a short title (編輯私人卡 for a 私人卡) · the
 save state (`SaveStateWord`: 儲存中⋯ once a write has gone 400 ms unanswered,
 已儲存, 修改已暫存 for a live card's revision, 未儲存 in the error ink; the word
 goes before the title gives way, and a pointer reads the last write's time) … ✓
@@ -294,13 +309,17 @@ save, and opens `PublishStep` in place: the mirror (asked once per title and
 story, never for a revision), the card as a list shows it — its cover changed on
 the picture itself, one 更換封面 chip whose menu offers another, a drawn one or
 none (`PublishStep.coverItems`); a picture that failed says so inside it —, tags,
-卡片類型 as one choice of 公開 · 匿名公開 · 草稿 (`WriteModel.Audience`: both fields
-in one change; 草稿 keeps a live card's byline), the resonance line, then one
+卡片類型 as one choice of 公開 · 匿名公開 · 私人卡 (`WriteModel.Audience`: both fields
+in one change; 私人卡 keeps a live card's byline), the resonance line, then one
 button (`WriteModel.verbTitle` / `submit()`): 發布 · 匿名發布 for a draft shared or
-a published 草稿 made public (the latter through edits/apply), 儲存 for a draft
-kept a 草稿 (saved and left, never published), 儲存修改 for a live card, 轉為草稿
-for a live card made a 草稿 — 捨棄修改 beside it only for a live card with a
-revision. Its choices are the draft's own values and autosave; back from it is
+a published 私人卡 made public (the latter through edits/apply), 儲存 for a 私人卡
+(written, never published), 儲存修改 for a live card, 轉為私人卡 for a live card made
+one — 捨棄修改 beside it only for a live card with a revision — and then the card's page
+in the writer's place (round 9 §1: a 私人卡's too; one kept only on the device, offline,
+leaves as before). A card begun and emptied again is deleted as the writer leaves
+(`WriteModel.dropIfEmpty`). The cover's controls wear the preview's family — a card's
+cover hue's, else its id's (`CardPalette.family(id:)`) — and a menu is presented with the
+trigger's frame read at the tap (`MenuAnchor`, `MenuPresentation`), never from `.zero`. Its choices are the draft's own values and autosave; back from it is
 back to writing (the bar's back, the edge swipe), the map's Leave at the split
 leaves from either step. A save the rules refuse, or a publish answered 409, is
 read again: a card moved to the trash meanwhile says so where the save line was,
@@ -309,12 +328,20 @@ with 還原, keeping what is typed. A story picture that failed is the shell's t
 picker the story has its caret, selection, keyboard and format bar again
 (`StoryEditorBridge.refocus()`).
 
+The composer floats over the thread (round 9 §4, `ComposerCapsule` / `ComposerSlip` in DesignSystem):
+one capsule with a paper halo — ＋, the text, Send as its end segment, tonal at rest and solid with
+something to send — 48 for a line at any text size (`ComposerText`: the padding from the line it draws),
+growing to five lines; the reply and what rides along on a slip above it; the letter's line as the
+thread's last item, a notice in the composer's place as a slip. It is the thread's
+`.safeAreaInset(edge: .bottom)`; the list runs under it to the screen's foot and, drawn upside down,
+takes what it covers as its top margin (`ThreadFoot.room`, + 12), which the pill and 已複製 keep too.
+
 Pictures in chat: the composer's ＋ opens 圖片 · 卡片 (`AttachMenuOverlay`, the
 screen's own layer, so the keyboard stays up). 圖片 is the system's `PhotosPicker`
 (one picture, `.current` encoding; no library access is asked for), readied off
 the main thread by `ChatPictures.prepare` — a JPEG at most 2048 px on its longest
 side, upright; a GIF up to 4 MB goes as it is — and held above the field
-(`ThreadModel.pendingPicture`: picking a card drops it, and the other way round).
+(`ThreadModel.pendingPicture`: picking a card drops it, and the other way round), on the composer's slip.
 Sending draws it at once from the device (`ChatImageStore.keep`, under the
 message's client id) while `ChatOutboxes` uploads it (`POST /api/v1/chat-images`
 with that client id, once per message, however often it is retried) and then
