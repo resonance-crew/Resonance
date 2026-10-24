@@ -30,6 +30,10 @@ import styles from './OrganicButton.module.css';
  *  - `dangerTonal` the peach's red twin: a button that opens a destructive
  *                  flow (Settings' Delete account), whose dialog then asks
  *                  with `danger`
+ *  - `dangerText`  the one face without a fill (round 9 §5): the trash's 清空,
+ *                  a word in the danger ink at the end of the shelf's hint
+ *                  line, where a filled shape under the shelf picker would read
+ *                  as a field — its wash, in the danger ink, says it presses
  *  - `ink`         solid in the ink colour, cream label: for a brand that asks
  *                  for a black button (Sign in with Apple)
  *  - `paper`       the cards' paper, ink label: for a control that has to
@@ -49,14 +53,15 @@ import styles from './OrganicButton.module.css';
  */
 export type OrganicButtonVariant =
   | 'primary' | 'secondary' | 'ghost' | 'outline' | 'ctaLight' | 'ctaGhost' | 'secondaryOutline'
-  | 'solid' | 'tonal' | 'danger' | 'dangerTonal' | 'ink' | 'text' | 'textAccent' | 'paper';
+  | 'solid' | 'tonal' | 'danger' | 'dangerTonal' | 'dangerText' | 'ink' | 'text' | 'textAccent' | 'paper';
 
 // The fallback is the red every error line and danger row already uses
 // (`--color-danger` itself is not defined anywhere), deepened like the
 // terracotta fill so its cream label clears 4.5:1 (5.1:1).
 const DANGER = 'color-mix(in oklch, var(--color-danger, oklch(58% 0.16 25)), black 8%)';
 
-type Face = { fill: string; text: string; hoverOverlay: string };
+/** `bare`: no fill and so no grain — the face is the label and its wash alone. */
+type Face = { fill: string; text: string; hoverOverlay: string; bare?: true };
 
 // A filled face darkens under the hover ink; a tinted one takes a wash of
 // its own hue.
@@ -88,6 +93,13 @@ const BTN_VARIANTS: Record<OrganicButtonVariant, Face> = {
     text: 'var(--button-on-danger-tonal)',
     hoverOverlay: 'color-mix(in oklch, var(--color-danger, oklch(58% 0.16 25)) 14%, transparent)',
   },
+  // The danger ink on the page's own paper (5.1:1 on cream), its wash the same red at a whisper.
+  dangerText: {
+    fill: 'transparent',
+    text: DANGER,
+    hoverOverlay: 'color-mix(in oklch, var(--color-danger, oklch(58% 0.16 25)) 12%, transparent)',
+    bare: true,
+  },
   ink:        { fill: 'var(--color-text)', text: 'var(--color-cream)', hoverOverlay: DARKEN },
   paper:      { fill: 'var(--color-card-bg)', text: 'var(--color-text)', hoverOverlay: WASH },
 };
@@ -97,7 +109,7 @@ const BTN_VARIANTS: Record<OrganicButtonVariant, Face> = {
 // renamed call site wobbles exactly as before — and like its native twin.
 const BTN_SEEDS: Record<OrganicButtonVariant, number> = {
   primary: 3, secondary: 201, ghost: 401, outline: 601, ctaLight: 801, ctaGhost: 1001, secondaryOutline: 1201,
-  solid: 3, tonal: 601, danger: 3, dangerTonal: 601, ink: 3, text: 401, textAccent: 601, paper: 401,
+  solid: 3, tonal: 601, danger: 3, dangerTonal: 601, dangerText: 401, ink: 3, text: 401, textAccent: 601, paper: 401,
 };
 
 // Buttons are small — keep the wobble gentle (few turns, low bow) so the
@@ -130,9 +142,11 @@ export interface OrganicButtonProps {
   callerLoader?: boolean;
   style?: CSSProperties & { fillColor?: string };
   className?: string;
+  /** Its accessible name when the words shown are a short form of it (清空 for 清空垃圾桶). */
+  ariaLabel?: string;
 }
 
-export function OrganicButton({ children, variant = 'primary', size = 'md', block = false, onClick, disabled = false, loading = false, callerLoader = false, style = {}, className }: OrganicButtonProps) {
+export function OrganicButton({ children, variant = 'primary', size = 'md', block = false, onClick, disabled = false, loading = false, callerLoader = false, style = {}, className, ariaLabel }: OrganicButtonProps) {
   const [hovered, setHovered] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const ref = useRef<HTMLButtonElement>(null);
@@ -180,6 +194,7 @@ export function OrganicButton({ children, variant = 'primary', size = 'md', bloc
       disabled={disabled}
       aria-busy={loading || undefined}
       aria-disabled={loading || undefined}
+      aria-label={ariaLabel}
       onMouseEnter={(e) => { recordPointer(e); setHovered(true); }}
       onMouseLeave={(e) => { recordPointer(e); setHovered(false); }}
       className={`${styles.btn}${size === 'sm' ? ` ${styles.sm}` : ''}${block ? ` ${styles.block}` : ''} res-shape-stand-in ${className || ''}`}
@@ -196,11 +211,13 @@ export function OrganicButton({ children, variant = 'primary', size = 'md', bloc
         curve={btnCurve} cornerJitter={btnJitter} cornerOffset={cornerOff}
       />
       {/* Paper carries the cards' own grain (the Modal's); every other fill the button's. */}
-      <ShapeGrain
-        w={w} h={h} d={overlayPath} seed={seed}
-        opacity={variant === 'paper' ? 0.3 : 0.38}
-        frequency={variant === 'paper' ? 0.88 : 1.1}
-      />
+      {!v.bare && (
+        <ShapeGrain
+          w={w} h={h} d={overlayPath} seed={seed}
+          opacity={variant === 'paper' ? 0.3 : 0.38}
+          frequency={variant === 'paper' ? 0.88 : 1.1}
+        />
+      )}
       <BrushWash
         w={w} h={h} d={overlayPath}
         color={v.hoverOverlay}

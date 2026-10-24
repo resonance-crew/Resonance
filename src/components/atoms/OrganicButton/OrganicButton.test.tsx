@@ -14,7 +14,7 @@ mockElementSize(120, 40);
 
 const ALL: OrganicButtonVariant[] = [
   'primary', 'secondary', 'ghost', 'outline', 'ctaLight', 'ctaGhost', 'secondaryOutline',
-  'solid', 'tonal', 'danger', 'dangerTonal', 'ink', 'text', 'textAccent', 'paper',
+  'solid', 'tonal', 'danger', 'dangerTonal', 'dangerText', 'ink', 'text', 'textAccent', 'paper',
 ];
 
 function renderVariant(variant: OrganicButtonVariant) {
@@ -58,6 +58,7 @@ describe('OrganicButton variants', () => {
     ['tonal', 'var(--button-tonal)', 'var(--button-on-tonal)'],
     ['danger', 'color-mix(in oklch, var(--color-danger, oklch(58% 0.16 25)), black 8%)', 'var(--color-cream)'],
     ['dangerTonal', 'var(--button-danger-tonal)', 'var(--button-on-danger-tonal)'],
+    ['dangerText', 'transparent', 'color-mix(in oklch, var(--color-danger, oklch(58% 0.16 25)), black 8%)'],
     ['ink', 'var(--color-text)', 'var(--color-cream)'],
     ['paper', 'var(--color-card-bg)', 'var(--color-text)'],
     ['ctaLight', 'var(--color-cream)', 'var(--button-on-tonal)'],
@@ -66,6 +67,15 @@ describe('OrganicButton variants', () => {
     const btn = renderVariant(variant);
     expect(face(btn)).toBe(fill);
     expect(btn.style.color).toBe(label);
+  });
+
+  // The trash's 清空 (round 9 §5) is the one face with no fill: its words in the danger ink, no grain on the
+  // page's paper — only its wash says it presses.
+  it('draws dangerText as its words alone: no fill, no grain', () => {
+    const bare = renderVariant('dangerText');
+    expect(bare.querySelector('filter')).toBeNull();
+    render(<OrganicButton variant="dangerTonal">Filled</OrganicButton>);
+    expect(screen.getByRole('button', { name: 'Filled' }).querySelector('filter')).not.toBeNull();
   });
 
   // The older names keep working and wear the rank they stood for, so call
@@ -138,8 +148,9 @@ describe('OrganicButton variants', () => {
     );
   });
 
-  // No face is see-through: a button always shows the shape you press.
-  it.each(ALL)('%s has a fill', (variant) => {
+  // No face is see-through: a button always shows the shape you press — but the trash's 清空, the one
+  // word-only button (round 9 §5), pinned on its own above.
+  it.each(ALL.filter((v) => v !== 'dangerText'))('%s has a fill', (variant) => {
     const btn = renderVariant(variant);
     expect(face(btn)).toBeTruthy();
     expect(face(btn)).not.toBe('transparent');

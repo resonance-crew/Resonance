@@ -199,7 +199,8 @@ export function ProfileTabs({
           />
         )}
       </div>
-      <div style={{ marginBottom: 28 }} />
+      {/* The trash's hint row sits 24 under the picker (round 9 §5); a shelf's cards 28. */}
+      <div style={{ marginBottom: active === 'trash' && !loading && list.length > 0 ? 24 : 28 }} />
       {loading ? (
         <FeedSkeleton count={6} />
       ) : active === 'trash' ? (
@@ -239,8 +240,7 @@ export function ProfileTabs({
           authors={authors}
           // An anonymous card wears the anonymous byline here too, exactly as
           // everyone sees it — the owner's ⋯ is what marks it as theirs.
-          // A draft has no public page yet — clicking it resumes writing.
-          cardHref={managed && active === 'draft' ? (c) => `/write/${c.id}` : undefined}
+          // Every card opens its page — a 私人卡 too, its owner's reader of it (its ⋯ and the page's pen edit it).
           renderActions={
             managed
               ? (c, _i, palette) => {

@@ -58,6 +58,9 @@ export function ThoughtMapPage() {
   const focusTitle = useCallback(() => titleRef.current?.focus({ preventScroll: true }), []);
   const openCard = (card: Card) => {
     if (split === true && card.authorId !== user?.id) router.push(`/card/${card.slug ?? card.id}`);
+    // Below the split a 私人卡 opens its page, its owner's reader of it (round 9 §1); at the split, the pane.
+    else if (split !== true && card.authorId === user?.id && (card.publishedAt == null || card.visibility === 'private'))
+      router.push(`/card/${card.slug ?? card.id}`);
     // The card shown before it saves as its editor goes.
     else {
       setStep('write');

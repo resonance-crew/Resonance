@@ -90,7 +90,8 @@ export const ThoughtMapNode = memo(function ThoughtMapNode({
   const hue = nodeHue(card);
   const seed = seedFromString(card.id);
   const emphasized = selected || linkTarget;
-  const isDraft = card.publishedAt == null;
+  // A 私人卡 (round 9 §1) — never published, or published and kept private — wears the lock either way.
+  const privateCard = card.publishedAt == null || card.visibility === 'private';
   const thumb = cardThumb(card);
   const tabbed = selected && !dragging;
 
@@ -169,7 +170,7 @@ export const ThoughtMapNode = memo(function ThoughtMapNode({
           <p className={styles.nodeExcerpt}>{plainExcerpt(card.story, thumb ? 80 : 100)}</p>
         </div>
         <div className={styles.nodeMeta}>
-          <Icon name={isDraft ? 'pen' : VISIBILITY_ICON[card.visibility]} size={14} />
+          <Icon name={privateCard ? 'lock' : VISIBILITY_ICON[card.visibility]} size={14} />
           <span className={styles.nodeTags}>{card.tags.map((t) => `#${t}`).join(' ')}</span>
         </div>
       </div>

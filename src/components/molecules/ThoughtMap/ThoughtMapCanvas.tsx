@@ -887,7 +887,8 @@ export function ThoughtMapCanvas({
       onOpenCard(card);
       return;
     }
-    router.push(card.publishedAt ? `/card/${card.slug ?? card.id}` : `/write/${card.id}`);
+    // Every card opens its page — a 私人卡 too, its owner's reader of it (round 9 §1).
+    router.push(`/card/${card.slug ?? card.id}`);
   };
 
   const zoom = (factor: number) => setCamera((cam) => zoomAt(cam, vw / 2, vh / 2, factor));
@@ -1393,7 +1394,13 @@ export function ThoughtMapCanvas({
                     {i > 0 && <Divider seed={31 + i * 7} spacing={0} />}
                     <button type="button" className={styles.trayRow} onClick={() => addCard(c)}>
                       <Icon
-                        name={resonatedIds.has(c.id) ? 'wave' : c.publishedAt ? 'cards' : 'pen'}
+                        name={
+                          resonatedIds.has(c.id)
+                            ? 'wave'
+                            : c.publishedAt == null || c.visibility === 'private'
+                              ? 'lock'
+                              : 'cards'
+                        }
                         size={15}
                       />
                       <span className={styles.trayRowTitle}>{c.thoughtCore}</span>

@@ -13,13 +13,16 @@ vi.mock('@/i18n/navigation', () => ({
 vi.mock('@/components/providers/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 'me' } }),
 }));
-const mine = { id: 'mine', authorId: 'me', thoughtCore: 'My card' } as Card;
+const mine = { id: 'mine', authorId: 'me', thoughtCore: 'My card', publishedAt: new Date('2026-09-01'), visibility: 'public' } as Card;
+// A 私人卡 never published (round 9 §1).
+const myPrivate = { id: 'kept', authorId: 'me', thoughtCore: 'Kept to myself', publishedAt: null, visibility: 'private' } as Card;
 const theirs = { id: 'theirs', slug: 'bobs-walk', authorId: 'bob', thoughtCore: 'Bob’s walk' } as Card;
 vi.mock('@/components/molecules/ThoughtMap/ThoughtMapBoard', () => ({
   ThoughtMapBoard: ({ onOpenCard }: { onOpenCard?: (card: Card) => void }) => (
     <div>
       <button onClick={() => onOpenCard?.(mine)}>open mine</button>
       <button onClick={() => onOpenCard?.(theirs)}>open theirs</button>
+      <button onClick={() => onOpenCard?.(myPrivate)}>open my private card</button>
     </div>
   ),
 }));
@@ -112,6 +115,24 @@ describe('the thought-map page', () => {
     expect(await screen.findByText('opened: Bob’s walk (write)')).toBeInTheDocument();
   });
 
+  // Round 9 §1: a 私人卡 is read on its page like any card — below the split, where the pane would cover the
+  // map, it opens there; at the split it opens in the pane beside the map, as every card of mine does.
+  it('opens a 私人卡 on its card page below the split, and in the pane at it', async () => {
+    screenAtSplit(false);
+    const view = renderWithIntl(<ThoughtMapPage />);
+    await userEvent.click(screen.getByRole('button', { name: 'open my private card' }));
+    expect(push).toHaveBeenCalledWith('/card/kept');
+    expect(screen.queryByText(/opened:/)).toBeNull();
+    view.unmount();
+    push.mockClear();
+
+    screenAtSplit(true);
+    renderWithIntl(<ThoughtMapPage />);
+    await userEvent.click(screen.getByRole('button', { name: 'open my private card' }));
+    expect(await screen.findByText('opened: Kept to myself (write)')).toBeInTheDocument();
+    expect(push).not.toHaveBeenCalled();
+  });
+
   // The pane's editor writes in two steps, as the writer's page does, with no address of its own.
   it('ends the pane’s header with ✓, and names the publish step there with its way back', async () => {
     screenAtSplit(false);
@@ -120,11 +141,11 @@ describe('the thought-map page', () => {
     await userEvent.click(screen.getByRole('button', { name: 'open mine' }));
     await screen.findByText('opened: My card (write)');
     const header = () => screen.getByRole('heading', { level: 2 }).closest('header')!;
-    expect(screen.getByRole('heading', { level: 2, name: en.write.editTitle })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: en.write.editPublishedTitle })).toBeInTheDocument();
     await userEvent.click(within(header()).getByRole('button', { name: en.write.finish }));
 
     expect(screen.getByText('opened: My card (publish)')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: en.write.publishPanel.title })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: en.write.publishPanel.updateTitle })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: en.write.finish })).toBeNull();
     // Its back: to writing, the pane staying open.
     await userEvent.click(screen.getByRole('button', { name: en.write.leaveStay }));

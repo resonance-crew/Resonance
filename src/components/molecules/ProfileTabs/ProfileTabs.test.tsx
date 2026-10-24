@@ -104,13 +104,28 @@ describe('ProfileTabs — the card box shelves', () => {
     expect(washWrapper.querySelectorAll(':scope > svg path[fill]')).toHaveLength(1);
     expect(strokedShapePaths(washWrapper)).toHaveLength(0);
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Drafts' }));
-    expect(screen.getByRole('tab', { name: 'Drafts' })).toHaveAttribute('aria-selected', 'true');
+    await userEvent.click(screen.getByRole('tab', { name: 'Private' }));
+    expect(screen.getByRole('tab', { name: 'Private' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: 'Published' }).parentElement).toBe(
       screen.getByRole('tablist'),
     );
-    const moved = screen.getByRole('tab', { name: 'Drafts' }).parentElement!.parentElement!;
+    const moved = screen.getByRole('tab', { name: 'Private' }).parentElement!.parentElement!;
     expect(strokedShapePaths(moved)).toHaveLength(0);
+  });
+
+  // Round 9 §1: a 私人卡 — never published, or published and kept private — opens its card page like every
+  // other card, the owner's reader of it; the writer is its ⋯'s 編輯 (and the page's pen).
+  it('opens every 私人卡 on its card page, never the writer', () => {
+    renderWithIntl(
+      <ProfileTabs
+        manageable
+        tabs={['draft']}
+        authors={{ me }}
+        data={{ draft: [card('never', { publishedAt: null, slug: undefined }), card('kept', { visibility: 'private', slug: 'kept-slug' })] }}
+      />,
+    );
+    expect(screen.getAllByText('Thought never')[0].closest('a')).toHaveAttribute('href', '/card/never');
+    expect(screen.getAllByText('Thought kept')[0].closest('a')).toHaveAttribute('href', '/card/kept-slug');
   });
 
   it('draws the tags on a shelf card as bare fills, and the owner\'s anonymous card with the anonymous byline, no badge', () => {
@@ -216,18 +231,20 @@ describe('ProfileTabs — the trash', () => {
     // No anonymous card here: no word of notes.
     expect(screen.queryByText('When an anonymous card goes to the trash, the notes left on it are deleted')).toBeNull();
     expect(screen.getByText('Public again when restored · Deleted forever in 23 days')).toBeInTheDocument();
-    expect(screen.getByText('Draft · Deleted forever in 29 days')).toBeInTheDocument();
-    expect(screen.getByText('Draft · Deleted forever within a day')).toBeInTheDocument();
+    expect(screen.getByText('Private card · Deleted forever in 29 days')).toBeInTheDocument();
+    expect(screen.getByText('Private card · Deleted forever within a day')).toBeInTheDocument();
     expect(screen.getByText('Connections only when restored · Deleted forever in 23 days')).toBeInTheDocument();
-    // A published card opens its page (its banner), a draft the writer (its notice).
+    // Every card opens its page (its trash banner) — a 私人卡 never published too (round 9 §1).
     expect(screen.getAllByText('Thought public-one')[0].closest('a')).toHaveAttribute('href', '/card/public-one');
-    expect(screen.getAllByText('Thought draft-one')[0].closest('a')).toHaveAttribute('href', '/write/draft-one');
+    expect(screen.getAllByText('Thought draft-one')[0].closest('a')).toHaveAttribute('href', '/card/draft-one');
     // Each card's ⋯ is the trash's own.
     expect(trashMenus.mock.calls.map(([p]) => p.card.id)).toEqual(expect.arrayContaining(['public-one', 'draft-one', 'private-one', 'circle-one']));
 
-    // 清空垃圾桶: the tonal red, which opens a question in red.
+    // 🗑 清空 (round 9 §5): words in the danger ink at the hint's end — named 清空垃圾桶 — which open a question in red.
     const empty = screen.getByRole('button', { name: 'Empty trash' });
-    expect(empty).toHaveAttribute('data-variant', 'dangerTonal');
+    expect(empty).toHaveAttribute('data-variant', 'dangerText');
+    expect(empty).toHaveTextContent('Empty');
+    expect(empty.closest('div')!.parentElement).toContainElement(screen.getByText("Cards stay in the trash for 30 days, then they're deleted forever"));
     await userEvent.click(empty);
     expect(screen.getByText('Empty the trash?')).toBeInTheDocument();
     expect(screen.getByText("Every card in the trash will be deleted forever. This can't be undone.")).toBeInTheDocument();

@@ -1,16 +1,28 @@
 /* ── The trash shelf ─────────────────────────────────────────────────
    What the trash keeps and for how long, the way to empty it, and under
    each card where it came from and when it goes. */
+
+/* One row, no container (round 9 §5): the hint at the start, 🗑 清空 at the
+   end, on every width — the lines wrap, the action keeps its place, centred
+   on them. The same gutters and end edge as the shelf picker above (the
+   page's); 24 below it (the shelf's spacer), 16 above the first card band
+   on a phone, 24 above the grid wider. */
 .header {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 0 0 20px;
+  margin: 0 0 24px;
+}
+@media (max-width: 640px) {
+  .header {
+    margin-bottom: 16px;
+  }
 }
 .lines {
   flex: 1;
   min-width: 0;
 }
+/* Both lines at 13, muted: the second (the anonymous notes) is a privacy statement, not a footnote. */
 .hint {
   margin: 0;
   font-family: var(--font-body);
@@ -21,15 +33,15 @@
 .hint + .hint {
   margin-top: 2px;
 }
-/* A phone: the button wraps under the lines, at their start. */
-@media (max-width: 640px) {
-  .header {
-    flex-wrap: wrap;
-  }
-  .lines {
-    flex-basis: 100%;
-  }
+/* 🗑 清空: words in the danger ink, a 44 target; its wash reaches the row's end edge, its words sit a
+   little in from it (the button's own padding), never past the picker's end. */
+.header .empty {
+  flex: none;
+  min-height: 44px;
+  margin-inline-end: -12px;
+  padding-inline: 12px;
 }
+
 /* Under each card: where it came from and when it goes (the grid's caption box, 8px under the card, holds it). */
 .caption {
   display: block;

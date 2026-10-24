@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { Icon } from '@/components/atoms/Icon';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { CardLinkGrid } from '@/components/molecules/CardLinkGrid/CardLinkGrid';
 import { ConfirmModal } from '@/components/molecules/ConfirmModal/ConfirmModal';
@@ -24,9 +25,9 @@ export interface TrashShelfProps {
  * The card box's 垃圾桶: what the viewer deleted, the latest in first, for
  * 30 days — each saying where it came from (a draft, private, or what
  * restoring makes it: 還原後公開 — a restore never re-publishes in silence)
- * and when it goes. A published card opens its page (its trash banner), a
- * draft the writer (its trashed notice). Its ⋯ restores it or deletes it for
- * good; 清空垃圾桶 deletes them all, asked first in red.
+ * and when it goes. Every card opens its page (its trash banner), a 私人卡
+ * never published too. Its ⋯ restores it or deletes it for good; 清空
+ * deletes them all, asked first in red.
  */
 export function TrashShelf({ cards, authors, onLeft }: TrashShelfProps) {
   const t = useTranslations('me');
@@ -68,28 +69,34 @@ export function TrashShelf({ cards, authors, onLeft }: TrashShelfProps) {
 
   return (
     <>
+      {/* One row, no container (round 9 §5): the hint at the start, 🗑 清空 at the end — on every width, the
+          action centred on the lines, which wrap. A filled shape under the shelf picker would read as a field. */}
       <div className={styles.header}>
         <div className={styles.lines}>
           <p className={styles.hint}>{t('trashHint', { days: TRASH_DAYS })}</p>
           {anonymousHere && <p className={styles.hint}>{t('trashAnonymousNotes')}</p>}
         </div>
-        {/* It only opens a question, which is red: the tonal red, as Settings' 刪除帳號. */}
+        {/* It only opens a question, which is red: its words in the danger ink, its name the whole of it. */}
         <OrganicButton
-          variant="dangerTonal"
+          variant="dangerText"
           size="sm"
+          className={styles.empty}
+          ariaLabel={tActions('emptyTrash')}
           onClick={() => {
             setFailed(false);
             setEmptying('asking');
           }}
         >
-          {tActions('emptyTrash')}
+          <Icon name="trash" size={16} />
+          {tActions('emptyTrashShort')}
         </OrganicButton>
       </div>
       <CardLinkGrid
         cards={cards}
         authors={authors}
-        // Never prefilled: a summary isn't the card.
-        cardHref={(c) => (c.publishedAt ? `/card/${c.slug ?? c.id}` : `/write/${c.id}`)}
+        // Its page, with its trash banner — a 私人卡 never published too (round 9 §1). Never prefilled: a
+        // summary isn't the card.
+        cardHref={(c) => `/card/${c.slug ?? c.id}`}
         renderCaption={caption}
         renderActions={(c, _i, palette) => {
           const hue = CARD_HUES[palette];

@@ -23,7 +23,7 @@ export interface CardActionsMenuProps {
    * `title`: what the undo toast names. `published` and `anonymous`: whether
    * moving it to the trash takes back a resonance that may be what connects
    * the viewer with its original's author — the one 刪除 that asks first.
-   * Only a card readers have is offered 轉為草稿: a 草稿 (a draft, or a
+   * Only a card readers have is offered 轉為私人卡: a 私人卡 (a draft, or a
    * published card kept private) is published from the writer's step.
    */
   card: {
@@ -70,7 +70,7 @@ export interface CardActionsMenuProps {
 type ActionKey = 'edit' | 'visibility' | 'unresonate' | 'delete';
 
 /**
- * The owner-side「⋯」menu on a card: 編輯 / 轉為草稿 (a card readers have)
+ * The owner-side「⋯」menu on a card: 編輯 / 轉為私人卡 (a card readers have)
  * / 取消共振 (a card that resonates with another) / 刪除. The trigger and
  * dropped panel come from {@link OrganicMenu} (the shared organic dropdown
  * language — wobbly chip, wavy pen dividers, per-row wash, danger wash on the
@@ -136,8 +136,8 @@ export function CardActionsMenu({
     referenceTitle ?? (lookup?.status === 'ready' ? lookup.cards.cards.find((c) => c.id === original)?.thoughtCore : undefined);
 
   const isPrivate = card.visibility === 'private';
-  // 轉為草稿, on a card readers have: a 草稿 — never published, or kept private — is published from the writer's step,
-  // where its tags, cover and type are, so every 草稿's ⋯ is the same (round 8 §1.2).
+  // 轉為私人卡, on a card readers have: a 私人卡 — never published, or kept private — is published from the writer's step,
+  // where its tags, cover and type are, so every 私人卡's ⋯ is the same (round 8 §1.2).
   const items: OrganicMenuItem[] = [
     { key: 'edit', icon: 'pen', label: t('edit') },
     ...(card.published === false || isPrivate ? [] : [{ key: 'visibility', icon: 'lock' as const, label: t('makePrivate') }]),
