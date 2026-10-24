@@ -16,7 +16,8 @@ import styles from './page.module.css';
 // Answering an older invite — none are sent any more — loads after the page.
 const InvitesInbox = dynamic(() => import('@/components/molecules/InvitesInbox/InvitesInbox').then((m) => m.InvitesInbox));
 
-const tabs: TabKey[] = ['published', 'private', 'draft', 'resonated', 'linked', 'bookmarks', 'trash', 'thoughtMap'];
+// 草稿 holds the cards no one else reads: drafts, and published cards kept private (round 8 §1.1).
+const tabs: TabKey[] = ['published', 'draft', 'resonated', 'linked', 'bookmarks', 'trash', 'thoughtMap'];
 
 export default function MyCardBoxPage() {
   const locale = useLocale();

@@ -2,7 +2,7 @@ import { Extension, Node, elementFromString, type AnyExtension } from '@tiptap/c
 import Blockquote from '@tiptap/extension-blockquote';
 import Image from '@tiptap/extension-image';
 import Paragraph from '@tiptap/extension-paragraph';
-import { DOMParser as PMDOMParser, type Node as PMNode } from '@tiptap/pm/model';
+import { DOMParser as PMDOMParser, Slice, type Node as PMNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey, Selection } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import { Markdown } from 'tiptap-markdown';
@@ -393,8 +393,14 @@ export const MarkdownPaste = Extension.create({
             const parser = (editor.storage as { markdown?: { parser?: { parse(content: string, opts?: { inline?: boolean }): string } } })
               .markdown?.parser;
             if (!parser) return false;
-            const dom = elementFromString(parser.parse(text, { inline: true }));
-            const slice = PMDOMParser.fromSchema(view.state.schema).parseSlice(dom, { preserveWhitespace: true, context: $from });
+            const schema = PMDOMParser.fromSchema(view.state.schema);
+            const blocks = elementFromString(parser.parse(text));
+            // Words alone (emphasis, a link) join the line they land in, as typed ones would; blocks — a
+            // heading, a list, a table — stand on their own, never merged into it (a table would turn to words).
+            const words = blocks.children.length === 1 && blocks.firstElementChild?.tagName === 'P';
+            const slice = words
+              ? schema.parseSlice(elementFromString(parser.parse(text, { inline: true })), { preserveWhitespace: true, context: $from })
+              : new Slice(schema.parse(blocks, { preserveWhitespace: true }).content, 0, 0);
             view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView().setMeta('paste', true).setMeta('uiEvent', 'paste'));
             return true;
           },

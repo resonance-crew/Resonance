@@ -1,13 +1,48 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { HandDrawnAvatar } from '@/components/atoms/HandDrawnAvatar/HandDrawnAvatar';
 import { HandDrawnCheckmark } from '@/components/atoms/HandDrawnCheckmark/HandDrawnCheckmark';
-import { AuthorRegionFlag, CardPublishedDate, type CardPublished } from '@/components/molecules/CardDetail/CardAuthorAside';
+import { SquareFlag } from '@/components/atoms/SquareFlag/SquareFlag';
 import { Link } from '@/i18n/navigation';
 import type { User } from '@/lib/db/types';
+import { regionCode, regionDisplayName, squareFlagCode } from '@/lib/regionName';
 import styles from './StoryByline.module.css';
+
+export interface CardPublished {
+  /** ISO 8601, for `<time dateTime>`. */
+  dateTime: string;
+  /** The date in the reader's language, with its year (2026年10月10日, Oct 10, 2026). */
+  label: string;
+}
+
+/**
+ * The author's region as a small square flag right after the pen name — a quiet
+ * mark, not a line of its own; its name is the tooltip and the accessible name.
+ * Nothing for a region without vendored flag art.
+ */
+export function AuthorRegionFlag({ region, size = 15 }: { region?: string | null; size?: number }) {
+  const locale = useLocale();
+  const code = region ? squareFlagCode(region) : null;
+  if (!region || !code) return null;
+  const name = regionDisplayName(regionCode(region), locale);
+  return (
+    <span title={name} style={{ display: 'inline-flex' }}>
+      <SquareFlag code={code} size={size} label={name} />
+    </span>
+  );
+}
+
+/** The card's published date, as the meta line under its title shows it (StoryByline). */
+export function CardPublishedDate({ published, className }: { published?: CardPublished | null; className?: string }) {
+  if (!published) return null;
+  return (
+    <time dateTime={published.dateTime} className={className}>
+      {published.label}
+    </time>
+  );
+}
 
 export interface StoryBylineProps {
   /** The author as the page shows them (unused on an anonymous card, which names no one). */
@@ -30,12 +65,11 @@ export interface StoryBylineProps {
  * The line under a card page's title: who wrote it, how long it takes to
  * read and when it was published, and the card's actions at its end.
  *
- * Up to 900px it is the byline — the author's avatar, pen name (a link to
- * their profile), region flag and verified mark over the meta line — since
- * the author rail is hidden there; from 901px the rail names the author, and
- * the row keeps the meta line alone. Both are in the server's HTML and CSS
- * picks one. An anonymous card shows the neutral「·」and 匿名 in muted ink,
- * linking nowhere, to everyone — its owner too.
+ * At every width it is the byline (round 8 §10.1) — the author's avatar, pen
+ * name (a link to their profile), region flag and verified mark over the
+ * meta line, the card's share and ⋯ at its end; the side rail holds only the
+ * story's contents. An anonymous card shows the neutral「·」and 匿名 in muted
+ * ink, linking nowhere, to everyone — its owner too.
  *
  * At 320px the pen name stays on one line (an ellipsis), the meta line may
  * wrap, and the row grows rather than clips (min-height, never height).

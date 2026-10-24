@@ -81,6 +81,13 @@ export interface WorkspaceShellProps {
    * over the map (`onLeave`) its way back.
    */
   bar?: { title: ReactNode; onBack: () => void; backDisabled?: boolean; backLabel?: string };
+  /**
+   * The pane's save state (the editor's SaveState): after the title in the
+   * writer's bar or the pane's header row below the split; at the split, just
+   * before the floating ✓ while there is one (the publish step says it in its
+   * own heading row).
+   */
+  paneStatus?: ReactNode;
   /** The Leave floating over the map; the page's history back without it. */
   onLeave?: () => void;
   /**
@@ -120,6 +127,7 @@ export function WorkspaceShell({
   leftOverride,
   bar,
   onLeave,
+  paneStatus,
   paneAction,
   titleRef,
   children,
@@ -386,6 +394,7 @@ export function WorkspaceShell({
             backDisabled={bar.backDisabled}
             scrolled={scrolled}
             heading
+            status={paneStatus}
             trailing={paneAction}
             titleRef={titleRef}
           />
@@ -484,11 +493,17 @@ export function WorkspaceShell({
                     backDisabled={paneBack?.disabled}
                     onBack={onClose!}
                     scrolled={paneScrolled}
+                    status={paneStatus}
                     trailing={paneAction}
                     titleRef={titleRef}
                   />
                 )}
-                {split === true && paneAction != null && <div className={styles.paneAction}>{paneAction}</div>}
+                {split === true && paneAction != null && (
+                  <div className={styles.paneAction}>
+                    {paneStatus}
+                    {paneAction}
+                  </div>
+                )}
                 <div ref={paneBodyRef} className={styles.paneBody} onScrollCapture={headed ? onPaneScroll : undefined}>
                   {children}
                 </div>

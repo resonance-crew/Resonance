@@ -9,6 +9,7 @@ import {
   getCardById,
   getCardBySlugOrId,
   getCardsByAuthor,
+  getMyDrafts,
   getCurrentUserProfile,
   getMyResonanceCard,
   getPublicCardView,
@@ -474,7 +475,8 @@ async function readShelf(uid: string, shelf: CardBoxShelf): Promise<CardBoxShelf
   // A bookmarked card that has since gone private simply drops out.
   if (shelf === 'resonated' || shelf === 'linked' || shelf === 'bookmarks') return othersShelf(shelf);
   if (shelf === 'trash') return summaryList(await callApi<CardListBody>('/api/v1/me/cards?tab=trash'));
-  const cards = await getCardsByAuthor(uid, shelf);
+  // 草稿: drafts and the cards kept private, together (round 8 §1.1).
+  const cards = shelf === 'draft' ? await getMyDrafts(uid) : await getCardsByAuthor(uid, shelf);
   return { cards, authors: await getUsersByIds(bylineAuthorIds(cards, uid)) };
 }
 

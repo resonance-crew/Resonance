@@ -21,13 +21,14 @@ vi.mock('next/dynamic', () => ({ default: () => () => null }));
 vi.mock('@/lib/db/firestore/client/reads', () => ({
   getCardById: vi.fn(),
   getCardsByAuthor: vi.fn(),
+  getMyDrafts: vi.fn(),
   getCurrentUserProfile: vi.fn(),
   getUsersByIds: vi.fn(),
 }));
 // Others' cards (resonated, linked, bookmarks) come from the server.
 vi.mock('@/lib/db/firestore/client/api', () => ({ callApi: vi.fn(async () => ({ cards: [] })) }));
 
-import { getCardsByAuthor, getCurrentUserProfile, getUsersByIds } from '@/lib/db/firestore/client/reads';
+import { getCardsByAuthor, getCurrentUserProfile, getMyDrafts, getUsersByIds } from '@/lib/db/firestore/client/reads';
 import { callApi } from '@/lib/db/firestore/client/api';
 import MyCardBoxPage from './page';
 
@@ -74,9 +75,8 @@ function renderPage() {
 beforeEach(() => {
   vi.mocked(getCurrentUserProfile).mockResolvedValue(me);
   vi.mocked(getUsersByIds).mockResolvedValue({ me });
-  vi.mocked(getCardsByAuthor).mockImplementation(async (_uid, tab) =>
-    tab === 'draft' ? [card('d1', { publishedAt: null })] : [card(`${tab}-1`)],
-  );
+  vi.mocked(getCardsByAuthor).mockImplementation(async (_uid, tab) => [card(`${tab}-1`)]);
+  vi.mocked(getMyDrafts).mockResolvedValue([card('d1', { publishedAt: null })]);
 });
 afterEach(() => {
   vi.clearAllMocks();
@@ -89,8 +89,18 @@ describe('the card box', () => {
     renderPage();
 
     expect((await screen.findAllByText('Card d1')).length).toBeGreaterThan(0);
-    expect(vi.mocked(getCardsByAuthor).mock.calls.map((c) => c[1])).toEqual(['draft']);
+    expect(getMyDrafts).toHaveBeenCalledTimes(1);
+    expect(getCardsByAuthor).not.toHaveBeenCalled();
     expect(callApi).not.toHaveBeenCalled();
+  });
+
+  // The 私人卡 shelf is part of 草稿 (round 8 §1.1): no tab of its own, and one left on it opens 草稿.
+  it('has one 草稿 shelf for drafts and private cards, and opens it for a viewer who left on 私人卡', async () => {
+    window.sessionStorage.setItem('me:cardbox-tab', 'private');
+    renderPage();
+    expect((await screen.findAllByText('Card d1')).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('tab', { name: 'Private' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Drafts' })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('reads the next shelf when its tab is opened', async () => {
@@ -98,9 +108,9 @@ describe('the card box', () => {
     expect((await screen.findAllByText('Card published-1')).length).toBeGreaterThan(0);
     expect(vi.mocked(getCardsByAuthor).mock.calls.map((c) => c[1])).toEqual(['published']);
 
-    await userEvent.setup().click(screen.getByRole('tab', { name: 'Private' }));
-    expect((await screen.findAllByText('Card private-1')).length).toBeGreaterThan(0);
-    expect(vi.mocked(getCardsByAuthor).mock.calls.map((c) => c[1])).toEqual(['published', 'private']);
+    await userEvent.setup().click(screen.getByRole('tab', { name: 'Drafts' }));
+    expect((await screen.findAllByText('Card d1')).length).toBeGreaterThan(0);
+    expect(getMyDrafts).toHaveBeenCalledTimes(1);
   });
 
   // B5: wide, a labelled tonal button with the profile's lines; a phone keeps a bare glyph at the

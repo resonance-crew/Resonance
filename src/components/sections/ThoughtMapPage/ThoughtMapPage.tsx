@@ -1,5 +1,7 @@
 'use client';
 
+import { SaveState, type SaveStatus } from '@/components/molecules/CardEditor/SaveState';
+import { editTitleKey } from '@/components/molecules/CardEditor/writerTitle';
 import { useCallback, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
@@ -44,12 +46,14 @@ export function ThoughtMapPage() {
   const split = useMediaQuery('(min-width: 1200px)');
   const [openedCard, setOpenedCard] = useState<Card | null>(null);
   const editor = useRef<CardEditorHandle>(null);
-  // The opened card's editor: its step (kept to itself — this page's query is its tabs'), 下一步, its business.
+  // The opened card's editor: its step (kept to itself — this page's query is its tabs'), its ✓, its business.
   const [step, setStep] = useState<WriterStep>('write');
   const [action, setAction] = useState<PrimaryAction | null>(null);
   const [pending, setPending] = useState(false);
   // The publish step's name as the editor says it (it follows who the card is for).
   const [stepTitle, setStepTitle] = useState<string | null>(null);
+  // Its save state, in the pane's header row (or before its ✓ at the split).
+  const [saveStatus, setSaveStatus] = useState<SaveStatus | null>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const focusTitle = useCallback(() => titleRef.current?.focus({ preventScroll: true }), []);
   const openCard = (card: Card) => {
@@ -67,9 +71,7 @@ export function ThoughtMapPage() {
       ? t('referenceCard')
       : step === 'publish'
         ? (stepTitle ?? (openedCard.publishedAt ? t('publishPanel.updateTitle') : t('publishPanel.title')))
-        : openedCard.publishedAt
-          ? t('editPublishedTitle')
-          : t('editTitle');
+        : t(editTitleKey(openedCard));
 
   return (
     <WorkspaceShell
@@ -85,6 +87,7 @@ export function ThoughtMapPage() {
       paneKey={openedCard?.id}
       focusCardId={openedCard?.id}
       onOpenCard={openCard}
+      paneStatus={<SaveState status={openedCard ? saveStatus : null} />}
       paneAction={action ? <PaneActionButton action={action} /> : undefined}
       titleRef={titleRef}
     >
@@ -99,6 +102,7 @@ export function ThoughtMapPage() {
             onPrimaryActionChange: setAction,
             onPendingChange: setPending,
             onStepTitleChange: setStepTitle,
+            onSaveStatusChange: setSaveStatus,
             inlineStepHeading: split === true,
             focusStepHeading: focusTitle,
           }}

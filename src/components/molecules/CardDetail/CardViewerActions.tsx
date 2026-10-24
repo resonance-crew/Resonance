@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import useSWR from 'swr';
@@ -40,6 +40,11 @@ export interface CardViewerActionsProps {
    */
   onDowngrade?: (story: string) => void;
   onOpenNote: () => void;
+  /**
+   * What ends the row, aligned right (round 8 §10.2): the card's share and ⋯,
+   * the byline's own two, as the bar's ghost icon buttons.
+   */
+  trailing?: ReactNode;
 }
 
 /**
@@ -55,6 +60,7 @@ export function CardViewerActions({
   referenceCardId,
   author,
   onOpenNote,
+  trailing,
 }: CardViewerActionsProps) {
   const t = useTranslations('card');
   const tNote = useTranslations('card.note');
@@ -159,8 +165,11 @@ export function CardViewerActions({
 
   return (
     <div className={styles.container}>
-      <div className={styles.bar} data-waiting={loadingMine || undefined}>
-        <SegmentedActionBar segments={segments} />
+      <div className={styles.row}>
+        <div className={styles.bar} data-waiting={loadingMine || undefined}>
+          <SegmentedActionBar segments={segments} />
+        </div>
+        {trailing && <div className={styles.trailing}>{trailing}</div>}
       </div>
 
       {picking && (

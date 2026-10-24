@@ -33,7 +33,7 @@
   }
 }
 
-/* The byline row: avatar and pen name up to 900px, the meta line alone after. */
+/* The byline row: the avatar and pen name over the meta line, at every width. */
 .byline {
   display: flex;
   align-items: center;
@@ -44,10 +44,4 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-@media (min-width: 901px) {
-  .avatar,
-  .name {
-    display: none;
-  }
 }

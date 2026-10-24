@@ -73,12 +73,9 @@
   }
 }
 
-/* The rail names the author from 901px: the row keeps its meta line alone. */
+/* The row names the author at every width (round 8 §10.1: the rail holds only
+   the contents); wider, its meta line takes the reader's larger size. */
 @media (min-width: 901px) {
-  .avatar,
-  .name {
-    display: none;
-  }
   .meta {
     font-size: var(--story-meta-size);
   }

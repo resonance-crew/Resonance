@@ -130,13 +130,13 @@ describe('TagField', () => {
     expect(list()).toEqual(['b']);
   });
 
-  it('says how to add under the field, and the error instead once there is one', () => {
+  // No help line (round 8 §2.2): the field's placeholder and its button say how; only an error is said.
+  it('says nothing under the field until a suggestion fails, then why', () => {
     const { rerender } = renderWithIntl(<Harness />);
-    expect(screen.getByText('Press Enter to add one, or let AI suggest from your story')).toBeInTheDocument();
+    expect(screen.queryByText(/Press Enter/)).not.toBeInTheDocument();
 
     rerender(<Harness error="Couldn’t suggest tags — please try again" />);
     expect(screen.getByText('Couldn’t suggest tags — please try again')).toBeInTheDocument();
-    expect(screen.queryByText(/Press Enter/)).not.toBeInTheDocument();
   });
 
   it('shows the model is thinking in the action, which stays the AI one', () => {

@@ -1,5 +1,6 @@
 'use client';
 
+import { editTitleKey } from '@/components/molecules/CardEditor/writerTitle';
 import { useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
@@ -186,7 +187,7 @@ export default function EditCardPage() {
   const values = pending ?? card;
   return (
     <WriteWorkspace
-      title={card.publishedAt ? t('editPublishedTitle') : t('editTitle')}
+      title={t(editTitleKey(card))}
       locale={locale}
       referenceCardId={card.referenceCardId}
       initial={{

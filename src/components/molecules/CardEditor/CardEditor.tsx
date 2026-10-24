@@ -16,6 +16,7 @@ import { CharCount, FieldHint, Textarea } from '@/components/atoms/Field/Field';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { MarkdownEditor, type MarkdownEditorHandle } from '@/components/molecules/MarkdownEditor/MarkdownEditor';
 import { PublishStep, reachesOriginal, stepTitleKey } from '@/components/molecules/PublishStep/PublishStep';
+import type { SaveStatus } from './SaveState';
 import { createCardDraft, publishCard, updateCardDraft } from '@/lib/db/firestore/client/cards';
 import {
   applyPendingCardEdit,
@@ -38,8 +39,10 @@ import styles from './CardEditor.module.css';
 export const TITLE_MAX = 60;
 /** From this many characters on, the title says how many are left. */
 const TITLE_COUNT_FROM = 50;
-/** How long 下一步 waits on the first save before it shows its loader. */
+/** How long ✓ waits on the first save before it shows its loader. */
 const NEXT_LOADER_MS = 300;
+/** How long a write runs before the bar says 儲存中⋯ (a quick one goes straight to its next word: no flicker). */
+const SAVING_SHOWN_MS = 400;
 
 /** The writer's two steps: writing (the title and the story), then publishing (發布這張卡片 / 更新這張卡片). */
 export type WriterStep = 'write' | 'publish';
@@ -98,11 +101,13 @@ export interface CardEditorProps {
    */
   onStoryChange?: (story: string) => void;
   /**
-   * Reports the save state as ready-to-render copy ("草稿已自動儲存 · 14:32").
-   * The host shows it at the top of the column — the reassurance has to be
-   * visible without scrolling to the bottom of the form.
+   * Reports the save state as the bar says it (round 8 §2.1): 儲存中⋯ ·
+   * 已儲存 · 修改已暫存 · 未儲存, with the last write's time for a tooltip —
+   * or null before anything is written. The host shows it in its bar beside
+   * the title (or before the ✓ at the split): the reassurance has to be in
+   * view wherever the story is scrolled.
    */
-  onSaveStatusChange?: (label: string | null) => void;
+  onSaveStatusChange?: (status: SaveStatus | null) => void;
   /**
    * The step shown, when the host keeps it (the writer's page puts it in the
    * address, so the browser's back returns to writing); the editor keeps its
@@ -255,6 +260,9 @@ export function CardEditor({
   // cover is uploaded/generated, cleared when removed.
   const [accentHue, setAccentHue] = useState<number | null>(initial?.accentHue ?? null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  // A write on its way past SAVING_SHOWN_MS, and whether the last one failed (the bar's 儲存中⋯ and 未儲存).
+  const [savingShown, setSavingShown] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [pending, setPending] = useState(false);
   // Which action `pending` is for: its button shows the loader (B6), the other rests.
   const [busyVerb, setBusyVerb] = useState<'publish' | 'leave'>('publish');
@@ -318,7 +326,9 @@ export function CardEditor({
     reportPending.current?.(pending);
   }, [pending]);
 
-  const stepTitle = t(`publishPanel.${stepTitleKey(isPublished ? 'update' : 'publish', visibility)}`);
+  // How readers have the card now (a pending edit may be what is on screen): a private one is a 草稿 to them.
+  const liveVisibility: Visibility = initial?.live?.visibility ?? initial?.visibility ?? 'public';
+  const stepTitle = t(`publishPanel.${stepTitleKey(isPublished ? 'update' : 'publish', visibility, liveVisibility)}`);
   const reportStepTitle = useRef(onStepTitleChange);
   reportStepTitle.current = onStepTitleChange;
   useEffect(() => {
@@ -363,25 +373,29 @@ export function CardEditor({
   trashedRef.current = trashed;
 
   /**
-   * One line of plain reassurance at the top of the column. It says both what
-   * has happened and, for a live card, what has *not* happened yet. A draft
-   * says nothing until its first save; a card in the trash has its own line
-   * (with 還原), drawn by the editor.
+   * The save state in a word, for the host's bar (round 8 §2.1): 儲存中⋯ while
+   * a write runs long, 未儲存 when the last one failed (the next pause tries
+   * again), 已儲存 after a draft's write and 修改已暫存 for a live card's —
+   * whose revision readers don't see yet — from the start when one is
+   * buffered. Nothing before the first write; a card in the trash has its own
+   * line (with 還原), drawn by the editor.
    */
-  const saveStatusLabel = useMemo(() => {
+  const saveStatus = useMemo<SaveStatus | null>(() => {
     if (trashed) return null;
+    if (savingShown) return { label: t('status.saving') };
+    if (saveFailed) return { label: t('status.failed'), failed: true };
     const time = savedAt?.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
-    if (isPublished) {
-      if (savedAt) return t('editBuffered', { time: time! });
-      return hasPendingEdit ? t('editBufferedIdle') : t('editLiveHint');
-    }
-    return savedAt ? t('autosaved', { time: time! }) : null;
-  }, [savedAt, hasPendingEdit, isPublished, trashed, locale, t]);
+    const done = (label: string): SaveStatus => ({ label, title: time ? t('status.at', { status: label, time }) : undefined });
+    if (isPublished) return savedAt || hasPendingEdit ? done(t('status.savedLive')) : null;
+    return savedAt ? done(t('status.saved')) : null;
+  }, [savedAt, savingShown, saveFailed, hasPendingEdit, isPublished, trashed, locale, t]);
 
+  const reportStatus = useRef(onSaveStatusChange);
+  reportStatus.current = onSaveStatusChange;
   useEffect(() => {
-    onSaveStatusChange?.(saveStatusLabel);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saveStatusLabel]);
+    reportStatus.current?.(saveStatus);
+  }, [saveStatus]);
+  useEffect(() => () => reportStatus.current?.(null), []);
 
   /** The editable body, in the shape both the card doc and the buffer take. */
   function payloadFrom(v: DraftValues) {
@@ -403,37 +417,54 @@ export function CardEditor({
    */
   function saveDraft(): Promise<Card | null> {
     const run = writeChainRef.current.then(async () => {
-      const v = valuesRef.current;
-      const payload = payloadFrom(v);
-      if (isPublished && draftIdRef.current) {
-        await savePendingCardEdit(draftIdRef.current, payload);
-        setHasPendingEdit(true);
-        lastSavedRef.current = draftSnapshot(v);
-        setSavedAt(new Date());
-        return null;
+      // Said in the bar only once it runs long; whether it went through, always.
+      const shown = window.setTimeout(() => setSavingShown(true), SAVING_SHOWN_MS);
+      try {
+        const card = await writeDraft();
+        setSaveFailed(false);
+        return card;
+      } catch (err) {
+        setSaveFailed(true);
+        throw err;
+      } finally {
+        window.clearTimeout(shown);
+        setSavingShown(false);
       }
-      const card = draftIdRef.current
-        ? await updateCardDraft(draftIdRef.current, payload)
-        : await createCardDraft({ ...payload, originalLocale: locale, referenceCardId });
-      if (!draftIdRef.current) {
-        // First save of a fresh draft: swap /write for /write/{id} in place
-        // (Next integrates native replaceState) so a reload or a later
-        // traversal reopens this draft instead of a blank editor — before the
-        // publish step's entry is pushed over it.
-        const path = window.location.pathname;
-        const next = path.replace(/\/write(\/[^/]+)?$/, `/write/${card.id}`);
-        if (next !== path) {
-          const base = (window.history.state ?? {}) as Record<string, unknown>;
-          window.history.replaceState(base, '', next);
-        }
-      }
-      draftIdRef.current = card.id;
-      lastSavedRef.current = draftSnapshot(v);
-      setSavedAt(new Date());
-      return card;
     });
     writeChainRef.current = run.catch(() => undefined);
     return run;
+  }
+
+  /** One write of what is on screen: the draft's document, or a live card's buffer. */
+  async function writeDraft(): Promise<Card | null> {
+    const v = valuesRef.current;
+    const payload = payloadFrom(v);
+    if (isPublished && draftIdRef.current) {
+      await savePendingCardEdit(draftIdRef.current, payload);
+      setHasPendingEdit(true);
+      lastSavedRef.current = draftSnapshot(v);
+      setSavedAt(new Date());
+      return null;
+    }
+    const card = draftIdRef.current
+      ? await updateCardDraft(draftIdRef.current, payload)
+      : await createCardDraft({ ...payload, originalLocale: locale, referenceCardId });
+    if (!draftIdRef.current) {
+      // First save of a fresh draft: swap /write for /write/{id} in place
+      // (Next integrates native replaceState) so a reload or a later
+      // traversal reopens this draft instead of a blank editor — before the
+      // publish step's entry is pushed over it.
+      const path = window.location.pathname;
+      const next = path.replace(/\/write(\/[^/]+)?$/, `/write/${card.id}`);
+      if (next !== path) {
+        const base = (window.history.state ?? {}) as Record<string, unknown>;
+        window.history.replaceState(base, '', next);
+      }
+    }
+    draftIdRef.current = card.id;
+    lastSavedRef.current = draftSnapshot(v);
+    setSavedAt(new Date());
+    return card;
   }
 
   /** What is on screen differs from what was last written, and is worth writing (a blank new card isn't). */
@@ -568,7 +599,7 @@ export function CardEditor({
   const actionDisabled = !isPublished && isEmptyDraft(values);
   const reportAction = useRef(onPrimaryActionChange);
   reportAction.current = onPrimaryActionChange;
-  const nextLabel = t('next');
+  const nextLabel = t('finish');
   useEffect(() => {
     reportAction.current?.(
       actionHidden
@@ -621,6 +652,11 @@ export function CardEditor({
       askForTitle();
       return;
     }
+    // 草稿: kept as it is — nothing is published to anyone, not even to its author alone.
+    if (valuesRef.current.visibility === 'private') {
+      await keepDraft();
+      return;
+    }
     setBusyVerb('publish');
     setPending(true);
     setPublishError(null);
@@ -642,8 +678,7 @@ export function CardEditor({
     } catch (err) {
       if (await confirmTrashed(err)) return;
       console.error('Publish failed:', err);
-      // Only its author will see it: it was being saved, not published.
-      setPublishError(failure(err, t(valuesRef.current.visibility === 'private' ? 'publishPanel.saveFailed' : 'publishPanel.failed')));
+      setPublishError(failure(err, t('publishPanel.failed')));
     } finally {
       setPending(false);
     }
@@ -690,12 +725,16 @@ export function CardEditor({
       // A resonance these changes hid or unnamed was taken back with them: the connection with the original's
       // author may have ended, so what turns on the viewer's connections is read again.
       if (referenceCardId) refreshConnections();
-      router.replace(`/card/${result.slug ?? initial?.slug ?? id}`);
+      // Kept as a 草稿 now: the writer goes back where it came from, as a draft's 儲存 does; shared, to its page.
+      if (valuesRef.current.visibility === 'private') (onLeave ?? leaveWriter)();
+      else router.replace(`/card/${result.slug ?? initial?.slug ?? id}`);
     } catch (err) {
       closedRef.current = false;
       if (await confirmTrashed(err)) return;
       console.error('Save changes failed:', err);
-      setPublishError(failure(err, tNative('saveError')));
+      // A 草稿 made public was being published; anything else, saved.
+      const publishing = liveVisibility === 'private' && valuesRef.current.visibility !== 'private';
+      setPublishError(failure(err, t(publishing ? 'publishPanel.failed' : 'publishPanel.saveFailed')));
     } finally {
       setPending(false);
     }
@@ -725,13 +764,12 @@ export function CardEditor({
   }
 
   /**
-   * The explicit way out of a draft, in the publish step's foot. Autosave
-   * already makes leaving safe, but "just close the window" is not something
-   * anyone should have to infer — this gives the intent a button to land on.
+   * 草稿 + 儲存 for a card never published: what is on screen is written (not
+   * left to the debounce) and the writer goes back where it came from. Never
+   * the publish call — a draft is its author's alone, finished or not.
    */
-  async function saveDraftAndLeave() {
-    if (pending) return;
-    setBusyVerb('leave');
+  async function keepDraft() {
+    setBusyVerb('publish');
     setPending(true);
     setPublishError(null);
     try {
@@ -742,7 +780,7 @@ export function CardEditor({
       closedRef.current = false;
       if (await confirmTrashed(err)) return;
       console.error('Save draft failed:', err);
-      setPublishError(failure(err, tNative('saveError')));
+      setPublishError(failure(err, t('publishPanel.saveFailed')));
     } finally {
       setPending(false);
     }
@@ -886,6 +924,8 @@ export function CardEditor({
                 setAccentHue(hue);
               }}
               resonance={referenceCardId != null}
+              liveVisibility={liveVisibility}
+              saveStatus={saveStatus}
               liveReaches={
                 isPublished &&
                 reachesOriginal(
@@ -898,8 +938,9 @@ export function CardEditor({
               busyVerb={busyVerb}
               error={publishError}
               onSubmit={() => void (isPublished ? applyUpdate() : submit())}
-              onSecondary={() => void (isPublished ? discardEdits() : saveDraftAndLeave())}
-              showSecondary={isPublished ? hasPendingEdit || draftSnapshot(values) !== lastSavedRef.current : true}
+              onSecondary={() => void discardEdits()}
+              // 捨棄修改, only while a live card has a revision to drop: a draft's choices are its one button.
+              showSecondary={isPublished && (hasPendingEdit || draftSnapshot(values) !== lastSavedRef.current)}
             />
           </div>
         )}

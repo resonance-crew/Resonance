@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type * as React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ReactNode } from 'react';
 import { act } from 'react';
@@ -63,7 +64,8 @@ vi.mock('@/lib/db/firestore/client/cards', async (orig) => ({
 }));
 // Leaf components with reads of their own (bookmarks, notes) aren't the subject.
 vi.mock('@/components/molecules/CardDetail/ReadAfterArea', () => ({
-  ReadAfterArea: () => <div data-testid="read-after-area" />,
+  // It draws what the page hands it to end its row (the card's share and ⋯).
+  ReadAfterArea: ({ trailing }: { trailing?: React.ReactNode }) => <div data-testid="read-after-area">{trailing}</div>,
 }));
 
 import {
@@ -379,7 +381,9 @@ describe('taking over from the server render', () => {
       expect(getUserById).not.toHaveBeenCalled();
 
       // The ⋯ is named by what it holds: with no author to block, the report alone.
-      await userEvent.setup({ pointerEventsCheck: 0 }).click(screen.getByRole('button', { name: 'Report this card' }));
+      // The byline's ⋯ (the story's end row has the same one).
+      expect(screen.getAllByRole('button', { name: 'Report this card' })).toHaveLength(2);
+      await userEvent.setup({ pointerEventsCheck: 0 }).click(screen.getAllByRole('button', { name: 'Report this card' })[0]);
       expect(screen.getByRole('menuitem', { name: /Report this card/ })).toBeInTheDocument();
       expect(screen.queryByRole('menuitem', { name: /Block/ })).not.toBeInTheDocument();
     });
@@ -723,11 +727,38 @@ describe('the head: title, byline and actions', () => {
     // Under the title, before the story.
     expect(title.compareDocumentPosition(metaLine()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(metaLine().compareDocumentPosition(screen.getByText('The longer story body of this card.')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // The byline names the author (up to 900px; CSS hides it beside the rail), linking to their profile.
+    // The byline names the author at every width, linking to their profile (round 8 §10.1).
     expect(within(bylineRow()).getByRole('link', { name: '@author' })).toHaveAttribute('href', '/u/@author');
-    // The rail is about the person: no date there.
-    expect(container.querySelector('aside time')).toBeNull();
+    // No rail for a story without headings: no author block beside it, and the column centred.
+    expect(container.querySelector('aside')).toBeNull();
+    expect(container.querySelector('[data-contents]')).toBeNull();
     expect(container.querySelectorAll('time')).toHaveLength(1);
+  });
+
+  it('keeps a rail of the story’s contents beside one with headings, and the author out of it', async () => {
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1', { story: '## The start\n\nWords.\n\n## The end\n\nMore words.' }));
+    const { container } = renderPage({ slug: 'c1' });
+    await screen.findByRole('heading', { level: 1 });
+    expect(container.querySelector('[data-contents]')).not.toBeNull();
+    const aside = container.querySelector('aside')!;
+    expect(within(aside).queryByRole('link', { name: '@author' })).toBeNull();
+  });
+
+  it('ends the story with one row: the response bar, and the card’s share and ⋯ at its end — its owner’s alone', async () => {
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1'));
+    const view = renderPage({ slug: 'c1' });
+    await screen.findByRole('heading', { level: 1 });
+    expect(within(screen.getByTestId('read-after-area')).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Share']);
+    view.unmount();
+
+    asOwner();
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1'));
+    renderPage({ slug: 'c1' });
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.queryByTestId('read-after-area')).toBeNull();
+    const shares = screen.getAllByRole('button', { name: 'Share' });
+    expect(shares).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Manage card' })).toHaveLength(2);
   });
 
   it('puts the story’s language on the title and the story alone, never on the page around them', async () => {

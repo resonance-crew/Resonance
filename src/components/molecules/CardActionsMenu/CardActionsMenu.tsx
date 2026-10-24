@@ -23,8 +23,8 @@ export interface CardActionsMenuProps {
    * `title`: what the undo toast names. `published` and `anonymous`: whether
    * moving it to the trash takes back a resonance that may be what connects
    * the viewer with its original's author — the one 刪除 that asks first.
-   * A draft (`published: false`) is offered no 轉為公開·私人: nothing is
-   * published from here, its audience is chosen in the writer's publish step.
+   * Only a card readers have is offered 轉為草稿: a 草稿 (a draft, or a
+   * published card kept private) is published from the writer's step.
    */
   card: {
     id: string;
@@ -70,7 +70,7 @@ export interface CardActionsMenuProps {
 type ActionKey = 'edit' | 'visibility' | 'unresonate' | 'delete';
 
 /**
- * The owner-side「⋯」menu on a card: 編輯 / 轉為公開·私人 (a published card)
+ * The owner-side「⋯」menu on a card: 編輯 / 轉為草稿 (a card readers have)
  * / 取消共振 (a card that resonates with another) / 刪除. The trigger and
  * dropped panel come from {@link OrganicMenu} (the shared organic dropdown
  * language — wobbly chip, wavy pen dividers, per-row wash, danger wash on the
@@ -136,13 +136,11 @@ export function CardActionsMenu({
     referenceTitle ?? (lookup?.status === 'ready' ? lookup.cards.cards.find((c) => c.id === original)?.thoughtCore : undefined);
 
   const isPrivate = card.visibility === 'private';
-  // Made public again, an anonymous card stays anonymous: the verb says so.
-  const makeVisible = isPrivate ? (card.anonymous === true ? t('makePublicAnonymous') : t('makePublic')) : t('makePrivate');
+  // 轉為草稿, on a card readers have: a 草稿 — never published, or kept private — is published from the writer's step,
+  // where its tags, cover and type are, so every 草稿's ⋯ is the same (round 8 §1.2).
   const items: OrganicMenuItem[] = [
     { key: 'edit', icon: 'pen', label: t('edit') },
-    ...(card.published === false
-      ? []
-      : [{ key: 'visibility', icon: isPrivate ? ('globe' as const) : ('lock' as const), label: makeVisible }]),
+    ...(card.published === false || isPrivate ? [] : [{ key: 'visibility', icon: 'lock' as const, label: t('makePrivate') }]),
     ...(original ? [{ key: 'unresonate', icon: 'wave' as const, label: t('unresonate') }] : []),
     { key: 'delete', icon: 'trash', label: t('delete'), danger: true },
   ];
@@ -236,7 +234,7 @@ export function CardActionsMenu({
       setBusy(true);
       setNotice(null);
       try {
-        await updateCardSettings(card.id, { visibility: isPrivate ? 'public' : 'private' });
+        await updateCardSettings(card.id, { visibility: 'private' });
         refreshOwnLists();
         onChanged?.();
       } catch {
@@ -280,7 +278,7 @@ export function CardActionsMenu({
     }
   }
 
-  const noticeTitle = notice === 'trash' ? t('delete') : makeVisible;
+  const noticeTitle = notice === 'trash' ? t('delete') : t('makePrivate');
   return (
     <>
       <OrganicMenu

@@ -2,7 +2,7 @@
 
 import { useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { FieldHint } from '@/components/atoms/Field/Field';
+import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import { HandDrawnDashedSurface } from '@/components/atoms/HandDrawnDashedBorder/HandDrawnDashedBorder';
 import { Icon } from '@/components/atoms/Icon';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
@@ -12,6 +12,7 @@ import type { GenerateImageEvent } from '@/app/api/generate-image/route';
 import type { CardMedia } from '@/lib/db/types';
 import { extractAccentHue } from '@/lib/images/accentHue';
 import { UnsupportedImage, uploadImageFile } from '@/lib/images/upload';
+import { useElementSize } from '@/lib/hooks/useElementSize';
 import { ndjsonValues } from '@/lib/streams/ndjson';
 import styles from './PublishStep.module.css';
 
@@ -160,7 +161,9 @@ export function useCoverEditor({
  * and once there is one, one chip on it that says so (更換封面), whose menu
  * holds everything a cover can become: another picture, one drawn from the
  * story, none. The picture is where it is changed — no second control for it
- * under the preview.
+ * under the preview — and where it is said that it couldn't be (round 8 §3):
+ * under the two pills while there is no cover, on a paper chip at the
+ * picture's top-left over one that stays; the next try takes it away.
  */
 export function CoverFrame({ cover }: { cover: CoverEditor }) {
   const t = useTranslations('write');
@@ -195,7 +198,9 @@ export function CoverFrame({ cover }: { cover: CoverEditor }) {
           <span className={styles.coverBusyText}>{generating ? t('mediaGenerating') : t('mediaUploading')}</span>
         </span>
       ) : media ? (
-        <span className={styles.coverMenu}>
+        <>
+          {cover.error && <CoverErrorChip message={cover.error} />}
+          <span className={styles.coverMenu}>
           <OrganicMenu
             items={menu}
             label={t('coverChange')}
@@ -210,7 +215,8 @@ export function CoverFrame({ cover }: { cover: CoverEditor }) {
               else if (key === 'remove') cover.remove();
             }}
           />
-        </span>
+          </span>
+        </>
       ) : (
         <span className={styles.coverEmpty}>
           <span className={styles.coverPills}>
@@ -227,7 +233,13 @@ export function CoverFrame({ cover }: { cover: CoverEditor }) {
               {t('mediaGenerate')}
             </OrganicButton>
           </span>
-          {!canGenerate && <span className={styles.coverNeed}>{t('mediaGenerateNeedStory')}</span>}
+          {cover.error ? (
+            <span className={styles.coverFailed} role="alert">
+              {cover.error}
+            </span>
+          ) : (
+            !canGenerate && <span className={styles.coverNeed}>{t('mediaGenerateNeedStory')}</span>
+          )}
         </span>
       )}
       {dragOver && !busy && (
@@ -246,12 +258,25 @@ export function CoverFrame({ cover }: { cover: CoverEditor }) {
   );
 }
 
-/** Under the preview, only while there is one: why the last try at a cover didn't work. */
-export function CoverError({ cover }: { cover: CoverEditor }) {
-  if (!cover.error) return null;
+/** Why the last try at a cover didn't work, over the cover that stays: the 更換封面 chip's paper, in the error's ink. */
+function CoverErrorChip({ message }: { message: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const { w, h } = useElementSize(ref, 0, 0, [message]);
   return (
-    <div className={styles.coverBelow}>
-      <FieldHint tone="error">{cover.error}</FieldHint>
-    </div>
+    <span ref={ref} className={styles.coverErrorChip} role="alert">
+      <HandDrawnBorder
+        w={w}
+        h={h}
+        R={Math.min(h * 0.42, 16)}
+        seed={43}
+        mag={Math.min(h, 34) * 0.03}
+        fillColor="color-mix(in oklch, var(--color-cream) 94%, transparent)"
+        segmentsH={2}
+        segmentsV={1}
+        curve={1.4}
+        cornerJitter={2.4}
+      />
+      <span className={styles.coverErrorText}>{message}</span>
+    </span>
   );
 }

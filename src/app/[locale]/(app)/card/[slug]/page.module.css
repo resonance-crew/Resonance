@@ -1,12 +1,21 @@
-/* The article grid: the story's column (--measure, 680) in the middle, the
-   author rail 48px to the right of the text. Grid sizing grows the middle
-   track to 680 first; the flexible tracks share the rest, and the right one
-   never drops below the rail and its gap (308) — so the column is centred
-   from 1392px (both side tracks ≥ 308) and slides left below that, the rail
-   always beside the text (reading-type §4). */
+/* The article grid: the story's column (--measure, 680) in the middle — the
+   byline under the title names the author at every width (round 8 §10.1). A
+   story without headings has no rail: its column is centred at every width.
+   One with headings keeps its contents' rail 80px to the right of the text:
+   grid sizing grows the middle track to 680 first; the flexible tracks share
+   the rest, and the right one never drops below the rail and its gap (340) —
+   so the column is centred from 1456px (both side tracks ≥ 340) and slides
+   left below that, the rail always beside the text (reading-type §4). */
 .layout {
   display: grid;
   align-items: start;
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(0, var(--measure))
+    minmax(0, 1fr);
+}
+
+.layout[data-contents] {
   grid-template-columns:
     minmax(0, 1fr)
     minmax(0, var(--measure))
@@ -39,7 +48,21 @@
   margin-bottom: var(--story-end-gap);
 }
 
-/* Right rail: author intro on top, ToC below; sticks while the article scrolls.
+/* The story's end on its author's own card: the card's share and ⋯ alone, at the row's end (round 8 §10.2). */
+.endActions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 40px;
+}
+@media (pointer: coarse) {
+  .endActions {
+    gap: 0;
+  }
+}
+
+/* Right rail: the story's contents; sticks while the article scrolls.
    It never runs past the window: a long ToC scrolls inside it (CardToc). */
 .aside {
   grid-column: 3;
@@ -58,7 +81,8 @@
    page's gutters below that — 20 a side on a phone). The byline under the
    title names the author. */
 @media (max-width: 900px) {
-  .layout {
+  .layout,
+  .layout[data-contents] {
     grid-template-columns: minmax(0, var(--measure));
     justify-content: center;
   }

@@ -15,6 +15,7 @@ vi.mock('@/lib/db/firestore/client/reads', () => ({
   getCardById: vi.fn(),
   getCardBySlugOrId: vi.fn(),
   getCardsByAuthor: vi.fn(),
+  getMyDrafts: vi.fn(),
   getPublicCardsByAuthor: vi.fn(),
   getCurrentUserProfile: vi.fn(),
   getLatestPublishedFeed: vi.fn(),
@@ -67,6 +68,7 @@ import {
   getCardById,
   getCardBySlugOrId,
   getCardsByAuthor,
+  getMyDrafts,
   getPublicCardsByAuthor,
   getPublicCardView,
   getPublicFeedPage,
@@ -606,9 +608,9 @@ describe('useMyCardBox', () => {
   // The box read all six shelves (three of them the same query of the
   // viewer's cards, each whole) before showing any; it reads the one on screen.
   it('reads only the shelf on screen, with its authors', async () => {
-    vi.mocked(getCardsByAuthor).mockImplementation(async (_uid, tab) =>
-      tab === 'draft' ? [card('draft', 'me', { publishedAt: null })] : [card(`${tab}-card`, 'me')],
-    );
+    vi.mocked(getCardsByAuthor).mockImplementation(async (_uid, tab) => [card(`${tab}-card`, 'me')]);
+    // 草稿 holds the drafts and the cards kept private together (round 8 §1.1).
+    vi.mocked(getMyDrafts).mockResolvedValue([card('draft', 'me', { publishedAt: null })]);
     vi.mocked(getUsersByIds).mockResolvedValue({ me: user('me') });
 
     const { result, rerender } = renderHook(({ shelf }) => useMyCardBox(shelf).data, {
@@ -619,13 +621,14 @@ describe('useMyCardBox', () => {
 
     expect(result.current!.cards.map((c) => c.id)).toEqual(['draft']);
     expect(result.current!.authors).toHaveProperty('me');
-    expect(vi.mocked(getCardsByAuthor).mock.calls.map((c) => c[1])).toEqual(['draft']);
+    expect(getMyDrafts).toHaveBeenCalledWith('me');
+    expect(getCardsByAuthor).not.toHaveBeenCalled();
     expect(callApi).not.toHaveBeenCalled();
 
     // Opening another shelf reads that one.
-    rerender({ shelf: 'private' });
-    await waitFor(() => expect(result.current?.cards.map((c) => c.id)).toEqual(['private-card']));
-    expect(vi.mocked(getCardsByAuthor).mock.calls.map((c) => c[1])).toEqual(['draft', 'private']);
+    rerender({ shelf: 'published' });
+    await waitFor(() => expect(result.current?.cards.map((c) => c.id)).toEqual(['published-card']));
+    expect(vi.mocked(getCardsByAuthor).mock.calls.map((c) => c[1])).toEqual(['published']);
   });
 
   it("reads others' cards from the server, an anonymous original without its author", async () => {

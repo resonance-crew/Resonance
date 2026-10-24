@@ -3,6 +3,7 @@
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
+import { useToast } from '@/components/providers/ToastProvider';
 import { useEditor, EditorContent, useEditorState } from '@tiptap/react';
 import Placeholder from '@tiptap/extension-placeholder';
 import { HandDrawnDashedSurface } from '@/components/atoms/HandDrawnDashedBorder/HandDrawnDashedBorder';
@@ -125,6 +126,7 @@ export function MarkdownEditor({
 }: MarkdownEditorProps) {
   const t = useTranslations('write.editor');
   const canvas = variant === 'canvas';
+  const toast = useToast();
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
   const [cardModalOpen, setCardModalOpen] = useState(false);
@@ -267,7 +269,11 @@ export function MarkdownEditor({
             editor.chain().focus().insertContent(node).run();
           }
         } catch (e) {
-          setImageError(t(e instanceof UnsupportedImage ? 'imageUnsupported' : 'imageUploadError'));
+          const why = t(e instanceof UnsupportedImage ? 'imageUnsupported' : 'imageUploadError');
+          setImageError(why);
+          // On the writer's page the line sits under the story, which may be scrolled far from where the
+          // picture was going: the shell's toast says it in view (round 8 §3).
+          if (canvas) toast.show({ message: why });
         } finally {
           setUploadingCount((c) => c - 1);
         }

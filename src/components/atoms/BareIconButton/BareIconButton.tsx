@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, type ComponentProps, type MouseEvent } from 'react';
+import { ButtonLoader } from '@/components/atoms/ButtonLoader/ButtonLoader';
 import { Icon, type IconName } from '@/components/atoms/Icon';
 import { Link } from '@/i18n/navigation';
 import { wobCircle } from '@/lib/design/wobCircle';
@@ -23,6 +24,11 @@ export interface BareIconButtonProps {
   /** Muted ink at rest (a bar's small tools), or full ink (a bar's back arrow, which leads the row). */
   tone?: 'muted' | 'ink';
   disabled?: boolean;
+  /**
+   * At work (the writer's ✓ while a new card's first save runs): the glyph
+   * gives its place to the button's own small loader, and a press does nothing.
+   */
+  loading?: boolean;
   /** Where the tooltip hangs: over the button (default), under it, or nowhere. */
   tip?: 'above' | 'below' | false;
   /** Which edge of the button the tooltip lines up with (it grows away from it). */
@@ -48,6 +54,7 @@ export function BareIconButton({
   mirror = false,
   tone = 'muted',
   disabled = false,
+  loading = false,
   tip = 'above',
   tipAlign = 'center',
   seed = 5,
@@ -70,8 +77,8 @@ export function BareIconButton({
       <svg className={styles.wash} viewBox="0 0 100 100" aria-hidden="true">
         <path d={disc} />
       </svg>
-      <span className={styles.glyph} style={turn ? { transform: turn } : undefined}>
-        <Icon name={icon} size={iconSize} strokeWidth={INK} />
+      <span className={styles.glyph} style={turn && !loading ? { transform: turn } : undefined}>
+        {loading ? <ButtonLoader size={iconSize} /> : <Icon name={icon} size={iconSize} strokeWidth={INK} />}
       </span>
     </>
   );
@@ -82,7 +89,13 @@ export function BareIconButton({
           {face}
         </Link>
       ) : (
-        <button type="button" {...shared} disabled={disabled} onClick={onClick}>
+        <button
+          type="button"
+          {...shared}
+          disabled={disabled}
+          aria-busy={loading || undefined}
+          onClick={loading ? undefined : onClick}
+        >
           {face}
         </button>
       )}

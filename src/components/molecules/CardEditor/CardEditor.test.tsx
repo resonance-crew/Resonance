@@ -104,7 +104,7 @@ const livePost = {
 };
 
 /**
- * The editor in a page: the page draws the one way forward it reports (下一步,
+ * The editor in a page: the page draws the one way forward it reports (✓ 完成,
  * in its bar), as the writer's workspace does.
  */
 function Writer(props: Omit<CardEditorProps, 'onPrimaryActionChange'> & { editorRef?: Ref<CardEditorHandle> }) {
@@ -122,14 +122,18 @@ function Writer(props: Omit<CardEditorProps, 'onPrimaryActionChange'> & { editor
   );
 }
 
-const next = () => screen.getByRole('button', { name: en.write.next });
+const next = () => screen.getByRole('button', { name: en.write.finish });
 const title = () => screen.getByLabelText('One-line title');
 const story = () => screen.getByLabelText('Story');
-/** The publish step is up: its verb, whichever the audience makes it (發布 · 匿名發布 · 儲存). */
+/** The publish step is up: its one button, whichever the card and its type make it. */
 const inStep = () =>
-  [en.write.publishPanel.publish, en.write.publishPanel.publishAnonymously, en.write.publishPanel.save].some(
-    (name) => screen.queryByRole('button', { name }) != null,
-  );
+  [
+    en.write.publishPanel.publish,
+    en.write.publishPanel.publishAnonymously,
+    en.write.publishPanel.save,
+    en.write.publishPanel.update,
+    en.write.publishPanel.makeDraft,
+  ].some((name) => screen.queryByRole('button', { name }) != null);
 
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
@@ -302,7 +306,7 @@ describe('CardEditor — the publish step', () => {
     // At the split, where the step has its own way back to writing.
     renderWithIntl(<Writer locale="en" onStepChange={onStepChange} inlineStepHeading />);
     await toPublishStep();
-    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.private }));
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
     await waitFor(() => expect(updateCardDraft).toHaveBeenCalledWith('draft-1', expect.objectContaining({ visibility: 'private' })), {
       timeout: 4000,
     });
@@ -312,7 +316,7 @@ describe('CardEditor — the publish step', () => {
     await waitFor(() => expect(inStep()).toBe(false));
     await userEvent.click(next());
     await waitFor(() => expect(inStep()).toBe(true));
-    expect(screen.getByRole('button', { name: en.write.visibility.private })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: en.write.visibility.draft })).toHaveAttribute('aria-pressed', 'true');
   });
 
   // An anonymous card is public or private, never for connections only: no write is ever both.
@@ -334,34 +338,40 @@ describe('CardEditor — the publish step', () => {
     }
   });
 
-  // Kept to its author, a card is saved, not published: the host's bar, the verb and a failure all say so.
-  it('names the step after its audience for the host, and says a failed save as one', async () => {
+  // A 草稿 is saved, never published: the host's bar, the one button and a failure all say so.
+  it('names the step after the card’s type for the host, and says a failed save as one', async () => {
     const onStepTitleChange = vi.fn();
-    vi.mocked(publishCard).mockRejectedValueOnce(new Error('offline'));
     renderWithIntl(<Writer locale="en" onStepTitleChange={onStepTitleChange} />);
     await toPublishStep();
     expect(onStepTitleChange).toHaveBeenLastCalledWith(en.write.publishPanel.title);
-    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.private }));
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
     expect(onStepTitleChange).toHaveBeenLastCalledWith(en.write.publishPanel.saveTitle);
+    // The one button: no way out beside it any more (草稿 is a choice of its own).
+    expect(screen.queryByRole('button', { name: en.write.saveDraftAndLeave })).toBeNull();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(updateCardDraft).mockRejectedValueOnce(new Error('offline'));
     await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.save }));
     expect(await screen.findByRole('alert')).toHaveTextContent(en.write.publishPanel.saveFailed);
+    expect(publishCard).not.toHaveBeenCalled();
   });
 
-  it('saves the draft for later from the step’s foot, by the host’s way out', async () => {
+  it('keeps a 草稿 as a draft with its one button, by the host’s way out — never publishing it', async () => {
     const onLeave = vi.fn();
     renderWithIntl(<Writer locale="en" onLeave={onLeave} />);
     await toPublishStep('Enough for today');
-    await userEvent.click(screen.getByRole('button', { name: en.write.saveDraftAndLeave }));
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
+    await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.save }));
     await waitFor(() => expect(onLeave).toHaveBeenCalled());
     expect(createCardDraft).toHaveBeenCalledWith(expect.objectContaining({ thoughtCore: 'Enough for today' }));
-    // Leaving a draft is never publishing it.
+    expect(updateCardDraft).toHaveBeenLastCalledWith('draft-1', expect.objectContaining({ visibility: 'private' }));
     expect(publishCard).not.toHaveBeenCalled();
   });
 
   it('leaves back where the writer came from without a host’s way out', async () => {
     renderWithIntl(<Writer locale="en" />);
     await toPublishStep('Enough for today');
-    await userEvent.click(screen.getByRole('button', { name: en.write.saveDraftAndLeave }));
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
+    await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.save }));
     // A writer opened in a tab of its own has nothing to go back to: the card box, where the draft now is.
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/me'));
   });
@@ -401,7 +411,8 @@ describe('CardEditor — editing a published card', () => {
   it('buffers autosaved edits privately instead of writing them live', async () => {
     const onSaveStatusChange = vi.fn();
     renderWithIntl(<Writer locale="en" initial={livePost} onSaveStatusChange={onSaveStatusChange} />);
-    await waitFor(() => expect(onSaveStatusChange).toHaveBeenCalledWith(en.write.editLiveHint));
+    // Nothing to say before anything is written.
+    await waitFor(() => expect(onSaveStatusChange).toHaveBeenCalledWith(null));
     fireEvent.change(story(), { target: { value: 'A rewrite, mid-sentence and not ready for' } });
     await waitFor(
       () => expect(savePendingCardEdit).toHaveBeenCalledWith('card-1', expect.objectContaining({ story: 'A rewrite, mid-sentence and not ready for' })),
@@ -410,9 +421,14 @@ describe('CardEditor — editing a published card', () => {
     // The live document — the one readers are looking at — stays untouched.
     expect(updateCardDraft).not.toHaveBeenCalled();
     expect(publishCard).not.toHaveBeenCalled();
-    await waitFor(() => expect(onSaveStatusChange).toHaveBeenCalledWith(expect.stringContaining('readers still see the old version')), {
-      timeout: 4000,
-    });
+    // Saved where readers don't see it yet: the bar's 修改已暫存, its time in the tooltip.
+    await waitFor(
+      () =>
+        expect(onSaveStatusChange).toHaveBeenCalledWith(
+          expect.objectContaining({ label: en.write.status.savedLive, title: expect.stringContaining(en.write.status.savedLive) }),
+        ),
+      { timeout: 4000 },
+    );
   });
 
   /** 下一步, then 儲存修改 in 更新這張卡片. */
@@ -438,10 +454,12 @@ describe('CardEditor — editing a published card', () => {
     // The same step, in update dress: no mirror moment, and it says plainly what the button is about to do.
     expect(await screen.findByRole('region', { name: en.write.publishPanel.updateTitle })).toBeInTheDocument();
     expect(screen.getByText(en.write.publishPanel.updateHint)).toBeInTheDocument();
-    // Anonymous for everyone, then kept to its author: a live card keeps its anonymity while it is private.
+    // Anonymous for everyone, then a 草稿: a live card keeps its anonymity while it is private, and the
+    // one button says what that does (轉為草稿), the hint about readers gone with them.
     await userEvent.click(screen.getByRole('button', { name: en.write.visibility.anonymous }));
-    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.private }));
-    await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.update }));
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
+    expect(screen.queryByText(en.write.publishPanel.updateHint)).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.makeDraft }));
 
     await waitFor(() =>
       expect(savePendingCardEdit).toHaveBeenLastCalledWith(
@@ -453,7 +471,8 @@ describe('CardEditor — editing a published card', () => {
     expect(applyPendingCardEdit).not.toHaveBeenCalled();
     await act(async () => release());
 
-    await waitFor(() => expect(replace).toHaveBeenCalledWith('/card/a-quiet-thought'));
+    // A 草稿 now: back where the writer came from (the card box, in a tab of its own), not to its page.
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/me'));
     // The id is all it sends: the server reads the buffer, never the browser's say-so.
     expect(applyPendingCardEdit).toHaveBeenCalledTimes(1);
     expect(applyPendingCardEdit).toHaveBeenCalledWith('card-1');
@@ -515,7 +534,7 @@ describe('CardEditor — editing a published card', () => {
     await saveChanges();
 
     // In the writer's words, never the server's.
-    expect(await screen.findByText(en.native.saveError)).toBeInTheDocument();
+    expect(await screen.findByText(en.write.publishPanel.saveFailed)).toBeInTheDocument();
     expect(screen.queryByText('The edit does not fit a card.')).not.toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
     expect(story()).toHaveValue('A rewrite the server turns down.');
@@ -532,7 +551,7 @@ describe('CardEditor — editing a published card', () => {
     fireEvent.change(story(), { target: { value: 'Words that must not vanish.' } });
     await saveChanges();
 
-    expect(await screen.findByText(en.native.saveError)).toBeInTheDocument();
+    expect(await screen.findByText(en.write.publishPanel.saveFailed)).toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
     const saves = vi.mocked(savePendingCardEdit).mock.calls.length;
     unmount();
@@ -575,10 +594,26 @@ describe('CardEditor — editing a published card', () => {
       />,
     );
     await userEvent.click(next());
-    await screen.findByRole('region', { name: en.write.publishPanel.updateTitle });
+    // A card kept private is a 草稿 to its author: its step saves it, or publishes it.
+    await screen.findByRole('region', { name: en.write.publishPanel.saveTitle });
+    expect(screen.getByRole('button', { name: en.write.publishPanel.save })).toBeInTheDocument();
     expect(screen.queryByText(en.write.publishPanel.resonanceReaches)).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: en.write.visibility.public }));
     expect(screen.getByText(en.write.publishPanel.resonanceReaches)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: en.write.publishPanel.title })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: en.write.publishPanel.publish })).toBeInTheDocument();
+  });
+
+  it('publishes a 草稿 that was kept private through its pending edit, then opens its page', async () => {
+    vi.mocked(applyPendingCardEdit).mockResolvedValue({ id: 'card-1', slug: 'a-quiet-thought', applied: true });
+    renderWithIntl(<Writer locale="en" initial={{ ...livePost, visibility: 'private', live: { visibility: 'private', anonymous: false } }} />);
+    await userEvent.click(next());
+    await userEvent.click(await screen.findByRole('button', { name: en.write.visibility.public }));
+    await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.publish }));
+    await waitFor(() => expect(applyPendingCardEdit).toHaveBeenCalledWith('card-1'));
+    expect(savePendingCardEdit).toHaveBeenLastCalledWith('card-1', expect.objectContaining({ visibility: 'public', anonymous: false }));
+    expect(publishCard).not.toHaveBeenCalled();
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/card/a-quiet-thought'));
   });
 });
 
@@ -691,7 +726,32 @@ describe('CardEditor — autosave', () => {
     await waitFor(() => expect(onSaveStatusChange).toHaveBeenCalledWith(null));
     fireEvent.change(title(), { target: { value: 'Something worth keeping' } });
     // The debounce is deliberately longer than waitFor's default window.
-    await waitFor(() => expect(onSaveStatusChange).toHaveBeenCalledWith(expect.stringContaining('Draft saved')), { timeout: 4000 });
+    await waitFor(() => expect(onSaveStatusChange).toHaveBeenLastCalledWith(expect.objectContaining({ label: en.write.status.saved })), {
+      timeout: 4000,
+    });
+  });
+
+  it('says 儲存中⋯ only for a write that runs long, 未儲存 when one fails, and 已儲存 once one goes through', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const onSaveStatusChange = vi.fn();
+    let finish: (() => void) | null = null;
+    vi.mocked(createCardDraft).mockImplementationOnce(
+      () => new Promise((resolve) => (finish = () => resolve({ id: 'draft-1' } as never))),
+    );
+    vi.mocked(updateCardDraft).mockRejectedValueOnce(new Error('offline'));
+    const editor = createRef<CardEditorHandle>();
+    renderWithIntl(<Writer locale="en" editorRef={editor} onSaveStatusChange={onSaveStatusChange} />);
+    fireEvent.change(title(), { target: { value: 'Slow to keep' } });
+    const first = editor.current!.saveNow();
+    await waitFor(() => expect(onSaveStatusChange).toHaveBeenLastCalledWith({ label: en.write.status.saving }));
+    act(() => finish!());
+    await first;
+    await waitFor(() => expect(onSaveStatusChange).toHaveBeenLastCalledWith(expect.objectContaining({ label: en.write.status.saved })));
+    fireEvent.change(title(), { target: { value: 'Slow to keep, then offline' } });
+    await expect(editor.current!.saveNow()).rejects.toThrow('offline');
+    await waitFor(() => expect(onSaveStatusChange).toHaveBeenLastCalledWith({ label: en.write.status.failed, failed: true }));
+    await act(() => editor.current!.saveNow());
+    await waitFor(() => expect(onSaveStatusChange).toHaveBeenLastCalledWith(expect.objectContaining({ label: en.write.status.saved })));
   });
 });
 

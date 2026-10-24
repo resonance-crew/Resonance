@@ -222,7 +222,7 @@ object Tokens {
     /** --story-byline-avatar */
     const val StoryBylineAvatar = 40f
     /** --story-rail-gap */
-    const val StoryRailGap = 48f
+    const val StoryRailGap = 80f
     /** --radius-sm */
     const val RadiusSm = 12f
     /** --radius-md */

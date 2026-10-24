@@ -475,6 +475,19 @@ describe('the card box in one request (GET /me/cardbox?shelves=)', () => {
   it('answers only the shelves asked for, and nothing for none', async () => {
     expect(await getCardBoxShelves(db, 'alice', new Set())).toEqual({});
   });
+
+  it("says when each of the viewer's own cards was last changed on their own shelves, and nowhere else", async () => {
+    const alice = await getCardBoxShelves(db, 'alice', ALL);
+    for (const s of ['published', 'private', 'draft'] as const) {
+      for (const c of alice[s]!.cards) expect(c, `${s} ${c.id}`).toHaveProperty('editedAt');
+    }
+    // A draft stamped a minute ago says so (one seeded without an updatedAt says null).
+    expect(alice.draft!.cards[0].editedAt).toBe(new Date(alice.draft!.cards[0].editedAt!).toISOString());
+    expect(Date.now() - Date.parse(alice.draft!.cards[0].editedAt!)).toBeLessThan(5 * 60_000);
+    for (const s of ['resonated', 'linked', 'bookmarks', 'trash'] as const) {
+      for (const c of alice[s]!.cards) expect(c, `${s} ${c.id}`).not.toHaveProperty('editedAt');
+    }
+  });
 });
 
 describe('cards written before the rules closed publishedAt and slug', () => {
