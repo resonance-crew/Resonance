@@ -106,9 +106,9 @@ public struct MessageLinkRange: Equatable, Sendable {
 /// A message's bubble (MessageBubble.tsx): 15/1.4 words, padding 9 × 14, your own on
 /// `bubbleMine`, theirs on `bubbleTheirs`, no outline (Messenger's flat bubbles, in the paper's own
 /// colours). It hugs its words, unless it carries more (`attachment`: a link's preview, a shared
-/// card), which makes it one bubble of a fixed `width` — the words, then what it carries edge to
-/// edge, clipped by the bubble's own wobbly outline. A reply to a note wears a small italic header
-/// (`quoteLabel`).
+/// card, a picture), which makes it one bubble of a fixed `width` — the words, then what it carries
+/// edge to edge (a picture leads instead, `attachmentFirst`, the words under it), clipped by the
+/// bubble's own wobbly outline. A reply to a note wears a small italic header (`quoteLabel`).
 ///
 /// The words are drawn by ``ChatText``: `links` are underlined, terracotta-deep in your own bubble
 /// and terracotta in theirs, and a tap on one goes to `onLinkTap`; `highlights` are the matches of
@@ -129,14 +129,15 @@ public struct MessageBubble<Attachment: View>: View {
     let width: CGFloat?
     let plain: Bool
     let carries: Bool
+    let attachmentFirst: Bool
     let onLinkTap: ((URL) -> Void)?
     let attachment: Attachment
 
     /// `carries` says whether `attachment` draws anything (it is decided while drawing, so the type can't tell).
     public init(text: String, mine: Bool, seed: Double, quoteLabel: String? = nil, tuckTop: Bool = false, tuckBottom: Bool = false,
                 links: [MessageLinkRange] = [], highlights: [NSRange] = [], highlightStrong: Bool = false, flash: Double = 0,
-                width: CGFloat? = nil, plain: Bool = false, carries: Bool = true, onLinkTap: ((URL) -> Void)? = nil,
-                @ViewBuilder attachment: () -> Attachment) {
+                width: CGFloat? = nil, plain: Bool = false, carries: Bool = true, attachmentFirst: Bool = false,
+                onLinkTap: ((URL) -> Void)? = nil, @ViewBuilder attachment: () -> Attachment) {
         self.text = text
         self.mine = mine
         self.seed = seed
@@ -150,6 +151,7 @@ public struct MessageBubble<Attachment: View>: View {
         self.width = width
         self.plain = plain
         self.carries = carries && Attachment.self != EmptyView.self
+        self.attachmentFirst = attachmentFirst
         self.onLinkTap = onLinkTap
         self.attachment = attachment()
     }
@@ -159,6 +161,7 @@ public struct MessageBubble<Attachment: View>: View {
             ? AnyShape(plainBubbleShape(mine: mine, tuckTop: tuckTop, tuckBottom: tuckBottom))
             : AnyShape(MessageBubbleShape(seed: seed, mine: mine, tuckTop: tuckTop, tuckBottom: tuckBottom))
         VStack(alignment: .leading, spacing: 0) {
+            if attachmentFirst { attachment }
             if !text.isEmpty || quoteLabel != nil {
                 VStack(alignment: .leading, spacing: 4) {
                     if let quoteLabel {
@@ -178,11 +181,11 @@ public struct MessageBubble<Attachment: View>: View {
                 }
                 .padding(.horizontal, BubbleMetrics.padX)
                 .padding(.top, BubbleMetrics.padY)
-                // What it carries brings its own air above it.
-                .padding(.bottom, carries ? 0 : BubbleMetrics.padY)
+                // What it carries under the words brings its own air above it.
+                .padding(.bottom, carries && !attachmentFirst ? 0 : BubbleMetrics.padY)
                 .frame(maxWidth: width == nil ? nil : .infinity, alignment: .leading)
             }
-            attachment
+            if !attachmentFirst { attachment }
         }
         .frame(width: width, alignment: .leading)
         .background {
@@ -294,6 +297,40 @@ public struct CardQuote<Card: View>: View {
 /// How much wider than the bubble a picture inside it is drawn on each side: past its wobbly
 /// edge's widest swing, so the clip, not the picture, ends it.
 private let pictureBleed: CGFloat = 4
+
+/// A picture sent in a message, edge to edge across the top of its bubble (round 7 §4.3): at its
+/// shown `size` (its shape fixed before the picture arrives), reaching past the bubble's sides and
+/// top — and its foot, when no words follow it (`endsBubble`) — so the bubble's wobbly outline ends
+/// it, never the picture's own edge. `content` is what lies in it — the picture cover-cropped, or its
+/// stand-in while it is read. A tap opens it (`onOpen`); a hold is the message's menu.
+public struct MessagePictureSection<Content: View>: View {
+    let size: CGSize
+    let endsBubble: Bool
+    let label: String
+    let onOpen: (() -> Void)?
+    let content: Content
+
+    public init(size: CGSize, endsBubble: Bool, label: String, onOpen: (() -> Void)?, @ViewBuilder content: () -> Content) {
+        self.size = size
+        self.endsBubble = endsBubble
+        self.label = label
+        self.onOpen = onOpen
+        self.content = content()
+    }
+
+    public var body: some View {
+        let below = endsBubble ? pictureBleed : 0
+        content
+            .frame(width: size.width + 2 * pictureBleed, height: size.height + pictureBleed + below)
+            .clipped()
+            .padding(.horizontal, -pictureBleed)
+            .padding(.top, -pictureBleed)
+            .padding(.bottom, -below)
+            .contentShape(Rectangle())
+            .modifier(BubblePartAction(action: onOpen, trait: .isButton))
+            .accessibilityLabel(label)
+    }
+}
 
 /// A picture edge to edge across a bubble at 1.91:1 (the share-image ratio); `onError` when it won't load.
 private struct BubblePicture: View {

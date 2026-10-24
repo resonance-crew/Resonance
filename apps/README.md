@@ -196,7 +196,11 @@ those the latest cards already show: the cards are the scroll's targets (CardCol
 so a reader further down keeps the card they are reading where it is, and one at the top
 (TabScreen's `head`) sees the first pick there; a grid keeps them in rows of their
 own above, the latest cards keeping their columns, colours and shapes
-(`CardPalette.palettes(_:over:)`). Cards seen in lists stay in
+(`CardPalette.palettes(_:over:)`). The reader further down hears of them from the
+shell's toast, 今天的推薦來了 · 往上看 (`FeedModel.picksLanded`, `PicksNotice`): the
+pill takes the feed to its top (TabScreen's `toTopRequests`), reaching the top by hand
+takes it down, and picks that land while the feed is out of sight are told of once it is
+back. `-feedPicksDelay 15 -feedPicks …` and a scroll down shows it. Cards seen in lists stay in
 `SessionStore.cardPreviews` (memory only, per account, emptied on sign-out
 and on any block change) as the card page's placeholder — the page always
 refetches. `Route.thread(handle:uid:note:)` takes the uid whenever the caller
@@ -259,13 +263,38 @@ above it (`CaretFollow`), and the island's own scroll view is pinned at its top
 下一步 (the bar's trailing pill; floating at the pane's top at the split) asks for
 a title, waits a moment for a new draft's first save, and opens `PublishStep` in
 place: the mirror (asked once per title and story, never for a revision), the
-card as a list shows it with its cover editor in the picture, tags, who can see
-it, the byline, the resonance line, then 存成草稿，稍後再寫 | 發布 (捨棄修改 |
-儲存修改 for a live card). Its choices are the draft's own values and autosave;
-back from it is back to writing (the bar's 繼續寫, the edge swipe), the map's
-Leave at the split leaves from either step. A save the rules refuse, or a
+card as a list shows it — its cover changed on the picture itself, one 更換封面
+chip whose menu offers another, a drawn one or none (`PublishStep.coverItems`) —,
+tags, 誰可以看見 as one choice of 公開 · 匿名公開 · 只有自己 (`WriteModel.Audience`:
+both fields in one change; 只有自己 names a draft and keeps a live card's byline)
+with the one line that says what it means, the resonance line, then
+存成草稿，稍後再寫 | 發布 · 匿名發布 · 儲存 by the audience, the step titled
+儲存這張卡片 for 只有自己 (捨棄修改 | 儲存修改 for a live card, whose 更新 hint
+shows while it has readers). Its choices are the draft's own values and
+autosave; back from it is back to writing (the bar's 繼續寫, the edge swipe), the
+map's Leave at the split leaves from either step. A save the rules refuse, or a
 publish answered 409, is read again: a card moved to the trash meanwhile says so
 where the save line was, with 還原, keeping what is typed.
+
+Pictures in chat: the composer's ＋ opens 圖片 · 卡片 (`AttachMenuOverlay`, the
+screen's own layer, so the keyboard stays up). 圖片 is the system's `PhotosPicker`
+(one picture, `.current` encoding; no library access is asked for), readied off
+the main thread by `ChatPictures.prepare` — a JPEG at most 2048 px on its longest
+side, upright; a GIF up to 4 MB goes as it is — and held above the field
+(`ThreadModel.pendingPicture`: picking a card drops it, and the other way round).
+Sending draws it at once from the device (`ChatImageStore.keep`, under the
+message's client id) while `ChatOutboxes` uploads it (`POST /api/v1/chat-images`
+with that client id, once per message, however often it is retried) and then
+sends the message naming it. Pictures are read only through
+`MessagingAPI.chatImage`, the account's HTTP stack with its token — never a
+plain image loader: the thread's size for a bubble (`MessagePictureSize`: as
+wide as the bubble, at most 320 tall, its shape held between 1:2 and 2:1) and
+the full one in `ChatPictureViewer` (pinch or double-tap to zoom; a pull down or
+its ✕ closes it). `FreshnessMiddleware` never asks for one again (its bytes
+never change); `ChatImageStore` keeps them decoded, per account. One that
+couldn't be read keeps its fill with the picture glyph, and a tap asks again.
+A reply to a picture quotes 一張圖片 (`ReplyQuote.summary`), and the Messages
+list says 傳送了一張圖片 for one sent without words.
 
 The app hosts its unit tests; run them with `xcodebuild test … -destination
 'id=<udid>'`. Under XCTest the app points at a local stack that isn't there

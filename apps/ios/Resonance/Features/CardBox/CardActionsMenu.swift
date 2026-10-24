@@ -150,7 +150,14 @@ struct CardActionsMenu: View {
         ]
     }
 
-    private var visibilityLabel: String { isPrivate ? L10n.Me.Actions.makePublic : L10n.Me.Actions.makePrivate }
+    private var visibilityLabel: String { Self.visibilityLabel(private: isPrivate, anonymous: anonymous) }
+
+    /// 轉為公開 / 轉為私人 — and, on a private card that is anonymous, 轉為匿名公開: it does come back
+    /// anonymous (the server keeps its byline), and the words say so.
+    static func visibilityLabel(private isPrivate: Bool, anonymous: Bool) -> String {
+        guard isPrivate else { return L10n.Me.Actions.makePrivate }
+        return anonymous ? L10n.Me.Actions.makePublicAnonymous : L10n.Me.Actions.makePublic
+    }
 
     /// What changed: this card, and on a resonance the card it answers (its page lists it).
     private var change: WriteLauncher.Change { .init(cardId: cardId, referenceCardId: answering) }

@@ -2,24 +2,32 @@ import DesignSystem
 import ResonanceKit
 import SwiftUI
 
-/// The message being written: what is attached (the note being answered, a card), the reply it
-/// carries and the field with Send beside it. Sending never holds the composer — a message goes to
-/// the outbox and the field is empty for the next one, with its keyboard still up. The twin of
-/// Android's ThreadComposer.
+/// The message being written: what is attached (the note being answered, a card or a picture —
+/// one of the two), the reply it carries and the field with Send beside it. The ＋ before the field
+/// opens what can be attached (圖片 · 卡片, the screen's menu over it). Sending never holds the
+/// composer — a message goes to the outbox and the field is empty for the next one, with its
+/// keyboard still up. The twin of Android's ThreadComposer.
 struct ThreadComposer: View {
     @Bindable var model: ThreadModel
     var composing: FocusState<Bool>.Binding
-    let onPickCard: () -> Void
+    /// The ＋ was tapped: where it is on the screen, for its menu to hang from.
+    let onAttach: (CGRect) -> Void
+    @State private var attachFrame: CGRect = .zero
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if model.noteRef != nil || model.pendingCard != nil {
+            if model.noteRef != nil || model.pendingCard != nil || model.pendingPicture != nil || model.preparingPicture {
                 FlowRow(spacing: 8) {
                     if model.noteRef != nil {
                         AttachmentChip(icon: .note, title: L10n.Messages.quotedNote) { model.noteRef = nil }
                     }
                     if let card = model.pendingCard {
                         AttachmentChip(icon: .cards, title: card.title) { model.pendingCard = nil }
+                    }
+                    if model.preparingPicture {
+                        PictureChip(picture: nil) {}
+                    } else if let picture = model.pendingPicture {
+                        PictureChip(picture: picture.preview) { model.pendingPicture = nil }
                     }
                 }
                 .padding(.top, 10)
@@ -28,13 +36,14 @@ struct ThreadComposer: View {
             if let quote = model.replyingTo { ReplyBar(model: model, quote: quote) }
             // Send is a little shorter than the field: it stays at the foot of the field as that grows.
             HStack(alignment: .bottom, spacing: 8) {
-                Button(action: onPickCard) {
-                    OrganicIcon(.cards, size: 18, color: Tokens.textMuted)
+                Button { onAttach(attachFrame) } label: {
+                    OrganicIcon(.plus, size: 18, color: Tokens.textMuted)
                         .frame(width: 40, height: 40)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(OrganicPressStyle())
-                .accessibilityLabel(L10n.Messages.attachCard)
+                .accessibilityLabel(L10n.Messages.attach)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { attachFrame = $0 }
                 .padding(.bottom, 5)
                 TextField(text: $model.draft, prompt: fieldPrompt(L10n.Messages.placeholder), axis: .vertical) {
                     Text(L10n.Messages.threadWith(handle: model.displayHandle))
@@ -93,7 +102,7 @@ private struct ReplyBar: View {
 
     var body: some View {
         let who = quote.senderId == model.me ? L10n.Messages.replyingToSelf : L10n.Messages.replyingTo(handle: model.displayHandle)
-        let what = quote.text.isEmpty ? L10n.Messages.replyCard : quote.text.replacingOccurrences(of: "\n", with: " ")
+        let what = quote.summary(picture: L10n.Messages.replyImage, card: L10n.Messages.replyCard).replacingOccurrences(of: "\n", with: " ")
         HStack(spacing: 10) {
             ReplyRule().frame(height: 34)
             VStack(alignment: .leading, spacing: 1) {
@@ -113,6 +122,42 @@ private struct ReplyBar: View {
         .padding(.top, 12)
         .padding(.leading, 4)
         .accessibilityElement(children: .contain)
+    }
+}
+
+/// A picture picked for the next message, above the composer where a card's chip shows: a small
+/// thumbnail with the hand-drawn edge of the pictures, and its ✕ (移除圖片). While the picture is
+/// readied (`picture` nil), the pen's loader in its place.
+private struct PictureChip: View {
+    let picture: UIImage?
+    let onRemove: () -> Void
+
+    var body: some View {
+        let edge = WobRectShape(radius: 10, seed: 61, mag: 0.9)
+        HStack(spacing: 4) {
+            Group {
+                if let picture {
+                    Image(uiImage: picture).resizable().scaledToFill()
+                } else {
+                    Tokens.creamDark.overlay { SketchLoader(size: 18) }
+                }
+            }
+            .frame(width: 44, height: 44)
+            .clipShape(edge)
+            .accessibilityLabel(L10n.Messages.attachImage)
+            if picture != nil {
+                Button(action: onRemove) {
+                    OrganicIcon(.close, size: 13, color: Tokens.textMuted)
+                        .frame(width: 32, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L10n.Messages.removeImage)
+            }
+        }
+        .padding(.leading, 4).padding(.trailing, picture == nil ? 4 : 0).padding(.vertical, 4)
+        .background(Tokens.terracottaLight.opacity(0.4),
+                    in: UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 14, bottomTrailingRadius: 12, topTrailingRadius: 14))
     }
 }
 

@@ -15,7 +15,9 @@ import ResonanceKit
 /// **Sending** (`send`) takes what the composer holds and frees the composer at once; the outbox
 /// sends in order and a failure stays in the thread as a failed message (`retry`, `discard`). The
 /// outbox belongs to the session, not to this model, so a send carries on when the thread is
-/// covered by a profile or left.
+/// covered by a profile or left. A message carries a card or a picture, never both
+/// (`pendingCard`, `pendingPicture`: picking one drops the other); a picture is drawn from the device
+/// the moment it is sent, while the outbox uploads it and sends the message naming it.
 ///
 /// Opened with the other person's uid (from Messages, a notification, their page), it listens to
 /// the conversation by its pair id at once and asks for their profile alongside — only for their
@@ -83,7 +85,16 @@ final class ThreadModel {
     // MARK: Composer state
 
     var draft = ""
-    var pendingCard: FeedCard?
+    /// A card to share with the next message (picking one drops a picture picked).
+    var pendingCard: FeedCard? {
+        didSet { if pendingCard != nil, pendingPicture != nil { pendingPicture = nil } }
+    }
+    /// A picture to send with the next message (picking one drops a card picked).
+    var pendingPicture: PickedPicture? {
+        didSet { if pendingPicture != nil, pendingCard != nil { pendingCard = nil } }
+    }
+    /// A picture is being readied for sending (made a JPEG of the server's size, off the main thread).
+    private(set) var preparingPicture = false
     var noteRef: MessagingAPI.NoteRef?
     /// The message the next one answers (set by `reply(to:)`, cleared by sending and `cancelReply`).
     private(set) var replyingTo: ReplyQuote?
@@ -576,11 +587,38 @@ final class ThreadModel {
 
     // MARK: - Sending
 
-    /// ThreadView's `valid`: text or a card, within 2000, somewhere to send it. A message in flight
-    /// doesn't matter: the next one queues behind it.
+    /// ThreadView's `valid`: text, a card or a picture, within 2000, somewhere to send it. A message in
+    /// flight doesn't matter: the next one queues behind it.
     var canSend: Bool {
         let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (!trimmed.isEmpty || pendingCard != nil) && trimmed.utf16.count <= Self.maxLength && pairId != nil
+        return (!trimmed.isEmpty || pendingCard != nil || pendingPicture != nil) && trimmed.utf16.count <= Self.maxLength
+            && pairId != nil && !preparingPicture
+    }
+
+    /// The pictures of the account's conversations (read with its credentials).
+    var pictures: ChatImageStore { session.chatImages }
+
+    /// A picture picked from the library: its bytes read (`load`: the library may fetch them first),
+    /// readied for sending off the main thread, then held above the field until it is sent or taken
+    /// away. One that can't be read, or is no picture, says so instead.
+    func attachPicture(_ load: () async -> Data?) async {
+        preparingPicture = true
+        defer { preparingPicture = false }
+        error = nil
+        guard let data = await load() else {
+            error = L10n.Messages.imageUnsupported
+            return
+        }
+        let picked = await Task.detached(priority: .userInitiated) { ChatPictures.prepare(data) }.value
+        guard let picked else {
+            error = L10n.Messages.imageUnsupported
+            return
+        }
+        pendingPicture = picked
+    }
+
+    func attachPicture(_ data: Data) async {
+        await attachPicture { data }
     }
 
     /// This conversation's outbox (kept by the session, so it outlives this model). Nil until we know whom it is with.
@@ -615,13 +653,18 @@ final class ThreadModel {
     func send() {
         guard canSend, let me, let box = outbox else { return }
         watchOutbox()
-        // The card it shares is drawn at once, not asked for.
+        let clientId = Outbox.newClientId()
+        // The card it shares is drawn at once, not asked for; so is its picture, from the device, under
+        // the id the server will keep it by.
         if let card = pendingCard { sharedCards.remember(card) }
-        box.enqueue(Outbox.Outgoing(clientId: Outbox.newClientId(), senderId: me,
+        if let picture = pendingPicture { session.chatImages.keep(picture.preview, for: clientId) }
+        box.enqueue(Outbox.Outgoing(clientId: clientId, senderId: me,
                                     text: draft.trimmingCharacters(in: .whitespacesAndNewlines),
-                                    cardRef: pendingCard?.id, noteRef: noteRef, replyTo: replyingTo))
+                                    cardRef: pendingCard?.id, noteRef: noteRef, replyTo: replyingTo,
+                                    picture: pendingPicture?.upload))
         draft = ""
         pendingCard = nil
+        pendingPicture = nil
         noteRef = nil
         replyingTo = nil
         error = nil

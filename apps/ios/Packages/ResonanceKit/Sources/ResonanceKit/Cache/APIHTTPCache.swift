@@ -126,11 +126,15 @@ public final class APIFreshness: Sendable {
 
 /// Sends `Cache-Control: no-cache` on a GET that `APIFreshness` says must go
 /// to the server, and marks every URL stale after a write that succeeded —
-/// except the push registration, which changes nothing anyone reads.
+/// except the push registration, which changes nothing anyone reads. A chat
+/// picture is never asked for again: its bytes never change (and the account's
+/// cache keeps it a year), so the viewer's writes leave it as it is.
 public struct FreshnessMiddleware: ClientMiddleware {
     let freshness: APIFreshness
     /// Writes that leave every read as it was.
     static let unchanging: Set<String> = ["registerDevice", "unregisterDevice"]
+    /// Reads whose answer never changes: no write makes them stale.
+    static let immutable: Set<String> = ["getChatImage"]
     /// The header that opts in to the server's `max-age` (src/lib/api/v1/cache.ts).
     static let optIn = HTTPField.Name("X-Resonance-Cache")!
 
@@ -152,7 +156,9 @@ public struct FreshnessMiddleware: ClientMiddleware {
         // may reuse a private answer while fresh: the server only allows max-age > 0 to clients
         // that say so (older builds, sharing URLSession.shared, revalidate every time).
         request.headerFields[Self.optIn] = "1"
-        if freshness.mustRevalidate(request.path ?? "") { request.headerFields[.cacheControl] = "no-cache" }
+        if !Self.immutable.contains(operationID), freshness.mustRevalidate(request.path ?? "") {
+            request.headerFields[.cacheControl] = "no-cache"
+        }
         return try await next(request, body, baseURL)
     }
 }

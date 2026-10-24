@@ -3,20 +3,20 @@ import ResonanceKit
 import SwiftUI
 import UIKit
 
-/// The writer's second step (writer.spec §2, the web's PublishStep): 發布這張卡片 — or 更新這張卡片
-/// for a live card — on one screen in the editor's place, the publish panel grown into a page
-/// (publishing is still two taps: 下一步 → 發布). Top to bottom: the mirror line (first publication
-/// only), the card as a list will show it with its cover editor in its picture, 標籤, 誰可以看見,
-/// 以匿名發布 with its byline, a line saying whether a resonance reaches its original, then the
-/// foot — 存成草稿，稍後再寫 | 發布 (捨棄修改 | 儲存修改 for a live card). Every choice is the
-/// model's own value and autosaves with the draft or the live card's pending edit.
+/// The writer's second step (writer.spec §2, the web's PublishStep): 發布這張卡片 — 儲存這張卡片 for
+/// a draft kept to its author, 更新這張卡片 for a live card — on one screen in the editor's place,
+/// the publish panel grown into a page (publishing is still two taps: 下一步 → 發布). Top to bottom:
+/// the mirror line (first publication only), the card as a list will show it with its cover edited
+/// on the picture itself (round 7 §1.3), 標籤, 誰可以看見 — one choice of 公開 · 匿名公開 · 只有自己
+/// with the one line that says what it means (§1.1) —, a line saying whether a resonance reaches its
+/// original, then the foot — 存成草稿，稍後再寫 | 發布 · 匿名發布 · 儲存, by the audience (捨棄修改 |
+/// 儲存修改 for a live card). Every choice is the model's own value and autosaves with the draft or
+/// the live card's pending edit.
 struct PublishStep: View {
     let model: WriteModel
     /// At the split the pane has no bar: the step names itself in its own first row (← 繼續寫 and
     /// the heading), level with the Leave over the map. Below it the bar does.
     let inlineHeading: Bool
-    /// The anonymous-publishing hint, for the writer's first few visits.
-    let showsAnonymousHint: Bool
     var onBack: () -> Void
     var onPickCover: () -> Void
     var onSubmit: () -> Void
@@ -26,11 +26,6 @@ struct PublishStep: View {
 
     private var updating: Bool { model.isPublished }
     private var compact: Bool { window.layoutClass == .compact }
-
-    /// The step's heading: 發布這張卡片, or 更新這張卡片 for a live card.
-    static func title(updating: Bool) -> String {
-        updating ? L10n.Write.PublishPanel.updateTitle : L10n.Write.PublishPanel.title
-    }
 
     /// The way out beside the verb: always for a draft (存成草稿，稍後再寫); for a live card only while
     /// there is a revision to drop (捨棄修改).
@@ -46,7 +41,7 @@ struct PublishStep: View {
     /// at the bar (``topPadding(_:showsBar:compact:)``). With anything above it, the band keeps its
     /// own rule, as a card under another does.
     static func bandUnderBar(_ model: WriteModel, showsBar: Bool, compact: Bool) -> Bool {
-        guard compact, showsBar, !model.isPublished else { return false }
+        guard compact, showsBar, !model.showsUpdateHint else { return false }
         switch model.insight {
         case .loading?, .shown?: return false
         case .none?, nil: return true
@@ -62,10 +57,11 @@ struct PublishStep: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Self.sectionGap) {
-            if inlineHeading || updating {
+            if inlineHeading || model.showsUpdateHint {
                 VStack(alignment: .leading, spacing: 8) {
                     if inlineHeading { headingRow }
-                    if updating {
+                    // About readers: not said while the card is being kept to its author.
+                    if model.showsUpdateHint {
                         CSSText(L10n.Write.PublishPanel.updateHint, font: AppFonts.scaledUIFont(.body, size: 14), lineHeight: 1.7,
                                 color: UIColor(Tokens.textMuted))
                     }
@@ -76,8 +72,6 @@ struct PublishStep: View {
                 preview
                 tags
                 audience
-                anonymity
-                if let line = model.resonanceLine { resonance(line) }
             }
             // Publishing, saving or leaving: every control in the step waits (the web's fieldset disabled).
             .disabled(model.pending)
@@ -99,7 +93,7 @@ struct PublishStep: View {
             OrganicIconButton(.arrowRight, label: L10n.Write.leaveStay, size: 18, mirrored: true, action: onBack)
                 .disabled(model.pending)
                 .padding(.leading, -13)
-            Text(Self.title(updating: updating))
+            Text(model.stepTitle)
                 .font(AppFonts.heading(22))
                 .tracking(-0.02 * 22)
                 .foregroundStyle(Tokens.text)
@@ -156,30 +150,19 @@ struct PublishStep: View {
                         .frame(maxWidth: Self.previewMaxWidth, alignment: .leading)
                 }
             }
+            // What it is, said once: the card as a list will show it (the caption under it is gone).
             .accessibilityElement(children: .contain)
             .accessibilityLabel(L10n.Write.previewCaption)
-            Text(L10n.Write.previewCaption)
-                .font(AppFonts.body(12))
-                .foregroundStyle(Tokens.textMuted)
-                .accessibilityHidden(true)
-            coverBelow
+            // Why the last picture didn't come: one line, only while there is one.
+            if let error = model.mediaError {
+                Text(error).font(AppFonts.body(12)).foregroundStyle(Tokens.terracotta)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
     /// Wider than a phone, the preview keeps to a list column's card.
     static let previewMaxWidth: CGFloat = 360
-
-    /// Under the caption: another picture for one that is there, and why the last try didn't work.
-    @ViewBuilder private var coverBelow: some View {
-        let busy = model.mediaBusy
-        if model.values.imageURL != nil && !busy {
-            OrganicButton(L10n.Write.mediaReplace, variant: .tonal, size: .sm, action: onPickCover)
-                .padding(.top, 4)
-        }
-        if let error = model.mediaError {
-            Text(error).font(AppFonts.body(12)).foregroundStyle(Tokens.terracotta)
-        }
-    }
 
     // MARK: 3 — tags
 
@@ -199,64 +182,41 @@ struct PublishStep: View {
         }
     }
 
-    // MARK: 4 — who can see it
+    // MARK: 4 — who can see it, and under whose name
 
     private var audience: some View {
         VStack(alignment: .leading, spacing: Self.labelGap) {
             label(L10n.Write.Visibility.label)
             // A segmented choice with no pen line (its options are buttons): a quiet paper-dark track
-            // shows the control's extent, the chosen side wears the tonal peach with the deep label. A
-            // card kept for connections only (older ones) shows neither side chosen and keeps its
-            // audience until one is.
+            // shows the control's extent, the chosen segment wears the tonal peach with the deep label.
+            // Anonymity is a way of being public, so it is one of the three. A card kept for connections
+            // only (older ones) shows none chosen and keeps its audience until one is.
             SegmentedActionBar([
-                visibilityOption("public", L10n.Write.Visibility.`public`, icon: .globe),
-                visibilityOption("private", L10n.Write.Visibility.`private`, icon: .lock),
+                audienceOption(.public, L10n.Write.Visibility.`public`, icon: .globe),
+                audienceOption(.anonymous, L10n.Write.Visibility.anonymous, icon: .mask),
+                audienceOption(.private, L10n.Write.Visibility.`private`, icon: .lock),
             ], fill: Tokens.creamDark)
-            // Never for connections only: who could read it would say who wrote it.
-            if model.values.anonymous { hint(L10n.Write.PublishPanel.anonymousVisibility) }
+            // One line that says what the choice means — the preview above already wears the byline.
+            hint(model.audienceLine(handle: session.me?.handle ?? ""))
+                .contentTransition(.opacity)
+                .animation(.easeOut(duration: 0.16), value: model.audience)
+            // A resonance's line stays with the choice it follows.
+            if let line = model.resonanceLine { resonance(line).padding(.top, 2) }
         }
     }
 
-    private func visibilityOption(_ value: String, _ label: String, icon: IconName) -> SegmentSpec {
-        let chosen = model.values.visibility == value
-        // The other side's ink stays deep enough to read on the track.
-        return SegmentSpec(id: value, icon: icon, label: label,
+    private func audienceOption(_ audience: WriteModel.Audience, _ label: String, icon: IconName) -> SegmentSpec {
+        let chosen = model.audience == audience
+        // The other segments' ink stays deep enough to read on the track.
+        return SegmentSpec(id: audience.rawValue, icon: icon, label: label,
                            fill: chosen ? Tokens.buttonTonal : nil,
                            ink: chosen ? Tokens.buttonOnTonal : Tokens.segmentIdleInk,
                            pressInk: .black.opacity(0.05), selected: chosen) {
-            model.choose(visibility: value)
+            model.choose(audience)
         }
     }
 
-    // MARK: 5 — publish anonymously, with the byline the world will get
-
-    private var anonymity: some View {
-        VStack(alignment: .leading, spacing: Self.labelGap) {
-            HStack(spacing: 12) {
-                Text(L10n.Write.PublishPanel.anonymousToggle).font(AppFonts.body(14)).foregroundStyle(Tokens.text)
-                Spacer(minLength: 0)
-                OrganicToggle(isOn: Binding(get: { model.values.anonymous }, set: { model.setAnonymous($0) }),
-                              label: L10n.Write.PublishPanel.anonymousToggle, seed: 57)
-            }
-            // Seeing is understanding: the exact card head the world will get.
-            HStack(spacing: 10) {
-                if model.values.anonymous {
-                    HandDrawnAvatar(initials: "·", color: Tokens.creamDark, size: 34, seed: 97)
-                } else if let me = session.me {
-                    HandDrawnAvatar(initials: me.initials, imageURL: me.avatarUrl.flatMap(URL.init(string:)),
-                                    color: OKLCHColor.parse(me.accentColor) ?? Tokens.terracottaLight, size: 34, seed: 7)
-                }
-                Text(model.values.anonymous ? L10n.Write.PublishPanel.anonymousName : session.me?.handle ?? "")
-                    .font(AppFonts.body(14, weight: .semibold))
-                    .foregroundStyle(model.values.anonymous ? Tokens.textMuted : Tokens.text)
-            }
-            .accessibilityElement(children: .combine)
-            if showsAnonymousHint && !model.values.anonymous { hint(L10n.Write.PublishPanel.anonymousHint) }
-        }
-        .animation(.easeOut(duration: 0.2), value: model.values.anonymous)
-    }
-
-    // MARK: 6 — whether a resonance tells its original's author
+    // MARK: 5 — whether a resonance tells its original's author
 
     private func resonance(_ line: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -308,8 +268,8 @@ struct PublishStep: View {
     }
 
     private var verb: OrganicButton {
-        OrganicButton(updating ? L10n.Write.PublishPanel.update : L10n.Write.PublishPanel.publish, variant: .solid, size: .sm,
-                      action: onSubmit)
+        // The verb follows the audience: 發布, 匿名發布, or 儲存 for a card kept to its author.
+        OrganicButton(model.verbTitle, variant: .solid, size: .sm, action: onSubmit)
             .loading(model.pending && model.busyVerb == .publish)
             .workingLabel(updating ? L10n.Write.saveShort : nil)
     }
@@ -343,8 +303,9 @@ extension PublishStep {
 
 /// What lies in the preview's picture (the web's CoverFrame): with no cover the two ways to one —
 /// 加一張圖片 · 生成圖片, the second waiting for a story — the pen's loader while one is on its way
-/// (over the model's blurred, washed rough pass while it paints), and once there is one, the
-/// editor's ✕ to take it away.
+/// (over the model's blurred, washed rough pass while it paints), and once there is one, the picture
+/// is where it is changed (round 7 §1.3): one 更換封面 chip on its bottom-right corner, its menu
+/// another picture · a drawn one · none.
 private struct CoverSlot: View {
     let model: WriteModel
     var onPick: () -> Void
@@ -366,7 +327,7 @@ private struct CoverSlot: View {
                 .accessibilityElement(children: .combine)
             } else if model.values.imageURL != nil {
                 Color.clear
-                    .overlay(alignment: .topTrailing) { removeChip.padding(12) }
+                    .overlay(alignment: .bottomTrailing) { changeChip.padding(10) }
             } else {
                 VStack(spacing: 8) {
                     ViewThatFits(in: .horizontal) {
@@ -396,21 +357,24 @@ private struct CoverSlot: View {
         .disabled(!model.canGenerate)
     }
 
-    /// The editor's ✕ (HandDrawnImage's): the dark chip on the picture's corner.
-    private var removeChip: some View {
-        Button { model.removeCover() } label: {
-            ZStack {
-                let chip = WobRectShape(radius: 34 * 0.4, seed: 36, mag: 34 * 0.022, options: WobRectOptions(
-                    curve: 1.3, cornerJitter: 3.2, cornerOffset: 34 * 0.06, segmentsH: .count(1), segmentsV: .count(1)))
-                chip.fill(Tokens.imageRemoveFill)
-                chip.stroke(Tokens.imageRemoveStroke, lineWidth: Tokens.ink)
-                OrganicIcon(.close, size: 16, color: Tokens.cream)
-            }
-            .frame(width: 34, height: 34)
-            .frame(width: 44, height: 44)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(L10n.Write.mediaRemove)
+    /// 更換封面: the paper chip on the picture's corner, and what it offers — another picture, one drawn
+    /// from the story (waiting for a story), or none.
+    private var changeChip: some View {
+        OrganicMenu(items: PublishStep.coverItems(canGenerate: model.canGenerate, pick: onPick,
+                                                  generate: { Task { await model.generateCover() } },
+                                                  remove: { model.removeCover() }),
+                    label: L10n.Write.coverChange, seed: 36, trigger: .pill(L10n.Write.coverChange, .image))
+    }
+}
+
+extension PublishStep {
+    /// The cover's menu: 換一張圖片 · 生成圖片 (waiting for a story to draw from) · 移除圖片, in the danger tone.
+    static func coverItems(canGenerate: Bool, pick: @escaping () -> Void, generate: @escaping () -> Void,
+                           remove: @escaping () -> Void) -> [OrganicMenuItem] {
+        [
+            OrganicMenuItem(id: "replace", title: L10n.Write.mediaReplace, icon: .image, action: pick),
+            OrganicMenuItem(id: "generate", title: L10n.Write.mediaGenerate, icon: .sparkle, disabled: !canGenerate, action: generate),
+            OrganicMenuItem(id: "remove", title: L10n.Write.mediaRemove, icon: .trash, danger: true, action: remove),
+        ]
     }
 }

@@ -13,14 +13,16 @@ public enum CardLookup<Card> {
 extension CardLookup: Equatable where Card: Equatable {}
 extension CardLookup: Sendable where Card: Sendable {}
 
-/// What a message's bubble carries besides its words — decided from the card it shares and what
-/// is known of that card: the card itself once read and the reader's to see, its stand-in while it
-/// is read; otherwise its link's preview, or its words alone. A card the reader can't see falls
-/// back: a link to it is a link again (with its preview, if the server made one); a card shared
-/// with the button shows nothing of itself. Pure; the twin of Android's `Carried`.
+/// What a message's bubble carries besides its words — a picture sent with them, else decided from
+/// the card it shares and what is known of that card: the card itself once read and the reader's to
+/// see, its stand-in while it is read; otherwise its link's preview, or its words alone. A card the
+/// reader can't see falls back: a link to it is a link again (with its preview, if the server made
+/// one); a card shared with the button shows nothing of itself. Pure; the twin of Android's `Carried`.
 public enum Carried<Card> {
     /// Its words alone (or a reply to a note).
     case words
+    /// A picture sent with the words (over them, edge to edge): the bubble is the picture's.
+    case picture(ChatImage)
     /// A link's unfurled page.
     case preview(LinkPreview)
     /// A card of the site, shared with the button or linked to.
@@ -33,6 +35,8 @@ public enum Carried<Card> {
     /// `share` is the card `message` shares (`ChatMessage.cardShare`); `lookup` says where a card
     /// asked for by its key stands.
     public static func of(_ message: ChatMessage, share: CardShare?, lookup: (String) -> CardLookup<Card>) -> Carried {
+        // A message carries a card or a picture, never both: the picture is what it is about.
+        if let image = message.image { return .picture(image) }
         if let share {
             switch lookup(share.key) {
             case let .found(card): return .card(card, share)
@@ -52,7 +56,7 @@ public enum Carried<Card> {
     public func words(of message: ChatMessage) -> String {
         switch self {
         case let .card(_, share), let .cardLoading(share): share.link != nil && share.text.isEmpty ? "" : message.text
-        case .words, .preview, .nothing: message.text
+        case .words, .picture, .preview, .nothing: message.text
         }
     }
 

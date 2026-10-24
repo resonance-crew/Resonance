@@ -8,15 +8,25 @@ import SwiftUI
 /// the prompt to write. Picks that come after the latest cards are showing go
 /// on top of them at once: a reader at the top sees the first of them there, one
 /// further down keeps the cards in front of them where they are (the list anchors
-/// its scroll on them, a grid keeps the picks in rows of their own above).
+/// its scroll on them, a grid keeps the picks in rows of their own above) and
+/// hears of them from the shell's toast, 今天的推薦來了 · 往上看, which takes the
+/// feed up to them (``PicksNotice``).
 struct FeedScreen: View {
     @Environment(SessionStore.self) private var session
     @Environment(WriteLauncher.self) private var writer
     @Environment(\.window) private var window
+    @Environment(\.isSelectedTab) private var onSelectedTab
     @State private var model: FeedModel?
+    /// The list rests at its top (as TabScreen tells it).
+    @State private var atTop = true
+    /// Each one takes the list back to its top (the toast's 往上看).
+    @State private var upRequests = 0
+    /// Between appearing and disappearing: the top of the tab's stack.
+    @State private var appeared = false
+    @State private var picksNotice = PicksNotice()
 
     var body: some View {
-        TabScreen("", head: model?.cards.first?.id) {
+        TabScreen("", head: model?.cards.first?.id, toTopRequests: upRequests, onAtTop: reachedTop) {
             content
         }
         .animation(.easeInOut(duration: 0.25), value: model?.refreshFailure)
@@ -43,6 +53,45 @@ struct FeedScreen: View {
         .onChange(of: session.awayRefreshes) {
             Task { await model?.revalidate() }
         }
+        // Today's picks landed above a reader down the list: the toast says so, the whole pill the way up.
+        .onChange(of: model?.picksLanded ?? 0) { before, now in
+            if now > before, picksNotice.landed(atTop: atTop, inView: inView) { tellPicks() }
+        }
+        // Out of sight (another tab, a page over the feed) the toast has nothing to scroll; back in view,
+        // picks that landed meanwhile are told of.
+        .onAppear {
+            appeared = true
+            if inView, picksNotice.back(atTop: atTop) { tellPicks() }
+        }
+        .onDisappear {
+            appeared = false
+            takeDownPicksToast()
+        }
+        .onChange(of: onSelectedTab) { _, selected in
+            if !selected {
+                takeDownPicksToast()
+            } else if appeared, picksNotice.back(atTop: atTop) {
+                tellPicks()
+            }
+        }
+    }
+
+    /// The feed is on show: the top of its stack, on the tab chosen.
+    private var inView: Bool { appeared && onSelectedTab }
+
+    /// 今天的推薦來了 · 往上看: up to the picks when tapped.
+    private func tellPicks() {
+        picksNotice.shown(session.toasts.show(L10n.Home.Recommended.arrived, action: PicksNotice.action { upRequests += 1 }))
+    }
+
+    private func takeDownPicksToast() {
+        if let id = picksNotice.takeDown() { session.toasts.dismiss(id) }
+    }
+
+    /// The list came to rest at its top, or left it: at the top by hand, the toast's job is done.
+    private func reachedTop(_ top: Bool) {
+        atTop = top
+        if top, let id = picksNotice.reachedTop() { session.toasts.dismiss(id) }
     }
 
     /// The paper of the band at the bar's line, when the feed's top is one: the first card's family
@@ -198,5 +247,59 @@ struct RefreshNote: View {
             .padding(.top, -12)
             .padding(.bottom, 24)
             .transition(.opacity)
+    }
+}
+
+/// When today's picks are told of (round 7 §2): picks that land on top of the latest cards while the
+/// reader is down the list — where the feed keeps their place, so the picks are out of sight above
+/// them — bring the shell's toast, 今天的推薦來了 · 往上看, the whole pill the way up. At the top
+/// already, the picks are simply the first thing in view, and nothing is said. Reaching the top by
+/// hand takes the toast down (its job is done); the feed leaving the screen does too, and picks that
+/// landed while it was away are told of once it is back, the reader still down the list.
+struct PicksNotice: Equatable {
+    /// The toast showing, by its id in the shell's center.
+    private(set) var toast: Int?
+    /// Picks landed while the feed was out of sight, the reader down the list: said once it is back.
+    private(set) var owed = false
+
+    /// Picks went on top of the latest cards: whether to say so now.
+    mutating func landed(atTop: Bool, inView: Bool) -> Bool {
+        guard !atTop else { return false }
+        guard inView else {
+            owed = true
+            return false
+        }
+        return true
+    }
+
+    /// The feed is in view again: whether to say what landed while it wasn't.
+    mutating func back(atTop: Bool) -> Bool {
+        defer { owed = false }
+        return owed && !atTop
+    }
+
+    /// The toast went up under `id`.
+    mutating func shown(_ id: Int) {
+        toast = id
+        owed = false
+    }
+
+    /// The feed left the screen: the toast to take down, if one shows.
+    mutating func takeDown() -> Int? {
+        defer { toast = nil }
+        return toast
+    }
+
+    /// The list reached its top: nothing is owed any more, and the toast showing goes.
+    mutating func reachedTop() -> Int? {
+        owed = false
+        return takeDown()
+    }
+
+    /// The toast's action: 往上看 after the words, the arrow before them; the pill is named by both.
+    static func action(up: @escaping @MainActor () -> Void) -> ToastCenter.Action {
+        ToastCenter.Action(label: L10n.Home.Recommended.arrivedAction,
+                           accessibilityLabel: "\(L10n.Home.Recommended.arrived) · \(L10n.Home.Recommended.arrivedAction)",
+                           icon: .arrowUp, perform: up)
     }
 }

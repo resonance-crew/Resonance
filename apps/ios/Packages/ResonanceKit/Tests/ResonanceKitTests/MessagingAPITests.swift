@@ -7,7 +7,7 @@ import Testing
 
 /// Notes and messages go through the contract; the server's refusals surface as APIFailure.
 struct MessagingAPITests {
-    func api(_ transport: StubTransport) -> MessagingAPI {
+    func api(_ transport: any ClientTransport) -> MessagingAPI {
         MessagingAPI(client: Client(serverURL: URL(string: "https://example.test/api/v1")!, transport: transport))
     }
 
@@ -66,5 +66,98 @@ struct MessagingAPITests {
         await #expect(throws: APIFailure(code: "blocked", message: "You cannot message this person.", status: 403)) {
             try await api(transport).sendMessage(to: "bob", text: "hi")
         }
+    }
+
+    /// A picture is uploaded as the contract's form — the file, whom it is for, the message's own
+    /// client id — and answered with its id and size as kept.
+    @Test func aPictureIsUploadedWithWhomItIsForAndTheMessagesId() async throws {
+        let transport = RawTransport(status: .created, body: Data(#"{"id":"AbCdEfGhIjKlMnOpQrSt","width":1536,"height":2048}"#.utf8))
+        let jpeg = Data([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10])
+        let kept = try await api(transport).uploadChatImage(jpeg, contentType: "image/jpeg", filename: "picture.jpg", to: "bob",
+                                                            clientId: "AbCdEfGhIjKlMnOpQrSt")
+        #expect(kept == ChatImage(id: "AbCdEfGhIjKlMnOpQrSt", width: 1536, height: 2048))
+        let request = try #require(transport.requests.first)
+        #expect(request.method == .post)
+        #expect(request.path?.hasSuffix("/chat-images") == true)
+        #expect(request.headerFields[.contentType]?.hasPrefix("multipart/form-data; boundary=") == true)
+        let body = try #require(transport.bodies.first)
+        let form = String(decoding: body, as: UTF8.self)
+        #expect(form.contains(#"name="file""#) && form.contains(#"filename="picture.jpg""#))
+        #expect(form.contains(#"name="to""#) && form.contains("\r\n\r\nbob\r\n"))
+        #expect(form.contains(#"name="clientId""#) && form.contains("\r\n\r\nAbCdEfGhIjKlMnOpQrSt\r\n"))
+        // The bytes as they were picked.
+        #expect(body.range(of: jpeg) != nil)
+    }
+
+    @Test func aPictureRefusedIsAFailureWithItsStatus() async throws {
+        let refused = RawTransport(status: .badRequest, body: Data(#"{"error":{"code":"invalid_request","message":"Not a picture that can be sent."}}"#.utf8))
+        let failure = await #expect(throws: APIFailure.self) {
+            try await api(refused).uploadChatImage(Data([1]), contentType: "image/jpeg", filename: "picture.jpg", to: "bob",
+                                                   clientId: "AbCdEfGhIjKlMnOpQrSt")
+        }
+        #expect(failure?.status == 400)
+        // Past the day's budget: a failure that will pass (the outbox stops its line rather than dropping the message).
+        let spent = RawTransport(status: .tooManyRequests, body: Data(#"{"error":{"code":"rate_limited","message":"Too many."}}"#.utf8))
+        let limit = await #expect(throws: APIFailure.self) {
+            try await api(spent).uploadChatImage(Data([1]), contentType: "image/jpeg", filename: "picture.jpg", to: "bob",
+                                                 clientId: "AbCdEfGhIjKlMnOpQrSt")
+        }
+        #expect(limit?.status == 429)
+        #expect(!Outbox.refusedByServer(limit!))
+        #expect(Outbox.refusedByServer(failure!))
+    }
+
+    @Test func aMessageNamesItsPicture() async throws {
+        let transport = StubTransport(status: .created, body: #"{"conversationId":"alice_bob","id":"AbCdEfGhIjKlMnOpQrSt"}"#)
+        _ = try await api(transport).sendMessage(to: "bob", text: "", clientId: "AbCdEfGhIjKlMnOpQrSt", image: "AbCdEfGhIjKlMnOpQrSt")
+        let json = try #require(transport.sentJSON.first ?? nil)
+        #expect(json["image"] as? String == "AbCdEfGhIjKlMnOpQrSt")
+        #expect(json["text"] as? String == "")
+        #expect(json["cardRef"] == nil)
+    }
+
+    /// A picture is read back with the viewer's credentials: the thread's size or as kept, its bytes as they came.
+    @Test func aPictureIsReadBackAtTheSizeAsked() async throws {
+        let webp = Data("RIFF....WEBPVP8 ".utf8)
+        let transport = RawTransport(status: .ok, body: webp, contentType: "image/webp")
+        #expect(try await api(transport).chatImage("p1", thumb: true) == webp)
+        #expect(try await api(transport).chatImage("p1", thumb: false) == webp)
+        #expect(transport.requests.map(\.bare) == ["/chat-images/p1", "/chat-images/p1"])
+        #expect(transport.requests.allSatisfy { $0.method == .get })
+        #expect(transport.requests.first?.query("size") == "thumb")
+        #expect(transport.requests.last?.query("size") == "full")
+        let missing = RawTransport(status: .notFound, body: Data(#"{"error":{"code":"not_found","message":"No such picture."}}"#.utf8))
+        let failure = await #expect(throws: APIFailure.self) { try await api(missing).chatImage("p9", thumb: true) }
+        #expect(failure?.isNotFound == true)
+    }
+}
+
+/// A transport that keeps each request's raw body and answers with the bytes it is given.
+final class RawTransport: ClientTransport, @unchecked Sendable {
+    let status: HTTPResponse.Status
+    let body: Data
+    let contentType: String
+    private let lock = NSLock()
+    private var _requests: [HTTPRequest] = []
+    private var _bodies: [Data] = []
+    var requests: [HTTPRequest] { lock.withLock { _requests } }
+    var bodies: [Data] { lock.withLock { _bodies } }
+
+    init(status: HTTPResponse.Status, body: Data, contentType: String = "application/json") {
+        self.status = status
+        self.body = body
+        self.contentType = contentType
+    }
+
+    func send(_ request: HTTPRequest, body: HTTPBody?, baseURL: URL, operationID: String) async throws -> (HTTPResponse, HTTPBody?) {
+        var sent = Data()
+        if let body { sent = try await Data(collecting: body, upTo: 8 << 20) }
+        lock.withLock {
+            _requests.append(request)
+            _bodies.append(sent)
+        }
+        var response = HTTPResponse(status: status)
+        response.headerFields[.contentType] = contentType
+        return (response, HTTPBody(self.body))
     }
 }

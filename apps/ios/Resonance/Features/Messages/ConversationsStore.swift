@@ -32,6 +32,8 @@ final class ConversationsStore {
         let other: Person
         let lastText: String?
         let lastFromMe: Bool
+        /// The last message was a picture (`lastMessage.image`).
+        var lastImage = false
         let sentAt: Date?
         let unread: Int
     }
@@ -177,7 +179,7 @@ final class ConversationsStore {
             let last = doc.get("lastMessage") as? [String: Any]
             let unread = ((doc.get("unread") as? [String: Any])?[uid] as? NSNumber)?.intValue ?? 0
             return Conversation(id: doc.documentID, other: other, lastText: last?["text"] as? String,
-                                lastFromMe: last?["senderId"] as? String == uid,
+                                lastFromMe: last?["senderId"] as? String == uid, lastImage: last?["image"] as? Bool == true,
                                 sentAt: (last?["sentAt"] as? Timestamp)?.dateValue(), unread: unread)
         }
         let talking = Set(conversations.map(\.other.id))

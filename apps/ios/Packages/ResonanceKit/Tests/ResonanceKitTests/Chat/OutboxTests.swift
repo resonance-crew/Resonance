@@ -59,6 +59,28 @@ import Testing
         box.clear()
     }
 
+    /// A picture goes with its message: drawn at once under the message's client id (the server
+    /// keeps it under that id), handed to `deliver` as it was picked.
+    @Test func aPictureGoesWithItsMessage() async {
+        let log = Log()
+        let box = Outbox { m in
+            log.sent.append(m)
+            return m.clientId
+        }
+        let picture = Outbox.Picture(data: Data([0xFF, 0xD8, 0xFF]), contentType: "image/jpeg", width: 1200, height: 900)
+        let message = Outgoing(clientId: "AbCdEfGhIjKlMnOpQrSt", senderId: "alice", text: "", picture: picture,
+                               queuedAt: Date(timeIntervalSince1970: 1))
+        #expect(message.message.image == ChatImage(id: "AbCdEfGhIjKlMnOpQrSt", width: 1200, height: 900))
+        #expect(message.message.text.isEmpty)
+        #expect(out("words").message.image == nil)
+        box.enqueue(message)
+        await until(box) { $0.first?.status == .sent }
+        #expect(log.sent.first?.picture == picture)
+        #expect(picture.filename == "picture.jpg")
+        #expect(Outbox.Picture(data: Data(), contentType: "image/gif", width: 1, height: 1).filename == "picture.gif")
+        box.clear()
+    }
+
     @Test func aSentMessageStaysUntilTheConversationShowsIt() async {
         let box = Outbox { _ in "doc" }
         box.enqueue(out("a"))

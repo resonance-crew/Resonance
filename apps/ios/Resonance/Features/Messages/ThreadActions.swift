@@ -136,3 +136,51 @@ struct MessageMenuOverlay: View {
         }
     }
 }
+
+/// The composer's ＋, open (round 7 §4.2): 圖片 · 卡片 on the organic menu's panel, hanging over the ＋
+/// from its leading edge. It is the screen's own layer, never a presented one, so the field keeps its
+/// keyboard. A tap beside it, or the escape gesture, closes it; a row closes it and does its part.
+struct AttachMenuOverlay: View {
+    /// The ＋, on the screen.
+    let anchor: CGRect
+    let items: [OrganicMenuItem]
+    let onDismiss: () -> Void
+    @State private var shown = false
+    @State private var leaving = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let screen = geo.frame(in: .global)
+            let plus = anchor.offsetBy(dx: -screen.minX, dy: -screen.minY)
+            ZStack(alignment: .bottomLeading) {
+                Color.black.opacity(0.001)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: dismiss)
+                    .accessibilityHidden(true)
+                OrganicMenuPanel(items: items, seed: 29) { item in
+                    dismiss()
+                    item.action()
+                }
+                .scaleEffect(shown ? 1 : 0.94, anchor: .bottomLeading)
+                .offset(y: shown ? 0 : 4)
+                .opacity(shown ? 1 : 0)
+                .padding(.leading, max(menuMargin, plus.minX))
+                .padding(.bottom, max(menuMargin, geo.size.height - plus.minY + menuGap))
+            }
+        }
+        .ignoresSafeArea()
+        .accessibilityAction(.escape, dismiss)
+        .onEscapeKey(dismiss)
+        .onAppear { withAnimation(.timingCurve(0.2, 0.8, 0.3, 1, duration: 0.18)) { shown = true } }
+    }
+
+    private func dismiss() {
+        guard !leaving else { return }
+        leaving = true
+        withAnimation(.easeOut(duration: 0.12)) { shown = false }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+            onDismiss()
+        }
+    }
+}

@@ -25,6 +25,8 @@ import Testing
         #expect(!model.latestVisible)
         #expect(!model.picksOnTop)
         #expect(model.leadingPicks == 2)
+        // Leading from the start, they land nowhere out of sight: nothing to tell.
+        #expect(model.picksLanded == 0)
         // The picks ended the wait: nobody sat out the whole patience.
         #expect(ContinuousClock.now - started < .seconds(4))
 
@@ -52,6 +54,8 @@ import Testing
         #expect(ids(model.cards) == ["x", "a", "b", "c"])
         #expect(model.leadingPicks == 1)
         #expect(model.latestVisible)
+        // Something new landed above the latest: a reader down the list hears of it.
+        #expect(model.picksLanded == 1)
         // The latest cards stay showing under them: "load more" fetches the next page, it reveals nothing.
         #expect(!model.canLoadMore)
     }
@@ -81,6 +85,8 @@ import Testing
         #expect(await eventually { model.picksOnTop })
         #expect(ids(model.cards) == ["a", "b"])
         #expect(model.leadingPicks == 0)
+        // Nothing new above the reader: nothing to tell.
+        #expect(model.picksLanded == 0)
     }
 
     @Test func latePicksLeaveOutWhomTheReaderBlocked() async {
@@ -126,6 +132,7 @@ import Testing
         try? await Task.sleep(for: .milliseconds(50))
         #expect(!model.picksOnTop)
         #expect(ids(model.cards) == ["a", "b"])
+        #expect(model.picksLanded == 0)
     }
 
     @Test func picksStandInWhenTheLatestFail() async {
@@ -355,5 +362,99 @@ import Testing
         #expect(await eventually { model.picksOnTop })
         #expect(ids(model.cards) == ["x", "b", "a"])
         #expect(model.leadingPicks == 2)
+        #expect(model.picksLanded == 1)
+    }
+
+    /// A kept feed on a cold start, its picks coming behind it (revalidate): one landing — and a pull
+    /// whose picks come in time leads with them, landing nothing.
+    @Test func picksForAKeptFeedLandOnceAndAPullsInTimeLandNone() async {
+        let (a, b, x) = (a, b, x)
+        let picks = Gate<[FeedCard]>()
+        let keeping = FeedKeeping(latest: { Fixture.page([a, b]) }, picks: { [] }, keepLatest: { _ in }, keepPicks: { _ in })
+        let model = FeedModel(feed: { _ in Fixture.page([a, b]) }, recommended: { await picks.wait() },
+                              patience: .milliseconds(20), keeping: keeping)
+        let loading = Task { await model.load() }
+        #expect(await eventually { model.phase == .loaded })
+        await picks.open([x])
+        await loading.value
+        #expect(model.picksOnTop)
+        #expect(model.picksLanded == 1)
+
+        // A pull whose picks are there in time: they head the feed as a fresh load's do, landing nothing.
+        let pulled = FeedModel(feed: { _ in Fixture.page([a]) }, recommended: { [x] }, patience: .seconds(5))
+        await pulled.load()
+        await pulled.refresh()
+        #expect(ids(pulled.cards) == ["x"])
+        #expect(pulled.picksLanded == 0)
+    }
+}
+
+/// 今天的推薦來了 · 往上看 (round 7 §2): told to a reader down the list when picks land above them,
+/// never at the top; taken down once the top is reached by hand or the feed leaves the screen; picks
+/// that landed while the feed was out of sight told of once it is back, the reader still down the list.
+@MainActor @Suite struct PicksNoticeTests {
+    @Test func toldDownTheListNeverAtTheTop() {
+        var notice = PicksNotice()
+        let atTheTop = notice.landed(atTop: true, inView: true)
+        #expect(!atTheTop)
+        let down = notice.landed(atTop: false, inView: true)
+        #expect(down)
+        notice.shown(7)
+        #expect(notice.toast == 7)
+        // The top reached by hand: its job is done.
+        let reached = notice.reachedTop()
+        #expect(reached == 7)
+        #expect(notice.toast == nil)
+        let again = notice.reachedTop()
+        #expect(again == nil)
+    }
+
+    @Test func landedOutOfSightIsToldOnceTheFeedIsBack() {
+        var notice = PicksNotice()
+        let away = notice.landed(atTop: false, inView: false)
+        #expect(!away)
+        #expect(notice.owed)
+        let back = notice.back(atTop: false)
+        #expect(back)
+        #expect(!notice.owed)
+        // Told once only.
+        let twice = notice.back(atTop: false)
+        #expect(!twice)
+        // Back at the top already: the picks are in view, nothing to tell.
+        _ = notice.landed(atTop: false, inView: false)
+        let atTheTop = notice.back(atTop: true)
+        #expect(!atTheTop)
+        // The top reached meanwhile: nothing owed.
+        _ = notice.landed(atTop: false, inView: false)
+        _ = notice.reachedTop()
+        let afterTop = notice.back(atTop: false)
+        #expect(!afterTop)
+    }
+
+    @Test func theFeedLeavingTakesTheToastDown() {
+        var notice = PicksNotice()
+        notice.shown(3)
+        let first = notice.takeDown()
+        #expect(first == 3)
+        let second = notice.takeDown()
+        #expect(second == nil)
+    }
+
+    /// The shell's toast with its action: the arrow, 往上看 after the words, the whole pill named by
+    /// both, the time a toast with an action has — and a tap takes the list up.
+    @Test func theToastIsTheWayUp() {
+        final class Taps { var up = 0 }
+        let taps = Taps()
+        let toasts = ToastCenter(sleep: { _ in try await Task.sleep(for: .seconds(60)) }, assistive: { false }, announce: { _ in })
+        toasts.show(L10n.Home.Recommended.arrived, action: PicksNotice.action { taps.up += 1 })
+        let toast = toasts.current
+        #expect(toast?.message == L10n.Home.Recommended.arrived)
+        #expect(toast?.action?.label == L10n.Home.Recommended.arrivedAction)
+        #expect(toast?.action?.icon == .arrowUp)
+        #expect(toast?.action?.accessibilityLabel == "\(L10n.Home.Recommended.arrived) · \(L10n.Home.Recommended.arrivedAction)")
+        #expect(toast?.duration == ToastCenter.actionDuration)
+        toasts.act()
+        #expect(taps.up == 1)
+        #expect(toasts.current == nil)
     }
 }

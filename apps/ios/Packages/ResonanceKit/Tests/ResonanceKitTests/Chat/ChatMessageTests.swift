@@ -49,6 +49,33 @@ import Testing
         #expect(read(["replyTo": ["senderId": "alice", "text": "x"]]).replyTo == nil)
     }
 
+    /// A picture sent in a message: its id and size as kept (round 7 §4.1) — what the bubble takes its
+    /// shape from before the picture arrives; a field without an id is no picture.
+    @Test func aPictureComesWithItsSize() throws {
+        let m = read(["senderId": "bob", "text": "", "image": ["id": "p1", "width": NSNumber(value: 1536), "height": NSNumber(value: 2048)]])
+        #expect(m.image == ChatImage(id: "p1", width: 1536, height: 2048))
+        #expect(m.cardRef == nil)
+        #expect(read(["text": "hi"]).image == nil)
+        #expect(read(["image": ["width": 10, "height": 10]]).image == nil)
+        #expect(read(["image": ["id": ""]]).image == nil)
+        // A size missing or odd reads as 0: the bubble then takes a square.
+        #expect(read(["image": ["id": "p2"]]).image == ChatImage(id: "p2", width: 0, height: 0))
+        #expect(read(["image": ["id": "p3", "width": -4, "height": "x"]]).image == ChatImage(id: "p3", width: 0, height: 0))
+    }
+
+    /// A reply to a picture says so: the server's `replyTo.image`, and the quote a reply made here carries.
+    @Test func aQuoteOfAPictureSaysItWasOne() throws {
+        let m = read(["senderId": "bob", "text": "好看", "replyTo": ["id": "m0", "senderId": "alice", "text": "", "image": true]])
+        #expect(m.replyTo == ReplyQuote(id: "m0", senderId: "alice", text: "", image: true))
+        #expect(m.replyTo?.summary(picture: "一張圖片", card: "一張卡片") == "一張圖片")
+        // Words come first; a quote of a card alone says it was a card.
+        #expect(ReplyQuote(id: "m0", senderId: "a", text: "看這張", image: true).summary(picture: "一張圖片", card: "一張卡片") == "看這張")
+        #expect(ReplyQuote(id: "m0", senderId: "a", text: "", cardRef: "walk").summary(picture: "一張圖片", card: "一張卡片") == "一張卡片")
+        let picture = ChatMessage(id: "m0", senderId: "alice", text: "", sentAt: at, image: ChatImage(id: "p1", width: 4, height: 3))
+        #expect(ReplyQuote.of(picture).image)
+        #expect(!ReplyQuote.of(read(["senderId": "alice", "text": "hi"])).image)
+    }
+
     @Test func aQuoteIsCutAtOneHundredFortyCodePoints() throws {
         let long = String(repeating: "🙂", count: 200)
         let quote = try #require(read(["replyTo": ["id": "m0", "senderId": "alice", "text": long]]).replyTo)

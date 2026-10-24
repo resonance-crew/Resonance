@@ -26,6 +26,10 @@ import Testing
             switch (request.method, request.path) {
             case ("GET", _) where request.headers["if-none-match"] == etag:
                 return .init(status: 304, headers: caching)
+            case ("GET", let path) where path.hasPrefix("/api/v1/chat-images/"):
+                // A sent picture: the same bytes for good.
+                return .init(headers: ["Cache-Control": "private, max-age=31536000, immutable", "Content-Type": "image/webp"],
+                             body: "RIFF-WEBP")
             case ("GET", "/api/v1/me"):
                 return .init(headers: caching, body: """
                 {"id":"\(uid)","handle":"\(uid)","initials":"AB","accentColor":"oklch(90% 0.05 60)","bio":null,
@@ -100,6 +104,20 @@ import Testing
         let me = server.requests(to: "/api/v1/me")
         #expect(me.count == 2)
         #expect(me.last?.headers["cache-control"] == "no-cache")
+    }
+
+    /// A chat picture never changes: kept, it is shown again after the viewer's writes without asking.
+    @Test func aChatPictureIsNeverAskedForAgain() async throws {
+        let messaging = MessagingAPI(client: client)
+        #expect(try await messaging.chatImage("p1", thumb: true) == Data("RIFF-WEBP".utf8))
+        _ = try await messaging.sendNote(cardId: "c1", text: "Hi")
+        cache.freshness.invalidate()
+        #expect(try await messaging.chatImage("p1", thumb: true) == Data("RIFF-WEBP".utf8))
+        let asked = server.requests(to: "/api/v1/chat-images/p1?size=thumb")
+        #expect(asked.count == 1)
+        // Every other URL still asks again after the write.
+        _ = try await reading.feed()
+        #expect(server.requests(to: "/api/v1/feed?limit=12").last?.headers["cache-control"] == "no-cache")
     }
 
     @Test func aWriteMadeElsewhereMakesTheNextGETAskAgain() async throws {
