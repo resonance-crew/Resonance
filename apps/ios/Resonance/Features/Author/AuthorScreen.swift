@@ -89,6 +89,8 @@ struct AuthorScreen: View {
             VStack(spacing: 14) {
                 HandDrawnAvatar(initials: author.initials, imageURL: author.avatarUrl.flatMap(URL.init(string:)),
                                 color: author.accent, size: 96, seed: author.avatarSeedValue)
+                    // The avatar → the pen name: 16 (`--people-name-gap`, round 9 §9).
+                    .padding(.bottom, Tokens.peopleNameGap - 14)
                 Text(author.handle)
                     .font(AppFonts.heading(32))
                     .foregroundStyle(Tokens.text)
@@ -111,7 +113,8 @@ struct AuthorScreen: View {
                 }
             }
             .padding(.horizontal, 24)
-            .headerGap(phone: 20)
+            // The people head (round 9 §9): the avatar 40 / 56 under the bar's pen line.
+            .peopleHeadGap()
             .padding(.bottom, 36)
             .readableColumn()
 
@@ -205,8 +208,9 @@ struct AuthorScreen: View {
 private struct ProfileSkeleton: View {
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 16) {
+            VStack(spacing: 14) {
                 SkeletonBlock(width: 96, circle: true)
+                    .padding(.bottom, Tokens.peopleNameGap - 14)
                 SkeletonBlock(width: 220, height: 34, radius: 10)
                 SkeletonBlock(fraction: 0.8, height: 16, alignment: .center)
                 SkeletonBlock(fraction: 0.6, height: 16, alignment: .center)
@@ -215,7 +219,8 @@ private struct ProfileSkeleton: View {
             // The blocks are centred like the hero they stand in for.
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 24)
-            .headerGap(phone: 20)
+            // Where the page's avatar will stand (round 9 §9): nothing moves as it loads.
+            .peopleHeadGap()
             .padding(.bottom, 36)
             .readableColumn()
             FeedSkeleton(count: 4)

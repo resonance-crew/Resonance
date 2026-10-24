@@ -78,7 +78,7 @@ import Testing
         #expect(CardBoxScreen.draftShelf(private: [drafts[0]], drafts: drafts)?.map(\.id) == ["d1", "d2"])
     }
 
-    /// The 草稿 shelf asks for both of its lists, and a shelf choice of `private` opens 草稿.
+    /// The 私人卡 shelf asks for both of its lists, and a shelf choice of `private` opens it.
     @Test func theDraftShelfAsksForItsTwoListsAndPrivateOpensIt() {
         #expect(asked(.draft) == own)
         // Its private cards known already: the drafts alone.
@@ -89,15 +89,15 @@ import Testing
         #expect(CardBoxScreen.shelf(forKey: "nowhere") == nil)
     }
 
-    /// Round 8 §1.1 (the web sends both to /write/{id}): every card on 草稿 opens the writer — a
-    /// published card kept private as a draft never published, as its ⋯ 編輯 does — and a card
-    /// readers have, on 已發布, its page.
-    @Test func everyDraftOpensTheWriterAndACardReadersHaveItsPage() {
-        #expect(CardBoxScreen.opensWriter(ownCard("d", published: nil, edited: nil)))
-        #expect(CardBoxScreen.opensWriter(ownCard("d", published: nil, edited: nil, visibility: "public")))
-        #expect(CardBoxScreen.opensWriter(ownCard("p", published: "2026-10-01T08:00:00.000Z", edited: nil)))
-        #expect(!CardBoxScreen.opensWriter(ownCard("q", published: "2026-10-01T08:00:00.000Z", edited: nil, visibility: "public")))
-        #expect(!CardBoxScreen.opensWriter(ownCard("c", published: "2026-10-01T08:00:00.000Z", edited: nil, visibility: "connections")))
+    /// Round 9 §1: a card only its author sees — never published, or published and kept private — is a
+    /// 私人卡 (its page wears the lock and offers 編輯 where share would be); a card readers have isn't.
+    /// Every card on the shelves opens its page now, a 私人卡 too.
+    @Test func aCardOnlyItsAuthorSeesIsAPrivateCard() {
+        #expect(CardScreen.isPrivate(ownCard("d", published: nil, edited: nil)))
+        #expect(CardScreen.isPrivate(ownCard("d", published: nil, edited: nil, visibility: "public")))
+        #expect(CardScreen.isPrivate(ownCard("p", published: "2026-10-01T08:00:00.000Z", edited: nil)))
+        #expect(!CardScreen.isPrivate(ownCard("q", published: "2026-10-01T08:00:00.000Z", edited: nil, visibility: "public")))
+        #expect(!CardScreen.isPrivate(ownCard("c", published: "2026-10-01T08:00:00.000Z", edited: nil, visibility: "connections")))
     }
 
     @Test func aRefreshThatFailedSpeaksOnlyOverTheShelfItWasFor() throws {
