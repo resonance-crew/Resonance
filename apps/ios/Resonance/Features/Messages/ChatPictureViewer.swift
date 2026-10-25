@@ -6,7 +6,9 @@ import UIKit
 /// A picture from a conversation, full screen (round 7 §4.3): on a dark backdrop, fitted — the
 /// thread's own size at once, then the picture as kept — pinched or double-tapped to zoom, swiped
 /// down or closed (the close in its corner, the escape gesture) to go back to the thread. Nothing to
-/// save or share yet. It fades in and out over the thread (at once under Reduce Motion).
+/// save or share yet. It fades in and out over the thread (at once under Reduce Motion), and the thread
+/// under it is left exactly as it was (round 11 §1: its foot held while the keyboard is away under the
+/// picture — see `KeyboardHold` — and the status bar kept).
 struct ChatPictureViewer: View {
     let picture: ChatImage
     let store: ChatImageStore
@@ -63,7 +65,10 @@ struct ChatPictureViewer: View {
         }
         .opacity(shown ? 1 : 0)
         .presentationBackground(.clear)
-        .statusBarHidden()
+        // The status bar stays, in light ink over the dark (round 11 §1): hidden, it gave a window without a
+        // sensor housing (an iPad) its top 24 back, and the whole page under the picture moved up as it
+        // opened and down as it closed.
+        .preferredColorScheme(.dark)
         .accessibilityAction(.escape, close)
         .onEscapeKey(close)
         .onAppear { withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) { shown = true } }

@@ -656,7 +656,7 @@ public struct SharedCardSkeleton: View {
 /// floating capsule exactly 48 tall for a line of text at any text size, ＋ (44 wide) at its start,
 /// Send as its 52-wide end segment; 14 from the screen's sides, 8 over the bottom safe area (or the
 /// keyboard), at most 720 wide; what rides with the message in rows 6 above it. Behind them the foot's
-/// paper (``ComposerBacking``) across the whole pane, its top `fade` a fade into it — never a halo,
+/// paper (``ComposerBacking``) across the whole pane, its top `fade` (12) a fade into it — never a halo,
 /// never a shadow.
 public nonisolated enum ComposerMetrics {
     /// The capsule with one line in it, whatever the text size (only more lines make it taller).
@@ -667,9 +667,13 @@ public nonisolated enum ComposerMetrics {
     /// The send segment, the capsule's end.
     public static let sendWidth: CGFloat = 52
     public static let sendGlyph: CGFloat = 20
-    /// The foot's paper fades in over its top 24: over the capsule's top half when nothing rides with
-    /// the message, over 24 the foot gains above the rows when something does.
-    public static let fade: CGFloat = 24
+    /// The foot's paper fades in over its top 12 (round 11 §3: just enough to see it is a fade), from the
+    /// top edge of what the foot shows first: over the capsule's top 12 when nothing rides with the
+    /// message; from `rideFadeRoom` over the topmost riding row when something does.
+    public static let fade: CGFloat = 12
+    /// What the foot gains over its riding rows: 6, as a row's ink (its picture, the reply's rule, its
+    /// label) starts about 6 into it — the fade ends where the rows' ink begins.
+    public static let rideFadeRoom: CGFloat = 6
     /// The capsule over the bottom safe area or the keyboard.
     public static let bottomGap: CGFloat = 8
     /// The last row (or a notice) over the capsule.
@@ -707,9 +711,9 @@ public nonisolated enum ComposerMetrics {
     /// written in — darker, never another colour (it was terracotta).
     public static func pen(focused: Bool) -> Color { focused ? Tokens.fieldBorderHover : Tokens.fieldBorder }
 
-    /// How much the foot adds over what it holds: the fade's 24 when rows ride over the capsule (it
-    /// lies over the capsule's own top half otherwise).
-    public static func fadeRoom(riding: Bool) -> CGFloat { riding ? fade : 0 }
+    /// How much the foot adds over what it holds: 6 when rows ride over the capsule (the fade then runs
+    /// over those 6 and the top 6 of the first row); nothing otherwise (it lies over the capsule's top 12).
+    public static func fadeRoom(riding: Bool) -> CGFloat { riding ? rideFadeRoom : 0 }
 
     /// The send segment's seam: SegmentedActionBar's seed for the seam after the text.
     static func seamSeed(_ seed: Double) -> Double { seed + 11 }

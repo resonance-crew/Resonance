@@ -63,15 +63,30 @@ struct PublishStep: View {
         }
     }
 
-    /// Where the step's content starts under the bar: right at its line when the band leads (its paper
-    /// reaching up under the wave), else 16 below it; in the split's pane, level with the map's Leave.
+    /// Whether the preview is the step's first thing (no hint, no mirror line on its way or shown).
+    static func previewLeads(_ model: WriteModel) -> Bool {
+        guard !model.showsUpdateHint else { return false }
+        switch model.insight {
+        case .loading?, .shown?: return false
+        case .none?, nil: return true
+        }
+    }
+
+    /// Where the step's content starts under the bar (round 11 §4, measured from the bar's pen line as the
+    /// card page's head is): on a phone right at its line when the band leads (its paper reaching up under
+    /// the wave); a tablet's preview card, leading, as far under it as a card page's cover
+    /// (`--story-head-cover-gap`); anything else first — the mirror's line, the update hint — where the
+    /// writer's title stands (`--story-head-gap`). In the split's pane, level with the map's Leave.
     static func topPadding(_ model: WriteModel, showsBar: Bool, compact: Bool) -> CGFloat {
         guard showsBar else { return WriteWorkspace.paneTop }
-        return bandUnderBar(model, showsBar: showsBar, compact: compact) ? 0 : 16
+        if bandUnderBar(model, showsBar: showsBar, compact: compact) { return 0 }
+        if compact { return PenLineGap.fromFoot(Tokens.storyHeadGapCompact) }
+        return PenLineGap.fromFoot(previewLeads(model) ? Tokens.storyHeadCoverGap : Tokens.storyHeadGap)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Self.sectionGap) {
+        let sectionGap = Self.sectionGap(compact: compact)
+        VStack(alignment: .leading, spacing: sectionGap) {
             if inlineHeading || model.showsUpdateHint {
                 VStack(alignment: .leading, spacing: 8) {
                     if inlineHeading { headingRow }
@@ -83,42 +98,43 @@ struct PublishStep: View {
                 }
             }
             if !updating { mirror }
-            VStack(alignment: .leading, spacing: Self.sectionGap) {
+            VStack(alignment: .leading, spacing: sectionGap) {
                 preview
                 tags
                 audience
             }
             // Publishing, saving or leaving: every control in the step waits (the web's fieldset disabled).
             .disabled(model.pending)
-            VStack(alignment: .leading, spacing: 14) {
-                WavyDivider(seed: 47).padding(.vertical, 2)
+            // The rule over the foot stands in the middle of one section gap, not with a gap of its own on
+            // each side: the verb stays near the choice that names it.
+            VStack(alignment: .leading, spacing: sectionGap / 2) {
+                WavyDivider(seed: 47)
                 foot
             }
+            .padding(.top, -sectionGap / 2)
         }
     }
 
-    /// The section gap (the apps' 28) and label → control (10).
-    static let sectionGap: CGFloat = 28
-    static let labelGap: CGFloat = 10
+    /// Between the step's sections (round 11 §4: `--publish-section-gap`, 40 on a phone, 48 wider), and
+    /// a section's label → its control (`--publish-label-gap`, 12).
+    static func sectionGap(compact: Bool) -> CGFloat {
+        compact ? Tokens.publishSectionGapCompact : Tokens.publishSectionGap
+    }
+    static let labelGap: CGFloat = Tokens.publishLabelGap
 
     // MARK: The heading at the split
 
-    /// ← 繼續寫, the step's name, and the save state ending the row — where the bar would say it below
-    /// the split (round 8 §2.1).
+    /// ← 繼續寫, the step's name, and under it its save state — as the bar says them below the split
+    /// (round 11 §5: the name's second line, its height kept, the name alone on the arrow's line meanwhile).
     private var headingRow: some View {
         HStack(spacing: 8) {
             OrganicIconButton(.arrowRight, label: L10n.Write.leaveStay, size: 18, mirrored: true, action: onBack)
                 .disabled(model.pending)
                 .padding(.leading, -13)
-            Text(model.stepTitle)
-                .font(AppFonts.heading(22))
-                .tracking(-0.02 * 22)
-                .foregroundStyle(Tokens.text)
-                .lineLimit(2)
-                .accessibilityAddTraits(.isHeader)
+            BarTitles(model.stepTitle, font: AppFonts.heading(22), tracking: -0.02 * 22,
+                      subtitle: WriteModel.SaveState.subtitle(model.saveState, help: model.saveStateHelp))
                 .layoutPriority(1)
             Spacer(minLength: 8)
-            SaveStateWord(state: model.saveState, help: model.saveStateHelp)
         }
         .frame(minHeight: 38)
     }
@@ -133,6 +149,7 @@ struct PublishStep: View {
                     SketchLoader(size: 28)
                     Text(L10n.Write.PublishPanel.insightLoading).font(AppFonts.body(14)).foregroundStyle(Tokens.textMuted)
                 }
+                .frame(minHeight: mirrorRoom, alignment: .topLeading)
                 .transition(.opacity)
             case let .shown(text):
                 HStack(alignment: .top, spacing: 10) {
@@ -140,6 +157,7 @@ struct PublishStep: View {
                     CSSText(L10n.Write.PublishPanel.insight(coreInsight: text), font: AppFonts.scaledUIFont(.body, size: 14),
                             lineHeight: 1.7)
                 }
+                .frame(minHeight: mirrorRoom, alignment: .topLeading)
                 .transition(.opacity)
             case .none?, nil:
                 EmptyView()
@@ -148,6 +166,10 @@ struct PublishStep: View {
         // A null answer collapses the line (200 ms), above the preview rather than under a finger.
         .animation(.easeOut(duration: 0.2), value: model.insight)
     }
+
+    /// On a phone the mirror's line keeps two lines' room from the start (round 11 §4): the echo is mostly
+    /// two lines there, and the preview under it doesn't move when the words come in place of the loader.
+    private var mirrorRoom: CGFloat? { compact ? 2 * 14 * 1.7 : nil }
 
     // MARK: 2 — the card as a list shows it; its picture is the cover editor
 

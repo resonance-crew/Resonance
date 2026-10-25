@@ -6,8 +6,8 @@ import SwiftUI
 /// start (圖片 · 卡片, the screen's menu over it), the text, Send as its end segment — and, in rows
 /// straight over it, what rides with the message: the reply it carries, the note being answered, a
 /// card or a picture (one of the two), and why the last try didn't go. The rows have no frame: they
-/// sit on the foot's paper (``ComposerBacking``, the screen's), which comes on in the 24 the foot
-/// gains over them. The capsule keeps its geometry in every state: 48 for a line of text at any text
+/// sit on the foot's paper (``ComposerBacking``, the screen's), which fades in over the 6 the foot
+/// gains above them and the top 6 of the first row, before its ink (round 11 §3). The capsule keeps its geometry in every state: 48 for a line of text at any text
 /// size, taller only with more lines (up to five, then it scrolls). Sending never holds the composer —
 /// a message goes to the outbox and the field is empty for the next one, with its keyboard still up.
 /// The twin of Android's ThreadComposer.
@@ -28,7 +28,7 @@ struct ThreadComposer: View {
         VStack(spacing: 0) {
             if !rides.isEmpty {
                 VStack(spacing: 0) {
-                    // The 24 the foot gains over its rows: where its paper fades in.
+                    // The 6 the foot gains over its rows: where its paper starts to fade in.
                     Color.clear.frame(height: ComposerMetrics.fadeRoom(riding: true))
                     ForEach(rides, id: \.self) { ride in row(ride) }
                 }

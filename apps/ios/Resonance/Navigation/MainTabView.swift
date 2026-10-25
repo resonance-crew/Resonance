@@ -315,10 +315,24 @@ struct MainTabView: View {
             // Once per launch: the tab view reappears (a language change), and must not push the page again.
             guard !Self.openedLaunchRoute, let path = UserDefaults.standard.string(forKey: "route") else { return }
             Self.openedLaunchRoute = true
+            // `/settings` and `/settings/<section>` (profile, account, privacy, notifications, language, terms,
+            // delete) open Settings or one of its pages, which have no site URL.
+            if let settings = Self.launchSettings(path) { return paths[tab, default: []].append(contentsOf: settings) }
             open(URL(string: path, relativeTo: session.config.origin)?.absoluteURL ?? session.config.origin.appending(path: path))
         }
         #endif
     }
+
+    #if DEBUG
+    /// The pages a `-route /settings[/<section>]` launch opens (screen checks): Settings, then the section.
+    static func launchSettings(_ path: String) -> [Route]? {
+        let parts = path.split(separator: "/").map(String.init)
+        guard parts.first == "settings" else { return nil }
+        guard parts.count > 1 else { return [.settings] }
+        guard let section = SettingsSection.allCases.first(where: { "\($0)" == parts[1] }) else { return [.settings] }
+        return [.settings, .settingsSection(section)]
+    }
+    #endif
 
     /// Site links (universal links, shared URLs) open on the current tab.
     private func open(_ url: URL) {

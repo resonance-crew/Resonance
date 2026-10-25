@@ -423,8 +423,8 @@ private struct ManagedCardList: View {
 }
 
 /// The card box's 垃圾桶 (the web's TrashShelf): what I deleted, the latest in first, for 30 days —
-/// each saying where it came from and when it goes (``TrashCaption``) — every card opening its page,
-/// with its trash banner (round 9 §1). Its ⋯ restores it or deletes it for good. Over the cards one row,
+/// nothing under the cards (round 11 §7: restoring says who reads the card) — every card opening its
+/// page, with its trash banner (round 9 §1). Its ⋯ restores it or deletes it for good. Over the cards one row,
 /// no container (round 9 §5): how long the trash keeps them at its start — and, while an anonymous card
 /// is here, that the notes left on it went with it — and 清空 at its end.
 private struct TrashShelf: View {
@@ -540,8 +540,8 @@ final class ShelfReads {
     func supersedeAll() { by = [:] }
 }
 
-/// The trash's cards (ProfileTabs' trash shelf): each with its caption under the byline and the
-/// trash's ⋯ over its top-right corner; an anonymous one wears the anonymous byline, as on the other
+/// The trash's cards (ProfileTabs' trash shelf): each as the shelves show a card, nothing under its
+/// byline (round 11 §7), with the trash's ⋯ over its top-right corner; an anonymous one wears the anonymous byline, as on the other
 /// owned shelves. Every one opens its page — its trash banner there, published or never (round 9 §1:
 /// the server answers its author for both).
 private struct TrashCardList: View {
@@ -549,13 +549,11 @@ private struct TrashCardList: View {
 
     var body: some View {
         let palettes = CardPalette.palettes(cards.map(\.accentHue))
-        let now = Date.now
         CardColumns(count: cards.count) { i, bordered in
             let card = cards[i]
             let hue = CardPalette(index: palettes[i]).hue
             let face = StoryCardView(card.publicStory, position: i, isLast: i == cards.count - 1, bordered: bordered,
                                      palette: palettes[i])
-                .footnote(TrashCaption.text(card, now: now))
             // Never prefilled from the shelf: a trash summary isn't the card's page.
             NavigationLink(value: Route.card(card.routeKey)) { face }
                 .buttonStyle(.plain)

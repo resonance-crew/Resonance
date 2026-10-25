@@ -40,13 +40,11 @@ import UIKit
         #expect(ComposerMetrics.pen(focused: true) != Tokens.terracotta)
     }
 
-    @Test func theFootsPaperFadesInOverItsTop24AndGains24OverRidingRows() {
-        #expect(ComposerMetrics.fade == 24)
-        // Nothing riding: the fade lies over the capsule's top half (solid from 24 under its top, the middle of its 48).
+    @Test func theFootsPaperFadesInOverItsTopAndTheRowsRideOnIt() {
+        // Round 11 §3 shortened the fade (24 → 12) and what the foot gains over riding rows (24 → 6):
+        // RoundElevenTests holds those numbers. Nothing riding still adds nothing over the capsule.
         #expect(ComposerMetrics.fadeRoom(riding: false) == 0)
-        #expect(ComposerMetrics.fade == ComposerMetrics.height / 2)
-        // Something riding: the foot gains the fade's 24 over its rows, solid from their top down.
-        #expect(ComposerMetrics.fadeRoom(riding: true) == 24)
+        #expect(ComposerMetrics.fade < ComposerMetrics.height / 2)
         // The rows, in the reply's measures.
         #expect(ComposerMetrics.rowMinHeight == 52 && ComposerMetrics.rowPadY == 4 && ComposerMetrics.rowStart == 12)
         #expect(ComposerMetrics.rowLeadGap == 10 && ComposerMetrics.rowThumb == 40 && ComposerMetrics.rowGlyph == 18)
