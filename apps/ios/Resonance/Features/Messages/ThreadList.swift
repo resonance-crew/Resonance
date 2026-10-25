@@ -151,6 +151,8 @@ struct MessageList: View {
                 // left after replying by a swipe, and sending re-anchors the list in a way that can do it — it
                 // is held at its own edge in UIKit, never through `position` (see SidewaysLock).
                 .background(SidewaysLock())
+                // A tap on the thread puts the keyboard away (round 10 §4).
+                .background(KeyboardTapAway())
             }
             .scrollPosition($position, anchor: .center)
             .upsideDown()

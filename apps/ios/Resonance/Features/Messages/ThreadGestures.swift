@@ -120,3 +120,83 @@ final class SidewaysDragRecognizer: UIGestureRecognizer {
         distance = 0
     }
 }
+
+// MARK: - A tap on the thread puts the keyboard away (round 10 §4)
+
+/// Puts away whatever keyboard is up — the composer's, or the search's — the way UIKit says it: the
+/// first responder resigns (and SwiftUI's focus follows it).
+enum KeyboardAway {
+    static func now() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+}
+
+/// A tap on the thread — on the paper between messages, or on a message's words — puts the keyboard
+/// away, as Messages does; dragging the list down takes it away with the finger
+/// (`scrollDismissesKeyboard(.interactively)`). Before round 10 nothing did on a tap: the list only let
+/// the keyboard go to a drag that reached it, and the owner tapped and tapped.
+///
+/// It is a UIKit tap on the list's own scroll view, never a SwiftUI gesture over the rows: it lets
+/// every touch through (`cancelsTouchesInView` off), recognizes beside the list's other gestures, and
+/// waits for the ones that are a message's own to fail first — a hold (the message's menu: the keyboard
+/// stays where it is under it), a tap on a picture, a quote, a card or a link's page (`PartTapRecognizer`)
+/// and a tap on a link in the words — so those still do only what they do. A control (a button) is
+/// left alone too.
+struct KeyboardTapAway: UIViewRepresentable {
+    func makeUIView(context: Context) -> KeyboardTapAwayView { KeyboardTapAwayView() }
+    func updateUIView(_ view: KeyboardTapAwayView, context: Context) {}
+}
+
+/// ``KeyboardTapAway``'s view: puts its tap on the scroll view it is drawn in, and takes it off again
+/// when it leaves (the tap's target is this view).
+final class KeyboardTapAwayView: UIView, UIGestureRecognizerDelegate {
+    let tap = UITapGestureRecognizer()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        isHidden = true
+        tap.addTarget(self, action: #selector(tapped))
+        tap.cancelsTouchesInView = false
+        tap.delaysTouchesEnded = false
+        tap.delegate = self
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard window != nil else {
+            tap.view?.removeGestureRecognizer(tap)
+            return
+        }
+        let enclosing = sequence(first: superview, next: { $0?.superview }).lazy.compactMap { $0 as? UIScrollView }.first
+        if let enclosing, tap.view !== enclosing { attach(to: enclosing) }
+    }
+
+    func attach(to view: UIView) {
+        tap.view?.removeGestureRecognizer(tap)
+        view.addGestureRecognizer(tap)
+    }
+
+    @objc private func tapped() {
+        if tap.state == .ended { KeyboardAway.now() }
+    }
+
+    /// Whether `other` is a message's own gesture, which a tap must leave its touch to.
+    static func yields(to other: UIGestureRecognizer) -> Bool {
+        other is UILongPressGestureRecognizer || other is PartTapRecognizer || other.view is ChatTextView
+    }
+
+    func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        !(touch.view is UIControl)
+    }
+
+    func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        true
+    }
+
+    func gestureRecognizer(_ g: UIGestureRecognizer, shouldRequireFailureOf other: UIGestureRecognizer) -> Bool {
+        Self.yields(to: other)
+    }
+}

@@ -402,7 +402,7 @@ private struct PartTap: UIGestureRecognizerRepresentable {
 
 /// One finger down and up again where it went down, sooner than a hold. The wash shows only once
 /// the finger has stayed a moment (one that is starting a scroll never flashes it).
-final class PartTapRecognizer: UIGestureRecognizer {
+public final class PartTapRecognizer: UIGestureRecognizer {
     var onPress: ((Bool) -> Void)?
     private var start: CGPoint = .zero
     /// Each touch's timers know whether they are still the current touch's.
@@ -412,7 +412,7 @@ final class PartTapRecognizer: UIGestureRecognizer {
     }
     private let slop: CGFloat = 10
 
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+    public override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
         super.touchesBegan(touches, with: event)
         guard touches.count == 1, (event.allTouches?.count ?? 1) == 1, let first = touches.first else { return fail() }
         start = first.location(in: nil)
@@ -428,25 +428,25 @@ final class PartTapRecognizer: UIGestureRecognizer {
         }
     }
 
-    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+    public override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
         super.touchesMoved(touches, with: event)
         guard let first = touches.first else { return }
         let p = first.location(in: nil)
         if hypot(p.x - start.x, p.y - start.y) > slop { fail() }
     }
 
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+    public override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
         super.touchesEnded(touches, with: event)
         down = false
         state = state == .possible ? .ended : .failed
     }
 
-    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+    public override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
         super.touchesCancelled(touches, with: event)
         fail()
     }
 
-    override func reset() {
+    public override func reset() {
         super.reset()
         touch += 1
         down = false

@@ -32,6 +32,28 @@ import UIKit
         #expect(ThoughtMapScreen.trayIcon(keptPrivate, resonated: false) == .lock)
     }
 
+    // MARK: §4 — a tap on the thread puts the keyboard away
+
+    @Test func theThreadsTapLeavesAMessagesOwnGesturesTheirTouch() {
+        // It waits for a message's hold (its menu), a tap on a picture, a quote or a card, and a tap on a link in its words.
+        #expect(KeyboardTapAwayView.yields(to: UILongPressGestureRecognizer()))
+        #expect(KeyboardTapAwayView.yields(to: PartTapRecognizer()))
+        let words = ChatTextView(), onWords = UITapGestureRecognizer()
+        words.addGestureRecognizer(onWords)
+        #expect(KeyboardTapAwayView.yields(to: onWords))
+        // The list's own scrolling isn't one of them: a drag takes the keyboard down interactively instead.
+        #expect(!KeyboardTapAwayView.yields(to: UIPanGestureRecognizer()))
+        // It never holds a touch back from what is under it, and it is put on the list it is drawn in.
+        let away = KeyboardTapAwayView()
+        #expect(!away.tap.cancelsTouchesInView && !away.tap.delaysTouchesEnded)
+        let list = UIScrollView()
+        away.attach(to: list)
+        #expect(list.gestureRecognizers?.contains(away.tap) == true)
+        let other = UIScrollView()
+        away.attach(to: other)
+        #expect(list.gestureRecognizers?.contains(away.tap) != true && other.gestureRecognizers?.contains(away.tap) == true)
+    }
+
     // MARK: §5 — the thread no longer freezes after a picture is sent
 
     @Test func aThreadSetAsideGoesBackToItsEdgeInUIKitKeepingItsPlace() {
