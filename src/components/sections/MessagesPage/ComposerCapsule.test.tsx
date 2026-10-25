@@ -39,10 +39,11 @@ describe('the composer capsule (round 9 §4)', () => {
     expect(capsuleShape(0, 48)).toBeNull();
   });
 
-  // Round 10 §3.1–3.2: no paper halo round the pen; the foot's paper behind the whole foot keeps the thread from
-  // showing round it — a 24 fade from the thread into it, solid from there to the screen's edge, 24 more over
-  // rows riding along — and nothing of it is a shadow or see-through.
-  it('draws no halo round its pen, and lays the foot’s paper behind it with a 24 fade', () => {
+  // Round 10 §3.1–3.2, round 11 §3: no paper halo round the pen; the foot's paper behind the whole foot keeps the
+  // thread from showing round it — a 12 fade from the thread into it, starting on the foot's top edge (the
+  // capsule's; 6 over the top riding row, where its ink starts), solid from there to the screen's edge —
+  // and nothing of it is a shadow or see-through.
+  it('draws no halo round its pen, and lays the foot’s paper behind it with a 12 fade from its top edge', () => {
     const { container } = render(capsule());
     const paths = Array.from(container.querySelectorAll('svg path'));
     const pen = paths.find((p) => p.getAttribute('class')?.includes('capsulePen'))!;
@@ -51,12 +52,12 @@ describe('the composer capsule (round 9 §4)', () => {
     for (const p of paths) expect(Number(p.getAttribute('stroke-width') ?? 0)).toBeLessThanOrEqual(INK);
     expect(css).not.toMatch(/paperHalo/);
 
-    expect(rule('.dock::before')).toMatch(/height:\s*24px/);
+    expect(rule('.dock::before')).toMatch(/top:\s*0;[\s\S]*height:\s*12px/);
     expect(rule('.dock::before')).toMatch(/linear-gradient\(to bottom, transparent, var\(--color-cream\)\)/);
-    expect(rule('.dock::after')).toMatch(/top:\s*24px;[\s\S]*bottom:\s*0;[\s\S]*background:\s*var\(--color-cream\)/);
+    expect(rule('.dock::after')).toMatch(/top:\s*12px;[\s\S]*bottom:\s*0;[\s\S]*background:\s*var\(--color-cream\)/);
     // The fade lets taps through to the thread; the solid paper takes them.
     expect(rule('.dock::after')).toMatch(/pointer-events:\s*auto/);
-    expect(rule('.dock:has(> .carry)')).toMatch(/padding-top:\s*24px/);
+    expect(rule('.dock:has(> .carry)')).toMatch(/padding-top:\s*6px/);
     // Not a shadow: a floating thing stays opaque in every state.
     for (const sel of ['.capsule', '.send', '.slip', '.dock', '.paperFill', '.sendFace', '.carryRow']) {
       expect(rule(sel)).not.toMatch(/opacity|box-shadow|drop-shadow/);

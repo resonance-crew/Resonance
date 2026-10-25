@@ -814,14 +814,15 @@
   pointer-events: auto;
 }
 
-/* The foot's paper (round 10 §3.2): the page's cream behind the foot, across
-   the pane and down to the screen's edge, so nothing of the thread shows
-   under or beside it. Its top 24 are a fade from the thread into the paper —
-   over the capsule's top half, solid from its one-line middle down — and with
-   rows riding over the capsule the foot grows 24 over them, so they lie on
-   solid paper. The fade lets taps through to the thread; the solid paper
-   takes them (nothing hidden under it can be pressed). Under what is in the
-   foot (the foot is its own stacking context). */
+/* The foot's paper (round 10 §3.2, round 11 §3): the page's cream behind the
+   foot, across the pane and down to the screen's edge, so nothing of the
+   thread shows under or beside it. Its top 12 are a fade from the thread into
+   the paper, starting on the top edge of what the foot shows first — the
+   capsule; with rows riding over it, 6 over the topmost row, so the fade ends
+   where the row's first ink starts — so the paper and the foot meet there;
+   solid below. The fade lets taps through to the thread; the solid
+   paper takes them (nothing hidden under it can be pressed). Under what is in
+   the foot (the foot is its own stacking context). */
 .dock::before,
 .dock::after {
   content: '';
@@ -833,19 +834,19 @@
 
 .dock::before {
   top: 0;
-  height: 24px;
+  height: 12px;
   background: linear-gradient(to bottom, transparent, var(--color-cream));
 }
 
 .dock::after {
-  top: 24px;
+  top: 12px;
   bottom: 0;
   background: var(--color-cream);
   pointer-events: auto;
 }
 
 .dock:has(> .carry) {
-  padding-top: 24px;
+  padding-top: 6px;
 }
 
 .paperFill {
@@ -1230,16 +1231,25 @@
 
 /* ── A picture sent in the thread, and its viewer ─────────────────── */
 
+/* Edge to edge: 4 px past the bubble's box on its top and sides (and its foot
+   when nothing follows), where the wobble swings out, so the bubble's own
+   outline ends it and none of its fill shows round the picture (as the link
+   preview's picture). */
 .sentPicture {
   position: relative;
   display: block;
-  width: 100%;
+  width: calc(100% + 8px);
+  margin: -4px -4px 0;
   padding: 0;
   border: 0;
   overflow: hidden;
   background: color-mix(in oklch, var(--color-text) 6%, transparent);
   cursor: zoom-in;
   -webkit-tap-highlight-color: transparent;
+}
+
+.sentPicture:last-child {
+  margin-bottom: -4px;
 }
 
 .sentPicture[data-failed] {
@@ -1273,6 +1283,9 @@
   inset: 0;
   z-index: 1000;
   display: grid;
+  /* One definite cell the size of the window less its padding, so the
+     picture's max-height: 100% holds and a tall one fits whole. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
   padding: 56px 16px 24px;
   background: oklch(12% 0.01 60 / 0.9);
