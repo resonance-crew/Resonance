@@ -597,6 +597,22 @@ final class WriteModel {
         values = next
     }
 
+    /// What a 私人卡's 公開發表 starts the step at (round 12 §3): 公開 — 匿名公開 for a card already marked
+    /// anonymous, its byline kept.
+    nonisolated static func publicAudience(anonymous: Bool) -> Audience {
+        anonymous ? .anonymous : .public
+    }
+
+    /// Opened by a 私人卡's 公開發表 (round 12 §3): 公開 (or 匿名公開) chosen as if picked in the step — it
+    /// autosaves with the draft like any choice there, and stays the writer's to change — then on to the
+    /// step as ✓ goes (a card without a title stays writing, asked for one). Answers whether the step opened.
+    @discardableResult
+    func openPublishing() async -> Bool {
+        guard !trashed else { return false }
+        choose(Self.publicAudience(anonymous: values.anonymous))
+        return await goNext()
+    }
+
     /// 草稿 is chosen: the step keeps the card its author's — saving it, never publishing it — and the
     /// writer leaves once it is kept, back where it came from (round 8 §2.3). A card kept for
     /// connections (none chosen) reads as shared.

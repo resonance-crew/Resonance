@@ -53,14 +53,14 @@ struct ChatPictureViewer: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea()
             Button(action: close) {
-                OrganicIcon(.close, size: 20, color: Tokens.cream)
-                    .frame(width: 44, height: 44)
+                OrganicIcon(.close, size: ViewerClose.glyph, color: Tokens.cream, strokeWidth: Tokens.ink)
+                    .frame(width: ViewerClose.tapArea, height: ViewerClose.tapArea)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(OrganicPressStyle(color: Tokens.cream.opacity(0.16)))
+            .buttonStyle(ViewerCloseStyle())
             .accessibilityLabel(L10n.Native.close)
-            .padding(.trailing, 12)
-            .padding(.top, 8)
+            .padding(.trailing, ViewerClose.inset)
+            .padding(.top, ViewerClose.inset)
             .opacity(pull > 0 ? 0 : 1)
         }
         .opacity(shown ? 1 : 0)
@@ -97,6 +97,41 @@ struct ChatPictureViewer: View {
             try? await Task.sleep(for: .milliseconds(160))
             onClose()
         }
+    }
+}
+
+/// The viewer's ✕ (round 12 §1–2): a picture the screen's own shape fills it to the corner, and a bare
+/// light glyph was lost on a light one. As the viewers of Photos, Instagram or X keep theirs, the glyph stays
+/// light on a dark of its own — a wobbly disc of the viewer's own ink at half strength (deeper while
+/// pressed), always shown: over the dark around a picture it all but vanishes, over a light picture it
+/// carries the ✕. The web's BareIconButton `onDark` disc: its wobCircle (seed 5; 8 segments, a wobble of
+/// 2.2 in 46, control jitter 0.4), 40 across in the 44 tap area, the area 16 in from the safe area's top
+/// and end (the disc's centre 16 + 22 from them).
+nonisolated enum ViewerClose {
+    static let glyph: CGFloat = 20
+    static let disc: CGFloat = 40
+    static let tapArea: CGFloat = 44
+    static let inset: CGFloat = 16
+    static let rest = 0.5
+    static let pressed = 0.72
+    static let seed: Double = 5
+    static let shape = WobCircleOptions(segments: 8, mag: Double(disc) / 2 * 2.2 / 46, cpJitter: 0.4)
+
+    /// The disc's strength, at rest or pressed.
+    static func alpha(pressed isPressed: Bool) -> Double { isPressed ? pressed : rest }
+}
+
+/// The ✕'s disc of the viewer's ink, deeper while pressed; the glyph stays cream in every state.
+private struct ViewerCloseStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                WobCircleShape(seed: ViewerClose.seed, options: ViewerClose.shape)
+                    .fill(Tokens.viewerInk.opacity(ViewerClose.alpha(pressed: configuration.isPressed)))
+                    .frame(width: ViewerClose.disc, height: ViewerClose.disc)
+                    .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+                    .allowsHitTesting(false)
+            }
     }
 }
 

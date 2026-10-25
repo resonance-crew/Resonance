@@ -227,7 +227,9 @@ struct CardScreen: View {
                             answering: card.referenceCardId, answeringTitle: detail.referenceCard?.value1.title,
                             answeringAnonymous: detail.referenceCard?.value1.anonymous,
                             isPublished: card.publishedAt != nil, anonymous: detail.anonymous, title: card.title,
-                            trashFeedback: .page, showsCardAfterEdit: false, onTrashed: { justTrashed = true },
+                            trashFeedback: .page, showsCardAfterEdit: false,
+                            // A 私人卡's pen stands beside it: its ⋯ leads with 公開發表 instead of a second 編輯 (round 12 §3).
+                            editShown: Self.isPrivateCard(detail), onTrashed: { justTrashed = true },
                             trigger: .bare)
         } else {
             let author = detail.anonymous ? nil : card.author?.value1

@@ -46,6 +46,9 @@ extension Tokens {
     /// HandDrawnImage's ✕ chip: a dark translucent pebble with a pale rim.
     public nonisolated static let imageRemoveFill = oklch(0.30, 0.02, 70, alpha: 0.7)
     public nonisolated static let imageRemoveStroke = oklch(0.96, 0.02, 75, alpha: 0.75)
+    /// The picture viewer's own dark (Thread.module.css `.viewer`: oklch(12% 0.01 60)) — what its ✕
+    /// stands on, at half strength (round 12 §1–2).
+    public nonisolated static let viewerInk = oklch(0.12, 0.01, 60)
 
     nonisolated static func oklch(_ L: Double, _ C: Double, _ H: Double, alpha: Double = 1) -> Color {
         OKLCHColor.color(L, C, H, alpha: alpha)

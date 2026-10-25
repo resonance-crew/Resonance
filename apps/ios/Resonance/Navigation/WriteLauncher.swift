@@ -16,6 +16,9 @@ final class WriteLauncher {
         var showsCard = true
         /// Words to start from (a note grown into a resonance).
         var story: String?
+        /// A 私人卡's 公開發表 (round 12 §3): the writer opens at its publish step with 公開 chosen — 匿名公開
+        /// for a card already marked anonymous — the choice still the writer's to change there.
+        var publishPublicly = false
     }
 
     /// What a visit of the writer (or a card's ⋯) wrote: the card, and the card it
@@ -52,6 +55,16 @@ final class WriteLauncher {
     /// Edit one of your cards.
     func edit(_ cardId: String, showsCard: Bool = true) {
         open(Request(cardId: cardId, showsCard: showsCard))
+    }
+
+    /// 公開發表 on a 私人卡's own page (round 12 §3): the writer at its publish step, 公開 chosen; the card's page
+    /// is underneath, so it doesn't open again once the writer is done.
+    func publishPublicly(_ cardId: String) {
+        open(Self.publishPubliclyRequest(cardId))
+    }
+
+    static func publishPubliclyRequest(_ cardId: String) -> Request {
+        Request(cardId: cardId, showsCard: false, publishPublicly: true)
     }
 
     /// The writer is going: `change` is what the visit wrote (a draft saved on

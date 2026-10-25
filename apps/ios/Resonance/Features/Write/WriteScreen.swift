@@ -143,6 +143,9 @@ struct WriteScreen: View {
         // A picture in the story that didn't go in says so in the app's toast, wherever the story is scrolled.
         let toasts = session.toasts
         model.tell = { toasts.show($0) }
+        // A 私人卡's 公開發表 (round 12 §3): the page opens on the publish step, 公開 (匿名公開) chosen — the step
+        // there from the first frame rather than crossing over from the writing page.
+        if request.publishPublicly, await model.openPublishing() { publishLoaded = true }
         self.model = model
         // The workspace's Back, its edge swipe and its hiding of the pane come here.
         pane.saveNow = { [weak model, writer] in
