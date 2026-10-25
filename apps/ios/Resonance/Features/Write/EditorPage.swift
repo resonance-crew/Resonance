@@ -12,7 +12,10 @@ import WebKit
 /// Content-Security-Policy lets it run only its own two inline scripts (by
 /// hash), load only its own fonts and show https, data and blob images; it
 /// can't fetch, frame, post a form or change its base URL. `EditorNavigation`
-/// keeps the web view on the page.
+/// keeps the web view on the page. Against the emulators the pictures a story
+/// holds are the dev server's own, over plain http (`/api/emulator-storage/…`):
+/// an emulator build lets the page show those too (`imageSources`), and nothing
+/// else — a release build never points at the emulators.
 enum EditorPage {
     static let scheme = "resonance-editor"
     static let host = "editor"
@@ -49,8 +52,19 @@ enum EditorPage {
         url.scheme?.lowercased() == scheme && url.host?.lowercased() == host && url.path == path
     }
 
-    /// The policy for `html`: only its own inline scripts run.
-    static func contentSecurityPolicy(for html: String) -> String {
+    /// Where pictures may come from beyond https, data and blob: against the emulators, the dev
+    /// server the app talks to — under both of its names, since what it stores names itself by
+    /// `localhost` (dev-emulator.mjs) while the app asks `127.0.0.1` (round 11 §8: every picture
+    /// put in a story showed as the island's broken placeholder on iOS, refused by `img-src https:`).
+    /// Nothing in production, whose pictures are https.
+    static func imageSources(for config: AppConfig) -> [String] {
+        guard config.usesEmulator, config.origin.scheme == "http", let port = config.origin.port else { return [] }
+        return ["http://localhost:\(port)", "http://127.0.0.1:\(port)"]
+    }
+
+    /// The policy for `html`: only its own inline scripts run; pictures from https, data, blob and
+    /// `imageSources`.
+    static func contentSecurityPolicy(for html: String, imageSources: [String] = []) -> String {
         let scripts = inlineScripts(in: html).map { "'sha256-\(Data(SHA256.hash(data: Data($0.utf8))).base64EncodedString())'" }
         return [
             "default-src 'none'",
@@ -59,7 +73,7 @@ enum EditorPage {
             "style-src 'unsafe-inline'",
             "font-src \(scheme):",
             // Story photos (R2, over https); pasted or dropped ones may be data: or blob:.
-            "img-src https: data: blob:",
+            (["img-src https: data: blob:"] + imageSources).joined(separator: " "),
             "base-uri 'none'",
             "form-action 'none'",
         ].joined(separator: "; ")
@@ -93,16 +107,18 @@ final class EditorPageHandler: NSObject, WKURLSchemeHandler {
     }
 
     private let bundle: Bundle
+    private let imageSources: [String]
 
-    init(bundle: Bundle = .main) {
+    init(bundle: Bundle = .main, imageSources: [String] = EditorPage.imageSources(for: .current)) {
         self.bundle = bundle
+        self.imageSources = imageSources
     }
 
     /// The page, read and hashed once.
     private lazy var page: Resource? = {
         guard let file = bundle.url(forResource: "editor", withExtension: "html"),
               let html = try? String(contentsOf: file, encoding: .utf8) else { return nil }
-        let policy = EditorPage.contentSecurityPolicy(for: html)
+        let policy = EditorPage.contentSecurityPolicy(for: html, imageSources: imageSources)
         return Resource(data: Data(EditorPage.served(html, policy: policy).utf8), headers: [
             "Content-Type": "text/html; charset=utf-8",
             "Content-Security-Policy": policy,
