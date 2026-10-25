@@ -13,15 +13,22 @@ html, body { margin: 0; background: var(--color-cream); color: var(--color-text)
 .quote-body { flex: 1; min-width: 0; }
 .quote-body > :last-child { margin-bottom: 0; }
 /* A picture: story.css spaces it (.story-picture); a figure's own side margins go. */
+/* The photo's box hugs it (centred; at a quote's edge in a quote), its clip
+   the wobble (island.ts), the ring over it shown while it is picked. */
 .image { margin-left: 0; margin-right: 0; }
-.image img { display: block; max-width: 100%; max-height: 420px; margin: 0 auto; }
-.ProseMirror blockquote .image img { margin: 0; }
+.image .picture-box { position: relative; display: block; width: fit-content; max-width: 100%; margin: 0 auto; line-height: 0; }
+.ProseMirror blockquote .image .picture-box { margin: 0; }
+.image .picture-clip { display: block; max-width: 100%; }
+.image img { display: block; max-width: 100%; max-height: 420px; }
+.image .picture-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; visibility: hidden; }
+.image.picked .picture-ring { visibility: visible; }
 .image.broken { min-height: 80px; background: repeating-linear-gradient(135deg, rgb(0 0 0 / 5%) 0 1px, transparent 1px 12px); border-radius: 18px; }
 /* An embedded card: story.css spaces it (.story-embed) and stops the prose's type at its edge. */
 .card-embed { display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; border: 1.2px solid var(--color-text-muted); border-radius: 18px 22px 16px 24px / 20px 16px 24px 18px; background: var(--color-card-bg); font-family: var(--font-heading); font-weight: 700; }
 .card-embed small { font-family: var(--font-body); font-weight: 400; color: var(--color-text-muted); }
-/* A picked picture or card: its ring drawn inside its own edge, so the writer's bare page
-   (?layout=canvas: no padding, the view's edge at the text's) never cuts it off. */
+/* A picked card (or table): its ring drawn inside its own edge, so the writer's bare page
+   (?layout=canvas: no padding, the view's edge at the text's) never cuts it off. A picture
+   rings along its own wobble instead (.picture-ring). */
 .ProseMirror-selectednode { outline: 2px solid var(--color-terracotta); outline-offset: -2px; }
 p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--placeholder); float: left; height: 0; pointer-events: none; }
 

@@ -1213,6 +1213,14 @@ public enum L10n {
             public static var restore: String { Strings.shared.string("me.actions.restore") }
             /// Restored
             public static var restored: String { Strings.shared.string("me.actions.restored") }
+            /// Restored as a public card
+            public static var restoredPublic: String { Strings.shared.string("me.actions.restoredPublic") }
+            /// Restored as an anonymous card
+            public static var restoredAnonymous: String { Strings.shared.string("me.actions.restoredAnonymous") }
+            /// Restored for your connections only
+            public static var restoredConnections: String { Strings.shared.string("me.actions.restoredConnections") }
+            /// Restored as a private card
+            public static var restoredPrivate: String { Strings.shared.string("me.actions.restoredPrivate") }
             /// This card is back, but it no longer resonates with the card it answered.
             public static var restoredAloneBody: String { Strings.shared.string("me.actions.restoredAloneBody") }
             /// Delete forever

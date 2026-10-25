@@ -1215,6 +1215,14 @@ object L10n {
             val restore: String get() = Strings.string("me.actions.restore")
             /** Restored */
             val restored: String get() = Strings.string("me.actions.restored")
+            /** Restored as a public card */
+            val restoredPublic: String get() = Strings.string("me.actions.restoredPublic")
+            /** Restored as an anonymous card */
+            val restoredAnonymous: String get() = Strings.string("me.actions.restoredAnonymous")
+            /** Restored for your connections only */
+            val restoredConnections: String get() = Strings.string("me.actions.restoredConnections")
+            /** Restored as a private card */
+            val restoredPrivate: String get() = Strings.string("me.actions.restoredPrivate")
             /** This card is back, but it no longer resonates with the card it answered. */
             val restoredAloneBody: String get() = Strings.string("me.actions.restoredAloneBody")
             /** Delete forever */

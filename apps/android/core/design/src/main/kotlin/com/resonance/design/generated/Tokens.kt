@@ -225,6 +225,16 @@ object Tokens {
     const val StoryEndGap = 40f
     /** --story-end-gap-compact */
     const val StoryEndGapCompact = 32f
+    /** --writer-title-gap */
+    const val WriterTitleGap = 32f
+    /** --writer-title-gap-compact */
+    const val WriterTitleGapCompact = 24f
+    /** --publish-section-gap */
+    const val PublishSectionGap = 48f
+    /** --publish-section-gap-compact */
+    const val PublishSectionGapCompact = 40f
+    /** --publish-label-gap */
+    const val PublishLabelGap = 12f
     /** --story-meta-size */
     const val StoryMetaSize = 14f
     /** --story-meta-size-compact */

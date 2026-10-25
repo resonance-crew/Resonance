@@ -221,6 +221,16 @@ public nonisolated enum Tokens {
     public static let storyEndGap: CGFloat = 40
     /// --story-end-gap-compact
     public static let storyEndGapCompact: CGFloat = 32
+    /// --writer-title-gap
+    public static let writerTitleGap: CGFloat = 32
+    /// --writer-title-gap-compact
+    public static let writerTitleGapCompact: CGFloat = 24
+    /// --publish-section-gap
+    public static let publishSectionGap: CGFloat = 48
+    /// --publish-section-gap-compact
+    public static let publishSectionGapCompact: CGFloat = 40
+    /// --publish-label-gap
+    public static let publishLabelGap: CGFloat = 12
     /// --story-meta-size
     public static let storyMetaSize: CGFloat = 14
     /// --story-meta-size-compact

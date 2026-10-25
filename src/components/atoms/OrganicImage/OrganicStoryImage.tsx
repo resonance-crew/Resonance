@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useRef } from 'react';
-import { wobRect } from '@/lib/design/wobRect';
+import { storyPictureShape } from '@/lib/design/storyPicture';
 import { INK_STRONG } from '@/lib/design/strokes';
 import { useElementSize } from '@/lib/hooks/useElementSize';
 
@@ -43,23 +43,12 @@ export function OrganicStoryImage({
   const ref = useRef<HTMLSpanElement>(null);
   const { w, h } = useElementSize(ref);
 
-  const mag = Math.min(w, h) * 0.025;
   // The wobble swings both inward and outward of the box edge, so the photo
-  // is zoomed just enough that the outward bulges land on real pixels instead
-  // of being clipped to nothing.
-  const cornerOffset = 6;
-  const bleed = Math.ceil(mag + cornerOffset + 4);
-
-  const clip = useMemo(() => {
-    if (!w || !h) return undefined;
-    return wobRect(w, h, 12, seed, mag, {
-      segmentsH: [3, 4],
-      segmentsV: [2, 3],
-      curve: 0.4,
-      cornerJitter: 1.1,
-      cornerOffset,
-    });
-  }, [w, h, seed, mag]);
+  // is zoomed just enough (bleed) that the outward bulges land on real pixels
+  // instead of being clipped to nothing.
+  const shape = useMemo(() => (w && h ? storyPictureShape(w, h, seed) : undefined), [w, h, seed]);
+  const clip = shape?.clip;
+  const bleed = shape?.bleed ?? 0;
 
   return (
     <span

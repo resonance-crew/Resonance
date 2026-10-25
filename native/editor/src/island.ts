@@ -33,7 +33,8 @@ import { Editor } from '@tiptap/core';
 import Blockquote from '@tiptap/extension-blockquote';
 import Placeholder from '@tiptap/extension-placeholder';
 import { wavyVertical } from '../../../src/lib/design/wavyPath';
-import { wobRect } from '../../../src/lib/design/wobRect';
+import { storyPictureShape } from '../../../src/lib/design/storyPicture';
+import { INK_STRONG } from '../../../src/lib/design/strokes';
 import { seedFromString } from '../../../src/lib/design/prng';
 import { storyLinkWaveVars } from '../../../src/lib/design/storyLinkWave';
 import { BlockImage, CardEmbed, getMarkdown, MarkdownTable, storyExtensions } from '../../../src/lib/markdown/editorSchema';
@@ -116,24 +117,68 @@ const IslandBlockquote = Blockquote.extend({
   },
 });
 
-/** Photos clipped to the same wobbly rectangle the article uses. */
+let pictureRings = 0;
+
+/**
+ * Photos clipped to the wobbly outline the article and the web writer use
+ * (storyPictureShape), zoomed by its bleed so the outward swings land on the
+ * photo. A picked one is ringed along that same outline — never a rectangle —
+ * the pen pressed harder (INK_STRONG) in terracotta, drawn inside its edge (a
+ * stroke twice as wide, clipped to the shape) so the writer's bare page, whose
+ * edge is the text's, never cuts it off.
+ */
 const IslandImage = BlockImage.extend({
   addNodeView() {
     return ({ node }) => {
       const dom = document.createElement('figure');
       dom.className = 'image story-picture';
+      const box = document.createElement('span');
+      box.className = 'picture-box';
+      const clipBox = document.createElement('span');
+      clipBox.className = 'picture-clip';
       const img = document.createElement('img');
       img.src = String(node.attrs.src ?? '');
       img.alt = String(node.attrs.alt ?? '');
-      const clip = () => {
+      const ring = document.createElementNS(SVG, 'svg');
+      ring.setAttribute('class', 'picture-ring');
+      ring.setAttribute('aria-hidden', 'true');
+      const clipId = `picture-ring-${++pictureRings}`;
+      const clipPath = document.createElementNS(SVG, 'clipPath');
+      clipPath.id = clipId;
+      const inside = document.createElementNS(SVG, 'path');
+      clipPath.append(inside);
+      const line = document.createElementNS(SVG, 'path');
+      line.setAttribute('fill', 'none');
+      line.setAttribute('stroke', 'var(--color-terracotta)');
+      line.setAttribute('stroke-width', String(INK_STRONG * 2));
+      line.setAttribute('clip-path', `url(#${clipId})`);
+      ring.append(clipPath, line);
+      let size = '';
+      const shape = () => {
         const w = img.clientWidth;
         const h = img.clientHeight;
-        if (w && h) img.style.clipPath = `path("${wobRect(w, h, 18, seedFromString(img.src))}")`;
+        if (!w || !h || `${w}x${h}` === size) return;
+        size = `${w}x${h}`;
+        const { clip, bleed } = storyPictureShape(w, h, seedFromString(img.src));
+        clipBox.style.clipPath = `path("${clip}")`;
+        img.style.transform = `scale(${(w + bleed * 2) / w}, ${(h + bleed * 2) / h})`;
+        ring.setAttribute('viewBox', `0 0 ${w} ${h}`);
+        inside.setAttribute('d', clip);
+        line.setAttribute('d', clip);
       };
-      img.addEventListener('load', clip);
+      img.addEventListener('load', shape);
       img.addEventListener('error', () => dom.classList.add('broken'));
-      dom.append(img);
-      return { dom };
+      const resized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(shape);
+      resized?.observe(img);
+      clipBox.append(img);
+      box.append(clipBox, ring);
+      dom.append(box);
+      return {
+        dom,
+        selectNode: () => dom.classList.add('picked'),
+        deselectNode: () => dom.classList.remove('picked'),
+        destroy: () => resized?.disconnect(),
+      };
     };
   },
 });
