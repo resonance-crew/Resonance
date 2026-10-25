@@ -285,20 +285,33 @@ export function ThoughtMapCanvas({
 
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
+  const groupsRef = useRef(groups);
+  groupsRef.current = groups;
 
-  // Frame the existing content once the viewport has a size — and with the
-  // pane already open beside it (the writer), its card at the centre.
-  useEffect(() => {
-    if (fittedRef.current || !vw || !vh) return;
-    fittedRef.current = true;
+  // The map opens framing everything on it — what 顯示全部 (👁) does — and
+  // keeps everything framed while what it shows changes size (the writer's
+  // pane easing open beside it, a divider released, a window or a tablet
+  // turned) until the reader pans or zooms it themself; 顯示全部 hands the
+  // camera back to it (round 12 §7). The writer at the split opens so too:
+  // its card is on the map among the rest.
+  const followFitRef = useRef(true);
+  const takeCamera = () => {
+    followFitRef.current = false;
+  };
+  const fitAll = (w: number, h: number) => {
     const rects = [
-      ...Object.values(nodes).map(nodeRect),
-      ...Object.values(groups).map((g) => ({ x: g.x, y: g.y, w: g.w, h: g.h })),
+      ...Object.values(nodesRef.current).map(nodeRect),
+      ...Object.values(groupsRef.current).map((g) => ({ x: g.x, y: g.y, w: g.w, h: g.h })),
     ];
-    const fitted = fitCamera(rects, vw, vh);
-    const focus = paneOpen && focusCardId ? nodes[focusCardId] : undefined;
-    setCamera(focus ? centerOn(fitted, nodeRect(focus), vw, vh) : fitted);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (glideRef.current != null) cancelAnimationFrame(glideRef.current);
+    glideRef.current = null;
+    setCamera(fitCamera(rects, w, h));
+  };
+  useEffect(() => {
+    if (!vw || !vh) return;
+    if (fittedRef.current && !followFitRef.current) return;
+    fittedRef.current = true;
+    fitAll(vw, vh);
   }, [vw, vh]);
 
   // A glide of the camera to the focused card. The pane's width eases after
@@ -372,6 +385,11 @@ export function ThoughtMapCanvas({
     const prev = widthRef.current;
     if (toggled) widthRef.current = w || prev;
     if (!w || !fittedRef.current) return;
+    // Still framing everything (the reader hasn't moved the camera): frame it in the new width.
+    if (followFitRef.current) {
+      fitAll(w, viewportRef.current?.offsetHeight ?? 0);
+      return;
+    }
     if (paneOpen && focusCardId && nodesRef.current[focusCardId]) {
       glideToCard(focusCardId);
       return;
@@ -392,6 +410,7 @@ export function ThoughtMapCanvas({
       const px = e.clientX - r.left;
       const py = e.clientY - r.top;
       const zooming = e.ctrlKey || e.metaKey;
+      takeCamera();
       setCamera((cam) =>
         zooming
           ? zoomAt(cam, px, py, Math.exp(-e.deltaY * 0.002))
@@ -538,6 +557,7 @@ export function ThoughtMapCanvas({
         // Zoom about the finger midpoint, then pan with the midpoint's drift —
         // the world point between the fingers stays pinned under them.
         const frame = pinchFrame();
+        takeCamera();
         setCamera((cam) => {
           const z = zoomAt(cam, frame.cx, frame.cy, frame.dist / prev.dist);
           return { ...z, x: z.x + (frame.cx - prev.cx), y: z.y + (frame.cy - prev.cy) };
@@ -553,7 +573,10 @@ export function ThoughtMapCanvas({
     switch (drag.kind) {
       case 'pan':
         markMoved(drag, px, py);
-        if (drag.moved) setMoving(true);
+        if (drag.moved) {
+          setMoving(true);
+          takeCamera();
+        }
         setCamera((cam) => ({ ...cam, x: drag.camX + (px - drag.px), y: drag.camY + (py - drag.py) }));
         break;
       case 'node':
@@ -891,13 +914,14 @@ export function ThoughtMapCanvas({
     router.push(`/card/${card.slug ?? card.id}`);
   };
 
-  const zoom = (factor: number) => setCamera((cam) => zoomAt(cam, vw / 2, vh / 2, factor));
+  const zoom = (factor: number) => {
+    takeCamera();
+    setCamera((cam) => zoomAt(cam, vw / 2, vh / 2, factor));
+  };
+  // 顯示全部: everything framed, and kept so as the map changes size, until the reader moves it again.
   const fit = () => {
-    const rects = [
-      ...Object.values(nodes).map(nodeRect),
-      ...Object.values(groups).map((g) => ({ x: g.x, y: g.y, w: g.w, h: g.h })),
-    ];
-    setCamera(fitCamera(rects, vw, vh));
+    followFitRef.current = true;
+    fitAll(vw, vh);
   };
 
   // --- derived render data ----------------------------------------------------

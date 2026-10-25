@@ -84,9 +84,58 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('ThoughtMapCanvas centring the card the pane shows', () => {
-  it('glides the opened card to the map’s centre when the pane opens, at its zoom', () => {
+/** Every card's centre is inside the 900 × 600 map. */
+function allInView(world: HTMLElement) {
+  for (const id of Object.keys(spots)) {
+    const c = centreOf(world, id);
+    expect(c.x).toBeGreaterThan(0);
+    expect(c.x).toBeLessThan(900);
+    expect(c.y).toBeGreaterThan(0);
+    expect(c.y).toBeLessThan(600);
+  }
+}
+
+/** The reader drags the map's empty paper. */
+function pan(viewport: HTMLElement) {
+  fireEvent.pointerDown(viewport, { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
+  fireEvent.pointerMove(viewport, { pointerId: 1, clientX: 200, clientY: 250 });
+  fireEvent.pointerUp(viewport, { pointerId: 1, clientX: 200, clientY: 250 });
+}
+
+// Round 12 §7: the map opens framing everything (顯示全部), the writer's at the split too, and keeps it framed
+// while it changes size — until the reader pans or zooms; from then on the pane's card glides to the centre.
+describe('ThoughtMapCanvas framing everything until the reader takes the camera', () => {
+  it('opens with every card in view — beside the writer’s pane too, its card among the rest', () => {
+    allInView(board({}).world);
+  });
+
+  it('opens beside the writer’s pane framing everything, not centring the pane’s card', () => {
+    const { world } = board({ paneOpen: true, focusCardId: 'c' });
+    allInView(world);
+    expect(centreOf(world, 'c').x).not.toBeCloseTo(450);
+  });
+
+  it('frames everything again when the pane opens, while the reader hasn’t moved the map', () => {
     const { world, rerender } = board({});
+    rerender({ paneOpen: true, focusCardId: 'c' });
+    settle();
+    allInView(world);
+  });
+
+  it('gives the camera back to 顯示全部 after the reader moved it', () => {
+    const { world, viewport, rerender } = board({});
+    pan(viewport);
+    act(() => void screen.getByRole('button', { name: 'Fit to view' }).click());
+    rerender({ paneOpen: true, focusCardId: 'c' });
+    settle();
+    allInView(world);
+  });
+});
+
+describe('ThoughtMapCanvas centring the card the pane shows, once the reader moved the map', () => {
+  it('glides the opened card to the map’s centre when the pane opens, at its zoom', () => {
+    const { world, viewport, rerender } = board({});
+    pan(viewport);
     const { s } = centreOf(world, 'c');
     rerender({ paneOpen: true, focusCardId: 'c' });
     settle();
@@ -98,14 +147,13 @@ describe('ThoughtMapCanvas centring the card the pane shows', () => {
 
   it('brings another card opened in the pane to the centre, and again once the divider is released', () => {
     const { world, viewport, rerender } = board({ paneOpen: true, focusCardId: 'a' });
+    pan(viewport);
     rerender({ paneOpen: true, focusCardId: 'b' });
     settle();
     expect(centreOf(world, 'b').x).toBeCloseTo(450);
 
     // The reader pans away; a released divider brings the card back.
-    fireEvent.pointerDown(viewport, { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
-    fireEvent.pointerMove(viewport, { pointerId: 1, clientX: 200, clientY: 250 });
-    fireEvent.pointerUp(viewport, { pointerId: 1, clientX: 200, clientY: 250 });
+    pan(viewport);
     expect(centreOf(world, 'b').x).not.toBeCloseTo(450);
     rerender({ paneOpen: true, focusCardId: 'b', settleKey: 1 });
     settle();
