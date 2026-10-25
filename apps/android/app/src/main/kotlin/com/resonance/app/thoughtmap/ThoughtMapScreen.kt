@@ -124,8 +124,9 @@ fun ThoughtMapScreen(
     paneCardId: String? = null,
     /**
      * Bumped by the workspace each time the map's visible width settles beside the pane — the pane
-     * opened or shown again, another card opened in it, the divider let go: the map then glides
-     * [paneCardId] to the middle of what it shows, at the zoom it is at.
+     * opened or shown again, another card opened in it, the divider let go: the map then frames
+     * everything in what it shows while it still frames everything (as every visit opens), else
+     * glides [paneCardId] to the middle of it, at the zoom it is at.
      */
     paneSettled: Int = 0,
 ) {
@@ -158,15 +159,15 @@ fun ThoughtMapScreen(
         if (uid != null) store.cardsChanged(uid, changes, session.lastCardChange)
     }
 
-    // The map's width settled beside the pane: the card the pane shows to the middle of it (a card not on the map: nothing moves).
+    // The map's width settled beside the pane: everything framed in it while the camera still frames everything (as
+    // it opens); once the reader has moved it, the card the pane shows to the middle of it (a card not on the map: nothing moves).
     LaunchedEffect(store, paneSettled) {
         if (paneSettled == centred) return@LaunchedEffect
         centred = paneSettled
-        val id = currentPaneCard ?: return@LaunchedEffect
         snapshotFlow { store.loaded }.first { it }
         // A frame on, so the viewport is the width the map was just laid out at.
         withFrameNanos { }
-        val target = store.centring(id) ?: return@LaunchedEffect
+        val target = store.settledBesidePane(currentPaneCard) ?: return@LaunchedEffect
         glide(store, target, reduced)
     }
 
@@ -205,19 +206,24 @@ internal fun mapOpening(card: MapCard, uid: String?, split: Boolean): MapOpening
     else -> MapOpening.Writer(card.id)
 }
 
-/** The camera to [target] in [CENTRE_MILLIS], easing out (at once with the system's animations off); a finger on the map stops it where it is. */
+/**
+ * The camera to [target] in [CENTRE_MILLIS], easing out (at once with the system's animations off); a finger on
+ * the map, or anything else moving the camera meanwhile (a zoom button, 顯示全部), stops it where it is.
+ */
 private suspend fun glide(store: ThoughtMapStore, target: MapCamera, reduced: Boolean) {
     val from = store.camera
     if (reduced) {
         store.camera = target
         return
     }
+    var last = from
     val start = withFrameNanos { it }
     while (true) {
         val t = withFrameNanos { (it - start) / 1_000_000f / CENTRE_MILLIS }.coerceAtMost(1f)
-        if (store.touching) return
+        if (store.touching || store.framing || store.camera != last) return
         val k = EaseOut.transform(t).toDouble()
-        store.camera = MapCamera(from.x + (target.x - from.x) * k, from.y + (target.y - from.y) * k, from.s)
+        last = MapCamera(from.x + (target.x - from.x) * k, from.y + (target.y - from.y) * k, from.s)
+        store.camera = last
         if (t >= 1f) return
     }
 }

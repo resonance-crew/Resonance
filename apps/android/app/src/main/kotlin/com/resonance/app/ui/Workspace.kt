@@ -145,7 +145,8 @@ internal class PaneState(card: PaneCard?, open: Boolean, frac: Float, settled: I
     val fade = Animatable(1f)
     /**
      * Counts the times the map's width settled beside the pane (opened with it, shown again, another
-     * card opened in it, the divider let go — never while it is held): the map centres the pane's card on each.
+     * card opened in it, the divider let go — never while it is held): the map frames everything again on each, or —
+     * the reader having moved its camera — centres the pane's card.
      */
     var settled by mutableIntStateOf(settled)
 
@@ -177,9 +178,11 @@ internal class PaneState(card: PaneCard?, open: Boolean, frac: Float, settled: I
  * whole width and the grip waits docked at the trailing edge while there is a card to show again.
  * Hiding saves the draft at once and keeps the writer as it was, composed off screen.
  *
- * Each time the map's width settles beside the pane — opened with it or shown again, another card
- * opened in it, the divider let go — the map glides the card the pane shows (one opened from the
- * map; the writer's own card once it has an id) to the middle of what it shows, at its zoom.
+ * The map opens framing everything on it (its 顯示全部), the writer's map too, and frames it again as
+ * its width changes and each time it settles beside the pane — opened with it or shown again,
+ * another card opened in it, the divider let go — until the reader pans or zooms it; after that a
+ * settling glides the card the pane shows (one opened from the map; the writer's own card once it
+ * has an id) to the middle of what the map shows, at its zoom (round 13).
  *
  * Below the split nothing changes: the writer is its own page with its bar, the map its own with
  * its Leave and its cards opening the writer pushed over it — but a card the pane held as the
