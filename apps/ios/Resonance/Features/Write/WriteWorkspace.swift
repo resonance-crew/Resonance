@@ -58,7 +58,8 @@ enum EditorSplit {
 @MainActor final class WritePane {
     /// Saves what is written now (hiding the pane, opening another card in it).
     var saveNow: () -> Void = {}
-    /// The card it writes, once it has an id (a new card's once first saved): what the map centres.
+    /// The card it writes, once it has an id (a new card's once first saved): what the map centres once
+    /// the reader has moved its camera.
     var cardId: () -> String? = { nil }
     /// Whether the page should ask before it goes back (writing to put away).
     var holds: () -> Bool = { false }
@@ -116,7 +117,8 @@ struct WriteWorkspace: View {
     @State private var hidings = 0
     /// Each time the map's visible width settles beside the pane — it opens or is shown again, another
     /// card opens in it, a drag on its grip is let go at a width, VoiceOver steps it — for the map to
-    /// centre the card the pane shows. The writer's pane is open from the start.
+    /// frame everything in it again, or, once the reader has moved its camera, centre the card the pane
+    /// shows (ThoughtMapStore.settle). The writer's pane is open from the start.
     @State private var settled: Int
     @State private var pane = WritePane()
     private static let space = "write.workspace"

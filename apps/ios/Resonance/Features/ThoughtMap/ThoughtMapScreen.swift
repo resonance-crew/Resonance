@@ -16,7 +16,7 @@ struct ThoughtMapScreen: View {
     /// In the split workspace: the card its pane shows (nil while it shows none, or a new draft not saved yet)…
     var focus: () -> String? = { nil }
     /// …and a count it bumps each time the map's visible width settles beside the pane: the camera then
-    /// centres that card (see ThoughtMapStore.centre).
+    /// frames everything again, or — once the reader has moved it — centres that card (ThoughtMapStore.settle).
     var settled = 0
     @Environment(SessionStore.self) private var session
     @Environment(WriteLauncher.self) private var writer
@@ -25,8 +25,13 @@ struct ThoughtMapScreen: View {
     /// The window's own controls (an iPad's app in a window): the Back on the canvas steps past them.
     @State private var controls = WindowControlsInset.zero
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// The last `settled` centred on.
+    /// The last `settled` acted on.
     @State private var centred = 0
+    /// This map has been shown: it opened framing everything (ThoughtMapStore.beginVisit), once.
+    @State private var visited = false
+    /// On screen now — not covered by a page pushed over it — so its size is the map's (a covered map
+    /// shares the store with the one over it, and must not report a size of its own).
+    @State private var shown = false
     /// Kept by the session between visits (see ThoughtMapStore.open).
     private var store: ThoughtMapStore { session.thoughtMap }
 
@@ -46,8 +51,17 @@ struct ThoughtMapScreen: View {
                     chrome(insets: insets, size: geo.size)
                     if store.trayOpen { MapTray(store: store, size: geo.size) }
                 }
-                .onAppear { store.setViewport(geo.size) }
-                .onChange(of: geo.size) { _, size in store.setViewport(size) }
+                .onAppear {
+                    shown = true
+                    // A map shown opens framing everything, as 顯示全部 leaves it (round 13).
+                    if !visited {
+                        visited = true
+                        store.beginVisit()
+                    }
+                    store.setViewport(geo.size)
+                }
+                .onDisappear { shown = false }
+                .onChange(of: geo.size) { _, size in if shown { store.setViewport(size) } }
             }
             .ignoresSafeArea()
         }
@@ -61,15 +75,15 @@ struct ThoughtMapScreen: View {
         .task {
             store.onOpen = openCard ?? { card in open(card) }
             if let uid = session.uid { await store.open(uid: uid, changes: writer.changes, lastChange: writer.lastChange) }
-            // Shown beside a pane already open (the writer's own): the card in it, at once.
+            // Shown beside a pane already open (the writer's own): framed in the width beside it.
             if settled > centred {
                 centred = settled
-                if let id = focus() { store.centre(on: id, animated: false) }
+                store.settle(on: focus(), animated: false)
             }
         }
         .onChange(of: settled) { _, now in
             centred = now
-            if let id = focus() { store.centre(on: id, animated: !reduceMotion) }
+            store.settle(on: focus(), animated: !reduceMotion)
         }
         // The workspace crossed the split: its taps open in the pane, or push the writer again.
         .onChange(of: openCard != nil) { store.onOpen = openCard ?? { card in open(card) } }
