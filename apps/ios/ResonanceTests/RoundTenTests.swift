@@ -32,6 +32,42 @@ import UIKit
         #expect(ThoughtMapScreen.trayIcon(keptPrivate, resonated: false) == .lock)
     }
 
+    // MARK: §3 — the composer's foot
+
+    @Test func theCapsulesPenDarkensWhenWrittenInAndNeverTurnsTerracotta() {
+        #expect(ComposerMetrics.pen(focused: false) == Tokens.fieldBorder)
+        #expect(ComposerMetrics.pen(focused: true) == Tokens.fieldBorderHover)
+        #expect(ComposerMetrics.pen(focused: true) != Tokens.terracotta)
+    }
+
+    @Test func theFootsPaperFadesInOverItsTop24AndGains24OverRidingRows() {
+        #expect(ComposerMetrics.fade == 24)
+        // Nothing riding: the fade lies over the capsule's top half (solid from 24 under its top, the middle of its 48).
+        #expect(ComposerMetrics.fadeRoom(riding: false) == 0)
+        #expect(ComposerMetrics.fade == ComposerMetrics.height / 2)
+        // Something riding: the foot gains the fade's 24 over its rows, solid from their top down.
+        #expect(ComposerMetrics.fadeRoom(riding: true) == 24)
+        // The rows, in the reply's measures.
+        #expect(ComposerMetrics.rowMinHeight == 52 && ComposerMetrics.rowPadY == 4 && ComposerMetrics.rowStart == 12)
+        #expect(ComposerMetrics.rowLeadGap == 10 && ComposerMetrics.rowThumb == 40 && ComposerMetrics.rowGlyph == 18)
+        #expect(ComposerMetrics.slipGap == 6 && ComposerMetrics.clearance == 12)
+    }
+
+    @Test func whatRidesWithTheMessageStacksReplyThenAttachmentThenError() {
+        #expect(ComposerRide.of(reply: false, note: false, card: false, picture: false, error: false).isEmpty)
+        #expect(ComposerRide.of(reply: true, note: false, card: false, picture: true, error: false) == [.reply, .picture])
+        #expect(ComposerRide.of(reply: true, note: true, card: true, picture: false, error: true) == [.reply, .note, .card, .error])
+        #expect(ComposerRide.of(reply: false, note: false, card: false, picture: false, error: true) == [.error])
+    }
+
+    @Test func theThreadKeepsClearOfTheWholeFootEvenWithTheKeyboardUp() {
+        // A phone's keyboard (336) with a reply and a picture riding (24 + 52 + 52 + 6 + 48 + 8): the foot covers
+        // 526 of an 812 thread — past the old half-thread cap (406), which left the newest message under the rows.
+        let thread: CGFloat = 812, foot: CGFloat = 336 + 24 + 52 + 52 + 6 + 48 + 8
+        #expect(ThreadFoot.room(threadBottom: thread, shownHeight: thread - foot) == foot)
+        #expect(ThreadFoot.room(threadBottom: thread, shownHeight: thread - foot) > thread / 2)
+    }
+
     // MARK: §4 — a tap on the thread puts the keyboard away
 
     @Test func theThreadsTapLeavesAMessagesOwnGesturesTheirTouch() {

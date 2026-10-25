@@ -62,10 +62,11 @@ struct ThreadScreen: View {
     /// A word over the composer for a moment ("Copied").
     @State private var toast: String?
     @State private var resultsUnderBar = false
-    /// How much of the thread's foot the floating foot covers — the capsule and its slip (or a notice in
-    /// their place), the 8 under them and the home indicator under that (round 9 §4) — measured as how far
-    /// the thread layer, which runs under it, reaches past what shows above it.
-    /// The thread layer's foot, and the height left over the floating foot, in the thread's own space.
+    /// How much of the thread's foot the floating foot covers — its paper's fade, the rows riding with
+    /// the message and the capsule (or a notice in their place), the 8 under them and the home indicator
+    /// under that (round 9 §4, round 10 §3.2) — measured as how far the thread layer, which runs under it,
+    /// reaches past what shows above it: the thread layer's foot, and the height left over the floating
+    /// foot, in the thread's own space.
     @State private var threadBottom: CGFloat = 0
     @State private var shownHeight: CGFloat = 0
     @FocusState private var composing: Bool
@@ -219,9 +220,10 @@ struct ThreadScreen: View {
         }
     }
 
-    /// How far up from the thread's foot its newest message, the pill and 已複製 stand (round 9 §4):
-    /// past whatever floats over it there — the capsule and its slip, the bottom safe area or the
-    /// keyboard under them, the 8 between — and 12 more. Measured live: the field grows, a slip comes.
+    /// How far up from the thread's foot its newest message, the pill and 已複製 stand (round 9 §4,
+    /// round 10 §3.2): past the whole foot — its paper's fade (and the 24 it gains over riding rows),
+    /// the rows, the capsule, the 8 under it, the bottom safe area or the keyboard — and 12 more, so the
+    /// newest message rests above the fade. Measured live: the field grows, a row comes.
     private var bottomRoom: CGFloat {
         ThreadFoot.room(threadBottom: threadBottom, shownHeight: shownHeight) + ComposerMetrics.clearance
     }
@@ -254,7 +256,9 @@ struct ThreadScreen: View {
                         .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 }
             }
-            .frame(maxHeight: .infinity)
+            // Exactly the height it is given, whatever it holds: a skeleton or a pill padded by the room
+            // over the foot never makes the layer it is measured from any taller.
+            .frame(minHeight: 0, maxHeight: .infinity)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listWidth = $0 }
             // How far it runs past what shows over the foot: the foot's inset and the home indicator under it
             // (over a keyboard the thread stops at the keyboard and keeps its place, as it always has).
@@ -285,7 +289,9 @@ struct ThreadScreen: View {
 
     /// Floating over the messages' foot, 8 over the bottom safe area or the keyboard: the composer — or,
     /// where there is nothing to write, a slip in its place with a calm line: the wait for an answer to
-    /// one's own note, or why messages can't be sent here. Nothing while that isn't known yet.
+    /// one's own note, or why messages can't be sent here. Nothing while that isn't known yet. Behind it
+    /// the foot's paper (round 10 §3.2) across the whole pane, down to the screen's foot, fading in over
+    /// its top 24; a tap on its solid part puts the keyboard away, as a tap on the thread does.
     @ViewBuilder private func foot(_ model: ThreadModel) -> some View {
         VStack(spacing: 0) {
             if model.accessKnown {
@@ -317,6 +323,13 @@ struct ThreadScreen: View {
         // A wide pane keeps the field to a writing width, centred under the thread.
         .frame(maxWidth: ComposerMetrics.maxWidth)
         .frame(maxWidth: .infinity)
+        .background(alignment: .top) {
+            if model.accessKnown {
+                ComposerBacking { KeyboardAway.now() }
+                    // Through the home indicator, and under the keyboard (no message shows through its glass).
+                    .ignoresSafeArea(edges: .bottom)
+            }
+        }
     }
 
     private func context(_ model: ThreadModel) -> ThreadContext {
@@ -726,13 +739,17 @@ private struct PersonPlaceholder: View {
     }
 }
 
-/// The floating foot's room over the thread (round 9 §4).
+/// The floating foot's room over the thread (round 9 §4, round 10 §3.2).
 nonisolated enum ThreadFoot {
-    /// How much of the thread the foot covers: how far the thread layer's foot (`threadBottom`) lies past
-    /// the room shown over the foot (`shownHeight`), both in the thread's own space — never less than
-    /// nothing, and never more than the thread itself (a measure taken mid-layout can't run away).
+    /// How much of the thread the foot covers — its paper's fade and the 24 it gains over riding rows
+    /// included, the home indicator or the keyboard under it — : how far the thread layer's foot
+    /// (`threadBottom`) lies past the room shown over the foot (`shownHeight`), both in the thread's own
+    /// space; never less than nothing, never more than the thread. (It was held under half the thread,
+    /// which a phone's keyboard with a reply and a picture riding outgrows: the newest message then lay
+    /// under the composer. The thread layer's height no longer follows what it holds, so nothing measured
+    /// here can run away.)
     static func room(threadBottom: CGFloat, shownHeight: CGFloat) -> CGFloat {
         guard shownHeight > 0, threadBottom > 0 else { return 0 }
-        return min(max(0, threadBottom - shownHeight), threadBottom / 2)
+        return min(max(0, threadBottom - shownHeight), threadBottom)
     }
 }

@@ -2,57 +2,37 @@ import DesignSystem
 import ResonanceKit
 import SwiftUI
 
-/// The message being written (round 9 §4): a capsule floating over the thread — ＋ at its start (圖片 ·
-/// 卡片, the screen's menu over it), the text, Send as its end segment — and, on a slip directly over
-/// it, what rides with the message: the reply it carries, the note being answered, a card or a picture
-/// (one of the two), and why the last try didn't go. The capsule keeps its geometry in every state: 48
-/// for a line of text at any text size, taller only with more lines (up to five, then it scrolls).
-/// Sending never holds the composer — a message goes to the outbox and the field is empty for the next
-/// one, with its keyboard still up. The twin of Android's ThreadComposer.
+/// The message being written (round 9 §4, round 10 §3): a capsule floating over the thread — ＋ at its
+/// start (圖片 · 卡片, the screen's menu over it), the text, Send as its end segment — and, in rows
+/// straight over it, what rides with the message: the reply it carries, the note being answered, a
+/// card or a picture (one of the two), and why the last try didn't go. The rows have no frame: they
+/// sit on the foot's paper (``ComposerBacking``, the screen's), which comes on in the 24 the foot
+/// gains over them. The capsule keeps its geometry in every state: 48 for a line of text at any text
+/// size, taller only with more lines (up to five, then it scrolls). Sending never holds the composer —
+/// a message goes to the outbox and the field is empty for the next one, with its keyboard still up.
+/// The twin of Android's ThreadComposer.
 struct ThreadComposer: View {
     @Bindable var model: ThreadModel
     var composing: FocusState<Bool>.Binding
     /// The ＋ was tapped: where it is on the screen, for its menu to hang from.
     let onAttach: (CGRect) -> Void
 
-    /// What rides on the slip.
-    private var slip: Bool {
-        model.replyingTo != nil || model.noteRef != nil || model.pendingCard != nil || model.pendingPicture != nil
-            || model.preparingPicture || model.error != nil
+    /// What rides with the message, top to bottom.
+    private var rides: [ComposerRide] {
+        ComposerRide.of(reply: model.replyingTo != nil, note: model.noteRef != nil, card: model.pendingCard != nil,
+                        picture: model.pendingPicture != nil || model.preparingPicture, error: model.error != nil)
     }
 
     var body: some View {
-        VStack(spacing: ComposerMetrics.slipGap) {
-            if slip {
-                ComposerSlip {
-                    VStack(alignment: .leading, spacing: 6) {
-                        if let quote = model.replyingTo { ReplyBar(model: model, quote: quote) }
-                        if model.noteRef != nil || model.pendingCard != nil || model.pendingPicture != nil || model.preparingPicture {
-                            FlowRow(spacing: 8) {
-                                if model.noteRef != nil {
-                                    AttachmentChip(icon: .note, title: L10n.Messages.quotedNote) { model.noteRef = nil }
-                                }
-                                if let card = model.pendingCard {
-                                    AttachmentChip(icon: .cards, title: card.title) { model.pendingCard = nil }
-                                }
-                                if model.preparingPicture {
-                                    PictureChip(picture: nil) {}
-                                } else if let picture = model.pendingPicture {
-                                    PictureChip(picture: picture.preview) { model.pendingPicture = nil }
-                                }
-                            }
-                            .padding(.vertical, 4)
-                        }
-                        if let error = model.error {
-                            Text(error).font(AppFonts.body(12)).foregroundStyle(Tokens.terracotta)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .padding(.vertical, 4)
-                        }
-                    }
-                    .padding(.leading, 12)
-                    .padding(.trailing, 4)
-                    .padding(.vertical, 4)
+        let rides = rides
+        VStack(spacing: 0) {
+            if !rides.isEmpty {
+                VStack(spacing: 0) {
+                    // The 24 the foot gains over its rows: where its paper fades in.
+                    Color.clear.frame(height: ComposerMetrics.fadeRoom(riding: true))
+                    ForEach(rides, id: \.self) { ride in row(ride) }
                 }
+                .padding(.bottom, ComposerMetrics.slipGap)
                 .transition(.opacity)
             }
             ComposerCapsule(focused: composing.wrappedValue, canSend: model.canSend, attachLabel: L10n.Messages.attach,
@@ -60,7 +40,64 @@ struct ThreadComposer: View {
                 ComposerField(model: model, composing: composing)
             }
         }
-        .animation(.easeOut(duration: 0.16), value: slip)
+        .animation(.easeOut(duration: 0.16), value: rides)
+    }
+
+    /// One riding thing as its row: lead · words · ✕.
+    @ViewBuilder private func row(_ ride: ComposerRide) -> some View {
+        switch ride {
+        case .reply:
+            if let quote = model.replyingTo {
+                ComposerRow(label: quote.senderId == model.me ? L10n.Messages.replyingToSelf : L10n.Messages.replyingTo(handle: model.displayHandle),
+                            detail: quote.summary(picture: L10n.Messages.replyImage, card: L10n.Messages.replyCard)
+                                .replacingOccurrences(of: "\n", with: " "),
+                            removeLabel: L10n.Messages.replyCancel, onRemove: { model.cancelReply() }) {
+                    ReplyRule().frame(height: 34)
+                }
+            }
+        case .note:
+            ComposerRow(label: L10n.Messages.quotedNote, removeLabel: L10n.Messages.removeCard, onRemove: { model.noteRef = nil }) {
+                ComposerRowTile(.glyph(.note))
+            }
+        case .card:
+            if let card = model.pendingCard {
+                ComposerRow(label: L10n.Messages.attachCardShort, detail: card.title, removeLabel: L10n.Messages.removeCard,
+                            onRemove: { model.pendingCard = nil }) {
+                    ComposerRowTile(card.imageUrl.flatMap(URL.init(string:)).map { .cover($0) } ?? .glyph(.cards))
+                }
+            }
+        case .picture:
+            // While it is readied, the pen's loader in its place and nothing to take away yet.
+            ComposerRow(label: L10n.Messages.attachImage, removeLabel: L10n.Messages.removeImage,
+                        onRemove: model.preparingPicture ? nil : { model.pendingPicture = nil }) {
+                ComposerRowTile(.picture(model.preparingPicture ? nil : model.pendingPicture?.preview))
+            }
+        case .error:
+            if let error = model.error {
+                Text(error).font(AppFonts.body(12)).foregroundStyle(Tokens.terracotta)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, ComposerMetrics.rowStart)
+                    .padding(.vertical, 6)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+}
+
+/// What rides with the message (round 10 §3.4), in its order over the capsule: the reply, the note it
+/// answers, the card or the picture, then why the last try didn't go.
+nonisolated enum ComposerRide: Hashable {
+    case reply, note, card, picture, error
+
+    static func of(reply: Bool, note: Bool, card: Bool, picture: Bool, error: Bool) -> [ComposerRide] {
+        var rides: [ComposerRide] = []
+        if reply { rides.append(.reply) }
+        if note { rides.append(.note) }
+        if card { rides.append(.card) }
+        if picture { rides.append(.picture) }
+        if error { rides.append(.error) }
+        return rides
     }
 }
 
@@ -132,94 +169,6 @@ struct ThreadFootNote: View {
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity)
-    }
-}
-
-/// On the slip while replying: a wavy terracotta rule, whom to (12, semibold) over a line of what
-/// (12.5), and a ✕ a finger wide.
-private struct ReplyBar: View {
-    let model: ThreadModel
-    let quote: ReplyQuote
-
-    var body: some View {
-        let who = quote.senderId == model.me ? L10n.Messages.replyingToSelf : L10n.Messages.replyingTo(handle: model.displayHandle)
-        let what = quote.summary(picture: L10n.Messages.replyImage, card: L10n.Messages.replyCard).replacingOccurrences(of: "\n", with: " ")
-        HStack(spacing: 10) {
-            ReplyRule().frame(height: 34)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(who).font(AppFonts.body(12, weight: .semibold)).foregroundStyle(Tokens.text).lineLimit(1)
-                Text(what).font(AppFonts.body(12.5)).foregroundStyle(Tokens.textMuted).lineLimit(1)
-            }
-            Spacer(minLength: 0)
-            Button { model.cancelReply() } label: {
-                OrganicIcon(.close, size: 15, color: Tokens.textMuted, strokeWidth: Tokens.ink)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(OrganicPressStyle())
-            .accessibilityLabel(L10n.Messages.replyCancel)
-        }
-        .frame(minHeight: 44)
-        .accessibilityElement(children: .contain)
-    }
-}
-
-/// A picture picked for the next message, on the slip where a card's chip shows: a small
-/// thumbnail with the hand-drawn edge of the pictures, and its ✕ (移除圖片). While the picture is
-/// readied (`picture` nil), the pen's loader in its place.
-private struct PictureChip: View {
-    let picture: UIImage?
-    let onRemove: () -> Void
-
-    var body: some View {
-        let edge = WobRectShape(radius: 10, seed: 61, mag: 0.9)
-        HStack(spacing: 4) {
-            Group {
-                if let picture {
-                    Image(uiImage: picture).resizable().scaledToFill()
-                } else {
-                    Tokens.creamDark.overlay { SketchLoader(size: 18) }
-                }
-            }
-            .frame(width: 44, height: 44)
-            .clipShape(edge)
-            .accessibilityLabel(L10n.Messages.attachImage)
-            if picture != nil {
-                Button(action: onRemove) {
-                    OrganicIcon(.close, size: 13, color: Tokens.textMuted)
-                        .frame(width: 32, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(L10n.Messages.removeImage)
-            }
-        }
-        .padding(.leading, 4).padding(.trailing, picture == nil ? 4 : 0).padding(.vertical, 4)
-        .background(Tokens.terracottaLight.opacity(0.4),
-                    in: UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 14, bottomTrailingRadius: 12, topTrailingRadius: 14))
-    }
-}
-
-/// A pending attachment on the slip: its glyph, its name, and a ✕.
-private struct AttachmentChip: View {
-    let icon: IconName
-    let title: String
-    let onRemove: () -> Void
-
-    var body: some View {
-        HStack(spacing: 6) {
-            OrganicIcon(icon, size: 14, color: Tokens.text)
-            Text(title).font(AppFonts.body(12)).foregroundStyle(Tokens.text).lineLimit(1).frame(maxWidth: 180, alignment: .leading)
-                .fixedSize(horizontal: true, vertical: false)
-            Button(action: onRemove) {
-                OrganicIcon(.close, size: 13, color: Tokens.textMuted).padding(2)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(L10n.Messages.removeCard)
-        }
-        .padding(.leading, 10).padding(.trailing, 8).padding(.vertical, 5)
-        .background(Tokens.terracottaLight.opacity(0.4),
-                    in: UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 14, bottomTrailingRadius: 12, topTrailingRadius: 14))
     }
 }
 

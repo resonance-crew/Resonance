@@ -652,11 +652,12 @@ public struct SharedCardSkeleton: View {
 
 // MARK: - Composer
 
-/// The chat composer's measures (round 9 §4), the same on the web and Android: one floating capsule
-/// exactly 48 tall for a line of text at any text size, ＋ (44 wide) at its start, Send as its 52-wide
-/// end segment; 14 from the screen's sides, 8 over the bottom safe area (or the keyboard), at most 720
-/// wide; what rides with the message on a slip 6 above it; a 4-point halo of the page's paper round
-/// both, so they read as paper cut out over any bubble — never a shadow, never a face with alpha.
+/// The chat composer's measures (round 9 §4, round 10 §3), the same on the web and Android: one
+/// floating capsule exactly 48 tall for a line of text at any text size, ＋ (44 wide) at its start,
+/// Send as its 52-wide end segment; 14 from the screen's sides, 8 over the bottom safe area (or the
+/// keyboard), at most 720 wide; what rides with the message in rows 6 above it. Behind them the foot's
+/// paper (``ComposerBacking``) across the whole pane, its top `fade` a fade into it — never a halo,
+/// never a shadow.
 public nonisolated enum ComposerMetrics {
     /// The capsule with one line in it, whatever the text size (only more lines make it taller).
     public static let height: CGFloat = 48
@@ -666,12 +667,21 @@ public nonisolated enum ComposerMetrics {
     /// The send segment, the capsule's end.
     public static let sendWidth: CGFloat = 52
     public static let sendGlyph: CGFloat = 20
-    /// The paper round a floating face (outside its pen line).
-    public static let halo: CGFloat = 4
+    /// The foot's paper fades in over its top 24: over the capsule's top half when nothing rides with
+    /// the message, over 24 the foot gains above the rows when something does.
+    public static let fade: CGFloat = 24
     /// The capsule over the bottom safe area or the keyboard.
     public static let bottomGap: CGFloat = 8
-    /// The slip over the capsule.
+    /// The last row (or a notice) over the capsule.
     public static let slipGap: CGFloat = 6
+    /// A riding row: at least 52 tall, 4 over and under its content, which starts 12 in from the
+    /// capsule's start edge; 10 from its lead to its words; a 40 × 40 picture or tile, a tile's glyph 18.
+    public static let rowMinHeight: CGFloat = 52
+    public static let rowPadY: CGFloat = 4
+    public static let rowStart: CGFloat = 12
+    public static let rowLeadGap: CGFloat = 10
+    public static let rowThumb: CGFloat = 40
+    public static let rowGlyph: CGFloat = 18
     /// The screen's sides (the page gutter) and the widest the capsule is.
     public static let gutter: CGFloat = 14
     public static let maxWidth: CGFloat = 720
@@ -693,16 +703,21 @@ public nonisolated enum ComposerMetrics {
         max(0, (height - lineHeight) / 2)
     }
 
-    /// The stroke that draws the halo under a pen line `pen` wide: `halo` of paper past the pen's outer edge.
-    public static func haloStroke(pen: CGFloat) -> CGFloat { pen + 2 * halo }
+    /// The capsule's pen (round 10 §3.3): the field's border at rest, its darker hover pen while it is
+    /// written in — darker, never another colour (it was terracotta).
+    public static func pen(focused: Bool) -> Color { focused ? Tokens.fieldBorderHover : Tokens.fieldBorder }
+
+    /// How much the foot adds over what it holds: the fade's 24 when rows ride over the capsule (it
+    /// lies over the capsule's own top half otherwise).
+    public static func fadeRoom(riding: Bool) -> CGFloat { riding ? fade : 0 }
 
     /// The send segment's seam: SegmentedActionBar's seed for the seam after the text.
     static func seamSeed(_ seed: Double) -> Double { seed + 11 }
 }
 
-/// The composer's capsule (round 9 §4): one hand-drawn field shape — the field's wobble, the cream
-/// paper, its pen at INK turning terracotta while it is being written in — with a 4-point halo of the
-/// page's paper under its pen line. Inside, ＋ as a ghost at its start, the text (`field`, no border of
+/// The composer's capsule (round 9 §4, round 10 §3): one hand-drawn field shape — the field's wobble,
+/// the cream paper, its pen at INK in the field's border, darker (the field's hover pen) while it is
+/// being written in, never a halo. Inside, ＋ as a ghost at its start, the text (`field`, no border of
 /// its own), and Send as its end segment: a wavy seam cut across the capsule in the paper's colour (the
 /// segmented bar's language), the segment's face the tonal peach with a terracotta plane at rest and
 /// the solid terracotta with a cream plane once there is something to send (a 140 ms change). Send
@@ -782,8 +797,8 @@ public nonisolated struct ComposerCapsuleShape: Shape {
     }
 }
 
-/// The capsule drawn: the halo, the paper, the send segment's face, its seam, the grain over the
-/// segment, and the pen line over all.
+/// The capsule drawn: the paper, the send segment's face, its seam, the grain over the segment, and
+/// the pen line over all.
 private struct ComposerCapsuleFace: View {
     let seed: Double
     let focused: Bool
@@ -794,7 +809,6 @@ private struct ComposerCapsuleFace: View {
         let shape = ComposerCapsuleShape(seed: seed)
         let segment = ComposerSendSegment(seed: seed)
         ZStack {
-            shape.stroke(Tokens.cream, style: StrokeStyle(lineWidth: ComposerMetrics.haloStroke(pen: Tokens.ink), lineJoin: .round))
             shape.fill(Tokens.cream)
             ZStack {
                 segment.fill(canSend ? Tokens.buttonFill : Tokens.buttonTonal)
@@ -805,7 +819,7 @@ private struct ComposerCapsuleFace: View {
             .clipShape(shape)
             .animation(.easeOut(duration: 0.14), value: canSend)
             .animation(.easeOut(duration: 0.12), value: pressed)
-            shape.stroke(focused ? Tokens.terracotta : Tokens.fieldBorder,
+            shape.stroke(ComposerMetrics.pen(focused: focused),
                          style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
                 .animation(.easeOut(duration: 0.15), value: focused)
         }
@@ -836,10 +850,9 @@ nonisolated struct ComposerSendSeam: Shape {
     }
 }
 
-/// What rides with the message, on a slip directly over the capsule (round 9 §4): the same width,
-/// opaque paper, its pen INK_LIGHT in the muted ink — a secondary surface — the field's wobble at a
-/// radius of 14, and the same halo. The capsule under it keeps its exact geometry whatever the slip
-/// holds. A notice that takes the composer's place is one too, alone in the capsule's place.
+/// A notice in the composer's place, where there is nothing to write (a letter waiting for its
+/// answer, no connection): a slip of the capsule's width — opaque paper, its pen INK_LIGHT in the
+/// muted ink, the field's wobble at a radius of 14 — on the foot's paper (round 10 §3.2: no halo).
 public struct ComposerSlip<Content: View>: View {
     var seed: Double
     @ViewBuilder let content: Content
@@ -855,12 +868,133 @@ public struct ComposerSlip<Content: View>: View {
             .background {
                 let shape = WobRectShape(radius: ComposerMetrics.slipRadius, seed: seed)
                 ZStack {
-                    shape.stroke(Tokens.cream, style: StrokeStyle(lineWidth: ComposerMetrics.haloStroke(pen: Tokens.inkLight), lineJoin: .round))
                     shape.fill(Tokens.cream)
                     shape.stroke(Tokens.textMuted, style: StrokeStyle(lineWidth: Tokens.inkLight, lineCap: .round, lineJoin: .round))
                 }
                 .accessibilityHidden(true)
             }
+    }
+}
+
+/// The foot's paper (round 10 §3.2): the page's cream behind the composer across the pane's whole
+/// width, run down to the screen's foot by its host (through the home indicator, under the keyboard),
+/// its top ``ComposerMetrics/fade`` a fade from clear paper into it — so a message scrolling down
+/// never shows under the composer, and where the foot meets the thread the paper comes on softly.
+/// The solid part takes taps (`onTap`: the thread puts the keyboard away there, as on the thread);
+/// the fade lets them through to the messages under it.
+public struct ComposerBacking: View {
+    let onTap: () -> Void
+
+    public init(onTap: @escaping () -> Void) {
+        self.onTap = onTap
+    }
+
+    public var body: some View {
+        VStack(spacing: 0) {
+            LinearGradient(colors: [Tokens.cream.opacity(0), Tokens.cream], startPoint: .top, endPoint: .bottom)
+                .frame(height: ComposerMetrics.fade)
+                .allowsHitTesting(false)
+            Tokens.cream
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onTap)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// One thing riding with the message (round 10 §3.4), in the reply's style: its lead (the reply's
+/// wavy rule, a 40 × 40 picture, or a glyph on a tile — ``ComposerRowTile``), a label (12, semibold)
+/// over a detail (12.5, muted) — one line each, cut with … — and a ✕ a finger wide at the row's end.
+/// No frame: rows sit on the foot's paper in the composer's column, their content 12 in from the
+/// capsule's start edge, at least 52 tall, touching each other. A label alone is centred in its row.
+/// The lead and the words take no taps: a tap there is a tap on the paper (the keyboard goes away).
+/// `onRemove` nil: nothing to take away yet (a picture still being readied), its room kept.
+public struct ComposerRow<Lead: View>: View {
+    let label: String
+    let detail: String?
+    let removeLabel: String
+    let onRemove: (() -> Void)?
+    let lead: Lead
+
+    public init(label: String, detail: String? = nil, removeLabel: String, onRemove: (() -> Void)?,
+                @ViewBuilder lead: () -> Lead) {
+        self.label = label
+        self.detail = detail
+        self.removeLabel = removeLabel
+        self.onRemove = onRemove
+        self.lead = lead()
+    }
+
+    public var body: some View {
+        HStack(spacing: ComposerMetrics.rowLeadGap) {
+            lead
+                .allowsHitTesting(false)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label).font(AppFonts.body(12, weight: .semibold)).foregroundStyle(Tokens.text).lineLimit(1)
+                if let detail, !detail.isEmpty {
+                    Text(detail).font(AppFonts.body(12.5)).foregroundStyle(Tokens.textMuted).lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .allowsHitTesting(false)
+            if let onRemove {
+                OrganicIconButton(.close, label: removeLabel, size: 16, action: onRemove)
+            } else {
+                Color.clear.frame(width: 44, height: 44)
+            }
+        }
+        .padding(.vertical, ComposerMetrics.rowPadY)
+        .padding(.leading, ComposerMetrics.rowStart)
+        // The ✕'s glyph on the send plane's line, under the capsule's end.
+        .padding(.trailing, (ComposerMetrics.sendWidth - 44) / 2)
+        .frame(minHeight: ComposerMetrics.rowMinHeight)
+        .accessibilityElement(children: .contain)
+    }
+}
+
+/// A riding row's 40 × 40 lead, rounded as the chips were (12 / 14): a picture cover-cropped (or the
+/// pen's loader while it is readied), a card's cover, or a glyph (18) on the tonal tile — the
+/// terracotta light mixed into the paper, the chips' old face.
+public struct ComposerRowTile: View {
+    public enum Face {
+        case picture(UIImage?)
+        case cover(URL)
+        case glyph(IconName)
+    }
+
+    let face: Face
+
+    public init(_ face: Face) {
+        self.face = face
+    }
+
+    public static let shape = UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 14, bottomTrailingRadius: 12,
+                                                     topTrailingRadius: 14)
+    /// The tile's face: the terracotta light at 40% on the paper.
+    public static let tonal = Tokens.cream.mix(with: Tokens.terracottaLight, by: 0.4, in: .device)
+
+    public var body: some View {
+        Group {
+            switch face {
+            case let .picture(image):
+                if let image {
+                    Image(uiImage: image).resizable().scaledToFill()
+                } else {
+                    Self.tonal.overlay { SketchLoader(size: 18) }
+                }
+            case let .cover(url):
+                Self.tonal.overlay {
+                    LazyImage(url: url) { state in
+                        if let image = state.image { image.resizable().scaledToFill() }
+                    }
+                }
+            case let .glyph(icon):
+                Self.tonal.overlay { OrganicIcon(icon, size: ComposerMetrics.rowGlyph, color: Tokens.text, strokeWidth: Tokens.ink) }
+            }
+        }
+        .frame(width: ComposerMetrics.rowThumb, height: ComposerMetrics.rowThumb)
+        .clipShape(Self.shape)
+        .accessibilityHidden(true)
     }
 }
 

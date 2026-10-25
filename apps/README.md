@@ -329,20 +329,29 @@ with 還原, keeping what is typed. A story picture that failed is the shell's t
 picker the story has its caret, selection, keyboard and format bar again
 (`StoryEditorBridge.refocus()`).
 
-The composer floats over the thread (round 9 §4, `ComposerCapsule` / `ComposerSlip` in DesignSystem):
-one capsule with a paper halo — ＋, the text, Send as its end segment, tonal at rest and solid with
-something to send — 48 for a line at any text size (`ComposerText`: the padding from the line it draws),
-growing to five lines; the reply and what rides along on a slip above it; the letter's line as the
-thread's last item, a notice in the composer's place as a slip. It is the thread's
-`.safeAreaInset(edge: .bottom)`; the list runs under it to the screen's foot and, drawn upside down,
-takes what it covers as its top margin (`ThreadFoot.room`, + 12), which the pill and 已複製 keep too.
+The composer floats over the thread (round 9 §4, round 10 §3; `ComposerCapsule`, `ComposerRow`,
+`ComposerBacking` in DesignSystem): one capsule — ＋, the text, Send as its end segment, tonal at rest and
+solid with something to send — 48 for a line at any text size (`ComposerText`: the padding from the line it
+draws), growing to five lines, its pen the field's border, darker (`Tokens.fieldBorderHover`) while it is
+written in, never a halo. What rides along is a row each in the reply's style, no frame — the reply (its
+wavy rule), the note answered or the card (a glyph on a tonal tile, a card's cover when it has one), the
+picture (its 40 × 40) — label · detail · ✕ at the end (`ComposerRide` orders them); the letter's line is
+the thread's last item, a notice in the composer's place a framed slip. Behind it all the foot's paper
+runs the pane's whole width down to the screen's foot (through the home indicator, under the keyboard),
+its top 24 a fade: over the capsule's top half, or over 24 the foot gains above riding rows. It is the
+thread's `.safeAreaInset(edge: .bottom)`; the list runs under it to the screen's foot and, drawn upside
+down, takes all it covers (the fade too) as its top margin (`ThreadFoot.room`, + 12), which the pill and
+已複製 keep too. A tap on the thread or on the foot's solid paper puts the keyboard away (`KeyboardTapAway`:
+a UIKit tap on the list that waits for a message's own hold and taps), a drag down takes it with the
+finger; the list is held at its own edge in UIKit (`SidewaysLock`) — setting its `ScrollPosition` for
+that froze the app after a picture was sent (round 10 §5).
 
 Pictures in chat: the composer's ＋ opens 圖片 · 卡片 (`AttachMenuOverlay`, the
 screen's own layer, so the keyboard stays up). 圖片 is the system's `PhotosPicker`
 (one picture, `.current` encoding; no library access is asked for), readied off
 the main thread by `ChatPictures.prepare` — a JPEG at most 2048 px on its longest
 side, upright; a GIF up to 4 MB goes as it is — and held above the field
-(`ThreadModel.pendingPicture`: picking a card drops it, and the other way round), on the composer's slip.
+(`ThreadModel.pendingPicture`: picking a card drops it, and the other way round), in a row over the composer.
 Sending draws it at once from the device (`ChatImageStore.keep`, under the
 message's client id) while `ChatOutboxes` uploads it (`POST /api/v1/chat-images`
 with that client id, once per message, however often it is retried) and then
