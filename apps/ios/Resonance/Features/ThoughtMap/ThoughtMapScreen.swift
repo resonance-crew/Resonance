@@ -80,15 +80,22 @@ struct ThoughtMapScreen: View {
         }
     }
 
-    /// Below the split: a card of mine opens in the writer (a published one with its pending edit) —
-    /// a 私人卡 on its page (round 9 §1), where its owner reads it and 編輯 is a tap away; a card I
-    /// resonated with opens on its page. (At the split every card of mine opens in the pane, `openCard`.)
+    /// Below the split: every card of mine opens in the writer — a 私人卡 (never published, or published
+    /// and kept private) exactly as a shared one, a published one with its pending edit (round 10 §1: the
+    /// map is where I work on my cards; the card box, the trash and links elsewhere still open a 私人卡's
+    /// page) — and a card I resonated with opens on its page. (At the split every card of mine opens in
+    /// the pane, `openCard`.)
     private func open(_ card: MapCard) {
-        if card.authorId == session.uid, !Self.isPrivate(card) {
+        if Self.opensWriter(card, viewer: session.uid) {
             writer.edit(card.id, showsCard: false)
         } else {
             openRoute(.card(card.slug ?? card.id))
         }
+    }
+
+    /// A tap on `card` below the split opens the writer: it is the viewer's own, shared or not.
+    static func opensWriter(_ card: MapCard, viewer: String?) -> Bool {
+        viewer != nil && card.authorId == viewer
     }
 
     /// A 私人卡: never published, or published and kept private.

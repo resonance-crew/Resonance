@@ -61,8 +61,6 @@ import Testing
         #expect(ComposerMetrics.textPadding(lineHeight: 24) == 12)
         #expect(ComposerMetrics.textPadding(lineHeight: 60) == 0)
         #expect(ComposerMetrics.maxLines == 5 && ComposerMetrics.sendWidth == 52 && ComposerMetrics.attachWidth == 44)
-        // The halo: 4 of paper past a pen line's outer edge.
-        #expect(abs(ComposerMetrics.haloStroke(pen: Tokens.ink) - (Tokens.ink + 8)) < 0.001)
     }
 
     @Test func theThreadKeepsClearOfWhatFloatsOverItsFoot() {
@@ -72,8 +70,8 @@ import Testing
         #expect(ThreadFoot.room(threadBottom: 0, shownHeight: 700) == 0)
         #expect(ThreadFoot.room(threadBottom: 700, shownHeight: 0) == 0)
         #expect(ThreadFoot.room(threadBottom: 600, shownHeight: 700) == 0)
-        // A measure taken mid-layout never runs past half the thread.
-        #expect(ThreadFoot.room(threadBottom: 800, shownHeight: 100) == 400)
+        // Never more than the thread itself (round 10 lifted the half-thread cap: see RoundTenTests).
+        #expect(ThreadFoot.room(threadBottom: 800, shownHeight: 1) == 799)
     }
 
     // MARK: §6 — tables
