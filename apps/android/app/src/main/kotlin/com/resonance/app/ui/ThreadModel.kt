@@ -80,8 +80,8 @@ import java.util.Date
  * Used on the main thread, like every Compose state it holds.
  */
 class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, private val session: Session) {
-    /** A card waiting to go with the next message: what the chip shows and what is sent. */
-    data class Attachment(val id: String, val title: String)
+    /** A card waiting to go with the next message: what its row shows (its title, its cover's thumbnail) and what is sent. */
+    data class Attachment(val id: String, val title: String, val cover: String? = null)
 
     /** `Failed`: who they are couldn't be asked (offline, a server error) — not "nobody by that name", which is `Missing`. */
     enum class Phase { Loading, Missing, Failed, Ready }
@@ -927,6 +927,8 @@ internal fun threadSaver(handle: String, uid: String?, session: Session): Saver<
             m.routeNote?.cardId.orEmpty(), m.routeNote?.noteId.orEmpty(),
             // The reply quotes a picture (「一張圖片」).
             if (reply?.image == true) "1" else "",
+            // The attached card's cover, for its row's thumbnail.
+            m.pendingCard?.cover.orEmpty(),
         )
     },
     restore = { v ->
@@ -934,7 +936,7 @@ internal fun threadSaver(handle: String, uid: String?, session: Session): Saver<
         ThreadModel(handle, uid, note(9, 10), session).also { m ->
             m.draft = v[0]
             m.noteRef = note(1, 2)
-            if (v[3].isNotEmpty()) m.pendingCard = ThreadModel.Attachment(v[3], v[4])
+            if (v[3].isNotEmpty()) m.pendingCard = ThreadModel.Attachment(v[3], v[4], v.getOrNull(12)?.ifEmpty { null })
             if (v.size >= 9 && v[5].isNotEmpty()) m.restoreReply(ReplyQuote(v[5], v[6], v[7], v[8].ifEmpty { null }, image = v.getOrNull(11) == "1"))
         }
     },

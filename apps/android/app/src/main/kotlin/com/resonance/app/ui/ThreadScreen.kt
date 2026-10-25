@@ -70,6 +70,7 @@ import com.resonance.app.SafetyService
 import com.resonance.app.Session
 import com.resonance.design.AppFonts
 import com.resonance.design.ChatPictureSource
+import com.resonance.design.ComposerBacking
 import com.resonance.design.CssText
 import com.resonance.design.EmptyAction
 import com.resonance.design.HandDrawnAvatar
@@ -88,7 +89,6 @@ import com.resonance.design.OrganicMenuItem
 import com.resonance.design.OrganicModal
 import com.resonance.design.WavyDivider
 import com.resonance.design.cream
-import com.resonance.design.floatingGroup
 import com.resonance.design.floatingSlip
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
@@ -272,31 +272,35 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                 // While they are found the composer is there already (nothing to send to until they are): a
                 // thread mostly is somewhere to write, and the field stays put — what was typed, the keyboard.
                 // It floats 8 over the navigation bar or the keyboard, the page's gutter at its sides; in a wide
-                // pane it keeps to a column of its own, centred under the thread.
-                Box(
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .windowInsetsPadding(footInsets)
-                        .padding(bottom = ComposerGap)
-                        .onSizeChanged { room.foot = it.height },
-                ) {
-                    val padded = Modifier.readableColumn(ComposerMax).padding(horizontal = ComposerGutter)
-                    when (foot) {
-                        ThreadFoot.Composer, ThreadFoot.Answer -> Composer(model, handle, composerFocus, onPickImage = pickImage, onPickCard = { pickingCard = true }, padded)
-                        ThreadFoot.Awaiting -> FootNote(L10n.Messages.awaitingReply, padded)
-                        ThreadFoot.Closed -> FootNote(L10n.Messages.notConnected, padded) {
-                            BasicText(
-                                L10n.Messages.viewProfile,
-                                style = AppFonts.body(13f, lineHeight = 1.3f, color = Tokens.Terracotta).copy(textDecoration = TextDecoration.Underline),
-                                modifier = Modifier
-                                    .heightIn(min = 44.dp)
-                                    .wrapContentHeight()
-                                    .plainClickable(role = Role.Button) { open(Route.Author(model.other?.handle ?: handle)) },
-                            )
+                // pane it keeps to a column of its own, centred under the thread. Behind it the foot's paper
+                // (round 10 §3.2) runs the pane's whole width down to the screen's edge, so the thread never
+                // shows under or beside it — its fade over the foot's top 24, counted in the room it takes.
+                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+                    if (foot != ThreadFoot.Pending) ComposerBacking(Modifier.matchParentSize())
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .windowInsetsPadding(footInsets)
+                            .padding(bottom = ComposerGap)
+                            .onSizeChanged { room.foot = it.height },
+                    ) {
+                        val padded = Modifier.readableColumn(ComposerMax).padding(horizontal = ComposerGutter)
+                        when (foot) {
+                            ThreadFoot.Composer, ThreadFoot.Answer -> Composer(model, handle, composerFocus, onPickImage = pickImage, onPickCard = { pickingCard = true }, padded)
+                            ThreadFoot.Awaiting -> FootNote(L10n.Messages.awaitingReply, padded)
+                            ThreadFoot.Closed -> FootNote(L10n.Messages.notConnected, padded) {
+                                BasicText(
+                                    L10n.Messages.viewProfile,
+                                    style = AppFonts.body(13f, lineHeight = 1.3f, color = Tokens.Terracotta).copy(textDecoration = TextDecoration.Underline),
+                                    modifier = Modifier
+                                        .heightIn(min = 44.dp)
+                                        .wrapContentHeight()
+                                        .plainClickable(role = Role.Button) { open(Route.Author(model.other?.handle ?: handle)) },
+                                )
+                            }
+                            // Whether a note waits not heard yet: no foot, rather than one that changes as it arrives.
+                            ThreadFoot.Pending -> {}
                         }
-                        // Whether a note waits not heard yet: no foot, rather than one that changes as it arrives.
-                        ThreadFoot.Pending -> {}
                     }
                 }
             }
@@ -410,7 +414,7 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
         seed = 53.0, maxWidth = 480.dp, closeLabel = L10n.Write.Editor.CardModal.cancel,
     ) {
         CardPickerContent(session, L10n.Messages.pickCard, L10n.Messages.pickCardSubtitle, onPick = { card ->
-            model.attachCard(ThreadModel.Attachment(card.id, card.title))
+            model.attachCard(ThreadModel.Attachment(card.id, card.title, card.imageUrl))
             pickingCard = false
         }) { pickingCard = false }
     }
@@ -419,12 +423,13 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
 /**
  * The thread's foot where there is no composer: a calm line, centred — a note of yours waiting for
  * its answer, or why you can't write here — and what can be done about it, if anything; floating in
- * the composer's place on an opaque slip with the capsule's paper halo (round 9 §4).
+ * the composer's place on an opaque framed slip (round 9 §4), the foot's paper behind it as behind
+ * the capsule, its fade over the slip's top 24 (round 10 §3.2).
  */
 @Composable
 private fun FootNote(text: String, modifier: Modifier = Modifier, action: (@Composable () -> Unit)? = null) {
     Column(
-        modifier.fillMaxWidth().floatingGroup().floatingSlip(seed = 31.0).padding(horizontal = 18.dp).padding(top = 12.dp, bottom = if (action != null) 4.dp else 12.dp),
+        modifier.fillMaxWidth().floatingSlip(seed = 31.0).padding(horizontal = 18.dp).padding(top = 12.dp, bottom = if (action != null) 4.dp else 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {

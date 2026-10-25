@@ -8,7 +8,8 @@ import org.junit.Test
 
 /**
  * Round 10's rules that aren't drawing: where a card tapped on the thought map opens (every card of
- * mine in the writer, a 私人卡 as a shared one; someone else's on its page).
+ * mine in the writer, a 私人卡 as a shared one; someone else's on its page), and the order of what
+ * rides with a message over the composer.
  */
 class RoundTenTest {
     private fun node(author: String = "alice", published: Boolean = true, visibility: String = "public", slug: String? = "rain") =
@@ -33,5 +34,16 @@ class RoundTenTest {
         // Someone else's anonymous original comes without its author; signed out, nothing is mine.
         assertEquals(MapOpening.Page("m1"), mapOpening(node(author = "", slug = null), "alice", split = false))
         assertEquals(MapOpening.Page("rain"), mapOpening(node(), null, split = false))
+    }
+
+    // §3.4
+
+    @Test fun theReplyRidesFirstThenTheNoteThenTheAttachment() {
+        assertEquals(
+            listOf(Riding.Reply, Riding.Note, Riding.Card, Riding.Error),
+            ridingRows(reply = true, note = true, card = true, picture = false, error = true),
+        )
+        assertEquals(listOf(Riding.Reply, Riding.Picture), ridingRows(reply = true, note = false, card = false, picture = true, error = false))
+        assertEquals(emptyList<Riding>(), ridingRows(reply = false, note = false, card = false, picture = false, error = false))
     }
 }

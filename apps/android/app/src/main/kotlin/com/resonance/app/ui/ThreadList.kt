@@ -179,13 +179,14 @@ internal class MessageMenu(val row: ThreadRow, val bounds: Rect, val link: Strin
 
 /**
  * Where the floating composer stands (round 9 §4): the room it takes at the screen's foot — the
- * navigation bar or the keyboard ([insets]), [ComposerGap] of air, then the capsule and its slip as
- * drawn ([foot]) — read while laying out, so the thread follows the keyboard frame by frame and the
+ * navigation bar or the keyboard ([insets]), [ComposerGap] of air, then the capsule as drawn
+ * ([foot]) with what rides over it and, over those rows, the 24 the foot paper's fade lies in
+ * (round 10 §3.2) — read while laying out, so the thread follows the keyboard frame by frame and the
  * composer as it grows, without composing again.
  */
 @Stable
 internal class ComposerRoom(private val insets: WindowInsets, private val density: Density) {
-    /** How tall the composer is as drawn — the capsule and its slip, or a notice in their place (px; 0 with none). */
+    /** How tall the composer is as drawn — the capsule, its riding rows and their fade, or a notice in their place (px; 0 with none). */
     var foot by mutableIntStateOf(0)
 
     /** From the screen's foot to the composer's top (px). */
@@ -339,7 +340,7 @@ internal fun MessageList(
             if (quiet != null) item(key = "quiet") { QuietNote(quiet) }
             else if (model.threadReady && rows.isNotEmpty()) item(key = "older") { OlderRow(model) }
         }
-        // The pill rests 12 over the composer (or its slip), wherever the keyboard has taken it.
+        // The pill rests 12 over the foot (the capsule, or the fade over its riding rows), wherever the keyboard has taken it.
         AnimatedVisibility(
             visible = pillVisible && (unseen > 0 || farUp) && !atBottom,
             modifier = Modifier.align(Alignment.BottomCenter).offset { IntOffset(0, -room.clear) },

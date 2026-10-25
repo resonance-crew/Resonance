@@ -633,3 +633,16 @@ thread's last item. 與此文共振 lists full cards, three then 查看全部; t
 when its read failed; tables set every cell at its start under hand-drawn rules (`tableRule`); the trash's head is one
 row (the hint, 🗑 清空); the writer's cover controls wear the card's family (`CoverFaces`; a coverless card's from its
 id, `CardPalette.ofId`), 更換封面 with its menu in the same hue. Bare icon buttons draw at INK at rest.
+
+Round 10 (2026-10-25): below the split the thought map opens every card of mine in the writer, a 私人卡 as a shared
+one (`mapOpening`; someone else's on its page; the card box and the trash still open a 私人卡's page). The composer
+lost its paper halo (and `floatingGroup`): behind the thread's foot lies `ComposerBacking`, the cream across the pane
+down to the screen's edge (through the navigation bar, to the keyboard's top), its top 24 (`ComposerFade`) a fade
+that lets taps through to the thread while the solid paper takes them. With nothing riding the fade covers the
+capsule's top half; what rides with the message — the reply, the note answered, the card (its cover as a 40 thumbnail,
+`Attachment.cover`), the picture — are frameless rows in the reply's style (`ComposerRow`: lead · 12/600 label over a
+12.5 line · a 44 ✕ over Send, 52 at least, touching), 24 more over them for the fade, so the paper is solid behind
+every row; why the last one didn't go is a terracotta line under them. That 24 is part of the measured foot
+(`ComposerRoom.foot`), so the newest message, the pill and the list's end room keep 12 over the fade. The capsule's
+pen is `FieldBorder`, `FieldBorderHover` while written in (`composerPen`) — darker, never terracotta. A notice in the
+composer's place keeps its framed slip, the paper behind it alike.
