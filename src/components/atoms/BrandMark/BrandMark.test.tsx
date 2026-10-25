@@ -33,8 +33,8 @@ describe('BrandMark', () => {
     // The 24 grid with room round it: the mark draws about 14 px of the slot, as the hand-drawn glyphs beside it read.
     expect(svg).toHaveAttribute('viewBox', '-2 -2 28 28');
     expect(svg.querySelector('path')).toHaveAttribute('d', BRAND_PATHS.line);
-    // X's thin strokes reach its corners: it keeps a little more room.
-    expect(render(<BrandMark name="x" />).container.querySelector('svg')).toHaveAttribute('viewBox', '-3 -3 30 30');
+    // X the same (round 12 §4): with more room of its own it read a size smaller than the rest.
+    expect(render(<BrandMark name="x" />).container.querySelector('svg')).toHaveAttribute('viewBox', '-2 -2 28 28');
   });
 
   it('is never recoloured: near-black ink, whatever row or hover it sits in', () => {

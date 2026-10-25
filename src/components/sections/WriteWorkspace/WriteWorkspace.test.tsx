@@ -23,12 +23,14 @@ vi.mock('@/components/molecules/CardEditor/CardEditor', () => ({
     onStepChange,
     onPrimaryActionChange,
     onShowCard,
+    startPublic,
   }: {
     ref?: React.Ref<unknown>;
     step?: 'write' | 'publish';
     onStepChange?: (s: 'write' | 'publish') => void;
     onPrimaryActionChange?: (a: unknown) => void;
     onShowCard?: (href: string) => void;
+    startPublic?: boolean;
   }) => {
     React.useImperativeHandle(ref, () => ({
       ...editor,
@@ -48,6 +50,7 @@ vi.mock('@/components/molecules/CardEditor/CardEditor', () => ({
       <>
         <textarea aria-label="Draft" />
         <p>step: {step}</p>
+        {startPublic && <p>starts public</p>}
         {step === 'publish' && <button onClick={() => onShowCard?.('/card/draft')}>Keep as a private card</button>}
       </>
     );
@@ -294,6 +297,27 @@ describe('the publish step', () => {
     expect(screen.getByText('step: write')).toBeInTheDocument();
     expect(window.location.search).toBe('');
     expect(pushState).not.toHaveBeenCalled();
+  });
+});
+
+describe('a 私人卡’s 公開發表', () => {
+  // Round 12 §3: its ⋯ opens the writer at the publish step with 公開 chosen (`&audience=public`), read once and
+  // dropped from the address, so going back to writing or a reload doesn't carry it.
+  it('opens the step with 公開 chosen, and leaves the address saying only the step', async () => {
+    screenAtSplit(false);
+    window.history.replaceState(null, '', '/en/write/draft?step=publish&audience=public');
+    renderWithIntl(<WriteWorkspace title={en.write.editTitle} locale="en" initial={{ id: 'draft', story: 'x' }} />);
+    expect(await screen.findByText('step: publish')).toBeInTheDocument();
+    expect(screen.getByText('starts public')).toBeInTheDocument();
+    expect(window.location.search).toBe('?step=publish');
+  });
+
+  it('chooses nothing for a plain step address', async () => {
+    screenAtSplit(false);
+    window.history.replaceState(null, '', '/en/write/draft?step=publish');
+    renderWithIntl(<WriteWorkspace title={en.write.editTitle} locale="en" initial={{ id: 'draft', story: 'x' }} />);
+    expect(await screen.findByText('step: publish')).toBeInTheDocument();
+    expect(screen.queryByText('starts public')).toBeNull();
   });
 });
 

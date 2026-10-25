@@ -454,6 +454,9 @@ describe('MessagesPage thread', () => {
     await userEvent.click(picture);
     const viewer_ = screen.getByRole('dialog', { name: 'View photo' });
     expect(viewer_.querySelector('img')).toHaveAttribute('src', '/api/v1/chat-images/pic-1');
+    // Round 12 §1: its ✕ is the cream glyph on a disc of the viewer's own dark, always shown — it reads on a light
+    // picture, and hovering it never turns it the dark it stands on.
+    expect(within(viewer_).getByRole('button', { name: 'Close' })).toHaveAttribute('data-tone', 'onDark');
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: 'View photo' })).toBeNull();
   });

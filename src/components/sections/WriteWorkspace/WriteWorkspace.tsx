@@ -34,6 +34,11 @@ export interface WriteWorkspaceProps {
 
 /** The publish step's place in the address: the writer's own page's `?step=publish`. */
 const STEP_PARAM = 'step';
+/**
+ * A 私人卡's 公開發表 (round 12 §3) opens the step with `&audience=public`: the choice starts at 公開. Read once
+ * and dropped from the address, so going back to writing (or a reload) doesn't carry it.
+ */
+const AUDIENCE_PARAM = 'audience';
 function stepIn(search: string): WriterStep {
   return new URLSearchParams(search).get(STEP_PARAM) === 'publish' ? 'publish' : 'write';
 }
@@ -94,9 +99,17 @@ export function WriteWorkspace({
   const pushedStep = useRef(false);
   // What waits for the step's entry to be popped (leaving from the step).
   const afterPop = useRef<(() => void) | null>(null);
+  const [startPublic, setStartPublic] = useState(false);
   useEffect(() => {
-    // Opened at the step (a reload): the draft's step, whose entry is this one.
+    // Opened at the step (a reload, or a 私人卡's 公開發表): the draft's step, whose entry is this one.
     if (initial?.id && stepIn(window.location.search) === 'publish') setStep('publish');
+    const params = new URLSearchParams(window.location.search);
+    if (params.get(AUDIENCE_PARAM) != null) {
+      if (initial?.id && params.get(AUDIENCE_PARAM) === 'public') setStartPublic(true);
+      params.delete(AUDIENCE_PARAM);
+      const rest = params.toString();
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
+    }
     const onPop = () => {
       const now = stepIn(window.location.search);
       if (now === 'write') pushedStep.current = false;
@@ -275,6 +288,7 @@ export function WriteWorkspace({
               onPrimaryActionChange={setDraftAction}
               onPendingChange={setDraftPending}
               onStepTitleChange={setDraftStepTitle}
+              startPublic={startPublic}
               inlineStepHeading={split === true}
               focusStepHeading={focusBarTitle}
               // A 私人卡 kept opens its page in the writer's own entry: from the step, its entry is popped first.

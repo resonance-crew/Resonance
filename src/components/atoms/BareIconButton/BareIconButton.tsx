@@ -21,8 +21,12 @@ export interface BareIconButtonProps {
   rotate?: number;
   /** Mirrors the glyph (back is `arrow-right` mirrored, as the hand drew it). */
   mirror?: boolean;
-  /** Muted ink at rest (a bar's small tools), or full ink (a bar's back arrow, which leads the row). */
-  tone?: 'muted' | 'ink';
+  /**
+   * Muted ink at rest (a bar's small tools), full ink (a bar's back arrow, which leads the row), or — over a
+   * picture or the dark of a viewer — a cream glyph on its disc, always shown, of that dark at half strength
+   * (deeper hovered or pressed), so it reads on a light picture and a dark one alike (round 12 §1).
+   */
+  tone?: 'muted' | 'ink' | 'onDark';
   disabled?: boolean;
   /**
    * At work (the writer's ✓ while a new card's first save runs): the glyph

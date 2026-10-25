@@ -70,6 +70,49 @@
   margin-bottom: var(--story-end-gap);
 }
 
+/* The tags after the story — and below 1200, on a long story, the card's
+   share · ⋯ at their end (round 12 §6). However many tags, they wrap in
+   their own column; the two stand at the row's end, centred on the tags'
+   first line (a pill is 22 tall, a button 36, a finger’s 44); alone (no
+   tags) they simply end the row. */
+.tagsRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px 12px;
+  margin-bottom: 40px;
+  --end-button: 36px;
+}
+
+.tagList {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tagsActions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.tagList + .tagsActions {
+  margin-block: calc((22px - var(--end-button)) / 2);
+}
+
+@media (pointer: coarse) {
+  .tagsRow {
+    --end-button: 44px;
+  }
+
+  .tagsActions {
+    gap: 0;
+  }
+}
+
 /* The story's end on its author's own card: the card's share and ⋯ alone, at the row's end (round 8 §10.2). */
 .endActions {
   display: flex;

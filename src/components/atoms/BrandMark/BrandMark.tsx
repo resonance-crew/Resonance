@@ -41,10 +41,10 @@ export const BRAND_PATHS: Record<BrandName, string> = {
  * Room kept round each mark inside its box, in grid units: the marks fill
  * their 24 grid edge to edge, while the hand-drawn icons beside them leave
  * most of theirs to the paper, so at the same box a mark read twice their
- * size. Padded, a mark draws about 14 px of a 17 px slot; X's thin strokes
- * span the corners, so it keeps a little more room.
+ * size. Padded, a mark draws about 14.5 px of a 17 px slot — X too (round 12
+ * §4: with more room it drew 13.3 and read a size smaller than the rest).
  */
-const INSET: Record<BrandName, number> = { line: 2, threads: 2, facebook: 2, x: 3 };
+const INSET: Record<BrandName, number> = { line: 2, threads: 2, facebook: 2, x: 2 };
 
 export interface BrandMarkProps {
   name: BrandName;

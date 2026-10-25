@@ -1299,13 +1299,11 @@
   border-radius: 6px;
 }
 
+/* Its ✕ on a disc of the viewer's dark (BareIconButton tone onDark): the
+   disc's centre 16 + 22 in from the top and end. */
 .viewerClose {
   position: absolute;
-  top: 10px;
-  right: 10px;
-  color: oklch(96% 0.01 75);
-}
-
-.viewerClose button {
-  color: inherit;
+  top: 16px;
+  right: 16px;
+  z-index: 1;
 }

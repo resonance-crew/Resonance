@@ -64,13 +64,19 @@ export interface CardActionsMenuProps {
   onRestored?: (card: TrashCardRef) => void;
   /** On the page's own paper (the card page's title row): see OrganicMenu's `bare`. */
   bare?: boolean;
+  /**
+   * The page beside it shows its own 編輯 (a 私人卡's card page, its pen): the ⋯ then leads with 公開發表
+   * instead — the writer's publish step with 公開 chosen (round 12 §3) — so the page never says 編輯 twice.
+   */
+  editShown?: boolean;
   className?: string;
 }
 
-type ActionKey = 'edit' | 'visibility' | 'unresonate' | 'delete';
+type ActionKey = 'edit' | 'publish' | 'visibility' | 'unresonate' | 'delete';
 
 /**
- * The owner-side「⋯」menu on a card: 編輯 / 轉為私人卡 (a card readers have)
+ * The owner-side「⋯」menu on a card: 編輯 (公開發表 on a 私人卡's own page,
+ * where its pen is 編輯) / 轉為私人卡 (a card readers have)
  * / 取消共振 (a card that resonates with another) / 刪除. The trigger and
  * dropped panel come from {@link OrganicMenu} (the shared organic dropdown
  * language — wobbly chip, wavy pen dividers, per-row wash, danger wash on the
@@ -102,6 +108,7 @@ export function CardActionsMenu({
   onTrashed,
   onRestored,
   bare = false,
+  editShown = false,
   className,
 }: CardActionsMenuProps) {
   const t = useTranslations('me.actions');
@@ -138,9 +145,10 @@ export function CardActionsMenu({
   const isPrivate = card.visibility === 'private';
   // 轉為私人卡, on a card readers have: a 私人卡 — never published, or kept private — is published from the writer's step,
   // where its tags, cover and type are, so every 私人卡's ⋯ is the same (round 8 §1.2).
+  const privateCard = card.published === false || isPrivate;
   const items: OrganicMenuItem[] = [
-    { key: 'edit', icon: 'pen', label: t('edit') },
-    ...(card.published === false || isPrivate ? [] : [{ key: 'visibility', icon: 'lock' as const, label: t('makePrivate') }]),
+    editShown && privateCard ? { key: 'publish', icon: 'globe', label: t('publishPublicly') } : { key: 'edit', icon: 'pen', label: t('edit') },
+    ...(privateCard ? [] : [{ key: 'visibility', icon: 'lock' as const, label: t('makePrivate') }]),
     ...(original ? [{ key: 'unresonate', icon: 'wave' as const, label: t('unresonate') }] : []),
     { key: 'delete', icon: 'trash', label: t('delete'), danger: true },
   ];
@@ -228,6 +236,10 @@ export function CardActionsMenu({
     if (busy || deciding) return;
     if (key === 'edit') {
       router.push(`/write/${card.id}`);
+      return;
+    }
+    if (key === 'publish') {
+      router.push(`/write/${card.id}?step=publish&audience=public`);
       return;
     }
     if (key === 'visibility') {

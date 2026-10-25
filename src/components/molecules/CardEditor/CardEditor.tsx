@@ -133,6 +133,11 @@ export interface CardEditorProps {
   /** Publishing, saving or leaving is on its way: the host's back waits with the step's buttons. */
   onPendingChange?: (pending: boolean) => void;
   /**
+   * Opened by a 私人卡's 公開發表 (round 12 §3): the step's choice starts at 公開 — 匿名公開 for a card already
+   * marked anonymous — as if it had been picked there (it autosaves with the draft, and stays the writer's to change).
+   */
+  startPublic?: boolean;
+  /**
    * The publish step's name, which follows who the card is for (發布這張卡片 ·
    * 儲存這張卡片 · 更新這張卡片): for the host's bar, which names the step below the split.
    */
@@ -240,6 +245,7 @@ export function CardEditor({
   focusStepHeading,
   onShowCard,
   onPendingChange,
+  startPublic = false,
   onStepTitleChange,
   ref,
 }: CardEditorProps) {
@@ -287,6 +293,11 @@ export function CardEditor({
   // editor's lifetime — the host remounts it when the route's card changes.
   const isPublished = initial?.publishedAt != null;
   const [hasPendingEdit, setHasPendingEdit] = useState(initial?.hasPendingEdit ?? false);
+  // 公開發表 (round 12 §3): the step's choice starts at 公開 — its anonymity kept, so a card marked anonymous
+  // starts at 匿名公開 — as if picked there, so it autosaves with the draft like any choice in the step.
+  useEffect(() => {
+    if (startPublic) setVisibility('public');
+  }, [startPublic]);
 
   // ---- The step ---------------------------------------------------------
   const [ownStep, setOwnStep] = useState<WriterStep>('write');

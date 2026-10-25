@@ -104,7 +104,7 @@ export function PictureViewer({ image, onClose }: { image: MessageImage; onClose
   return createPortal(
     <div ref={dialog} className={styles.viewer} role="dialog" aria-modal="true" aria-label={t('openImage')} onClick={onClose}>
       <span className={styles.viewerClose}>
-        <BareIconButton icon="close" label={tNative('close')} iconSize={22} tip={false} onClick={onClose} />
+        <BareIconButton icon="close" label={tNative('close')} iconSize={20} tone="onDark" tip={false} onClick={onClose} />
       </span>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img className={styles.viewerPicture} src={src} alt="" onClick={(e) => e.stopPropagation()} />

@@ -381,8 +381,8 @@ describe('taking over from the server render', () => {
       expect(getUserById).not.toHaveBeenCalled();
 
       // The ⋯ is named by what it holds: with no author to block, the report alone.
-      // The byline's ⋯ (the story's end row has the same one).
-      expect(screen.getAllByRole('button', { name: 'Report this card' })).toHaveLength(2);
+      // The byline's ⋯ (a short story has no second one at its end).
+      expect(screen.getAllByRole('button', { name: 'Report this card' })).toHaveLength(1);
       await userEvent.setup({ pointerEventsCheck: 0 }).click(screen.getAllByRole('button', { name: 'Report this card' })[0]);
       expect(screen.getByRole('menuitem', { name: /Report this card/ })).toBeInTheDocument();
       expect(screen.queryByRole('menuitem', { name: /Block/ })).not.toBeInTheDocument();
@@ -744,21 +744,86 @@ describe('the head: title, byline and actions', () => {
     expect(within(aside).queryByRole('link', { name: '@author' })).toBeNull();
   });
 
-  it('ends the story with one row: the response bar, and the card’s share and ⋯ at its end — its owner’s alone', async () => {
-    vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1'));
-    const view = renderPage({ slug: 'c1' });
-    await screen.findByRole('heading', { level: 1 });
-    expect(within(screen.getByTestId('read-after-area')).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Share']);
-    view.unmount();
+  // Round 12 §5–6: the card's share · ⋯ come again at the story's end only when the byline and the end can't
+  // be in view at once — at ≥ 1200 at the end of the response row (its owner's: a row of its own), below it at
+  // the end of the tags.
+  describe('the share · ⋯ at the story’s end', () => {
+    const realMatchMedia = window.matchMedia;
+    const realRect = Element.prototype.getBoundingClientRect;
+    afterEach(() => {
+      window.matchMedia = realMatchMedia;
+      Element.prototype.getBoundingClientRect = realRect;
+    });
+    const wideIs = (wide: boolean) => {
+      window.matchMedia = ((query: string) => ({
+        matches: query.includes('min-width: 1200px') ? wide : false,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      })) as typeof window.matchMedia;
+    };
+    // The story's end 3000 px under its byline: far out of a window's view.
+    const longStory = () => {
+      Element.prototype.getBoundingClientRect = function (this: Element) {
+        const foot = this.className?.toString().includes('tagsRow') ? 3000 : 0;
+        return { top: 0, bottom: foot, left: 0, right: 0, width: 0, height: foot, x: 0, y: 0, toJSON() {} } as DOMRect;
+      };
+    };
+    const tagsRow = () => document.querySelector<HTMLElement>('[class*="tagsRow"]')!;
 
-    asOwner();
-    vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1'));
-    renderPage({ slug: 'c1' });
-    await screen.findByRole('heading', { level: 1 });
-    expect(screen.queryByTestId('read-after-area')).toBeNull();
-    const shares = screen.getAllByRole('button', { name: 'Share' });
-    expect(shares).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: 'Manage card' })).toHaveLength(2);
+    it('says nothing twice on a short story: the byline’s alone', async () => {
+      wideIs(true);
+      vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1'));
+      const view = renderPage({ slug: 'c1' });
+      await screen.findByRole('heading', { level: 1 });
+      expect(within(screen.getByTestId('read-after-area')).queryAllByRole('button', { name: 'Share' })).toHaveLength(0);
+      expect(screen.getAllByRole('button', { name: 'Share' })).toHaveLength(1);
+      view.unmount();
+
+      asOwner();
+      vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1'));
+      renderPage({ slug: 'c1' });
+      await screen.findByRole('heading', { level: 1 });
+      expect(screen.getAllByRole('button', { name: 'Share' })).toHaveLength(1);
+      expect(screen.getAllByRole('button', { name: 'Manage card' })).toHaveLength(1);
+    });
+
+    it('ends a long story’s response row with them at ≥ 1200 — its owner’s with a row of their own', async () => {
+      wideIs(true);
+      longStory();
+      vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1'));
+      const view = renderPage({ slug: 'c1' });
+      await screen.findByRole('heading', { level: 1 });
+      await waitFor(() =>
+        expect(within(screen.getByTestId('read-after-area')).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Share']),
+      );
+      expect(within(tagsRow()).queryAllByRole('button')).toHaveLength(0);
+      view.unmount();
+
+      asOwner();
+      vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1'));
+      renderPage({ slug: 'c1' });
+      await screen.findByRole('heading', { level: 1 });
+      expect(screen.queryByTestId('read-after-area')).toBeNull();
+      await waitFor(() => expect(screen.getAllByRole('button', { name: 'Share' })).toHaveLength(2));
+      expect(screen.getAllByRole('button', { name: 'Manage card' })).toHaveLength(2);
+    });
+
+    it('puts them at the end of a long story’s tags below 1200, and nowhere else', async () => {
+      wideIs(false);
+      longStory();
+      asOwner();
+      vi.mocked(getCardBySlugOrId).mockResolvedValue(card('c1'));
+      renderPage({ slug: 'c1' });
+      await screen.findByRole('heading', { level: 1 });
+      await waitFor(() => expect(within(tagsRow()).getByRole('button', { name: 'Share' })).toBeInTheDocument());
+      expect(within(tagsRow()).getByRole('button', { name: 'Manage card' })).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: 'Share' })).toHaveLength(2);
+    });
   });
 
   it('puts the story’s language on the title and the story alone, never on the page around them', async () => {

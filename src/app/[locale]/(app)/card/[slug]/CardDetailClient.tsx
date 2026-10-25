@@ -35,8 +35,14 @@ import { cardKey } from '@/lib/data/cardPrefill';
 import type { CardSeed } from '@/lib/data/cardSeed';
 import { useCard, useCardPageLists, useMyBlockedIds } from '@/lib/data/hooks';
 import { SectionEdge } from '@/components/atoms/SectionEdge/SectionEdge';
+import { HEADER_TOTAL_H } from '@/components/sections/AppHeader/HeaderChrome';
+import { useEndsApart } from '@/lib/hooks/useEndsApart';
+import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { CARD_HOLD_ATTR } from './cardHold';
 import styles from './page.module.css';
+
+/** The end row the card's share · ⋯ would add under the tags (a bar button's height), counted when deciding. */
+const END_ROW_H = 44;
 
 const wrapStyle = {
   maxWidth: 'var(--page-max-w-wide)',
@@ -141,6 +147,13 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   const storyRef = useRef<HTMLDivElement>(null);
   const [headings, setHeadings] = useState<TocHeading[]>([]);
   const story = data?.card?.story;
+
+  // The card's share · ⋯ come twice — under the title and at the story's end — only when the two can't be in
+  // view at once (round 12 §5–6): at ≥ 1200 at the end of the response row, below it at the end of the tags.
+  const [bylineEl, setBylineEl] = useState<HTMLDivElement | null>(null);
+  const [tagsEl, setTagsEl] = useState<HTMLDivElement | null>(null);
+  const wide = useMediaQuery('(min-width: 1200px)');
+  const endsApart = useEndsApart(bylineEl, tagsEl, { header: HEADER_TOTAL_H, extra: END_ROW_H });
 
   // Derive the ToC from the rendered headings so the anchor ids match the ones
   // rehype-slug generated exactly.
@@ -255,6 +268,8 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
           referenceAnonymous={resonances.cards.find((c) => c.id === card.referenceCardId)?.anonymous}
           seed={hue + 3}
           bare
+          // A 私人卡's pen stands beside it: its ⋯ leads with 公開發表 instead of a second 編輯.
+          editShown={privateCard && !trashed}
           // Re-read this card so the visibility chip/state reflects the change.
           onChanged={() => void mutate(cardKey(slug, user!.id))}
           // Moved to the trash: the page stays, and shows its banner (the card read again).
@@ -308,6 +323,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
             </h1>
 
             <StoryByline
+              ref={setBylineEl}
               className={styles.byline}
               author={author}
               anonymous={card.anonymous}
@@ -326,19 +342,27 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
               </CardEmbedSourceContext.Provider>
             </div>
 
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 40 }}>
-              {/* Tags are app furniture, not card content — they stay in the
-                  theme color even when the card carries its own accent hue. */}
-              {card.tags.map((tag) => (
-                <TagPill key={tag} color="var(--color-terracotta-light)">
-                  {tag}
-                </TagPill>
-              ))}
+            {/* The tags; below 1200, when the story is long, the card's share · ⋯ again at their end (round 12 §6):
+                the tags wrap in their own column, the two stay at the row's end on the tags' first line. */}
+            <div ref={setTagsEl} className={styles.tagsRow}>
+              {card.tags.length > 0 && (
+                <div className={styles.tagList}>
+                  {/* Tags are app furniture, not card content — they stay in the
+                      theme color even when the card carries its own accent hue. */}
+                  {card.tags.map((tag) => (
+                    <TagPill key={tag} color="var(--color-terracotta-light)">
+                      {tag}
+                    </TagPill>
+                  ))}
+                </div>
+              )}
+              {endsApart && wide === false && <div className={styles.tagsActions}>{cardActions}</div>}
             </div>
 
-            {/* The story's end: the response row, the card's share and ⋯ at its end — its author's alone. */}
+            {/* The story's end: the response row, the card's share and ⋯ at its end — at ≥ 1200, and only when the
+                story is long enough that the byline's are out of view (round 12 §5); its author's alone. */}
             {isOwner ? (
-              <div className={styles.endActions}>{cardActions}</div>
+              endsApart && wide === true && <div className={styles.endActions}>{cardActions}</div>
             ) : (
               <ReadAfterArea
                 cardId={card.id}
@@ -351,7 +375,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
                   accentColor: author.accentColor,
                 }}
                 coreInsight={card.signature?.coreInsight}
-                trailing={cardActions}
+                trailing={endsApart && wide === true ? cardActions : undefined}
               />
             )}
 

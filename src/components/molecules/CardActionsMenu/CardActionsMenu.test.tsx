@@ -108,6 +108,34 @@ describe('CardActionsMenu', () => {
     expect(mockPush).toHaveBeenCalledWith('/write/c1');
   });
 
+  // Round 12 §3: on a 私人卡's own page its pen is 編輯, so the ⋯ leads with 公開發表 — the writer's publish step,
+  // with 公開 chosen — never a second 編輯; anywhere without the pen (the card box), 編輯 stays.
+  it('leads a 私人卡’s ⋯ with Publish where the page shows its own Edit, opening the writer’s publish step', async () => {
+    for (const card of [
+      { id: 'c1', visibility: 'private' as const, published: true },
+      { id: 'c2', visibility: 'public' as const, published: false },
+    ]) {
+      mockPush.mockClear();
+      const view = renderMenu(<CardActionsMenu card={card} editShown />);
+      await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
+      const items = screen.getAllByRole('menuitem').map((i) => i.textContent);
+      expect(items[0]).toBe('Publish');
+      expect(items).not.toContain('Edit');
+      await userEvent.click(screen.getByText('Publish'));
+      expect(mockPush).toHaveBeenCalledWith(`/write/${card.id}?step=publish&audience=public`);
+      view.unmount();
+    }
+
+    // The card box's ⋯ (no pen beside it) keeps Edit; so does a card readers have, on its page or not.
+    const box = renderMenu(<CardActionsMenu card={{ id: 'c1', visibility: 'private', published: true }} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
+    expect(screen.getAllByRole('menuitem')[0]).toHaveTextContent('Edit');
+    box.unmount();
+    renderMenu(<CardActionsMenu card={{ id: 'c3', visibility: 'public', published: true }} editShown />);
+    await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
+    expect(screen.getAllByRole('menuitem')[0]).toHaveTextContent('Edit');
+  });
+
   it('makes a public card private through the server, then reads the card box and profile lists again', async () => {
     const onChanged = vi.fn();
     renderMenu(<CardActionsMenu card={{ id: 'c1', visibility: 'public' }} onChanged={onChanged} />);

@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { HandDrawnAvatar } from '@/components/atoms/HandDrawnAvatar/HandDrawnAvatar';
 import { HandDrawnCheckmark } from '@/components/atoms/HandDrawnCheckmark/HandDrawnCheckmark';
@@ -66,6 +66,8 @@ export interface StoryBylineProps {
    */
   actions?: ReactNode;
   className?: string;
+  /** The row itself (the card page measures from it whether the story's end is out of its view). */
+  ref?: Ref<HTMLDivElement>;
 }
 
 /**
@@ -81,11 +83,11 @@ export interface StoryBylineProps {
  * At 320px the pen name stays on one line (an ellipsis), the meta line may
  * wrap, and the row grows rather than clips (min-height, never height).
  */
-export function StoryByline({ author, anonymous = false, minutes, published, privateCard = false, actions, className }: StoryBylineProps) {
+export function StoryByline({ author, anonymous = false, minutes, published, privateCard = false, actions, className, ref }: StoryBylineProps) {
   const t = useTranslations('card');
   const tApp = useTranslations('app');
   return (
-    <div className={[styles.byline, className].filter(Boolean).join(' ')}>
+    <div ref={ref} className={[styles.byline, className].filter(Boolean).join(' ')}>
       <span className={styles.avatar}>
         {anonymous ? (
           <HandDrawnAvatar initials="·" size={40} color="var(--color-cream-dark)" seed={97} />

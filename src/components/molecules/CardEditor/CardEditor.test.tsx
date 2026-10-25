@@ -302,6 +302,37 @@ describe('CardEditor — the publish step', () => {
     expect(push).not.toHaveBeenCalled();
   });
 
+  // Round 12 §3: a 私人卡's 公開發表 opens the step with 公開 chosen — as if picked there, so it autosaves with the
+  // draft — and a card already marked anonymous starts at 匿名公開.
+  it('starts the step at 公開 when opened by 公開發表, saving it as a choice', async () => {
+    renderWithIntl(
+      <Writer
+        locale="en"
+        step="publish"
+        startPublic
+        initial={{ id: 'draft-1', thoughtCore: 'A quiet thought', story: 'Words of it.', visibility: 'private' }}
+      />,
+    );
+    expect(await screen.findByRole('button', { name: en.write.publishPanel.publish })).toBeInTheDocument();
+    await waitFor(() => expect(updateCardDraft).toHaveBeenCalledWith('draft-1', expect.objectContaining({ visibility: 'public', anonymous: false })), {
+      timeout: 4000,
+    });
+  });
+
+  it('starts a card already marked anonymous at 匿名公開', async () => {
+    renderWithIntl(
+      <Writer
+        locale="en"
+        step="publish"
+        startPublic
+        initial={{ id: 'draft-1', thoughtCore: 'A quiet thought', story: 'Words of it.', visibility: 'private', anonymous: true }}
+      />,
+    );
+    await waitFor(() => expect(updateCardDraft).toHaveBeenCalledWith('draft-1', expect.objectContaining({ visibility: 'public', anonymous: true })), {
+      timeout: 4000,
+    });
+  });
+
   // The data-layer rule: what is chosen in the step is the draft's, saved like its words.
   it('autosaves the audience chosen in the step, and keeps it going back to writing', async () => {
     const onStepChange = vi.fn();
