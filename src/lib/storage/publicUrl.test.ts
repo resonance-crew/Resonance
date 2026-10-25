@@ -63,4 +63,13 @@ describe('a cover the server copies (cardContentProblem)', () => {
     // The card's own cover, kept as it is, wherever it is.
     expect(cardContentProblem(content(`https://tracker.example/${KEY}`), { keptMediaUrl: `https://tracker.example/${KEY}` })).toBeNull();
   });
+
+  it('takes plain http only on our own base — the dev server’s, against the emulators', () => {
+    const local = 'http://localhost:3100/api/emulator-storage';
+    vi.stubEnv('R2_PUBLIC_BASE', local);
+    expect(cardContentProblem(content(`${local}/${KEY}`))).toBeNull();
+    expect(cardContentProblem(content(`http://localhost:3100/elsewhere/${KEY}`))).toBe('media');
+    // In production the base is https: no http cover is ours.
+    expect(cardContentProblem(content(`http://img.resonance.test/${KEY}`), { publicBases: [NOW] })).toBe('media');
+  });
 });

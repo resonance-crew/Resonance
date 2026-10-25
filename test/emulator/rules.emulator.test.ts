@@ -515,6 +515,20 @@ describe('profiles (users/{uid})', () => {
     await assertFails(updateDoc(me, { avatarUrl: 'https://img.resonance.test.evil.example/p.gif' }));
   });
 
+  it('take an avatar from the dev server’s storage against the emulators — never once the host is configured', async () => {
+    const me = doc(as('alice'), 'users', 'alice');
+    const local = 'http://localhost:3100/api/emulator-storage/image/2026-10/a.webp';
+    // No config/storage (the emulators'): the dev server's plain-http stand-in, and no other plain http.
+    await assertSucceeds(updateDoc(me, { avatarUrl: local }));
+    await assertFails(updateDoc(me, { avatarUrl: 'http://tracker.example/p.gif' }));
+    await assertFails(updateDoc(me, { avatarUrl: 'http://localhost.evil.example/p.gif' }));
+    // Production's: its host only (another picture: an unchanged URL isn't asked).
+    await seed(async (db) => {
+      await setDoc(doc(db, 'config', 'storage'), { host: 'img.resonance.test' });
+    });
+    await assertFails(updateDoc(me, { avatarUrl: local.replace('a.webp', 'b.webp') }));
+  });
+
   it('take an avatar from a former storage host during a move — and from no third host', async () => {
     const me = doc(as('alice'), 'users', 'alice');
     // Without formerHosts (as before any move), the old host is not ours.

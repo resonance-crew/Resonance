@@ -44,7 +44,8 @@ export function cardContentProblem(
   const m = c.media;
   if (m) {
     if (m.type !== 'image' && m.type !== 'video') return 'media';
-    if (!/^https:\/\/\S+$/.test(m.url) || m.url.length > CARD_LIMITS.url) return 'media';
+    // https — or our own storage's base, which against the emulators is the dev server's own http://localhost:….
+    if (!(/^https:\/\/\S+$/.test(m.url) || storageKeyOf(m.url, bases)) || m.url.length > CARD_LIMITS.url) return 'media';
     // Our own storage only, where the server knows it (the rules hold the same once config/storage is set: its host or a former one).
     if (bases.length && m.url !== opts.keptMediaUrl && !storageKeyOf(m.url, bases)) return 'media';
     if (m.label != null && (typeof m.label !== 'string' || m.label.length > CARD_LIMITS.mediaLabel)) return 'media';

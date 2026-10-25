@@ -25,6 +25,20 @@ function extension(filename: string) {
   return ext ? `.${ext}` : '';
 }
 
+/**
+ * `{kind}/{yyyy-mm}/{uuid}.{ext}` — never the owner: the key is in the
+ * picture's public URL, and an anonymous card's cover must not name its
+ * author. Whose it is lives in `uploads/{uuid}` (./uploads).
+ */
+export function objectKey(intent: UploadIntent): string {
+  const now = new Date();
+  return [
+    intent.kind,
+    `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`,
+    `${crypto.randomUUID()}${extension(intent.filename)}`,
+  ].join('/');
+}
+
 /** An S3 client for R2, with the account's keys unless others are given (a bucket a key of its own reaches). */
 export function r2Client(credentials?: { accessKeyId: string; secretAccessKey: string }): S3Client {
   return new S3Client({
@@ -49,22 +63,8 @@ export class R2StorageProvider implements IStorageProvider {
   private bucket = env('R2_BUCKET');
   private publicBase = env('R2_PUBLIC_BASE').replace(/\/$/, '');
 
-  /**
-   * `{kind}/{yyyy-mm}/{uuid}.{ext}` — never the owner: the key is in the
-   * picture's public URL, and an anonymous card's cover must not name its
-   * author. Whose it is lives in `uploads/{uuid}` (./uploads).
-   */
-  private buildKey(intent: UploadIntent): string {
-    const now = new Date();
-    return [
-      intent.kind,
-      `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`,
-      `${crypto.randomUUID()}${extension(intent.filename)}`,
-    ].join('/');
-  }
-
   async uploadObject(intent: UploadIntent, body: Uint8Array): Promise<StoredObject> {
-    const key = this.buildKey(intent);
+    const key = objectKey(intent);
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
@@ -81,7 +81,7 @@ export class R2StorageProvider implements IStorageProvider {
   }
 
   async createPresignedUpload(intent: UploadIntent): Promise<PresignedUpload> {
-    const key = this.buildKey(intent);
+    const key = objectKey(intent);
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: key,

@@ -107,11 +107,13 @@ service cloud.firestore {
     // host, so a cover or an avatar can't be a tracking pixel somewhere else.
     // During a move to a new host, `formerHosts` lists the ones the same
     // pictures were served from before, so a draft or a pending edit still
-    // holding an old-host cover stays saveable. Any https URL until it is set.
+    // holding an old-host cover stays saveable. Any https URL until it is set
+    // — and, against the emulators, where it never is, the dev server's own
+    // stand-in for the storage (http://localhost:<port>/, lib/storage/local).
     function storedFile(url) {
       return url is string
         && url.size() <= 2048
-        && url.matches("https://[^ ]+")
+        && (url.matches("https://[^ ]+") || url.matches("http://localhost:[0-9]+/[^ ]+"))
         && (
           !exists(/databases/$(database)/documents/config/storage)
           || storedHost(url.split("/")[2], get(/databases/$(database)/documents/config/storage).data)

@@ -2,6 +2,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { DeleteObjectCommand, DeleteObjectsCommand, GetObjectCommand, PutObjectCommand, type S3Client } from '@aws-sdk/client-s3';
+import { againstEmulators } from './local';
 import { r2Client } from './r2';
 
 /**
@@ -103,8 +104,6 @@ export class LocalChatImages implements ChatImageStore {
     for (const key of keys) await this.delete(key);
   }
 }
-
-const againstEmulators = () => !!process.env.FIRESTORE_EMULATOR_HOST || process.env.NEXT_PUBLIC_FIREBASE_EMULATOR === 'true';
 
 /**
  * The store pictures go to, or null when none is set up (production without
