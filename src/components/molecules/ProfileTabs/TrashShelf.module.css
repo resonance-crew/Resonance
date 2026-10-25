@@ -42,13 +42,3 @@
   padding-inline: 12px;
 }
 
-/* Under each card: where it came from and when it goes (the grid's caption box, 8px under the card, holds it). */
-.caption {
-  display: block;
-  margin: 0;
-  font-family: var(--font-body);
-  font-size: 12.5px;
-  line-height: 1.4;
-  font-style: normal;
-  color: var(--color-text-muted);
-}

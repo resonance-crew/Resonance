@@ -47,9 +47,9 @@ beforeEach(() => {
 });
 
 describe('TrashActionsMenu', () => {
-  it('restores a card, reads the shelves again and says so', async () => {
+  it('restores a card, reads the shelves again and says who reads it now', async () => {
     const onRestored = vi.fn();
-    mockCallApi.mockResolvedValue({ card: { id: 'c1' }, changed: true, droppedResonance: false });
+    mockCallApi.mockResolvedValue({ card: { id: 'c1', publishedAt: '2026-10-01T00:00:00Z', visibility: 'public' }, changed: true, droppedResonance: false });
     renderMenu(<TrashActionsMenu card={{ id: 'c1' }} onRestored={onRestored} />);
     await waitFor(() => expect(trashReads).toHaveBeenCalledTimes(1));
 
@@ -58,10 +58,27 @@ describe('TrashActionsMenu', () => {
     await userEvent.click(screen.getByText('Restore'));
 
     await waitFor(() => expect(mockCallApi).toHaveBeenCalledWith('/api/v1/cards/c1/restore', { method: 'POST' }));
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Restored'));
+    // Round 11 §7: the trash row no longer warns that a card comes back public, so the toast says so.
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Restored as a public card'));
     expect(onRestored).toHaveBeenCalledWith({ id: 'c1' });
     await waitFor(() => expect(trashReads).toHaveBeenCalledTimes(2));
     expect(privateReads).toHaveBeenCalledTimes(2);
+  });
+
+  it('says a card came back private, anonymous or for connections only, as the restore answered', async () => {
+    for (const [card, said] of [
+      [{ id: 'c1', publishedAt: '2026-10-01T00:00:00Z', visibility: 'private', anonymous: false }, 'Restored as a private card'],
+      [{ id: 'c2', publishedAt: null, visibility: 'public', anonymous: false }, 'Restored as a private card'],
+      [{ id: 'c3', publishedAt: '2026-10-01T00:00:00Z', visibility: 'public', anonymous: true }, 'Restored as an anonymous card'],
+      [{ id: 'c4', publishedAt: '2026-10-01T00:00:00Z', visibility: 'connections', anonymous: false }, 'Restored for your connections only'],
+    ] as const) {
+      mockCallApi.mockResolvedValue({ card, changed: true, droppedResonance: false });
+      const view = renderMenu(<TrashActionsMenu card={{ id: card.id }} />);
+      await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
+      await userEvent.click(screen.getByText('Restore'));
+      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(said));
+      view.unmount();
+    }
   });
 
   it('says a resonance came back on its own', async () => {

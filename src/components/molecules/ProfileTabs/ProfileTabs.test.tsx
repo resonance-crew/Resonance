@@ -211,7 +211,7 @@ describe('ProfileTabs — the trash', () => {
     expect(names.slice(-2)).toEqual(['Trash', 'Thought map']);
   });
 
-  it('says what the trash keeps and for how long, and under each card where it came from and when it goes', async () => {
+  it('says what the trash keeps and for how long over the shelf, and nothing under its cards', async () => {
     renderWithIntl(
       <ProfileTabs
         manageable
@@ -230,10 +230,9 @@ describe('ProfileTabs — the trash', () => {
     expect(screen.getByText("Cards stay in the trash for 30 days, then they're deleted forever")).toBeInTheDocument();
     // No anonymous card here: no word of notes.
     expect(screen.queryByText('When an anonymous card goes to the trash, the notes left on it are deleted')).toBeNull();
-    expect(screen.getByText('Public again when restored · Deleted forever in 23 days')).toBeInTheDocument();
-    expect(screen.getByText('Private card · Deleted forever in 29 days')).toBeInTheDocument();
-    expect(screen.getByText('Private card · Deleted forever within a day')).toBeInTheDocument();
-    expect(screen.getByText('Connections only when restored · Deleted forever in 23 days')).toBeInTheDocument();
+    // Round 11 §7: no line under the cards — neither what a card was nor when it goes (restoring says where it went).
+    expect(screen.queryByText(/Deleted forever (in|within)/)).toBeNull();
+    expect(screen.queryByText(/when restored|Private card/)).toBeNull();
     // Every card opens its page (its trash banner) — a 私人卡 never published too (round 9 §1).
     expect(screen.getAllByText('Thought public-one')[0].closest('a')).toHaveAttribute('href', '/card/public-one');
     expect(screen.getAllByText('Thought draft-one')[0].closest('a')).toHaveAttribute('href', '/card/draft-one');

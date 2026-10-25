@@ -113,6 +113,29 @@ export function useTrashActions(): TrashActions {
   );
 }
 
+/**
+ * Who reads a card that came back from the trash, as its toast says it (round
+ * 11 §7: the trash's rows no longer warn that restoring makes a card public
+ * again, so the toast does) — read off the restore's answer, never guessed
+ * from the trash row: a 私人卡 (kept private, or never published), public,
+ * public and anonymous, or for connections only.
+ */
+export type RestoredAs = 'private' | 'public' | 'anonymous' | 'connections';
+
+export function restoredAs(card: { publishedAt?: unknown; visibility?: string | null; anonymous?: boolean | null }): RestoredAs {
+  if (!card.publishedAt || card.visibility === 'private') return 'private';
+  if (card.visibility === 'connections') return 'connections';
+  return card.anonymous ? 'anonymous' : 'public';
+}
+
+/** The toast's key under `me.actions` for a card restored as {@link restoredAs} says. */
+export const RESTORED_TOAST = {
+  private: 'restoredPrivate',
+  public: 'restoredPublic',
+  anonymous: 'restoredAnonymous',
+  connections: 'restoredConnections',
+} as const satisfies Record<RestoredAs, string>;
+
 // "This card is back, but no longer resonates with the card it answered":
 // said in a dialog, which must outlive the control that restored the card —
 // the toast's 復原 does it after the card's own ⋯ has left the page with the

@@ -9,7 +9,7 @@ import { ConfirmModal } from '@/components/molecules/ConfirmModal/ConfirmModal';
 import { EmptyState } from '@/components/molecules/EmptyState/EmptyState';
 import { CARD_HUES } from '@/components/molecules/StoryCard/StoryCard';
 import { TrashActionsMenu } from '@/components/molecules/TrashActionsMenu/TrashActionsMenu';
-import { TRASH_DAYS, daysLeft, purgeAtOf } from '@/lib/cards/trash';
+import { TRASH_DAYS } from '@/lib/cards/trash';
 import { useTrashActions, type TrashCardRef } from '@/lib/data/trash';
 import type { Card, User } from '@/lib/db/types';
 import styles from './TrashShelf.module.css';
@@ -23,11 +23,11 @@ export interface TrashShelfProps {
 
 /**
  * The card box's 垃圾桶: what the viewer deleted, the latest in first, for
- * 30 days — each saying where it came from (a draft, private, or what
- * restoring makes it: 還原後公開 — a restore never re-publishes in silence)
- * and when it goes. Every card opens its page (its trash banner), a 私人卡
- * never published too. Its ⋯ restores it or deletes it for good; 清空
- * deletes them all, asked first in red.
+ * 30 days (the hint over the shelf says so) — the cards alone, no line under
+ * them (round 11 §7): restoring one says which shelf it went back to (a
+ * public one is public again — never in silence). Every card opens its page
+ * (its trash banner), a 私人卡 never published too. Its ⋯ restores it or
+ * deletes it for good; 清空 deletes them all, asked first in red.
  */
 export function TrashShelf({ cards, authors, onLeft }: TrashShelfProps) {
   const t = useTranslations('me');
@@ -43,15 +43,6 @@ export function TrashShelf({ cards, authors, onLeft }: TrashShelfProps) {
 
   // Notes on an anonymous card went with it into the trash: said while one is here.
   const anonymousHere = cards.some((c) => c.anonymous === true && c.publishedAt);
-  const now = Date.now();
-  const caption = (c: Card) => {
-    const from = !c.publishedAt
-      ? t('trashFrom.draft')
-      : t(`trashFrom.${c.trashedFrom?.visibility ?? 'private'}`);
-    const left = c.trashedAt ? daysLeft(purgeAtOf(c.trashedAt), now) : null;
-    const days = !left ? null : left.lastDay ? t('trashLastDay') : t('trashDaysLeft', { count: left.days });
-    return <span className={styles.caption}>{days ? `${from} · ${days}` : from}</span>;
-  };
   const ref = (c: Card): TrashCardRef => ({ id: c.id, slug: c.slug, referenceCardId: c.trashedFrom?.referenceCardId ?? undefined });
 
   async function empty() {
@@ -97,7 +88,6 @@ export function TrashShelf({ cards, authors, onLeft }: TrashShelfProps) {
         // Its page, with its trash banner — a 私人卡 never published too (round 9 §1). Never prefilled: a
         // summary isn't the card.
         cardHref={(c) => `/card/${c.slug ?? c.id}`}
-        renderCaption={caption}
         renderActions={(c, _i, palette) => {
           const hue = CARD_HUES[palette];
           return <TrashActionsMenu card={ref(c)} seed={hue} hue={hue} onRestored={(r) => onLeft?.(r.id)} onDeleted={onLeft} />;

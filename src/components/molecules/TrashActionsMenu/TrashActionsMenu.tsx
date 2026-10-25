@@ -6,7 +6,7 @@ import { ConfirmModal } from '@/components/molecules/ConfirmModal/ConfirmModal';
 import { OrganicMenu, type OrganicMenuItem } from '@/components/molecules/OrganicMenu/OrganicMenu';
 import { useToast } from '@/components/providers/ToastProvider';
 import { ApiError } from '@/lib/db/firestore/client/api';
-import { announceRestoredAlone, useTrashActions, type TrashCardRef } from '@/lib/data/trash';
+import { RESTORED_TOAST, announceRestoredAlone, restoredAs, useTrashActions, type TrashCardRef } from '@/lib/data/trash';
 
 export interface TrashActionsMenuProps {
   card: TrashCardRef;
@@ -20,8 +20,8 @@ export interface TrashActionsMenuProps {
 }
 
 /**
- * The ⋯ on a card in the trash: 還原 (it comes back as it was, saying
- * 「已還原」) and 永久刪除 (asked first, in red: it can't be undone). The
+ * The ⋯ on a card in the trash: 還原 (it comes back as it was, saying who
+ * reads it now: 已還原為私人卡 / 公開卡片 / …) and 永久刪除 (asked first, in red: it can't be undone). The
  * delete keeps to the trash (`onlyIfTrashed`): a card restored meanwhile,
  * on another device, is not deleted — the shelf is read again and says so.
  */
@@ -42,9 +42,9 @@ export function TrashActionsMenu({ card, seed = 7, hue, onRestored, onDeleted }:
   async function restore() {
     setBusy(true);
     try {
-      const { droppedResonance } = await actions.restore(card);
+      const { card: restored, droppedResonance } = await actions.restore(card);
       if (droppedResonance) announceRestoredAlone();
-      else toast.show({ message: t('restored') });
+      else toast.show({ message: t(RESTORED_TOAST[restoredAs(restored)]) });
       onRestored?.(card);
     } catch {
       toast.show({ message: t('undoFailed') });
