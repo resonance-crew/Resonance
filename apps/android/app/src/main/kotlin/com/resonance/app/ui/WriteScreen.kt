@@ -1019,12 +1019,26 @@ internal fun bandUnderBar(bar: Boolean, compact: Boolean, hint: Boolean, mirrorO
 private val SPLIT_ROW_HEIGHT = 38.dp
 
 /**
+ * Lays a split row out with its middle on the middle of [SPLIT_ROW_HEIGHT] — the Leave's and the
+ * floating ✓'s line — however tall it is: what is taller stands out over the row's top as much as
+ * under its foot, and what follows starts under its foot.
+ */
+private fun Modifier.onSplitRowLine(): Modifier = layout { measurable, constraints ->
+    val p = measurable.measure(constraints.copy(minHeight = 0))
+    val row = SPLIT_ROW_HEIGHT.roundToPx()
+    val top = (row - p.height) / 2
+    layout(p.width, maxOf(row, p.height + top)) { p.place(0, top) }
+}
+
+/**
  * At the split, the step's own first row: ← 繼續寫 and its name (22/1.2 bold, the bar title's style),
  * level with the Leave, and the writing's save state at its end (no bar says it there).
  */
 @Composable
 private fun StepHeading(model: WriteModel, status: BarStatus?) {
-    Row(Modifier.fillMaxWidth().heightIn(min = SPLIT_ROW_HEIGHT).padding(start = 0.dp), verticalAlignment = Alignment.CenterVertically) {
+    // Its middle on the Leave's line, the row's 38 (round 11 review): the name with its save state under it is
+    // taller than the row, so the two lines stand out over it evenly rather than pushing the arrow down.
+    Row(Modifier.fillMaxWidth().onSplitRowLine(), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.layout { measurable, constraints ->
             // The arrow's 48 hit box hangs into the pad and over the row's 38 (its glyph on the column's
             // edge, level with the Leave's), the row keeping the Leave's height.
