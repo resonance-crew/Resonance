@@ -17,7 +17,8 @@ export interface HeaderBarProps {
   /** The title is the page's own heading (the writer has no other), not a label over one. */
   heading?: boolean;
   /**
-   * A quiet word after the title (the writer's save state): it gives way before the title does.
+   * A quiet line under the title (the writer's save state, round 11 §5): the title's subtitle, the two
+   * centred on the row together — its line kept while it says nothing, so the title never moves.
    */
   status?: ReactNode;
   /**
@@ -67,14 +68,16 @@ export function HeaderBar({
           disabled={backDisabled}
           onClick={onBack}
         />
-        {heading ? (
-          <h1 ref={titleRef} tabIndex={titleRef ? -1 : undefined} className={styles.title}>
-            {title}
-          </h1>
-        ) : (
-          <span className={styles.title}>{title}</span>
-        )}
-        {status}
+        <div className={styles.titles}>
+          {heading ? (
+            <h1 ref={titleRef} tabIndex={titleRef ? -1 : undefined} className={styles.title}>
+              {title}
+            </h1>
+          ) : (
+            <span className={styles.title}>{title}</span>
+          )}
+          {status !== undefined && <div className={styles.subtitle}>{status}</div>}
+        </div>
         {trailing != null && <div className={styles.trailing}>{trailing}</div>}
       </div>
     </header>

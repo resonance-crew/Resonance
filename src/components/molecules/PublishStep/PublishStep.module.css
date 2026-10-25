@@ -1,10 +1,18 @@
 /* The publish step: the writer's column, the publish panel's sections down
-   it at the writer's own gap. */
+   it one gap apart (round 11 §4: --publish-section-gap, compact on a phone),
+   a section's label its own small gap over its control. */
 .step {
+  --section-gap: var(--publish-section-gap);
   display: flex;
   flex-direction: column;
-  gap: clamp(22px, 3vw, 32px);
+  gap: var(--section-gap);
   min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .step {
+    --section-gap: var(--publish-section-gap-compact);
+  }
 }
 
 /* At the split (no bar over the pane): ← 繼續寫 and the step's name, level
@@ -30,9 +38,19 @@
   }
 }
 
-/* The save state after the step's name, where the bar would say it below the split. */
+/* The step's name and, under it, its save state — where the bar says them
+   below the split (round 11 §5: the title's second line, its height kept). */
+.headingTitles {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
 .headingState {
-  margin-left: 4px;
+  display: flex;
+  min-height: calc(12px * 1.4);
+  margin-top: 1px;
+  --save-state-size: 12px;
 }
 
 .heading {
@@ -69,7 +87,7 @@
 .insightWrap[data-collapsed] {
   grid-template-rows: 0fr;
   /* The step's gap closes with it. */
-  margin-bottom: calc(-1 * clamp(22px, 3vw, 32px));
+  margin-bottom: calc(-1 * var(--section-gap));
 }
 
 .insightClip {
@@ -110,7 +128,7 @@
 .fieldset {
   display: flex;
   flex-direction: column;
-  gap: clamp(22px, 3vw, 32px);
+  gap: var(--section-gap);
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -143,6 +161,15 @@
   }
 }
 
+/* On a wider screen the preview is a card on cream: first under the bar, its
+   top edge stands as far under the pen line as a card page's cover does
+   (--story-head-cover-gap; the column already gives --story-head-gap). */
+@media (min-width: 641px) and (max-width: 1199px) {
+  .previewBlock[data-under-bar] {
+    margin-top: calc(var(--story-head-cover-gap) - var(--story-head-gap));
+  }
+}
+
 /* The preview's name, for screen readers only: on screen the card says what it is. */
 .caption {
   position: absolute;
@@ -159,7 +186,7 @@
 .group {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--publish-label-gap);
 }
 
 .label {

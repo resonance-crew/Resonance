@@ -17,18 +17,25 @@
   background: var(--color-cream);
 }
 
-/* Below the split, under the writer's bar, the first line sits closer to its
-   pen line than a page's title does to an empty top: the bar already says
-   where you are. */
+/* Below the split, under the writer's bar, the title stands as far under the
+   bar's pen line as a card page's title does under the header's (round 11
+   §4: --story-head-gap, compact on a phone) — writing a card and reading it
+   start at the same place. The bar's height runs 9 past its pen line. */
 @media (max-width: 1199px) {
   .shell[data-bar] {
     --app-header-h: var(--bar-h);
-    --editor-pad-top: clamp(20px, 3vh, 28px);
+    --editor-pad-top: calc(var(--story-head-gap) - 9px);
   }
 
   /* The writer's Leave over the map is the split's: below it, its bar's back. */
   .back[data-split-only] {
     display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .shell[data-bar] {
+    --editor-pad-top: calc(var(--story-head-gap-compact) - 9px);
   }
 }
 

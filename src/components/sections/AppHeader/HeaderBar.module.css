@@ -35,6 +35,26 @@
   }
 }
 
+/* The title, and under it its subtitle when it has one (the writer's save
+   state): one block, centred on the row as the arrow is. It gives way to
+   what closes the row (it ellipsizes first). */
+.titles {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Two sizes on one line looked odd (round 11 §5): the state is the title's
+   second line, 12 muted, its height kept while it is empty. */
+.subtitle {
+  display: flex;
+  min-width: 0;
+  min-height: calc(12px * 1.4);
+  margin-top: 1px;
+  --save-state-size: 12px;
+}
+
 .title {
   flex: 0 1 auto;
   min-width: 0;

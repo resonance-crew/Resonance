@@ -1,11 +1,12 @@
-/* The bar's quiet word: it ellipsizes before the title beside it does
-   (a shrink far above the title's), and never wraps. */
+/* The bar's quiet word — under the title below the split (the bar sets
+   --save-state-size 12), before the floating ✓ at the split: one line,
+   ellipsized, never wrapping. */
 .state {
   flex: 0 1000 auto;
   min-width: 0;
   overflow: hidden;
   font-family: var(--font-body);
-  font-size: 13px;
+  font-size: var(--save-state-size, 13px);
   font-weight: 400;
   line-height: 1.4;
   letter-spacing: 0;

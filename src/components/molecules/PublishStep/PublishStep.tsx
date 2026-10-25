@@ -350,10 +350,14 @@ export function PublishStep({
             disabled={pending}
             onClick={onBack}
           />
-          <h2 id={headingId} ref={headingRef} tabIndex={-1} className={styles.heading}>
-            {title}
-          </h2>
-          <SaveState status={saveStatus} className={styles.headingState} />
+          <div className={styles.headingTitles}>
+            <h2 id={headingId} ref={headingRef} tabIndex={-1} className={styles.heading}>
+              {title}
+            </h2>
+            <div className={styles.headingState}>
+              <SaveState status={saveStatus} />
+            </div>
+          </div>
         </div>
       )}
       {/* What readers will see changes: said only while there are readers, and they stay. */}

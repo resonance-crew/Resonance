@@ -299,6 +299,29 @@ describe('the chrome around the panes', () => {
     expect(onBack).toHaveBeenCalledTimes(1);
     expect(mockBack).not.toHaveBeenCalled();
   });
+
+  // Round 11 §5: two sizes on one line looked odd — the save state is the title's second line, its line kept
+  // while it says nothing (the title never moves at the first save), never beside the title or the ✓.
+  it('says the save state on a line of its own under the bar’s title, kept while empty', () => {
+    const view = renderWithIntl(
+      <WorkspaceShell open bar={{ title: 'New card', onBack: vi.fn() }} paneStatus={<span>Saved</span>} paneAction={<button type="button">Done</button>}>
+        <p>editor</p>
+      </WorkspaceShell>,
+    );
+    const title = screen.getByRole('heading', { level: 1, name: 'New card' });
+    const state = screen.getByText('Saved');
+    const line = state.parentElement!;
+    expect(line.previousElementSibling).toBe(title);
+    expect(line.className).toMatch(/subtitle/);
+    expect(screen.getByRole('button', { name: 'Done' }).closest('[class*="trailing"]')).not.toContainElement(state);
+
+    view.rerender(
+      <WorkspaceShell open bar={{ title: 'New card', onBack: vi.fn() }} paneStatus={<span />}>
+        <p>editor</p>
+      </WorkspaceShell>,
+    );
+    expect(screen.getByRole('heading', { level: 1, name: 'New card' }).nextElementSibling?.className).toMatch(/subtitle/);
+  });
 });
 
 /** The thought-map page in small: a card opened from the map shows in the pane until it is hidden. */

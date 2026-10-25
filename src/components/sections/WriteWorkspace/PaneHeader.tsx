@@ -39,7 +39,7 @@ export interface PaneHeaderProps {
   scrolled: boolean;
   /** The arrow waits (a request on its way that leaving would cut short). */
   backDisabled?: boolean;
-  /** A quiet word after the title (the editor's save state), as the writer's bar has it: it gives way first. */
+  /** A quiet line under the title (the editor's save state), as the writer's bar has it (round 11 §5). */
   status?: ReactNode;
   /** What closes the row on the right (the editor's ✓), as the writer's bar has it: the title gives way. */
   trailing?: ReactNode;
@@ -79,10 +79,12 @@ export function PaneHeader({ title, backLabel, onBack, scrolled, backDisabled = 
           disabled={backDisabled}
           onClick={onBack}
         />
-        <h2 ref={titleRef} tabIndex={titleRef ? -1 : undefined} className={barStyles.title}>
-          {title}
-        </h2>
-        {status}
+        <div className={barStyles.titles}>
+          <h2 ref={titleRef} tabIndex={titleRef ? -1 : undefined} className={barStyles.title}>
+            {title}
+          </h2>
+          {status !== undefined && <div className={barStyles.subtitle}>{status}</div>}
+        </div>
         {trailing != null && <div className={barStyles.trailing}>{trailing}</div>}
       </div>
       <svg
