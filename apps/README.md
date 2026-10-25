@@ -209,7 +209,11 @@ never published and the published cards kept private together, the latest change
 (`CardBoxScreen.draftShelf`, by `editedAt`, else `publishedAt`); every card in the box opens its page, a
 私人卡 too — whose meta line ends with 🔒 私人卡 and whose bar (a phone's; a tablet's byline) has a pen to the
 writer where share would be (`CardScreen.isPrivateCard`) — and a card's ⋯ offers 轉為私人卡 only on a card
-readers have (`CardActionsMenu.rows(readersSee:answering:)`). The thought map reads its cards under the rules
+readers have (`CardActionsMenu.rows(readersSee:answering:editShown:)`). On a 私人卡's own page, where that pen
+is 編輯, the ⋯ leads with 公開發表 instead (round 12 §3, `editShown`): `WriteLauncher.publishPublicly` opens
+the writer at its publish step (`Request.publishPublicly` → `WriteModel.openPublishing`) with 公開 chosen —
+匿名公開 for a card already marked anonymous — as if picked there (it autosaves; a published 私人卡's choice
+waits in its pending edit); the card box's ⋯, with no pen beside it, keeps 編輯. The thought map reads its cards under the rules
 — the newest 40 published, and the 40 never-published 私人卡 most recently edited in a query of their own
 (`ThoughtMapService.newestDrafts`), wears the lock on every 私人卡's node and tray row, and opens every card of
 mine in the writer, a 私人卡 as a shared one (round 10 §1; below the split the writer — iOS
@@ -373,7 +377,9 @@ sends the message naming it. Pictures are read only through
 plain image loader: the thread's size for a bubble (`MessagePictureSize`: as
 wide as the bubble, at most 320 tall, its shape held between 1:2 and 2:1) and
 the full one in `ChatPictureViewer` (pinch or double-tap to zoom; a pull down or
-its ✕ closes it). `FreshnessMiddleware` never asks for one again (its bytes
+its ✕ closes it — a cream glyph on an always-shown wobbly disc of the viewer's ink,
+`Tokens.viewerInk` at 50 %, 72 % pressed, 40 in its 44 tap area 16 inside the safe
+area: round 12 §1–2's `ViewerClose`, so it reads on a light picture that fills the screen). `FreshnessMiddleware` never asks for one again (its bytes
 never change); `ChatImageStore` keeps them decoded, per account. One that
 couldn't be read keeps its fill with the picture glyph, and a tap asks again.
 A reply to a picture quotes 一張圖片 (`ReplyQuote.summary`), and the Messages

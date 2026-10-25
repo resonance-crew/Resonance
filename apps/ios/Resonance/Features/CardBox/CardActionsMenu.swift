@@ -40,8 +40,9 @@ enum TrashFeedback: Equatable {
     case toast, page
 }
 
-/// The owner's ⋯ on a card (CardActionsMenu.tsx): 編輯 / 轉為草稿 (a card readers can see, round 8
-/// §1.2) / 取消共振 (a card that resonates with another) / 刪除, in the shared
+/// The owner's ⋯ on a card (CardActionsMenu.tsx): 編輯 (公開發表 on a 私人卡's own page, whose pen is
+/// 編輯, round 12 §3) / 轉為草稿 (a card readers can see, round 8 §1.2) / 取消共振 (a card that resonates
+/// with another) / 刪除, in the shared
 /// OrganicMenu. 刪除 moves the card to the trash, where it waits 30 days:
 /// no dialog except the one ``TrashDecision`` asks — the toast's 復原 and the
 /// trash shelf are the way back. Taking a resonance back asks first, in the
@@ -73,6 +74,9 @@ struct CardActionsMenu: View {
     var trashFeedback: TrashFeedback = .toast
     /// Whether the card opens once edited (false on the card's own page, which is already underneath).
     var showsCardAfterEdit = true
+    /// The page beside it shows its own 編輯 (a 私人卡's card page, its pen): the ⋯ then leads with 公開發表
+    /// instead — the writer's publish step with 公開 chosen (round 12 §3) — so the page never says 編輯 twice.
+    var editShown = false
     var onChanged: () -> Void = {}
     /// The card went to the trash (its lists are told already).
     var onTrashed: () -> Void = {}
@@ -139,21 +143,24 @@ struct CardActionsMenu: View {
 
     /// The ⋯'s rows, in order.
     nonisolated enum Row: Equatable {
-        case edit, visibility, unresonate, delete
+        case edit, publish, visibility, unresonate, delete
     }
 
-    /// 編輯, 轉為草稿 — only on a card readers can see (round 8 §1.2): nothing is published from here, a
-    /// 草稿's type is chosen in the writer's publish step (公開 · 匿名公開 · 草稿), so every 草稿's ⋯ is the
-    /// same — 取消共振 on a resonance, 刪除.
-    static func rows(readersSee: Bool, answering: Bool) -> [Row] {
-        [.edit] + (readersSee ? [.visibility] : []) + (answering ? [.unresonate] : []) + [.delete]
+    /// 編輯, 轉為草稿 — only on a card readers can see (round 8 §1.2): a 草稿's type is chosen in the
+    /// writer's publish step (公開 · 匿名公開 · 草稿), so every 草稿's ⋯ is the same — 取消共振 on a
+    /// resonance, 刪除. On a 私人卡's own page, where its pen beside the ⋯ is 編輯 (`editShown`), the first row
+    /// is 公開發表 instead (round 12 §3), the way to that step; the card box's ⋯ has no pen beside it.
+    nonisolated static func rows(readersSee: Bool, answering: Bool, editShown: Bool = false) -> [Row] {
+        [editShown && !readersSee ? .publish : .edit] + (readersSee ? [.visibility] : []) + (answering ? [.unresonate] : []) + [.delete]
     }
 
     private var items: [OrganicMenuItem] {
-        Self.rows(readersSee: readersSee, answering: answering != nil).map { row in
+        Self.rows(readersSee: readersSee, answering: answering != nil, editShown: editShown).map { row in
             switch row {
             case .edit:
                 OrganicMenuItem(id: "edit", title: L10n.Me.Actions.edit, icon: .pen) { writer.edit(cardId, showsCard: showsCardAfterEdit) }
+            case .publish:
+                OrganicMenuItem(id: "publish", title: L10n.Me.Actions.publishPublicly, icon: .globe) { writer.publishPublicly(cardId) }
             case .visibility:
                 OrganicMenuItem(id: "visibility", title: L10n.Me.Actions.makePrivate, icon: .lock) { Task { await makeDraft() } }
             case .unresonate:
