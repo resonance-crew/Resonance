@@ -131,7 +131,11 @@ Launch arguments for checking screens (Debug): `-route /card/<slug>` or
 every kind of content. `-writeTitle "…" -writeStory "…"` start a new card with
 that text (the simulator can't type into the fields from outside), and
 `-writeCover <url>` with that picture as its cover; `-threadDraft "…"` fills a
-conversation's composer (`-route /messages/<handle>` opens one).
+conversation's composer (`-route /messages/<handle>` opens one), `-threadReply YES`
+answers their newest message (a reply riding, the keyboard up) and `-threadPicture <s>`
+opens the newest picture and closes it that many seconds later (round 11 §1's check).
+`-route /settings` (or `/settings/<section>`: profile, account, privacy, notifications,
+language, terms, delete) opens Settings or one of its pages.
 `-openWriter YES` opens the writer on a new card at launch and `-writeCard <id>`
 on one of yours (a draft, a published card, one in the trash); `-writeStep publish`
 then opens its second step, `-writeFocus YES` puts the caret in the story (the
@@ -187,8 +191,9 @@ a conversation's shared cards one `GET /api/v1/cards?keys=` (`CardSummaries`). A
 change goes through `PATCH /api/v1/cards/{id}`; its 刪除 moves the card to the trash
 (`POST …/trash`, `TrashDecision`: no question but the plain one for a public, named resonance whose
 original is named), with the shell's 「已移到垃圾桶 · 復原」 toast in the card box and the trash banner
-(`TrashedCardBanner`) on the card's own page, which stays. The card box's last shelf, 垃圾桶, restores
-(`…/restore`), deletes for good (`DELETE …?onlyIfTrashed=true`, asked in red) and empties
+(`TrashedCardBanner`) on the card's own page, which stays. The card box's last shelf, 垃圾桶 (no line
+under its cards, round 11 §7), restores (`…/restore`, its toast saying who reads the card now — `RestoredAs`,
+from the answer's card: 已還原為私人卡 · 公開卡片 · 匿名公開卡片 · 僅連結的人看得到), deletes for good (`DELETE …?onlyIfTrashed=true`, asked in red) and empties
 (`DELETE /me/trash`, paged by `WritingAPI.emptyTrash` through a 70 s client, `AppHTTP.slowSession`:
 a page of deletes can outlast the app's 30 s; after a failure the dialog closes once the trash,
 read again, is empty); a trashed card is left off the thought map
@@ -300,12 +305,15 @@ language's type), whose formatting is `StoryFormatBar`, docked on the keyboard
 while the story has the focus; the page keeps the island's caret line (`caret`)
 above it (`CaretFollow`), and the island's own scroll view is pinned at its top
 (WebKit would otherwise slide the story out of its frame to show the caret).
-The bar is back · a short title (編輯私人卡 for a 私人卡) · the
-save state (`SaveStateWord`: 儲存中⋯ once a write has gone 400 ms unanswered,
-已儲存, 修改已暫存 for a live card's revision, 未儲存 in the error ink; the word
-goes before the title gives way, and a pointer reads the last write's time) … ✓
+The bar is back · a short title (編輯私人卡 for a 私人卡) with the save state as
+its second line (round 11 §5, `BarTitles` through `OrganicInlineBar.subtitle`: 儲存中⋯
+once a write has gone 400 ms unanswered, 已儲存, 修改已暫存 for a live card's revision,
+未儲存 in the error ink, at 12; its line kept while empty, the title alone on the
+row's line meanwhile, gliding up as it fills; a pointer reads the last write's time) … ✓
 (`write.finish`, a ghost icon; at the split it floats at the pane's top end with
-the state beside it). ✓ asks for a title, waits a moment for a new draft's first
+the state beside it). The title's line box stands the reading head under the bar's
+pen line, as a card page's title does, and 32 over the story (round 11 §4); the
+publish step's sections are `--publish-section-gap` apart. ✓ asks for a title, waits a moment for a new draft's first
 save, and opens `PublishStep` in place: the mirror (asked once per title and
 story, never for a revision), the card as a list shows it — its cover changed on
 the picture itself, one 更換封面 chip whose menu offers another, a drawn one or
@@ -338,13 +346,16 @@ wavy rule), the note answered or the card (a glyph on a tonal tile, a card's cov
 picture (its 40 × 40) — label · detail · ✕ at the end (`ComposerRide` orders them); the letter's line is
 the thread's last item, a notice in the composer's place a framed slip. Behind it all the foot's paper
 runs the pane's whole width down to the screen's foot (through the home indicator, under the keyboard),
-its top 24 a fade: over the capsule's top half, or over 24 the foot gains above riding rows. It is the
+its top 12 a fade (round 11 §3): over the capsule's top 12, or from 6 above the topmost riding row. It is the
 thread's `.safeAreaInset(edge: .bottom)`; the list runs under it to the screen's foot and, drawn upside
 down, takes all it covers (the fade too) as its top margin (`ThreadFoot.room`, + 12), which the pill and
 已複製 keep too. A tap on the thread or on the foot's solid paper puts the keyboard away (`KeyboardTapAway`:
 a UIKit tap on the list that waits for a message's own hold and taps), a drag down takes it with the
 finger; the list is held at its own edge in UIKit (`SidewaysLock`) — setting its `ScrollPosition` for
-that froze the app after a picture was sent (round 10 §5).
+that froze the app after a picture was sent (round 10 §5). Opening a picture puts the keyboard away under
+it (UIKit gives the field back on the way out): the thread keeps its foot meanwhile (`KeyboardHold`), and
+the viewer keeps the status bar (hidden, it moved an iPad's page by 24), so closing it leaves the thread
+exactly where it was (round 11 §1).
 
 Pictures in chat: the composer's ＋ opens 圖片 · 卡片 (`AttachMenuOverlay`, the
 screen's own layer, so the keyboard stays up). 圖片 is the system's `PhotosPicker`
