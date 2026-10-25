@@ -204,8 +204,8 @@ never published and the published cards kept private together, the latest change
 writer where share would be (`CardScreen.isPrivateCard`) — and a card's ⋯ offers 轉為私人卡 only on a card
 readers have (`CardActionsMenu.rows(readersSee:answering:)`). The thought map reads its cards under the rules
 — the newest 40 published, and the 40 never-published 私人卡 most recently edited in a query of their own
-(`ThoughtMapService.newestDrafts`), wears the lock on every 私人卡's node and tray row, and opens a 私人卡 on its
-page below the split — and asks
+(`ThoughtMapService.newestDrafts`), wears the lock on every 私人卡's node and tray row, and opens every card of
+mine in the writer, a 私人卡 as a shared one (round 10 §1; at the split in the pane) — and asks
 `GET /api/v1/cards?keys=` for the ones they refuse (someone else's anonymous original, without its
 author). Reports go through the server (`POST /api/v1/reports`, `…/cards/{key}/report`). A scheduled
 deletion comes with the account (`Me.deletion`, the kept one on a cold start): no separate request,
