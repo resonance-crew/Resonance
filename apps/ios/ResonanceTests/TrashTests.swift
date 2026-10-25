@@ -57,8 +57,8 @@ import Testing
 }
 
 /// The card box's 垃圾桶 (trash.spec §4, §6): always the strip's last shelf, asked for alone when
-/// chosen; each card says where it came from (a restore never re-publishes in silence) and when it
-/// goes; while an anonymous card is there, the shelf says its notes went with it.
+/// chosen; its cards say nothing under them (round 11 §7: restoring says who reads the card); while an
+/// anonymous card is there, the shelf says its notes went with it.
 @MainActor @Suite struct TrashShelfTests {
     @Test func theTrashIsAlwaysTheLastShelf() {
         #expect(CardBoxScreen.order.last == .trash)
@@ -71,16 +71,11 @@ import Testing
         #expect(CardBoxScreen.asked(with: .trash, force: false, known: [], unconfirmed: []) == [.trash])
     }
 
-    @Test func eachCardSaysWhereItCameFromAndWhenItGoes() {
+    /// The shelf's cards say nothing under them (round 11 §7); the card page's trash banner still says
+    /// when one goes.
+    @Test func theBannerSaysWhenACardGoes() {
         let now = ISO8601.date("2026-10-08T00:00:00.000Z")!
-        #expect(TrashCaption.text(trashed("a", restoresTo: "public"), now: now)
-                == "\(L10n.Me.TrashFrom.public) · \(L10n.Me.trashDaysLeft(count: 23))")
-        #expect(TrashCaption.from(trashed("b", restoresTo: "connections")) == L10n.Me.TrashFrom.connections)
-        #expect(TrashCaption.from(trashed("c", restoresTo: "private")) == L10n.Me.TrashFrom.private)
-        // A published private card is a 草稿 (round 8 §1.1): it reads as a draft does.
-        #expect(L10n.Me.TrashFrom.private == L10n.Me.TrashFrom.draft)
-        // A draft is a draft, whatever it would restore to.
-        #expect(TrashCaption.from(trashed("d", published: false, restoresTo: "public")) == L10n.Me.TrashFrom.draft)
+        #expect(TrashCaption.days(purgeAt: trashed("a").purgeDate, now: now) == L10n.Me.trashDaysLeft(count: 23))
         // Under a day left: 「一天內永久刪除」; a part of a day counts as a whole one before that.
         let lastDay = ISO8601.date("2026-10-30T12:00:00.000Z")!
         #expect(TrashCaption.days(purgeAt: trashed("e").purgeDate, now: lastDay) == L10n.Me.trashLastDay)

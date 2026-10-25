@@ -1,8 +1,22 @@
 import DesignSystem
 import Foundation
+import ResonanceKit
 import SwiftUI
 import Testing
 @testable import Resonance
+
+/// A card as the restore answers it: back as `visibility`, published or never, named or anonymous.
+@MainActor private func restored(_ id: String = "c1", published: Bool = true, visibility: String = "public",
+                                 anonymous: Bool = false) -> RestoredCard {
+    let author = anonymous ? "null" : #"{"id":"alice","handle":"alice","initials":"AL","accentColor":"oklch(90% 0.05 60)","avatarUrl":null,"avatarSeed":"42","verified":false,"region":"TW"}"#
+    let json = """
+    {"card":{"id":"\(id)","slug":null,"title":"Card \(id)","excerpt":"…","tags":[],
+     "publishedAt":\(published ? "\"2026-09-01T08:00:00.000Z\"" : "null"),"author":\(author),"anonymous":\(anonymous),
+     "visibility":"\(visibility)","imageUrl":null,"imageLabel":null,"accentHue":140,"readMinutes":2,"referenceCardId":null,
+     "reason":null},"changed":true,"droppedResonance":false}
+    """
+    return try! JSONDecoder().decode(RestoredCard.self, from: Data(json.utf8))
+}
 
 /// Round 11 (2026-10-25, late): a picture opened from a thread leaves the thread where it was, the
 /// foot's paper fades in over a short 12 from the top edge of what it shows first, the writer and its
@@ -69,5 +83,61 @@ import Testing
         #expect(ComposerMetrics.fadeRoom(riding: true) == 6)
         let inkStart = (ComposerMetrics.rowMinHeight - ComposerMetrics.rowThumb) / 2
         #expect(ComposerMetrics.fadeRoom(riding: true) + inkStart == ComposerMetrics.fade)
+    }
+
+    // MARK: §7 — the trash: a restore from the shelf says who reads the card now
+
+    @Test func theRestoreSaysWhoReadsTheCardFromTheAnswersCard() {
+        #expect(RestoredAs.of(restored(visibility: "private").card) == .private)
+        // Never published: a 私人卡 whatever its visibility says.
+        #expect(RestoredAs.of(restored(published: false, visibility: "public").card) == .private)
+        #expect(RestoredAs.of(restored(visibility: "public").card) == .public)
+        #expect(RestoredAs.of(restored(visibility: "public", anonymous: true).card) == .anonymous)
+        #expect(RestoredAs.of(restored(visibility: "connections").card) == .connections)
+        #expect(RestoredAs.private.message == L10n.Me.Actions.restoredPrivate)
+        #expect(RestoredAs.public.message == L10n.Me.Actions.restoredPublic)
+        #expect(RestoredAs.anonymous.message == L10n.Me.Actions.restoredAnonymous)
+        #expect(RestoredAs.connections.message == L10n.Me.Actions.restoredConnections)
+    }
+
+    @Test func theShelfsRestoreSaysTheAudienceAndEveryOtherRestoreSaysRestored() async {
+        func toasts() -> ToastCenter {
+            ToastCenter(sleep: { _ in try await Task.sleep(for: .seconds(60)) }, assistive: { false }, announce: { _ in })
+        }
+        let writer = WriteLauncher()
+        let shelf = toasts()
+        let came = await TrashMoves.restore("c1", answering: nil, says: .audience,
+                                            host: .init(restoreCard: { _ in restored(visibility: "public", anonymous: true) },
+                                                        deleteCard: { _ in }, toasts: shelf), writer: writer)
+        #expect(came)
+        #expect(shelf.current?.message == L10n.Me.Actions.restoredAnonymous)
+        // The undo of a move just made, the card page's banner: 「已還原」 as before.
+        let undo = toasts()
+        await TrashMoves.restore("c1", answering: nil, host: .init(restoreCard: { _ in restored() }, deleteCard: { _ in }, toasts: undo),
+                                 writer: writer)
+        #expect(undo.current?.message == L10n.Me.Actions.restored)
+    }
+
+    // MARK: §8 — a picture put in a story shows on iOS
+
+    @Test func theIslandShowsTheEmulatorsPicturesAndProductionStaysHttpsOnly() throws {
+        let html = try String(contentsOf: try #require(Bundle.main.url(forResource: "editor", withExtension: "html")), encoding: .utf8)
+        // Production: https, data and blob pictures, and nothing over plain http.
+        #expect(EditorPage.imageSources(for: .production).isEmpty)
+        let production = EditorPage.contentSecurityPolicy(for: html, imageSources: EditorPage.imageSources(for: .production))
+        #expect(production.contains("img-src https: data: blob:;"))
+        #expect(!production.contains("http://"))
+        // Against the emulators: the dev server's own pictures, under the name they are stored by
+        // (localhost) and the one the app asks (127.0.0.1) — that port only.
+        let emulator = AppConfig(backend: .emulator, origin: URL(string: "http://127.0.0.1:3201")!)
+        #expect(EditorPage.imageSources(for: emulator) == ["http://localhost:3201", "http://127.0.0.1:3201"])
+        let local = EditorPage.contentSecurityPolicy(for: html, imageSources: EditorPage.imageSources(for: emulator))
+        #expect(local.contains("img-src https: data: blob: http://localhost:3201 http://127.0.0.1:3201;"))
+        // Nothing else of the page's policy moves with it.
+        #expect(local.replacingOccurrences(of: " http://localhost:3201 http://127.0.0.1:3201", with: "") == production)
+        // The handler serves the page under the policy it was given.
+        let handler = EditorPageHandler(imageSources: EditorPage.imageSources(for: emulator))
+        let served = try #require(handler.resource(for: EditorPage.url(placeholder: "Write")))
+        #expect(served.headers["Content-Security-Policy"] == local)
     }
 }

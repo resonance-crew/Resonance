@@ -52,15 +52,27 @@ import SwiftUI
             })
     }
 
-    /// Brings the card back as it was: 「已還原」, or — a resonance that came back on its own — the
-    /// shell's notice; a failure says so (the trash is the way to try again). True when it came back.
+    /// What a restore says once the card is back.
+    enum Word: Equatable {
+        /// 「已還原」: the undo of a move just made, the card page's banner — the card is back where it was seen.
+        case restored
+        /// Who reads the card now (round 11 §7): the trash shelf's restore, whose cards no longer say
+        /// what restoring makes them — the toast is the only word of it (``RestoredAs``).
+        case audience
+    }
+
+    /// Brings the card back as it was: `says` (「已還原」, or who reads it now), or — a resonance that
+    /// came back on its own — the shell's notice; a failure says so (the trash is the way to try again).
+    /// True when it came back.
     @discardableResult
-    static func restore(_ cardId: String, answering: String?, session: SessionStore, writer: WriteLauncher) async -> Bool {
-        await restore(cardId, answering: answering, host: Host(session: session), writer: writer)
+    static func restore(_ cardId: String, answering: String?, says word: Word = .restored, session: SessionStore,
+                        writer: WriteLauncher) async -> Bool {
+        await restore(cardId, answering: answering, says: word, host: Host(session: session), writer: writer)
     }
 
     @discardableResult
-    static func restore(_ cardId: String, answering: String?, host: Host, writer: WriteLauncher) async -> Bool {
+    static func restore(_ cardId: String, answering: String?, says word: Word = .restored, host: Host,
+                        writer: WriteLauncher) async -> Bool {
         do {
             let restored = try await host.restoreCard(cardId)
             host.forget(cardId)
@@ -69,7 +81,7 @@ import SwiftUI
             if restored.droppedResonance {
                 host.restoredAlone()
             } else {
-                host.toasts.show(L10n.Me.Actions.restored)
+                host.toasts.show(word == .audience ? RestoredAs.of(restored.card).message : L10n.Me.Actions.restored)
             }
             return true
         } catch {
@@ -113,19 +125,33 @@ import SwiftUI
     }
 }
 
-/// What a card in the trash says under it (the web's TrashShelf caption): where it came from — a
-/// draft, a private card, or what restoring makes it (還原後公開: a restore never re-publishes in
-/// silence) — and when it goes (「{n} 天後永久刪除」, 「一天內永久刪除」).
-enum TrashCaption {
-    static func from(_ card: FeedCard) -> String {
-        guard card.publishedAt != nil else { return L10n.Me.TrashFrom.draft }
-        switch card.restoresTo {
-        case ._public?: return L10n.Me.TrashFrom.public
-        case .connections?: return L10n.Me.TrashFrom.connections
-        case ._private?, nil: return L10n.Me.TrashFrom.private
-        }
+/// Who reads a card the trash gave back (round 11 §7, the web's `restoredAs`), from the restore's
+/// answer — never from the shelf's row: a 私人卡 (private, or never published), a public card under
+/// its author's name, an anonymous public card, or one for connections only.
+enum RestoredAs: Equatable {
+    case `private`, `public`, anonymous, connections
+
+    static func of(_ card: FeedCard) -> RestoredAs {
+        guard card.publishedAt != nil, card.visibility != ._private else { return .private }
+        if card.visibility == .connections { return .connections }
+        return card.anonymous ? .anonymous : .public
     }
 
+    /// The toast: 「已還原為私人卡」, 「已還原為公開卡片」, 「已還原為匿名公開卡片」, 「已還原，僅連結的人看得到」.
+    var message: String {
+        switch self {
+        case .private: L10n.Me.Actions.restoredPrivate
+        case .public: L10n.Me.Actions.restoredPublic
+        case .anonymous: L10n.Me.Actions.restoredAnonymous
+        case .connections: L10n.Me.Actions.restoredConnections
+        }
+    }
+}
+
+/// What the trash says about its cards: when one goes (the card page's trash banner: 「{n} 天後永久刪除」,
+/// 「一天內永久刪除」), and whether an anonymous card is among them (the shelf's line over its cards). The
+/// shelf's cards themselves say nothing under them any more (round 11 §7).
+enum TrashCaption {
     /// When the card goes, from its purge date (nil when it says none).
     static func days(purgeAt: Date?, now: Date = .now) -> String? {
         guard let purgeAt else { return nil }
@@ -138,15 +164,10 @@ enum TrashCaption {
     static func holdsAnonymous(_ cards: [FeedCard]) -> Bool {
         cards.contains { $0.anonymous && $0.publishedAt != nil }
     }
-
-    static func text(_ card: FeedCard, now: Date = .now) -> String {
-        let from = from(card)
-        return days(purgeAt: card.purgeDate, now: now).map { "\(from) · \($0)" } ?? from
-    }
 }
 
-/// The ⋯ on a card in the trash (TrashActionsMenu.tsx): 還原 (it comes back as it was, saying
-/// 「已還原」) and 永久刪除 (asked first, in red: it can't be undone). The delete keeps to the
+/// The ⋯ on a card in the trash (TrashActionsMenu.tsx): 還原 (it comes back as it was, saying who
+/// reads it now: ``RestoredAs``) and 永久刪除 (asked first, in red: it can't be undone). The delete keeps to the
 /// trash (`onlyIfTrashed`): a card restored meanwhile, on another device, is not deleted — the
 /// shelf is read again and says so.
 struct TrashActionsMenu: View {
@@ -182,7 +203,7 @@ struct TrashActionsMenu: View {
         guard !busy else { return }
         busy = true
         defer { busy = false }
-        await TrashMoves.restore(cardId, answering: nil, session: session, writer: writer)
+        await TrashMoves.restore(cardId, answering: nil, says: .audience, session: session, writer: writer)
     }
 
     private func deleteForever() async {
