@@ -164,7 +164,9 @@ width as `MainTabView` measures it (`WindowLayout` in the `window` environment
 value, `LayoutClass` in DesignSystem `Components/Layout.swift`: compact < 600 ≤
 medium < 900 ≤ expanded, the writer split from 1200) — never `UIScreen` or the
 device. Medium and up: a full-width header with the four tabs centred in it
-(`OrganicTopTabs`, the pen at its end) instead of the tab bar; expanded: the
+(`OrganicTopTabs`, the pen at its end) instead of the tab bar — a pushed page's bar keeps that
+header's height, its row (←, title, actions) 6 under the row's middle (round 11 §6,
+`HeaderChrome.backRowDrop`), and a title's two lines never grow it; expanded: the
 bordered feed grid, two-pane Messages (`MessagesPanes`: the conversation at the
 foot of the Messages stack is the detail pane), the card page's contents rail
 (for a story with a table of contents only; the byline is under the title at every
