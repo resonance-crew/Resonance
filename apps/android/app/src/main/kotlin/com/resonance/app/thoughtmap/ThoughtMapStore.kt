@@ -119,6 +119,17 @@ class ThoughtMapStore(private val reading: ReadingApi) {
 
     /** `screen = world × s + (x, y)`; read while drawing, so a pan or pinch redraws without recomposing. */
     var camera by mutableStateOf(MapCamera(0.0, 0.0, 1.0))
+
+    /**
+     * The camera frames everything on the map — what 顯示全部 (👁) does — from the moment a visit
+     * shows the map, and frames it again whenever what the map shows changes size (the workspace's
+     * pane easing open, the divider let go, the tablet turned), a card opens in the pane beside it,
+     * or what is on it arrives (a read finishing after the map has its size), until the reader
+     * pans, pinches or zooms it themself; 顯示全部 hands the camera back to it (round 13, the web's
+     * `followFitRef`).
+     */
+    var framing = true
+        private set
     var viewportW = 0.0
         private set
     var viewportH = 0.0
@@ -140,7 +151,6 @@ class ThoughtMapStore(private val reading: ReadingApi) {
     var onOpen: (MapCard) -> Unit = {}
 
     private var service: ThoughtMapService? = null
-    private var fitted = false
     /**
      * When everything was last read, and the count of card changes it had seen then (the session
      * keeps this store between visits: see [open]).
@@ -226,17 +236,25 @@ class ThoughtMapStore(private val reading: ReadingApi) {
 
     /**
      * A visit. The session keeps this store between visits: one within [STALE_AFTER_MS] of the last
-     * read shows what it read at once (where the camera was), reading again only the cards the
-     * writer changed since; a later one reads everything again, behind what it shows. What a visit
-     * was in the middle of (a selection, the tray, an open editor) doesn't carry over.
+     * read shows what it read at once, reading again only the cards the writer changed since; a
+     * later one reads everything again, behind what it shows. What a visit was in the middle of (a
+     * selection, the tray, an open editor) doesn't carry over, nor where the last one left the
+     * camera: every visit opens framing everything ([framing]).
      */
     suspend fun open(uid: String, changes: Int, lastChange: Session.CardChange?, now: Long = System.currentTimeMillis()) {
+        visit()
+        run(refresh(loaded && service?.uid == uid, readAt, seenChanges, changes, lastChange, now), uid, changes)
+    }
+
+    /** What a visit starts from: nothing picked or being typed, and the camera framing everything on the map. */
+    internal fun visit() {
         selection = null
         trayOpen = false
         editingGroupId = null
         editingEdgeId = null
         touchesCancelled()
-        run(refresh(loaded && service?.uid == uid, readAt, seenChanges, changes, lastChange, now), uid, changes)
+        framing = true
+        frameIfFraming()
     }
 
     /** A card changed while the map is open (a card of it was being edited in the writer). */
@@ -271,35 +289,8 @@ class ThoughtMapStore(private val reading: ReadingApi) {
                 // A placed card older than the newest 40 is still on the map: read it by id.
                 val missing = m.nodes.map { it.cardId }.filter { byId[it] == null }
                 for (card in service.cards(missing)) byId[card.id] = card
-                applyCards(byId, c.resonated)
-                // A card that's gone (deleted, in the trash, an original I can no longer read) drops out of
-                // view; its place is kept, for a card that comes back (a restore).
-                nodes.clear()
-                nodeOrder.clear()
-                parked.clear()
-                for (n in m.nodes) {
-                    val node = MapNode(n.cardId, n.x, n.y, n.groupId)
-                    if (cards[n.cardId] != null) {
-                        nodes[n.cardId] = node
-                        nodeOrder.add(n.cardId)
-                    } else parked[n.cardId] = node
-                }
-                edges.clear()
-                edgeOrder.clear()
-                for (e in m.edges) {
-                    edges[e.id] = MapEdge(e.id, e.sourceCardId, e.targetCardId, e.label)
-                    edgeOrder.add(e.id)
-                }
-                groups.clear()
-                groupOrder.clear()
-                for (g in m.groups) {
-                    groups[g.id] = MapGroup(g.id, g.title, g.hue, g.x, g.y, g.w, g.h)
-                    groupOrder.add(g.id)
-                }
-                loaded = true
-                failed = false
+                place(m, byId, c.resonated)
                 readAt = started
-                fitIfReady()
             }
         } catch (e: CancellationException) {
             throw e
@@ -307,6 +298,40 @@ class ThoughtMapStore(private val reading: ReadingApi) {
             Log.w("ThoughtMap", "load failed", e)
             failed = !loaded
         }
+    }
+
+    /**
+     * The map as it was read, with its cards: what it shows from now on. A card that's gone
+     * (deleted, in the trash, an original I can no longer read) drops out of view; its place is
+     * kept, for a card that comes back (a restore). Still [framing], the camera frames it.
+     */
+    internal fun place(board: ThoughtMapService.Loaded, byId: Map<String, MapCard>, resonated: Set<String>) {
+        applyCards(byId, resonated)
+        nodes.clear()
+        nodeOrder.clear()
+        parked.clear()
+        for (n in board.nodes) {
+            val node = MapNode(n.cardId, n.x, n.y, n.groupId)
+            if (cards[n.cardId] != null) {
+                nodes[n.cardId] = node
+                nodeOrder.add(n.cardId)
+            } else parked[n.cardId] = node
+        }
+        edges.clear()
+        edgeOrder.clear()
+        for (e in board.edges) {
+            edges[e.id] = MapEdge(e.id, e.sourceCardId, e.targetCardId, e.label)
+            edgeOrder.add(e.id)
+        }
+        groups.clear()
+        groupOrder.clear()
+        for (g in board.groups) {
+            groups[g.id] = MapGroup(g.id, g.title, g.hue, g.x, g.y, g.w, g.h)
+            groupOrder.add(g.id)
+        }
+        loaded = true
+        failed = false
+        frameIfFraming()
     }
 
     /** Titles and tags may have changed in the writer: refresh the cards, keep the map. */
@@ -319,6 +344,7 @@ class ThoughtMapStore(private val reading: ReadingApi) {
             for (card in service.cards(missing)) byId[card.id] = card
             applyCards(byId, c.resonated)
             parkNodes(nodes, nodeOrder, parked, cards::containsKey)
+            frameIfFraming()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -354,6 +380,7 @@ class ThoughtMapStore(private val reading: ReadingApi) {
         }
         applyCards(byId, resonated)
         parkNodes(nodes, nodeOrder, parked, cards::containsKey)
+        frameIfFraming()
     }
 
     /**
@@ -380,17 +407,23 @@ class ThoughtMapStore(private val reading: ReadingApi) {
         this.resonated = resonated
     }
 
+    /** What the map shows changed size (laid out first, the pane easing open, the divider let go, a turn): still [framing], everything framed in it. */
     fun setViewport(w: Double, h: Double) {
         if (w == viewportW && h == viewportH) return
         viewportW = w
         viewportH = h
-        fitIfReady()
+        frameIfFraming()
     }
 
-    private fun fitIfReady() {
-        if (fitted || !loaded || viewportW <= 0 || viewportH <= 0) return
-        fitted = true
-        fit()
+    private fun frameIfFraming() {
+        if (!framing || !loaded || viewportW <= 0 || viewportH <= 0) return
+        val rects = nodeOrder.mapNotNull { nodeRect(it) } + groupOrder.mapNotNull { groups[it]?.rect }
+        camera = fitCamera(rects, viewportW, viewportH)
+    }
+
+    /** The reader moved the camera themself (a pan, a pinch, a zoom button): it stays where they put it. */
+    private fun takeCamera() {
+        framing = false
     }
 
     // Derived
@@ -428,12 +461,28 @@ class ThoughtMapStore(private val reading: ReadingApi) {
     // Camera
 
     fun zoom(factor: Double) {
+        takeCamera()
         camera = zoomAt(camera, viewportW / 2, viewportH / 2, factor)
     }
 
+    /** 顯示全部 (👁): everything framed, and kept framed as the map changes size, until the reader moves it again. */
     fun fit() {
-        val rects = nodeOrder.mapNotNull { nodeRect(it) } + groupOrder.mapNotNull { groups[it]?.rect }
-        camera = fitCamera(rects, viewportW, viewportH)
+        framing = true
+        frameIfFraming()
+    }
+
+    /**
+     * The map's width settled beside the workspace's pane (opened with it or shown again, another
+     * card opened in it, the divider let go). Still [framing]: everything framed in that width, and
+     * nothing to glide to (null). Once the reader has moved the camera: the camera that brings the
+     * pane's card [cardId] to the middle of the map, at the zoom it is at (null: none, or not on the map).
+     */
+    fun settledBesidePane(cardId: String?): MapCamera? {
+        if (framing) {
+            frameIfFraming()
+            return null
+        }
+        return cardId?.let(::centring)
     }
 
     /** The camera that shows card [id] in the middle of the map as it is laid out now, at the zoom it is at; null when the card isn't on the map. */
@@ -687,6 +736,7 @@ class ThoughtMapStore(private val reading: ReadingApi) {
         val prev = pinch
         if (prev != null) {
             val frame = pinchFrame() ?: return
+            takeCamera()
             val cam = zoomAt(camera, frame.cx, frame.cy, frame.dist / prev.dist)
             camera = cam.copy(x = cam.x + frame.cx - prev.cx, y = cam.y + frame.cy - prev.cy)
             pinch = frame
@@ -699,7 +749,11 @@ class ThoughtMapStore(private val reading: ReadingApi) {
         if (!moved && hypot(x - startX, y - startY) > 4) moved = true
         val w = screenToWorld(camera, x, y)
         when (current) {
-            is Drag.Pan -> camera = camera.copy(x = current.camX + (x - current.px), y = current.camY + (y - current.py))
+            is Drag.Pan -> {
+                // Past the 4px rule the finger is moving the map: the camera is the reader's.
+                if (moved) takeCamera()
+                camera = camera.copy(x = current.camX + (x - current.px), y = current.camY + (y - current.py))
+            }
             is Drag.NodeDrag -> {
                 if (!moved) return
                 val n = nodes[current.id] ?: return

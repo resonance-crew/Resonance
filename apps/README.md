@@ -60,7 +60,7 @@ native/fixtures/            golden files the web and both apps' tests read alike
   `Session.CardChange` / `takeWriterChange`), naming the card and the card it answers. A card page reads
   again only for a change that `concerns` it — its card, or a resonance to it; a change naming no card (a
   block) concerns every page. The thought map is kept by the session per account: a visit within 15
-  minutes shows it where it was left, re-reading only the card the writer changed.
+  minutes shows what it read at once, re-reading only the card the writer changed.
 - **Story links** (`StoryLink`): relative links and links on the site's host — the origin's, or the one it
   had before (`StoryLink.formerHosts` / `FORMER_HOSTS`; the exact name only, never a look-alike) — open in
   the app, other http(s) links in the in-app browser, `mailto:` as written; any other scheme is plain text.
@@ -700,3 +700,11 @@ window makes the status bar's glyphs light (`LightStatusGlyphs`); the paper's da
 card already anonymous (`publishingAudience`), a choice like any in the step (autosaved, still changeable); the offer
 is made once, so a restored writer keeps what it was left with. Back from that step is writing, as always. The card
 box's ⋯ keeps 編輯.
+
+Round 13 (2026-10-26), Android: the thought map — its own screen and the writer's map at the split — opens doing what
+👁 顯示全部 does, every card and region framed in what it shows (`ThoughtMapStore.framing`, the web's `followFitRef`):
+each visit (the session's store no longer opens where the last visit left the camera), a board read that lands after
+the map has its size (`place`), and, until the reader pans, pinches or zooms (`takeCamera`), every change of its size —
+the pane easing open, the divider let go, a turn — and each settling beside the pane (`settledBesidePane`), a card
+opened from the map included. Once the reader has moved it a settling glides the pane's card to the middle as before;
+顯示全部 hands the camera back to the rule.
