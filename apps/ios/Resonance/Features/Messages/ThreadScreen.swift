@@ -104,6 +104,31 @@ struct ThreadScreen: View {
                 lifetime.model = model
                 model.setOnScreen(visible && scenePhase == .active)
                 await model.load()
+                #if DEBUG
+                // `-threadReply YES` answers their newest message (the composer with a reply riding), and
+                // `-threadPicture <seconds>` opens the newest picture and closes it that long after (the
+                // thread under it checked on a device the simulator can't be tapped on).
+                let defaults = UserDefaults.standard
+                if defaults.bool(forKey: "threadReply") || defaults.double(forKey: "threadPicture") > 0 {
+                    while !model.threadReady { try? await Task.sleep(for: .milliseconds(100)) }
+                    try? await Task.sleep(for: .seconds(1))
+                    if defaults.bool(forKey: "threadReply"), let theirs = model.rows.last(where: { !model.isMine($0.message) }) {
+                        reply(theirs.message)
+                        // The keyboard up before anything else happens.
+                        try? await Task.sleep(for: .seconds(1.5))
+                    }
+                    let seconds = defaults.double(forKey: "threadPicture")
+                    if seconds > 0, let picture = model.rows.last(where: { $0.message.image != nil })?.message.image {
+                        openPicture(picture)
+                        try? await Task.sleep(for: .seconds(seconds))
+                        withTransaction(\.disablesAnimations, true) {
+                            viewing = nil
+                            keyboardHold.pictureClosed()
+                        }
+                        awaitKeyboard()
+                    }
+                }
+                #endif
             }
             // The conversation is read and listened to only while it is on show (its unread count, its pushes):
             // not under a page pushed over it, nor on a tab out of sight.
