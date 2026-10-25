@@ -153,11 +153,11 @@ public nonisolated struct HeaderChrome: Equatable, Sendable {
     /// What a pushed page's back arrow takes past the page pad (its 44 target hanging 13 into the gutter).
     public static let backReserve: CGFloat = 31
     /// How far a pushed page's row — its ←, title and actions — stands under the row's middle (round 11
-    /// §6): the owner found it high in the tall header. Measured on an iPad (13", status bar 32): the
-    /// home header's row is centred at 68 (its tabs and pen; the wordmark's ink 69.75, the wave's 70.5)
-    /// and a pushed page's ← and title at 68 / 68.75 — already on the same line, so the spec's 6 would
-    /// overshoot it; the difference in ink, 2, is what it moves. The bar's height and pen line stay.
-    public static let backRowDrop: CGFloat = 2
+    /// §6): the owner found it high in the tall header. 6 (the design review's call, matching Android's
+    /// approved look): on a 13" iPad ← moves from 68 to 74, ~3.75 under the home lockup's centre, the
+    /// title and its state's line ending 1 under the home tabs' pill, ← 36.5 over the pen line and its
+    /// 44 clearing it by 14.5. The bar's height and pen line stay.
+    public static let backRowDrop: CGFloat = 6
     /// How far under the header's pen line a tablet page's first content starts (round 5 E2).
     public static let contentGap: CGFloat = 32
     /// The same gap from the bar's foot, where a page's scrolled content begins (its line rests
@@ -891,7 +891,7 @@ public struct OrganicInlineBar<Leading: View, Trailing: View>: View {
             }
             .padding(.leading, controls.leading)
             .padding(.trailing, controls.trailing)
-            .frame(minHeight: 44)
+            .frame(minHeight: Self.phoneRow)
             .windowControlsInset($controls)
             .padding(.horizontal, 20)
             .padding(.leading, inset)
@@ -900,6 +900,9 @@ public struct OrganicInlineBar<Leading: View, Trailing: View>: View {
             .background { HeaderEdge(scrolled: scrolled, progress: progress) }
         }
     }
+
+    /// A phone's (and a compact window's) row: a finger tall.
+    static var phoneRow: CGFloat { 44 }
 
     /// The arrow's own 8pt pad sits in the gutter (margin-left −8 on the web).
     @ViewBuilder private var arrow: some View {
@@ -916,6 +919,8 @@ public struct OrganicInlineBar<Leading: View, Trailing: View>: View {
                       tracking: chrome != nil ? 0 : -0.02 * size,
                       lift: chrome != nil ? 0 : barTitleBesideArrow(title, size: size),
                       subtitle: subtitle, alignment: chrome != nil ? .center : .leading)
+                // Centred on the row and never taller than it: two lines must not grow the bar.
+                .frame(maxHeight: chrome != nil ? HeaderChrome.rowHeight : Self.phoneRow)
                 .layoutPriority(titleLeads ? 1 : 0)
         } else if !title.isEmpty {
             let size = barTitleSize(window)

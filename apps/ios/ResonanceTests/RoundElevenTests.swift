@@ -183,12 +183,14 @@ import Testing
 
     // MARK: §6 — a tablet's back bar sits a little lower
 
-    @Test func aTabletsBackRowMovesDownWhereTheHomeHeadersRowIs() {
-        // Measured on the 13" iPad: the home header's row at 68 (tabs, pen), the back bar's ← at 68 and its
-        // title's ink at 68.75 — the same line already, so 2 (the difference in ink to the wordmark's 69.75
-        // and the wave's 70.5) rather than the spec's 6, which would overshoot it.
-        #expect(HeaderChrome.backRowDrop == 2)
-        // ← and ✓ keep their whole 44 above the pen line: the row is 72, the glyphs centred in it.
-        #expect((HeaderChrome.rowHeight - 44) / 2 >= HeaderChrome.backRowDrop)
+    @Test func aTabletsBackRowMovesDown6AndKeepsItsTapAreaOverThePenLine() {
+        // The design review's 6 (Android's approved look): on the 13" iPad ← from 68 to 74, ~3.75 under the
+        // home lockup's centre, the title and its state's line ending 1 under the home tabs' pill.
+        #expect(HeaderChrome.backRowDrop == 6)
+        // ← and ✓ keep their whole 44 above the pen line: the row is 72, the glyphs centred in it, and the
+        // wave band (10) under the row; 14 of the row's own air is left under the 44 after the move.
+        #expect((HeaderChrome.rowHeight - 44) / 2 + HeaderEdge.height - HeaderEdge.lineDepth > HeaderChrome.backRowDrop)
+        // Two lines never grow a row: the split's step heading keeps its 38, level with the map's Leave.
+        #expect(PublishStep.headingRowHeight == 38)
     }
 }

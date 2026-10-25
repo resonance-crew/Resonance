@@ -133,11 +133,16 @@ struct PublishStep: View {
                 .padding(.leading, -13)
             BarTitles(model.stepTitle, font: AppFonts.heading(22), tracking: -0.02 * 22,
                       subtitle: WriteModel.SaveState.subtitle(model.saveState, help: model.saveStateHelp))
+                // Centred on the row, never growing it: the arrow stays level with the Leave over the map.
+                .frame(maxHeight: Self.headingRowHeight)
                 .layoutPriority(1)
             Spacer(minLength: 8)
         }
-        .frame(minHeight: 38)
+        .frame(height: Self.headingRowHeight)
     }
+
+    /// The split's heading row (← 繼續寫 and the step's name): level with the Leave floating over the map.
+    static let headingRowHeight: CGFloat = 38
 
     // MARK: 1 — the mirror moment
 
