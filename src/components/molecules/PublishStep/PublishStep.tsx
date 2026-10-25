@@ -465,7 +465,9 @@ export function PublishStep({
         )}
       </fieldset>
 
-      <Divider seed={47} spacing={2} />
+      <div className={styles.footRule}>
+        <Divider seed={47} spacing={2} />
+      </div>
 
       {/* The foot: the way out tonal, the verb solid and rightmost (on a phone, the verb across the top);
           why the last try failed, and what it waits for, right above it. */}

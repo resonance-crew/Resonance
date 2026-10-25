@@ -46,13 +46,19 @@
 }
 
 /* Two sizes on one line looked odd (round 11 §5): the state is the title's
-   second line, 12 muted, its height kept while it is empty. */
+   second line, 12 muted, its height kept while it is empty — the row never
+   grows — and the title, alone meanwhile, stands down onto the arrow's line,
+   gliding up when the state comes. */
 .subtitle {
   display: flex;
   min-width: 0;
   min-height: calc(12px * 1.4);
   margin-top: 1px;
   --save-state-size: 12px;
+}
+
+.titles:has(.subtitle > [role='status']:empty) .title {
+  transform: translateY(9px);
 }
 
 .title {
@@ -68,6 +74,13 @@
   color: var(--color-text);
   white-space: nowrap;
   text-overflow: ellipsis;
+  transition: transform 160ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .title {
+    transition: none;
+  }
 }
 
 /* Named from script (the writer's publish step): the heading says where the

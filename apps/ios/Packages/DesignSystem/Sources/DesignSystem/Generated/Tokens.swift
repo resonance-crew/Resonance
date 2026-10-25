@@ -224,7 +224,7 @@ public nonisolated enum Tokens {
     /// --writer-title-gap
     public static let writerTitleGap: CGFloat = 32
     /// --writer-title-gap-compact
-    public static let writerTitleGapCompact: CGFloat = 24
+    public static let writerTitleGapCompact: CGFloat = 32
     /// --publish-section-gap
     public static let publishSectionGap: CGFloat = 48
     /// --publish-section-gap-compact

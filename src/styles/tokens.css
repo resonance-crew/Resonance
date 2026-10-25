@@ -177,8 +177,8 @@
   /* The writer and its publish step (round 11 §4): the bar's pen line → the
      writer's title is --story-head-gap, as the card page's; on a tablet the
      publish step's preview card stands --story-head-cover-gap under it. */
-  --writer-title-gap: 32px;        /* the writer's title → its story */
-  --writer-title-gap-compact: 24px;
+  --writer-title-gap: 32px;        /* the writer's title → its story (well over a paragraph's gap) */
+  --writer-title-gap-compact: 32px;
   --publish-section-gap: 48px;     /* between the publish step's sections */
   --publish-section-gap-compact: 40px;
   --publish-label-gap: 12px;       /* a section's label → its control */

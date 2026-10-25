@@ -53,6 +53,11 @@
   --save-state-size: 12px;
 }
 
+/* Alone (no state yet), the name stands on the arrow's line, as the bar's does. */
+.headingTitles:has(.headingState > [role='status']:empty) .heading {
+  transform: translateY(9px);
+}
+
 .heading {
   min-width: 0;
   margin: 0;
@@ -61,6 +66,13 @@
   font-weight: 700;
   line-height: 1.2;
   color: var(--color-text);
+  transition: transform 160ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heading {
+    transition: none;
+  }
 }
 
 /* Named from script as the step opens: it says where the focus is, and is no control. */
@@ -82,6 +94,14 @@
   display: grid;
   grid-template-rows: 1fr;
   transition: grid-template-rows 200ms ease, margin 200ms ease;
+}
+
+/* On a phone the echo is mostly two lines: the loader's one line keeps that
+   room, so the preview under it doesn't move when the words come. */
+@media (max-width: 640px) {
+  .insightWrap:not([data-collapsed]) {
+    min-height: calc(14px * 1.7 * 2);
+  }
 }
 
 .insightWrap[data-collapsed] {
@@ -215,6 +235,12 @@
 
 .resonance:empty {
   display: none;
+}
+
+/* The rule over the foot stands in the middle of one section gap, not with a
+   gap of its own on each side: the verb stays near the choice that names it. */
+.footRule {
+  margin-block: calc(-0.5 * var(--section-gap));
 }
 
 .footBlock {

@@ -228,7 +228,7 @@ object Tokens {
     /** --writer-title-gap */
     const val WriterTitleGap = 32f
     /** --writer-title-gap-compact */
-    const val WriterTitleGapCompact = 24f
+    const val WriterTitleGapCompact = 32f
     /** --publish-section-gap */
     const val PublishSectionGap = 48f
     /** --publish-section-gap-compact */
