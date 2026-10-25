@@ -13,6 +13,8 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -58,6 +60,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
@@ -180,8 +184,8 @@ internal class MessageMenu(val row: ThreadRow, val bounds: Rect, val link: Strin
 /**
  * Where the floating composer stands (round 9 §4): the room it takes at the screen's foot — the
  * navigation bar or the keyboard ([insets]), [ComposerGap] of air, then the capsule as drawn
- * ([foot]) with what rides over it and, over those rows, the 24 the foot paper's fade lies in
- * (round 10 §3.2) — read while laying out, so the thread follows the keyboard frame by frame and the
+ * ([foot]) with what rides over it and, over those rows, the 6 the foot paper's fade starts in
+ * (round 10 §3.2, round 11 §3) — read while laying out, so the thread follows the keyboard frame by frame and the
  * composer as it grows, without composing again.
  */
 @Stable
@@ -779,6 +783,35 @@ private fun Modifier.overlapAbove(by: Dp): Modifier = layout { measurable, const
     val placeable = measurable.measure(constraints)
     val up = by.roundToPx()
     layout(placeable.width, (placeable.height - up).coerceAtLeast(0)) { placeable.place(0, -up) }
+}
+
+// The thread's blank
+
+/**
+ * A tap on the thread's blank (round 11 §2: between bubbles, beside them, above the first, the
+ * list's empty room) — one no message took: a bubble's own tap, its long-press and its links take
+ * the touch as it goes down, so they are never blank; a drag (scrolling, swipe-to-reply) is never a
+ * tap, nor a press held past the long-press time. Seen in the final pass, after everything under
+ * the finger had it; nothing is consumed. iOS's tap on the thread.
+ */
+internal fun Modifier.onThreadBlankTap(onTap: () -> Unit): Modifier = pointerInput(Unit) {
+    awaitEachGesture {
+        // What lies under the finger has had the touch first, and taken it if it was theirs.
+        val down = awaitFirstDown(pass = PointerEventPass.Final)
+        val tapped = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+            var up = false
+            while (true) {
+                val change = awaitPointerEvent(PointerEventPass.Final).changes.firstOrNull { it.id == down.id } ?: break
+                if (change.isConsumed || (change.position - down.position).getDistance() > viewConfiguration.touchSlop) break
+                if (!change.pressed) {
+                    up = true
+                    break
+                }
+            }
+            up
+        }
+        if (tapped == true) onTap()
+    }
 }
 
 // Swipe to reply

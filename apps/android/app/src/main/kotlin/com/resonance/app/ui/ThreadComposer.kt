@@ -44,7 +44,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.resonance.design.AppFonts
 import com.resonance.design.ComposerCapsule
-import com.resonance.design.ComposerFade
+import com.resonance.design.ComposerRowsLead
 import com.resonance.design.ComposerHeight
 import com.resonance.design.ComposerRow
 import com.resonance.design.ComposerTile
@@ -54,6 +54,7 @@ import com.resonance.design.OrganicMenuFrom
 import com.resonance.design.OrganicMenuItem
 import com.resonance.design.ReplyRule
 import com.resonance.design.SketchLoader
+import com.resonance.design.blocksTouches
 import com.resonance.design.fieldHintStyle
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
@@ -65,10 +66,12 @@ import com.resonance.kit.l10n.L10n
  * start (the organic menu of what can go with it: 圖片 · 卡片, one or the other), the field, and Send
  * as its end segment — and above it, 6 over the capsule, what rides with the message as rows in the
  * reply's style ([ComposerRows], round 10 §3.4): the reply it carries, the note being answered, the
- * card or picture attached, why the last one didn't go. With rows riding the foot is [ComposerFade]
- * taller over them: the fade of the foot's paper ([ComposerBacking]) lies there, so the paper is
- * solid behind every row. The capsule keeps its geometry whatever rides with it. Sending never holds
- * the composer — a message goes to the outbox and the field is empty for the next one, with its
+ * card or picture attached, why the last one didn't go. With rows riding the foot starts
+ * [ComposerRowsLead] over them (round 11 §3): the foot paper's 12 fade ([ComposerBacking]) starts
+ * there and ends where the topmost row's ink starts, so the paper is solid behind every row. The
+ * rows and the capsule take their own touches (a tap on them is never the paper's, which puts the
+ * keyboard away). The capsule keeps its geometry whatever rides with it. Sending never holds the
+ * composer — a message goes to the outbox and the field is empty for the next one, with its
  * keyboard still up.
  */
 @Composable
@@ -83,8 +86,8 @@ internal fun Composer(
     var focused by remember { mutableStateOf(false) }
     Column(modifier.fillMaxWidth()) {
         if (rides(model)) {
-            Spacer(Modifier.height(ComposerFade))
-            ComposerRows(model)
+            Spacer(Modifier.height(ComposerRowsLead))
+            ComposerRows(model, Modifier.blocksTouches())
             Spacer(Modifier.height(ROWS_GAP))
         }
         ComposerCapsule(
@@ -93,6 +96,7 @@ internal fun Composer(
             onSend = { model.send() },
             focused = { focused },
             textStyle = ComposerText,
+            modifier = Modifier.blocksTouches(),
             leading = { AttachMenu(onPickImage, onPickCard) },
         ) { vertical ->
             Box(Modifier.fillMaxWidth().padding(vertical = vertical)) {
@@ -154,8 +158,8 @@ internal fun ridingRows(reply: Boolean, note: Boolean, card: Boolean, picture: B
  * didn't go is a line of its own under them, at the rows' inset.
  */
 @Composable
-private fun ComposerRows(model: ThreadModel) {
-    Column(Modifier.fillMaxWidth()) {
+private fun ComposerRows(model: ThreadModel, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth()) {
         val reply = model.replyingTo
         val note = model.noteRef
         val card = model.pendingCard

@@ -2,6 +2,7 @@ package com.resonance.design
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -12,7 +13,8 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -25,7 +27,6 @@ import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -40,8 +41,9 @@ import java.io.File
  * A bar's glyphs at work and at rest (round 8 §2.1, §9.1): the writer's ✓ is the bar's own icon
  * button — faded and still while there is nothing to finish, the small button loop in its glyph's
  * place (never the big loader) while a first save runs, its size kept, busy to TalkBack; the card's
- * share at work keeps its size and says busy too; and the writer's bar says its save state after its
- * title, a polite live region, the first thing to go when the row is too narrow.
+ * share at work keeps its size and says busy too; and the writer's bar says its save state as its
+ * title's second line (round 11 §5), a polite live region, the title alone on the row's line until it
+ * comes; a tablet's back bar sets its row 6 lower (round 11 §6).
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -98,7 +100,7 @@ class BarActionsTest {
         compose.onNodeWithContentDescription(L10n.Home.moreLoading).assertDoesNotExist()
     }
 
-    @Test fun theBarSaysItsSaveStateAfterItsTitleAsAPoliteLiveRegion() {
+    @Test fun theBarSaysItsSaveStateUnderItsTitleAsAPoliteLiveRegion() {
         var status by mutableStateOf<BarStatus?>(null)
         compose.setContent {
             Box(Modifier.width(390.dp)) {
@@ -114,21 +116,54 @@ class BarActionsTest {
         compose.onNodeWithText("未儲存").assertIsDisplayed()
     }
 
-    @Test fun theSaveStateIsTheFirstToGoWhenTheRowIsTooNarrow() {
+    @Test fun theSaveStateIsTheTitlesSecondLineAndTheTitleStandsOnTheRowUntilItComes() {
+        var status by mutableStateOf<BarStatus?>(null)
         compose.setContent {
-            Box(Modifier.width(150.dp).testTag("bar")) {
-                OrganicInlineBar(L10n.App.Nav.back, {}, title = L10n.Write.PublishPanel.updateTitle, hasStatus = true, status = BarStatus(L10n.Write.Status.savedLive))
+            Box(Modifier.width(390.dp).testTag("bar")) {
+                OrganicInlineBar(L10n.App.Nav.back, {}, title = L10n.Write.title, hasStatus = true, status = status)
             }
         }
-        compose.onNodeWithText(L10n.Write.PublishPanel.updateTitle).assertIsDisplayed()
-        // Not drawn — still the live region it was, for TalkBack.
-        compose.onNodeWithText("修改已暫存").assertIsNotDisplayed()
+        val bar = compose.onNodeWithTag("bar").getBoundsInRoot()
+        val back = compose.onNodeWithContentDescription(L10n.App.Nav.back).getBoundsInRoot()
+        val alone = compose.onNodeWithText(L10n.Write.title).getBoundsInRoot()
+        // Alone, the title stands on the row's line: its middle on the arrow's.
+        assertEquals(((back.top + back.bottom) / 2).value, ((alone.top + alone.bottom) / 2).value, 1.5f)
+        compose.runOnIdle { status = BarStatus(L10n.Write.Status.saved) }
+        compose.mainClock.advanceTimeBy(400)
+        compose.waitForIdle()
+        val title = compose.onNodeWithText(L10n.Write.title).getBoundsInRoot()
+        val state = compose.onNodeWithText("已儲存").getBoundsInRoot()
+        // Under the title, start-aligned on a phone, the two lines together on the arrow's middle — and the bar never grew.
+        assertTrue(state.top >= title.bottom)
+        assertEquals(title.left.value, state.left.value, 1f)
+        assertEquals(((back.top + back.bottom) / 2).value, ((title.top + state.bottom) / 2).value, 1.5f)
+        assertTrue(title.top < alone.top)
+        assertEquals((bar.bottom - bar.top).value, compose.onNodeWithTag("bar").getBoundsInRoot().let { it.bottom - it.top }.value, 0.5f)
     }
 
-    @Test fun aStateFitsAfterTheTitleOnlyWhole() {
-        assertTrue(statusFits(title = 100, status = 60, gap = 8, room = 168))
-        assertFalse(statusFits(title = 100, status = 60, gap = 8, room = 167))
-        // Nothing to say never takes room.
-        assertFalse(statusFits(title = 10, status = 0, gap = 8, room = 400))
+    @Test fun onATabletTheSaveStateIsCentredUnderTheCentredTitleAndTheRowSitsLower() {
+        compose.setContent {
+            CompositionLocalProvider(
+                LocalHeaderChrome provides HeaderChrome(width = 800.dp, groupWidth = 0.dp, pad = 32.dp, labels = false, tabs = false),
+                LocalInlineBarHeight provides TopBarRow,
+            ) {
+                Box(Modifier.width(800.dp)) {
+                    OrganicInlineBar(L10n.App.Nav.back, {}, title = L10n.Write.title, hasStatus = true, status = BarStatus(L10n.Write.Status.saved))
+                }
+            }
+        }
+        val title = compose.onNodeWithText(L10n.Write.title).getBoundsInRoot()
+        val state = compose.onNodeWithText("已儲存").getBoundsInRoot()
+        assertEquals(((title.left + title.right) / 2).value, ((state.left + state.right) / 2).value, 1f)
+        // The arrow 6 under the 72 row's middle (round 11 §6), its 48 still clear of the bar's foot.
+        val back = compose.onNodeWithContentDescription(L10n.App.Nav.back).getBoundsInRoot()
+        assertEquals(TopBarRow.value / 2 + TabletBarRowDrop.value, ((back.top + back.bottom) / 2).value, 1f)
+        assertTrue(back.bottom.value <= TopBarRow.value)
+    }
+
+    @Test fun aTabletRowPieceDropsButNeverPastTheRowsFoot() {
+        assertEquals(12 + 6, tabletRowTop(row = 72, height = 48, drop = 6))
+        assertEquals(24, tabletRowTop(row = 72, height = 48, drop = 30))
+        assertEquals(0, tabletRowTop(row = 40, height = 48, drop = 6))
     }
 }

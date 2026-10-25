@@ -408,9 +408,9 @@ private fun EmptyTrashDialog(state: Emptying, set: (Emptying?) -> Unit) {
 /**
  * The trash shelf (TrashShelf.tsx): what I deleted, the latest in first — never one past its days,
  * which is gone to me too. Over it how long cards wait (and, while an anonymous card is here, that
- * its notes went with it) with 清空垃圾桶; each card says where it came from and when it goes
- * ([TrashWords]) and wears the trash's ⋯ (還原 · 永久刪除). Every card opens its page, with its
- * trash banner ([trashTap]).
+ * its notes went with it) with 清空垃圾桶; the cards alone, no line under them (round 11 §7: restoring
+ * one says who reads it now, [restoredToast]), each wearing the trash's ⋯ (還原 · 永久刪除). Every card
+ * opens its page, with its trash banner ([trashTap]).
  * Empty, the trash's own empty state.
  */
 private fun LazyListScope.trashShelf(cards: List<FeedCard>, open: (Route) -> Unit, layout: CardListLayout, air: CardBoxAir, onEmpty: () -> Unit) {
@@ -428,9 +428,6 @@ private fun LazyListScope.trashShelf(cards: List<FeedCard>, open: (Route) -> Uni
     item { TrashHeader(anonymousHere = shown.any { it.anonymous && it.publishedAt != null }, inset = layout.headerInset, air = air, grid = layout.isGrid, onEmpty = onEmpty) }
     val tap: (FeedCard) -> Route = ::trashTap
     val palettes = cardFamilies(shown)
-    val caption: @Composable (FeedCard) -> Unit = { card ->
-        BasicText(TrashWords.caption(card, now), style = AppFonts.body(12.5f, lineHeight = 1.4f, color = Tokens.TextMuted), modifier = Modifier.padding(top = 8.dp))
-    }
     if (layout.isGrid) return borderedCards(
         shown, open, null, false, layout, tap, keyPrefix = "trash:",
         overlay = { card, i ->
@@ -439,18 +436,14 @@ private fun LazyListScope.trashShelf(cards: List<FeedCard>, open: (Route) -> Uni
                 TrashActionsMenu(TrashRef(card.id, card.title), seed = hue, hue = hue)
             }
         },
-        caption = caption,
     )
     itemsIndexed(shown, key = { _, c -> "trash:${c.id}" }) { i, card ->
         val hue = CardPalette.of(palettes[i]).hue
-        Column(Modifier.fillMaxWidth()) {
-            Box {
-                StoryCard(card.story(), i, i == shown.lastIndex, Modifier.plainClickable { open(tap(card)) }, inset = layout.inset, palette = palettes[i])
-                Box(Modifier.align(Alignment.TopEnd).padding(top = 14.dp - 3.dp, end = layout.inset - 4.dp - 3.dp)) {
-                    TrashActionsMenu(TrashRef(card.id, card.title), seed = hue, hue = hue)
-                }
+        Box(Modifier.fillMaxWidth()) {
+            StoryCard(card.story(), i, i == shown.lastIndex, Modifier.plainClickable { open(tap(card)) }, inset = layout.inset, palette = palettes[i])
+            Box(Modifier.align(Alignment.TopEnd).padding(top = 14.dp - 3.dp, end = layout.inset - 4.dp - 3.dp)) {
+                TrashActionsMenu(TrashRef(card.id, card.title), seed = hue, hue = hue)
             }
-            Box(Modifier.padding(start = layout.inset, end = layout.inset, bottom = 8.dp)) { caption(card) }
         }
     }
 }

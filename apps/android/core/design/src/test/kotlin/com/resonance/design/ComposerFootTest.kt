@@ -20,6 +20,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.resonance.design.generated.IconName
@@ -86,25 +87,30 @@ class ComposerFootTest {
 
     @Test fun theFadeLetsATapThroughAndTheSolidPaperTakesIt() {
         var taps = 0
+        var paperTaps = 0
         compose.setContent {
             Box(Modifier.size(360.dp, 200.dp)) {
                 // The thread under the foot.
                 Box(Modifier.fillMaxSize().testTag("thread").clickable { taps++ })
                 Column(Modifier.fillMaxSize()) {
                     Box(Modifier.height(100.dp))
-                    ComposerBacking(Modifier.height(100.dp).width(360.dp).testTag("backing"))
+                    ComposerBacking(Modifier.height(100.dp).width(360.dp).testTag("backing"), onTap = { paperTaps++ })
                 }
             }
         }
-        // In the fade (the backing's top 24): through to the thread.
-        compose.onNodeWithTag("backing", useUnmergedTree = true).performTouchInput { click(Offset(centerX, 12.dp.toPx())) }
-        compose.runOnIdle { assertEquals(1, taps) }
-        // On the solid paper: taken, the thread never hears of it.
-        compose.onNodeWithTag("backing", useUnmergedTree = true).performTouchInput { click(Offset(centerX, 70.dp.toPx())) }
-        compose.runOnIdle { assertEquals(1, taps) }
+        // In the fade (the backing's top 12, round 11 §3): through to the thread.
+        compose.onNodeWithTag("backing", useUnmergedTree = true).performTouchInput { click(Offset(centerX, 6.dp.toPx())) }
+        compose.runOnIdle { assertEquals(1, taps); assertEquals(0, paperTaps) }
+        // On the solid paper from 12 down: taken — the thread never hears of it — and a tap on the blank (the keyboard goes).
+        compose.onNodeWithTag("backing", useUnmergedTree = true).performTouchInput { click(Offset(centerX, 16.dp.toPx())) }
+        compose.runOnIdle { assertEquals(1, taps); assertEquals(1, paperTaps) }
+        // A drag over the paper is taken too, but is no tap.
+        compose.onNodeWithTag("backing", useUnmergedTree = true).performTouchInput { swipeUp(startY = 90.dp.toPx(), endY = 30.dp.toPx()) }
+        compose.runOnIdle { assertEquals(1, taps); assertEquals(1, paperTaps) }
         // Over the foot altogether: the thread as ever.
         compose.onNodeWithTag("thread").performTouchInput { click(Offset(centerX, 50.dp.toPx())) }
         compose.runOnIdle { assertEquals(2, taps) }
-        assertEquals(24.dp, ComposerFade)
+        assertEquals(12.dp, ComposerFade)
+        assertEquals(6.dp, ComposerRowsLead)
     }
 }

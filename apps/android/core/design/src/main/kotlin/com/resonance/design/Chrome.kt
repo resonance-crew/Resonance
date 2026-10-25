@@ -13,8 +13,6 @@ import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.layout.AlignmentLine
-import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.platform.LocalContext
@@ -45,6 +43,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.draw.scale
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -55,6 +55,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -87,6 +88,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -618,8 +620,9 @@ fun OrganicInlineBar(
     /** [title] is the page's own (a card's, risen from the article): a tablet's header sets it a step larger and bold ([TabletPageTitle]). */
     pageTitle: Boolean = false,
     /**
-     * The bar says a save state after its [title] (the writer's, round 8 §2.1): [status], or nothing
-     * yet — its live region stands from the start, so TalkBack hears the first word too.
+     * The bar says a save state under its [title] (the writer's, round 8 §2.1, round 11 §5): the
+     * title's subtitle — [status], or nothing yet, its line kept so the title never moves, and its
+     * live region standing from the start, so TalkBack hears the first word too.
      */
     hasStatus: Boolean = false,
     /** The save state's word ([hasStatus]); null: nothing to say now. */
@@ -667,7 +670,7 @@ fun OrganicInlineBar(
             if (title != null) {
                 Spacer(Modifier.width(4.dp))
                 // Level with the arrow: no brand-place drop here (barTitleDrop).
-                if (hasStatus) TitleWithStatus(titleText, status, Modifier.weight(1f)) else titleText(Modifier.weight(1f))
+                if (hasStatus) TitleWithStatus(titleText, status, centred = false, Modifier.weight(1f)) else titleText(Modifier.weight(1f))
             } else {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     leading()
@@ -681,11 +684,13 @@ fun OrganicInlineBar(
     // The arrow's hit box hangs 16 into the pad, the last action's 12 (their glyphs sit on it).
     val startPad = chrome.pad - 16.dp
     val endPad = chrome.pad - 12.dp
+    // A pushed page's whole row sits a little under the bar's middle (round 11 §6), the bar's height and pen line kept.
+    val drop = if (chrome.tabs) 0.dp else TabletBarRowDrop
     Layout(
         contents = listOf(
             { Row(verticalAlignment = Alignment.CenterVertically) { back(); leading() } },
             {
-                if (title != null) { if (hasStatus) TitleWithStatus(titleText, status, Modifier) else titleText(Modifier) }
+                if (title != null) { if (hasStatus) TitleWithStatus(titleText, status, centred = true, Modifier) else titleText(Modifier) }
                 else if (centre != null) Row(verticalAlignment = Alignment.CenterVertically, content = centre)
             },
             { Row(verticalAlignment = Alignment.CenterVertically, content = trailing) },
@@ -696,6 +701,7 @@ fun OrganicInlineBar(
         val h = constraints.maxHeight
         val sp = startPad.roundToPx()
         val ep = endPad.roundToPx()
+        val dy = drop.roundToPx()
         val loose = Constraints(maxHeight = h)
         val endP = end.firstOrNull()?.measure(loose.copy(maxWidth = (w - sp - ep).coerceAtLeast(0)))
         val endW = endP?.width ?: 0
@@ -704,12 +710,29 @@ fun OrganicInlineBar(
         val room = InlineBarCentre.room(w / density, (sp + leadW) / density, (ep + endW) / density)
         val midP = if (room != null) middle.firstOrNull()?.measure(loose.copy(maxWidth = (room * density).toInt())) else null
         layout(w, h) {
-            leadP?.place(sp, (h - leadP.height) / 2)
-            endP?.place(w - ep - endW, (h - endP.height) / 2)
-            midP?.place((w - midP.width) / 2, (h - midP.height) / 2)
+            leadP?.place(sp, tabletRowTop(h, leadP.height, dy))
+            endP?.place(w - ep - endW, tabletRowTop(h, endP.height, dy))
+            midP?.place((w - midP.width) / 2, tabletRowTop(h, midP.height, dy))
         }
     }
 }
+
+/**
+ * How far a tablet's back bar — the header row of a pushed page (the writer and its publish step,
+ * a card, a person's settings, a thread filling the window) — sets its row's content (←, the title
+ * with its save state, share, ⋯, ✓) under the middle of its [TopBarRow] (round 11 §6): all of it
+ * together, the bar's height and pen line unchanged. The tall bar matches the home header's; with
+ * the row centred in it, a back arrow and a 17 title — far lighter than the home header's 44 tab
+ * group and wordmark — read as floating high in it. A phone's bar doesn't move; a tab root's header
+ * doesn't either.
+ */
+val TabletBarRowDrop = 6.dp
+
+/**
+ * Where a tablet bar's piece [height] tall goes in its row [row] tall: centred, then [drop] lower —
+ * never so low that it reaches into the bar's foot (a 48 tap box keeps clear of the pen line).
+ */
+fun tabletRowTop(row: Int, height: Int, drop: Int): Int = ((row - height) / 2 + drop).coerceAtMost((row - height).coerceAtLeast(0))
 
 /**
  * How wide a pushed page's context may be in the middle of a tablet's header (round 5, part C),
@@ -735,62 +758,61 @@ object InlineBarCentre {
 data class BarStatus(val text: String, val failed: Boolean = false)
 
 /**
- * A save state ([BarStatus]): 13 in the muted ink — the error ink when it [BarStatus.failed] — one
- * line, a polite live region, so TalkBack hears each change; empty while there is nothing to say
- * (the region stays, and hears the first word too). In a bar after its title ([OrganicInlineBar]'s
- * `status`), and where there is no bar (the writer's split) before its ✓ or at the end of its step's heading.
+ * A save state ([BarStatus]): [size] (13; the title's subtitle's 12, [SaveStateSubtitleSize]) in the
+ * muted ink — the error ink when it [BarStatus.failed] — one line, ellipsized, a polite live region,
+ * so TalkBack hears each change; empty while there is nothing to say, its line's height kept (the
+ * region stays, and hears the first word too). Under a bar's title ([OrganicInlineBar]'s `status`)
+ * and under the step's heading at the writer's split; before the floating ✓ there.
  */
 @Composable
-fun SaveStateText(status: BarStatus?, modifier: Modifier = Modifier) {
+fun SaveStateText(status: BarStatus?, modifier: Modifier = Modifier, size: Float = SaveStateSize) {
+    val style = AppFonts.body(size, lineHeight = SAVE_STATE_LEADING, color = if (status?.failed == true) Mixes.Danger else Tokens.TextMuted)
     BasicText(
         status?.text.orEmpty(),
         maxLines = 1,
         softWrap = false,
-        style = AppFonts.body(SaveStateSize, lineHeight = 1.3f, color = if (status?.failed == true) Mixes.Danger else Tokens.TextMuted),
-        modifier = modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        overflow = TextOverflow.Ellipsis,
+        style = style,
+        modifier = modifier.heightIn(min = lineHeightOf(style)).semantics { liveRegion = LiveRegionMode.Polite },
     )
 }
 
-/** A save state's size (13 px/pt on every platform). */
+/** A save state's size where it stands alone (before the split's ✓): 13 px/pt on every platform. */
 const val SaveStateSize = 13f
 
+/** A save state's size as the title's subtitle (round 11 §5): 12. */
+const val SaveStateSubtitleSize = 12f
+
+/** A save state's line: 1.4 (the web's). */
+private const val SAVE_STATE_LEADING = 1.4f
+
 /**
- * A bar's title with its save state after it on the same line, their baselines level: the state
- * gives way first — when the two don't fit, it goes ([statusFits]) and the title keeps the whole
- * room, truncated only once it alone doesn't fit.
+ * A title with its save state as its subtitle (round 11 §5, iOS's `navigationSubtitle`): the title
+ * alone on the first line, the state under it at 12, [SubtitleGap] apart — start-aligned under a
+ * phone's start-aligned title, [centred] under a tablet's centred one. The two lines together are
+ * one block, centred on the bar's row by whoever places it (the same middle as ← and ✓). The
+ * second line keeps its height while it says nothing (before the first save, a live card not yet
+ * edited), so the bar never grows; meanwhile the title, alone, stands down on the row's own line
+ * ([aloneDrop]: half the second line), gliding up (160 ms ease-out; at once with the system's
+ * animations off) as the state comes. Each line ellipsizes on its own.
  */
 @Composable
-private fun TitleWithStatus(title: @Composable (Modifier) -> Unit, status: BarStatus?, modifier: Modifier) {
-    Layout(contents = listOf({ title(Modifier) }, { SaveStateText(status) }), modifier) { (t, s), constraints ->
-        val gap = StatusGap.roundToPx()
-        val titleM = t.first()
-        val statusP = s.first().measure(Constraints(maxHeight = constraints.maxHeight))
-        val room = constraints.maxWidth
-        val fits = statusFits(titleM.maxIntrinsicWidth(constraints.maxHeight), statusP.width, gap, room)
-        val titleP = titleM.measure(Constraints(maxWidth = if (fits) room - gap - statusP.width else room, maxHeight = constraints.maxHeight))
-        val width = if (fits) titleP.width + gap + statusP.width else titleP.width
-        val height = max(titleP.height, statusP.height)
-        layout(if (constraints.hasFixedWidth) constraints.maxWidth else width, height) {
-            val titleY = (height - titleP.height) / 2
-            titleP.place(0, titleY)
-            if (fits) {
-                val tb = titleP[FirstBaseline]
-                val sb = statusP[FirstBaseline]
-                val y = if (tb == AlignmentLine.Unspecified || sb == AlignmentLine.Unspecified) (height - statusP.height) / 2 else titleY + tb - sb
-                statusP.place(titleP.width + gap, y)
-            }
-        }
+fun TitleWithStatus(title: @Composable (Modifier) -> Unit, status: BarStatus?, centred: Boolean, modifier: Modifier = Modifier) {
+    val second = lineHeightOf(AppFonts.body(SaveStateSubtitleSize, lineHeight = SAVE_STATE_LEADING))
+    val still = LocalContext.current.prefersReducedMotion()
+    val alone = status?.text.isNullOrEmpty()
+    val drop by animateDpAsState(if (alone) aloneDrop(second) else 0.dp, if (still) snap() else tween(TITLE_FADE_MILLIS, easing = EaseOut), label = "titleAlone")
+    Column(modifier, horizontalAlignment = if (centred) Alignment.CenterHorizontally else Alignment.Start) {
+        title(Modifier.offset { IntOffset(0, drop.roundToPx()) })
+        SaveStateText(status, Modifier.padding(top = SubtitleGap), size = SaveStateSubtitleSize)
     }
 }
 
-/** The room between a bar's title and its save state. */
-private val StatusGap = 8.dp
+/** How far a title stands down while its save state's line is empty: half that line and its gap, onto the row's middle. */
+fun aloneDrop(subtitleLine: Dp): Dp = (subtitleLine + SubtitleGap) / 2
 
-/**
- * Whether a save state [status] wide fits after a title [title] wide (as it would lay out whole) in
- * [room], [gap] apart — else it is the first thing to go. Nothing to say (0 wide) never fits.
- */
-fun statusFits(title: Int, status: Int, gap: Int, room: Int): Boolean = status > 0 && title + gap + status <= room
+/** Between a title and its save state under it. */
+private val SubtitleGap = 1.dp
 
 /**
  * A card's title in the middle of a tablet's header, once the article's own has gone up under it:
