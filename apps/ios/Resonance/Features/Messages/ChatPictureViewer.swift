@@ -6,7 +6,9 @@ import UIKit
 /// A picture from a conversation, full screen (round 7 §4.3): on a dark backdrop, fitted — the
 /// thread's own size at once, then the picture as kept — pinched or double-tapped to zoom, swiped
 /// down or closed (the close in its corner, the escape gesture) to go back to the thread. Nothing to
-/// save or share yet. It fades in and out over the thread (at once under Reduce Motion).
+/// save or share yet. It fades in and out over the thread (at once under Reduce Motion), and the thread
+/// under it is left exactly as it was (round 11 §1: its foot held while the keyboard is away under the
+/// picture — see `KeyboardHold`).
 struct ChatPictureViewer: View {
     let picture: ChatImage
     let store: ChatImageStore

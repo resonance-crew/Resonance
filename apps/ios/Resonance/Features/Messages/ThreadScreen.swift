@@ -40,6 +40,9 @@ struct ThreadScreen: View {
     @State private var photoItem: PhotosPickerItem?
     /// The picture open full screen.
     @State private var viewing: ChatImage?
+    /// The keyboard's part of the thread's foot, held while a picture is open and until the keyboard is
+    /// back after it (round 11 §1).
+    @State private var keyboardHold = KeyboardHold()
     @State private var reporting = false
     @State private var sendingReport = false
     @State private var confirmingBlock = false
@@ -161,6 +164,11 @@ struct ThreadScreen: View {
             }
             .padding(.leading, inPane ? PaneLines.gutter : 0)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            // While a picture is open the keyboard steps away under it (UIKit's, for a presentation) and comes
+            // back after: the thread keeps the foot it had, so nothing in it moves either way (round 11 §1).
+            // Always the same two modifiers, so letting go never rebuilds the thread.
+            .padding(.bottom, keyboardHold.padding ?? 0)
+            .ignoresSafeArea(keyboardHold.padding == nil ? [] : .keyboard, edges: .bottom)
             .accessibilityHidden(menu != nil)
             bar
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { barHeight = $0 }
@@ -179,6 +187,11 @@ struct ThreadScreen: View {
         }
         .background(Tokens.cream)
         .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { safe = $0 }
+        // The keyboard back where it was after a picture: the thread takes its foot from it again.
+        .onChange(of: safe.bottom) { _, bottom in
+            guard let released = keyboardHold.release(bottom: bottom) else { return }
+            withTransaction(\.disablesAnimations, true) { keyboardHold = released }
+        }
     }
 
     /// On show: the top of its stack, on the tab chosen.
@@ -221,7 +234,7 @@ struct ThreadScreen: View {
     }
 
     /// How far up from the thread's foot its newest message, the pill and 已複製 stand (round 9 §4,
-    /// round 10 §3.2): past the whole foot — its paper's fade (and the 24 it gains over riding rows),
+    /// round 10 §3.2, round 11 §3): past the whole foot — its paper's fade (and the 6 it gains over riding rows),
     /// the rows, the capsule, the 8 under it, the bottom safe area or the keyboard — and 12 more, so the
     /// newest message rests above the fade. Measured live: the field grows, a row comes.
     private var bottomRoom: CGFloat {
@@ -291,7 +304,7 @@ struct ThreadScreen: View {
     /// where there is nothing to write, a slip in its place with a calm line: the wait for an answer to
     /// one's own note, or why messages can't be sent here. Nothing while that isn't known yet. Behind it
     /// the foot's paper (round 10 §3.2) across the whole pane, down to the screen's foot, fading in over
-    /// its top 24; a tap on its solid part puts the keyboard away, as a tap on the thread does.
+    /// its top 12 (round 11 §3); a tap on its solid part puts the keyboard away, as a tap on the thread does.
     @ViewBuilder private func foot(_ model: ThreadModel) -> some View {
         VStack(spacing: 0) {
             if model.accessKnown {
@@ -352,8 +365,35 @@ struct ThreadScreen: View {
             openLink: openLink,
             openRoute: { openRoute($0) },
             // Over the thread with no slide: the viewer fades itself in and out.
-            openPicture: { picture in withTransaction(\.disablesAnimations, true) { viewing = picture } }
+            openPicture: { picture in openPicture(picture) }
         )
+    }
+
+    /// A picture opens full screen over the thread, which holds its foot as it is: the keyboard, if it is up,
+    /// steps away under the picture and comes back when it closes, and nothing in the thread follows it.
+    private func openPicture(_ picture: ChatImage) {
+        var hold = keyboardHold
+        hold.pictureOpened(bottom: safe.bottom, screenFoot: KeyboardHold.screenFoot, composing: composing, searching: searchFocused)
+        withTransaction(\.disablesAnimations, true) {
+            keyboardHold = hold
+            viewing = picture
+        }
+    }
+
+    /// The picture is closed: the keyboard comes back where it was (UIKit gives the field it had back; if
+    /// it doesn't, the field is asked again), and the thread takes its foot from it again — or, should the
+    /// keyboard stay away or come back at another height, follows it as it would any keyboard.
+    private func awaitKeyboard() {
+        guard keyboardHold.padding != nil else { return }
+        let opened = keyboardHold.opened
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard keyboardHold.padding != nil, keyboardHold.opened == opened, viewing == nil else { return }
+            if keyboardHold.wasComposing { composing = true } else if keyboardHold.wasSearching { searchFocused = true }
+            try? await Task.sleep(for: .milliseconds(700))
+            guard keyboardHold.padding != nil, keyboardHold.opened == opened, viewing == nil else { return }
+            withAnimation(.easeOut(duration: 0.25)) { keyboardHold.letGo() }
+        }
     }
 
     /// What the composer's ＋ offers: a picture from the library, or one of the viewer's cards.
@@ -594,7 +634,13 @@ struct ThreadScreen: View {
             .fullScreenCover(item: $viewing) { picture in
                 if let model {
                     ChatPictureViewer(picture: picture, store: model.pictures) {
-                        withTransaction(\.disablesAnimations, true) { viewing = nil }
+                        // One transaction without animation: anything else changed beside it lets the cover
+                        // slide away as it would by default, the picture showing again on its way out.
+                        withTransaction(\.disablesAnimations, true) {
+                            viewing = nil
+                            keyboardHold.pictureClosed()
+                        }
+                        awaitKeyboard()
                     }
                 }
             }
@@ -739,9 +785,77 @@ private struct PersonPlaceholder: View {
     }
 }
 
+/// The keyboard's part of the thread's foot while a picture is open (round 11 §1). Presenting the
+/// picture full screen puts the keyboard away (UIKit keeps the field and gives it back on the way out),
+/// and a thread that followed it moved twice — down as the picture came, up as it went: the owner saw the
+/// messages jump. Held, the thread keeps the foot it had — the keyboard's height standing in as padding
+/// for the keyboard it no longer follows — until the picture is closed and the keyboard is back, when the
+/// thread takes its foot from the keyboard again: the same height, so nothing moves.
+nonisolated struct KeyboardHold: Equatable {
+    /// What stands in for the keyboard: how far over the screen's own foot it reached when the picture opened.
+    private(set) var padding: CGFloat?
+    /// A picture is open (the keyboard away under it, or on its way back).
+    private(set) var open = false
+    /// Which field had the keyboard: the one to ask again should UIKit not give it back.
+    private(set) var wasComposing = false
+    private(set) var wasSearching = false
+    /// Counts the pictures opened, so a late step of one closed long ago leaves the next alone.
+    private(set) var opened = 0
+    /// The screen's own foot (the home indicator's safe area) the keyboard was measured over.
+    private(set) var screenFoot: CGFloat = 0
+
+    /// The window's own bottom safe area: the keyboard is never part of a window's (a view's safe area,
+    /// SwiftUI's, counts it in — even a view that ignores the keyboard reports it).
+    @MainActor static var screenFoot: CGFloat {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let window = scenes.flatMap(\.windows).first(where: \.isKeyWindow) ?? scenes.first?.windows.first
+        return window?.safeAreaInsets.bottom ?? 0
+    }
+
+    /// The keyboard's part of a foot `bottom` deep (the screen's bottom safe area, the keyboard's included)
+    /// over a screen whose own foot is `screenFoot`; nil when no keyboard is up.
+    static func keyboard(bottom: CGFloat, screenFoot: CGFloat) -> CGFloat? {
+        let part = bottom - screenFoot
+        return part > 0.5 ? part : nil
+    }
+
+    mutating func pictureOpened(bottom: CGFloat, screenFoot: CGFloat, composing: Bool, searching: Bool) {
+        open = true
+        opened += 1
+        // A second picture opened before the keyboard was back keeps holding what the first held.
+        if padding == nil {
+            padding = Self.keyboard(bottom: bottom, screenFoot: screenFoot)
+            self.screenFoot = screenFoot
+        }
+        if padding != nil, composing || searching {
+            wasComposing = composing
+            wasSearching = searching
+        }
+    }
+
+    mutating func pictureClosed() { open = false }
+
+    /// The foot measured again: once the picture is closed and the keyboard is back as high as it was
+    /// (it can come back in steps — its candidate bar after it), the hold lets go, and nothing moves.
+    func release(bottom: CGFloat) -> KeyboardHold? {
+        guard let padding, !open, let keyboard = Self.keyboard(bottom: bottom, screenFoot: screenFoot),
+              keyboard >= padding - 0.5 else { return nil }
+        var hold = self
+        hold.letGo()
+        return hold
+    }
+
+    /// No keyboard to wait for any more.
+    mutating func letGo() {
+        padding = nil
+        wasComposing = false
+        wasSearching = false
+    }
+}
+
 /// The floating foot's room over the thread (round 9 §4, round 10 §3.2).
 nonisolated enum ThreadFoot {
-    /// How much of the thread the foot covers — its paper's fade and the 24 it gains over riding rows
+    /// How much of the thread the foot covers — its paper's fade and the 6 it gains over riding rows
     /// included, the home indicator or the keyboard under it — : how far the thread layer's foot
     /// (`threadBottom`) lies past the room shown over the foot (`shownHeight`), both in the thread's own
     /// space; never less than nothing, never more than the thread. (It was held under half the thread,
