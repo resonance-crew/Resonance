@@ -147,6 +147,10 @@ struct MessageList: View {
                 // Exactly as wide as the list: a vertical list never has anything to move sideways to. (Not
                 // containerRelativeFrame: in a pane beside the conversations it took the window's width.)
                 .frame(maxWidth: .infinity)
+                // …and if anything ever sets it aside all the same — the owner saw the whole thread 16 to the
+                // left after replying by a swipe, and sending re-anchors the list in a way that can do it — it
+                // is held at its own edge in UIKit, never through `position` (see SidewaysLock).
+                .background(SidewaysLock())
             }
             .scrollPosition($position, anchor: .center)
             .upsideDown()
@@ -159,15 +163,6 @@ struct MessageList: View {
             // foot (the composer, its slip, the safe area or keyboard under them) and 12 of air.
             .contentMargins(.bottom, topMargin + 4, for: .scrollContent)
             .contentMargins(.top, bottomRoom, for: .scrollContent)
-            // A vertical list has nothing to move sideways to: if anything ever leaves it scrolled aside — the
-            // owner saw the whole thread 16 to the left, their face cut by the screen's edge, after replying
-            // by a swipe — it goes straight back to its own edge, where it is otherwise held (no drag can
-            // move it sideways).
-            .onScrollGeometryChange(for: Bool.self) { geo in
-                ReplySwipeMath.drifted(offsetX: geo.contentOffset.x + geo.contentInsets.leading)
-            } action: { _, drifted in
-                if drifted { position.scrollTo(x: 0) }
-            }
             .onScrollGeometryChange(for: ListPlace.self) { geo in
                 // The container is what lies between the insets: upside down, the air over the
                 // composer below it and the bar (with the status bar) above it.
@@ -802,6 +797,61 @@ nonisolated enum ReplySwipeMath {
 
     /// The list stands aside from its own edge (more than a rounding's worth).
     static func drifted(offsetX: CGFloat) -> Bool { abs(offsetX) > 0.5 }
+}
+
+/// Holds the thread's scroll view at its own leading edge (round 10 §5), in UIKit: it watches the
+/// scroll view's offset and puts a sideways one straight back, before anything draws it.
+///
+/// The thread used to do this in SwiftUI — a scroll geometry change that set the list's
+/// `ScrollPosition` to x 0 — and that was the app freezing after a picture was sent (the owner's
+/// watchdog report: the main thread laying out the thread's rows inside one transaction that never
+/// ended). Sending re-anchors the list (the foot shrinks, the newest row arrives, the list goes to the
+/// latest) and on the way its offset can land a few points aside; setting the position replaced the
+/// list's anchor with a point, which moved it and re-anchored the rows again, which could set it aside
+/// again — a loop through the screen's own state, re-laying out every row each turn. Here nothing goes
+/// through SwiftUI's state: the offset is corrected where it is kept, once, and the correction is no
+/// change SwiftUI hears of.
+struct SidewaysLock: UIViewRepresentable {
+    func makeUIView(context: Context) -> SidewaysLockView { SidewaysLockView() }
+    func updateUIView(_ view: SidewaysLockView, context: Context) {}
+}
+
+/// ``SidewaysLock``'s view: finds the scroll view it is drawn in and keeps it at its leading edge.
+final class SidewaysLockView: UIView {
+    private weak var scrollView: UIScrollView?
+    private var watch: NSKeyValueObservation?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        isHidden = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard window != nil else { return }
+        let enclosing = sequence(first: superview, next: { $0?.superview }).lazy.compactMap { $0 as? UIScrollView }.first
+        if let enclosing, enclosing !== scrollView { hold(enclosing) }
+    }
+
+    /// Keeps `scrollView` at its leading edge from now on.
+    func hold(_ scrollView: UIScrollView) {
+        self.scrollView = scrollView
+        scrollView.alwaysBounceHorizontal = false
+        watch = scrollView.observe(\.contentOffset, options: [.new]) { scrollView, _ in
+            MainActor.assumeIsolated { Self.toEdge(scrollView) }
+        }
+        Self.toEdge(scrollView)
+    }
+
+    /// Puts a scroll view standing aside back at its leading edge (its offset there is minus its leading inset).
+    static func toEdge(_ scrollView: UIScrollView) {
+        let edge = -scrollView.adjustedContentInset.left
+        guard ReplySwipeMath.drifted(offsetX: scrollView.contentOffset.x - edge) else { return }
+        scrollView.contentOffset = CGPoint(x: edge, y: scrollView.contentOffset.y)
+    }
 }
 
 /// Drag a message toward the middle of the screen (theirs to the right, yours to the left) and the
