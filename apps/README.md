@@ -440,6 +440,12 @@ adb shell am start -n com.resonance.stories/com.resonance.app.MainActivity \
   --es password <SEED_PASSWORD from scripts/seed-emulator.ts> --es route /card/rich-story
 ```
 
+A cover or story picture stored against the emulators is served by the dev server at
+`http://localhost:<dev port>/api/emulator-storage/…` — on the device, the device itself. Reverse that port once
+per boot (`adb -s <serial> reverse tcp:3100 tcp:3100`, or the port the dev server runs on) and debug builds reach
+it: their network security config (`app/src/debug/res/xml/network_security_config.xml`, in place of main's) lets
+plain HTTP go to `localhost` and `127.0.0.1` as well as `10.0.2.2`. Chat pictures need nothing: they go through the API.
+
 A tapped push starts the app with its data as extras, so `--es route` with `--es notificationId` fakes a
 tap (`--es route "''"` for a push with no page of its own: the notifications tab); `--es pushTitle …`
 posts the notification a push that arrives while the app is open shows:
