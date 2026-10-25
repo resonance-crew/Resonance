@@ -131,23 +131,19 @@ class TrashCenterTest {
         assertEquals(3, calls.reads)
     }
 
-    @Test fun aShelfCaptionSaysWhereTheCardComesBackAndWhenItGoes() {
+    @Test fun theBannerSaysWhenTheCardGoes() {
         val now = Instant.parse("2026-10-20T08:00:00Z")
-        fun card(published: Boolean, restoresTo: FeedCard.RestoresTo?, trashedDaysAgo: Double) = FeedCard(
+        fun card(trashedDaysAgo: Double) = FeedCard(
             id = "c", slug = null, title = "t", excerpt = "", tags = emptyList(),
-            publishedAt = if (published) "2026-09-01T00:00:00Z" else null,
+            publishedAt = "2026-09-01T00:00:00Z",
             author = null, anonymous = false, visibility = FeedCard.Visibility.`private`, imageUrl = null, imageLabel = null,
             accentHue = null, readMinutes = 1, referenceCardId = null, reason = null,
             trashedAt = now.minusSeconds((trashedDaysAgo * 86_400).toLong()).toString(),
-            restoresTo = restoresTo,
+            restoresTo = FeedCard.RestoresTo.`public`,
         )
-        assertEquals("還原後公開 · 23 天後永久刪除", TrashWords.caption(card(true, FeedCard.RestoresTo.`public`, 7.0), now))
-        assertEquals("私人卡 · 29 天後永久刪除", TrashWords.caption(card(false, FeedCard.RestoresTo.`private`, 1.0), now))
-        assertEquals("私人卡 · 30 天後永久刪除", TrashWords.caption(card(false, null, 0.5), now))
-        assertEquals("私人卡 · 一天內永久刪除", TrashWords.caption(card(true, FeedCard.RestoresTo.`private`, 29.5), now))
-        assertEquals("還原後只給連結看 · 12 天後永久刪除", TrashWords.caption(card(true, FeedCard.RestoresTo.connections, 18.0), now))
-        // A visibility no reader knows comes back private, as the server restores it.
-        assertEquals("私人卡 · 12 天後永久刪除", TrashWords.caption(card(true, null, 18.0), now))
+        assertEquals("23 天後永久刪除", TrashWords.left(card(7.0), now))
+        assertEquals("30 天後永久刪除", TrashWords.left(card(0.5), now))
+        assertEquals("一天內永久刪除", TrashWords.left(card(29.5), now))
     }
 
     private class FakeTrashCalls : TrashCalls {

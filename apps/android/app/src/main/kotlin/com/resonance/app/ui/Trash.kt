@@ -130,11 +130,12 @@ class TrashCenter(
         }
 
     /**
-     * Out of the trash, then said so: 已還原, or the notice when it came back standing alone (it no
-     * longer answers the card it answered), or 沒能還原，可以到垃圾桶再試一次. Whether it came back.
+     * Out of the trash, then said so: 已還原 — or, [sayWho] (the trash shelf's 還原, round 11 §7), who
+     * reads it now ([restoredToast]) — or the notice when it came back standing alone (it no longer
+     * answers the card it answered), or 沒能還原，可以到垃圾桶再試一次. Whether it came back.
      */
-    suspend fun restoreSaying(card: TrashRef): Boolean = try {
-        sayRestored(restore(card))
+    suspend fun restoreSaying(card: TrashRef, sayWho: Boolean = false): Boolean = try {
+        sayRestored(restore(card), sayWho)
         true
     } catch (e: CancellationException) {
         throw e
@@ -143,9 +144,17 @@ class TrashCenter(
         false
     }
 
-    /** What a restore that went through says: 已還原, or the notice for a resonance that came back on its own. */
-    fun sayRestored(restored: RestoredCard) {
-        if (restored.droppedResonance) restoredAlone = true else toasts.show(L10n.Me.Actions.restored)
+    /**
+     * What a restore that went through says: 已還原 (the card page's banner, a toast's 復原), or who reads
+     * the card now ([sayWho]: the shelf's, whose rows no longer say it before — [restoredToast]), or
+     * the notice for a resonance that came back on its own.
+     */
+    fun sayRestored(restored: RestoredCard, sayWho: Boolean = false) {
+        when {
+            restored.droppedResonance -> restoredAlone = true
+            sayWho -> toasts.show(restoredToast(restored.card))
+            else -> toasts.show(L10n.Me.Actions.restored)
+        }
     }
 
     /** For good, only while it is in the trash (a card restored meanwhile elsewhere is refused, `isNotInTrash`). */
@@ -215,21 +224,10 @@ internal fun OneExitNotice(title: String, body: String, seed: Double, onDismiss:
 }
 
 /**
- * What a card in the trash says under it (the shelf's caption, the banner's line): where it came
- * from — a draft; private; or what a restore makes it, 還原後公開 / 還原後只給連結看, so a restore
- * never re-publishes in silence — then when it goes: 「一天內永久刪除」 in its last day, else
- * 「{n} 天後永久刪除」.
+ * When a card in the trash goes, as its page's banner says it (the shelf's rows say nothing under
+ * them since round 11 §7): 「一天內永久刪除」 in its last day, else 「{n} 天後永久刪除」.
  */
 internal object TrashWords {
-    fun from(card: FeedCard): String = when {
-        card.publishedAt == null -> L10n.Me.TrashFrom.draft
-        else -> when (card.restoresTo) {
-            FeedCard.RestoresTo.`public` -> L10n.Me.TrashFrom.public
-            FeedCard.RestoresTo.connections -> L10n.Me.TrashFrom.connections
-            else -> L10n.Me.TrashFrom.private
-        }
-    }
-
     /** When it goes, or null when the card says nothing of it. */
     fun left(card: FeedCard, now: Instant = Instant.now()): String? = left(card.purgeInstant, now)
 
@@ -238,7 +236,30 @@ internal object TrashWords {
         val left = Trash.daysLeft(purge, now)
         return if (left.lastDay) L10n.Me.trashLastDay else L10n.Me.trashDaysLeft(left.days)
     }
+}
 
-    /** The shelf's caption: 「{from} · {left}」. */
-    fun caption(card: FeedCard, now: Instant = Instant.now()): String = listOfNotNull(from(card), left(card, now)).joinToString(" · ")
+/** Who reads a card that came back from the trash (round 11 §7, the web's `restoredAs`). */
+internal enum class RestoredAs { Private, Public, Anonymous, Connections }
+
+/**
+ * Who reads [card] — the restore's answer, never the trash row — now that it is back: a 私人卡 (kept
+ * private, or never published), public, public and anonymous, or connections only.
+ */
+internal fun restoredAs(card: FeedCard): RestoredAs = when {
+    card.publishedAt.isNullOrEmpty() || card.visibility == FeedCard.Visibility.`private` -> RestoredAs.Private
+    card.visibility == FeedCard.Visibility.connections -> RestoredAs.Connections
+    card.anonymous -> RestoredAs.Anonymous
+    else -> RestoredAs.Public
+}
+
+/**
+ * The trash shelf's restore toast (round 11 §7): who reads the card now — 已還原為私人卡 ·
+ * 已還原為公開卡片 · 已還原為匿名公開卡片 · 已還原，僅連結的人看得到 — the only word of it now that
+ * the rows no longer warn 還原後公開 before.
+ */
+internal fun restoredToast(card: FeedCard): String = when (restoredAs(card)) {
+    RestoredAs.Private -> L10n.Me.Actions.restoredPrivate
+    RestoredAs.Public -> L10n.Me.Actions.restoredPublic
+    RestoredAs.Anonymous -> L10n.Me.Actions.restoredAnonymous
+    RestoredAs.Connections -> L10n.Me.Actions.restoredConnections
 }

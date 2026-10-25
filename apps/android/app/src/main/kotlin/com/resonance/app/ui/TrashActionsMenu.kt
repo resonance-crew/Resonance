@@ -82,8 +82,9 @@ internal fun DeleteForeverDialog(trash: TrashCenter, toasts: Toasts, card: Trash
 }
 
 /**
- * The ⋯ on a card in the trash (TrashActionsMenu.tsx): 還原 — it comes back as it was, saying 已還原
- * (or, for a resonance that came back on its own, the shell's notice) — and 永久刪除, asked first in
+ * The ⋯ on a card in the trash (TrashActionsMenu.tsx): 還原 — it comes back as it was, saying who reads
+ * it now (已還原為私人卡 / 公開卡片 / …: [restoredToast]; for a resonance that came back on its own, the
+ * shell's notice) — and 永久刪除, asked first in
  * red ([DeleteForeverDialog]), sent only while the card is still in the trash (`onlyIfTrashed`).
  */
 @Composable
@@ -101,10 +102,10 @@ fun TrashActionsMenu(
         OrganicMenuItem(L10n.Me.Actions.restore, IconName.Restore) {
             if (restoring) return@OrganicMenuItem
             restoring = true
-            // In the shell's scope: the card leaves the shelf as it comes back, and its word still comes.
+            // In the shell's scope: the card leaves the shelf as it comes back, and its word — who reads it now — still comes.
             trash.launch {
                 try {
-                    restoreSaying(card)
+                    restoreSaying(card, sayWho = true)
                 } finally {
                     restoring = false
                 }
