@@ -2,46 +2,54 @@ package com.resonance.design
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.addOutline
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.resonance.design.generated.IconName
@@ -57,8 +65,17 @@ val ComposerHeight = 48.dp
 /** Send, the capsule's end segment: its width (the segmented bar's language). */
 val ComposerSendWidth = 52.dp
 
-/** The paper halo round a floating object's pen line, so it reads as cut-out paper over any bubble. */
-val FloatHalo = 4.dp
+/**
+ * The fade at the top of the composer's foot (round 10 §3.2): the page's paper going from clear to
+ * opaque over these 24, then solid to the screen's bottom edge ([ComposerBacking]).
+ */
+val ComposerFade = 24.dp
+
+/** A row riding with the message over the capsule ([ComposerRow]): its least height. */
+val ComposerRowHeight = 52.dp
+
+/** The capsule's pen: the field's own (FieldBorder), darker while it is written in — the same colour, never terracotta (round 10 §3.3). */
+fun composerPen(focused: Boolean): Color = if (focused) Tokens.FieldBorderHover else Tokens.FieldBorder
 
 /** The text's padding above and below that centres one line [line] tall in the capsule's 48 (never less than none). */
 fun composerPadding(line: Dp): Dp = ((ComposerHeight - line) / 2).coerceAtLeast(0.dp)
@@ -75,9 +92,9 @@ fun lineHeightOf(style: TextStyle): Dp {
 
 /**
  * The composer as one floating field with its tools inside (round 9 §4): the field's own wobble on
- * cream with its pen at INK, terracotta while it has the focus ([focused], read while drawing), drawn
- * with a [FloatHalo] of the page's paper under the pen so it stands clear of whatever bubble it lies
- * over — no shadow, no alpha; inside a [floatingGroup] with its slip. In it: [leading] (the ＋ ghost button, a 48 square at its start),
+ * cream with its pen at INK, darker while it has the focus ([focused], read while drawing:
+ * [composerPen]) — no halo, no shadow, no alpha: the foot's paper behind it ([ComposerBacking]) keeps
+ * the thread from showing round it (round 10 §3). In it: [leading] (the ＋ ghost button, a 48 square at its start),
  * the [field] (the text, given the padding that centres one line in 48: [composerPadding] of
  * [textStyle]'s real line), and Send as the capsule's end segment — a wavy seam in the paper's colour
  * cut across it, [ComposerSendWidth] wide and as tall as the capsule, the plane on the last line's row.
@@ -119,17 +136,14 @@ fun ComposerCapsule(
                 }
                 val seamPath = polylinePath(seam, density)
                 val grain = Grain.brush(GrainMode.Tile, "grain-button", size, density, 0.38f)
-                val halo = Stroke((Tokens.Ink + FloatHalo * 2).toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                 val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                 onDrawBehind {
-                    // Under whatever floats beside it in its group ([floatingGroup]): never over the slip's pen.
-                    drawOutline(o, Tokens.Cream, style = halo, blendMode = BlendMode.DstOver)
                     drawOutline(o, Tokens.Cream)
                     drawPath(region, face)
                     if (pressed && canSend) drawPath(region, OrganicIndication.OnFill)
                     grain?.let { drawPath(region, it, alpha = 0.38f) }
                     clipPath(outline) { drawPath(seamPath, Tokens.Cream, style = pen) }
-                    drawOutline(o, if (focused()) Tokens.Terracotta else Tokens.FieldBorder, style = pen)
+                    drawOutline(o, composerPen(focused()), style = pen)
                 }
             },
     ) {
@@ -163,43 +177,101 @@ fun ComposerCapsule(
 private const val SEND_FADE_MILLIS = 140
 
 /**
- * A secondary surface floating over the thread (round 9 §4): what rides with the message above the
- * capsule (the reply quote, the attached chips), or a notice in the composer's place — opaque
- * cream, its pen INK_LIGHT in the muted ink, the field's wobble at radius 14, and the same paper
- * [FloatHalo] as the capsule. No shadow, no alpha. Drawn inside a [floatingGroup].
+ * A notice floating in the composer's place (round 9 §4): opaque cream, its pen INK_LIGHT in the
+ * muted ink, the field's wobble at radius 14. No halo, shadow or alpha: the foot's paper is behind it
+ * ([ComposerBacking]), as behind the capsule (round 10 §3.1).
  */
 fun Modifier.floatingSlip(seed: Double = 29.0, radius: Double = 14.0, pen: Color = Tokens.TextMuted): Modifier = drawWithCache {
     val o = WobRectShape(radius, seed).createOutline(size, layoutDirection, this)
-    val halo = Stroke((Tokens.InkLight + FloatHalo * 2).toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
     val line = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
     onDrawBehind {
-        drawOutline(o, Tokens.Cream, style = halo, blendMode = BlendMode.DstOver)
         drawOutline(o, Tokens.Cream)
         drawOutline(o, pen, style = line)
     }
 }
 
 /**
- * The floating objects drawn together (the slip over the capsule, or a notice alone): one layer of
- * their own, reaching [FloatHaloReach] past its edges, in which each one's paper halo goes under the
- * others' pen lines (they draw it beneath what is already there) — so two halos 6 apart never cut
- * into each other's edge, while the layer still lays paper over the bubbles behind it. Its size and
- * place are what it wraps.
+ * The paper at the thread's foot, behind the composer (round 10 §3.2): the page's cream across the
+ * whole pane, down to the screen's bottom edge — through the navigation bar, to the keyboard's top
+ * when it is up — its top [ComposerFade] a fade from clear paper to opaque. Laid behind the foot at
+ * its size: with nothing riding, the fade covers the capsule's top half (solid from the middle of
+ * its one line down); with rows riding the foot is [ComposerFade] taller over them, so the paper is
+ * solid from the rows' top. The solid paper takes every touch, so nothing under it can be tapped or
+ * dragged; the fade lets them through to the thread. Not read by TalkBack.
  */
-fun Modifier.floatingGroup(): Modifier = this
-    .layout { measurable, constraints ->
-        val r = FloatHaloReach.roundToPx()
-        val wider = constraints.copy(
-            minWidth = constraints.minWidth + 2 * r,
-            maxWidth = if (constraints.hasBoundedWidth) constraints.maxWidth + 2 * r else constraints.maxWidth,
-            minHeight = constraints.minHeight + 2 * r,
-            maxHeight = if (constraints.hasBoundedHeight) constraints.maxHeight + 2 * r else constraints.maxHeight,
+@Composable
+fun ComposerBacking(modifier: Modifier = Modifier) {
+    Column(modifier.clearAndSetSemantics { }) {
+        Box(Modifier.fillMaxWidth().height(ComposerFade).background(remember { Brush.verticalGradient(listOf(Tokens.Cream.copy(alpha = 0f), Tokens.Cream)) }))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .background(Tokens.Cream)
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) awaitPointerEvent().changes.forEach { it.consume() }
+                    }
+                },
         )
-        val placeable = measurable.measure(wider)
-        layout((placeable.width - 2 * r).coerceAtLeast(0), (placeable.height - 2 * r).coerceAtLeast(0)) { placeable.place(-r, -r) }
     }
-    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-    .padding(FloatHaloReach)
+}
 
-/** How far a floating group's layer reaches past it: the halo, the pen and the shapes' wobble. */
-private val FloatHaloReach = FloatHalo + 4.dp
+/**
+ * One thing riding with the message over the capsule (round 10 §3.4), in the reply's style: its
+ * [lead] (the reply's rule, a 40 thumbnail, a glyph on a tonal tile), 10, its [label] (12 / 600) over
+ * one line of [detail] (12.5, muted — none: the label alone, centred), and a 44 ✕ at the row's end,
+ * named [closeLabel]. No frame: it lies straight on the foot's paper in the capsule's column, its
+ * content 12 from the capsule's start edge and the ✕ over Send. Rows riding together touch.
+ */
+@Composable
+fun ComposerRow(
+    label: String,
+    detail: String?,
+    closeLabel: String,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+    lead: @Composable () -> Unit,
+) {
+    Row(
+        modifier.fillMaxWidth().heightIn(min = ComposerRowHeight).padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        lead()
+        Column(Modifier.weight(1f).padding(start = 10.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            BasicText(label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(12f, 600, lineHeight = 1.35f, color = Tokens.Text))
+            if (!detail.isNullOrEmpty()) BasicText(detail, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(12.5f, lineHeight = 1.35f, color = Tokens.TextMuted))
+        }
+        Box(
+            Modifier
+                .size(ComposerCloseSize)
+                .clickable(interactionSource = null, indication = OrganicIndication(inset = 4.dp), role = Role.Button, onClickLabel = closeLabel, onClick = onClose)
+                .semantics { contentDescription = closeLabel },
+            contentAlignment = Alignment.Center,
+        ) { OrganicIcon(IconName.Close, size = 16.dp, color = Tokens.TextMuted, strokeWidth = Tokens.Ink.value) }
+    }
+}
+
+/** A riding row's ✕: the bare icon button's hit box. */
+val ComposerCloseSize = 44.dp
+
+/** A riding row's lead when it is a picture or a tile: 40 square. */
+val ComposerLeadSize = 40.dp
+
+/** The rounding of a riding row's thumbnail and tile (the attachment chips' 12 / 14). */
+val ComposerLeadShape = RoundedCornerShape(topStart = 12.dp, topEnd = 14.dp, bottomEnd = 12.dp, bottomStart = 14.dp)
+
+/** The tonal tile's face: the light terracotta at 0.4 laid on the cream, opaque (the chips' old face). */
+val ComposerTileFace = Tokens.TerracottaLight.copy(alpha = 0.4f).compositeOver(Tokens.Cream)
+
+/**
+ * A riding row's lead as a 40 tile: [icon] (18) on the tonal face, and over it [content] (a cover,
+ * a picture), clipped to the same rounding, once there is one.
+ */
+@Composable
+fun ComposerTile(icon: IconName?, modifier: Modifier = Modifier, content: (@Composable BoxScope.() -> Unit)? = null) {
+    Box(modifier.size(ComposerLeadSize).clip(ComposerLeadShape).background(ComposerTileFace), contentAlignment = Alignment.Center) {
+        icon?.let { OrganicIcon(it, size = 18.dp, color = Tokens.Text) }
+        content?.invoke(this)
+    }
+}

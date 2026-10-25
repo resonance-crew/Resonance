@@ -139,17 +139,15 @@ fun ThoughtMapScreen(
     // The last settling handled, saved with the page: coming back to it (or rotating) moves nothing.
     var centred by rememberSaveable { mutableIntStateOf(0) }
 
-    // A card of mine opens in the writer (a published one with its pending edit) — at the split in the pane beside
-    // the map, as every card of mine; below it a 私人卡 opens its page, as it does from the card box (round 9 §1). A
-    // card I resonated with opens on its page.
+    // Every card of mine opens in the writer, a 私人卡 as a shared one (a published one with its pending edit) — at the
+    // split in the pane beside the map, below it pushed over the map (round 10 §1; the card box and the trash still
+    // open a 私人卡's page). A card I resonated with opens on its page.
     LaunchedEffect(store, uid) {
         store.onOpen = { card ->
-            val mine = currentOpenMine
-            when {
-                card.authorId != uid -> currentOpen(Route.Card(card.slug ?: card.id))
-                mine != null -> mine(card.id)
-                card.isPrivateCard -> currentOpen(Route.Card(card.slug ?: card.id))
-                else -> currentOpen(Route.Write(cardId = card.id, showsCard = false))
+            when (val opening = mapOpening(card, uid, split = currentOpenMine != null)) {
+                is MapOpening.Page -> currentOpen(Route.Card(opening.key))
+                is MapOpening.Pane -> currentOpenMine?.invoke(opening.cardId)
+                is MapOpening.Writer -> currentOpen(Route.Write(cardId = opening.cardId, showsCard = false))
             }
         }
         // The session keeps the map between visits: this one shows it at once, reading again what is due.
@@ -187,6 +185,24 @@ fun ThoughtMapScreen(
         Chrome(store, session, leave) { scope.launch { store.addGroup() } }
         if (store.trayOpen) MapTray(store)
     }
+}
+
+/** Where a card tapped on the map opens: its page, the split's pane, or the writer pushed over the map. */
+internal sealed interface MapOpening {
+    data class Page(val key: String) : MapOpening
+    data class Pane(val cardId: String) : MapOpening
+    data class Writer(val cardId: String) : MapOpening
+}
+
+/**
+ * Where [card] opens from the map (round 10 §1): someone else's (one I resonated with) on its page;
+ * every card of mine — shared or a 私人卡, published or not — in the writer: the pane beside the map
+ * at the [split], else the writer pushed over the map.
+ */
+internal fun mapOpening(card: MapCard, uid: String?, split: Boolean): MapOpening = when {
+    card.authorId != uid -> MapOpening.Page(card.slug ?: card.id)
+    split -> MapOpening.Pane(card.id)
+    else -> MapOpening.Writer(card.id)
 }
 
 /** The camera to [target] in [CENTRE_MILLIS], easing out (at once with the system's animations off); a finger on the map stops it where it is. */
