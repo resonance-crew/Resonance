@@ -138,8 +138,13 @@ sealed interface Route : NavKey {
          * person typing.
          */
         val savedNew: Boolean = false,
+        /**
+         * Opened from a 私人卡's 公開發表 on its own page (round 12 §3): the writer opens on `cardId` at
+         * its publish step, with the card offered to readers ([publishingAudience]).
+         */
+        val publishing: Boolean = false,
     ) : Route {
-        override val contentKey get() = "write:$referenceCardId:${if (savedNew) null else cardId}"
+        override val contentKey get() = "write:$referenceCardId:${if (savedNew) null else cardId}${if (publishing) ":publish" else ""}"
     }
     /**
      * A conversation, by the other person's pen name — and their `uid` when the place it opens
