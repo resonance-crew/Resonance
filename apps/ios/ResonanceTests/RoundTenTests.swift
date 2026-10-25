@@ -9,6 +9,29 @@ import UIKit
 /// Round 10 (2026-10-25): the thought map opens every card of mine in the writer, the thread no longer
 /// freezes after a picture is sent, a tap on the thread puts the keyboard away, and the composer's foot.
 @MainActor @Suite struct RoundTenTests {
+    // MARK: §1 — the thought map: every card of mine opens the writer
+
+    @Test func everyCardOfMineOnTheMapOpensTheWriterAndOthersTheirPage() {
+        func card(_ id: String, author: String, published: Date?, visibility: String) -> MapCard {
+            MapCard(id: id, authorId: author, slug: published == nil ? nil : id, title: id, story: "", tags: [],
+                    visibility: visibility, publishedAt: published, mediaURL: nil, accentHue: nil)
+        }
+        let neverPublished = card("draft", author: "me", published: nil, visibility: "private")
+        let keptPrivate = card("kept", author: "me", published: Date(), visibility: "private")
+        let shared = card("shared", author: "me", published: Date(), visibility: "public")
+        let forConnections = card("close", author: "me", published: Date(), visibility: "connections")
+        let theirs = card("theirs", author: "them", published: Date(), visibility: "public")
+        // A 私人卡 opens the writer exactly as a shared card does (round 9 sent it to its page).
+        for mine in [neverPublished, keptPrivate, shared, forConnections] {
+            #expect(ThoughtMapScreen.opensWriter(mine, viewer: "me"), "\(mine.id)")
+        }
+        // Someone else's card (one I resonated with) opens its page; nobody signed in opens nothing in the writer.
+        #expect(!ThoughtMapScreen.opensWriter(theirs, viewer: "me"))
+        #expect(!ThoughtMapScreen.opensWriter(shared, viewer: nil))
+        // The lock still marks a 私人卡 on the map and in the tray.
+        #expect(ThoughtMapScreen.trayIcon(keptPrivate, resonated: false) == .lock)
+    }
+
     // MARK: §5 — the thread no longer freezes after a picture is sent
 
     @Test func aThreadSetAsideGoesBackToItsEdgeInUIKitKeepingItsPlace() {
