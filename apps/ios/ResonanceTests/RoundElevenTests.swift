@@ -140,4 +140,55 @@ import Testing
         let served = try #require(handler.resource(for: EditorPage.url(placeholder: "Write")))
         #expect(served.headers["Content-Security-Policy"] == local)
     }
+
+    // MARK: §4 — the writer and its publish step take the reading page's air
+
+    @Test func theWritersTitleStandsWhereTheCardPagesTitleDoes() {
+        for layout in [LayoutClass.compact, .expanded] {
+            let typo = StoryTypography(script: .cjk, layout: layout)
+            let font = typo.titleFont()
+            // The field's line starts this much above the title's CSS line box; the page pads for the box to
+            // stand the reading head under the pen line, as a card page's title does.
+            let inset = WriteScreen.titleBoxInset(font: font, leading: typo.titleLeading)
+            #expect(abs(WriteScreen.headTop(typo: typo, font: font) - (PenLineGap.fromFoot(typo.headGap(cover: false)) + inset)) < 0.001)
+            // The title's box → the story: --writer-title-gap, 32 at both sizes (24 read as a paragraph's gap).
+            let gap = WriteScreen.titleGap(compact: layout == .compact, font: font, leading: typo.titleLeading)
+            #expect(abs(gap + inset - 32) < 0.001)
+        }
+        #expect(Tokens.writerTitleGap == 32 && Tokens.writerTitleGapCompact == 32)
+    }
+
+    @Test func thePublishStepsSectionsAreOneGapApart() {
+        #expect(PublishStep.sectionGap(compact: true) == 40)
+        #expect(PublishStep.sectionGap(compact: false) == 48)
+        #expect(PublishStep.labelGap == 12)
+    }
+
+    // MARK: §5 — the save state is the title's second line
+
+    @Test func theTitleStandsOnTheRowsLineUntilTheStateComes() {
+        // The second line's room is always kept (12 on a 1.4 line, 1 under the title): the bar never grows.
+        #expect(BarTitles.subtitleLine == 12 * 1.4)
+        // Alone, the title stands down half of it — onto the row's line, where ← and ✓ sit.
+        #expect(abs(BarTitles.titleOffset(subtitle: nil) - (12 * 1.4 + 1) / 2) < 0.001)
+        #expect(BarTitles.titleOffset(subtitle: "已儲存") == 0)
+        // A CJK title's own lift beside the arrow is kept in both.
+        #expect(BarTitles.titleOffset(subtitle: "已儲存", lift: -0.7) == -0.7)
+        // The four states, the failed one in the error ink; none before the first write.
+        #expect(WriteModel.SaveState.subtitle(nil, help: nil).text == nil)
+        #expect(WriteModel.SaveState.subtitle(.saved, help: nil).text == L10n.Write.Status.saved)
+        #expect(WriteModel.SaveState.subtitle(.failed, help: nil).ink == Tokens.terracotta)
+        #expect(WriteModel.SaveState.subtitle(.savedLive, help: nil).ink == Tokens.textMuted)
+    }
+
+    // MARK: §6 — a tablet's back bar sits a little lower
+
+    @Test func aTabletsBackRowMovesDownWhereTheHomeHeadersRowIs() {
+        // Measured on the 13" iPad: the home header's row at 68 (tabs, pen), the back bar's ← at 68 and its
+        // title's ink at 68.75 — the same line already, so 2 (the difference in ink to the wordmark's 69.75
+        // and the wave's 70.5) rather than the spec's 6, which would overshoot it.
+        #expect(HeaderChrome.backRowDrop == 2)
+        // ← and ✓ keep their whole 44 above the pen line: the row is 72, the glyphs centred in it.
+        #expect((HeaderChrome.rowHeight - 44) / 2 >= HeaderChrome.backRowDrop)
+    }
 }

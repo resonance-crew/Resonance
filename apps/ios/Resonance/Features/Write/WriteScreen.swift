@@ -191,9 +191,10 @@ struct WriteScreen: View {
 
     // MARK: The bar
 
-    /// Back · title · save state … ✓ (round 8 §2.1): the title short at every size (新卡片, 編輯草稿,
-    /// 編輯卡片 — the step's own in the publish step), the save state after it in a quiet word that
-    /// goes before the title gives way, and ✓ at the end while writing.
+    /// Back · title … ✓ (round 8 §2.1): the title short at every size (新卡片, 編輯草稿, 編輯卡片 — the
+    /// step's own in the publish step), the save state its second line (round 11 §5: under it, 12 and
+    /// muted, the two centred on the row; the line kept while it is empty, the title meanwhile on the
+    /// row's line), and ✓ at the end while writing.
     private var bar: some View {
         let step = model?.step ?? .write
         // The publish step's heading follows the card and its type: 發布這張卡片, 儲存草稿 or 更新這張卡片.
@@ -201,12 +202,13 @@ struct WriteScreen: View {
             : model?.title ?? (request.cardId == nil ? L10n.Write.title : inTrash.map(WriteModel.pageTitle) ?? L10n.Write.editTitle)
         return OrganicInlineBar(title, backLabel: step == .publish ? L10n.Write.leaveStay : L10n.App.Nav.back,
                                 scrolled: step == .publish ? scrolledPublish : scrolledWrite) {
-            if let model { SaveStateWord(state: model.saveState, help: model.saveStateHelp) }
+            EmptyView()
         } trailing: {
             if let model, model.step == .write, !model.trashed {
                 finishButton(model)
             }
         }
+        .subtitle(WriteModel.SaveState.subtitle(model?.saveState, help: model?.saveStateHelp))
         .titleFirst()
         .onBack { if let model { goBack(model) } else { dismiss() } }
     }
@@ -376,8 +378,27 @@ struct WriteScreen: View {
     /// At the split, the first row: the floating ✓ (and the save state before it), a finger tall.
     private static let splitRow: CGFloat = 44
 
+    /// How much higher a title field's line starts than the title's CSS line box: the field's line is
+    /// the face's own height, the box the title's leading — the glyphs centred in both.
+    static func titleBoxInset(font: UIFont, leading: CGFloat) -> CGFloat {
+        (font.pointSize * leading - font.lineHeight) / 2
+    }
+
+    /// What the writing page pads under the bar's foot for the title's line box to stand the reading
+    /// head under the bar's pen line (round 11 §4), as a card page's title does under its header's.
+    static func headTop(typo: StoryTypography, font: UIFont) -> CGFloat {
+        PenLineGap.fromFoot(typo.headGap(cover: false)) + titleBoxInset(font: font, leading: typo.titleLeading)
+    }
+
+    /// The air under the title field for its line box to end `--writer-title-gap` over the story's first line.
+    static func titleGap(compact: Bool, font: UIFont, leading: CGFloat) -> CGFloat {
+        max(0, (compact ? Tokens.writerTitleGapCompact : Tokens.writerTitleGap) - titleBoxInset(font: font, leading: leading))
+    }
+
     private func writeColumn(_ model: WriteModel) -> some View {
         let typo = StoryTypography(script: model.script, layout: window.layoutClass)
+        let font = typo.titleFont()
+        let compact = window.layoutClass == .compact
         return VStack(alignment: .leading, spacing: 0) {
             statusLine(model)
                 .frame(minHeight: showsBar ? 0 : Self.splitRow, alignment: .leading)
@@ -385,13 +406,17 @@ struct WriteScreen: View {
                 .padding(.trailing, showsBar ? 0 : 160)
                 .padding(.bottom, statusShown(model) || !showsBar ? 16 : 0)
             titleField(model, typo: typo)
-                .padding(.bottom, 16)
+                // The title → the story's first line (round 11 §4): well over a paragraph's gap, so the title
+                // never reads as the story's first paragraph. Its note lies in this gap (`titleField`).
+                .padding(.bottom, Self.titleGap(compact: compact, font: font, leading: typo.titleLeading))
             StoryCanvasField(bridge: model.editor, minHeight: storyRoom)
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.writeSpace)).minY } action: { islandTop = $0 }
         }
-        .padding(.horizontal, window.layoutClass == .compact ? 20 : window.pad)
-        // In the pane there is no bar: its first line sits level with the Back on the canvas.
-        .padding(.top, showsBar ? 16 : WriteWorkspace.paneTop)
+        .padding(.horizontal, compact ? 20 : window.pad)
+        // Under the bar, the title's line box as far under its pen line as a card page's title stands
+        // (round 11 §4: --story-head-gap, 48 on a phone, 64 wider) — writing a card and reading it start
+        // at the same place. In the pane there is no bar: its first line sits level with the Back on the canvas.
+        .padding(.top, showsBar ? Self.headTop(typo: typo, font: font) : WriteWorkspace.paneTop)
         .padding(.bottom, 48)
         // Wider than a phone, the web's writing measure (680 and the page's pads), centred.
         .frame(maxWidth: window.layoutClass == .compact ? .infinity : Tokens.measure + 2 * window.pad)
@@ -437,12 +462,11 @@ struct WriteScreen: View {
 
     /// The title: one line of intent, borderless, in the card page's own title type (by the story's
     /// script); Return goes on to the story. From 50 characters it says how many it has; 下一步 with
-    /// none asks for one under it.
+    /// none asks for one under it — in the gap to the story, which never moves for it (round 11 §4).
     private func titleField(_ model: WriteModel, typo: StoryTypography) -> some View {
         let font = typo.titleFont()
         let lineBox = font.pointSize * typo.titleLeading
-        return VStack(alignment: .leading, spacing: 4) {
-            TextField(text: Binding(get: { model.values.title }, set: { text in
+        return TextField(text: Binding(get: { model.values.title }, set: { text in
                 if model.typeTitle(text) {
                     // Return: on to the story.
                     titleFocused = false
@@ -463,20 +487,26 @@ struct WriteScreen: View {
             .accessibilityLabel(L10n.Write.coreLabel)
             // What 下一步 asked for, said with the field (its own value stays the title typed).
             .accessibilityHint(model.titleError ? L10n.Write.titleRequired : "")
-            if model.titleError {
-                Text(L10n.Write.titleRequired)
-                    .font(AppFonts.body(Tokens.hintSize))
-                    .foregroundStyle(Tokens.terracotta)
-                    .accessibilityAddTraits(.isStaticText)
-                    .onAppear { AccessibilityNotification.Announcement(L10n.Write.titleRequired).post() }
-            } else if model.showsTitleCount {
-                Text(verbatim: "\(model.values.title.count) / \(WriteModel.titleMax)")
-                    .font(AppFonts.body(Tokens.hintSize))
-                    .monospacedDigit()
-                    .foregroundStyle(model.values.title.count >= WriteModel.titleMax ? Tokens.text : Tokens.textMuted)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+            // The note hangs 4 under the field, in the gap to the story: laid out over it, it moves nothing.
+            .overlay(alignment: .bottom) {
+                Group {
+                    if model.titleError {
+                        Text(L10n.Write.titleRequired)
+                            .font(AppFonts.body(Tokens.hintSize))
+                            .foregroundStyle(Tokens.terracotta)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityAddTraits(.isStaticText)
+                            .onAppear { AccessibilityNotification.Announcement(L10n.Write.titleRequired).post() }
+                    } else if model.showsTitleCount {
+                        Text(verbatim: "\(model.values.title.count) / \(WriteModel.titleMax)")
+                            .font(AppFonts.body(Tokens.hintSize))
+                            .monospacedDigit()
+                            .foregroundStyle(model.values.title.count >= WriteModel.titleMax ? Tokens.text : Tokens.textMuted)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                }
+                .alignmentGuide(.bottom) { $0[.top] - 4 }
             }
-        }
     }
 
     /// Step 2, in its own scroll (it starts at its top each time it opens; writing keeps its place).

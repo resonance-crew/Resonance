@@ -152,6 +152,12 @@ public nonisolated struct HeaderChrome: Equatable, Sendable {
     public static let penReserve: CGFloat = 64
     /// What a pushed page's back arrow takes past the page pad (its 44 target hanging 13 into the gutter).
     public static let backReserve: CGFloat = 31
+    /// How far a pushed page's row — its ←, title and actions — stands under the row's middle (round 11
+    /// §6): the owner found it high in the tall header. Measured on an iPad (13", status bar 32): the
+    /// home header's row is centred at 68 (its tabs and pen; the wordmark's ink 69.75, the wave's 70.5)
+    /// and a pushed page's ← and title at 68 / 68.75 — already on the same line, so the spec's 6 would
+    /// overshoot it; the difference in ink, 2, is what it moves. The bar's height and pen line stay.
+    public static let backRowDrop: CGFloat = 2
     /// How far under the header's pen line a tablet page's first content starts (round 5 E2).
     public static let contentGap: CGFloat = 32
     /// The same gap from the bar's foot, where a page's scrolled content begins (its line rests
@@ -768,6 +774,8 @@ public struct OrganicInlineBar<Leading: View, Trailing: View>: View {
     private var inset: CGFloat = 0
     /// The title keeps its room before `leading` gets any (``titleFirst()``).
     private var titleLeads = false
+    /// A second line under the title (``subtitle(_:ink:help:)``); nil: the title alone, on one line.
+    private var subtitle: BarTitles.Subtitle?
     /// The page's actions as drawn (a tablet centres the context clear of them).
     @State private var trailingWidth: CGFloat = 0
     /// The window's controls in the row's corner (an iPad's app in a window): the arrow and the actions clear them.
@@ -814,6 +822,20 @@ public struct OrganicInlineBar<Leading: View, Trailing: View>: View {
         return bar
     }
 
+    /// A quiet second line under the title (round 11 §5: the writer's save state): 12, muted (or `ink`),
+    /// one line; the two centred on the row together, start-aligned on a phone and centred on a tablet.
+    /// Its line is kept while `text` is nil, so the bar never grows — the title meanwhile stands alone on
+    /// the row's line, gliding up as the line fills (``BarTitles``).
+    public func subtitle(_ text: String?, ink: Color = Tokens.textMuted, help: String? = nil) -> Self {
+        subtitle(BarTitles.Subtitle(text: text, ink: ink, help: help))
+    }
+
+    public func subtitle(_ line: BarTitles.Subtitle) -> Self {
+        var bar = self
+        bar.subtitle = line
+        return bar
+    }
+
     /// How far through the page's story the reader is (0…1; nil draws nothing): a marker rides the
     /// bar's own wave from its left end (design §3), in its own ink and width (round 5 D1).
     public func readingProgress(_ progress: CGFloat?) -> Self {
@@ -849,6 +871,8 @@ public struct OrganicInlineBar<Leading: View, Trailing: View>: View {
                 .frame(maxWidth: HeaderChrome.centreRoom(width: window.width,
                                                          side: max(trailingWidth - 12 + controls.trailing, HeaderChrome.backReserve + controls.leading)))
             }
+            // The row a little under the tall row's middle (round 11 §6), all of it together; the bar keeps its height.
+            .offset(y: HeaderChrome.backRowDrop)
             .frame(minHeight: HeaderChrome.rowHeight)
             .windowControlsInset($controls)
             .padding(.leading, window.pad + inset)
@@ -886,7 +910,14 @@ public struct OrganicInlineBar<Leading: View, Trailing: View>: View {
     }
 
     @ViewBuilder private var titleText: some View {
-        if !title.isEmpty {
+        if let subtitle, !title.isEmpty {
+            let size = barTitleSize(window)
+            BarTitles(title, font: chrome != nil ? HeaderContextTitle.font : AppFonts.heading(size),
+                      tracking: chrome != nil ? 0 : -0.02 * size,
+                      lift: chrome != nil ? 0 : barTitleBesideArrow(title, size: size),
+                      subtitle: subtitle, alignment: chrome != nil ? .center : .leading)
+                .layoutPriority(titleLeads ? 1 : 0)
+        } else if !title.isEmpty {
             let size = barTitleSize(window)
             // A tablet's centred context is set as iPadOS sets an inline title (round 5 D5).
             Text(title)
@@ -899,6 +930,87 @@ public struct OrganicInlineBar<Leading: View, Trailing: View>: View {
                 .accessibilityAddTraits(.isHeader)
                 .layoutPriority(titleLeads ? 1 : 0)
         }
+    }
+}
+
+/// A bar's title with a quiet second line under it (round 11 §5: the writer's save state — 儲存中⋯,
+/// 已儲存, 修改已暫存, 未儲存): the title alone on its first line, the second at 12 in the muted ink (or its
+/// own), each one line, ellipsized. The two are centred on the row together; the second line's height is
+/// kept while it says nothing, so the bar never grows — and the title, alone meanwhile, stands down on
+/// the row's line (half the second line and its gap, as the web's 9), gliding up as the line fills
+/// (160 ms ease-out, at once under Reduce Motion). Also the publish step's own heading at the split.
+public struct BarTitles: View {
+    /// The second line: its words (nil: kept empty), its ink, and what a pointer resting on it reads.
+    public struct Subtitle: Equatable {
+        public var text: String?
+        public var ink: Color
+        public var help: String?
+
+        public init(text: String?, ink: Color = Tokens.textMuted, help: String? = nil) {
+            self.text = text
+            self.ink = ink
+            self.help = help
+        }
+    }
+
+    /// The second line's type and box (the web's 12 on a 1.4 line, 1 under the title).
+    public static let subtitleSize: CGFloat = 12
+    public static let subtitleLine: CGFloat = subtitleSize * 1.4
+    public static let subtitleGap: CGFloat = 1
+    /// How far the title stands down while it is alone: onto the row's line, where it sits with no second line.
+    public static let aloneDrop: CGFloat = (subtitleLine + subtitleGap) / 2
+
+    let title: String
+    let font: Font
+    let tracking: CGFloat
+    let lift: CGFloat
+    let subtitle: Subtitle
+    let alignment: HorizontalAlignment
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// `lift`: the title's own optical place beside the arrow (a CJK title's), kept in both states.
+    public init(_ title: String, font: Font, tracking: CGFloat = 0, lift: CGFloat = 0, subtitle: Subtitle,
+                alignment: HorizontalAlignment = .leading) {
+        self.title = title
+        self.font = font
+        self.tracking = tracking
+        self.lift = lift
+        self.subtitle = subtitle
+        self.alignment = alignment
+    }
+
+    /// Where the title stands: down on the row's line while the second line is empty.
+    public static func titleOffset(subtitle: String?, lift: CGFloat = 0) -> CGFloat {
+        lift + (subtitle == nil ? aloneDrop : 0)
+    }
+
+    public var body: some View {
+        let frameAlignment = Alignment(horizontal: alignment, vertical: .center)
+        VStack(alignment: alignment, spacing: Self.subtitleGap) {
+            Text(title)
+                .font(font)
+                .tracking(tracking)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .foregroundStyle(Tokens.text)
+                .offset(y: Self.titleOffset(subtitle: subtitle.text, lift: lift))
+                .accessibilityAddTraits(.isHeader)
+            ZStack(alignment: frameAlignment) {
+                if let text = subtitle.text {
+                    Text(text)
+                        .font(AppFonts.body(Self.subtitleSize))
+                        .foregroundStyle(subtitle.ink)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .contentTransition(.opacity)
+                        .help(subtitle.help ?? text)
+                        .transition(.opacity)
+                }
+            }
+            .frame(height: Self.subtitleLine, alignment: frameAlignment)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: subtitle.text)
+        }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: subtitle.text == nil)
     }
 }
 

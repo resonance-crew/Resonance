@@ -120,6 +120,13 @@ private struct TagFlow: Layout {
 /// 儲存中⋯ · 已儲存 · 修改已暫存, or 未儲存 in the error ink — 13 in the muted ink, on one line. It goes
 /// before the title gives way (the bar's `titleFirst`): shown whole, or not at all. Nothing before the
 /// card's first write. (VoiceOver hears each new word from the writer, `announce(_:)`.)
+extension WriteModel.SaveState {
+    /// The bar's second line under its title (round 11 §5): the word, in the error ink when it failed.
+    static func subtitle(_ state: WriteModel.SaveState?, help: String?) -> BarTitles.Subtitle {
+        BarTitles.Subtitle(text: state?.label, ink: state == .failed ? Tokens.terracotta : Tokens.textMuted, help: help ?? state?.label)
+    }
+}
+
 struct SaveStateWord: View {
     let state: WriteModel.SaveState?
     /// What a pointer resting on it reads: the word with the last write's time (``WriteModel/saveStateHelp``).

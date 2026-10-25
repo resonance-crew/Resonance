@@ -280,7 +280,7 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         // The mirror's line is on its way above the band.
         #expect(draft.insight == .loading)
         #expect(!PublishStep.bandUnderBar(draft, showsBar: true, compact: true))
-        #expect(PublishStep.topPadding(draft, showsBar: true, compact: true) == 16)
+        #expect(PublishStep.topPadding(draft, showsBar: true, compact: true) == PenLineGap.fromFoot(Tokens.storyHeadGapCompact))
         // Nothing to say: the line collapses, and the band is the first thing under the bar.
         #expect(await eventually { draft.insight == WriteModel.Insight.none })
         #expect(PublishStep.bandUnderBar(draft, showsBar: true, compact: true))
@@ -289,20 +289,20 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(!PublishStep.bandUnderBar(draft, showsBar: false, compact: true))
         #expect(PublishStep.topPadding(draft, showsBar: false, compact: true) == WriteWorkspace.paneTop)
         #expect(!PublishStep.bandUnderBar(draft, showsBar: true, compact: false))
-        #expect(PublishStep.topPadding(draft, showsBar: true, compact: false) == 16)
+        #expect(PublishStep.topPadding(draft, showsBar: true, compact: false) == PenLineGap.fromFoot(Tokens.storyHeadCoverGap))
 
         // A mirror line shown stays above the band, which keeps its rule.
         let mirrored = WriteModel(drafts: RecordingDraftStore(), writing: writing(), calls: ServerCalls().calls, opened: card())
         #expect(await mirrored.goNext())
         #expect(await eventually { mirrored.insight == .shown("被理解之前，先被看見") })
         #expect(!PublishStep.bandUnderBar(mirrored, showsBar: true, compact: true))
-        #expect(PublishStep.topPadding(mirrored, showsBar: true, compact: true) == 16)
+        #expect(PublishStep.topPadding(mirrored, showsBar: true, compact: true) == PenLineGap.fromFoot(Tokens.storyHeadGapCompact))
 
         // A live card's step says 更新這張卡片's hint above the band.
         let live = WriteModel(drafts: RecordingDraftStore(), writing: writing(), calls: quiet.calls, opened: card(published: true))
         #expect(await live.goNext())
         #expect(!PublishStep.bandUnderBar(live, showsBar: true, compact: true))
-        #expect(PublishStep.topPadding(live, showsBar: true, compact: true) == 16)
+        #expect(PublishStep.topPadding(live, showsBar: true, compact: true) == PenLineGap.fromFoot(Tokens.storyHeadGapCompact))
     }
 
     @Test func theAudienceChosenInTheStepIsSavedAndKeptGoingBack() async {
