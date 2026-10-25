@@ -1177,6 +1177,8 @@ public enum L10n {
             public static var menuLabel: String { Strings.shared.string("me.actions.menuLabel") }
             /// Edit
             public static var edit: String { Strings.shared.string("me.actions.edit") }
+            /// Publish
+            public static var publishPublicly: String { Strings.shared.string("me.actions.publishPublicly") }
             /// Make private
             public static var makePrivate: String { Strings.shared.string("me.actions.makePrivate") }
             /// Delete

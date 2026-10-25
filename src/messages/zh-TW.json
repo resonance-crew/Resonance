@@ -653,6 +653,7 @@
     "actions": {
       "menuLabel": "管理卡片",
       "edit": "編輯",
+      "publishPublicly": "公開發表",
       "makePrivate": "轉為私人卡",
       "delete": "刪除",
       "deleteConfirmTitle": "刪除這張卡片？",

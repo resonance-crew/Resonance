@@ -653,6 +653,7 @@
     "actions": {
       "menuLabel": "Manage card",
       "edit": "Edit",
+      "publishPublicly": "Publish",
       "makePrivate": "Make private",
       "delete": "Delete",
       "deleteConfirmTitle": "Delete this card?",

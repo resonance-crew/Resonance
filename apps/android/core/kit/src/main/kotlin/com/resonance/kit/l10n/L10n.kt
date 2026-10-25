@@ -1179,6 +1179,8 @@ object L10n {
             val menuLabel: String get() = Strings.string("me.actions.menuLabel")
             /** Edit */
             val edit: String get() = Strings.string("me.actions.edit")
+            /** Publish */
+            val publishPublicly: String get() = Strings.string("me.actions.publishPublicly")
             /** Make private */
             val makePrivate: String get() = Strings.string("me.actions.makePrivate")
             /** Delete */
