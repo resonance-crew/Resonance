@@ -223,6 +223,11 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
         keyboard?.hide()
         jump(hit.messageId, false)
     }
+    // A tap on the thread's blank, or on the foot's solid paper, puts the keyboard away (round 11 §2).
+    val putKeyboardAway: () -> Unit = {
+        focusManager.clearFocus()
+        keyboard?.hide()
+    }
     val reply: (ChatMessage) -> Unit = { message ->
         model.reply(message)
         runCatching { composerFocus.requestFocus() }
@@ -264,7 +269,7 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                 val foot = model.foot
                 // The thread runs to the screen's foot; the composer floats over it.
                 Box(Modifier.fillMaxSize()) {
-                    if (ready) MessageList(rows, ctx, list, top, Modifier.fillMaxSize(), pillVisible = !(searching && showResults), sayEmpty = foot.composes, room = room, notice = notice)
+                    if (ready) MessageList(rows, ctx, list, top, Modifier.fillMaxSize().onThreadBlankTap(putKeyboardAway), pillVisible = !(searching && showResults), sayEmpty = foot.composes, room = room, notice = notice)
                     // Who it is with, or the first read, still on its way: the thread's shapes until the messages take their place.
                     if (!ready || !model.threadReady) ThreadSkeleton(room, Modifier.padding(top = top))
                     if (ready && searching && showResults) SearchResults(model, query, top, resultsList, pick, bottom = with(density) { room.clear.toDp() })
@@ -274,9 +279,10 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                 // It floats 8 over the navigation bar or the keyboard, the page's gutter at its sides; in a wide
                 // pane it keeps to a column of its own, centred under the thread. Behind it the foot's paper
                 // (round 10 §3.2) runs the pane's whole width down to the screen's edge, so the thread never
-                // shows under or beside it — its fade over the foot's top 24, counted in the room it takes.
+                // shows under or beside it — its fade over the foot's top 12 (round 11 §3), counted in the room it
+                // takes; a tap on its solid part puts the keyboard away, as one on the thread's blank does.
                 Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
-                    if (foot != ThreadFoot.Pending) ComposerBacking(Modifier.matchParentSize())
+                    if (foot != ThreadFoot.Pending) ComposerBacking(Modifier.matchParentSize(), onTap = putKeyboardAway)
                     Box(
                         Modifier
                             .fillMaxWidth()
@@ -424,7 +430,7 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
  * The thread's foot where there is no composer: a calm line, centred — a note of yours waiting for
  * its answer, or why you can't write here — and what can be done about it, if anything; floating in
  * the composer's place on an opaque framed slip (round 9 §4), the foot's paper behind it as behind
- * the capsule, its fade over the slip's top 24 (round 10 §3.2).
+ * the capsule, its fade over the slip's top 12 (round 10 §3.2, round 11 §3).
  */
 @Composable
 private fun FootNote(text: String, modifier: Modifier = Modifier, action: (@Composable () -> Unit)? = null) {

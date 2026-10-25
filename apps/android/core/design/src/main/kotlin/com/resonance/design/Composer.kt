@@ -41,6 +41,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
@@ -66,10 +69,18 @@ val ComposerHeight = 48.dp
 val ComposerSendWidth = 52.dp
 
 /**
- * The fade at the top of the composer's foot (round 10 §3.2): the page's paper going from clear to
- * opaque over these 24, then solid to the screen's bottom edge ([ComposerBacking]).
+ * The fade at the top of the composer's foot (round 10 §3.2, round 11 §3): the page's paper going
+ * from clear to opaque over these 12 — just enough to read as a fade — then solid to the screen's
+ * bottom edge ([ComposerBacking]). It starts on the top edge of what the foot shows first.
  */
-val ComposerFade = 24.dp
+val ComposerFade = 12.dp
+
+/**
+ * With rows riding over the capsule, the foot starts this far over the topmost one (round 11 §3):
+ * a row's first ink (the reply's rule, a thumbnail, the label) starts about 6 into it, so the
+ * [ComposerFade] that starts here ends where that ink starts — the paper solid behind every row.
+ */
+val ComposerRowsLead = 6.dp
 
 /** A row riding with the message over the capsule ([ComposerRow]): its least height. */
 val ComposerRowHeight = 52.dp
@@ -191,16 +202,19 @@ fun Modifier.floatingSlip(seed: Double = 29.0, radius: Double = 14.0, pen: Color
 }
 
 /**
- * The paper at the thread's foot, behind the composer (round 10 §3.2): the page's cream across the
- * whole pane, down to the screen's bottom edge — through the navigation bar, to the keyboard's top
- * when it is up — its top [ComposerFade] a fade from clear paper to opaque. Laid behind the foot at
- * its size: with nothing riding, the fade covers the capsule's top half (solid from the middle of
- * its one line down); with rows riding the foot is [ComposerFade] taller over them, so the paper is
- * solid from the rows' top. The solid paper takes every touch, so nothing under it can be tapped or
- * dragged; the fade lets them through to the thread. Not read by TalkBack.
+ * The paper at the thread's foot, behind the composer (round 10 §3.2, round 11 §3): the page's cream
+ * across the whole pane, down to the screen's bottom edge — through the navigation bar, to the
+ * keyboard's top when it is up — its top [ComposerFade] a fade from clear paper to opaque, starting
+ * on the top edge of what the foot shows first. Laid behind the foot at its size: with nothing
+ * riding, the fade covers the capsule's top 12 (solid from there down); with rows riding the foot
+ * starts [ComposerRowsLead] over them, so the fade ends where their ink starts. The solid paper takes
+ * every touch, so nothing under it can be tapped or dragged — a tap on it ([onTap]) is a tap on the
+ * thread's blank (the keyboard goes away); the fade lets touches through to the thread. Not read by
+ * TalkBack.
  */
 @Composable
-fun ComposerBacking(modifier: Modifier = Modifier) {
+fun ComposerBacking(modifier: Modifier = Modifier, onTap: () -> Unit = {}) {
+    val tap by rememberUpdatedState(onTap)
     Column(modifier.clearAndSetSemantics { }) {
         Box(Modifier.fillMaxWidth().height(ComposerFade).background(remember { Brush.verticalGradient(listOf(Tokens.Cream.copy(alpha = 0f), Tokens.Cream)) }))
         Box(
@@ -209,8 +223,21 @@ fun ComposerBacking(modifier: Modifier = Modifier) {
                 .weight(1f)
                 .background(Tokens.Cream)
                 .pointerInput(Unit) {
-                    awaitPointerEventScope {
-                        while (true) awaitPointerEvent().changes.forEach { it.consume() }
+                    // Every touch is the paper's (nothing under it is pressed); one that stays a tap is the blank's.
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        down.consume()
+                        var moved = false
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            event.changes.forEach { it.consume() }
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) moved = true
+                            if (!change.pressed) {
+                                if (!moved) tap()
+                                break
+                            }
+                        }
                     }
                 },
         )
