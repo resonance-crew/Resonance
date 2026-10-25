@@ -11,7 +11,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,7 +41,8 @@ import coil3.ImageLoader
 import coil3.compose.AsyncImage
 import com.resonance.design.ChatPictureSource
 import com.resonance.design.OrganicIcon
-import com.resonance.design.OrganicIconButton
+import com.resonance.design.OnDarkDisc
+import com.resonance.design.OnDarkIconButton
 import com.resonance.design.SketchLoader
 import com.resonance.design.generated.IconName
 import com.resonance.design.prefersReducedMotion
@@ -135,14 +140,24 @@ internal fun PictureViewer(picture: ChatPictureSource, loader: ImageLoader?, onD
                 Loading.Failed -> OrganicIcon(IconName.Image, size = 30.dp, color = Color.White.copy(alpha = 0.7f))
                 Loading.Done -> {}
             }
-            Box(Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.statusBars).padding(8.dp)) {
-                OrganicIconButton(IconName.Close, L10n.Native.close, size = 18.dp, color = Color.White, onClick = onDismiss)
+            // The ✕ on its disc of the viewer's dark (round 12 §1–2), the disc's centre 16 + 22 in from the
+            // top and end, inside the system bars and a cutout: it reads on a light picture that fills the screen.
+            Box(Modifier.align(Alignment.TopEnd).windowInsetsPadding(ViewerCloseInsets).padding(top = ViewerCloseInset, end = ViewerCloseInset)) {
+                OnDarkIconButton(IconName.Close, L10n.Native.close, onClick = onDismiss)
             }
         }
     }
 }
 
 private enum class Loading { Busy, Done, Failed }
+
+/** The ✕'s disc centre from the top and end edges (round 12 §1–2: 16 + half its 44 on the web), and so its target's inset. */
+internal val ViewerCloseCentre = 38.dp
+internal val ViewerCloseInset = ViewerCloseCentre - OnDarkDisc.Target / 2
+
+/** What the ✕ keeps clear of: the status bar, a cutout, a navigation bar at the end (landscape). */
+private val ViewerCloseInsets: WindowInsets
+    @Composable get() = WindowInsets.systemBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Top + WindowInsetsSides.End)
 
 /** How far a double tap zooms in, and how far a pinch may go. */
 private const val DOUBLE_TAP_ZOOM = 2.5f
