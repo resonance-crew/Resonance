@@ -789,11 +789,12 @@
 
 /* ── The composer: floating over the thread (round 9 §4) ──────────── */
 
-/* The thread's foot, floating: no band and no fade — the thread runs on under
-   it to the screen's edge. It stays in the column's flow (iOS Safari keeps a
-   focused field in view so), the page's gutter at its sides, 8 over the safe
-   area (or the keyboard), centred and at most 720 wide. Only what is drawn in
-   it takes the pointer: the air round it is the thread's. */
+/* The thread's foot, floating — the thread runs on under it to the screen's
+   edge. It stays in the column's flow (iOS Safari keeps a focused field in
+   view so), across the pane, 8 over the safe area (or the keyboard); what it
+   holds is centred and at most 720 wide, the page's gutter at its sides.
+   Only what is drawn in it takes the pointer: the air round it is the
+   thread's. */
 .dock {
   position: relative;
   z-index: 5;
@@ -802,39 +803,59 @@
   flex-direction: column;
   gap: 6px;
   width: 100%;
-  max-width: calc(720px + 28px);
-  margin: 0 auto;
   padding: 0 14px calc(8px + env(safe-area-inset-bottom, 0px));
   pointer-events: none;
 }
 
 .dock > * {
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
   pointer-events: auto;
 }
 
-/* Paper laid over the thread: the page's cream cut out round the pen line (the
-   halo), no shadow and nothing see-through — it reads over any bubble, a dark
-   photo's too. Shared by the capsule and the slips. */
-.paperHalo {
-  fill: none;
-  stroke: var(--color-cream);
-  stroke-linejoin: round;
+/* The foot's paper (round 10 §3.2): the page's cream behind the foot, across
+   the pane and down to the screen's edge, so nothing of the thread shows
+   under or beside it. Its top 24 are a fade from the thread into the paper —
+   over the capsule's top half, solid from its one-line middle down — and with
+   rows riding over the capsule the foot grows 24 over them, so they lie on
+   solid paper. The fade lets taps through to the thread; the solid paper
+   takes them (nothing hidden under it can be pressed). Under what is in the
+   foot (the foot is its own stacking context). */
+.dock::before,
+.dock::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: -1;
+}
+
+.dock::before {
+  top: 0;
+  height: 24px;
+  background: linear-gradient(to bottom, transparent, var(--color-cream));
+}
+
+.dock::after {
+  top: 24px;
+  bottom: 0;
+  background: var(--color-cream);
+  pointer-events: auto;
+}
+
+.dock:has(> .carry) {
+  padding-top: 24px;
 }
 
 .paperFill {
   fill: var(--color-cream);
 }
 
-/* A slip (FloatingSlip): what rides with the next message, over the capsule —
-   a secondary surface, its pen a step lighter in the muted ink — or a notice
-   standing in the composer's place, in the field's pen. */
+/* A notice in the composer's place (FloatingSlip), in the field's pen. */
 .slip {
   position: relative;
   --shape-fill: var(--color-cream);
-  --shape-ink: color-mix(in oklch, var(--color-text-muted) 55%, var(--color-cream));
-}
-
-.slip[data-pen='field'] {
   --shape-ink: var(--field-border);
 }
 
@@ -912,8 +933,15 @@
   color: var(--color-text-muted);
 }
 
-/* Replying: a short wavy pen rule in terracotta, whom, the words, and a 44 ✕. */
-.replyBar {
+/* What rides the next message (round 10 §3.4): a row each, in the reply's
+   style — what it is at the start, whom or what in two lines, a 44 ✕ at the
+   end — with no frame, on the foot's solid paper. */
+.carry {
+  display: flex;
+  flex-direction: column;
+}
+
+.carryRow {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -921,7 +949,8 @@
   padding: 4px 0 4px 12px;
 }
 
-.replyRule {
+/* A reply's lead: a short wavy pen rule in terracotta, the row's height. */
+.carryRule {
   display: flex;
   flex-shrink: 0;
   align-self: stretch;
@@ -929,7 +958,28 @@
   margin: 4px 0;
 }
 
-.replyBarText {
+/* A picture's or a card's lead: its picture, cover-cropped — or a glyph on the
+   tonal tile (the terracotta tint mixed into the paper). */
+.carryTile {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 12px 14px 12px 14px;
+  background: color-mix(in oklch, var(--color-terracotta-light) 40%, var(--color-cream));
+}
+
+.carryTile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.carryText {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -937,14 +987,14 @@
   min-width: 0;
 }
 
-.replyBarWho {
+.carryLabel {
   font-size: 12px;
   font-weight: 600;
   line-height: 1.3;
   color: var(--color-text);
 }
 
-.replyBarQuote {
+.carryDetail {
   overflow: hidden;
   font-size: 12.5px;
   line-height: 1.35;
@@ -953,104 +1003,14 @@
   white-space: nowrap;
 }
 
-.replyClose {
+.carryRemove {
   display: flex;
   flex-shrink: 0;
 }
 
-.replyClose > button,
-.replyClose > a {
+.carryRemove > button {
   width: 44px;
   height: 44px;
-}
-
-/* A note, a card or a picture riding the next message. The slip leaves room
-   round them for their rings (and a picture's ✕ on its corner): nothing cuts one. */
-.attachments {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px;
-}
-
-.replyBar + .attachments {
-  padding-top: 4px;
-}
-
-/* On the opaque slip, opaque itself: the terracotta tint mixed into the paper. */
-.attachChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 8px 5px 10px;
-  font-size: 12px;
-  color: var(--color-text);
-  background: color-mix(in oklch, var(--color-terracotta-light) 40%, var(--color-cream));
-  border-radius: 12px 14px 12px 14px;
-}
-
-.attachTitle {
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.attachRemove {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px;
-  border: none;
-  border-radius: 50%;
-  background: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-}
-
-.attachRemove:hover {
-  color: var(--color-terracotta);
-}
-
-/* Their rings, whole: outside the glyph, inside the slip's padding. */
-.attachRemove:focus-visible,
-.attachPictureRemove:focus-visible {
-  outline: 2px solid var(--field-border-focus, var(--color-terracotta));
-  outline-offset: 1px;
-}
-
-/* A picture waiting to go: its thumbnail, rounded as the chips are, its × on its corner. */
-.attachPicture {
-  position: relative;
-  display: inline-block;
-  width: 52px;
-  height: 52px;
-}
-
-.attachPicture img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 12px 14px 12px 14px;
-  background: color-mix(in oklch, var(--color-text) 6%, var(--color-cream));
-}
-
-.attachPictureRemove {
-  position: absolute;
-  top: -7px;
-  right: -7px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: var(--color-text);
-  color: var(--color-cream);
-  cursor: pointer;
 }
 
 .fileInput {
@@ -1091,7 +1051,8 @@
   z-index: 1;
 }
 
-/* The field's pen: soft ink at rest, darker under the pointer, terracotta while written in. */
+/* The field's pen: soft ink at rest, its own darker ink under the pointer and while written in — darker, never
+   another colour (round 10 §3.3). */
 .capsulePen {
   fill: none;
   stroke: var(--field-border);
@@ -1105,7 +1066,7 @@
 }
 
 .capsule[data-focus] .capsulePen {
-  stroke: var(--field-border-focus);
+  stroke: var(--field-border-hover);
 }
 
 /* The ＋: a ghost glyph at the capsule's start, its target 44 × 48, on the last line's row. */
@@ -1253,10 +1214,17 @@
     padding-left: 0;
   }
 
-  /* The page's own 14px side padding is the composer's gutter on a phone. */
+  /* The page's own 14px side padding is the composer's gutter on a phone; the foot's paper reaches past it to
+     the screen's edges, as the header's does. */
   .dock {
     padding-right: 0;
     padding-left: 0;
+  }
+
+  .dock::before,
+  .dock::after {
+    left: -14px;
+    right: -14px;
   }
 }
 

@@ -819,17 +819,17 @@ export function ThreadView({ handle, replyNote }: ThreadViewProps) {
                 under it by its measured height (useDockInset). */}
             <div ref={dockRef} className={styles.dock}>
               {error && (
-                <FloatingSlip seed={43} pen="field" className={styles.noticeSlip} role="alert">
+                <FloatingSlip seed={43} className={styles.noticeSlip} role="alert">
                   <p className={styles.error}>{error}</p>
                 </FloatingSlip>
               )}
               {foot === 'awaiting' ? (
                 // Their answer is what connects the two: until it comes, nothing more to write here.
-                <FloatingSlip seed={37} pen="field" className={styles.noticeSlip}>
+                <FloatingSlip seed={37} className={styles.noticeSlip}>
                   <p className={styles.letterLine}>{t('awaitingReply')}</p>
                 </FloatingSlip>
               ) : foot === 'closed' ? (
-                <FloatingSlip seed={41} pen="field" className={styles.noticeSlip}>
+                <FloatingSlip seed={41} className={styles.noticeSlip}>
                   {notConnected}
                 </FloatingSlip>
               ) : (

@@ -7,7 +7,7 @@ import { ShapeGrain } from '@/components/atoms/ShapeGrain/ShapeGrain';
 import { boundaryPoints, polyline } from '@/components/molecules/SegmentedActionBar/SegmentedActionBar';
 import { INK } from '@/lib/design/strokes';
 import { useElementSize } from '@/lib/hooks/useElementSize';
-import { floatingPath, haloWidth } from './FloatingSlip';
+import { floatingPath } from './FloatingSlip';
 import styles from './Thread.module.css';
 
 /** The capsule's one-line height on every platform: one line sits centred in it at any text size (round 9 §4). */
@@ -37,7 +37,7 @@ export function capsuleShape(w: number, h: number) {
 export interface ComposerCapsuleProps {
   /** The ＋, the file input and the field, in that order (Send is the capsule's own). */
   children: ReactNode;
-  /** The field is written in: the pen turns terracotta, as every field's. */
+  /** The field is written in: its pen darkens (the field's own darker ink, never another colour). */
   focused: boolean;
   /** There is something to send: the segment takes the verb's solid face. */
   ready: boolean;
@@ -47,8 +47,9 @@ export interface ComposerCapsuleProps {
 
 /**
  * The composer's capsule (round 9 §4): one hand-drawn field — the field's
- * wobble, cream, its pen at INK turning terracotta while written in — with the
- * page's paper as a halo round it, holding the ＋, the text and Send. Send is
+ * wobble, cream, its pen at INK darkening while written in (round 10 §3.3) —
+ * holding the ＋, the text and Send; the foot's paper behind it (the dock's)
+ * keeps the thread from showing round it. Send is
  * the capsule's end segment in the segmented bar's language: a wavy seam cut
  * across it in the paper's colour, the segment the tonal peach with a
  * terracotta plane while there is nothing to send, the verb's solid
@@ -81,14 +82,13 @@ export function ComposerCapsule({ children, focused, ready, sendLabel, onSend }:
     >
       {shape && (
         <>
-          {/* The paper halo, the field's cream, the send segment's face — under what is in it. */}
+          {/* The field's cream and the send segment's face — under what is in it. */}
           <svg aria-hidden="true" className={styles.capsuleShape} width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
             <defs>
               <clipPath id={clipId}>
                 <path d={shape.outline} />
               </clipPath>
             </defs>
-            <path d={shape.outline} className={styles.paperHalo} strokeWidth={haloWidth(INK)} />
             <path d={shape.outline} className={styles.paperFill} />
             <path d={shape.segment} className={styles.sendFace} clipPath={`url(#${clipId})`} />
           </svg>

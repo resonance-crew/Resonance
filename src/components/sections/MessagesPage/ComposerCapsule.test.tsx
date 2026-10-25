@@ -5,9 +5,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen } from '@/../test/render';
 import { mockElementSize } from '@/../test/organic';
 import { boundaryPoints, polyline } from '@/components/molecules/SegmentedActionBar/SegmentedActionBar';
-import { INK, INK_LIGHT } from '@/lib/design/strokes';
+import { INK } from '@/lib/design/strokes';
 import { CAPSULE_H, ComposerCapsule, SEND_SEGMENT_W, capsuleShape } from './ComposerCapsule';
-import { FloatingSlip, PAPER_HALO, floatingPath } from './FloatingSlip';
+import { FloatingSlip, floatingPath } from './FloatingSlip';
 
 // The capsule and the slip measure themselves before they draw.
 mockElementSize(320, 48);
@@ -15,7 +15,8 @@ mockElementSize(320, 48);
 const css = readFileSync(join(process.cwd(), 'src/components/sections/MessagesPage/Thread.module.css'), 'utf8');
 const rule = (selector: string) => {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return css.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
+  // Every block of the selector's own (one shared with another selector too), in order.
+  return [...css.matchAll(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`, 'g'))].map((m) => m[1]).join('\n');
 };
 
 function capsule(props: Partial<Parameters<typeof ComposerCapsule>[0]> = {}) {
@@ -28,7 +29,7 @@ function capsule(props: Partial<Parameters<typeof ComposerCapsule>[0]> = {}) {
 
 describe('the composer capsule (round 9 §4)', () => {
   // One shape: the field's outline, the send segment past a wavy seam — the segmented bar's seam, one point list
-  // for the face's edge and the stroke — and the page's paper as a halo round it.
+  // for the face's edge and the stroke.
   it('cuts Send off the field as its end segment, on the segmented bar’s seam', () => {
     const shape = capsuleShape(320, 48)!;
     const seam = polyline(boundaryPoints(320 - SEND_SEGMENT_W, 48, 34, 1.6, Math.max(12, 48 * 0.3)));
@@ -38,19 +39,26 @@ describe('the composer capsule (round 9 §4)', () => {
     expect(capsuleShape(0, 48)).toBeNull();
   });
 
-  it('draws the halo under the field’s pen, in the paper’s colour, and nothing see-through', () => {
+  // Round 10 §3.1–3.2: no paper halo round the pen; the foot's paper behind the whole foot keeps the thread from
+  // showing round it — a 24 fade from the thread into it, solid from there to the screen's edge, 24 more over
+  // rows riding along — and nothing of it is a shadow or see-through.
+  it('draws no halo round its pen, and lays the foot’s paper behind it with a 24 fade', () => {
     const { container } = render(capsule());
     const paths = Array.from(container.querySelectorAll('svg path'));
-    const halo = paths.find((p) => p.getAttribute('class')?.includes('paperHalo'))!;
     const pen = paths.find((p) => p.getAttribute('class')?.includes('capsulePen'))!;
-    expect(halo.getAttribute('d')).toBe(pen.getAttribute('d'));
-    expect(Number(halo.getAttribute('stroke-width'))).toBe(INK + 2 * PAPER_HALO);
     expect(Number(pen.getAttribute('stroke-width'))).toBe(INK);
-    // The halo comes first: the pen line lies on it.
-    expect(paths.indexOf(halo)).toBeLessThan(paths.indexOf(pen));
-    expect(rule('.paperHalo')).toMatch(/stroke:\s*var\(--color-cream\)/);
-    // Not a shadow, not a fade: a floating thing stays opaque in every state.
-    for (const sel of ['.capsule', '.send', '.slip', '.dock', '.paperFill', '.sendFace']) {
+    // Nothing stroked wider than the pen: no ring round it.
+    for (const p of paths) expect(Number(p.getAttribute('stroke-width') ?? 0)).toBeLessThanOrEqual(INK);
+    expect(css).not.toMatch(/paperHalo/);
+
+    expect(rule('.dock::before')).toMatch(/height:\s*24px/);
+    expect(rule('.dock::before')).toMatch(/linear-gradient\(to bottom, transparent, var\(--color-cream\)\)/);
+    expect(rule('.dock::after')).toMatch(/top:\s*24px;[\s\S]*bottom:\s*0;[\s\S]*background:\s*var\(--color-cream\)/);
+    // The fade lets taps through to the thread; the solid paper takes them.
+    expect(rule('.dock::after')).toMatch(/pointer-events:\s*auto/);
+    expect(rule('.dock:has(> .carry)')).toMatch(/padding-top:\s*24px/);
+    // Not a shadow: a floating thing stays opaque in every state.
+    for (const sel of ['.capsule', '.send', '.slip', '.dock', '.paperFill', '.sendFace', '.carryRow']) {
       expect(rule(sel)).not.toMatch(/opacity|box-shadow|drop-shadow/);
     }
     expect(css).not.toMatch(/\.send\[aria-disabled[^{]*\{[^}]*opacity/);
@@ -76,12 +84,14 @@ describe('the composer capsule (round 9 §4)', () => {
     expect(onSend).toHaveBeenCalledTimes(1);
   });
 
-  it('turns its pen terracotta while written in, as every field does', () => {
+  // Round 10 §3.3: written in, its pen darkens — the field's own darker ink — and never turns terracotta.
+  it('darkens its pen while written in, without changing its colour', () => {
     const { container, rerender } = render(capsule());
     expect(container.firstElementChild).not.toHaveAttribute('data-focus');
     rerender(capsule({ focused: true }));
     expect(container.firstElementChild).toHaveAttribute('data-focus');
-    expect(rule('.capsule[data-focus] .capsulePen')).toMatch(/stroke:\s*var\(--field-border-focus\)/);
+    expect(rule('.capsule[data-focus] .capsulePen')).toMatch(/stroke:\s*var\(--field-border-hover\)/);
+    expect(rule('.capsule[data-focus] .capsulePen')).not.toMatch(/focus|terracotta/);
   });
 
   // Telegram's: the field doesn't grow from a larger font — one line sits centred in 48 by padding worked out from
@@ -99,20 +109,20 @@ describe('the composer capsule (round 9 §4)', () => {
   });
 });
 
-describe('the slip over the composer', () => {
-  it('is opaque paper with the same halo, its pen a step lighter for what rides along', () => {
+describe('a notice in the composer’s place', () => {
+  it('is opaque paper in the field’s pen, with no halo', () => {
     const { container } = render(
       <FloatingSlip seed={31}>
-        <span>Replying to alice</span>
+        <span>Waiting for their answer</span>
       </FloatingSlip>,
     );
     const paths = Array.from(container.querySelectorAll('svg path'));
-    const halo = paths.find((p) => p.getAttribute('class')?.includes('paperHalo'))!;
     const pen = paths.find((p) => p.getAttribute('class')?.includes('slipPen'))!;
-    expect(Number(pen.getAttribute('stroke-width'))).toBe(INK_LIGHT);
-    expect(Number(halo.getAttribute('stroke-width'))).toBe(INK_LIGHT + 2 * PAPER_HALO);
+    expect(Number(pen.getAttribute('stroke-width'))).toBe(INK);
+    expect(paths.map((p) => p.getAttribute('class'))).toEqual([expect.stringContaining('paperFill'), expect.stringContaining('slipPen')]);
     expect(pen.getAttribute('d')).toBe(floatingPath(320, 48, 14, 31));
-    expect(screen.getByText('Replying to alice')).toBeInTheDocument();
+    expect(rule('.slip')).toMatch(/--shape-ink:\s*var\(--field-border\)/);
+    expect(screen.getByText('Waiting for their answer')).toBeInTheDocument();
   });
 
   it('stands in as a plain shape of the same fill until it is measured', () => {

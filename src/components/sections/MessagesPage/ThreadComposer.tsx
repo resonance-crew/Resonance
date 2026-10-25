@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { BareIconButton } from '@/components/atoms/BareIconButton/BareIconButton';
 import { Divider } from '@/components/atoms/Divider/Divider';
 import { Textarea } from '@/components/atoms/Field/Field';
-import { Icon } from '@/components/atoms/Icon';
+import { Icon, type IconName } from '@/components/atoms/Icon';
 import { OrganicMenu } from '@/components/molecules/OrganicMenu/OrganicMenu';
 import { useToast } from '@/components/providers/ToastProvider';
 import { preparePicture, UnsupportedImage, type PreparedPicture } from '@/lib/chat/preparePicture';
@@ -16,7 +16,6 @@ import { MESSAGE_MAX_LENGTH } from '@/lib/db/firestore/client/messages';
 import type { Card, MessageReplyQuote } from '@/lib/db/types';
 import type { ThreadDraft } from '@/lib/data/thread';
 import { ComposerCapsule } from './ComposerCapsule';
-import { FloatingSlip } from './FloatingSlip';
 import styles from './Thread.module.css';
 
 // The card picker loads when it is first opened, not with the thread.
@@ -52,8 +51,8 @@ interface PendingPicture extends PreparedPicture {
  * a picture can be pasted too), the field — one line at rest, growing to five
  * with what is written — and Send as the capsule's end segment
  * (ComposerCapsule). What the next message carries (the message it answers, a
- * note it quotes, a card or a picture — one of the two) rides on a slip of
- * its own just over it. Its draft lives here, so typing never draws the
+ * note it quotes, a card or a picture — one of the two) rides just over it,
+ * a row each in the reply's style, its ✕ at the end. Its draft lives here, so typing never draws the
  * thread above it again; sending never holds it (the message goes out behind
  * any still on their way, and the field is ready at once — a picture goes up
  * as it is sent).
@@ -115,64 +114,56 @@ export function ThreadComposer({ inputRef, otherHandle, replyingTo, replyHandle,
     inputRef.current?.focus();
   }
 
-  // The pen of the field: terracotta while it is written in, as every field's.
+  // The capsule's pen darkens while it is written in.
   const [focused, setFocused] = useState(false);
   const carries = !!(replyingTo || noteRef || pendingCard || picture);
 
   return (
     <>
-      {/* What rides the next message — the message it answers, a note, a card or a picture — on a slip of its own
-          over the capsule, so the capsule keeps its exact shape whatever it carries. */}
+      {/* What rides the next message — the message it answers, then a note, a card or a picture — as rows in the
+          reply's style straight on the foot's paper, over the capsule, which keeps its exact shape whatever it
+          carries (round 10 §3.4). */}
       {carries && (
-        <FloatingSlip seed={31} className={styles.carrySlip}>
+        <div className={styles.carry}>
           {replyingTo && (
-            <div className={styles.replyBar}>
-              <span className={styles.replyRule} aria-hidden>
-                <Divider orientation="vertical" seed={31} amplitude={1.1} strokeWidth={INK} color="var(--color-terracotta)" spacing={0} />
-              </span>
-              <span className={styles.replyBarText}>
-                <span className={styles.replyBarWho}>
-                  {replyHandle ? t('replyingTo', { handle: replyHandle }) : t('replyingToSelf')}
+            <CarryRow
+              lead={
+                <span className={styles.carryRule} aria-hidden>
+                  <Divider orientation="vertical" seed={31} amplitude={1.1} strokeWidth={INK} color="var(--color-terracotta)" spacing={0} />
                 </span>
-                <span className={styles.replyBarQuote}>{replyingTo.text || t('replyCard')}</span>
-              </span>
-              <span className={styles.replyClose}>
-                <BareIconButton icon="close" label={t('replyCancel')} iconSize={16} tipAlign="end" onClick={onCancelReply} />
-              </span>
-            </div>
+              }
+              label={replyHandle ? t('replyingTo', { handle: replyHandle }) : t('replyingToSelf')}
+              detail={replyingTo.text || t('replyCard')}
+              removeLabel={t('replyCancel')}
+              onRemove={onCancelReply}
+            />
           )}
-          {(noteRef || pendingCard || picture) && (
-            <div className={styles.attachments}>
-              {noteRef && (
-                <span className={styles.attachChip}>
-                  <Icon name="note" size={14} />
-                  {t('quotedNote')}
-                  <button type="button" aria-label={t('removeCard')} className={styles.attachRemove} onClick={() => setNoteRef(undefined)}>
-                    <Icon name="close" size={13} />
-                  </button>
-                </span>
-              )}
-              {pendingCard && (
-                <span className={styles.attachChip}>
-                  <Icon name="cards" size={14} />
-                  <span className={styles.attachTitle}>{pendingCard.thoughtCore}</span>
-                  <button type="button" aria-label={t('removeCard')} className={styles.attachRemove} onClick={() => setPendingCard(null)}>
-                    <Icon name="close" size={13} />
-                  </button>
-                </span>
-              )}
-              {picture && (
-                <span className={styles.attachPicture}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={picture.previewUrl} alt={t('attachImage')} />
-                  <button type="button" aria-label={t('removeImage')} className={styles.attachPictureRemove} onClick={() => setPicture(null)}>
-                    <Icon name="close" size={13} />
-                  </button>
-                </span>
-              )}
-            </div>
+          {noteRef && (
+            <CarryRow
+              lead={<CarryTile icon="note" />}
+              label={t('quotedNote')}
+              removeLabel={t('removeCard')}
+              onRemove={() => setNoteRef(undefined)}
+            />
           )}
-        </FloatingSlip>
+          {pendingCard && (
+            <CarryRow
+              lead={<CarryTile icon="cards" picture={pendingCard.media?.type === 'image' ? pendingCard.media.url : undefined} />}
+              label={t('attachCardShort')}
+              detail={pendingCard.thoughtCore}
+              removeLabel={t('removeCard')}
+              onRemove={() => setPendingCard(null)}
+            />
+          )}
+          {picture && (
+            <CarryRow
+              lead={<CarryTile picture={picture.previewUrl} />}
+              label={t('attachImage')}
+              removeLabel={t('removeImage')}
+              onRemove={() => setPicture(null)}
+            />
+          )}
+        </div>
       )}
 
       <ComposerCapsule focused={focused} ready={valid} sendLabel={t('send')} onSend={submit}>
@@ -269,5 +260,51 @@ export function ThreadComposer({ inputRef, otherHandle, replyingTo, replyHandle,
         />
       )}
     </>
+  );
+}
+
+/**
+ * One thing riding the next message, in the reply's style (round 10 §3.4): what it is at the start — the reply's
+ * wavy rule, a picture's thumbnail, a card's cover or a glyph on a tonal tile — then whom or what (and a line of
+ * it), and its ✕ at the end.
+ */
+function CarryRow({
+  lead,
+  label,
+  detail,
+  removeLabel,
+  onRemove,
+}: {
+  lead: ReactNode;
+  label: string;
+  detail?: string;
+  removeLabel: string;
+  onRemove: () => void;
+}) {
+  return (
+    <div className={styles.carryRow}>
+      {lead}
+      <span className={styles.carryText}>
+        <span className={styles.carryLabel}>{label}</span>
+        {detail && <span className={styles.carryDetail}>{detail}</span>}
+      </span>
+      <span className={styles.carryRemove}>
+        <BareIconButton icon="close" label={removeLabel} iconSize={16} tipAlign="end" onClick={onRemove} />
+      </span>
+    </div>
+  );
+}
+
+/** A row's 40 × 40 lead: the picture when there is one, else `icon` on the tonal tile. */
+function CarryTile({ icon, picture }: { icon?: IconName; picture?: string }) {
+  return (
+    <span className={styles.carryTile} aria-hidden>
+      {picture ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={picture} alt="" />
+      ) : (
+        icon && <Icon name={icon} size={18} color="var(--color-terracotta)" />
+      )}
+    </span>
   );
 }

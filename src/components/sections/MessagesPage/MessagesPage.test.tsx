@@ -407,7 +407,10 @@ describe('MessagesPage thread', () => {
 
     const file = new File(['jpeg'], 'sky.jpg', { type: 'image/jpeg' });
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
-    expect(await screen.findByRole('img', { name: 'Photo' })).toHaveAttribute('src', 'blob:local/picture');
+    // Its row over the capsule: the thumbnail, Photo, its ✕.
+    const row = (await screen.findByRole('button', { name: 'Remove photo' })).closest('[class*="carryRow"]')!;
+    expect(row.querySelector('img')).toHaveAttribute('src', 'blob:local/picture');
+    expect(row).toHaveTextContent('Photo');
     await u.type(screen.getByRole('textbox', { name: 'Conversation with alice' }), 'the sky tonight');
     await u.click(screen.getByRole('button', { name: 'Send' }));
 
@@ -415,9 +418,9 @@ describe('MessagesPage thread', () => {
     const [uploaded, to, opts] = mockUploadChatImage.mock.calls[0];
     expect([uploaded, to, opts.as]).toEqual([file, 'alice', 'me']);
     expect(mockSendMessage).toHaveBeenCalledWith('alice', 'the sky tonight', expect.objectContaining({ image: opts.clientId, clientId: opts.clientId }));
-    // Drawn in the thread at once, from the device; the chip is gone.
+    // Drawn in the thread at once, from the device; its row is gone.
     expect(screen.getByRole('button', { name: 'View photo' })).toBeInTheDocument();
-    expect(screen.queryByRole('img', { name: 'Photo' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Remove photo' })).toBeNull();
   });
 
   it('holds one of the two — a card picked takes the picture\'s place — and says when a file is not a picture it can send', async () => {
@@ -426,13 +429,14 @@ describe('MessagesPage thread', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Attach a photo or a card' })).toBeInTheDocument());
     const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
     fireEvent.change(input, { target: { files: [new File(['jpeg'], 'sky.jpg', { type: 'image/jpeg' })] } });
-    expect(await screen.findByRole('img', { name: 'Photo' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Remove photo' })).toBeInTheDocument();
 
     await u.click(screen.getByRole('button', { name: 'Attach a photo or a card' }));
     await u.click(screen.getByRole('menuitem', { name: 'Card' }));
     await u.click(await screen.findByRole('button', { name: 'pick-card' }));
     expect(screen.getByText('A shared thought')).toBeInTheDocument();
-    expect(screen.queryByRole('img', { name: 'Photo' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Remove card' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove photo' })).toBeNull();
   });
 
   it('draws a picture message in its bubble, opens it whole, and quotes it as a photo', async () => {
