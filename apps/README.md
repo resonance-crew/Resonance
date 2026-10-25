@@ -656,3 +656,16 @@ every row; why the last one didn't go is a terracotta line under them. That 24 i
 (`ComposerRoom.foot`), so the newest message, the pill and the list's end room keep 12 over the fade. The capsule's
 pen is `FieldBorder`, `FieldBorderHover` while written in (`composerPen`) — darker, never terracotta. A notice in the
 composer's place keeps its framed slip, the paper behind it alike.
+
+Round 11 (2026-10-25): a tap on the thread's blank — one no message took: between bubbles, beside them, above the
+first — puts the keyboard away (`onThreadBlankTap`, the final pass), and so does a tap on the foot's solid paper
+(`ComposerBacking`'s `onTap`); the capsule and the riding rows keep their own touches. The foot's fade is 12
+(`ComposerFade`), starting on the capsule's top edge, or 6 over the topmost riding row (`ComposerRowsLead`), where
+the row's ink starts. The writer's head is the card page's (`writerHead`: the bar's pen line → the title's line box
+48 / 64, a tablet's publish card 72), the title → the story 32 (`writerTitleGap`), the title's count or error in
+that gap; the publish step's sections are one `publishSectionGap` apart (40 / 48), a label 12 over its control,
+the rule over the button in the middle of one gap, a phone's mirror line keeping two lines of room while asked. The
+save state is the bar title's second line (`TitleWithStatus`: 12, start-aligned on a phone, centred on a tablet,
+its line kept while empty and the title alone standing on the row's line until it comes). A tablet's back bar sets
+its row `TabletBarRowDrop` (6) under its middle. The trash shelf's cards say nothing under them; its 還原 says who
+reads the card now (`restoredToast`, from the restore's answer: the web's `restoredAs`).
