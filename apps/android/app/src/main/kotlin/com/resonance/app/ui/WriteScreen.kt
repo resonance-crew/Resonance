@@ -11,6 +11,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Ease
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -101,6 +102,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -141,6 +143,8 @@ import com.resonance.design.OrganicMenuItem
 import com.resonance.design.OrganicModal
 import com.resonance.design.ReadingTextScale
 import com.resonance.design.SaveStateText
+import com.resonance.design.TitleWithStatus
+import com.resonance.design.storyHeadGap
 import com.resonance.design.Segment
 import com.resonance.design.SegmentedActionBar
 import com.resonance.design.SketchLoader
@@ -714,7 +718,8 @@ private fun WritingStep(
             .then(if (compact) Modifier else Modifier.fillMaxWidth().wrapContentWidth().widthIn(max = columnMax))
             // The bar lies over the page, so what scrolls shows right up to its pen line.
             .padding(top = top)
-            .padding(start = pad, end = pad, top = if (bar) 16.dp else 0.dp, bottom = 48.dp)
+            // Under the bar the page's first line stands where a card page's title does (round 11 §4: the reading head).
+            .padding(start = pad, end = pad, top = if (bar) writerHead(compact) else 0.dp, bottom = 48.dp)
             // The page's end clears what covers it: the docked bar, else the system's navigation bar (the keyboard down).
             .then(if (docked) Modifier.padding(bottom = with(density) { dockPx.toDp() }.coerceAtLeast(DOCK_BAR_HEIGHT)) else Modifier.navigationBarsPadding()),
     ) {
@@ -736,7 +741,8 @@ private fun WritingStep(
         }
         if (!bar || line != null || model.saveError != null) Spacer(Modifier.height(16.dp))
         TitleField(model, bridge, compact, titleFocus, onTitleFocus)
-        Spacer(Modifier.height(16.dp))
+        // The title → the story's first line (round 11 §4); what the title says of itself lies in this gap.
+        Spacer(Modifier.height(writerTitleGap(compact)))
         Box(Modifier.onGloballyPositioned { storyCoords = it }) {
             StoryCanvas(bridge, minHeight = maxOf(240.dp, page - 320.dp))
         }
@@ -805,27 +811,31 @@ private fun TitleField(model: WriteModel, bridge: StoryEditorBridge, compact: Bo
                 },
             )
         }
-        // In the gap under it, so the story never moves: the count from 50 on (the error, below, in its place).
+        // In the gap under it, so the story never moves (round 11 §4): the count from 50 on, at the end, or —
+        // instead — the error, at the start; neither takes room of its own.
         val count = title.length
         when {
-            model.titleError -> {}
+            model.titleError -> BasicText(
+                L10n.Write.titleRequired,
+                style = AppFonts.body(Tokens.HintSize, lineHeight = 1.4f, color = Mixes.Danger),
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .inTheGap()
+                    .semantics { liveRegion = LiveRegionMode.Assertive },
+            )
             count >= TITLE_COUNT_FROM -> BasicText(
                 "$count / ${WriteModel.TITLE_MAX}",
                 style = AppFonts.body(Tokens.HintSize, lineHeight = 1.4f, color = if (count >= WriteModel.TITLE_MAX) Tokens.Text else Tokens.TextMuted),
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .layout { measurable, constraints ->
-                        val p = measurable.measure(constraints)
-                        layout(p.width, 0) { p.place(0, 1.dp.roundToPx()) }
-                    },
+                modifier = Modifier.align(Alignment.BottomEnd).inTheGap(),
             )
         }
     }
-    if (model.titleError) BasicText(
-        L10n.Write.titleRequired,
-        style = AppFonts.body(Tokens.HintSize, lineHeight = 1.5f, color = Mixes.Danger),
-        modifier = Modifier.padding(top = 6.dp).semantics { liveRegion = LiveRegionMode.Assertive },
-    )
+}
+
+/** What the title says of itself, laid in the gap under it: 1 below the title's box, taking no height. */
+private fun Modifier.inTheGap(): Modifier = layout { measurable, constraints ->
+    val p = measurable.measure(constraints)
+    layout(p.width, 0) { p.place(0, 1.dp.roundToPx()) }
 }
 
 /** From this many characters on, the title says how many it holds. */
@@ -877,6 +887,13 @@ private fun PublishStep(
     val hint = model.showsUpdateHint
     val tucks = bar && compact && !hint
     val underBar = bandUnderBar(bar, compact, hint, mirrorOnScreen = mirrorShows || lineComposed)
+    // A tablet's preview card first under the bar stands where a card page's cover would (round 11 §4): 8 lower
+    // than the line a hint or the mirror would start on — eased, as the mirror folds away above it.
+    val gap = publishSectionGap(compact)
+    val coverLead by animateDpAsState(
+        if (bar && !compact && cardFirstUnderBar(hint, mirrorOnScreen = mirrorShows || lineComposed)) writerHead(compact, cover = true) - writerHead(compact) else 0.dp,
+        if (reduced) snap() else tween(200, easing = Ease), label = "previewLead",
+    )
     // Every section keeps its gap above it, so one that folds away (the mirror with nothing to say) takes its gap along.
     Column(
         Modifier
@@ -885,31 +902,33 @@ private fun PublishStep(
             .then(if (compact) Modifier else Modifier.fillMaxWidth().wrapContentWidth().widthIn(max = columnMax))
             // Where a band may tuck under the bar, the column starts at the bar's wave; what sits above the band keeps clear of it.
             .padding(top = if (bar) inlineBarTop() - (if (tucks) HeaderEdgeHeight else 0.dp) else splitTop())
-            .padding(start = pad, end = pad, top = if (bar && !tucks) 16.dp else 0.dp, bottom = 48.dp),
+            // Under the bar the step's first line stands where a card page's title does (round 11 §4: the reading head).
+            .padding(start = pad, end = pad, top = if (bar && !tucks) writerHead(compact) else 0.dp, bottom = 48.dp),
     ) {
         if (!bar) {
             StepHeading(model, status)
-            Spacer(Modifier.height(STEP_GAP))
+            Spacer(Modifier.height(gap))
         }
         if (model.showsUpdateHint) {
             BasicText(L10n.Write.PublishPanel.updateHint, style = AppFonts.body(14f, lineHeight = 1.7f, color = Tokens.TextMuted))
-            Spacer(Modifier.height(STEP_GAP))
+            Spacer(Modifier.height(gap))
         }
         // The mirror line over the band: the band starts under the wave, as it does at the end of the line's folding.
         if (tucks && !underBar) Spacer(Modifier.height(HeaderEdgeHeight))
-        if (!updating) MirrorLine(model.mirror, reduced, lead = if (tucks) 16.dp else 0.dp) { lineComposed = it }
+        if (!updating) MirrorLine(model.mirror, reduced, gap, lead = if (tucks) writerHead(compact) else 0.dp, twoLines = compact) { lineComposed = it }
+        Spacer(Modifier.height(coverLead))
 
         // While it publishes, nothing in the step takes a tap (the web's fieldset disabled, iOS's .disabled):
         // the controls show it themselves. Never faded as a whole — an alpha layer is cut at this column's
         // box, and the card's pen line (a tablet's bordered card) or band (a phone's, edge to edge) runs past it.
         Column(Modifier.holdWhile(pending)) {
             Preview(session, model, compact, pad, underBar, pickCover, dismissKeyboard)
-            Spacer(Modifier.height(STEP_GAP))
+            Spacer(Modifier.height(gap))
             Tags(model, dismissKeyboard)
-            Spacer(Modifier.height(STEP_GAP))
+            Spacer(Modifier.height(gap))
             AudienceChoice(model)
             model.resonanceLine?.let { line ->
-                Spacer(Modifier.height(STEP_GAP))
+                Spacer(Modifier.height(gap))
                 Row(
                     Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
                     verticalAlignment = Alignment.CenterVertically,
@@ -924,10 +943,12 @@ private fun PublishStep(
             }
         }
 
-        Spacer(Modifier.height(STEP_GAP))
+        // The rule over the foot stands in the middle of one section gap (round 11 §4 review): the verb stays near
+        // the choice that names it.
+        Spacer(Modifier.height(gap / 2))
         Column {
             WavyDivider(seed = 47.0)
-            Spacer(Modifier.height(STEP_GAP))
+            Spacer(Modifier.height(gap / 2))
             if (model.verbWaits) {
                 BasicText(L10n.Write.mediaBusyHint, style = AppFonts.body(12f, lineHeight = 1.5f, color = Tokens.TextMuted))
                 Spacer(Modifier.height(12.dp))
@@ -960,8 +981,28 @@ private fun PublishStep(
     }
 }
 
-/** The step's gap between its sections (the web's clamp(22px, 3vw, 32px); the apps' 28). */
-private val STEP_GAP = 28.dp
+/** Two lines of the mirror's words (14 on 1.7): the room its loader keeps on a phone. */
+private val MIRROR_TWO_LINES = (14f * 1.7f * 2).dp
+
+/** The publish step's gap between its sections (round 11 §4, `--publish-section-gap`): 48, 40 on a phone — the preview, 標籤, 卡片類型, the rule and the button alike. */
+internal fun publishSectionGap(compact: Boolean): Dp = (if (compact) Tokens.PublishSectionGapCompact else Tokens.PublishSectionGap).dp
+
+/** A section's label → its control in the publish step (`--publish-label-gap`). */
+internal val PublishLabelGap: Dp = Tokens.PublishLabelGap.dp
+
+/**
+ * The writer's head under its bar (round 11 §4): from the bar's foot to the first line's box — the
+ * title's, or the publish step's first line — as far under the bar's pen line as a card page's title
+ * ([storyHeadGap]: 48 on a phone, 64 wider); to a card's top edge with [cover] (56 / 72).
+ */
+internal fun writerHead(compact: Boolean, cover: Boolean = false): Dp =
+    (if (compact) LayoutClass.Compact else LayoutClass.Medium).storyHeadGap(cover)
+
+/** The writer's title → its story's first line (round 11 §4, `--writer-title-gap`): 32, 24 on a phone. */
+internal fun writerTitleGap(compact: Boolean): Dp = (if (compact) Tokens.WriterTitleGapCompact else Tokens.WriterTitleGap).dp
+
+/** Whether the publish step's card is the first thing under the bar: no update hint, no mirror line on screen. */
+internal fun cardFirstUnderBar(hint: Boolean, mirrorOnScreen: Boolean): Boolean = !hint && !mirrorOnScreen
 
 /**
  * Whether the publish step's card band is the first thing under the writer's bar, and so drawn as
@@ -994,9 +1035,11 @@ private fun StepHeading(model: WriteModel, status: BarStatus?) {
             OrganicIconButton(IconName.ArrowRight, L10n.Write.leaveStay, mirrored = true) { model.back() }
         }
         Spacer(Modifier.widthIn(min = 4.dp))
-        BasicText(model.stepTitle, style = AppFonts.heading(22f, 700, lineHeight = 1.2f), modifier = Modifier.weight(1f).semantics { heading() })
-        Spacer(Modifier.width(12.dp))
-        SaveStateText(status)
+        // The writing's save state under the step's name (round 11 §5), as the bar says it below the split.
+        TitleWithStatus(
+            { m -> BasicText(model.stepTitle, style = AppFonts.heading(22f, 700, lineHeight = 1.2f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = m.semantics { heading() }) },
+            status, centred = false, Modifier.weight(1f),
+        )
     }
 }
 
@@ -1005,10 +1048,11 @@ private fun StepHeading(model: WriteModel, status: BarStatus?) {
  * 你想說的，也許是——「…」 once it answers; an answer of nothing folds the line away with its gap
  * (200 ms; at once with the system's animations off). The line grows as it changes, so what is under
  * it glides rather than jumps. [lead]: air above the line that folds with it (a phone's, under the
- * bar); [onComposed] says when the line is on screen and when it has gone, folding done.
+ * bar); [twoLines]: the room of two lines of words kept while it is asked (a phone's); [onComposed] says
+ * when the line is on screen and when it has gone, folding done.
  */
 @Composable
-private fun MirrorLine(mirror: Mirror?, reduced: Boolean, lead: Dp = 0.dp, onComposed: (Boolean) -> Unit = {}) {
+private fun MirrorLine(mirror: Mirror?, reduced: Boolean, gap: Dp, lead: Dp = 0.dp, twoLines: Boolean = false, onComposed: (Boolean) -> Unit = {}) {
     // What it last had to say stays drawn while the line folds away.
     var said by remember { mutableStateOf<Mirror?>(null) }
     if (mirror is Mirror.Loading || mirror is Mirror.Shown) said = mirror
@@ -1024,7 +1068,9 @@ private fun MirrorLine(mirror: Mirror?, reduced: Boolean, lead: Dp = 0.dp, onCom
         }
         Column(Modifier.fillMaxWidth().animateContentSize(if (reduced) snap() else tween(200, easing = Ease))) {
             if (lead > 0.dp) Spacer(Modifier.height(lead))
-            when (val m = said) {
+            // On a phone the echo is mostly two lines: the loader's one keeps that room, so the card under it
+            // doesn't move when the words come (round 11 §4 review).
+            Box(Modifier.heightIn(min = if (twoLines) MIRROR_TWO_LINES else 0.dp)) { when (val m = said) {
                 is Mirror.Shown -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OrganicIcon(IconName.Sparkle, Modifier.padding(top = 3.dp), size = 16.dp, color = Tokens.Terracotta)
                     BasicText(L10n.Write.PublishPanel.insight(m.text), style = AppFonts.body(14f, lineHeight = 1.7f))
@@ -1033,8 +1079,8 @@ private fun MirrorLine(mirror: Mirror?, reduced: Boolean, lead: Dp = 0.dp, onCom
                     SketchLoader(28.dp)
                     BasicText(L10n.Write.PublishPanel.insightLoading, style = AppFonts.body(14f, lineHeight = 1.7f, color = Tokens.TextMuted))
                 }
-            }
-            Spacer(Modifier.height(STEP_GAP))
+            } }
+            Spacer(Modifier.height(gap))
         }
     }
 }
@@ -1247,7 +1293,7 @@ private fun StepLabel(text: String) {
  */
 @Composable
 private fun Tags(model: WriteModel, dismissKeyboard: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(PublishLabelGap)) {
         StepLabel(L10n.Write.tagsLabel)
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             TagField(
@@ -1286,7 +1332,7 @@ private fun Tags(model: WriteModel, dismissKeyboard: () -> Unit) {
 @Composable
 private fun AudienceChoice(model: WriteModel) {
     val chosen = model.audience
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(PublishLabelGap)) {
         StepLabel(L10n.Write.Visibility.label)
         SegmentedActionBar(
             Audience.entries.map { audience ->
