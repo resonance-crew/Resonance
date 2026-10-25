@@ -1,5 +1,8 @@
 package com.resonance.app.ui
 
+import android.os.Build
+import android.view.View
+import android.view.WindowInsetsController
 import androidx.compose.animation.core.animate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -18,6 +21,7 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -33,10 +37,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import coil3.ImageLoader
 import coil3.compose.AsyncImage
 import com.resonance.design.ChatPictureSource
@@ -59,6 +65,7 @@ import kotlin.math.abs
 @Composable
 internal fun PictureViewer(picture: ChatPictureSource, loader: ImageLoader?, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        LightStatusGlyphs()
         val scope = rememberCoroutineScope()
         val reduced = LocalContext.current.prefersReducedMotion()
         var size by remember { mutableStateOf(IntSize.Zero) }
@@ -150,6 +157,27 @@ internal fun PictureViewer(picture: ChatPictureSource, loader: ImageLoader?, onD
 }
 
 private enum class Loading { Busy, Done, Failed }
+
+/**
+ * Light status-bar glyphs over the viewer's dark (round 12 §1–2's follow-up): set on the viewer's own
+ * window, which governs the bars while it is open; it goes with the viewer, and the activity's dark
+ * glyphs on the paper are back as it closes — nothing of the app's own window is touched.
+ */
+@Composable
+private fun LightStatusGlyphs() {
+    val view = LocalView.current
+    DisposableEffect(view) {
+        (view.parent as? DialogWindowProvider)?.window?.let { window ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                window.insetsController?.setSystemBarsAppearance(0, WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS)
+            } else {
+                @Suppress("DEPRECATION")
+                window.decorView.systemUiVisibility = window.decorView.systemUiVisibility and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+            }
+        }
+        onDispose {}
+    }
+}
 
 /** The ✕'s disc centre from the top and end edges (round 12 §1–2: 16 + half its 44 on the web), and so its target's inset. */
 internal val ViewerCloseCentre = 38.dp

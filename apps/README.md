@@ -686,7 +686,8 @@ reads the card now (`restoredToast`, from the restore's answer: the web's `resto
 Round 12 (2026-10-26): the picture viewer's ✕ is `OnDarkIconButton` — the cream glyph (20, INK) on a wobbly disc
 of the viewer's own dark (`OnDarkDisc`: `oklch(12% 0.01 60)` at 50 %, 72 % pressed; the web bare button's wash,
 seed 5, 40 across in a 48 target), its centre 16 + 22 in from the top and end inside the system bars and a cutout
-(`ViewerCloseCentre`): it reads on a light picture that fills the screen and fades into the dark around one. On a
+(`ViewerCloseCentre`): it reads on a light picture that fills the screen and fades into the dark around one. While open, the viewer's own
+window makes the status bar's glyphs light (`LightStatusGlyphs`); the paper's dark ones are back as it closes. On a
 私人卡's own page — the 編輯 pen already beside the ⋯ — the ⋯ leads with 公開發表 (globe) instead of 編輯
 (`menuRows(penBeside)`), which opens the writer on the card at its publish step (`publishRoute`:
 `Route.Write.publishing`, carried by the workspace's pane) with the card offered to readers — 公開, or 匿名公開 for a
