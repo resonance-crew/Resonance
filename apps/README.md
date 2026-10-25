@@ -700,3 +700,12 @@ window makes the status bar's glyphs light (`LightStatusGlyphs`); the paper's da
 card already anonymous (`publishingAudience`), a choice like any in the step (autosaved, still changeable); the offer
 is made once, so a restored writer keeps what it was left with. Back from that step is writing, as always. The card
 box's ⋯ keeps 編輯.
+
+Round 13 (2026-10-26, iOS): a thought map opens as its 👁 顯示全部 leaves it — every card and region framed in the
+map's visible area — on the map page and beside the writer at the split alike (`ThoughtMapStore.beginVisit`, once per
+`ThoughtMapScreen` shown, whatever the camera was on the session's last visit), and while `framing` frames it again
+as the board's read lands (`show`), as its visible size changes (the pane easing open or hidden, a divider
+let go, the iPad turned or its window resized, the map back from under a page pushed over it — only the screen on
+show reports its size) and when a card opens in the pane (`settle`). A pan past the 4px rule, a pinch or the zoom
+buttons take the camera (`takeCamera`): from then on the pane's card glides to the centre as before; 👁 hands it back.
+The web's rule (50d7cf4a, `followFitRef`).

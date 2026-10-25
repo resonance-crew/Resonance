@@ -60,7 +60,13 @@ final class ThoughtMapStore {
     @ObservationIgnored private var service: ThoughtMapService?
     /// Cards' summaries from the server, for the cards the rules won't read here (ThoughtMapService.summaries).
     private let summaries: @Sendable ([String]) async throws -> [FeedCard]
-    @ObservationIgnored private var fitted = false
+    /// Whether the camera frames everything on the map — what 顯示全部 (👁) does — and keeps it so: as the
+    /// board's read arrives, whenever the map's visible size changes (the writer's pane easing open or shut
+    /// beside it, a divider let go, the iPad turned or its window resized, the map shown again after being
+    /// covered) and when a card opens in the pane. From the start of each map shown (`beginVisit`) until the
+    /// reader pans, pinches or zooms it themself; 顯示全部 hands the camera back to it (round 13, the web's
+    /// `followFitRef`).
+    @ObservationIgnored private(set) var framing = true
     /// The card to centre (see `centre(on:animated:)`): while the camera glides to it, or until the map
     /// can (not loaded yet, no size yet).
     @ObservationIgnored private var focus: (id: String, animated: Bool)?
@@ -103,9 +109,9 @@ final class ThoughtMapStore {
     }
 
     /// A visit. The session keeps this store between visits: one within
-    /// `staleAfter` of the last read shows what it read at once (where the camera
-    /// was), reading again only the cards the writer changed since; a later one
-    /// reads everything again, behind what it shows. What a visit was in the
+    /// `staleAfter` of the last read shows what it read at once (framed afresh:
+    /// `beginVisit`), reading again only the cards the writer changed since; a later
+    /// one reads everything again, behind what it shows. What a visit was in the
     /// middle of (a selection, the tray, an open editor) doesn't carry over.
     func open(uid: String, changes: Int, lastChange: WriteLauncher.Change?, now: Date = .now) async {
         selection = nil
@@ -151,32 +157,38 @@ final class ThoughtMapStore {
             // A placed card older than the newest 40 is still on the map: read it by id.
             let missing = m.nodes.map(\.cardId).filter { byId[$0] == nil }
             for card in await service.cards(ids: missing) { byId[card.id] = card }
-            applyCards(byId, resonated: c.resonated)
-            // A card that's gone (deleted, in the trash, an original I can no longer read) drops out of
-            // view; its place is kept, for a card that comes back (a restore).
-            nodes = [:]
-            nodeOrder = []
-            parked = [:]
-            for n in m.nodes {
-                if cards[n.cardId] != nil {
-                    nodes[n.cardId] = n
-                    nodeOrder.append(n.cardId)
-                } else {
-                    parked[n.cardId] = n
-                }
-            }
-            edges = Dictionary(uniqueKeysWithValues: m.edges.map { ($0.id, $0) })
-            edgeOrder = m.edges.map(\.id)
-            groups = Dictionary(uniqueKeysWithValues: m.groups.map { ($0.id, $0) })
-            groupOrder = m.groups.map(\.id)
-            loaded = true
-            failed = false
+            show(m, cards: byId, resonated: c.resonated)
             readAt = started
-            fitIfReady()
-            applyFocus()
         } catch {
             failed = !loaded
         }
+    }
+
+    /// The board as a read found it, shown — framed while the camera still frames everything, so a read
+    /// that lands after the map has its size frames what it brought.
+    func show(_ m: ThoughtMapService.Loaded, cards byId: [String: MapCard], resonated: Set<String>) {
+        applyCards(byId, resonated: resonated)
+        // A card that's gone (deleted, in the trash, an original I can no longer read) drops out of
+        // view; its place is kept, for a card that comes back (a restore).
+        nodes = [:]
+        nodeOrder = []
+        parked = [:]
+        for n in m.nodes {
+            if cards[n.cardId] != nil {
+                nodes[n.cardId] = n
+                nodeOrder.append(n.cardId)
+            } else {
+                parked[n.cardId] = n
+            }
+        }
+        edges = Dictionary(uniqueKeysWithValues: m.edges.map { ($0.id, $0) })
+        edgeOrder = m.edges.map(\.id)
+        groups = Dictionary(uniqueKeysWithValues: m.groups.map { ($0.id, $0) })
+        groupOrder = m.groups.map(\.id)
+        loaded = true
+        failed = false
+        frameIfReady()
+        applyFocus()
     }
 
     /// Titles and tags may have changed in the writer: refresh the cards, keep the map — a card that
@@ -187,7 +199,7 @@ final class ThoughtMapStore {
         let missing = (nodeOrder + parked.keys.sorted()).filter { byId[$0] == nil }
         for card in await service.cards(ids: missing) { byId[card.id] = card }
         applyCards(byId, resonated: c.resonated)
-        Self.parkNodes(&nodes, order: &nodeOrder, parked: &parked) { cards[$0] != nil }
+        parkGoneNodes()
     }
 
     /// Out of view, the nodes whose card is gone (`known` false), into `parked`; back in view, the
@@ -224,7 +236,15 @@ final class ThoughtMapStore {
             }
         }
         applyCards(byId, resonated: resonated)
+        parkGoneNodes()
+    }
+
+    /// The nodes whose card went out of view, those whose card came back into it; framed again while the
+    /// camera frames everything and what the map shows changed.
+    private func parkGoneNodes() {
+        let shown = nodeOrder
         Self.parkNodes(&nodes, order: &nodeOrder, parked: &parked) { cards[$0] != nil }
+        if nodeOrder != shown { frameIfReady() }
     }
 
     private func applyCards(_ byId: [String: MapCard], resonated: Set<String>) {
@@ -241,18 +261,32 @@ final class ThoughtMapStore {
         self.resonated = resonated
     }
 
+    /// The map's visible size (the screen shown reports it: see ThoughtMapScreen). Framing everything still,
+    /// everything is framed in it; otherwise a glide under way aims again at the centre of the width the
+    /// map settled at.
     func setViewport(_ size: CGSize) {
         guard size != viewport else { return }
         viewport = size
-        fitIfReady()
-        // A glide under way aims again at the centre of the width the map settled at.
-        applyFocus()
+        if framing { frameIfReady() } else { applyFocus() }
     }
 
-    private func fitIfReady() {
-        guard !fitted, loaded, viewport.width > 0, viewport.height > 0 else { return }
-        fitted = true
-        camera = fittedCamera
+    /// A map shown (the thought-map page, or the writer's beside its pane): it opens as 顯示全部 leaves it —
+    /// everything framed, and kept framed until the reader takes the camera — whatever the camera was on
+    /// the last visit, in whatever size.
+    func beginVisit() {
+        stopGlide()
+        framing = true
+        frameIfReady()
+    }
+
+    /// Everything framed in the map's visible area, while the camera frames everything and the map has
+    /// its board and its size.
+    private func frameIfReady() {
+        guard framing, loaded, viewport.width > 0, viewport.height > 0 else { return }
+        glide?.stop()
+        glide = nil
+        let framed = fittedCamera
+        if framed != camera { camera = framed }
     }
 
     // MARK: - Derived
@@ -296,13 +330,22 @@ final class ThoughtMapStore {
     // MARK: - Camera
 
     func zoom(by factor: Double) {
-        stopGlide()
+        takeCamera()
         camera = zoomAt(camera, viewport.width / 2, viewport.height / 2, factor)
     }
 
+    /// 顯示全部 (👁): everything framed, and kept framed as the map changes size until the reader moves it again.
     func fit() {
         stopGlide()
+        framing = true
         camera = fittedCamera
+    }
+
+    /// The reader moves the camera themself (a pan, a pinch, the zoom buttons): a glide stops where it
+    /// is, and the map no longer frames everything on its own.
+    private func takeCamera() {
+        stopGlide()
+        framing = false
     }
 
     private var fittedCamera: MapCamera {
@@ -311,9 +354,19 @@ final class ThoughtMapStore {
     }
 
     /// The split workspace's map, once its visible width settles beside the editor pane (the pane opens
-    /// or is shown again, another card opens in it, a divider drag ends): the camera glides (300 ms,
-    /// ease-out; reduced motion: jumps) so the card the pane shows sits at the centre of the map's
-    /// visible area, at the current zoom. A card not on the map leaves the camera where it is.
+    /// or is shown again, another card opens in it, a divider drag ends): framing everything still, it
+    /// frames everything in that width (round 13); once the reader has moved the camera, the card the
+    /// pane shows (if any) glides to the centre (`centre`).
+    func settle(on cardId: String?, animated: Bool) {
+        if framing {
+            frameIfReady()
+        } else if let cardId {
+            centre(on: cardId, animated: animated)
+        }
+    }
+
+    /// The camera glides (300 ms, ease-out; reduced motion: jumps) so `cardId` sits at the centre of the
+    /// map's visible area, at the current zoom. A card not on the map leaves the camera where it is.
     func centre(on cardId: String, animated: Bool) {
         focus = (cardId, animated)
         applyFocus()
@@ -558,6 +611,7 @@ final class ThoughtMapStore {
             var cam = zoomAt(camera, frame.cx, frame.cy, frame.dist / prev.dist)
             cam.x += frame.cx - prev.cx
             cam.y += frame.cy - prev.cy
+            if cam != camera { framing = false }
             camera = cam
             pinch = frame
             return
@@ -568,6 +622,8 @@ final class ThoughtMapStore {
         let w = screenToWorld(camera, p.x, p.y)
         switch drag {
         case let .pan(px, py, camX, camY):
+            // Past the 4px rule the pan is the reader's: the map no longer frames everything on its own.
+            if moved { framing = false }
             camera.x = camX + (p.x - px)
             camera.y = camY + (p.y - py)
         case let .node(nid, dx, dy):
