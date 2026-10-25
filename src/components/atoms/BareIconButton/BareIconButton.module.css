@@ -88,7 +88,8 @@
 /* Over a picture (the chat's viewer): the cream glyph on a disc of the
    viewer's own ink, always there — at half strength at rest, deeper hovered
    or pressed — so it shows on a light picture and fades into the dark around
-   one. Larger, a finger's 44 everywhere; the glyph never turns to ink. */
+   one. Larger, a finger's 44 everywhere (the disc 40 across); the glyph never
+   turns to ink. */
 .button[data-tone='onDark'] {
   width: 44px;
   height: 44px;
@@ -96,7 +97,7 @@
 }
 .button[data-tone='onDark'] .wash {
   fill: oklch(12% 0.01 60 / 0.5);
-  transform: scale(0.91);
+  transform: none;
   opacity: 1;
 }
 .button[data-tone='onDark']:active:not(:disabled),
@@ -112,7 +113,7 @@
   }
   .button[data-tone='onDark']:hover:not(:disabled) .wash {
     fill: oklch(12% 0.01 60 / 0.72);
-    transform: scale(0.91);
+    transform: none;
   }
 }
 
