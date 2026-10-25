@@ -744,6 +744,55 @@ fun OrganicIconButton(
 }
 
 /**
+ * A glyph over a picture or the dark of a viewer (round 12 §1–2; the web's BareIconButton tone
+ * `onDark`, iOS's twin): the cream glyph, drawn with the one pen, on a wobbly disc of the viewer's
+ * own ink — always shown, at [OnDarkDisc.REST] of that dark, [OnDarkDisc.PRESSED] while pressed;
+ * the glyph stays cream either way — so it reads on a light picture that fills the screen and all
+ * but vanishes into the dark around one. The disc is the bare button's wash (the web's wobCircle,
+ * seed 5), [OnDarkDisc.Disc] across, centred in a finger's [OnDarkDisc.Target].
+ */
+@Composable
+fun OnDarkIconButton(icon: IconName, label: String, size: Dp = 20.dp, onClick: () -> Unit) {
+    val presses = remember { MutableInteractionSource() }
+    val pressed by presses.collectIsPressedAsState()
+    Box(
+        Modifier
+            .size(OnDarkDisc.Target)
+            .clickable(interactionSource = presses, indication = null, role = Role.Button, onClickLabel = label, onClick = onClick)
+            .semantics { contentDescription = label }
+            .drawWithCache {
+                val disc = OnDarkDisc.path(this.size.width / 2, this.size.height / 2, density)
+                onDrawBehind { drawPath(disc, OnDarkDisc.Ink.copy(alpha = OnDarkDisc.alpha(pressed))) }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        OrganicIcon(icon, size = size, color = Tokens.Cream, strokeWidth = Tokens.Ink.value)
+    }
+}
+
+/** [OnDarkIconButton]'s disc: the viewer's backdrop ink, how strong it lies, and its outline. */
+object OnDarkDisc {
+    /** The viewer's own dark, `oklch(12% 0.01 60)` (the web viewer's backdrop). */
+    val Ink: Color = OklchColor.of(0.12, 0.01, 60.0)
+    /** The disc at rest, and pressed. */
+    const val REST = 0.5f
+    const val PRESSED = 0.72f
+    val Disc = 40.dp
+    val Target = 48.dp
+    /** The web's wash: wobCircle(50, 50, 46, seed 5, 8 segments, mag 2.2, jitter 0.4) in a 100 box — here 92 of it are [Disc]. */
+    const val SEED = 5.0
+    private val outline = wobCircle(50.0, 50.0, 46.0, SEED, WobCircleOptions(segments = 8, mag = 2.2, cpJitter = 0.4))
+
+    fun alpha(pressed: Boolean): Float = if (pressed) PRESSED else REST
+
+    /** The disc centred at ([cx], [cy]) px. */
+    fun path(cx: Float, cy: Float, density: Float): Path {
+        val s = Disc.value / 92f * density
+        return outline.toPath(s, cx - 50f * s, cy - 50f * s)
+    }
+}
+
+/**
  * SketchLoader: six dashes travelling nose-to-tail around a two-lap wobbly
  * loop. With animations removed it rests as the whole loop, un-dashed, at 0.7
  * (the web's reduced-motion sketch).

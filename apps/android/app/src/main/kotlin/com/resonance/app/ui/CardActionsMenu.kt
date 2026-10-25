@@ -49,7 +49,7 @@ internal fun trashAsk(referenceCardId: String?, published: Boolean, visibility: 
 }
 
 /**
- * The owner's ⋯ on a card (CardActionsMenu.tsx): 編輯 / 轉為草稿 (a card readers have: published,
+ * The owner's ⋯ on a card (CardActionsMenu.tsx): 編輯 (公開發表 on a 私人卡's own page, [penBeside]) / 轉為草稿 (a card readers have: published,
  * and not private — round 8 §1.2) / 取消共振 (for a card answering another, [referenceCardId]) /
  * 刪除, in the shared OrganicMenu ([menuRows]). Every 草稿 — never published, or published and kept
  * private — has the same three: it is published from the writer's step, where its tags, cover and
@@ -92,6 +92,11 @@ fun CardActionsMenu(
     trashFeedback: TrashFeedback = TrashFeedback.Toast,
     /** After the card went to the trash (the screens showing it read it again already). */
     onTrashed: () -> Unit = {},
+    /**
+     * The page draws the 私人卡's 編輯 pen beside the ⋯ (its own card page, round 12 §3): the ⋯ leads with
+     * 公開發表 instead, which opens the writer at its publish step with the card offered to readers.
+     */
+    penBeside: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val trash = LocalTrash.current ?: rememberFallbackTrash(session)
@@ -128,9 +133,10 @@ fun CardActionsMenu(
         }
     }
 
-    val items = menuRows(seen = seenByReaders(published, visibility), answering = referenceCardId != null).map { row ->
+    val items = menuRows(seen = seenByReaders(published, visibility), answering = referenceCardId != null, penBeside = penBeside).map { row ->
         when (row) {
             MenuRow.Edit -> OrganicMenuItem(L10n.Me.Actions.edit, IconName.Pen) { open(Route.Write(cardId = cardId, showsCard = showsCard)) }
+            MenuRow.PublishPublicly -> OrganicMenuItem(L10n.Me.Actions.publishPublicly, IconName.Globe) { open(publishRoute(cardId, showsCard)) }
             // 轉為草稿: private, as 轉為私人 was (its byline kept, so it comes back as it went).
             MenuRow.Visibility -> OrganicMenuItem(L10n.Me.Actions.makePrivate, IconName.Lock) {
                 if (busy) return@OrganicMenuItem
@@ -219,7 +225,7 @@ private fun rememberFallbackTrash(session: Session): TrashCenter {
 }
 
 /** The ⋯'s rows, in order. */
-internal enum class MenuRow { Edit, Visibility, Unresonate, Delete }
+internal enum class MenuRow { Edit, PublishPublicly, Visibility, Unresonate, Delete }
 
 /** Whether readers have a card: published, and not private (a published private card is a 草稿 to them all, round 8 §1). */
 internal fun seenByReaders(published: Boolean, visibility: String): Boolean = published && visibility != "private"
@@ -227,13 +233,18 @@ internal fun seenByReaders(published: Boolean, visibility: String): Boolean = pu
 /**
  * 編輯, 轉為草稿 — only on a card readers have ([seen]): a 草稿 (never published, or published and
  * kept private) is published from the writer's step, never from here — 取消共振 on a resonance, 刪除.
+ * On a 私人卡's own page, whose 編輯 pen stands beside the ⋯ ([penBeside]), the first row is
+ * 公開發表 instead: the way to that step (round 12 §3); the card box's ⋯, with no pen by it, keeps 編輯.
  * As on the web and iOS.
  */
-internal fun menuRows(seen: Boolean, answering: Boolean): List<MenuRow> =
-    listOf(MenuRow.Edit) + listOfNotNull(
+internal fun menuRows(seen: Boolean, answering: Boolean, penBeside: Boolean = false): List<MenuRow> =
+    listOf(if (penBeside && !seen) MenuRow.PublishPublicly else MenuRow.Edit) + listOfNotNull(
         MenuRow.Visibility.takeIf { seen },
         MenuRow.Unresonate.takeIf { answering },
     ) + MenuRow.Delete
+
+/** 公開發表's writer (round 12 §3): on the card, at its publish step, the card offered to readers. */
+internal fun publishRoute(cardId: String, showsCard: Boolean): Route.Write = Route.Write(cardId = cardId, showsCard = showsCard, publishing = true)
 
 /**
  * What a change made from the ⋯ is about: the card — and, for a resonance, the card it answers,

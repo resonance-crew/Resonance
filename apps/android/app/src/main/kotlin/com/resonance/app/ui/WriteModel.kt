@@ -108,6 +108,12 @@ internal fun audienceOf(visibility: String, anonymous: Boolean): Audience? = whe
     else -> null
 }
 
+/**
+ * What a 私人卡's 公開發表 offers in the publish step it opens (round 12 §3): 公開 — or 匿名公開 when the
+ * card is already marked anonymous, so it never goes out under its author's name unasked.
+ */
+internal fun publishingAudience(anonymous: Boolean): Audience = if (anonymous) Audience.Anonymous else Audience.Public
+
 /** What going back asks before the writer goes ([WriteModel.leaveQuestion]; its words: [leaveBody]). */
 enum class LeaveQuestion {
     /** 「寫下的內容已經存成草稿…」: a draft, kept on the way out. */
@@ -181,6 +187,12 @@ class WriteModel(
     private val nextWait: Long = NEXT_WAIT_MS,
     /** [opened] is a draft this writer began as a new card in this visit (the screen came back: a rotation, a restored process): its title stays 新卡片. */
     beganNew: Boolean = false,
+    /**
+     * Opened from a 私人卡's 公開發表 (round 12 §3): on the publish step, with [opened] offered to readers
+     * — 公開, or 匿名公開 for a card already anonymous ([publishingAudience]) — a choice like any other
+     * in the step: autosaved with the draft, still the writer's to change.
+     */
+    publishing: Boolean = false,
 ) {
     /** The card this one resonates with, if any (a response card). */
     val referenceCardId: String? = opened?.referenceCardId ?: referenceCardId
@@ -242,7 +254,13 @@ class WriteModel(
 
     // The steps
 
-    var step by mutableStateOf(if (opened != null) initialStep else WriterStep.Write)
+    var step by mutableStateOf(
+        when {
+            opened == null -> WriterStep.Write
+            publishing -> WriterStep.Publish
+            else -> initialStep
+        },
+    )
         private set
     /** 下一步 found no title: said under it, until the next keystroke. */
     var titleError by mutableStateOf(false)
@@ -302,6 +320,7 @@ class WriteModel(
         opened?.values?.title?.takeIf { it.isNotEmpty() }?.let(editor::setTitle)
         opened?.let { editor.setMarkdown(it.values.story) }
         editor.onChange = { story -> update { copy(story = story) } }
+        if (publishing && opened != null) choose(publishingAudience(values.anonymous))
     }
 
     /**

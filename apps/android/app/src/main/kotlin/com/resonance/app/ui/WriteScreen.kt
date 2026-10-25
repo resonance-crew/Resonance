@@ -210,6 +210,8 @@ fun WriteScreen(
     bar: Boolean = true,
     /** It began on a new card in this visit, since saved as the draft [cardId] (a rotation, a restored process): still 新卡片. */
     beganNew: Boolean = false,
+    /** A 私人卡's 公開發表 (round 12 §3): it opens on [cardId] at the publish step, offered to readers. */
+    publishing: Boolean = false,
     onFinished: (String) -> Unit,
 ) {
     // A new card is saved as a draft as soon as there is something to keep, and its route then names
@@ -249,7 +251,7 @@ fun WriteScreen(
             }
         }
         card.isTrashed -> TrashedWriter(session, card, bar, close) { attempt++ }
-        else -> androidx.compose.runtime.key(card) { WriteForm(session, referenceCardId, null, card, close, onFinished, pane = pane, bar = bar, beganNew = beganNew) }
+        else -> androidx.compose.runtime.key(card) { WriteForm(session, referenceCardId, null, card, close, onFinished, pane = pane, bar = bar, beganNew = beganNew, publishing = publishing) }
     }
 }
 
@@ -315,6 +317,7 @@ private fun WriteForm(
     pane: WriterHandle? = null,
     bar: Boolean = true,
     beganNew: Boolean = false,
+    publishing: Boolean = false,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -336,8 +339,13 @@ private fun WriteForm(
     }
     // The step, kept across a restored process (a new card always starts writing).
     var savedStep by rememberSaveable { mutableStateOf(WriterStep.Write) }
+    // 公開發表's offer is made once: a writer restored afterwards keeps the step and the choice it was left with.
+    var offered by rememberSaveable { mutableStateOf(false) }
     val model = remember(opened) {
-        WriteModel(session.drafts, session.writing.writerCalls(), referenceCardId, bridge, opened, initialStep = savedStep, beganNew = beganNew).apply {
+        WriteModel(
+            session.drafts, session.writing.writerCalls(), referenceCardId, bridge, opened, initialStep = savedStep, beganNew = beganNew,
+            publishing = publishing && !offered,
+        ).apply {
             this.onCreated = onCreated
             // A picture for the story that didn't go in is said where the writing is, whatever has scrolled.
             onStoryPictureError = { toasts.show(it) }
@@ -361,6 +369,7 @@ private fun WriteForm(
     }
     val step = model.step
     LaunchedEffect(step) { savedStep = step }
+    LaunchedEffect(model) { if (publishing) offered = true }
     // Whatever way the screen goes (close, back, a tab switch), the last edit is saved.
     DisposableEffect(model) { onDispose { model.leave() } }
     // Leaving the app saves what is written now, not 1.5s later.

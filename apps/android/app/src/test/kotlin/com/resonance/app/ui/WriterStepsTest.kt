@@ -768,11 +768,11 @@ class WriterStepsTest {
         assertEquals("雨 後", editor.titles.last())
     }
 
-    // Stand-ins
+    // Stand-ins (RoundTwelveTest drives the writer with them too)
 
     private class Refused : Exception("PERMISSION_DENIED")
 
-    private class FakeStore : DraftStore {
+    internal class FakeStore : DraftStore {
         val created = mutableListOf<DraftValues>()
         val createdIds = mutableListOf<String>()
         val updates = mutableListOf<Pair<String, DraftValues>>()
@@ -822,7 +822,7 @@ class WriterStepsTest {
         override fun refused(error: Throwable): Boolean = error is Refused
     }
 
-    private class FakeCalls : WriterCalls {
+    internal class FakeCalls : WriterCalls {
         val published = mutableListOf<String>()
         val applied = mutableListOf<String>()
         val restored = mutableListOf<String>()
@@ -874,7 +874,7 @@ class WriterStepsTest {
         )
     }
 
-    private class FakeEditor : StoryEditor {
+    internal class FakeEditor : StoryEditor {
         override var onChange: (String) -> Unit = {}
         var story = ""
         val titles = mutableListOf<String>()

@@ -791,6 +791,8 @@ private fun CardPageActions(
                 referenceAnonymous = d.referenceCard?.anonymous,
                 published = card.publishedAt != null, anonymous = d.anonymous, title = card.title,
                 trashFeedback = TrashFeedback.Page, onTrashed = onTrashed,
+                // Its pen is 編輯 already: the ⋯ leads with 公開發表 (round 12 §3).
+                penBeside = isPrivateCard(d),
             )
         } else {
             // An anonymous card hides its author: the menu only reports it (the server knows who wrote it).
