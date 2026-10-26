@@ -199,8 +199,10 @@ fun LazyListScope.storyCards(
     // No card wears the family of any of the three before it (design note B3), over the list as shown — each run as its own.
     val palettes = cardRunFamilies(cards, leading)
     itemsIndexed(cards, key = { _, c -> keyPrefix + c.id }) { i, card ->
+        // Mapped once per card (its strings and accent), not on every recomposition of the list.
+        val content = remember(card) { card.story() }
         StoryCard(
-            card.story(), runPosition(i, leading, cards.size), i == cards.lastIndex,
+            content, runPosition(i, leading, cards.size), i == cards.lastIndex,
             Modifier.plainClickable { open(Route.Card(card.routeKey, card)) }.pointerHoverIcon(PointerIcon.Hand),
             isFirst = firstUnderBar && i == 0, inset = layout.inset, palette = palettes[i],
         )
@@ -252,7 +254,7 @@ internal fun LazyListScope.borderedCards(
                         val card = cards[i]
                         Column {
                             Box {
-                                BorderedStoryCard(card.story(), runPosition(i, leading, cards.size), Modifier.plainClickable { open(tap(card)) }, palette = palettes[i])
+                                BorderedStoryCard(remember(card) { card.story() }, runPosition(i, leading, cards.size), Modifier.plainClickable { open(tap(card)) }, palette = palettes[i])
                                 overlay?.invoke(this, card, i)
                             }
                             caption?.invoke(card)
@@ -337,7 +339,7 @@ fun LazyListScope.miniCards(cards: List<FeedCard>, open: (Route) -> Unit, keyPre
     itemsIndexed(cards, key = { _, c -> "$keyPrefix${c.id}" }) { i, card ->
         // Wider than a phone, the band's content keeps to the centred reading column.
         MiniStoryCard(
-            card.story(), i, i == cards.lastIndex,
+            remember(card) { card.story() }, i, i == cards.lastIndex,
             Modifier.plainClickable { open(Route.Card(card.routeKey, card)) }.pointerHoverIcon(PointerIcon.Hand),
             inset = LocalWindowLayout.current.bandInset, palette = palettes[i],
         )
