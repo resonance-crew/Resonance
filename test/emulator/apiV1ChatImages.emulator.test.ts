@@ -320,6 +320,30 @@ describe('what goes', () => {
     expect(await files()).toHaveLength(4);
   });
 
+  it('deletes several at once, each only while it is still unsent', async () => {
+    const dayAgo = Timestamp.fromMillis(Date.now() - UNSENT_KEEP_MS - 60_000);
+    const ids: string[] = [];
+    for (let i = 0; i < 8; i++) {
+      const { id } = await upload();
+      await db.doc(`chatImages/${id}`).update({ unsentAt: dayAgo });
+      ids.push(id);
+    }
+    let active = 0;
+    let most = 0;
+    const counting = Object.assign(Object.create(store) as typeof store, {
+      delete: async (key: string) => {
+        most = Math.max(most, ++active);
+        await new Promise((r) => setTimeout(r, 20));
+        active--;
+        return store.delete(key);
+      },
+    });
+    expect(await purgeUnsentChatImages(db, counting)).toEqual({ deleted: 8, failed: 0 });
+    // Two files a picture: one picture at a time never deletes more than two at once.
+    expect(most).toBeGreaterThan(2);
+    expect(await files()).toEqual([]);
+  });
+
   // Found by age, the longest waiting first, past any number of fresh ones (ids an uploader chooses sort first).
   it('reaches an old unsent picture whatever its id, past a page of fresh ones', async () => {
     const old = await upload('alice', 'bob', 'zzzzzzzzzzzzzzzzzzzz');

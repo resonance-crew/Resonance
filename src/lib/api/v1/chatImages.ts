@@ -1,6 +1,7 @@
 import { Timestamp, type DocumentSnapshot, type Firestore } from 'firebase-admin/firestore';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
 import type { ChatImageStore } from '@/lib/storage/chatImages';
+import { runPool } from '@/lib/push/pool';
 import { ApiFailure } from './http';
 
 /**
@@ -118,13 +119,15 @@ export interface UnsentPurge {
 
 /** How many unsent pictures a page of the purge reads. */
 const UNSENT_PAGE = 100;
+/** How many of a page's pictures are deleted at once (each a transaction, then its two files). */
+export const UNSENT_CONCURRENCY = 4;
 
 /**
  * Deletes the pictures uploaded more than UNSENT_KEEP_MS ago that no message
  * carries (a picture picked and never sent, a send refused after its upload),
- * the longest waiting first, page after page: each record only while it is
- * still unsent — one sent meanwhile stays — then its files. Starts none past
- * `deadline`.
+ * the longest waiting first, page after page, UNSENT_CONCURRENCY at a time:
+ * each record only while it is still unsent — one sent meanwhile stays —
+ * then its files. Starts none past `deadline`.
  */
 export async function purgeUnsentChatImages(
   db: Firestore,
@@ -140,26 +143,31 @@ export async function purgeUnsentChatImages(
     // Past the ones that failed: one that keeps failing never pins the head.
     if (after) page = page.startAfter(after);
     const unsent = await page.get();
-    for (const d of unsent.docs) {
-      if (clock() > deadline) return { deleted, failed };
-      try {
-        const gone = await db.runTransaction(async (tx) => {
-          const fresh = await tx.get(d.ref);
-          if (!fresh.exists || fresh.get('unsentAt') == null) return false;
-          tx.delete(d.ref);
-          return true;
-        });
-        if (!gone) continue;
-        // The record went first, so no message can take the picture now; its files follow (best effort).
-        const results = await Promise.allSettled(chatImageFiles([d]).map((key) => store.delete(key)));
-        if (results.some((r) => r.status === 'rejected')) console.error(`[chatImages] files of ${d.id} not deleted`);
-        deleted++;
-      } catch (err) {
-        failed++;
-        console.error(`[chatImages] unsent ${d.id} not purged`, err);
-      }
-    }
-    if (unsent.size < UNSENT_PAGE || clock() > deadline) return { deleted, failed };
+    const late = () => clock() > deadline;
+    await runPool(
+      unsent.docs,
+      UNSENT_CONCURRENCY,
+      async (d) => {
+        try {
+          const gone = await db.runTransaction(async (tx) => {
+            const fresh = await tx.get(d.ref);
+            if (!fresh.exists || fresh.get('unsentAt') == null) return false;
+            tx.delete(d.ref);
+            return true;
+          });
+          if (!gone) return;
+          // The record went first, so no message can take the picture now; its files follow (best effort).
+          const results = await Promise.allSettled(chatImageFiles([d]).map((key) => store.delete(key)));
+          if (results.some((r) => r.status === 'rejected')) console.error(`[chatImages] files of ${d.id} not deleted`);
+          deleted++;
+        } catch (err) {
+          failed++;
+          console.error(`[chatImages] unsent ${d.id} not purged`, err);
+        }
+      },
+      { stop: late, tag: '[chatImages]' },
+    );
+    if (unsent.size < UNSENT_PAGE || late()) return { deleted, failed };
     after = unsent.docs[unsent.docs.length - 1];
   }
 }
