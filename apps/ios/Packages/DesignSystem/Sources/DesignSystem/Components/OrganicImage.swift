@@ -69,10 +69,12 @@ nonisolated struct OrganicImageShape: Shape {
     func path(in rect: CGRect) -> Path {
         let w = rect.width - bleed * 2, h = rect.height - bleed * 2
         guard w > 0, h > 0 else { return Path() }
-        return wobRect(w, h, min(radius, min(w, h) / 2), seed: seed, mag: min(w, h) * 0.05, options: WobRectOptions(
-            curve: 0.4, cornerJitter: 1.1, cornerOffset: 6, segmentsH: .range(3, 4), segmentsV: .range(2, 3)
-        )).path(offsetX: bleed, offsetY: bleed)
+        // Kept by the geometry cache: a feed of covers asks for the same few sizes on every layout.
+        return GeometryCache.shared.wobRectPath(WobRectKey(w: w, h: h, r: min(radius, min(w, h) / 2), seed: seed, mag: min(w, h) * 0.05,
+                                                           options: Self.options, offsetX: bleed, offsetY: bleed))
     }
+
+    private static let options = WobRectOptions(curve: 0.4, cornerJitter: 1.1, cornerOffset: 6, segmentsH: .range(3, 4), segmentsV: .range(2, 3))
 }
 
 extension OrganicImage where Placeholder == Color {
