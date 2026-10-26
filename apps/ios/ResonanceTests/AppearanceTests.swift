@@ -100,6 +100,35 @@ import UIKit
         #expect(Self.close(alpha.withAlphaComponent(1), Palette.resolved(.terracotta, accent: .sage, scheme: .dark)))
     }
 
+    /// WCAG luminance of a colour (sRGB, extended values clamped), with what it is laid over.
+    static func luminance(_ c: UIColor, over paper: UIColor? = nil) -> CGFloat {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        c.getRed(&r, green: &g, blue: &b, alpha: &a)
+        if let paper, a < 1 {
+            var pr: CGFloat = 0, pg: CGFloat = 0, pb: CGFloat = 0, pa: CGFloat = 0
+            paper.getRed(&pr, green: &pg, blue: &pb, alpha: &pa)
+            r = r * a + pr * (1 - a); g = g * a + pg * (1 - a); b = b * a + pb * (1 - a)
+        }
+        func lin(_ v: CGFloat) -> CGFloat { let x = min(1, max(0, v)); return x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4) }
+        return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+    }
+
+    static func contrast(_ x: CGFloat, _ y: CGFloat) -> CGFloat { (max(x, y) + 0.05) / (min(x, y) + 0.05) }
+
+    @MainActor @Test(arguments: Accent.allCases)
+    func aLoadingBlockStandsOffThePaperAndShimmersInTheThemeWorn(_ accent: Accent) {
+        let dark = Self.traits(.dark, accent)
+        let paper = Tokens.UI.cream.resolvedColor(with: dark)
+        let block = UIColor(Tokens.skeletonBase).resolvedColor(with: dark)
+        // Light's block stands about 1.1:1 off the cream; the night paper's no less (it was 1.02).
+        #expect(Self.contrast(Self.luminance(block, over: paper), Self.luminance(paper)) > 1.08, "\(accent)")
+        // The theme's sweep (a skeleton on no card): its light accent met with the theme's glow.
+        let sweep = SkeletonBlock.highlightOKLCH(nil, accent: accent, scheme: .dark)
+        let accentLight = OKLCHColor.components(Palette.oklch(.terracottaLight, accent: accent, scheme: .dark))!
+        let dh = abs((sweep.H - accentLight.H + 540).truncatingRemainder(dividingBy: 360) - 180)
+        #expect(dh < 25, "\(accent): the sweep leans to the theme's hue")
+    }
+
     @Test func aMixOfTokensFollowsTheScheme() {
         var light = EnvironmentValues()
         light.colorScheme = .light
