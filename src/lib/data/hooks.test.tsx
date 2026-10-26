@@ -228,6 +228,16 @@ describe('useFeed', () => {
     expect(result.current.hasMore).toBe(true);
     expect(callApi).not.toHaveBeenCalled();
   });
+
+  it('hands over the same feed until a page comes, so its grid needs no new render', async () => {
+    api({ '/api/v1/feed': { cards: [summary('c1', 'a1')], nextCursor: null } satisfies FeedPageBody });
+    const { result, rerender } = renderHook(() => useFeed(), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    const first = result.current.data;
+    rerender();
+    rerender();
+    expect(result.current.data).toBe(first);
+  });
 });
 
 // An anonymous card still carries its author's uid (rules can't redact a

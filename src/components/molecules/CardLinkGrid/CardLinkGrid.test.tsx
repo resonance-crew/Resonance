@@ -16,8 +16,16 @@ vi.mock('@/components/providers/AuthProvider', () => ({ useAuth: () => ({ user: 
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a>,
 }));
+// A card's tags, counted each time a card draws them.
+const drawn = vi.hoisted(() => ({ tags: 0 }));
+vi.mock('@/components/atoms/TagPill/TagPill', () => ({
+  TagPill: ({ children }: { children: ReactNode }) => {
+    drawn.tags++;
+    return <span data-testid="tag">{children}</span>;
+  },
+}));
 
-function card(id: string, accentHue?: number): Card {
+function card(id: string, accentHue?: number, extra: Partial<Card> = {}): Card {
   return {
     id,
     authorId: 'a',
@@ -33,6 +41,7 @@ function card(id: string, accentHue?: number): Card {
     inviteCount: 0,
     anonymous: true,
     accentHue,
+    ...extra,
   };
 }
 
@@ -83,5 +92,33 @@ describe('card lists never put one colour beside itself', () => {
       return Number(el.outerHTML.match(/oklch\(90% 0\.06 ([\d.]+)\)/)![1]);
     });
     expect(worn).toEqual(cardPalettes(hues).map((p) => CARD_HUES[p]));
+  });
+});
+
+// A list re-renders for reasons of its own — the viewer's session settling,
+// the home page's toast and lead, a new authors map — and its cards stay as
+// they were drawn; on a phone the server's grid is kept node for node.
+describe('the grid draws a card again only when it changed', () => {
+  it('leaves its cards alone when it re-renders with the same cards', () => {
+    const cards = [card('a', 140, { tags: ['one'] }), card('b', 55, { tags: ['two'] })];
+    const { rerender } = renderWithIntl(<CardLinkGrid cards={cards} authors={{}} />);
+    const after = drawn.tags;
+    expect(after).toBeGreaterThanOrEqual(2);
+    // A new array of the same cards and a new (empty) authors map, as the home page makes.
+    act(() => rerender(<CardLinkGrid cards={[...cards]} authors={{}} />));
+    expect(drawn.tags).toBe(after);
+
+    // A card that changed is drawn again — and only it.
+    const changed = { ...cards[1], tags: ['three'] };
+    act(() => rerender(<CardLinkGrid cards={[cards[0], changed]} authors={{}} />));
+    expect(drawn.tags).toBe(after + 1);
+  });
+
+  it('on a phone keeps the server’s one-column grid: the cards sit in it as the server put them', () => {
+    // jsdom's matchMedia (test/setup) matches nothing: a phone's width.
+    const cards = hues.slice(0, 3).map((h, i) => card(`c${i}`, h));
+    const { container } = renderWithIntl(<CardLinkGrid cards={cards} authors={{}} />);
+    const grid = container.querySelector('[data-card-grid]')!;
+    expect(Array.from(grid.children).map((el) => (el as HTMLElement).dataset.cardId)).toEqual(['c0', 'c1', 'c2']);
   });
 });

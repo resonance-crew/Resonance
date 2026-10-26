@@ -193,13 +193,18 @@ export function useFeed(): FeedState {
   );
 
   const pages = data ?? [];
-  const merged: CardsWithAuthors | undefined =
-    pages.length > 0
-      ? {
-          cards: pages.flatMap((p) => p.cards),
-          authors: Object.assign({}, ...pages.map((p) => p.authors)),
-        }
-      : undefined;
+  // The same object until a page comes or goes, so the feed's grid and cards
+  // don't re-render with each render of the page.
+  const merged = useMemo<CardsWithAuthors | undefined>(
+    () =>
+      data && data.length > 0
+        ? {
+            cards: data.flatMap((p) => p.cards),
+            authors: Object.assign({}, ...data.map((p) => p.authors)),
+          }
+        : undefined,
+    [data],
+  );
   return {
     data: merged,
     isLoading: isLoading || !path,
