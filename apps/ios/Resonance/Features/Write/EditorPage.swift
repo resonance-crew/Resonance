@@ -114,8 +114,20 @@ final class EditorPageHandler: NSObject, WKURLSchemeHandler {
         self.imageSources = imageSources
     }
 
-    /// The page, read and hashed once.
-    private lazy var page: Resource? = {
+    /// The page, read and hashed once per launch (not once per writer opened): the same bundle and
+    /// image sources always serve the same page.
+    private var page: Resource? {
+        let key = "\(bundle.bundlePath)\n\(imageSources.joined(separator: " "))"
+        if let kept = Self.pages[key] { return kept }
+        let page = Self.read(bundle: bundle, imageSources: imageSources)
+        if let page { Self.pages[key] = page }
+        return page
+    }
+
+    /// Each page served, by its bundle and image sources.
+    private static var pages: [String: Resource] = [:]
+
+    private static func read(bundle: Bundle, imageSources: [String]) -> Resource? {
         guard let file = bundle.url(forResource: "editor", withExtension: "html"),
               let html = try? String(contentsOf: file, encoding: .utf8) else { return nil }
         let policy = EditorPage.contentSecurityPolicy(for: html, imageSources: imageSources)
@@ -124,7 +136,7 @@ final class EditorPageHandler: NSObject, WKURLSchemeHandler {
             "Content-Security-Policy": policy,
             "Cache-Control": "no-store",
         ])
-    }()
+    }
 
     /// What `url` names, if it's something the page may load.
     func resource(for url: URL) -> Resource? {

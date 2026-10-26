@@ -85,6 +85,17 @@ import UIKit
         #expect(OKLCHColor.parse("not a colour") == nil)
     }
 
+    @Test func theEditorsPageIsServedTheSameToEveryWriter() throws {
+        let page = EditorPage.url(placeholder: "Write")
+        let first = try #require(EditorPageHandler().resource(for: page))
+        let second = try #require(EditorPageHandler().resource(for: page))
+        #expect(first.data == second.data)
+        #expect(first.headers == second.headers)
+        // Other image sources, another page (its policy names them).
+        let local = try #require(EditorPageHandler(imageSources: ["http://localhost:3100"]).resource(for: page))
+        #expect(local.headers["Content-Security-Policy"] != first.headers["Content-Security-Policy"])
+    }
+
     @Test func aStoryIsReadOffTheMainThreadAsItWasOnIt() async {
         let title = "雨後", story = "## 一\n\n去 https://example.com/a 看看。\n\n### 二\n\n走路。"
         let read = await Task.detached { CardModel.read(title: title, story: story) }.value
