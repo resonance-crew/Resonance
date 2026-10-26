@@ -163,14 +163,27 @@ export async function revokeSessions(uid: string) {
 }
 
 /**
+ * A sign-in by email and password to an address never verified. Anyone can
+ * make one for an address that isn't theirs, and when the address's owner
+ * later signs in with Google or Apple, Firebase keeps that uid — with the
+ * profile, pen name and push devices the first one left on it. No sign-in
+ * page offers email and password (Google and Apple only; the emulators keep
+ * it for their seeded accounts), so outside the emulators it is no account.
+ */
+function unverifiedPassword(token: DecodedIdToken): boolean {
+  return !process.env.FIREBASE_AUTH_EMULATOR_HOST && token.firebase?.sign_in_provider === 'password' && token.email_verified !== true;
+}
+
+/**
  * A verified token's user, or null when the credential is no good (expired,
- * forged, revoked, account disabled or deleted). Throws AuthUnavailableError
- * when Firebase Auth couldn't be asked.
+ * forged, revoked, account disabled or deleted, an unverified password
+ * sign-in). Throws AuthUnavailableError when Firebase Auth couldn't be asked.
  */
 async function signedIn(verify: () => Promise<DecodedIdToken>, revocation: RevocationCheck): Promise<DecodedIdToken | null> {
   try {
     // Local: signature, expiry, audience (the emulator also checks revocation here).
     const token = await verify();
+    if (unverifiedPassword(token)) return null;
     const state = await accountState(token.uid, revocation);
     if (state.disabled) return null;
     // As firebase-admin's own check: a token from a sign-in before the revocation is revoked.

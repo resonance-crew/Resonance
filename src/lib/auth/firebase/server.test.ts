@@ -86,6 +86,23 @@ describe('getCurrentUser', () => {
     expect(await getCurrentUser()).toBeNull();
   });
 
+  it('refuses a password sign-in to an unverified address, except against the emulators', async () => {
+    bearer('pre');
+    const by = (sign_in_provider: string, email_verified: boolean) =>
+      auth.verifyIdToken.mockResolvedValueOnce({ ...token('pre'), email_verified, firebase: { sign_in_provider } });
+    by('password', false);
+    expect(await getCurrentUser()).toBeNull();
+    expect(auth.getUser).not.toHaveBeenCalled();
+    by('password', true);
+    expect(await getCurrentUser()).toMatchObject({ id: 'pre' });
+    by('google.com', false);
+    expect(await getCurrentUser()).toMatchObject({ id: 'pre' });
+    vi.stubEnv('FIREBASE_AUTH_EMULATOR_HOST', '127.0.0.1:9099');
+    by('password', false);
+    expect(await getCurrentUser()).toMatchObject({ id: 'pre' });
+    vi.unstubAllEnvs();
+  });
+
   it('refuses an expired or forged token without asking about the account', async () => {
     bearer('fay');
     auth.verifyIdToken.mockRejectedValueOnce(authError('auth/id-token-expired'));
