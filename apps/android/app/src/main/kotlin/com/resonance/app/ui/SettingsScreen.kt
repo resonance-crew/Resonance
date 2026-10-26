@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -597,9 +598,11 @@ private val SwatchGap = 14.dp
 private fun ThemeSwatch(name: String, palette: ResonanceColors, selected: Boolean, seed: Double, onClick: () -> Unit) {
     val ring = if (selected) palette.Terracotta else Tokens.FieldBorder
     val ringWidth = if (selected) Tokens.InkStrong else Tokens.InkLight
+    // As wide as its name (never under the swatch's own room), the name on one line — 'Terracotta' too, at any text size;
+    // the row wraps a swatch to the next line before a name would.
     Column(
         Modifier
-            .width(SwatchSize + 8.dp)
+            .widthIn(min = SwatchSize + 8.dp)
             .selectable(selected, role = Role.RadioButton, onClick = onClick)
             .semantics(mergeDescendants = true) { contentDescription = name },
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -626,6 +629,8 @@ private fun ThemeSwatch(name: String, palette: ResonanceColors, selected: Boolea
             name,
             style = AppFonts.body(12.5f, if (selected) 600 else 500, lineHeight = 1.3f, color = if (selected) Tokens.Text else Tokens.TextMuted)
                 .copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center),
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }
@@ -764,7 +769,7 @@ private fun ColumnScope.BlockedListContent(session: Session, onClose: () -> Unit
                     HandDrawnAvatar(
                         person.initials,
                         person.avatarUrl,
-                        avatarFill(person.accentColor, Tokens.CreamDark),
+                        avatarFill(person.accentColor),
                         36.dp,
                         person.avatarSeed ?: seedFromString(person.id).toDouble(),
                     )
