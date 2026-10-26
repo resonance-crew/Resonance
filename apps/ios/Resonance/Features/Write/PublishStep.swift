@@ -339,8 +339,9 @@ extension PublishStep {
 }
 
 /// What lies in the preview's picture (the web's CoverFrame): with no cover the two ways to one —
-/// 加一張圖片 · 生成圖片, the second waiting for a story — the pen's loader while one is on its way
-/// (over the model's blurred, washed rough pass while it paints), and once there is one, the picture
+/// 加一張圖片 · 生成圖片, the second waiting for a story — the pen's loader while one is on its way, in
+/// the card's deep pen (over the cover it replaces, or the model's rough pass while it paints, blurred
+/// and washed to the picture's whole outline: ``veil(width:height:)``), and once there is one, the picture
 /// is where it is changed (round 7 §1.3): one 更換封面 chip on its bottom-right corner, its menu
 /// another picture · a drawn one · none. What went wrong with the last try is said here too (round 8
 /// §3): under the empty picture's pills, or on a paper chip at the top-left of the cover that stays.
@@ -354,16 +355,12 @@ private struct CoverSlot: View {
         GeometryReader { geo in
             ZStack {
                 if model.mediaBusy {
-                    if model.generating, let partial = model.partialPreview {
-                        Image(uiImage: partial).resizable().scaledToFill()
-                            .blur(radius: 14)
-                        Tokens.cream.opacity(0.45)
-                    }
+                    veil(width: geo.size.width, height: geo.size.height)
                     VStack(spacing: 6) {
-                        SketchLoader(size: 64)
+                        SketchLoader(size: 64, color: palette.deep)
                         Text(model.generating ? L10n.Write.mediaGenerating : L10n.Write.mediaUploading)
                             .font(AppFonts.body(14, weight: .semibold))
-                            .foregroundStyle(Tokens.text)
+                            .foregroundStyle(palette.deep)
                     }
                     .accessibilityElement(children: .combine)
                 } else if model.values.imageURL != nil {
@@ -406,6 +403,33 @@ private struct CoverSlot: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .animation(.easeOut(duration: 0.16), value: model.mediaError)
+        }
+    }
+
+    /// What lies under the loader while a cover is on its way: the cover it replaces, or the model's
+    /// rough pass while it paints, blurred and washed in the card's paper — neither is the settled
+    /// picture, and the loader and its words read over it (the web's veiled `.coverBusy`). It reaches
+    /// past the box as far as the picture does (``organicImageBleed``), so the card's clip cuts it to
+    /// the picture's whole outline, bulges and all; with no picture yet, the stripes stay as they are.
+    @ViewBuilder private func veil(width w: CGFloat, height h: CGFloat) -> some View {
+        let bleed = organicImageBleed(w, h)
+        let partial = model.generating ? model.partialPreview : nil
+        if partial != nil || model.values.imageURL != nil {
+            ZStack {
+                if let partial {
+                    Image(uiImage: partial).resizable().scaledToFill()
+                } else if let url = model.values.imageURL {
+                    // Blurred, it needs no more pixels than its points.
+                    RemoteImage(url: url, pixelSize: CGSize(width: w + bleed * 2, height: h + bleed * 2))
+                }
+            }
+            .frame(width: w + bleed * 2, height: h + bleed * 2)
+            .clipped()
+            .blur(radius: 14, opaque: true)
+            .overlay(palette.interior.opacity(0.45))
+            // Takes the box's room; the veil reaches past it by the bleed on every side.
+            .frame(width: w, height: h)
+            .accessibilityHidden(true)
         }
     }
 

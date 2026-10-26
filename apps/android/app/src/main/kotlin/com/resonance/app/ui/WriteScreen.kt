@@ -108,6 +108,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import coil3.compose.AsyncImage
 import com.resonance.app.BuildConfig
 import com.resonance.app.DebugLaunch
 import com.resonance.app.DraftService
@@ -1161,8 +1162,9 @@ internal fun previewContent(model: WriteModel, me: com.resonance.api.models.Me?)
 /**
  * The preview's picture as the cover editor (StoryCard's cover slot): no cover — the card's stripes
  * with 加一張圖片 · 生成圖片 (the second waiting for a story), and under them why the last picture
- * didn't work, in the error ink, in place of the hint (round 8 §3); a photo going up — the loader; an
- * illustration painting — its rough pass blurred under a cream wash, and the loader; a cover — the
+ * didn't work, in the error ink, in place of the hint (round 8 §3); a photo going up or an illustration
+ * painting — the loader in the card's deep pen, over the cover it replaces or the rough pass, blurred
+ * under a wash of the card's paper (the stripes, when there is neither, stay bare); a cover — the
  * picture, with one 更換封面 chip on its bottom end corner ([CoverMenu]) and, when a replacement or a
  * drawing failed, a paper chip on its top start corner saying why ([CoverErrorChip]) — no ✕, and
  * nothing under the card: the picture is where it is changed, and where its trouble is said. Its
@@ -1176,18 +1178,27 @@ private fun BoxScope.CoverSlot(frame: CoverFrame, palette: CardPalette, model: W
     val busy = model.mediaBusy
     StoryCardCover(
         // Under the two pills the card's stripes say nothing of their own.
-        if (model.generating) null else url, if (url == null) frame.copy(label = "") else frame,
+        url, if (url == null) frame.copy(label = "") else frame,
         overlay = {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 when {
                     busy -> {
+                        // The cover it replaces, or the model's rough pass while it paints: veiled — blurred and
+                        // washed in the card's paper — so the loader and its words read over it. The overlay is
+                        // the picture's own bled, clipped box: the veil reaches its whole outline.
+                        val veiled = (model.generating && partial != null) || url != null
                         if (model.generating && partial != null) {
                             Image(partial.asImageBitmap(), null, Modifier.fillMaxSize().blur(14.dp), contentScale = ContentScale.Crop)
+                        } else if (url != null) {
+                            AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().blur(14.dp))
                         }
-                        Box(Modifier.fillMaxSize().background(Tokens.Cream.copy(alpha = 0.45f)))
+                        if (veiled) Box(Modifier.fillMaxSize().background(palette.interior.copy(alpha = 0.45f)))
                         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            SketchLoader(64.dp)
-                            BasicText(if (model.generating) L10n.Write.mediaGenerating else L10n.Write.mediaUploading, style = AppFonts.body(14f, 600))
+                            SketchLoader(64.dp, color = palette.deep)
+                            BasicText(
+                                if (model.generating) L10n.Write.mediaGenerating else L10n.Write.mediaUploading,
+                                style = AppFonts.body(14f, 600, color = palette.deep),
+                            )
                         }
                     }
                     url == null -> Column(

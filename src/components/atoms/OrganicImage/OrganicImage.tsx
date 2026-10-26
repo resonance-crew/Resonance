@@ -22,6 +22,8 @@ export interface OrganicImageProps {
   /**
    * Laid over the picture inside the clip, on the box itself (children reach past it by the wobble's
    * bleed): controls that sit on the picture — the writer's cover slot — keep their place in the frame.
+   * What must cover the picture as far as it reaches (a veil over it) insets itself by
+   * `calc(-1 * var(--image-bleed))`, which the box sets.
    */
   overlay?: ReactNode;
   /**
@@ -94,6 +96,7 @@ export function OrganicImage({
         width: '100%',
         paddingBottom: `${ratio * 100}%`,
         clipPath: clip ? `path('${clip}')` : undefined,
+        ['--image-bleed' as string]: `${clip ? bleed : 0}px`,
         ...style,
       }}
     >

@@ -692,8 +692,9 @@ public nonisolated enum ComposerMetrics {
     /// The text's size (× the interface scale) and its most lines before it scrolls.
     public static let textSize: CGFloat = 16
     public static let maxLines = 5
-    /// The air from the capsule's (or the slip's) top to the newest message, the jump pill and 已複製.
-    public static let clearance: CGFloat = 12
+    /// The air from the capsule's (or the slip's) top to the newest message, the jump pill and 已複製
+    /// (the web's --dock-clear; 12 sat the newest message on the capsule).
+    public static let clearance: CGFloat = 20
     /// The capsule's corner (the field's) and the slip's.
     public static let radius: CGFloat = Tokens.radiusMd
     public static let slipRadius: CGFloat = 14

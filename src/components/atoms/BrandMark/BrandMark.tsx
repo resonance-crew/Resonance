@@ -4,7 +4,8 @@ import styles from './BrandMark.module.css';
  * The platforms' own marks, for the web share menu's rows (molecules/ShareMenu):
  * LINE, Threads, Facebook, X — each brand's official monochrome mark,
  * unmodified, in near-black ink (no brand may be recoloured, so never the
- * terracotta of the hand-drawn icons beside them).
+ * terracotta a menu's hand-drawn icons wear; the share menu draws its own
+ * glyphs, 複製連結 and 更多分享方式, in this ink beside them).
  *
  * Where the paths come from: each brand's centre gives its files only to
  * someone who accepts its terms (LINE's logo guidelines, line.me/en/logo;
@@ -41,10 +42,12 @@ export const BRAND_PATHS: Record<BrandName, string> = {
  * Room kept round each mark inside its box, in grid units: the marks fill
  * their 24 grid edge to edge, while the hand-drawn icons beside them leave
  * most of theirs to the paper, so at the same box a mark read twice their
- * size. Padded, a mark draws about 14.5 px of a 17 px slot — X too (round 12
- * §4: with more room it drew 13.3 and read a size smaller than the rest).
+ * size. Padded, a round mark (LINE's bubble, Threads, Facebook's disc) draws
+ * about 14.5 px of a 17 px slot. X fills its square to the corners, so at the
+ * same box it reads the biggest of the four (the owner, 2026-10-26): it draws
+ * 12.8 px, a square of about the disc's area — the optical size of the rest.
  */
-const INSET: Record<BrandName, number> = { line: 2, threads: 2, facebook: 2, x: 2 };
+const INSET: Record<BrandName, number> = { line: 2, threads: 2, facebook: 2, x: 4 };
 
 export interface BrandMarkProps {
   name: BrandName;

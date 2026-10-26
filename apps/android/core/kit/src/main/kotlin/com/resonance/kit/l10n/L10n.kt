@@ -928,7 +928,7 @@ object L10n {
         val mediaUploadError: String get() = Strings.string("write.mediaUploadError")
         /** Couldn’t read this image — try a JPG or PNG */
         val mediaUnsupported: String get() = Strings.string("write.mediaUnsupported")
-        /** Sketching it in… */
+        /** Uploading the picture… */
         val mediaUploading: String get() = Strings.string("write.mediaUploading")
         /** Generate */
         val mediaGenerate: String get() = Strings.string("write.mediaGenerate")

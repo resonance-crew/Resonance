@@ -7,8 +7,11 @@
 /* The thread's body, from under its header to the screen's foot: the
    messages, and what floats over them (the way back down, the search's list).
    It runs on under the floating composer (.dock, after it in the column) by
-   the composer's measured height, --dock-h (useDockInset). */
+   the composer's measured height, --dock-h (useDockInset); the newest
+   message, the way back down and 已複製 rest --dock-clear over it (the apps'
+   ComposerMetrics.clearance / ComposerClear). */
 .body {
+  --dock-clear: 20px;
   position: relative;
   flex: 1;
   min-height: 0;
@@ -33,8 +36,8 @@
   display: flex;
   flex-direction: column;
   /* The top clears the header's row and its wave (58 + 12); the foot, the
-     floating composer and 12 of air, so the newest message always clears it. */
-  padding: 70px 16px calc(var(--dock-h, 64px) + 12px) 4px;
+     floating composer and its air (--dock-clear), so the newest message always clears it. */
+  padding: 70px 16px calc(var(--dock-h, 64px) + var(--dock-clear)) 4px;
 }
 
 /* ── Rows ─────────────────────────────────────────────────────────── */
@@ -579,8 +582,8 @@
    where it sits and how it arrives; the face is InkPill's. */
 .pill {
   position: absolute;
-  /* 12 over the floating composer (or the slip over it), not at the list's foot under it. */
-  bottom: calc(var(--dock-h, 64px) + 12px);
+  /* As far over the floating composer (or the slip over it) as the newest message, not at the list's foot under it. */
+  bottom: calc(var(--dock-h, 64px) + var(--dock-clear));
   left: 50%;
   z-index: 3;
   transform: translateX(-50%);

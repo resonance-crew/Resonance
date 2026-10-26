@@ -95,6 +95,12 @@ describe('ShareMenu on a desktop', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Share' }));
     const rows = screen.getAllByRole('menuitem');
     expect(rows.at(-1)).toHaveAccessibleName('More ways to share');
+    // Copy link and More ways to share in the brands' marks' near-black, not the menu's terracotta: one ink down the column.
+    for (const row of [rows[0], rows.at(-1)!]) {
+      const inked = row.closest<HTMLElement>('[style*="--menu-glyph"]')!;
+      expect(inked.style.getPropertyValue('--menu-glyph')).toBe('var(--color-text)');
+      expect(inked.style.getPropertyValue('--menu-glyph-active')).toBe('var(--color-text)');
+    }
     await userEvent.click(rows.at(-1)!);
     expect(share).toHaveBeenCalledWith({ title: 'Pickled plums & salt', url: `${ORIGIN}/card/pickled-plums` });
   });

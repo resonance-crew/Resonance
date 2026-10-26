@@ -926,7 +926,7 @@ public enum L10n {
         public static var mediaUploadError: String { Strings.shared.string("write.mediaUploadError") }
         /// Couldn’t read this image — try a JPG or PNG
         public static var mediaUnsupported: String { Strings.shared.string("write.mediaUnsupported") }
-        /// Sketching it in…
+        /// Uploading the picture…
         public static var mediaUploading: String { Strings.shared.string("write.mediaUploading") }
         /// Generate
         public static var mediaGenerate: String { Strings.shared.string("write.mediaGenerate") }

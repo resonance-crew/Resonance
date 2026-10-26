@@ -295,9 +295,10 @@
      a text baseline with a descender's gap below it. */
   display: flex;
   flex-shrink: 0;
-  color: var(--menu-border);
+  /* The menu's pen, or the page's ink (OrganicMenu `glyphs`). */
+  color: var(--menu-glyph, var(--menu-border));
   transition: color 120ms ease;
 }
 .option[data-active] .optionIcon {
-  color: var(--menu-border-hover);
+  color: var(--menu-glyph-active, var(--menu-border-hover));
 }

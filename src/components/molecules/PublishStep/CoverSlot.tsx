@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import { HandDrawnDashedSurface } from '@/components/atoms/HandDrawnDashedBorder/HandDrawnDashedBorder';
@@ -159,8 +159,10 @@ export function useCoverEditor({
  * What lies in the preview's picture: with no cover the two ways to one
  * (加一張圖片 · 生成圖片, the second waiting for a story), a dashed frame while
  * a file is dragged over (dropped, it uploads), the pen's loader while one is
- * on its way — over the model's blurred, washed rough pass while it paints —
- * and once there is one, one chip on it that says so (更換封面), whose menu
+ * on its way, in the card's colours — over the cover it replaces, or the
+ * model's rough pass while it paints, blurred and washed to the picture's
+ * whole outline (neither is the settled picture: the loader and its words
+ * read over it) — and once there is one, one chip on it that says so (更換封面), whose menu
  * holds everything a cover can become: another picture, one drawn from the
  * story, none. The picture is where it is changed — no second control for it
  * under the preview — and where it is said that it couldn't be (round 8 §3):
@@ -196,8 +198,13 @@ export function CoverFrame({ cover, palette = 0 }: { cover: CoverEditor; palette
     >
       {cover.input}
       {busy ? (
-        <span className={styles.coverBusy} data-partial={(generating && partial != null) || undefined}>
-          <SketchLoader size={64} seed={31} ariaLabel={generating ? t('mediaGenerating') : t('mediaUploading')} />
+        <span
+          className={styles.coverBusy}
+          // A picture under it — the cover being replaced, or the model's rough pass — is veiled.
+          data-veiled={(media != null || (generating && partial != null)) || undefined}
+          style={colors.busy}
+        >
+          <SketchLoader size={64} seed={31} color={colors.ink} ariaLabel={generating ? t('mediaGenerating') : t('mediaUploading')} />
           <span className={styles.coverBusyText}>{generating ? t('mediaGenerating') : t('mediaUploading')}</span>
         </span>
       ) : media ? (
@@ -277,7 +284,8 @@ export function CoverFrame({ cover, palette = 0 }: { cover: CoverEditor; palette
  * solid's black wash under a pointer); 生成圖片 waiting for a story, the
  * family's tonal step with muted words — never faded. 更換封面 over a picture
  * is the family's fill, opaque, with its pen line and its deep pen for words;
- * its menu takes the family's hue.
+ * its menu takes the family's hue. A cover on its way is drawn in the family's
+ * deep pen too — the loader and its words — over a wash of its paper.
  */
 export function coverColors(palette: number) {
   const hue = CARD_HUES[palette] ?? CARD_HUES[0];
@@ -285,6 +293,8 @@ export function coverColors(palette: number) {
   const paper = `oklch(97.5% 0.012 ${hue})`;
   return {
     hue,
+    ink: deep,
+    busy: { '--cover-ink': deep, '--cover-paper': paper } as CSSProperties,
     pill: { fillColor: deep, color: paper },
     pillResting: { fillColor: `oklch(90% 0.06 ${hue})`, color: `oklch(50% 0.04 ${hue})` },
     chip: { fill: CARD_FILLS[palette] ?? CARD_FILLS[0], pen, ink: deep },

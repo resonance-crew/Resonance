@@ -260,7 +260,7 @@ struct ThreadScreen: View {
 
     /// How far up from the thread's foot its newest message, the pill and 已複製 stand (round 9 §4,
     /// round 10 §3.2, round 11 §3): past the whole foot — its paper's fade (and the 6 it gains over riding rows),
-    /// the rows, the capsule, the 8 under it, the bottom safe area or the keyboard — and 12 more, so the
+    /// the rows, the capsule, the 8 under it, the bottom safe area or the keyboard — and ``ComposerMetrics/clearance`` more, so the
     /// newest message rests above the fade. Measured live: the field grows, a row comes.
     private var bottomRoom: CGFloat {
         ThreadFoot.room(threadBottom: threadBottom, shownHeight: shownHeight) + ComposerMetrics.clearance

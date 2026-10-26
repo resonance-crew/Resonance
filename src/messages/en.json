@@ -518,7 +518,7 @@
     "mediaHint": "Any common image format",
     "mediaUploadError": "Couldn’t upload the image — please try again",
     "mediaUnsupported": "Couldn’t read this image — try a JPG or PNG",
-    "mediaUploading": "Sketching it in…",
+    "mediaUploading": "Uploading the picture…",
     "mediaGenerate": "Generate",
     "mediaGenerateHint": "An image from your story",
     "mediaGenerateNeedStory": "Write your story first",
