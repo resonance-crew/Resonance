@@ -182,6 +182,16 @@ export async function getCardsByKeys(db: Firestore, viewerId: string, keys: stri
   return { cards: await present(db, viewerId, askedByKey(cards, keys, viewerId), { blocked }) };
 }
 
+/** The cards a story embeds; one that can't be read for them gives none (embeds only save the reader a request each). */
+function embedKeysOf(id: string, story: string): string[] {
+  try {
+    return embeddedCardKeys(story);
+  } catch (e) {
+    console.error('[api/v1] embeds', id, e);
+    return [];
+  }
+}
+
 /**
  * The cards keys named, minus an anonymous card a slug led to for someone
  * other than its author (anonymousBySlug): named by its id it stays.
@@ -242,7 +252,7 @@ export async function getCardDetail(
   const trashed = isOwner && trashedAtOf(card) != null;
   const lists = trashed ? new Set<CardInclude>([...include].filter((i) => i === 'embeds')) : include;
   const ownerLinks = lists.has('links') && isOwner;
-  const embedKeys = include.has('embeds') ? embeddedCardKeys(String(card.story ?? '')) : [];
+  const embedKeys = include.has('embeds') ? embedKeysOf(card.id, String(card.story ?? '')) : [];
   // The card itself is never kept from the viewer by their blocks: a named
   // one by someone they blocked is the client's to hide (its page knows the
   // byline), and an anonymous one is there for everyone (blockHides). The
