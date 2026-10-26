@@ -546,11 +546,12 @@ describe('profiles (users/{uid})', () => {
     await assertFails(updateDoc(me, { avatarUrl: 'https://pub-0123.r2.dev.evil.example/p.gif' }));
   });
 
-  it('stay readable by anyone, signed in or not — a page at a time, never the whole directory', async () => {
+  it('stay readable by anyone one at a time, signed in or not — never listed, not even a page', async () => {
     await assertSucceeds(getDoc(doc(anonymous(), 'users', 'alice')));
-    await assertSucceeds(getDocs(query(collection(anonymous(), 'users'), where('handleLower', '==', 'alice'), limit(1))));
-    // Bylines by id, 30 at most (getUsersByIds).
-    await assertSucceeds(getDocs(query(collection(anonymous(), 'users'), where(documentId(), 'in', ['alice', 'bob']), limit(2))));
+    // A list query pages through the whole directory however small its pages (startAfter).
+    await assertFails(getDocs(query(collection(anonymous(), 'users'), where('handleLower', '==', 'alice'), limit(1))));
+    await assertFails(getDocs(query(collection(anonymous(), 'users'), where(documentId(), 'in', ['alice', 'bob']), limit(2))));
+    await assertFails(getDocs(query(collection(as('carol'), 'users'), orderBy(documentId()), limit(30))));
     await assertFails(getDocs(collection(anonymous(), 'users')));
     await assertFails(getDocs(query(collection(as('carol'), 'users'), where(documentId(), 'in', ['alice', 'bob']))));
     await assertFails(getDocs(query(collection(as('carol'), 'users'), limit(31))));
