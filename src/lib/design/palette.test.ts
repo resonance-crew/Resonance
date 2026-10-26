@@ -49,6 +49,8 @@ const PAIRS: [PaletteToken, PaletteToken, number][] = [
   // The call-to-action band's two buttons: the verb a paper pill, the second action a deeper band.
   ['cta-verb-ink', 'cta-ink', 4.5],
   ['cta-ink', 'cta-ghost', 4.5],
+  ['apple-label', 'apple-fill', 7],
+  ['color-text', 'avatar-wait', 7],
   ['color-cream', 'danger-fill', 4.5],
   ['button-on-danger-tonal', 'button-danger-tonal', 4.5],
   ['color-danger', 'color-cream', 4],
@@ -61,6 +63,7 @@ const PAIRS: [PaletteToken, PaletteToken, number][] = [
   ...[0, 1, 2, 3, 4, 5].flatMap((i): [PaletteToken, PaletteToken, number][] => [
     ['color-text', `card-fill-${i}` as PaletteToken, 7],
     ['color-text', `card-tag-${i}` as PaletteToken, 7],
+    [`card-pill-ink-${i}` as PaletteToken, `card-pill-${i}` as PaletteToken, 4.5],
     [`card-note-ink-${i}` as PaletteToken, `card-fill-${i}` as PaletteToken, 4.5],
     [`card-border-${i}` as PaletteToken, `card-fill-${i}` as PaletteToken, 2.5],
   ]),
@@ -104,6 +107,32 @@ describe('palette', () => {
           const f = failures(paletteForHue(hue, chroma, scheme), scheme);
           expect(f, `hue ${hue} chroma ${chroma} ${scheme}`).toEqual([]);
         }
+      }
+    }
+  });
+
+  it('the light roles added for the web are what it drew before them', () => {
+    for (const a of ACCENTS) {
+      const p = paletteFor(a, 'light');
+      for (let i = 0; i < 6; i++) {
+        expect(cssOklch(p[`card-pill-${i}` as PaletteToken])).toBe(cssOklch(p[`card-border-deep-${i}` as PaletteToken]));
+        expect(cssOklch(p[`card-pill-ink-${i}` as PaletteToken])).toBe(cssOklch(p[`card-interior-${i}` as PaletteToken]));
+      }
+      expect(cssOklch(p['avatar-wait'])).toBe(cssOklch(p['color-cream-dark']));
+      expect(cssOklch(p['apple-fill'])).toBe(cssOklch(p['color-text']));
+      expect(cssOklch(p['skeleton-glow'])).toBe(cssOklch(p['color-cream']));
+    }
+    const dark = paletteFor('terracotta', 'dark');
+    expect([cssOklch(dark['apple-fill']), cssOklch(dark['apple-label'])]).toEqual(['oklch(100% 0 0)', 'oklch(0% 0 0)']);
+  });
+
+  it('a loading block stands apart from the paper in both schemes, as far in dark as in light', () => {
+    for (const a of ACCENTS) {
+      for (const scheme of SCHEMES) {
+        const p = paletteFor(a, scheme);
+        const base = p['skeleton-base'];
+        const laid = base.L * base.alpha + p['color-cream'].L * (1 - base.alpha);
+        expect(Math.abs(laid - p['color-cream'].L), `${a} ${scheme}`).toBeGreaterThan(0.05);
       }
     }
   });

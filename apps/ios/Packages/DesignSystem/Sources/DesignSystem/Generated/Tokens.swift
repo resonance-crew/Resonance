@@ -77,6 +77,16 @@ public nonisolated enum Tokens {
     public static let ctaGhost = Color(uiColor: UI.ctaGhost)
     /// --cta-verb-ink · terracotta: light #904724, dark #803c1a
     public static let ctaVerbInk = Color(uiColor: UI.ctaVerbInk)
+    /// --skeleton-base · terracotta: light #e2d9cd, dark #312a24
+    public static let skeletonBase = Color(uiColor: UI.skeletonBase)
+    /// --skeleton-glow · terracotta: light #faf2e9, dark #332c27
+    public static let skeletonGlow = Color(uiColor: UI.skeletonGlow)
+    /// --avatar-wait · terracotta: light #efe6db, dark #241e18
+    public static let avatarWait = Color(uiColor: UI.avatarWait)
+    /// --apple-fill · terracotta: light #2f2115, dark #ffffff
+    public static let appleFill = Color(uiColor: UI.appleFill)
+    /// --apple-label · terracotta: light #faf2e9, dark #000000
+    public static let appleLabel = Color(uiColor: UI.appleLabel)
     /// --color-danger · terracotta: light #c74b47, dark #ed756e
     public static let danger = Color(uiColor: UI.danger)
     /// --danger-fill · terracotta: light #b2423f, dark #e36b65
@@ -193,17 +203,17 @@ public nonisolated enum Tokens {
     public static let cardNoteInk4 = Color(uiColor: UI.cardNoteInk4)
     /// --card-note-ink-5 · terracotta: light #783f42, dark #e6a3a4
     public static let cardNoteInk5 = Color(uiColor: UI.cardNoteInk5)
-    /// --card-stripe-0 · terracotta: light #e9bda0, dark #4e3421
+    /// --card-stripe-0 · terracotta: light #e9bda0, dark #5c412e
     public static let cardStripe0 = Color(uiColor: UI.cardStripe0)
-    /// --card-stripe-1 · terracotta: light #d3d1e8, dark #3a3946
+    /// --card-stripe-1 · terracotta: light #d3d1e8, dark #474654
     public static let cardStripe1 = Color(uiColor: UI.cardStripe1)
-    /// --card-stripe-2 · terracotta: light #c3d8be, dark #323f2f
+    /// --card-stripe-2 · terracotta: light #c3d8be, dark #3f4c3c
     public static let cardStripe2 = Color(uiColor: UI.cardStripe2)
-    /// --card-stripe-3 · terracotta: light #e2cc95, dark #483b20
+    /// --card-stripe-3 · terracotta: light #e2cc95, dark #56492d
     public static let cardStripe3 = Color(uiColor: UI.cardStripe3)
-    /// --card-stripe-4 · terracotta: light #b6d4db, dark #2c3e43
+    /// --card-stripe-4 · terracotta: light #b6d4db, dark #394b50
     public static let cardStripe4 = Color(uiColor: UI.cardStripe4)
-    /// --card-stripe-5 · terracotta: light #e1b9b9, dark #4b3334
+    /// --card-stripe-5 · terracotta: light #e1b9b9, dark #594040
     public static let cardStripe5 = Color(uiColor: UI.cardStripe5)
     /// --card-accent-0 · terracotta: light #fed4b9, dark #573b28
     public static let cardAccent0 = Color(uiColor: UI.cardAccent0)
@@ -253,6 +263,30 @@ public nonisolated enum Tokens {
     public static let cardTag4 = Color(uiColor: UI.cardTag4)
     /// --card-tag-5 · terracotta: light #e8bfbf, dark #493131
     public static let cardTag5 = Color(uiColor: UI.cardTag5)
+    /// --card-pill-0 · terracotta: light #6c2d00, dark #6c4932
+    public static let cardPill0 = Color(uiColor: UI.cardPill0)
+    /// --card-pill-1 · terracotta: light #4d437a, dark #524d72
+    public static let cardPill1 = Color(uiColor: UI.cardPill1)
+    /// --card-pill-2 · terracotta: light #1c500e, dark #415b3b
+    public static let cardPill2 = Color(uiColor: UI.cardPill2)
+    /// --card-pill-3 · terracotta: light #6e4c00, dark #605129
+    public static let cardPill3 = Color(uiColor: UI.cardPill3)
+    /// --card-pill-4 · terracotta: light #004d60, dark #255b67
+    public static let cardPill4 = Color(uiColor: UI.cardPill4)
+    /// --card-pill-5 · terracotta: light #6c3437, dark #704546
+    public static let cardPill5 = Color(uiColor: UI.cardPill5)
+    /// --card-pill-ink-0 · terracotta: light #fef5ef, dark #f5e0d2
+    public static let cardPillInk0 = Color(uiColor: UI.cardPillInk0)
+    /// --card-pill-ink-1 · terracotta: light #f6f6ff, dark #e4e2f8
+    public static let cardPillInk1 = Color(uiColor: UI.cardPillInk1)
+    /// --card-pill-ink-2 · terracotta: light #f3f9f1, dark #daead7
+    public static let cardPillInk2 = Color(uiColor: UI.cardPillInk2)
+    /// --card-pill-ink-3 · terracotta: light #faf6ee, dark #ede4cf
+    public static let cardPillInk3 = Color(uiColor: UI.cardPillInk3)
+    /// --card-pill-ink-4 · terracotta: light #eef9fc, dark #cfeaf1
+    public static let cardPillInk4 = Color(uiColor: UI.cardPillInk4)
+    /// --card-pill-ink-5 · terracotta: light #fff4f4, dark #f8dddd
+    public static let cardPillInk5 = Color(uiColor: UI.cardPillInk5)
 
     public static let cardFills: [Color] = [cardFill0, cardFill1, cardFill2, cardFill3, cardFill4, cardFill5]
     public static let cardBorders: [Color] = [cardBorder0, cardBorder1, cardBorder2, cardBorder3, cardBorder4, cardBorder5]
@@ -472,6 +506,11 @@ extension Tokens {
         public static let ctaInk = Palette.uiColor(.ctaInk)
         public static let ctaGhost = Palette.uiColor(.ctaGhost)
         public static let ctaVerbInk = Palette.uiColor(.ctaVerbInk)
+        public static let skeletonBase = Palette.uiColor(.skeletonBase)
+        public static let skeletonGlow = Palette.uiColor(.skeletonGlow)
+        public static let avatarWait = Palette.uiColor(.avatarWait)
+        public static let appleFill = Palette.uiColor(.appleFill)
+        public static let appleLabel = Palette.uiColor(.appleLabel)
         public static let danger = Palette.uiColor(.danger)
         public static let dangerFill = Palette.uiColor(.dangerFill)
         public static let buttonDangerTonal = Palette.uiColor(.buttonDangerTonal)
@@ -560,5 +599,17 @@ extension Tokens {
         public static let cardTag3 = Palette.uiColor(.cardTag3)
         public static let cardTag4 = Palette.uiColor(.cardTag4)
         public static let cardTag5 = Palette.uiColor(.cardTag5)
+        public static let cardPill0 = Palette.uiColor(.cardPill0)
+        public static let cardPill1 = Palette.uiColor(.cardPill1)
+        public static let cardPill2 = Palette.uiColor(.cardPill2)
+        public static let cardPill3 = Palette.uiColor(.cardPill3)
+        public static let cardPill4 = Palette.uiColor(.cardPill4)
+        public static let cardPill5 = Palette.uiColor(.cardPill5)
+        public static let cardPillInk0 = Palette.uiColor(.cardPillInk0)
+        public static let cardPillInk1 = Palette.uiColor(.cardPillInk1)
+        public static let cardPillInk2 = Palette.uiColor(.cardPillInk2)
+        public static let cardPillInk3 = Palette.uiColor(.cardPillInk3)
+        public static let cardPillInk4 = Palette.uiColor(.cardPillInk4)
+        public static let cardPillInk5 = Palette.uiColor(.cardPillInk5)
     }
 }

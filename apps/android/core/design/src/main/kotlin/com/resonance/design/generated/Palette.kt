@@ -110,182 +110,216 @@ class ResonanceColors(
     val CtaGhost: Color = at(34)
     /** --cta-verb-ink */
     val CtaVerbInk: Color = at(35)
+    /** --skeleton-base */
+    val SkeletonBase: Color = at(36)
+    /** --skeleton-glow */
+    val SkeletonGlow: Color = at(37)
+    /** --avatar-wait */
+    val AvatarWait: Color = at(38)
+    /** --apple-fill */
+    val AppleFill: Color = at(39)
+    /** --apple-label */
+    val AppleLabel: Color = at(40)
     /** --color-danger */
-    val Danger: Color = at(36)
+    val Danger: Color = at(41)
     /** --danger-fill */
-    val DangerFill: Color = at(37)
+    val DangerFill: Color = at(42)
     /** --button-danger-tonal */
-    val ButtonDangerTonal: Color = at(38)
+    val ButtonDangerTonal: Color = at(43)
     /** --button-on-danger-tonal */
-    val ButtonOnDangerTonal: Color = at(39)
+    val ButtonOnDangerTonal: Color = at(44)
     /** --color-lavender */
-    val Lavender: Color = at(40)
+    val Lavender: Color = at(45)
     /** --color-sage */
-    val Sage: Color = at(41)
+    val Sage: Color = at(46)
     /** --color-yellow */
-    val Yellow: Color = at(42)
+    val Yellow: Color = at(47)
     /** --color-sky */
-    val Sky: Color = at(43)
+    val Sky: Color = at(48)
     /** --avatar-stroke */
-    val AvatarStroke: Color = at(44)
+    val AvatarStroke: Color = at(49)
     /** --tag-stroke */
-    val TagStroke: Color = at(45)
+    val TagStroke: Color = at(50)
     /** --scrim — what a modal lays over the screen */
-    val Scrim: Color = at(46)
+    val Scrim: Color = at(51)
     /** --shadow-ink — a real drop shadow */
-    val ShadowInk: Color = at(47)
+    val ShadowInk: Color = at(52)
     /** --grain-ink — the grain's specks: dark on cream, light on night paper */
-    val GrainInk: Color = at(48)
+    val GrainInk: Color = at(53)
     /** --toward-ink — "further from the paper": black in light, white in dark (a press or hover wash, at a low alpha) */
-    val TowardInk: Color = at(49)
+    val TowardInk: Color = at(54)
     /** --footer-ink-soft */
-    val FooterInkSoft: Color = at(50)
+    val FooterInkSoft: Color = at(55)
     /** --picture-backing — behind a story picture: none in light, a light paper in dark (a transparent logo's black words still show) */
-    val PictureBacking: Color = at(51)
+    val PictureBacking: Color = at(56)
     /** --soft-pen */
-    val SoftPen: Color = at(52)
+    val SoftPen: Color = at(57)
     /** --color-ok */
-    val Ok: Color = at(53)
+    val Ok: Color = at(58)
     /** --verified-mark */
-    val VerifiedMark: Color = at(54)
+    val VerifiedMark: Color = at(59)
     /** --photo-ink */
-    val PhotoInk: Color = at(55)
+    val PhotoInk: Color = at(60)
     /** --photo-shade */
-    val PhotoShade: Color = at(56)
+    val PhotoShade: Color = at(61)
     /** --viewer-ground */
-    val ViewerGround: Color = at(57)
+    val ViewerGround: Color = at(62)
     /** --card-fill-0 */
-    val CardFill0: Color = at(58)
+    val CardFill0: Color = at(63)
     /** --card-fill-1 */
-    val CardFill1: Color = at(59)
+    val CardFill1: Color = at(64)
     /** --card-fill-2 */
-    val CardFill2: Color = at(60)
+    val CardFill2: Color = at(65)
     /** --card-fill-3 */
-    val CardFill3: Color = at(61)
+    val CardFill3: Color = at(66)
     /** --card-fill-4 */
-    val CardFill4: Color = at(62)
+    val CardFill4: Color = at(67)
     /** --card-fill-5 */
-    val CardFill5: Color = at(63)
+    val CardFill5: Color = at(68)
     /** --card-border-0 */
-    val CardBorder0: Color = at(64)
+    val CardBorder0: Color = at(69)
     /** --card-border-1 */
-    val CardBorder1: Color = at(65)
+    val CardBorder1: Color = at(70)
     /** --card-border-2 */
-    val CardBorder2: Color = at(66)
+    val CardBorder2: Color = at(71)
     /** --card-border-3 */
-    val CardBorder3: Color = at(67)
+    val CardBorder3: Color = at(72)
     /** --card-border-4 */
-    val CardBorder4: Color = at(68)
+    val CardBorder4: Color = at(73)
     /** --card-border-5 */
-    val CardBorder5: Color = at(69)
+    val CardBorder5: Color = at(74)
     /** --card-border-deep-0 */
-    val CardBorderDeep0: Color = at(70)
+    val CardBorderDeep0: Color = at(75)
     /** --card-border-deep-1 */
-    val CardBorderDeep1: Color = at(71)
+    val CardBorderDeep1: Color = at(76)
     /** --card-border-deep-2 */
-    val CardBorderDeep2: Color = at(72)
+    val CardBorderDeep2: Color = at(77)
     /** --card-border-deep-3 */
-    val CardBorderDeep3: Color = at(73)
+    val CardBorderDeep3: Color = at(78)
     /** --card-border-deep-4 */
-    val CardBorderDeep4: Color = at(74)
+    val CardBorderDeep4: Color = at(79)
     /** --card-border-deep-5 */
-    val CardBorderDeep5: Color = at(75)
+    val CardBorderDeep5: Color = at(80)
     /** --card-interior-0 */
-    val CardInterior0: Color = at(76)
+    val CardInterior0: Color = at(81)
     /** --card-interior-1 */
-    val CardInterior1: Color = at(77)
+    val CardInterior1: Color = at(82)
     /** --card-interior-2 */
-    val CardInterior2: Color = at(78)
+    val CardInterior2: Color = at(83)
     /** --card-interior-3 */
-    val CardInterior3: Color = at(79)
+    val CardInterior3: Color = at(84)
     /** --card-interior-4 */
-    val CardInterior4: Color = at(80)
+    val CardInterior4: Color = at(85)
     /** --card-interior-5 */
-    val CardInterior5: Color = at(81)
+    val CardInterior5: Color = at(86)
     /** --card-separator-0 */
-    val CardSeparator0: Color = at(82)
+    val CardSeparator0: Color = at(87)
     /** --card-separator-1 */
-    val CardSeparator1: Color = at(83)
+    val CardSeparator1: Color = at(88)
     /** --card-separator-2 */
-    val CardSeparator2: Color = at(84)
+    val CardSeparator2: Color = at(89)
     /** --card-separator-3 */
-    val CardSeparator3: Color = at(85)
+    val CardSeparator3: Color = at(90)
     /** --card-separator-4 */
-    val CardSeparator4: Color = at(86)
+    val CardSeparator4: Color = at(91)
     /** --card-separator-5 */
-    val CardSeparator5: Color = at(87)
+    val CardSeparator5: Color = at(92)
     /** --card-note-ink-0 */
-    val CardNoteInk0: Color = at(88)
+    val CardNoteInk0: Color = at(93)
     /** --card-note-ink-1 */
-    val CardNoteInk1: Color = at(89)
+    val CardNoteInk1: Color = at(94)
     /** --card-note-ink-2 */
-    val CardNoteInk2: Color = at(90)
+    val CardNoteInk2: Color = at(95)
     /** --card-note-ink-3 */
-    val CardNoteInk3: Color = at(91)
+    val CardNoteInk3: Color = at(96)
     /** --card-note-ink-4 */
-    val CardNoteInk4: Color = at(92)
+    val CardNoteInk4: Color = at(97)
     /** --card-note-ink-5 */
-    val CardNoteInk5: Color = at(93)
+    val CardNoteInk5: Color = at(98)
     /** --card-stripe-0 */
-    val CardStripe0: Color = at(94)
+    val CardStripe0: Color = at(99)
     /** --card-stripe-1 */
-    val CardStripe1: Color = at(95)
+    val CardStripe1: Color = at(100)
     /** --card-stripe-2 */
-    val CardStripe2: Color = at(96)
+    val CardStripe2: Color = at(101)
     /** --card-stripe-3 */
-    val CardStripe3: Color = at(97)
+    val CardStripe3: Color = at(102)
     /** --card-stripe-4 */
-    val CardStripe4: Color = at(98)
+    val CardStripe4: Color = at(103)
     /** --card-stripe-5 */
-    val CardStripe5: Color = at(99)
+    val CardStripe5: Color = at(104)
     /** --card-accent-0 */
-    val CardAccent0: Color = at(100)
+    val CardAccent0: Color = at(105)
     /** --card-accent-1 */
-    val CardAccent1: Color = at(101)
+    val CardAccent1: Color = at(106)
     /** --card-accent-2 */
-    val CardAccent2: Color = at(102)
+    val CardAccent2: Color = at(107)
     /** --card-accent-3 */
-    val CardAccent3: Color = at(103)
+    val CardAccent3: Color = at(108)
     /** --card-accent-4 */
-    val CardAccent4: Color = at(104)
+    val CardAccent4: Color = at(109)
     /** --card-accent-5 */
-    val CardAccent5: Color = at(105)
+    val CardAccent5: Color = at(110)
     /** --card-hover-0 */
-    val CardHover0: Color = at(106)
+    val CardHover0: Color = at(111)
     /** --card-hover-1 */
-    val CardHover1: Color = at(107)
+    val CardHover1: Color = at(112)
     /** --card-hover-2 */
-    val CardHover2: Color = at(108)
+    val CardHover2: Color = at(113)
     /** --card-hover-3 */
-    val CardHover3: Color = at(109)
+    val CardHover3: Color = at(114)
     /** --card-hover-4 */
-    val CardHover4: Color = at(110)
+    val CardHover4: Color = at(115)
     /** --card-hover-5 */
-    val CardHover5: Color = at(111)
+    val CardHover5: Color = at(116)
     /** --card-skeleton-0 */
-    val CardSkeleton0: Color = at(112)
+    val CardSkeleton0: Color = at(117)
     /** --card-skeleton-1 */
-    val CardSkeleton1: Color = at(113)
+    val CardSkeleton1: Color = at(118)
     /** --card-skeleton-2 */
-    val CardSkeleton2: Color = at(114)
+    val CardSkeleton2: Color = at(119)
     /** --card-skeleton-3 */
-    val CardSkeleton3: Color = at(115)
+    val CardSkeleton3: Color = at(120)
     /** --card-skeleton-4 */
-    val CardSkeleton4: Color = at(116)
+    val CardSkeleton4: Color = at(121)
     /** --card-skeleton-5 */
-    val CardSkeleton5: Color = at(117)
+    val CardSkeleton5: Color = at(122)
     /** --card-tag-0 */
-    val CardTag0: Color = at(118)
+    val CardTag0: Color = at(123)
     /** --card-tag-1 */
-    val CardTag1: Color = at(119)
+    val CardTag1: Color = at(124)
     /** --card-tag-2 */
-    val CardTag2: Color = at(120)
+    val CardTag2: Color = at(125)
     /** --card-tag-3 */
-    val CardTag3: Color = at(121)
+    val CardTag3: Color = at(126)
     /** --card-tag-4 */
-    val CardTag4: Color = at(122)
+    val CardTag4: Color = at(127)
     /** --card-tag-5 */
-    val CardTag5: Color = at(123)
+    val CardTag5: Color = at(128)
+    /** --card-pill-0 */
+    val CardPill0: Color = at(129)
+    /** --card-pill-1 */
+    val CardPill1: Color = at(130)
+    /** --card-pill-2 */
+    val CardPill2: Color = at(131)
+    /** --card-pill-3 */
+    val CardPill3: Color = at(132)
+    /** --card-pill-4 */
+    val CardPill4: Color = at(133)
+    /** --card-pill-5 */
+    val CardPill5: Color = at(134)
+    /** --card-pill-ink-0 */
+    val CardPillInk0: Color = at(135)
+    /** --card-pill-ink-1 */
+    val CardPillInk1: Color = at(136)
+    /** --card-pill-ink-2 */
+    val CardPillInk2: Color = at(137)
+    /** --card-pill-ink-3 */
+    val CardPillInk3: Color = at(138)
+    /** --card-pill-ink-4 */
+    val CardPillInk4: Color = at(139)
+    /** --card-pill-ink-5 */
+    val CardPillInk5: Color = at(140)
 
     /** --card-fill-0…5, in CardPalette.HUES order. */
     val CardFills: List<Color> = listOf(CardFill0, CardFill1, CardFill2, CardFill3, CardFill4, CardFill5)
@@ -309,6 +343,10 @@ class ResonanceColors(
     val CardSkeletons: List<Color> = listOf(CardSkeleton0, CardSkeleton1, CardSkeleton2, CardSkeleton3, CardSkeleton4, CardSkeleton5)
     /** --card-tag-0…5, in CardPalette.HUES order. */
     val CardTags: List<Color> = listOf(CardTag0, CardTag1, CardTag2, CardTag3, CardTag4, CardTag5)
+    /** --card-pill-0…5, in CardPalette.HUES order. */
+    val CardPills: List<Color> = listOf(CardPill0, CardPill1, CardPill2, CardPill3, CardPill4, CardPill5)
+    /** --card-pill-ink-0…5, in CardPalette.HUES order. */
+    val CardPillInks: List<Color> = listOf(CardPillInk0, CardPillInk1, CardPillInk2, CardPillInk3, CardPillInk4, CardPillInk5)
 
     /** --grain-scale */
     val GrainScale: Float = if (dark) 0.4f else 1.0f
@@ -377,6 +415,11 @@ class ResonanceColors(
             "cta-ink",
             "cta-ghost",
             "cta-verb-ink",
+            "skeleton-base",
+            "skeleton-glow",
+            "avatar-wait",
+            "apple-fill",
+            "apple-label",
             "color-danger",
             "danger-fill",
             "button-danger-tonal",
@@ -465,6 +508,18 @@ class ResonanceColors(
             "card-tag-3",
             "card-tag-4",
             "card-tag-5",
+            "card-pill-0",
+            "card-pill-1",
+            "card-pill-2",
+            "card-pill-3",
+            "card-pill-4",
+            "card-pill-5",
+            "card-pill-ink-0",
+            "card-pill-ink-1",
+            "card-pill-ink-2",
+            "card-pill-ink-3",
+            "card-pill-ink-4",
+            "card-pill-ink-5",
         )
 
         private val built = arrayOfNulls<ResonanceColors>(PaletteTheme.entries.size * 2)
@@ -554,6 +609,11 @@ internal object PaletteTables {
         0.965, 0.015, 75.0, 1.0, // cta-ink
         0.5084, 0.1148, 45.0, 1.0, // cta-ghost
         0.4836, 0.1092, 45.0, 1.0, // cta-verb-ink
+        0.8898, 0.01872, 74.1, 0.85, // skeleton-base
+        0.965, 0.015, 75.0, 1.0, // skeleton-glow
+        0.93, 0.018, 75.0, 1.0, // avatar-wait
+        0.26, 0.03, 60.0, 1.0, // apple-fill
+        0.965, 0.015, 75.0, 1.0, // apple-label
         0.58, 0.16, 25.0, 1.0, // color-danger
         0.5336, 0.1472, 25.0, 1.0, // danger-fill
         0.9, 0.048, 25.0, 1.0, // button-danger-tonal
@@ -642,6 +702,18 @@ internal object PaletteTables {
         0.87, 0.075, 88.0, 1.0, // card-tag-3
         0.87, 0.033, 215.0, 1.0, // card-tag-4
         0.84, 0.047, 18.0, 1.0, // card-tag-5
+        0.38, 0.11, 55.0, 1.0, // card-pill-0
+        0.42, 0.09, 290.0, 1.0, // card-pill-1
+        0.38, 0.11, 140.0, 1.0, // card-pill-2
+        0.44, 0.12, 88.0, 1.0, // card-pill-3
+        0.38, 0.09, 215.0, 1.0, // card-pill-4
+        0.4, 0.08, 18.0, 1.0, // card-pill-5
+        0.975, 0.012, 55.0, 1.0, // card-pill-ink-0
+        0.975, 0.012, 290.0, 1.0, // card-pill-ink-1
+        0.975, 0.012, 140.0, 1.0, // card-pill-ink-2
+        0.975, 0.012, 88.0, 1.0, // card-pill-ink-3
+        0.975, 0.012, 215.0, 1.0, // card-pill-ink-4
+        0.975, 0.012, 18.0, 1.0, // card-pill-ink-5
     )
 
     /** terracotta, dark. */
@@ -682,6 +754,11 @@ internal object PaletteTables {
         0.93, 0.02, 76.0, 1.0, // cta-ink
         0.3432, 0.082134, 45.0, 1.0, // cta-ghost
         0.44, 0.1053, 45.0, 1.0, // cta-verb-ink
+        0.2912, 0.014517, 64.96, 0.85, // skeleton-base
+        0.3, 0.013, 62.0, 1.0, // skeleton-glow
+        0.24, 0.01404, 64.0, 1.0, // avatar-wait
+        1.0, 0.0, 0.0, 1.0, // apple-fill
+        0.0, 0.0, 0.0, 1.0, // apple-label
         0.7, 0.15, 25.0, 1.0, // color-danger
         0.67, 0.15, 25.0, 1.0, // danger-fill
         0.3, 0.06, 25.0, 1.0, // button-danger-tonal
@@ -740,12 +817,12 @@ internal object PaletteTables {
         0.78, 0.08, 88.0, 1.0, // card-note-ink-3
         0.78, 0.08, 215.0, 1.0, // card-note-ink-4
         0.78, 0.08, 18.0, 1.0, // card-note-ink-5
-        0.35, 0.04875, 55.0, 1.0, // card-stripe-0
-        0.35, 0.024, 290.0, 1.0, // card-stripe-1
-        0.35, 0.0315, 140.0, 1.0, // card-stripe-2
-        0.36, 0.045, 85.0, 1.0, // card-stripe-3
-        0.35, 0.02475, 215.0, 1.0, // card-stripe-4
-        0.35, 0.03525, 18.0, 1.0, // card-stripe-5
+        0.4, 0.04875, 55.0, 1.0, // card-stripe-0
+        0.4, 0.024, 290.0, 1.0, // card-stripe-1
+        0.4, 0.0315, 140.0, 1.0, // card-stripe-2
+        0.41, 0.045, 85.0, 1.0, // card-stripe-3
+        0.4, 0.02475, 215.0, 1.0, // card-stripe-4
+        0.4, 0.03525, 18.0, 1.0, // card-stripe-5
         0.38, 0.05, 55.0, 1.0, // card-accent-0
         0.38, 0.05, 290.0, 1.0, // card-accent-1
         0.38, 0.05, 140.0, 1.0, // card-accent-2
@@ -770,6 +847,18 @@ internal object PaletteTables {
         0.35, 0.045, 85.0, 1.0, // card-tag-3
         0.34, 0.02475, 215.0, 1.0, // card-tag-4
         0.34, 0.03525, 18.0, 1.0, // card-tag-5
+        0.44, 0.06, 55.0, 1.0, // card-pill-0
+        0.44, 0.06, 290.0, 1.0, // card-pill-1
+        0.44, 0.06, 140.0, 1.0, // card-pill-2
+        0.44, 0.06, 88.0, 1.0, // card-pill-3
+        0.44, 0.06, 215.0, 1.0, // card-pill-4
+        0.44, 0.06, 18.0, 1.0, // card-pill-5
+        0.92, 0.03, 55.0, 1.0, // card-pill-ink-0
+        0.92, 0.03, 290.0, 1.0, // card-pill-ink-1
+        0.92, 0.03, 140.0, 1.0, // card-pill-ink-2
+        0.92, 0.03, 88.0, 1.0, // card-pill-ink-3
+        0.92, 0.03, 215.0, 1.0, // card-pill-ink-4
+        0.92, 0.03, 18.0, 1.0, // card-pill-ink-5
     )
 
     /** sage, light. */
@@ -810,6 +899,11 @@ internal object PaletteTables {
         0.965, 0.013, 140.0, 1.0, // cta-ink
         0.451, 0.1066, 140.0, 1.0, // cta-ghost
         0.429, 0.1014, 140.0, 1.0, // cta-verb-ink
+        0.8898, 0.01654, 140.6, 0.85, // skeleton-base
+        0.965, 0.013, 140.0, 1.0, // skeleton-glow
+        0.93, 0.016, 140.0, 1.0, // avatar-wait
+        0.26, 0.025, 150.0, 1.0, // apple-fill
+        0.965, 0.013, 140.0, 1.0, // apple-label
         0.58, 0.16, 25.0, 1.0, // color-danger
         0.5336, 0.1472, 25.0, 1.0, // danger-fill
         0.9, 0.048, 25.0, 1.0, // button-danger-tonal
@@ -898,6 +992,18 @@ internal object PaletteTables {
         0.87, 0.075, 88.0, 1.0, // card-tag-3
         0.87, 0.033, 215.0, 1.0, // card-tag-4
         0.84, 0.047, 18.0, 1.0, // card-tag-5
+        0.38, 0.11, 55.0, 1.0, // card-pill-0
+        0.42, 0.09, 290.0, 1.0, // card-pill-1
+        0.38, 0.11, 140.0, 1.0, // card-pill-2
+        0.44, 0.12, 88.0, 1.0, // card-pill-3
+        0.38, 0.09, 215.0, 1.0, // card-pill-4
+        0.4, 0.08, 18.0, 1.0, // card-pill-5
+        0.975, 0.012, 55.0, 1.0, // card-pill-ink-0
+        0.975, 0.012, 290.0, 1.0, // card-pill-ink-1
+        0.975, 0.012, 140.0, 1.0, // card-pill-ink-2
+        0.975, 0.012, 88.0, 1.0, // card-pill-ink-3
+        0.975, 0.012, 215.0, 1.0, // card-pill-ink-4
+        0.975, 0.012, 18.0, 1.0, // card-pill-ink-5
     )
 
     /** sage, dark. */
@@ -938,6 +1044,11 @@ internal object PaletteTables {
         0.93, 0.02, 154.0, 1.0, // cta-ink
         0.3432, 0.073008, 143.0, 1.0, // cta-ghost
         0.44, 0.0936, 143.0, 1.0, // cta-verb-ink
+        0.2912, 0.014517, 142.96, 0.85, // skeleton-base
+        0.3, 0.013, 140.0, 1.0, // skeleton-glow
+        0.24, 0.01404, 142.0, 1.0, // avatar-wait
+        1.0, 0.0, 0.0, 1.0, // apple-fill
+        0.0, 0.0, 0.0, 1.0, // apple-label
         0.7, 0.15, 25.0, 1.0, // color-danger
         0.67, 0.15, 25.0, 1.0, // danger-fill
         0.3, 0.06, 25.0, 1.0, // button-danger-tonal
@@ -996,12 +1107,12 @@ internal object PaletteTables {
         0.78, 0.08, 88.0, 1.0, // card-note-ink-3
         0.78, 0.08, 215.0, 1.0, // card-note-ink-4
         0.78, 0.08, 18.0, 1.0, // card-note-ink-5
-        0.35, 0.04875, 55.0, 1.0, // card-stripe-0
-        0.35, 0.024, 290.0, 1.0, // card-stripe-1
-        0.35, 0.0315, 140.0, 1.0, // card-stripe-2
-        0.36, 0.045, 85.0, 1.0, // card-stripe-3
-        0.35, 0.02475, 215.0, 1.0, // card-stripe-4
-        0.35, 0.03525, 18.0, 1.0, // card-stripe-5
+        0.4, 0.04875, 55.0, 1.0, // card-stripe-0
+        0.4, 0.024, 290.0, 1.0, // card-stripe-1
+        0.4, 0.0315, 140.0, 1.0, // card-stripe-2
+        0.41, 0.045, 85.0, 1.0, // card-stripe-3
+        0.4, 0.02475, 215.0, 1.0, // card-stripe-4
+        0.4, 0.03525, 18.0, 1.0, // card-stripe-5
         0.38, 0.05, 55.0, 1.0, // card-accent-0
         0.38, 0.05, 290.0, 1.0, // card-accent-1
         0.38, 0.05, 140.0, 1.0, // card-accent-2
@@ -1026,6 +1137,18 @@ internal object PaletteTables {
         0.35, 0.045, 85.0, 1.0, // card-tag-3
         0.34, 0.02475, 215.0, 1.0, // card-tag-4
         0.34, 0.03525, 18.0, 1.0, // card-tag-5
+        0.44, 0.06, 55.0, 1.0, // card-pill-0
+        0.44, 0.06, 290.0, 1.0, // card-pill-1
+        0.44, 0.06, 140.0, 1.0, // card-pill-2
+        0.44, 0.06, 88.0, 1.0, // card-pill-3
+        0.44, 0.06, 215.0, 1.0, // card-pill-4
+        0.44, 0.06, 18.0, 1.0, // card-pill-5
+        0.92, 0.03, 55.0, 1.0, // card-pill-ink-0
+        0.92, 0.03, 290.0, 1.0, // card-pill-ink-1
+        0.92, 0.03, 140.0, 1.0, // card-pill-ink-2
+        0.92, 0.03, 88.0, 1.0, // card-pill-ink-3
+        0.92, 0.03, 215.0, 1.0, // card-pill-ink-4
+        0.92, 0.03, 18.0, 1.0, // card-pill-ink-5
     )
 
     /** lavender, light. */
@@ -1066,6 +1189,11 @@ internal object PaletteTables {
         0.965, 0.012, 300.0, 1.0, // cta-ink
         0.4756, 0.1148, 290.0, 1.0, // cta-ghost
         0.4524, 0.1092, 290.0, 1.0, // cta-verb-ink
+        0.8945, 0.0156, 299.7, 0.85, // skeleton-base
+        0.965, 0.012, 300.0, 1.0, // skeleton-glow
+        0.935, 0.015, 300.0, 1.0, // avatar-wait
+        0.26, 0.025, 295.0, 1.0, // apple-fill
+        0.965, 0.012, 300.0, 1.0, // apple-label
         0.58, 0.16, 25.0, 1.0, // color-danger
         0.5336, 0.1472, 25.0, 1.0, // danger-fill
         0.9, 0.048, 25.0, 1.0, // button-danger-tonal
@@ -1154,6 +1282,18 @@ internal object PaletteTables {
         0.87, 0.075, 88.0, 1.0, // card-tag-3
         0.87, 0.033, 215.0, 1.0, // card-tag-4
         0.84, 0.047, 18.0, 1.0, // card-tag-5
+        0.38, 0.11, 55.0, 1.0, // card-pill-0
+        0.42, 0.09, 290.0, 1.0, // card-pill-1
+        0.38, 0.11, 140.0, 1.0, // card-pill-2
+        0.44, 0.12, 88.0, 1.0, // card-pill-3
+        0.38, 0.09, 215.0, 1.0, // card-pill-4
+        0.4, 0.08, 18.0, 1.0, // card-pill-5
+        0.975, 0.012, 55.0, 1.0, // card-pill-ink-0
+        0.975, 0.012, 290.0, 1.0, // card-pill-ink-1
+        0.975, 0.012, 140.0, 1.0, // card-pill-ink-2
+        0.975, 0.012, 88.0, 1.0, // card-pill-ink-3
+        0.975, 0.012, 215.0, 1.0, // card-pill-ink-4
+        0.975, 0.012, 18.0, 1.0, // card-pill-ink-5
     )
 
     /** lavender, dark. */
@@ -1194,6 +1334,11 @@ internal object PaletteTables {
         0.93, 0.016923, 312.0, 1.0, // cta-ink
         0.3432, 0.069966, 290.0, 1.0, // cta-ghost
         0.44, 0.0897, 290.0, 1.0, // cta-verb-ink
+        0.2912, 0.012283, 300.96, 0.85, // skeleton-base
+        0.3, 0.011, 298.0, 1.0, // skeleton-glow
+        0.24, 0.01188, 300.0, 1.0, // avatar-wait
+        1.0, 0.0, 0.0, 1.0, // apple-fill
+        0.0, 0.0, 0.0, 1.0, // apple-label
         0.7, 0.15, 25.0, 1.0, // color-danger
         0.67, 0.15, 25.0, 1.0, // danger-fill
         0.3, 0.06, 25.0, 1.0, // button-danger-tonal
@@ -1252,12 +1397,12 @@ internal object PaletteTables {
         0.78, 0.08, 88.0, 1.0, // card-note-ink-3
         0.78, 0.08, 215.0, 1.0, // card-note-ink-4
         0.78, 0.08, 18.0, 1.0, // card-note-ink-5
-        0.35, 0.04875, 55.0, 1.0, // card-stripe-0
-        0.35, 0.024, 290.0, 1.0, // card-stripe-1
-        0.35, 0.0315, 140.0, 1.0, // card-stripe-2
-        0.36, 0.045, 85.0, 1.0, // card-stripe-3
-        0.35, 0.02475, 215.0, 1.0, // card-stripe-4
-        0.35, 0.03525, 18.0, 1.0, // card-stripe-5
+        0.4, 0.04875, 55.0, 1.0, // card-stripe-0
+        0.4, 0.024, 290.0, 1.0, // card-stripe-1
+        0.4, 0.0315, 140.0, 1.0, // card-stripe-2
+        0.41, 0.045, 85.0, 1.0, // card-stripe-3
+        0.4, 0.02475, 215.0, 1.0, // card-stripe-4
+        0.4, 0.03525, 18.0, 1.0, // card-stripe-5
         0.38, 0.05, 55.0, 1.0, // card-accent-0
         0.38, 0.05, 290.0, 1.0, // card-accent-1
         0.38, 0.05, 140.0, 1.0, // card-accent-2
@@ -1282,6 +1427,18 @@ internal object PaletteTables {
         0.35, 0.045, 85.0, 1.0, // card-tag-3
         0.34, 0.02475, 215.0, 1.0, // card-tag-4
         0.34, 0.03525, 18.0, 1.0, // card-tag-5
+        0.44, 0.06, 55.0, 1.0, // card-pill-0
+        0.44, 0.06, 290.0, 1.0, // card-pill-1
+        0.44, 0.06, 140.0, 1.0, // card-pill-2
+        0.44, 0.06, 88.0, 1.0, // card-pill-3
+        0.44, 0.06, 215.0, 1.0, // card-pill-4
+        0.44, 0.06, 18.0, 1.0, // card-pill-5
+        0.92, 0.03, 55.0, 1.0, // card-pill-ink-0
+        0.92, 0.03, 290.0, 1.0, // card-pill-ink-1
+        0.92, 0.03, 140.0, 1.0, // card-pill-ink-2
+        0.92, 0.03, 88.0, 1.0, // card-pill-ink-3
+        0.92, 0.03, 215.0, 1.0, // card-pill-ink-4
+        0.92, 0.03, 18.0, 1.0, // card-pill-ink-5
     )
 
     /** yellow, light. */
@@ -1322,6 +1479,11 @@ internal object PaletteTables {
         0.965, 0.02, 95.0, 1.0, // cta-ink
         0.5248, 0.1066, 78.0, 1.0, // cta-ghost
         0.4992, 0.1014, 78.0, 1.0, // cta-verb-ink
+        0.8898, 0.02436, 94.1, 0.85, // skeleton-base
+        0.965, 0.02, 95.0, 1.0, // skeleton-glow
+        0.93, 0.024, 95.0, 1.0, // avatar-wait
+        0.26, 0.03, 80.0, 1.0, // apple-fill
+        0.965, 0.02, 95.0, 1.0, // apple-label
         0.58, 0.16, 25.0, 1.0, // color-danger
         0.5336, 0.1472, 25.0, 1.0, // danger-fill
         0.9, 0.048, 25.0, 1.0, // button-danger-tonal
@@ -1410,6 +1572,18 @@ internal object PaletteTables {
         0.87, 0.075, 88.0, 1.0, // card-tag-3
         0.87, 0.033, 215.0, 1.0, // card-tag-4
         0.84, 0.047, 18.0, 1.0, // card-tag-5
+        0.38, 0.11, 55.0, 1.0, // card-pill-0
+        0.42, 0.09, 290.0, 1.0, // card-pill-1
+        0.38, 0.11, 140.0, 1.0, // card-pill-2
+        0.44, 0.12, 88.0, 1.0, // card-pill-3
+        0.38, 0.09, 215.0, 1.0, // card-pill-4
+        0.4, 0.08, 18.0, 1.0, // card-pill-5
+        0.975, 0.012, 55.0, 1.0, // card-pill-ink-0
+        0.975, 0.012, 290.0, 1.0, // card-pill-ink-1
+        0.975, 0.012, 140.0, 1.0, // card-pill-ink-2
+        0.975, 0.012, 88.0, 1.0, // card-pill-ink-3
+        0.975, 0.012, 215.0, 1.0, // card-pill-ink-4
+        0.975, 0.012, 18.0, 1.0, // card-pill-ink-5
     )
 
     /** yellow, dark. */
@@ -1450,6 +1624,11 @@ internal object PaletteTables {
         0.93, 0.023077, 102.0, 1.0, // cta-ink
         0.3432, 0.07605, 78.0, 1.0, // cta-ghost
         0.44, 0.0975, 78.0, 1.0, // cta-verb-ink
+        0.2912, 0.01675, 90.96, 0.85, // skeleton-base
+        0.3, 0.015, 88.0, 1.0, // skeleton-glow
+        0.24, 0.0162, 90.0, 1.0, // avatar-wait
+        1.0, 0.0, 0.0, 1.0, // apple-fill
+        0.0, 0.0, 0.0, 1.0, // apple-label
         0.7, 0.15, 25.0, 1.0, // color-danger
         0.67, 0.15, 25.0, 1.0, // danger-fill
         0.3, 0.06, 25.0, 1.0, // button-danger-tonal
@@ -1508,12 +1687,12 @@ internal object PaletteTables {
         0.78, 0.08, 88.0, 1.0, // card-note-ink-3
         0.78, 0.08, 215.0, 1.0, // card-note-ink-4
         0.78, 0.08, 18.0, 1.0, // card-note-ink-5
-        0.35, 0.04875, 55.0, 1.0, // card-stripe-0
-        0.35, 0.024, 290.0, 1.0, // card-stripe-1
-        0.35, 0.0315, 140.0, 1.0, // card-stripe-2
-        0.36, 0.045, 85.0, 1.0, // card-stripe-3
-        0.35, 0.02475, 215.0, 1.0, // card-stripe-4
-        0.35, 0.03525, 18.0, 1.0, // card-stripe-5
+        0.4, 0.04875, 55.0, 1.0, // card-stripe-0
+        0.4, 0.024, 290.0, 1.0, // card-stripe-1
+        0.4, 0.0315, 140.0, 1.0, // card-stripe-2
+        0.41, 0.045, 85.0, 1.0, // card-stripe-3
+        0.4, 0.02475, 215.0, 1.0, // card-stripe-4
+        0.4, 0.03525, 18.0, 1.0, // card-stripe-5
         0.38, 0.05, 55.0, 1.0, // card-accent-0
         0.38, 0.05, 290.0, 1.0, // card-accent-1
         0.38, 0.05, 140.0, 1.0, // card-accent-2
@@ -1538,5 +1717,17 @@ internal object PaletteTables {
         0.35, 0.045, 85.0, 1.0, // card-tag-3
         0.34, 0.02475, 215.0, 1.0, // card-tag-4
         0.34, 0.03525, 18.0, 1.0, // card-tag-5
+        0.44, 0.06, 55.0, 1.0, // card-pill-0
+        0.44, 0.06, 290.0, 1.0, // card-pill-1
+        0.44, 0.06, 140.0, 1.0, // card-pill-2
+        0.44, 0.06, 88.0, 1.0, // card-pill-3
+        0.44, 0.06, 215.0, 1.0, // card-pill-4
+        0.44, 0.06, 18.0, 1.0, // card-pill-5
+        0.92, 0.03, 55.0, 1.0, // card-pill-ink-0
+        0.92, 0.03, 290.0, 1.0, // card-pill-ink-1
+        0.92, 0.03, 140.0, 1.0, // card-pill-ink-2
+        0.92, 0.03, 88.0, 1.0, // card-pill-ink-3
+        0.92, 0.03, 215.0, 1.0, // card-pill-ink-4
+        0.92, 0.03, 18.0, 1.0, // card-pill-ink-5
     )
 }

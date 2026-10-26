@@ -120,6 +120,21 @@ object Tokens {
     /** --cta-verb-ink */
     val CtaVerbInk: Color
         @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CtaVerbInk
+    /** --skeleton-base */
+    val SkeletonBase: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.SkeletonBase
+    /** --skeleton-glow */
+    val SkeletonGlow: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.SkeletonGlow
+    /** --avatar-wait */
+    val AvatarWait: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.AvatarWait
+    /** --apple-fill */
+    val AppleFill: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.AppleFill
+    /** --apple-label */
+    val AppleLabel: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.AppleLabel
     /** --color-danger */
     val Danger: Color
         @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.Danger
@@ -384,6 +399,42 @@ object Tokens {
     /** --card-tag-5 */
     val CardTag5: Color
         @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardTag5
+    /** --card-pill-0 */
+    val CardPill0: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardPill0
+    /** --card-pill-1 */
+    val CardPill1: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardPill1
+    /** --card-pill-2 */
+    val CardPill2: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardPill2
+    /** --card-pill-3 */
+    val CardPill3: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardPill3
+    /** --card-pill-4 */
+    val CardPill4: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardPill4
+    /** --card-pill-5 */
+    val CardPill5: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardPill5
+    /** --card-pill-ink-0 */
+    val CardPillInk0: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardPillInk0
+    /** --card-pill-ink-1 */
+    val CardPillInk1: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardPillInk1
+    /** --card-pill-ink-2 */
+    val CardPillInk2: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardPillInk2
+    /** --card-pill-ink-3 */
+    val CardPillInk3: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardPillInk3
+    /** --card-pill-ink-4 */
+    val CardPillInk4: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardPillInk4
+    /** --card-pill-ink-5 */
+    val CardPillInk5: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardPillInk5
 
     /** --card-fill-0…5, in CardPalette.HUES order. */
     val CardFills: List<Color>
@@ -418,6 +469,12 @@ object Tokens {
     /** --card-tag-0…5, in CardPalette.HUES order. */
     val CardTags: List<Color>
         @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardTags
+    /** --card-pill-0…5, in CardPalette.HUES order. */
+    val CardPills: List<Color>
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardPills
+    /** --card-pill-ink-0…5, in CardPalette.HUES order. */
+    val CardPillInks: List<Color>
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardPillInks
 
     /** --grain-scale */
     val GrainScale: Float

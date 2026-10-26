@@ -56,6 +56,11 @@
   --cta-ink: oklch(96.5% 0.015 75);
   --cta-ghost: oklch(50.84% 0.1148 45);
   --cta-verb-ink: oklch(48.36% 0.1092 45);
+  --skeleton-base: oklch(88.98% 0.0187 74.1 / 0.85);
+  --skeleton-glow: oklch(96.5% 0.015 75);
+  --avatar-wait: oklch(93% 0.018 75);
+  --apple-fill: oklch(26% 0.03 60);
+  --apple-label: oklch(96.5% 0.015 75);
   --color-danger: oklch(58% 0.16 25);
   --danger-fill: oklch(53.36% 0.1472 25);
   --button-danger-tonal: oklch(90% 0.048 25);
@@ -144,6 +149,18 @@
   --card-tag-3: oklch(87% 0.075 88);
   --card-tag-4: oklch(87% 0.033 215);
   --card-tag-5: oklch(84% 0.047 18);
+  --card-pill-0: oklch(38% 0.11 55);
+  --card-pill-1: oklch(42% 0.09 290);
+  --card-pill-2: oklch(38% 0.11 140);
+  --card-pill-3: oklch(44% 0.12 88);
+  --card-pill-4: oklch(38% 0.09 215);
+  --card-pill-5: oklch(40% 0.08 18);
+  --card-pill-ink-0: oklch(97.5% 0.012 55);
+  --card-pill-ink-1: oklch(97.5% 0.012 290);
+  --card-pill-ink-2: oklch(97.5% 0.012 140);
+  --card-pill-ink-3: oklch(97.5% 0.012 88);
+  --card-pill-ink-4: oklch(97.5% 0.012 215);
+  --card-pill-ink-5: oklch(97.5% 0.012 18);
 }
 
 :root[data-accent='sage'] {
@@ -183,6 +200,11 @@
   --cta-ink: oklch(96.5% 0.013 140);
   --cta-ghost: oklch(45.1% 0.1066 140);
   --cta-verb-ink: oklch(42.9% 0.1014 140);
+  --skeleton-base: oklch(88.98% 0.0165 140.6 / 0.85);
+  --skeleton-glow: oklch(96.5% 0.013 140);
+  --avatar-wait: oklch(93% 0.016 140);
+  --apple-fill: oklch(26% 0.025 150);
+  --apple-label: oklch(96.5% 0.013 140);
 }
 
 :root[data-accent='lavender'] {
@@ -222,6 +244,11 @@
   --cta-ink: oklch(96.5% 0.012 300);
   --cta-ghost: oklch(47.56% 0.1148 290);
   --cta-verb-ink: oklch(45.24% 0.1092 290);
+  --skeleton-base: oklch(89.45% 0.0156 299.7 / 0.85);
+  --skeleton-glow: oklch(96.5% 0.012 300);
+  --avatar-wait: oklch(93.5% 0.015 300);
+  --apple-fill: oklch(26% 0.025 295);
+  --apple-label: oklch(96.5% 0.012 300);
 }
 
 :root[data-accent='yellow'] {
@@ -261,6 +288,11 @@
   --cta-ink: oklch(96.5% 0.02 95);
   --cta-ghost: oklch(52.48% 0.1066 78);
   --cta-verb-ink: oklch(49.92% 0.1014 78);
+  --skeleton-base: oklch(88.98% 0.0244 94.1 / 0.85);
+  --skeleton-glow: oklch(96.5% 0.02 95);
+  --avatar-wait: oklch(93% 0.024 95);
+  --apple-fill: oklch(26% 0.03 80);
+  --apple-label: oklch(96.5% 0.02 95);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -320,6 +352,11 @@
     --cta-ink: oklch(93% 0.02 76);
     --cta-ghost: oklch(34.32% 0.0821 45);
     --cta-verb-ink: oklch(44% 0.1053 45);
+    --skeleton-base: oklch(29.12% 0.0145 64.96 / 0.85);
+    --skeleton-glow: oklch(30% 0.013 62);
+    --avatar-wait: oklch(24% 0.014 64);
+    --apple-fill: oklch(100% 0 0);
+    --apple-label: oklch(0% 0 0);
     --color-danger: oklch(70% 0.15 25);
     --danger-fill: oklch(67% 0.15 25);
     --button-danger-tonal: oklch(30% 0.06 25);
@@ -378,12 +415,12 @@
     --card-note-ink-3: oklch(78% 0.08 88);
     --card-note-ink-4: oklch(78% 0.08 215);
     --card-note-ink-5: oklch(78% 0.08 18);
-    --card-stripe-0: oklch(35% 0.0488 55);
-    --card-stripe-1: oklch(35% 0.024 290);
-    --card-stripe-2: oklch(35% 0.0315 140);
-    --card-stripe-3: oklch(36% 0.045 85);
-    --card-stripe-4: oklch(35% 0.0248 215);
-    --card-stripe-5: oklch(35% 0.0353 18);
+    --card-stripe-0: oklch(40% 0.0488 55);
+    --card-stripe-1: oklch(40% 0.024 290);
+    --card-stripe-2: oklch(40% 0.0315 140);
+    --card-stripe-3: oklch(41% 0.045 85);
+    --card-stripe-4: oklch(40% 0.0248 215);
+    --card-stripe-5: oklch(40% 0.0353 18);
     --card-accent-0: oklch(38% 0.05 55);
     --card-accent-1: oklch(38% 0.05 290);
     --card-accent-2: oklch(38% 0.05 140);
@@ -408,6 +445,18 @@
     --card-tag-3: oklch(35% 0.045 85);
     --card-tag-4: oklch(34% 0.0248 215);
     --card-tag-5: oklch(34% 0.0353 18);
+    --card-pill-0: oklch(44% 0.06 55);
+    --card-pill-1: oklch(44% 0.06 290);
+    --card-pill-2: oklch(44% 0.06 140);
+    --card-pill-3: oklch(44% 0.06 88);
+    --card-pill-4: oklch(44% 0.06 215);
+    --card-pill-5: oklch(44% 0.06 18);
+    --card-pill-ink-0: oklch(92% 0.03 55);
+    --card-pill-ink-1: oklch(92% 0.03 290);
+    --card-pill-ink-2: oklch(92% 0.03 140);
+    --card-pill-ink-3: oklch(92% 0.03 88);
+    --card-pill-ink-4: oklch(92% 0.03 215);
+    --card-pill-ink-5: oklch(92% 0.03 18);
   }
 
   :root:not([data-scheme='light'])[data-accent='sage'] {
@@ -447,6 +496,9 @@
     --cta-ink: oklch(93% 0.02 154);
     --cta-ghost: oklch(34.32% 0.073 143);
     --cta-verb-ink: oklch(44% 0.0936 143);
+    --skeleton-base: oklch(29.12% 0.0145 142.96 / 0.85);
+    --skeleton-glow: oklch(30% 0.013 140);
+    --avatar-wait: oklch(24% 0.014 142);
   }
 
   :root:not([data-scheme='light'])[data-accent='lavender'] {
@@ -486,6 +538,9 @@
     --cta-ink: oklch(93% 0.0169 312);
     --cta-ghost: oklch(34.32% 0.07 290);
     --cta-verb-ink: oklch(44% 0.0897 290);
+    --skeleton-base: oklch(29.12% 0.0123 300.96 / 0.85);
+    --skeleton-glow: oklch(30% 0.011 298);
+    --avatar-wait: oklch(24% 0.0119 300);
   }
 
   :root:not([data-scheme='light'])[data-accent='yellow'] {
@@ -525,6 +580,9 @@
     --cta-ink: oklch(93% 0.0231 102);
     --cta-ghost: oklch(34.32% 0.0761 78);
     --cta-verb-ink: oklch(44% 0.0975 78);
+    --skeleton-base: oklch(29.12% 0.0168 90.96 / 0.85);
+    --skeleton-glow: oklch(30% 0.015 88);
+    --avatar-wait: oklch(24% 0.0162 90);
   }
 }
 
@@ -584,6 +642,11 @@
   --cta-ink: oklch(93% 0.02 76);
   --cta-ghost: oklch(34.32% 0.0821 45);
   --cta-verb-ink: oklch(44% 0.1053 45);
+  --skeleton-base: oklch(29.12% 0.0145 64.96 / 0.85);
+  --skeleton-glow: oklch(30% 0.013 62);
+  --avatar-wait: oklch(24% 0.014 64);
+  --apple-fill: oklch(100% 0 0);
+  --apple-label: oklch(0% 0 0);
   --color-danger: oklch(70% 0.15 25);
   --danger-fill: oklch(67% 0.15 25);
   --button-danger-tonal: oklch(30% 0.06 25);
@@ -642,12 +705,12 @@
   --card-note-ink-3: oklch(78% 0.08 88);
   --card-note-ink-4: oklch(78% 0.08 215);
   --card-note-ink-5: oklch(78% 0.08 18);
-  --card-stripe-0: oklch(35% 0.0488 55);
-  --card-stripe-1: oklch(35% 0.024 290);
-  --card-stripe-2: oklch(35% 0.0315 140);
-  --card-stripe-3: oklch(36% 0.045 85);
-  --card-stripe-4: oklch(35% 0.0248 215);
-  --card-stripe-5: oklch(35% 0.0353 18);
+  --card-stripe-0: oklch(40% 0.0488 55);
+  --card-stripe-1: oklch(40% 0.024 290);
+  --card-stripe-2: oklch(40% 0.0315 140);
+  --card-stripe-3: oklch(41% 0.045 85);
+  --card-stripe-4: oklch(40% 0.0248 215);
+  --card-stripe-5: oklch(40% 0.0353 18);
   --card-accent-0: oklch(38% 0.05 55);
   --card-accent-1: oklch(38% 0.05 290);
   --card-accent-2: oklch(38% 0.05 140);
@@ -672,6 +735,18 @@
   --card-tag-3: oklch(35% 0.045 85);
   --card-tag-4: oklch(34% 0.0248 215);
   --card-tag-5: oklch(34% 0.0353 18);
+  --card-pill-0: oklch(44% 0.06 55);
+  --card-pill-1: oklch(44% 0.06 290);
+  --card-pill-2: oklch(44% 0.06 140);
+  --card-pill-3: oklch(44% 0.06 88);
+  --card-pill-4: oklch(44% 0.06 215);
+  --card-pill-5: oklch(44% 0.06 18);
+  --card-pill-ink-0: oklch(92% 0.03 55);
+  --card-pill-ink-1: oklch(92% 0.03 290);
+  --card-pill-ink-2: oklch(92% 0.03 140);
+  --card-pill-ink-3: oklch(92% 0.03 88);
+  --card-pill-ink-4: oklch(92% 0.03 215);
+  --card-pill-ink-5: oklch(92% 0.03 18);
 }
 
 :root[data-scheme='dark'][data-accent='sage'] {
@@ -711,6 +786,9 @@
   --cta-ink: oklch(93% 0.02 154);
   --cta-ghost: oklch(34.32% 0.073 143);
   --cta-verb-ink: oklch(44% 0.0936 143);
+  --skeleton-base: oklch(29.12% 0.0145 142.96 / 0.85);
+  --skeleton-glow: oklch(30% 0.013 140);
+  --avatar-wait: oklch(24% 0.014 142);
 }
 
 :root[data-scheme='dark'][data-accent='lavender'] {
@@ -750,6 +828,9 @@
   --cta-ink: oklch(93% 0.0169 312);
   --cta-ghost: oklch(34.32% 0.07 290);
   --cta-verb-ink: oklch(44% 0.0897 290);
+  --skeleton-base: oklch(29.12% 0.0123 300.96 / 0.85);
+  --skeleton-glow: oklch(30% 0.011 298);
+  --avatar-wait: oklch(24% 0.0119 300);
 }
 
 :root[data-scheme='dark'][data-accent='yellow'] {
@@ -789,4 +870,7 @@
   --cta-ink: oklch(93% 0.0231 102);
   --cta-ghost: oklch(34.32% 0.0761 78);
   --cta-verb-ink: oklch(44% 0.0975 78);
+  --skeleton-base: oklch(29.12% 0.0168 90.96 / 0.85);
+  --skeleton-glow: oklch(30% 0.015 88);
+  --avatar-wait: oklch(24% 0.0162 90);
 }

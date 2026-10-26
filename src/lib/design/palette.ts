@@ -212,6 +212,11 @@ const DERIVED_TOKENS = [
   'cta-ink',
   'cta-ghost',
   'cta-verb-ink',
+  'skeleton-base',
+  'skeleton-glow',
+  'avatar-wait',
+  'apple-fill',
+  'apple-label',
 ] as const;
 type DerivedToken = (typeof DERIVED_TOKENS)[number];
 
@@ -255,6 +260,8 @@ const FAMILY_TOKENS = [
   'card-hover',
   'card-skeleton',
   'card-tag',
+  'card-pill',
+  'card-pill-ink',
 ] as const;
 type FamilyToken = (typeof FAMILY_TOKENS)[number];
 
@@ -315,6 +322,14 @@ const RECIPES: Record<Scheme, (b: Base) => Record<DerivedToken, Oklch>> = {
     // On the band: the second action a deeper accent under the band's words, the verb a paper pill with the tonal label.
     'cta-ghost': mixWithBlack(b['color-terracotta'], 0.18),
     'cta-verb-ink': deepenUntil(b['color-terracotta'], 0.22, over(b['color-terracotta-light'], 0.75, b['color-cream-dark']), 4.6),
+    // A loading block: the well with a touch of ink, a little see-through; the shimmer runs toward the paper.
+    'skeleton-base': { ...over(b['color-text'], 0.06, b['color-cream-dark']), alpha: 0.85 },
+    'skeleton-glow': b['color-cream'],
+    // An avatar's disc before its person's colour is known (or for no one: the anonymous mark).
+    'avatar-wait': b['color-cream-dark'],
+    // Sign in with Apple: the ink button Apple asks for on light paper.
+    'apple-fill': b['color-text'],
+    'apple-label': b['color-cream'],
   }),
   dark: (b) => {
     const accent = b['color-terracotta'];
@@ -350,6 +365,14 @@ const RECIPES: Record<Scheme, (b: Base) => Record<DerivedToken, Oklch>> = {
       'cta-ink': lch(0.93, b['color-text'].C, b['color-text'].H),
       'cta-ghost': mixWithBlack(fitGamut(lch(0.44, accent.C * 0.78, accent.H - 2)), 0.22),
       'cta-verb-ink': deepenUntil(fitGamut(lch(0.44, accent.C * 0.78, accent.H - 2)), 0, lch(0.93, b['color-text'].C, b['color-text'].H), 4.6),
+      // Lifted off the night paper (the well under it would sink to the paper's own lightness), the shimmer near it.
+      'skeleton-base': { ...over(b['color-text'], 0.08, b['color-card-bg']), alpha: 0.85 },
+      'skeleton-glow': lch(0.3, paper.C, paper.H),
+      // Raised, not a hole in the paper.
+      'avatar-wait': b['color-card-bg'],
+      // Apple's white style on a dark ground: pure white, black words and mark.
+      'apple-fill': lch(1, 0, 0),
+      'apple-label': lch(0, 0, 0),
     };
   },
 };
@@ -454,6 +477,9 @@ function family(scheme: Scheme, i: number): Record<FamilyToken, Oklch> {
       'card-skeleton': lch(0.88, 0.08, h),
       // A tag on the card: a few points under the fill, so it still reads on the hover wash.
       'card-tag': lch(L - 0.05, C, h),
+      // A pill on the card's coverless frame (the writer's 加一張圖片): the deep pen, its paper for words.
+      'card-pill': o(LIGHT_BORDERS[i][1]),
+      'card-pill-ink': lch(0.975, 0.012, h),
     };
   }
   // Each family keeps its own calibration (yellow needs more chroma to read as yellow), at 0.75×;
@@ -466,11 +492,15 @@ function family(scheme: Scheme, i: number): Record<FamilyToken, Oklch> {
     'card-interior': lch(0.235, 0.014, h),
     'card-separator': lch(0.72, 0.04, h, 0.4),
     'card-note-ink': fitGamut(lch(0.78, 0.08, h)),
-    'card-stripe': lch(fill.L + 0.05, fill.C, fill.H),
+    // The coverless frame's hatching, light enough to read on the fill at 28% (as light's does).
+    'card-stripe': lch(fill.L + 0.1, fill.C, fill.H),
     'card-accent': lch(0.38, 0.05, h),
     'card-hover': lch(0.27, 0.022, h),
     'card-skeleton': lch(0.34, 0.05, h),
     'card-tag': fitGamut(lch(fill.L + 0.04, fill.C, fill.H)),
+    // A tonal pill on the dark frame (a bright cream pill would be the brightest thing on the step): chalk words.
+    'card-pill': fitGamut(lch(0.44, 0.06, h)),
+    'card-pill-ink': fitGamut(lch(0.92, 0.03, h)),
   };
 }
 

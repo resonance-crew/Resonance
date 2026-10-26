@@ -61,7 +61,9 @@ export type CardRole =
   | 'accent'
   | 'hover'
   | 'skeleton'
-  | 'tag';
+  | 'tag'
+  | 'pill'
+  | 'pill-ink';
 
 /**
  * A family's colour as the page draws it now (palette.css's `--card-<role>-<i>`),
