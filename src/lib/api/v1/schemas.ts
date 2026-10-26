@@ -677,6 +677,8 @@ export const InviteIdParam = DocId;
 export const NotificationIdParam = DocId;
 /** An app install's own stable id (a UUID it keeps; Firebase Installations' id also fits). */
 export const InstallationIdParam = z.string().regex(/^[A-Za-z0-9_.:-]{8,128}$/, 'Not a valid installation id.');
+/** A conversation's id: its two participants' uids, sorted, joined by `_` (as the connection's). */
+export const ConversationIdParam = z.string().min(3).max(257).regex(/^[^/]+_[^/]+$/, 'Not a valid conversation id.');
 /** Pen names may be any script (2–20 characters); never a path. */
 export const HandleParam = z.string().trim().min(1).max(40).regex(/^[^/?#]+$/, 'Not a valid handle.');
 

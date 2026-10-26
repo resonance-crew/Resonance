@@ -4,7 +4,8 @@ import ResonanceAPI
 
 /// Notes and messages — the writes that reach another person, so they go
 /// through the server (POST /api/v1/notes, /api/v1/messages), which re-checks
-/// connections and blocks and rings the right bell — and the pictures sent in a
+/// connections and blocks and rings the right bell — deleting a conversation
+/// (DELETE /api/v1/conversations/{pair}, both people's at once) and the pictures sent in a
 /// conversation (POST /api/v1/chat-images, read back with GET
 /// /api/v1/chat-images/{id}: for the two people of the conversation only, so
 /// never through a plain image loader). Reading conversations is the
@@ -94,6 +95,18 @@ public struct MessagingAPI: Sendable {
         case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
         case let .forbidden(r): throw APIFailure(try r.body.json, status: 403)
         case let .tooManyRequests(r): throw APIFailure(try r.body.json, status: 429)
+        case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
+        }
+    }
+
+    /// Deletes a conversation for both of its people (DELETE /api/v1/conversations/{pair}): its messages, then the
+    /// conversation, on the server. One already gone is nothing; one the viewer isn't in is `not_found`.
+    public func deleteConversation(_ pairId: String) async throws {
+        switch try await client.deleteConversation(path: .init(pair: pairId)) {
+        case .noContent: return
+        case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
+        case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
+        case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
         case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
         }
     }

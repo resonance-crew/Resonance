@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
 import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { ApiFailure } from '@/lib/api/v1/http';
-import { NOTE_REQUEST_MAX, sendMessage, sendNote } from '@/lib/api/v1/conversations';
+import { NOTE_REQUEST_MAX, deleteConversation, sendMessage, sendNote } from '@/lib/api/v1/conversations';
 import { deleteCard } from '@/lib/api/v1/cards';
 import { acceptInvite } from '@/lib/api/v1/invites';
 import { resonateWith } from '@/lib/api/v1/resonate';
@@ -1146,5 +1146,46 @@ describe("the sender's budget, spent beside the send", () => {
     const note = await sendNote(db, 'alice', { cardId: 'walk', text: 'hi' }, spend(db, 'alice', 'note'));
     expect((await db.doc(`notes/${note.id}`).get()).get('toUserId')).toBe('bob');
     expect([await used('message'), await used('note')]).toEqual([1, 1]);
+  });
+});
+
+// Deleting a conversation went through the rules, message by message — which
+// let either person delete single messages, the other's too, while the
+// conversation went on. The server deletes it whole.
+describe('DELETE /conversations/{pair}', () => {
+  async function seedThread() {
+    await Promise.all([
+      db.doc('conversations/alice_bob').set({ participants: ['alice', 'bob'], request: { from: 'alice', cardId: 'c1', at: new Date(), count: 1 } }),
+      db.doc('conversations/alice_bob/messages/m1').set({ senderId: 'alice', text: 'hi', sentAt: new Date() }),
+      db.doc('conversations/alice_bob/messages/m2').set({ senderId: 'bob', text: 'hey', sentAt: new Date() }),
+      db.doc('letters/alice_bob').set({ from: 'alice', to: 'bob', count: 1 }),
+    ]);
+  }
+  const left = async () => (await db.collection('conversations/alice_bob/messages').get()).size;
+
+  it('deletes the conversation and its messages for both people, keeping the letter count apart', async () => {
+    await seedThread();
+    await deleteConversation(db, 'bob', 'alice_bob');
+    expect((await db.doc('conversations/alice_bob').get()).exists).toBe(false);
+    expect(await left()).toBe(0);
+    expect((await db.doc('letters/alice_bob').get()).exists).toBe(true);
+    // Already gone: nothing (a retry after a lost answer).
+    await deleteConversation(db, 'alice', 'alice_bob');
+  });
+
+  it('is a missing conversation to anyone else, whether it exists or not', async () => {
+    await seedThread();
+    for (const [uid, pair] of [['carol', 'alice_bob'], ['carol', 'alice_carol_x'], ['alice', 'bob_alice'], ['alice', 'alice_alice']] as const) {
+      expect((await failure(deleteConversation(db, uid, pair))).code).toBe('not_found');
+    }
+    expect(await left()).toBe(2);
+    // Their own conversation, never opened: nothing to delete, nothing said.
+    await deleteConversation(db, 'carol', 'bob_carol');
+  });
+
+  it("refuses someone whose uid the id names but who isn't in the conversation", async () => {
+    await db.doc('conversations/alice_bob').set({ participants: ['alice', 'zed'] });
+    expect((await failure(deleteConversation(db, 'bob', 'alice_bob'))).code).toBe('not_found');
+    expect((await db.doc('conversations/alice_bob').get()).exists).toBe(true);
   });
 });

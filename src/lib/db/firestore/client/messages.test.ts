@@ -49,9 +49,10 @@ const listener = vi.hoisted(() => ({
 }));
 vi.mock('./realtime', () => ({ listenNewest: listener.listenNewest }));
 
-import { getDoc, getDocs } from 'firebase/firestore/lite';
+import { getDoc, getDocs, writeBatch } from 'firebase/firestore/lite';
 import {
   conversationId,
+  deleteConversation,
   getConversation,
   getOlderMessages,
   listenConversations,
@@ -381,5 +382,26 @@ describe('a conversation read once', () => {
     expect((await getConversation('aaa_bbb'))?.request).toBeUndefined();
     vi.mocked(getDoc).mockResolvedValueOnce(snap({ participants: ['aaa', 'bbb'], unread: {}, request: { from: 'bbb', count: 'x' } }) as never);
     expect((await getConversation('aaa_bbb'))?.request).toEqual({ from: 'bbb', cardId: undefined, count: 0 });
+  });
+});
+
+// Deleting from the browser went message by message through the rules — which
+// is what let either person delete single messages. The server deletes it whole.
+describe('deleteConversation', () => {
+  it('asks the server to delete the whole conversation, and writes nothing itself', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await deleteConversation('aaa_bbb');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/v1/conversations/aaa_bbb');
+    expect(init?.method).toBe('DELETE');
+    expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer id-token');
+    expect(getDocs).not.toHaveBeenCalled();
+    expect(writeBatch).not.toHaveBeenCalled();
+  });
+
+  it("lets the server's refusal fail", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'not_found', message: 'No such conversation.' } }), { status: 404 }));
+    await expect(deleteConversation('aaa_bbb')).rejects.toMatchObject({ status: 404 });
   });
 });

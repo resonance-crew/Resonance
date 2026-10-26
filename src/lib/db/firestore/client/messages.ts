@@ -12,7 +12,6 @@ import {
   query,
   startAfter,
   updateDoc,
-  writeBatch,
 } from './sdk';
 import type { Conversation, Message } from '@/lib/db/types';
 import { getFirebaseClientAuth } from '@/lib/auth/firebase/client';
@@ -361,21 +360,12 @@ export function listenConversations(
 }
 
 /**
- * Delete a conversation and its messages, for both participants. Firestore
- * doesn't cascade subcollection deletes, so the messages go first (in batched
- * chunks under the 500-write limit) and the parent doc last — a crash midway
- * leaves a still-listable conversation rather than orphaned messages.
+ * Delete a conversation and its messages, for both participants, through the
+ * server (DELETE /api/v1/conversations/{pair}), which deletes it whole. (The
+ * rules still let a participant delete its messages one by one, for the app
+ * builds that deleted a conversation from the client.)
  */
 export async function deleteConversation(pairId: string): Promise<void> {
   requireUid();
-  const db = getClientDb();
-  const msgs = await getDocs(collection(db, 'conversations', pairId, 'messages'));
-  for (let i = 0; i < msgs.docs.length; i += 450) {
-    const batch = writeBatch(db);
-    for (const d of msgs.docs.slice(i, i + 450)) batch.delete(d.ref);
-    await batch.commit();
-  }
-  const batch = writeBatch(db);
-  batch.delete(doc(db, 'conversations', pairId));
-  await batch.commit();
+  await callApi(`/api/v1/conversations/${encodeURIComponent(pairId)}`, { method: 'DELETE' });
 }

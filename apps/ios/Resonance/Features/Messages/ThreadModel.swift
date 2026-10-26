@@ -744,20 +744,12 @@ final class ThreadModel {
 
     // MARK: - Deleting
 
-    /// Deletes the whole conversation, for both people (deleteConversation: messages in batches, then the parent).
+    /// Deletes the whole conversation, for both people (DELETE /api/v1/conversations/{pair}: the server deletes it whole).
     func deleteConversation() async -> Bool {
         guard let pairId else { return false }
-        let db = FirebaseBootstrap.db
-        let ref = db.collection("conversations").document(pairId)
         do {
             stop()
-            let all = try await ref.collection("messages").getDocuments().documents
-            for chunk in stride(from: 0, to: all.count, by: 450).map({ Array(all[$0..<min($0 + 450, all.count)]) }) {
-                let batch = db.batch()
-                chunk.forEach { batch.deleteDocument($0.reference) }
-                try await batch.commit()
-            }
-            try await ref.delete()
+            try await MessagingAPI(client: session.api).deleteConversation(pairId)
             session.outboxes.forget(pairId)
             resetHistory()
             return true

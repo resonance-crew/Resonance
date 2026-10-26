@@ -125,6 +125,8 @@ export const noPenName = () => new ApiFailure('forbidden', 'Choose a pen name fi
  * wrong with the request — exactly as when the budget was spent first.
  */
 async function budgetFirst<T>(spent: Promise<void>, send: () => Promise<T>): Promise<T> {
+  // Handled from the start: refused while the send's reads run, it is awaited below all the same.
+  spent.catch(() => {});
   let result: T;
   try {
     result = await send();
@@ -636,4 +638,29 @@ function replyQuote(original: DocumentSnapshot): { id: string; senderId: string;
     ...(typeof cardRef === 'string' && cardRef ? { cardRef } : {}),
     ...(messageImageOf(original.get('image')) ? { image: true as const } : {}),
   };
+}
+
+/**
+ * Delete a conversation, everything in it, for both of its people (DELETE
+ * /conversations/{pair}): its messages and the conversation itself, with its
+ * letter if one waits (the writer withdraws it, its recipient declines it; the
+ * count of three is kept apart, in letters/*, and stays). Either participant
+ * may; for anyone else it is a missing conversation's 404 whether it exists or
+ * not (who talks to whom is no one else's to probe). One already gone is
+ * nothing (a retry after a lost answer). The messages go before the
+ * conversation, so one cut short is still listed and can be deleted again.
+ */
+export async function deleteConversation(db: Firestore, uid: string, pair: string): Promise<void> {
+  const other = pair.startsWith(`${uid}_`) ? pair.slice(uid.length + 1) : pair.endsWith(`_${uid}`) ? pair.slice(0, -uid.length - 1) : '';
+  if (!other || other === uid || pairOf(uid, other) !== pair || isReservedId(pair)) {
+    throw new ApiFailure('not_found', 'No such conversation.');
+  }
+  const ref = db.doc(`conversations/${pair}`);
+  const snap = await ref.get();
+  if (snap.exists) {
+    const participants = snap.get('participants');
+    if (!Array.isArray(participants) || !participants.includes(uid)) throw new ApiFailure('not_found', 'No such conversation.');
+  }
+  // recursiveDelete takes what is under the conversation before the conversation itself.
+  await db.recursiveDelete(ref);
 }
