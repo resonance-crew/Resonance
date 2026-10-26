@@ -131,7 +131,7 @@ internal fun RefChatText(
                     if (waves.isNotEmpty()) {
                         val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                         waves.forEach { w ->
-                            translate(w.x, w.y) { drawPath(w.path, Tokens.Terracotta, alpha = if (w.link == pressed) 1f else 0.7f, style = pen) }
+                            translate(w.x, w.y) { drawPath(w.path, Tokens.LinkWave, alpha = if (w.link == pressed) 1f else 0.7f, style = pen) }
                         }
                     }
                     drawIntoCanvas { layout.draw(it.nativeCanvas) }
@@ -190,7 +190,7 @@ internal fun RefRichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl:
                     // a descender's foot rests in its arch rather than being crossed by it.
                     val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                     strokes.forEach { s ->
-                        translate(s.x, s.y) { drawPath(s.wave, Tokens.Terracotta, alpha = if (s.url == pressedUrl) 1f else 0.7f, style = pen) }
+                        translate(s.x, s.y) { drawPath(s.wave, Tokens.LinkWave, alpha = if (s.url == pressedUrl) 1f else 0.7f, style = pen) }
                     }
                     drawIntoCanvas { layout.draw(it.nativeCanvas) }
                 },
