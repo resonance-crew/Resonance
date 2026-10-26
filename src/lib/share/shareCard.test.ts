@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { lightRootCss } from '@/lib/design/paletteCss';
 import { describe, expect, it } from 'vitest';
 import { CARD_BORDERS, CARD_FILLS } from '@/lib/design/cardColours';
 import { CARD_HUES } from '@/lib/design/dominantHue';
@@ -30,7 +31,8 @@ const fixture = () => ({ note: NOTE, ...SHARE_CARD });
 
 if (process.env.UPDATE_SHARE_CARD) writeFileSync(FIXTURE, `${JSON.stringify(fixture(), null, 2)}\n`);
 
-const tokensCss = readFileSync(resolve(ROOT, 'src/styles/tokens.css'), 'utf8');
+// Colours are palette.css's; light terracotta's :root stands for them (a share image is always light terracotta).
+const tokensCss = readFileSync(resolve(ROOT, 'src/styles/tokens.css'), 'utf8') + lightRootCss();
 function cssToken(name: string): string | undefined {
   return new RegExp(`${name}:\\s*([^;]+);`).exec(tokensCss)?.[1].replace(/\/\*.*$/, '').trim();
 }

@@ -16,7 +16,7 @@
 import { mix, mixWithBlack, parseOklch, srgbHex, type Oklch } from './oklch';
 
 /** The tokens a story's type may read. */
-const CARRIED = /^(?:font-|story-|color-|button-|radius-)|^(?:measure|placeholder|link-card-muted)$/;
+const CARRIED = /^(?:font-|story-|color-|button-|radius-|field-border)|^(?:measure|placeholder|link-card-muted)$/;
 
 /** The declarations of a stylesheet's custom properties, comments left out (the last one of a name wins). */
 export function customProperties(css: string): Map<string, string> {
@@ -89,6 +89,11 @@ export function islandRoot(tokensCss: string): string {
   const lines: string[] = [];
   for (const [name, value] of tokens) {
     if (!CARRIED.test(name)) continue;
+    // A plain reference follows whatever the island's palette (paletteCss) says in its scheme and theme.
+    if (/^var\(\s*--[\w-]+\s*\)$/.test(value)) {
+      lines.push(`  --${name}: ${value};`);
+      continue;
+    }
     if (COLOURISH.test(value)) {
       const c = colour(value, tokens, new Set([name]));
       if (c && c !== 'black' && c !== 'transparent') lines.push(`  --${name}: ${cssColour(c)};`);

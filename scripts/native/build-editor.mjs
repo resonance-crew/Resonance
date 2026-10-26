@@ -16,6 +16,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { islandRoot } from './islandRoot.ts';
+import { paletteCss } from '../../src/lib/design/paletteCss.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const src = resolve(root, 'native/editor/src');
@@ -33,6 +34,8 @@ const result = await build({
 const js = result.outputFiles[0].text;
 const css = [
   islandRoot(readFileSync(resolve(root, 'src/styles/tokens.css'), 'utf8')),
+  // Every colour, per scheme and theme, in hex: the host sets data-scheme / data-accent on <html>.
+  paletteCss('hex'),
   readFileSync(resolve(root, 'src/styles/story.css'), 'utf8'),
   readFileSync(resolve(src, 'island.css'), 'utf8'),
 ].join('\n');

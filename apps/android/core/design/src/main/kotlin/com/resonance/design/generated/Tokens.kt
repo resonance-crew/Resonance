@@ -28,14 +28,14 @@ object Tokens {
     val Text = Color(0.1752f, 0.13f, 0.0888f, 1f, ColorSpaces.DisplayP3)
     /** --color-text-muted · sRGB #786550 */
     val TextMuted = Color(0.4591f, 0.3997f, 0.324f, 1f, ColorSpaces.DisplayP3)
-    /** --bubble-mine · sRGB #fddbbd */
-    val BubbleMine = Color(0.9711f, 0.8626f, 0.756f, 1f, ColorSpaces.DisplayP3)
-    /** --bubble-theirs · sRGB #eae2d7 */
-    val BubbleTheirs = Color(0.9116f, 0.8855f, 0.847f, 1f, ColorSpaces.DisplayP3)
-    /** --bubble-quote · sRGB #dfd8d0 */
-    val BubbleQuote = Color(0.8683f, 0.8475f, 0.819f, 1f, ColorSpaces.DisplayP3)
-    /** --link-card-muted · sRGB #64523d */
-    val LinkCardMuted = Color(0.3801f, 0.3227f, 0.2494f, 1f, ColorSpaces.DisplayP3)
+    /** --bubble-mine · sRGB #fedbbd */
+    val BubbleMine = Color(0.972f, 0.8629f, 0.7556f, 1f, ColorSpaces.DisplayP3)
+    /** --bubble-theirs · sRGB #eae2d8 */
+    val BubbleTheirs = Color(0.9112f, 0.8865f, 0.8503f, 1f, ColorSpaces.DisplayP3)
+    /** --bubble-quote · sRGB #e1d8ce */
+    val BubbleQuote = Color(0.8758f, 0.85f, 0.8129f, 1f, ColorSpaces.DisplayP3)
+    /** --link-card-muted · sRGB #63513f */
+    val LinkCardMuted = Color(0.3788f, 0.3222f, 0.2565f, 1f, ColorSpaces.DisplayP3)
     /** --link-wave · sRGB #ba7f64 */
     val LinkWave = Color(0.6968f, 0.5071f, 0.4094f, 1f, ColorSpaces.DisplayP3)
     /** --reading-progress · sRGB #ef7926 */

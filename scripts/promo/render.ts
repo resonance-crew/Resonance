@@ -25,6 +25,7 @@ import { cpus, tmpdir } from 'node:os';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { lightRootCss } from '../../src/lib/design/paletteCss';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const PAGE_DIR = join(ROOT, 'scripts/promo/page');
@@ -96,10 +97,12 @@ async function servePage(): Promise<{ server: Server; origin: string }> {
   });
   const js = bundle.outputFiles[0].text;
   // The site's own tokens, with the handwriting face read from the apps' copy instead of a CDN.
-  const tokens = readFileSync(join(ROOT, 'src/styles/tokens.css'), 'utf8').replace(
-    /url\('https:\/\/cdn\.jsdelivr\.net[^']*'\)/,
-    "url('/fonts/ChenYuluoyanThin.ttf')",
-  );
+  // The tour is always the light terracotta site: palette.css's light :root alone.
+  const tokens =
+    readFileSync(join(ROOT, 'src/styles/tokens.css'), 'utf8').replace(
+      /url\('https:\/\/cdn\.jsdelivr\.net[^']*'\)/,
+      "url('/fonts/ChenYuluoyanThin.ttf')",
+    ) + lightRootCss();
   const css = readFileSync(join(PAGE_DIR, 'promo.css'), 'utf8');
   const html = `<!doctype html><html><head><meta charset="utf-8">
 <style>${tokens}</style><style>${css}</style></head>

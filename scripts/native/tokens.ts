@@ -13,6 +13,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { INK, INK_LIGHT, INK_STRONG } from '../../src/lib/design/strokes';
 import { encode, linearSrgbToLinearP3, mix, mixWithBlack, parseOklch, srgbHex, toLinearSrgb, type Oklch } from './oklch';
+import { paletteFor, type PaletteToken } from '../../src/lib/design/palette';
 
 const root = resolve(__dirname, '../..');
 const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
@@ -37,10 +38,18 @@ function token(name: string, c: Oklch, source: string): Token {
 
 const tokens: Token[] = [];
 
-// --- tokens.css ----------------------------------------------------------------
+// --- the palette (src/lib/design/palette.ts: light terracotta, the apps' static tokens) ---
+// The tokens the apps had while tokens.css held them; the apps' scheme- and theme-aware
+// palettes are generated beside these (see each app's lane: palette tables).
 const css = read('src/styles/tokens.css');
-const cssVars: Record<string, Oklch> = {};
-for (const m of css.matchAll(/--([\w-]+):\s*(oklch\([^)]*\))/g)) cssVars[m[1]] = parseOklch(m[2]);
+const lightTerracotta = paletteFor('terracotta', 'light');
+const STATIC_COLOURS: PaletteToken[] = [
+  'color-cream', 'color-cream-dark', 'color-card-bg', 'color-terracotta', 'color-terracotta-light',
+  'color-lavender', 'color-sage', 'color-yellow', 'color-sky', 'color-text', 'color-text-muted',
+  'bubble-mine', 'bubble-theirs', 'bubble-quote', 'link-card-muted', 'link-wave', 'reading-progress',
+  'field-border', 'field-border-hover', 'placeholder',
+];
+const cssVars: Record<string, Oklch> = Object.fromEntries(STATIC_COLOURS.map((t) => [t, lightTerracotta[t]]));
 const camel = (s: string) => s.replace(/^color-/, '').replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
 for (const [name, value] of Object.entries(cssVars)) tokens.push(token(camel(name), value, `--${name}`));
 

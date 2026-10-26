@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { customProperties, islandRoot } from '../../scripts/native/islandRoot';
+import { lightRootCss } from '../lib/design/paletteCss';
 
 // A story's type is written once (story.css) from one vocabulary (tokens.css),
 // for the reader, the web writer and the apps' editor island; the apps' readers
@@ -10,7 +11,8 @@ import { customProperties, islandRoot } from '../../scripts/native/islandRoot';
 const read = (p: string) => readFileSync(resolve(__dirname, p), 'utf8');
 const tokensCss = read('./tokens.css');
 const storyCss = read('./story.css');
-const tokens = customProperties(tokensCss);
+// Colours are palette.css's (generated from lib/design/palette); light terracotta's :root stands for them.
+const tokens = customProperties(tokensCss + lightRootCss());
 const own = customProperties(storyCss);
 
 /** What scripts/native/tokens.ts exports to Tokens.swift / Tokens.kt: `--x: N;` or `--x: Npx;`. */
@@ -51,7 +53,8 @@ describe('story.css', () => {
 });
 
 describe("the island's :root", () => {
-  const root = customProperties(islandRoot(tokensCss));
+  // build-editor.mjs: the island's :root, then the palette in hex (light terracotta's :root first).
+  const root = customProperties(islandRoot(tokensCss) + lightRootCss('hex'));
 
   it('declares everything story.css reads (the page header, which the island has none of, aside)', () => {
     for (const name of reads) {

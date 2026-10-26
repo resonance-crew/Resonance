@@ -24,14 +24,14 @@ public nonisolated enum Tokens {
     public static let text = Color(.displayP3, red: 0.1752, green: 0.13, blue: 0.0888, opacity: 1)
     /// --color-text-muted · sRGB #786550
     public static let textMuted = Color(.displayP3, red: 0.4591, green: 0.3997, blue: 0.324, opacity: 1)
-    /// --bubble-mine · sRGB #fddbbd
-    public static let bubbleMine = Color(.displayP3, red: 0.9711, green: 0.8626, blue: 0.756, opacity: 1)
-    /// --bubble-theirs · sRGB #eae2d7
-    public static let bubbleTheirs = Color(.displayP3, red: 0.9116, green: 0.8855, blue: 0.847, opacity: 1)
-    /// --bubble-quote · sRGB #dfd8d0
-    public static let bubbleQuote = Color(.displayP3, red: 0.8683, green: 0.8475, blue: 0.819, opacity: 1)
-    /// --link-card-muted · sRGB #64523d
-    public static let linkCardMuted = Color(.displayP3, red: 0.3801, green: 0.3227, blue: 0.2494, opacity: 1)
+    /// --bubble-mine · sRGB #fedbbd
+    public static let bubbleMine = Color(.displayP3, red: 0.972, green: 0.8629, blue: 0.7556, opacity: 1)
+    /// --bubble-theirs · sRGB #eae2d8
+    public static let bubbleTheirs = Color(.displayP3, red: 0.9112, green: 0.8865, blue: 0.8503, opacity: 1)
+    /// --bubble-quote · sRGB #e1d8ce
+    public static let bubbleQuote = Color(.displayP3, red: 0.8758, green: 0.85, blue: 0.8129, opacity: 1)
+    /// --link-card-muted · sRGB #63513f
+    public static let linkCardMuted = Color(.displayP3, red: 0.3788, green: 0.3222, blue: 0.2565, opacity: 1)
     /// --link-wave · sRGB #ba7f64
     public static let linkWave = Color(.displayP3, red: 0.6968, green: 0.5071, blue: 0.4094, opacity: 1)
     /// --reading-progress · sRGB #ef7926

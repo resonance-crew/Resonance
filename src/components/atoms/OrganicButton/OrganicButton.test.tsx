@@ -131,21 +131,18 @@ describe('OrganicButton variants', () => {
     expect(body).toMatch(/outline-color:\s*var\(--color-cream\)/);
   });
 
-  // Every label clears 4.5:1 on its face: the fills are mixes defined once,
-  // beside the palette (a test can't evaluate color-mix; pin the recipe the
-  // contrast was measured on — cream 4.7:1 on the fill, the deep label 4.8:1
-  // on the tint and 6.1:1 on cream, the deep red 5.7:1 on its tint).
+  // Every label clears 4.5:1 on its face in every theme and scheme: the faces
+  // are palette tokens (lib/design/palette, whose test checks each pair), and
+  // a label on the solid face is the paper colour in both schemes.
   it('takes its faces from the button tokens', () => {
-    const tokens = readFileSync(join(process.cwd(), 'src/styles/tokens.css'), 'utf8');
-    expect(tokens).toMatch(/--button-fill:\s*color-mix\(in oklch, var\(--color-terracotta\), black 12%\);/);
-    expect(tokens).toMatch(/--button-tonal:\s*color-mix\(in oklch, var\(--color-terracotta-light\) 75%, var\(--color-cream-dark\)\);/);
-    expect(tokens).toMatch(/--button-on-tonal:\s*color-mix\(in oklch, var\(--color-terracotta\), black 22%\);/);
-    expect(tokens).toMatch(
-      /--button-danger-tonal:\s*color-mix\(in oklch, var\(--color-danger, oklch\(58% 0\.16 25\)\) 20%, oklch\(98% 0\.02 25\)\);/,
-    );
-    expect(tokens).toMatch(
-      /--button-on-danger-tonal:\s*color-mix\(in oklch, var\(--color-danger, oklch\(58% 0\.16 25\)\), black 22%\);/,
-    );
+    const tsx = readFileSync(join(process.cwd(), 'src/components/atoms/OrganicButton/OrganicButton.tsx'), 'utf8');
+    for (const t of ['--button-fill', '--button-tonal', '--button-on-tonal', '--button-danger-tonal', '--button-on-danger-tonal']) {
+      expect(tsx, t).toContain(`var(${t})`);
+    }
+    const palette = readFileSync(join(process.cwd(), 'src/styles/palette.css'), 'utf8');
+    for (const t of ['--button-fill', '--button-tonal', '--button-on-tonal', '--button-danger-tonal', '--button-on-danger-tonal']) {
+      expect(palette.split(`${t}:`).length - 1, t).toBeGreaterThanOrEqual(3); // light, the system's dark, the chosen dark
+    }
   });
 
   // No face is see-through: a button always shows the shape you press — but the trash's 清空, the one

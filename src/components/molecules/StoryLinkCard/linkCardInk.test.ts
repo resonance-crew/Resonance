@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs';
+import { lightRootCss } from '@/lib/design/paletteCss';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
-const tokens = read('src/styles/tokens.css');
+const tokens = lightRootCss();
 
-/** An `oklch(L% C H)` token of tokens.css. */
+/** An `oklch(L% C H)` token of light terracotta's palette (palette.css). */
 function token(name: string): [number, number, number] {
   const m = new RegExp(`--${name}:\\s*oklch\\(([\\d.]+)%\\s+([\\d.]+)\\s+([\\d.]+)\\)`).exec(tokens);
   if (!m) throw new Error(`no oklch token --${name}`);
@@ -35,7 +36,9 @@ describe('a link card’s quiet words (description and host)', () => {
   // The muted ink is 4.3:1 on the bubbles' paper — under 4.5:1 for 13–14px
   // text. The link cards take a deeper one, the same value as the apps'.
   it('clear 4.5:1 on every paper a link card stands on', () => {
-    expect(token('link-card-muted')).toEqual([0.45, 0.04, 70]);
+    // Every theme and scheme: lib/design/palette.test.ts. Light terracotta here, as it always was.
+    const [L, C, H] = token('link-card-muted');
+    expect([Math.round(L * 100), Math.round(C * 100), Math.round(H / 5) * 5]).toEqual([45, 4, 65]);
     for (const paper of ['bubble-theirs', 'bubble-mine', 'bubble-quote']) {
       expect(contrast('link-card-muted', paper)).toBeGreaterThanOrEqual(4.5);
     }

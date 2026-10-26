@@ -14,66 +14,27 @@
   --font-body:    var(--font-dm-sans, 'DM Sans'), var(--font-noto-sans-tc, 'Noto Sans TC'), system-ui, sans-serif;
   --font-handwritten: 'ChenYuluoyan Thin', var(--font-noto-serif-tc, 'Noto Serif TC'), cursive;
 
-  /* Color System — Warm Pastel Palette per DESIGN.md § 8 */
-  --color-cream:            oklch(96.5% 0.015 75);
-  --color-cream-dark:       oklch(93%   0.018 75);
-  --color-card-bg:          oklch(97.5% 0.01  80);
-
-  --color-terracotta:       oklch(62%   0.14  45);
-  --color-terracotta-light: oklch(88%   0.08  55);
-
-  --color-lavender:         oklch(80%   0.07  290);
-  --color-sage:             oklch(78%   0.07  140);
-  --color-yellow:           oklch(88%   0.10  90);
-  --color-sky:              oklch(82%   0.07  220);
-
-  --color-text:             oklch(26%   0.03  60);
-  --color-text-muted:       oklch(52%   0.04  70);
-  /* Chat bubbles (Messenger's look in our hand): every bubble is a filled wobble with no pen line —
-     your own the terracotta-light wash over cream (made opaque, so what a bubble overlaps never shows
-     through), theirs a deeper paper, and the message a reply quotes a quieter paper behind it. */
-  --bubble-mine:   oklch(91.2% 0.055 62.6);
-  --bubble-theirs: oklch(91.5% 0.017 74);
-  --bubble-quote:  oklch(88.5% 0.013 72);
-  /* A link card's description and host (a story's link card, a chat link's
-     preview): the muted ink deepened to clear 4.5:1 on the bubbles' papers —
-     5.8:1 on --bubble-theirs, 5.7:1 on --bubble-mine, 5.3:1 on --bubble-quote
-     (--color-text-muted is 4.3:1 there). The apps' link cards take the same. */
-  --link-card-muted: oklch(45% 0.04 70);
-  /* A link's pen wave in text (a story's, a chat message's): the terracotta at
-     0.6× its chroma and a touch lighter, quieter than the deep-terracotta words
-     it runs under; its crests lean --link-wave-amp px off the line (the pen's
-     own wave leans 1.2), a crest every 4.5 as ever. The web draws it from
-     lib/design/storyLinkWave (a data URI, which can't read these, so it holds
-     the same two values and a test keeps them equal); the apps from these. */
-  --link-wave: oklch(65% 0.084 45);
+  /* Colours: src/styles/palette.css, generated from src/lib/design/palette.ts
+     (npx tsx scripts/web/palette-css.ts) — every colour that changes with the
+     reader's scheme (light / dark, data-scheme or the system's) and theme
+     colour (data-accent on <html>): the paper (--color-cream, -cream-dark,
+     --color-card-bg), the ink (--color-text, -text-muted), the accent
+     (--color-terracotta, whatever its hue, and its wash -terracotta-light),
+     the pens (--field-border, -hover, --placeholder), the chat bubbles, the
+     reading progress, the buttons, the danger red, the card families and the
+     grain's ink. Only lengths and mixes that keep their role in both schemes
+     stay here. */
+  /* A link's pen wave in text (a story's, a chat message's) is --link-wave, in
+     palette.css (the accent quieter, per theme and scheme); its crests lean
+     --link-wave-amp px off the line (the pen's own wave leans 1.2), a crest
+     every 4.5 as ever. The apps take both. */
   --link-wave-amp: 0.75;
   /* The card page's reading progress: the header's own pen line drawn over
-     from its leading end at the pen's own width (INK), in a brighter
-     terracotta than any pen or button, with a soft glow of the same colour
-     around it (blur radius --reading-progress-glow, the colour at 55%), so it
-     reads as progress, not as the line inked in. The apps take all three. */
-  --reading-progress: oklch(70% 0.17 50);
+     from its leading end at the pen's own width (INK), in --reading-progress
+     (brighter than any pen or button), with a soft glow of the same colour
+     around it (blur radius --reading-progress-glow, the colour at 55%). */
   --reading-progress-width: 1.8px;
   --reading-progress-glow: 4px;
-
-  /* Every button is a filled shape with no pen line (a pen outline marks a
-     container, an input or a segmented control — never a lone button): the
-     verb a deep terracotta, everything beside it (secondary, cancel, close,
-     load more) a soft terracotta tint, and a button that opens a destructive
-     flow the same tint in red. Each is a mix of the palette, so labels clear
-     4.5:1 — cream on the fill 4.7:1, the deep label 4.8:1 on the tint and
-     6.1:1 on cream paper, the deep red 5.7:1 on its tint (plain terracotta,
-     3.5:1 either way, never carries a label). Being mixes, not oklch()
-     literals, the native token pipeline leaves them to the apps'
-     DesignSystem, which resolves the same mixes. */
-  --button-fill:     color-mix(in oklch, var(--color-terracotta), black 12%);
-  --button-tonal:    color-mix(in oklch, var(--color-terracotta-light) 75%, var(--color-cream-dark));
-  --button-on-tonal: color-mix(in oklch, var(--color-terracotta), black 22%);
-  /* The danger red (--color-danger is unset: every red reads its fallback)
-     as a tint on a rose paper of its own hue, and deepened as the label. */
-  --button-danger-tonal:    color-mix(in oklch, var(--color-danger, oklch(58% 0.16 25)) 20%, oklch(98% 0.02 25));
-  --button-on-danger-tonal: color-mix(in oklch, var(--color-danger, oklch(58% 0.16 25)), black 22%);
 
   --grain-opacity: 0.10;
 
@@ -199,9 +160,7 @@
   --people-head-gap: 56px;
   --people-head-gap-compact: 40px;
   --people-name-gap: 16px;
-  /* Inline code and code blocks: the ink at a whisper. Story CSS only (the
-     island resolves it to an rgb() of its own, the apps their own tint). */
-  --story-code-tint: color-mix(in oklch, var(--color-text) 6%, transparent);
+  /* Inline code and code blocks: the ink at a whisper — --story-code-tint, in palette.css. */
 
   /* Story images (article body + the editor, so both look the same).
      A photo is its own beat in the text: it carries its own breathing room
@@ -222,12 +181,9 @@
   --field-pad-y: 14px;
   --field-pad-x: 18px;
   --field-radius: var(--radius-md);
-  --field-border: oklch(80% 0.02 75);
-  --field-border-hover: oklch(60% 0.04 60);
   --field-border-focus: var(--color-terracotta);
 
   --label-size: 12px;
   --label-tracking: 0.06em;
   --hint-size: 12px;
-  --placeholder: oklch(64% 0.03 70);
 }

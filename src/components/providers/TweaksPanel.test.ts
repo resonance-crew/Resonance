@@ -2,10 +2,12 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { lightRootCss } from '@/lib/design/paletteCss';
 import { ACCENT_MAP, TWEAK_DEFAULTS, applySavedTweaks, applyTweaks, loadTweaks } from './TweaksPanel';
 
 const read = (p: string) => readFileSync(resolve(__dirname, '../../..', p), 'utf8');
-const tokens = read('src/styles/tokens.css');
+// Colours are palette.css's; light terracotta's :root stands for them beside tokens.css.
+const tokens = read('src/styles/tokens.css') + lightRootCss();
 const fonts = read('src/styles/fonts.ts');
 
 /** A custom property's declared value in tokens.css. */
