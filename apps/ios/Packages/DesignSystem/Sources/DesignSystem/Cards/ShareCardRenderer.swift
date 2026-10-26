@@ -26,8 +26,10 @@ import UIKit
     }
 
     static func render(_ view: some View, scale: CGFloat, opaque: Bool) -> UIImage? {
+        // A picture that leaves the device is light terracotta, whatever this device wears (spec §1.5).
         let renderer = ImageRenderer(content: view
             .environment(\.colorScheme, .light)
+            .environment(\.accent, .terracotta)
             .environment(\.dynamicTypeSize, .large))
         renderer.scale = scale
         renderer.isOpaque = opaque

@@ -42,7 +42,7 @@ extension FeedCard {
             authorInitials: author?.initials ?? "·",
             authorImageURL: author?.avatarUrl.flatMap(URL.init(string:)),
             avatarSeed: author.map { $0.avatarSeedValue } ?? anonymousSeed,
-            authorAccent: author.flatMap { OKLCHColor.parse($0.accentColor) },
+            authorAccent: author.flatMap { OKLCHColor.avatar($0.accentColor) },
             imageURL: imageUrl.flatMap(URL.init(string:)),
             accentHue: accentHue
         )
@@ -61,5 +61,5 @@ extension Author {
         return Double((initials.unicodeScalars.first?.value ?? 7) * 13)
     }
 
-    var accent: Color { OKLCHColor.parse(accentColor) ?? Tokens.terracottaLight }
+    var accent: Color { OKLCHColor.avatar(accentColor) ?? Tokens.terracottaLight }
 }

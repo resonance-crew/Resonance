@@ -254,7 +254,8 @@ struct MapTray: View {
 
     var body: some View {
         ZStack {
-            OKLCHColor.color(0.3, 0.02, 75, alpha: 0.16)
+            // A light scrim: the modal's at 0.57 (0.16 on cream, deeper on the night paper).
+            Tokens.scrim.opacity(0.57)
                 .contentShape(Rectangle())
                 .onTapGesture { store.trayOpen = false }
             let cards = store.trayCards
@@ -355,12 +356,12 @@ struct MapEditors: View {
                 .padding(EdgeInsets(top: 4, leading: 4, bottom: 1, trailing: 4))
                 .frame(width: max(120, g.w * store.camera.s - 44 - 16))
             WavyLineShape(seed: Double(seedFromString(g.id)) + 17, amp: 1.7, stepsPerPoint: 1.0 / 46)
-                .stroke(OKLCHColor.color(0.48, 0.09, g.hue), style: StrokeStyle(lineWidth: Tokens.inkLight, lineCap: .round))
+                .stroke(Palette.hue(.regionLabelPen, g.hue), style: StrokeStyle(lineWidth: Tokens.inkLight, lineCap: .round))
                 .frame(width: lineW, height: 6)
                 .padding(.leading, 4)
         }
         .padding(6)
-        .background(OKLCHColor.color(0.965, 0.032, g.hue).opacity(0.96), in: RoundedRectangle(cornerRadius: 12))
+        .background(Palette.hue(.regionFill, g.hue).opacity(0.96), in: RoundedRectangle(cornerRadius: 12))
         .offset(x: x - 6, y: y - 6)
         .onAppear { focus = .group }
     }
@@ -394,8 +395,8 @@ struct MapEditors: View {
         .frame(width: w, height: 28)
         .background {
             let shape = WobRectShape(radius: 14, seed: Double(seedFromString(e.id)) + 5)
-            shape.fill(OKLCHColor.color(0.88, 0.03, 60))
-            shape.stroke(OKLCHColor.color(0.46, 0.045, 60), style: StrokeStyle(lineWidth: Tokens.inkLight, lineJoin: .round))
+            shape.fill(Palette.hue(.mapPillOn, 60))
+            shape.stroke(Palette.hue(.mapInk, 60), style: StrokeStyle(lineWidth: Tokens.inkLight, lineJoin: .round))
         }
         .offset(x: p.x - w / 2, y: p.y - 14)
         .onAppear { focus = .edge }

@@ -59,7 +59,9 @@ enum TurbulenceLattice {
 extension View {
     /// The web's grain computed per pixel on the GPU (see Grain.metal).
     /// Apply to a filled shape: the fill's coverage becomes the clip.
-    public func turbulenceGrain(frequency: Double, octaves: Int, seed: Int, opacity: Double, mode: Float = 0) -> some View {
+    /// `ink` is what mode 1 (GrainOverlay) draws its specks in: --grain-ink, black on cream and chalk on the night paper.
+    public func turbulenceGrain(frequency: Double, octaves: Int, seed: Int, opacity: Double, mode: Float = 0,
+                                ink: Color = Tokens.grainInk) -> some View {
         let table = TurbulenceLattice.table(seed: seed)
         return visualEffect { content, proxy in
             content.colorEffect(ShaderLibrary.bundle(.module).grain(
@@ -68,7 +70,8 @@ extension View {
                 .float(frequency),
                 .float(Float(octaves)),
                 .float(opacity),
-                .float(mode)
+                .float(mode),
+                .color(ink)
             ))
         }
     }

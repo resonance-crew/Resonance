@@ -6,7 +6,7 @@ import SwiftUI
 
 /// The settings sections that apply to the app, in the web's order.
 enum SettingsSection: Hashable, CaseIterable {
-    case profile, account, privacy, notifications, language, terms, delete
+    case profile, account, privacy, notifications, language, appearance, terms, delete
 
     var title: String {
         switch self {
@@ -15,6 +15,7 @@ enum SettingsSection: Hashable, CaseIterable {
         case .privacy: L10n.Settings.Sections.privacy
         case .notifications: L10n.Settings.Sections.notifications
         case .language: L10n.Settings.Sections.language
+        case .appearance: L10n.Settings.Sections.appearance
         case .terms: L10n.Settings.Sections.terms
         case .delete: L10n.Settings.Sections.delete
         }
@@ -28,6 +29,7 @@ enum SettingsSection: Hashable, CaseIterable {
         case .privacy: .lock
         case .notifications: .bell
         case .language: .globe
+        case .appearance: .palette
         case .terms: .document
         case .delete: .trash
         }
@@ -41,6 +43,7 @@ enum SettingsSection: Hashable, CaseIterable {
         case .privacy: 2
         case .notifications: 3
         case .language: 4
+        case .appearance: 5
         case .terms: 6
         case .delete: 7
         }
@@ -117,6 +120,7 @@ struct SettingsSectionScreen: View {
                 case .privacy: PrivacySettings()
                 case .notifications: NotificationSettings()
                 case .language: LanguageSettings()
+                case .appearance: AppearanceSettings()
                 case .terms: TermsSettings()
                 case .delete: DeleteAccountSettings()
                 }
@@ -254,7 +258,7 @@ private struct ProfilePhotoRow: View {
         HStack(alignment: .center, spacing: 16) {
             Button { picking = true } label: {
                 HandDrawnAvatar(initials: me.initials, imageURL: me.avatarUrl.flatMap(URL.init(string:)),
-                                color: OKLCHColor.parse(me.accentColor) ?? Tokens.terracottaLight, size: 88, seed: 77)
+                                color: OKLCHColor.avatar(me.accentColor) ?? Tokens.terracottaLight, size: 88, seed: 77)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(hasPhoto ? L10n.Settings.Profile.avatarChange : L10n.Settings.Profile.avatarAdd)
@@ -657,7 +661,7 @@ private struct BlockedListContent: View {
     private func row(_ person: SafetyService.BlockedPerson) -> some View {
         HStack(spacing: 12) {
             HandDrawnAvatar(initials: person.initials, imageURL: person.avatarUrl.flatMap(URL.init(string:)),
-                            color: person.accentColor.flatMap(OKLCHColor.parse) ?? Tokens.creamDark, size: 36,
+                            color: OKLCHColor.avatar(person.accentColor) ?? Tokens.creamDark, size: 36,
                             seed: person.avatarSeed ?? 5)
             VStack(alignment: .leading, spacing: 0) {
                 Text(person.handle ?? L10n.Safety.BlockedList.unknownUser)

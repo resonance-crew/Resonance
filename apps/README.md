@@ -135,7 +135,7 @@ conversation's composer (`-route /messages/<handle>` opens one), `-threadReply Y
 answers their newest message (a reply riding, the keyboard up) and `-threadPicture <s>`
 opens the newest picture and closes it that many seconds later (round 11 §1's check).
 `-route /settings` (or `/settings/<section>`: profile, account, privacy, notifications,
-language, terms, delete) opens Settings or one of its pages.
+language, appearance, terms, delete) opens Settings or one of its pages.
 `-openWriter YES` opens the writer on a new card at launch and `-writeCard <id>`
 on one of yours (a draft, a published card, one in the trash); `-writeStep publish`
 then opens its second step, `-writeFocus YES` puts the caret in the story (the

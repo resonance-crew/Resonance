@@ -571,37 +571,39 @@ nonisolated struct MenuPanelShape {
     }
 }
 
-/// The --menu-* colors: theme terracotta, or a card's hue.
+/// The --menu-* colors: theme terracotta, or a card's hue (palette HUE_INKS, by scheme).
 struct MenuColors {
     let border: Color
     let borderHover: Color
     let cream: Color
     let divider: Color
-    /// The cream the washes mix into, as oklch.
-    private let creamLCH: (Double, Double, Double)
+    let hue: Double?
 
     init(hue: Double?) {
+        self.hue = hue
         if let hue {
-            border = OKLCHColor.color(0.52, 0.11, hue)
-            borderHover = OKLCHColor.color(0.38, 0.09, hue)
-            creamLCH = (0.98, 0.01, hue)
-            divider = OKLCHColor.color(0.55, 0.04, hue, alpha: 0.4)
+            border = Palette.hue(.nodePen, hue)
+            borderHover = Palette.hue(.menuPenHover, hue)
+            cream = Palette.hue(.menuPaper, hue)
+            divider = Palette.hue(.cardRule, hue, alpha: 0.4)
         } else {
             border = Tokens.terracotta
             borderHover = Tokens.terracottaDeep
-            creamLCH = (0.965, 0.015, 75)
+            cream = Tokens.cream
             divider = Tokens.terracotta.opacity(0.4)
         }
-        cream = OKLCHColor.color(creamLCH.0, creamLCH.1, creamLCH.2)
     }
 
     /// color-mix(in oklch, yellow 25% — 45% while pressed —, menu-cream).
     func dangerWash(pressed: Bool) -> Color {
         let t = pressed ? 0.45 : 0.25
-        let yellow = (0.88, 0.10, 90.0)
-        let dh = (yellow.2 - creamLCH.2 + 540).truncatingRemainder(dividingBy: 360) - 180
-        return OKLCHColor.color(creamLCH.0 + (yellow.0 - creamLCH.0) * t,
-                                creamLCH.1 + (yellow.1 - creamLCH.1) * t,
-                                creamLCH.2 + dh * t)
+        guard let hue else { return Palette.mix(.yellow, t, .cream) }
+        func wash(_ scheme: PaletteScheme) -> Color {
+            let paper = Palette.hueOKLCH(.menuPaper, hue, scheme)
+            let yellow = OKLCHColor.components(Palette.oklch(.yellow, accent: .terracotta, scheme: scheme)) ?? (0.88, 0.1, 90, 1)
+            let m = Palette.mixOKLCH(yellow, t, (paper.L, paper.C, paper.H, 1))
+            return OKLCHColor.color(m.L, m.C, m.H)
+        }
+        return Palette.schemed(light: wash(.light), dark: wash(.dark))
     }
 }

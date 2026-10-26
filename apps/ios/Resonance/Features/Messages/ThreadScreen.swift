@@ -768,7 +768,7 @@ private struct SharedMediaContent: View {
                                 Button { openRoute(.card(card.routeKey)) } label: {
                                     HStack(spacing: 12) {
                                         OrganicImage(url: card.imageUrl.flatMap(URL.init(string:)), seed: 7,
-                                                     fill: OKLCHColor.color(0.9, 0.06, card.accentHue ?? 55))
+                                                     fill: Palette.hue(.cardTile, card.accentHue ?? 55))
                                             .environment(\.skeletonHue, card.accentHue)
                                             .frame(width: 40, height: 40)
                                         Text(card.title).font(AppFonts.body(14, weight: .semibold)).foregroundStyle(Tokens.text)

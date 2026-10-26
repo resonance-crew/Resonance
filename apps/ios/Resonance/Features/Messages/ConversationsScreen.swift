@@ -116,7 +116,7 @@ private struct ConversationRow: View {
     private var label: some View {
             HStack(spacing: 12) {
                 HandDrawnAvatar(initials: person.initials, imageURL: person.avatarURL,
-                                color: person.accentColor.flatMap(OKLCHColor.parse) ?? Tokens.terracottaLight,
+                                color: OKLCHColor.avatar(person.accentColor) ?? Tokens.terracottaLight,
                                 size: 40, seed: person.avatarSeed.flatMap(Double.init).flatMap { $0 == 0 ? nil : $0 } ?? 5)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(person.handle).font(AppFonts.body(14, weight: .semibold)).foregroundStyle(Tokens.text)

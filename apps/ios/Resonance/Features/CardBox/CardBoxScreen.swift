@@ -118,7 +118,7 @@ struct CardBoxScreen: View {
             HStack(spacing: 16) {
                 Button { openRoute(.author(me.handle)) } label: {
                     HandDrawnAvatar(initials: me.initials, imageURL: me.avatarUrl.flatMap(URL.init(string:)),
-                                    color: OKLCHColor.parse(me.accentColor) ?? Tokens.terracottaLight, size: 72,
+                                    color: OKLCHColor.avatar(me.accentColor) ?? Tokens.terracottaLight, size: 72,
                                     seed: Double(seedFromString(me.id)))
                 }
                 .buttonStyle(.plain)

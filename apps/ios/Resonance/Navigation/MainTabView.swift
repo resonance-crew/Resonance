@@ -314,8 +314,8 @@ struct MainTabView: View {
             // Once per launch: the tab view reappears (a language change), and must not push the page again.
             guard !Self.openedLaunchRoute, let path = UserDefaults.standard.string(forKey: "route") else { return }
             Self.openedLaunchRoute = true
-            // `/settings` and `/settings/<section>` (profile, account, privacy, notifications, language, terms,
-            // delete) open Settings or one of its pages, which have no site URL.
+            // `/settings` and `/settings/<section>` (profile, account, privacy, notifications, language, appearance,
+            // terms, delete) open Settings or one of its pages, which have no site URL.
             if let settings = Self.launchSettings(path) { return paths[tab, default: []].append(contentsOf: settings) }
             open(URL(string: path, relativeTo: session.config.origin)?.absoluteURL ?? session.config.origin.appending(path: path))
         }

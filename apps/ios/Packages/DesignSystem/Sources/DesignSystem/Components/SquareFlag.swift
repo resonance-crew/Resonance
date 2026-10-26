@@ -38,7 +38,7 @@ public struct SquareFlag: View {
                 .frame(width: size + pad * 2, height: size + pad * 2)
                 .frame(width: size, height: size)
                 .clipShape(shape)
-                .overlay { shape.stroke(OKLCHColor.color(0.36, 0.06, 60, alpha: 0.55), style: StrokeStyle(lineWidth: Tokens.inkLight, lineJoin: .round)) }
+                .overlay { shape.stroke(Tokens.avatarStroke, style: StrokeStyle(lineWidth: Tokens.inkLight, lineJoin: .round)) }
                 .accessibilityHidden(true)
         }
     }

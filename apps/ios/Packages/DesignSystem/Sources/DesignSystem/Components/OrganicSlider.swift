@@ -37,7 +37,7 @@ public struct OrganicSlider: View {
         ZStack(alignment: .topLeading) {
             if width > 0 {
                 let bar = SliderBarShape(seed: seed, capPad: capPad)
-                bar.stroke(OKLCHColor.color(0.84, 0.022, 75), style: StrokeStyle(lineWidth: Self.trackWidth, lineCap: .round))
+                bar.stroke(Tokens.toggleOff, style: StrokeStyle(lineWidth: Self.trackWidth, lineCap: .round))
                 bar.stroke(Tokens.terracotta, style: StrokeStyle(lineWidth: Self.trackWidth, lineCap: .round))
                     .mask(alignment: .leading) { Rectangle().frame(width: thumbX) }
                 let knob = WobCircleShape(seed: seed + 5, options: WobCircleOptions(segments: 9, mag: 0.7, cpJitter: 0.4))

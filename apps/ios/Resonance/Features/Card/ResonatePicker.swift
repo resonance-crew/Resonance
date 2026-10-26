@@ -205,8 +205,9 @@ private struct WriteNewStyle: ButtonStyle {
             .opacity(isEnabled ? 1 : 0.5)
     }
 
-    /// color-mix(in oklch, terracotta, black 34%): the words' ink under a finger.
-    static let pressedInk = OKLCHColor.color(0.62 * 0.66, 0.14 * 0.66, 45)
+    /// The words' ink under a finger: the accent's deepest pen (color-mix(in oklch, terracotta, black
+    /// 35%) in light, brighter in dark).
+    static let pressedInk = Tokens.terracottaInk
 }
 
 /// The rows' footprint while the shelf is read: plain blocks, nothing drawn before it is measured.

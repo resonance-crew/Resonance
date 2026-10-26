@@ -1,3 +1,4 @@
+import Synchronization
 import SwiftUI
 
 /// Skeleton.tsx: one placeholder block with the warm shimmer — sand, then a
@@ -67,22 +68,31 @@ public struct SkeletonBlock: View {
     }
 
     /// color-mix(in oklch, color-mix(cream-dark 94%, text) 85%, transparent).
-    static let base = OKLCHColor.color(0.8898, 0.0187, 74.1, alpha: 0.85)
+    static let base = Palette.mix(.creamDark, 0.94, .text, alpha: 0.85)
 
     /// color-mix(in oklab, <highlight> 50%, cream), the highlight being
-    /// oklch(88% .08 hue) on a card, or terracotta-light (hue 55) elsewhere.
+    /// oklch(88% .08 hue) on a card, or terracotta-light (hue 55) elsewhere; in dark the family's
+    /// skeleton step (34% .05 hue) over the night paper. Each hue's made once.
     static func highlight(_ hue: Double?) -> Color {
-        let mix = highlightOKLCH(hue)
-        return OKLCHColor.color(mix.L, mix.C, mix.H)
+        let key = hue.map { Int(($0 * 100).rounded()) } ?? -1
+        if let kept = highlights.withLock({ $0[key] }) { return kept }
+        let light = highlightOKLCH(hue), dark = highlightOKLCH(hue, scheme: .dark)
+        let color = Palette.schemed(light: OKLCHColor.color(light.L, light.C, light.H),
+                                    dark: OKLCHColor.color(dark.L, dark.C, dark.H))
+        highlights.withLock { $0[key] = color }
+        return color
     }
+
+    private static let highlights = Mutex<[Int: Color]>([:])
 
     /// The highlight as OKLCH: the card's light shade and the cream averaged in OKLab (a = C·cos h,
     /// b = C·sin h), so the mix stays on the line between them. An average of hues instead swung a
     /// lavender card's light through red to pink and a blue one's to green (both on the way to the
     /// cream's 75°).
-    public static func highlightOKLCH(_ hue: Double?) -> (L: Double, C: Double, H: Double) {
-        let card = (L: 0.88, C: 0.08, H: hue ?? 55)
-        let cream = (L: 0.965, C: 0.015, H: 75.0)
+    public static func highlightOKLCH(_ hue: Double?, scheme: PaletteScheme = .light) -> (L: Double, C: Double, H: Double) {
+        let card = scheme == .light ? (L: 0.88, C: 0.08, H: hue ?? 55) : (L: 0.34, C: 0.05, H: hue ?? 55)
+        let paper = OKLCHColor.components(Palette.oklch(.cream, accent: .terracotta, scheme: scheme)) ?? (0.965, 0.015, 75, 1)
+        let cream = (L: paper.L, C: paper.C, H: paper.H)
         func lab(_ c: (L: Double, C: Double, H: Double)) -> (L: Double, a: Double, b: Double) {
             let r = c.H * .pi / 180
             return (c.L, c.C * cos(r), c.C * sin(r))

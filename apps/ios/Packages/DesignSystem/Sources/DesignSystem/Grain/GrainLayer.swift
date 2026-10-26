@@ -47,23 +47,42 @@ public struct GrainLayer<S: Shape>: View {
         self.overflow = overflow
     }
 
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// The grain's strength in this scheme: light specks on night paper read louder than dark ones
+    /// on cream (palette SCHEME_NUMBERS `grain-scale`).
+    private var strength: Double { opacity * Palette.grainScale(PaletteScheme(colorScheme)) }
+
     public var body: some View {
         switch mode {
         case .none:
             EmptyView()
         case .tile:
-            Image(uiImage: GrainTiles.image(tile))
-                .resizable(resizingMode: .tile)
-                .opacity(opacity)
+            tileImage
+                .opacity(strength)
                 .clipShape(OutsetShape(base: shape, by: overflow))
                 .padding(-overflow)
                 .allowsHitTesting(false)
         case .shader:
             let spec = GrainSpec.named(tile)
+            // The fill is only the shape's coverage: the shader draws the noise (in --grain-ink).
             shape.fill(.black)
                 .turbulenceGrain(frequency: spec.frequency, octaves: spec.octaves, seed: spec.seed,
-                                 opacity: opacity, mode: spec.shaderMode)
+                                 opacity: strength, mode: spec.shaderMode, ink: Tokens.grainInk)
                 .allowsHitTesting(false)
+        }
+    }
+
+    /// The tile. GrainOverlay's is ink with the noise as its alpha, drawn in --grain-ink (black on
+    /// cream, chalk on the night paper); ShapeGrain's grey noise is the same in both.
+    @ViewBuilder private var tileImage: some View {
+        if GrainSpec.named(tile).shaderMode == 1 {
+            Image(uiImage: GrainTiles.image(tile).withRenderingMode(.alwaysTemplate))
+                .resizable(resizingMode: .tile)
+                .foregroundStyle(Tokens.grainInk)
+        } else {
+            Image(uiImage: GrainTiles.image(tile))
+                .resizable(resizingMode: .tile)
         }
     }
 }

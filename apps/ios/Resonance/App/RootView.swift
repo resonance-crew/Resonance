@@ -86,7 +86,7 @@ private struct DebugWindow: ViewModifier {
                 // Laid out at the size asked for, drawn scaled into the middle of the screen.
                 content
                     .frame(width: size.width, height: size.height)
-                    .border(Color.red.opacity(0.4))
+                    .border(Tokens.danger.opacity(0.4))
                     .scaleEffect(scale)
                     .frame(width: geo.size.width, height: geo.size.height)
             }

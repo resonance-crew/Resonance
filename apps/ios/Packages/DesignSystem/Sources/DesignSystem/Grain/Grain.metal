@@ -78,18 +78,20 @@ static float toSrgb(float c) {
 
 /// mode 0 — ShapeGrain: gray = luminance (saturate 0 in linearRGB, shown in sRGB),
 ///          alpha = noise alpha × opacity.
-/// mode 1 — GrainOverlay: black, alpha = (1 − luminance) × opacity.
+/// mode 1 — GrainOverlay: the ink (--grain-ink: black on cream, chalk on the night paper),
+///          alpha = (1 − luminance) × opacity.
 /// mode 2 / 3 — parity probes: opaque gray of the luminance / of the noise alpha.
 /// The input colour's alpha is the shape's coverage, so the effect clips to it.
 [[ stitchable ]] half4 grain(float2 position, half4 color, device const float *table, int count,
-                             float2 size, float frequency, float octaves, float opacity, float mode) {
+                             float2 size, float frequency, float octaves, float opacity, float mode, half4 ink) {
     float4 n = turbulence(table, position, size, frequency, int(octaves));
     float lum = dot(n.rgb, float3(0.2126, 0.7152, 0.0722));
-    float g, a;
-    if (mode < 0.5) { g = toSrgb(lum); a = n.a * opacity; }
-    else if (mode < 1.5) { g = 0.0; a = (1.0 - lum) * opacity; }
-    else if (mode < 2.5) { g = toSrgb(lum); a = 1.0; }
-    else { g = n.a; a = 1.0; }
+    float3 g;
+    float a;
+    if (mode < 0.5) { g = float3(toSrgb(lum)); a = n.a * opacity; }
+    else if (mode < 1.5) { g = float3(ink.rgb) / max(float(ink.a), 1e-4); a = (1.0 - lum) * opacity; }
+    else if (mode < 2.5) { g = float3(toSrgb(lum)); a = 1.0; }
+    else { g = float3(n.a); a = 1.0; }
     a *= float(color.a);
-    return half4(half(g * a), half(g * a), half(g * a), half(a));
+    return half4(half3(g * a), half(a));
 }
