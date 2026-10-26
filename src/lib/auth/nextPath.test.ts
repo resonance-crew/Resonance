@@ -39,6 +39,15 @@ describe('sanitizeNextPath', () => {
     expect(sanitizeNextPath(decodeURIComponent('%2F%09%2Fevil.example'))).toBeNull();
   });
 
+  it('rejects hosts that appear once dot segments collapse', () => {
+    for (const raw of ['/.//evil.example', '/..//evil.example', '/%2e//evil.example', '/a/..//evil.example', '/.\\/evil.example', '/./%2F/evil.example']) {
+      const safe = sanitizeNextPath(raw);
+      expect(safe === null || new URL(safe, 'https://resonance.channel').origin === 'https://resonance.channel', raw).toBe(true);
+    }
+    expect(sanitizeNextPath('/.//evil.example')).toBeNull();
+    expect(sanitizeNextPath('/a/../b')).toBe('/b');
+  });
+
   it('keeps a pen-name path, as the browser will request it', () => {
     expect(sanitizeNextPath('/zh-TW/u/小明')).toBe(`/zh-TW/u/${encodeURIComponent('小明')}`);
   });
