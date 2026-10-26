@@ -356,8 +356,8 @@ describe('PublishStep', () => {
     const view = renderWithIntl(<Step cardId={id} />);
     for (const pill of pills()) {
       // The family's palette tokens, which the scheme draws (in dark the deep pen is the bright one).
-      expect(pill.style.getPropertyValue('--shape-fill')).toBe(cardVar('border-deep', f));
-      expect(pill.style.color).toBe(asColor(cardVar('interior', f)));
+      expect(pill.style.getPropertyValue('--shape-fill')).toBe(cardVar('pill', f));
+      expect(pill.style.color).toBe(asColor(cardVar('pill-ink', f)));
     }
     view.unmount();
 

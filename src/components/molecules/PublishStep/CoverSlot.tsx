@@ -299,7 +299,8 @@ export function coverColors(palette: number) {
     hue,
     ink: deep,
     busy: { '--cover-ink': deep, '--cover-paper': paper } as CSSProperties,
-    pill: { fillColor: deep, color: paper },
+    // In light the deep pen with its paper for words; in dark a tonal pill of the family with chalk words.
+    pill: { fillColor: cardVar('pill', family), color: cardVar('pill-ink', family) },
     pillResting: { fillColor: cardVar('accent', family), color: `oklch(var(--hue-pill-ink) ${hue})` },
     chip: { fill: cardVar('fill', family), pen, ink: deep },
   };
