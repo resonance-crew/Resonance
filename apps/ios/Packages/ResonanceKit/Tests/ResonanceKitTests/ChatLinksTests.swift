@@ -112,6 +112,20 @@ import Testing
         #expect(ChatLinks.links(in: "nothing to see").isEmpty)
     }
 
+    @Test func aLinkStartsAtItsWordsInAnyCaseAndAtNothingThatOnlyLooksLikeThem() {
+        #expect(texts("a HTTPS://example.com b hTtP://example.org c WwW.example.net") ==
+            ["HTTPS://example.com", "hTtP://example.org", "WwW.example.net"])
+        // Full-width letters, a dotless or dotted I, a Kelvin sign: none of them is the ASCII letter.
+        #expect(texts("ｈttps://example.com ｗww.example.com") == [])
+        #expect(texts("https:／/example.com wwW。example.com") == [])
+        #expect(texts("\u{212A}https://example.com") == ["https://example.com"])
+        // Cut short at the message's end, or a word that only begins like one.
+        #expect(texts("https:/") == [])
+        #expect(texts("http") == [])
+        #expect(texts("ww") == [])
+        #expect(texts("whttps://example.com hhttp://example.com") == [])
+    }
+
     @Test func aSchemeOrHostInTheWrongCaseIsStillAnOrdinaryLink() {
         let link = ChatLinks.parse("HTTPS://EXAMPLE.COM")
         #expect(link?.url.absoluteString == "https://example.com/")
