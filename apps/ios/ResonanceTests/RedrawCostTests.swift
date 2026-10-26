@@ -128,4 +128,18 @@ import UIKit
         store.camera = MapCamera(x: 40, y: -20, s: 1.5)
         #expect(store.edgeGeometry(edge)?.path == fresh(bAt: 900))
     }
+
+    @Test func aListFetchesTheNextFewCoversAheadOfTheReader() {
+        func card(_ id: String, cover: Bool) -> FeedCard {
+            var card = Fixture.card(id)
+            card.imageUrl = cover ? "https://img.example.test/\(id).webp" : nil
+            return card
+        }
+        let cards = (0..<10).map { card("c\($0)", cover: $0 != 3) }
+        #expect(StoryCardList.coversAhead(of: 0, in: cards).map(\.lastPathComponent) == ["c1.webp", "c2.webp", "c4.webp", "c5.webp", "c6.webp"])
+        #expect(StoryCardList.coversAhead(of: 7, in: cards).map(\.lastPathComponent) == ["c8.webp", "c9.webp"])
+        #expect(StoryCardList.coversAhead(of: 9, in: cards).isEmpty)
+        // The very address the card's cover asks for.
+        #expect(StoryCardList.coversAhead(of: 0, in: cards).first == cards[1].story.imageURL)
+    }
 }

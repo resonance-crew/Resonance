@@ -83,6 +83,20 @@ extension OrganicImage where Placeholder == Color {
     }
 }
 
+/// Covers fetched before their cards come on screen: a list asks for the next few as each card
+/// appears. Only their bytes, into the image pipeline's HTTP disk cache — nothing decoded, nothing
+/// kept in memory — so the cover's own request, the same one (``OrganicImage``'s URL), is a cache hit
+/// when its card shows. At low priority, two at a time; what is in memory or on its way is skipped.
+public enum CoverPrefetch {
+    private static let prefetcher = ImagePrefetcher(destination: .diskCache)
+
+    /// Fetches the covers at `urls` ahead.
+    public static func ahead(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        prefetcher.startPrefetching(with: urls)
+    }
+}
+
 /// A remote picture filling its frame (cover), decoded at the size it's shown
 /// at (`pixelSize`, in points × scale) instead of full resolution — for many
 /// small pictures at once, like the thought map's card thumbnails.
