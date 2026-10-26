@@ -48,7 +48,7 @@ import UIKit
         // The rows, in the reply's measures.
         #expect(ComposerMetrics.rowMinHeight == 52 && ComposerMetrics.rowPadY == 4 && ComposerMetrics.rowStart == 12)
         #expect(ComposerMetrics.rowLeadGap == 10 && ComposerMetrics.rowThumb == 40 && ComposerMetrics.rowGlyph == 18)
-        #expect(ComposerMetrics.slipGap == 6 && ComposerMetrics.clearance == 12)
+        #expect(ComposerMetrics.slipGap == 6 && ComposerMetrics.clearance == 20)
     }
 
     @Test func whatRidesWithTheMessageStacksReplyThenAttachmentThenError() {

@@ -221,8 +221,8 @@ internal class ComposerRoom(private val insets: WindowInsets, private val densit
 /** The composer floats this far over the navigation bar or the keyboard. */
 internal val ComposerGap = 8.dp
 
-/** What the thread keeps clear over the composer: its newest message, the jump pill. */
-internal val ComposerClear = 12.dp
+/** What the thread keeps clear over the composer: its newest message, the jump pill (the web's --dock-clear; 12 sat the newest message on the capsule). */
+internal val ComposerClear = 20.dp
 
 /**
  * The thread's padding, its foot following the composer ([ComposerRoom.clear]) — read by the list
@@ -343,7 +343,7 @@ internal fun MessageList(
             Modifier.fillMaxSize(),
             state = list,
             reverseLayout = true,
-            // The thread runs to the screen's foot, under the floating composer; the newest message rests 12 over it.
+            // The thread runs to the screen's foot, under the floating composer; the newest message rests ComposerClear over it.
             contentPadding = padding,
         ) {
             // The letter's line is the thread's last item: it scrolls with the messages (round 9 §4).

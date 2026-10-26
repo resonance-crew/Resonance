@@ -1,0 +1,11 @@
+# Default ignored files
+/shelf/
+/workspace.xml
+# Per machine or per click: rewritten as Android Studio is used (the device picked and the
+# device list's sorting, App Quality Insights' filters, the local JDK's name, what Gradle sync writes)
+/appInsightsSettings.xml
+/deploymentTargetSelector.xml
+/deviceManager.xml
+/misc.xml
+/gradle.xml
+/kotlinc.xml

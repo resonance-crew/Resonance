@@ -113,18 +113,18 @@ class RoundNineTest {
 
     @Test fun theThreadKeepsClearOfTheFloatingComposerAndTheKeyboard() {
         val density = Density(2f, 1f)
-        // A 48 capsule (96 px) over a 24 px navigation bar: 8 of air, then 12 more for the newest message.
+        // A 48 capsule (96 px) over a 24 px navigation bar: 8 of air, then 20 more for the newest message.
         val room = ComposerRoom(WindowInsets(bottom = 48), density)
         room.foot = 96
         assertEquals(48 + 16 + 96, room.above)
-        assertEquals(48 + 16 + 96 + 24, room.clear)
+        assertEquals(48 + 16 + 96 + 40, room.clear)
         // The capsule grows (more lines, a reply on its slip): so does the room.
         room.foot = 220
-        assertEquals(48 + 16 + 220 + 24, room.clear)
+        assertEquals(48 + 16 + 220 + 40, room.clear)
         // No composer at all (a letter still being heard of): the air over the bar alone.
         room.foot = 0
         assertEquals(48 + 16, room.above)
         assertEquals(8.dp, ComposerGap)
-        assertEquals(12.dp, ComposerClear)
+        assertEquals(20.dp, ComposerClear)
     }
 }

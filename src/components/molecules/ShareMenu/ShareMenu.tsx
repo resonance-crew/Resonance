@@ -137,6 +137,8 @@ export function ShareMenu({ target, seed = 5, hint, tip, className }: ShareMenuP
       bare
       tip={tip}
       triggerIcon="share"
+      // 複製連結 and 更多分享方式 in the brands' marks' near-black, so the column reads as one.
+      glyphs="ink"
       items={items}
       footer={hint}
       footerWrap

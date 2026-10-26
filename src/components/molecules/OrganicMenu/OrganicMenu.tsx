@@ -76,6 +76,13 @@ export interface OrganicMenuProps {
   tone?: 'muted' | 'ink';
   /** For `bare`: where its tooltip hangs — over it (default), or under it at the top of a screen. */
   tip?: 'above' | 'below';
+  /**
+   * The rows' hand-drawn glyphs in the menu's pen (default), or in the page's
+   * ink at rest and under the row's wash alike — for a menu whose other rows
+   * wear brands' marks, which are never recoloured (the share menu): one
+   * column of glyphs in one ink.
+   */
+  glyphs?: 'pen' | 'ink';
   /** A quiet line under the rows (a message's full time), parted from them by one more divider. */
   footer?: ReactNode;
   /**
@@ -154,6 +161,7 @@ export function OrganicMenu({
   bare = false,
   tone = 'muted',
   tip = 'above',
+  glyphs = 'pen',
   footer,
   footerWrap = false,
   onTriggerClick,
@@ -228,7 +236,10 @@ export function OrganicMenu({
     };
   }, [open, floating, closeMenu]);
 
-  const styleOverrides = menuColors(hue);
+  const styleOverrides = {
+    ...menuColors(hue),
+    ...(glyphs === 'ink' ? { '--menu-glyph': 'var(--color-text)', '--menu-glyph-active': 'var(--color-text)' } : {}),
+  } as CSSProperties;
 
   /** Where a floating panel goes: under the trigger when it fits, else over it; its `align` edge on the trigger's. */
   function place(trigger: HTMLElement): CSSProperties {

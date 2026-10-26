@@ -378,6 +378,42 @@ describe('PublishStep', () => {
     await echoSettled();
   });
 
+  // 2026-10-26: the loader wore the theme's terracotta on every card, said 正在描繪中 while a file went up, and
+  // a cover being replaced stayed sharp under it — the veil was only for the model's rough pass, and stopped at
+  // the box while the picture's wobble reaches past it.
+  it('says a cover is on its way in the card’s deep ink, over the cover it replaces veiled to its outline', async () => {
+    vi.mocked(uploadImageFile).mockReturnValue(new Promise(() => {}));
+    const cover: CardMedia = { type: 'image', url: 'https://img.example.com/green.webp', label: 'green' };
+    const view = renderWithIntl(<Step cardId="card-a" start={{ media: cover, accentHue: 140 }} />);
+    fireEvent.change(view.container.querySelector<HTMLInputElement>('input[type="file"]')!, {
+      target: { files: [new File(['x'], 'next.webp', { type: 'image/webp' })] },
+    });
+    const loader = await screen.findByRole('status', { name: en.write.mediaUploading });
+    expect(en.write.mediaUploading).toBe('Uploading the picture…');
+    const deep = CARD_BORDERS[CARD_HUES.indexOf(140)][1];
+    for (const path of loader.querySelectorAll('path')) expect(path).toHaveAttribute('stroke', deep);
+    const busy = screen.getByText(en.write.mediaUploading).parentElement!;
+    expect(busy).toHaveAttribute('data-veiled');
+    expect(busy.style.getPropertyValue('--cover-ink')).toBe(deep);
+    // The cover it replaces stays under the veil, which reaches as far as the picture does: the picture's box says
+    // how far (OrganicImage's bleed — 0 here, where nothing is measured; the wobble's swing in a browser).
+    const old = view.container.querySelector('img[src="https://img.example.com/green.webp"]')!;
+    expect(old).toBeInTheDocument();
+    const box = busy.closest<HTMLElement>('[style*="--image-bleed"]')!;
+    expect(box).toContainElement(old as HTMLElement);
+    expect(box.style.getPropertyValue('--image-bleed')).toMatch(/^\d+px$/);
+    view.unmount();
+
+    // No cover yet: the loader over the card's stripes, nothing to veil.
+    renderWithIntl(<Step cardId="card-a" />);
+    fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, {
+      target: { files: [new File(['x'], 'first.webp', { type: 'image/webp' })] },
+    });
+    await screen.findByRole('status', { name: en.write.mediaUploading });
+    expect(screen.getByText(en.write.mediaUploading).parentElement).not.toHaveAttribute('data-veiled');
+    await echoSettled();
+  });
+
   it('waits for a story before it offers to draw a cover', async () => {
     renderWithIntl(<Step start={{ story: '' }} />);
     expect(screen.getByRole('button', { name: en.write.mediaGenerate })).toBeDisabled();

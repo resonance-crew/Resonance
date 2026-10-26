@@ -29,8 +29,7 @@ public struct OrganicImage<Placeholder: View>: View {
     public var body: some View {
         GeometryReader { geo in
             let w = geo.size.width, h = geo.size.height
-            let mag = min(w, h) * 0.05
-            let bleed = (mag + 6 + 4).rounded(.up)
+            let bleed = organicImageBleed(w, h)
             ZStack {
                 if let url {
                     LazyImage(url: url) { state in
@@ -58,6 +57,13 @@ public struct OrganicImage<Placeholder: View>: View {
             .offset(x: -bleed, y: -bleed)
         }
     }
+}
+
+/// How far an ``OrganicImage``'s picture reaches past its `w` × `h` box on every side: the wobble's
+/// outward swing (its magnitude and corner offset) and 4 more. What must cover the picture as far as it
+/// reaches — a veil over it in a story card's cover slot — reaches as far.
+public func organicImageBleed(_ w: CGFloat, _ h: CGFloat) -> CGFloat {
+    (min(w, h) * 0.05 + 6 + 4).rounded(.up)
 }
 
 /// The clip, drawn in the bled frame's coordinates (so offset by `bleed`).
