@@ -4,7 +4,7 @@ import Markdown, { type Components, type ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSlug from 'rehype-slug';
 import type { Element, ElementContent } from 'hast';
-import { createContext, useContext, useMemo, type CSSProperties, type ReactNode } from 'react';
+import { createContext, memo, useContext, useMemo, type CSSProperties, type ReactNode } from 'react';
 import { Divider } from '@/components/atoms/Divider/Divider';
 import { OrganicStoryImage } from '@/components/atoms/OrganicImage/OrganicStoryImage';
 import { CardEmbedLink } from '@/components/molecules/EmbedStoryCard/CardEmbedLink';
@@ -175,6 +175,8 @@ function StoryParagraph({ node, children }: { children?: ReactNode } & ExtraProp
   return <p>{children}</p>;
 }
 
+// The plugin lists are the same objects on every render (react-markdown takes them as props).
+const REMARK_PLUGINS = [remarkGfm];
 const LATIN_PLUGINS = [rehypeSlug];
 const CJK_PLUGINS = [rehypeSlug, rehypeLatinMarks];
 
@@ -201,8 +203,15 @@ export interface StoryMarkdownProps {
  * Table of Contents can anchor-scroll to them. The page may provide its
  * card's link previews (StoryLinkPreviewsContext); a standalone link with one
  * is drawn as its link card.
+ *
+ * Parsing a story is the costliest thing a card page does in the browser, so
+ * it happens only when the story, how it is set, or its previews change —
+ * not on each of the page's own renders (auth settling, the lists around the
+ * card arriving, the reader scrolling the byline out of view). What a story
+ * draws that depends on the page — its embedded cards — reads the page's
+ * context itself and updates on its own.
  */
-export function StoryMarkdown({ source, script, lang, density }: StoryMarkdownProps) {
+export const StoryMarkdown = memo(function StoryMarkdown({ source, script, lang, density }: StoryMarkdownProps) {
   const previews = useContext(StoryLinkPreviewsContext);
   // Parsed again (as CommonMark, like the server) only when there is a preview to place.
   const cards = useMemo<StoryLinkCards | null>(
@@ -220,10 +229,10 @@ export function StoryMarkdown({ source, script, lang, density }: StoryMarkdownPr
   return (
     <div className="story-prose" data-script={setAs} data-density={density} lang={read ? read.lang : lang}>
       <StoryLinkCardsContext.Provider value={cards}>
-        <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={components}>
+        <Markdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={rehypePlugins} components={components}>
           {source}
         </Markdown>
       </StoryLinkCardsContext.Provider>
     </div>
   );
-}
+});

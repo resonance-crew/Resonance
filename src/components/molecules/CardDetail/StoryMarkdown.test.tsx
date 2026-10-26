@@ -2,7 +2,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, renderWithIntl, screen } from '@/../test/render';
+import { useState } from 'react';
+import { act, fireEvent, renderWithIntl, screen } from '@/../test/render';
 import fixture from '../../../../native/fixtures/story-link-cards.json';
 import { StoryLinkPreviewsContext } from '@/components/molecules/StoryLinkCard/StoryLinkPreviews';
 import type { LinkPreview } from '@/lib/db/types';
@@ -13,6 +14,20 @@ import { StoryMarkdown } from './StoryMarkdown';
 vi.mock('@/components/molecules/EmbedStoryCard/CardEmbedLink', () => ({
   CardEmbedLink: ({ href }: { href: string }) => <span data-testid="card-embed">{href}</span>,
 }));
+
+// react-markdown as it is, counting each time it parses and renders a story.
+const markdown = vi.hoisted(() => ({ parses: 0 }));
+vi.mock('react-markdown', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-markdown')>();
+  const Real = actual.default;
+  return {
+    ...actual,
+    default: (props: Parameters<typeof Real>[0]) => {
+      markdown.parses++;
+      return <Real {...props} />;
+    },
+  };
+});
 
 describe('StoryMarkdown', () => {
   it('gives a photo its own block, so it never runs into the sentence above', () => {
@@ -278,5 +293,52 @@ describe('tableMore', () => {
     expect(tableMore(0, 600, 300)).toBe('end');
     expect(tableMore(150, 600, 300)).toBe('both');
     expect(tableMore(300, 600, 300)).toBe('start');
+  });
+});
+
+// The card page renders again and again while it loads (auth settling, its
+// own read, the lists around the card, the byline measured); parsing the
+// story each time was the page's costliest work in the browser.
+describe('StoryMarkdown renders', () => {
+  it('parses a story once, however often the page around it renders, and again only when it changes', () => {
+    let rerenderPage: () => void = () => {};
+    let setSource: (s: string) => void = () => {};
+    function Page() {
+      const [, setTick] = useState(0);
+      const [source, set] = useState('# A heading\n\nOne paragraph.');
+      rerenderPage = () => setTick((n) => n + 1);
+      setSource = set;
+      return <StoryMarkdown source={source} script="latin" lang="en" />;
+    }
+    markdown.parses = 0;
+    renderWithIntl(<Page />);
+    expect(markdown.parses).toBe(1);
+
+    act(() => rerenderPage());
+    act(() => rerenderPage());
+    expect(markdown.parses).toBe(1);
+    expect(screen.getByRole('heading', { name: 'A heading' })).toBeInTheDocument();
+
+    act(() => setSource('Another story.'));
+    expect(markdown.parses).toBe(2);
+    expect(screen.getByText('Another story.')).toBeInTheDocument();
+  });
+
+  it('draws its link cards again when the page’s previews arrive', () => {
+    const preview: LinkPreview = { url: 'https://example.com/a', title: 'Example page' };
+    let setPreviews: (p: LinkPreview[] | null) => void = () => {};
+    function Page() {
+      const [previews, set] = useState<LinkPreview[] | null>(null);
+      setPreviews = set;
+      return (
+        <StoryLinkPreviewsContext.Provider value={previews}>
+          <StoryMarkdown source={'Before.\n\n<https://example.com/a>\n\nAfter.'} />
+        </StoryLinkPreviewsContext.Provider>
+      );
+    }
+    renderWithIntl(<Page />);
+    expect(screen.queryByText('Example page')).toBeNull();
+    act(() => setPreviews([preview]));
+    expect(screen.getByText('Example page')).toBeInTheDocument();
   });
 });

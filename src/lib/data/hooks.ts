@@ -714,21 +714,30 @@ export function useCardPageLists(id: string | undefined, referenceCardId: string
   const incoming = useResonanceCards(pub ? id : undefined);
   const source = useReferencedCard(pub ? referenceCardId : undefined);
 
-  if (path === 'v1') {
-    const d = signedIn.data;
-    if (d === undefined) return { embeds: signedIn.error ? null : { status: 'loading' } };
-    if (d === null) return { resonances: EMPTY, related: EMPTY, links: EMPTY, embeds: { status: 'ready', cards: EMPTY } };
-    return { resonances: d.resonances, related: d.related, links: d.links, embeds: { status: 'ready', cards: d.embeds } };
-  }
-  if (path === null) return { embeds: { status: 'loading' } };
-  return {
-    resonances: incoming.data || source.data ? mergeLists(source.data, incoming.data) : undefined,
-    related: related.data,
-    // Cards linking to a card are its author's to see — never a signed-out reader.
-    links: EMPTY,
-    embeds: null,
-  };
+  // The same object until something in it changes: the page re-renders for
+  // many reasons, and its story's embeds (which read `embeds` from context)
+  // and lists shouldn't re-render with it.
+  const d = signedIn.data;
+  const failed = !!signedIn.error;
+  return useMemo<CardPageLists>(() => {
+    if (path === 'v1') {
+      if (d === undefined) return { embeds: failed ? null : LOADING };
+      if (d === null) return { resonances: EMPTY, related: EMPTY, links: EMPTY, embeds: NONE_EMBEDDED };
+      return { resonances: d.resonances, related: d.related, links: d.links, embeds: { status: 'ready', cards: d.embeds } };
+    }
+    if (path === null) return { embeds: LOADING };
+    return {
+      resonances: incoming.data || source.data ? mergeLists(source.data, incoming.data) : undefined,
+      related: related.data,
+      // Cards linking to a card are its author's to see — never a signed-out reader.
+      links: EMPTY,
+      embeds: null,
+    };
+  }, [path, d, failed, incoming.data, source.data, related.data]);
 }
+
+const LOADING: CardEmbedSource = { status: 'loading' };
+const NONE_EMBEDDED: CardEmbedSource = { status: 'ready', cards: EMPTY };
 
 /** GET /api/v1/cards?keys= takes at most this many (CARD_KEYS_MAX in lib/api/v1/schemas). */
 const CARD_KEYS_MAX = 30;

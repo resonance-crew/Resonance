@@ -98,6 +98,7 @@ import {
   useProfileByHandle,
   useProfileCards,
   useProfileLinks,
+  useCardPageLists,
   useCardSummaries,
   useNotifications,
   useRecommendedFeed,
@@ -1121,6 +1122,41 @@ describe('useRecommendedFeed', () => {
     const { result } = renderHook(() => useRecommendedFeed(), { wrapper });
     await waitFor(() => expect(result.current.data).toBeDefined());
     expect(result.current.data!.cards).toEqual([]);
+  });
+});
+
+describe('useCardPageLists', () => {
+  // The card page renders many times while it loads (auth settling, its own
+  // read, the block list, measurements): what it hands its lists and its
+  // story's embeds must stay the same object until something in it changes.
+  it('hands over the same lists and embeds until the answer changes', async () => {
+    api({
+      '/api/v1/cards/c1?include=': {
+        card: summary('c1', 'a1'),
+        resonances: [summary('r1', 'a2')],
+        related: [summary('x1', 'a3')],
+        links: [],
+        embeds: [summary('e1', 'a4')],
+      },
+    });
+    const { result, rerender } = renderHook(() => useCardPageLists('c1', undefined), { wrapper });
+    await waitFor(() => expect(result.current.related).toBeDefined());
+    const first = result.current;
+    expect(first.embeds).toMatchObject({ status: 'ready' });
+
+    rerender();
+    rerender();
+    expect(result.current).toBe(first);
+    expect(result.current.embeds).toBe(first.embeds);
+  });
+
+  it('keeps one loading source while the answer is on its way', () => {
+    vi.mocked(callApi).mockReturnValue(new Promise(() => {}));
+    const { result, rerender } = renderHook(() => useCardPageLists('c1', undefined), { wrapper });
+    const loading = result.current.embeds;
+    expect(loading).toEqual({ status: 'loading' });
+    rerender();
+    expect(result.current.embeds).toBe(loading);
   });
 });
 
