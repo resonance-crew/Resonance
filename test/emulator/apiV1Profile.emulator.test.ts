@@ -212,7 +212,9 @@ describe('reportCard', () => {
 
   it("fills in an anonymous card's author, which the app never sees", async () => {
     await db.doc('cards/anon').set({ authorId: 'bob', visibility: 'public', anonymous: true, slug: 'a-quiet-night', publishedAt: new Date() });
-    const id = await reportCard(db, 'nina', 'a-quiet-night', { reason: 'harassment', detail: '不舒服' });
+    // By its id, as a reader has it: a slug never leads a stranger to an anonymous card (it may carry the author's pen name).
+    await expect(reportCard(db, 'nina', 'a-quiet-night', { reason: 'harassment' })).rejects.toMatchObject({ code: 'not_found' });
+    const id = await reportCard(db, 'nina', 'anon', { reason: 'harassment', detail: '不舒服' });
     expect(await report(id)).toMatchObject({
       reporterId: 'nina',
       targetType: 'card',
