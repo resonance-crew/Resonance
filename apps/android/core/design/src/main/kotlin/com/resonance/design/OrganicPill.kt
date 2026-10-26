@@ -80,6 +80,9 @@ fun OrganicPill(
     val focused by source.collectIsFocusedAsState()
     val shape = remember(size) { WobRectShape(size.radius, 41.0, mag = 1.2) }
     val ink = Tokens.TerracottaInk
+    val paper = Tokens.Cream
+    val wash = Tokens.TerracottaLight
+    val focusPen = Tokens.Terracotta
     val text: AnnotatedString = remember(label, verb) {
         buildAnnotatedString {
             append(label)
@@ -97,10 +100,10 @@ fun OrganicPill(
                 val o = shape.createOutline(this.size, layoutDirection, this)
                 val ring = Stroke(Tokens.Ink.toPx())
                 onDrawBehind {
-                    drawOutline(o, Tokens.Cream)
-                    drawOutline(o, Tokens.TerracottaLight, alpha = 0.9f)
+                    drawOutline(o, paper)
+                    drawOutline(o, wash, alpha = 0.9f)
                     // A keyboard's focus: the pen goes round it in terracotta, as a field's does.
-                    if (focused) drawOutline(o, Tokens.Terracotta, style = ring)
+                    if (focused) drawOutline(o, focusPen, style = ring)
                 }
             }
             .then(

@@ -100,7 +100,7 @@ sealed interface ShareByline {
  */
 @Composable
 fun ShareCardCanvas(model: ShareCardModel, cover: ImageBitmap?, modifier: Modifier = Modifier) {
-    FixedTextSize {
+    SharedPicture {
         Box(modifier.size(ShareCardRecipe.Canvas.WIDTH.dp, ShareCardRecipe.Canvas.HEIGHT.dp)) {
             ShareCardBackdrop(model)
             val zone = ShareCardRecipe.SafeZone
@@ -119,7 +119,7 @@ fun ShareCardCanvas(model: ShareCardModel, cover: ImageBitmap?, modifier: Modifi
 /** The card alone, on nothing, [ShareCardRecipe.Sticker.MARGIN] clear all round so its wobble isn't cut: Instagram's movable sticker. */
 @Composable
 fun ShareCardSticker(model: ShareCardModel, cover: ImageBitmap?, modifier: Modifier = Modifier) {
-    FixedTextSize {
+    SharedPicture {
         Box(modifier.padding(ShareCardRecipe.Sticker.MARGIN.dp)) { ShareCard(model, cover) }
     }
 }
@@ -127,20 +127,26 @@ fun ShareCardSticker(model: ShareCardModel, cover: ImageBitmap?, modifier: Modif
 /** The backdrop alone (the card's family fill under the band's grain): Instagram's background behind the sticker. */
 @Composable
 fun ShareCardBackdrop(model: ShareCardModel, modifier: Modifier = Modifier) {
-    val palette = ShareCardRecipe.palette(model.cardId, model.accentHue)
+    val family = ShareCardRecipe.palette(model.cardId, model.accentHue).colorsIn(ShareCardRecipe.PALETTE)
     Box(
         modifier
             .size(ShareCardRecipe.Canvas.WIDTH.dp, ShareCardRecipe.Canvas.HEIGHT.dp)
-            .drawBehind { drawRect(palette.fill) }
-            .grainOverlay(ShareCardRecipe.Backdrop.GRAIN),
+            .drawBehind { drawRect(family.fill) }
+            .grainOverlay(ShareCardRecipe.Backdrop.GRAIN, GrainInk.of(ShareCardRecipe.PALETTE)),
     )
 }
 
-/** Inside, `sp` is `dp`: the share image is a picture, the same at any system text size. */
+/**
+ * The share image is a picture that leaves the device: inside, `sp` is `dp` (the same at any system
+ * text size) and every colour is light terracotta's ([ShareCardRecipe.PALETTE]), whatever scheme or
+ * theme the screen wears.
+ */
 @Composable
-private fun FixedTextSize(content: @Composable () -> Unit) {
+private fun SharedPicture(content: @Composable () -> Unit) {
     val d = LocalDensity.current
-    CompositionLocalProvider(LocalDensity provides Density(d.density, 1f), content = content)
+    CompositionLocalProvider(LocalDensity provides Density(d.density, 1f)) {
+        ResonanceTheme(ShareCardRecipe.PALETTE, content)
+    }
 }
 
 /**
@@ -153,6 +159,8 @@ private fun FixedTextSize(content: @Composable () -> Unit) {
 @Composable
 fun ShareCard(model: ShareCardModel, cover: ImageBitmap?, modifier: Modifier = Modifier) {
     val palette = ShareCardRecipe.palette(model.cardId, model.accentHue)
+    val family = palette.colorsIn(ShareCardRecipe.PALETTE)
+    val grainInk = GrainInk.of(ShareCardRecipe.PALETTE)
     val seed = ShareCardRecipe.seed(model.cardId)
     Column(
         modifier
@@ -163,12 +171,12 @@ fun ShareCard(model: ShareCardModel, cover: ImageBitmap?, modifier: Modifier = M
                 val h = (size.height / density).toDouble()
                 val outline = WobRectShape(ShareCardRecipe.Card.RADIUS.toDouble(), seed, mag = min(w, h) * ShareCardRecipe.Card.OUTLINE_MAGNITUDE, options = ShareCardRecipe.Card.OUTLINE)
                     .createOutline(size, layoutDirection, this)
-                val grain = Grain.brush(GrainMode.Tile, ShareCardRecipe.Card.PAPER_GRAIN_TILE, size, density, ShareCardRecipe.Card.PAPER_GRAIN)
+                val grain = Grain.brush(GrainMode.Tile, ShareCardRecipe.Card.PAPER_GRAIN_TILE, size, density, ShareCardRecipe.Card.PAPER_GRAIN, grainInk)
                 val pen = Stroke(ShareCardRecipe.Card.PEN_WIDTH.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                 onDrawBehind {
-                    drawOutline(outline, palette.interior)
+                    drawOutline(outline, family.interior)
                     grain?.let { drawOutline(outline, it, alpha = ShareCardRecipe.Card.PAPER_GRAIN) }
-                    drawOutline(outline, palette.border, style = pen)
+                    drawOutline(outline, family.border, style = pen)
                 }
             }
             .padding(start = ShareCardRecipe.Card.PADDING.dp, end = ShareCardRecipe.Card.PADDING.dp, top = ShareCardRecipe.Card.PADDING.dp, bottom = ShareCardRecipe.Card.PADDING_BOTTOM.dp),
@@ -200,7 +208,7 @@ fun ShareCard(model: ShareCardModel, cover: ImageBitmap?, modifier: Modifier = M
             Modifier.fillMaxWidth().height(ShareCardRecipe.Rule.HEIGHT.dp).drawWithCache {
                 val p = wavyLinePath(size.width, size.height, density, seed + ShareCardRecipe.Rule.SEED_OFFSET, ShareCardRecipe.Rule.AMPLITUDE, ShareCardRecipe.Rule.STEPS)
                 val s = Stroke(ShareCardRecipe.Rule.WIDTH.dp.toPx(), cap = StrokeCap.Round)
-                onDrawBehind { drawPath(p, palette.separator, style = s) }
+                onDrawBehind { drawPath(p, family.separator, style = s) }
             },
         )
         Spacer(Modifier.height(ShareCardRecipe.Rule.GAP_BELOW.dp))
@@ -235,7 +243,7 @@ internal fun wordsLayout(text: String, type: StoryType, maxLines: Int, widthPx: 
     val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = AppFonts.typeface(type.bodyFamily, type.bodyWeight)
         textSize = density.cssFontPx(ShareCardRecipe.Words.SIZE)
-        color = Tokens.Text.toArgb()
+        color = ShareCardRecipe.PALETTE.Text.toArgb()
         letterSpacing = type.bodyTracking
     }
     val full = wordsLayout(text, type, paint, widthPx)
@@ -277,7 +285,7 @@ private fun CoverPicture(cover: ImageBitmap, seed: Double, width: Float, height:
             Modifier
                 .requiredSize(width.dp + bleed * 2, height.dp + bleed * 2)
                 .clip(BledShape(seed, bleed.value.toDouble()))
-                .grainOverlay(ShareCardRecipe.Cover.GRAIN),
+                .grainOverlay(ShareCardRecipe.Cover.GRAIN, GrainInk.of(ShareCardRecipe.PALETTE)),
         ) {
             Image(cover, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
@@ -305,7 +313,7 @@ private fun ShareByline(model: ShareCardModel, palette: CardPalette) {
                         )
                         if (byline.verified) {
                             Spacer(Modifier.width(b.VERIFIED_GAP.dp))
-                            OrganicIcon(IconName.Verified, size = b.VERIFIED_SIZE.dp, color = Tokens.Sage, strokeWidth = 1.8f)
+                            OrganicIcon(IconName.Verified, size = b.VERIFIED_SIZE.dp, color = Tokens.VerifiedMark, strokeWidth = 1.8f)
                         }
                     }
                     ShareByline.Anonymous -> BasicText(

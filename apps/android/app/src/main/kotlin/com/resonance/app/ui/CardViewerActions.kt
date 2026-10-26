@@ -80,7 +80,7 @@ fun CardViewerActions(
         listOf(
             Segment(
                 "resonate", resonate.label, resonate.icon,
-                fill = Mixes.ButtonFill, textColor = Tokens.Cream, press = OrganicIndication.OnFill,
+                fill = Tokens.ButtonFill, textColor = Tokens.Cream, press = OrganicIndication.OnFill,
             ) {
                 val answered = mine
                 when {
@@ -98,7 +98,7 @@ fun CardViewerActions(
             Segment(
                 "bookmark", if (bookmarked) L10n.Card.Bookmark.remove else L10n.Card.Bookmark.add, IconName.Bookmark,
                 collapse = 1,
-                iconFill = if (bookmarked) Mixes.ButtonOnTonal else null,
+                iconFill = if (bookmarked) Tokens.ButtonOnTonal else null,
                 iconStroke = if (bookmarked) 2f else 1.6f,
             ) {
                 val bookmarks = session.bookmarks ?: return@Segment

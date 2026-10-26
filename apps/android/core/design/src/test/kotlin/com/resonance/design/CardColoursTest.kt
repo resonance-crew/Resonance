@@ -1,5 +1,7 @@
 package com.resonance.design
 
+import org.robolectric.RobolectricTestRunner
+import org.junit.runner.RunWith
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -20,6 +22,8 @@ import java.io.File
  * same families for every case, a page appended recolouring nothing, and no card sharing a family with
  * the three before it (so no grid of one, two or three row-major columns shares one beside or above).
  */
+// A composition of its own answers the palette's getters (composed): Compose's runtime wants Android's Trace.
+@RunWith(RobolectricTestRunner::class)
 class CardColoursTest {
     private val fixture: JsonObject = Json.parseToJsonElement(File("../../../../native/fixtures/card-colours.json").readText()).jsonObject
 
@@ -81,8 +85,8 @@ class CardColoursTest {
     }
 
     @Test
-    fun eachFamilyHasItsDeeperPen() {
-        val deep = listOf(Tokens.CardBorder0Dark, Tokens.CardBorder1Dark, Tokens.CardBorder2Dark, Tokens.CardBorder3Dark, Tokens.CardBorder4Dark, Tokens.CardBorder5Dark)
+    fun eachFamilyHasItsDeeperPen() = composed {
+        val deep = listOf(Tokens.CardBorderDeep0, Tokens.CardBorderDeep1, Tokens.CardBorderDeep2, Tokens.CardBorderDeep3, Tokens.CardBorderDeep4, Tokens.CardBorderDeep5)
         for (i in 0 until 6) assertEquals(deep[i], CardPalette.of(i).deep)
         assertNotEquals(CardPalette.of(0).border, CardPalette.of(0).deep)
     }

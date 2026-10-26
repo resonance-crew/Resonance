@@ -37,10 +37,12 @@
             android:launchMode="singleTop"
             android:theme="@style/Theme.Resonance.Starting"
             android:windowSoftInputMode="adjustResize"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|density">
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|density|uiMode">
             <!-- configChanges: a rotation, a fold, a split or a window resized relays the Compose
                  screens out instead of recreating the activity, so the writer keeps its WebView —
-                 cursor, undo history and the keyboard — through them (scout-tablet §2.1). -->
+                 cursor, undo history and the keyboard — through them (scout-tablet §2.1). uiMode too:
+                 dark mode turned on or off (the system's, or 外觀's on Android 12+) recolours the
+                 screens where they stand (ResonanceTheme, SystemBars) instead of starting them again. -->
             <!-- singleTop: a site link (or the debug route) opened while the app is
                  running arrives in onNewIntent instead of being dropped. -->
             <intent-filter>

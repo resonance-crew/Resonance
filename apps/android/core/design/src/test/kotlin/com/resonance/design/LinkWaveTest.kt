@@ -1,5 +1,7 @@
 package com.resonance.design
 
+import org.robolectric.RobolectricTestRunner
+import org.junit.runner.RunWith
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import com.resonance.design.generated.Tokens
@@ -20,13 +22,15 @@ import kotlin.math.abs
  * baseline): its upper crests stay clear of a CJK glyph's foot (the ideographic box ends 0.12em
  * down) at the story's 17, its headings' 22 and on any screen.
  */
+// A composition of its own answers the palette's getters (composed): Compose's runtime wants Android's Trace.
+@RunWith(RobolectricTestRunner::class)
 class LinkWaveTest {
     @Test fun theWaveRunsTwentyNineHundredthsOfAnEmUnderTheBaseline() {
         assertEquals(0.29f, WAVE_DEPTH_EM, 0f)
         assertEquals(100f + 17f * 0.29f, linkWaveY(100f, 17f), 1e-4f)
     }
 
-    @Test fun itLiesFlatterThanThePenInItsQuieterInk() {
+    @Test fun itLiesFlatterThanThePenInItsQuieterInk() = composed {
         // tokens.css --link-wave-amp and --link-wave, the web's WAVE_AMP and WAVE_INK (#ba7f64).
         assertEquals(0.75, LINK_WAVE_AMP, 0.0)
         val swing = (1..200).maxOf { seed -> penWavePoints(120.0, seed.toDouble(), amp = LINK_WAVE_AMP).maxOf { abs(it.y) } }
@@ -50,12 +54,12 @@ class LinkWaveTest {
         }
     }
 
-    @Test fun theStoryLinkCardIsTheChatCardBubblesFillPressedTheQuotes() {
+    @Test fun theStoryLinkCardIsTheChatCardBubblesFillPressedTheQuotes() = composed {
         assertEquals(Tokens.BubbleTheirs, StoryLinkCardLook.fill)
         assertEquals(Tokens.BubbleQuote, StoryLinkCardLook.wash)
     }
 
-    @Test fun itsDescriptionAndHostAreTheWebsLinkCardInkReadableOnItsFill() {
+    @Test fun itsDescriptionAndHostAreTheWebsLinkCardInkReadableOnItsFill() = composed {
         // --link-card-muted: the page's text-muted is 4.3:1 on the card's fill, short of the 4.5 small words need.
         assertEquals(Tokens.LinkCardMuted, StoryLinkCardLook.muted)
         fun contrast(a: Color, b: Color): Float {

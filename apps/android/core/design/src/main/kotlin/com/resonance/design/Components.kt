@@ -99,6 +99,10 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
+import com.resonance.design.generated.ResonanceColors
+import com.resonance.design.generated.LocalResonanceColors
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
 import com.resonance.geometry.SegValue
 import com.resonance.geometry.WobCircleOptions
 import com.resonance.geometry.WobLoopOptions
@@ -119,9 +123,10 @@ fun Modifier.organicSurface(
     grain: GrainMode = GrainMode.Tile,
     grainOpacity: Float = 0.3f,
     tile: String = "grain-card",
+    grainInk: GrainInk,
 ): Modifier = drawWithCache {
     val outline = WobRectShape(radius, seed).createOutline(size, layoutDirection, this)
-    val grainBrush = Grain.brush(grain, tile, size, density, grainOpacity)
+    val grainBrush = Grain.brush(grain, tile, size, density, grainOpacity, grainInk)
     val grainAlpha = if (grain == GrainMode.Tile) grainOpacity else 1f
     val ink = Stroke(width = Tokens.Ink.toPx(), join = StrokeJoin.Round)
     onDrawBehind {
@@ -131,16 +136,20 @@ fun Modifier.organicSurface(
     }
 }
 
-/** Grain over a rectangle (the web's GrainOverlay): black ink at 2× opacity, so the mean darkening is `opacity`. */
-fun Modifier.grainOverlay(opacity: Float): Modifier = drawWithCacheOf(GrainOverlay(opacity))
+/** Grain over a rectangle (the web's GrainOverlay): the palette's grain ink at 2× opacity, so the mean darkening is `opacity`. */
+@Composable
+fun Modifier.grainOverlay(opacity: Float): Modifier = grainOverlay(opacity, GrainInk.current)
+
+/** [grainOverlay] in a given ink (a picture leaving the device: light terracotta's). */
+fun Modifier.grainOverlay(opacity: Float, ink: GrainInk): Modifier = drawWithCacheOf(GrainOverlay(opacity, ink))
 
 /**
  * [grainOverlay]'s drawing, as a value ([drawWithCacheOf]): recomposed with equal inputs it is an equal modifier,
  * which keeps what it cached (outline, paths, grain) instead of building it again at the next draw.
  */
-private data class GrainOverlay(val opacity: Float) : (CacheDrawScope) -> DrawResult {
+private data class GrainOverlay(val opacity: Float, val ink: GrainInk) : (CacheDrawScope) -> DrawResult {
     override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
-        val brush = Grain.brush(GrainMode.Tile, "grain-overlay", size, density, 1f)
+        val brush = Grain.brush(GrainMode.Tile, "grain-overlay", size, density, 1f, ink)
         onDrawWithContent {
             drawContent()
             brush?.let { drawRect(it, alpha = (opacity * 2).coerceAtMost(1f)) }
@@ -184,6 +193,8 @@ fun TagPill(
     onRemove: (() -> Unit)? = null,
 ) {
     val s = seed ?: autoSeed(text)
+    val rim = Tokens.TagStroke
+    val cross = Tokens.Text
     Row(
         Modifier
             .drawWithCache {
@@ -191,7 +202,7 @@ fun TagPill(
                 val stroke = Stroke(Tokens.Ink.toPx())
                 onDrawBehind {
                     drawOutline(o, fill)
-                    if (outlined) drawOutline(o, Color(0.25f, 0.19f, 0.13f, 0.45f), style = stroke)
+                    if (outlined) drawOutline(o, rim, style = stroke)
                 }
             }
             .padding(horizontal = size.padX, vertical = size.padY),
@@ -214,7 +225,7 @@ fun TagPill(
                 moveTo(1.6f * k, 1.8f * k); cubicTo(3f * k, 3f * k, 5.2f * k, 5.2f * k, 8.2f * k, 8.4f * k)
                 moveTo(8.2f * k, 1.8f * k); cubicTo(7f * k, 3f * k, 4.8f * k, 5.2f * k, 1.6f * k, 8.4f * k)
             }
-            drawPath(x, Tokens.Text, style = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round))
+            drawPath(x, cross, style = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round))
         }
     }
 }
@@ -270,6 +281,7 @@ fun HandDrawnAvatar(
             options = WobRectOptions(curve = 1.3, cornerJitter = 3.2, cornerOffset = s * 0.06, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0)),
         )
     }
+    val rim = Tokens.AvatarStroke
     Box(
         Modifier
             .size(size)
@@ -280,7 +292,7 @@ fun HandDrawnAvatar(
                 onDrawWithContent {
                     drawOutline(o, color)
                     drawContent()
-                    drawOutline(o, Mixes.AvatarRim, style = ink)
+                    drawOutline(o, rim, style = ink)
                 }
             },
         contentAlignment = Alignment.Center,
@@ -348,6 +360,7 @@ fun OrganicLink(
     val opacity by animateFloatAsState(if (pressed) 1f else 0.7f, tween(160), label = "organicLinkUnderline")
     val seed = remember(href) { seedFromString(href).toDouble() }
     var baseline by remember { mutableFloatStateOf(Float.NaN) }
+    val wave = Tokens.Terracotta
     Box(
         modifier
             .clickable(interactionSource = source, indication = null, role = Role.Button, onClick = onClick)
@@ -357,7 +370,7 @@ fun OrganicLink(
                 onDrawBehind {
                     // Under the letters, not under the line box: 0.2em below the baseline.
                     val y = if (baseline.isNaN()) size.height - 3.dp.toPx() else baseline + sizeSp.sp.toPx() * 0.2f
-                    translate(top = y) { drawPath(underline, Tokens.Terracotta, alpha = opacity, style = stroke) }
+                    translate(top = y) { drawPath(underline, wave, alpha = opacity, style = stroke) }
                 }
             },
     ) {
@@ -439,6 +452,7 @@ fun OrganicButton(
     val haptic = LocalHapticFeedback.current
     val solidDisabled = !enabled && !loading && disabledFace != null
     val face = if (solidDisabled) disabledFace!! else face ?: ButtonFace.of(variant)
+    val grainInk = GrainInk.current
     val text = face.label
     val overlay = face.press
     val shape = remember(variant) { OrganicButtonShape(face.seed) }
@@ -491,7 +505,7 @@ fun OrganicButton(
             .scale(if (pressed) 0.97f else 1f)
             .drawWithCache {
                 val o = shape.createOutline(size, layoutDirection, this)
-                val grain = Grain.brush(GrainMode.Tile, face.grainTile, size, density, face.grainAlpha)
+                val grain = Grain.brush(GrainMode.Tile, face.grainTile, size, density, face.grainAlpha, grainInk)
                 val pen = outline?.let { Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round) }
                 onDrawBehind {
                     drawOutline(o, face.fill)
@@ -669,7 +683,8 @@ enum class ButtonVariant { Primary, Ghost, Outline, Solid, Ink, Danger, Paper, T
  * its own hue), the grain tile over it and the seed it wobbles by (the web's BTN_SEEDS — each rank
  * keeps the wobble of the variant it grew out of).
  */
-class ButtonFace private constructor(
+@Immutable
+data class ButtonFace private constructor(
     val fill: Color,
     val label: Color,
     val press: Color,
@@ -685,21 +700,27 @@ class ButtonFace private constructor(
          * A face of the caller's own colours (a card's family), with the buttons' grain and a solid
          * button's wobble: [press] is the ink a press spreads (black at 0.14 on a deep face).
          */
-        fun custom(fill: Color, label: Color, press: Color = OrganicIndication.OnFill, seed: Double = 3.0): ButtonFace =
+        fun custom(fill: Color, label: Color, press: Color, seed: Double = 3.0): ButtonFace =
             ButtonFace(fill, label, press, seed)
 
-        private val Solid = ButtonFace(Mixes.ButtonFill, Tokens.Cream, OrganicIndication.OnFill, 3.0)
-        private fun tonal(seed: Double) = ButtonFace(Mixes.ButtonTonal, Mixes.ButtonOnTonal, OrganicIndication.Wash, seed)
+        /** The variant's face in the screen's palette (a label on a solid face is the paper, in either scheme). */
+        @Composable @ReadOnlyComposable
+        fun of(variant: ButtonVariant): ButtonFace = of(variant, LocalResonanceColors.current)
 
-        fun of(variant: ButtonVariant): ButtonFace = when (variant) {
-            ButtonVariant.Primary, ButtonVariant.Solid -> Solid
-            ButtonVariant.Ghost, ButtonVariant.Text -> tonal(401.0)
-            ButtonVariant.Outline, ButtonVariant.TextAccent, ButtonVariant.Tonal -> tonal(601.0)
-            ButtonVariant.Danger -> ButtonFace(Mixes.DangerFill, Tokens.Cream, OrganicIndication.OnFill, 3.0)
-            ButtonVariant.DangerTonal -> ButtonFace(Mixes.ButtonDangerTonal, Mixes.ButtonOnDangerTonal, Mixes.Danger.copy(alpha = 0.14f), 601.0)
-            ButtonVariant.Ink -> ButtonFace(Tokens.Text, Tokens.Cream, OrganicIndication.OnFill, 3.0)
-            // Paper carries the cards' own grain (the Modal's).
-            ButtonVariant.Paper -> ButtonFace(Tokens.CardBg, Tokens.Text, OrganicIndication.Wash, 401.0, grainTile = "grain-card", grainAlpha = 0.3f)
+        /** The variant's face in [c]. */
+        fun of(variant: ButtonVariant, c: ResonanceColors): ButtonFace {
+            val onFill = OrganicIndication.onFill(c)
+            val wash = OrganicIndication.wash(c)
+            return when (variant) {
+                ButtonVariant.Primary, ButtonVariant.Solid -> ButtonFace(c.ButtonFill, c.Cream, onFill, 3.0)
+                ButtonVariant.Ghost, ButtonVariant.Text -> ButtonFace(c.ButtonTonal, c.ButtonOnTonal, wash, 401.0)
+                ButtonVariant.Outline, ButtonVariant.TextAccent, ButtonVariant.Tonal -> ButtonFace(c.ButtonTonal, c.ButtonOnTonal, wash, 601.0)
+                ButtonVariant.Danger -> ButtonFace(c.DangerFill, c.Cream, onFill, 3.0)
+                ButtonVariant.DangerTonal -> ButtonFace(c.ButtonDangerTonal, c.ButtonOnDangerTonal, c.Danger.copy(alpha = 0.14f), 601.0)
+                ButtonVariant.Ink -> ButtonFace(c.Text, c.Cream, onFill, 3.0)
+                // Paper carries the cards' own grain (the Modal's).
+                ButtonVariant.Paper -> ButtonFace(c.CardBg, c.Text, wash, 401.0, grainTile = "grain-card", grainAlpha = 0.3f)
+            }
         }
     }
 }
@@ -785,8 +806,8 @@ fun OnDarkIconButton(icon: IconName, label: String, size: Dp = 20.dp, onClick: (
 
 /** [OnDarkIconButton]'s disc: the viewer's backdrop ink, how strong it lies, and its outline. */
 object OnDarkDisc {
-    /** The viewer's own dark, `oklch(12% 0.01 60)` (the web viewer's backdrop). */
-    val Ink: Color = OklchColor.of(0.12, 0.01, 60.0)
+    /** The viewer's own dark (`viewer-ground`, the web viewer's backdrop), the same in either scheme. */
+    val Ink: Color get() = ResonanceColors.LightTerracotta.ViewerGround
     /** The disc at rest, and pressed. */
     const val REST = 0.5f
     const val PRESSED = 0.72f
@@ -964,21 +985,23 @@ private fun EmptyMark(icon: IconName, seed: Double) {
             options = WobRectOptions(curve = 1.3, cornerJitter = 3.2, cornerOffset = 3.84, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0)),
         )
     }
+    val blob = Tokens.TerracottaLight.copy(alpha = 0.5f)
+    val grainInk = GrainInk.current
     Box(
         Modifier
             .size(64.dp)
             .clearAndSetSemantics { }
             .drawWithCache {
                 val o = shape.createOutline(size, layoutDirection, this)
-                val grain = Grain.brush(GrainMode.Tile, "grain-card", size, density, 0.3f)
+                val grain = Grain.brush(GrainMode.Tile, "grain-card", size, density, 0.3f, grainInk)
                 onDrawBehind {
-                    drawOutline(o, Tokens.TerracottaLight.copy(alpha = 0.5f))
+                    drawOutline(o, blob)
                     grain?.let { drawOutline(o, it, alpha = 0.3f) }
                 }
             },
         contentAlignment = Alignment.Center,
     ) {
-        OrganicIcon(icon, size = 28.dp, color = Mixes.ButtonOnTonal, strokeWidth = Tokens.Ink.value)
+        OrganicIcon(icon, size = 28.dp, color = Tokens.ButtonOnTonal, strokeWidth = Tokens.Ink.value)
     }
 }
 
@@ -1063,7 +1086,9 @@ fun FieldLabel(text: String) {
  * (`Tokens.FieldPadX` × `FieldPadY`); `focused` is read while drawing, so a
  * focus change redraws without recomposing.
  */
-fun Modifier.fieldSurface(seed: Double = 13.0, focused: () -> Boolean = NotFocused, curve: Double? = null): Modifier = drawWithCacheOf(FieldSurface(seed, focused, curve))
+@Composable
+fun Modifier.fieldSurface(seed: Double = 13.0, focused: () -> Boolean = NotFocused, curve: Double? = null): Modifier =
+    drawWithCacheOf(FieldSurface(seed, focused, curve, Tokens.Cream, Tokens.Terracotta, Tokens.FieldBorder))
 
 /** Never focused: one value, so two resting fields' surfaces are equal. */
 private val NotFocused: () -> Boolean = { false }
@@ -1072,7 +1097,14 @@ private val NotFocused: () -> Boolean = { false }
  * [fieldSurface]'s drawing, as a value ([drawWithCacheOf]): recomposed with equal inputs it is an equal modifier,
  * which keeps what it cached (outline, paths, grain) instead of building it again at the next draw.
  */
-private data class FieldSurface(val seed: Double, val focused: () -> Boolean, val curve: Double?) : (CacheDrawScope) -> DrawResult {
+private data class FieldSurface(
+    val seed: Double,
+    val focused: () -> Boolean,
+    val curve: Double?,
+    val paper: Color,
+    val focusInk: Color,
+    val ink: Color,
+) : (CacheDrawScope) -> DrawResult {
     override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
         val shape = curve?.let { AutoWobRectShape(Tokens.RadiusMd.toDouble(), seed, it) } ?: WobRectShape(Tokens.RadiusMd.toDouble(), seed)
         val o = shape.createOutline(size, layoutDirection, this)
@@ -1080,14 +1112,16 @@ private data class FieldSurface(val seed: Double, val focused: () -> Boolean, va
         val r = CornerRadius(Tokens.RadiusMd.dp.toPx())
         onDrawBehind {
             // The web fills the field's plain rounded box; the pen line wobbles around it.
-            drawRoundRect(Tokens.Cream, cornerRadius = r)
-            drawOutline(o, if (focused()) Tokens.Terracotta else Tokens.FieldBorder, style = s)
+            drawRoundRect(paper, cornerRadius = r)
+            drawOutline(o, if (focused()) focusInk else ink, style = s)
         }
     }
 }
 
 /** globals.css: every placeholder is the body face, italic, at the field's size and weight. */
+@Composable @ReadOnlyComposable
 fun fieldHintStyle(size: Float = 15f, lineHeight: Float = 1.6f) = AppFonts.oblique(AppFonts.body(size, 400, lineHeight = lineHeight, color = Tokens.Placeholder))
 
-/** Solid page background. */
+/** Solid page background: the paper. */
+@Composable
 fun Modifier.cream(): Modifier = background(Tokens.Cream)

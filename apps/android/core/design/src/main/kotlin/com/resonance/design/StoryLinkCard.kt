@@ -1,5 +1,6 @@
 package com.resonance.design
 
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -123,6 +124,8 @@ fun StoryLinkCardFrame(
     val shape = remember(seed) { WobRectShape(StoryLinkCardLook.RADIUS, seed) }
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
+    val fill = StoryLinkCardLook.fill
+    val wash = StoryLinkCardLook.wash
     Column(
         modifier
             .widthIn(max = 520.dp)
@@ -131,12 +134,12 @@ fun StoryLinkCardFrame(
             .drawWithCache {
                 val outline = Path().apply { addOutline(shape.createOutline(size, layoutDirection, this@drawWithCache)) }
                 onDrawWithContent {
-                    drawPath(outline, StoryLinkCardLook.fill)
+                    drawPath(outline, fill)
                     clipPath(outline) { this@onDrawWithContent.drawContent() }
                 }
             }
             // The wash spreads from the finger over the fill, under the picture and the words.
-            .clickable(source, indication = remember(shape) { OrganicIndication(StoryLinkCardLook.wash, shape = shape) }, role = Role.Button, onClickLabel = label, onClick = onOpen)
+            .clickable(source, indication = remember(shape, wash) { OrganicIndication(wash, shape = shape) }, role = Role.Button, onClickLabel = label, onClick = onOpen)
             .semantics { contentDescription = label },
     ) { content(pressed) }
 }
@@ -151,9 +154,9 @@ fun StoryLinkCardFrame(
 object StoryLinkCardLook {
     const val RADIUS = 16.0
     const val BLEED = 8f
-    val fill get() = Tokens.BubbleTheirs
-    val wash get() = Tokens.BubbleQuote
-    val muted get() = Tokens.LinkCardMuted
+    val fill: androidx.compose.ui.graphics.Color @Composable @ReadOnlyComposable get() = Tokens.BubbleTheirs
+    val wash: androidx.compose.ui.graphics.Color @Composable @ReadOnlyComposable get() = Tokens.BubbleQuote
+    val muted: androidx.compose.ui.graphics.Color @Composable @ReadOnlyComposable get() = Tokens.LinkCardMuted
 }
 
 /** As tall as its box, but [by] wider on each side and [by] higher, placed so it reaches past the box's top and sides. */

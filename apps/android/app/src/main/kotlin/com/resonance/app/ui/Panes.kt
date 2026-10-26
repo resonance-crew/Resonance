@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -49,6 +50,8 @@ import com.resonance.design.OrganicEmptyState
 import com.resonance.design.cream
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
+import com.resonance.design.generated.ResonanceColors
+import com.resonance.design.generated.LocalResonanceColors
 import com.resonance.design.toPath
 import com.resonance.geometry.wavyVertical
 import com.resonance.kit.l10n.L10n
@@ -243,7 +246,10 @@ internal fun paneRuleGeometry(status: Float, height: Float): PaneRuleGeometry {
  * The panes' one pen (round 5 D4): the rule's ink — the fields' border at 35 % — laid on the
  * paper once, so it is opaque: the lines that meet it never darken where they overlap.
  */
-internal val PanePen: Color get() = Tokens.FieldBorderHover.copy(alpha = 0.35f).compositeOver(Tokens.Cream)
+internal val PanePen: Color @Composable @ReadOnlyComposable get() = panePen(LocalResonanceColors.current)
+
+/** [PanePen] in [palette]. */
+internal fun panePen(palette: ResonanceColors): Color = palette.FieldBorderHover.copy(alpha = 0.35f).compositeOver(palette.Cream)
 
 /** The pane bar's line starts this much past the rule's centre, so its round cap ends inside the rule's stroke. */
 private val PaneLeadTuck: Dp = 0.5.dp

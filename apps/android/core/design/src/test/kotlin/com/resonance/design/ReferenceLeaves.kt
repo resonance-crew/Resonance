@@ -114,6 +114,8 @@ internal fun RefChatText(
         val sizePx = scaled.cssFontPx(sizeSp)
         val waves = remember(layout, links, sizePx, density) { chatLinkWaves(layout, links, sizePx, density) }
         var pressed by remember { mutableStateOf<Int?>(null) }
+        // The story links' pen wave, as the leaves now draw it (--link-wave).
+        val wave = Tokens.LinkWave
         Box(
             Modifier
                 .width(Dp(boxPx / density))
@@ -131,7 +133,7 @@ internal fun RefChatText(
                     if (waves.isNotEmpty()) {
                         val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                         waves.forEach { w ->
-                            translate(w.x, w.y) { drawPath(w.path, Tokens.Terracotta, alpha = if (w.link == pressed) 1f else 0.7f, style = pen) }
+                            translate(w.x, w.y) { drawPath(w.path, wave, alpha = if (w.link == pressed) 1f else 0.7f, style = pen) }
                         }
                     }
                     drawIntoCanvas { layout.draw(it.nativeCanvas) }
@@ -165,6 +167,7 @@ internal fun RefRichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl:
         val sizePx = scaled.cssFontPx(style.size)
         val strokes = remember(layout, spanned, sizePx, density) { linkStrokes(layout, spanned, sizePx, density) }
         var pressedUrl by remember { mutableStateOf<String?>(null) }
+        val linkInk = Tokens.LinkWave
         Box(
             Modifier
                 .width(Dp(layout.width / density))
@@ -190,7 +193,7 @@ internal fun RefRichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl:
                     // a descender's foot rests in its arch rather than being crossed by it.
                     val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                     strokes.forEach { s ->
-                        translate(s.x, s.y) { drawPath(s.wave, Tokens.Terracotta, alpha = if (s.url == pressedUrl) 1f else 0.7f, style = pen) }
+                        translate(s.x, s.y) { drawPath(s.wave, linkInk, alpha = if (s.url == pressedUrl) 1f else 0.7f, style = pen) }
                     }
                     drawIntoCanvas { layout.draw(it.nativeCanvas) }
                 },
@@ -202,7 +205,7 @@ internal fun RefRichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl:
 internal fun RefStoryTitle(text: String, type: StoryType, lang: String?, modifier: Modifier = Modifier) {
     val scaled = LocalDensity.current
     val density = scaled.density
-    val style = remember(type, lang) { ProseStyle.title(type, lang) }
+    val style = ProseStyle.title(type, lang)
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val widthPx = constraints.maxWidth
         val layout = remember(text, style, widthPx, density, scaled.fontScale, AppFonts.useBundledCJK) {
@@ -261,6 +264,7 @@ internal fun RefOrganicImage(
 internal fun RefOrganicRadio(selected: Boolean, seed: Double = 21.0, modifier: Modifier = Modifier) {
     val dot by androidx.compose.animation.core.animateFloatAsState(if (selected) 1f else 0f, androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = 600f), label = "radio")
     val ring = if (selected) Tokens.TerracottaDeep else Tokens.ToggleOffStroke
+    val inked = Tokens.Terracotta
     androidx.compose.foundation.Canvas(modifier.size(22.dp).clearAndSetSemantics { }) {
         val ringOutline = WobCircleShape(seed, com.resonance.geometry.WobCircleOptions(segments = 7, mag = 0.7, cpJitter = 0.4))
             .createOutline(size, layoutDirection, this)
@@ -272,7 +276,7 @@ internal fun RefOrganicRadio(selected: Boolean, seed: Double = 21.0, modifier: M
                 .createOutline(androidx.compose.ui.geometry.Size(d, d), layoutDirection, this)
             val off = (size.width - d) / 2
             drawContext.transform.translate(off, off)
-            drawOutline(o, Tokens.Terracotta, alpha = dot)
+            drawOutline(o, inked, alpha = dot)
             drawContext.transform.translate(-off, -off)
         }
     }
@@ -289,13 +293,14 @@ internal fun RefSquareFlag(code: String, size: Dp = 18.dp, seed: Double? = null)
         ))
     }
     val pad = maxOf(1.0, s * 0.06).dp
+    val rim = FlagRim
     Box(
         Modifier
             .size(size)
             .clearAndSetSemantics { }
             .drawWithContent {
                 drawContent()
-                drawOutline(shape.createOutline(this.size, layoutDirection, this), FlagRim, style = Stroke(Tokens.InkLight.toPx(), join = StrokeJoin.Round))
+                drawOutline(shape.createOutline(this.size, layoutDirection, this), rim, style = Stroke(Tokens.InkLight.toPx(), join = StrokeJoin.Round))
             }
             .clip(shape),
         contentAlignment = androidx.compose.ui.Alignment.Center,

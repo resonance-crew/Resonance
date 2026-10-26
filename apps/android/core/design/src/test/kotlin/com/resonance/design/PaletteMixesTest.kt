@@ -1,5 +1,7 @@
 package com.resonance.design
 
+import org.robolectric.RobolectricTestRunner
+import org.junit.runner.RunWith
 import com.resonance.design.generated.Tokens
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -11,8 +13,10 @@ import org.junit.Test
  * (`oklch(97.5% 0.012 hue)` and the rest, by StoryCard.tsx's numbers), whichever palette object asks,
  * and a parsed colour string answers the same colour every time — an unparsable one, null every time.
  */
+// A composition of its own answers the palette's getters (composed): Compose's runtime wants Android's Trace.
+@RunWith(RobolectricTestRunner::class)
 class PaletteMixesTest {
-    @Test fun everyFamilysMixesAreTheColoursTheirCssNames() {
+    @Test fun everyFamilysMixesAreTheColoursTheirCssNames() = composed {
         val fillLc = listOf(90.0 to 0.065, 94.0 to 0.032, 93.0 to 0.042, 92.0 to 0.075, 92.0 to 0.033, 89.0 to 0.047)
         for (i in CardPalette.HUES.indices) {
             val hue = CardPalette.HUES[i]

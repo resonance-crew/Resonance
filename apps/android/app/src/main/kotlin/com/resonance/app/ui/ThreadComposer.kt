@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -127,7 +128,7 @@ internal fun Composer(
 
 /** The composer's words: 16 (× the interface's text size, capped at 1.25), 1.5 apart. */
 private const val COMPOSER_LEADING = 1.5f
-internal val ComposerText: TextStyle get() = AppFonts.body(16f, lineHeight = COMPOSER_LEADING)
+internal val ComposerText: TextStyle @Composable @ReadOnlyComposable get() = AppFonts.body(16f, lineHeight = COMPOSER_LEADING)
 
 /** The last riding row → the capsule. */
 private val ROWS_GAP = 6.dp

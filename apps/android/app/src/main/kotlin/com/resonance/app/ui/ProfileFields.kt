@@ -122,8 +122,8 @@ fun PenNameField(
             when (availability) {
                 Availability.Checking -> BasicText(L10n.Auth.handleChecking, style = AppFonts.body(small, lineHeight = 1.4f, color = Tokens.TextMuted))
                 Availability.Available -> {
-                    OrganicIcon(IconName.Check, size = 12.dp, color = Tokens.Sage)
-                    BasicText(L10n.Auth.handleAvailable, style = AppFonts.body(small, lineHeight = 1.4f, color = Tokens.Sage))
+                    OrganicIcon(IconName.Check, size = 12.dp, color = Tokens.Ok)
+                    BasicText(L10n.Auth.handleAvailable, style = AppFonts.body(small, lineHeight = 1.4f, color = Tokens.Ok))
                 }
                 Availability.Taken -> BasicText(L10n.Auth.handleTaken, style = AppFonts.body(small, lineHeight = 1.4f, color = Tokens.Terracotta))
                 Availability.Failed -> {

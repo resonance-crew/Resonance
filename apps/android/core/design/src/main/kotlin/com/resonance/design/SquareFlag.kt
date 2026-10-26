@@ -1,5 +1,6 @@
 package com.resonance.design
 
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
@@ -35,8 +36,8 @@ internal val FlagArt = mapOf(
     "us" to R.drawable.flag_us,
 )
 
-/** SquareFlag.tsx's faint rim, `oklch(36% 0.06 60 / 0.55)`. */
-internal val FlagRim = OklchColor.parse("oklch(36% 0.06 60 / 0.55)") ?: Color.Black.copy(alpha = 0.3f)
+/** SquareFlag.tsx's faint rim, the avatars' (`--avatar-stroke`: oklch(36% 0.06 60 / 0.55) in light). */
+internal val FlagRim: Color @Composable @ReadOnlyComposable get() = Tokens.AvatarStroke
 
 /** Whether a region has flag art (else [SquareFlag] draws nothing). */
 fun hasSquareFlag(code: String): Boolean = code.lowercase() in FlagArt
@@ -59,6 +60,7 @@ fun SquareFlag(code: String, size: Dp = 18.dp, seed: Double? = null) {
     }
     // The art overscans the square so an outward bulge of the wobble stays covered.
     val pad = maxOf(1.0, s * 0.06).dp
+    val rimInk = FlagRim
     Box(
         Modifier
             .size(size)
@@ -69,7 +71,7 @@ fun SquareFlag(code: String, size: Dp = 18.dp, seed: Double? = null) {
                 val pen = Stroke(Tokens.InkLight.toPx(), join = StrokeJoin.Round)
                 onDrawWithContent {
                     drawContent()
-                    drawOutline(rim, FlagRim, style = pen)
+                    drawOutline(rim, rimInk, style = pen)
                 }
             }
             .clip(shape),

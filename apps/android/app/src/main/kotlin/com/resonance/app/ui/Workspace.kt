@@ -302,6 +302,7 @@ internal fun Workspace(
         snapshotFlow { pane.inHideZone }.collect { if (it) haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate) }
     }
 
+    val boundary = Tokens.FieldBorder
     BoxWithConstraints(Modifier.fillMaxSize().cream()) {
         val window = constraints.maxWidth.toFloat()
         val card = pane.card
@@ -349,7 +350,7 @@ internal fun Workspace(
                     // The boundary: a hair of the fields' border on the pane's own leading edge, over what it holds.
                     .drawWithContent {
                         drawContent()
-                        if (split) drawLine(Tokens.FieldBorder, Offset(0.5f, 0f), Offset(0.5f, size.height), strokeWidth = 1.dp.toPx())
+                        if (split) drawLine(boundary, Offset(0.5f, 0f), Offset(0.5f, size.height), strokeWidth = 1.dp.toPx())
                     },
             ) {
                 key(card.slot) {
@@ -491,7 +492,7 @@ private fun ReleasePill(pane: PaneState) {
     val gap = with(density) { (GRIP_TOUCH_W / 2 + 4.dp).toPx() }
     BasicText(
         L10n.Write.releaseToClose,
-        style = AppFonts.body(13f, 600, lineHeight = 1.3f, color = Mixes.ButtonOnTonal),
+        style = AppFonts.body(13f, 600, lineHeight = 1.3f, color = Tokens.ButtonOnTonal),
         maxLines = 1,
         modifier = Modifier
             .layout { measurable, constraints ->
@@ -501,7 +502,7 @@ private fun ReleasePill(pane: PaneState) {
                     placeable.place((cx - gap - placeable.width).roundToInt(), (constraints.maxHeight - placeable.height) / 2)
                 }
             }
-            .background(Mixes.ButtonTonal, RoundedCornerShape(50))
+            .background(Tokens.ButtonTonal, RoundedCornerShape(50))
             .padding(horizontal = 14.dp, vertical = 7.dp)
             .clearAndSetSemantics { },
     )

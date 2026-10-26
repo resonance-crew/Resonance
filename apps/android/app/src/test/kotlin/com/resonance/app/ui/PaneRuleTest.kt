@@ -1,5 +1,7 @@
 package com.resonance.app.ui
 
+import com.resonance.design.generated.PaletteTheme
+import com.resonance.design.generated.ResonanceColors
 import com.resonance.design.HeaderEdgeHeight
 import com.resonance.design.PaneBarRow
 import com.resonance.design.TopBarRow
@@ -40,6 +42,8 @@ class PaneRuleTest {
     }
 
     @Test fun isOneOpaquePen() {
-        assertEquals(1f, PanePen.alpha)
+        // In either scheme: laid on its own paper, it is opaque.
+        assertEquals(1f, panePen(ResonanceColors.LightTerracotta).alpha)
+        assertEquals(1f, panePen(ResonanceColors.of(PaletteTheme.Terracotta, dark = true)).alpha)
     }
 }

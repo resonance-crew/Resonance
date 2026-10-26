@@ -5,8 +5,10 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.lightColorScheme
+import android.graphics.drawable.ColorDrawable
+import androidx.activity.compose.LocalActivity
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -16,11 +18,15 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.resonance.app.AppearanceStore
 import com.resonance.app.Launch
+import com.resonance.app.MainActivity
 import com.resonance.app.Session
 import com.resonance.design.CappedTextScale
 import com.resonance.design.OrganicIndication
+import com.resonance.design.ResonanceTheme
 import com.resonance.design.SketchLoader
+import com.resonance.design.generated.LocalResonanceColors
 import com.resonance.design.cream
 import com.resonance.design.generated.Tokens
 
@@ -32,7 +38,10 @@ import com.resonance.design.generated.Tokens
 fun ResonanceRoot(session: Session, incomingRoute: MutableState<String?>) {
     // A large system text size is followed only part of the way, for every screen, dialog and sheet below.
     CappedTextScale {
-    MaterialTheme(colorScheme = lightColorScheme(primary = Tokens.Terracotta, surface = Tokens.Cream, background = Tokens.Cream)) {
+    // 外觀: the scheme and theme every colour below reads (and Material's, made from the same palette).
+    val appearance by AppearanceStore.shared.state.collectAsStateWithLifecycle()
+    ResonanceTheme(appearance.scheme, appearance.accent) {
+    SystemBars()
     // Every press is the hand-drawn ink spread, never Material's rectangular ripple (it spilt past round chips and bare glyphs).
     CompositionLocalProvider(LocalIndication provides OrganicIndication()) {
         val phase by session.phase.collectAsStateWithLifecycle()
@@ -64,6 +73,21 @@ private fun SignedIn(session: Session, incomingRoute: MutableState<String?>) {
             Session.Entry.App -> key(account) { MainTabs(session, incomingRoute) }
         }
     }
+}
+
+/**
+ * What the system draws round the screens, in the scheme they wear: the bars' glyphs (light on the
+ * night paper) and the window's own paper — what shows under a screen as the keyboard slides or a
+ * page is swapped — said again whenever the scheme or theme changes (the activity isn't started
+ * again for it: configChanges takes uiMode).
+ */
+@Composable
+private fun SystemBars() {
+    val activity = LocalActivity.current as? MainActivity ?: return
+    val dark = LocalResonanceColors.current.dark
+    val paper = Tokens.Cream
+    LaunchedEffect(dark) { activity.systemBarsFor(dark) }
+    LaunchedEffect(paper) { activity.window.setBackgroundDrawable(ColorDrawable(paper.toArgb())) }
 }
 
 @Composable

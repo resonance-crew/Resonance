@@ -69,7 +69,7 @@ class DrawCacheReuseTest {
         assertTrue(points(bled.createOutline(Size(600f, 375f), LayoutDirection.Ltr, density)).isNotEmpty())
     }
 
-    @Test fun equalInputsMakeEqualDrawModifiers() {
+    @Test fun equalInputsMakeEqualDrawModifiers() = composed {
         val shape = MessageBubbleShape(3.0)
         val flash = { 0.5f }
         assertEquals(Modifier.bubbleSurface(shape, Tokens.BubbleMine), Modifier.bubbleSurface(MessageBubbleShape(3.0), Tokens.BubbleMine))

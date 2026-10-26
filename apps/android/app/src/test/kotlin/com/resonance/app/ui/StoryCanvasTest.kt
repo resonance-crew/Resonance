@@ -1,5 +1,8 @@
 package com.resonance.app.ui
 
+import com.resonance.design.PaletteFormula
+import com.resonance.design.generated.PaletteTheme
+import com.resonance.design.generated.ResonanceColors
 import com.resonance.kit.story.StoryScript
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -22,6 +25,24 @@ class StoryCanvasTest {
         )
         // The framed field older screens had: neither.
         assertEquals("/android_asset/editor.html?embed=1&fonts=&placeholder=Start%20here", StoryEditorBridge.editorQuery("Start here", canvas = false, locale = "en"))
+    }
+
+    @Test fun theIslandIsToldItsSchemeAndThemeNeverLeftToGuess() {
+        // Light terracotta: the scheme said all the same, no theme attribute, no colours of the host's.
+        val light = StoryEditorBridge.islandAppearance(ResonanceColors.LightTerracotta)
+        assertTrue(light, "h.setAttribute('data-scheme','light')" in light)
+        assertTrue(light, "h.removeAttribute('data-accent')" in light)
+        assertTrue(light, "v={}" in light)
+        // A theme in dark: the island's own stylesheet knows it by name.
+        val sage = StoryEditorBridge.islandAppearance(ResonanceColors.of(PaletteTheme.Sage, dark = true))
+        assertTrue(sage, "h.setAttribute('data-scheme','dark')" in sage)
+        assertTrue(sage, "h.setAttribute('data-accent','sage')" in sage)
+        // The wallpaper's: no name the stylesheet knows, so every token goes on <html> in sRGB.
+        val wallpaper = StoryEditorBridge.islandAppearance(PaletteFormula.wallpaperPalette(250.0, 0.11, dark = true))
+        assertTrue(wallpaper, "h.removeAttribute('data-accent')" in wallpaper)
+        for (token in ResonanceColors.TOKENS) assertTrue(token, "\"--$token\":\"rgb(" in wallpaper)
+        // Each time, what the host set before is taken off first.
+        assertTrue(wallpaper, "removeProperty" in wallpaper)
     }
 
     @Test fun theIslandSaysHowTheStoryIsSet() {

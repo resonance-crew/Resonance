@@ -1,5 +1,11 @@
 package com.resonance.app.ui
 
+import com.resonance.design.generated.ResonanceColors
+import com.resonance.design.generated.PaletteTheme
+import com.resonance.design.generated.LocalResonanceColors
+import com.resonance.design.OklchColor
+import android.webkit.WebSettings
+import android.os.Build
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color as AndroidColor
@@ -166,6 +172,8 @@ class StoryEditorBridge(
         private set
     private var pendingMarkdown: String? = null
     private var pendingTitle: String? = null
+    /** What the island was last told of its colours ([islandAppearance]), said again once it is ready. */
+    private var appearance: String? = null
     private var minHeight: Int? = null
 
     val webView: StoryWebView = StoryWebView(context).apply {
@@ -179,6 +187,13 @@ class StoryEditorBridge(
         @Suppress("DEPRECATION")
         settings.allowUniversalAccessFromFileURLs = false
         settings.setGeolocationEnabled(false)
+        // The island is told its scheme and theme (setPalette); the browser never darkens it on its own.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            settings.isAlgorithmicDarkeningAllowed = false
+        } else {
+            @Suppress("DEPRECATION")
+            settings.forceDark = WebSettings.FORCE_DARK_OFF
+        }
         webViewClient = EditorClient()
         setBackgroundColor(AndroidColor.TRANSPARENT)
         // The writing screen scrolls; the island only grows.
@@ -209,6 +224,19 @@ class StoryEditorBridge(
     fun setTextScale(scale: Float) {
         val zoom = (scale * 100).roundToInt()
         if (webView.settings.textZoom != zoom) webView.settings.textZoom = zoom
+    }
+
+    /**
+     * The island's colours: the scheme the screen wears (always said — `data-scheme` light or dark —
+     * so the island never decides by prefers-color-scheme on its own) and its theme (`data-accent`;
+     * the wallpaper's, which the island's stylesheet doesn't know, as the palette's own custom
+     * properties on its `<html>`). On load before the story is set, and on every change.
+     */
+    fun setPalette(palette: ResonanceColors) {
+        val js = islandAppearance(palette)
+        if (js == appearance) return
+        appearance = js
+        if (ready) webView.evaluateJavascript(js, null)
     }
 
     override fun setMarkdown(markdown: String) {
@@ -347,6 +375,8 @@ class StoryEditorBridge(
         when (m) {
             IslandMessage.Ready -> {
                 ready = true
+                // Its colours before its words, so the story never shows in the other scheme's ink.
+                appearance?.let { webView.evaluateJavascript(it, null) }
                 // The title first, so the story it opens with is read with it.
                 pendingTitle?.let(::setTitle)
                 pendingTitle = null
@@ -384,6 +414,38 @@ class StoryEditorBridge(
         const val FIELD_MIN_HEIGHT = 200
         /** The canvas before the island has said how tall its words are: a line of them. */
         const val CANVAS_START_HEIGHT = 40
+
+        /**
+         * The script that dresses the island's `<html>` in [palette]: `data-scheme` (light or dark,
+         * always), `data-accent` for one of the four themes (absent for terracotta), and for any other
+         * palette (the wallpaper's) every token as a custom property on the element itself, in sRGB
+         * (an older WebView reads no oklch() or display-p3) — removed again when a theme returns.
+         */
+        fun islandAppearance(palette: ResonanceColors): String {
+            val scheme = if (palette.dark) "dark" else "light"
+            val theme = PaletteTheme.entries.firstOrNull { ResonanceColors.of(it, palette.dark) == palette }
+            val accent = theme?.takeIf { it != PaletteTheme.Terracotta }?.key
+            val vars = if (theme != null) JsonObject(emptyMap()) else JsonObject(
+                ResonanceColors.TOKENS.associate { token ->
+                    val c = palette.oklchOf(token).let { (l, ch, h, a) -> OklchColor.of(l, ch, h, a) }
+                    "--$token" to JsonPrimitive(cssRgb(c))
+                },
+            )
+            return "(function(){var h=document.documentElement,v=$vars;" +
+                "h.setAttribute('data-scheme','$scheme');" +
+                (if (accent != null) "h.setAttribute('data-accent','$accent');" else "h.removeAttribute('data-accent');") +
+                "(h.dataset.hostVars||'').split(',').forEach(function(k){if(k)h.style.removeProperty(k);});" +
+                "Object.keys(v).forEach(function(k){h.style.setProperty(k,v[k]);});" +
+                "h.dataset.hostVars=Object.keys(v).join(',');})()"
+        }
+
+        /** A colour as CSS reads it anywhere: `rgb(r g b / a)` in sRGB. */
+        private fun cssRgb(c: androidx.compose.ui.graphics.Color): String {
+            val s = c.convert(androidx.compose.ui.graphics.colorspace.ColorSpaces.Srgb)
+            fun ch(v: Float) = (v.coerceIn(0f, 1f) * 255).roundToInt()
+            val alpha = (s.alpha * 1000).roundToInt() / 1000.0
+            return "rgb(${ch(s.red)} ${ch(s.green)} ${ch(s.blue)}" + (if (alpha < 1) " / $alpha)" else ")")
+        }
 
         /** The bundled island itself (whatever its query), the one page the editor's WebView may hold. */
         fun isEditor(url: Uri): Boolean = url.scheme == "file" && url.authority.isNullOrEmpty() && url.path == EDITOR_PATH
@@ -547,6 +609,8 @@ fun StoryCanvas(bridge: StoryEditorBridge, minHeight: Dp, modifier: Modifier = M
         SideEffect { bridge.setTextScale(fontScale) }
     }
     SideEffect { bridge.setMinHeight(minHeight.value.roundToInt()) }
+    val palette = LocalResonanceColors.current
+    SideEffect { bridge.setPalette(palette) }
     AndroidView(
         factory = { bridge.webView },
         modifier = modifier
@@ -646,6 +710,7 @@ private fun DockTool(
     onClick: () -> Unit,
 ) {
     val color = if (on) Tokens.Terracotta else Tokens.Text
+    val wash = Tokens.TerracottaLight.copy(alpha = 0.7f)
     Box(
         Modifier
             .heightIn(min = DOCK_ROW_HEIGHT)
@@ -667,7 +732,7 @@ private fun DockTool(
                     val o = WobRectShape(h * 0.4, EDITOR_SEED + seed, mag = 1.4, options = WobRectOptions(
                         curve = 1.5, cornerJitter = 2.6, cornerOffset = h * 0.05, segmentsH = SegValue.Count(2.0), segmentsV = SegValue.Count(1.0),
                     )).createOutline(size, layoutDirection, this)
-                    onDrawBehind { if (on) drawOutline(o, Tokens.TerracottaLight.copy(alpha = 0.7f)) }
+                    onDrawBehind { if (on) drawOutline(o, wash) }
                 }
                 .padding(horizontal = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -689,7 +754,11 @@ private fun DockRule(offset: Double) {
  * The docked bar's paper and its top edge: the toolbar's pen line (wavyPath's construction, as
  * many turns as its width takes: [ruleSteps]) along the top, the cream below it.
  */
-private fun Modifier.dockedWave(seed: Double): Modifier = drawWithCache {
+@Composable
+private fun Modifier.dockedWave(seed: Double): Modifier {
+    val paperInk = Tokens.Cream
+    val lineInk = Tokens.FieldBorderHover.copy(alpha = 0.45f)
+    return drawWithCache {
     val w = (size.width / density).toDouble()
     val line = pointsToBezier(wavyPoints(w, DOCK_WAVE_ROOM.value / 2.0 + 1, 1.6, seed, ruleSteps(w.toFloat()))).toPath(density)
     val paper = Path().apply {
@@ -700,8 +769,9 @@ private fun Modifier.dockedWave(seed: Double): Modifier = drawWithCache {
     }
     val pen = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round)
     onDrawBehind {
-        drawPath(paper, Tokens.Cream)
-        drawPath(line, Tokens.FieldBorderHover.copy(alpha = 0.45f), style = pen)
+        drawPath(paper, paperInk)
+        drawPath(line, lineInk, style = pen)
+    }
     }
 }
 

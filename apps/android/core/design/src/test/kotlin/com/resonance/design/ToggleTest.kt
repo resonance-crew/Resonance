@@ -1,5 +1,7 @@
 package com.resonance.design
 
+import org.robolectric.RobolectricTestRunner
+import org.junit.runner.RunWith
 import com.resonance.design.generated.Tokens
 import com.resonance.geometry.PathCommand
 import kotlinx.serialization.json.Json
@@ -21,6 +23,8 @@ import kotlin.math.abs
  * and inked on that one path) and its knob come out as the web drew them for the seeds the app uses —
  * native/fixtures/geometry.json, generated from the TypeScript — and it inks off and on as the web does.
  */
+// A composition of its own answers the palette's getters (composed): Compose's runtime wants Android's Trace.
+@RunWith(RobolectricTestRunner::class)
 class ToggleTest {
     private val fixtures: JsonObject = Json.parseToJsonElement(File("../../../../native/fixtures/geometry.json").readText()).jsonObject
 
@@ -58,7 +62,7 @@ class ToggleTest {
         assertEquals(26.0, Toggle.knobX(checked = true), 0.0)
     }
 
-    @Test fun offIsASoftInkOnPaperAndOnIsDeepTerracottaOnTerracotta() {
+    @Test fun offIsASoftInkOnPaperAndOnIsDeepTerracottaOnTerracotta() = composed {
         val off = Toggle.inks(checked = false)
         assertEquals(Tokens.CreamDark, off.fill)
         assertEquals(Tokens.TextMuted, off.ink)

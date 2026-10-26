@@ -65,8 +65,10 @@ class Segment(
     val label: String,
     val icon: IconName? = null,
     val fill: Color? = null,
-    val textColor: Color = Mixes.ButtonOnTonal,
-    val press: Color = OrganicIndication.Wash,
+    /** Its label's colour; null: the tonal label's ink of the palette on screen. */
+    val textColor: Color? = null,
+    /** The ink a press spreads; null: the palette's wash. */
+    val press: Color? = null,
     val contentDescription: String? = null,
     /** The step at which it shows its glyph alone when the labels don't fit ([SegmentedLayout.steps]): 0 never. */
     val collapse: Int = 0,
@@ -98,7 +100,7 @@ fun SegmentedActionBar(
     segments: List<Segment>,
     modifier: Modifier = Modifier,
     seed: Double = 71.0,
-    fill: Color = Mixes.ButtonTonal,
+    fill: Color = Tokens.ButtonTonal,
     divider: Color = Tokens.Cream,
     enabled: Boolean = true,
 ) {
@@ -120,6 +122,9 @@ fun SegmentedActionBar(
         val ink = remember { InkSpread() }
         val leftsNow by rememberUpdatedState(lefts)
         var pressed by remember { mutableStateOf<Int?>(null) }
+        val label = Tokens.ButtonOnTonal
+        val wash = OrganicIndication.Wash
+        val grainInk = GrainInk.current
         Row(
             Modifier
                 .fade(if (enabled) 1f else 0.6f)
@@ -140,12 +145,12 @@ fun SegmentedActionBar(
                         }
                     }
                     val seams = boundaries.map { polylinePath(it, this.density) }
-                    val grain = Grain.brush(GrainMode.Tile, "grain-button", size, this.density, 0.38f)
+                    val grain = Grain.brush(GrainMode.Tile, "grain-button", size, this.density, 0.38f, grainInk)
                     val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round)
                     onDrawBehind {
                         drawPath(outer, fill)
                         segments.forEachIndexed { i, seg -> seg.fill?.let { drawPath(regions[i], it) } }
-                        pressed?.let { i -> with(ink) { draw(regions[i], segments[i].press) } }
+                        pressed?.let { i -> with(ink) { draw(regions[i], segments[i].press ?: wash) } }
                         clipPath(outer) { seams.forEach { drawPath(it, divider, style = pen) } }
                         grain?.let { drawPath(outer, it, alpha = 0.38f) }
                     }
@@ -182,15 +187,15 @@ fun SegmentedActionBar(
                     horizontalArrangement = Arrangement.spacedBy(SegmentedLayout.GAP.dp, Alignment.CenterHorizontally),
                 ) {
                     seg.icon?.let {
-                        if (seg.loading) ButtonLoader(seg.textColor, SegmentedLayout.ICON.dp, Modifier.offset(y = labelInkDrop(14f)))
+                        if (seg.loading) ButtonLoader(seg.textColor ?: label, SegmentedLayout.ICON.dp, Modifier.offset(y = labelInkDrop(14f)))
                         else OrganicIcon(
                             it, Modifier.offset(y = labelInkDrop(14f)), size = SegmentedLayout.ICON.dp,
-                            color = seg.textColor, strokeWidth = seg.iconStroke, fill = seg.iconFill,
+                            color = seg.textColor ?: label, strokeWidth = seg.iconStroke, fill = seg.iconFill,
                         )
                     }
                     if (!collapsed) BasicText(
                         seg.label, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis,
-                        style = style.copy(color = seg.textColor),
+                        style = style.copy(color = seg.textColor ?: label),
                         // The short label stands for the full words, which are read instead; past the last step
                         // the words may be cut, never the glyph.
                         modifier = (if (seg.contentDescription != null) Modifier.clearAndSetSemantics { } else Modifier).weight(1f, fill = false),

@@ -15,11 +15,11 @@ class SettingsSectionTest {
         assertEquals(
             listOf(
                 SettingsSection.Profile, SettingsSection.Account, SettingsSection.Privacy, SettingsSection.Notifications,
-                SettingsSection.Language, SettingsSection.Terms, SettingsSection.Delete,
+                SettingsSection.Language, SettingsSection.Appearance, SettingsSection.Terms, SettingsSection.Delete,
             ),
             SettingsSection.entries,
         )
-        assertEquals(listOf(0, 1, 2, 3, 4, 6, 7), SettingsSection.entries.map { it.webIndex })
+        assertEquals(listOf(0, 1, 2, 3, 4, 5, 6, 7), SettingsSection.entries.map { it.webIndex })
     }
 
     /** Turning a push switch on saves it only when its pushes can show; else the permission comes first, or the notice. */

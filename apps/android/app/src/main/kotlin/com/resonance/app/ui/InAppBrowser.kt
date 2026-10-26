@@ -1,5 +1,7 @@
 package com.resonance.app.ui
 
+import com.resonance.design.generated.ResonanceColors
+import com.resonance.app.AppearanceStore
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -10,7 +12,6 @@ import androidx.browser.customtabs.CustomTabsClient
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.browser.customtabs.CustomTabsService
 import androidx.compose.ui.graphics.toArgb
-import com.resonance.design.generated.Tokens
 
 /**
  * Opens a web page inside the app (a Custom Tab, the twin of iOS's
@@ -26,13 +27,17 @@ object InAppBrowser {
     fun open(context: Context, url: String) {
         val uri = Uri.parse(url)
         if (uri.scheme?.lowercase() !in setOf("http", "https")) return
+        // The tab's bars in the app's paper, light and dark, and in the mode the app is in now.
+        val appearance = AppearanceStore.shared
+        val dark = appearance.isDark(context.resources.configuration)
+        fun bars(palette: ResonanceColors) = CustomTabColorSchemeParams.Builder()
+            .setToolbarColor(palette.Cream.toArgb())
+            .setNavigationBarColor(palette.Cream.toArgb())
+            .build()
         val tab = CustomTabsIntent.Builder()
-            .setDefaultColorSchemeParams(
-                CustomTabColorSchemeParams.Builder()
-                    .setToolbarColor(Tokens.Cream.toArgb())
-                    .setNavigationBarColor(Tokens.Cream.toArgb())
-                    .build(),
-            )
+            .setDefaultColorSchemeParams(bars(appearance.palette(context, dark = false)))
+            .setColorSchemeParams(CustomTabsIntent.COLOR_SCHEME_DARK, bars(appearance.palette(context, dark = true)))
+            .setColorScheme(if (dark) CustomTabsIntent.COLOR_SCHEME_DARK else CustomTabsIntent.COLOR_SCHEME_LIGHT)
             .setShowTitle(true)
             .setShareState(CustomTabsIntent.SHARE_STATE_OFF)
             .build()

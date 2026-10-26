@@ -127,6 +127,7 @@ fun HandDrawnImage(
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
     val frame = AutoWobRectShape(radius, seed, curve)
+    val pen = Tokens.FieldBorder
     Box(
         modifier
             .fillMaxWidth()
@@ -137,7 +138,7 @@ fun HandDrawnImage(
                 onDrawWithContent {
                     drawContent()
                     wash?.let { drawOutline(o, it) }
-                    drawOutline(o, Tokens.FieldBorder, style = ink)
+                    drawOutline(o, pen, style = ink)
                 }
             },
     ) {

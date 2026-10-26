@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -133,30 +134,37 @@ data class ProseStyle(
     val align: Layout.Alignment = Layout.Alignment.ALIGN_NORMAL,
     /** Tabular figures (`font-variant-numeric: tabular-nums`): a table's numbers stand in columns. */
     val tabular: Boolean = false,
+    /** A quote's ink (the palette's muted ink). */
+    val muted: Color = color,
+    /** A link's words (the tonal label's ink). */
+    val link: Color = color,
 ) {
     /** A quote's words: muted and upright (no slanted Chinese), still the body's size and type. */
-    val quoted get() = copy(color = Tokens.TextMuted, italic = false, inQuote = true)
+    val quoted get() = copy(color = muted, italic = false, inQuote = true)
 
     companion object {
         /** The story's words in [type], in [lang]. */
+        @Composable @ReadOnlyComposable
         fun body(type: StoryType, lang: String? = null) = ProseStyle(
             type.bodyFamily, type.bodySize, type.bodyWeight, type.bodyLeading, Tokens.Text,
             tracking = type.bodyTracking, justified = type.justified, boldWeight = type.boldWeight,
-            latinMarks = type.cjk, lang = lang, codeScale = Tokens.StoryCode,
+            latinMarks = type.cjk, lang = lang, codeScale = Tokens.StoryCode, muted = Tokens.TextMuted, link = Tokens.ButtonOnTonal,
         )
 
         /** A heading of the story (`#` and `##` as the reader's h2, the rest as its h3), in the ink of what holds it. */
+        @Composable @ReadOnlyComposable
         fun heading(type: StoryType, level: Int, lang: String? = null, color: Color = Tokens.Text) = ProseStyle(
             type.headingFamily, type.headingSize(level), type.headingWeight, type.headingLeading, color,
             tracking = type.headingTracking, balanced = true, boldWeight = type.boldWeight, lining = true,
-            latinMarks = type.cjk, lang = lang, codeScale = Tokens.StoryCode,
+            latinMarks = type.cjk, lang = lang, codeScale = Tokens.StoryCode, muted = Tokens.TextMuted, link = Tokens.ButtonOnTonal,
         )
 
         /** The card's title over its story. */
+        @Composable @ReadOnlyComposable
         fun title(type: StoryType, lang: String? = null) = ProseStyle(
             type.headingFamily, type.titleSize, type.headingWeight, type.titleLeading, Tokens.Text,
             tracking = type.headingTracking, balanced = true, boldWeight = type.headingWeight, lining = true,
-            latinMarks = type.cjk, lang = lang,
+            latinMarks = type.cjk, lang = lang, muted = Tokens.TextMuted, link = Tokens.ButtonOnTonal,
         )
     }
 }
@@ -291,7 +299,7 @@ private fun richText(runs: List<InlineRun>, style: ProseStyle): SpannableStringB
         if (run.code) text.setSpan(CodeSpan(style.codeScale), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         if (style.italic || run.italic) text.setSpan(SyntheticItalicSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         if (run.strikethrough) text.setSpan(StrikethroughSpan(), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        run.link?.let { text.setSpan(LinkSpan(it, Mixes.ButtonOnTonal.toArgb()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
+        run.link?.let { text.setSpan(LinkSpan(it, style.link.toArgb()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
         if (run.code) text.setSpan(ForegroundColorSpan(style.color.toArgb()), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
     return text
@@ -360,6 +368,9 @@ internal fun proseSemantics(plain: String, lang: String?): AnnotatedString =
     if (lang == null || plain.isEmpty()) AnnotatedString(plain)
     else AnnotatedString(plain, listOf(AnnotatedString.Range(SpanStyle(localeList = LocaleList(lang)), 0, plain.length)))
 
+/** [drawBehind] handed a colour read in composition (the quote's rail). */
+private fun Modifier.drawBehind(rail: Color, draw: androidx.compose.ui.graphics.drawscope.DrawScope.(Color) -> Unit): Modifier = drawBehind { draw(rail) }
+
 /** OpenType's tabular figures: every digit one width, so a column of numbers lines up. */
 private const val TABULAR_FIGURES = "tnum"
 
@@ -375,6 +386,7 @@ fun RichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl: (String) ->
     val pressedUrl = remember { mutableStateOf<String?>(null) }
     // Whether its words hold a link at all; one whose strokes came out empty (only spaces) takes no tap, as before.
     val linked = remember(runs) { runs.any { it.link != null && it.text.isNotEmpty() } }
+    val wave = Tokens.LinkWave
     Box(modifier.fillMaxWidth()) {
         Box(
             Modifier
@@ -386,12 +398,13 @@ fun RichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl: (String) ->
                         RichTextLayout(layout, spanned, linkStrokes(layout, spanned, scaled.cssFontPx(style.size), density))
                     },
                     size = { IntSize(it.layout.width, it.layout.height) },
+                    drawKey = wave,
                 ) { (layout, _, strokes) ->
                     // The waves first, under the letters (the web paints them as the link's background):
                     // a descender's foot rests in its arch rather than being crossed by it.
                     val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                     strokes.forEach { s ->
-                        translate(s.x, s.y) { drawPath(s.wave, Tokens.LinkWave, alpha = if (s.url == pressedUrl.value) 1f else 0.7f, style = pen) }
+                        translate(s.x, s.y) { drawPath(s.wave, wave, alpha = if (s.url == pressedUrl.value) 1f else 0.7f, style = pen) }
                     }
                     drawIntoCanvas { layout.draw(it.nativeCanvas) }
                 }
@@ -481,7 +494,7 @@ object TitleClauses {
 fun StoryTitle(text: String, type: StoryType, lang: String?, modifier: Modifier = Modifier) {
     val scaled = LocalDensity.current
     val density = scaled.density
-    val style = remember(type, lang) { ProseStyle.title(type, lang) }
+    val style = ProseStyle.title(type, lang)
     val read = remember(text, lang) { proseSemantics(text, lang) }
     // Laid out while measured, for the width offered (no subcomposition: [builtForWidth]).
     val built = remember { WidthBuilt<StaticLayout>() }
@@ -560,7 +573,8 @@ fun StoryMarkdown(
     /** A card link standing alone, drawn by the page in the story's [ProseStyle] (for when it has no card to show). */
     embed: @Composable (href: String, title: String, style: ProseStyle) -> Unit,
 ) {
-    val story = remember(type, lang, onOpenUrl, links, embed, headingAnchor) { Story(type, lang, onOpenUrl, links, embed, headingAnchor) }
+    val body = ProseStyle.body(type, lang)
+    val story = remember(type, lang, onOpenUrl, links, embed, headingAnchor, body) { Story(type, lang, onOpenUrl, links, embed, headingAnchor, body) }
     BlockColumn(blocks, story.body, story, nested = false)
 }
 
@@ -572,8 +586,9 @@ private class Story(
     val links: StoryLinkCards?,
     val embed: @Composable (String, String, ProseStyle) -> Unit,
     val headingAnchor: ((StoryBlock.Heading) -> Modifier)?,
+    /** The story's words in its type ([ProseStyle.body]), in the palette on screen. */
+    val body: ProseStyle,
 ) {
-    val body = ProseStyle.body(type, lang)
     val spacing = type.spacing()
 
     /** Whether a standalone link is drawn as its page's card (a preview came with the page), for the room around it. */
@@ -637,13 +652,13 @@ private fun Block(block: StoryBlock, style: ProseStyle, story: Story) {
         is StoryBlock.Quote -> Box(
             Modifier
                 .fillMaxWidth()
-                .drawBehind {
+                .drawBehind(rail = Tokens.TerracottaLight) {
                     val h = size.height / density
                     val trim = min(0.18f * h, 6f)
                     val run = h - trim * 2
                     val path = wavyVertical(run.toDouble(), 5.0, 1.4, max(2, (run / 34).roundToInt()))
                         .toPath(density, QuoteRailWidth.toPx() / 2, trim * density)
-                    drawPath(path, Tokens.TerracottaLight, style = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round))
+                    drawPath(path, it, style = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round))
                 }
                 .padding(start = QuoteRailWidth + em),
         ) { BlockColumn(block.children, style.quoted, story, nested = true) }
@@ -682,7 +697,7 @@ private fun Block(block: StoryBlock, style: ProseStyle, story: Story) {
 private const val CODE_LEADING = 1.6f
 
 /** `--story-code-tint`: the text's ink at 6 %. */
-private val CodeTint = Tokens.Text.copy(alpha = 0.06f)
+private val CodeTint: Color @Composable @ReadOnlyComposable get() = Tokens.StoryCodeTint
 
 /**
  * OrganicStoryImage: a photo at its own proportions (≤ 520dp or 62% of the
@@ -788,6 +803,8 @@ private fun StoryTable(table: StoryBlock.Table, style: ProseStyle, onOpenUrl: (S
     ) {
         Column(Modifier.padding(horizontal = TABLE_REACH)) {
             val rows = listOf(table.head) + table.rows
+            val headInk = TableHeadRuleInk
+            val rowInk = TableRowRuleInk
             rows.forEachIndexed { r, cells ->
                 Row(
                     Modifier.drawWithCache {
@@ -801,7 +818,7 @@ private fun StoryTable(table: StoryBlock.Table, style: ProseStyle, onOpenUrl: (S
                             else -> null
                         }
                         val pen = Stroke(if (r == 0) headPen else rowPen, cap = StrokeCap.Round, join = StrokeJoin.Round)
-                        val ink = if (r == 0) TableHeadRuleInk else TableRowRuleInk
+                        val ink = if (r == 0) headInk else rowInk
                         onDrawBehind { rule?.let { drawPath(it, ink, style = pen) } }
                     },
                     verticalAlignment = Alignment.Top,
@@ -846,8 +863,8 @@ private val TABLE_HEAD_RULE = Tokens.InkLight
 private val TABLE_ROW_RULE = 1.dp
 /** How far a table's side with more fades into the paper. */
 private val TABLE_FADE = 24.dp
-private val TableHeadRuleInk = Tokens.TextMuted.copy(alpha = 0.6f)
-private val TableRowRuleInk = Tokens.TextMuted.copy(alpha = 0.3f)
+private val TableHeadRuleInk: Color @Composable @ReadOnlyComposable get() = Tokens.TextMuted.copy(alpha = 0.6f)
+private val TableRowRuleInk: Color @Composable @ReadOnlyComposable get() = Tokens.TextMuted.copy(alpha = 0.3f)
 
 /** How far past the text column a table's scroller reaches at each side: room for the head's rule to overshoot. */
 private val TABLE_REACH = 2.dp

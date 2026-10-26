@@ -5,7 +5,8 @@
       The paper color while the first frame draws (the color-cream token), and the system bars as
       MainActivity's enableEdgeToEdge sets them: see-through, dark glyphs, no contrast scrim. Said here
       too because on Android 12 and 12L the splash, as it hands off, copies this theme's bar colors
-      onto the window — Theme.Material's grey and black bands, had it none of its own.
+      onto the window — Theme.Material's grey and black bands, had it none of its own. Dark mode's
+      twin (the night paper, light glyphs) is values-night/themes.xml.
     -->
     <style name="Theme.Resonance" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/paper</item>
@@ -19,9 +20,9 @@
 
     <!--
       The launch (androidx SplashScreen; Android 12's own splash, and its backport on 10–11): the
-      launcher icon's waves on the paper, then Theme.Resonance. The app is drawn on paper whatever the
-      system's mode, so nothing here takes a night value: left to the system, the splash of a phone in
-      dark mode is black, the waves set on it like a stranger's. Dark bar glyphs, as on every screen.
+      launcher icon's waves on the paper, then Theme.Resonance. In dark mode the night paper with
+      light bar glyphs (values-night) — the system's mode, or on Android 12+ the app's own
+      (AppearanceStore sets the app's night mode, which the next launch's splash follows).
       The hand-off into the first screen is MainActivity's (Launch.kt).
     -->
     <style name="Base.Theme.Resonance.Starting" parent="Theme.SplashScreen">

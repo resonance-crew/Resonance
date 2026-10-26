@@ -53,6 +53,8 @@ class ResonanceApp : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         AppFonts.init(this)
+        // 外觀 before any screen: its mode is also the app's night mode on Android 12+.
+        AppearanceStore.init(this)
         Grain.init(this)
         Grain.warmUp()
         // The web's catalogs, bundled as they are (see L10n.kt).

@@ -59,6 +59,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
+import com.resonance.design.generated.ResonanceColors
+import com.resonance.design.generated.LocalResonanceColors
+import androidx.compose.runtime.ReadOnlyComposable
 
 /**
  * The chat composer's one-line height (round 9 §4): 48 on every platform, whatever the text size —
@@ -88,7 +91,7 @@ val ComposerRowsLead = 6.dp
 val ComposerRowHeight = 52.dp
 
 /** The capsule's pen: the field's own (FieldBorder), darker while it is written in — the same colour, never terracotta (round 10 §3.3). */
-fun composerPen(focused: Boolean): Color = if (focused) Tokens.FieldBorderHover else Tokens.FieldBorder
+fun composerPen(focused: Boolean, palette: ResonanceColors): Color = if (focused) palette.FieldBorderHover else palette.FieldBorder
 
 /** The text's padding above and below that centres one line [line] tall in the capsule's 48 (never less than none). */
 fun composerPadding(line: Dp): Dp = ((ComposerHeight - line) / 2).coerceAtLeast(0.dp)
@@ -130,10 +133,13 @@ fun ComposerCapsule(
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val haptic = LocalHapticFeedback.current
-    val face by animateColorAsState(if (canSend) Mixes.ButtonFill else Mixes.ButtonTonal, tween(SEND_FADE_MILLIS), label = "sendFace")
-    val plane by animateColorAsState(if (canSend) Tokens.Cream else Mixes.ButtonOnTonal, tween(SEND_FADE_MILLIS), label = "sendPlane")
+    val face by animateColorAsState(if (canSend) Tokens.ButtonFill else Tokens.ButtonTonal, tween(SEND_FADE_MILLIS), label = "sendFace")
+    val plane by animateColorAsState(if (canSend) Tokens.Cream else Tokens.ButtonOnTonal, tween(SEND_FADE_MILLIS), label = "sendPlane")
     val shape = remember(seed) { WobRectShape(Tokens.RadiusMd.toDouble(), seed) }
     val vertical = composerPadding(lineHeightOf(textStyle))
+    val palette = LocalResonanceColors.current
+    val press = OrganicIndication.OnFill
+    val grainInk = GrainInk.current
     Box(
         modifier
             .fillMaxWidth()
@@ -148,15 +154,15 @@ fun ComposerCapsule(
                     op(SegmentedLayout.regionPath(1, 2, listOf(seam), w, h, pad.toFloat(), density), outline, PathOperation.Intersect)
                 }
                 val seamPath = polylinePath(seam, density)
-                val grain = Grain.brush(GrainMode.Tile, "grain-button", size, density, 0.38f)
+                val grain = Grain.brush(GrainMode.Tile, "grain-button", size, density, 0.38f, grainInk)
                 val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                 onDrawBehind {
-                    drawOutline(o, Tokens.Cream)
+                    drawOutline(o, palette.Cream)
                     drawPath(region, face)
-                    if (pressed && canSend) drawPath(region, OrganicIndication.OnFill)
+                    if (pressed && canSend) drawPath(region, press)
                     grain?.let { drawPath(region, it, alpha = 0.38f) }
-                    clipPath(outline) { drawPath(seamPath, Tokens.Cream, style = pen) }
-                    drawOutline(o, composerPen(focused()), style = pen)
+                    clipPath(outline) { drawPath(seamPath, palette.Cream, style = pen) }
+                    drawOutline(o, composerPen(focused(), palette), style = pen)
                 }
             },
     ) {
@@ -194,18 +200,19 @@ private const val SEND_FADE_MILLIS = 140
  * muted ink, the field's wobble at radius 14. No halo, shadow or alpha: the foot's paper is behind it
  * ([ComposerBacking]), as behind the capsule (round 10 §3.1).
  */
-fun Modifier.floatingSlip(seed: Double = 29.0, radius: Double = 14.0, pen: Color = Tokens.TextMuted): Modifier = drawWithCacheOf(FloatingSlip(seed, radius, pen))
+@Composable
+fun Modifier.floatingSlip(seed: Double = 29.0, radius: Double = 14.0, pen: Color = Tokens.TextMuted): Modifier = drawWithCacheOf(FloatingSlip(seed, radius, pen, Tokens.Cream))
 
 /**
  * [floatingSlip]'s drawing, as a value ([drawWithCacheOf]): recomposed with equal inputs it is an equal modifier,
  * which keeps what it cached (outline, paths, grain) instead of building it again at the next draw.
  */
-private data class FloatingSlip(val seed: Double, val radius: Double, val pen: Color) : (CacheDrawScope) -> DrawResult {
+private data class FloatingSlip(val seed: Double, val radius: Double, val pen: Color, val paper: Color) : (CacheDrawScope) -> DrawResult {
     override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
         val o = WobRectShape(radius, seed).createOutline(size, layoutDirection, this)
         val line = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
         onDrawBehind {
-            drawOutline(o, Tokens.Cream)
+            drawOutline(o, paper)
             drawOutline(o, pen, style = line)
         }
     }
@@ -226,7 +233,8 @@ private data class FloatingSlip(val seed: Double, val radius: Double, val pen: C
 fun ComposerBacking(modifier: Modifier = Modifier, onTap: () -> Unit = {}) {
     val tap by rememberUpdatedState(onTap)
     Column(modifier.clearAndSetSemantics { }) {
-        Box(Modifier.fillMaxWidth().height(ComposerFade).background(remember { Brush.verticalGradient(listOf(Tokens.Cream.copy(alpha = 0f), Tokens.Cream)) }))
+        val paper = Tokens.Cream
+        Box(Modifier.fillMaxWidth().height(ComposerFade).background(remember(paper) { Brush.verticalGradient(listOf(paper.copy(alpha = 0f), paper)) }))
         Box(
             Modifier
                 .fillMaxWidth()
@@ -299,7 +307,7 @@ val ComposerLeadSize = 40.dp
 val ComposerLeadShape = RoundedCornerShape(topStart = 12.dp, topEnd = 14.dp, bottomEnd = 12.dp, bottomStart = 14.dp)
 
 /** The tonal tile's face: the light terracotta at 0.4 laid on the cream, opaque (the chips' old face). */
-val ComposerTileFace = Tokens.TerracottaLight.copy(alpha = 0.4f).compositeOver(Tokens.Cream)
+val ComposerTileFace: Color @Composable @ReadOnlyComposable get() = Tokens.TerracottaLight.copy(alpha = 0.4f).compositeOver(Tokens.Cream)
 
 /**
  * A riding row's lead as a 40 tile: [icon] (18) on the tonal face, and over it [content] (a cover,

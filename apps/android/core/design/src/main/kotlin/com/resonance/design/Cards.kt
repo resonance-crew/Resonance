@@ -253,7 +253,8 @@ data class StoryCardContent(
     /** Why the feed picked it — Resonance's handwritten margin note. */
     val reason: String? = null,
     /** The author's own color (MiniStoryCard paints their avatar with it). */
-    val authorAccent: Color? = null,
+    /** The author's stored avatar colour (an oklch() string), drawn per scheme by [avatarFill]. */
+    val authorAccent: String? = null,
 )
 
 /** CSS `margin-top` (negative too): shifts the child and takes the same amount off the space it claims. */
@@ -284,6 +285,7 @@ private fun StoryBand(
 ) {
     val interior = palette.interior
     val border = palette.border
+    val grainInk = GrainInk.current
     // The first band of a list that starts under the bar's wavy band: its paper runs up beneath the
     // wave (the bar's pen line is its top edge, so it draws no rule of its own), and its content
     // keeps its place.
@@ -292,7 +294,7 @@ private fun StoryBand(
         modifier
             .fillMaxWidth()
             .drawWithCache {
-                val grain = Grain.brush(GrainMode.Tile, "grain-overlay", size, density, 1f)
+                val grain = Grain.brush(GrainMode.Tile, "grain-overlay", size, density, 1f, grainInk)
                 // wavyLine(200, seed + 17, 1.4, 7) stretched across the band, centred on its edge.
                 val rule = wavyLinePath(size.width, 0f, density, ruleSeed, 1.4, 7)
                 val stroke = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round)
@@ -392,7 +394,7 @@ private fun ColumnScope.StoryCardBody(
     }
     // The web renders the tag row even when empty (its 8px margin still counts).
     FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        content.tags.take(4).forEach { TagPill(it, fill = palette.fill) }
+        content.tags.take(4).forEach { TagPill(it, fill = palette.colors.tag) }
     }
     CssText(content.title, AppFonts.Family.Heading, 18f, 700, lineHeight = 1.3f, modifier = Modifier.fillMaxWidth())
     CssText(content.excerpt, AppFonts.Family.Body, 14f, 400, lineHeight = 1.65f, color = Tokens.TextMuted, modifier = Modifier.fillMaxWidth())
@@ -496,7 +498,9 @@ private fun BorderedCardFrame(palette: CardPalette, seed: Double, modifier: Modi
     val hovered by source.collectIsHoveredAsState()
     val wash by animateFloatAsState(if (hover && hovered) 1f else 0f, tween(320), label = "cardWash")
     val interior = palette.interior
-    val washed = OklchColor.parse("oklch(92.5% 0.024 ${palette.hue})") ?: interior
+    val washed = palette.hover
+    val border = palette.border
+    val grainInk = GrainInk.current
     Column(
         modifier
             .fillMaxWidth()
@@ -505,12 +509,12 @@ private fun BorderedCardFrame(palette: CardPalette, seed: Double, modifier: Modi
                 val w = (size.width / density).toDouble()
                 val h = (size.height / density).toDouble()
                 val outline = WobRectShape(22.0, seed, mag = min(w, h) * 0.025, options = BorderedCardWob).createOutline(size, layoutDirection, this)
-                val grain = Grain.brush(GrainMode.Tile, "grain-card", size, density, BorderedCardGrain)
+                val grain = Grain.brush(GrainMode.Tile, "grain-card", size, density, BorderedCardGrain, grainInk)
                 val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                 onDrawBehind {
                     drawOutline(outline, if (wash > 0f) lerp(interior, washed, wash) else interior)
                     grain?.let { drawOutline(outline, it, alpha = BorderedCardGrain) }
-                    drawOutline(outline, palette.border, style = pen)
+                    drawOutline(outline, border, style = pen)
                 }
             }
             .padding(22.dp),
@@ -536,7 +540,7 @@ internal const val BorderedCardGrain = 0.2f
 fun MiniStoryCard(content: StoryCardContent, position: Int, isLast: Boolean = false, modifier: Modifier = Modifier, inset: Dp = BandInset, palette: Int? = null) {
     val palette = cardPalette(palette, content.accentHue, position)
     val seed = position * 71.0 + 19
-    val accent = content.authorAccent ?: palette.accent
+    val accent = avatarFill(content.authorAccent, palette.accent)
     WithSkeletonHue(palette.hue) {
         StoryBand(palette, seed + 17, isLast, 28.dp, 12.dp, modifier, inset = inset) {
             OrganicImage(content.imageUrl, seed + 5, Modifier.fillMaxWidth().aspectRatio(1 / 0.56f), grain = StoryGrain.Cover) {
@@ -559,11 +563,13 @@ fun MiniStoryCard(content: StoryCardContent, position: Int, isLast: Boolean = fa
 @Composable
 fun FeedEndMark(text: String, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        val pen = Tokens.FieldBorderHover.copy(alpha = 0.7f)
+        val dot = Tokens.Terracotta
         Canvas(Modifier.size(width = FeedEndWave + 5.dp + 3.2.dp, height = 8.dp).clearAndSetSemantics { }) {
             val mid = size.height / 2
             val wave = penWave(FeedEndWave.value.toDouble(), 307.0, amp = 1.2, half = 4.5).toPath(density, 0f, mid)
-            drawPath(wave, Tokens.FieldBorderHover.copy(alpha = 0.7f), style = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
-            drawCircle(Tokens.Terracotta, radius = 1.6.dp.toPx(), center = Offset((FeedEndWave + 5.dp + 1.6.dp).toPx(), mid))
+            drawPath(wave, pen, style = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawCircle(dot, radius = 1.6.dp.toPx(), center = Offset((FeedEndWave + 5.dp + 1.6.dp).toPx(), mid))
         }
         BasicText(
             text,
@@ -592,7 +598,7 @@ fun FeedMoreButton(loading: Boolean, modifier: Modifier = Modifier, onClick: () 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        if (loading) SketchLoader(15.dp, Mixes.ButtonOnTonal)
-        BasicText(L10n.Home.moreBtn, style = AppFonts.body(14f, 600, lineHeight = 1.3f, color = Mixes.ButtonOnTonal))
+        if (loading) SketchLoader(15.dp, Tokens.ButtonOnTonal)
+        BasicText(L10n.Home.moreBtn, style = AppFonts.body(14f, 600, lineHeight = 1.3f, color = Tokens.ButtonOnTonal))
     }
 }

@@ -1,5 +1,24 @@
 package com.resonance.app.ui
 
+import com.resonance.design.avatarFill
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.layout.size
+import com.resonance.geometry.WobCircleOptions
+import com.resonance.design.generated.ResonanceColors
+import com.resonance.design.generated.LocalResonanceColors
+import com.resonance.design.wallpaperColors
+import com.resonance.design.WobCircleShape
+import com.resonance.design.SegmentedActionBar
+import com.resonance.design.Segment
+import com.resonance.design.AppearanceScheme
+import com.resonance.design.AppearanceAccent
+import com.resonance.app.AppearanceStore
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -110,6 +129,7 @@ enum class SettingsSection(
     Privacy(IconName.Lock, 2),
     Notifications(IconName.Bell, 3),
     Language(IconName.Globe, 4),
+    Appearance(IconName.Palette, 5),
     Terms(IconName.Document, 6),
     Delete(IconName.Trash, 7);
 
@@ -120,6 +140,7 @@ enum class SettingsSection(
             Privacy -> L10n.Settings.Sections.privacy
             Notifications -> L10n.Settings.Sections.notifications
             Language -> L10n.Settings.Sections.language
+            Appearance -> L10n.Settings.Sections.appearance
             Terms -> L10n.Settings.Sections.terms
             Delete -> L10n.Settings.Sections.delete
         }
@@ -161,7 +182,7 @@ internal fun settingsTop(cls: LayoutClass): Dp = titledBarGap(cls, tabletAir = t
 @Composable
 private fun MenuRow(section: SettingsSection, onClick: () -> Unit) {
     // Deleting the account is the one red row.
-    val tint = if (section == SettingsSection.Delete) Mixes.Danger else Tokens.Terracotta
+    val tint = if (section == SettingsSection.Delete) Tokens.Danger else Tokens.Terracotta
     Row(
         Modifier
             .fillMaxWidth()
@@ -193,6 +214,7 @@ fun SettingsSectionScreen(session: Session, section: SettingsSection, back: () -
                 SettingsSection.Privacy -> PrivacySettings(session)
                 SettingsSection.Notifications -> NotificationSettings(session)
                 SettingsSection.Language -> LanguageSettings(session)
+                SettingsSection.Appearance -> AppearanceSettings()
                 SettingsSection.Terms -> TermsSettings(session)
                 SettingsSection.Delete -> DeleteAccountSettings(session)
             }
@@ -277,7 +299,7 @@ private fun ProfileSettings(session: Session) {
                     }
                 }
             }
-            if (failed) BasicText(L10n.Native.saveError, style = AppFonts.body(13f, color = Mixes.Danger))
+            if (failed) BasicText(L10n.Native.saveError, style = AppFonts.body(13f, color = Tokens.Danger))
         }
     }
 }
@@ -452,7 +474,7 @@ private fun NotificationSettings(session: Session) {
             }
         }
         if (state.saveFailed) {
-            BasicText(L10n.Settings.Notifications.saveError, style = AppFonts.body(13f, color = Mixes.Danger), modifier = Modifier.padding(top = 14.dp))
+            BasicText(L10n.Settings.Notifications.saveError, style = AppFonts.body(13f, color = Tokens.Danger), modifier = Modifier.padding(top = 14.dp))
         }
     }
 }
@@ -491,6 +513,120 @@ private fun LanguageRow(session: Session, language: Strings.Language, label: Str
             modifier = Modifier.weight(1f),
         )
         OrganicRadio(selected, seed)
+    }
+}
+
+/**
+ * 外觀 (spec §2): 顯示模式 — 跟隨系統 · 淺色 · 深色, the app's segmented choice on its paper-dark
+ * track as the publish step's 卡片類型 — and 主題色, a row of hand-drawn swatches (a radio group),
+ * each showing its theme's paper and accent in the mode on screen, the chosen one ringed in its
+ * accent with a tick; from Android 12 a fifth, 桌布配色, wears the wallpaper's colour. Both apply at
+ * once, everywhere (AppearanceStore), and are kept on this device.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AppearanceSettings() {
+    val store = AppearanceStore.shared
+    val appearance by store.state.collectAsStateWithLifecycle()
+    val dark = LocalResonanceColors.current.dark
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    Column(verticalArrangement = Arrangement.spacedBy(28.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            FieldLabel(L10n.Tweaks.scheme)
+            SegmentedActionBar(
+                AppearanceScheme.entries.map { scheme ->
+                    val on = appearance.scheme == scheme
+                    Segment(
+                        scheme.key, schemeLabel(scheme),
+                        fill = if (on) Tokens.ButtonTonal else null,
+                        textColor = if (on) Tokens.ButtonOnTonal else Tokens.SegmentIdleInk,
+                        press = Tokens.TowardInk.copy(alpha = 0.05f),
+                        selected = on,
+                    ) { store.setScheme(scheme) }
+                },
+                Modifier.fillMaxWidth(),
+                seed = 83.0,
+                fill = Tokens.CreamDark,
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            FieldLabel(L10n.Tweaks.accentColor)
+            val accents = AppearanceAccent.entries.filter { it != AppearanceAccent.Wallpaper || AppearanceAccent.wallpaperOffered }
+            FlowRow(
+                Modifier.selectableGroup(),
+                horizontalArrangement = Arrangement.spacedBy(SwatchGap),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                accents.forEachIndexed { i, accent ->
+                    val palette = accent.theme?.let { ResonanceColors.of(it, dark) }
+                        ?: remember(configuration, dark) { wallpaperColors(context, dark) }
+                    ThemeSwatch(accentLabel(accent), palette, selected = appearance.accent == accent, seed = 91.0 + i * 7) { store.setAccent(accent) }
+                }
+            }
+        }
+    }
+}
+
+/** 顯示模式's words. */
+internal fun schemeLabel(scheme: AppearanceScheme): String = when (scheme) {
+    AppearanceScheme.System -> L10n.Tweaks.schemeSystem
+    AppearanceScheme.Light -> L10n.Tweaks.schemeLight
+    AppearanceScheme.Dark -> L10n.Tweaks.schemeDark
+}
+
+/** 主題色's names: 赤陶 · 鼠尾草 · 薰衣草 · 金黃 · 桌布配色. */
+internal fun accentLabel(accent: AppearanceAccent): String = when (accent) {
+    AppearanceAccent.Terracotta -> L10n.Tweaks.themeTerracotta
+    AppearanceAccent.Sage -> L10n.Tweaks.themeSage
+    AppearanceAccent.Lavender -> L10n.Tweaks.themeLavender
+    AppearanceAccent.Yellow -> L10n.Tweaks.themeYellow
+    AppearanceAccent.Wallpaper -> L10n.Tweaks.accentWallpaper
+}
+
+private val SwatchSize = 52.dp
+private val SwatchGap = 14.dp
+
+/**
+ * One theme as a swatch: a wobbly disc of its [palette]'s paper (its own pen round it, the paper's
+ * edge on the page), its accent a smaller disc inside, and its name under it. Chosen, the ring is
+ * the accent at the strong pen and a tick in the paper's colour sits on the accent. One radio for
+ * TalkBack, named by its name.
+ */
+@Composable
+private fun ThemeSwatch(name: String, palette: ResonanceColors, selected: Boolean, seed: Double, onClick: () -> Unit) {
+    val ring = if (selected) palette.Terracotta else Tokens.FieldBorder
+    val ringWidth = if (selected) Tokens.InkStrong else Tokens.InkLight
+    Column(
+        Modifier
+            .width(SwatchSize + 8.dp)
+            .selectable(selected, role = Role.RadioButton, onClick = onClick)
+            .semantics(mergeDescendants = true) { contentDescription = name },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            Modifier.size(SwatchSize).drawWithCache {
+                val outer = WobCircleShape(seed, WobCircleOptions(segments = 8, mag = 1.4, cpJitter = 0.4)).createOutline(size, layoutDirection, this)
+                val inset = size.width * 0.27f
+                val inner = WobCircleShape(seed + 5, WobCircleOptions(segments = 7, mag = 0.9, cpJitter = 0.4))
+                    .createOutline(androidx.compose.ui.geometry.Size(size.width - inset * 2, size.height - inset * 2), layoutDirection, this)
+                val pen = Stroke(ringWidth.toPx(), join = StrokeJoin.Round)
+                onDrawBehind {
+                    drawOutline(outer, palette.Cream)
+                    translate(inset, inset) { drawOutline(inner, palette.Terracotta) }
+                    drawOutline(outer, ring, style = pen)
+                }
+            },
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selected) OrganicIcon(IconName.Check, size = 16.dp, color = palette.Cream, strokeWidth = Tokens.InkStrong.value)
+        }
+        BasicText(
+            name,
+            style = AppFonts.body(12.5f, if (selected) 600 else 500, lineHeight = 1.3f, color = if (selected) Tokens.Text else Tokens.TextMuted)
+                .copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center),
+        )
     }
 }
 
@@ -560,7 +696,7 @@ private fun DeleteAccountSettings(session: Session) {
             ) { save.launch("resonance-backup-${LocalDate.now()}.json") }
             OrganicButton(L10n.Settings.Delete.button, width, variant = ButtonVariant.DangerTonal, icon = IconName.Trash) { confirming = true }
         }
-        if (failed) BasicText(L10n.Settings.Delete.error, style = AppFonts.body(13f, color = Mixes.Danger))
+        if (failed) BasicText(L10n.Settings.Delete.error, style = AppFonts.body(13f, color = Tokens.Danger))
     }
 
     if (confirming) OrganicConfirmDialog(
@@ -628,7 +764,7 @@ private fun ColumnScope.BlockedListContent(session: Session, onClose: () -> Unit
                     HandDrawnAvatar(
                         person.initials,
                         person.avatarUrl,
-                        person.accentColor?.let(OklchColor::parse) ?: Tokens.CreamDark,
+                        avatarFill(person.accentColor, Tokens.CreamDark),
                         36.dp,
                         person.avatarSeed ?: seedFromString(person.id).toDouble(),
                     )

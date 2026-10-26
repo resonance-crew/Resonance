@@ -135,7 +135,12 @@ object AppFonts {
      * (LineHeightStyle Center, no trim), no legacy font padding, and greedy
      * line breaking like browsers (Compose defaults to balanced "Paragraph").
      */
+    @androidx.compose.runtime.Composable @androidx.compose.runtime.ReadOnlyComposable
     fun style(family: Family, size: Float, weight: Int = 400, lineHeight: Float = 1.5f, color: androidx.compose.ui.graphics.Color = Tokens.Text, letterSpacing: TextUnit = TextUnit.Unspecified) =
+        styleIn(family, size, weight, lineHeight, color, letterSpacing)
+
+    /** [style] in an ink given (outside composition: a layout built off the screen's palette, the share card's). */
+    fun styleIn(family: Family, size: Float, weight: Int = 400, lineHeight: Float = 1.5f, color: androidx.compose.ui.graphics.Color, letterSpacing: TextUnit = TextUnit.Unspecified) =
         TextStyle(
             fontFamily = family(family, weight),
             fontSize = size.sp,
@@ -154,7 +159,12 @@ object AppFonts {
      */
     fun oblique(style: TextStyle): TextStyle = style.copy(textGeometricTransform = TextGeometricTransform(skewX = -0.25f))
 
+    @androidx.compose.runtime.Composable @androidx.compose.runtime.ReadOnlyComposable
     fun heading(size: Float, weight: Int = 700, lineHeight: Float = 1.25f) = style(Family.Heading, size, weight, lineHeight)
+    @androidx.compose.runtime.Composable @androidx.compose.runtime.ReadOnlyComposable
     fun body(size: Float, weight: Int = 400, lineHeight: Float = 1.6f, color: androidx.compose.ui.graphics.Color = Tokens.Text) =
         style(Family.Body, size, weight, lineHeight, color)
+    /** [body] in an ink given (outside composition). */
+    fun bodyIn(size: Float, weight: Int = 400, lineHeight: Float = 1.6f, color: androidx.compose.ui.graphics.Color) =
+        styleIn(Family.Body, size, weight, lineHeight, color)
 }

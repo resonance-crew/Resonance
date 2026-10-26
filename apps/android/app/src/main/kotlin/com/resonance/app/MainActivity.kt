@@ -44,12 +44,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         // The launch's splash (the waves on the paper) before anything else draws; see [Launch].
         val splash = installSplashScreen()
-        // The app is drawn on paper in light and dark mode alike: dark system-bar icons always,
-        // not the system's white ones on cream when the phone is in dark mode.
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
-        )
+        // See-through bars whose glyphs follow the scheme the screens wear (外觀's, or the system's):
+        // dark on the paper, light on the night paper. Said again whenever it changes (SystemBars).
+        systemBarsFor(AppearanceStore.shared.isDark(resources.configuration))
         super.onCreate(savedInstanceState)
         val emulator = BuildConfig.DEBUG && intent.getBooleanExtra("emulator", false)
         val config = if (!emulator) AppConfig(usesEmulator = false) else {
@@ -114,6 +111,12 @@ class MainActivity : ComponentActivity() {
                 notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
+    }
+
+    /** The bars' glyphs for the scheme on screen: [dark] light glyphs, else dark ones, on see-through bars. */
+    fun systemBarsFor(dark: Boolean) {
+        val style = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark }
+        enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
     }
 
     // Ctrl-N / Cmd-N on a hardware keyboard opens the writer, whatever has focus (a text field doesn't use the chord).

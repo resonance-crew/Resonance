@@ -29,7 +29,12 @@ import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import com.resonance.design.generated.Tokens
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
+import androidx.compose.ui.node.currentValueOf
+import com.resonance.design.generated.LocalResonanceColors
+import com.resonance.design.generated.ResonanceColors
 import com.resonance.geometry.SegValue
 import com.resonance.geometry.WobRectOptions
 import kotlinx.coroutines.Job
@@ -48,10 +53,11 @@ import kotlin.random.Random
  * Provided app-wide as `LocalIndication`, so a plain `clickable` gets it
  * (each press a fresh wobble); a control narrows it with `inset` (a glyph
  * centred in a 48dp hit box washes a 40dp squircle), gives it its own `shape`
- * (a button's pill), or colours it (`OnFill` over a terracotta face).
+ * (a button's pill), or colours it (`OnFill` over a terracotta face). Left uncoloured it is the
+ * palette's [wash], read as it draws, so it follows the scheme and theme on screen.
  */
 class OrganicIndication(
-    private val color: Color = Wash,
+    private val color: Color? = null,
     private val inset: Dp = 0.dp,
     private val shape: Shape? = null,
 ) : IndicationNodeFactory {
@@ -61,10 +67,15 @@ class OrganicIndication(
     override fun hashCode() = (31 * color.hashCode() + inset.hashCode()) * 31 + (shape?.hashCode() ?: 0)
 
     companion object {
-        /** The web's hover wash, terracotta at 14%. */
-        val Wash = Tokens.Terracotta.copy(alpha = 0.14f)
-        /** Over a filled terracotta face: the pressed shade the web's primary button darkens to. */
-        val OnFill = Color.Black.copy(alpha = 0.14f)
+        /** The web's hover wash, the accent at 14%. */
+        val Wash: Color @Composable @ReadOnlyComposable get() = wash(LocalResonanceColors.current)
+        /** Over a filled accent face: the pressed shade the web's primary button darkens to. */
+        val OnFill: Color @Composable @ReadOnlyComposable get() = onFill(LocalResonanceColors.current)
+
+        fun wash(c: ResonanceColors): Color = c.Terracotta.copy(alpha = 0.14f)
+
+        /** Darker in either scheme (a deep face in light, a bright one in dark): toward black, 14% — in dark the deep shadow ink, 20%. */
+        fun onFill(c: ResonanceColors): Color = if (c.dark) c.ShadowInk.copy(alpha = 0.2f) else c.TowardInk.copy(alpha = 0.14f)
         /** How long the ink takes to reach the far edge, and to lift. */
         const val SpreadMillis = 300
         const val FadeMillis = 220
@@ -142,10 +153,10 @@ class InkSpread {
 
 private class OrganicPressNode(
     private val source: InteractionSource,
-    private val color: Color,
+    private val color: Color?,
     private val inset: Dp,
     private val shape: Shape?,
-) : Modifier.Node(), DrawModifierNode {
+) : Modifier.Node(), DrawModifierNode, CompositionLocalConsumerModifierNode {
     private val spread = InkSpread()
     private var seed = 1.0
     private var cached: Pair<Pair<Size, Double>, Path>? = null
@@ -175,7 +186,7 @@ private class OrganicPressNode(
                     val outline = shape?.createOutline(box, layoutDirection, this) ?: organicWashOutline(box, this, seed)
                     Path().apply { addOutline(outline); translate(Offset(pad, pad)) }.also { cached = key to it }
                 }
-                with(spread) { draw(path, color) }
+                with(spread) { draw(path, color ?: OrganicIndication.wash(currentValueOf(LocalResonanceColors))) }
             }
         }
         drawContent()

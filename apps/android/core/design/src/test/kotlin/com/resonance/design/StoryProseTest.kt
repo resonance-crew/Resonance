@@ -58,7 +58,7 @@ class StoryProseTest {
         Strings.load { File("../../../../src/messages/${it.tag}.json").readText() }
     }
 
-    @Test fun aCjkStorysWordsAreItsSansTrackedAndJustified() {
+    @Test fun aCjkStorysWordsAreItsSansTrackedAndJustified() = composed {
         val body = ProseStyle.body(cjkPhone, "zh-TW")
         assertEquals(AppFonts.Family.BodyCJK, body.family)
         assertEquals(Tokens.StorySizeCompact, body.size)
@@ -81,7 +81,7 @@ class StoryProseTest {
         assertEquals(Tokens.StoryTracking, layout.paint.letterSpacing, 1e-6f)
     }
 
-    @Test fun aLatinStoryIsRaggedAndUntracked() {
+    @Test fun aLatinStoryIsRaggedAndUntracked() = composed {
         val body = ProseStyle.body(latinPhone, "en")
         assertEquals(AppFonts.Family.Body, body.family)
         assertEquals(Tokens.StorySizeLatinCompact, body.size)
@@ -92,7 +92,7 @@ class StoryProseTest {
         assertEquals(LineBreaker.JUSTIFICATION_MODE_NONE, layout.justificationMode)
     }
 
-    @Test fun headingsAreSizedFromTheBodyAndHashIsAnH2() {
+    @Test fun headingsAreSizedFromTheBodyAndHashIsAnH2() = composed {
         val h1 = ProseStyle.heading(cjkPhone, 1)
         val h2 = ProseStyle.heading(cjkPhone, 2)
         val h4 = ProseStyle.heading(cjkPhone, 4)
@@ -110,7 +110,7 @@ class StoryProseTest {
         assertEquals(0f, ProseStyle.heading(latinPhone, 2).tracking)
     }
 
-    @Test fun anApostropheInsideALatinWordIsSetInTheLatinFaceInACjkStory() {
+    @Test fun anApostropheInsideALatinWordIsSetInTheLatinFaceInACjkStory() = composed {
         val text = "教練只說：don’t rush."
         val mark = text.indexOf('’')
         val (_, cjk) = buildRichLayout(listOf(InlineRun(text)), ProseStyle.body(cjkPhone), 320, one)
@@ -123,7 +123,7 @@ class StoryProseTest {
         assertTrue(latin.getSpans(3, 4, MetricAffectingSpan::class.java).none { latin.getSpanStart(it) == 3 && latin.getSpanEnd(it) == 4 })
     }
 
-    @Test fun inlineCodeIsSmallerAndUntracked() {
+    @Test fun inlineCodeIsSmallerAndUntracked() = composed {
         val (layout, spanned) = buildRichLayout(listOf(InlineRun("看 "), InlineRun("code", code = true)), ProseStyle.body(cjkPhone), 320, one)
         val code = (spanned as Spanned).getSpans(2, 6, MetricAffectingSpan::class.java)
         assertTrue(code.isNotEmpty())
@@ -147,7 +147,7 @@ class StoryProseTest {
         assertNull(TitleClauses.breaks(listOf(80f, 400f), 335f))
     }
 
-    @Test fun aCjkTitleWrapsAfterItsComma() {
+    @Test fun aCjkTitleWrapsAfterItsComma() = composed {
         val style = ProseStyle.title(cjkPhone, "zh-TW")
         assertEquals(AppFonts.Family.HeadingCJK, style.family)
         assertEquals(Tokens.StoryTitleCompact, style.size)

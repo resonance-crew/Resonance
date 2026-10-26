@@ -57,7 +57,7 @@ object CssLayout {
      * drawn at the app's text scale ([cssFontPx]) and the line box follows it, so the CSS
      * line-height multiple stays the same at any system text size.
      */
-    fun build(text: String, family: AppFonts.Family, sizeSp: Float, weight: Int, lineHeight: Float, widthPx: Int, density: Density, color: Color = Tokens.Text, letterSpacing: Float = 0f): StaticLayout {
+    fun build(text: String, family: AppFonts.Family, sizeSp: Float, weight: Int, lineHeight: Float, widthPx: Int, density: Density, color: Color, letterSpacing: Float = 0f): StaticLayout {
         val sizePx = density.cssFontPx(sizeSp)
         val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             typeface = AppFonts.typeface(family, weight)

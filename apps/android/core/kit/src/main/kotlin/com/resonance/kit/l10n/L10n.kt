@@ -276,7 +276,7 @@ object L10n {
         val open: String get() = Strings.string("tweaks.open")
         /** Close tweaks panel */
         val close: String get() = Strings.string("tweaks.close")
-        /** Accent color */
+        /** Theme color */
         val accentColor: String get() = Strings.string("tweaks.accentColor")
         /** Terracotta (default) */
         val accentTerracotta: String get() = Strings.string("tweaks.accentTerracotta")
@@ -310,6 +310,24 @@ object L10n {
         val grainMedium: String get() = Strings.string("tweaks.grainMedium")
         /** Heavy */
         val grainHeavy: String get() = Strings.string("tweaks.grainHeavy")
+        /** Mode */
+        val scheme: String get() = Strings.string("tweaks.scheme")
+        /** Match system */
+        val schemeSystem: String get() = Strings.string("tweaks.schemeSystem")
+        /** Light */
+        val schemeLight: String get() = Strings.string("tweaks.schemeLight")
+        /** Dark */
+        val schemeDark: String get() = Strings.string("tweaks.schemeDark")
+        /** Wallpaper */
+        val accentWallpaper: String get() = Strings.string("tweaks.accentWallpaper")
+        /** Terracotta */
+        val themeTerracotta: String get() = Strings.string("tweaks.themeTerracotta")
+        /** Sage */
+        val themeSage: String get() = Strings.string("tweaks.themeSage")
+        /** Lavender */
+        val themeLavender: String get() = Strings.string("tweaks.themeLavender")
+        /** Gold */
+        val themeYellow: String get() = Strings.string("tweaks.themeYellow")
     }
     object App {
         object Nav {

@@ -52,10 +52,10 @@ class ComposerFootTest {
         Strings.load { File("../../../../src/messages/${it.tag}.json").readText() }
     }
 
-    @Test fun focusDarkensThePenWithoutChangingItsColour() {
-        assertEquals(Tokens.FieldBorder, composerPen(focused = false))
-        assertEquals(Tokens.FieldBorderHover, composerPen(focused = true))
-        assertNotEquals(Tokens.Terracotta, composerPen(focused = true))
+    @Test fun focusDarkensThePenWithoutChangingItsColour() = composed {
+        assertEquals(Tokens.FieldBorder, composerPen(focused = false, Light))
+        assertEquals(Tokens.FieldBorderHover, composerPen(focused = true, Light))
+        assertNotEquals(Tokens.Terracotta, composerPen(focused = true, Light))
     }
 
     @Test fun aRowIsAtLeast52WithItsCloseA44SquareAtTheEnd() {

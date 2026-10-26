@@ -276,6 +276,8 @@ private fun TocRule(scroll: ScrollState, toc: TocLayout, modifier: Modifier, con
                 if (scroll.maxValue in 1 until Int.MAX_VALUE) available.copy(x = 0f) else Velocity.Zero
         }
     }
+    val railInk = Tokens.FieldBorder
+    val thumbInk = Tokens.Terracotta
     Box(
         modifier
             .drawWithCache {
@@ -288,12 +290,12 @@ private fun TocRule(scroll: ScrollState, toc: TocLayout, modifier: Modifier, con
                 val stretch = Stroke(Tokens.InkStrong.toPx(), cap = StrokeCap.Round)
                 val part = Path()
                 onDrawBehind {
-                    drawPath(path, Tokens.FieldBorder, style = rule)
+                    drawPath(path, railInk, style = rule)
                     // Read while drawing: scrolling redraws the stretch and recomposes nothing.
                     val thumb = thumbOf(scroll, size.height, density) ?: return@onDrawBehind
                     part.reset()
                     measure.getSegment(length * thumb.top / track, length * (thumb.top + thumb.h) / track, part, true)
-                    drawPath(part, Tokens.Terracotta, style = stretch)
+                    drawPath(part, thumbInk, style = stretch)
                 }
             }
             .pointerInput(scroll, still) {

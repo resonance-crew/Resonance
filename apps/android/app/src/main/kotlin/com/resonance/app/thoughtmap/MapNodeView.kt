@@ -1,5 +1,10 @@
 package com.resonance.app.thoughtmap
 
+import com.resonance.design.generated.LocalResonanceColors
+import com.resonance.design.generated.ResonanceColors
+import com.resonance.design.generated.HueRole
+import com.resonance.design.PaletteMixes
+import androidx.compose.runtime.ReadOnlyComposable
 import android.graphics.LinearGradient
 import android.graphics.Shader
 import android.os.Build
@@ -193,14 +198,17 @@ fun MapNodeView(
     LaunchedEffect(fade) {
         if (!still) fade.animateTo(1f, tween(280, easing = FadeIn))
     }
+    val inks = MapInk.current
+    val textInk = Tokens.Text
+    val mutedInk = Tokens.TextMuted
 
     Box(
         modifier
             .requiredSize(mapNodeW.dp, mapNodeH.dp)
             .drawWithCache {
                 val d = density
-                val fill = if (tabbed) MapInk.nodeFill(hue, true) else MapInk.nodeFill(hue, emphasized)
-                val stroke = if (tabbed) MapInk.nodeStroke(hue, true) else MapInk.nodeStroke(hue, emphasized)
+                val fill = if (tabbed) inks.nodeFill(hue, true) else inks.nodeFill(hue, emphasized)
+                val stroke = if (tabbed) inks.nodeStroke(hue, true) else inks.nodeStroke(hue, emphasized)
                 val penWidth = (if (tabbed || emphasized) Tokens.InkStrong else Tokens.Ink).toPx()
                 val outline = if (tabbed) {
                     GeometryCache.get("tab|$seed") {
@@ -214,8 +222,8 @@ fun MapNodeView(
                 val pen = Stroke(penWidth, cap = if (tabbed) StrokeCap.Round else StrokeCap.Butt, join = StrokeJoin.Round)
                 // The body's text: the title and excerpt faded out over the last 14px, as the web's mask does — painted with a
                 // gradient so it stays vector text (no offscreen layer, which would blur when the camera scales it).
-                val opaque = Tokens.Text.toArgb()
-                val muted = Tokens.TextMuted.toArgb()
+                val opaque = textInk.toArgb()
+                val muted = mutedInk.toArgb()
                 fun paint(family: AppFonts.Family, sizeDp: Float, weight: Int, color: Int) = TextPaint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                     typeface = AppFonts.typeface(family, weight)
                     textSize = sizeDp * d
@@ -275,6 +283,7 @@ private fun MapThumb(url: String, hue: Double, seed: Double, modifier: Modifier)
     }
     val px = (64 * density * 2).roundToInt()
     val request = remember(url, px) { ImageRequest.Builder(context).data(url).size(Size(px, px)).crossfade(false).build() }
+    val rimInk = MapInk.current.thumbRim(hue)
     Box(
         modifier
             .size(56.dp)
@@ -284,7 +293,7 @@ private fun MapThumb(url: String, hue: Double, seed: Double, modifier: Modifier)
                 val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                 onDrawWithContent {
                     drawContent()
-                    drawOutline(rim, MapInk.thumbRim(hue), style = pen)
+                    drawOutline(rim, rimInk, style = pen)
                 }
             },
     ) {
@@ -302,16 +311,18 @@ private fun MapThumb(url: String, hue: Double, seed: Double, modifier: Modifier)
 /** The link handle: a dashed 28dp circle on the right edge (centred on the card's edge at 233, 89), an arrow inside. */
 @Composable
 private fun LinkHandle() {
+    val paper = Tokens.CardBg
+    val dash = Tokens.FieldBorderHover
     Box(
         Modifier
             .offset((mapNodeW - 13).dp, (mapNodeH / 2 - 14).dp)
             .size(28.dp)
             .drawBehind {
-                drawCircle(Tokens.CardBg)
+                drawCircle(paper)
                 // `border: 1.6px dashed`, drawn inside the 28 box.
                 val w = 1.6.dp.toPx()
                 drawCircle(
-                    Tokens.FieldBorderHover, radius = size.minDimension / 2 - w / 2,
+                    dash, radius = size.minDimension / 2 - w / 2,
                     style = Stroke(w, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.8.dp.toPx(), 3.2.dp.toPx()))),
                 )
             },
@@ -343,22 +354,41 @@ private fun TabRow() {
     }
 }
 
-/** The map's inks: oklch colors per hue, made once (the web writes them as CSS oklch()). */
-object MapInk {
-    private val cache = HashMap<String, Color>()
+/**
+ * The map's inks, the web's ThoughtMap's: a card's and a group's colours from their hue through the
+ * palette's hue roles (palette.ts HUE_ROLES: interior, wash, pen, emphasis, group…), the arrows
+ * and their pills from the palette's inks and well — so the map follows the scheme and theme on
+ * screen. [current] is the screen's palette's; each made once.
+ */
+class MapInk private constructor(private val palette: ResonanceColors) {
+    fun nodeFill(hue: Double, emphasized: Boolean) = palette.hue(if (emphasized) HueRole.Wash else HueRole.Interior, hue)
+    fun nodeStroke(hue: Double, emphasized: Boolean) = palette.hue(if (emphasized) HueRole.Emphasis else HueRole.Pen, hue)
+    fun thumbRim(hue: Double) = palette.hue(HueRole.Pen, hue, 0.55)
+    fun regionFill(hue: Double, hot: Boolean) = palette.hue(HueRole.Group, hue, if (hot) 0.92 else 0.78)
+    fun regionStroke(hue: Double, strong: Boolean) = palette.hue(if (strong) HueRole.GroupPenHot else HueRole.GroupPen, hue)
+    /** An arrow: the muted ink a quarter of the way to the ink; chosen, the ink. */
+    fun edgeInk(selected: Boolean) = if (selected) palette.Text else edge
+    fun linkInk(hue: Double) = palette.hue(HueRole.Pen, hue)
+    /** A group title's underline and its bar. */
+    fun regionUnderline(hue: Double) = palette.hue(HueRole.GroupInk, hue)
+    fun regionBar(hue: Double) = palette.hue(HueRole.Group, hue, 0.96)
+    /** An arrow's label: on the well; chosen, a step further from the paper. */
+    val pillFill = palette.CreamDark
+    val pillFillSelected = PaletteMixes.mixed(palette.oklchOf("color-cream-dark"), palette.oklchOf("toward-ink"), 0.94)
+    /** The dot grid: the fields' pen. */
+    val dot = palette.FieldBorder
+    /** Behind the tray: the scrim at two thirds. */
+    val scrim = palette.Scrim.copy(alpha = palette.Scrim.alpha * 0.67f)
+    private val edge = PaletteMixes.mixed(palette.oklchOf("color-text-muted"), palette.oklchOf("color-text"), 0.75)
 
-    fun oklch(l: Double, c: Double, h: Double, alpha: Double = 1.0): Color =
-        cache.getOrPut("$l|$c|$h|$alpha") { OklchColor.of(l, c, h, alpha) }
+    companion object {
+        private val made = HashMap<ResonanceColors, MapInk>()
 
-    fun nodeFill(hue: Double, emphasized: Boolean) = if (emphasized) oklch(0.925, 0.045, hue) else oklch(0.975, 0.012, hue)
-    fun nodeStroke(hue: Double, emphasized: Boolean) = if (emphasized) oklch(0.38, 0.13, hue) else oklch(0.52, 0.11, hue)
-    fun thumbRim(hue: Double) = oklch(0.52, 0.11, hue, 0.55)
-    fun regionFill(hue: Double, hot: Boolean) = oklch(0.965, 0.032, hue, if (hot) 0.92 else 0.78)
-    fun regionStroke(hue: Double, strong: Boolean) = if (strong) oklch(0.45, 0.1, hue) else oklch(0.6, 0.085, hue)
-    fun edgeInk(selected: Boolean) = if (selected) oklch(0.28, 0.05, 60.0) else oklch(0.46, 0.045, 60.0)
-    fun linkInk(hue: Double) = oklch(0.52, 0.11, hue)
-    val pillFill = oklch(0.94, 0.02, 75.0)
-    val pillFillSelected = oklch(0.88, 0.03, 60.0)
-    val dot = oklch(0.82, 0.025, 75.0)
-    val scrim = oklch(0.3, 0.02, 75.0, 0.16)
+        fun of(palette: ResonanceColors): MapInk = synchronized(made) {
+            made.getOrPut(palette) { MapInk(palette) }.also { if (made.size > 8) made.keys.retainAll(setOf(palette)) }
+        }
+
+        /** The screen's palette's inks. */
+        val current: MapInk @Composable @ReadOnlyComposable get() = of(LocalResonanceColors.current)
+    }
 }

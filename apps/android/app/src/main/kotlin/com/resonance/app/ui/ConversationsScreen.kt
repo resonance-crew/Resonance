@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import com.resonance.design.avatarFill
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.hoverable
@@ -162,6 +163,8 @@ private fun ConversationRow(person: Person, preview: String, time: String?, unre
     val pressed by source.collectIsPressedAsState()
     val hovered by source.collectIsHoveredAsState()
     val seed = seedFromString(person.id).toDouble()
+    val chosenWash = Tokens.TerracottaLight.copy(alpha = 0.55f)
+    val pressWash = Tokens.TowardInk.copy(alpha = 0.045f)
     Row(
         Modifier
             .readableColumn()
@@ -177,8 +180,8 @@ private fun ConversationRow(person: Person, preview: String, time: String?, unre
                     options = WobRectOptions(curve = 1.3, cornerJitter = 2.4, cornerOffset = h * 0.05, segmentsH = SegValue.Count(3.0), segmentsV = SegValue.Count(1.0)),
                 ).createOutline(size, layoutDirection, this)
                 onDrawBehind {
-                    if (chosen) drawOutline(outline, Tokens.TerracottaLight.copy(alpha = 0.55f))
-                    else if (pressed || hovered) drawOutline(outline, Color.Black.copy(alpha = 0.045f))
+                    if (chosen) drawOutline(outline, chosenWash)
+                    else if (pressed || hovered) drawOutline(outline, pressWash)
                 }
             }
             .clickable(source, indication = null, role = Role.Button) { open(Route.Thread(person.handle, uid = person.id)) }
@@ -188,7 +191,7 @@ private fun ConversationRow(person: Person, preview: String, time: String?, unre
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         HandDrawnAvatar(
-            person.initials, person.avatarUrl, person.accentColor?.let(OklchColor::parse) ?: Tokens.TerracottaLight,
+            person.initials, person.avatarUrl, avatarFill(person.accentColor),
             size = 40.dp, seed = seedOr(person.avatarSeed, 5.0),
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {

@@ -4,19 +4,45 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.BitmapShader
+import android.graphics.Canvas
 import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
 import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.os.Build
 import android.util.Half
 import androidx.annotation.RequiresApi
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.toArgb
+import com.resonance.design.generated.LocalResonanceColors
+import com.resonance.design.generated.ResonanceColors
 import java.nio.ShortBuffer
 import kotlin.concurrent.thread
 
 enum class GrainMode { None, Tile, Shader }
+
+/**
+ * What the grain's specks are drawn in (palette.ts `grain-ink`, `grain-scale`): dark specks on
+ * cream; light ones on night paper, lighter-handed (light specks on dark read louder). Read it in
+ * composition ([current]) and hand it to the draw block with the rest.
+ */
+@Immutable
+data class GrainInk(val color: Color, val scale: Float) {
+    companion object {
+        fun of(palette: ResonanceColors) = GrainInk(palette.GrainInk, palette.GrainScale)
+
+        /** The screen's palette's. */
+        val current: GrainInk @Composable @ReadOnlyComposable get() = of(LocalResonanceColors.current)
+    }
+}
 
 /**
  * The web's feTurbulence parameters for each grain, keyed by tile name
@@ -66,16 +92,34 @@ object Grain {
         }
     }
 
-    fun brush(mode: GrainMode, tile: String, size: Size, density: Float, opacity: Float): Brush? = when (mode) {
+    /** The tile's specks in [ink] (its alpha × the ink's scale): the black tile itself for black at full strength. */
+    private fun tile(name: String, ink: GrainInk): Bitmap {
+        val argb = ink.color.toArgb()
+        if (argb == android.graphics.Color.BLACK && ink.scale >= 1f) return tile(name)
+        val key = "$name|$argb|${ink.scale}"
+        synchronized(tiles) { tiles[key]?.let { return it } }
+        val black = tile(name)
+        val tinted = Bitmap.createBitmap(black.width, black.height, Bitmap.Config.ARGB_8888)
+        Canvas(tinted).drawBitmap(
+            black, 0f, 0f,
+            Paint().apply {
+                colorFilter = PorterDuffColorFilter(argb or (0xff shl 24), PorterDuff.Mode.SRC_IN)
+                alpha = (255 * ink.scale.coerceIn(0f, 1f) * ink.color.alpha).toInt()
+            },
+        )
+        return synchronized(tiles) { tiles.getOrPut(key) { tinted } }
+    }
+
+    fun brush(mode: GrainMode, tile: String, size: Size, density: Float, opacity: Float, ink: GrainInk): Brush? = when (mode) {
         GrainMode.None -> null
         GrainMode.Tile -> {
             // Tiles are 128 dp rendered at 3×; scale them to this screen's density.
-            val shader = BitmapShader(tile(tile), Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
+            val shader = BitmapShader(tile(tile, ink), Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
             shader.setLocalMatrix(Matrix().apply { setScale(density / 3f, density / 3f) })
             ShaderBrush(shader)
         }
         GrainMode.Shader ->
-            if (Build.VERSION.SDK_INT >= 33) ShaderBrush(GrainShader.create(GrainSpec.named(tile), size, density, opacity)) else null
+            if (Build.VERSION.SDK_INT >= 33) ShaderBrush(GrainShader.create(GrainSpec.named(tile), size, density, opacity * ink.scale, ink = ink.color)) else null
     }
 }
 
@@ -96,6 +140,7 @@ object GrainShader {
         uniform float octaves;
         uniform float opacity;
         uniform float mode;
+        uniform float3 ink;      // the specks' colour (mode 1), sRGB
 
         float sel(float i) { return float(lattice.eval(float2(i + 0.5, 0.5)).r); }
         float2 grad(float ch, float i) { return float2(lattice.eval(float2(i + 0.5, ch + 1.5)).rg); }
@@ -165,7 +210,7 @@ object GrainShader {
             float lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
             float gray; float a;
             if (mode < 0.5) { gray = toSrgb(lum); a = channel(3.0, p, freq, st0) * opacity; }
-            else if (mode < 1.5) { gray = 0.0; a = (1.0 - lum) * opacity; }
+            else if (mode < 1.5) { a = (1.0 - lum) * opacity; return half4(half(ink.r * a), half(ink.g * a), half(ink.b * a), half(a)); }
             else if (mode < 2.5) { gray = toSrgb(lum); a = 1.0; }
             else { gray = channel(3.0, p, freq, st0); a = 1.0; }
             return half4(half(gray * a), half(gray * a), half(gray * a), half(a));
@@ -175,8 +220,9 @@ object GrainShader {
     private val lattices = HashMap<Int, BitmapShader>()
 
     /** Opacity is baked in (mode 0/1) so the brush is drawn at alpha 1. */
-    fun create(spec: GrainSpec, size: Size, density: Float, opacity: Float, mode: Float = spec.shaderMode): RuntimeShader =
+    fun create(spec: GrainSpec, size: Size, density: Float, opacity: Float, ink: Color, mode: Float = spec.shaderMode): RuntimeShader =
         RuntimeShader(AGSL).apply {
+            setFloatUniform("ink", ink.red, ink.green, ink.blue)
             setInputBuffer("lattice", lattice(spec.seed))
             setFloatUniform("size", size.width / density, size.height / density)
             setFloatUniform("density", density)
