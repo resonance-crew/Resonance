@@ -148,20 +148,29 @@ public nonisolated enum Palette {
     public static func mix(_ a: PaletteToken, _ share: Double, _ b: PaletteToken, alpha: Double = 1) -> Color {
         let key = MixKey(a: a.rawValue, share: Int((share * 10000).rounded()), b: b.rawValue, alpha: Int((alpha * 1000).rounded()))
         if let kept = mixes.withLock({ $0[key] }) { return kept }
-        var made: [UIColor] = []
-        for accent in Accent.allCases {
-            for scheme in PaletteScheme.allCases {
-                let x = OKLCHColor.components(oklch(a, accent: accent, scheme: scheme)) ?? (0, 0, 0, 1)
-                let y = OKLCHColor.components(oklch(b, accent: accent, scheme: scheme)) ?? (0, 0, 0, 1)
-                let m = mixOKLCH(x, share, y)
-                let (r, g, bl) = OKLCHColor.displayP3(L: m.L, C: m.C, H: m.H)
-                made.append(UIColor(displayP3Red: r, green: g, blue: bl, alpha: m.alpha * alpha))
-            }
+        let color = made { accent, scheme in
+            let x = OKLCHColor.components(oklch(a, accent: accent, scheme: scheme)) ?? (0, 0, 0, 1)
+            let y = OKLCHColor.components(oklch(b, accent: accent, scheme: scheme)) ?? (0, 0, 0, 1)
+            let m = mixOKLCH(x, share, y)
+            return (m.L, m.C, m.H, m.alpha * alpha)
         }
-        let table = made
-        let color = Color(uiColor: UIColor { traits in table[traits.accent.index * 2 + PaletteScheme(traits).index] })
         mixes.withLock { $0[key] = color }
         return color
+    }
+
+    /// A colour worked out from the palette for every theme and scheme (oklch numbers), made once and
+    /// picked at draw time as the tokens are — for what the web computes in CSS over its variables.
+    public static func made(_ oklch: (Accent, PaletteScheme) -> (L: Double, C: Double, H: Double, alpha: Double)) -> Color {
+        var table: [UIColor] = []
+        for accent in Accent.allCases {
+            for scheme in PaletteScheme.allCases {
+                let c = oklch(accent, scheme)
+                let (r, g, b) = OKLCHColor.displayP3(L: c.L, C: c.C, H: c.H)
+                table.append(UIColor(displayP3Red: r, green: g, blue: b, alpha: c.alpha))
+            }
+        }
+        let colours = table
+        return Color(uiColor: UIColor { colours[$0.accent.index * 2 + PaletteScheme($0).index] })
     }
 
     // MARK: Hue-made colours
