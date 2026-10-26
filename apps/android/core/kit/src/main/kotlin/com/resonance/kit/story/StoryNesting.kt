@@ -24,8 +24,15 @@ object StoryNesting {
     const val DELIMITER_BUDGET = 1_000_000
 
     /**
+     * Cells one table may come to: rows are padded to the header's columns, and every line after the
+     * header is a row — read per blank-line block as (most `|` on a line + 1) × lines.
+     */
+    const val TABLE_CELLS = 20_000
+
+    /**
      * Whether the story is too costly to read as Markdown at all: [tooDeep], or a paragraph holding
-     * more than [PARAGRAPH_DELIMITERS] inline delimiters, or more than [DELIMITER_BUDGET] over it.
+     * more than [PARAGRAPH_DELIMITERS] inline delimiters, or more than [DELIMITER_BUDGET] over it, or a
+     * table of more than [TABLE_CELLS] cells.
      */
     fun tooComplex(story: String): Boolean = tooDeep(story) || tooManyDelimiters(story)
 
@@ -36,10 +43,14 @@ object StoryNesting {
         fun delimiter(c: Char) = c == '*' || c == '_' || c == '~' || c == '`' || c == '[' || c == ']'
         var paragraph = 0L
         var load = 0L
+        var columns = 0L
+        var rows = 0L
         var fence = 0.toChar()
         fun endParagraph(): Boolean {
             load += paragraph * paragraph
             paragraph = 0
+            columns = 0
+            rows = 0
             return load > DELIMITER_BUDGET
         }
         var i = 0
@@ -81,8 +92,14 @@ object StoryNesting {
                 continue
             }
             if (fence != 0.toChar()) continue
-            for (k in start until end) if (delimiter(story[k])) paragraph++
+            var pipes = 0L
+            for (k in start until end) {
+                if (delimiter(story[k])) paragraph++ else if (story[k] == '|') pipes++
+            }
             if (paragraph > PARAGRAPH_DELIMITERS) return true
+            if (pipes > columns) columns = pipes
+            rows++
+            if (columns > 0 && (columns + 1) * rows > TABLE_CELLS) return true
         }
         return endParagraph()
     }

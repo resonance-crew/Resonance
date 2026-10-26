@@ -15,9 +15,13 @@ public nonisolated enum StoryNesting {
     public static let paragraphDelimiters = 200
     /// The paragraphs' delimiter counts, squared and summed.
     public static let delimiterBudget = 1_000_000
+    /// Cells one table may come to: rows are padded to the header's columns, and every line after
+    /// the header is a row — read per blank-line block as (most `|` on a line + 1) × lines.
+    public static let tableCells = 20_000
 
     /// Whether the story is too costly to read as Markdown at all: `tooDeep`, or a paragraph holding
-    /// more than `paragraphDelimiters` inline delimiters, or more than `delimiterBudget` over the story.
+    /// more than `paragraphDelimiters` inline delimiters, or more than `delimiterBudget` over the story,
+    /// or a table of more than `tableCells` cells.
     public static func tooComplex(_ story: String) -> Bool {
         tooDeep(story) || tooManyDelimiters(story)
     }
@@ -32,10 +36,14 @@ public nonisolated enum StoryNesting {
         func isDelimiter(_ c: UInt8) -> Bool { c == 0x2A || c == 0x5F || c == 0x7E || c == 0x60 || c == 0x5B || c == 0x5D }
         var paragraph = 0
         var load = 0
+        var columns = 0
+        var rows = 0
         var fence: UInt8 = 0
         func endParagraph() -> Bool {
             load += paragraph * paragraph
             paragraph = 0
+            columns = 0
+            rows = 0
             return load > delimiterBudget
         }
         var i = 0
@@ -77,8 +85,14 @@ public nonisolated enum StoryNesting {
                 continue
             }
             if fence != 0 { continue }
-            for k in start..<end where isDelimiter(bytes[k]) { paragraph += 1 }
+            var pipes = 0
+            for k in start..<end {
+                if isDelimiter(bytes[k]) { paragraph += 1 } else if bytes[k] == UInt8(ascii: "|") { pipes += 1 }
+            }
             if paragraph > paragraphDelimiters { return true }
+            columns = max(columns, pipes)
+            rows += 1
+            if columns > 0, (columns + 1) * rows > tableCells { return true }
         }
         return endParagraph()
     }

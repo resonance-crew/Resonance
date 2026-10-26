@@ -201,6 +201,11 @@ import Testing
         #expect(!StoryNesting.tooComplex(ordinary))
         let code = "```\n" + String(repeating: "snake_case_name = other_value * __dunder__\n", count: 300) + "```"
         #expect(!StoryNesting.tooComplex(code))
+        // A wide header over many short lines is millions of padded cells; an ordinary table is not.
+        let wide = "|" + String(repeating: "a|", count: 1_000) + "\n|" + String(repeating: "-|", count: 1_000) + "\n" + String(repeating: "a\n", count: 80_000)
+        #expect(StoryNesting.tooComplex(wide))
+        let table = "| a | b | c |\n| --- | --- | --- |\n" + String(repeating: "| x | y | z |\n", count: 400)
+        #expect(!StoryNesting.tooComplex(table))
         // Many paragraphs near the limit add up.
         let many = Array(repeating: String(repeating: "*a ", count: StoryNesting.paragraphDelimiters - 10), count: 40).joined(separator: "\n\n")
         #expect(StoryNesting.tooComplex(many))

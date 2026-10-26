@@ -9,9 +9,11 @@
  *   stack — a crash on the page's server render and in every reader's tab,
  *   not a slow read;
  * - a paragraph of thousands of emphasis, strikethrough, code or bracket
- *   delimiters that never pair up (`**…`, `~~a …`, `*[…`) costs the parser
- *   time quadratic in their number — minutes for one paragraph — and nests
- *   as deep.
+ *   delimiters (`**…`, `~~a …`, `*[…`, `a* *…`) costs the parser time
+ *   quadratic in their number — minutes for one paragraph — and nests as
+ *   deep;
+ * - a table's rows are padded to its header's columns: a wide header over
+ *   many short lines comes to millions of cells.
  *
  * No story worth reading comes near either. One that does is drawn as its
  * words (StoryMarkdown), embeds and link cards nothing, and a share card
@@ -30,6 +32,12 @@ export const STORY_NESTING_LIMIT = 32;
 export const PARAGRAPH_DELIMITER_LIMIT = 200;
 /** The paragraphs' delimiter counts, squared and summed: what the parser's work grows with. */
 export const STORY_DELIMITER_BUDGET = 1_000_000;
+/**
+ * Cells one table may come to. A GFM table pads every row to its header's columns, and any line
+ * after the header is a row: a header of a thousand `|` over ten thousand one-letter lines is ten
+ * million cells from a few dozen KB. Read per blank-line block as (most `|` on a line + 1) × lines.
+ */
+export const TABLE_CELL_LIMIT = 20_000;
 
 const SPACE = 0x20;
 const TAB = 0x09;
@@ -54,10 +62,14 @@ export function storyTooComplex(story: string): boolean {
   let i = 0;
   let paragraph = 0; // delimiters in the paragraph being read
   let load = 0; // Σ paragraph²
+  let columns = 0; // most `|` on a line of the paragraph (a table's header has its columns' worth)
+  let rows = 0; // the paragraph's lines (every line after a table's header is a row)
   let fence = 0; // the fence character while inside a fenced code block (` or ~), else 0
   const endParagraph = (): boolean => {
     load += paragraph * paragraph;
     paragraph = 0;
+    columns = 0;
+    rows = 0;
     return load > STORY_DELIMITER_BUDGET;
   };
   while (i < n) {
@@ -108,8 +120,16 @@ export function storyTooComplex(story: string): boolean {
       continue;
     }
     if (fence) continue;
-    for (let k = start; k < end; k++) if (isDelimiter(story.charCodeAt(k))) paragraph++;
+    let pipes = 0;
+    for (let k = start; k < end; k++) {
+      const c = story.charCodeAt(k);
+      if (isDelimiter(c)) paragraph++;
+      else if (c === 0x7c) pipes++; // |
+    }
     if (paragraph > PARAGRAPH_DELIMITER_LIMIT) return true;
+    if (pipes > columns) columns = pipes;
+    rows++;
+    if (columns > 0 && (columns + 1) * rows > TABLE_CELL_LIMIT) return true;
   }
   return endParagraph();
 }

@@ -22,6 +22,8 @@ const hostile: Record<string, string> = {
   'strikethrough that never pairs': fit('~~a '.repeat(25_000) + 'x' + ' a~~'.repeat(25_000)),
   'links inside emphasis': fit('*['.repeat(10_000) + 'x' + '](https://a.com)*'.repeat(10_000)),
   'code spans that never close': fit('`a ``b '.repeat(30_000)),
+  'flat runs of emphasis delimiters': fit('a* *'.repeat(50_000)),
+  'a wide table header over many short lines': '|' + 'a|'.repeat(1_000) + '\n|' + '-|'.repeat(1_000) + '\n' + 'a\n'.repeat(80_000),
   'many paragraphs each near the limit': Array.from({ length: 40 }, () => '*a '.repeat(PARAGRAPH_DELIMITER_LIMIT - 10)).join('\n\n'),
 };
 
@@ -32,6 +34,7 @@ const ordinary: Record<string, string> = {
   'every paragraph with some emphasis': fit('這段有 **重點** 和 *強調*，還有 [連結](https://example.com)。\n\n'.repeat(6_000)),
   'code fences full of underscores': '```python\n' + 'snake_case_name = other_value_here * __dunder__\n'.repeat(400) + '```\n\nafter',
   'a table': '| a | b |\n| --- | --- |\n' + '| **x** | *y* |\n'.repeat(30),
+  'a large ordinary table': '| ' + Array.from({ length: 8 }, (_, i) => `c${i}`).join(' | ') + ' |\n|' + ' --- |'.repeat(8) + '\n' + ('| ' + Array.from({ length: 8 }, () => 'v').join(' | ') + ' |\n').repeat(500),
 };
 
 describe('storyTooComplex', () => {

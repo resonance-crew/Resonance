@@ -65,6 +65,9 @@ class StoryParserTest {
         val ordinary = (0 until 40).joinToString("\n\n") { "這段有 **重點** 和 *強調*，第${it}段。" }
         assertTrue(!nesting.tooComplex(ordinary))
         assertTrue(!nesting.tooComplex("```\n" + "snake_case_name = other_value * __dunder__\n".repeat(300) + "```"))
+        val wide = "|" + "a|".repeat(1_000) + "\n|" + "-|".repeat(1_000) + "\n" + "a\n".repeat(80_000)
+        assertTrue(nesting.tooComplex(wide))
+        assertTrue(!nesting.tooComplex("| a | b | c |\n| --- | --- | --- |\n" + "| x | y | z |\n".repeat(400)))
         val many = List(40) { "*a ".repeat(nesting.PARAGRAPH_DELIMITERS - 10) }.joinToString("\n\n")
         assertTrue(nesting.tooComplex(many))
         assertEquals(emptyList(), com.resonance.kit.story.SharePassages.blocks(deep + "\n\n第二段，平平常常的一段話，也值得被讀到。"))

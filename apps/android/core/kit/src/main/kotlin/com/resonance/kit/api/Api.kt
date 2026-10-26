@@ -12,6 +12,7 @@ import com.resonance.api.models.FeedCard
 import com.resonance.api.models.FeedPage
 import com.resonance.api.models.Me
 import com.resonance.api.models.Profile
+import java.time.OffsetDateTime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -20,10 +21,10 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okhttp3.Call
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Response
-import java.time.OffsetDateTime
 
 /**
  * Where the API lives and how a request gets its credentials — the twin of
@@ -37,6 +38,11 @@ class ApiConfiguration(
     val idToken: suspend (forceRefresh: Boolean) -> String?,
 ) {
     val apiUrl: String get() = origin.trimEnd('/') + "/api/v1"
+
+    init {
+        // The one host the shared client hands the App Check token to (AppHttp).
+        AppCheckHeader.apiOrigin = origin.toHttpUrlOrNull()
+    }
 }
 
 /**
