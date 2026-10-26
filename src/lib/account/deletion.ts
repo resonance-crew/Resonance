@@ -342,6 +342,9 @@ async function purgeChatPictures(
   return true;
 }
 
+/** How many uploaded files the purge hands the store at once (R2's DeleteObjects takes a thousand). */
+export const UPLOAD_DELETE_BATCH = 1000;
+
 export interface PurgeDeps {
   db: Firestore;
   /** Removes the sign-in account (firebase-admin `auth.deleteUser`). */
@@ -350,6 +353,11 @@ export interface PurgeDeps {
   deleteStoragePrefix?: (prefix: string) => Promise<number>;
   /** Removes one uploaded file (the ones `uploads/*` records as the user's); failures are logged, not fatal. */
   deleteStorageObject?: (key: string) => Promise<void>;
+  /**
+   * Removes many uploaded files at once (a store's batch delete, UPLOAD_DELETE_BATCH a call), in place of
+   * deleteStorageObject; failures are logged, not fatal.
+   */
+  deleteStorageObjects?: (keys: string[]) => Promise<void>;
   /** Removes chat pictures' files (lib/storage/chatImages, a page's at once); failures are logged, not fatal. */
   deleteChatImageFiles?: (keys: string[]) => Promise<void>;
   /** Drops cached pages (logical paths, `revalidateLocalized` in the cron); failures are logged, not fatal. */
@@ -365,19 +373,25 @@ export interface PurgeDeps {
  * rest — storage, sign-in, the request — to the next run.
  */
 export async function purgeAccount(deps: PurgeDeps, uid: string, opts: PurgeOptions = {}): Promise<PurgeReport> {
-  // The pictures recorded as theirs go before the records that list them.
-  if (deps.deleteStorageObject) {
-    for (const key of await uploadedKeys(deps.db, uid)) {
+  const clock = opts.clock ?? Date.now;
+  const late = () => opts.deadline !== undefined && clock() >= opts.deadline;
+  // The pictures recorded as theirs go before the records that list them — a batch at a time, none started past
+  // the deadline: cut short, the rest of the account waits for the next run (its records would otherwise go
+  // before their files), which finds the same records and deletes what is left.
+  if (deps.deleteStorageObjects || deps.deleteStorageObject) {
+    const keys = await uploadedKeys(deps.db, uid);
+    const batch = deps.deleteStorageObjects ? UPLOAD_DELETE_BATCH : 1;
+    for (let i = 0; i < keys.length; i += batch) {
+      if (late()) return { trees: 0, documents: 0, pages: [], complete: false };
+      const some = keys.slice(i, i + batch);
       try {
-        await deps.deleteStorageObject(key);
+        await (deps.deleteStorageObjects ? deps.deleteStorageObjects(some) : deps.deleteStorageObject!(some[0]));
       } catch (err) {
-        console.error(`Account purge: storage cleanup failed for ${key}`, err);
+        console.error(`Account purge: storage cleanup failed for ${some.length === 1 ? some[0] : `${some.length} files`}`, err);
       }
     }
   }
   if (deps.deleteChatImageFiles) {
-    const clock = opts.clock ?? Date.now;
-    const late = () => opts.deadline !== undefined && clock() >= opts.deadline;
     // Cut short, the rest of the account waits: its records would otherwise go before their files.
     if (!(await purgeChatPictures(deps.db, deps.deleteChatImageFiles, uid, late))) {
       return { trees: 0, documents: 0, pages: [], complete: false };

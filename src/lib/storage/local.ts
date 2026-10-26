@@ -86,6 +86,10 @@ export class LocalStorageProvider implements IStorageProvider {
     await rm(this.path(key), { force: true });
   }
 
+  async deleteObjects(keys: string[]): Promise<void> {
+    for (const key of keys) await this.deleteObject(key);
+  }
+
   async copyObject(fromKey: string, toKey: string): Promise<void> {
     const to = this.path(toKey);
     await mkdir(dirname(to), { recursive: true });

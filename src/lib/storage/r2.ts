@@ -57,6 +57,9 @@ export function r2Client(credentials?: { accessKeyId: string; secretAccessKey: s
   });
 }
 
+/** How many keys one DeleteObjects request takes. */
+const DELETE_BATCH = 1000;
+
 export class R2StorageProvider implements IStorageProvider {
   private client = r2Client();
 
@@ -121,6 +124,17 @@ export class R2StorageProvider implements IStorageProvider {
 
   async deleteObject(key: string): Promise<void> {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+  }
+
+  async deleteObjects(keys: string[]): Promise<void> {
+    let failed = 0;
+    // R2 takes a thousand keys a request.
+    for (let i = 0; i < keys.length; i += DELETE_BATCH) {
+      const Objects = keys.slice(i, i + DELETE_BATCH).map((Key) => ({ Key }));
+      const res = await this.client.send(new DeleteObjectsCommand({ Bucket: this.bucket, Delete: { Objects, Quiet: true } }));
+      failed += res.Errors?.length ?? 0;
+    }
+    if (failed) throw new Error(`${failed} of ${keys.length} objects were not deleted`);
   }
 
   async copyObject(fromKey: string, toKey: string): Promise<void> {

@@ -7,6 +7,7 @@ import {
   purgeAccount,
   purgeDueAccounts,
   scheduleAccountDeletion,
+  UPLOAD_DELETE_BATCH,
 } from '@/lib/account/deletion';
 import { exportAccountData, exportAccountJson } from '@/lib/account/export';
 import { sendNote } from '@/lib/api/v1/conversations';
@@ -318,6 +319,40 @@ describe('purgeAccount', () => {
     expect(await exists('cards/alice-trashed/edits/current')).toBe(false);
     expect(await exists('cards/alice-trashed-draft')).toBe(false);
     expect(await exists('notes/on-trashed')).toBe(false);
+  });
+
+  it("hands the store the account's pictures a batch at a time, starting none past the deadline", async () => {
+    await seedWorld();
+    const writer = db.bulkWriter();
+    for (let i = 0; i < UPLOAD_DELETE_BATCH + 5; i++) void writer.set(db.doc(`uploads/many-${i}`), { ownerId: 'alice', key: `image/2026-10/m${i}.webp`, kind: 'image' });
+    await writer.close();
+    const deleteStorageObjects = vi.fn(async (_keys: string[]) => {});
+    const deleteAuthUser = vi.fn(async () => {});
+    // Out of time before the first batch: nothing of the account is touched, its pictures' records stay for next time.
+    const cut = await purgeAccount({ db, deleteAuthUser, deleteStorageObjects }, 'alice', { deadline: 0, clock: () => 1 });
+    expect(cut.complete).toBe(false);
+    expect(deleteStorageObjects).not.toHaveBeenCalled();
+    expect(await exists('uploads/many-0')).toBe(true);
+    expect(await exists('users/alice')).toBe(true);
+    expect(deleteAuthUser).not.toHaveBeenCalled();
+    // In time: two calls (a thousand, then the rest), then the account.
+    await purgeAccount({ db, deleteAuthUser, deleteStorageObjects }, 'alice');
+    expect(deleteStorageObjects.mock.calls.map(([keys]) => keys.length)).toEqual([UPLOAD_DELETE_BATCH, 6]);
+    expect(deleteStorageObjects.mock.calls.flatMap(([keys]) => keys)).toContain('image/2026-10/a1.webp');
+    expect(await exists('uploads/many-0')).toBe(false);
+    expect(deleteAuthUser).toHaveBeenCalledWith('alice');
+  });
+
+  it('goes on with the account when a batch of pictures cannot be deleted (logged)', async () => {
+    await seedWorld();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const deleteStorageObjects = vi.fn(async () => {
+      throw new Error('r2 down');
+    });
+    const report = await purgeAccount({ db, deleteAuthUser: vi.fn(async () => {}), deleteStorageObjects }, 'alice');
+    expect(report.complete).toBe(true);
+    expect(await exists('users/alice')).toBe(false);
+    expect(error.mock.calls.some((c) => String(c[0]).includes('storage cleanup failed'))).toBe(true);
   });
 
   it('removes the notes on a card before the card, so a purge cut short leaves none its next run could no longer find', async () => {

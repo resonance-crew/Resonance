@@ -16,6 +16,12 @@ export interface IStorageProvider {
    */
   getObject(key: string, maxBytes: number): Promise<Uint8Array | null>;
   deleteObject(key: string): Promise<void>;
+  /**
+   * Delete these objects, as many at a time as the store takes (R2: a
+   * thousand a request); a key that isn't there is nothing. Throws when any
+   * of them could not be deleted.
+   */
+  deleteObjects(keys: string[]): Promise<void>;
   /** Copy an object to a new key, its type and caching with it (scripts/backfills/rekeyImages). */
   copyObject(fromKey: string, toKey: string): Promise<void>;
   /** Delete every object under `prefix` (e.g. `image/{uid}/`); returns how many. */
