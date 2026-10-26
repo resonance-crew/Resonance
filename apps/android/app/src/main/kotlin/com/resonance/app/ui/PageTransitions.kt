@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import com.resonance.design.generated.Tokens
 import androidx.activity.BackEventCompat
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
@@ -280,10 +281,12 @@ internal fun PageFrame(motion: PageMotion, onStack: () -> Boolean, content: @Com
         return releasedPose(pagePose(move, role, at, width, end, finger, shift, corner), t, finger, drift)
     }
 
+    // The page underneath sinks into shadow (--shadow-ink: a warm near-black, in either scheme).
+    val shade = Tokens.ShadowInk
     Box(
         Modifier.fillMaxSize().drawBehind {
             val scrim = pose(size.width, 0f, 0f, 0f).scrim
-            if (scrim > 0f) drawRect(Color.Black, alpha = scrim)
+            if (scrim > 0f) drawRect(shade, alpha = scrim)
         },
     ) {
         Box(

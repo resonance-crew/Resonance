@@ -1383,7 +1383,7 @@ private fun AudienceChoice(model: WriteModel) {
                     audience.name, audienceLabel(audience), audienceIcon(audience),
                     fill = if (on) Tokens.ButtonTonal else null,
                     textColor = if (on) Tokens.ButtonOnTonal else VisibilityInk,
-                    press = Color.Black.copy(alpha = 0.05f),
+                    press = Tokens.TowardInk.copy(alpha = 0.05f),
                     selected = on,
                 ) { model.choose(audience) }
             },
