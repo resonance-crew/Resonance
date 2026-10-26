@@ -24,34 +24,42 @@ object StoryNesting {
     const val DELIMITER_BUDGET = 1_000_000
 
     /**
-     * Cells one table may come to: rows are padded to the header's columns, and every line after the
-     * header is a row — read per blank-line block as (most `|` on a line + 1) × lines.
+     * Cells all of a story's tables may come to: rows are padded to the header's columns, every line
+     * after the header is a row, and the web's parser resolves a story's tables in one pass quadratic
+     * in the cells written across them. Each blank-line block holding a line that could be a delimiter
+     * row (only `-`, `:`, `|`, `>` and spaces, at least one `-`; a table needs no `|`) counts
+     * (most `|` on a line + 1) × its lines.
      */
-    const val TABLE_CELLS = 20_000
+    const val TABLE_CELLS = 5_000
 
     /**
      * Whether the story is too costly to read as Markdown at all: [tooDeep], or a paragraph holding
-     * more than [PARAGRAPH_DELIMITERS] inline delimiters, or more than [DELIMITER_BUDGET] over it, or a
-     * table of more than [TABLE_CELLS] cells.
+     * more than [PARAGRAPH_DELIMITERS] inline delimiters, or more than [DELIMITER_BUDGET] over it, or
+     * tables of more than [TABLE_CELLS] cells. A line ends at LF, CR or CRLF, as the parser reads it.
      */
     fun tooComplex(story: String): Boolean = tooDeep(story) || tooManyDelimiters(story)
 
     /** Counts each paragraph's inline delimiters after its lines' quote and list markers, skipping fenced code. */
     fun tooManyDelimiters(story: String): Boolean {
         val n = story.length
-        fun space(c: Char) = c == ' ' || c == '\t' || c == '\r'
+        fun space(c: Char) = c == ' ' || c == '\t'
         fun delimiter(c: Char) = c == '*' || c == '_' || c == '~' || c == '`' || c == '[' || c == ']'
+        fun delimiterRowChar(c: Char) = c == '|' || c == ':' || c == '-' || c == '>' || c == ' ' || c == '\t'
         var paragraph = 0L
         var load = 0L
         var columns = 0L
         var rows = 0L
+        var table = false
+        var cells = 0L
         var fence = 0.toChar()
         fun endParagraph(): Boolean {
             load += paragraph * paragraph
+            if (table) cells += (columns + 1) * rows
             paragraph = 0
             columns = 0
             rows = 0
-            return load > DELIMITER_BUDGET
+            table = false
+            return load > DELIMITER_BUDGET || cells > TABLE_CELLS
         }
         var i = 0
         while (i < n) {
@@ -76,9 +84,9 @@ object StoryNesting {
                 depth++
             }
             val start = i
-            while (i < n && story[i] != '\n') i++
+            while (i < n && story[i] != '\n' && story[i] != '\r') i++
             val end = i
-            i++
+            i += if (i + 1 < n && story[i] == '\r' && story[i + 1] == '\n') 2 else 1
             if (start == end) {
                 // A blank line ends the paragraph.
                 if (depth == 0 && endParagraph()) return true
@@ -93,13 +101,18 @@ object StoryNesting {
             }
             if (fence != 0.toChar()) continue
             var pipes = 0L
+            var delimiterRow = true
+            var dash = false
             for (k in start until end) {
-                if (delimiter(story[k])) paragraph++ else if (story[k] == '|') pipes++
+                val c = story[k]
+                if (delimiter(c)) paragraph++ else if (c == '|') pipes++
+                if (c == '-') dash = true else if (!delimiterRowChar(c)) delimiterRow = false
             }
             if (paragraph > PARAGRAPH_DELIMITERS) return true
             if (pipes > columns) columns = pipes
             rows++
-            if (columns > 0 && (columns + 1) * rows > TABLE_CELLS) return true
+            if (delimiterRow && dash) table = true
+            if (table && cells + (columns + 1) * rows > TABLE_CELLS) return true
         }
         return endParagraph()
     }
@@ -117,7 +130,7 @@ object StoryNesting {
             var depth = 0
             var indent = 0
             var lineStart = true
-            scan@ while (i < n && story[i] != '\n') {
+            scan@ while (i < n && story[i] != '\n' && story[i] != '\r') {
                 while (i < n && space(story[i])) {
                     if (lineStart) indent += if (story[i] == '\t') 4 else 1
                     i++
@@ -142,8 +155,8 @@ object StoryNesting {
                 depth++
                 if (depth > limit) return true
             }
-            while (i < n && story[i] != '\n') i++
-            i++
+            while (i < n && story[i] != '\n' && story[i] != '\r') i++
+            i += if (i + 1 < n && story[i] == '\r' && story[i + 1] == '\n') 2 else 1
         }
         return false
     }
