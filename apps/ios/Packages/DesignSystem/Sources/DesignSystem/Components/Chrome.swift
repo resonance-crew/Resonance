@@ -1047,6 +1047,7 @@ public struct HeaderEdge: View {
     var progress: CGFloat?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.headerLineInk) private var ink
+    @Environment(\.colorScheme) private var colorScheme
 
     public init(scrolled: Bool = false, progress: CGFloat? = nil) {
         self.scrolled = scrolled
@@ -1055,8 +1056,9 @@ public struct HeaderEdge: View {
 
     /// Below this nothing is drawn: no lone dot of a round cap at the wave's start.
     public static let progressMin: CGFloat = 0.002
-    /// The progress glow's ink: the marker's own, at 55 % (round 5 E1).
-    public static let glowOpacity: Double = 0.55
+    /// The progress glow's ink: the marker's own, at 55 % (round 5 E1) — 40 % on the night paper, where
+    /// the light one reads as neon (palette SCHEME_NUMBERS `reading-progress-glow-alpha`).
+    public static func glowOpacity(_ scheme: PaletteScheme) -> Double { Palette.readingProgressGlowAlpha(scheme) }
 
     public var body: some View {
         ZStack {
@@ -1076,12 +1078,13 @@ public struct HeaderEdge: View {
             if let progress {
                 // The pen's own width over the line, in the brighter ink, on the same path — so centred on
                 // it, covering it — leaving the unread rest of the line as its track; a soft glow of the same
-                // ink behind it (round 5 E1: blur `readingProgressGlow`, the ink at 55 %).
+                // ink behind it (round 5 E1: blur `readingProgressGlow`, the ink at 55 %, 40 % in dark).
                 let p = min(max(progress, 0), 1)
                 HeaderEdgeShape(closed: false)
                     .trim(from: 0, to: p)
                     .stroke(Tokens.readingProgress, style: StrokeStyle(lineWidth: Tokens.readingProgressWidth, lineCap: .round))
-                    .shadow(color: Tokens.readingProgress.opacity(Self.glowOpacity), radius: Tokens.readingProgressGlow)
+                    .shadow(color: Tokens.readingProgress.opacity(Self.glowOpacity(PaletteScheme(colorScheme))),
+                            radius: Tokens.readingProgressGlow)
                     .opacity(p < Self.progressMin ? 0 : 1)
                     // It follows the scroll; with motion allowed, a short ease takes the steps out.
                     .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: p)

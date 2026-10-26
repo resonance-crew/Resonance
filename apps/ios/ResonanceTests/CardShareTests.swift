@@ -163,6 +163,25 @@ import UIKit
         #expect(short.lineCount == 1 && !short.truncated)
     }
 
+    /// A picture that leaves the device is light terracotta (spec §1.5), whatever this device wears: drawn
+    /// while the scene is dark and sage — and with that as the current traits — it is the very same picture.
+    @Test func theShareCardIsLightTerracottaWhateverTheDeviceWears() throws {
+        let content = CardSharing.content(Self.detail(), cover: nil, photo: nil)
+        let plain = try #require(ShareCardRenderer.composite(content)?.pngData())
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        scene.traitOverrides.userInterfaceStyle = .dark
+        scene.traitOverrides.accent = .sage
+        let saved = UITraitCollection.current
+        UITraitCollection.current = UITraitCollection { $0.userInterfaceStyle = .dark; $0.accent = .sage }
+        defer {
+            UITraitCollection.current = saved
+            scene.traitOverrides.remove(UITraitUserInterfaceStyle.self)
+            scene.traitOverrides.remove(AccentTrait.self)
+        }
+        let worn = try #require(ShareCardRenderer.composite(content)?.pngData())
+        #expect(plain == worn)
+    }
+
     @Test func thePicturesAreTheirSizesTheCompositeOpaqueTheStickerOnTransparency() throws {
         let content = CardSharing.content(Self.detail(), cover: Self.swatch(.systemTeal, CGSize(width: 800, height: 400)), photo: nil)
         let composite = try #require(ShareCardRenderer.composite(content))
