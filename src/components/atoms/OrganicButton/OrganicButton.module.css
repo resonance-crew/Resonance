@@ -86,3 +86,14 @@
   display: flex;
   width: 100%;
 }
+
+/* Sign in with Apple on dark: Apple's white button is a clean white, so no paper
+   grain greys it (the grain reads its strength from --grain-scale). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-scheme='light']) .btn[data-variant='ink'] {
+    --grain-scale: 0;
+  }
+}
+:root[data-scheme='dark'] .btn[data-variant='ink'] {
+  --grain-scale: 0;
+}

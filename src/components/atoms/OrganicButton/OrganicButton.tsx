@@ -101,7 +101,8 @@ const BTN_VARIANTS: Record<OrganicButtonVariant, Face> = {
     hoverOverlay: 'color-mix(in oklch, var(--color-danger) 12%, transparent)',
     bare: true,
   },
-  ink:        { fill: 'var(--color-text)', text: 'var(--color-cream)', hoverOverlay: DARKEN },
+  // Sign in with Apple: Apple's black button on light paper, its white one (pure white, black words) on dark.
+  ink:        { fill: 'var(--apple-fill)', text: 'var(--apple-label)', hoverOverlay: DARKEN },
   paper:      { fill: 'var(--color-card-bg)', text: 'var(--color-text)', hoverOverlay: WASH },
 };
 

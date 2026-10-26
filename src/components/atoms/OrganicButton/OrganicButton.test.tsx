@@ -59,7 +59,7 @@ describe('OrganicButton variants', () => {
     ['danger', 'var(--danger-fill)', 'var(--color-cream)'],
     ['dangerTonal', 'var(--button-danger-tonal)', 'var(--button-on-danger-tonal)'],
     ['dangerText', 'transparent', 'var(--danger-fill)'],
-    ['ink', 'var(--color-text)', 'var(--color-cream)'],
+    ['ink', 'var(--apple-fill)', 'var(--apple-label)'],
     ['paper', 'var(--color-card-bg)', 'var(--color-text)'],
     // On the call-to-action band: its own tokens, light words on a deep band in either scheme.
     ['ctaLight', 'var(--cta-ink)', 'var(--cta-verb-ink)'],
@@ -157,10 +157,11 @@ describe('OrganicButton variants', () => {
 
   // Sign in with Apple asks for a black button: the ink face with a cream
   // label, as large as its neighbour and, like it, no pen line.
-  it('ink sets a cream label on the ink colour', () => {
+  // Sign in with Apple: the ink colour under a cream label on light paper, Apple's white style on dark (palette.ts).
+  it('ink wears the Apple button tokens', () => {
     const btn = renderVariant('ink');
-    expect(btn.style.color).toBe('var(--color-cream)');
-    expect(btn.style.getPropertyValue('--shape-fill')).toBe('var(--color-text)');
+    expect(btn.style.color).toBe('var(--apple-label)');
+    expect(btn.style.getPropertyValue('--shape-fill')).toBe('var(--apple-fill)');
   });
 
   it('still takes clicks', async () => {
