@@ -65,6 +65,11 @@ android {
         }
     }
 
+    // The fonts are stored, not deflated, so AppFonts maps each file once (shared, clean pages)
+    // instead of inflating a private copy per weight, and the writer's WebView reads them as they lie.
+    // The APK on the device grows by about 5 MB; Play compresses the download itself.
+    androidResources { noCompress += "ttf" }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
