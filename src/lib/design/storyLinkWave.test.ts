@@ -78,7 +78,7 @@ describe('the wave’s placement in the story stylesheet', () => {
     // oklch(65% 0.084 45) is #ba7f64 in sRGB (the apps' generated Tokens say so beside it).
     expect(lightRootCss()).toMatch(/--link-wave:\s*oklch\(65% 0\.084 45\);/);
     expect(WAVE_INK).toBe('rgb(186,127,100)');
-    expect(readFileSync(resolve(root, 'apps/ios/Packages/DesignSystem/Sources/DesignSystem/Generated/Tokens.swift'), 'utf8')).toContain('--link-wave · sRGB #ba7f64');
+    expect(readFileSync(resolve(root, 'apps/ios/Packages/DesignSystem/Sources/DesignSystem/Generated/Tokens.swift'), 'utf8')).toContain('--link-wave · terracotta: light #ba7f64');
     expect(svgOf(storyLinkWave('https://example.com/ink').rest)).toContain(`stroke="${WAVE_INK}"`);
   });
 
