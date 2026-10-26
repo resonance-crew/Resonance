@@ -106,4 +106,26 @@ import UIKit
         #expect(read.toc.map(\.text) == ["一", "二"])
         #expect(read.toc.map(\.level) == [2, 3])
     }
+
+    @Test func anArrowIsDrawnOnceUntilACardAtEitherEndMoves() {
+        let store = RoundThirteenTests.store()
+        let edge = MapEdge(id: "e1", sourceCardId: "a", targetCardId: "b", label: "")
+        func show(bAt x: Double) {
+            let board = ThoughtMapService.Loaded(nodes: [MapNode(cardId: "a", x: 0, y: 0, groupId: nil), MapNode(cardId: "b", x: x, y: 320, groupId: nil)],
+                                                 edges: [edge], groups: [])
+            store.show(board, cards: ["a": RoundThirteenTests.card("a"), "b": RoundThirteenTests.card("b")], resonated: [])
+        }
+        func fresh(bAt x: Double) -> [PathCommand] {
+            organicEdgePath(mapNodeRect(0, 0), mapNodeRect(x, 320), seed: Double(seedFromString("e1"))).path
+        }
+        show(bAt: 420)
+        #expect(store.edgeGeometry(edge)?.path == fresh(bAt: 420))
+        #expect(store.edgeGeometry(edge)?.path == fresh(bAt: 420))
+        // A card moved: the arrow follows it.
+        show(bAt: 900)
+        #expect(store.edgeGeometry(edge)?.path == fresh(bAt: 900))
+        // The camera moving changes nothing of it.
+        store.camera = MapCamera(x: 40, y: -20, s: 1.5)
+        #expect(store.edgeGeometry(edge)?.path == fresh(bAt: 900))
+    }
 }
