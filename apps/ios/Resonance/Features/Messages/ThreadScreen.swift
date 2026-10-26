@@ -229,9 +229,11 @@ struct ThreadScreen: View {
         if visible { model.resume() } else { model.stop() }
     }
 
+    /// Read from the list's ids alone (`listedIds`), which change only as conversations come and go —
+    /// not from its rows, which change with every message: the thread isn't drawn again for those.
     private var conversationListed: Bool {
         guard let pair = model?.pairId else { return false }
-        return session.conversations.conversations.contains { $0.id == pair }
+        return session.conversations.listedIds.contains(pair)
     }
 
     // MARK: Content
@@ -538,9 +540,10 @@ struct ThreadScreen: View {
     private func menuShown(_ model: ThreadModel) -> Bool {
         guard model.phase == .loading || model.phase == .ready else { return false }
         if model.conversationExists { return true }
-        let listed = session.conversations.conversations.contains { conversation in
-            if let pair = model.pairId { return conversation.id == pair }
-            return conversation.other.handle.caseInsensitiveCompare(model.displayHandle) == .orderedSame
+        let listed = if let pair = model.pairId {
+            session.conversations.listedIds.contains(pair)
+        } else {
+            session.conversations.listedHandles.contains { $0.caseInsensitiveCompare(model.displayHandle) == .orderedSame }
         }
         return listed || (!session.conversations.loaded && !model.threadReady)
     }

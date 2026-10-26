@@ -32,10 +32,19 @@ extension Route {
 
 /// Pushes a route onto the current tab's stack (for taps that aren't
 /// NavigationLinks, e.g. a card link inside a story).
-struct OpenRouteAction {
+///
+/// Equal when it is for the same `tab`: the tab view makes a new one for each tab every time it is
+/// drawn, and what its closures do depends on the tab alone (they read the tab view's state when
+/// called, never a copy taken when they were made). Told apart by its closures, each new one would
+/// count as a change, and every page reading it, in all four stacks, would be drawn again.
+struct OpenRouteAction: Equatable {
+    /// The tab whose stack it pushes onto (nil: the default, which does nothing).
+    var tab: AppTab?
     let push: (Route) -> Void
     var popToRoot: () -> Void = {}
     var replaceTop: (Route) -> Void = { _ in }
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.tab == rhs.tab }
     func callAsFunction(_ route: Route) { push(route) }
     func dismissToRoot() { popToRoot() }
     /// The page on top gives way to `route` (a published card takes the writer's place).

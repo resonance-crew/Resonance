@@ -45,7 +45,15 @@ final class ConversationsStore {
     /// A listener failed (offline for good, the backend refusing): what is
     /// shown is as last read until the app is back in the foreground (`resume`).
     private(set) var failed = false
-    var unreadTotal: Int { conversations.reduce(0) { $0 + $1.unread } }
+    /// The tab's badge: every conversation's unread count added up. Kept apart from `conversations`
+    /// (and set only through `publish`), so what reads only the badge — the tab bar — isn't drawn
+    /// again for each new last message, only when the count changes.
+    private(set) var unreadTotal = 0
+    /// The ids of the conversations listed, and the other person's pen name in each (in list order):
+    /// what a thread asks of the list ("is this conversation in Messages?") without reading every row,
+    /// so it is told only when a conversation comes or goes.
+    private(set) var listedIds: Set<String> = []
+    private(set) var listedHandles: [String] = []
     /// The people this account is connected with, live (nil until the first read of the list).
     var connectedIds: Set<String>? { ready.contains("connections") ? Set(connectionUids) : nil }
     /// The people this account has blocked, live (nil until the first read of the list).
@@ -145,7 +153,7 @@ final class ConversationsStore {
         blockedIds = nil
         people = PeopleBook()
         ready = []
-        conversations = []
+        publish([])
         starters = []
         loaded = false
         failed = false
@@ -174,17 +182,26 @@ final class ConversationsStore {
         // A row whose profile is gone is skipped (one that couldn't be read yet waits for the next try);
         // blocked people drop out entirely.
         let found = people.found
-        conversations = rawConversations.compactMap { doc in
+        publish(rawConversations.compactMap { doc in
             guard let otherId = Self.other(in: doc, me: uid), !blocked.contains(otherId), let other = found[otherId] else { return nil }
             let last = doc.get("lastMessage") as? [String: Any]
             let unread = ((doc.get("unread") as? [String: Any])?[uid] as? NSNumber)?.intValue ?? 0
             return Conversation(id: doc.documentID, other: other, lastText: last?["text"] as? String,
                                 lastFromMe: last?["senderId"] as? String == uid, lastImage: last?["image"] as? Bool == true,
                                 sentAt: (last?["sentAt"] as? Timestamp)?.dateValue(), unread: unread)
-        }
+        })
         let talking = Set(conversations.map(\.other.id))
         starters = connectionUids.filter { !talking.contains($0) && !blocked.contains($0) }.compactMap { found[$0] }
         loaded = ready.isSuperset(of: ["conversations", "connections", "blocks"])
+    }
+
+    /// The list as it is now, and what is kept beside it. Each is told to its readers only when it
+    /// changed (an equal value set again notifies no one).
+    private func publish(_ list: [Conversation]) {
+        conversations = list
+        unreadTotal = list.reduce(0) { $0 + $1.unread }
+        listedIds = Set(list.map(\.id))
+        listedHandles = list.map(\.other.handle)
     }
 
     /// Someone's profile (users/{uid} is public). A missing one, or one without
