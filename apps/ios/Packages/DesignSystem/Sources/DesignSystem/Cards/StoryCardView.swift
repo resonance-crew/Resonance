@@ -122,7 +122,7 @@ public struct StoryCardView: View {
             CSSText(content.title, font: AppFonts.scaledUIFont(.heading, size: 18, weight: .bold), lineHeight: 1.3)
                 .accessibilityAddTraits(.isHeader)
 
-            CSSText(content.excerpt, font: AppFonts.scaledUIFont(.body, size: 14), lineHeight: 1.65, color: UIColor(Tokens.textMuted))
+            CSSText(content.excerpt, font: AppFonts.scaledUIFont(.body, size: 14), lineHeight: 1.65, color: Tokens.UI.textMuted)
 
             StoryCardSeparator(palette: palette, seed: seed)
 

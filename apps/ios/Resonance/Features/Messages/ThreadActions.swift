@@ -153,7 +153,7 @@ struct AttachMenuOverlay: View {
             let screen = geo.frame(in: .global)
             let plus = anchor.offsetBy(dx: -screen.minX, dy: -screen.minY)
             ZStack(alignment: .bottomLeading) {
-                Color.black.opacity(0.001)
+                Color.clear
                     .contentShape(Rectangle())
                     .onTapGesture(perform: dismiss)
                     .accessibilityHidden(true)

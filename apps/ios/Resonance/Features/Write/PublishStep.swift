@@ -93,7 +93,7 @@ struct PublishStep: View {
                     // About readers: not said while the card is being kept to its author.
                     if model.showsUpdateHint {
                         CSSText(L10n.Write.PublishPanel.updateHint, font: AppFonts.scaledUIFont(.body, size: 14), lineHeight: 1.7,
-                                color: UIColor(Tokens.textMuted))
+                                color: Tokens.UI.textMuted)
                     }
                 }
             }
@@ -253,7 +253,7 @@ struct PublishStep: View {
         return SegmentSpec(id: audience.rawValue, icon: icon, label: label,
                            fill: chosen ? Tokens.buttonTonal : nil,
                            ink: chosen ? Tokens.buttonOnTonal : Tokens.segmentIdleInk,
-                           pressInk: .black.opacity(0.05), selected: chosen) {
+                           pressInk: Tokens.towardInk.opacity(0.05), selected: chosen) {
             model.choose(audience)
         }
     }
@@ -479,7 +479,7 @@ private struct CoverErrorChip: View {
             .background {
                 CoverErrorChipShape()
                     .fill(Tokens.cream.opacity(0.94))
-                    .shadow(color: .black.opacity(0.22), radius: 1.5, y: 1)
+                    .shadow(color: Tokens.shadowInk.opacity(0.22), radius: 1.5, y: 1)
             }
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isStaticText)

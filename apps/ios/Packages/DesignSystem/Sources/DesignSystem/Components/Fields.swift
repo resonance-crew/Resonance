@@ -227,7 +227,7 @@ public struct OrganicEmptyState: View {
             if let message {
                 // The quiet line: the list's own size under a mark, the older 16 on a page without one.
                 CSSText(message, font: AppFonts.scaledUIFont(.body, size: icon != nil ? 14.5 : 16), lineHeight: 1.6,
-                        color: UIColor(Tokens.textMuted), lineLimit: icon != nil ? 3 : 0, alignment: .center)
+                        color: Tokens.UI.textMuted, lineLimit: icon != nil ? 3 : 0, alignment: .center)
                     .padding(.bottom, actionTitle != nil ? 20 : 0)
             }
             if let actionTitle, let action {

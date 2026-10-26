@@ -16,8 +16,8 @@ enum InAppBrowser {
         guard var top = scene?.keyWindow?.rootViewController ?? scene?.windows.first?.rootViewController else { return }
         while let presented = top.presentedViewController { top = presented }
         let browser = SFSafariViewController(url: url)
-        browser.preferredControlTintColor = UIColor(Tokens.terracotta)
-        browser.preferredBarTintColor = UIColor(Tokens.cream)
+        browser.preferredControlTintColor = Tokens.UI.terracotta
+        browser.preferredBarTintColor = Tokens.UI.cream
         top.present(browser, animated: true)
     }
 }

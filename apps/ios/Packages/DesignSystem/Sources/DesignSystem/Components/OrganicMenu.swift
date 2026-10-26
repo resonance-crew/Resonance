@@ -293,7 +293,8 @@ struct MenuStage: View {
             let place = MenuDrop.place(face: face, screen: screen, panelHeight: MenuPanelShape.height(rows: items.count))
             let above = place.above
             ZStack(alignment: above ? .bottomTrailing : .topTrailing) {
-                Color.black.opacity(0.001)
+                Color.clear
+                    .contentShape(Rectangle())
                     .onTapGesture { close(nil) }
                     .accessibilityHidden(true)
                 panel

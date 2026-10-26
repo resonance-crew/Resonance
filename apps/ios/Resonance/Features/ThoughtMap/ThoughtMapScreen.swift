@@ -207,7 +207,7 @@ struct ThoughtMapScreen: View {
     private var emptyState: some View {
         VStack(spacing: 18) {
             CSSText(L10n.Me.ThoughtMap.empty, font: AppFonts.scaledUIFont(.body, size: 15), lineHeight: 1.7,
-                    color: UIColor(Tokens.textMuted))
+                    color: Tokens.UI.textMuted)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 320)
                 .fixedSize(horizontal: false, vertical: true)

@@ -220,7 +220,7 @@ struct ListItemView<Embed: View, LinkCard: View>: View {
         // Blocks inside an item keep their spacing but not a trailing margin.
         ZStack(alignment: .topLeading) {
             // The marker sits on the first line's box, like a CSS list marker, a space before the words.
-            CSSText(marker, font: style.font, lineHeight: style.lineHeight, color: UIColor(Tokens.textMuted), alignment: .right)
+            CSSText(marker, font: style.font, lineHeight: style.lineHeight, color: Tokens.UI.textMuted, alignment: .right)
                 .frame(width: gutter - Self.markerSpace * em)
                 .accessibilityHidden(true)
             BlockStack(blocks: blocks, style: style, rhythm: rhythm, onOpenURL: onOpenURL, embed: embed, linkCard: linkCard)

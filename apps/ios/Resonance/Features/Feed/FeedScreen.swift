@@ -204,7 +204,7 @@ struct FeedEndMark: View {
             }
             .accessibilityHidden(true)
             CSSText(L10n.Home.feedEnd, font: AppFonts.scaledUIFont(.body, size: 13.5), lineHeight: 1.5,
-                    color: UIColor(Tokens.textMuted), alignment: .center)
+                    color: Tokens.UI.textMuted, alignment: .center)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

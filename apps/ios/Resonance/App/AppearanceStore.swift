@@ -40,9 +40,13 @@ final class AppearanceStore {
     private(set) var mode: Mode
     private(set) var accent: Accent
     @ObservationIgnored private let defaults: UserDefaults
+    /// The scenes a change is laid on (the app's; a test's none).
+    @ObservationIgnored private let scenes: () -> [UIWindowScene]
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard,
+         scenes: @escaping () -> [UIWindowScene] = { UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene } }) {
         self.defaults = defaults
+        self.scenes = scenes
         mode = defaults.string(forKey: Self.modeKey).flatMap(Mode.init(rawValue:)) ?? .system
         accent = defaults.string(forKey: Self.accentKey).flatMap(Accent.init(rawValue:)) ?? .terracotta
     }
@@ -73,7 +77,7 @@ final class AppearanceStore {
 
     /// The choice laid on every scene the app has.
     func apply() {
-        for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) { apply(to: scene) }
+        for scene in scenes() { apply(to: scene) }
     }
 }
 

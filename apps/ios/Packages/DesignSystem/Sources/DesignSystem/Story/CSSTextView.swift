@@ -152,7 +152,7 @@ public struct ProseStyle: Sendable {
         public static let leading: CGFloat = 1.6
     }
 
-    public init(typography: StoryTypography, role: StoryTypography.Role, level: Int = 2, color: UIColor = UIColor(Tokens.text),
+    public init(typography: StoryTypography, role: StoryTypography.Role, level: Int = 2, color: UIColor = Tokens.UI.text,
                 inQuote: Bool = false, language: String? = nil) {
         self.typography = typography
         self.role = role
@@ -186,7 +186,7 @@ public struct ProseStyle: Sendable {
     /// A quote's words: muted and upright (no synthetic slanted Chinese), at the body's size.
     public var quoted: ProseStyle {
         var s = self
-        s.color = UIColor(Tokens.textMuted)
+        s.color = Tokens.UI.textMuted
         s.inQuote = true
         return s
     }
@@ -251,7 +251,7 @@ public struct ProseStyle: Sendable {
             if run.strikethrough { attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
             if let link = run.link, let url = URL(string: link) {
                 attrs[.link] = url
-                attrs[.foregroundColor] = UIColor(Tokens.buttonOnTonal)
+                attrs[.foregroundColor] = Tokens.UI.buttonOnTonal
             }
             faces.append((NSRange(location: out.length, length: (run.text as NSString).length), run.bold, run.italic, run.code))
             out.append(NSAttributedString(string: run.text, attributes: attrs))
@@ -269,5 +269,5 @@ public struct ProseStyle: Sendable {
     }
 
     /// Code's tint (`--story-code-tint`): the text's ink at 6% over the paper.
-    static let codeTint = UIColor(Tokens.text.opacity(0.06))
+    static let codeTint = Tokens.UI.storyCodeTint
 }

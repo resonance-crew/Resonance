@@ -51,7 +51,7 @@ public struct SegmentSpec: Identifiable {
     public static func verb(id: String, icon: IconName?, label: String, working: Bool = false,
                             action: @escaping () -> Void) -> SegmentSpec {
         SegmentSpec(id: id, icon: icon, label: label, fill: Tokens.buttonFill, ink: Tokens.cream,
-                    pressInk: .black.opacity(0.14), working: working, action: action)
+                    pressInk: Tokens.towardInk.opacity(0.14), working: working, action: action)
     }
 }
 

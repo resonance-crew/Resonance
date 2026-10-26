@@ -522,7 +522,7 @@ private struct PenChip: View {
                 // The verb's face (buttonFill): cream on plain terracotta was 3.5:1.
                 shape.fill(Tokens.buttonFill)
                 GrainLayer(shape: shape, mode: .tile, opacity: 0.38, tile: "grain-button")
-                shape.fill(Color.black.opacity(pressed ? 0.14 : 0))
+                shape.fill(Tokens.towardInk.opacity(pressed ? 0.14 : 0))
             }
     }
 }

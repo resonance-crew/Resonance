@@ -302,7 +302,7 @@ public final class ShareTextLayout {
         style.lineBreakStrategy = .pushOut
         let attributed = NSMutableAttributedString(string: text, attributes: [
             .font: font,
-            .foregroundColor: UIColor(Tokens.text),
+            .foregroundColor: Palette.shared(.text), // the picture leaves the device: light terracotta
             .paragraphStyle: style,
             .kern: type.tracking * size,
         ])

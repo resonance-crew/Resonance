@@ -818,7 +818,7 @@ private struct ComposerCapsuleFace: View {
             ZStack {
                 segment.fill(canSend ? Tokens.buttonFill : Tokens.buttonTonal)
                 GrainLayer(shape: segment, mode: .tile, opacity: 0.38, tile: "grain-button", overflow: 16)
-                segment.fill(canSend ? Color.black.opacity(0.14) : Tokens.terracotta.opacity(0.14)).opacity(pressed ? 1 : 0)
+                segment.fill(canSend ? Tokens.towardInk.opacity(0.14) : Tokens.terracotta.opacity(0.14)).opacity(pressed ? 1 : 0)
                 ComposerSendSeam(seed: seed).stroke(Tokens.cream, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round))
             }
             .clipShape(shape)

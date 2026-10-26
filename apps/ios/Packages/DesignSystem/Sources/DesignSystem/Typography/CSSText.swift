@@ -20,7 +20,7 @@ public struct CSSText: UIViewRepresentable {
     /// CSS `text-align` (an empty state's centred lines).
     var alignment: NSTextAlignment
 
-    public init(_ text: String, font: UIFont, lineHeight: CGFloat, color: UIColor = UIColor(Tokens.text),
+    public init(_ text: String, font: UIFont, lineHeight: CGFloat, color: UIColor = Tokens.UI.text,
                 tracking: CGFloat = 0, lineLimit: Int = 0, fitsContent: Bool = false, alignment: NSTextAlignment = .natural) {
         self.text = text
         self.font = font

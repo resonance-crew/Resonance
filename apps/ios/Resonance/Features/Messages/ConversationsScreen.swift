@@ -190,7 +190,7 @@ private struct RowWash<Label: View>: View {
                         curve: 1.3, cornerJitter: 2.4, cornerOffset: h * 0.05, segmentsH: .count(3), segmentsV: .count(1)))
                     ZStack {
                         shape.fill(Tokens.terracottaLight.opacity(chosen ? 0.55 : 0))
-                        shape.fill(Color.black.opacity(pressed || hovered ? 0.045 : 0))
+                        shape.fill(Tokens.towardInk.opacity(pressed || hovered ? 0.045 : 0))
                     }
                 }
             }

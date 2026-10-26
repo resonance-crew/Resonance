@@ -101,7 +101,7 @@ enum AvatarImage {
         format.scale = 1
         format.opaque = true
         let drawn = UIGraphicsImageRenderer(size: size, format: format).image { context in
-            UIColor(Tokens.cream).setFill()
+            Palette.shared(.cream).setFill() // stored for everyone to see: light, whatever this device wears
             context.fill(CGRect(origin: .zero, size: size))
             let k = CGFloat(side) / crop.width
             UIImage(cgImage: image).draw(in: CGRect(x: -crop.minX * k, y: -crop.minY * k,

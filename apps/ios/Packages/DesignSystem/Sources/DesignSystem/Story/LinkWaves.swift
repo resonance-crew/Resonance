@@ -25,7 +25,7 @@ public enum LinkWaves {
     public static let amp: CGFloat = Tokens.linkWaveAmp
 
     /// The wave's ink (tokens.css --link-wave): the terracotta, quieter, under deep-terracotta words.
-    public static let ink = UIColor(Tokens.linkWave)
+    public static let ink = Tokens.UI.linkWave
 
     /// The wave's centre under the baseline for text of `fontSize`.
     public static func drop(fontSize: CGFloat) -> CGFloat { fontSize * depthEm }
@@ -82,7 +82,9 @@ final class LinkWaveTextView: UITextView, UIGestureRecognizerDelegate {
     private var waveLayers: [CAShapeLayer] = []
     private var drawn: (width: CGFloat, text: NSAttributedString)?
     private var pressedURL: URL?
-    var waveColor: UIColor = .systemOrange
+    var waveColor: UIColor = LinkWaves.ink {
+        didSet { recolourWaves() }
+    }
     var waveDrop: CGFloat = 3
 
     override init(frame: CGRect, textContainer: NSTextContainer?) {
@@ -93,6 +95,18 @@ final class LinkWaveTextView: UITextView, UIGestureRecognizerDelegate {
         press.cancelsTouchesInView = false
         press.delegate = self
         addGestureRecognizer(press)
+        // A layer holds a CGColor, which no appearance change reaches: the waves take the ink again.
+        registerForTraitChanges([UITraitUserInterfaceStyle.self, AccentTrait.self]) { (view: LinkWaveTextView, _) in
+            view.recolourWaves()
+        }
+    }
+
+    /// The wave's ink as this view's appearance draws it (a theme or a light/dark switch re-resolves it).
+    private var waveInk: CGColor { waveColor.resolvedColor(with: traitCollection).cgColor }
+
+    private func recolourWaves() {
+        let ink = waveInk
+        waveLayers.forEach { $0.strokeColor = ink }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -123,7 +137,7 @@ final class LinkWaveTextView: UITextView, UIGestureRecognizerDelegate {
             let layer = CAShapeLayer()
             layer.path = path.cgPath
             layer.fillColor = nil
-            layer.strokeColor = waveColor.cgColor
+            layer.strokeColor = waveInk
             layer.lineWidth = Tokens.ink
             layer.lineCap = .round
             layer.lineJoin = .round

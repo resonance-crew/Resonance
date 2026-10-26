@@ -20,7 +20,7 @@ public struct StoryTitle: View {
     let lang: String?
     var color: UIColor
 
-    public init(_ title: String, typography: StoryTypography, lang: String?, color: UIColor = UIColor(Tokens.text)) {
+    public init(_ title: String, typography: StoryTypography, lang: String?, color: UIColor = Tokens.UI.text) {
         self.title = title
         self.typography = typography
         self.lang = lang
@@ -48,7 +48,7 @@ public struct StoryTitle: View {
 extension StoryTypography {
     /// A title's words (or one clause of them) as the title sets them: its face, tracking and CSS line
     /// box, start-aligned, an apostrophe inside a Latin word in Playfair in a CJK title.
-    @MainActor public func titleText(_ text: String, font: UIFont, color: UIColor = UIColor(Tokens.text)) -> NSAttributedString {
+    @MainActor public func titleText(_ text: String, font: UIFont, color: UIColor = Tokens.UI.text) -> NSAttributedString {
         let lineBox = font.pointSize * titleLeading
         let style = paragraphStyle(lineBox: lineBox, role: .title)
         let out = NSMutableAttributedString(string: text, attributes: [

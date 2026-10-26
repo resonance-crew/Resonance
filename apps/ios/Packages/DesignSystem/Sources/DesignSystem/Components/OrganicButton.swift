@@ -346,7 +346,7 @@ public struct OrganicButtonFace: Equatable, Sendable {
     public let grain: String
     public let grainOpacity: Double
 
-    static let solid = OrganicButtonFace(fill: Tokens.buttonFill, label: Tokens.cream, pressInk: .black.opacity(0.14), seed: 3)
+    static let solid = OrganicButtonFace(fill: Tokens.buttonFill, label: Tokens.cream, pressInk: Tokens.towardInk.opacity(0.14), seed: 3)
     static let tonal = OrganicButtonFace(fill: Tokens.buttonTonal, label: Tokens.buttonOnTonal,
                                          pressInk: Tokens.terracotta.opacity(0.14), seed: 601)
 
@@ -366,10 +366,10 @@ public struct OrganicButtonFace: Equatable, Sendable {
         // Cancel / Close / Keep and the ghost wobble as they did (seed 401) in the tonal face.
         case .ghost, .text: OrganicButtonFace(fill: Tokens.buttonTonal, label: Tokens.buttonOnTonal,
                                               pressInk: Tokens.terracotta.opacity(0.14), seed: 401)
-        case .danger: OrganicButtonFace(fill: Tokens.dangerFill, label: Tokens.cream, pressInk: .black.opacity(0.14), seed: 3)
+        case .danger: OrganicButtonFace(fill: Tokens.dangerFill, label: Tokens.cream, pressInk: Tokens.towardInk.opacity(0.14), seed: 3)
         case .dangerTonal: OrganicButtonFace(fill: Tokens.buttonDangerTonal, label: Tokens.buttonOnDangerTonal,
                                              pressInk: Tokens.danger.opacity(0.14), seed: 601)
-        case .ink: OrganicButtonFace(fill: Tokens.text, label: Tokens.cream, pressInk: .black.opacity(0.14), seed: 3)
+        case .ink: OrganicButtonFace(fill: Tokens.text, label: Tokens.cream, pressInk: Tokens.towardInk.opacity(0.14), seed: 3)
         // The cards' own tile, at the strength the modal's paper carries it.
         case .paper: OrganicButtonFace(fill: Tokens.cardBg, label: Tokens.text, pressInk: Tokens.terracotta.opacity(0.14),
                                        seed: 401, grain: "grain-card", grainOpacity: 0.3)

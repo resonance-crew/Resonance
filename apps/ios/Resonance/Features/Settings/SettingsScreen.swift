@@ -421,7 +421,7 @@ private struct NotificationSettings: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(label).font(AppFonts.body(16)).foregroundStyle(Tokens.text)
                     .fixedSize(horizontal: false, vertical: true)
-                CSSText(hint, font: AppFonts.scaledUIFont(.body, size: Tokens.hintSize), lineHeight: 1.55, color: UIColor(Tokens.textMuted))
+                CSSText(hint, font: AppFonts.scaledUIFont(.body, size: Tokens.hintSize), lineHeight: 1.55, color: Tokens.UI.textMuted)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityHidden(true)
@@ -439,7 +439,7 @@ private struct NotificationSettings: View {
     private var denied: some View {
         VStack(alignment: .leading, spacing: 10) {
             CSSText(L10n.Settings.Notifications.permissionDenied, font: AppFonts.scaledUIFont(.body, size: 14), lineHeight: 1.55,
-                    color: UIColor(Tokens.textMuted))
+                    color: Tokens.UI.textMuted)
             OrganicButton(L10n.Settings.Notifications.openSettings, variant: .tonal, size: .sm) {
                 if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
             }
@@ -564,7 +564,7 @@ private struct DeleteAccountSettings: View {
     }
 
     private func muted(_ text: String) -> some View {
-        CSSText(text, font: AppFonts.scaledUIFont(.body, size: 14), lineHeight: 1.65, color: UIColor(Tokens.textMuted))
+        CSSText(text, font: AppFonts.scaledUIFont(.body, size: 14), lineHeight: 1.65, color: Tokens.UI.textMuted)
     }
 
     private func export() async {

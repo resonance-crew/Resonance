@@ -673,7 +673,7 @@ struct WriteScreen: View {
                 .accessibilityAddTraits(.isHeader)
                 .padding(.bottom, 8)
             CSSText(L10n.Write.Trashed.line, font: AppFonts.scaledUIFont(.body, size: 14.5), lineHeight: 1.6,
-                    color: UIColor(Tokens.textMuted), alignment: .center)
+                    color: Tokens.UI.textMuted, alignment: .center)
                 .padding(.bottom, 20)
             OrganicButton(L10n.Write.Trashed.restore, variant: .solid, size: .sm) { Task { await restoreOpened(card) } }
                 .loading(restoringOpened)

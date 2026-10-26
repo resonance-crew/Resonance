@@ -39,7 +39,7 @@ private nonisolated struct AccentKey: EnvironmentKey, UITraitBridgedEnvironmentK
 
 extension EnvironmentValues {
     /// The theme the palette's colours resolve in (``AccentTrait``).
-    public var accent: Accent {
+    public nonisolated var accent: Accent {
         get { self[AccentKey.self] }
         set { self[AccentKey.self] = newValue }
     }
