@@ -1,5 +1,6 @@
 import DesignSystem
 import Testing
+import UIKit
 @testable import Resonance
 
 /// The card page's actions are one segmented row sharing the column evenly, none narrower than its
@@ -17,8 +18,10 @@ import Testing
     }
 
     @Test func aChoicesUnchosenSideIsTheMutedInkDeepened() {
-        // The publish panel's audience: color-mix(in oklch, text-muted, black 10%), a token like every mix.
-        #expect(Tokens.segmentIdleInk == OKLCHColor.color(0.52 * 0.9, 0.04 * 0.9, 70))
+        // The publish panel's audience: color-mix(in oklch, text-muted, black 10%) in light, a palette token.
+        #expect(Palette.oklch(.segmentIdleInk, accent: .terracotta, scheme: .light) == "oklch(46.8% 0.036 70)")
+        let light = UITraitCollection { $0.userInterfaceStyle = .light; $0.accent = .terracotta }
+        #expect(Tokens.UI.segmentIdleInk.resolvedColor(with: light) === Palette.resolved(.segmentIdleInk, accent: .terracotta, scheme: .light))
     }
 
     @Test func aBookmarkFlipsAtOnceAndSettlesOnWhatTheWriteSays() {

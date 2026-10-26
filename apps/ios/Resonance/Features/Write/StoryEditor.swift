@@ -108,6 +108,28 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
         webView.load(URLRequest(url: EditorPage.url(placeholder: placeholder, layout: layout, locale: locale)))
     }
 
+    // MARK: - Staying on the page
+
+    func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
+        let decision = EditorNavigation.decide(action.request.url, mainFrame: action.targetFrame?.isMainFrame ?? false,
+                                               tapped: action.navigationType == .linkActivated)
+        if case let .openInBrowser(url) = decision { openInBrowser(url) }
+        return decision == .allow ? .allow : .cancel
+    }
+
+    /// The editor opens a tapped link in a new window (Tiptap's openOnClick):
+    /// a web page goes to the in-app browser, and no window is ever made.
+    /// (WebKit asks only for a tap: the page can't open windows by itself.)
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                 for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if case let .openInBrowser(url) = EditorNavigation.decide(action.request.url, mainFrame: false, tapped: true) {
+            openInBrowser(url)
+        }
+        return nil
+    }
+
+    // MARK: - The island's appearance
+
     /// What the island's <html> says (`data-scheme`, `data-accent`): the opening script's, then each worn since.
     @ObservationIgnored private(set) var appearance: IslandAppearance?
 

@@ -296,7 +296,9 @@ struct StoryImageView: View {
             let setAspect = $aspect
             LazyImage(request: Self.request(url)) { state in
                 if let image = state.image {
-                    image.resizable().scaledToFill()
+                    // A picture with transparency (a logo's black words) stands on a light paper in dark
+                    // (--picture-backing; nothing in light).
+                    image.resizable().scaledToFill().background(Tokens.pictureBacking)
                 } else {
                     Tokens.creamDark
                 }

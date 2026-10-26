@@ -68,12 +68,20 @@ import UIKit
     }
 
     @Test func aCardFamilysColoursAreTheOnesItsCSSSays() {
+        // In light terracotta, as the web's CSS writes them (each is the palette's family token, dark too).
+        let light = UITraitCollection { $0.userInterfaceStyle = .light; $0.accent = .terracotta }
+        func same(_ a: Color, _ css: String) -> Bool {
+            guard let b = OKLCHColor.parse(css) else { return false }
+            let x = UIColor(a).resolvedColor(with: light).cgColor.converted(to: CGColorSpace(name: CGColorSpace.displayP3)!, intent: .defaultIntent, options: nil)!
+            let y = UIColor(b).cgColor.converted(to: CGColorSpace(name: CGColorSpace.displayP3)!, intent: .defaultIntent, options: nil)!
+            return zip(x.components!, y.components!).allSatisfy { abs($0 - $1) < 0.002 }
+        }
         for (index, hue) in CardPalette.hues.enumerated() {
             let palette = CardPalette(index: index)
-            #expect(palette.interior == OKLCHColor.parse("oklch(97.5% 0.012 \(hue))"))
-            #expect(palette.hovered == OKLCHColor.parse("oklch(92.5% 0.024 \(hue))"))
-            #expect(palette.separator == OKLCHColor.parse("oklch(55% 0.04 \(hue) / 0.4)"))
-            #expect(palette.noteInk == OKLCHColor.parse("oklch(44% 0.08 \(hue))"))
+            #expect(same(palette.interior, "oklch(97.5% 0.012 \(hue))"))
+            #expect(same(palette.hovered, "oklch(92.5% 0.024 \(hue))"))
+            #expect(same(palette.separator, "oklch(55% 0.04 \(hue) / 0.4)"))
+            #expect(same(palette.noteInk, "oklch(44% 0.08 \(hue))"))
         }
     }
 
