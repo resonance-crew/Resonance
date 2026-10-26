@@ -4,12 +4,14 @@ import { describe, expect, it } from 'vitest';
 import { parseOklch } from './oklch';
 import {
   ACCENTS,
+  HUE_ROLES,
   PALETTE_TOKENS,
   SCHEMES,
   THEME_SPECS,
   avatarFill,
   contrast,
   cssOklch,
+  fitGamut,
   inP3,
   lightBaseOf,
   paletteFor,
@@ -43,9 +45,13 @@ const PAIRS: [PaletteToken, PaletteToken, number][] = [
   ['color-cream', 'button-fill', 4.5],
   ['button-on-tonal', 'button-tonal', 4.5],
   ['button-on-tonal', 'color-cream', 4.5],
+  // The call-to-action band's two buttons: the verb a paper pill, the second action a deeper band.
+  ['cta-verb-ink', 'cta-ink', 4.5],
+  ['cta-ink', 'cta-ghost', 4.5],
   ['color-cream', 'danger-fill', 4.5],
   ['button-on-danger-tonal', 'button-danger-tonal', 4.5],
   ['color-danger', 'color-cream', 4],
+  ['color-ok', 'color-cream', 3.4],
   // The accent itself never carries a label; as a pen or an icon it clears 3.
   ['color-terracotta', 'color-cream', 3],
   ['field-border-hover', 'color-cream', 3],
@@ -53,6 +59,7 @@ const PAIRS: [PaletteToken, PaletteToken, number][] = [
   ['placeholder', 'color-cream', 2.4],
   ...[0, 1, 2, 3, 4, 5].flatMap((i): [PaletteToken, PaletteToken, number][] => [
     ['color-text', `card-fill-${i}` as PaletteToken, 7],
+    ['color-text', `card-tag-${i}` as PaletteToken, 7],
     [`card-note-ink-${i}` as PaletteToken, `card-fill-${i}` as PaletteToken, 4.5],
     [`card-border-${i}` as PaletteToken, `card-fill-${i}` as PaletteToken, 2.5],
   ]),
@@ -105,6 +112,29 @@ describe('palette', () => {
       const p = paletteFor(a, 'dark');
       expect(p['color-cream-dark'].L).toBeLessThan(p['color-cream'].L);
       expect(p['color-cream'].L).toBeLessThan(p['color-card-bg'].L);
+    }
+  });
+
+  it('the hue roles read at every hue: words on their paper, pens beside it, the ink on the washes', () => {
+    const at = (role: keyof typeof HUE_ROLES, hue: number, scheme: 'light' | 'dark') => {
+      const [L, C] = HUE_ROLES[role][scheme];
+      return fitGamut({ L, C, H: hue, alpha: 1 });
+    };
+    for (const scheme of SCHEMES) {
+      const ink = paletteFor('terracotta', scheme)['color-text'];
+      for (let hue = 0; hue < 360; hue += 15) {
+        for (const role of ['ink', 'label', 'pill-ink'] as const) {
+          expect(contrast(at(role, hue, scheme), at('interior', hue, scheme)), `${scheme} ${role} at ${hue}`).toBeGreaterThan(4.5);
+        }
+        for (const role of ['pen', 'emphasis', 'group-pen-hot'] as const) {
+          expect(contrast(at(role, hue, scheme), at('interior', hue, scheme)), `${scheme} ${role} at ${hue}`).toBeGreaterThan(3);
+        }
+        for (const role of ['interior', 'tint', 'wash', 'group', 'menu'] as const) {
+          expect(contrast(ink, at(role, hue, scheme)), `${scheme} ink on ${role} at ${hue}`).toBeGreaterThan(7);
+        }
+        // A thumbnail's ground, or a pill under its own (pill-ink) words.
+        expect(contrast(ink, at('accent', hue, scheme)), `${scheme} ink on accent at ${hue}`).toBeGreaterThan(6);
+      }
     }
   });
 

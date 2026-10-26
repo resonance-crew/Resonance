@@ -17,6 +17,7 @@ import { srgbHex, toLinearSrgb, encode, type Oklch } from './oklch';
 import {
   ACCENTS,
   DEFAULT_ACCENT,
+  HUE_ROLES,
   PALETTE_TOKENS,
   SCHEME_NUMBERS,
   cssOklch,
@@ -49,7 +50,11 @@ function block(selector: string, palette: Palette, tokens: readonly PaletteToken
 }
 
 function schemeRules(scheme: Scheme, base: string, format: PaletteCssFormat, indent: string): string[] {
-  const numbers = Object.entries(SCHEME_NUMBERS[scheme]).map(([k, v]) => `--${k}: ${v};`);
+  const numbers = [
+    ...Object.entries(SCHEME_NUMBERS[scheme]).map(([k, v]) => `--${k}: ${v};`),
+    // Lightness and chroma of each hue role: oklch(var(--hue-pen) <hue>).
+    ...Object.entries(HUE_ROLES).map(([k, v]) => `--hue-${k}: ${v[scheme][0]} ${v[scheme][1]};`),
+  ];
   const rules = [block(base, paletteFor(DEFAULT_ACCENT, scheme), PALETTE_TOKENS, format, [`color-scheme: ${scheme};`, ...numbers], indent)];
   for (const accent of ACCENTS) {
     if (accent === DEFAULT_ACCENT) continue;

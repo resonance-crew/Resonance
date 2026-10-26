@@ -3,6 +3,7 @@
 import { useMemo, useSyncExternalStore } from 'react';
 import { resolvedAccent, resolvedScheme } from './appearance';
 import { paletteFor, type Accent, type Palette, type Scheme } from './palette';
+import { waveInk } from './storyLinkWave';
 
 /**
  * The theme and scheme the page wears, for what draws its colours in script
@@ -38,4 +39,15 @@ export function useAppearance(): { accent: Accent; scheme: Scheme } {
 export function usePalette(): Palette {
   const { accent, scheme } = useAppearance();
   return useMemo(() => paletteFor(accent, scheme), [accent, scheme]);
+}
+
+/**
+ * The pen wave's ink under a link now (storyLinkWave's `ink`): a data URI
+ * can't read --link-wave, so the links take it from here and redraw when the
+ * reader's theme or scheme changes. Before hydration it is light terracotta's,
+ * which dark terracotta's barely differs from.
+ */
+export function useLinkWaveInk(): string {
+  const { accent, scheme } = useAppearance();
+  return useMemo(() => waveInk(accent, scheme), [accent, scheme]);
 }
