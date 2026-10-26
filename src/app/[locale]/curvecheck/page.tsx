@@ -1,3 +1,4 @@
+import { notFound } from 'next/navigation';
 import { StoryMarkdown } from '@/components/molecules/CardDetail/StoryMarkdown';
 
 const shortMd = `> A short one-line quote.`;
@@ -29,6 +30,8 @@ A long link that has to wrap: [the quietly sprawling guide to keeping a paper jo
 ## A heading with [a page we keep](https://example.com/heading)`;
 
 export default function CurveCheck() {
+  // A design check for development: not part of the product (and it loads third-party pictures).
+  if (process.env.VERCEL_ENV === 'production') notFound();
   return (
     <div style={{ maxWidth: 640, margin: '40px auto', padding: 24 }}>
       <h2>Short quote</h2>

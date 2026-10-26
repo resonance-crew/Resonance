@@ -24,12 +24,7 @@ export default function middleware(request: NextRequest) {
     }
   }
 
-  const response = intlMiddleware(request);
-  response.headers.set(
-    'x-pathname',
-    `${request.nextUrl.pathname}${request.nextUrl.search}`
-  );
-  return response;
+  return intlMiddleware(request);
 }
 
 export const config = {

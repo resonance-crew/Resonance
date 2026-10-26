@@ -57,8 +57,9 @@ describe('POST /api/v1/messages (every write route shares these)', () => {
   it('refuses a cookie write another origin made — a same-site subdomain included — and lets the site and Bearer clients through', async () => {
     const send = (headers: Record<string, string>) =>
       POST(new Request('http://localhost/api/v1/messages', { method: 'POST', headers, body: JSON.stringify({ to: 'bob', text: 'hi' }) }));
-    for (const headers of [{ 'sec-fetch-site': 'same-site' }, { 'sec-fetch-site': 'cross-site' }, { origin: 'https://hi.resonance.channel', host: 'resonance.channel' }]) {
-      const res = await send(headers as Record<string, string>);
+    const variants: Record<string, string>[] = [{ 'sec-fetch-site': 'same-site' }, { 'sec-fetch-site': 'cross-site' }, { origin: 'https://hi.resonance.channel', host: 'resonance.channel' }];
+    for (const headers of variants) {
+      const res = await send(headers);
       expect(res.status, JSON.stringify(headers)).toBe(403);
     }
     expect(sendMessage).not.toHaveBeenCalled();

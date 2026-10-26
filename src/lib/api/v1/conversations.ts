@@ -547,7 +547,8 @@ export async function sendMessage(
     // (`image`, written or taken away every time — the preview is merged into the one before).
     tx.set(conversation, {
       lastMessage: {
-        text: cut(input.text || card?.thoughtCore || '', LAST_MESSAGE_PREVIEW),
+        // A card's title only when anyone may read the card: the list is the recipient's even when the card isn't.
+        text: cut(input.text || (card && card.visibility === 'public' ? card.thoughtCore : '') || '', LAST_MESSAGE_PREVIEW),
         senderId: uid,
         sentAt: FieldValue.serverTimestamp(),
         image: picture ? true : FieldValue.delete(),

@@ -44,6 +44,8 @@ const nextConfig: NextConfig = {
   // ── Security headers on every response (see src/lib/api/securityHeaders) ──
   // No framing by other origins, no MIME sniffing, a short referrer, no
   // device access; the Content-Security-Policy is report-only for now.
+  // No "X-Powered-By: Next.js": nothing gained by naming the stack.
+  poweredByHeader: false,
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders(process.env) }];
   },
