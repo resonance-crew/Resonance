@@ -109,9 +109,10 @@ private fun NotificationRow(item: NotificationsStore.Item, session: Session, ope
                 style = AppFonts.body(14f, lineHeight = 1.5f, color = if (item.isUnread) Tokens.Text else Tokens.TextMuted),
                 modifier = Modifier.weight(1f, fill = false),
             )
-            if (item.isUnread) Box(
-                Modifier.size(6.dp).semantics { contentDescription = L10n.App.Notifications.unread }.drawBehind { drawCircle(Tokens.Terracotta) },
-            )
+            if (item.isUnread) {
+                val dot = Tokens.Terracotta
+                Box(Modifier.size(6.dp).semantics { contentDescription = L10n.App.Notifications.unread }.drawBehind { drawCircle(dot) })
+            }
         }
         if (item.type == "note" && !item.preview.isNullOrEmpty()) {
             BasicText("「${item.preview}」", style = AppFonts.body(13f, color = Tokens.TextMuted))

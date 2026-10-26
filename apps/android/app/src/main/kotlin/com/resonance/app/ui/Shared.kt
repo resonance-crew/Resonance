@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import com.resonance.design.avatarFill
 import androidx.compose.animation.core.animate
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.navigationBars
@@ -142,7 +143,7 @@ fun FeedCard.story(): StoryCardContent {
         imageLabel = imageLabel ?: title.take(24),
         accentHue = accentHue,
         reason = null,
-        authorAccent = a?.let { OklchColor.parse(it.accentColor) },
+        authorAccent = a?.accentColor,
     )
 }
 
@@ -173,7 +174,9 @@ fun Author.avatarSeedValue(): Double = avatarSeed?.toDoubleOrNull() ?: ((initial
 
 /** The web's `Number(avatarSeed) || fallback`: Messages draw a missing or zero seed as their own fixed one (5 in the list, 3 in a thread). */
 fun seedOr(avatarSeed: String?, fallback: Double): Double = avatarSeed?.toDoubleOrNull()?.takeIf { it != 0.0 && it.isFinite() } ?: fallback
-fun Author.accent() = OklchColor.parse(accentColor) ?: Tokens.TerracottaLight
+/** The author's avatar colour as the screen's scheme draws it. */
+@androidx.compose.runtime.Composable @androidx.compose.runtime.ReadOnlyComposable
+fun Author.accent() = avatarFill(accentColor)
 
 /** "Oct 10, 2026" / "2026年10月10日" in the interface language (the web's publishedDate). */
 fun mediumDate(iso: String?): String? = iso?.let {

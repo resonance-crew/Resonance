@@ -40,7 +40,7 @@ import java.io.File
 class ComposerCapsuleTest {
     @get:Rule val compose = createComposeRule()
 
-    private val style by lazy { AppFonts.body(16f, lineHeight = 1.5f) }
+    private val style by lazy { composed { AppFonts.body(16f, lineHeight = 1.5f) } }
 
     @Before fun fonts() {
         AppFonts.init(RuntimeEnvironment.getApplication())

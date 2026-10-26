@@ -87,6 +87,9 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
+import com.resonance.design.generated.ResonanceColors
+import com.resonance.design.generated.LocalResonanceColors
+import androidx.compose.runtime.ReadOnlyComposable
 import com.resonance.geometry.SegValue
 import com.resonance.geometry.WobCircleOptions
 import com.resonance.geometry.WobRectOptions
@@ -110,7 +113,7 @@ import kotlinx.coroutines.launch
  * Modal.tsx's backdrop (oklch(20% 0.04 60)), but lighter than its 0.42 — over the cream
  * page that read muddy, the paper gone grey rather than set back.
  */
-val ModalScrim: Color = OklchColor.parse("oklch(20% 0.04 60 / 0.28)") ?: Color.Black.copy(alpha = 0.28f)
+val ModalScrim: Color @Composable @ReadOnlyComposable get() = Tokens.Scrim
 
 /**
  * The web's Modal: a wobbly card — radius 26, the wobble 2.5% of its short
@@ -168,6 +171,9 @@ fun OrganicModal(
                 contentAlignment = Alignment.Center,
             ) {
                 val scroll = rememberScrollState()
+                val card = Tokens.CardBg
+                val border = Tokens.ModalBorder
+                val grainInk = GrainInk.current
                 Column(
                     Modifier
                         .widthIn(max = maxWidth)
@@ -185,12 +191,12 @@ fun OrganicModal(
                                 curve = 0.6, cornerJitter = 0.9, cornerOffset = 5.0, segmentsH = SegValue.Range(3, 4), segmentsV = SegValue.Range(5, 6),
                             ))
                             val path = cmds.toPath(density)
-                            val grain = Grain.brush(GrainMode.Tile, "grain-card", size, density, 0.3f)
+                            val grain = Grain.brush(GrainMode.Tile, "grain-card", size, density, 0.3f, grainInk)
                             val ink = Stroke(Tokens.Ink.toPx())
                             onDrawBehind {
-                                drawPath(path, Tokens.CardBg)
+                                drawPath(path, card)
                                 grain?.let { drawPath(path, it, alpha = 0.3f) }
-                                drawPath(path, Tokens.ModalBorder, style = ink)
+                                drawPath(path, border, style = ink)
                             }
                         }
                         // A card taller than the room scrolls, its words fading where there is more.
@@ -322,7 +328,7 @@ val ModalErrorTuck = ModalGap + ModalActionsTop - ModalErrorGap
 /** A dialog's error line (the web's Modal `.error`): 13, danger red, right above its actions — [ModalErrorGap] over them, as on the web. */
 @Composable
 fun ModalError(text: String) = BasicText(
-    text, style = AppFonts.body(13f, lineHeight = 1.5f, color = Mixes.Danger),
+    text, style = AppFonts.body(13f, lineHeight = 1.5f, color = Tokens.Danger),
     modifier = Modifier.layout { measurable, constraints ->
         val placeable = measurable.measure(constraints)
         val tuck = ModalErrorTuck.roundToPx()
@@ -436,7 +442,7 @@ class OrganicMenuItem(val title: String, val icon: IconName, val destructive: Bo
  * 0.09 h)` when pressed, paper `oklch(98% 0.01 h)`, dividers `oklch(55% 0.04 h
  * / 0.4)`, and the destructive row's wash `color-mix(yellow 25%, paper)` (45% pressed).
  */
-internal class MenuColors(hue: Double?) {
+internal class MenuColors(hue: Double?, palette: ResonanceColors) {
     val border: Color
     val borderHover: Color
     val cream: Color
@@ -445,30 +451,38 @@ internal class MenuColors(hue: Double?) {
     val dangerWashPressed: Color
 
     init {
+        val mixes = PaletteMixes.of(palette)
         if (hue == null) {
-            border = Tokens.Terracotta
-            borderHover = Tokens.TerracottaDeep
-            cream = Tokens.Cream
-            divider = Tokens.Terracotta.copy(alpha = 0.4f)
-            dangerWash = Mixes.MenuDangerWash
-            dangerWashPressed = Mixes.MenuDangerWashPressed
+            border = palette.Terracotta
+            borderHover = palette.TerracottaDeep
+            cream = palette.Cream
+            divider = palette.Terracotta.copy(alpha = 0.4f)
+            dangerWash = mixes.menuDangerWash
+            dangerWashPressed = mixes.menuDangerWashPressed
+        } else if (palette.dark) {
+            // On night paper a card's own menu wears its family's colours: its pens, its paper, its rule.
+            val family = CardPalette(hue, 0).colorsIn(palette)
+            border = family.border
+            borderHover = family.deep
+            cream = family.interior
+            divider = family.separator
+            dangerWash = mixes.menuDangerWash
+            dangerWashPressed = mixes.menuDangerWashPressed
         } else {
-            border = OklchColor.parse("oklch(52% 0.11 $hue)") ?: Tokens.Terracotta
-            borderHover = OklchColor.parse("oklch(38% 0.09 $hue)") ?: Tokens.TerracottaDeep
-            cream = OklchColor.parse("oklch(98% 0.01 $hue)") ?: Tokens.Cream
-            divider = OklchColor.parse("oklch(55% 0.04 $hue / 0.4)") ?: Tokens.Terracotta.copy(alpha = 0.4f)
-            dangerWash = mixYellow(hue, 0.25)
-            dangerWashPressed = mixYellow(hue, 0.45)
+            // The web's light --menu-* of a card's hue (StoryCard's menu).
+            border = OklchColor.of(0.52, 0.11, hue)
+            borderHover = OklchColor.of(0.38, 0.09, hue)
+            cream = OklchColor.of(0.98, 0.01, hue)
+            divider = OklchColor.of(0.55, 0.04, hue, 0.4)
+            dangerWash = mixYellow(palette, hue, 0.25)
+            dangerWashPressed = mixYellow(palette, hue, 0.45)
         }
     }
 
-    /** color-mix(in oklch, yellow t, the menu's paper): halfway round the shorter hue arc, as CSS interpolates. */
-    private fun mixYellow(hue: Double, t: Double): Color {
-        val (yl, yc, yh) = Triple(0.88, 0.10, 90.0)
-        val (cl, cc) = 0.98 to 0.01
-        val dh = (yh - hue + 540) % 360 - 180
-        val h = ((hue + dh * t) % 360 + 360) % 360
-        return OklchColor.parse("oklch(${(cl + (yl - cl) * t) * 100}% ${cc + (yc - cc) * t} $h)") ?: Mixes.MenuDangerWash
+    /** color-mix(in oklch, yellow t, the menu's paper of [hue]): halfway round the shorter hue arc, as CSS interpolates. */
+    private fun mixYellow(palette: ResonanceColors, hue: Double, t: Double): Color {
+        val m = PaletteMixes.mix(palette.oklchOf("color-yellow"), doubleArrayOf(0.98, 0.01, hue, 1.0), t)
+        return OklchColor.of(m[0], m[1], m[2], m[3])
     }
 }
 
@@ -503,7 +517,8 @@ fun OrganicMenuChip(
     busy: Boolean = false,
     onClick: () -> Unit,
 ) {
-    val colors = remember(hue) { MenuColors(hue) }
+    val palette = LocalResonanceColors.current
+    val colors = remember(hue, palette) { MenuColors(hue, palette) }
     if (trigger == MenuTrigger.Bare) {
         Box(
             Modifier
@@ -619,7 +634,8 @@ private fun MenuHost(
     var open by remember { mutableStateOf(false) }
     var choosing by remember { mutableStateOf(false) }
     val menuScope = rememberCoroutineScope()
-    val colors = remember(hue) { MenuColors(hue) }
+    val palette = LocalResonanceColors.current
+    val colors = remember(hue, palette) { MenuColors(hue, palette) }
     Box {
         trigger(open) { open = !open }
         if (open) {
@@ -687,7 +703,8 @@ fun OrganicMenuPanel(
     hue: Double? = null,
     onChoose: (OrganicMenuItem) -> Unit,
 ) {
-    val colors = remember(hue) { MenuColors(hue) }
+    val palette = LocalResonanceColors.current
+    val colors = remember(hue, palette) { MenuColors(hue, palette) }
     MenuPanel(items, seed, colors, footer, origin, onChoose, modifier)
 }
 
@@ -833,6 +850,7 @@ object Toggle {
      */
     class Inks(val fill: Color, val ink: Color)
 
+    @Composable @ReadOnlyComposable
     fun inks(checked: Boolean) = if (checked) Inks(Tokens.Terracotta, Tokens.TerracottaDeep) else Inks(Tokens.CreamDark, Tokens.TextMuted)
 }
 
@@ -869,6 +887,8 @@ fun OrganicToggle(checked: Boolean, seed: Double = 9.0, enabled: Boolean = true)
     val knobX by animateDpAsState(Toggle.knobX(checked).dp, if (still) snap() else tween(200, easing = KnobEasing), label = "knob")
     val fill by animateColorAsState(inks.fill, if (still) snap() else tween(160, easing = InkEasing), label = "fill")
     val ink by animateColorAsState(inks.ink, if (still) snap() else tween(160, easing = InkEasing), label = "ink")
+    val knobPaper = Tokens.Cream
+    val grainInk = GrainInk.current
     Box(
         Modifier
             .size(Toggle.W.dp, Toggle.H.dp)
@@ -876,7 +896,7 @@ fun OrganicToggle(checked: Boolean, seed: Double = 9.0, enabled: Boolean = true)
             .fade(if (enabled) 1f else Toggle.DISABLED_ALPHA)
             .drawWithCache {
                 val track = Toggle.trackPath(seed).toPath(density)
-                val grain = Grain.brush(GrainMode.Tile, "grain-button", size, density, Toggle.GRAIN_ALPHA)
+                val grain = Grain.brush(GrainMode.Tile, "grain-button", size, density, Toggle.GRAIN_ALPHA, grainInk)
                 val pen = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                 onDrawBehind {
                     drawPath(track, fill)
@@ -893,7 +913,7 @@ fun OrganicToggle(checked: Boolean, seed: Double = 9.0, enabled: Boolean = true)
                     val knob = Toggle.knobPath(seed).toPath(density)
                     val ring = Stroke(Tokens.InkLight.toPx(), join = StrokeJoin.Round)
                     onDrawBehind {
-                        drawPath(knob, Tokens.Cream)
+                        drawPath(knob, knobPaper)
                         drawPath(knob, ink, style = ring)
                     }
                 },

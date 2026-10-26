@@ -43,8 +43,8 @@ import com.resonance.design.generated.Tokens
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.story.StoryScript
 
-/** The shimmer's highlight: the theme's light accent, or a card's own hue inside a card. */
-val LocalSkeletonHighlight = compositionLocalOf { Mixes.skeletonHighlight() }
+/** The shimmer's highlight inside a card of its own hue ([WithSkeletonHue]); null: the theme's accent family's. */
+val LocalSkeletonHighlight = compositionLocalOf<Color?> { null }
 
 /** CSS `ease`. */
 private val Ease = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1f)
@@ -100,18 +100,19 @@ fun SharedShimmer(content: @Composable () -> Unit) {
 
 @Composable
 private fun Modifier.shimmer(): Modifier {
-    val highlight = LocalSkeletonHighlight.current
+    val highlight = LocalSkeletonHighlight.current ?: Mixes.skeletonHighlight()
+    val base = Mixes.SkeletonBase
     val shared = LocalShimmerClock.current
     val t = if (shared != null) shared.phase else shimmerPhase()
     return clearAndSetSemantics { }
         .drawBehind {
-            val p = t?.value ?: return@drawBehind drawRect(Mixes.SkeletonBase)
+            val p = t?.value ?: return@drawBehind drawRect(base)
             val w = size.width
             // background-position 100% → −100% moves the 4w-wide band's left edge from −3w to 3w.
             val left = -3f * w * (1f - 2f * p)
             drawRect(
                 Brush.horizontalGradient(
-                    0.25f to Mixes.SkeletonBase, 0.37f to highlight, 0.63f to Mixes.SkeletonBase,
+                    0.25f to base, 0.37f to highlight, 0.63f to base,
                     startX = left, endX = left + 4f * w,
                 ),
             )

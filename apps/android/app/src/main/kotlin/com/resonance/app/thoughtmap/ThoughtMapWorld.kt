@@ -115,16 +115,18 @@ fun FixedFontScale(content: @Composable () -> Unit) {
  */
 @Composable
 fun MapGridLayer(store: ThoughtMapStore) {
-    val shader = remember { if (MapDots.useShader && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) MapDots.shader() else null }
-    val fallbackPaint = remember {
+    val inks = MapInk.current
+    val shader = remember(inks) { if (MapDots.useShader && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) MapDots.shader(inks.dot) else null }
+    val fallbackPaint = remember(inks) {
         Paint().apply {
             isAntiAlias = true
             strokeCap = StrokeCap.Round
-            color = MapInk.dot
+            color = inks.dot
         }
     }
+    val paper = Tokens.CardBg
     Canvas(Modifier.fillMaxSize()) {
-        drawRect(Tokens.CardBg)
+        drawRect(paper)
         val cam = store.camera
         val d = density
         val spacing = (26 * cam.s * d).toFloat()
@@ -170,7 +172,7 @@ object MapDots {
     """
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    fun shader(): RuntimeShader = RuntimeShader(Source).apply { setColorUniform("dotColor", MapInk.dot.toArgb()) }
+    fun shader(dot: androidx.compose.ui.graphics.Color): RuntimeShader = RuntimeShader(Source).apply { setColorUniform("dotColor", dot.toArgb()) }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     fun draw(scope: DrawScope, shader: RuntimeShader, spacing: Float, ox: Float, oy: Float) {
@@ -187,6 +189,7 @@ object MapDots {
 /** Regions (fill and rim) and the arrows between cards, with their heads. */
 @Composable
 fun MapUnderLayer(store: ThoughtMapStore) {
+    val inks = MapInk.current
     MapCameraLayer(store) {
         Canvas(Modifier.fillMaxSize()) {
             val d = density
@@ -199,15 +202,15 @@ fun MapUnderLayer(store: ThoughtMapStore) {
                     val strong = isHot || (selection as? ThoughtMapStore.Selection.Group)?.id == g.id
                     val path = store.regionPath(g)
                     translate(g.x.toFloat(), g.y.toFloat()) {
-                        drawPath(path, MapInk.regionFill(g.hue, isHot))
-                        drawPath(path, MapInk.regionStroke(g.hue, strong), style = Stroke(if (strong) INK_STRONG else INK_LIGHT, join = StrokeJoin.Round))
+                        drawPath(path, inks.regionFill(g.hue, isHot))
+                        drawPath(path, inks.regionStroke(g.hue, strong), style = Stroke(if (strong) INK_STRONG else INK_LIGHT, join = StrokeJoin.Round))
                     }
                 }
                 for (eid in store.edgeOrder) {
                     val e = store.edges[eid] ?: continue
                     val geo = store.edgeGeometry(e) ?: continue
                     val selected = (selection as? ThoughtMapStore.Selection.Edge)?.id == e.id
-                    val color = MapInk.edgeInk(selected)
+                    val color = inks.edgeInk(selected)
                     val style = Stroke(if (selected) INK_STRONG else INK, cap = StrokeCap.Round)
                     drawPath(geo.path, color, style = style)
                     drawPath(geo.head, color, style = style)
@@ -224,6 +227,8 @@ private val INK_STRONG = Tokens.InkStrong.value
 /** The arrow being drawn (dashed until it docks) with the docking dots, then the regions' rims re-inked over their cards. */
 @Composable
 fun MapOverLayer(store: ThoughtMapStore) {
+    val inks = MapInk.current
+    val paper = Tokens.CardBg
     MapCameraLayer(store) {
         Canvas(Modifier.fillMaxSize()) {
             val d = density
@@ -237,7 +242,7 @@ fun MapOverLayer(store: ThoughtMapStore) {
                         val target = store.linkTarget
                         val targetRect = target?.let { store.nodeRect(it) }
                         val hue = store.cards[draft.sourceId]?.let(ThoughtMapStore::hue) ?: 55.0
-                        val linkColor = MapInk.linkInk(hue)
+                        val linkColor = inks.linkInk(hue)
                         val to = targetRect ?: com.resonance.geometry.Rect(draft.wx - 1, draft.wy - 1, 2.0, 2.0)
                         val seed = seedFromString(draft.sourceId).toDouble()
                         val geo = organicEdgePath(source, to, seed)
@@ -261,7 +266,7 @@ fun MapOverLayer(store: ThoughtMapStore) {
                                 Offset((r.x + r.w / 2).toFloat(), (r.y + r.h).toFloat()), Offset(r.x.toFloat(), (r.y + r.h / 2).toFloat()),
                             )
                             for (m in mids) {
-                                drawCircle(if (docked) linkColor else Tokens.CardBg, radius, m)
+                                drawCircle(if (docked) linkColor else paper, radius, m)
                                 drawCircle(linkColor, radius, m, style = Stroke(INK))
                             }
                         }
@@ -272,7 +277,7 @@ fun MapOverLayer(store: ThoughtMapStore) {
                     val g = store.groups[gid] ?: continue
                     val strong = hot == g.id || (selection as? ThoughtMapStore.Selection.Group)?.id == g.id
                     translate(g.x.toFloat(), g.y.toFloat()) {
-                        drawPath(store.regionPath(g), MapInk.regionStroke(g.hue, strong), style = Stroke(if (strong) INK_STRONG else INK_LIGHT, join = StrokeJoin.Round))
+                        drawPath(store.regionPath(g), inks.regionStroke(g.hue, strong), style = Stroke(if (strong) INK_STRONG else INK_LIGHT, join = StrokeJoin.Round))
                     }
                 }
             }
@@ -423,6 +428,6 @@ private fun EdgeLabel(store: ThoughtMapStore, eid: String) {
             }
         },
     ) {
-        TagPill(store.labelText(e), fill = if (selected) MapInk.pillFillSelected else MapInk.pillFill, size = TagSize.Sm)
+        TagPill(store.labelText(e), fill = if (selected) MapInk.current.pillFillSelected else MapInk.current.pillFill, size = TagSize.Sm)
     }
 }

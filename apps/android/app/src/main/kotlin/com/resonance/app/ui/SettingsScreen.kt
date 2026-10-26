@@ -161,7 +161,7 @@ internal fun settingsTop(cls: LayoutClass): Dp = titledBarGap(cls, tabletAir = t
 @Composable
 private fun MenuRow(section: SettingsSection, onClick: () -> Unit) {
     // Deleting the account is the one red row.
-    val tint = if (section == SettingsSection.Delete) Mixes.Danger else Tokens.Terracotta
+    val tint = if (section == SettingsSection.Delete) Tokens.Danger else Tokens.Terracotta
     Row(
         Modifier
             .fillMaxWidth()
@@ -277,7 +277,7 @@ private fun ProfileSettings(session: Session) {
                     }
                 }
             }
-            if (failed) BasicText(L10n.Native.saveError, style = AppFonts.body(13f, color = Mixes.Danger))
+            if (failed) BasicText(L10n.Native.saveError, style = AppFonts.body(13f, color = Tokens.Danger))
         }
     }
 }
@@ -452,7 +452,7 @@ private fun NotificationSettings(session: Session) {
             }
         }
         if (state.saveFailed) {
-            BasicText(L10n.Settings.Notifications.saveError, style = AppFonts.body(13f, color = Mixes.Danger), modifier = Modifier.padding(top = 14.dp))
+            BasicText(L10n.Settings.Notifications.saveError, style = AppFonts.body(13f, color = Tokens.Danger), modifier = Modifier.padding(top = 14.dp))
         }
     }
 }
@@ -560,7 +560,7 @@ private fun DeleteAccountSettings(session: Session) {
             ) { save.launch("resonance-backup-${LocalDate.now()}.json") }
             OrganicButton(L10n.Settings.Delete.button, width, variant = ButtonVariant.DangerTonal, icon = IconName.Trash) { confirming = true }
         }
-        if (failed) BasicText(L10n.Settings.Delete.error, style = AppFonts.body(13f, color = Mixes.Danger))
+        if (failed) BasicText(L10n.Settings.Delete.error, style = AppFonts.body(13f, color = Tokens.Danger))
     }
 
     if (confirming) OrganicConfirmDialog(

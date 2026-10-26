@@ -259,6 +259,7 @@ fun BoxScope.SketchPullIndicator(
 fun BoxScope.SketchPullPaper(pull: SketchPull, top: Dp, paper: Color) {
     val shown by remember(pull) { derivedStateOf { pull.state.distanceFraction > 0f || pull.refreshing } }
     if (!shown) return
+    val grainInk = GrainInk.current
     Box(
         Modifier
             .align(Alignment.TopCenter)
@@ -267,7 +268,7 @@ fun BoxScope.SketchPullPaper(pull: SketchPull, top: Dp, paper: Color) {
             .fillMaxWidth()
             .height(pull.threshold * 3)
             .drawWithCache {
-                val grain = Grain.brush(GrainMode.Tile, "grain-overlay", this.size, this.density, 1f)
+                val grain = Grain.brush(GrainMode.Tile, "grain-overlay", this.size, this.density, 1f, grainInk)
                 onDrawBehind {
                     val gap = pull.offsetPx
                     // Drawn from the band's own top (where it is now), so the grain's tiles run on from its.

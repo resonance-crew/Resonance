@@ -134,7 +134,7 @@ class ShareCardRecipeTest {
         assertEquals(0.02f.em, ShareCardRecipe.titleStyle(StoryScript.Cjk, 22f).letterSpacing)
     }
 
-    @Test fun theRuleTheBylineAndTheLockupAreTheWebs() {
+    @Test fun theRuleTheBylineAndTheLockupAreTheWebs() = composed {
         near(num("rule", "height"), ShareCardRecipe.Rule.HEIGHT, "rule height")
         near(num("rule", "width"), ShareCardRecipe.Rule.WIDTH, "rule width")
         near(num("rule", "seedOffset"), ShareCardRecipe.Rule.SEED_OFFSET, "rule seed")
@@ -180,7 +180,7 @@ class ShareCardRecipeTest {
         assertEquals(624f, (ShareCardRecipe.Card.WIDTH + 2 * ShareCardRecipe.Sticker.MARGIN) * ShareCardRecipe.Sticker.SCALE)
     }
 
-    @Test fun theColoursAreTheCardsFamily() {
+    @Test fun theColoursAreTheCardsFamily() = composed {
         // A cover's family wins; without one the id fixes it, as the web's sharePalette does.
         assertEquals(CardPalette.nearest(140.0), ShareCardRecipe.palette("any", 140.0).index)
         assertEquals(Math.floorMod(seedFromId("c1").toInt(), CardPalette.HUES.size), ShareCardRecipe.palette("c1", null).index)

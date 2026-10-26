@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import com.resonance.design.GrainInk
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -177,7 +178,7 @@ private fun CardPickRow(card: FeedCard, index: Int, choosing: Boolean, chosen: B
             BasicText(
                 card.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 // Chosen: the tonal buttons' deep terracotta (plain terracotta is 3.3:1 on the modal's paper).
-                style = AppFonts.body(15f, 600, lineHeight = 1.3f, color = if (chosen) Mixes.ButtonOnTonal else Tokens.Text),
+                style = AppFonts.body(15f, 600, lineHeight = 1.3f, color = if (chosen) Tokens.ButtonOnTonal else Tokens.Text),
             )
             pickMeta(card.anonymous, card.publishedAt, anonymousLabel)?.let {
                 BasicText(it, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(13f, lineHeight = 1.4f, color = Tokens.TextMuted))
@@ -195,7 +196,10 @@ private fun CardPickRow(card: FeedCard, index: Int, choosing: Boolean, chosen: B
 @Composable
 private fun PickThumb(url: String?, hue: Double, seed: Double, chosen: Boolean) {
     val shape = remember(seed) { pickThumbShape(seed) }
-    val cover = OklchColor.parse("oklch(90% 0.06 $hue)") ?: Tokens.TerracottaLight
+    val cover = Mixes.atHue("card-accent", hue)
+    val rimInk = Tokens.AvatarStroke
+    val chosenFace = Tokens.Terracotta.copy(alpha = 0.82f)
+    val grainInk = GrainInk.current
     Box(
         Modifier
             .size(40.dp)
@@ -205,7 +209,7 @@ private fun PickThumb(url: String?, hue: Double, seed: Double, chosen: Boolean) 
                 onDrawWithContent {
                     drawOutline(o, cover)
                     drawContent()
-                    drawOutline(o, Mixes.AvatarRim, style = rim)
+                    drawOutline(o, rimInk, style = rim)
                 }
             },
     ) {
@@ -215,9 +219,9 @@ private fun PickThumb(url: String?, hue: Double, seed: Double, chosen: Boolean) 
             Box(
                 Modifier.fillMaxSize().drawWithCache {
                     val o = shape.createOutline(size, layoutDirection, this)
-                    val grain = Grain.brush(GrainMode.Tile, "grain-button", size, density, 0.38f)
+                    val grain = Grain.brush(GrainMode.Tile, "grain-button", size, density, 0.38f, grainInk)
                     onDrawBehind {
-                        drawOutline(o, Tokens.Terracotta.copy(alpha = 0.82f))
+                        drawOutline(o, chosenFace)
                         grain?.let { drawOutline(o, it, alpha = 0.38f) }
                     }
                 },

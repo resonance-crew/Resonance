@@ -64,6 +64,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -171,6 +172,7 @@ fun <T> OrganicTabBar(items: List<OrganicTabItem<T>>, selection: T, onSelect: (T
  */
 @Composable
 private fun <T> TabFace(item: OrganicTabItem<T>, index: Int, selected: Boolean, wash: () -> Float, modifier: Modifier) {
+    val scrap = Tokens.TerracottaLight
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Box(
             Modifier.size(56.dp, 32.dp).drawWithCache {
@@ -180,7 +182,7 @@ private fun <T> TabFace(item: OrganicTabItem<T>, index: Int, selected: Boolean, 
                 val o = WobRectShape(12.0, index * 29.0 + 7, mag = 3.2, options = WobRectOptions(
                     curve = 1.2, cornerJitter = 3.6, cornerOffset = 3.0, segmentsH = SegValue.Count(2.0), segmentsV = SegValue.Count(1.0),
                 )).createOutline(size, layoutDirection, this)
-                onDrawBehind { val w = wash(); if (w > 0f) drawOutline(o, Tokens.TerracottaLight.copy(alpha = 0.55f * w)) }
+                onDrawBehind { val w = wash(); if (w > 0f) drawOutline(o, scrap.copy(alpha = 0.55f * w)) }
             },
             contentAlignment = Alignment.Center,
         ) {
@@ -281,8 +283,9 @@ fun brandBarHeight(): Dp = if (LocalHeaderChrome.current != null) TopBarRow else
 private val PenChipWidth = 56.dp
 
 /** The labels' face in the header's tabs: body 14, 600 chosen / 500 not. */
+@Composable @ReadOnlyComposable
 private fun topTabStyle(selected: Boolean) =
-    AppFonts.body(14f, if (selected) 600 else 500, lineHeight = 1.2f, color = if (selected) Mixes.ButtonOnTonal else Tokens.TextMuted)
+    AppFonts.body(14f, if (selected) 600 else 500, lineHeight = 1.2f, color = if (selected) Tokens.ButtonOnTonal else Tokens.TextMuted)
 
 /** Each tab's width in the header's group, labelled ([TopTabsFit.labelledItem], measured at 600) or glyph alone. */
 @Composable
@@ -328,6 +331,11 @@ fun <T> TopTabs(
     val chosen = items.map { (_, item) ->
         animateFloatAsState(if (item.id == selection) 1f else 0f, tween(160), label = "topTabFill")
     }
+    val well = Tokens.CreamDark
+    val face = Tokens.ButtonTonal
+    val wash = OrganicIndication.Wash
+    val seam = Tokens.Cream
+    val grainInk = GrainInk.current
     Row(
         modifier
             .height(TopTabsFit.HEIGHT.dp)
@@ -344,16 +352,16 @@ fun <T> TopTabs(
                     Path().apply { op(SegmentedLayout.regionPath(i, items.size, boundaries, w, h, pad.toFloat(), d), outer, PathOperation.Intersect) }
                 }
                 val seams = boundaries.map { polylinePath(it, d) }
-                val grain = Grain.brush(GrainMode.Tile, "grain-button", size, d, 0.38f)
+                val grain = Grain.brush(GrainMode.Tile, "grain-button", size, d, 0.38f, grainInk)
                 val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round)
                 onDrawBehind {
-                    drawPath(outer, Tokens.CreamDark)
+                    drawPath(outer, well)
                     regions.forEachIndexed { i, region ->
                         val fill = max(chosen[i].value, if (hovers[i].value) TOP_HOVER_FILL else 0f)
-                        if (fill > 0f) drawPath(region, Mixes.ButtonTonal, alpha = fill)
+                        if (fill > 0f) drawPath(region, face, alpha = fill)
                     }
-                    pressed?.let { i -> with(ink) { draw(regions[i], OrganicIndication.Wash) } }
-                    clipPath(outer) { seams.forEach { drawPath(it, Tokens.Cream, style = pen) } }
+                    pressed?.let { i -> with(ink) { draw(regions[i], wash) } }
+                    clipPath(outer) { seams.forEach { drawPath(it, seam, style = pen) } }
                     grain?.let { drawPath(outer, it, alpha = 0.38f) }
                 }
             }
@@ -377,7 +385,7 @@ fun <T> TopTabs(
                     }
                 }
             }
-            val face = if (selected) Mixes.ButtonOnTonal else Tokens.TextMuted
+            val face = if (selected) Tokens.ButtonOnTonal else Tokens.TextMuted
             Box(
                 Modifier
                     .width(widths.getOrElse(i) { TopTabsFit.ICON_ITEM.dp })
@@ -442,6 +450,9 @@ fun TopPen(label: String, icon: IconName, onClick: () -> Unit, modifier: Modifie
 /** The pen in the tab bar: a solid terracotta squircle as tall as a tab, the nib in cream; it darkens while pressed. */
 @Composable
 private fun PenChip(pressed: Boolean, icon: IconName) {
+    val face = Tokens.ButtonFill
+    val press = OrganicIndication.OnFill
+    val grainInk = GrainInk.current
     Box(
         Modifier
             .size(56.dp, 40.dp)
@@ -450,12 +461,12 @@ private fun PenChip(pressed: Boolean, icon: IconName) {
                 val o = WobRectShape(17.0, 3.0, mag = 1.1, options = WobRectOptions(
                     curve = 1.3, cornerJitter = 3.0, cornerOffset = 2.4, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0),
                 )).createOutline(size, layoutDirection, this)
-                val grain = Grain.brush(GrainMode.Tile, "grain-button", size, density, 0.38f)
+                val grain = Grain.brush(GrainMode.Tile, "grain-button", size, density, 0.38f, grainInk)
                 onDrawBehind {
                     // The verb's face (--button-fill): the pen chip is the write button.
-                    drawOutline(o, Mixes.ButtonFill)
+                    drawOutline(o, face)
                     grain?.let { drawOutline(o, it, alpha = 0.38f) }
-                    if (pressed) drawOutline(o, OrganicIndication.OnFill)
+                    if (pressed) drawOutline(o, press)
                 }
             },
         contentAlignment = Alignment.Center,
@@ -469,6 +480,7 @@ private fun PenChip(pressed: Boolean, icon: IconName) {
 @Composable
 fun CountBadge(count: Int, modifier: Modifier = Modifier) {
     val w = if (count > 9) 26.dp else 19.dp
+    val chip = Tokens.Terracotta
     Box(
         modifier
             .size(w, 18.dp)
@@ -477,7 +489,7 @@ fun CountBadge(count: Int, modifier: Modifier = Modifier) {
                 val o = WobRectShape(18 * 0.4, 9.0, mag = 1.3, options = WobRectOptions(
                     curve = 1.5, cornerJitter = 3.0, cornerOffset = 18 * 0.06, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0),
                 )).createOutline(size, layoutDirection, this)
-                onDrawBehind { drawOutline(o, Tokens.Terracotta) }
+                onDrawBehind { drawOutline(o, chip) }
             },
         contentAlignment = Alignment.Center,
     ) { BasicText("$count", style = AppFonts.body(10f, 700, lineHeight = 1f, color = Tokens.Cream)) }
@@ -500,6 +512,7 @@ val BrandBarHeight = 58.dp
 private const val BRAND = "Resonance"
 
 /** A screen's title in a phone's bar (a tab's in the brand's place, a pushed page's beside the arrow): Playfair 20/700. */
+@Composable @ReadOnlyComposable
 private fun phoneBarTitle() = AppFonts.heading(PHONE_BAR_TITLE, 700, lineHeight = 1.2f).copy(letterSpacing = (-0.02).em)
 
 private const val PHONE_BAR_TITLE = 20f
@@ -768,7 +781,7 @@ data class BarStatus(val text: String, val failed: Boolean = false)
  */
 @Composable
 fun SaveStateText(status: BarStatus?, modifier: Modifier = Modifier, size: Float = SaveStateSize) {
-    val style = AppFonts.body(size, lineHeight = SAVE_STATE_LEADING, color = if (status?.failed == true) Mixes.Danger else Tokens.TextMuted)
+    val style = AppFonts.body(size, lineHeight = SAVE_STATE_LEADING, color = if (status?.failed == true) Tokens.Danger else Tokens.TextMuted)
     BasicText(
         status?.text.orEmpty(),
         maxLines = 1,
@@ -879,12 +892,17 @@ val HeaderEdgeHeight = 10.dp
  * whatever `lineAlpha` says, and reaches [lead] past the bar's start in a level stroke — to the
  * rule beside the pane, where it meets it.
  */
+@Composable
 fun Modifier.headerEdge(
     lineAlpha: () -> Float = FullInk,
     progress: (() -> Float)? = null,
     pen: Color? = null,
     lead: Dp = 0.dp,
-): Modifier = drawWithCacheOf(HeaderEdge(lineAlpha, progress, pen, lead))
+): Modifier = drawWithCacheOf(HeaderEdge(lineAlpha, progress, pen, lead, HeaderInks(Tokens.Cream, Tokens.FieldBorderHover, Tokens.ReadingProgress, Tokens.ReadingProgressGlowAlpha)))
+
+/** What the header's edge is drawn in: its paper, its line, and the reading progress's pen and glow. */
+@Immutable
+private data class HeaderInks(val paper: Color, val line: Color, val progress: Color, val glowAlpha: Float)
 
 /** The line at full ink: one value, so two bars' edges are equal. */
 private val FullInk: () -> Float = { 1f }
@@ -893,7 +911,7 @@ private val FullInk: () -> Float = { 1f }
  * [headerEdge]'s drawing, as a value ([drawWithCacheOf]): recomposed with equal inputs it is an equal modifier,
  * which keeps what it cached (outline, paths, grain) instead of building it again at the next draw.
  */
-private data class HeaderEdge(val lineAlpha: () -> Float, val progress: (() -> Float)?, val pen: Color?, val lead: Dp) : (CacheDrawScope) -> DrawResult {
+private data class HeaderEdge(val lineAlpha: () -> Float, val progress: (() -> Float)?, val pen: Color?, val lead: Dp, val inks: HeaderInks) : (CacheDrawScope) -> DrawResult {
     override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
         val ink = Tokens.Ink.toPx()
         val (line, fill) = headerEdgePaths(size.width, size.height, density)
@@ -904,16 +922,16 @@ private data class HeaderEdge(val lineAlpha: () -> Float, val progress: (() -> F
         val measure = if (progress != null) PathMeasure().apply { setPath(line, false) } else null
         val read = Path()
         val readPen = Stroke(ReadingProgressPen.width.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-        val glow = if (progress != null) ReadingProgressPen.glowPaint(readPen.width, ReadingProgressPen.glow.toPx()) else null
+        val glow = if (progress != null) ReadingProgressPen.glowPaint(readPen.width, ReadingProgressPen.glow.toPx(), inks.progress, inks.glowAlpha) else null
         val stroke = Stroke(ink, cap = StrokeCap.Round)
         onDrawBehind {
-            drawPath(fill, Tokens.Cream)
+            drawPath(fill, inks.paper)
             if (pen != null) {
                 // Opaque, so the lead-in, the line and the rule they meet never darken where they overlap.
                 leadIn?.let { drawPath(it, pen, style = stroke) }
                 drawPath(line, pen, style = stroke)
             } else {
-                drawPath(line, Tokens.FieldBorderHover, alpha = lineAlpha(), style = stroke)
+                drawPath(line, inks.line, alpha = lineAlpha(), style = stroke)
             }
             // How far the story has been read: a marker over the pen line itself, centred on it and
             // covering it, from the leading edge; nothing at all before the first step (no lone cap dot).
@@ -923,7 +941,7 @@ private data class HeaderEdge(val lineAlpha: () -> Float, val progress: (() -> F
                 measure.getSegment(0f, p.coerceAtMost(1f) * measure.length, read, true)
                 // Its soft glow first, behind it: the same stroke blurred, in the same colour at 55 % (round 5 E1).
                 glow?.let { paint -> drawIntoCanvas { it.nativeCanvas.drawPath(read.asAndroidPath(), paint) } }
-                drawPath(read, ReadingProgressPen.color, style = readPen)
+                drawPath(read, inks.progress, style = readPen)
             }
         }
     }
@@ -933,23 +951,25 @@ private data class HeaderEdge(val lineAlpha: () -> Float, val progress: (() -> F
  * The reading progress's pen (round 5 D1, E1): the header's own pen width (`--reading-progress-width`,
  * 1.8, round caps) in `--reading-progress`, a brighter terracotta-orange, over the header's line —
  * the unread rest of that line reads as its track — with a soft glow of the same colour behind it:
- * the stroke blurred by `--reading-progress-glow` (4) at [GLOW_ALPHA] (the web's drop-shadow, iOS's
- * shadow).
+ * the stroke blurred by `--reading-progress-glow` (4) at [glowAlpha] (the web's drop-shadow, iOS's
+ * shadow) — 0.55 in light, softer in dark (`--reading-progress-glow-alpha`), where a glow at light's
+ * strength reads as neon.
  */
 object ReadingProgressPen {
-    val color: Color get() = Tokens.ReadingProgress
+    val color: Color @Composable @ReadOnlyComposable get() = Tokens.ReadingProgress
     val width: Dp get() = Tokens.ReadingProgressWidth.dp
     val glow: Dp get() = Tokens.ReadingProgressGlow.dp
-    const val GLOW_ALPHA = 0.55f
+    /** `--reading-progress-glow-alpha`. */
+    val glowAlpha: Float @Composable @ReadOnlyComposable get() = Tokens.ReadingProgressGlowAlpha
 
-    /** The glow's paint: the pen's stroke, [blur] px soft (a blur mask: the canvas is hardware drawn, API 28+). */
-    fun glowPaint(width: Float, blur: Float): android.graphics.Paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+    /** The glow's paint: the pen's stroke in [color] at [alpha], [blur] px soft (a blur mask: the canvas is hardware drawn, API 28+). */
+    fun glowPaint(width: Float, blur: Float, color: Color, alpha: Float): android.graphics.Paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
         style = android.graphics.Paint.Style.STROKE
         strokeWidth = width
         strokeCap = android.graphics.Paint.Cap.ROUND
         strokeJoin = android.graphics.Paint.Join.ROUND
         // As Compose's own paint takes it (the line drawn over it is the same colour).
-        color = this@ReadingProgressPen.color.copy(alpha = GLOW_ALPHA).toArgb()
+        this.color = color.copy(alpha = alpha).toArgb()
         maskFilter = android.graphics.BlurMaskFilter(blur, android.graphics.BlurMaskFilter.Blur.NORMAL)
     }
 }
@@ -1025,13 +1045,14 @@ fun readingProgress(storyTop: Float, storyHeight: Float, lineY: Float, visible: 
  * content scrolled beneath shows right down to the line. The line rests at
  * half ink, like the header's before the page scrolls.
  */
-fun Modifier.footerEdge(lineAlpha: Float = 0.5f): Modifier = drawWithCacheOf(FooterEdge(lineAlpha))
+@Composable
+fun Modifier.footerEdge(lineAlpha: Float = 0.5f): Modifier = drawWithCacheOf(FooterEdge(lineAlpha, Tokens.Cream, Tokens.FieldBorderHover))
 
 /**
  * [footerEdge]'s drawing, as a value ([drawWithCacheOf]): recomposed with equal inputs it is an equal modifier,
  * which keeps what it cached (outline, paths, grain) instead of building it again at the next draw.
  */
-private data class FooterEdge(val lineAlpha: Float) : (CacheDrawScope) -> DrawResult {
+private data class FooterEdge(val lineAlpha: Float, val paper: Color, val pen: Color) : (CacheDrawScope) -> DrawResult {
     override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
         val d = density
         val ink = Tokens.Ink.toPx()
@@ -1053,8 +1074,8 @@ private data class FooterEdge(val lineAlpha: Float) : (CacheDrawScope) -> DrawRe
             close()
         }
         onDrawBehind {
-            drawPath(fill, Tokens.Cream)
-            drawPath(line, Tokens.FieldBorderHover, alpha = lineAlpha, style = Stroke(ink, cap = StrokeCap.Round))
+            drawPath(fill, paper)
+            drawPath(line, pen, alpha = lineAlpha, style = Stroke(ink, cap = StrokeCap.Round))
         }
     }
 }

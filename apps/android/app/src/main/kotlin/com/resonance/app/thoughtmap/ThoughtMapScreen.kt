@@ -85,6 +85,7 @@ import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.ButtonFace
 import com.resonance.design.Grain
+import com.resonance.design.GrainInk
 import com.resonance.design.GrainMode
 import com.resonance.design.Mixes
 import com.resonance.design.OrganicButtonShape
@@ -310,13 +311,14 @@ private const val LEAVE_ASPECT = 1.2f
 @Composable
 private fun ZoomCluster(store: ThoughtMapStore, modifier: Modifier) {
     val pct by remember(store) { derivedStateOf { (store.camera.s * 100).roundToInt() } }
-    val face = remember { ButtonFace.of(ButtonVariant.Tonal) }
+    val face = ButtonFace.of(ButtonVariant.Tonal)
+    val grainInk = GrainInk.current
     val shape = remember { OrganicButtonShape(ZOOM_SEED) }
     Row(
         modifier
             .drawWithCache {
                 val outline = shape.createOutline(size, layoutDirection, this)
-                val grain = Grain.brush(GrainMode.Tile, face.grainTile, size, density, face.grainAlpha)
+                val grain = Grain.brush(GrainMode.Tile, face.grainTile, size, density, face.grainAlpha, grainInk)
                 onDrawBehind {
                     drawOutline(outline, face.fill)
                     grain?.let { drawOutline(outline, it, alpha = face.grainAlpha) }
@@ -347,7 +349,7 @@ private fun ZoomButton(icon: IconName, label: String, press: Color, onClick: () 
             .clickable(interactionSource = null, indication = OrganicIndication(press, inset = 2.dp), role = Role.Button, onClickLabel = label, onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
-    ) { OrganicIcon(icon, size = 16.dp, color = Mixes.ButtonOnTonal) }
+    ) { OrganicIcon(icon, size = 16.dp, color = Tokens.ButtonOnTonal) }
 }
 
 // The tray
@@ -361,8 +363,10 @@ fun MapTray(store: ThoughtMapStore) {
     val config = LocalConfiguration.current
     val cards = store.trayCards
     val scroll = rememberScrollState()
+    val paper = Tokens.CardBg
+    val pen = Tokens.FieldBorder
     Box(
-        Modifier.fillMaxSize().background(MapInk.scrim).plainClickable { store.trayOpen = false },
+        Modifier.fillMaxSize().background(MapInk.current.scrim).plainClickable { store.trayOpen = false },
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -372,10 +376,10 @@ fun MapTray(store: ThoughtMapStore) {
                 .heightIn(max = min(440f, config.screenHeightDp * 0.6f).dp)
                 .drawWithCache {
                     val outline = WobRectShape(16.0, 29.0).createOutline(size, layoutDirection, this)
-                    val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                    val stroke = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                     onDrawBehind {
-                        drawOutline(outline, Tokens.CardBg)
-                        drawOutline(outline, Tokens.FieldBorder, style = pen)
+                        drawOutline(outline, paper)
+                        drawOutline(outline, pen, style = stroke)
                     }
                 }
                 // A tap on the card itself is not a tap on the backdrop.
@@ -456,11 +460,12 @@ private fun GroupTitleEditor(store: ThoughtMapStore, g: MapGroup) {
     val x = (g.x + 16) * cam.s + cam.x
     val y = (g.y + 8) * cam.s + cam.y
     val lineW = max(32.0, MapText.width(value.text, AppFonts.Family.Heading, 700, 16f) + 8.0)
-    val underline = remember(g.hue) { MapInk.oklch(0.48, 0.09, g.hue) }
+    val inks = MapInk.current
+    val underline = inks.regionUnderline(g.hue)
     Column(
         Modifier
             .offset((x - 6).dp, (y - 6).dp)
-            .background(MapInk.oklch(0.965, 0.032, g.hue, 0.96), RoundedCornerShape(12.dp))
+            .background(inks.regionBar(g.hue), RoundedCornerShape(12.dp))
             .padding(6.dp),
     ) {
         BasicTextField(
@@ -515,6 +520,7 @@ private fun EdgeLabelEditor(store: ThoughtMapStore, e: MapEdge) {
     val w = max(72.0, MapText.width(shown, AppFonts.Family.Body, 600, 11.5f, 0.04f) + 16.0) + 26 + 12
     val style = AppFonts.body(11.5f, 600, lineHeight = 1.3f).copy(textAlign = TextAlign.Center, letterSpacing = 0.04.em)
     val seed = seedFromString(e.id) + 5.0
+    val inks = MapInk.current
     Row(
         Modifier
             .offset((px - w / 2).dp, (py - 14).dp)
@@ -523,8 +529,8 @@ private fun EdgeLabelEditor(store: ThoughtMapStore, e: MapEdge) {
                 val outline = WobRectShape(14.0, seed).createOutline(size, layoutDirection, this)
                 val pen = Stroke(Tokens.InkLight.toPx(), join = StrokeJoin.Round)
                 onDrawBehind {
-                    drawOutline(outline, MapInk.pillFillSelected)
-                    drawOutline(outline, MapInk.edgeInk(false), style = pen)
+                    drawOutline(outline, inks.pillFillSelected)
+                    drawOutline(outline, inks.edgeInk(false), style = pen)
                 }
             }
             .padding(start = 10.dp, end = 6.dp),

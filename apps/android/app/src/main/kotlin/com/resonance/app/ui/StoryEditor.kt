@@ -646,6 +646,7 @@ private fun DockTool(
     onClick: () -> Unit,
 ) {
     val color = if (on) Tokens.Terracotta else Tokens.Text
+    val wash = Tokens.TerracottaLight.copy(alpha = 0.7f)
     Box(
         Modifier
             .heightIn(min = DOCK_ROW_HEIGHT)
@@ -667,7 +668,7 @@ private fun DockTool(
                     val o = WobRectShape(h * 0.4, EDITOR_SEED + seed, mag = 1.4, options = WobRectOptions(
                         curve = 1.5, cornerJitter = 2.6, cornerOffset = h * 0.05, segmentsH = SegValue.Count(2.0), segmentsV = SegValue.Count(1.0),
                     )).createOutline(size, layoutDirection, this)
-                    onDrawBehind { if (on) drawOutline(o, Tokens.TerracottaLight.copy(alpha = 0.7f)) }
+                    onDrawBehind { if (on) drawOutline(o, wash) }
                 }
                 .padding(horizontal = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -689,7 +690,11 @@ private fun DockRule(offset: Double) {
  * The docked bar's paper and its top edge: the toolbar's pen line (wavyPath's construction, as
  * many turns as its width takes: [ruleSteps]) along the top, the cream below it.
  */
-private fun Modifier.dockedWave(seed: Double): Modifier = drawWithCache {
+@Composable
+private fun Modifier.dockedWave(seed: Double): Modifier {
+    val paperInk = Tokens.Cream
+    val lineInk = Tokens.FieldBorderHover.copy(alpha = 0.45f)
+    return drawWithCache {
     val w = (size.width / density).toDouble()
     val line = pointsToBezier(wavyPoints(w, DOCK_WAVE_ROOM.value / 2.0 + 1, 1.6, seed, ruleSteps(w.toFloat()))).toPath(density)
     val paper = Path().apply {
@@ -700,8 +705,9 @@ private fun Modifier.dockedWave(seed: Double): Modifier = drawWithCache {
     }
     val pen = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round)
     onDrawBehind {
-        drawPath(paper, Tokens.Cream)
-        drawPath(line, Tokens.FieldBorderHover.copy(alpha = 0.45f), style = pen)
+        drawPath(paper, paperInk)
+        drawPath(line, lineInk, style = pen)
+    }
     }
 }
 

@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.resonance.design.generated.IconName
+import androidx.compose.ui.graphics.Color
 import com.resonance.design.generated.Tokens
 import com.resonance.geometry.penWave
 import com.resonance.geometry.pointsToBezier
@@ -231,10 +232,11 @@ private fun Wordmark(size: Dp) {
 private fun Tagline(tagline: BrandTagline, fontSize: Float) {
     val start = tagline.prefix.length
     val end = start + tagline.accent.length
-    val text = remember(tagline.prefix, tagline.accent, tagline.suffix) {
+    val accent = Tokens.Terracotta
+    val text = remember(tagline.prefix, tagline.accent, tagline.suffix, accent) {
         buildAnnotatedString {
             append(tagline.prefix)
-            withStyle(SpanStyle(color = Tokens.Terracotta)) { append(tagline.accent) }
+            withStyle(SpanStyle(color = accent)) { append(tagline.accent) }
             append(tagline.suffix)
         }
     }
@@ -257,7 +259,7 @@ private fun Tagline(tagline: BrandTagline, fontSize: Float) {
                     Triple(left, l.getLineBaseline(line) + fontSize.sp.toPx() * 0.2f, wave)
                 }
             onDrawBehind {
-                strokes.forEach { (x, y, wave) -> translate(x, y) { drawPath(wave, Tokens.Terracotta, alpha = 0.9f, style = pen) } }
+                strokes.forEach { (x, y, wave) -> translate(x, y) { drawPath(wave, accent, alpha = 0.9f, style = pen) } }
             }
         },
         style = style,
@@ -276,17 +278,18 @@ private const val BlobShape = "M54,-65.2C68.7,-54.3,78.2,-36.8,80.1,-18.8C82,-.9
  * and widened 18%, its centre [dx] from the box's middle and [y] under its top
  * — the soft ground behind the sign-in's mark.
  */
-fun Modifier.organiBlob(across: Dp, dx: Dp, y: Dp): Modifier = drawWithCacheOf(OrganiBlobBackdrop(across, dx, y))
+@Composable
+fun Modifier.organiBlob(across: Dp, dx: Dp, y: Dp): Modifier = drawWithCacheOf(OrganiBlobBackdrop(across, dx, y, Tokens.TerracottaLight, GrainInk.current))
 
 /**
  * [organiBlob]'s drawing, as a value ([drawWithCacheOf]): recomposed with equal inputs it is an equal modifier,
  * which keeps what it cached (outline, paths, grain) instead of building it again at the next draw.
  */
-private data class OrganiBlobBackdrop(val across: Dp, val dx: Dp, val y: Dp) : (CacheDrawScope) -> DrawResult {
+private data class OrganiBlobBackdrop(val across: Dp, val dx: Dp, val y: Dp, val tint: Color, val grainInk: GrainInk) : (CacheDrawScope) -> DrawResult {
     override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
         val k = across.toPx() / 180f
         val blob = PathParser().parsePathString(BlobShape).toPath().apply { transform(Matrix().apply { scale(k, k) }) }
-        val grain = Grain.brush(GrainMode.Tile, "grain-card", size, density, 1f)
+        val grain = Grain.brush(GrainMode.Tile, "grain-card", size, density, 1f, grainInk)
         val centre = Offset(size.width / 2 + dx.toPx(), y.toPx())
         onDrawBehind {
             withTransform({
@@ -294,7 +297,7 @@ private data class OrganiBlobBackdrop(val across: Dp, val dx: Dp, val y: Dp) : (
                 rotate(-18f, pivot = Offset.Zero)
                 scale(1.18f, 1f, pivot = Offset.Zero)
             }) {
-                drawPath(blob, Tokens.TerracottaLight, alpha = 0.26f)
+                drawPath(blob, tint, alpha = 0.26f)
                 // OrganiBlob's grain (0.4), under the blob's own 0.26.
                 grain?.let { drawPath(blob, it, alpha = 0.26f * 0.4f) }
             }
@@ -312,13 +315,15 @@ private val SheetWaveY = 7.dp
  * INK_LIGHT, and runs to the bottom with no rule there. grainOverlay's grain
  * lies over the content, kept inside the wave.
  */
-fun Modifier.sheetEdge(seed: Double = 313.0, grain: Float = 0.04f): Modifier = drawWithCacheOf(SheetEdge(seed, grain))
+@Composable
+fun Modifier.sheetEdge(seed: Double = 313.0, grain: Float = 0.04f): Modifier =
+    drawWithCacheOf(SheetEdge(seed, grain, Tokens.AuthInterior, Tokens.AuthBorder, GrainInk.current))
 
 /**
  * [sheetEdge]'s drawing, as a value ([drawWithCacheOf]): recomposed with equal inputs it is an equal modifier,
  * which keeps what it cached (outline, paths, grain) instead of building it again at the next draw.
  */
-private data class SheetEdge(val seed: Double, val grain: Float) : (CacheDrawScope) -> DrawResult {
+private data class SheetEdge(val seed: Double, val grain: Float, val paper: Color, val pen: Color, val grainInk: GrainInk) : (CacheDrawScope) -> DrawResult {
     override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
         val d = density
         val w = (size.width / d).toDouble()
@@ -330,14 +335,14 @@ private data class SheetEdge(val seed: Double, val grain: Float) : (CacheDrawSco
             lineTo(0f, size.height)
             close()
         }
-        val brush = Grain.brush(GrainMode.Tile, "grain-overlay", size, d, 1f)
-        val pen = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round)
+        val brush = Grain.brush(GrainMode.Tile, "grain-overlay", size, d, 1f, grainInk)
+        val stroke = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round)
         onDrawWithContent {
-            drawPath(fill, Tokens.AuthInterior)
+            drawPath(fill, paper)
             drawContent()
-            // As grainOverlay: black ink at 2× the opacity, so the mean darkening is `grain`.
+            // As grainOverlay: the grain's ink at 2× the opacity, so the mean darkening is `grain`.
             brush?.let { drawPath(fill, it, alpha = (grain * 2).coerceAtMost(1f)) }
-            drawPath(line, Tokens.AuthBorder, style = pen)
+            drawPath(line, pen, style = stroke)
         }
     }
 }

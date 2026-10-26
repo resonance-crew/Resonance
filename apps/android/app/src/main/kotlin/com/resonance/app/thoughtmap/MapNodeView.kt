@@ -1,5 +1,7 @@
 package com.resonance.app.thoughtmap
 
+import com.resonance.design.generated.LocalResonanceColors
+import androidx.compose.runtime.ReadOnlyComposable
 import android.graphics.LinearGradient
 import android.graphics.Shader
 import android.os.Build
@@ -193,14 +195,17 @@ fun MapNodeView(
     LaunchedEffect(fade) {
         if (!still) fade.animateTo(1f, tween(280, easing = FadeIn))
     }
+    val inks = MapInk.current
+    val textInk = Tokens.Text
+    val mutedInk = Tokens.TextMuted
 
     Box(
         modifier
             .requiredSize(mapNodeW.dp, mapNodeH.dp)
             .drawWithCache {
                 val d = density
-                val fill = if (tabbed) MapInk.nodeFill(hue, true) else MapInk.nodeFill(hue, emphasized)
-                val stroke = if (tabbed) MapInk.nodeStroke(hue, true) else MapInk.nodeStroke(hue, emphasized)
+                val fill = if (tabbed) inks.nodeFill(hue, true) else inks.nodeFill(hue, emphasized)
+                val stroke = if (tabbed) inks.nodeStroke(hue, true) else inks.nodeStroke(hue, emphasized)
                 val penWidth = (if (tabbed || emphasized) Tokens.InkStrong else Tokens.Ink).toPx()
                 val outline = if (tabbed) {
                     GeometryCache.get("tab|$seed") {
@@ -214,8 +219,8 @@ fun MapNodeView(
                 val pen = Stroke(penWidth, cap = if (tabbed) StrokeCap.Round else StrokeCap.Butt, join = StrokeJoin.Round)
                 // The body's text: the title and excerpt faded out over the last 14px, as the web's mask does — painted with a
                 // gradient so it stays vector text (no offscreen layer, which would blur when the camera scales it).
-                val opaque = Tokens.Text.toArgb()
-                val muted = Tokens.TextMuted.toArgb()
+                val opaque = textInk.toArgb()
+                val muted = mutedInk.toArgb()
                 fun paint(family: AppFonts.Family, sizeDp: Float, weight: Int, color: Int) = TextPaint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                     typeface = AppFonts.typeface(family, weight)
                     textSize = sizeDp * d
@@ -275,6 +280,7 @@ private fun MapThumb(url: String, hue: Double, seed: Double, modifier: Modifier)
     }
     val px = (64 * density * 2).roundToInt()
     val request = remember(url, px) { ImageRequest.Builder(context).data(url).size(Size(px, px)).crossfade(false).build() }
+    val rimInk = MapInk.current.thumbRim(hue)
     Box(
         modifier
             .size(56.dp)
@@ -284,7 +290,7 @@ private fun MapThumb(url: String, hue: Double, seed: Double, modifier: Modifier)
                 val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                 onDrawWithContent {
                     drawContent()
-                    drawOutline(rim, MapInk.thumbRim(hue), style = pen)
+                    drawOutline(rim, rimInk, style = pen)
                 }
             },
     ) {
@@ -302,16 +308,18 @@ private fun MapThumb(url: String, hue: Double, seed: Double, modifier: Modifier)
 /** The link handle: a dashed 28dp circle on the right edge (centred on the card's edge at 233, 89), an arrow inside. */
 @Composable
 private fun LinkHandle() {
+    val paper = Tokens.CardBg
+    val dash = Tokens.FieldBorderHover
     Box(
         Modifier
             .offset((mapNodeW - 13).dp, (mapNodeH / 2 - 14).dp)
             .size(28.dp)
             .drawBehind {
-                drawCircle(Tokens.CardBg)
+                drawCircle(paper)
                 // `border: 1.6px dashed`, drawn inside the 28 box.
                 val w = 1.6.dp.toPx()
                 drawCircle(
-                    Tokens.FieldBorderHover, radius = size.minDimension / 2 - w / 2,
+                    dash, radius = size.minDimension / 2 - w / 2,
                     style = Stroke(w, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.8.dp.toPx(), 3.2.dp.toPx()))),
                 )
             },
@@ -343,22 +351,46 @@ private fun TabRow() {
     }
 }
 
-/** The map's inks: oklch colors per hue, made once (the web writes them as CSS oklch()). */
-object MapInk {
+/**
+ * The map's inks: oklch colours per hue (a card's, a region's), made once — the web writes them as
+ * CSS oklch(). Light is the web's; dark the same roles on night paper: a card's paper a low tint
+ * of its hue, its pen bright (the "deeper" pen of light is the brighter one), regions a deep wash,
+ * the arrows chalk. [current] is the screen's scheme's.
+ */
+class MapInk private constructor(val dark: Boolean) {
     private val cache = HashMap<String, Color>()
 
     fun oklch(l: Double, c: Double, h: Double, alpha: Double = 1.0): Color =
-        cache.getOrPut("$l|$c|$h|$alpha") { OklchColor.of(l, c, h, alpha) }
+        synchronized(cache) { cache.getOrPut("$l|$c|$h|$alpha") { OklchColor.of(l, c, h, alpha) } }
 
-    fun nodeFill(hue: Double, emphasized: Boolean) = if (emphasized) oklch(0.925, 0.045, hue) else oklch(0.975, 0.012, hue)
-    fun nodeStroke(hue: Double, emphasized: Boolean) = if (emphasized) oklch(0.38, 0.13, hue) else oklch(0.52, 0.11, hue)
-    fun thumbRim(hue: Double) = oklch(0.52, 0.11, hue, 0.55)
-    fun regionFill(hue: Double, hot: Boolean) = oklch(0.965, 0.032, hue, if (hot) 0.92 else 0.78)
-    fun regionStroke(hue: Double, strong: Boolean) = if (strong) oklch(0.45, 0.1, hue) else oklch(0.6, 0.085, hue)
-    fun edgeInk(selected: Boolean) = if (selected) oklch(0.28, 0.05, 60.0) else oklch(0.46, 0.045, 60.0)
-    fun linkInk(hue: Double) = oklch(0.52, 0.11, hue)
-    val pillFill = oklch(0.94, 0.02, 75.0)
-    val pillFillSelected = oklch(0.88, 0.03, 60.0)
-    val dot = oklch(0.82, 0.025, 75.0)
-    val scrim = oklch(0.3, 0.02, 75.0, 0.16)
+    fun nodeFill(hue: Double, emphasized: Boolean) =
+        if (dark) { if (emphasized) oklch(0.3, 0.04, hue) else oklch(0.235, 0.014, hue) }
+        else { if (emphasized) oklch(0.925, 0.045, hue) else oklch(0.975, 0.012, hue) }
+    fun nodeStroke(hue: Double, emphasized: Boolean) =
+        if (dark) { if (emphasized) oklch(0.84, 0.07, hue) else oklch(0.72, 0.09, hue) }
+        else { if (emphasized) oklch(0.38, 0.13, hue) else oklch(0.52, 0.11, hue) }
+    fun thumbRim(hue: Double) = if (dark) oklch(0.72, 0.09, hue, 0.55) else oklch(0.52, 0.11, hue, 0.55)
+    fun regionFill(hue: Double, hot: Boolean) = if (dark) oklch(0.27, 0.03, hue, if (hot) 0.92 else 0.78) else oklch(0.965, 0.032, hue, if (hot) 0.92 else 0.78)
+    fun regionStroke(hue: Double, strong: Boolean) =
+        if (dark) { if (strong) oklch(0.8, 0.08, hue) else oklch(0.62, 0.07, hue) }
+        else { if (strong) oklch(0.45, 0.1, hue) else oklch(0.6, 0.085, hue) }
+    fun edgeInk(selected: Boolean) =
+        if (dark) { if (selected) oklch(0.88, 0.02, 76.0) else oklch(0.66, 0.03, 70.0) }
+        else { if (selected) oklch(0.28, 0.05, 60.0) else oklch(0.46, 0.045, 60.0) }
+    fun linkInk(hue: Double) = if (dark) oklch(0.72, 0.09, hue) else oklch(0.52, 0.11, hue)
+    /** A region title's underline and its bar. */
+    fun regionUnderline(hue: Double) = if (dark) oklch(0.7, 0.08, hue) else oklch(0.48, 0.09, hue)
+    fun regionBar(hue: Double) = if (dark) oklch(0.27, 0.03, hue, 0.96) else oklch(0.965, 0.032, hue, 0.96)
+    val pillFill = if (dark) oklch(0.27, 0.015, 70.0) else oklch(0.94, 0.02, 75.0)
+    val pillFillSelected = if (dark) oklch(0.34, 0.025, 60.0) else oklch(0.88, 0.03, 60.0)
+    val dot = if (dark) oklch(0.36, 0.02, 70.0) else oklch(0.82, 0.025, 75.0)
+    val scrim = if (dark) oklch(0.08, 0.01, 60.0, 0.4) else oklch(0.3, 0.02, 75.0, 0.16)
+
+    companion object {
+        val Light = MapInk(false)
+        val Dark = MapInk(true)
+
+        /** The screen's scheme's inks. */
+        val current: MapInk @Composable @ReadOnlyComposable get() = if (LocalResonanceColors.current.dark) Dark else Light
+    }
 }

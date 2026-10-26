@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import com.resonance.design.avatarFill
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
@@ -558,7 +559,7 @@ private fun TheirFace(shown: Boolean, ctx: ThreadContext) {
                     .plainClickable(role = Role.Button, onClickLabel = L10n.Messages.viewProfile) { ctx.open(Route.Author(other.handle)) }
                     .semantics { contentDescription = other.handle },
             ) {
-                HandDrawnAvatar(other.initials, other.avatarUrl, OklchColor.parse(other.accentColor) ?: Tokens.TerracottaLight, FACE, seedOr(other.avatarSeed, 3.0))
+                HandDrawnAvatar(other.initials, other.avatarUrl, avatarFill(other.accentColor), FACE, seedOr(other.avatarSeed, 3.0))
             }
         }
     }

@@ -228,9 +228,13 @@ fun MediaHalf(icon: IconName, title: String, hint: String, modifier: Modifier = 
  * The image surface's frame (HandDrawnDashedSurface R16, seed 31, bow 0.8):
  * the field's line, terracotta while something is on its way in.
  */
-fun Modifier.mediaFrame(busy: Boolean = false): Modifier = drawWithCache {
-    // Built when the size changes, not on every draw.
-    val o = AutoWobRectShape(16.0, 31.0, 0.8).createOutline(size, layoutDirection, this)
-    val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-    onDrawBehind { drawOutline(o, if (busy) Tokens.Terracotta else Tokens.FieldBorder, style = pen) }
+@Composable
+fun Modifier.mediaFrame(busy: Boolean = false): Modifier {
+    val ink = if (busy) Tokens.Terracotta else Tokens.FieldBorder
+    return drawWithCache {
+        // Built when the size changes, not on every draw.
+        val o = AutoWobRectShape(16.0, 31.0, 0.8).createOutline(size, layoutDirection, this)
+        val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        onDrawBehind { drawOutline(o, ink, style = pen) }
+    }
 }

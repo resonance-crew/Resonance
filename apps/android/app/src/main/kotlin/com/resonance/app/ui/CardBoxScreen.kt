@@ -1,5 +1,7 @@
 package com.resonance.app.ui
 
+import androidx.compose.runtime.ReadOnlyComposable
+import com.resonance.design.avatarFill
 import com.resonance.design.LayoutClass
 import com.resonance.design.LocalWindowLayout
 import com.resonance.design.peopleHeadGap
@@ -307,7 +309,7 @@ fun CardBoxScreen(session: Session, open: (Route) -> Unit) {
             when (val p = profile) {
                 is Session.Profile.Loaded -> Row(Modifier.padding(horizontal = layout.headerInset), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Box(Modifier.clickable(onClickLabel = L10n.Me.viewPublicProfile) { open(Route.Author(p.me.handle)) }) {
-                        HandDrawnAvatar(p.me.initials, p.me.avatarUrl, OklchColor.parse(p.me.accentColor) ?: Tokens.TerracottaLight, 72.dp, seedFromString(p.me.id).toDouble())
+                        HandDrawnAvatar(p.me.initials, p.me.avatarUrl, avatarFill(p.me.accentColor), 72.dp, seedFromString(p.me.id).toDouble())
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         BasicText(p.me.handle, style = AppFonts.heading(24f))
@@ -502,23 +504,23 @@ private fun EmptyTrashAction(onClick: () -> Unit) {
     Row(
         Modifier
             .heightIn(min = 48.dp)
-            .clickable(interactionSource = null, indication = remember(shape) { OrganicIndication(EmptyPress, shape = shape) }, role = Role.Button, onClick = onClick)
+            .clickable(interactionSource = null, indication = EmptyPress.let { press -> remember(shape, press) { OrganicIndication(press, shape = shape) } }, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = L10n.Me.Actions.emptyTrash }
             .padding(horizontal = EmptyActionPadX),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        OrganicIcon(IconName.Trash, Modifier.offset(y = labelInkDrop(14f)), size = 16.dp, color = Mixes.Danger, strokeWidth = Tokens.Ink.value)
+        OrganicIcon(IconName.Trash, Modifier.offset(y = labelInkDrop(14f)), size = 16.dp, color = Tokens.Danger, strokeWidth = Tokens.Ink.value)
         BasicText(
             L10n.Me.Actions.emptyTrashShort,
-            style = AppFonts.body(14f, 600, lineHeight = 1.3f, color = Mixes.Danger),
+            style = AppFonts.body(14f, 600, lineHeight = 1.3f, color = Tokens.Danger),
             modifier = Modifier.clearAndSetSemantics { },
         )
     }
 }
 
 /** The danger ink a press of 清空 spreads. */
-private val EmptyPress = Mixes.Danger.copy(alpha = 0.12f)
+private val EmptyPress: Color @Composable @ReadOnlyComposable get() = Tokens.Danger.copy(alpha = 0.12f)
 
 /** 清空's padding a side (its words end that far in from its wash's edge, which reaches the gutter's end). */
 private val EmptyActionPadX = 12.dp
@@ -619,6 +621,7 @@ private fun ShelfTabs(selection: TabGetCardBox, edge: Dp, air: CardBoxAir, openM
         Modifier.fadingEdges(scroll).horizontalScroll(scroll).padding(horizontal = edge, vertical = ShelfStripPadY).padding(top = air.shelvesTop, bottom = air.shelvesBottom),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        val wash = Tokens.TerracottaLight.copy(alpha = 0.55f)
         ShelfOrder.forEach { s ->
             val selected = s == selection
             BasicText(
@@ -628,7 +631,7 @@ private fun ShelfTabs(selection: TabGetCardBox, edge: Dp, air: CardBoxAir, openM
                     .drawWithCache {
                         val o = WobRectShape(12.0, 23.0 + s.value.length * 7).createOutline(size, layoutDirection, this)
                         onDrawBehind {
-                            if (selected) drawOutline(o, Tokens.TerracottaLight.copy(alpha = 0.55f))
+                            if (selected) drawOutline(o, wash)
                         }
                     }
                     .semantics { this.selected = selected }

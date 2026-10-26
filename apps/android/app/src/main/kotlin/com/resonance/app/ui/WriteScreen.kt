@@ -1,5 +1,8 @@
 package com.resonance.app.ui
 
+import com.resonance.design.GrainInk
+import com.resonance.design.CardFamily
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -747,7 +750,7 @@ private fun WritingStep(
         ) { line?.invoke() }
         model.saveError?.let {
             Spacer(Modifier.height(6.dp))
-            BasicText(it, style = AppFonts.body(13f, lineHeight = 1.5f, color = Mixes.Danger), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive })
+            BasicText(it, style = AppFonts.body(13f, lineHeight = 1.5f, color = Tokens.Danger), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive })
         }
         if (!bar || line != null || model.saveError != null) Spacer(Modifier.height(16.dp))
         TitleField(model, bridge, compact, titleFocus, onTitleFocus)
@@ -777,7 +780,7 @@ private fun TrashedLine(model: WriteModel, onRestore: () -> Unit) {
             BasicText(L10n.Write.Trashed.status, style = AppFonts.body(14f, lineHeight = 1.5f, color = Tokens.TextMuted))
             OrganicButton(L10n.Me.Actions.restore, variant = ButtonVariant.Tonal, small = true, loading = model.restoring, onClick = onRestore)
         }
-        model.restoreError?.let { BasicText(it, style = AppFonts.body(12f, lineHeight = 1.5f, color = Mixes.Danger)) }
+        model.restoreError?.let { BasicText(it, style = AppFonts.body(12f, lineHeight = 1.5f, color = Tokens.Danger)) }
     }
 }
 
@@ -827,7 +830,7 @@ private fun TitleField(model: WriteModel, bridge: StoryEditorBridge, compact: Bo
         when {
             model.titleError -> BasicText(
                 L10n.Write.titleRequired,
-                style = AppFonts.body(Tokens.HintSize, lineHeight = 1.4f, color = Mixes.Danger),
+                style = AppFonts.body(Tokens.HintSize, lineHeight = 1.4f, color = Tokens.Danger),
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .inTheGap()
@@ -1207,7 +1210,7 @@ private fun BoxScope.CoverSlot(frame: CoverFrame, palette: CardPalette, model: W
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         // In the card's own family (round 9 §8): its deep pen as the face, its paper as the words.
-                        val faces = remember(palette.index) { CoverFaces.of(palette) }
+                        val faces = CoverFaces.of(palette)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             OrganicButton(L10n.Write.mediaPlaceholder, icon = IconName.Image, small = true, face = faces.solid) {
                                 dismissKeyboard()
@@ -1224,7 +1227,7 @@ private fun BoxScope.CoverSlot(frame: CoverFrame, palette: CardPalette, model: W
                         val error = model.mediaError
                         if (error != null) BasicText(
                             error,
-                            style = AppFonts.body(12f, lineHeight = 1.4f, color = Mixes.Danger).copy(textAlign = TextAlign.Center),
+                            style = AppFonts.body(12f, lineHeight = 1.4f, color = Tokens.Danger).copy(textAlign = TextAlign.Center),
                             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                         )
                         else if (model.values.story.isBlank()) {
@@ -1255,16 +1258,17 @@ private fun BoxScope.CoverSlot(frame: CoverFrame, palette: CardPalette, model: W
  */
 @Composable
 private fun CoverErrorChip(text: String, maxWidth: Dp, seed: Double) {
-    val face = remember { ButtonFace.of(ButtonVariant.Paper) }
+    val face = ButtonFace.of(ButtonVariant.Paper)
+    val grainInk = GrainInk.current
     val shape = remember(seed) { OrganicButtonShape(seed) }
     BasicText(
         text,
-        style = AppFonts.body(13f, 600, lineHeight = 1.35f, color = Mixes.Danger),
+        style = AppFonts.body(13f, 600, lineHeight = 1.35f, color = Tokens.Danger),
         modifier = Modifier
             .widthIn(max = maxWidth)
             .drawWithCache {
                 val o = shape.createOutline(size, layoutDirection, this)
-                val grain = Grain.brush(GrainMode.Tile, face.grainTile, size, density, face.grainAlpha)
+                val grain = Grain.brush(GrainMode.Tile, face.grainTile, size, density, face.grainAlpha, grainInk)
                 onDrawBehind {
                     drawOutline(o, face.fill)
                     grain?.let { drawOutline(o, it, alpha = face.grainAlpha) }
@@ -1288,7 +1292,7 @@ private fun CoverMenu(model: WriteModel, seed: Double, palette: CardPalette, pic
         OrganicMenuItem(L10n.Write.mediaGenerate, IconName.Sparkle, enabled = model.canGenerate) { model.generateCover() },
         OrganicMenuItem(L10n.Write.mediaRemove, IconName.Trash, destructive = true) { model.removeCover() },
     )
-    val faces = remember(palette.index) { CoverFaces.of(palette) }
+    val faces = CoverFaces.of(palette)
     OrganicMenuFrom(items, seed = seed + 11, hue = palette.hue) { _, toggle ->
         OrganicButton(L10n.Write.coverChange, icon = IconName.Image, small = true, face = faces.chip, outline = palette.border) {
             dismissKeyboard()
@@ -1306,10 +1310,14 @@ private fun CoverMenu(model: WriteModel, seed: Double, palette: CardPalette, pic
  */
 internal class CoverFaces private constructor(val solid: ButtonFace, val resting: ButtonFace, val chip: ButtonFace) {
     companion object {
-        fun of(palette: CardPalette): CoverFaces = CoverFaces(
-            solid = ButtonFace.custom(palette.deep, palette.interior, OrganicIndication.OnFill, seed = 3.0),
-            resting = ButtonFace.custom(palette.accent, Tokens.TextMuted, OrganicIndication.OnFill, seed = 3.0),
-            chip = ButtonFace.custom(palette.fill, palette.deep, palette.deep.copy(alpha = 0.14f), seed = 401.0),
+        /** The family's faces in the screen's palette. */
+        @Composable @ReadOnlyComposable
+        fun of(palette: CardPalette): CoverFaces = of(palette.colors, Tokens.TextMuted, OrganicIndication.OnFill)
+
+        fun of(family: CardFamily, muted: Color, press: Color): CoverFaces = CoverFaces(
+            solid = ButtonFace.custom(family.deep, family.interior, press, seed = 3.0),
+            resting = ButtonFace.custom(family.accent, muted, press, seed = 3.0),
+            chip = ButtonFace.custom(family.fill, family.deep, family.deep.copy(alpha = 0.14f), seed = 401.0),
         )
     }
 }
@@ -1373,8 +1381,8 @@ private fun AudienceChoice(model: WriteModel) {
                 val on = chosen == audience
                 Segment(
                     audience.name, audienceLabel(audience), audienceIcon(audience),
-                    fill = if (on) Mixes.ButtonTonal else null,
-                    textColor = if (on) Mixes.ButtonOnTonal else VisibilityInk,
+                    fill = if (on) Tokens.ButtonTonal else null,
+                    textColor = if (on) Tokens.ButtonOnTonal else VisibilityInk,
                     press = Color.Black.copy(alpha = 0.05f),
                     selected = on,
                 ) { model.choose(audience) }
@@ -1429,8 +1437,8 @@ private fun StepFoot(
     }
 }
 
-/** The visibility choice's other side: color-mix(text-muted, black 10%), deep enough to read on the paper-dark track. */
-private val VisibilityInk = OklchColor.parse("oklch(46.8% 0.036 70)") ?: Tokens.TextMuted
+/** The visibility choice's other side: `--segment-idle-ink` (color-mix(text-muted, black 10%) in light), deep enough to read on the paper-dark track. */
+private val VisibilityInk: Color @Composable @ReadOnlyComposable get() = Tokens.SegmentIdleInk
 
 /**
  * A tap on the page itself — one nothing under it took (a field, a button, the story) and that

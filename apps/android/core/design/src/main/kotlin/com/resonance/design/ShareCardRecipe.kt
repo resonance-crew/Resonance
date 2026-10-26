@@ -5,6 +5,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.em
 import com.resonance.design.generated.IconName
+import com.resonance.design.generated.ResonanceColors
 import com.resonance.design.generated.Tokens
 import com.resonance.geometry.WobRectOptions
 import com.resonance.kit.story.StoryScript
@@ -116,8 +117,8 @@ object ShareCardRecipe {
     object Anonymous {
         const val INITIALS = "·"
         const val SEED = 97.0
-        val FILL: Color get() = Tokens.CreamDark
-        val NAME_COLOUR: Color get() = Tokens.TextMuted
+        val FILL: Color get() = PALETTE.CreamDark
+        val NAME_COLOUR: Color get() = PALETTE.TextMuted
     }
 
     /** Right-aligned at the byline's end, where a feed card has its →: the wave and Resonance over resonance.channel. */
@@ -148,6 +149,9 @@ object ShareCardRecipe {
         const val HEIGHT = 1920
     }
 
+    /** The picture leaves the device: light terracotta's palette, whatever the screen wears. */
+    val PALETTE: ResonanceColors get() = ResonanceColors.LightTerracotta
+
     /** A card's colour family on a share card: its cover's, else one fixed by its id. */
     fun palette(cardId: String, accentHue: Double?): CardPalette = CardPalette.of(CardPalette.preferred(accentHue, seedFromId(cardId).toInt()))
 
@@ -155,16 +159,16 @@ object ShareCardRecipe {
     fun seed(cardId: String): Double = seedFromId(cardId)
 
     /** The title's type for a story in [script], at [size]: the story's title face, weight, tracking and leading, lining figures. */
-    fun titleStyle(script: StoryScript, size: Float, color: Color = Tokens.Text): TextStyle {
+    fun titleStyle(script: StoryScript, size: Float, color: Color = PALETTE.Text): TextStyle {
         val type = StoryType(script, compact = false)
-        return AppFonts.style(type.headingFamily, size, type.headingWeight, type.titleLeading, color, type.headingTracking.em)
+        return AppFonts.styleIn(type.headingFamily, size, type.headingWeight, type.titleLeading, color, type.headingTracking.em)
             .copy(fontFeatureSettings = StoryType.LINING_FIGURES)
     }
 
     /** The words' type for a story in [script]: the story's body face and tracking at its regular leading, justified for CJK. */
-    fun wordsStyle(script: StoryScript, color: Color = Tokens.Text): TextStyle {
+    fun wordsStyle(script: StoryScript, color: Color = PALETTE.Text): TextStyle {
         val type = StoryType(script, compact = false)
-        return AppFonts.style(type.bodyFamily, Words.SIZE, type.bodyWeight, type.bodyLeading, color, type.bodyTracking.em)
+        return AppFonts.styleIn(type.bodyFamily, Words.SIZE, type.bodyWeight, type.bodyLeading, color, type.bodyTracking.em)
             .copy(textAlign = if (type.justified) TextAlign.Justify else TextAlign.Start)
     }
 }

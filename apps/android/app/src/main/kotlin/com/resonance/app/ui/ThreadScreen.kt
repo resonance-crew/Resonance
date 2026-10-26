@@ -1,5 +1,7 @@
 package com.resonance.app.ui
 
+import com.resonance.design.Mixes
+import com.resonance.design.avatarFill
 import androidx.compose.ui.layout.onSizeChanged
 import com.resonance.design.LayoutClass
 import com.resonance.design.LocalWindowLayout
@@ -541,7 +543,7 @@ private fun ThreadBar(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    HandDrawnAvatar(other.initials, other.avatarUrl, OklchColor.parse(other.accentColor) ?: Tokens.TerracottaLight, 36.dp, seedOr(other.avatarSeed, 3.0))
+                    HandDrawnAvatar(other.initials, other.avatarUrl, avatarFill(other.accentColor), 36.dp, seedOr(other.avatarSeed, 3.0))
                     BasicText(
                         other.handle, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         style = AppFonts.heading(18f, 700, lineHeight = 1.2f),
@@ -651,7 +653,7 @@ private fun SharedMediaContent(model: ThreadModel, opener: LinkOpener, onClose: 
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        val cover = OklchColor.parse("oklch(90% 0.06 ${card.accentHue ?: 55.0})") ?: Tokens.TerracottaLight
+                        val cover = Mixes.atHue("card-accent", card.accentHue ?: 55.0)
                         OrganicImage(card.imageUrl, 7.0, Modifier.size(40.dp)) { Box(Modifier.fillMaxSize().background(cover)) }
                         BasicText(
                             card.title, maxLines = 2, overflow = TextOverflow.Ellipsis,

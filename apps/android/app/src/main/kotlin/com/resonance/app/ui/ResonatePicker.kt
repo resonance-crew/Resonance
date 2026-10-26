@@ -1,5 +1,7 @@
 package com.resonance.app.ui
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -228,6 +230,7 @@ fun ResonatePicker(
 private fun WriteNewRow(enabled: Boolean, onClick: () -> Unit) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
+    val waveInk = Tokens.LinkWave
     Row(
         Modifier
             .fillMaxWidth()
@@ -242,19 +245,19 @@ private fun WriteNewRow(enabled: Boolean, onClick: () -> Unit) {
         var baseline by remember { mutableFloatStateOf(Float.NaN) }
         BasicText(
             L10n.Card.ResonatePicker.writeNew,
-            style = AppFonts.body(15f, 600, lineHeight = 1.3f, color = if (pressed) WriteNewPressed else Mixes.ButtonOnTonal),
+            style = AppFonts.body(15f, 600, lineHeight = 1.3f, color = if (pressed) WriteNewPressed else Tokens.ButtonOnTonal),
             onTextLayout = { baseline = it.firstBaseline },
             modifier = Modifier.drawWithCache {
                 val wave = penWave((size.width / density).toDouble(), seedFromString("write-new").toDouble(), amp = LINK_WAVE_AMP).toPath(density)
                 val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                 onDrawBehind {
-                    if (pressed && !baseline.isNaN()) translate(top = linkWaveY(baseline, 15.sp.toPx())) { drawPath(wave, Tokens.LinkWave, style = pen) }
+                    if (pressed && !baseline.isNaN()) translate(top = linkWaveY(baseline, 15.sp.toPx())) { drawPath(wave, waveInk, style = pen) }
                 }
             },
         )
     }
 }
 
-/** The words pressed: color-mix(terracotta, black 34%). */
-private val WriteNewPressed = OklchColor.parse("oklch(40.92% 0.0924 45)") ?: Tokens.TerracottaInk
+/** The words pressed: the accent's deepest pen (color-mix(terracotta, black 35%) in light; brighter in dark). */
+private val WriteNewPressed: Color @Composable @ReadOnlyComposable get() = Tokens.TerracottaInk
 

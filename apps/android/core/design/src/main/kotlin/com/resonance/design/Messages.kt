@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -185,6 +186,7 @@ private fun plainBubbleShape(mine: Boolean, run: RunPosition): Shape {
 }
 
 /** A bubble's paper: your own a warm terracotta wash, theirs a deeper paper than the page — both opaque. */
+@Composable @ReadOnlyComposable
 fun bubbleFill(mine: Boolean): Color = if (mine) Tokens.BubbleMine else Tokens.BubbleTheirs
 
 /**
@@ -193,7 +195,7 @@ fun bubbleFill(mine: Boolean): Color = if (mine) Tokens.BubbleMine else Tokens.B
  * to edge and ends where the bubble does. [flash] (0…1, read while drawing) washes it terracotta:
  * the message a reply's quote jumped to.
  */
-fun Modifier.bubbleSurface(shape: Shape, fill: Color, flash: () -> Float = NoFlash): Modifier = drawWithCacheOf(BubbleSurface(shape, fill, flash))
+fun Modifier.bubbleSurface(shape: Shape, fill: Color, flash: () -> Float = NoFlash, flashInk: Color = fill): Modifier = drawWithCacheOf(BubbleSurface(shape, fill, flash, flashInk))
 
 /** No pulse: one value, so two resting bubbles' surfaces are equal. */
 private val NoFlash: () -> Float = { 0f }
@@ -202,14 +204,14 @@ private val NoFlash: () -> Float = { 0f }
  * [bubbleSurface]'s drawing, as a value ([drawWithCacheOf]): recomposed with equal inputs it is an equal modifier,
  * which keeps what it cached (outline, paths, grain) instead of building it again at the next draw.
  */
-private data class BubbleSurface(val shape: Shape, val fill: Color, val flash: () -> Float) : (CacheDrawScope) -> DrawResult {
+private data class BubbleSurface(val shape: Shape, val fill: Color, val flash: () -> Float, val flashInk: Color) : (CacheDrawScope) -> DrawResult {
     override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
         val outline = shape.createOutline(size, layoutDirection, this)
         val clip = Path().apply { addOutline(outline) }
         onDrawWithContent {
             drawOutline(outline, fill)
             val pulse = flash()
-            if (pulse > 0f) drawOutline(outline, Tokens.Terracotta, alpha = 0.3f * pulse)
+            if (pulse > 0f) drawOutline(outline, flashInk, alpha = 0.3f * pulse)
             clipPath(clip) { this@onDrawWithContent.drawContent() }
         }
     }
@@ -258,7 +260,7 @@ fun MessageBubble(
             .then(if (width != null) Modifier.width(width) else Modifier)
             .then(
                 if (plain) Modifier.clip(plainBubbleShape(mine, run)).background(paper)
-                else Modifier.bubbleSurface(remember(seed, mine, run) { MessageBubbleShape(seed, mine, run) }, paper, flash),
+                else Modifier.bubbleSurface(remember(seed, mine, run) { MessageBubbleShape(seed, mine, run) }, paper, flash, Tokens.Terracotta),
             )
             .then(
                 if (onLongPress != null) Modifier
@@ -285,7 +287,7 @@ fun MessageBubble(
                     text,
                     links = links,
                     // The tonal buttons' deep label: 4.5:1 on either bubble (plain terracotta is 3.45:1).
-                    linkColor = Mixes.ButtonOnTonal,
+                    linkColor = Tokens.ButtonOnTonal,
                     highlights = highlights,
                     highlightColor = highlightWash(highlightStrong),
                     onTap = onLinkTap,
@@ -301,6 +303,7 @@ private val BubblePadX = 14.dp
 private val BubblePadY = 9.dp
 
 /** The wash behind a search match: the hit being looked at stronger than the others in view. */
+@Composable @ReadOnlyComposable
 fun highlightWash(strong: Boolean): Color = Tokens.Terracotta.copy(alpha = if (strong) 0.5f else 0.24f)
 
 /**
@@ -358,6 +361,7 @@ fun ChatText(
     val built = remember { WidthBuilt<ChatTextLayout>() }
     val hit: (Float, Float) -> Int? = { x, y -> built.value?.let { linkAt(it.layout, links, x, y, 6f * density) } }
     val pressed = remember { mutableStateOf<Int?>(null) }
+    val wave = Tokens.LinkWave
     Box(modifier) {
         Box(
             Modifier
@@ -370,7 +374,7 @@ fun ChatText(
                         ChatTextLayout(layout, min(layout.width, widest), chatLinkWaves(layout, links, scaled.cssFontPx(sizeSp), density))
                     },
                     size = { IntSize(it.boxPx, it.layout.height) },
-                    drawKey = highlightColor,
+                    drawKey = highlightColor to wave,
                 ) { (layout, _, waves) ->
                     if (highlights.isNotEmpty()) {
                         val r = 4.dp.toPx()
@@ -383,7 +387,7 @@ fun ChatText(
                     if (waves.isNotEmpty()) {
                         val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                         waves.forEach { w ->
-                            translate(w.x, w.y) { drawPath(w.path, Tokens.LinkWave, alpha = if (w.link == pressed.value) 1f else 0.7f, style = pen) }
+                            translate(w.x, w.y) { drawPath(w.path, wave, alpha = if (w.link == pressed.value) 1f else 0.7f, style = pen) }
                         }
                     }
                     drawIntoCanvas { layout.draw(it.nativeCanvas) }
@@ -698,6 +702,7 @@ data class CardByline(
 ) {
     companion object {
         /** A card posted anonymously: the mark the card page shows (a dot on paper) beside [name] (匿名) — never the author. */
+        @Composable @ReadOnlyComposable
         fun anonymous(name: String) = CardByline(name, "·", null, Tokens.CreamDark, 97.0, isAnonymous = true)
     }
 }
@@ -818,6 +823,7 @@ private fun SkeletonLines(style: TextStyle, height: Dp, vararg bars: Modifier) {
 /** A reply's rule in the composer: a short vertical pen line in terracotta, wavy like the headers' edges. */
 @Composable
 fun ReplyRule(modifier: Modifier = Modifier, seed: Double = 31.0) {
+    val ink = Tokens.Terracotta
     Box(
         modifier
             .width(6.dp)
@@ -826,7 +832,7 @@ fun ReplyRule(modifier: Modifier = Modifier, seed: Double = 31.0) {
                 val h = size.height / density
                 val line = com.resonance.geometry.wavyVertical(h.toDouble(), seed, 1.1, max(3, (h / 9).toInt())).toPath(density, size.width / 2, 0f)
                 val pen = Stroke(2.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
-                onDrawBehind { drawPath(line, Tokens.Terracotta, style = pen) }
+                onDrawBehind { drawPath(line, ink, style = pen) }
             },
     )
 }

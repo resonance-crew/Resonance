@@ -65,7 +65,7 @@ class DrawCacheOfTest {
     }
 
     @Test fun drawsWhatDrawWithCacheDraws() {
-        val block = Surface(7.0, Tokens.BubbleTheirs, IntArray(1))
+        val block = Surface(7.0, Light.BubbleTheirs, IntArray(1))
         var ours by mutableStateOf(true)
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(2f, 1f)) {

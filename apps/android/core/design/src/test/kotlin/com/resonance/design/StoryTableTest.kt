@@ -89,7 +89,7 @@ class StoryTableTest {
         assertEquals(listOf(100f), tableColumns(1, { _, _ -> 99.2f }, rows = 0, min = 10f, max = 200f))
     }
 
-    @Test fun aTablesWordsAreSetNotJustifiedItsFiguresTabularEveryCellAtItsStart() {
+    @Test fun aTablesWordsAreSetNotJustifiedItsFiguresTabularEveryCellAtItsStart() = composed {
         // A column the delimiter row put at its end (---:) still starts its words at the cell's start edge.
         val asked = ProseStyle.body(cjk, "zh-TW").copy(align = Layout.Alignment.ALIGN_OPPOSITE, justified = true)
         val body = tableBodyStyle(asked)

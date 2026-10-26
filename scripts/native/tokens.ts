@@ -14,6 +14,7 @@ import { dirname, resolve } from 'node:path';
 import { INK, INK_LIGHT, INK_STRONG } from '../../src/lib/design/strokes';
 import { encode, linearSrgbToLinearP3, mix, mixWithBlack, parseOklch, srgbHex, toLinearSrgb, type Oklch } from './oklch';
 import { paletteFor, type PaletteToken } from '../../src/lib/design/palette';
+import { kotlinPalette, kotlinTokens } from './palette-kotlin';
 
 const root = resolve(__dirname, '../..');
 const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
@@ -106,42 +107,12 @@ ${lengths.map((l) => `\n    /// ${l.source}\n    public static let ${l.name}: CG
 }
 `;
 
-const kt = `// ${header}
-package com.resonance.design.generated
-
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.colorspace.ColorSpaces
-import androidx.compose.ui.unit.dp
-
-object Tokens {
-${tokens
-  .map(
-    (t) =>
-      `    /** ${t.source} · sRGB ${t.srgbHex}${t.inSrgbGamut ? '' : ' (outside sRGB)'} */\n` +
-      `    val ${t.name[0].toUpperCase()}${t.name.slice(1)} = Color(${t.p3[0]}f, ${t.p3[1]}f, ${t.p3[2]}f, ${t.alpha}f, ColorSpaces.DisplayP3)`,
-  )
-  .join('\n')}
-
-    val CardFills = listOf(${[0, 1, 2, 3, 4, 5].map((i) => `CardFill${i}`).join(', ')})
-    val CardBorders = listOf(${[0, 1, 2, 3, 4, 5].map((i) => `CardBorder${i}`).join(', ')})
-
-    /** One pen for the whole app (src/lib/design/strokes.ts). */
-    val Ink = ${INK}.dp
-    val InkLight = ${INK_LIGHT}.dp
-    val InkStrong = ${INK_STRONG}.dp
-}
-`;
-
 const outputs: [string, string][] = [
   // The app's packages default to main-actor isolation; constants are safe anywhere.
   ['apps/ios/Packages/DesignSystem/Sources/DesignSystem/Generated/Tokens.swift', swift.replace('public enum Tokens {', 'public nonisolated enum Tokens {')],
-  [
-    'apps/android/core/design/src/main/kotlin/com/resonance/design/generated/Tokens.kt',
-    kt.replace(
-      `    val InkStrong = ${INK_STRONG}.dp\n}`,
-      `    val InkStrong = ${INK_STRONG}.dp\n${lengths.map((l) => `\n    /** ${l.source} */\n    const val ${l.name[0].toUpperCase()}${l.name.slice(1)} = ${l.value}f`).join('')}\n}`,
-    ),
-  ],
+  // Android: the palette for every theme and scheme, and Tokens' colours read from it (./palette-kotlin).
+  ['apps/android/core/design/src/main/kotlin/com/resonance/design/generated/Tokens.kt', kotlinTokens(header, { ink: INK, inkLight: INK_LIGHT, inkStrong: INK_STRONG }, lengths)],
+  ['apps/android/core/design/src/main/kotlin/com/resonance/design/generated/Palette.kt', kotlinPalette()],
 ];
 for (const [p, body] of outputs) {
   mkdirSync(dirname(resolve(root, p)), { recursive: true });

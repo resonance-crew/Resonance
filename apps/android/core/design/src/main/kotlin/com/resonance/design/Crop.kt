@@ -39,6 +39,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.ui.graphics.Color
 import com.resonance.design.generated.Tokens
 import com.resonance.geometry.SegValue
 import com.resonance.geometry.WobCircleOptions
@@ -120,8 +122,8 @@ fun cropStageSide(available: Dp): Dp = min(320f, available.value).dp
 
 fun cropMask(stage: Dp): Dp = stage - 48.dp
 
-/** The scrim over the photo outside the mask, oklch(30% 0.02 70 / 0.5). */
-private val CropScrim = OklchColor.parse("oklch(30% 0.02 70 / 0.5)") ?: Tokens.Text.copy(alpha = 0.5f)
+/** The scrim over the photo outside the mask: over a picture, the same dark in either scheme. */
+private val CropScrim = OverPicture.Scrim
 
 /**
  * The crop's stage (design note B7): a square of cream-dark paper in HandDrawnImage's frame (seed
@@ -150,6 +152,7 @@ fun AvatarCropStage(
             curve = 1.3, cornerJitter = 3.2, cornerOffset = m * 0.06, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0),
         ))
     }
+    val well = Tokens.CreamDark
     Box(
         modifier
             .size(side)
@@ -177,7 +180,7 @@ fun AvatarCropStage(
                 val pen = Stroke(Tokens.Ink.toPx(), join = StrokeJoin.Round)
                 onDrawBehind {
                     clipPath(paperPath) {
-                        drawRect(Tokens.CreamDark)
+                        drawRect(well)
                         val s = model.scale(current.z).toFloat() * density
                         val w = photo.width * s
                         val h = photo.height * s
@@ -191,7 +194,7 @@ fun AvatarCropStage(
                         )
                         clipPath(ringPath, ClipOp.Difference) { drawRect(CropScrim) }
                     }
-                    drawPath(ringPath, Tokens.Cream.copy(alpha = 0.9f), style = pen)
+                    drawPath(ringPath, OverPicture.Rim, style = pen)
                 }
             },
     )
@@ -214,6 +217,9 @@ fun OrganicSlider(
 ) {
     val emit by rememberUpdatedState(onChange)
     val knobR = 11.dp
+    val trackInk = SliderTrack
+    val accent = Tokens.Terracotta
+    val knobPaper = Tokens.Cream
     fun valueAt(x: Float, width: Float, density: Float): Float {
         val pad = (knobR.value + 1f) * density
         val usable = max(1f, width - pad * 2)
@@ -247,16 +253,16 @@ fun OrganicSlider(
         if (barLen > 0f) {
             val bar = wavyLine(barLen.toDouble(), seed, 2.6, max(4, (barLen / 38f).roundToInt())).toPath(d, capPad * d, cy)
             val track = Stroke(7.dp.toPx(), cap = StrokeCap.Round)
-            drawPath(bar, SliderTrack, style = track)
-            clipRect(right = thumbX) { drawPath(bar, Tokens.Terracotta, style = track) }
+            drawPath(bar, trackInk, style = track)
+            clipRect(right = thumbX) { drawPath(bar, accent, style = track) }
         }
         val knob = wobCircle(knobR.value.toDouble(), knobR.value.toDouble(), knobR.value.toDouble(), seed + 5, WobCircleOptions(segments = 9, mag = 0.7, cpJitter = 0.4)).toPath(d)
         translate(left = thumbX - knobR.toPx(), top = cy - knobR.toPx()) {
-            drawPath(knob, Tokens.Cream)
-            drawPath(knob, Tokens.Terracotta, style = Stroke(Tokens.Ink.toPx(), join = StrokeJoin.Round))
+            drawPath(knob, knobPaper)
+            drawPath(knob, accent, style = Stroke(Tokens.Ink.toPx(), join = StrokeJoin.Round))
         }
     }
 }
 
-/** The slider's track, oklch(84% 0.022 75). */
-private val SliderTrack = OklchColor.parse("oklch(84% 0.022 75)") ?: Tokens.CreamDark
+/** The slider's track (the web's oklch(84% 0.022 75)): a switch's off well, a step from the paper in either scheme. */
+private val SliderTrack: Color @Composable @ReadOnlyComposable get() = Tokens.ToggleOff

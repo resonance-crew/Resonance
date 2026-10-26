@@ -125,7 +125,7 @@ class StoryTypeTest {
         assertEquals(cjkWide, StoryType.of(StoryScript.Cjk, LayoutClass.Expanded))
     }
 
-    @Test fun theTitleAndHeadingsStandOnLiningFiguresWithNoNegativeTracking() {
+    @Test fun theTitleAndHeadingsStandOnLiningFiguresWithNoNegativeTracking() = composed {
         val title = cjkPhone.titleStyle()
         assertEquals("lnum", title.fontFeatureSettings)
         assertEquals(0.02f.em, title.letterSpacing)

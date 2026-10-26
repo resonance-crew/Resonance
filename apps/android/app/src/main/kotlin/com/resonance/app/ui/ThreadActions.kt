@@ -155,11 +155,12 @@ internal fun MessageMenuOverlay(
             }
         }
 
+        val scrim = ModalScrim
         Box(
             Modifier
                 .fillMaxSize()
                 // The modals' scrim, over the bars too (the activity is edge to edge).
-                .drawBehind { drawRect(ModalScrim, alpha = appear.value) }
+                .drawBehind { drawRect(scrim, alpha = appear.value) }
                 .plainClickable(onClick = dismiss),
         )
         CappedTextScale {

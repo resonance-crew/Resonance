@@ -101,6 +101,7 @@ fun OrganicIcon(
 fun OrganicRadio(selected: Boolean, seed: Double = 21.0, modifier: Modifier = Modifier) {
     val dot by animateFloatAsState(if (selected) 1f else 0f, spring(dampingRatio = 0.7f, stiffness = 600f), label = "radio")
     val ring = if (selected) Tokens.TerracottaDeep else Tokens.ToggleOffStroke
+    val inked = Tokens.Terracotta
     // Canvas's own Spacer + drawBehind, with the ring's outline built when the size changes, not on every draw.
     Spacer(modifier.size(22.dp).clearAndSetSemantics { }.drawWithCache {
         val ringOutline = WobCircleShape(seed, WobCircleOptions(segments = 7, mag = 0.7, cpJitter = 0.4))
@@ -115,7 +116,7 @@ fun OrganicRadio(selected: Boolean, seed: Double = 21.0, modifier: Modifier = Mo
                     .createOutline(androidx.compose.ui.geometry.Size(d, d), layoutDirection, this)
                 val off = (size.width - d) / 2
                 drawContext.transform.translate(off, off)
-                drawOutline(o, Tokens.Terracotta, alpha = dot)
+                drawOutline(o, inked, alpha = dot)
                 drawContext.transform.translate(-off, -off)
             }
         }

@@ -1,5 +1,7 @@
 package com.resonance.design
 
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.Composable
 import android.annotation.SuppressLint
 import android.graphics.text.LineBreakConfig
 import android.graphics.text.LineBreaker
@@ -112,14 +114,17 @@ data class StoryType(val script: StoryScript, val compact: Boolean) {
     // Styles
 
     /** The title: the heading face at the title's size, lining figures (「2400 公尺」 stands level). */
+    @Composable @ReadOnlyComposable
     fun titleStyle(color: Color = Tokens.Text): TextStyle =
         AppFonts.style(headingFamily, titleSize, headingWeight, titleLeading, color, headingTracking.em).copy(fontFeatureSettings = LINING_FIGURES)
 
     /** A heading in the story, lining figures too. */
+    @Composable @ReadOnlyComposable
     fun headingStyle(level: Int, color: Color = Tokens.Text): TextStyle =
         AppFonts.style(headingFamily, headingSize(level), headingWeight, headingLeading, color, headingTracking.em).copy(fontFeatureSettings = LINING_FIGURES)
 
     /** The story's words (a Compose `Text`'s: the reader's own line boxes take [bodyFamily] and the numbers above). */
+    @Composable @ReadOnlyComposable
     fun bodyStyle(weight: Int = bodyWeight, color: Color = Tokens.Text): TextStyle =
         AppFonts.style(bodyFamily, bodySize, weight, bodyLeading, color, bodyTracking.em)
 

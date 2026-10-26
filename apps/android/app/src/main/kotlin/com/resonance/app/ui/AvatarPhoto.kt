@@ -1,5 +1,7 @@
 package com.resonance.app.ui
 
+import com.resonance.design.generated.ResonanceColors
+import com.resonance.design.avatarFill
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Matrix
@@ -69,13 +71,14 @@ import kotlinx.coroutines.withContext
 object AvatarPhoto {
     /**
      * What the mask showed of [photo], as the avatar's JPEG (0.9): a square of the crop's own size
-     * kept between 256 and 512, on cream first (a transparent picture never turns black).
+     * kept between 256 and 512, on cream first (a transparent picture never turns black) — light
+     * terracotta's cream whatever the screen wears: everyone sees the picture, in either scheme.
      */
     fun render(photo: Bitmap, rect: CropRect): ByteArray {
         val out = AvatarCrop.outputSize(rect.side)
         val square = Bitmap.createBitmap(out, out, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(square)
-        canvas.drawColor(Tokens.Cream.toArgb())
+        canvas.drawColor(ResonanceColors.LightTerracotta.Cream.toArgb())
         val k = (out / rect.side).toFloat()
         val place = Matrix().apply {
             setScale(k, k)
@@ -121,13 +124,13 @@ internal fun AvatarSettingsRow(session: Session, me: Me) {
     val verb = if (me.avatarUrl != null) L10n.Settings.Profile.avatarChange else L10n.Settings.Profile.avatarAdd
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.clickable(onClickLabel = verb, role = Role.Button, onClick = pick)) {
-            HandDrawnAvatar(me.initials, me.avatarUrl, OklchColor.parse(me.accentColor) ?: Tokens.TerracottaLight, 88.dp, 77.0)
+            HandDrawnAvatar(me.initials, me.avatarUrl, avatarFill(me.accentColor), 88.dp, 77.0)
         }
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             BasicText(L10n.Settings.Profile.avatar, style = AppFonts.body(14f, 600, lineHeight = 1.4f))
             BasicText(L10n.Settings.Profile.avatarHint, style = AppFonts.body(13f, lineHeight = 1.5f, color = Tokens.TextMuted), modifier = Modifier.padding(top = 2.dp))
-            if (openError) BasicText(L10n.Settings.Profile.avatarOpenError, style = AppFonts.body(13f, lineHeight = 1.5f, color = Mixes.Danger), modifier = Modifier.padding(top = 2.dp))
+            if (openError) BasicText(L10n.Settings.Profile.avatarOpenError, style = AppFonts.body(13f, lineHeight = 1.5f, color = Tokens.Danger), modifier = Modifier.padding(top = 2.dp))
             Spacer(Modifier.height(8.dp))
             OrganicButton(verb, variant = ButtonVariant.Tonal, small = true, icon = IconName.Image, onClick = pick)
         }
