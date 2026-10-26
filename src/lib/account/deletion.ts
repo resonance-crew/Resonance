@@ -3,7 +3,7 @@ import { cardPagePaths, landingPagePaths, profilePagePaths } from '@/lib/api/rev
 import { CHAT_IMAGES, chatImageFiles } from '@/lib/api/v1/chatImages';
 import { restoreCard, trashCard } from '@/lib/api/v1/trash';
 import { HANDLES } from '@/lib/db/firestore/handles';
-import { TOMBSTONE, tombstoneRef } from '@/lib/db/firestore/tombstones';
+import { RETIRED_SLUG, TOMBSTONE, retirable, retiredSlugRef, tombstoneRef } from '@/lib/db/firestore/tombstones';
 import { UPLOADS, uploadedKeys } from '@/lib/storage/uploads';
 import { DELETION_GRACE_DAYS } from './constants';
 
@@ -326,8 +326,12 @@ export async function purgeAccountData(db: Firestore, uid: string, opts: PurgeOp
   const deleteTree = async (ref: DocumentReference) => {
     const records = byCard.get(ref.path);
     if (records?.length) await deleteAll(db, records);
-    // A card's id stays dead (tombstoneRef): written, on its own, before the card goes, so no moment lets another take it.
-    if (ref.parent.id === 'cards') await tombstoneRef(db, ref.id).set(TOMBSTONE);
+    // A card's id stays dead (tombstoneRef) and its slug retired: written, on their own, before the card goes, so no
+    // moment lets another take either.
+    if (ref.parent.id === 'cards') {
+      const slug = (await ref.get()).get('slug');
+      await Promise.all([tombstoneRef(db, ref.id).set(TOMBSTONE), retirable(slug) ? retiredSlugRef(db, slug).set(RETIRED_SLUG) : null]);
+    }
     await db.recursiveDelete(ref, writer);
   };
   try {

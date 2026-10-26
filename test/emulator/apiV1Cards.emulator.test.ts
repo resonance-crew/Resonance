@@ -377,6 +377,8 @@ describe('deleteCard (DELETE /cards/{id})', () => {
     expect((await failure(getCardDetail(db, 'alice', 'a-quiet-night'))).code).toBe('not_found');
     // Its id stays dead (no new card may take it: firestore.rules), and its tombstone names no one.
     expect(Object.keys((await db.doc('cardTombstones/live').get()).data() ?? {})).toEqual(['deletedAt']);
+    // Its slug is retired with it (no new card is given it: old links would open that card), naming no one either.
+    expect(Object.keys((await db.doc('retiredSlugs/a-quiet-night').get()).data() ?? {})).toEqual(['retiredAt']);
   });
 
   // Review: left behind, the notes on a deleted anonymous card stayed in their

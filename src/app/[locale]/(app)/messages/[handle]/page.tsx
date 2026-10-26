@@ -22,8 +22,10 @@ function MessageThreadContent() {
   const noteId = search.get('note');
   const cardId = search.get('card');
   const replyNote = noteId && cardId ? { noteId, cardId } : undefined;
+  // Whose thread a bell row meant (its sender's id): the pen name may since be someone else's.
+  const userId = search.get('u') ?? undefined;
   return (
-    <MessagesPage activeHandle={decodeHandle(params?.handle)} replyNote={replyNote} />
+    <MessagesPage activeHandle={decodeHandle(params?.handle)} replyNote={replyNote} userId={userId} />
   );
 }
 

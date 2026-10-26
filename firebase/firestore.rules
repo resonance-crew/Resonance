@@ -696,6 +696,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // --- retired slugs (server-only) ---
+    // The slugs of cards deleted for good, written beside their tombstones:
+    // assignSlug gives none of them to a new card. Never whose card it was.
+    match /retiredSlugs/{slug} {
+      allow read, write: if false;
+    }
+
     // --- uploads (server-only) ---
     // Whose each stored picture is (keyed by its storage key's file name):
     // the keys themselves name no one, so an anonymous card's cover can't

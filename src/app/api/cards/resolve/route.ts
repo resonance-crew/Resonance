@@ -7,8 +7,9 @@ export const runtime = 'nodejs';
 /**
  * A hit is the same for every viewer (an id, never content), so the CDN may
  * keep it: an hour fresh, then served while it refreshes. Not longer — a
- * deleted card's slug can be given to a new card, and until the cached answer
- * lapses its URL still names the old id (which then reads as not found).
+ * card deleted for good keeps its slug retired (retiredSlugs, so no new card
+ * is given it), but until the cached answer lapses its URL still names the old
+ * id, which then reads as not found.
  */
 const RESOLVE_HIT_CACHE = 'public, s-maxage=3600, stale-while-revalidate=86400';
 /** A miss is never cached: the card may be about to exist (a slug assigned a moment later). */

@@ -41,6 +41,15 @@ describe('assignSlug', () => {
     expect(docs['cards/c1'].slug).toBe('a-quiet-night-alice');
   });
 
+  it("never hands out a slug retired with a deleted card: its old links would open this one", async () => {
+    const { db } = fakeAdminDb({
+      'cards/c1': { ...card },
+      'retiredSlugs/after-the-rain': { retiredAt: at(0) },
+      'users/alice': { handle: 'alice' },
+    });
+    expect(await assignSlug(db, 'c1', async () => 'after-the-rain', { ...card })).toBe('after-the-rain-alice');
+  });
+
   it('reads the card itself when it is not handed one', async () => {
     const { db, reads } = fakeAdminDb({ 'cards/c1': { ...card }, 'users/alice': { handle: 'alice' } });
     expect(await assignSlug(db, 'c1', async () => 'after-the-rain')).toBe('after-the-rain');

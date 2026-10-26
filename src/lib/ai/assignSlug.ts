@@ -1,5 +1,6 @@
 import type { DocumentData, Firestore } from 'firebase-admin/firestore';
 import { slugHolder } from '@/lib/db/firestore/cardKey';
+import { retirable, retiredSlugRef } from '@/lib/db/firestore/tombstones';
 import { ensureUniqueSlug, slugify } from './slugify';
 import { titleToSlugBase } from './tasks';
 
@@ -39,9 +40,13 @@ export async function assignSlug(
   ]);
   const handle = author ? slugify(String(author.data()?.handle ?? '')) : '';
 
+  // Taken by another card, or retired with a card deleted for good (old links still name it).
   const slug = await ensureUniqueSlug(base, handle, async (candidate) => {
-    const dupes = await db.collection('cards').where('slug', '==', candidate).limit(1).get();
-    return dupes.docs.some((d) => d.id !== cardId);
+    const [dupes, retired] = await Promise.all([
+      db.collection('cards').where('slug', '==', candidate).limit(1).get(),
+      retirable(candidate) ? retiredSlugRef(db, candidate).get() : null,
+    ]);
+    return !!retired?.exists || dupes.docs.some((d) => d.id !== cardId);
   });
 
   // Not `updatedAt`: publishing stamped it (with the card's list summary,

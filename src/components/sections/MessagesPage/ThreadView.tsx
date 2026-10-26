@@ -26,7 +26,7 @@ import { resonanceCardKey, threadCardKeys } from '@/lib/chat/cardLink';
 import { footComposes, threadFoot } from '@/lib/chat/foot';
 import { threadRows } from '@/lib/chat/rows';
 import type { TextRange } from '@/lib/chat/search';
-import { getUserByHandle, isConnected } from '@/lib/db/firestore/client/reads';
+import { getUserByHandle, getUsersByIds, isConnected } from '@/lib/db/firestore/client/reads';
 import {
   conversationId,
   deleteConversation,
@@ -64,6 +64,12 @@ export interface ThreadViewProps {
    * that never came into the thread, quotes it.
    */
   replyNote?: { noteId: string; cardId: string };
+  /**
+   * Whose thread the link meant, by id (a bell row's `u`). A pen name released by a rename or a deleted
+   * account can be taken by someone else: when it now names another person, the thread finds the one meant
+   * by id and moves to their pen name — or says they are gone — and never opens the new holder's.
+   */
+  userId?: string;
 }
 
 /**
@@ -80,17 +86,29 @@ export interface ThreadViewProps {
  * exists, older ones paged in as the reader scrolls up or searches, and the
  * viewer's own still on their way — come from {@link useChatThread}.
  */
-export function ThreadView({ handle, replyNote }: ThreadViewProps) {
+export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
   const t = useTranslations('messages');
   const locale = useLocale();
   const router = useRouter();
   const { user } = useAuth();
   const { mutate: globalMutate } = useSWRConfig();
 
-  const { data: other, isLoading: loadingOther } = useSWR(
+  const { data: holder, isLoading: loadingHolder } = useSWR(
     `user:handle:${handle}`,
     () => getUserByHandle(handle),
   );
+  // The pen name has passed to someone else since the link was made: find the one it meant, by id.
+  const moved = !!userId && !!holder && holder.id !== userId;
+  const { data: meant, isLoading: loadingMeant } = useSWR(moved ? `user:id:${userId}` : null, () =>
+    getUsersByIds([userId!]).then((found) => found[userId!] ?? null),
+  );
+  const other = moved ? null : holder;
+  const loadingOther = loadingHolder || (moved && (loadingMeant || !!meant?.handle));
+  useEffect(() => {
+    if (!moved || !meant?.handle || meant.handle === handle) return;
+    const q = replyNote ? `?${new URLSearchParams({ note: replyNote.noteId, card: replyNote.cardId, u: meant.id }).toString()}` : '';
+    router.replace(`/messages/${encodeURIComponent(meant.handle)}${q}`);
+  }, [moved, meant, handle, replyNote, router]);
   const pairId = user && other ? conversationId(user.id, other.id) : undefined;
   const { data: convo, mutate: mutateConvo } = useSWR(
     pairId ? `conversation:${pairId}` : null,

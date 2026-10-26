@@ -66,8 +66,8 @@ describe('the bell’s rows', () => {
     expect(links.map((a) => a.getAttribute('href'))).toEqual([
       '/card/masked',
       '/card/masked',
-      '/messages/carol?note=note2&card=walk',
-      '/messages/carol',
+      '/messages/carol?note=note2&card=walk&u=carol',
+      '/messages/carol?u=carol',
     ]);
     expect(links.filter((a) => a.getAttribute('href')?.startsWith('/messages/bob'))).toEqual([]);
   });

@@ -696,6 +696,15 @@ describe('cards: what the author may write', () => {
     await assertFails(setDoc(doc(as('mallory'), 'cardTombstones', 'FreshCardAAAAAAAAAAA'), { deletedAt: new Date() }));
   });
 
+  it('lets no client read or write a retired slug (server-only, as tombstones are)', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'retiredSlugs', 'a-quiet-night'), { retiredAt: new Date() });
+    });
+    await assertFails(getDoc(doc(as('mallory'), 'retiredSlugs', 'a-quiet-night')));
+    await assertFails(setDoc(doc(as('mallory'), 'retiredSlugs', 'a-fresh-name'), { retiredAt: new Date() }));
+    await assertFails(deleteDoc(doc(as('mallory'), 'retiredSlugs', 'a-quiet-night')));
+  });
+
   it("keeps a pending edit that names someone else from the card's owner (a copy left under an id another took)", async () => {
     await seed(async (db) => {
       await setDoc(doc(db, 'cards', 'TakenCardAAAAAAAAAAA'), publishedCard('mallory'));
