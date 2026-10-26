@@ -103,6 +103,19 @@ describe('POST /api/upload', () => {
     expect(meta).toMatchObject({ format: 'webp', pages: 3, width: 60, pageHeight: 40, delay: [80, 80, 80], loop: 0 });
   });
 
+  // Re-encoding costs per frame: a tiny canvas with thousands of frames fits
+  // the pixel limit and 4 MB, and would hold the function for tens of seconds.
+  it('refuses an animation with more frames than any real one has', async () => {
+    const frames = await Promise.all(['#f00', '#0f0'].map((c) => solid(2, 2, c).raw().toBuffer()));
+    const n = 600;
+    const gif = await sharp(Buffer.concat(Array.from({ length: n }, (_, i) => frames[i % 2])), { raw: { width: 2, height: 2 * n, channels: 3, pageHeight: 2 } })
+      .gif({ loop: 0 })
+      .toBuffer();
+    expect((await sharp(gif, { animated: true }).metadata()).pages).toBe(n);
+    const res = await upload(gif, { name: 'many.gif', type: 'image/gif' });
+    expect(res.status).toBe(400);
+  });
+
   it('fills a profile photo into 256 px', async () => {
     const res = await upload(await solid(1200, 900).jpeg().toBuffer(), { purpose: 'avatar' });
     expect(res.status).toBe(200);

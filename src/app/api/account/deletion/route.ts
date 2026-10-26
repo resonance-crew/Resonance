@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { crossOriginCookieWrite } from '@/lib/api/sameOrigin';
 import { getCurrentUser } from '@/lib/auth';
 import { revokeSessions } from '@/lib/auth/firebase/server';
 import { getAdminDb } from '@/lib/db/firestore/admin';
@@ -39,7 +40,10 @@ export async function GET() {
  * client (lib/auth/firebase/appleToken.ts, the iOS app's
  * AppleTokenRevocation): that takes a session this revokes.
  */
-export async function POST() {
+export async function POST(req: Request) {
+  // A write with the session cookie from another origin (a same-site subdomain too) is never the caller's own page.
+  if (crossOriginCookieWrite(req)) return NextResponse.json({ error: 'This request did not come from the site' }, { status: 403 });
+
   const user = await getCurrentUser();
   if (!user) return unauthorized();
   const deletion = await scheduleAccountDeletion(getAdminDb(), user.id);
@@ -48,7 +52,10 @@ export async function POST() {
 }
 
 /** Cancel a scheduled deletion. */
-export async function DELETE() {
+export async function DELETE(req: Request) {
+  // A write with the session cookie from another origin (a same-site subdomain too) is never the caller's own page.
+  if (crossOriginCookieWrite(req)) return NextResponse.json({ error: 'This request did not come from the site' }, { status: 403 });
+
   const user = await getCurrentUser();
   if (!user) return unauthorized();
   await cancelAccountDeletion(getAdminDb(), user.id);

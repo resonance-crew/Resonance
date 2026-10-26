@@ -96,7 +96,8 @@ export function toCardSeed(id: string | null, card: Card | null, author: User | 
       card: {
         id: card.id,
         authorId: anonymous ? '' : card.authorId,
-        slug: str(card.slug),
+        // An anonymous card lives at its id: its slug may name its author (anonymousBySlug).
+        slug: anonymous ? null : str(card.slug),
         thoughtCore: String(card.thoughtCore ?? ''),
         story: String(card.story ?? ''),
         tags: Array.isArray(card.tags) ? card.tags.filter((t): t is string => typeof t === 'string') : [],

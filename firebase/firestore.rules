@@ -139,9 +139,10 @@ service cloud.firestore {
     match /users/{userId} {
       allow create: if false;
       allow get: if true;
-      // Bylines by id (`documentId() in`, 30 at most) and the lookup by pen
-      // name (limit 1) — a page at a time, never the whole directory.
-      allow list: if request.query.limit is int && request.query.limit <= 30;
+      // Never listed: a list query pages through the whole directory however
+      // small its pages. Bylines are a get each, a pen name goes through its
+      // reservation (handles/{name}), the rest through /api/v1.
+      allow list: if false;
       allow update: if isSelf(userId)
         && changedKeys().hasOnly([
           "bio",
@@ -232,8 +233,12 @@ service cloud.firestore {
       // A new draft: yours, unpublished, without a slug, stamped now, with
       // zeroed counters and an auto-generated id. A resonance must answer a
       // card you can read, with no block either way unless it is anonymous.
+      // Never under the id of a card deleted for good (its tombstone, written
+      // by the server as it deletes one): resonances, bookmarks, threads and
+      // links still name that id, and would follow whoever took it.
       allow create: if signedIn()
         && cardId.matches("^[A-Za-z0-9]{20}$")
+        && !exists(/databases/$(database)/documents/cardTombstones/$(cardId))
         && request.resource.data.keys().hasOnly([
           "authorId", "thoughtCore", "story", "tags", "visibility", "anonymous",
           "media", "accentHue", "originalLocale", "referenceCardId", "translations",
@@ -354,7 +359,10 @@ service cloud.firestore {
         function leavesAnonymousForConnections(e) {
           return e.get("anonymous", false) == true && e.get("visibility", card().get("visibility", "")) == "connections";
         }
-        allow read: if signedIn() && ownsCard();
+        // Its author's alone: a copy naming someone else (left under an id
+        // another card took) stays theirs.
+        allow read: if signedIn() && ownsCard()
+          && resource.data.get("authorId", request.auth.uid) == request.auth.uid;
         // A whole working copy, replaced each time (never merged). It may keep
         // a card anonymous and for connections only that already is (an older
         // card stays editable), never make one so. Never into a card in the
@@ -371,7 +379,8 @@ service cloud.firestore {
           && validCardContent(request.resource.data, request.resource.data.keys())
           && (!leavesAnonymousForConnections(request.resource.data) || anonymousForConnections(card()));
         allow delete: if signedIn()
-          && (resource.data.get("authorId", "") == request.auth.uid || ownsCard());
+          && (resource.data.get("authorId", "") == request.auth.uid
+            || (ownsCard() && resource.data.get("authorId", request.auth.uid) == request.auth.uid));
       }
     }
 
@@ -684,6 +693,14 @@ service cloud.firestore {
     // the keys themselves name no one, so an anonymous card's cover can't
     // point at its author, and the account purge deletes a person's pictures
     // from these records.
+    // --- card tombstones (server-only) ---
+    // The ids of cards deleted for good, written in the transaction that
+    // deletes one (deleteCard, the account purge): no new card takes such an
+    // id (cards create, above). Nothing else — never whose card it was.
+    match /cardTombstones/{cardId} {
+      allow read, write: if false;
+    }
+
     match /uploads/{uploadId} {
       allow read, write: if false;
     }

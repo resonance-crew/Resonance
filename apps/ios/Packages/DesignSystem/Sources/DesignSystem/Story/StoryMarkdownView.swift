@@ -1,3 +1,4 @@
+import Nuke
 import NukeUI
 import StoryFormat
 import SwiftUI
@@ -293,7 +294,7 @@ struct StoryImageView: View {
             let h = w / a
             let bleed = (min(w, h) * 0.025 + 6 + 4).rounded(.up)
             let setAspect = $aspect
-            LazyImage(url: url) { state in
+            LazyImage(request: Self.request(url)) { state in
                 if let image = state.image {
                     image.resizable().scaledToFill()
                 } else {
@@ -314,6 +315,19 @@ struct StoryImageView: View {
         }
         .frame(height: height)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { column = $0 }
+    }
+
+    /// The longest side a story picture is decoded at, in pixels: wider than any column drawn at 3×.
+    static let maxPixelSize: Float = 2400
+
+    /// A story picture may come from any host and declare any size: decoded as a thumbnail (ImageIO,
+    /// never the whole bitmap first), so a small file claiming tens of thousands of pixels a side
+    /// can't take the reader's memory.
+    static func request(_ url: URL?) -> ImageRequest? {
+        guard let url else { return nil }
+        var request = ImageRequest(url: url)
+        request.thumbnail = ImageRequest.ThumbnailOptions(maxPixelSize: maxPixelSize)
+        return request
     }
 
     /// The laid-out height for the reader's column (until measured, the window's minus the gutters).

@@ -10,8 +10,11 @@ import type { InsightSignature, Visibility } from '@/lib/db/types';
 
 export interface IndexResult {
   indexed: boolean;
-  /** `unchanged`: what the signature reads is what it was made from — no LLM call, the vectors' visibility synced alone. */
-  reason?: 'not-published' | 'not-found' | 'low-insight' | 'unchanged';
+  /**
+   * `unchanged`: what the signature reads is what it was made from — no LLM call, the vectors' visibility synced alone.
+   * `over-budget`: `mayCall` refused the LLM call; the card keeps its last signature and vectors (their visibility synced).
+   */
+  reason?: 'not-published' | 'not-found' | 'low-insight' | 'unchanged' | 'over-budget';
   channels?: number;
 }
 
@@ -87,7 +90,8 @@ async function markIndexed(ref: DocumentReference, hash: string, signature: Insi
  * keeps the hash of the text it was made from (`signature.contentHash`, see
  * indexContentHash), and an unchanged one skips the LLM and the embeddings
  * (`reason: 'unchanged'`; `force` makes it all the same — the backfill's
- * --all). Either way the card's vectors first take its visibility as this
+ * --all). `mayCall` is asked just before the LLM call, so only a save that
+ * needs one spends the caller's budget for it. Either way the card's vectors first take its visibility as this
  * run reads it, before any LLM call, and follow a change that lands while
  * it runs.
  *
@@ -100,7 +104,7 @@ async function markIndexed(ref: DocumentReference, hash: string, signature: Insi
  * next edit, and an indexed one whose vectors were dropped would lose them
  * for good.
  */
-export async function indexCard(cardId: string, opts: { force?: boolean } = {}): Promise<IndexResult> {
+export async function indexCard(cardId: string, opts: { force?: boolean; mayCall?: () => Promise<boolean> } = {}): Promise<IndexResult> {
   const db = getAdminDb();
   const ref = db.collection('cards').doc(cardId);
   const [snap] = await db.getAll(ref, { fieldMask: INDEX_FIELDS });
@@ -134,6 +138,7 @@ export async function indexCard(cardId: string, opts: { force?: boolean } = {}):
     if (settled !== first) await store.setVisibility(cardId, settled);
     return { indexed: false, reason: 'unchanged' };
   }
+  if (opts.mayCall && !(await opts.mayCall())) return { indexed: false, reason: 'over-budget' };
 
   const signature = await extractInsightSignature({ title, story });
 

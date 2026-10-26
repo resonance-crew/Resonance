@@ -20,6 +20,12 @@ export type UploadPurpose = 'image' | 'avatar' | 'thumb';
  * a side, so this is far above anything real.
  */
 export const MAX_INPUT_PIXELS = 50_000_000;
+/**
+ * The most frames an animation may have: re-encoding costs per frame, so a
+ * small canvas with tens of thousands of frames (within the pixel limit and
+ * 4 MB) would hold a function for tens of seconds. Real GIFs stay far below.
+ */
+export const MAX_FRAMES = 500;
 /** A story image or cover: at most this many pixels on its long side. */
 export const IMAGE_MAX_EDGE = 2048;
 /** A profile photo: filled into this square (it is drawn at 30–120 px). */
@@ -77,6 +83,7 @@ async function openUpload(input: Uint8Array): Promise<{ image: sharp.Sharp; anim
   }
   if (!meta.format || !ACCEPTED.has(meta.format)) throw new UnsupportedImage(`Unsupported format: ${meta.format}`);
 
+  if ((meta.pages ?? 1) > MAX_FRAMES) throw new UnsupportedImage(`Too many frames: ${meta.pages}`);
   const animated = (meta.pages ?? 1) > 1;
   // EXIF orientation is a still photo's; an animation has none to apply.
   return { image: animated ? open(true) : open(false).rotate(), animated };

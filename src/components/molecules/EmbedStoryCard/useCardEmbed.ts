@@ -15,7 +15,13 @@ export type CardEmbedData =
 /** Extracts the slug-or-id segment from a `/card/...` href. */
 export function cardKeyFromHref(href: string): string | null {
   const m = href.match(/^\/card\/([^/?#]+)/);
-  return m ? decodeURIComponent(m[1]) : null;
+  if (!m) return null;
+  // A malformed escape ('/card/%E0') names no card — and must not throw while a page renders.
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return null;
+  }
 }
 
 /**

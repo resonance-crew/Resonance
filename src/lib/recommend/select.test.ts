@@ -12,6 +12,11 @@ describe('buildSelectMessages', () => {
 });
 
 describe('parseSelection', () => {
+  it('keeps a reason to one line of at most 120 code points', () => {
+    const picks = parseSelection({ picks: [{ ref: 'a', reason: '你'.repeat(10_000) + '\nmore' }] });
+    expect(Array.from(picks[0]?.reason ?? '')).toHaveLength(120);
+  });
+
   it('parses picks preserving order', () => {
     const out = parseSelection({
       picks: [

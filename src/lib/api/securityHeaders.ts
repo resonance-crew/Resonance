@@ -136,5 +136,7 @@ export function securityHeaders(env: SecurityEnv): { key: string; value: string 
     { key: 'X-Content-Type-Options', value: 'nosniff' },
     { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
     { key: 'Permissions-Policy', value: PERMISSIONS_POLICY },
+    // HTTPS only, remembered for two years (not the subdomains: they are other projects' to decide).
+    { key: 'Strict-Transport-Security', value: 'max-age=63072000' },
   ];
 }

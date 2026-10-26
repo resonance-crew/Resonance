@@ -17,7 +17,12 @@ export function sanitizeNextPath(raw: string | null | undefined): string | null 
     return null;
   }
   if (url.origin !== SAME_SITE) return null;
-  return url.pathname + url.search + url.hash;
+  const path = url.pathname + url.search + url.hash;
+  // Resolving drops dot segments, so "/.//evil.example" comes back as
+  // "//evil.example" — a host to the browser. What we return must itself stay
+  // on this site when read again.
+  if (path.startsWith('//') || new URL(path, SAME_SITE).origin !== SAME_SITE) return null;
+  return path;
 }
 
 /** A placeholder origin (never contacted) for resolving a path in isolation. */

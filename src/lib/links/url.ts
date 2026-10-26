@@ -92,7 +92,12 @@ function linkEnd(text: string, start: number, schemeLength: number): number {
     }
     i += cp > 0xffff ? 2 : 1;
   }
-  // Sentence punctuation and unbalanced closers go.
+  // Sentence punctuation and unbalanced closers go. The brackets the link
+  // holds are counted once and taken off as closers are trimmed: recounting
+  // the link for every closer made a link followed by a long run of them
+  // quadratic, which a stored story could use to pin a server or a reader.
+  const held: Record<string, number> = { '(': 0, ')': 0, '[': 0, ']': 0, '{': 0, '}': 0 };
+  for (let j = start; j < i; j++) if (text[j] in held) held[text[j]]++;
   for (;;) {
     const last = text[i - 1];
     if (i - start <= schemeLength) break;
@@ -101,22 +106,14 @@ function linkEnd(text: string, start: number, schemeLength: number): number {
       continue;
     }
     const opener = PAIRS[last];
-    if (opener) {
-      const slice = text.slice(start, i);
-      if (count(slice, last) > count(slice, opener)) {
-        i--;
-        continue;
-      }
+    if (opener && held[last] > held[opener]) {
+      held[last]--;
+      i--;
+      continue;
     }
     break;
   }
   return i;
-}
-
-function count(text: string, char: string): number {
-  let n = 0;
-  for (const c of text) if (c === char) n++;
-  return n;
 }
 
 /**

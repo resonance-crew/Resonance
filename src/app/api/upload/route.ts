@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { crossOriginCookieWrite } from '@/lib/api/sameOrigin';
 import { getCurrentUser } from '@/lib/auth';
 import { getStorageProvider } from '@/lib/storage';
 import { storeOwned } from '@/lib/storage/uploads';
@@ -8,6 +9,8 @@ import { limited } from '@/lib/api/rateLimit';
 import { getAdminDb } from '@/lib/db/firestore/admin';
 
 export const runtime = 'nodejs';
+// A re-encode is bounded (normalizeUpload's pixel and frame limits); this bounds the rest.
+export const maxDuration = 30;
 
 const tooLarge = () => NextResponse.json({ error: 'Image is too large' }, { status: 413 });
 
@@ -26,6 +29,8 @@ const tooLarge = () => NextResponse.json({ error: 'Image is too large' }, { stat
  * (src/lib/images/compress.ts), which keeps the request small.
  */
 export async function POST(req: Request) {
+  // A write with the session cookie from another origin (a same-site subdomain too) is never the caller's own page.
+  if (crossOriginCookieWrite(req)) return NextResponse.json({ error: 'This request did not come from the site' }, { status: 403 });
   // Signed out (or a revoked session) is a 401 — what makes a client renew its token — not a crash.
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });

@@ -55,6 +55,8 @@ export const PROXY_QUALITY = 80;
  * may be: this decodes strangers' files on request, a few at a time.
  */
 export const PROXY_MAX_PIXELS = 30_000_000;
+/** An AVIF/HEIF picture's own cap: it decodes whole (no shrink-on-load), so far less than PROXY_MAX_PIXELS. */
+export const HEIF_MAX_PIXELS = 4_000_000;
 /** How many pictures are fetched and decoded at once, and how many more may wait their turn. */
 export const MAX_CONCURRENT = 3;
 export const MAX_WAITING = 16;
@@ -107,6 +109,9 @@ export async function toPreviewWebp(bytes: Uint8Array): Promise<Buffer> {
     const image = sharp(bytes, { limitInputPixels: PROXY_MAX_PIXELS, failOn: 'error', sequentialRead: true });
     const meta = await image.metadata();
     if (!meta.format || !FORMATS.has(meta.format)) throw new ImageRefused(`format ${meta.format}`);
+    // AVIF/HEIF decodes whole with no shrink-on-load: a 1 KB file at the pixel
+    // cap took ~700 MB, three at once over 2 GB. A preview never needs that many.
+    if (meta.format === 'heif' && (meta.width ?? 0) * (meta.height ?? 0) > HEIF_MAX_PIXELS) throw new ImageRefused('heif too large');
     return await image
       .rotate()
       .resize(PROXY_EDGE, PROXY_EDGE, { fit: 'inside', withoutEnlargement: true })

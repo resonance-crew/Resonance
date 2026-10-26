@@ -375,6 +375,8 @@ describe('deleteCard (DELETE /cards/{id})', () => {
     expect((await db.doc('cardVectors/live__insight').get()).exists).toBe(false);
     expect((await db.doc('cardVectors/other__insight').get()).exists).toBe(true);
     expect((await failure(getCardDetail(db, 'alice', 'a-quiet-night'))).code).toBe('not_found');
+    // Its id stays dead (no new card may take it: firestore.rules), and its tombstone names no one.
+    expect(Object.keys((await db.doc('cardTombstones/live').get()).data() ?? {})).toEqual(['deletedAt']);
   });
 
   // Review: left behind, the notes on a deleted anonymous card stayed in their

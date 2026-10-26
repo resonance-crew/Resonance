@@ -110,18 +110,20 @@ public enum ChatLinks {
             }
             i += 1
         }
+        // The brackets the link holds, counted once and taken off as closers are trimmed (url.ts):
+        // recounting the link for every closer made a long run of them quadratic.
+        var held: [Unicode.Scalar: Int] = [:]
+        for c in s[start..<i] where pairs[c] != nil || pairs.values.contains(c) { held[c, default: 0] += 1 }
         while i - start > schemeLength {
             let last = s[i - 1]
             if trailing.contains(last) {
                 i -= 1
                 continue
             }
-            if let opener = pairs[last] {
-                let slice = s[start..<i]
-                if slice.filter({ $0 == last }).count > slice.filter({ $0 == opener }).count {
-                    i -= 1
-                    continue
-                }
+            if let opener = pairs[last], held[last, default: 0] > held[opener, default: 0] {
+                held[last, default: 0] -= 1
+                i -= 1
+                continue
             }
             break
         }

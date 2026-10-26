@@ -17,9 +17,11 @@ function requireUid(): string {
 /**
  * What a pen name may never contain: it is the /u/{handle} and
  * /messages/{handle} path segment (the server's `Handle` schema refuses the
- * same). Inputs strip these as they are typed.
+ * same). Inputs strip these as they are typed, and the characters that show
+ * nothing (format characters but the joiner inside an emoji: the server's
+ * hasInvisible).
  */
-export const HANDLE_FORBIDDEN = /[/?#\\\p{Cc}]/gu;
+export const HANDLE_FORBIDDEN = /[/?#\\\p{Cc}]|(?!\u200D)\p{Cf}/gu;
 
 export async function getCurrentUserHandle(): Promise<string | null> {
   const uid = getFirebaseClientAuth().currentUser?.uid;

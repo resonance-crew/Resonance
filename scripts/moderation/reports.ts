@@ -17,6 +17,7 @@
  * (credentials come from .env otherwise).
  */
 import 'dotenv/config';
+import { terminalSafe } from './terminal';
 import { emulatorEnv, EMULATOR_PROJECT_ID } from '../emulator-env.mjs';
 import { purgeAtOf } from '../../src/lib/cards/trash';
 
@@ -58,13 +59,14 @@ async function main() {
     snap.docs.forEach((d, i) => {
       const r = d.data();
       const when = r.createdAt?.toDate?.().toISOString() ?? '?';
+      const t = terminalSafe;
       console.log(
-        `${d.id}  ${when}  [${r.status}]  ${r.reason}  ${r.targetType}:${r.targetId}` +
-          `  against ${r.targetUserId}  by ${r.reporterId}` +
-          (r.contextId ? `  (context ${r.contextId})` : '') +
-          (r.detail ? `\n    “${r.detail}”` : ''),
+        `${t(d.id)}  ${when}  [${t(r.status)}]  ${t(r.reason)}  ${t(r.targetType)}:${t(r.targetId)}` +
+          `  against ${t(r.targetUserId)}  by ${t(r.reporterId)}` +
+          (r.contextId ? `  (context ${t(r.contextId)})` : '') +
+          (r.detail ? `\n    “${t(r.detail)}”` : ''),
       );
-      console.log(`    ${summarize(evidence[i].data())}`);
+      console.log(`    ${t(summarize(evidence[i].data()))}`);
     });
     return;
   }

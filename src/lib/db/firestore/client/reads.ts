@@ -3,7 +3,6 @@
 import {
   collection,
   doc,
-  documentId,
   getDoc,
   getDocs,
   limit as fbLimit,
@@ -302,17 +301,15 @@ export async function getPublicCardsByAuthor(authorId: string): Promise<Card[]> 
 
 // --- users ---
 
-// Profiles are public (`users/*` allows get and list to anyone), and every
-// list shows its cards' authors — the same few people over and over. So a
-// page-wide cache keeps them for a few minutes, and the ones it lacks are read
-// together, up to 30 per `documentId() in` query. (Cards are never read this
-// way: one card the viewer can't see would make the rules refuse the whole
-// query.)
+// Profiles are public (`users/*` allows a get to anyone, never a list), and
+// every list shows its cards' authors — the same few people over and over. So
+// a page-wide cache keeps them for a few minutes, and the ones it lacks are
+// read side by side, a get each, 30 at a time.
 
 /** How long a cached profile is trusted. */
 const USER_TTL_MS = 5 * 60 * 1000;
-/** Firestore's cap on an `in` filter's values. */
-const IN_QUERY_MAX = 30;
+/** Profiles read at once. */
+const USERS_AT_ONCE = 30;
 
 const userCache = new Map<string, { user: User | null; at: number }>();
 const userReads = new Map<string, Promise<User | null>>();
@@ -337,12 +334,15 @@ export function forgetCachedUser(id?: string): void {
   else userCache.delete(id);
 }
 
-/** Read one chunk (≤ 30) of profiles in a single query and cache what came back — absent ones as null. */
+/**
+ * Read one chunk (≤ 30) of profiles — a get each, side by side (the rules list
+ * no profiles: a list query can page through the whole directory) — and cache
+ * what came back, absent ones as null.
+ */
 function readUserChunk(ids: string[]): Promise<Map<string, User>> {
-  // The rules list profiles a page (≤ 30) at a time: the limit says so.
-  const read = getDocs(query(collection(getClientDb(), 'users'), where(documentId(), 'in', ids), fbLimit(ids.length))).then((snap) => {
+  const read = Promise.all(ids.map((id) => getDoc(doc(getClientDb(), 'users', id)))).then((snaps) => {
     const found = new Map<string, User>();
-    for (const d of snap.docs) found.set(d.id, mapUser(d.id, d.data()));
+    for (const d of snaps) if (d.exists()) found.set(d.id, mapUser(d.id, d.data()));
     for (const id of ids) remember(id, found.get(id) ?? null);
     return found;
   });
@@ -398,9 +398,9 @@ export async function getUsersByIds(ids: string[]): Promise<Record<string, User>
     }
     missing.push(id);
   }
-  for (let i = 0; i < missing.length; i += IN_QUERY_MAX) {
+  for (let i = 0; i < missing.length; i += USERS_AT_ONCE) {
     waits.push(
-      readUserChunk(missing.slice(i, i + IN_QUERY_MAX)).then((found) => {
+      readUserChunk(missing.slice(i, i + USERS_AT_ONCE)).then((found) => {
         for (const [id, u] of found) out[id] = u;
       }),
     );
@@ -411,31 +411,21 @@ export async function getUsersByIds(ids: string[]): Promise<Record<string, User>
 
 /**
  * The person who goes by a pen name: its reservation (handles/{name}, kept
- * by the server with each profile write) names them. A name reserved before
- * reservations existed has none yet: then the profile whose `handleLower`
- * matches.
+ * by the server with each profile write) names them.
  */
 export async function getUserByHandle(handle: string): Promise<User | null> {
   const key = handle.trim().toLowerCase();
   if (!key) return null;
+  // Every pen name is reserved (handles/{name}, backfill.ts handles): no reservation, no such person.
   let uid: unknown = null;
   try {
-    // (A name that can't be a document id — `..`, a `/` from a hand-typed URL — throws here: no reservation.)
     const reserved = await getDoc(doc(getClientDb(), 'handles', key));
     uid = reserved.exists() ? reserved.data().uid : null;
-  } catch {
-    // Unreadable: fall back to the profiles themselves.
+  } catch (err) {
+    // A name that can't be a document id (`..`, a `/` from a hand-typed URL) names no one; offline is a failure.
+    if (!isAbsent(err)) throw err;
   }
-  if (typeof uid === 'string' && uid) return getUserById(uid);
-  const snap = await getDocs(
-    query(
-      collection(getClientDb(), 'users'),
-      where('handleLower', '==', key),
-      fbLimit(1)
-    )
-  );
-  const d = snap.docs[0];
-  return d ? mapUser(d.id, d.data()) : null;
+  return typeof uid === 'string' && uid ? getUserById(uid) : null;
 }
 
 /**

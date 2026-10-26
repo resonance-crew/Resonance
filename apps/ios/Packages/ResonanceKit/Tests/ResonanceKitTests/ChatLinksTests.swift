@@ -15,6 +15,17 @@ import Testing
         #expect(texts("(https://example.com/x)") == ["https://example.com/x"])
         #expect(texts("https://en.wikipedia.org/wiki/A_(b) ok") == ["https://en.wikipedia.org/wiki/A_(b)"])
         #expect(texts("go to https://example.com!?") == ["https://example.com"])
+        #expect(texts("((https://example.com/x(y)))") == ["https://example.com/x(y)"])
+    }
+
+    @Test func trimsALongRunOfClosersInAMoment() {
+        // Every trimmed closer recounted the link before: a story of one link and 199 000 closers took minutes.
+        for closer in [")", "]", "}"] {
+            let text = "https://a.com/" + String(repeating: closer, count: 199_000)
+            let started = Date()
+            #expect(texts(text) == ["https://a.com/"])
+            #expect(Date().timeIntervalSince(started) < 5)
+        }
     }
 
     @Test func followsTheServersRulesAroundChineseText() {

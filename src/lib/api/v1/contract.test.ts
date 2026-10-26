@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { CreateProfileRequest, hasInvisible } from './schemas';
+import { HANDLE_FORBIDDEN } from '@/lib/db/firestore/client/profile';
 
 const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
@@ -52,6 +54,22 @@ describe('POST /api/v1/messages (every write route shares these)', () => {
     });
     afterMessageSent.mockReset();
     spend.mockReset().mockResolvedValue(undefined);
+  });
+
+  // SameSite=Lax keeps the cookie off cross-site requests but not off a sibling
+  // subdomain's: a write with the cookie must come from the site's own pages.
+  it('refuses a cookie write another origin made — a same-site subdomain included — and lets the site and Bearer clients through', async () => {
+    const send = (headers: Record<string, string>) =>
+      POST(new Request('http://localhost/api/v1/messages', { method: 'POST', headers, body: JSON.stringify({ to: 'bob', text: 'hi' }) }));
+    const variants: Record<string, string>[] = [{ 'sec-fetch-site': 'same-site' }, { 'sec-fetch-site': 'cross-site' }, { origin: 'https://hi.resonance.channel', host: 'resonance.channel' }];
+    for (const headers of variants) {
+      const res = await send(headers);
+      expect(res.status, JSON.stringify(headers)).toBe(403);
+    }
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect((await send({ 'sec-fetch-site': 'same-origin' })).status).toBe(201);
+    expect((await send({ 'sec-fetch-site': 'cross-site', authorization: 'Bearer token' })).status).toBe(201);
+    expect((await send({})).status).toBe(201);
   });
 
   it('is 429 once the sender has spent their budget, with nothing sent after it', async () => {
@@ -232,5 +250,23 @@ describe('round-4 request shapes', () => {
     expect(UpdateNotificationSettingsRequest.parse({ picks: true, connectionCards: null })).toEqual({ picks: true, connectionCards: null });
     expect(UpdateNotificationSettingsRequest.parse({})).toEqual({});
     expect(UpdateNotificationSettingsRequest.safeParse({ picks: 'on' }).success).toBe(false);
+  });
+});
+
+// A pen name belongs to one person: the reservation tells only case apart, so
+// a character that shows nothing would let a second account hold a name that
+// renders exactly as someone else's.
+describe('pen names (Handle)', () => {
+  const ok = (handle: string) => CreateProfileRequest.safeParse({ handle, region: 'TW', primaryLocale: 'zh-TW' }).success;
+  it('refuses zero-width and bidi-control characters', () => {
+    for (const h of ['alice​', '‮ecila', 'al⁦ice⁩', 'ali‍ce']) expect(ok(h), JSON.stringify(h)).toBe(false);
+  });
+  it('takes ordinary names in any script, and emoji joined with the zero-width joiner', () => {
+    for (const h of ['alice', '小雨', 'Ana María', '👨‍👩‍👧', 'rain🏳️‍🌈']) expect(ok(h), JSON.stringify(h)).toBe(true);
+  });
+  it('agrees with what the web strips as it is typed', () => {
+    expect(hasInvisible('alice​')).toBe(true);
+    expect('alice​‮'.replace(HANDLE_FORBIDDEN, '')).toBe('alice');
+    expect('👨‍👩‍👧'.replace(HANDLE_FORBIDDEN, '')).toBe('👨‍👩‍👧');
   });
 });

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { crossOriginCookieWrite } from '@/lib/api/sameOrigin';
 import { getCurrentUser } from '@/lib/auth';
 import { limited } from '@/lib/api/rateLimit';
 import { getAdminDb } from '@/lib/db/firestore/admin';
@@ -30,6 +31,8 @@ export type GenerateImageEvent =
  * status is already 200 by then, so the client must key off the event type.
  */
 export async function POST(req: Request) {
+  // A write with the session cookie from another origin (a same-site subdomain too) is never the caller's own page.
+  if (crossOriginCookieWrite(req)) return NextResponse.json({ error: 'This request did not come from the site' }, { status: 403 });
   // Signed out (or a revoked session) is a 401 — what makes a client renew its token — not a crash.
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });

@@ -10,15 +10,23 @@ public nonisolated enum StoryNesting {
 
     /// Whether a line of the story opens more than `limit` quotes and list items at its start (a
     /// `>`, a bullet or a number followed by a space each count; a guess on the deep side, read in
-    /// one pass over the bytes).
+    /// one pass over the bytes), or starts that many levels of indentation in (lists nest by
+    /// indenting too: a line per level, each two spaces further in).
     public static func tooDeep(_ story: String, limit: Int = limit) -> Bool {
         let bytes = Array(story.utf8)
         let space: Set<UInt8> = [0x20, 0x09]
         var i = 0
         while i < bytes.count {
             var depth = 0
+            var indent = 0
+            var lineStart = true
             scan: while i < bytes.count, bytes[i] != 0x0A {
-                while i < bytes.count, space.contains(bytes[i]) { i += 1 }
+                while i < bytes.count, space.contains(bytes[i]) {
+                    if lineStart { indent += bytes[i] == 0x09 ? 4 : 1 }
+                    i += 1
+                }
+                lineStart = false
+                if indent > limit * 4 { return true }
                 guard i < bytes.count else { break }
                 switch bytes[i] {
                 case UInt8(ascii: ">"):

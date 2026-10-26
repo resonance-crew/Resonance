@@ -163,7 +163,7 @@ describe('card page server render', () => {
   });
 
   it("never serialises an anonymous card's author — not in the HTML, not in the payload", async () => {
-    const { html, payload, seed } = await renderPage('unsigned-letter');
+    const { html, payload, seed } = await renderPage('anon1');
 
     expect(html).toContain('Nobody needs to know who wrote this.');
     expect(html).toContain('Anonymous');
@@ -173,12 +173,21 @@ describe('card page server render', () => {
     }
     expect(seed?.view?.author).toBeNull();
     expect(seed?.view?.card.authorId).toBe('');
+    // Its slug neither: made while it was named, it may end in its author's pen name.
+    expect(seed?.view?.card.slug).toBeNull();
+    expect(html).not.toContain('unsigned-letter');
     // The server never even read the profile.
     expect(fake.reads).not.toContain('users/uid-author');
 
-    const meta = await generateMetadata({ params: Promise.resolve({ locale: 'en', slug: 'unsigned-letter' }) });
+    const meta = await generateMetadata({ params: Promise.resolve({ locale: 'en', slug: 'anon1' }) });
     expect(JSON.stringify(meta)).not.toContain('quiet-walker');
     expect((meta.openGraph as { authors?: unknown }).authors).toBeUndefined();
+  });
+
+  it("knows an anonymous card by its id alone: its slug may end in its author's pen name", async () => {
+    const { seed, html } = await renderPage('unsigned-letter');
+    expect(seed).toEqual({ id: null, view: null });
+    expect(html).not.toContain('Nobody needs to know who wrote this.');
   });
 
   it.each([
@@ -263,7 +272,7 @@ describe('card page server render', () => {
     const cover = 'https://img.example/image/uid-author/2026-10/cover.avif';
     fake.docs['cards/anon1'] = { ...fake.docs['cards/anon1'], media: { type: 'image', url: cover } };
 
-    const meta = await generateMetadata({ params: Promise.resolve({ locale: 'en', slug: 'unsigned-letter' }) });
+    const meta = await generateMetadata({ params: Promise.resolve({ locale: 'en', slug: 'anon1' }) });
     const [image] = meta.openGraph?.images as { url: string }[];
     expect(image.url).toMatch(/\/api\/og\/card\/anon1\?v=[0-9a-z]+$/);
     expect((meta.twitter as { images?: string[] }).images).toEqual([image.url]);

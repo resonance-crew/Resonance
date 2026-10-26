@@ -86,6 +86,8 @@ describe('applyCardEdit', () => {
       stale: ['/card/live', '/card/a-quiet-night', '/'],
       // No resonance to reach (it answers no card).
       reaches: false,
+      // Its visibility moved: the route moves its recommendation vectors before answering.
+      movedTo: 'connections',
     });
     const card = (await db.doc('cards/live').get()).data()!;
     expect(card).toMatchObject({
@@ -113,15 +115,22 @@ describe('applyCardEdit', () => {
   });
 
   it('copies only the editable fields from the buffer', async () => {
-    await buffer({ authorId: 'mallory', readCount: 999, publishedAt: null, slug: 'stolen', visibility: 'everyone' });
+    await buffer({ authorId: 'alice', readCount: 999, publishedAt: null, slug: 'stolen', visibility: 'everyone' });
     await applyCardEdit(db, 'alice', 'live');
     const card = (await db.doc('cards/live').get()).data()!;
     expect(card).toMatchObject({ authorId: 'alice', readCount: 7, slug: 'a-quiet-night', visibility: 'public' });
     expect(card.publishedAt).not.toBeNull();
   });
 
+  // A copy naming someone else could only be one left under an id another card took.
+  it("applies no copy that names someone else, and leaves the card as it was", async () => {
+    await buffer({ authorId: 'mallory' });
+    expect((await failure(applyCardEdit(db, 'alice', 'live'))).code).toBe('not_found');
+    expect((await db.doc('cards/live').get()).get('thoughtCore')).not.toBe('更安靜的夜晚');
+  });
+
   it('changes nothing when there is no pending edit (a retry after success)', async () => {
-    await expect(applyCardEdit(db, 'alice', 'live')).resolves.toEqual({ id: 'live', slug: 'a-quiet-night', applied: false, stale: [], reaches: false });
+    await expect(applyCardEdit(db, 'alice', 'live')).resolves.toEqual({ id: 'live', slug: 'a-quiet-night', applied: false, stale: [], reaches: false, movedTo: null });
     expect((await db.doc('cards/live').get()).get('story')).toBe('原本的故事');
   });
 

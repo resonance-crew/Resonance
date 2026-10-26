@@ -193,6 +193,22 @@ describe('indexing a card whose text has not changed', () => {
     expect(mocks.signed).toBe(3);
   });
 
+  it("asks the caller's budget only when the LLM would run, and keeps the last index when it says no", async () => {
+    const mayCall = vi.fn(async () => true);
+    expect(await indexCard('live', { mayCall })).toEqual({ indexed: true, channels: 2 });
+    expect(mayCall).toHaveBeenCalledTimes(1);
+    // Unchanged text: no LLM, so nothing spent.
+    await db.doc('cards/live').update({ tags: ['日常'] });
+    expect(await indexCard('live', { mayCall })).toEqual({ indexed: false, reason: 'unchanged' });
+    expect(mayCall).toHaveBeenCalledTimes(1);
+    // Changed text over budget: the signature stays, the vectors still take the card's visibility.
+    await db.doc('cards/live').update({ thoughtCore: 'A drawer, emptied', visibility: 'private' });
+    mayCall.mockResolvedValueOnce(false);
+    expect(await indexCard('live', { mayCall })).toEqual({ indexed: false, reason: 'over-budget' });
+    expect(mocks.signed).toBe(1);
+    expect(await vectorsOf('live')).toEqual({ insight: 'private', situation: 'private' });
+  });
+
   it('gives the vectors the card\'s visibility before the LLM is asked', async () => {
     await indexCard('live');
     await db.doc('cards/live').update({ story: 'Another story.', visibility: 'private' });

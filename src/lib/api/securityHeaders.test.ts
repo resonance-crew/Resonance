@@ -26,6 +26,8 @@ describe('securityHeaders', () => {
     expect(headers['Referrer-Policy']).toBe('strict-origin-when-cross-origin');
     expect(headers['Permissions-Policy']).toContain('camera=()');
     expect(headers['Permissions-Policy']).toContain('geolocation=()');
+    // HTTPS only, remembered (not the subdomains: other projects').
+    expect(headers['Strict-Transport-Security']).toBe('max-age=63072000');
   });
 
   it('are what next.config serves on every path', async () => {

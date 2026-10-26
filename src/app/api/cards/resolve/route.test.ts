@@ -13,6 +13,7 @@ beforeEach(() => {
   fake = fakeAdminDb({
     'cards/doc1': { slug: 'a-quiet-morning', visibility: 'public', publishedAt: Timestamp.fromMillis(1_000) },
     'cards/secret': { slug: 'hidden-thoughts', visibility: 'private', publishedAt: Timestamp.fromMillis(2_000) },
+    'cards/masked': { slug: 'a-quiet-night-bob', visibility: 'public', anonymous: true, publishedAt: Timestamp.fromMillis(2_500) },
     'cards/binned': {
       slug: 'a-binned-night',
       visibility: 'private',
@@ -54,6 +55,16 @@ describe('GET /api/cards/resolve', () => {
       expect(await res.json(), key).toEqual({ id: null });
       expect(res.headers.get('cache-control'), key).toBe('no-store');
     }
+  });
+
+  // An anonymous card's slug was made while it was named and may end in its
+  // author's pen name: a slug leading to it would confirm a guess at who
+  // wrote it. Its id still answers.
+  it('knows an anonymous card by its id alone, never by its slug', async () => {
+    const bySlug = await resolve('a-quiet-night-bob');
+    expect(await bySlug.json()).toEqual({ id: null });
+    expect(bySlug.headers.get('cache-control')).toBe('no-store');
+    expect(await (await resolve('masked')).json()).toEqual({ id: 'masked' });
   });
 
   it('never lets a miss be cached (the slug may be assigned a moment later)', async () => {

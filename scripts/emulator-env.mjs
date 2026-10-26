@@ -35,5 +35,12 @@ export const emulatorEnv = {
   R2_ENDPOINT: '',
   R2_ACCESS_KEY_ID: '',
   R2_SECRET_ACCESS_KEY: '',
+  R2_CHAT_BUCKET: '',
+  R2_CHAT_ACCESS_KEY_ID: '',
+  R2_CHAT_SECRET_ACCESS_KEY: '',
+  // Signatures and verifications made here must never hold in production:
+  // the link-image key falls back to the development one, Turnstile is off.
+  LINK_PREVIEW_SECRET: '',
+  TURNSTILE_SECRET_KEY: '',
   CRON_SECRET: 'emulator-cron-secret',
 };

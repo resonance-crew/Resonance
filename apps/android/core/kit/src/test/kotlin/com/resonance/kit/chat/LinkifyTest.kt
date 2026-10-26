@@ -52,6 +52,17 @@ class LinkifyTest {
         assertEquals(listOf("https://en.wikipedia.org/wiki/Foo_(bar)"), urls("https://en.wikipedia.org/wiki/Foo_(bar)"))
         assertEquals(listOf("https://en.wikipedia.org/wiki/Foo_(bar)"), urls("(see https://en.wikipedia.org/wiki/Foo_(bar))"))
         assertEquals(listOf("https://example.com/a"), urls("[https://example.com/a]"))
+        assertEquals(listOf("https://example.com/x(y)"), urls("((https://example.com/x(y)))"))
+    }
+
+    @Test fun aLongRunOfClosersIsTrimmedInAMoment() {
+        // Every trimmed closer recounted the link before: a story of one link and 199 000 closers took minutes.
+        for (closer in listOf(")", "]", "}")) {
+            val text = "https://a.com/" + closer.repeat(199_000)
+            val started = System.nanoTime()
+            assertEquals(listOf("https://a.com/"), written(text))
+            assertTrue(System.nanoTime() - started < 5_000_000_000L)
+        }
     }
 
     @Test fun chinesePunctuationEndsTheLink() {

@@ -258,6 +258,13 @@ describe('the picture we send', () => {
     }
   });
 
+  it('refuses an AVIF bigger than a preview needs: it decodes whole, with no shrink-on-load', async () => {
+    const big = await solid(2100, 2000).avif({ quality: 1, effort: 0 }).toBuffer();
+    await expect(toPreviewWebp(big)).rejects.toThrow(/heif too large/);
+    // The same size as a PNG is decoded with shrink-on-load and stays allowed.
+    await expect(toPreviewWebp(await solid(2100, 2000).png().toBuffer())).resolves.toBeInstanceOf(Buffer);
+  });
+
   it('takes an AVIF', async () => {
     const meta = await sharp(await toPreviewWebp(await solid(64, 64).avif().toBuffer())).metadata();
     expect(meta.format).toBe('webp');

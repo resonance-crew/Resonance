@@ -1,6 +1,6 @@
 import { Timestamp, type DocumentData, type Firestore, type QueryDocumentSnapshot, type QuerySnapshot } from 'firebase-admin/firestore';
 import { trashExpired } from '@/lib/cards/trash';
-import { cardByKey, slugHolder, slugShaped } from '@/lib/db/firestore/cardKey';
+import { anonymousBySlug, cardByKey, slugHolder, slugShaped } from '@/lib/db/firestore/cardKey';
 import { uidForHandle } from '@/lib/db/firestore/handles';
 import { mapCard } from '@/lib/db/firestore/mapper';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
@@ -63,7 +63,8 @@ async function cardDoc(db: Firestore, id: string, fields?: readonly string[]): P
 
 /** A card the viewer may read, by slug or document id — else not_found (never "forbidden": that would confirm it exists). */
 export async function visibleCard(db: Firestore, viewerId: string, key: string): Promise<Card> {
-  const snap = await cardByKey(db, key);
+  const found = await cardByKey(db, key);
+  const snap = found && !anonymousBySlug(found, key, viewerId) ? found : null;
   const card = snap ? mapCard(snap.id, snap.data()!) : null;
   if (!card || !(await canView(db, card, viewerId))) throw notFound();
   return card;
@@ -178,7 +179,16 @@ export async function cardsByKeys(db: Firestore, keys: string[]): Promise<ListCa
  */
 export async function getCardsByKeys(db: Firestore, viewerId: string, keys: string[]): Promise<CardListBody> {
   const [cards, blocked] = await Promise.all([cardsByKeys(db, keys), blockedByViewer(db, viewerId)]);
-  return { cards: await present(db, viewerId, cards, { blocked }) };
+  return { cards: await present(db, viewerId, askedByKey(cards, keys, viewerId), { blocked }) };
+}
+
+/**
+ * The cards keys named, minus an anonymous card a slug led to for someone
+ * other than its author (anonymousBySlug): named by its id it stays.
+ */
+function askedByKey(cards: ListCard[], keys: string[], viewerId: string): ListCard[] {
+  const asked = new Set(keys);
+  return cards.filter((c) => !(c.anonymous === true && !asked.has(c.id) && c.authorId !== viewerId));
 }
 
 /**
@@ -244,7 +254,7 @@ export async function getCardDetail(
     lists.has('resonances') ? resonancesOf(db, card.id).get().then(toCards) : [],
     lists.has('related') ? recentPublic(db).get().then(toCards) : [],
     ownerLinks ? cardsLinkingTo(db, card.id) : [],
-    embedKeys.length ? cardsByKeys(db, embedKeys) : [],
+    embedKeys.length ? cardsByKeys(db, embedKeys).then((cards) => askedByKey(cards, embedKeys, viewerId)) : [],
   ]);
   const [referenceCard, resonanceCards, relatedCards, linkCards, embedCards] = await presentAll(
     db,

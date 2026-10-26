@@ -5,7 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
-vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
+import { Timestamp } from 'firebase-admin/firestore';
+import { fakeAdminDb, type FakeAdminDb } from '@/../test/fakeAdminDb';
+let fake: FakeAdminDb;
+vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => fake.db }));
 const dailyRecommendations = vi.fn();
 vi.mock('@/lib/recommend/daily', () => ({ dailyRecommendations: (...a: unknown[]) => dailyRecommendations(...a) }));
 vi.mock('next/server', async (importOriginal) => ({ ...(await importOriginal<typeof import('next/server')>()), after: vi.fn() }));
@@ -13,9 +16,16 @@ vi.mock('next/server', async (importOriginal) => ({ ...(await importOriginal<typ
 const { after } = await import('next/server');
 const { GET } = await import('./route');
 
+const published = Timestamp.fromMillis(1_000);
 beforeEach(() => {
   vi.clearAllMocks();
   getCurrentUser.mockResolvedValue({ id: 'alice' });
+  fake = fakeAdminDb({
+    'cards/c1': { visibility: 'public', publishedAt: published },
+    'cards/c2': { visibility: 'public', publishedAt: published },
+    'cards/gone-private': { visibility: 'private', publishedAt: published },
+    'cards/binned': { visibility: 'private', publishedAt: published, trashedAt: published },
+  });
 });
 
 describe('GET /api/recommend/feed', () => {
@@ -42,6 +52,19 @@ describe('GET /api/recommend/feed', () => {
       cached: true,
       status: 'fresh',
     });
+  });
+
+  // Picks are stored when built; a card made private, trashed or deleted since
+  // must not keep reaching other readers (with a reason derived from its words).
+  it('leaves out a pick whose card is no longer public, published and out of the trash', async () => {
+    dailyRecommendations.mockResolvedValue({
+      items: ['c1', 'gone-private', 'binned', 'deleted'].map((cardId) => ({ cardId, channel: 'insight', reason: 'r', score: 1 })),
+      cached: true,
+      status: 'fresh',
+      refresh: null,
+    });
+    const body = await (await GET()).json();
+    expect(body.items).toEqual([{ cardId: 'c1', reason: 'r' }]);
   });
 
   // The evening's pick push leaves a reader who opened their picks today be.
