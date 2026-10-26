@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { crossOriginCookieWrite } from '@/lib/api/sameOrigin';
 import { getCurrentUser } from '@/lib/auth';
 import { getAdminDb } from '@/lib/db/firestore/admin';
 import { suggestStoryTags } from '@/lib/ai/tasks';
@@ -37,6 +38,8 @@ export function cardSizedTags(raw: unknown): string[] {
  * the LLM so suggestions match their existing vocabulary.
  */
 export async function POST(req: Request) {
+  // A write with the session cookie from another origin (a same-site subdomain too) is never the caller's own page.
+  if (crossOriginCookieWrite(req)) return NextResponse.json({ error: 'This request did not come from the site' }, { status: 403 });
   // Signed out (or a revoked session) is a 401 — what makes a client renew its token — not a crash.
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });

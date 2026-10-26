@@ -3,6 +3,7 @@ import type { z } from 'zod';
 import { getCurrentUser } from '@/lib/auth';
 import type { AuthUser } from '@/lib/auth/types';
 import { noteAppCheck, routePattern } from '@/lib/appCheck/server';
+import { crossOriginCookieWrite } from '@/lib/api/sameOrigin';
 import type { ApiErrorBody } from './schemas';
 
 type Code = ApiErrorBody['error']['code'];
@@ -84,6 +85,8 @@ export function withUser<A extends unknown[]>(handler: (user: AuthUser, req: Req
     const cold = served++ === 0;
     const start = performance.now();
     watchAppCheck(req);
+    // A write with the session cookie from another origin (a same-site subdomain too): never the caller's own page.
+    if (crossOriginCookieWrite(req)) return timed(apiError('forbidden', 'This request did not come from the site.'), 0, null, cold);
     const read = req.method === 'GET' || req.method === 'HEAD';
     let user: AuthUser | null;
     try {

@@ -52,6 +52,21 @@ describe('POST /api/v1/messages (every write route shares these)', () => {
     spend.mockReset().mockResolvedValue(undefined);
   });
 
+  // SameSite=Lax keeps the cookie off cross-site requests but not off a sibling
+  // subdomain's: a write with the cookie must come from the site's own pages.
+  it('refuses a cookie write another origin made — a same-site subdomain included — and lets the site and Bearer clients through', async () => {
+    const send = (headers: Record<string, string>) =>
+      POST(new Request('http://localhost/api/v1/messages', { method: 'POST', headers, body: JSON.stringify({ to: 'bob', text: 'hi' }) }));
+    for (const headers of [{ 'sec-fetch-site': 'same-site' }, { 'sec-fetch-site': 'cross-site' }, { origin: 'https://hi.resonance.channel', host: 'resonance.channel' }]) {
+      const res = await send(headers as Record<string, string>);
+      expect(res.status, JSON.stringify(headers)).toBe(403);
+    }
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect((await send({ 'sec-fetch-site': 'same-origin' })).status).toBe(201);
+    expect((await send({ 'sec-fetch-site': 'cross-site', authorization: 'Bearer token' })).status).toBe(201);
+    expect((await send({})).status).toBe(201);
+  });
+
   it('is 429 once the sender has spent their budget, and sends nothing', async () => {
     spend.mockRejectedValue(new ApiFailure('rate_limited', 'Too many requests. Please try again later.'));
     const res = await post({ to: 'bob', text: 'hi' });

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { crossOriginCookieWrite } from '@/lib/api/sameOrigin';
 import { z } from 'zod';
 import type { Firestore } from 'firebase-admin/firestore';
 import { getCurrentUser } from '@/lib/auth';
@@ -51,6 +52,8 @@ async function mayRevalidate(db: Firestore, uid: string, path: string, profile: 
  * else is left alone (and listed nowhere in the answer).
  */
 export async function POST(req: Request) {
+  // A write with the session cookie from another origin (a same-site subdomain too) is never the caller's own page.
+  if (crossOriginCookieWrite(req)) return NextResponse.json({ error: 'This request did not come from the site' }, { status: 403 });
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
 
