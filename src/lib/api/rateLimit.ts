@@ -19,6 +19,12 @@ export const LIMITS = {
   /** Publishing: a slug LLM call, the index, maybe a bell. */
   publish: { max: 30, windowMs: DAY },
   /**
+   * Saving changes to a published card re-indexes it after the response (an
+   * LLM call and embeddings). Over it the save goes through and the re-index
+   * is skipped (the card keeps its last index, its visibility moved anyway).
+   */
+  reindex: { max: 50, windowMs: DAY },
+  /**
    * Resonating with a card with one already written: rings the original
    * author once per card, and may connect the two — which taking it back
    * undoes, so a tight budget keeps that from becoming a way to reach anyone.

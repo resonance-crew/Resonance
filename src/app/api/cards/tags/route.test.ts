@@ -2,11 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeAdminDb, type FakeAdminDb } from '@/../test/fakeAdminDb';
 
 let fake: FakeAdminDb;
-const suggest = vi.fn(async () => ['alpha', 'beta']);
+type TagInput = { existingTags: string[]; title: string; story: string };
+const suggest = vi.fn(async (_input: TagInput) => ['alpha', 'beta']);
 vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => fake.db }));
 vi.mock('@/lib/auth', () => ({ getCurrentUser: async () => ({ id: 'writer' }) }));
 vi.mock('@/lib/api/rateLimit', () => ({ limited: async () => null }));
-vi.mock('@/lib/ai/tasks', () => ({ suggestStoryTags: (input: unknown) => suggest(input as never) }));
+vi.mock('@/lib/ai/tasks', () => ({ suggestStoryTags: (input: TagInput) => suggest(input) }));
 
 import { POST, cardSizedTags } from './route';
 
@@ -23,14 +24,14 @@ describe('POST /api/cards/tags', () => {
   it('sends the model no more tags than a card may hold, however many are asked about', async () => {
     const res = await post({ thoughtCore: 'A walk', story: 'x', tags: Array.from({ length: 2000 }, (_, i) => `t${i}`.padEnd(500, 'x')) });
     expect(res.status).toBe(200);
-    const input = suggest.mock.calls[0][0] as unknown as { existingTags: string[]; title: string; story: string };
+    const input = suggest.mock.calls[0][0];
     expect(input.existingTags.length).toBeLessThanOrEqual(30);
     expect(input.existingTags.join(' ').length).toBeLessThanOrEqual(1000);
   });
 
   it('cuts the title and story too', async () => {
     await post({ thoughtCore: 'T'.repeat(5000), story: 'S'.repeat(1_000_000), tags: [] });
-    const input = suggest.mock.calls[0][0] as unknown as { title: string; story: string };
+    const input = suggest.mock.calls[0][0];
     expect(input.title.length).toBe(200);
     expect(input.story.length).toBeLessThanOrEqual(4000);
   });

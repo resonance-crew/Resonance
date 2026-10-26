@@ -7,6 +7,8 @@ import { refuseInTrash } from './inTrash';
 import { readTakeBack, takeBack } from './origins';
 import { becameReachable, hiddenResonance } from './resonate';
 import { summaryFields } from './summary';
+import { visibilityOf } from './present';
+import type { Visibility } from '@/lib/db/types';
 
 export interface ApplyEditResult {
   id: string;
@@ -18,6 +20,8 @@ export interface ApplyEditResult {
   stale: string[];
   /** The revision made a published resonance reachable: the route reaches its original after the response (never returned). */
   reaches: boolean;
+  /** The card's visibility when the revision changed it, else null: the route moves its vectors before answering (never returned). */
+  movedTo: Visibility | null;
 }
 
 /**
@@ -59,7 +63,7 @@ export async function applyCardEdit(db: Firestore, uid: string, id: string): Pro
       throw new ApiFailure('invalid_request', 'A draft saves as you write; publish it instead.');
     }
     const slug = typeof snap.get('slug') === 'string' ? (snap.get('slug') as string) : null;
-    if (!edit.exists) return { id, slug, applied: false, stale: [], reaches: false };
+    if (!edit.exists) return { id, slug, applied: false, stale: [], reaches: false, movedTo: null };
 
     const e = edit.data()!;
     const thoughtCore = typeof e.thoughtCore === 'string' ? e.thoughtCore : '';
@@ -98,7 +102,8 @@ export async function applyCardEdit(db: Firestore, uid: string, id: string): Pro
       ...landingPagePaths(snap.data(), { visibility: fields.visibility, publishedAt: snap.get('publishedAt') }),
     ];
     const reaches = becameReachable(snap.data()!, after);
-    return { id, slug, applied: true, stale, reaches };
+    const movedTo = fields.visibility !== snap.get('visibility') ? visibilityOf(fields.visibility) : null;
+    return { id, slug, applied: true, stale, reaches, movedTo };
   });
 }
 

@@ -86,6 +86,8 @@ describe('applyCardEdit', () => {
       stale: ['/card/live', '/card/a-quiet-night', '/'],
       // No resonance to reach (it answers no card).
       reaches: false,
+      // Its visibility moved: the route moves its recommendation vectors before answering.
+      movedTo: 'connections',
     });
     const card = (await db.doc('cards/live').get()).data()!;
     expect(card).toMatchObject({
@@ -121,7 +123,7 @@ describe('applyCardEdit', () => {
   });
 
   it('changes nothing when there is no pending edit (a retry after success)', async () => {
-    await expect(applyCardEdit(db, 'alice', 'live')).resolves.toEqual({ id: 'live', slug: 'a-quiet-night', applied: false, stale: [], reaches: false });
+    await expect(applyCardEdit(db, 'alice', 'live')).resolves.toEqual({ id: 'live', slug: 'a-quiet-night', applied: false, stale: [], reaches: false, movedTo: null });
     expect((await db.doc('cards/live').get()).get('story')).toBe('原本的故事');
   });
 
