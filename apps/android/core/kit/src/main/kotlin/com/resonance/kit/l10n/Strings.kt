@@ -33,22 +33,30 @@ object Strings {
     }
 
     @Volatile var language: Language = Language.En
-    private val catalogs = HashMap<Language, Map<String, String>>()
+    /** Each language's catalog once read; a language not read yet is absent (one that has no catalog maps to null). */
+    private val catalogs = HashMap<Language, Map<String, String>?>()
+    private var read: (Language) -> String? = { null }
 
-    /** Loads each language's catalog from its JSON text. */
+    /**
+     * Where each language's catalog comes from (its JSON text). A catalog is read and parsed the first
+     * time a message of its language is asked for — at launch only the one the app speaks, the other
+     * when the language changes or a message it lacks falls back to English.
+     */
     fun load(read: (Language) -> String?) {
         synchronized(catalogs) {
             catalogs.clear()
-            for (lang in Language.entries) {
-                val text = read(lang) ?: continue
-                catalogs[lang] = flatten(Json.parseToJsonElement(text).jsonObject)
-            }
+            this.read = read
         }
     }
 
+    /** [lang]'s catalog, read now if it hasn't been (under the lock). */
+    private fun catalog(lang: Language): Map<String, String>? =
+        if (catalogs.containsKey(lang)) catalogs[lang]
+        else read(lang)?.let { flatten(Json.parseToJsonElement(it).jsonObject) }.also { catalogs[lang] = it }
+
     /** The message in the current language, then English, then the key itself. */
     fun string(key: String): String = synchronized(catalogs) {
-        catalogs[language]?.get(key) ?: catalogs[Language.En]?.get(key) ?: key
+        catalog(language)?.get(key) ?: catalog(Language.En)?.get(key) ?: key
     }
 
     fun format(key: String, args: Map<String, Any>): String = MessageFormat.format(string(key), args, language)

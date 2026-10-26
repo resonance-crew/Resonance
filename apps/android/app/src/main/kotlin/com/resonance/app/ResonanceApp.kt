@@ -54,6 +54,7 @@ class ResonanceApp : Application(), SingletonImageLoader.Factory {
         super.onCreate()
         AppFonts.init(this)
         Grain.init(this)
+        Grain.warmUp()
         // The web's catalogs, bundled as they are (see L10n.kt).
         Strings.load { lang -> runCatching { assets.open("${lang.tag}.json").bufferedReader().use { it.readText() } }.getOrNull() }
         val saved = getSharedPreferences("settings", MODE_PRIVATE).getString(Session.LANGUAGE_KEY, null)
