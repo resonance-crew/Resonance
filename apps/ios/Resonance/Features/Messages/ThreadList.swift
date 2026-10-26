@@ -297,6 +297,7 @@ struct ThreadSkeleton: View {
             guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: 0.2)) { shown = true }
         }
+        .skeletonTimeline()
     }
 }
 

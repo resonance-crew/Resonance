@@ -185,5 +185,6 @@ struct FeedSkeleton: View {
         }
         .accessibilityElement()
         .accessibilityLabel("Loading")
+        .skeletonTimeline()
     }
 }

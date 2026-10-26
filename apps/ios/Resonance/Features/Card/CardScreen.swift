@@ -656,6 +656,7 @@ private struct CardDetailSkeleton: View {
         .padding(.top, PenLineGap.fromFoot(story.headGap(cover: true)))
         .accessibilityElement()
         .accessibilityLabel("Loading")
+        .skeletonTimeline()
     }
 }
 
@@ -682,6 +683,7 @@ private struct StorySkeleton: View {
         }
         .accessibilityElement()
         .accessibilityLabel("Loading")
+        .skeletonTimeline()
     }
 }
 

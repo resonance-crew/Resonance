@@ -100,6 +100,7 @@ private struct NotificationsSkeleton: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L10n.Home.moreLoading)
+        .skeletonTimeline()
     }
 }
 
