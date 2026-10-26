@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
 import { BareIconButton } from '@/components/atoms/BareIconButton/BareIconButton';
 import { Icon } from '@/components/atoms/Icon';
-import { useAuth } from '@/components/providers/AuthProvider';
+import { useSessionReady } from '@/components/providers/AuthProvider';
 import { localPicture } from '@/lib/chat/localPictures';
 import { chatImageUrl } from '@/lib/db/firestore/client/messages';
 import type { MessageImage } from '@/lib/db/types';
@@ -37,7 +37,7 @@ export function pictureBox(width: number, height: number): { w: number; h: numbe
  */
 export function PicturePart({ image, interactive }: { image: MessageImage; interactive: boolean }) {
   const t = useTranslations('messages');
-  const { sessionReady } = useAuth();
+  const sessionReady = useSessionReady();
   const local = localPicture(image.id);
   const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState(false);

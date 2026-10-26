@@ -17,6 +17,7 @@ function renderPage(ui: React.ReactElement) {
 const mockUseAuth = vi.fn();
 vi.mock('@/components/providers/AuthProvider', () => ({
   useAuth: () => mockUseAuth(),
+  useSessionReady: () => mockUseAuth().sessionReady ?? false,
 }));
 const mockPush = vi.fn();
 vi.mock('@/i18n/navigation', () => ({
