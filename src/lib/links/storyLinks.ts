@@ -1,4 +1,5 @@
 import { fromMarkdown } from 'mdast-util-from-markdown';
+import { storyTooComplex } from '@/lib/markdown/storyLimits';
 import { siteUrl } from '@/lib/site';
 import { findLinks, normalizeLink } from './url';
 
@@ -78,7 +79,8 @@ function soleLinkOf(paragraph: MdNode, definitions: Map<string, string>): string
  */
 export function soleLinkParagraphs(story: string): Map<number, string> {
   const found = new Map<number, string>();
-  if (!/https?:\/\/|www\./i.test(story)) return found;
+  // A story too costly to read as a tree is drawn as its words: no paragraph of it is a link card.
+  if (!/https?:\/\/|www\./i.test(story) || storyTooComplex(story)) return found;
   const root = fromMarkdown(story) as MdNode;
   const definitions = new Map<string, string>();
   const collect = (node: MdNode) => {

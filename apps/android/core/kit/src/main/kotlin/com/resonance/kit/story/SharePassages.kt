@@ -58,7 +58,8 @@ object SharePassages {
      */
     fun blocks(whole: String): List<String> {
         val story = head(whole)
-        if (isJsBlank(story)) return emptyList()
+        // Too costly to read as a tree (StoryNesting): drawn as its words, quoted from nowhere — as iOS and the web.
+        if (isJsBlank(story) || StoryNesting.tooComplex(story)) return emptyList()
         val blocks = ArrayList<String>()
         fun walk(node: Node) {
             if (blocks.size >= MAX) return

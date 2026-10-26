@@ -13,6 +13,7 @@ import { StoryLinkPreviewsContext } from '@/components/molecules/StoryLinkCard/S
 import { StoryTable } from './StoryTable';
 import type { LinkPreview } from '@/lib/db/types';
 import { isBlankParagraph } from '@/lib/markdown/blankLines';
+import { storyTooComplex } from '@/lib/markdown/storyLimits';
 import { SITE_HOSTS, soleLinkParagraphs } from '@/lib/links/storyLinks';
 import { seedFromString } from '@/lib/design/prng';
 import { storyLinkWaveVars } from '@/lib/design/storyLinkWave';
@@ -200,6 +201,22 @@ function StoryParagraph({ node, children }: { children?: ReactNode } & ExtraProp
   return <p>{children}</p>;
 }
 
+/**
+ * A story too costly to read as Markdown (lib/markdown/storyLimits: nested
+ * thousands deep, or thousands of delimiters in a paragraph): its words, a
+ * paragraph per blank-line block, its line breaks kept.
+ */
+function StoryWords({ source }: { source: string }) {
+  return source
+    .split(/\n[ \t\r]*\n/)
+    .filter((block) => block.trim())
+    .map((block, i) => (
+      <p key={i} className={styles.words}>
+        {block}
+      </p>
+    ));
+}
+
 const LATIN_PLUGINS = [rehypeSlug];
 const CJK_PLUGINS = [rehypeSlug, rehypeLatinMarks];
 
@@ -244,15 +261,20 @@ export function StoryMarkdown({ source, script, lang, density }: StoryMarkdownPr
   const rehypePlugins = setAs === 'latin' ? LATIN_PLUGINS : CJK_PLUGINS;
   // A new story, a new count.
   const embedOrder = useMemo(() => ({ source, order: new Map<number, number>() }), [source]);
+  const asWords = useMemo(() => storyTooComplex(source), [source]);
   return (
     <div className="story-prose" data-script={setAs} data-density={density} lang={read ? read.lang : lang}>
-      <StoryLinkCardsContext.Provider value={cards}>
-        <EmbedOrderContext.Provider value={embedOrder}>
-          <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={components}>
-            {source}
-          </Markdown>
-        </EmbedOrderContext.Provider>
-      </StoryLinkCardsContext.Provider>
+      {asWords ? (
+        <StoryWords source={source} />
+      ) : (
+        <StoryLinkCardsContext.Provider value={cards}>
+          <EmbedOrderContext.Provider value={embedOrder}>
+            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={components}>
+              {source}
+            </Markdown>
+          </EmbedOrderContext.Provider>
+        </StoryLinkCardsContext.Provider>
+      )}
     </div>
   );
 }

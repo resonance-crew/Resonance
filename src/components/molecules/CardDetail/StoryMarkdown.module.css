@@ -49,3 +49,9 @@ p > .storyImage {
   margin-left: 0;
   margin-right: 0;
 }
+
+/* A story too costly to read as Markdown, drawn as its words (StoryWords). */
+.words {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}

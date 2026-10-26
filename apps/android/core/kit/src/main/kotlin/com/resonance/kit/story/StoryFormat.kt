@@ -82,12 +82,12 @@ object StoryParser {
         .build()
 
     /**
-     * The story's blocks. One opening quotes and lists deeper than [StoryNesting.LIMIT] would run
-     * the recursive mapping (and the reader drawing it) out of stack: it is drawn as its words
-     * instead, a paragraph per blank-line gap, nothing parsed (as the iOS reader does).
+     * The story's blocks. One opening quotes and lists deeper than [StoryNesting.LIMIT], or a
+     * paragraph of more inline delimiters than [StoryNesting.PARAGRAPH_DELIMITERS], is drawn as its
+     * words instead, a paragraph per blank-line gap, nothing parsed (as the iOS reader and the web do).
      */
     fun parse(markdown: String): List<StoryBlock> =
-        if (StoryNesting.tooDeep(markdown)) unparsed(markdown) else children(parser.parse(markdown)).mapNotNull(::block)
+        if (StoryNesting.tooComplex(markdown)) unparsed(markdown) else children(parser.parse(markdown)).mapNotNull(::block)
 
     /** The story as written, a paragraph of words per run of lines between blank ones. */
     fun unparsed(markdown: String): List<StoryBlock> {

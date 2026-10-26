@@ -1,4 +1,5 @@
 import { fromMarkdown } from 'mdast-util-from-markdown';
+import { storyTooComplex } from '@/lib/markdown/storyLimits';
 
 /** How many embedded cards one card page brings along (a story rarely holds more than a few). */
 export const EMBED_LIMIT = 30;
@@ -39,7 +40,8 @@ export function cardKeyOfHref(href: string): string | null {
  * harmless: the list only saves the reader a request per embed).
  */
 export function embeddedCardKeys(story: string, max = EMBED_LIMIT): string[] {
-  if (!story.includes('/card/')) return [];
+  // A story too costly to read as a tree (lib/markdown/storyLimits) embeds nothing: the reader draws it as its words.
+  if (!story.includes('/card/') || storyTooComplex(story)) return [];
   const root = fromMarkdown(story) as MdNode;
   const definitions = new Map<string, string>();
   const collect = (node: MdNode) => {

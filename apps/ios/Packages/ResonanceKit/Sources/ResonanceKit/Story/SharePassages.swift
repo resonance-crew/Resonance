@@ -85,9 +85,12 @@ public nonisolated enum SharePassages {
         return String(decoding: kept, as: UTF16.self)
     }
 
-    /// Whether a line of the story opens more than `maxNesting` quotes and list items at its start
-    /// (StoryFormat's `StoryNesting`, which the reader's parser asks too).
-    static func nestsTooDeep(_ story: String) -> Bool { StoryNesting.tooDeep(story, limit: maxNesting) }
+    /// Whether a line of the story opens more than `maxNesting` quotes and list items at its start, or
+    /// a paragraph holds too many inline delimiters (StoryFormat's `StoryNesting`, which the reader's
+    /// parser asks too).
+    static func nestsTooDeep(_ story: String) -> Bool {
+        StoryNesting.tooDeep(story, limit: maxNesting) || StoryNesting.tooManyDelimiters(story)
+    }
 
     /// The paragraph's children that say something: neither blank words nor a soft line break (the
     /// web's tree keeps those inside its text, as blank text).
