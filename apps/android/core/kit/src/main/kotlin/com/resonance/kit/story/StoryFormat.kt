@@ -81,7 +81,27 @@ object StoryParser {
         .extensions(listOf(StrikethroughExtension.create(), TablesExtension.create()))
         .build()
 
-    fun parse(markdown: String): List<StoryBlock> = children(parser.parse(markdown)).mapNotNull(::block)
+    /**
+     * The story's blocks. One opening quotes and lists deeper than [StoryNesting.LIMIT] would run
+     * the recursive mapping (and the reader drawing it) out of stack: it is drawn as its words
+     * instead, a paragraph per blank-line gap, nothing parsed (as the iOS reader does).
+     */
+    fun parse(markdown: String): List<StoryBlock> =
+        if (StoryNesting.tooDeep(markdown)) unparsed(markdown) else children(parser.parse(markdown)).mapNotNull(::block)
+
+    /** The story as written, a paragraph of words per run of lines between blank ones. */
+    fun unparsed(markdown: String): List<StoryBlock> {
+        val blocks = ArrayList<StoryBlock>()
+        val lines = ArrayList<String>()
+        fun close() {
+            val text = lines.joinToString("\n").trim()
+            if (text.isNotEmpty()) blocks += StoryBlock.Paragraph(listOf(InlineRun(text)))
+            lines.clear()
+        }
+        for (line in markdown.split('\n')) if (line.isBlank()) close() else lines += line
+        close()
+        return blocks
+    }
 
     private fun children(node: Node): List<Node> = generateSequence(node.firstChild) { it.next }.toList()
 

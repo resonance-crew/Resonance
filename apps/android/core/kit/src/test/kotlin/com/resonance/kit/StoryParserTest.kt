@@ -35,6 +35,25 @@ class StoryParserTest {
 
     private fun cells(row: List<List<InlineRun>>) = row.map { cell -> cell.joinToString("") { it.text } }
 
+    @Test fun aStoryNestedPastWhatItCanDescendIsReadAsItsWords() {
+        // The mapping (and the reader drawing it) recurses per level: thousands of quotes ran it out
+        // of stack. Past the limit the story is its paragraphs of words, as written (the iOS reader's
+        // rule); at the limit it is parsed as ever.
+        val deep = "> ".repeat(20_000) + "雨停了\n\n第二段"
+        assertTrue(com.resonance.kit.story.StoryNesting.tooDeep(deep))
+        assertEquals(
+            listOf(StoryBlock.Paragraph(listOf(InlineRun("> ".repeat(20_000) + "雨停了"))), StoryBlock.Paragraph(listOf(InlineRun("第二段")))),
+            StoryParser.parse(deep),
+        )
+        val atLimit = "> ".repeat(com.resonance.kit.story.StoryNesting.LIMIT) + "雨停了"
+        assertTrue(!com.resonance.kit.story.StoryNesting.tooDeep(atLimit))
+        assertIs<StoryBlock.Quote>(StoryParser.parse(atLimit).first())
+        // Lists nest by indenting too.
+        val indented = (0 until 200).joinToString("\n") { "  ".repeat(it) + "- a" }
+        assertTrue(com.resonance.kit.story.StoryNesting.tooDeep(indented))
+        assertTrue(!com.resonance.kit.story.StoryNesting.tooDeep("- a\n  - b\n    - c"))
+    }
+
     @Test fun aTableIsItsHeadItsRowsAndItsColumnsAlignments() {
         val b = blocks("table-basic")
         assertEquals(3, b.size)

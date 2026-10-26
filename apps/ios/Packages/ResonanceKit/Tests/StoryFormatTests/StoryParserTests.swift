@@ -176,6 +176,10 @@ import Testing
         let atLimit = String(repeating: "> ", count: StoryNesting.limit) + "雨停了"
         #expect(!StoryNesting.tooDeep(atLimit))
         guard case .quote = StoryParser.parse(atLimit).first else { return #expect(Bool(false)) }
+        // Lists nest by indenting too: a line per level, each further in.
+        let indented = (0..<200).map { String(repeating: "  ", count: $0) + "- a" }.joined(separator: "\n")
+        #expect(StoryNesting.tooDeep(indented))
+        #expect(!StoryNesting.tooDeep("- a\n  - b\n    - c"))
     }
 
     // MARK: Tables (round 8 §5.2; the corpus's table-* cases)
