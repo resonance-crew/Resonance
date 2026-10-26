@@ -1,10 +1,27 @@
+import Synchronization
 import SwiftUI
 
 /// CSS `oklch(L C H [/ a])` → Display P3, the same conversion
 /// scripts/native/tokens.ts uses for the static tokens. For colors that
 /// arrive as data (a profile's accent color is stored as its CSS string).
 public nonisolated enum OKLCHColor {
+    /// Each string's colour, read once: avatars and cards ask for the same few on every update, and
+    /// the pattern match is the costly part. Bounded — data colours are few, but they are data.
+    private static let parsed = Mutex<[String: Color?]>([:])
+    private static let parsedLimit = 512
+
     public static func parse(_ css: String) -> Color? {
+        if let kept = parsed.withLock({ $0[css] }) { return kept }
+        let color = read(css)
+        parsed.withLock { cache in
+            if cache.count >= parsedLimit { cache.removeAll(keepingCapacity: true) }
+            cache[css] = color
+        }
+        return color
+    }
+
+    /// `parse` without the memory.
+    static func read(_ css: String) -> Color? {
         let pattern = /oklch\(\s*([\d.]+)(%?)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\s*\)/
         guard let m = css.firstMatch(of: pattern),
               var L = Double(m.1), let C = Double(m.3), let H = Double(m.4) else { return nil }

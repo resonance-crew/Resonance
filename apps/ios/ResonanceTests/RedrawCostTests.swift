@@ -66,4 +66,22 @@ import UIKit
             #expect(TextScale.readingFactor(relativeTo: style) == TextScale.reading(system: TextScale.system(relativeTo: style, in: category)))
         }
     }
+
+    @Test func aCardFamilysColoursAreTheOnesItsCSSSays() {
+        for (index, hue) in CardPalette.hues.enumerated() {
+            let palette = CardPalette(index: index)
+            #expect(palette.interior == OKLCHColor.parse("oklch(97.5% 0.012 \(hue))"))
+            #expect(palette.hovered == OKLCHColor.parse("oklch(92.5% 0.024 \(hue))"))
+            #expect(palette.separator == OKLCHColor.parse("oklch(55% 0.04 \(hue) / 0.4)"))
+            #expect(palette.noteInk == OKLCHColor.parse("oklch(44% 0.08 \(hue))"))
+        }
+    }
+
+    @Test func aColourStringReadsTheSameEveryTime() {
+        #expect(OKLCHColor.parse("oklch(90% 0.05 60)") == OKLCHColor.color(0.9, 0.05, 60))
+        #expect(OKLCHColor.parse("oklch(90% 0.05 60)") == OKLCHColor.color(0.9, 0.05, 60))
+        #expect(OKLCHColor.parse("oklch(0.55 0.04 18 / 0.4)") == OKLCHColor.color(0.55, 0.04, 18, alpha: 0.4))
+        #expect(OKLCHColor.parse("not a colour") == nil)
+        #expect(OKLCHColor.parse("not a colour") == nil)
+    }
 }
