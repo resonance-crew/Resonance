@@ -16,6 +16,7 @@ import {
   paletteForHue,
   type Palette,
   type PaletteToken,
+  wallpaperPalette,
 } from './palette';
 import { paletteCss } from './paletteCss';
 import { paletteFixture } from './paletteFixture';
@@ -57,24 +58,59 @@ const PAIRS: [PaletteToken, PaletteToken, number][] = [
   ]),
 ];
 
-function failures(p: Palette) {
-  return PAIRS.map(([a, b, min]) => ({ pair: `${a} on ${b}`, ratio: Math.round(contrast(p[a], p[b]) * 100) / 100, min })).filter((f) => f.ratio < f.min);
+/** What only the night paper must clear (light's own tables are the site as it was). */
+const DARK_PAIRS: [PaletteToken, PaletteToken, number][] = [
+  ['footer-ink', 'footer-bg', 7],
+  ['cta-ink', 'cta-band', 4.5],
+  ['color-text-muted', 'bubble-theirs', 4.5],
+  ...[0, 1, 2, 3, 4, 5].flatMap((i): [PaletteToken, PaletteToken, number][] => [
+    ['color-text-muted', `card-fill-${i}` as PaletteToken, 4.5],
+    ['color-text', `card-interior-${i}` as PaletteToken, 7],
+    ['color-text-muted', `card-interior-${i}` as PaletteToken, 4.5],
+    [`card-border-${i}` as PaletteToken, `card-fill-${i}` as PaletteToken, 4.5],
+    [`card-border-${i}` as PaletteToken, 'color-cream', 4.5],
+  ]),
+];
+
+/** Surfaces that must read as apart (no text between them): [a, b, at least]. */
+const DARK_APART: [PaletteToken, PaletteToken, number][] = [
+  ['bubble-quote', 'bubble-mine', 1.2],
+  ['bubble-quote', 'bubble-theirs', 1.1],
+  ['color-card-bg', 'color-cream-dark', 1.1],
+];
+
+function failures(p: Palette, scheme: 'light' | 'dark' = 'light') {
+  const pairs = scheme === 'dark' ? [...PAIRS, ...DARK_PAIRS, ...DARK_APART] : PAIRS;
+  return pairs.map(([a, b, min]) => ({ pair: `${a} on ${b}`, ratio: Math.round(contrast(p[a], p[b]) * 100) / 100, min })).filter((f) => f.ratio < f.min);
 }
 
 describe('palette', () => {
   it.each(ACCENTS.flatMap((a) => SCHEMES.map((s) => [a, s] as const)))('%s / %s clears every contrast pair', (accent, scheme) => {
-    expect(failures(paletteFor(accent, scheme))).toEqual([]);
+    expect(failures(paletteFor(accent, scheme), scheme)).toEqual([]);
   });
 
   it('the wallpaper formula clears every pair at any system hue and chroma', () => {
     for (let hue = 0; hue < 360; hue += 15) {
       for (const chroma of [0.02, 0.08, 0.2]) {
         for (const scheme of SCHEMES) {
-          const f = failures(paletteForHue(hue, chroma, scheme));
+          const f = failures(paletteForHue(hue, chroma, scheme), scheme);
           expect(f, `hue ${hue} chroma ${chroma} ${scheme}`).toEqual([]);
         }
       }
     }
+  });
+
+  it('the dark ladder keeps light\'s elevation: well below paper below card', () => {
+    for (const a of ACCENTS) {
+      const p = paletteFor(a, 'dark');
+      expect(p['color-cream-dark'].L).toBeLessThan(p['color-cream'].L);
+      expect(p['color-cream'].L).toBeLessThan(p['color-card-bg'].L);
+    }
+  });
+
+  it('a grey wallpaper wears terracotta', () => {
+    expect(wallpaperPalette(200, 0.01, 'dark')).toEqual(paletteFor('terracotta', 'dark'));
+    expect(wallpaperPalette(200, 0.1, 'dark')).toEqual(paletteForHue(200, 0.1, 'dark'));
   });
 
   it('every dark colour is inside Display P3 (the light tables are the site as it was)', () => {

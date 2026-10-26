@@ -37,8 +37,7 @@ describe('a link card’s quiet words (description and host)', () => {
   // text. The link cards take a deeper one, the same value as the apps'.
   it('clear 4.5:1 on every paper a link card stands on', () => {
     // Every theme and scheme: lib/design/palette.test.ts. Light terracotta here, as it always was.
-    const [L, C, H] = token('link-card-muted');
-    expect([Math.round(L * 100), Math.round(C * 100), Math.round(H / 5) * 5]).toEqual([45, 4, 65]);
+    expect(token('link-card-muted')).toEqual([0.45, 0.04, 70]);
     for (const paper of ['bubble-theirs', 'bubble-mine', 'bubble-quote']) {
       expect(contrast('link-card-muted', paper)).toBeGreaterThanOrEqual(4.5);
     }

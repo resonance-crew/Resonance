@@ -106,44 +106,55 @@ const LIGHT_BASES: Record<Accent, Base> = {
 };
 
 /**
- * What a theme is, as the ladder reads it: the accent's hue and chroma, the
- * hue and chroma its neutrals drift toward, and how light its accent stands
- * on the dark paper (a yellow needs more light than a violet to read as
- * itself; each clears 4.5:1 under a slate label).
+ * What a theme is, as the ladders read it. Light: the accent's hue and
+ * chroma and the hue and chroma its neutrals drift toward (the wallpaper's
+ * light table; the four themes have their own). Dark: the night paper's hue
+ * and chroma, and the accent as it stands on it — a yellow needs more light
+ * than a violet to read as itself; each clears 4.5:1 under a night-paper label.
  */
 export interface ThemeSpec {
   accentHue: number;
   accentChroma: number;
   neutralHue: number;
-  /** The paper's chroma in light (terracotta 0.015); the rest of the ladder scales from it. */
+  /** The paper's chroma in light (terracotta 0.015); the light ladder scales from it. */
   neutralChroma: number;
-  darkAccentL: number;
+  darkNeutralHue: number;
+  /** The night paper's chroma; the dark ladder scales from it. */
+  darkNeutralChroma: number;
+  darkAccent: { L: number; C: number; H: number };
 }
 
 export const THEME_SPECS: Record<Accent, ThemeSpec> = {
-  terracotta: { accentHue: 45, accentChroma: 0.14, neutralHue: 75, neutralChroma: 0.015, darkAccentL: 0.7 },
-  sage: { accentHue: 140, accentChroma: 0.13, neutralHue: 142, neutralChroma: 0.013, darkAccentL: 0.7 },
-  lavender: { accentHue: 290, accentChroma: 0.14, neutralHue: 298, neutralChroma: 0.012, darkAccentL: 0.72 },
-  yellow: { accentHue: 78, accentChroma: 0.13, neutralHue: 92, neutralChroma: 0.02, darkAccentL: 0.74 },
+  terracotta: { accentHue: 45, accentChroma: 0.14, neutralHue: 75, neutralChroma: 0.015, darkNeutralHue: 62, darkNeutralChroma: 0.013, darkAccent: { L: 0.71, C: 0.135, H: 47 } },
+  sage: { accentHue: 140, accentChroma: 0.13, neutralHue: 142, neutralChroma: 0.013, darkNeutralHue: 140, darkNeutralChroma: 0.013, darkAccent: { L: 0.73, C: 0.12, H: 145 } },
+  lavender: { accentHue: 290, accentChroma: 0.14, neutralHue: 298, neutralChroma: 0.012, darkNeutralHue: 298, darkNeutralChroma: 0.011, darkAccent: { L: 0.73, C: 0.115, H: 292 } },
+  yellow: { accentHue: 78, accentChroma: 0.13, neutralHue: 92, neutralChroma: 0.02, darkNeutralHue: 88, darkNeutralChroma: 0.015, darkAccent: { L: 0.79, C: 0.125, H: 80 } },
 };
 
 const lch = (L: number, C: number, H: number, alpha = 1): Oklch => ({ L, C, H: ((H % 360) + 360) % 360, alpha });
 
-/** The dark ladder: the warm slate, its raised card and well, chalk ink, the accent brightened to stand on it. */
+/**
+ * The dark ladder: night paper at 20.5%, the raised card lighter (24%) and
+ * the recessed well darker (17%) — the order light has — chalk ink at 88%
+ * (not brighter: a long read glares), muted ink at 68%, the accent
+ * brightened to stand on the paper, its wash a low tint.
+ */
 function darkBase(s: ThemeSpec): Base {
-  const n = s.neutralChroma;
-  const h = s.neutralHue;
+  const n = s.darkNeutralChroma;
+  const h = s.darkNeutralHue;
+  const k = n / 0.013;
+  const accent = fitGamut(lch(s.darkAccent.L, s.darkAccent.C, s.darkAccent.H));
   return {
-    'color-cream': lch(0.2, n * 0.8, h),
-    'color-card-bg': lch(0.23, n * 0.8, h),
-    'color-cream-dark': lch(0.245, n * 0.93, h),
-    'color-text': lch(0.91, n * 1.07, h),
-    'color-text-muted': lch(0.72, n * 2, h),
-    'field-border': lch(0.38, n * 1.33, h),
-    'field-border-hover': lch(0.58, n * 2.33, h),
-    placeholder: lch(0.56, n * 2, h),
-    'color-terracotta': fitGamut(lch(s.darkAccentL, s.accentChroma * 0.93, s.accentHue + 3)),
-    'color-terracotta-light': fitGamut(lch(0.35, s.accentChroma * 0.43, s.accentHue + 5)),
+    'color-cream': lch(0.205, n, h),
+    'color-card-bg': lch(0.24, n * 1.08, h + 2),
+    'color-cream-dark': lch(0.17, n * 0.85, h - 2),
+    'color-text': lch(0.88, 0.02 * k, h + 14),
+    'color-text-muted': lch(0.68, 0.03 * k, h + 8),
+    'field-border': lch(0.4, 0.02 * k, h + 8),
+    'field-border-hover': lch(0.6, 0.035 * k, h + 4),
+    placeholder: lch(0.58, 0.03 * k, h + 8),
+    'color-terracotta': accent,
+    'color-terracotta-light': fitGamut(lch(0.36, accent.C * 0.5, accent.H + 5)),
   };
 }
 
@@ -195,6 +206,10 @@ const DERIVED_TOKENS = [
   'segment-idle-ink',
   'link-wave',
   'story-code-tint',
+  'footer-bg',
+  'footer-ink',
+  'cta-band',
+  'cta-ink',
 ] as const;
 type DerivedToken = (typeof DERIVED_TOKENS)[number];
 
@@ -213,6 +228,9 @@ const SCHEME_TOKENS = [
   'scrim',
   'shadow-ink',
   'grain-ink',
+  'toward-ink',
+  'footer-ink-soft',
+  'picture-backing',
 ] as const;
 type SchemeToken = (typeof SCHEME_TOKENS)[number];
 
@@ -226,6 +244,8 @@ const FAMILY_TOKENS = [
   'card-note-ink',
   'card-stripe',
   'card-accent',
+  'card-hover',
+  'card-skeleton',
 ] as const;
 type FamilyToken = (typeof FAMILY_TOKENS)[number];
 
@@ -278,31 +298,46 @@ const RECIPES: Record<Scheme, (b: Base) => Record<DerivedToken, Oklch>> = {
     'link-wave': lch(b['color-terracotta'].L + 0.03, b['color-terracotta'].C * 0.6, b['color-terracotta'].H),
     // Inline code and code blocks: the ink at a whisper.
     'story-code-tint': { ...b['color-text'], alpha: 0.06 },
+    // The footer is a band of ink with paper words; the call to action a band of the accent.
+    'footer-bg': b['color-text'],
+    'footer-ink': b['color-cream'],
+    'cta-band': b['color-terracotta'],
+    'cta-ink': b['color-cream'],
   }),
-  dark: (b) => ({
-    'bubble-mine': over(b['color-terracotta-light'], 0.8, b['color-cream']),
-    'bubble-theirs': over(b['color-text'], 0.1, b['color-cream']),
-    'bubble-quote': over(b['color-text'], 0.155, b['color-cream']),
-    'link-card-muted': over(b['color-text'], 0.2, b['color-text-muted']),
-    'reading-progress': fitGamut(lch(b['color-terracotta'].L + 0.05, b['color-terracotta'].C + 0.03, b['color-terracotta'].H + 4)),
-    // A bright accent under a slate label (the paper colour, as cream is in light).
-    'button-fill': b['color-terracotta'],
-    'button-tonal': over(b['color-terracotta-light'], 0.75, b['color-cream-dark']),
-    'button-on-tonal': over(b['color-terracotta'], 0.7, b['color-text']),
-    // The deeper pens of light are the brighter pens of dark.
-    'terracotta-ink': over(b['color-terracotta'], 0.65, b['color-text']),
-    'terracotta-deep': over(b['color-terracotta'], 0.75, b['color-text']),
-    'terracotta-outline': over(b['color-terracotta'], 0.85, b['color-text']),
-    'auth-interior': over(b['color-terracotta-light'], 0.14, b['color-card-bg']),
-    'auth-border': over(b['color-terracotta'], 0.82, b['color-text']),
-    'toggle-off': lch(0.32, b['color-cream'].C * 1.33, b['color-cream'].H),
-    'toggle-off-stroke': lch(0.52, b['color-text-muted'].C * 0.75, b['color-text-muted'].H),
-    'ghost-stroke': lch(0.78, b['color-text-muted'].C, b['color-text-muted'].H),
-    'modal-border': lch(0.8, b['color-text'].C * 2, b['color-text'].H),
-    'segment-idle-ink': over(b['color-text'], 0.1, b['color-text-muted']),
-    'link-wave': lch(b['color-terracotta'].L - 0.06, b['color-terracotta'].C * 0.6, b['color-terracotta'].H),
-    'story-code-tint': { ...b['color-text'], alpha: 0.08 },
-  }),
+  dark: (b) => {
+    const accent = b['color-terracotta'];
+    const paper = b['color-cream'];
+    return {
+      'bubble-mine': over(b['color-terracotta-light'], 0.8, paper),
+      'bubble-theirs': over(b['color-text'], 0.1, paper),
+      // Quieter than theirs and well apart from mine: a reply carries its quote right against the sender's bubble.
+      'bubble-quote': lch(0.24, paper.C * 0.85, paper.H + 4),
+      'link-card-muted': over(b['color-text'], 0.35, b['color-text-muted']),
+      'reading-progress': fitGamut(lch(accent.L + 0.07, accent.C + 0.015, accent.H + 7)),
+      // A bright accent under a night-paper label (the paper colour, as cream is in light).
+      'button-fill': accent,
+      'button-tonal': over(b['color-terracotta-light'], 0.75, b['color-cream-dark']),
+      'button-on-tonal': fitGamut(lch(accent.L + 0.1, accent.C * 0.75, accent.H + 7)),
+      // The deeper pens of light are the brighter pens of dark.
+      'terracotta-ink': over(accent, 0.65, b['color-text']),
+      'terracotta-deep': over(accent, 0.75, b['color-text']),
+      'terracotta-outline': over(accent, 0.85, b['color-text']),
+      'auth-interior': over(b['color-terracotta-light'], 0.14, b['color-card-bg']),
+      'auth-border': over(accent, 0.82, b['color-text']),
+      'toggle-off': lch(0.32, paper.C * 1.33, paper.H + 8),
+      'toggle-off-stroke': lch(0.52, b['color-text-muted'].C * 0.75, b['color-text-muted'].H),
+      'ghost-stroke': lch(0.78, b['color-text-muted'].C, b['color-text-muted'].H),
+      'modal-border': lch(0.8, b['color-text'].C * 2, b['color-text'].H),
+      'segment-idle-ink': over(b['color-text'], 0.1, b['color-text-muted']),
+      'link-wave': lch(accent.L - 0.06, accent.C * 0.6, accent.H),
+      'story-code-tint': { ...b['color-text'], alpha: 0.08 },
+      // Ink as a band would be a cream slab, the accent a glaring one: both go deep, their words light.
+      'footer-bg': lch(0.15, paper.C * 0.75, paper.H),
+      'footer-ink': b['color-text'],
+      'cta-band': fitGamut(lch(0.44, accent.C * 0.78, accent.H - 2)),
+      'cta-ink': lch(0.93, b['color-text'].C, b['color-text'].H),
+    };
+  },
 };
 
 const SCHEME_VALUES: Record<Scheme, Record<SchemeToken, Oklch>> = {
@@ -320,21 +355,31 @@ const SCHEME_VALUES: Record<Scheme, Record<SchemeToken, Oklch>> = {
     scrim: o('oklch(20% 0.04 60 / 0.28)'),
     'shadow-ink': o('oklch(20% 0.04 60)'),
     'grain-ink': o('oklch(0% 0 0)'),
+    // What "further from the paper" mixes toward (color-mix(in oklch, X, var(--toward-ink) N%)); real shadows stay --shadow-ink.
+    'toward-ink': o('oklch(0% 0 0)'),
+    // The footer's quiet words, in either scheme a light ink on its dark band (CSS takes it at 0.65–0.9).
+    'footer-ink-soft': o('oklch(85% 0.015 75)'),
+    // Behind a story picture: none in light; in dark a light paper, so a transparent logo's black words still show.
+    'picture-backing': o('oklch(96.5% 0.015 75 / 0)'),
   },
   dark: {
-    'color-danger': o('oklch(68% 0.15 25)'),
-    'danger-fill': o('oklch(68% 0.15 25)'),
-    'button-danger-tonal': o('oklch(31% 0.06 25)'),
-    'button-on-danger-tonal': o('oklch(80% 0.09 25)'),
-    'color-lavender': o('oklch(45% 0.06 290)'),
-    'color-sage': o('oklch(44% 0.06 140)'),
-    'color-yellow': o('oklch(52% 0.08 90)'),
-    'color-sky': o('oklch(46% 0.06 220)'),
-    'avatar-stroke': o('oklch(82% 0.03 70 / 0.5)'),
+    'color-danger': o('oklch(70% 0.15 25)'),
+    'danger-fill': o('oklch(67% 0.15 25)'),
+    'button-danger-tonal': o('oklch(30% 0.06 25)'),
+    'button-on-danger-tonal': o('oklch(83% 0.08 25)'),
+    // Blobs and washes: as quiet against the night paper as the pastels are against cream.
+    'color-lavender': o('oklch(30% 0.045 290)'),
+    'color-sage': o('oklch(30% 0.045 140)'),
+    'color-yellow': o('oklch(31% 0.05 85)'),
+    'color-sky': o('oklch(30% 0.045 220)'),
+    'avatar-stroke': o('oklch(85% 0.02 70 / 0.35)'),
     'tag-stroke': o('oklch(84% 0.03 70 / 0.42)'),
     scrim: o('oklch(8% 0.01 60 / 0.6)'),
     'shadow-ink': o('oklch(5% 0.01 60)'),
     'grain-ink': o('oklch(96% 0.01 75)'),
+    'toward-ink': o('oklch(100% 0 0)'),
+    'footer-ink-soft': o('oklch(85% 0.015 75)'),
+    'picture-backing': o('oklch(93% 0.012 75)'),
   },
 };
 
@@ -363,8 +408,8 @@ const LIGHT_BORDERS: readonly [string, string][] = [
 
 function family(scheme: Scheme, i: number): Record<FamilyToken, Oklch> {
   const h = FAMILY_HUES[i];
+  const [L, C] = LIGHT_FILL_LC[i];
   if (scheme === 'light') {
-    const [L, C] = LIGHT_FILL_LC[i];
     return {
       'card-fill': lch(L, C, h),
       'card-border': o(LIGHT_BORDERS[i][0]),
@@ -374,19 +419,24 @@ function family(scheme: Scheme, i: number): Record<FamilyToken, Oklch> {
       'card-note-ink': lch(0.44, 0.08, h),
       'card-stripe': lch(L - 0.07, C, h),
       'card-accent': lch(0.9, 0.06, h),
+      'card-hover': lch(0.925, 0.024, h),
+      'card-skeleton': lch(0.88, 0.08, h),
     };
   }
-  const [, C] = LIGHT_FILL_LC[i];
-  const fill = lch(0.29, Math.min(0.045, C * 0.6 + 0.012), h);
+  // Each family keeps its own calibration (yellow needs more chroma to read as yellow), at 0.75×;
+  // the yellow family's hue leans to 85 so it doesn't go olive this deep.
+  const fill = i === 3 ? lch(0.31, 0.045, 85) : fitGamut(lch(0.3, C * 0.75, h));
   return {
     'card-fill': fill,
-    'card-border': fitGamut(lch(0.68, o(LIGHT_BORDERS[i][0]).C * 0.85, h)),
-    'card-border-deep': fitGamut(lch(0.8, o(LIGHT_BORDERS[i][1]).C * 0.7, h)),
-    'card-interior': lch(0.235, 0.012, h),
-    'card-separator': lch(0.62, 0.04, h, 0.4),
-    'card-note-ink': fitGamut(lch(0.8, 0.07, h)),
-    'card-stripe': lch(fill.L + 0.05, fill.C, h),
+    'card-border': fitGamut(lch(0.72, o(LIGHT_BORDERS[i][0]).C * 0.75, h)),
+    'card-border-deep': fitGamut(lch(0.84, o(LIGHT_BORDERS[i][0]).C * 0.5, h)),
+    'card-interior': lch(0.235, 0.014, h),
+    'card-separator': lch(0.72, 0.04, h, 0.4),
+    'card-note-ink': fitGamut(lch(0.78, 0.08, h)),
+    'card-stripe': lch(fill.L + 0.05, fill.C, fill.H),
     'card-accent': lch(0.38, 0.05, h),
+    'card-hover': lch(0.27, 0.022, h),
+    'card-skeleton': lch(0.34, 0.05, h),
   };
 }
 
@@ -398,9 +448,21 @@ function assemble(b: Base, scheme: Scheme): Palette {
   return out as Palette;
 }
 
+/**
+ * Light terracotta is the site as it always was, to the digit: where a recipe
+ * lands a hair off a value the site and the apps' fixtures pin, the value wins.
+ */
+const LIGHT_TERRACOTTA_EXACT: Partial<Record<PaletteToken, Oklch>> = {
+  'bubble-mine': o('oklch(91.2% 0.055 62.6)'),
+  'bubble-theirs': o('oklch(91.5% 0.017 74)'),
+  'bubble-quote': o('oklch(88.5% 0.013 72)'),
+  'link-card-muted': o('oklch(45% 0.04 70)'),
+};
+
 /** The palette a theme wears in a scheme. */
 export function paletteFor(accent: Accent, scheme: Scheme): Palette {
-  return assemble(scheme === 'light' ? LIGHT_BASES[accent] : darkBase(THEME_SPECS[accent]), scheme);
+  const p = assemble(scheme === 'light' ? LIGHT_BASES[accent] : darkBase(THEME_SPECS[accent]), scheme);
+  return accent === DEFAULT_ACCENT && scheme === 'light' ? ({ ...p, ...LIGHT_TERRACOTTA_EXACT } as Palette) : p;
 }
 
 /**
@@ -415,10 +477,29 @@ export function paletteForHue(hue: number, chroma: number, scheme: Scheme): Pale
   return assemble(scheme === 'light' ? lightBase(spec) : darkBase(spec), scheme);
 }
 
-/** The ThemeSpec a system accent colour stands for. */
+/**
+ * The ThemeSpec a system accent colour stands for. A wallpaper with almost no
+ * colour (chroma under WALLPAPER_MIN_CHROMA) has no hue worth taking: callers
+ * wear terracotta then (`wallpaperPalette`).
+ */
 export function specForHue(hue: number, chroma: number): ThemeSpec {
   const accentChroma = Math.min(0.14, Math.max(0.06, chroma));
-  return { accentHue: hue, accentChroma, neutralHue: hue + 10, neutralChroma: 0.013, darkAccentL: 0.72 };
+  return {
+    accentHue: hue,
+    accentChroma,
+    neutralHue: hue + 10,
+    neutralChroma: 0.013,
+    darkNeutralHue: hue + 10,
+    darkNeutralChroma: 0.012,
+    darkAccent: { L: 0.73, C: Math.min(0.13, accentChroma), H: hue + 2 },
+  };
+}
+
+export const WALLPAPER_MIN_CHROMA = 0.03;
+
+/** What the wallpaper accent wears: its hue's palette, or terracotta's for a grey wallpaper. */
+export function wallpaperPalette(hue: number, chroma: number, scheme: Scheme): Palette {
+  return chroma < WALLPAPER_MIN_CHROMA ? paletteFor(DEFAULT_ACCENT, scheme) : paletteForHue(hue, chroma, scheme);
 }
 
 /** The light base a spec would give — palette.test.ts holds it near the hand-made tables. */
@@ -478,7 +559,7 @@ export function avatarFill(stored: string, scheme: Scheme): string {
   } catch {
     return stored;
   }
-  return cssOklch(fitGamut(lch(0.44, c.C * 0.9, c.H, c.alpha)));
+  return cssOklch(fitGamut(lch(0.4, c.C * 0.85, c.H, c.alpha)));
 }
 
 /** The browser chrome's colour for a scheme (<meta name="theme-color">): the paper. */
@@ -487,7 +568,9 @@ export function themeColor(accent: Accent, scheme: Scheme): Oklch {
 }
 
 /** Numbers that change with the scheme (CSS custom properties beside the colours). */
-export const SCHEME_NUMBERS: Record<Scheme, Record<'grain-scale', number>> = {
-  light: { 'grain-scale': 1 },
-  dark: { 'grain-scale': 0.55 },
+export const SCHEME_NUMBERS: Record<Scheme, Record<'grain-scale' | 'reading-progress-glow-alpha', number>> = {
+  // Light specks on night paper read louder than dark ones on cream.
+  light: { 'grain-scale': 1, 'reading-progress-glow-alpha': 0.55 },
+  // A glow on dark reads as neon at light's strength.
+  dark: { 'grain-scale': 0.4, 'reading-progress-glow-alpha': 0.4 },
 };
