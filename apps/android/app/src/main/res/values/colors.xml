@@ -2,6 +2,20 @@
 <resources>
     <!-- Tokens.Terracotta (display-p3 0.7388 0.4228 0.2563) in sRGB: the waves glyph's tint on notifications. -->
     <color name="notification_accent">#C96736</color>
-    <!-- The paper (palette.ts light terracotta color-cream): the window under the first frame, and the launch's splash (values-night: the night paper). -->
+    <!--
+      Each theme's paper and accent in light (palette.ts color-cream, color-terracotta; values-night:
+      in dark), pinned by LaunchTest: the paper under the first frame and on the launch's splash (a
+      theme's own from Android 13, AppearanceStore), the accent the system's own controls take — the
+      text-selection handles in the writer's WebView among them.
+    -->
     <color name="paper">#FAF2E9</color>
+    <color name="paper_sage">#EFF6ED</color>
+    <color name="paper_lavender">#F4F2FB</color>
+    <color name="paper_yellow">#F7F4E5</color>
+    <color name="paper_wallpaper">@color/paper</color>
+    <color name="accent_terracotta">#C96736</color>
+    <color name="accent_sage">#448335</color>
+    <color name="accent_lavender">#7B69C6</color>
+    <color name="accent_yellow">#B7810F</color>
+    <color name="accent_wallpaper">@color/accent_terracotta</color>
 </resources>

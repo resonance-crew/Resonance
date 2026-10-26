@@ -1,5 +1,9 @@
 package com.resonance.app
 
+import com.resonance.design.AppearanceAccent
+import androidx.compose.ui.graphics.toArgb
+import android.os.Build
+import android.graphics.drawable.ColorDrawable
 import android.Manifest
 import android.content.Intent
 import android.graphics.Color
@@ -47,6 +51,8 @@ class MainActivity : ComponentActivity() {
         // See-through bars whose glyphs follow the scheme the screens wear (外觀's, or the system's):
         // dark on the paper, light on the night paper. Said again whenever it changes (SystemBars).
         systemBarsFor(AppearanceStore.shared.isDark(resources.configuration))
+        // Under the first frame, the chosen theme's paper (the manifest's theme knows only terracotta's).
+        window.setBackgroundDrawable(ColorDrawable(AppearanceStore.shared.palette(this).Cream.toArgb()))
         super.onCreate(savedInstanceState)
         val emulator = BuildConfig.DEBUG && intent.getBooleanExtra("emulator", false)
         val config = if (!emulator) AppConfig(usesEmulator = false) else {
@@ -95,6 +101,8 @@ class MainActivity : ComponentActivity() {
             handleExtras(intent)
         }
         setContent { ResonanceRoot(session, incomingRoute) }
+        // 外觀's theme where the screens don't reach: the system's controls, the next launch's splash.
+        lifecycleScope.launch { AppearanceStore.shared.state.collect { wearTheme(it.accent) } }
         // Once signed in: give this install's push token to the session.
         lifecycleScope.launch {
             session.phase.collect { phase ->
@@ -111,6 +119,15 @@ class MainActivity : ComponentActivity() {
                 notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
+    }
+
+    /**
+     * [accent] outside Compose: the system's own controls in it (the writer WebView's selection handles,
+     * from the views made after), and from Android 13 the next launch's splash on its paper.
+     */
+    private fun wearTheme(accent: AppearanceAccent) {
+        theme.applyStyle(AppearanceStore.controlsOverlay(accent), true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) runCatching { splashScreen.setSplashScreenTheme(AppearanceStore.splashTheme(accent)) }
     }
 
     /** The bars' glyphs for the scheme on screen: [dark] light glyphs, else dark ones, on see-through bars. */

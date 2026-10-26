@@ -16,6 +16,34 @@
         <item name="android:windowLightNavigationBar">true</item>
         <item name="android:enforceStatusBarContrast">false</item>
         <item name="android:enforceNavigationBarContrast">false</item>
+        <!-- The system's own controls (the writer WebView's selection handles) in the accent, not Material's teal; a theme's own: ThemeOverlay.Resonance.* below. -->
+        <item name="android:colorAccent">@color/accent_terracotta</item>
+        <item name="android:colorControlActivated">@color/accent_terracotta</item>
+    </style>
+
+    <!--
+      外觀's theme laid over Theme.Resonance (MainActivity applies the chosen one): the accent the
+      system draws its controls in. The resolved colours follow the scheme (values-night).
+    -->
+    <style name="ThemeOverlay.Resonance.Terracotta" parent="">
+        <item name="android:colorAccent">@color/accent_terracotta</item>
+        <item name="android:colorControlActivated">@color/accent_terracotta</item>
+    </style>
+    <style name="ThemeOverlay.Resonance.Sage" parent="">
+        <item name="android:colorAccent">@color/accent_sage</item>
+        <item name="android:colorControlActivated">@color/accent_sage</item>
+    </style>
+    <style name="ThemeOverlay.Resonance.Lavender" parent="">
+        <item name="android:colorAccent">@color/accent_lavender</item>
+        <item name="android:colorControlActivated">@color/accent_lavender</item>
+    </style>
+    <style name="ThemeOverlay.Resonance.Yellow" parent="">
+        <item name="android:colorAccent">@color/accent_yellow</item>
+        <item name="android:colorControlActivated">@color/accent_yellow</item>
+    </style>
+    <style name="ThemeOverlay.Resonance.Wallpaper" parent="">
+        <item name="android:colorAccent">@color/accent_wallpaper</item>
+        <item name="android:colorControlActivated">@color/accent_wallpaper</item>
     </style>
 
     <!--
@@ -36,4 +64,22 @@
         <item name="android:windowLightNavigationBar">true</item>
     </style>
     <style name="Theme.Resonance.Starting" parent="Base.Theme.Resonance.Starting" />
+
+    <!--
+      The launch in 外觀's theme (Android 13+: AppearanceStore hands the system the chosen one for the
+      next launch, SplashScreen.setSplashScreenTheme): that theme's paper, light or night (values-night),
+      the icon as it is. 桌布配色 takes the system's own neutral paper.
+    -->
+    <style name="Theme.Resonance.Starting.Sage">
+        <item name="windowSplashScreenBackground">@color/paper_sage</item>
+    </style>
+    <style name="Theme.Resonance.Starting.Lavender">
+        <item name="windowSplashScreenBackground">@color/paper_lavender</item>
+    </style>
+    <style name="Theme.Resonance.Starting.Yellow">
+        <item name="windowSplashScreenBackground">@color/paper_yellow</item>
+    </style>
+    <style name="Theme.Resonance.Starting.Wallpaper">
+        <item name="windowSplashScreenBackground">@color/paper_wallpaper</item>
+    </style>
 </resources>

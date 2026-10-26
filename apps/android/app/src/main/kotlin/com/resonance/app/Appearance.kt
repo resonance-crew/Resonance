@@ -87,6 +87,24 @@ class AppearanceStore(private val prefs: SharedPreferences, private val nightMod
             applyNightMode(app, shared.state.value.scheme)
         }
 
+        /** The launch's theme for [accent] (Android 13+ takes it for the next launch): its paper, light or night. */
+        fun splashTheme(accent: AppearanceAccent): Int = when (accent) {
+            AppearanceAccent.Terracotta -> R.style.Theme_Resonance_Starting
+            AppearanceAccent.Sage -> R.style.Theme_Resonance_Starting_Sage
+            AppearanceAccent.Lavender -> R.style.Theme_Resonance_Starting_Lavender
+            AppearanceAccent.Yellow -> R.style.Theme_Resonance_Starting_Yellow
+            AppearanceAccent.Wallpaper -> R.style.Theme_Resonance_Starting_Wallpaper
+        }
+
+        /** What the system's own controls wear for [accent] (the writer WebView's selection handles): a theme overlay. */
+        fun controlsOverlay(accent: AppearanceAccent): Int = when (accent) {
+            AppearanceAccent.Terracotta -> R.style.ThemeOverlay_Resonance_Terracotta
+            AppearanceAccent.Sage -> R.style.ThemeOverlay_Resonance_Sage
+            AppearanceAccent.Lavender -> R.style.ThemeOverlay_Resonance_Lavender
+            AppearanceAccent.Yellow -> R.style.ThemeOverlay_Resonance_Yellow
+            AppearanceAccent.Wallpaper -> R.style.ThemeOverlay_Resonance_Wallpaper
+        }
+
         /** Android 12+: the app's night mode, the system's own record of the choice (the next splash, WebView, values-night). */
         fun applyNightMode(context: Context, scheme: AppearanceScheme) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return

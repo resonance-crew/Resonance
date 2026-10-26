@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 桌布配色 (Android 12+): the system's own neutral paper and accent stand in for the wallpaper palette outside the screens (its splash, the WebView's handles). -->
+    <color name="paper_wallpaper">@android:color/system_neutral1_50</color>
+    <color name="accent_wallpaper">@android:color/system_accent1_600</color>
+</resources>
