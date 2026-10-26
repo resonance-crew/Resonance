@@ -167,6 +167,23 @@ export function useTweaks() {
 }
 
 /**
+ * What the provider does on each page load: the saved tweaks, applied — or,
+ * when they are the defaults (nothing saved, or the defaults saved), nothing
+ * at all: the defaults are tokens.css's own values, so writing them inline
+ * onto <html> (a dozen properties, a style recalc of the whole page) and
+ * saving them again changes nothing anyone sees. The editor still hears them.
+ */
+export function applySavedTweaks(): void {
+  const saved = loadTweaks();
+  const defaults =
+    saved.accentColor === TWEAK_DEFAULTS.accentColor &&
+    saved.fontFamily === TWEAK_DEFAULTS.fontFamily &&
+    saved.grainIntensity === TWEAK_DEFAULTS.grainIntensity;
+  if (defaults) postToEditor({ type: '__edit_mode_set_keys', edits: saved });
+  else applyTweaks(saved);
+}
+
+/**
  * Silent global provider: applies persisted tweaks on mount so the user's saved
  * accent / font / grain are honored on every page. Renders nothing — the
  * controls now live in Settings → Appearance. Retains the edit-mode
@@ -174,7 +191,7 @@ export function useTweaks() {
  */
 export default function TweaksPanel() {
   useEffect(() => {
-    applyTweaks(loadTweaks());
+    applySavedTweaks();
     postToEditor({ type: '__edit_mode_available' });
   }, []);
 
