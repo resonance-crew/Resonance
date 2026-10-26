@@ -32,6 +32,16 @@ interface StoryLinkCards {
 }
 const StoryLinkCardsContext = createContext<StoryLinkCards | null>(null);
 
+/**
+ * How many card links a story draws as cards — the server's EMBED_LIMIT
+ * (lib/api/v1/embeds), which caps what a page's include=embeds reads. Each
+ * card past it would read its own card: a long story of card links would
+ * make every reader's browser read thousands. The rest stay plain links.
+ */
+export const STORY_EMBED_MAX = 30;
+/** The order in which this story's card-link paragraphs come (by source offset), for STORY_EMBED_MAX. */
+const EmbedOrderContext = createContext<Map<number, number> | null>(null);
+
 /** The paragraph's only element child (ignoring whitespace), if any. */
 function soleElementChild(node: Element | undefined): Element | null {
   if (!node) return null;
@@ -62,9 +72,11 @@ const OWN_HOSTS: readonly string[] = (() => {
 
 /** A link to another site's page (http or https, a host not ours) — not a page of ours, an anchor or a mail address. */
 function toOtherSite(href: string | undefined): boolean {
-  if (!href || !/^https?:\/\//i.test(href)) return false;
+  if (!href) return false;
   try {
-    return !OWN_HOSTS.includes(new URL(href).hostname.replace(/\.$/, '').toLowerCase());
+    // Read as the browser will: '//host' and '/\\host' are other sites too, a path is ours.
+    const url = new URL(href, `https://${OWN_HOSTS[0]}`);
+    return /^https?:$/.test(url.protocol) && !OWN_HOSTS.includes(url.hostname.replace(/\.$/, '').toLowerCase());
   } catch {
     return false;
   }
@@ -131,6 +143,17 @@ const components: Components = {
   p: StoryParagraph,
 };
 
+/** Whether the card-link paragraph at `offset` is among the story's first STORY_EMBED_MAX (rendered in reading order). */
+function withinEmbedMax(order: Map<number, number> | null, offset: number | undefined): boolean {
+  if (!order || offset == null) return true;
+  let n = order.get(offset);
+  if (n === undefined) {
+    n = order.size;
+    order.set(offset, n);
+  }
+  return n < STORY_EMBED_MAX;
+}
+
 /**
  * Paragraphs that hold a single card link become that card as a block (the
  * shared card a thread draws, in a link card's container); a paragraph that
@@ -142,10 +165,11 @@ const components: Components = {
  */
 function StoryParagraph({ node, children }: { children?: ReactNode } & ExtraProps) {
   const cards = useContext(StoryLinkCardsContext);
+  const order = useContext(EmbedOrderContext);
   const sole = soleElementChild(node);
   if (sole?.tagName === 'a') {
     const href = String(sole.properties?.href ?? '');
-    if (href.startsWith('/card/')) {
+    if (href.startsWith('/card/') && withinEmbedMax(order, node?.position?.start.offset)) {
       return (
         <div className={`${styles.embedBlock} story-embed`}>
           <CardEmbedLink href={href} title={hastText(sole)} />
@@ -217,12 +241,16 @@ export function StoryMarkdown({ source, script, lang, density }: StoryMarkdownPr
   const setAs = script ?? read?.script;
   // A CJK story sets an apostrophe inside a Latin word in its Latin face (after the slugs, read from the words as they are).
   const rehypePlugins = setAs === 'latin' ? LATIN_PLUGINS : CJK_PLUGINS;
+  // A new story, a new count.
+  const embedOrder = useMemo(() => new Map<number, number>(), [source]);
   return (
     <div className="story-prose" data-script={setAs} data-density={density} lang={read ? read.lang : lang}>
       <StoryLinkCardsContext.Provider value={cards}>
-        <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={components}>
-          {source}
-        </Markdown>
+        <EmbedOrderContext.Provider value={embedOrder}>
+          <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={components}>
+            {source}
+          </Markdown>
+        </EmbedOrderContext.Provider>
       </StoryLinkCardsContext.Provider>
     </div>
   );

@@ -75,6 +75,21 @@ describe('StoryMarkdown', () => {
       expect(here).not.toHaveAttribute('rel');
     }
   });
+
+  // The browser reads '//host' as another site: it opens as one, not in this tab vouched for.
+  it('opens a protocol-relative link as another site', () => {
+    renderWithIntl(<StoryMarkdown source={'See [this](//evil.example/x) and [that](//resonance.channel/en).'} />);
+    expect(screen.getByRole('link', { name: 'this' })).toHaveAttribute('target', '_blank');
+    expect(screen.getByRole('link', { name: 'that' })).not.toHaveAttribute('target');
+  });
+
+  // Each card past the server's cap would read its own card in every reader's browser.
+  it('draws at most 30 card links as cards; the rest stay links', () => {
+    const source = Array.from({ length: 40 }, (_, i) => `[card ${i}](/card/c${i})`).join('\n\n');
+    renderWithIntl(<StoryMarkdown source={source} />);
+    expect(screen.getAllByTestId('card-embed')).toHaveLength(30);
+    expect(screen.getByRole('link', { name: 'card 39' })).toHaveAttribute('href', expect.stringContaining('/card/c39'));
+  });
 });
 
 // A story is set by src/styles/story.css, which the writer and the apps' editor share:
