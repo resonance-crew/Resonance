@@ -18,6 +18,7 @@ import com.resonance.app.ui.KeyShortcuts
 import com.resonance.app.ui.ResonanceRoot
 import com.resonance.kit.chat.ChatPush
 import com.resonance.kit.push.PushPlacement
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
@@ -29,6 +30,8 @@ import kotlinx.coroutines.launch
  *   --es threadDraft …             fills a conversation's composer (--es route /messages/<handle> opens one)
  *   --es pushToken …               registers that stand-in push token under the signed-in account
  *   --es pushTitle … [--es pushBody … --es pushRoute … --es pushId … --es pushFromUserId … --es pushType pick|new_card --es pushCardId …]   posts the notification a push received while open shows
+ *   --es pushChatBody … [--es pushChatConversation <pair> --es pushChatTitle … --es pushChatId … --es pushFromUserId …
+ *     --es pushChatAvatar <url> --es pushChatInitials … --es pushChatColor "oklch(…)"]   posts a chat message's notification, as a data-only chat push does
  *   --ez avifDecoder true          reads AVIF with the app's own decoder (Android 10–11's path) on any version
  *   --ei feedPicksDelay <s> [--es feedPicks <id,…>]   holds today's picks back that long, and stands those cards in for them
  *   --ez firestoreLog true         Firestore's own debug log in Logcat (tag Firestore: its streams, connectivity, targets)
@@ -191,15 +194,16 @@ class MainActivity : ComponentActivity() {
             // A chat message as the push service would show it (`pushChatConversation` is the pair id; screen checks of its notification).
             intent.getStringExtra("pushChatBody")?.let { body ->
                 val conversation = intent.getStringExtra("pushChatConversation").orEmpty()
-                PushCenter.showChatMessage(
-                    this,
-                    ChatPush(
-                        conversationId = conversation, messageId = intent.getStringExtra("pushChatId"), fromUserId = intent.getStringExtra("pushFromUserId"),
-                        toUserId = null,
-                        title = intent.getStringExtra("pushChatTitle").orEmpty().ifEmpty { "bob" }, body = body,
-                        route = intent.getStringExtra("pushRoute").orEmpty(), sentAt = System.currentTimeMillis(),
-                    ),
+                val push = ChatPush(
+                    conversationId = conversation, messageId = intent.getStringExtra("pushChatId"), fromUserId = intent.getStringExtra("pushFromUserId"),
+                    toUserId = null,
+                    title = intent.getStringExtra("pushChatTitle").orEmpty().ifEmpty { "bob" }, body = body,
+                    route = intent.getStringExtra("pushRoute").orEmpty(), sentAt = System.currentTimeMillis(),
+                    fromAvatarUrl = intent.getStringExtra("pushChatAvatar"), fromInitials = intent.getStringExtra("pushChatInitials"),
+                    fromColor = intent.getStringExtra("pushChatColor"),
                 )
+                // Off the main thread, as the push service draws it: the sender's photo may be fetched first.
+                lifecycleScope.launch(Dispatchers.IO) { PushCenter.showChatMessage(applicationContext, push) }
             }
         }
     }

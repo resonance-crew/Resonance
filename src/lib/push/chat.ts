@@ -4,6 +4,7 @@ import { createTranslator } from 'next-intl';
 import en from '@/messages/en.json';
 import zhTW from '@/messages/zh-TW.json';
 import { NOTE_MESSAGE_KIND, cut, pairOf } from '@/lib/api/v1/conversations';
+import { storageKeyOf } from '@/lib/storage/publicUrl';
 import type { DeviceLocale } from './devices';
 import {
   MESSAGES_CHANNEL,
@@ -55,6 +56,24 @@ function mutedBy(muted: unknown, uid: string): boolean {
   return Array.isArray(muted) && muted.some((m) => m && typeof m === 'object' && (m as { by?: unknown }).by === uid);
 }
 
+/**
+ * The sender's avatar as the app draws it, for a build that draws its own
+ * notification (the shade would otherwise show the system's letter): their
+ * photo when it is a picture on our own storage (anything else is left out —
+ * the phone fetches it), else their initials on their colour. Only what the
+ * profile has; none of it is needed.
+ */
+function faceOf(author: { get(field: string): unknown }): Record<string, string> {
+  const photo = str(author.get('avatarUrl'));
+  const initials = str(author.get('initials')).trim();
+  const color = str(author.get('accentColor')).trim();
+  return {
+    ...(storageKeyOf(photo) ? { fromAvatarUrl: photo } : {}),
+    ...(initials && [...initials].length <= 4 ? { fromInitials: initials } : {}),
+    ...(/^oklch\([\d.%\s/]{1,60}\)$/.test(color) ? { fromColor: color } : {}),
+  };
+}
+
 function epochMillis(value: unknown): number {
   const at = value as { toMillis?: () => number } | undefined;
   return typeof at?.toMillis === 'function' ? at.toMillis() : Date.now();
@@ -69,7 +88,8 @@ function epochMillis(value: unknown): number {
  * - A device registered with `chat-push` (Android) gets a data-only,
  *   high-priority message with everything its notification needs
  *   (`conversationId, messageId, fromUserId, fromHandle, title, body, route,
- *   sentAt`), already in its language.
+ *   sentAt`), already in its language, and the sender's avatar as far as
+ *   their profile has one (`fromAvatarUrl`, `fromInitials`, `fromColor`).
  * - Every other device gets a notification message — the sender's pen name
  *   and the words — that the system shows on its own: Android replaces a
  *   conversation's earlier one (`tag`), iOS groups them (`threadId`).
@@ -103,6 +123,7 @@ export async function pushMessage(db: Firestore, push: MessagePush, sender: Push
   const sentAt = String(epochMillis(message.get('sentAt')));
   const kind: Record<string, string> = message.get('kind') === NOTE_MESSAGE_KIND ? { kind: NOTE_MESSAGE_KIND } : {};
   const picture = message.get('image') != null;
+  const face = faceOf(author);
 
   // Every language's and kind's multicast side by side (multicastAll).
   const groups: MulticastGroup[] = [];
@@ -120,7 +141,7 @@ export async function pushMessage(db: Firestore, push: MessagePush, sender: Push
         tokens,
         // `toUserId`: the app draws it only while that account is the one signed in (a sign-out whose unregister never
         // reached us leaves the install registered to them for a while).
-        data: { type: 'message', conversationId, messageId, fromUserId: from, toUserId: to, fromHandle: handle, title, body, route, sentAt, ...kind },
+        data: { type: 'message', conversationId, messageId, fromUserId: from, toUserId: to, fromHandle: handle, title, body, route, sentAt, ...kind, ...face },
         android: { priority: 'high' },
       }));
     }

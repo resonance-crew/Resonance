@@ -49,6 +49,18 @@ class ChatPushTest {
         assertEquals(7L, ChatPush.from(data + ("sentAt" to "0"), now = 7)!!.sentAt)
     }
 
+    @Test fun carriesTheSendersAvatarAsFarAsTheirProfileHasOne() {
+        val photo = "https://img.resonance.channel/avatars/2026-10/a.webp"
+        val push = ChatPush.from(data + mapOf("fromAvatarUrl" to photo, "fromInitials" to " 小明 ", "fromColor" to "oklch(90% 0.06 140)"))!!
+        assertEquals(photo, push.fromAvatarUrl)
+        assertEquals("小明", push.fromInitials)
+        assertEquals("oklch(90% 0.06 140)", push.fromColor)
+        // None of it is needed; a picture that isn't on the web is no picture.
+        ChatPush.from(data)!!.let { assertNull(it.fromAvatarUrl); assertNull(it.fromInitials); assertNull(it.fromColor) }
+        assertNull(ChatPush.from(data + ("fromAvatarUrl" to "file:///data/data/x.png"))!!.fromAvatarUrl)
+        assertNull(ChatPush.from(data + ("fromInitials" to "  "))!!.fromInitials)
+    }
+
     @Test fun aCardAloneStillHasABody() {
         assertEquals("Shared a card", ChatPush.from(data + ("body" to "Shared a card"))!!.body)
         assertEquals("", ChatPush.from(data - "body")!!.body)

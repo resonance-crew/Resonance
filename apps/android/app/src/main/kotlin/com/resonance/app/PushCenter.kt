@@ -15,6 +15,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.IconCompat
 import com.google.firebase.messaging.FirebaseMessaging
 import com.resonance.kit.chat.ChatPush
 import com.resonance.kit.l10n.L10n
@@ -326,8 +327,10 @@ object PushCenter {
      * A chat message's notification: the conversation's latest lines ([MAX_LINES]) in one
      * `MessagingStyle` notification, tagged by the conversation so a new message replaces it (the
      * lines already in the shade are read back from it, which holds across a process restart), in
-     * the "messages" channel and group. Nothing when the person switched notifications off, or is
-     * looking at that conversation, or this very message is already in the shade (FCM delivered it twice).
+     * the "messages" channel and group, under the sender's own avatar ([ChatAvatar]: their photo,
+     * else their initials on their colour — never the system's letter). Nothing when the person
+     * switched notifications off, or is looking at that conversation, or this very message is
+     * already in the shade (FCM delivered it twice).
      */
     fun showChatMessage(context: Context, push: ChatPush) {
         if (!canNotify || viewingConversation == push.conversationId) return
@@ -338,9 +341,19 @@ object PushCenter {
         val lines = shown?.messages.orEmpty()
         if (push.messageId != null && lines.any { it.extras.getString(EXTRA_MESSAGE_ID) == push.messageId }) return
 
-        val sender = Person.Builder().setName(push.title).setKey(push.fromUserId ?: push.conversationId).build()
+        val sender = Person.Builder()
+            .setName(push.title)
+            .setKey(push.fromUserId ?: push.conversationId)
+            .setIcon(IconCompat.createWithBitmap(ChatAvatar.draw(context, push)))
+            .build()
         val style = NotificationCompat.MessagingStyle(Person.Builder().setName(L10n.Messages.you).build())
-        lines.takeLast(MAX_LINES - 1).forEach(style::addMessage)
+        // The sender's earlier lines take their name and face as they are now (the shade heads a run of lines with its first one's).
+        lines.takeLast(MAX_LINES - 1).forEach { line ->
+            style.addMessage(
+                if (line.person?.key != sender.key) line
+                else NotificationCompat.MessagingStyle.Message(line.text, line.timestamp, sender).also { it.extras.putAll(line.extras) },
+            )
+        }
         style.addMessage(
             NotificationCompat.MessagingStyle.Message(push.body, push.sentAt, sender).also { line ->
                 push.messageId?.let { line.extras.putString(EXTRA_MESSAGE_ID, it) }

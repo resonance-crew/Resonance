@@ -19,6 +19,11 @@ data class ChatPush(
     val route: String,
     /** When the message was sent, epoch milliseconds. */
     val sentAt: Long,
+    /** The sender's profile photo (the server sends one only from our own storage), when they have one. */
+    val fromAvatarUrl: String? = null,
+    /** What their avatar shows without a photo — their initials, on their colour (a CSS `oklch(…)`) — when their profile says. */
+    val fromInitials: String? = null,
+    val fromColor: String? = null,
 ) {
     /**
      * Whether this push may be drawn for [signedIn]: the account it was sent to must be the one
@@ -53,6 +58,9 @@ data class ChatPush(
                 body = data["body"] ?: fallbackBody.orEmpty(),
                 route = data["route"].orEmpty(),
                 sentAt = data["sentAt"]?.toLongOrNull()?.takeIf { it > 0 } ?: now,
+                fromAvatarUrl = data["fromAvatarUrl"]?.takeIf { it.startsWith("https://") || it.startsWith("http://") },
+                fromInitials = data["fromInitials"]?.trim()?.takeIf { it.isNotEmpty() },
+                fromColor = data["fromColor"]?.takeIf { it.isNotBlank() },
             )
         }
     }
