@@ -67,6 +67,10 @@ describe('cardRoute', () => {
     expect(cardRoute({ id: 'c1', slug: null })).toBe('/card/c1');
     expect(cardRoute({ id: 'c1', slug: '' })).toBe('/card/c1');
   });
+
+  it('opens an anonymous card at its id: a slug made while it was named may end in its pen name', () => {
+    expect(cardRoute({ id: 'c1', slug: 'a-walk-bob', anonymous: true })).toBe('/card/c1');
+  });
 });
 
 describe('readNotificationSettings', () => {

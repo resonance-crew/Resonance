@@ -43,5 +43,16 @@ export async function cardByKey(db: Firestore, key: string) {
  */
 export async function cardByKeyForAnyone(db: Firestore, key: string) {
   const snap = await cardByKey(db, key);
-  return snap && snap.get('trashedAt') == null ? snap : null;
+  return snap && snap.get('trashedAt') == null && !anonymousBySlug(snap, key, null) ? snap : null;
+}
+
+/**
+ * Whether `key` reached an anonymous card by its slug for someone other than
+ * its author. Such a card is reached by its id alone (cardShareKey): its slug
+ * was made while it was named and, if the title's slug was taken, ends in its
+ * author's pen name (lib/ai/slugify) — and slugs never change, so a slug that
+ * leads to an anonymous card would confirm a guess at who wrote it.
+ */
+export function anonymousBySlug(card: Pick<QueryDocumentSnapshot, 'id' | 'get'>, key: string, viewerId: string | null): boolean {
+  return card.get('anonymous') === true && card.id !== key && card.get('authorId') !== viewerId;
 }

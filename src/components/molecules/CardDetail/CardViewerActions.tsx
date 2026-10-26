@@ -10,6 +10,7 @@ import { useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useMyProfile, useMyResonance } from '@/lib/data/hooks';
 import { usePrefillCard } from '@/lib/data/cardPrefill';
+import { cardShareKey } from '@/lib/share/links';
 import { isBookmarked, toggleBookmark } from '@/lib/db/firestore/client/bookmarks';
 import styles from './CardViewerActions.module.css';
 
@@ -100,7 +101,7 @@ export function CardViewerActions({
     if (mine) {
       if (mine.publishedAt) {
         prefill(mine, me ?? undefined);
-        router.push(`/card/${mine.slug ?? mine.id}`);
+        router.push(`/card/${cardShareKey(mine)}`);
       } else {
         router.push(`/write/${mine.id}`);
       }

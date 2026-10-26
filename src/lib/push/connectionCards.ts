@@ -169,7 +169,7 @@ export async function pushConnectionCard(
     if (!announceable(now.data()) || now.get('authorId') !== author) return 'gone';
     if (!(await claim(db.doc(`${CONNECTION_CARD_PUSHES}/${uid}`), cardId, day))) return 'capped';
 
-    const data = { type: 'new_card', cardId, route: cardRoute({ id: cardId, slug: now.get('slug') }) };
+    const data = { type: 'new_card', cardId, route: cardRoute({ id: cardId, slug: now.get('slug'), anonymous: now.get('anonymous') }) };
     const dead: DocumentReference[] = [];
     for (const [locale, group] of groupByLocale(targets)) {
       const text = connectionCardText(locale, handle, str(now.get('thoughtCore')) || title);

@@ -3,6 +3,7 @@ import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
 import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { ApiFailure } from '@/lib/api/v1/http';
 import { sendMessage, sendNote } from '@/lib/api/v1/conversations';
+import { updateCard } from '@/lib/api/v1/cards';
 import { publishCard } from '@/lib/api/v1/publish';
 import {
   getCardBoxShelves,
@@ -119,9 +120,12 @@ const ALL = new Set(['resonances', 'related', 'links', 'embeds'] as const);
 const ids = (list: { cards: { id: string }[] }) => list.cards.map((c) => c.id);
 
 describe('reads: a block changes no answer about an anonymous card', () => {
-  it('(a) the card itself, by slug or id, with everything its page brings along', async () => {
-    const detail = await sameInEveryState(() => Promise.all([getCardDetail(db, 'alice', 'masked', ALL), getCardDetail(db, 'alice', 'a-masked-night')]));
-    expect(detail[0].card).toMatchObject({ id: 'masked', anonymous: true, author: null });
+  it('(a) the card itself, by its id, with everything its page brings along — and never by its slug', async () => {
+    // A slug was made while the card was named and may end in its author's pen name: it leads no one but its author there.
+    const code = (p: Promise<unknown>) => p.then(() => 'found', (e: unknown) => (e instanceof ApiFailure ? e.code : String(e)));
+    const detail = await sameInEveryState(() => Promise.all([getCardDetail(db, 'alice', 'masked', ALL), code(getCardDetail(db, 'alice', 'a-masked-night'))]));
+    expect(detail[0].card).toMatchObject({ id: 'masked', anonymous: true, author: null, slug: null });
+    expect(detail[1]).toBe('not_found');
   });
 
   it('(a) thirty anonymous cards at once (GET /cards?keys=), and the cards a story embeds', async () => {
@@ -129,7 +133,8 @@ describe('reads: a block changes no answer about an anonymous card', () => {
       Promise.all([getCardsByKeys(db, 'alice', ['masked', 'masked2', 'maskedReply', 'carolCard']), getCardDetail(db, 'alice', 'host', ALL)]),
     );
     expect(ids(keys)).toEqual(['masked', 'masked2', 'maskedReply', 'carolCard']);
-    expect(ids(host.embeds!)).toEqual(['masked', 'masked2']);
+    // The story names the first by its slug: that leads to it no more than the card page's own URL does.
+    expect(ids(host.embeds!)).toEqual(['masked2']);
   });
 
   it('(a) the latest feed and the recommended one', async () => {
@@ -287,6 +292,42 @@ describe('an older anonymous card for connections only', () => {
 // as it goes in (as they leave a deleted one), so their writer's resend is a
 // missing card's 404 and their export lacks them — never later, with its
 // author's account.
+// A card named when it was published whose title's slug was taken got its
+// author's pen name on the end of its slug (lib/ai/slugify), and slugs never
+// change. Made anonymous later, it must be reached by its id alone: no answer
+// to anyone but its author carries that slug, and the slug leads nowhere.
+describe('a card made anonymous after it was published under a pen name', () => {
+  beforeEach(async () => {
+    await card('renamed', 'bob', 4, { slug: 'a-rainy-day-bob' });
+    await updateCard(db, 'bob', 'renamed', { visibility: 'public', anonymous: true }, { setVisibility: async () => {} });
+  });
+
+  it('hands no one but its author the slug, and the slug resolves for no one else', async () => {
+    const code = (p: Promise<unknown>) => p.then(() => 'found', (e: unknown) => (e instanceof ApiFailure ? e.code : String(e)));
+    const [byId, bySlug, keys, byIdKey, feed, signedOut, page] = await sameInEveryState(() =>
+      Promise.all([
+        getCardDetail(db, 'alice', 'renamed'),
+        code(getCardDetail(db, 'alice', 'a-rainy-day-bob')),
+        getCardsByKeys(db, 'alice', ['a-rainy-day-bob']),
+        getCardsByKeys(db, 'alice', ['renamed']),
+        getFeed(db, 'alice', 30),
+        getFeed(db, null, 30),
+        readCardForPage(db, 'a-rainy-day-bob'),
+      ]),
+    );
+    expect(byId.card).toMatchObject({ id: 'renamed', anonymous: true, author: null, slug: null });
+    expect(bySlug).toBe('not_found');
+    expect(ids(keys)).toEqual([]);
+    expect(byIdKey.cards).toEqual([expect.objectContaining({ id: 'renamed', slug: null })]);
+    for (const list of [feed, signedOut]) expect(list.cards.find((c) => c.id === 'renamed')).toMatchObject({ slug: null, author: null });
+    expect(page.id).toBeNull();
+    const seed = await readCardForPage(db, 'renamed');
+    expect(toCardSeed(seed.id, seed.card, seed.author).view?.card.slug).toBeNull();
+    // Its author still finds it by its slug, and sees it.
+    expect((await getCardDetail(db, 'bob', 'a-rainy-day-bob')).card).toMatchObject({ id: 'renamed', slug: 'a-rainy-day-bob' });
+  });
+});
+
 describe('an anonymous card in the trash', () => {
   beforeEach(async () => {
     await card('maskedTrash', 'bob', 0, { anonymous: true, slug: 'a-night-in-the-trash' });

@@ -101,9 +101,13 @@ export function pickText(locale: DeviceLocale, cardTitle: string, reason: string
   return { title: t('pickTitle'), body: `${cut(cardTitle.trim(), PICK_TITLE_CHARS)}\n${why}` };
 }
 
-/** Where the push opens: the card's page, by its slug when it has one (both apps open `/card/{key}`). */
-export function cardRoute(card: { id: string; slug?: unknown }): string {
-  const key = typeof card.slug === 'string' && card.slug ? card.slug : card.id;
+/**
+ * Where the push opens: the card's page, by its slug when it has one (both
+ * apps open `/card/{key}`) — an anonymous card always by its id, as it is
+ * shared (cardShareKey): its slug may end in its author's pen name.
+ */
+export function cardRoute(card: { id: string; slug?: unknown; anonymous?: unknown }): string {
+  const key = card.anonymous !== true && typeof card.slug === 'string' && card.slug ? card.slug : card.id;
   return `/card/${encodeURIComponent(key)}`;
 }
 

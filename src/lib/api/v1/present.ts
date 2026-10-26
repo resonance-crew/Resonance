@@ -107,7 +107,9 @@ export function toFeedCard(c: ListCard, author: DocumentData | undefined, opts: 
   const title = String(c.thoughtCore ?? '');
   return {
     id: c.id,
-    slug: str(c.slug),
+    // Only its author is given an anonymous card's slug: made while the card
+    // was named, it may end in their pen name (anonymousBySlug).
+    slug: anonymous && !opts.deanonymize && !opts.own ? null : str(c.slug),
     title,
     excerpt: summary.excerpt,
     tags: Array.isArray(c.tags) ? c.tags.filter((t): t is string => typeof t === 'string') : [],

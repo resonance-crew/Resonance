@@ -50,6 +50,16 @@ describe('cardVisible', () => {
 });
 
 describe('toFeedCard', () => {
+  // A slug made while the card was named ends in its author's pen name when
+  // the title's slug was taken; an anonymous card is reached by its id alone.
+  it("gives an anonymous card's slug to its author alone", () => {
+    const masked = card({ anonymous: true, slug: 'a-quiet-night-alice' });
+    expect(toFeedCard(masked, undefined)).toMatchObject({ slug: null, author: null, anonymous: true });
+    expect(toFeedCard(masked, undefined, { deanonymize: true }).slug).toBe('a-quiet-night-alice');
+    expect(toFeedCard(masked, undefined, { own: true }).slug).toBe('a-quiet-night-alice');
+    expect(toFeedCard(card({ slug: 'a-quiet-night' }), undefined).slug).toBe('a-quiet-night');
+  });
+
   const trashed = card({
     visibility: 'private',
     trashedAt: new Date('2026-10-01T08:00:00Z'),
