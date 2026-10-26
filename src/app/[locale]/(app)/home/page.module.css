@@ -48,13 +48,22 @@
   font-weight: 600;
   line-height: 1.3;
   color: var(--button-on-tonal);
-  text-underline-offset: 4px;
   cursor: pointer;
 }
 
-/* Under a pointer the words say they can be pressed. */
-.more:not([aria-busy='true']):hover {
-  text-decoration: underline;
+/* Under a pointer the words say they can be pressed: the story link's pen wave
+   (lib/design/storyLinkWave) appears under them, whole tiles on the label's
+   bottom edge, its centre about the story's WAVE_DEPTH_EM under the baseline. */
+.moreLabel {
+  display: inline-block;
+  padding-bottom: 3px;
+  background-repeat: round no-repeat;
+  background-size: var(--wave-size);
+  background-position: 0 100%;
+}
+
+.more:not([aria-busy='true']):hover .moreLabel {
+  background-image: var(--wave-strong);
 }
 
 .more:focus-visible {

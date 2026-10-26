@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { INK } from './strokes';
-import { WAVE_DEPTH_EM, WAVE_TILE, WAVE_TILE_H, storyLinkWave, storyLinkWaveStyle, storyLinkWaveVars } from './storyLinkWave';
+import { WAVE_AMP, WAVE_DEPTH_EM, WAVE_TILE, WAVE_TILE_H, storyLinkWave, storyLinkWaveStyle, storyLinkWaveVars } from './storyLinkWave';
 import { penWaveTilePoints } from './wavyPath';
 import { seedFromString } from './prng';
 
@@ -15,9 +15,11 @@ describe('storyLinkWave', () => {
       const svg = svgOf(storyLinkWave(href).rest);
       expect(svg).toContain(`width="${WAVE_TILE}" height="${WAVE_TILE_H}" viewBox="0 ${-WAVE_TILE_H / 2} ${WAVE_TILE} ${WAVE_TILE_H}"`);
       expect(svg).toContain(`stroke-width="${INK}"`);
-      // Its farthest crest (at most 1.35 × 1.2px off the line), plus half the pen, stays inside the half tile.
-      const ys = penWaveTilePoints(WAVE_TILE, seedFromString(href)).map(([, y]) => Math.abs(y));
-      expect(Math.max(...ys)).toBeLessThanOrEqual(1.62 + 1e-9);
+      // Its farthest crest (at most 1.35 × WAVE_AMP off the line), plus half the pen, stays inside the half tile.
+      const ys = penWaveTilePoints(WAVE_TILE, seedFromString(href), WAVE_AMP).map(([, y]) => Math.abs(y));
+      expect(Math.max(...ys)).toBeLessThanOrEqual(1.35 * WAVE_AMP + 1e-9);
+      // Flatter than the pen's own wave: the whole stroke spans at most ~2px from crest to crest.
+      expect(2 * Math.max(...ys)).toBeLessThanOrEqual(2.1);
       expect(Math.max(...ys) + INK / 2).toBeLessThanOrEqual(WAVE_TILE_H / 2);
     }
   });
