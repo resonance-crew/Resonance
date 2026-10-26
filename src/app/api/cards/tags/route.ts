@@ -4,6 +4,7 @@ import { getAdminDb } from '@/lib/db/firestore/admin';
 import { suggestStoryTags } from '@/lib/ai/tasks';
 import { topTags } from '@/lib/ai/tags';
 import { limited } from '@/lib/api/rateLimit';
+import { CARD_LIMITS } from '@/lib/db/firestore/cardContent';
 
 export const runtime = 'nodejs';
 
@@ -13,6 +14,21 @@ export const runtime = 'nodejs';
 // rank them here — `select('tags')` keeps the payload to a few bytes per card.
 const HISTORY_CARDS_LIMIT = 200;
 const HISTORY_TAGS_LIMIT = 20;
+/** More of the story than the model is shown (suggestStoryTags cuts it again). */
+const STORY_READ_CHARS = 4_000;
+
+/** The tags a request names, no more than a card may carry (CARD_LIMITS). */
+export function cardSizedTags(raw: unknown): string[] {
+  const kept: string[] = [];
+  let joined = -1;
+  for (const t of Array.isArray(raw) ? raw : []) {
+    if (typeof t !== 'string' || !t.trim()) continue;
+    if (kept.length >= CARD_LIMITS.tags || joined + 1 + t.length > CARD_LIMITS.tagsJoined) break;
+    kept.push(t);
+    joined += 1 + t.length;
+  }
+  return kept;
+}
 
 /**
  * Suggest 2–3 tags for the card being written. The draft may be unsaved, so the
@@ -30,11 +46,11 @@ export async function POST(req: Request) {
     story?: unknown;
     tags?: unknown;
   } | null;
-  const title = typeof body?.thoughtCore === 'string' ? body.thoughtCore : '';
-  const story = typeof body?.story === 'string' ? body.story : '';
-  const existingTags = Array.isArray(body?.tags)
-    ? body.tags.filter((t): t is string => typeof t === 'string')
-    : [];
+  // Held to what a card may carry: one unit of the budget buys one card-sized
+  // prompt, whatever a caller sends (the tags go into the prompt whole).
+  const title = typeof body?.thoughtCore === 'string' ? body.thoughtCore.slice(0, CARD_LIMITS.title) : '';
+  const story = typeof body?.story === 'string' ? body.story.slice(0, STORY_READ_CHARS) : '';
+  const existingTags = cardSizedTags(body?.tags);
   if (!title.trim() && !story.trim()) {
     return NextResponse.json({ error: 'Nothing to tag' }, { status: 400 });
   }
