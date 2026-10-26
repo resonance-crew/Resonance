@@ -12,6 +12,7 @@ import {
   contrast,
   cssOklch,
   fitGamut,
+  hueColour,
   inP3,
   lightBaseOf,
   paletteFor,
@@ -136,6 +137,15 @@ describe('palette', () => {
         expect(contrast(ink, at('accent', hue, scheme)), `${scheme} ink on accent at ${hue}`).toBeGreaterThan(6);
       }
     }
+  });
+
+  it('the hue roles in light are the colours the components drew before them', () => {
+    expect(hueColour('interior', 55, 'light')).toBe('oklch(97.5% 0.012 55)');
+    expect(hueColour('accent', 140, 'light')).toBe('oklch(90% 0.06 140)');
+    expect(hueColour('pen', 290, 'light')).toBe('oklch(52% 0.11 290)');
+    expect(hueColour('separator', 88, 'light', 0.4)).toBe('oklch(55% 0.04 88 / 0.4)');
+    expect(paletteCss('oklch')).toContain('--hue-pen: 0.52 0.11;');
+    expect(paletteCss('oklch')).toContain('--hue-pen: 0.72 0.0825;');
   });
 
   it('a grey wallpaper wears terracotta', () => {
