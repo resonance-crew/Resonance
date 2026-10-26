@@ -37,6 +37,11 @@ describe('securityHeaders', () => {
     expect(rules[0].source).toBe('/:path*');
     expect(rules[0].headers.map((h) => h.key)).toEqual(securityHeaders(PRODUCTION).map((h) => h.key));
   });
+
+  it('leave no image optimizer for anyone to drive (/_next/image answers 404)', async () => {
+    const { default: config } = await import('../../../next.config');
+    expect(config.images?.unoptimized).toBe(true);
+  });
 });
 
 describe('reportOnlyPolicy', () => {
