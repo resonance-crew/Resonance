@@ -1,5 +1,7 @@
 .footer {
-  background: var(--color-text);
+  /* A band of ink in light; in dark a deep band below the paper (ink as a
+     band would be a cream slab) — its words light in both (--footer-ink). */
+  background: var(--footer-bg);
   padding: clamp(130px, 13vw, 180px) clamp(24px, 5vw, 80px) clamp(40px, 5vw, 64px);
   position: relative;
   overflow: hidden;
@@ -26,14 +28,14 @@
   font-family: var(--font-heading);
   font-weight: 700;
   font-size: 18px;
-  color: var(--color-cream);
+  color: var(--footer-ink);
 }
 
 .tagline {
   font-family: var(--font-body);
   font-size: 13px;
   /* AA on the footer's ink (5.0:1), as the trademark line. */
-  color: oklch(85% 0.015 75 / 0.65);
+  color: color-mix(in oklch, var(--footer-ink-soft) 65%, transparent);
   margin: 0;
   font-style: italic;
 }
@@ -54,7 +56,7 @@
   font-size: 12px;
   line-height: 1.5;
   text-align: center;
-  color: oklch(85% 0.015 75 / 0.65);
+  color: color-mix(in oklch, var(--footer-ink-soft) 65%, transparent);
 }
 
 .links {
@@ -68,25 +70,25 @@
   font-family: var(--font-body);
   font-size: 13px;
   /* AA on the footer's ink (5.3:1); brighter under the pointer. */
-  color: oklch(85% 0.015 75 / 0.68);
+  color: color-mix(in oklch, var(--footer-ink-soft) 68%, transparent);
   text-decoration: none;
   transition: color 150ms;
 }
 
 .link:hover {
-  color: oklch(85% 0.015 75 / 0.9);
+  color: color-mix(in oklch, var(--footer-ink-soft) 90%, transparent);
 }
 
 .divider {
   width: 100%;
   height: 1px;
-  background: oklch(85% 0.015 75 / 0.1);
+  background: color-mix(in oklch, var(--footer-ink-soft) 10%, transparent);
 }
 
 .copyright {
   font-family: var(--font-body);
   font-size: 12px;
   /* Quiet, still AA (5.0:1). */
-  color: oklch(85% 0.015 75 / 0.65);
+  color: color-mix(in oklch, var(--footer-ink-soft) 65%, transparent);
   margin: 0;
 }

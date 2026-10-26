@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { fireEvent, render, screen } from '@/../test/render';
 import { mockElementSize } from '@/../test/organic';
 import { StoryCard, type Story } from './StoryCard';
+import { paletteFor, type PaletteToken } from '@/lib/design/palette';
 
 // The card and its pills draw only once measured.
 mockElementSize(320, 480);
@@ -16,30 +17,22 @@ const story: Story = {
   tags: ['tea', 'rest'],
 };
 
-/** `oklch(92% 0.075 88)` → [92, '0.075 88']: the lightness, and the rest of the colour. */
-function lightness(fill: string | null) {
-  const m = fill?.match(/^oklch\((\d+)% (.+)\)$/);
-  if (!m) throw new Error(`not an oklch fill: ${fill}`);
-  return [Number(m[1]), m[2]] as const;
-}
-
 describe('StoryCard tags', () => {
   // The pills carry no outline, and on desktop hover the card's interior washes
-  // to close to the card's accent fill — a pill in that exact fill would vanish.
-  // So each is filled a few points deeper, in the same colour family.
-  it.each([0, 1, 2, 3, 4, 5])('fills the tags deeper than the card accent (palette %i)', (index) => {
+  // to close to the card's fill — a pill in that exact fill would vanish. So
+  // each wears its family's tag colour, a few points deeper (palette.ts
+  // card-tag; in dark a step above the fill), and every colour is a palette
+  // token, so the server's card is right in either scheme.
+  it.each([0, 1, 2, 3, 4, 5])('fills the tags in the family’s tag colour, the cover in its fill (palette %i)', (index) => {
     const { container } = render(<StoryCard story={story} index={index} />);
-
-    // The cover placeholder is painted in the card's accent fill.
-    const [accentL, accentRest] = lightness(container.querySelector('svg rect[fill]')?.getAttribute('fill') ?? null);
-
+    expect(container.querySelector('svg rect[fill]')).toHaveAttribute('fill', `var(--card-fill-${index})`);
     for (const tag of ['tea', 'rest']) {
       const pill = screen.getByText(tag).parentElement as HTMLElement;
-      const fill = pill.querySelector(':scope > svg path[fill]')?.getAttribute('fill') ?? null;
-      const [tagL, tagRest] = lightness(fill);
-      expect(tagL).toBe(accentL - 5);
-      expect(tagRest).toBe(accentRest);
+      expect(pill.querySelector(':scope > svg path[fill]')).toHaveAttribute('fill', `var(--card-tag-${index})`);
     }
+    const light = paletteFor('terracotta', 'light');
+    expect(light[`card-tag-${index}` as PaletteToken].L).toBeCloseTo(light[`card-fill-${index}` as PaletteToken].L - 0.05);
+    expect(container.innerHTML).not.toMatch(/oklch\(\d/);
   });
 });
 
@@ -62,8 +55,8 @@ describe('StoryCard hover', () => {
 
     fireEvent.mouseEnter(card, { clientX: 20, clientY: 30 });
     expect(scale()).toBeGreaterThan(0);
-    // The card's own hover tone (92.5% 0.024 at its hue; jsdom writes 92.5% as 0.925).
-    expect(disc.style.background).toMatch(/^oklch\((92\.5%|0\.925) 0\.024 140\)$/);
+    // The card's own hover tone (its family's, which the scheme draws).
+    expect(disc.style.background).toBe('var(--card-hover-2)');
 
     fireEvent.mouseLeave(card, { clientX: 300, clientY: 470 });
     expect(scale()).toBe(0);

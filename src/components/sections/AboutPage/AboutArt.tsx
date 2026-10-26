@@ -10,8 +10,8 @@ import { wavyLine } from '@/lib/design/wavyPath';
 import { makePrng } from '@/lib/design/prng';
 import { INK, INK_LIGHT, INK_STRONG } from '@/lib/design/strokes';
 
-const PEN = 'oklch(36% 0.06 60 / 0.55)';
-const PEN_SOFT = 'oklch(36% 0.06 60 / 0.35)';
+const PEN = 'var(--avatar-stroke)';
+const PEN_SOFT = 'color-mix(in oklch, var(--avatar-stroke) 64%, transparent)';
 
 /** Coordinates rounded, so the server's attributes and the browser's agree to the last digit. */
 const f = (n: number) => +n.toFixed(2);

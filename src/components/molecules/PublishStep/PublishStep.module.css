@@ -313,7 +313,7 @@
   font-family: var(--font-body);
   font-size: 12px;
   line-height: 1.4;
-  color: oklch(28% 0.04 60 / 0.7);
+  color: color-mix(in oklch, var(--color-text) 70%, transparent);
 }
 
 /* On its way: the pen's loader and its words in the card's deep pen
@@ -376,7 +376,7 @@
   padding: 7px 12px;
 }
 .coverErrorChip > svg {
-  filter: drop-shadow(0 1px 3px oklch(0% 0 0 / 0.22));
+  filter: drop-shadow(0 1px 3px color-mix(in oklch, var(--shadow-ink) 22%, transparent));
 }
 
 .coverErrorText {

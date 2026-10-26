@@ -1,12 +1,20 @@
 .page {
-  /* The beliefs' colours, after the deck's wheel: an olive sage, a sea-glass blue, a warm orange. */
-  --about-resonance: color-mix(in oklch, var(--color-sage) 70%, oklch(70% 0.1 115));
+  /* The beliefs' colours, after the deck's wheel: an olive sage, a sea-glass blue, a warm orange.
+     The olive leans the sage 8 points darker toward yellow (in light oklch(70% 0.1 115)), so in
+     dark it is a deep olive too; a browser without relative colours draws the sage. */
+  --about-resonance: var(--color-sage);
   --about-depth: color-mix(in oklch, color-mix(in oklch, var(--color-sky) 55%, var(--color-sage)) 70%, var(--color-cream));
   --about-insight: color-mix(in oklch, var(--color-terracotta) 50%, var(--color-terracotta-light));
 
   background: var(--color-cream);
   color: var(--color-text);
   overflow-x: clip;
+}
+
+@supports (color: oklch(from red l c h)) {
+  .page {
+    --about-resonance: color-mix(in oklch, var(--color-sage) 70%, oklch(from var(--color-sage) calc(l - 0.08) calc(c + 0.03) calc(h - 25)));
+  }
 }
 
 /* ── Hero ─────────────────────────────────────────────────────────── */
@@ -404,7 +412,7 @@
 
 .closing {
   position: relative;
-  background: var(--color-terracotta);
+  background: var(--cta-band);
   padding: clamp(140px, 14vw, 200px) clamp(20px, 5vw, 80px) clamp(72px, 9vw, 120px);
   overflow: hidden;
   display: flex;
@@ -433,7 +441,7 @@
   font-family: var(--font-heading);
   font-size: clamp(28px, 4.2vw, 48px);
   font-weight: 800;
-  color: var(--color-cream);
+  color: var(--cta-ink);
   line-height: 1.2;
   margin: 0 0 14px;
   text-wrap: balance;
@@ -443,7 +451,7 @@
   font-family: var(--font-body);
   font-size: 17px;
   line-height: 1.7;
-  color: color-mix(in oklch, var(--color-cream) 85%, transparent);
+  color: color-mix(in oklch, var(--cta-ink) 85%, transparent);
   margin: 0 0 8px;
 }
 
@@ -451,7 +459,7 @@
   font-family: var(--font-heading);
   font-style: italic;
   font-size: 18px;
-  color: color-mix(in oklch, var(--color-cream) 85%, transparent);
+  color: color-mix(in oklch, var(--cta-ink) 85%, transparent);
   margin: 0 0 36px;
 }
 
@@ -502,7 +510,7 @@
     text-align: left;
     font-size: 14.5px;
     text-decoration: line-through;
-    text-decoration-color: oklch(55% 0.05 60 / 0.45);
+    text-decoration-color: color-mix(in oklch, var(--soft-pen) 45%, transparent);
   }
 
   .arrow {

@@ -407,7 +407,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
               height={90}
               amplitude={0.14}
               steps={14}
-              stroke="oklch(55% 0.05 60 / 0.28)"
+              stroke="color-mix(in oklch, var(--soft-pen) 28%, transparent)"
               strokeWidth={1.2}
             />
           </div>
@@ -426,7 +426,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
               height={90}
               amplitude={0.14}
               steps={14}
-              stroke="oklch(55% 0.05 60 / 0.28)"
+              stroke="color-mix(in oklch, var(--soft-pen) 28%, transparent)"
               strokeWidth={1.2}
             />
           </div>

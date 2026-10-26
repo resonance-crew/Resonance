@@ -1,24 +1,7 @@
 'use client';
 
-import { CSSProperties, useEffect, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { INK } from '@/lib/design/strokes';
-
-function useAccentColor() {
-  const [color, setColor] = useState('#6F8F72');
-  useEffect(() => {
-    const read = () => {
-      const val = getComputedStyle(document.documentElement)
-        .getPropertyValue('--color-terracotta')
-        .trim();
-      if (val) setColor(val);
-    };
-    read();
-    const mo = new MutationObserver(read);
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
-    return () => mo.disconnect();
-  }, []);
-  return color;
-}
 
 export interface ResonanceIconProps {
   size?: number;
@@ -28,10 +11,10 @@ export interface ResonanceIconProps {
 /**
  * The brand mark: the same three stacked rippling waves as the「共振」action
  * icon (atoms/Icon/icons/wave.tsx) — resonance spreading outward — drawn in
- * the live accent color so it follows the TweaksPanel theme.
+ * the page's accent (`--color-terracotta`), so it follows the reader's theme
+ * and scheme from the server's first paint.
  */
 export function ResonanceIcon({ size = 32, style = {} }: ResonanceIconProps) {
-  const accent = useAccentColor();
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -39,7 +22,7 @@ export function ResonanceIcon({ size = 32, style = {} }: ResonanceIconProps) {
       height={size}
       viewBox="0 0 24 24"
       fill="none"
-      stroke={accent}
+      stroke="var(--color-terracotta)"
       strokeWidth={INK}
       strokeLinecap="round"
       strokeLinejoin="round"

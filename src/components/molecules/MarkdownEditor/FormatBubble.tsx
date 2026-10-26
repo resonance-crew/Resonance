@@ -88,7 +88,7 @@ export function FormatBubble({ editor, seed, ref }: { editor: Editor; seed: numb
             R={14}
             seed={seed + 101}
             fillColor="var(--color-card-bg)"
-            strokeColor="oklch(40% 0.06 60)"
+            strokeColor="var(--modal-border)"
             strokeWidth={INK}
           />
         )}

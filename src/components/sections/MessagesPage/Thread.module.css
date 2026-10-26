@@ -406,7 +406,7 @@
 
 /* A shared card is molecules/SharedCard; an own bubble gives its title a deeper hover colour. */
 .bubble[data-own] {
-  --shared-card-hover: color-mix(in oklch, var(--color-terracotta), black 25%);
+  --shared-card-hover: var(--terracotta-deep);
 }
 
 .previewPart {
@@ -636,13 +636,13 @@
   }
 }
 
-/* The thread dims under an ink scrim (the whole window: no bright band) —
-   the modals' scrim, whose colour the browser's bars take meanwhile. */
+/* The thread dims under the modals' scrim (the whole window: no bright
+   band), whose colour the browser's bars take meanwhile. */
 .scrim {
   all: unset;
   position: absolute;
   inset: 0;
-  background: color-mix(in oklch, var(--color-text) 24%, transparent);
+  background: var(--scrim);
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -728,7 +728,7 @@
 }
 
 .resultRow:hover {
-  --row-fill: oklch(0% 0 0 / 0.045);
+  --row-fill: color-mix(in oklch, var(--toward-ink) 4.5%, transparent);
 }
 
 .resultRow:focus-visible {
@@ -1291,7 +1291,8 @@
   grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
   padding: 56px 16px 24px;
-  background: oklch(12% 0.01 60 / 0.9);
+  /* Dark in either scheme: a picture is looked at on the dark. */
+  background: color-mix(in oklch, var(--viewer-ground) 90%, transparent);
 }
 
 .viewerPicture {

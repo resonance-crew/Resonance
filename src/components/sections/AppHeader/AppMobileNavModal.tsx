@@ -89,7 +89,7 @@ export function AppMobileNavModal({ open, onClose, user, activeKey }: AppMobileN
         <path
           d={dividerD}
           transform="translate(0,3)"
-          stroke="oklch(55% 0.05 60 / 0.35)"
+          stroke="color-mix(in oklch, var(--soft-pen) 35%, transparent)"
           strokeWidth={INK_LIGHT}
           fill="none"
           strokeLinecap="round"

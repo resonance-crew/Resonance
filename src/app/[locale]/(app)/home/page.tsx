@@ -12,6 +12,7 @@ import { useToast } from '@/components/providers/ToastProvider';
 import { penWave } from '@/lib/design/wavyPath';
 import { INK } from '@/lib/design/strokes';
 import { storyLinkWaveVars } from '@/lib/design/storyLinkWave';
+import { useLinkWaveInk } from '@/lib/design/useAppearance';
 import { useFeed, useRecommendedFeed } from '@/lib/data/hooks';
 import type { Card } from '@/lib/db/types';
 import styles from './page.module.css';
@@ -184,10 +185,9 @@ function cardInView(): { id: string; top: number } | null {
  * loop draws itself before the label (as a button's does); the button keeps
  * its focus, takes no click and says it is busy. The apps' FeedMoreButton.
  */
-/** The wave the label wears under a pointer: a story link's, seeded once. */
-const MORE_WAVE = storyLinkWaveVars('feed-more') as CSSProperties;
-
 function FeedMore({ label, loading, onClick }: { label: string; loading: boolean; onClick: () => void }) {
+  // The wave the label wears under a pointer: a story link's, in the page's wave ink.
+  const wave = storyLinkWaveVars('feed-more', useLinkWaveInk()) as CSSProperties;
   return (
     <button
       type="button"
@@ -197,7 +197,7 @@ function FeedMore({ label, loading, onClick }: { label: string; loading: boolean
       aria-disabled={loading || undefined}
     >
       {loading && <ButtonLoader size={15} />}
-      <span className={styles.moreLabel} style={MORE_WAVE}>
+      <span className={styles.moreLabel} style={wave}>
         {label}
       </span>
     </button>

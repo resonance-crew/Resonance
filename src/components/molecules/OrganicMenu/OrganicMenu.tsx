@@ -113,21 +113,24 @@ export interface OrganicMenuProps {
   className?: string;
 }
 
-/** The `--menu-*` colours a panel draws with: the theme's terracotta, or the accent `hue`. */
+/**
+ * The `--menu-*` colours a panel draws with: the theme's terracotta, or the
+ * accent `hue` at the scheme's lightness (palette.ts HUE_ROLES).
+ */
 function menuColors(hue: number | undefined): CSSProperties {
   return (
     hue === undefined
       ? {
           '--menu-border': 'var(--color-terracotta)',
-          '--menu-border-hover': 'color-mix(in oklch, var(--color-terracotta), black 25%)',
+          '--menu-border-hover': 'var(--terracotta-deep)',
           '--menu-cream': 'var(--color-cream)',
           '--menu-divider': 'color-mix(in oklch, var(--color-terracotta) 40%, transparent)',
         }
       : {
-          '--menu-border': `oklch(52% 0.11 ${hue})`,
-          '--menu-border-hover': `oklch(38% 0.09 ${hue})`,
-          '--menu-cream': `oklch(98% 0.01 ${hue})`,
-          '--menu-divider': `oklch(55% 0.04 ${hue} / 0.4)`,
+          '--menu-border': `oklch(var(--hue-pen) ${hue})`,
+          '--menu-border-hover': `oklch(var(--hue-pen-deep) ${hue})`,
+          '--menu-cream': `oklch(var(--hue-menu) ${hue})`,
+          '--menu-divider': `oklch(var(--hue-separator) ${hue} / 0.4)`,
         }
   ) as CSSProperties;
 }

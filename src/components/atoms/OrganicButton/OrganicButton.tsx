@@ -55,17 +55,17 @@ export type OrganicButtonVariant =
   | 'primary' | 'secondary' | 'ghost' | 'outline' | 'ctaLight' | 'ctaGhost' | 'secondaryOutline'
   | 'solid' | 'tonal' | 'danger' | 'dangerTonal' | 'dangerText' | 'ink' | 'text' | 'textAccent' | 'paper';
 
-// The fallback is the red every error line and danger row already uses
-// (`--color-danger` itself is not defined anywhere), deepened like the
-// terracotta fill so its cream label clears 4.5:1 (5.1:1).
-const DANGER = 'color-mix(in oklch, var(--color-danger, oklch(58% 0.16 25)), black 8%)';
+// The red every error line and danger row uses, deepened like the terracotta
+// fill so its cream label clears 4.5:1 (5.1:1) — the palette's --danger-fill
+// (in dark a bright red under a night-paper label).
+const DANGER = 'var(--danger-fill)';
 
 /** `bare`: no fill and so no grain — the face is the label and its wash alone. */
 type Face = { fill: string; text: string; hoverOverlay: string; bare?: true };
 
-// A filled face darkens under the hover ink; a tinted one takes a wash of
-// its own hue.
-const DARKEN = 'oklch(0% 0 0 / 0.14)';
+// A filled face moves away from the paper under the hover ink (darker in
+// light, lighter in dark: --toward-ink); a tinted one takes a wash of its own hue.
+const DARKEN = 'color-mix(in oklch, var(--toward-ink) 14%, transparent)';
 const WASH = 'color-mix(in oklch, var(--color-terracotta) 14%, transparent)';
 const SOLID: Face = { fill: 'var(--button-fill)', text: 'var(--color-cream)', hoverOverlay: DARKEN };
 const TONAL: Face = { fill: 'var(--button-tonal)', text: 'var(--button-on-tonal)', hoverOverlay: WASH };
@@ -82,22 +82,23 @@ const BTN_VARIANTS: Record<OrganicButtonVariant, Face> = {
   // as a button beside a filled verb, so they take the secondary pill.
   text: TONAL,
   textAccent: TONAL,
-  // On the terracotta band: cream for the verb, a deeper terracotta for the
-  // second action (cream on it 5.5:1; the band itself carries only large type).
-  ctaLight:   { fill: 'var(--color-cream)', text: 'var(--button-on-tonal)', hoverOverlay: 'oklch(0% 0 0 / 0.08)' },
-  ctaGhost:   { fill: 'color-mix(in oklch, var(--color-terracotta), black 18%)', text: 'var(--color-cream)', hoverOverlay: 'oklch(96% 0.015 75 / 0.14)' },
+  // On the call-to-action band (--cta-band): a paper pill for the verb, a
+  // deeper band for the second action (its words 5.5:1; the band itself
+  // carries only large type) — the band's own tokens, light in either scheme.
+  ctaLight:   { fill: 'var(--cta-ink)', text: 'var(--cta-verb-ink)', hoverOverlay: 'color-mix(in oklch, var(--toward-ink) 8%, transparent)' },
+  ctaGhost:   { fill: 'var(--cta-ghost)', text: 'var(--cta-ink)', hoverOverlay: 'color-mix(in oklch, var(--cta-ink) 14%, transparent)' },
   danger:     { fill: DANGER, text: 'var(--color-cream)', hoverOverlay: DARKEN },
   // The deep red on its rose tint, 5.7:1.
   dangerTonal: {
     fill: 'var(--button-danger-tonal)',
     text: 'var(--button-on-danger-tonal)',
-    hoverOverlay: 'color-mix(in oklch, var(--color-danger, oklch(58% 0.16 25)) 14%, transparent)',
+    hoverOverlay: 'color-mix(in oklch, var(--color-danger) 14%, transparent)',
   },
   // The danger ink on the page's own paper (5.1:1 on cream), its wash the same red at a whisper.
   dangerText: {
     fill: 'transparent',
     text: DANGER,
-    hoverOverlay: 'color-mix(in oklch, var(--color-danger, oklch(58% 0.16 25)) 12%, transparent)',
+    hoverOverlay: 'color-mix(in oklch, var(--color-danger) 12%, transparent)',
     bare: true,
   },
   ink:        { fill: 'var(--color-text)', text: 'var(--color-cream)', hoverOverlay: DARKEN },

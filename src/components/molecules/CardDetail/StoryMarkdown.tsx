@@ -17,6 +17,7 @@ import { storyTooComplex } from '@/lib/markdown/storyLimits';
 import { SITE_HOSTS, soleLinkParagraphs } from '@/lib/links/storyLinks';
 import { seedFromString } from '@/lib/design/prng';
 import { storyLinkWaveVars } from '@/lib/design/storyLinkWave';
+import { useLinkWaveInk } from '@/lib/design/useAppearance';
 import { rehypeLatinMarks } from '@/lib/markdown/rehypeLatinMarks';
 import { storyType, type StoryScript } from '@/lib/text/script';
 import '@/styles/story.css';
@@ -32,6 +33,22 @@ interface StoryLinkCards {
   previews: ReadonlyMap<string, LinkPreview>;
 }
 const StoryLinkCardsContext = createContext<StoryLinkCards | null>(null);
+
+/** A story's link in its pen wave, the wave in the ink the page's theme and scheme give it. */
+function StoryLink({ href, children, ...rest }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
+  const ink = useLinkWaveInk();
+  return (
+    <a
+      {...rest}
+      href={href}
+      {...(toOtherSite(href) ? AWAY : {})}
+      className="story-link"
+      style={storyLinkWaveVars(href ?? '', ink) as CSSProperties}
+    >
+      {children}
+    </a>
+  );
+}
 
 /**
  * How many card links a story draws as cards — the server's EMBED_LIMIT
@@ -108,19 +125,11 @@ const components: Components = {
   // that wraps gets a stroke under every line (OrganicLink's absolutely
   // positioned svg can't follow a wrapped inline box). One to another site
   // opens in a tab of its own; one to our pages stays in this one.
-  a: ({ node: _node, href, children, ...rest }) => {
-    return (
-      <a
-        {...rest}
-        href={href}
-        {...(toOtherSite(href) ? AWAY : {})}
-        className="story-link"
-        style={storyLinkWaveVars(href ?? '') as CSSProperties}
-      >
-        {children}
-      </a>
-    );
-  },
+  a: ({ node: _node, href, children, ...rest }) => (
+    <StoryLink {...rest} href={href}>
+      {children}
+    </StoryLink>
+  ),
   // Replace the flat accent border with a hand-drawn vertical curve.
   blockquote: ({ children }) => (
     <blockquote>

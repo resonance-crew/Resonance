@@ -10,6 +10,7 @@ import { wobRect } from '@/lib/design/wobRect';
 import { ModalCloseRow } from './ModalActions';
 import styles from './Modal.module.css';
 import { INK } from '@/lib/design/strokes';
+import { DIMMED_THEME_COLORS, metaScheme, resolvedAccent } from '@/lib/design/appearance';
 
 export interface ModalProps {
   open: boolean;
@@ -39,11 +40,11 @@ export interface ModalProps {
 /**
  * The browser's own bars (Android Chrome's, an installed app's status bar)
  * are painted in the page's theme colour, which no scrim reaches: while a
- * modal is open they take the scrim's colour over the cream, so the whole
- * screen dims as one and no bright band is left at the top. Keep it the
- * module CSS's `.backdrop` over #faf2e9 (--color-text at 24%).
+ * modal is open they take the scrim's colour over the paper of the theme and
+ * scheme each bar stands for (lib/design/appearance DIMMED_THEME_COLORS — the
+ * module CSS's `.backdrop` is that same `--scrim`), so the whole screen dims
+ * as one and no bright band is left at the top.
  */
-const DIMMED_THEME_COLOR = '#c9c0b6';
 let dimmed = 0;
 let themeColors: [HTMLMetaElement, string][] = [];
 
@@ -52,7 +53,8 @@ function dimThemeColor() {
   themeColors = Array.from(document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')).map(
     (meta) => [meta, meta.content],
   );
-  for (const [meta] of themeColors) meta.content = DIMMED_THEME_COLOR;
+  const accent = resolvedAccent();
+  for (const [meta] of themeColors) meta.content = DIMMED_THEME_COLORS[accent][metaScheme(meta)];
 }
 
 function restoreThemeColor() {
@@ -64,7 +66,7 @@ function restoreThemeColor() {
 /**
  * While `active`, the browser's own bars take the scrim's colour, as under a
  * modal — for anything else that dims the whole window with the same scrim
- * (`color-mix(in oklch, var(--color-text) 24%, transparent)`): the thread's
+ * (`--scrim`): the thread's
  * long-press menu.
  */
 export function useDimmedChrome(active: boolean): void {
@@ -127,7 +129,7 @@ export function Modal({
   maxWidth = 440,
   seed = 17,
   fillColor = 'var(--color-card-bg)',
-  borderColor = 'oklch(40% 0.06 60)',
+  borderColor = 'var(--modal-border)',
   padding = '32px 28px',
   ariaLabel = 'Dialog',
   closeLabel,

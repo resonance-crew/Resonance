@@ -48,9 +48,11 @@
   outline-offset: 3px;
 }
 
-.terracotta .badge:focus-visible,
+.terracotta .badge:focus-visible {
+  outline-color: var(--cta-ink);
+}
 .ink .badge:focus-visible {
-  outline-color: var(--color-cream);
+  outline-color: var(--footer-ink);
 }
 
 /* The file is drawn whole at its offset, not clipped to the box: cutting at a
@@ -106,11 +108,11 @@
 }
 
 .terracotta .caption {
-  color: color-mix(in oklch, var(--color-cream) 85%, transparent);
+  color: color-mix(in oklch, var(--cta-ink) 85%, transparent);
 }
 
 .ink .caption {
-  color: oklch(85% 0.015 75 / 0.6);
+  color: color-mix(in oklch, var(--footer-ink-soft) 60%, transparent);
 }
 
 @media (hover: hover) and (pointer: fine) {

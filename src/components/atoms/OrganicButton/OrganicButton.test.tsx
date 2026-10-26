@@ -56,13 +56,14 @@ describe('OrganicButton variants', () => {
   it.each([
     ['solid', 'var(--button-fill)', 'var(--color-cream)'],
     ['tonal', 'var(--button-tonal)', 'var(--button-on-tonal)'],
-    ['danger', 'color-mix(in oklch, var(--color-danger, oklch(58% 0.16 25)), black 8%)', 'var(--color-cream)'],
+    ['danger', 'var(--danger-fill)', 'var(--color-cream)'],
     ['dangerTonal', 'var(--button-danger-tonal)', 'var(--button-on-danger-tonal)'],
-    ['dangerText', 'transparent', 'color-mix(in oklch, var(--color-danger, oklch(58% 0.16 25)), black 8%)'],
+    ['dangerText', 'transparent', 'var(--danger-fill)'],
     ['ink', 'var(--color-text)', 'var(--color-cream)'],
     ['paper', 'var(--color-card-bg)', 'var(--color-text)'],
-    ['ctaLight', 'var(--color-cream)', 'var(--button-on-tonal)'],
-    ['ctaGhost', 'color-mix(in oklch, var(--color-terracotta), black 18%)', 'var(--color-cream)'],
+    // On the call-to-action band: its own tokens, light words on a deep band in either scheme.
+    ['ctaLight', 'var(--cta-ink)', 'var(--cta-verb-ink)'],
+    ['ctaGhost', 'var(--cta-ghost)', 'var(--cta-ink)'],
   ] as const)('%s wears the %s face with a %s label', (variant, fill, label) => {
     const btn = renderVariant(variant);
     expect(face(btn)).toBe(fill);

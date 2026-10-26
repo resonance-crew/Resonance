@@ -5,7 +5,7 @@ import { INK_LIGHT } from '@/lib/design/strokes';
 import styles from './AuthCard.module.css';
 
 const SEED = 313;
-const BORDER = 'color-mix(in oklch, var(--color-terracotta), black 18%)';
+const BORDER = 'var(--auth-border)';
 
 // The sheet's edge is one wavy pen line. Stacked (a phone, a tablet held
 // upright) the sheet sits at the foot of the screen and the line is its top;
@@ -85,9 +85,12 @@ function GrainFilter({ id }: { id: string }) {
             result="specks"
           />
           <feComposite in="specks" in2="SourceAlpha" operator="in" result="shaped" />
-          <feComponentTransfer in="shaped" result="grain">
+          <feComponentTransfer in="shaped" result="grainAlpha">
             <feFuncA type="linear" slope={GRAIN_OPACITY} />
           </feComponentTransfer>
+          {/* In the grain's ink, at the scheme's strength (GrainOverlay's --grain-ink and --grain-scale). */}
+          <feFlood style={{ floodColor: 'var(--grain-ink)', floodOpacity: 'var(--grain-scale, 1)' }} result="grainInk" />
+          <feComposite in="grainInk" in2="grainAlpha" operator="in" result="grain" />
           {/* Laid over the paper in sRGB, as GrainOverlay's opacity lays its
               grain: blended in linearRGB, 8% black darkens a light paper far
               less to the eye, and the strip showed as a lighter band. */}

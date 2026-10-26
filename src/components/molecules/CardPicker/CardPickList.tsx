@@ -196,13 +196,13 @@ function PickThumb({ src, hue, seed, chosen }: { src?: string; hue: number; seed
           // eslint-disable-next-line @next/next/no-img-element
           <img src={src} alt="" width={THUMB} height={THUMB} loading="lazy" decoding="async" className={styles.thumbImg} />
         ) : (
-          <span className={styles.thumbFallback} style={{ background: `oklch(90% 0.06 ${hue})` }} />
+          <span className={styles.thumbFallback} style={{ background: `oklch(var(--hue-accent) ${hue})` }} />
         )}
         {chosen && <span className={styles.thumbChosen} aria-hidden />}
       </span>
       {chosen && <ShapeGrain w={THUMB} h={THUMB} d={d} opacity={0.38} frequency={1.1} seed={seed} zIndex={1} />}
       <svg width={THUMB} height={THUMB} viewBox={`0 0 ${THUMB} ${THUMB}`} className={styles.thumbPen} aria-hidden>
-        <path d={d} fill="none" stroke="oklch(36% 0.06 60 / 0.55)" strokeWidth={INK} strokeLinejoin="round" />
+        <path d={d} fill="none" stroke="var(--avatar-stroke)" strokeWidth={INK} strokeLinejoin="round" />
       </svg>
       {chosen && (
         <span className={styles.thumbTick} aria-hidden>

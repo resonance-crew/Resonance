@@ -8,6 +8,7 @@ import type { TextRange } from '@/lib/chat/search';
 import type { RunPosition } from '@/lib/chat/rows';
 import { useElementSize } from '@/lib/hooks/useElementSize';
 import { storyLinkWaveVars } from '@/lib/design/storyLinkWave';
+import { useLinkWaveInk } from '@/lib/design/useAppearance';
 import styles from './Thread.module.css';
 
 /** A link in a message as the thread opens it: its normalized address, its host, and whether to ask first. */
@@ -173,6 +174,7 @@ const marks = (pieces: MarkedPiece[], strong: boolean) =>
  * from the raw text ({@link messageLinkProps}). A search's matches are marked.
  */
 export function BubbleWords({ text, note, ranges, strong = false, followed = false, onLink }: BubbleWordsProps) {
+  const waveInk = useLinkWaveInk();
   const segments = useMemo(() => markedSegments(text, ranges), [text, ranges]);
   return (
     <div className={styles.words} data-followed={followed || undefined}>
@@ -190,7 +192,7 @@ export function BubbleWords({ text, note, ranges, strong = false, followed = fal
             <a
               key={i}
               className={styles.link}
-              style={storyLinkWaveVars(seg.url) as CSSProperties}
+              style={storyLinkWaveVars(seg.url, waveInk) as CSSProperties}
               {...messageLinkProps({ url: seg.url, host: seg.host, suspicious: seg.suspicious }, onLink)}
             >
               {marks(seg.pieces, strong)}

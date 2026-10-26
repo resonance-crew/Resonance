@@ -59,6 +59,7 @@ export function ShapeGrain({
         </clipPath>
       </defs>
       <g clipPath={`url(#sgc-${id})`}>
+        {/* colour-fixed: only its alpha counts — the filter keeps the noise inside the shape */}
         <path d={d} fill="black" filter={`url(#sg-${id})`} />
       </g>
     </svg>

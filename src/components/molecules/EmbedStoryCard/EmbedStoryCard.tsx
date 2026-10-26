@@ -38,9 +38,10 @@ export function EmbedStoryCard({
   const ref = useRef<HTMLElement>(null);
   const { w, h } = useElementSize(ref);
 
-  const interior = `oklch(97.5% 0.012 ${hue})`;
-  const accent = `oklch(90% 0.06 ${hue})`;
-  const border = selected ? 'var(--field-border-focus)' : `oklch(52% 0.11 ${hue})`;
+  // The card's own hue as data; its lightness and chroma are the scheme's (palette.ts HUE_ROLES).
+  const interior = `oklch(var(--hue-interior) ${hue})`;
+  const accent = `oklch(var(--hue-accent) ${hue})`;
+  const border = selected ? 'var(--field-border-focus)' : `oklch(var(--hue-pen) ${hue})`;
 
   return (
     <article ref={ref} className={styles.card}>

@@ -115,7 +115,9 @@ export const ThoughtMapNode = memo(function ThoughtMapNode({
       tabIndex={-1}
     >
       {/* Selection deepens the card's own hue (fill + stroke) rather than
-          switching to the accent color, so a blue card selects as darker blue. */}
+          switching to the accent color, so a blue card selects as darker blue
+          (in dark, a brighter pen on a deeper paper). The hue is data; its
+          lightness and chroma are the scheme's (palette.ts HUE_ROLES). */}
       {tabbed ? (
         <svg
           aria-hidden="true"
@@ -132,11 +134,11 @@ export const ThoughtMapNode = memo(function ThoughtMapNode({
             zIndex: 0,
           }}
         >
-          <path d={tabbedPath} fill={`oklch(92.5% 0.045 ${hue})`} />
+          <path d={tabbedPath} fill={`oklch(var(--hue-wash) ${hue})`} />
           <path
             d={tabbedPath}
             fill="none"
-            stroke={`oklch(38% 0.13 ${hue})`}
+            stroke={`oklch(var(--hue-emphasis) ${hue})`}
             strokeWidth={INK_STRONG}
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -148,8 +150,8 @@ export const ThoughtMapNode = memo(function ThoughtMapNode({
           h={NODE_H}
           R={18}
           seed={seed}
-          fillColor={emphasized ? `oklch(92.5% 0.045 ${hue})` : `oklch(97.5% 0.012 ${hue})`}
-          strokeColor={emphasized ? `oklch(38% 0.13 ${hue})` : `oklch(52% 0.11 ${hue})`}
+          fillColor={emphasized ? `oklch(var(--hue-wash) ${hue})` : `oklch(var(--hue-interior) ${hue})`}
+          strokeColor={emphasized ? `oklch(var(--hue-emphasis) ${hue})` : `oklch(var(--hue-pen) ${hue})`}
           strokeWidth={emphasized ? INK_STRONG : INK}
           chalkSeed={seed % NODE_CHALK_SEEDS.length}
           sharedChalk
@@ -237,7 +239,7 @@ function NodeThumb({ src, seed, hue }: { src: string; seed: number; hue: number 
       <path
         d={path}
         fill="none"
-        stroke={`oklch(52% 0.11 ${hue} / 0.55)`}
+        stroke={`oklch(var(--hue-pen) ${hue} / 0.55)`}
         strokeWidth={INK}
         strokeLinecap="round"
         strokeLinejoin="round"

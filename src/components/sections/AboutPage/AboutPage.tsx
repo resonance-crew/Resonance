@@ -46,7 +46,7 @@ const BLOB_PAINTS: DriftPaint[] = [
   { color: '--color-yellow', alpha: 0.28 },
 ];
 
-const EDGE_PEN = 'oklch(55% 0.05 60 / 0.3)';
+const EDGE_PEN = 'color-mix(in oklch, var(--soft-pen) 30%, transparent)';
 
 function Heading({ kicker, title, id }: { kicker: string; title: string; id: string }) {
   return (
@@ -251,9 +251,9 @@ export function AboutPage() {
       </section>
 
       <section className={styles.closing}>
-        <SectionEdge topColor="var(--color-cream-dark)" seed={431} height={90} amplitude={0.13} stroke="oklch(40% 0.12 45 / 0.35)" strokeWidth={INK_LIGHT} />
+        <SectionEdge topColor="var(--color-cream-dark)" seed={431} height={90} amplitude={0.13} stroke="color-mix(in oklch, var(--terracotta-ink) 35%, transparent)" strokeWidth={INK_LIGHT} />
         <div className={styles.closingBlob} aria-hidden="true">
-          <OrganiBlob variant={2} fill="oklch(98% 0.01 75)" size={240} />
+          <OrganiBlob variant={2} fill="var(--cta-ink)" size={240} />
         </div>
         <div className={styles.closingContent}>
           <h2 className={styles.closingTitle}>{t('closing.title')}</h2>

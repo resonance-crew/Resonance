@@ -95,7 +95,7 @@ export function ComposerCapsule({ children, focused, ready, sendLabel, onSend }:
           {/* The segment's grain and its hover brush, cut to the capsule's outline. */}
           <div className={styles.capsuleSegmentLayer} style={{ width: w, height: h, clipPath: `path('${shape.outline}')` }} aria-hidden="true">
             <ShapeGrain w={w} h={h} d={shape.segment} seed={SEED} opacity={0.38} frequency={1.1} />
-            <BrushWash w={w} h={h} d={shape.segment} color="oklch(0% 0 0 / 0.14)" x={hover.x} y={hover.y} on={ready && hover.on} duration={340} overshoot={4} />
+            <BrushWash w={w} h={h} d={shape.segment} color="color-mix(in oklch, var(--toward-ink) 14%, transparent)" x={hover.x} y={hover.y} on={ready && hover.on} duration={340} overshoot={4} />
           </div>
           {/* The seam in the paper's colour and the pen line over everything. */}
           <svg aria-hidden="true" className={styles.capsuleShape} width={w} height={h} viewBox={`0 0 ${w} ${h}`}>

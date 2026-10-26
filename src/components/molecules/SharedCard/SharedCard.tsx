@@ -6,7 +6,7 @@ import { GrainOverlay } from '@/components/atoms/GrainOverlay/GrainOverlay';
 import { HandDrawnAvatar } from '@/components/atoms/HandDrawnAvatar/HandDrawnAvatar';
 import { Icon } from '@/components/atoms/Icon';
 import { Skeleton } from '@/components/atoms/Skeleton/Skeleton';
-import { CARD_BORDERS, CARD_FILLS } from '@/components/molecules/StoryCard/StoryCard';
+import { cardVar } from '@/lib/design/cardColours';
 import { cardHueIndex, nearestCardHue } from '@/lib/design/dominantHue';
 import { STORY_GRAIN } from '@/lib/design/grain';
 import { Link } from '@/i18n/navigation';
@@ -87,7 +87,7 @@ export function SharedCardContent({ card, author, titleId }: SharedCardContentPr
       ) : (
         <span
           className={styles.band}
-          style={{ '--band-fill': CARD_FILLS[palette], '--band-ink': CARD_BORDERS[palette][0] } as CSSProperties}
+          style={{ '--band-fill': cardVar('fill', palette), '--band-ink': cardVar('border', palette) } as CSSProperties}
           aria-hidden
         >
           <GrainOverlay opacity={STORY_GRAIN.band} />

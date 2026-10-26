@@ -11,6 +11,7 @@ import { Divider } from '@/components/atoms/Divider/Divider';
 import { Icon } from '@/components/atoms/Icon';
 import { SketchLoader } from '@/components/atoms/SketchLoader/SketchLoader';
 import { storyLinkWaveStyle } from '@/lib/design/storyLinkWave';
+import { useLinkWaveInk } from '@/lib/design/useAppearance';
 import { ruleSteps } from '@/lib/design/wavyPath';
 import { useElementSize } from '@/lib/hooks/useElementSize';
 import { useKeyboardInset } from '@/lib/hooks/useKeyboardInset';
@@ -144,6 +145,8 @@ export function MarkdownEditor({
   const fine = useMediaQuery(FINE_POINTER);
   const touchBar = canvas && fine === false;
   const kbInset = useKeyboardInset(touchBar && focus);
+  // The links' pen wave in the page's wave ink (editorProps are re-read on every render).
+  const waveInk = useLinkWaveInk();
 
   // editorProps handlers are captured once at editor creation, so they reach
   // the latest upload logic through a ref instead of a stale closure.
@@ -176,7 +179,7 @@ export function MarkdownEditor({
         ...(script ? { 'data-script': script } : {}),
         ...(lang ? { lang } : {}),
         // The pen wave every link in the story wears (one for all of them here; the reader seeds one per link).
-        style: storyLinkWaveStyle('editor'),
+        style: storyLinkWaveStyle('editor', waveInk),
         role: 'textbox',
         'aria-multiline': 'true',
         ...(ariaLabel ? { 'aria-label': ariaLabel } : {}),

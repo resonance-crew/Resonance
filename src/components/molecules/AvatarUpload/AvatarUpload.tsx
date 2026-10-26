@@ -117,7 +117,7 @@ export function AvatarUpload({
           style={{ clipPath, WebkitClipPath: clipPath }}
           aria-hidden="true"
         >
-          <Icon name="image" size={26} color="var(--color-cream)" />
+          <Icon name="image" size={26} color="var(--photo-ink)" />
         </span>
       </button>
 

@@ -11,6 +11,7 @@ import { useIsMobile } from '@/lib/hooks/useIsMobile';
 import { ProfileTabs, type TabKey } from '@/components/molecules/ProfileTabs/ProfileTabs';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useMyCardBox, useMyProfile, type CardBoxShelf } from '@/lib/data/hooks';
+import { LEGACY_AVATAR_COLOR } from '@/lib/design/avatarColors';
 import styles from './page.module.css';
 
 // Answering an older invite — none are sent any more — loads after the page.
@@ -53,12 +54,12 @@ export default function MyCardBoxPage() {
               src={user?.avatarUrl}
               initials={user?.initials ?? '··'}
               size={72}
-              color={user?.accentColor ?? 'oklch(88% 0.08 55)'}
+              color={user?.accentColor ?? LEGACY_AVATAR_COLOR}
               seed={Number(user?.avatarSeed ?? 0)}
             />
           </Link>
         ) : (
-          <HandDrawnAvatar initials="··" size={72} color="oklch(88% 0.08 55)" seed={0} />
+          <HandDrawnAvatar initials="··" size={72} color={LEGACY_AVATAR_COLOR} seed={0} />
         )}
         {/* No min-width on phones — reserving 200px would push the glyph
             onto its own row instead of keeping it at the right edge. */}

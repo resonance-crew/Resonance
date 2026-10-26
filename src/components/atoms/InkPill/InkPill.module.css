@@ -13,7 +13,7 @@
   background: transparent;
   font-family: var(--font-body);
   font-weight: 600;
-  color: color-mix(in oklch, var(--color-terracotta), black 35%);
+  color: var(--terracotta-ink);
 }
 
 /* The thread's: one line, small. */

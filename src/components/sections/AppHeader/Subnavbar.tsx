@@ -339,7 +339,7 @@ function SubnavPanel({
                 key={i}
                 d={dividerPath(pts)}
                 fill="none"
-                stroke="oklch(60% 0.04 60 / 0.45)"
+                stroke="color-mix(in oklch, var(--field-border-hover) 45%, transparent)"
                 strokeWidth={INK_LIGHT}
                 strokeLinecap="round"
                 clipPath={`url(#subnav-clip-${uid})`}

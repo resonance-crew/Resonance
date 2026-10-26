@@ -16,6 +16,7 @@ import { ApiError } from '@/lib/db/firestore/client/api';
 import { resonateWith } from '@/lib/db/firestore/client/cards';
 import type { Card } from '@/lib/db/types';
 import { storyLinkWaveVars } from '@/lib/design/storyLinkWave';
+import { useLinkWaveInk } from '@/lib/design/useAppearance';
 import styles from './ResonatePicker.module.css';
 
 /**
@@ -27,9 +28,6 @@ import styles from './ResonatePicker.module.css';
  * cards there are to choose from, left out or not — none at all is when the
  * viewer has "no public cards yet".
  */
-
-/** The story link's pen wave, which the「寫一張新卡片」row wears under a pointer. */
-const WRITE_NEW_WAVE = storyLinkWaveVars('resonate:write-new') as CSSProperties;
 
 export function resonateChoices(
   cards: Card[],
@@ -73,6 +71,8 @@ export function ResonatePicker({ open, onClose, targetId, targetReferenceId, onR
   const tNative = useTranslations('native');
   const router = useRouter();
   const refresh = useResonanceRefresh();
+  // The story link's pen wave, which the「寫一張新卡片」row wears under a pointer, in the page's wave ink.
+  const waveInk = useLinkWaveInk();
   // The card box's published shelf: one cache with the box, read when shown.
   const { data, error: readError, mutate: readAgain } = useMyCardBox(open ? 'published' : null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -131,7 +131,7 @@ export function ResonatePicker({ open, onClose, targetId, targetReferenceId, onR
     <>
       <button type="button" className={styles.writeNew} onClick={writeNew} disabled={busy}>
         <Icon name="pen" size={18} color="var(--color-terracotta)" />
-        <span className={styles.writeTitle} style={WRITE_NEW_WAVE}>
+        <span className={styles.writeTitle} style={storyLinkWaveVars('resonate:write-new', waveInk) as CSSProperties}>
           {t('writeNew')}
         </span>
       </button>

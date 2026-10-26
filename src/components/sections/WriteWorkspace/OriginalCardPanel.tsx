@@ -101,7 +101,7 @@ export function OriginalCardPanel({ cardId }: OriginalCardPanelProps) {
         {card.tags.map((tag) => (
           <TagPill
             key={tag}
-            color={card.accentHue != null ? `oklch(92% 0.06 ${card.accentHue})` : 'var(--color-terracotta-light)'}
+            color={card.accentHue != null ? `oklch(var(--hue-tint) ${card.accentHue})` : 'var(--color-terracotta-light)'}
           >
             {tag}
           </TagPill>

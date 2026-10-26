@@ -436,14 +436,14 @@ export function PublishStep({
                 const chosen = audience === a;
                 const ink = chosen
                   ? 'var(--button-on-tonal)'
-                  : 'color-mix(in oklch, var(--color-text-muted), black 10%)';
+                  : 'var(--segment-idle-ink)';
                 return {
                   key: a,
                   icon: <Icon name={AUDIENCE_ICON[a]} size={16} color={ink} />,
                   label: tVis(a === 'private' ? 'draft' : a),
                   fill: chosen ? 'var(--button-tonal)' : 'transparent',
                   textColor: ink,
-                  hoverOverlay: 'oklch(0% 0 0 / 0.05)',
+                  hoverOverlay: 'color-mix(in oklch, var(--toward-ink) 5%, transparent)',
                   pressed: chosen,
                   onClick: () => onAudienceChange(audienceFields(a, { anonymous, live: updating })),
                 } satisfies SegmentSpec;

@@ -36,7 +36,8 @@ import { wavyVertical } from '../../../src/lib/design/wavyPath';
 import { storyPictureShape } from '../../../src/lib/design/storyPicture';
 import { INK_STRONG } from '../../../src/lib/design/strokes';
 import { seedFromString } from '../../../src/lib/design/prng';
-import { storyLinkWaveVars } from '../../../src/lib/design/storyLinkWave';
+import { storyLinkWaveVars, waveInk } from '../../../src/lib/design/storyLinkWave';
+import { resolvedAccent, resolvedScheme } from '../../../src/lib/design/appearance';
 import { BlockImage, CardEmbed, getMarkdown, MarkdownTable, storyExtensions } from '../../../src/lib/markdown/editorSchema';
 import { LatinMarks } from '../../../src/lib/markdown/latinMarks';
 import { localeScript, storyLang, writerScript, type StoryScript } from '../../../src/lib/text/script';
@@ -206,8 +207,14 @@ const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.documentElement.classList.add('embed');
 // ?layout=canvas: the writer's bare page — no frame and no padding of its own (island.css).
 if (params.get('layout') === 'canvas') document.documentElement.classList.add('canvas');
-// The pen wave every link in the story wears (island.css), as the web editor's.
-for (const [name, value] of Object.entries(storyLinkWaveVars('editor'))) document.documentElement.style.setProperty(name, value);
+// The pen wave every link in the story wears (island.css), as the web editor's, in the ink of the
+// theme and scheme the host puts on <html> (data-accent, data-scheme) — again whenever it changes them.
+const wearWave = () => {
+  const ink = waveInk(resolvedAccent(), resolvedScheme());
+  for (const [name, value] of Object.entries(storyLinkWaveVars('editor', ink))) document.documentElement.style.setProperty(name, value);
+};
+wearWave();
+new MutationObserver(wearWave).observe(document.documentElement, { attributes: true, attributeFilter: ['data-accent', 'data-scheme'] });
 // A table's source wears 表格 / Table (the web writer's card.table), in the UI's language: ?locale=, which
 // the writer's page passes (the island's zh-TW without it, as its placeholder and type).
 const tableLabel = (params.get('locale') ?? 'zh-TW').startsWith('en') ? cardEn.table : cardZhTW.table;
