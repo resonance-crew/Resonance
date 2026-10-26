@@ -58,7 +58,8 @@ export class FirestoreVectorStore implements IVectorStore {
   }
 
   async deleteByCard(cardId: string): Promise<void> {
-    const snap = await this.db().collection(COLLECTION).where('cardId', '==', cardId).get();
+    // The references only: a vector is 1536 floats nobody here reads.
+    const snap = await this.db().collection(COLLECTION).where('cardId', '==', cardId).select().get();
     if (snap.empty) return;
     const batch = this.db().batch();
     snap.docs.forEach((d) => batch.delete(d.ref));
@@ -66,7 +67,7 @@ export class FirestoreVectorStore implements IVectorStore {
   }
 
   async setVisibility(cardId: string, visibility: Visibility): Promise<void> {
-    const snap = await this.db().collection(COLLECTION).where('cardId', '==', cardId).get();
+    const snap = await this.db().collection(COLLECTION).where('cardId', '==', cardId).select().get();
     if (snap.empty) return;
     const batch = this.db().batch();
     snap.docs.forEach((d) => batch.update(d.ref, { visibility, updatedAt: FieldValue.serverTimestamp() }));

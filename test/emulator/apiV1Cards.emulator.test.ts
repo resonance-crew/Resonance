@@ -395,26 +395,74 @@ describe('deleteCard (DELETE /cards/{id})', () => {
     expect((await db.doc(`notes/${elsewhere.id}`).get()).exists).toBe(true);
   });
 
-  // Review: a failing clean-up of what is under the card skipped the notes after it.
-  it('still removes the notes, and the vectors, when what is under the card cannot be removed', async () => {
+  it("takes its pending edit in the card's own transaction, never in a clean-up after it", async () => {
+    await db.doc('cards/live/edits/current').set({ story: 'half-written' });
+    const sweep = vi.spyOn(db, 'recursiveDelete');
+    let underneath: boolean | null = null;
+    // When the clean-ups start, the edit is gone already.
+    const vectors = { deleteByCard: async () => void (underneath = (await db.doc('cards/live/edits/current').get()).exists) };
+    let swept = -1;
+    try {
+      await deleteCard(db, 'alice', 'live', { vectors });
+      swept = sweep.mock.calls.length;
+    } finally {
+      sweep.mockRestore();
+    }
+    expect(underneath).toBe(false);
+    expect(swept).toBe(0);
+  });
+
+  // Review: a failing clean-up skipped the ones after it. Now they run side by side, each failing alone.
+  it('cleans up its notes and its vectors side by side', async () => {
     const { sendNote } = await import('@/lib/api/v1/conversations');
     await db.doc('users/carol').set({ handle: 'carol', handleLower: 'carol' });
     const note = await sendNote(db, 'carol', { cardId: 'live', text: 'hi' });
-    const underneath = vi.spyOn(db, 'recursiveDelete').mockRejectedValueOnce(new Error('deadline exceeded'));
+    // The notes' batch is held until the vectors' clean-up has started.
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const batch = db.batch.bind(db);
+    const spy = vi.spyOn(db, 'batch').mockImplementation(() => {
+      const b = batch();
+      const commit = b.commit.bind(b);
+      b.commit = async () => (await held, commit());
+      return b;
+    });
+    const vectors = { deleteByCard: vi.fn(async () => release()) };
+    try {
+      await deleteCard(db, 'alice', 'live', { vectors });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(vectors.deleteByCard).toHaveBeenCalledWith('live');
+    expect((await db.doc(`notes/${note.id}`).get()).exists).toBe(false);
+  });
+
+  it('still removes the notes when the vectors cannot be removed, and the vectors when the notes cannot', async () => {
+    const { sendNote } = await import('@/lib/api/v1/conversations');
+    await db.doc('users/carol').set({ handle: 'carol', handleLower: 'carol' });
+    const note = await sendNote(db, 'carol', { cardId: 'live', text: 'hi' });
     const quiet = console.error;
     console.error = () => {};
-    let tried = 0;
     try {
-      await deleteCard(db, 'alice', 'live', { vectors: new FirestoreVectorStore(db) });
-      tried = underneath.mock.calls.length;
+      await deleteCard(db, 'alice', 'live', { vectors: { deleteByCard: async () => { throw new Error('vector store down'); } } });
+      expect((await db.doc(`notes/${note.id}`).get()).exists).toBe(false);
+
+      await db.doc('cards/again').set({ authorId: 'alice', thoughtCore: 't', story: 's', visibility: 'public', anonymous: false, publishedAt: published });
+      const left = await sendNote(db, 'carol', { cardId: 'again', text: 'hi' });
+      const collection = db.collection.bind(db);
+      const spy = vi.spyOn(db, 'collection').mockImplementation((path: string) => {
+        if (path === 'notes') throw new Error('deadline exceeded');
+        return collection(path);
+      });
+      const vectors = { deleteByCard: vi.fn(async () => {}) };
+      await deleteCard(db, 'alice', 'again', { vectors });
+      spy.mockRestore();
+      expect(vectors.deleteByCard).toHaveBeenCalledWith('again');
+      expect((await db.doc('cards/again').get()).exists).toBe(false);
+      expect((await db.doc(`notes/${left.id}`).get()).exists).toBe(true);
     } finally {
       console.error = quiet;
-      underneath.mockRestore();
     }
-    expect(tried).toBe(1);
-    expect((await db.doc('cards/live').get()).exists).toBe(false);
-    expect((await db.doc(`notes/${note.id}`).get()).exists).toBe(false);
-    expect((await db.doc('cardVectors/live__insight').get()).exists).toBe(false);
   });
 
   it("names only the id page of a card without a slug (a draft)", async () => {

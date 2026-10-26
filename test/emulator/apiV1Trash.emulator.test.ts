@@ -348,6 +348,29 @@ describe('notes on a card in the trash', () => {
     expect((await db.collection('notes').where('cardId', '==', 'live').get()).size).toBe(0);
   });
 
+  it('go before the answer side by side with the vectors going private', async () => {
+    await db.doc('cards/live').update({ anonymous: true });
+    const note = await sendNote(db, 'carol', { cardId: 'live', text: 'hi' });
+    // The notes' batch is held until the vectors' change has started: one after the other, this never ends.
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const batch = db.batch.bind(db);
+    const spy = vi.spyOn(db, 'batch').mockImplementation(() => {
+      const b = batch();
+      const commit = b.commit.bind(b);
+      b.commit = async () => (await held, commit());
+      return b;
+    });
+    const vectors = { setVisibility: vi.fn(async () => release()) };
+    try {
+      await trashCard(db, 'alice', 'live', { vectors });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(vectors.setVisibility).toHaveBeenCalledWith('live', 'private');
+    expect(await exists(`notes/${note.id}`)).toBe(false);
+  });
+
   it("can't be shared in a message, even by its author", async () => {
     await set('connections/alice_carol', { userIds: ['alice', 'carol'], establishedAt: Timestamp.now() });
     await trashCard(db, 'alice', 'live');

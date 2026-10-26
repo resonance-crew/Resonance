@@ -167,9 +167,10 @@ export const NOT_IN_TRASH_MESSAGE = 'This card is not in the trash.';
  * A resonance is taken back with it, as unresonate takes it back
  * (readTakeBack): read in the transaction that deletes the card, so a
  * resonance pointed at a card a moment before can't outlive it with its
- * connection. The notes go just after the card — once it is gone no note can
- * land on it — so they leave their writers' backups when the card's page goes,
- * never later with its author's account, which would say whose card it was.
+ * connection. Its pending edit goes in that same transaction. The notes go
+ * just after the card — once it is gone no note can land on it — so they
+ * leave their writers' backups when the card's page goes, never later with
+ * its author's account, which would say whose card it was.
  */
 export async function deleteCard(db: Firestore, uid: string, id: string, opts: DeleteCardOptions = {}): Promise<DeletedCard> {
   if (isReservedId(id)) throw notFound();
@@ -182,18 +183,22 @@ export async function deleteCard(db: Firestore, uid: string, id: string, opts: D
     if (opts.onlyIfTrashed && trashedAt == null) throw new ApiFailure('conflict', NOT_IN_TRASH_MESSAGE);
     takeBack(tx, await readTakeBack(tx, db, uid, id));
     tx.delete(ref);
+    // What is under the card goes with it: its pending edit — the one document a card has beneath it (the rules
+    // let a client write edits/current alone, and no server path writes anything else there). Deleting a missing
+    // one is nothing; once the card is gone the rules take no new one.
+    tx.delete(db.doc(`cards/${id}/edits/current`));
     return snap.data()!;
   });
   if (!data) return { stale: [], deleted: false };
-  // The card is gone either way, so each clean-up below runs whatever the one before it did: a pending edit
-  // left under it is unreadable writing its author's account takes, stray notes go with that account too (or
-  // `backfill.ts orphan-notes`), and stray vectors only cost the recommender a candidate it then can't read.
-  // What is under the card (its pending edit).
-  await db.recursiveDelete(ref).catch((e) => console.error('[api/v1] pending edit', id, e));
-  await deleteNotesOn(db, id).catch((e) => console.error('[api/v1] notes', id, e));
-  await Promise.resolve()
-    .then(() => (opts.vectors ?? getVectorStore()).deleteByCard(id))
-    .catch((e) => console.error('[api/v1] vectors', id, e));
+  // The card is gone either way, so each clean-up below runs whatever the other does (side by side, each
+  // failing alone): stray notes go with its author's account (or `backfill.ts orphan-notes`), and stray vectors
+  // only cost the recommender a candidate it then can't read.
+  await Promise.all([
+    deleteNotesOn(db, id).catch((e) => console.error('[api/v1] notes', id, e)),
+    Promise.resolve()
+      .then(() => (opts.vectors ?? getVectorStore()).deleteByCard(id))
+      .catch((e) => console.error('[api/v1] vectors', id, e)),
+  ]);
   return { stale: [...cardPagePaths(mapCard(id, data)), ...landingPagePaths(data)], deleted: true };
 }
 
