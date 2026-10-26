@@ -555,10 +555,19 @@ export function sampleField(world: World, g: Grid): void {
  * The outline at `iso`, as closed loops of points ([x0, y0, x1, y1, …]),
  * by marching squares with each crossing interpolated along its cell edge.
  */
+/**
+ * traceContours' working arrays, kept between frames (30 a second, half a
+ * megabyte apiece on a wide hero) and grown when a grid needs more.
+ */
+let linksScratch = new Int32Array(0);
+let seenScratch = new Uint8Array(0);
+
 export function traceContours(g: Grid, iso = ISO): number[][] {
   const { v, nx, ny, cell, x0, y0 } = g;
   // Edge ids: 2·(j·nx + i) runs right from sample (i, j), +1 runs down from it.
-  const links = new Int32Array(nx * ny * 4).fill(-1);
+  if (linksScratch.length < nx * ny * 4) linksScratch = new Int32Array(nx * ny * 4);
+  const links = linksScratch;
+  links.fill(-1, 0, nx * ny * 4);
   const link = (a: number, b: number) => {
     links[a * 2 + (links[a * 2] === -1 ? 0 : 1)] = b;
     links[b * 2 + (links[b * 2] === -1 ? 0 : 1)] = a;
@@ -604,7 +613,9 @@ export function traceContours(g: Grid, iso = ISO): number[][] {
     const f = b === a ? 0.5 : (iso - a) / (b - a);
     out.push(x0 + (i + (down ? 0 : f)) * cell, y0 + (j + (down ? f : 0)) * cell);
   };
-  const seen = new Uint8Array(nx * ny * 2);
+  if (seenScratch.length < nx * ny * 2) seenScratch = new Uint8Array(nx * ny * 2);
+  const seen = seenScratch;
+  seen.fill(0, 0, nx * ny * 2);
   const loops: number[][] = [];
   for (let e = 0; e < nx * ny * 2; e++) {
     if (links[e * 2] === -1 || seen[e]) continue;
