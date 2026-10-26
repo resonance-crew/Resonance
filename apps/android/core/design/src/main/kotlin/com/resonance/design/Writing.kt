@@ -59,7 +59,7 @@ import kotlin.math.roundToInt
  * set bow — the writer's frames pass `curve={0.8}` (the title, the image
  * surface and the picture in it). The twin of iOS's AutoWobRectShape.
  */
-class AutoWobRectShape(private val radius: Double = 16.0, private val seed: Double, private val curve: Double) : Shape {
+data class AutoWobRectShape(private val radius: Double = 16.0, private val seed: Double, private val curve: Double) : Shape {
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
         val w = (size.width / density.density).toDouble()
         val h = (size.height / density.density).toDouble()
@@ -71,7 +71,7 @@ class AutoWobRectShape(private val radius: Double = 16.0, private val seed: Doub
 }
 
 /** A shape drawn in a box `inset` smaller on every side (a clip for an overscanned picture). */
-private class InsetShape(private val base: Shape, private val inset: Dp) : Shape {
+private data class InsetShape(private val base: Shape, private val inset: Dp) : Shape {
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
         val px = with(density) { inset.toPx() }
         val inner = base.createOutline(Size(size.width - px * 2, size.height - px * 2), layoutDirection, density)

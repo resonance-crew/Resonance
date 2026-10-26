@@ -41,15 +41,22 @@ fun List<PathCommand>.toPath(scale: Float, dx: Float = 0f, dy: Float = 0f): Path
     return p
 }
 
-/** Compose re-asks shapes for outlines on every size change; a feed repeats the same few sizes. */
+/**
+ * Compose re-asks shapes for outlines on every size change; a feed repeats the same few sizes. A key
+ * is any value with equality: the shapes' own [RectKey] (numbers, not a string built on every ask),
+ * or a string.
+ */
 object GeometryCache {
-    private val cache = LruCache<String, List<PathCommand>>(512)
-    fun get(key: String, make: () -> List<PathCommand>): List<PathCommand> =
+    private val cache = LruCache<Any, List<PathCommand>>(512)
+    fun get(key: Any, make: () -> List<PathCommand>): List<PathCommand> =
         cache.get(key) ?: make().also { cache.put(key, it) }
 }
 
-/** wobRect with the web's automatic segment/curve/magnitude choice for the size. */
-class WobRectShape(
+/** A wobRect's inputs, in dp, as a cache key ([kind] keeps one shape's from another's). */
+internal data class RectKey(val kind: Int, val w: Double, val h: Double, val r: Double, val seed: Double, val mag: Double, val options: WobRectOptions?)
+
+/** wobRect with the web's automatic segment/curve/magnitude choice for the size. Equal inputs, equal shapes. */
+data class WobRectShape(
     private val radius: Double = 22.0,
     private val seed: Double = 1.0,
     private val mag: Double? = null,
@@ -67,12 +74,12 @@ class WobRectShape(
         )
         val r = min(radius, min(w, h) / 2)
         val m = mag ?: autoMag(w, h)
-        val cmds = GeometryCache.get("r|$w|$h|$r|$seed|$m|$o") { wobRect(w, h, r, seed, m, o) }
+        val cmds = GeometryCache.get(RectKey(0, w, h, r, seed, m, o)) { wobRect(w, h, r, seed, m, o) }
         return Outline.Generic(cmds.toPath(d))
     }
 }
 
-class WobCircleShape(
+data class WobCircleShape(
     private val seed: Double = 1.0,
     private val options: WobCircleOptions = WobCircleOptions(),
 ) : Shape {

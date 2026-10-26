@@ -52,6 +52,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.CacheDrawScope
+import androidx.compose.ui.draw.DrawResult
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -131,7 +133,7 @@ private const val QUOTE_RADIUS = 16.0
  * them): the first of a run tucks its bottom one, a middle one both, the last its top one
  * ([RunPosition]). A bubble that carries a preview or a card is still one shape, and tucks the same.
  */
-class MessageBubbleShape(
+data class MessageBubbleShape(
     private val seed: Double,
     private val mine: Boolean = true,
     private val run: RunPosition = RunPosition.Single,
@@ -191,14 +193,25 @@ fun bubbleFill(mine: Boolean): Color = if (mine) Tokens.BubbleMine else Tokens.B
  * to edge and ends where the bubble does. [flash] (0…1, read while drawing) washes it terracotta:
  * the message a reply's quote jumped to.
  */
-fun Modifier.bubbleSurface(shape: Shape, fill: Color, flash: () -> Float = { 0f }): Modifier = drawWithCache {
-    val outline = shape.createOutline(size, layoutDirection, this)
-    val clip = Path().apply { addOutline(outline) }
-    onDrawWithContent {
-        drawOutline(outline, fill)
-        val pulse = flash()
-        if (pulse > 0f) drawOutline(outline, Tokens.Terracotta, alpha = 0.3f * pulse)
-        clipPath(clip) { this@onDrawWithContent.drawContent() }
+fun Modifier.bubbleSurface(shape: Shape, fill: Color, flash: () -> Float = NoFlash): Modifier = drawWithCacheOf(BubbleSurface(shape, fill, flash))
+
+/** No pulse: one value, so two resting bubbles' surfaces are equal. */
+private val NoFlash: () -> Float = { 0f }
+
+/**
+ * [bubbleSurface]'s drawing, as a value ([drawWithCacheOf]): recomposed with equal inputs it is an equal modifier,
+ * which keeps what it cached (outline, paths, grain) instead of building it again at the next draw.
+ */
+private data class BubbleSurface(val shape: Shape, val fill: Color, val flash: () -> Float) : (CacheDrawScope) -> DrawResult {
+    override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
+        val outline = shape.createOutline(size, layoutDirection, this)
+        val clip = Path().apply { addOutline(outline) }
+        onDrawWithContent {
+            drawOutline(outline, fill)
+            val pulse = flash()
+            if (pulse > 0f) drawOutline(outline, Tokens.Terracotta, alpha = 0.3f * pulse)
+            clipPath(clip) { this@onDrawWithContent.drawContent() }
+        }
     }
 }
 

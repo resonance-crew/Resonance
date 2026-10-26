@@ -94,13 +94,13 @@ private val ImageWob = WobRectOptions(
  * OrganicImage's clip: wobRect (R 18, 5% wobble) over the box, the picture
  * bleeding past it so the outward bulges land on real pixels (OrganicImage.tsx).
  */
-class OrganicImageShape(private val seed: Double, private val radius: Double = 18.0, private val magFactor: Double = 0.05) : Shape {
+data class OrganicImageShape(private val seed: Double, private val radius: Double = 18.0, private val magFactor: Double = 0.05) : Shape {
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
         val d = density.density
         val w = (size.width / d).toDouble()
         val h = (size.height / d).toDouble()
         if (w <= 0 || h <= 0) return Outline.Rectangle(Rect.Zero)
-        val cmds = GeometryCache.get("img|$w|$h|$seed|$radius|$magFactor") {
+        val cmds = GeometryCache.get(RectKey(1, w, h, radius, seed, magFactor, null)) {
             wobRect(w, h, min(radius, min(w, h) / 2), seed, min(w, h) * magFactor, ImageWob)
         }
         return Outline.Generic(cmds.toPath(d))
@@ -156,13 +156,13 @@ fun OrganicImage(
 }
 
 /** The clip drawn inside a frame `bleed` larger on every side. */
-internal class BledShape(private val seed: Double, private val bleed: Double, private val radius: Double = 18.0, private val magFactor: Double = 0.05) : Shape {
+internal data class BledShape(private val seed: Double, private val bleed: Double, private val radius: Double = 18.0, private val magFactor: Double = 0.05) : Shape {
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
         val d = density.density
         val w = size.width / d - bleed * 2
         val h = size.height / d - bleed * 2
         if (w <= 0 || h <= 0) return Outline.Rectangle(Rect.Zero)
-        val cmds = GeometryCache.get("bled|$w|$h|$seed|$radius|$magFactor") {
+        val cmds = GeometryCache.get(RectKey(2, w, h, radius, seed, magFactor, null)) {
             wobRect(w, h, min(radius, min(w, h) / 2), seed, min(w, h) * magFactor, ImageWob)
         }
         return Outline.Generic(cmds.toPath(d, (bleed * d).toFloat(), (bleed * d).toFloat()))

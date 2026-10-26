@@ -26,6 +26,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.CacheDrawScope
+import androidx.compose.ui.draw.DrawResult
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -192,12 +194,20 @@ private const val SEND_FADE_MILLIS = 140
  * muted ink, the field's wobble at radius 14. No halo, shadow or alpha: the foot's paper is behind it
  * ([ComposerBacking]), as behind the capsule (round 10 §3.1).
  */
-fun Modifier.floatingSlip(seed: Double = 29.0, radius: Double = 14.0, pen: Color = Tokens.TextMuted): Modifier = drawWithCache {
-    val o = WobRectShape(radius, seed).createOutline(size, layoutDirection, this)
-    val line = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-    onDrawBehind {
-        drawOutline(o, Tokens.Cream)
-        drawOutline(o, pen, style = line)
+fun Modifier.floatingSlip(seed: Double = 29.0, radius: Double = 14.0, pen: Color = Tokens.TextMuted): Modifier = drawWithCacheOf(FloatingSlip(seed, radius, pen))
+
+/**
+ * [floatingSlip]'s drawing, as a value ([drawWithCacheOf]): recomposed with equal inputs it is an equal modifier,
+ * which keeps what it cached (outline, paths, grain) instead of building it again at the next draw.
+ */
+private data class FloatingSlip(val seed: Double, val radius: Double, val pen: Color) : (CacheDrawScope) -> DrawResult {
+    override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
+        val o = WobRectShape(radius, seed).createOutline(size, layoutDirection, this)
+        val line = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        onDrawBehind {
+            drawOutline(o, Tokens.Cream)
+            drawOutline(o, pen, style = line)
+        }
     }
 }
 
