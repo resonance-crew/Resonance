@@ -88,27 +88,28 @@ object Linkify {
     private fun scan(text: String, begin: Int, hostStart: Int): Int {
         var i = begin
         var inHost = true
+        // What the host so far is, kept as it grows (re-reading it at every letter was quadratic).
+        var hostAscii = true
+        var hostDot = false
+        var hostLast = 0
         while (i < text.length) {
             val cp = text.codePointAt(i)
             if (ends(cp)) break
             if (i >= hostStart && inHost) {
                 if (cp == '/'.code || cp == '?'.code || cp == '#'.code) {
                     inHost = false
-                } else if (cp > 127 && hostIsDottedAscii(text, hostStart, i)) {
-                    break
+                } else {
+                    // A dotted ASCII name ending in a letter, digit or hyphen: more letters after it belong to the sentence.
+                    val dotted = hostAscii && hostDot && hostLast != 0 && (Character.isLetterOrDigit(hostLast) || hostLast == '-'.code)
+                    if (cp > 127 && dotted) break
+                    if (cp > 127) hostAscii = false
+                    if (cp == '.'.code) hostDot = true
+                    hostLast = cp
                 }
             }
             i += Character.charCount(cp)
         }
         return i
-    }
-
-    /** The host so far is a dotted ASCII name ending in a letter, digit or hyphen: more letters after it belong to the sentence. */
-    private fun hostIsDottedAscii(text: String, from: Int, to: Int): Boolean {
-        if (to <= from) return false
-        val so = text.substring(from, to)
-        val last = so.last()
-        return so.contains('.') && so.all { it.code < 128 } && (last.isLetterOrDigit() || last == '-')
     }
 
     private fun ends(cp: Int): Boolean {

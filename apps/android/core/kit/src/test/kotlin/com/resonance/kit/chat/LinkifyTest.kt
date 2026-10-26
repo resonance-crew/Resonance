@@ -65,6 +65,18 @@ class LinkifyTest {
         }
     }
 
+    @Test fun aLongNonAsciiHostIsReadInAMoment() {
+        // The host was re-read at every non-ASCII letter: a story of https:// and 200 000 CJK letters
+        // (or of 'https://中' and closers, which the server reads cheaply) was quadratic on Android alone.
+        for (text in listOf("https://" + "中".repeat(200_000), "https://中" + ")".repeat(199_990))) {
+            val started = System.nanoTime()
+            written(text)
+            assertTrue(System.nanoTime() - started < 2_000_000_000L)
+        }
+        // What it finds is as before: a dotted ASCII host ends before the letters after it.
+        assertEquals(listOf("https://example.com"), written("https://example.com很棒"))
+    }
+
     @Test fun chinesePunctuationEndsTheLink() {
         assertEquals(listOf("https://example.com/a"), urls("請看https://example.com/a，然後"))
         assertEquals(listOf("https://example.com/a"), urls("連結：https://example.com/a。"))
