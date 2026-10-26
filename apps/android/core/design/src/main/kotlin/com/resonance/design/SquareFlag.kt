@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeJoin
@@ -25,7 +26,7 @@ import com.resonance.geometry.WobRectOptions
 import com.resonance.geometry.seedFromString
 
 /** The regions with the web's flag art (public/flags, rasterised by scripts/apps/flags.ts). */
-private val FlagArt = mapOf(
+internal val FlagArt = mapOf(
     "gb" to R.drawable.flag_gb,
     "hk" to R.drawable.flag_hk,
     "jp" to R.drawable.flag_jp,
@@ -35,7 +36,7 @@ private val FlagArt = mapOf(
 )
 
 /** SquareFlag.tsx's faint rim, `oklch(36% 0.06 60 / 0.55)`. */
-private val FlagRim = OklchColor.parse("oklch(36% 0.06 60 / 0.55)") ?: Color.Black.copy(alpha = 0.3f)
+internal val FlagRim = OklchColor.parse("oklch(36% 0.06 60 / 0.55)") ?: Color.Black.copy(alpha = 0.3f)
 
 /** Whether a region has flag art (else [SquareFlag] draws nothing). */
 fun hasSquareFlag(code: String): Boolean = code.lowercase() in FlagArt
@@ -62,9 +63,14 @@ fun SquareFlag(code: String, size: Dp = 18.dp, seed: Double? = null) {
         Modifier
             .size(size)
             .clearAndSetSemantics { }
-            .drawWithContent {
-                drawContent()
-                drawOutline(shape.createOutline(this.size, layoutDirection, this), FlagRim, style = Stroke(Tokens.InkLight.toPx(), join = StrokeJoin.Round))
+            .drawWithCache {
+                // The rim's outline built when the size changes, not on every draw.
+                val rim = shape.createOutline(this.size, layoutDirection, this)
+                val pen = Stroke(Tokens.InkLight.toPx(), join = StrokeJoin.Round)
+                onDrawWithContent {
+                    drawContent()
+                    drawOutline(rim, FlagRim, style = pen)
+                }
             }
             .clip(shape),
         contentAlignment = Alignment.Center,

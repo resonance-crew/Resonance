@@ -871,8 +871,9 @@ private fun SwipeToReply(enabled: Boolean, mine: Boolean, onReply: () -> Unit, c
         ticked = false
         if (pulled != 0f) animate(pulled, 0f, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium)) { v, _ -> pulled = v }
     }
-    // Past the threshold the message gives, but with resistance.
-    val shown = if (pulled <= threshold) pulled else threshold + (pulled - threshold) * 0.3f
+    // Read while laying out and drawing, not composing: a drag recomposes only when the glyph comes, goes or inks in.
+    val pulling by remember { derivedStateOf { pulled > 0f } }
+    val full by remember(threshold) { derivedStateOf { pulled / threshold >= 1f } }
     Box(
         Modifier
             .fillMaxWidth()
@@ -882,17 +883,25 @@ private fun SwipeToReply(enabled: Boolean, mine: Boolean, onReply: () -> Unit, c
                 onDragStopped = { if (pulled >= threshold) onReply() },
             ),
     ) {
-        if (pulled > 0f) {
-            val progress = (pulled / threshold).coerceIn(0f, 1f)
+        if (pulling) {
             Box(
                 Modifier
                     .align(if (mine) Alignment.CenterEnd else Alignment.CenterStart)
                     .padding(horizontal = 6.dp)
-                    .graphicsLayer { alpha = progress; scaleX = 0.6f + 0.4f * progress; scaleY = scaleX }
+                    .graphicsLayer {
+                        val progress = (pulled / threshold).coerceIn(0f, 1f)
+                        alpha = progress; scaleX = 0.6f + 0.4f * progress; scaleY = scaleX
+                    }
                     .semantics { contentDescription = L10n.Messages.reply },
-            ) { OrganicIcon(IconName.Reply, size = 20.dp, color = if (progress >= 1f) Tokens.Terracotta else Tokens.TextMuted) }
+            ) { OrganicIcon(IconName.Reply, size = 20.dp, color = if (full) Tokens.Terracotta else Tokens.TextMuted) }
         }
-        Box(Modifier.offset { IntOffset((if (mine) -shown else shown).toInt(), 0) }) { content() }
+        Box(
+            Modifier.offset {
+                // Past the threshold the message gives, but with resistance.
+                val shown = if (pulled <= threshold) pulled else threshold + (pulled - threshold) * 0.3f
+                IntOffset((if (mine) -shown else shown).toInt(), 0)
+            },
+        ) { content() }
     }
 }
 

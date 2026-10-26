@@ -12,6 +12,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -248,5 +252,54 @@ internal fun RefOrganicImage(
             )
             overlay?.invoke()
         }
+    }
+}
+
+// OrganicRadio and SquareFlag as they were before A14 (their outlines built on every draw).
+
+@Composable
+internal fun RefOrganicRadio(selected: Boolean, seed: Double = 21.0, modifier: Modifier = Modifier) {
+    val dot by androidx.compose.animation.core.animateFloatAsState(if (selected) 1f else 0f, androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = 600f), label = "radio")
+    val ring = if (selected) Tokens.TerracottaDeep else Tokens.ToggleOffStroke
+    androidx.compose.foundation.Canvas(modifier.size(22.dp).clearAndSetSemantics { }) {
+        val ringOutline = WobCircleShape(seed, com.resonance.geometry.WobCircleOptions(segments = 7, mag = 0.7, cpJitter = 0.4))
+            .createOutline(size, layoutDirection, this)
+        drawOutline(ringOutline, ring, style = Stroke(Tokens.Ink.toPx()))
+        if (dot > 0.01f) {
+            val inset = 5.5.dp.toPx()
+            val d = (size.width - inset * 2) * (0.2f + 0.8f * dot)
+            val o = WobCircleShape(seed + 5, com.resonance.geometry.WobCircleOptions(segments = 6, mag = 0.5, cpJitter = 0.3))
+                .createOutline(androidx.compose.ui.geometry.Size(d, d), layoutDirection, this)
+            val off = (size.width - d) / 2
+            drawContext.transform.translate(off, off)
+            drawOutline(o, Tokens.Terracotta, alpha = dot)
+            drawContext.transform.translate(-off, -off)
+        }
+    }
+}
+
+@Composable
+internal fun RefSquareFlag(code: String, size: Dp = 18.dp, seed: Double? = null) {
+    val c = code.lowercase()
+    val art = FlagArt[c] ?: return
+    val s = size.value.toDouble()
+    val shape = remember(c, s, seed) {
+        WobRectShape(s * 0.3, seed ?: com.resonance.geometry.seedFromString(c).toDouble(), mag = s * 0.05, options = com.resonance.geometry.WobRectOptions(
+            curve = 1.6, cornerJitter = 3.0, cornerOffset = s * 0.06, segmentsH = com.resonance.geometry.SegValue.Count(1.0), segmentsV = com.resonance.geometry.SegValue.Count(1.0),
+        ))
+    }
+    val pad = maxOf(1.0, s * 0.06).dp
+    Box(
+        Modifier
+            .size(size)
+            .clearAndSetSemantics { }
+            .drawWithContent {
+                drawContent()
+                drawOutline(shape.createOutline(this.size, layoutDirection, this), FlagRim, style = Stroke(Tokens.InkLight.toPx(), join = StrokeJoin.Round))
+            }
+            .clip(shape),
+        contentAlignment = androidx.compose.ui.Alignment.Center,
+    ) {
+        androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(art), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.requiredSize(size + pad * 2))
     }
 }

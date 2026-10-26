@@ -181,4 +181,17 @@ class LeavesWithoutSubcompositionTest {
             }
         }
     }
+
+    @Test fun aRadioAndAFlagDrawAsBefore() {
+        assertSameEachWay(listOf(Density(2.625f), Density(3f))) { ref ->
+            androidx.compose.foundation.layout.Row(Modifier.padding(8.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                for (selected in listOf(false, true)) {
+                    if (ref) RefOrganicRadio(selected, seed = 21.0) else OrganicRadio(selected, seed = 21.0)
+                }
+                for (code in listOf("tw", "jp")) {
+                    if (ref) RefSquareFlag(code, 24.dp) else SquareFlag(code, 24.dp)
+                }
+            }
+        }
+    }
 }
