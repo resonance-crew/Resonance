@@ -1,4 +1,4 @@
-import type { Firestore } from 'firebase-admin/firestore';
+import type { DocumentData, Firestore } from 'firebase-admin/firestore';
 import { slugHolder } from '@/lib/db/firestore/cardKey';
 import { ensureUniqueSlug, slugify } from './slugify';
 import { titleToSlugBase } from './tasks';
@@ -10,14 +10,20 @@ import { titleToSlugBase } from './tasks';
  * the public URL stays stable across re-publishes. Called by the v1 publish
  * endpoint (web and apps alike); `slugBase` is injectable so tests need no
  * LLM.
+ *
+ * `known` is the card as the caller just read it (the publish transaction:
+ * its title, byline, author and slug, none of which publishing changes), so
+ * it isn't read again; the author's pen name is read while the title is
+ * being translated.
  */
 export async function assignSlug(
   db: Firestore,
   cardId: string,
   slugBase: (title: string) => Promise<string> = titleToSlugBase,
+  known?: DocumentData,
 ): Promise<string> {
   const ref = db.collection('cards').doc(cardId);
-  const data = (await ref.get()).data() ?? {};
+  const data = known ?? (await ref.get()).data() ?? {};
   if (typeof data.slug === 'string' && data.slug) {
     // Kept only while it still leads here: if an older card holds the same
     // slug (slugHolder), this one gets a fresh one instead of a dead URL.
@@ -25,14 +31,13 @@ export async function assignSlug(
     if (slugHolder(holders.docs)?.id === cardId || holders.empty) return data.slug;
   }
 
-  const base = await slugBase(String(data.thoughtCore ?? ''));
   // Leak checklist (ux §6): an anonymous card's public URL must not embed the
   // author's handle — collisions fall straight through to the numeric suffix.
-  let handle = '';
-  if (data.anonymous !== true) {
-    const author = await db.collection('users').doc(String(data.authorId ?? '')).get();
-    handle = slugify(String(author.data()?.handle ?? ''));
-  }
+  const [base, author] = await Promise.all([
+    slugBase(String(data.thoughtCore ?? '')),
+    data.anonymous !== true ? Promise.resolve().then(() => db.collection('users').doc(String(data.authorId ?? '')).get()) : null,
+  ]);
+  const handle = author ? slugify(String(author.data()?.handle ?? '')) : '';
 
   const slug = await ensureUniqueSlug(base, handle, async (candidate) => {
     const dupes = await db.collection('cards').where('slug', '==', candidate).limit(1).get();

@@ -13,6 +13,9 @@ export interface IndexResult {
   channels?: number;
 }
 
+/** The channels' embeddings, after a publish or an applied edit's response: abandoned past this (the next save tries again). */
+export const EMBED_TIMEOUT_MS = 10_000;
+
 /** Firestore's NOT_FOUND: an update of a document that is gone (deleted while the LLM ran). */
 const isNotFound = (e: unknown) => (e as { code?: unknown } | null)?.code === 5;
 
@@ -84,7 +87,7 @@ export async function indexCard(cardId: string): Promise<IndexResult> {
   }
 
   const channelTexts = signatureToChannelTexts(signature);
-  const vectors = await embed(channelTexts.map((c) => c.text));
+  const vectors = await embed(channelTexts.map((c) => c.text), { signal: AbortSignal.timeout(EMBED_TIMEOUT_MS) });
 
   // The card as it is now, after the LLM calls: one deleted meanwhile gets
   // no vectors, and one whose visibility changed — moved to the trash or
