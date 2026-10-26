@@ -20,7 +20,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
@@ -30,7 +29,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicText
@@ -56,6 +54,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -134,24 +138,65 @@ fun OrganicImage(
     overlay: (@Composable () -> Unit)? = null,
     placeholder: @Composable () -> Unit,
 ) {
-    BoxWithConstraints(modifier) {
-        val bleed = imageBleed(maxWidth.value, maxHeight.value, magFactor)
-        Box(
-            Modifier
-                .requiredSize(maxWidth + bleed * 2, maxHeight + bleed * 2)
-                .clip(BledShape(seed, bleed.value.toDouble(), radius, magFactor))
-                .then(if (grain > 0f) Modifier.grainOverlay(grain) else Modifier),
-        ) {
-            var loading by remember(url) { mutableStateOf(url != null) }
-            if (loading) SkeletonCover() else placeholder()
-            if (url != null) AsyncImage(
-                model = url, contentDescription = contentDescription, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
-                onLoading = { loading = true },
-                onSuccess = { loading = false },
-                onError = { loading = false; onError?.invoke() },
-            )
-            overlay?.invoke()
-        }
+    // The bleed follows the box offered (what BoxWithConstraints read, now read while measuring, with
+    // no subcomposition); the clip takes it from there ([HeldBledShape]).
+    val held = remember { HeldBleed() }
+    val shape = remember(seed, radius, magFactor) { HeldBledShape(seed, held, radius, magFactor) }
+    Layout(
+        content = {
+            Box(Modifier.clip(shape).then(if (grain > 0f) Modifier.grainOverlay(grain) else Modifier)) {
+                var loading by remember(url) { mutableStateOf(url != null) }
+                if (loading) SkeletonCover() else placeholder()
+                if (url != null) AsyncImage(
+                    model = url, contentDescription = contentDescription, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
+                    onLoading = { loading = true },
+                    onSuccess = { loading = false },
+                    onError = { loading = false; onError?.invoke() },
+                )
+                overlay?.invoke()
+            }
+        },
+        modifier = modifier,
+    ) { measurables, constraints -> bledLayout(measurables.single(), constraints, magFactor, held) }
+}
+
+/** The bleed the box was last measured with (dp), for its clip. */
+internal class HeldBleed {
+    var bleed = 0.0
+}
+
+/**
+ * [BledShape] with the bleed its box was measured with ([bledLayout]). Its outline is asked again
+ * whenever the picture's size changes, and that size (the box plus twice the bleed) is never the same
+ * for two different bleeds — a bleed only grows with the box's shorter side — so it never draws a stale one.
+ */
+internal data class HeldBledShape(private val seed: Double, private val held: HeldBleed, private val radius: Double, private val magFactor: Double) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline =
+        BledShape(seed, held.bleed, radius, magFactor).createOutline(size, layoutDirection, density)
+}
+
+/**
+ * What `BoxWithConstraints { Box(Modifier.requiredSize(maxWidth + bleed * 2, maxHeight + bleed * 2)) }`
+ * measured and placed, worked out in one layout: the picture [bleed][imageBleed] larger than the box
+ * offered on every side, centred on it (the half pixel rounding as `requiredSize` rounds it), the box
+ * taking the size offered.
+ */
+internal fun MeasureScope.bledLayout(measurable: Measurable, constraints: Constraints, magFactor: Double, held: HeldBleed): MeasureResult {
+    val maxWidth = if (constraints.hasBoundedWidth) constraints.maxWidth.toDp() else Dp.Infinity
+    val maxHeight = if (constraints.hasBoundedHeight) constraints.maxHeight.toDp() else Dp.Infinity
+    val bleed = imageBleed(maxWidth.value, maxHeight.value, magFactor)
+    held.bleed = bleed.value.toDouble()
+    val innerW = (maxWidth + bleed * 2).roundToPx()
+    val innerH = (maxHeight + bleed * 2).roundToPx()
+    val placeable = measurable.measure(Constraints.fixed(innerW, innerH))
+    // The size the box saw the picture take (within what it offered), and the box's own.
+    val seenW = innerW.coerceIn(0, constraints.maxWidth)
+    val seenH = innerH.coerceIn(0, constraints.maxHeight)
+    val boxW = max(constraints.minWidth, seenW)
+    val boxH = max(constraints.minHeight, seenH)
+    return layout(boxW, boxH) {
+        val at = Alignment.TopStart.align(IntSize(seenW, seenH), IntSize(boxW, boxH), layoutDirection)
+        placeable.place(at.x + (seenW - innerW) / 2, at.y + (seenH - innerH) / 2)
     }
 }
 

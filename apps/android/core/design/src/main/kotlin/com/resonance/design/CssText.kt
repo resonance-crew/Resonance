@@ -10,13 +10,9 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import android.text.style.LineHeightSpan
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
@@ -26,6 +22,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntSize
 import com.resonance.design.generated.Tokens
 import kotlin.math.ceil
 import kotlin.math.roundToInt
@@ -100,19 +97,28 @@ fun CssText(
 ) {
     val scaled = LocalDensity.current
     val density = scaled.density
-    BoxWithConstraints(modifier) {
-        val widthPx = constraints.maxWidth
-        val layout = remember(text, family, sizeSp, weight, lineHeight, widthPx, density, scaled.fontScale, color, letterSpacing, AppFonts.useBundledCJK) {
-            CssLayout.build(text, family, sizeSp, weight, lineHeight, widthPx, scaled, color, letterSpacing)
-        }
-        // The widest line without its trailing space, rounded up to a whole pixel (the iOS twin's `ceil`).
-        val boxPx = if (fitsContent) minOf(layout.width, ceil((0 until layout.lineCount).maxOfOrNull { layout.getLineMax(it) } ?: 0f).toInt()) else layout.width
+    // Laid out while measured, for the width offered (no subcomposition: [builtForWidth]).
+    val built = remember { WidthBuilt<StaticLayout>() }
+    Box(modifier) {
         Box(
             Modifier
-                .width((boxPx / density).let { androidx.compose.ui.unit.Dp(it) })
-                .height(androidx.compose.ui.unit.Dp(layout.height / density))
-                .semantics { this.text = AnnotatedString(text) }
-                .drawBehind { drawIntoCanvas { layout.draw(it.nativeCanvas) } },
+                .builtForWidth(
+                    key = CssTextKey(text, family, sizeSp, weight, lineHeight, density, scaled.fontScale, color, letterSpacing, AppFonts.useBundledCJK, fitsContent),
+                    built = built,
+                    build = { widthPx -> CssLayout.build(text, family, sizeSp, weight, lineHeight, widthPx, scaled, color, letterSpacing) },
+                    // The widest line without its trailing space, rounded up to a whole pixel (the iOS twin's `ceil`).
+                    size = { layout ->
+                        val boxPx = if (fitsContent) minOf(layout.width, ceil((0 until layout.lineCount).maxOfOrNull { layout.getLineMax(it) } ?: 0f).toInt()) else layout.width
+                        IntSize(boxPx, layout.height)
+                    },
+                ) { layout -> drawIntoCanvas { layout.draw(it.nativeCanvas) } }
+                .semantics { this.text = AnnotatedString(text) },
         )
     }
 }
+
+/** Everything a [CssText]'s layout and box come from but the width. */
+private data class CssTextKey(
+    val text: String, val family: AppFonts.Family, val sizeSp: Float, val weight: Int, val lineHeight: Float, val density: Float,
+    val fontScale: Float, val color: Color, val letterSpacing: Float, val bundledCJK: Boolean, val fitsContent: Boolean,
+)

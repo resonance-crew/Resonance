@@ -21,7 +21,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -86,6 +85,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
@@ -354,23 +354,24 @@ fun ChatText(
     val density = scaled.density
     val tap by rememberUpdatedState(onTap)
     val press by rememberUpdatedState(onLongPress)
-    BoxWithConstraints(modifier) {
-        val widthPx = constraints.maxWidth
-        val layout = remember(text, sizeSp, weight, lineHeight, widthPx, density, scaled.fontScale, color, linkColor, links, highlights, highlightWeight, maxLines, AppFonts.useBundledCJK) {
-            buildChatLayout(text, sizeSp, weight, lineHeight, widthPx, scaled, color, links, linkColor, highlightWeight.takeIf { highlights.isNotEmpty() }?.let { highlights to it }, maxLines)
-        }
-        val widest = ceil((0 until layout.lineCount).maxOfOrNull { layout.getLineMax(it) } ?: 0f).toInt()
-        val boxPx = min(layout.width, widest)
-        val hit: (Float, Float) -> Int? = { x, y -> linkAt(layout, links, x, y, 6f * density) }
-        val sizePx = scaled.cssFontPx(sizeSp)
-        val waves = remember(layout, links, sizePx, density) { chatLinkWaves(layout, links, sizePx, density) }
-        var pressed by remember { mutableStateOf<Int?>(null) }
+    // Laid out while measured, for the width offered (no subcomposition: [builtForWidth]); a tap reads what was laid out.
+    val built = remember { WidthBuilt<ChatTextLayout>() }
+    val hit: (Float, Float) -> Int? = { x, y -> built.value?.let { linkAt(it.layout, links, x, y, 6f * density) } }
+    val pressed = remember { mutableStateOf<Int?>(null) }
+    Box(modifier) {
         Box(
             Modifier
-                .width(Dp(boxPx / density))
-                .height(Dp(layout.height / density))
-                .semantics { this.text = AnnotatedString(text) }
-                .drawBehind {
+                .builtForWidth(
+                    key = ChatTextKey(text, sizeSp, weight, lineHeight, density, scaled.fontScale, color, linkColor, links, highlights, highlightWeight, maxLines, AppFonts.useBundledCJK),
+                    built = built,
+                    build = { widthPx ->
+                        val layout = buildChatLayout(text, sizeSp, weight, lineHeight, widthPx, scaled, color, links, linkColor, highlightWeight.takeIf { highlights.isNotEmpty() }?.let { highlights to it }, maxLines)
+                        val widest = ceil((0 until layout.lineCount).maxOfOrNull { layout.getLineMax(it) } ?: 0f).toInt()
+                        ChatTextLayout(layout, min(layout.width, widest), chatLinkWaves(layout, links, scaled.cssFontPx(sizeSp), density))
+                    },
+                    size = { IntSize(it.boxPx, it.layout.height) },
+                    drawKey = highlightColor,
+                ) { (layout, _, waves) ->
                     if (highlights.isNotEmpty()) {
                         val r = 4.dp.toPx()
                         val lift = cssFontPx(sizeSp) * 1.3f
@@ -382,19 +383,20 @@ fun ChatText(
                     if (waves.isNotEmpty()) {
                         val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                         waves.forEach { w ->
-                            translate(w.x, w.y) { drawPath(w.path, Tokens.Terracotta, alpha = if (w.link == pressed) 1f else 0.7f, style = pen) }
+                            translate(w.x, w.y) { drawPath(w.path, Tokens.Terracotta, alpha = if (w.link == pressed.value) 1f else 0.7f, style = pen) }
                         }
                     }
                     drawIntoCanvas { layout.draw(it.nativeCanvas) }
                 }
+                .semantics { this.text = AnnotatedString(text) }
                 .then(
-                    if (onTap != null || onLongPress != null) Modifier.pointerInput(layout, links) {
+                    if (onTap != null || onLongPress != null) Modifier.pointerInput(built, links, density) {
                         detectTapGestures(
                             // The pen presses harder while the finger is on a link: the web's hover.
                             onPress = { p ->
-                                pressed = hit(p.x, p.y)
+                                pressed.value = hit(p.x, p.y)
                                 tryAwaitRelease()
-                                pressed = null
+                                pressed.value = null
                             },
                             onTap = { p -> hit(p.x, p.y)?.let { i -> tap?.invoke(i) } },
                             onLongPress = { p -> press?.invoke(hit(p.x, p.y)) },
@@ -405,12 +407,22 @@ fun ChatText(
     }
 }
 
+/** A [ChatText]'s words laid out for a width: the layout, the box it hugs (px) and its links' waves. */
+internal data class ChatTextLayout(val layout: StaticLayout, val boxPx: Int, val waves: List<ChatWave>)
+
+/** Everything a [ChatText]'s layout comes from but the width. */
+private data class ChatTextKey(
+    val text: String, val sizeSp: Float, val weight: Int, val lineHeight: Float, val density: Float, val fontScale: Float,
+    val color: Color, val linkColor: Color, val links: List<IntRange>, val highlights: List<IntRange>, val highlightWeight: Int?,
+    val maxLines: Int, val bundledCJK: Boolean,
+)
+
 /**
  * [CssLayout.build] with spans: the same CSS line boxes and greedy breaks, [links] coloured (their
  * waves are drawn apart, [chatLinkWaves]), an optional heavier face for some ranges, and at most
  * [maxLines] lines (cut with …).
  */
-private fun buildChatLayout(
+internal fun buildChatLayout(
     text: String,
     sizeSp: Float,
     weight: Int,
@@ -455,10 +467,10 @@ private fun buildChatLayout(
 }
 
 /** One line's share of a link's wave: which link, where it starts (px) and the stroke. */
-private class ChatWave(val link: Int, val x: Float, val y: Float, val path: androidx.compose.ui.graphics.Path)
+internal class ChatWave(val link: Int, val x: Float, val y: Float, val path: androidx.compose.ui.graphics.Path)
 
 /** The story links' waves under [links] in [layout]: one `penWave` per line a link covers, seeded by its words. */
-private fun chatLinkWaves(layout: StaticLayout, links: List<IntRange>, sizePx: Float, density: Float): List<ChatWave> {
+internal fun chatLinkWaves(layout: StaticLayout, links: List<IntRange>, sizePx: Float, density: Float): List<ChatWave> {
     val length = layout.text.length
     // A line cut with … draws nothing past its end.
     val shown = if (layout.lineCount == 0) 0 else layout.getLineEnd(layout.lineCount - 1) - layout.getEllipsisCount(layout.lineCount - 1)
@@ -485,7 +497,7 @@ private fun clamp(r: IntRange, length: Int): Pair<Int, Int>? {
 }
 
 /** The link under the point (x, y) of the text, if any; `slop` is the room round a line's words that still counts. */
-private fun linkAt(layout: StaticLayout, links: List<IntRange>, x: Float, y: Float, slop: Float): Int? {
+internal fun linkAt(layout: StaticLayout, links: List<IntRange>, x: Float, y: Float, slop: Float): Int? {
     if (links.isEmpty() || y < 0 || y > layout.height) return null
     val line = layout.getLineForVertical(y.toInt())
     val left = layout.getLineLeft(line)
@@ -500,7 +512,7 @@ private fun linkAt(layout: StaticLayout, links: List<IntRange>, x: Float, y: Flo
  * Where each highlighted range falls: one rect per line it crosses, as tall as the glyphs (`lift`),
  * centred on the line box, `grow` wider than the words at each end.
  */
-private fun highlightRects(layout: StaticLayout, ranges: List<IntRange>, lift: Float, grow: Float): List<RectF> {
+internal fun highlightRects(layout: StaticLayout, ranges: List<IntRange>, lift: Float, grow: Float): List<RectF> {
     val out = ArrayList<RectF>()
     val length = layout.text.length
     for (r in ranges) {
