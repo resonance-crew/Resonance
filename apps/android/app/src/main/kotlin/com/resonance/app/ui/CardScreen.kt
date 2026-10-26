@@ -149,7 +149,6 @@ import com.resonance.kit.reading.embedFor
 import com.resonance.kit.story.StoryBlock
 import com.resonance.kit.story.StoryLink
 import com.resonance.kit.story.StoryLinks
-import com.resonance.kit.story.StoryParser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -167,7 +166,11 @@ class CardPageModel(private val session: Session, private val key: String, previ
         private set
     var detail by mutableStateOf(cached?.detail)
         private set
-    var blocks by mutableStateOf(cached?.let { StoryParser.parse(it.detail.story) } ?: emptyList())
+    // Parsed once with the page (off the main thread, by the loader), never during this page's first frame.
+    var blocks by mutableStateOf(cached?.blocks ?: emptyList())
+        private set
+    /** The story's script and language ([CardCache.Page.storyText]), set with [detail]. */
+    var storyText by mutableStateOf(cached?.storyText)
         private set
     var resonances by mutableStateOf(cached?.resonances.orEmpty())
         private set
@@ -204,8 +207,9 @@ class CardPageModel(private val session: Session, private val key: String, previ
         try {
             val page = session.cardPages.load(key, placeholder)
             val d = page.detail
-            if (d.story != detail?.story) blocks = StoryParser.parse(d.story)
+            if (d.story != detail?.story) blocks = page.blocks
             detail = d
+            storyText = page.storyText
             resonances = page.resonances
             related = page.related
             // Cards others linked to this one are shown to its author only (useLinkedToCard).
@@ -389,7 +393,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                 LazyColumn(Modifier.fillMaxSize().onPlaced { listCoords = it }, state = list, contentPadding = PaddingValues(top = top, bottom = 40.dp)) {
                     item(key = "article") {
                         // The story's type, read off its title and words together (StoryScripts), in this window's numbers.
-                        val text = remember(card.title, d.story) { StoryScripts.storyType(card.title, d.story) }
+                        val text = model.storyText ?: remember(card.title, d.story) { StoryScripts.storyType(card.title, d.story) }
                         val type = StoryType.of(text.script, cls)
                         Column(heading.onItem.then(byline.onItem).onPlaced { articleCoords = it }.padding(start = columns.start, end = columns.end).padding(top = articleTop)) {
                             if (trashedOwn) TrashedCardBanner(card, d.anonymous, compact = cls == LayoutClass.Compact, focusTicket = trashedHere, onDeleted = popToRoot)
