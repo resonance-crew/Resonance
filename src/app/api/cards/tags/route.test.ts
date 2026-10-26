@@ -9,7 +9,9 @@ vi.mock('@/lib/auth', () => ({ getCurrentUser: async () => ({ id: 'writer' }) })
 vi.mock('@/lib/api/rateLimit', () => ({ limited: async () => null }));
 vi.mock('@/lib/ai/tasks', () => ({ suggestStoryTags: (input: TagInput) => suggest(input) }));
 
-import { POST, cardSizedTags } from './route';
+import { POST } from './route';
+import { cardSizedTags } from '@/lib/ai/tags';
+import { CARD_LIMITS } from '@/lib/db/firestore/cardContent';
 
 const post = (body: unknown) => POST(new Request('http://localhost/api/cards/tags', { method: 'POST', body: JSON.stringify(body) }));
 
@@ -39,8 +41,8 @@ describe('POST /api/cards/tags', () => {
 
 describe('cardSizedTags', () => {
   it('keeps a card-sized list as it is and drops what is not a tag', () => {
-    expect(cardSizedTags(['rain', 'walk', 3, '', ' '])).toEqual(['rain', 'walk']);
-    expect(cardSizedTags('rain')).toEqual([]);
-    expect(cardSizedTags(Array.from({ length: 40 }, (_, i) => `t${i}`))).toHaveLength(30);
+    expect(cardSizedTags(['rain', 'walk', 3, '', ' '], CARD_LIMITS)).toEqual(['rain', 'walk']);
+    expect(cardSizedTags('rain', CARD_LIMITS)).toEqual([]);
+    expect(cardSizedTags(Array.from({ length: 40 }, (_, i) => `t${i}`), CARD_LIMITS)).toHaveLength(30);
   });
 });
