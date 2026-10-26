@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import com.resonance.design.avatarFill
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.hoverable
@@ -190,7 +191,7 @@ private fun ConversationRow(person: Person, preview: String, time: String?, unre
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         HandDrawnAvatar(
-            person.initials, person.avatarUrl, person.accentColor?.let(OklchColor::parse) ?: Tokens.TerracottaLight,
+            person.initials, person.avatarUrl, avatarFill(person.accentColor),
             size = 40.dp, seed = seedOr(person.avatarSeed, 5.0),
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {

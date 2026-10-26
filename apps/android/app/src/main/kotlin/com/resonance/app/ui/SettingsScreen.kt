@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import com.resonance.design.avatarFill
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawOutline
@@ -763,7 +764,7 @@ private fun ColumnScope.BlockedListContent(session: Session, onClose: () -> Unit
                     HandDrawnAvatar(
                         person.initials,
                         person.avatarUrl,
-                        person.accentColor?.let(OklchColor::parse) ?: Tokens.CreamDark,
+                        avatarFill(person.accentColor, Tokens.CreamDark),
                         36.dp,
                         person.avatarSeed ?: seedFromString(person.id).toDouble(),
                     )
