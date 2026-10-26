@@ -17,7 +17,7 @@ public struct OrganicButton: View {
     /// - `danger`: solid in red, the final confirm of what can't be undone.
     /// - `dangerTonal`: the peach's red twin, for a button that opens a destructive flow
     ///   (Settings' Delete account), whose dialog then asks with `danger`.
-    /// - `ink`: solid in the text ink, for a brand that asks for a black button (Apple's).
+    /// - `ink`: for a brand that asks for a black or white button (Apple's): the text ink in light, white in dark.
     /// - `paper`: the cards' paper (grain and all), ink label, for a control that must match a
     ///   paper surface.
     /// The older names keep working and wear the new faces, as on the web: `primary` is `solid`;
@@ -345,6 +345,8 @@ public struct OrganicButtonFace: Equatable, Sendable {
     /// The grain tile over the face and its strength.
     public let grain: String
     public let grainOpacity: Double
+    /// Whether the grain lies over the face in dark too (Apple's white button wears none).
+    public var grainInDark = true
 
     static let solid = OrganicButtonFace(fill: Tokens.buttonFill, label: Tokens.cream, pressInk: Tokens.towardInk.opacity(0.14), seed: 3)
     static let tonal = OrganicButtonFace(fill: Tokens.buttonTonal, label: Tokens.buttonOnTonal,
@@ -359,6 +361,13 @@ public struct OrganicButtonFace: Equatable, Sendable {
         self.grainOpacity = grainOpacity
     }
 
+    /// The same face with no grain in dark.
+    func withoutGrainInDark() -> OrganicButtonFace {
+        var face = self
+        face.grainInDark = false
+        return face
+    }
+
     public static func of(_ variant: OrganicButton.Variant) -> OrganicButtonFace {
         switch variant {
         case .primary, .solid: .solid
@@ -369,7 +378,10 @@ public struct OrganicButtonFace: Equatable, Sendable {
         case .danger: OrganicButtonFace(fill: Tokens.dangerFill, label: Tokens.cream, pressInk: Tokens.towardInk.opacity(0.14), seed: 3)
         case .dangerTonal: OrganicButtonFace(fill: Tokens.buttonDangerTonal, label: Tokens.buttonOnDangerTonal,
                                              pressInk: Tokens.danger.opacity(0.14), seed: 601)
-        case .ink: OrganicButtonFace(fill: Tokens.text, label: Tokens.cream, pressInk: Tokens.towardInk.opacity(0.14), seed: 3)
+        // Apple's: the ink in light as ever, pure white under a black label and logo in dark (the HIG's
+        // two styles; --apple-fill / --apple-label), with no grain over the white.
+        case .ink: OrganicButtonFace(fill: Tokens.appleFill, label: Tokens.appleLabel, pressInk: Tokens.shadowInk.opacity(0.14),
+                                     seed: 3).withoutGrainInDark()
         // The cards' own tile, at the strength the modal's paper carries it.
         case .paper: OrganicButtonFace(fill: Tokens.cardBg, label: Tokens.text, pressInk: Tokens.terracotta.opacity(0.14),
                                        seed: 401, grain: "grain-card", grainOpacity: 0.3)
@@ -497,7 +509,7 @@ struct OrganicButtonStyle {
 
     @ViewBuilder func fillLayers(_ shape: OrganicButtonShape) -> some View {
         shape.fill(face.fill)
-        GrainLayer(shape: shape, mode: .tile, opacity: face.grainOpacity, tile: face.grain, overflow: 3)
+        GrainLayer(shape: shape, mode: .tile, opacity: face.grainOpacity, tile: face.grain, overflow: 3, inDark: face.grainInDark)
     }
 }
 

@@ -38,13 +38,17 @@ public struct GrainLayer<S: Shape>: View {
     /// overshooting to be trimmed by an outer clip): the tile is laid that much wider, so the
     /// grain doesn't stop at the box and leave a band of bare fill along the bulge.
     var overflow: CGFloat
+    /// Drawn in dark too (false: a face that is plain in dark, Apple's white button).
+    var inDark: Bool
 
-    public init(shape: S, mode: GrainMode = .tile, opacity: Double = 0.3, tile: String = "grain-card", overflow: CGFloat = 0) {
+    public init(shape: S, mode: GrainMode = .tile, opacity: Double = 0.3, tile: String = "grain-card", overflow: CGFloat = 0,
+                inDark: Bool = true) {
         self.shape = shape
         self.mode = mode
         self.opacity = opacity
         self.tile = tile
         self.overflow = overflow
+        self.inDark = inDark
     }
 
     @Environment(\.colorScheme) private var colorScheme
@@ -54,7 +58,7 @@ public struct GrainLayer<S: Shape>: View {
     private var strength: Double { opacity * Palette.grainScale(PaletteScheme(colorScheme)) }
 
     public var body: some View {
-        switch mode {
+        switch inDark || colorScheme != .dark ? mode : .none {
         case .none:
             EmptyView()
         case .tile:
