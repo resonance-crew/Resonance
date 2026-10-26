@@ -178,11 +178,12 @@ describe('holding anonymous cards while the account waits to be deleted', () => 
 
   it('trashes the published anonymous cards alone, hidden from everyone at once, and never their profile page', async () => {
     await seedCards();
+    expect((await readCardForPage(db, 'zoeAnon')).id).toBe('zoeAnon');
     await scheduleAccountDeletion(db, 'zoe', new Date());
     const stale = await holdAnonymousCards(db, 'zoe');
     const anon = (await db.doc('cards/zoeAnon').get()).data()!;
     expect(anon).toMatchObject({ visibility: 'private', trashedFor: 'deletion', trashedFrom: { visibility: 'public' } });
-    expect(await readCardForPage('zoeAnon')).toEqual({ id: null, card: null, author: null });
+    expect(await readCardForPage(db, 'zoeAnon')).toEqual({ id: null, card: null, author: null });
     expect((await db.doc('cards/zoeNamed').get()).data()).toMatchObject({ visibility: 'public' });
     expect((await db.doc('cards/zoeNamed').get()).get('trashedAt')).toBeUndefined();
     expect((await db.doc('cards/zoeDraft').get()).get('trashedAt')).toBeUndefined();
