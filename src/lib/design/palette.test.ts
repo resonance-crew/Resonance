@@ -10,12 +10,15 @@ import {
   avatarFill,
   contrast,
   cssOklch,
+  hueInk,
   inP3,
   lightBaseOf,
   paletteFor,
   paletteForHue,
+  type HueInk,
   type Palette,
   type PaletteToken,
+  type Scheme,
   wallpaperPalette,
 } from './palette';
 import { paletteCss } from './paletteCss';
@@ -176,6 +179,32 @@ describe('palette', () => {
     expect(dark.H).toBeCloseTo(55);
     expect(contrast(paletteFor('terracotta', 'dark')['color-text'], dark)).toBeGreaterThan(4.5);
     expect(avatarFill('#abcdef', 'dark')).toBe('#abcdef');
+  });
+
+  it('a hue-made colour (a map card, a region, a menu in a card\'s colours) reads at every hue, in every theme', () => {
+    const at = (role: HueInk, h: number, s: Scheme) => hueInk(role, h, s);
+    for (const accent of ACCENTS) {
+      for (const scheme of SCHEMES) {
+        const p = paletteFor(accent, scheme);
+        for (let h = 0; h < 360; h += 10) {
+          const where = `${accent} ${scheme} ${h}`;
+          expect(contrast(p['color-text'], at('node-paper', h, scheme)), `${where} text on a map card`).toBeGreaterThan(7);
+          expect(contrast(p['color-text-muted'], at('node-paper', h, scheme)), `${where} muted on a map card`).toBeGreaterThan(4.5);
+          expect(contrast(p['color-text'], at('node-wash', h, scheme)), `${where} text on a chosen map card`).toBeGreaterThan(7);
+          expect(contrast(at('node-pen', h, scheme), at('node-paper', h, scheme)), `${where} a map card's pen`).toBeGreaterThan(3);
+          expect(contrast(at('node-pen-deep', h, scheme), at('node-wash', h, scheme)), `${where} a chosen card's pen`).toBeGreaterThan(3);
+          expect(contrast(at('region-pen-strong', h, scheme), p['color-cream']), `${where} a chosen region`).toBeGreaterThan(3);
+          expect(contrast(at('region-label-pen', h, scheme), at('region-fill', h, scheme)), `${where} a region's label`).toBeGreaterThan(4.5);
+          expect(contrast(p['color-text'], at('menu-paper', h, scheme)), `${where} a menu in a card's colours`).toBeGreaterThan(7);
+          if (scheme === 'dark') expect(inP3(at('node-pen-deep', h, scheme))).toBe(true);
+        }
+        expect(contrast(at('map-ink', 60, scheme), p['color-cream']), `${accent} ${scheme} an arrow`).toBeGreaterThan(4.5);
+        expect(contrast(p['color-text'], at('map-pill', 75, scheme)), `${accent} ${scheme} a label pill`).toBeGreaterThan(7);
+        expect(contrast(p['color-text'], at('map-pill-on', 60, scheme)), `${accent} ${scheme} a chosen label pill`).toBeGreaterThan(7);
+      }
+    }
+    // Light is what was drawn before there was a dark scheme.
+    expect(cssOklch(hueInk('node-pen', 55, 'light'))).toBe('oklch(52% 0.11 55)');
   });
 
   it('palette.css and native/fixtures/palette.json are what the palette says (npx tsx scripts/web/palette-css.ts)', () => {

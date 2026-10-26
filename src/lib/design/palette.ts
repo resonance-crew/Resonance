@@ -440,6 +440,60 @@ function family(scheme: Scheme, i: number): Record<FamilyToken, Oklch> {
   };
 }
 
+/**
+ * Colours made from a hue the data carries rather than from a card family —
+ * a thought-map card or region in its own hue, a menu in a card's colours, a
+ * coverless card's tile — and the map's warm neutrals (hue 60/75): each
+ * role's [lightness, chroma] per scheme, worn at that hue (`hueInk`). Light is
+ * what the web and the apps drew before there was a dark scheme; dark follows
+ * the families' ladder (papers ~24%, washes ~30%, pens 72%, deep pens 84%).
+ */
+export const HUE_INKS = {
+  /** A map card's paper (the family interior's step). */
+  'node-paper': { light: [0.975, 0.012], dark: [0.235, 0.014] },
+  /** A chosen map card's paper, its folder tab. */
+  'node-wash': { light: [0.925, 0.045], dark: [0.3, 0.04] },
+  /** A map card's pen; an arrow from it; a menu's pen in a card's colours. */
+  'node-pen': { light: [0.52, 0.11], dark: [0.72, 0.085] },
+  /** A chosen map card's pen. */
+  'node-pen-deep': { light: [0.38, 0.13], dark: [0.84, 0.065] },
+  /** A menu's pen under a pointer, in a card's colours. */
+  'menu-pen-hover': { light: [0.38, 0.09], dark: [0.84, 0.055] },
+  /** A menu's paper in a card's colours. */
+  'menu-paper': { light: [0.98, 0.01], dark: [0.25, 0.014] },
+  /** The rule between rows in a card's colours (callers take it at 0.4). */
+  'card-rule': { light: [0.55, 0.04], dark: [0.72, 0.04] },
+  /** A map region's wash (callers take it at 0.78–0.96). */
+  'region-fill': { light: [0.965, 0.032], dark: [0.26, 0.03] },
+  /** A map region's pen at rest. */
+  'region-pen': { light: [0.6, 0.085], dark: [0.6, 0.07] },
+  /** A map region's pen chosen or under a pointer. */
+  'region-pen-strong': { light: [0.45, 0.1], dark: [0.76, 0.085] },
+  /** A region's label pen. */
+  'region-label-pen': { light: [0.48, 0.09], dark: [0.72, 0.075] },
+  /** A coverless card's tile (MiniStoryCard's cover, a thread's card glyph tile). */
+  'card-tile': { light: [0.9, 0.06], dark: [0.38, 0.05] },
+  /** The map's dot grid (hue 75). */
+  'map-dot': { light: [0.82, 0.025], dark: [0.36, 0.02] },
+  /** An arrow's pen and the label pill's (hue 60). */
+  'map-ink': { light: [0.46, 0.045], dark: [0.74, 0.04] },
+  /** A chosen arrow's pen (hue 60). */
+  'map-ink-strong': { light: [0.28, 0.05], dark: [0.9, 0.03] },
+  /** A label pill's paper (hue 75). */
+  'map-pill': { light: [0.94, 0.02], dark: [0.28, 0.016] },
+  /** A chosen label pill's paper (hue 60). */
+  'map-pill-on': { light: [0.88, 0.03], dark: [0.36, 0.03] },
+} as const satisfies Record<string, Record<Scheme, readonly [number, number]>>;
+export type HueInk = keyof typeof HUE_INKS;
+
+/** A hue-made colour (HUE_INKS) at `hue` in a scheme. */
+export function hueInk(role: HueInk, hue: number, scheme: Scheme, alpha = 1): Oklch {
+  const [L, C] = HUE_INKS[role][scheme];
+  const c = lch(L, C, hue, alpha);
+  // Light is drawn as it always was (a screen clamps what P3 can't show); dark stays inside P3.
+  return scheme === 'dark' ? fitGamut(c) : c;
+}
+
 function assemble(b: Base, scheme: Scheme): Palette {
   const out = { ...b, ...RECIPES[scheme](b), ...SCHEME_VALUES[scheme] } as Record<string, Oklch>;
   FAMILY_HUES.forEach((_, i) => {
