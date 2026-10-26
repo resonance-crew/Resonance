@@ -101,8 +101,13 @@ export interface ExtractSignatureInput {
  * when their wording is far apart. Also scores how much transferable insight
  * the piece carries, which gates whether it enters the candidate pool.
  */
+/** Exactly what extractInsightSignature reads of a card: its title and the opening of its story. */
+export function signatureText(input: ExtractSignatureInput): string {
+  return `${input.title.trim()}\n\n${input.story.trim()}`.trim().slice(0, MAX_STORY_CHARS);
+}
+
 export async function extractInsightSignature(input: ExtractSignatureInput): Promise<InsightSignature> {
-  const text = `${input.title.trim()}\n\n${input.story.trim()}`.trim().slice(0, MAX_STORY_CHARS);
+  const text = signatureText(input);
   const raw = await chatJSON<Record<string, unknown>>([
     {
       role: 'system',
