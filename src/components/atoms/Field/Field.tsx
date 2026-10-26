@@ -40,11 +40,12 @@ export interface FieldLabelProps {
   children: ReactNode;
   htmlFor?: string;
   required?: boolean;
+  id?: string;
 }
 
-export function FieldLabel({ children, htmlFor, required }: FieldLabelProps) {
+export function FieldLabel({ children, htmlFor, required, id }: FieldLabelProps) {
   return (
-    <label htmlFor={htmlFor} className={styles.label}>
+    <label id={id} htmlFor={htmlFor} className={styles.label}>
       {children}
       {required && <span className={styles.required} aria-hidden>*</span>}
     </label>
@@ -618,17 +619,19 @@ export interface FieldProps {
   hintTone?: 'default' | 'ok' | 'error';
   required?: boolean;
   htmlFor?: string;
+  /** The label's id, for a control that isn't a form field to name itself by (aria-labelledby). */
+  labelId?: string;
   children: ReactNode;
   /** Right-aligned trailing slot (e.g. CharCount). */
   trailing?: ReactNode;
 }
 
 /** Composed wrapper: label + control + (hint | char count). */
-export function Field({ label, hint, hintTone, required, htmlFor, children, trailing }: FieldProps) {
+export function Field({ label, hint, hintTone, required, htmlFor, labelId, children, trailing }: FieldProps) {
   return (
     <div className={styles.fieldGroup}>
       {label && (
-        <FieldLabel htmlFor={htmlFor} required={required}>
+        <FieldLabel htmlFor={htmlFor} required={required} id={labelId}>
           {label}
         </FieldLabel>
       )}

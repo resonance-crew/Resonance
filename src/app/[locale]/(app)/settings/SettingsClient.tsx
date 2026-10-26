@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Fragment, useCallback, useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations, useLocale } from 'next-intl';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
@@ -106,6 +106,7 @@ export function SettingsClient({ initial }: SettingsClientProps) {
   const auth = useAuth();
   const { setMobileHeader } = useAppChrome();
   const { state: tweaks, update: updateTweaks } = useTweaks();
+  const schemeLabelId = useId();
   const [active, setActive] = useState<Section>('profile');
   // Phones use a two-level master/detail flow: 'menu' lists the sections as
   // tappable rows, 'detail' shows one section's controls. Desktop ignores this
@@ -362,11 +363,12 @@ export function SettingsClient({ initial }: SettingsClientProps) {
         )}
         {active === 'appearance' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            <Field label={tTweaks('scheme')}>
+            <Field label={tTweaks('scheme')} labelId={schemeLabelId}>
               {/* A segmented choice, as the publish step's 卡片類型: a quiet well for its extent,
                   the chosen side the tonal face with its label, the others a muted ink that reads on the well. */}
               <div className={styles.appearanceChoice}>
                 <SegmentedActionBar
+                  ariaLabelledBy={schemeLabelId}
                   fill="var(--color-cream-dark)"
                   segments={SCHEME_CHOICES.map((choice) => {
                     const chosen = tweaks.scheme === choice;

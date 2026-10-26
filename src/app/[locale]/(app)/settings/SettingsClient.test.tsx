@@ -417,6 +417,7 @@ describe('SettingsClient appearance', () => {
 
   it('chooses the mode from three segments, Match system pressed by default', async () => {
     await openAppearance();
+    expect(screen.getByRole('group', { name: 'Mode' })).toBeInTheDocument();
     const system = screen.getByRole('button', { name: 'Match system' });
     expect(system).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Light' })).toHaveAttribute('aria-pressed', 'false');

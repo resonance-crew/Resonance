@@ -56,6 +56,8 @@ export interface SegmentedActionBarProps {
   stroke?: string | null;
   /** The wavy seam between segments: by default a cut in the paper, not an ink line. */
   divider?: string;
+  /** What names the group (a segmented choice's label), for a screen reader. */
+  ariaLabelledBy?: string;
 }
 
 interface Bound {
@@ -159,6 +161,7 @@ export function SegmentedActionBar({
   fill = 'var(--button-tonal)',
   stroke = null,
   divider = 'var(--color-cream)',
+  ariaLabelledBy,
 }: SegmentedActionBarProps) {
   const barRef = useRef<HTMLDivElement>(null);
   const segRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -259,7 +262,7 @@ export function SegmentedActionBar({
   }, [w, h, bounds, segments.length, seed, pad]);
 
   return (
-    <div ref={barRef} className={styles.bar} role="group">
+    <div ref={barRef} className={styles.bar} role="group" aria-labelledby={ariaLabelledBy}>
       {w > 0 && h > 0 && (
         <svg
           aria-hidden="true"
