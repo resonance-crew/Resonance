@@ -32,6 +32,35 @@ struct ThreadContext {
     let openRoute: (Route) -> Void
     /// A picture was tapped: it opens full screen.
     let openPicture: (ChatImage) -> Void
+
+    /// Whether a row drawing `message` draws it the same with this context as with `other`: the same
+    /// thread, width, search marks, hit and lifted message for it. The callbacks don't count: the
+    /// screen makes new ones each time it is drawn, and they do the same (they read the screen's state
+    /// when called), so a row they alone would change is left as it is.
+    func draws(_ message: ChatMessage, like other: ThreadContext) -> Bool {
+        model === other.model && flash === other.flash && frames === other.frames && rowMax == other.rowMax
+            && marks(on: message) == other.marks(on: message)
+    }
+
+    /// What the context marks on `message`'s row.
+    func marks(on message: ChatMessage) -> RowMarks {
+        RowMarks(id: message.id, key: message.key, highlights: highlights, currentHit: currentHit, lifted: lifted)
+    }
+}
+
+/// What a thread's context marks on one message's row: its words found by the search, whether it is
+/// the hit being looked at, whether the long-press menu has lifted it. Another message's marks are
+/// none of its business.
+nonisolated struct RowMarks: Equatable {
+    let highlights: [NSRange]?
+    let isCurrentHit: Bool
+    let isLifted: Bool
+
+    init(id: String, key: String, highlights: [String: [NSRange]], currentHit: String?, lifted: String?) {
+        self.highlights = highlights[id]
+        isCurrentHit = currentHit == id
+        isLifted = lifted == key
+    }
 }
 
 /// The message the thread just jumped to from a reply's quote pulses once.
@@ -126,6 +155,8 @@ struct MessageList: View {
                         // A run still on its way says so once, under its newest message: the stack stays one stack.
                         let sendingBelow = row.position.joinsBelow && i > 0 && newestFirst[i - 1].message.delivery == .sending
                         ThreadRowView(row: row, ctx: ctx, deliveryLine: !sendingBelow)
+                            // Drawn again only when what it shows changed (`==`), not each time the screen is.
+                            .equatable()
                             .upsideDown()
                             .id(row.id)
                             // Scrolled up to within a few messages of the oldest held: the next page of older ones is read.
@@ -288,11 +319,18 @@ extension View {
     }
 }
 
-/// One row: the day or time label that leads it, if any, and the message on its side.
-struct ThreadRowView: View {
+/// One row: the day or time label that leads it, if any, and the message on its side. Equal to
+/// another when it draws the same: its row, its delivery line and what the context gives it
+/// (``ThreadContext/draws(_:like:)``). What it reads from the thread's model (the card a message
+/// shares, their face) redraws it as that changes, equal or not.
+struct ThreadRowView: View, Equatable {
     let row: ThreadRow
     let ctx: ThreadContext
     let deliveryLine: Bool
+
+    static func == (a: ThreadRowView, b: ThreadRowView) -> Bool {
+        a.row == b.row && a.deliveryLine == b.deliveryLine && a.ctx.draws(a.row.message, like: b.ctx)
+    }
 
     var body: some View {
         let gap = Self.gap(above: row)
@@ -457,7 +495,7 @@ struct MessageCore: View {
         let mine = model.isMine(message)
         let carried = model.carried(message)
         let words = carried.words(of: message)
-        let found = ChatLinks.links(in: words)
+        let found = model.links(in: words)
         let links = found.map { MessageLinkRange(range: $0.range, url: $0.url) }
         let pulse = ctx.flash.level(of: message.key)
         // A search hit in words the bubble doesn't show (a card's link, standing for the card) washes the whole bubble.
