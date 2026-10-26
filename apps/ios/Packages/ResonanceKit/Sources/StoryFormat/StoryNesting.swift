@@ -15,13 +15,16 @@ public nonisolated enum StoryNesting {
     public static let paragraphDelimiters = 200
     /// The paragraphs' delimiter counts, squared and summed.
     public static let delimiterBudget = 1_000_000
-    /// Cells one table may come to: rows are padded to the header's columns, and every line after
-    /// the header is a row — read per blank-line block as (most `|` on a line + 1) × lines.
-    public static let tableCells = 20_000
+    /// Cells all of a story's tables may come to: rows are padded to the header's columns, every line
+    /// after the header is a row, and the web's parser resolves a story's tables in one pass quadratic
+    /// in the cells written across them. Each blank-line block holding a line that could be a
+    /// delimiter row (only `-`, `:`, `|`, `>` and spaces, at least one `-`; a table needs no `|`)
+    /// counts (most `|` on a line + 1) × its lines.
+    public static let tableCells = 5_000
 
     /// Whether the story is too costly to read as Markdown at all: `tooDeep`, or a paragraph holding
     /// more than `paragraphDelimiters` inline delimiters, or more than `delimiterBudget` over the story,
-    /// or a table of more than `tableCells` cells.
+    /// or tables of more than `tableCells` cells. A line ends at LF, CR or CRLF, as the parser reads it.
     public static func tooComplex(_ story: String) -> Bool {
         tooDeep(story) || tooManyDelimiters(story)
     }
@@ -31,20 +34,27 @@ public nonisolated enum StoryNesting {
     public static func tooManyDelimiters(_ story: String) -> Bool {
         let bytes = Array(story.utf8)
         let n = bytes.count
-        func isSpace(_ c: UInt8) -> Bool { c == 0x20 || c == 0x09 || c == 0x0D }
+        func isSpace(_ c: UInt8) -> Bool { c == 0x20 || c == 0x09 }
+        func isLineEnd(_ c: UInt8) -> Bool { c == 0x0A || c == 0x0D }
         func isDigit(_ c: UInt8) -> Bool { c >= 0x30 && c <= 0x39 }
         func isDelimiter(_ c: UInt8) -> Bool { c == 0x2A || c == 0x5F || c == 0x7E || c == 0x60 || c == 0x5B || c == 0x5D }
+        // | : - > space tab
+        func isDelimiterRowChar(_ c: UInt8) -> Bool { c == 0x7C || c == 0x3A || c == 0x2D || c == 0x3E || c == 0x20 || c == 0x09 }
         var paragraph = 0
         var load = 0
         var columns = 0
         var rows = 0
+        var table = false
+        var cells = 0
         var fence: UInt8 = 0
         func endParagraph() -> Bool {
             load += paragraph * paragraph
+            if table { cells += (columns + 1) * rows }
             paragraph = 0
             columns = 0
             rows = 0
-            return load > delimiterBudget
+            table = false
+            return load > delimiterBudget || cells > tableCells
         }
         var i = 0
         while i < n {
@@ -69,9 +79,9 @@ public nonisolated enum StoryNesting {
                 depth += 1
             }
             let start = i
-            while i < n, bytes[i] != 0x0A { i += 1 }
+            while i < n, !isLineEnd(bytes[i]) { i += 1 }
             let end = i
-            i += 1
+            i += i + 1 < n && bytes[i] == 0x0D && bytes[i + 1] == 0x0A ? 2 : 1
             if start == end {
                 // A blank line ends the paragraph.
                 if depth == 0, endParagraph() { return true }
@@ -86,13 +96,18 @@ public nonisolated enum StoryNesting {
             }
             if fence != 0 { continue }
             var pipes = 0
+            var delimiterRow = true
+            var dash = false
             for k in start..<end {
-                if isDelimiter(bytes[k]) { paragraph += 1 } else if bytes[k] == UInt8(ascii: "|") { pipes += 1 }
+                let c = bytes[k]
+                if isDelimiter(c) { paragraph += 1 } else if c == UInt8(ascii: "|") { pipes += 1 }
+                if c == UInt8(ascii: "-") { dash = true } else if !isDelimiterRowChar(c) { delimiterRow = false }
             }
             if paragraph > paragraphDelimiters { return true }
             columns = max(columns, pipes)
             rows += 1
-            if columns > 0, (columns + 1) * rows > tableCells { return true }
+            if delimiterRow, dash { table = true }
+            if table, cells + (columns + 1) * rows > tableCells { return true }
         }
         return endParagraph()
     }
@@ -109,7 +124,7 @@ public nonisolated enum StoryNesting {
             var depth = 0
             var indent = 0
             var lineStart = true
-            scan: while i < bytes.count, bytes[i] != 0x0A {
+            scan: while i < bytes.count, bytes[i] != 0x0A, bytes[i] != 0x0D {
                 while i < bytes.count, space.contains(bytes[i]) {
                     if lineStart { indent += bytes[i] == 0x09 ? 4 : 1 }
                     i += 1
@@ -135,9 +150,9 @@ public nonisolated enum StoryNesting {
                 depth += 1
                 if depth > limit { return true }
             }
-            // On to the next line.
-            while i < bytes.count, bytes[i] != 0x0A { i += 1 }
-            i += 1
+            // On to the next line (LF, CR or CRLF).
+            while i < bytes.count, bytes[i] != 0x0A, bytes[i] != 0x0D { i += 1 }
+            i += i + 1 < bytes.count && bytes[i] == 0x0D && bytes[i + 1] == 0x0A ? 2 : 1
         }
         return false
     }

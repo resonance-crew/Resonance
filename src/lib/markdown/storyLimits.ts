@@ -13,7 +13,9 @@
  *   quadratic in their number — minutes for one paragraph — and nests as
  *   deep;
  * - a table's rows are padded to its header's columns: a wide header over
- *   many short lines comes to millions of cells.
+ *   many short lines comes to millions of cells — and the parser resolves all
+ *   of a story's tables in one pass whose time is quadratic in the cells
+ *   written across them, so many small tables cost as much as one large one.
  *
  * No story worth reading comes near either. One that does is drawn as its
  * words (StoryMarkdown), embeds and link cards nothing, and a share card
@@ -33,11 +35,16 @@ export const PARAGRAPH_DELIMITER_LIMIT = 200;
 /** The paragraphs' delimiter counts, squared and summed: what the parser's work grows with. */
 export const STORY_DELIMITER_BUDGET = 1_000_000;
 /**
- * Cells one table may come to. A GFM table pads every row to its header's columns, and any line
- * after the header is a row: a header of a thousand `|` over ten thousand one-letter lines is ten
- * million cells from a few dozen KB. Read per blank-line block as (most `|` on a line + 1) × lines.
+ * Cells all of a story's tables may come to. A GFM table pads every row to its header's columns,
+ * and any line after the header is a row: a header of a thousand `|` over ten thousand one-letter
+ * lines is ten million cells from a few dozen KB. And the parser resolves every table of a story
+ * in one pass whose time grows with the square of the cells written across them (5 000 ≈ 0.15 s,
+ * 10 000 ≈ 0.5 s, 20 000 ≈ 2 s), so the count is the story's, not a table's. Each blank-line block
+ * holding a line that could be a delimiter row (only `-`, `:`, `|`, `>` and spaces, at least one
+ * `-` — a table needs no `|` at all: `a`, `:-`, `b` is one) counts (most `|` on a line + 1) × its
+ * lines: at least the cells it is padded to and the cells written in it.
  */
-export const TABLE_CELL_LIMIT = 20_000;
+export const TABLE_CELL_LIMIT = 5_000;
 
 const SPACE = 0x20;
 const TAB = 0x09;
@@ -45,7 +52,18 @@ const NEWLINE = 0x0a;
 const CR = 0x0d;
 
 function isSpace(c: number): boolean {
-  return c === SPACE || c === TAB || c === CR;
+  return c === SPACE || c === TAB;
+}
+
+/** A line ends at LF, CR or CRLF, as the parsers read it (a CR alone too: a story written with them is lines, not one line). */
+function isLineEnd(c: number): boolean {
+  return c === NEWLINE || c === CR;
+}
+
+/** A character a table's delimiter row may hold (after the line's quote and list markers). */
+function isDelimiterRowChar(c: number): boolean {
+  // | : - > space tab
+  return c === 0x7c || c === 0x3a || c === 0x2d || c === 0x3e || c === SPACE || c === TAB;
 }
 
 function isDelimiter(c: number): boolean {
@@ -64,13 +82,17 @@ export function storyTooComplex(story: string): boolean {
   let load = 0; // Σ paragraph²
   let columns = 0; // most `|` on a line of the paragraph (a table's header has its columns' worth)
   let rows = 0; // the paragraph's lines (every line after a table's header is a row)
+  let table = false; // the paragraph holds a line that could be a table's delimiter row
+  let cells = 0; // the cells of the story's tables before this paragraph
   let fence = 0; // the fence character while inside a fenced code block (` or ~), else 0
   const endParagraph = (): boolean => {
     load += paragraph * paragraph;
+    if (table) cells += (columns + 1) * rows;
     paragraph = 0;
     columns = 0;
     rows = 0;
-    return load > STORY_DELIMITER_BUDGET;
+    table = false;
+    return load > STORY_DELIMITER_BUDGET || cells > TABLE_CELL_LIMIT;
   };
   while (i < n) {
     // The line's container prefix: indentation (all of it, also between markers) and quote/list markers.
@@ -103,9 +125,9 @@ export function storyTooComplex(story: string): boolean {
     }
     // The line's content.
     const start = i;
-    while (i < n && story.charCodeAt(i) !== NEWLINE) i++;
+    while (i < n && !isLineEnd(story.charCodeAt(i))) i++;
     const end = i;
-    i++; // past the line feed
+    i += story.charCodeAt(i) === CR && story.charCodeAt(i + 1) === NEWLINE ? 2 : 1; // past the line's end
     if (start === end && depth === 0) {
       // A blank line ends the paragraph.
       if (endParagraph()) return true;
@@ -121,15 +143,20 @@ export function storyTooComplex(story: string): boolean {
     }
     if (fence) continue;
     let pipes = 0;
+    let delimiterRow = true;
+    let dash = false;
     for (let k = start; k < end; k++) {
       const c = story.charCodeAt(k);
       if (isDelimiter(c)) paragraph++;
       else if (c === 0x7c) pipes++; // |
+      if (c === 0x2d) dash = true; // -
+      else if (!isDelimiterRowChar(c)) delimiterRow = false;
     }
     if (paragraph > PARAGRAPH_DELIMITER_LIMIT) return true;
     if (pipes > columns) columns = pipes;
     rows++;
-    if (columns > 0 && (columns + 1) * rows > TABLE_CELL_LIMIT) return true;
+    if (delimiterRow && dash) table = true;
+    if (table && cells + (columns + 1) * rows > TABLE_CELL_LIMIT) return true;
   }
   return endParagraph();
 }
