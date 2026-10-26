@@ -16,6 +16,13 @@ public nonisolated struct WindowControlsInset: Equatable, Sendable {
 
     public static let zero = WindowControlsInset()
 
+    /// Whether a row at `frame` (window coordinates) lies inside the window, as a bar's row does: only
+    /// such a row's reading is its inset (``View/windowControlsInset(_:)``).
+    public static func placed(_ frame: CGRect, in window: CGRect) -> Bool {
+        !frame.isEmpty && frame.minX >= window.minX - 0.5 && frame.minY >= window.minY - 0.5
+            && frame.maxX <= window.maxX + 0.5 && frame.maxY <= window.maxY + 0.5
+    }
+
     /// What the corner adds: the adapted region's insets less the plain region's, never below 0, and
     /// rounded to the point (so a layout pass's fractions never move the row).
     public static func added(adapted: NSDirectionalEdgeInsets, plain: NSDirectionalEdgeInsets) -> WindowControlsInset {
@@ -74,7 +81,12 @@ private struct WindowControlsProbe: UIViewRepresentable {
         }
 
         func measure() {
-            guard #available(iOS 26.0, *), window != nil else { return }
+            guard #available(iOS 26.0, *), let window else { return }
+            // A row UIKit holds outside the window (a list's inset bar mid-layout, a tab's stack laid aside)
+            // overlaps the window's corner only by where it was left: what it would read there is no one's
+            // inset, and it moved the feed's lockup 6 off the other tabs' (round 15). A bar's row always lies
+            // inside the window.
+            guard WindowControlsInset.placed(convert(bounds, to: nil), in: window.bounds) else { return }
             // The safe area, not the margins: a bar's content starts at the row's own edge (its pad is
             // outside the row), and the corner-adapted safe area is where that edge must be to clear the
             // controls with the system's room after them.

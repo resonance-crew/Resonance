@@ -24,6 +24,10 @@ const hostile: Record<string, string> = {
   'code spans that never close': fit('`a ``b '.repeat(30_000)),
   'flat runs of emphasis delimiters': fit('a* *'.repeat(50_000)),
   'a wide table header over many short lines': '|' + 'a|'.repeat(1_000) + '\n|' + '-|'.repeat(1_000) + '\n' + 'a\n'.repeat(80_000),
+  'a long table without a single pipe': 'a\n:-\n' + 'a\n'.repeat(90_000),
+  'many small tables': Array.from({ length: 200 }, () => '|' + 'a|'.repeat(100) + '\n|' + '-|'.repeat(100) + '\n' + 'a\n'.repeat(48)).join('\n'),
+  'a table written with CR line ends': '|' + 'a|'.repeat(1_000) + '\r|' + '-|'.repeat(1_000) + '\r' + 'a\r'.repeat(80_000),
+  'quotes opened after a CR': 'x\r' + '> '.repeat(5_000) + 'x',
   'many paragraphs each near the limit': Array.from({ length: 40 }, () => '*a '.repeat(PARAGRAPH_DELIMITER_LIMIT - 10)).join('\n\n'),
 };
 
@@ -34,7 +38,10 @@ const ordinary: Record<string, string> = {
   'every paragraph with some emphasis': fit('這段有 **重點** 和 *強調*，還有 [連結](https://example.com)。\n\n'.repeat(6_000)),
   'code fences full of underscores': '```python\n' + 'snake_case_name = other_value_here * __dunder__\n'.repeat(400) + '```\n\nafter',
   'a table': '| a | b |\n| --- | --- |\n' + '| **x** | *y* |\n'.repeat(30),
-  'a large ordinary table': '| ' + Array.from({ length: 8 }, (_, i) => `c${i}`).join(' | ') + ' |\n|' + ' --- |'.repeat(8) + '\n' + ('| ' + Array.from({ length: 8 }, () => 'v').join(' | ') + ' |\n').repeat(500),
+  'a story with a few tables': Array.from({ length: 6 }, () => '| a | b | c |\n| --- | --- | --- |\n' + '| x | y | z |\n'.repeat(40)).join('\n'),
+  'a story written with CRLF line ends': fit('> 一\r\n> > 二\r\n\r\n**粗體** 與 *斜體*\r\n\r\n'.repeat(5_000)),
+  'a long poem with section rules': ('一行詩\n'.repeat(400) + '---\n').repeat(6),
+  'a large ordinary table': '| ' + Array.from({ length: 8 }, (_, i) => `c${i}`).join(' | ') + ' |\n|' + ' --- |'.repeat(8) + '\n' + ('| ' + Array.from({ length: 8 }, () => 'v').join(' | ') + ' |\n').repeat(400),
 };
 
 describe('storyTooComplex', () => {

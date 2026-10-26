@@ -356,6 +356,35 @@ describe('pushMessage', () => {
     expect(MESSAGES_CHANNEL).toBe('messages');
   });
 
+  it("gives a build that draws its own notification the sender's avatar — a photo only from our own storage — and the system's push none of it", async () => {
+    const base = process.env.R2_PUBLIC_BASE;
+    process.env.R2_PUBLIC_BASE = 'https://img.resonance.test';
+    try {
+      const photo = 'https://img.resonance.test/avatars/2026-10/0b5c6a1e-2f8e-4c1a-9d1b-3c1f0e8a7b65.webp';
+      await db.doc('users/alice').set({ avatarUrl: photo, initials: '小明', accentColor: 'oklch(90% 0.06 140)' }, { merge: true });
+      const fcm = fakeFcm();
+      await pushMessage(db, await send('看看我的新頭貼'), fcm.sender);
+      let at = deliveries(fcm.sent);
+      expect(at['pixel-en'].data).toMatchObject({ fromAvatarUrl: photo, fromInitials: '小明', fromColor: 'oklch(90% 0.06 140)' });
+      for (const token of ['old-en', 'iphone-zh']) {
+        expect(at[token].data).not.toHaveProperty('fromAvatarUrl');
+        expect(at[token].data).not.toHaveProperty('fromInitials');
+      }
+
+      // A picture anywhere else, or a colour that isn't one, stays off the push; the initials still go.
+      await db.doc('users/alice').set({ avatarUrl: 'https://elsewhere.example/me.png', accentColor: 'url(javascript:x)' }, { merge: true });
+      const again = fakeFcm();
+      await pushMessage(db, await send('換回來了'), again.sender);
+      at = deliveries(again.sent);
+      expect(at['pixel-en'].data).toMatchObject({ fromInitials: '小明' });
+      expect(at['pixel-en'].data).not.toHaveProperty('fromAvatarUrl');
+      expect(at['pixel-en'].data).not.toHaveProperty('fromColor');
+    } finally {
+      if (base === undefined) delete process.env.R2_PUBLIC_BASE;
+      else process.env.R2_PUBLIC_BASE = base;
+    }
+  });
+
   it('sends one multicast for each language and kind of device', async () => {
     const fcm = fakeFcm();
     await pushMessage(db, await send('hi'), fcm.sender);

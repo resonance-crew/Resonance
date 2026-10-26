@@ -158,16 +158,34 @@ public nonisolated struct HeaderChrome: Equatable, Sendable {
     /// title and its state's line ending 1 under the home tabs' pill, ← 36.5 over the pen line and its
     /// 44 clearing it by 14.5. The bar's height and pen line stay.
     public static let backRowDrop: CGFloat = 6
-    /// How far under the header's pen line a tablet page's first content starts (round 5 E2).
-    public static let contentGap: CGFloat = 32
+    /// The line a pushed page's row stands on, under the status bar: the row's middle, ``backRowDrop``
+    /// lower (42). What floats where a bar would be — the thought map's controls, the writer's first row
+    /// in the split's pane — stands on it too, so nothing moves as one page gives way to the other.
+    public static let rowLine: CGFloat = rowHeight / 2 + backRowDrop
+    /// How far in from the window's sides a pushed page's ← and its last action stand their glyphs'
+    /// centres (round 15): no further than the row line lies under the status bar (``rowLine``, 42), so
+    /// the gap at the side reads as the one above — at the pad they stood 57 in on a 13" iPad and looked
+    /// set too far in — and on a narrow window no further in than they stood before (9 past the pad).
+    public static func glyphInset(width: CGFloat) -> CGFloat { min(LayoutClass.pad(width) + 9, rowLine) }
+    /// Where a tab root's header starts its lockup and ends its pen, from the window's sides (round 15):
+    /// where a pushed page's ← and last action end their glyphs (18 across, centred ``glyphInset(width:)``
+    /// in) — so the root's header and a pushed page's keep one edge as one gives way to the other.
+    public static func edge(width: CGFloat) -> CGFloat { glyphInset(width: width) - 9 }
+    /// The centre of a pushed page's ← glyph from the window's leading edge (``glyphInset(width:)``).
+    public static func backCentre(width: CGFloat) -> CGFloat { glyphInset(width: width) }
+    /// How far under the header's pen line a tablet page's first content starts (round 5 E2) in a
+    /// window `width` across: 4 % of it — the rule the page's side pad follows — between 32 and 56.
+    /// The air above grows with the paper at the sides: an upright tablet keeps about 32 (an 11" iPad
+    /// 33, a 13" one 41), a landscape one, its sides wide, gets 48 to 56 (a 13" iPad 55).
+    public static func contentGap(width: CGFloat) -> CGFloat { min(56, max(32, width * 0.04)) }
     /// The same gap from the bar's foot, where a page's scrolled content begins (its line rests
     /// ``HeaderEdge/lineDepth`` above the foot).
-    public static let contentTop: CGFloat = contentGap - HeaderEdge.lineDepth
+    public static func contentTop(width: CGFloat) -> CGFloat { contentGap(width: width) - HeaderEdge.lineDepth }
 
     /// How wide a root's leading content may be in a window `width` wide: up to 16 short of the group,
-    /// `L = (W − G) / 2 − P − 16`.
+    /// `L = (W − G) / 2 − E − 16`, E the header's ``edge(width:)``.
     public static func leadingRoom(width: CGFloat, groupWidth: CGFloat) -> CGFloat {
-        max(0, (width - groupWidth) / 2 - LayoutClass.pad(width) - 16)
+        max(0, (width - groupWidth) / 2 - edge(width: width) - 16)
     }
 
     /// The room the labelled group may take before it gives way to glyphs: `W − 2 × (P + 152)`.
@@ -190,7 +208,7 @@ extension EnvironmentValues {
 
 extension View {
     /// The air above a page's first content, under its bar: `phone` on a phone; on a tablet (the tabs
-    /// in the header) 32 under the header's pen line (round 5 E2: ``HeaderChrome/contentTop``).
+    /// in the header) the window's own gap under the header's pen line (``HeaderChrome/contentGap(width:)``).
     public func headerGap(phone: CGFloat) -> some View {
         modifier(HeaderGap(phone: phone))
     }
@@ -201,7 +219,7 @@ private struct HeaderGap: ViewModifier {
     @Environment(\.window) private var window
 
     func body(content: Content) -> some View {
-        content.padding(.top, window.topTabs ? HeaderChrome.contentTop : phone)
+        content.padding(.top, window.topTabs ? HeaderChrome.contentTop(width: window.width) : phone)
     }
 }
 
@@ -667,8 +685,8 @@ public struct OrganicBrandBar<Trailing: View>: View {
             .padding(.trailing, controls.trailing)
             .frame(minHeight: HeaderChrome.rowHeight)
             .windowControlsInset($controls)
-            .padding(.leading, window.pad)
-            .padding(.trailing, window.pad + chrome.trailingReserve)
+            .padding(.leading, HeaderChrome.edge(width: window.width))
+            .padding(.trailing, HeaderChrome.edge(width: window.width) + chrome.trailingReserve)
             .padding(.bottom, HeaderEdge.height)
             .background { HeaderEdge(scrolled: scrolled) }
             .accessibilityElement(children: .contain)
@@ -875,8 +893,10 @@ public struct OrganicInlineBar<Leading: View, Trailing: View>: View {
             .offset(y: HeaderChrome.backRowDrop)
             .frame(minHeight: HeaderChrome.rowHeight)
             .windowControlsInset($controls)
-            .padding(.leading, window.pad + inset)
-            .padding(.trailing, window.pad)
+            // The arrow's and the last action's glyphs centred on their inset from the window's sides (round 15): the
+            // arrow's 44 hangs 13 before this, the actions' 12 past it.
+            .padding(.leading, HeaderChrome.glyphInset(width: window.width) - 9 + inset)
+            .padding(.trailing, HeaderChrome.glyphInset(width: window.width) - 10)
             .padding(.bottom, HeaderEdge.height)
             .background { HeaderEdge(scrolled: scrolled, progress: progress) }
         } else {

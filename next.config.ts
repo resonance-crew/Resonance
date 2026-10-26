@@ -46,6 +46,11 @@ const nextConfig: NextConfig = {
   // device access; the Content-Security-Policy is report-only for now.
   // No "X-Powered-By: Next.js": nothing gained by naming the stack.
   poweredByHeader: false,
+  // No image optimizer: nothing here draws next/image (pictures are plain
+  // <img>, already resized where they are stored), and left on with its
+  // defaults /_next/image would resize any local path under any query, width
+  // and quality for anyone — billed work no page asks for.
+  images: { unoptimized: true },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders(process.env) }];
   },

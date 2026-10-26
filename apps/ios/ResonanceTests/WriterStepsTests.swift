@@ -287,7 +287,7 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(PublishStep.topPadding(draft, showsBar: true, compact: true) == 0)
         // The split's pane heads the step with its own row; a wider window draws a bordered card.
         #expect(!PublishStep.bandUnderBar(draft, showsBar: false, compact: true))
-        #expect(PublishStep.topPadding(draft, showsBar: false, compact: true) == WriteWorkspace.paneTop)
+        #expect(PublishStep.topPadding(draft, showsBar: false, compact: true) == WriteWorkspace.paneTop(row: PublishStep.headingRowHeight))
         #expect(!PublishStep.bandUnderBar(draft, showsBar: true, compact: false))
         #expect(PublishStep.topPadding(draft, showsBar: true, compact: false) == PenLineGap.fromFoot(Tokens.storyHeadCoverGap))
 

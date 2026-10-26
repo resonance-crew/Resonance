@@ -489,9 +489,9 @@ private struct CardScroll: ViewModifier {
 }
 
 /// The line under the title, at every width (the web's StoryByline; round 8 §10.1): the author's
-/// avatar (40), pen name (→ their page; one line, its end cut with an ellipsis), the region's flag
-/// and the verified mark, over the meta line. An anonymous card shows the neutral 「·」
-/// and 「匿名」 in muted ink, linking nowhere, to everyone — its owner too. The row grows with large
+/// avatar (40) and pen name (each → their page; the name one line, its end cut with an ellipsis),
+/// the region's flag and the verified mark, over the meta line. An anonymous card shows the neutral
+/// 「·」 and 「匿名」 in muted ink, linking nowhere, to everyone — its owner too. The row grows with large
 /// text and a wrapping meta line (at least 44, never a fixed height). On a tablet it ends in the card's
 /// share and ⋯ (`actions`, the page's); a phone's are the bar's.
 struct StoryBylineRow<Actions: View>: View {
@@ -511,8 +511,13 @@ struct StoryBylineRow<Actions: View>: View {
         let author = card.author?.value1
         HStack(spacing: 12) {
             if let author, !anonymous {
-                HandDrawnAvatar(initials: author.initials, imageURL: author.avatarUrl.flatMap(URL.init(string:)),
-                                color: author.accent, size: avatar, seed: author.avatarSeedValue)
+                // The avatar leads to their page as the pen name does; the name stays the one VoiceOver meets.
+                Button { openRoute(.author(author.handle)) } label: {
+                    HandDrawnAvatar(initials: author.initials, imageURL: author.avatarUrl.flatMap(URL.init(string:)),
+                                    color: author.accent, size: avatar, seed: author.avatarSeedValue)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHidden(true)
             } else {
                 HandDrawnAvatar(initials: "·", color: Tokens.avatarWait, size: avatar, seed: 97)
             }

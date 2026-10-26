@@ -206,6 +206,16 @@ import Testing
         #expect(StoryNesting.tooComplex(wide))
         let table = "| a | b | c |\n| --- | --- | --- |\n" + String(repeating: "| x | y | z |\n", count: 400)
         #expect(!StoryNesting.tooComplex(table))
+        // The cells are the story's, not a table's; a table needs no pipe; a CR ends a line as LF does.
+        #expect(StoryNesting.tooComplex("a\n:-\n" + String(repeating: "a\n", count: 90_000)))
+        let small = "|" + String(repeating: "a|", count: 100) + "\n|" + String(repeating: "-|", count: 100) + "\n" + String(repeating: "a\n", count: 48)
+        #expect(StoryNesting.tooComplex(Array(repeating: small, count: 200).joined(separator: "\n")))
+        #expect(StoryNesting.tooComplex("|" + String(repeating: "a|", count: 1_000) + "\r|" + String(repeating: "-|", count: 1_000) + "\r" + String(repeating: "a\r", count: 80_000)))
+        #expect(StoryNesting.tooComplex("x\r" + String(repeating: "> ", count: 5_000) + "x"))
+        let few = "| a | b | c |\n| --- | --- | --- |\n" + String(repeating: "| x | y | z |\n", count: 40)
+        #expect(!StoryNesting.tooComplex(Array(repeating: few, count: 6).joined(separator: "\n")))
+        #expect(!StoryNesting.tooComplex(String(repeating: "> 一\r\n> > 二\r\n\r\n**粗體** 與 *斜體*\r\n\r\n", count: 2_000)))
+        #expect(!StoryNesting.tooComplex(String(repeating: String(repeating: "一行詩\n", count: 400) + "---\n", count: 6)))
         // Many paragraphs near the limit add up.
         let many = Array(repeating: String(repeating: "*a ", count: StoryNesting.paragraphDelimiters - 10), count: 40).joined(separator: "\n\n")
         #expect(StoryNesting.tooComplex(many))

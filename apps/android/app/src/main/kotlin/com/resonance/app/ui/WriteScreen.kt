@@ -130,6 +130,8 @@ import com.resonance.design.EmptyAction
 import com.resonance.design.Grain
 import com.resonance.design.GrainMode
 import com.resonance.design.HeaderEdgeHeight
+import com.resonance.design.TabletBarRowLine
+import com.resonance.design.tabletBarGlyphInset
 import com.resonance.design.LayoutClass
 import com.resonance.design.LocalToasts
 import com.resonance.design.LocalWindowLayout
@@ -199,6 +201,8 @@ import kotlinx.coroutines.launch
  * In the split workspace ([Workspace], round 5 E5) it is the editor pane's ([pane]): no bar and no
  * back of its own — the map's Leave and the system back are the workspace's, which asks through
  * [pane] what the writer holds, as the bar's arrow does — its content starting under the status bar.
+ * With the writer alone in the workspace (the pane given the whole window) it has its bar again, the
+ * same writer still composed; its back from writing is the workspace's ([paneBack]) on a card from the map.
  */
 @Composable
 fun WriteScreen(
@@ -211,8 +215,10 @@ fun WriteScreen(
     onCreated: (String) -> Unit = {},
     /** How the workspace around the writer reaches it ([Workspace]); null: the writer is a page of its own. */
     pane: WriterHandle? = null,
-    /** Its own bar and back (a page of its own, or a pane covering the map below the split); false: the split workspace's pane. */
+    /** Its own bar and back (a page of its own, a pane covering the map below the split, or the writer alone at it); false: the split workspace's pane. */
     bar: Boolean = true,
+    /** Back from writing, taken by the workspace without the leave question (the writer alone on a card from the map: the pane hides, its draft saved); null: the writer's own leave. */
+    paneBack: (() -> Unit)? = null,
     /** It began on a new card in this visit, since saved as the draft [cardId] (a rotation, a restored process): still 新卡片. */
     beganNew: Boolean = false,
     /** A 私人卡's 公開發表 (round 12 §3): it opens on [cardId] at the publish step, offered to readers. */
@@ -224,7 +230,7 @@ fun WriteScreen(
     // rotated, the app restored) it opens on the draft rather than a blank card.
     val id = remember { cardId }
     if (id == null) {
-        WriteForm(session, referenceCardId, story, null, close, onFinished, onCreated, pane, bar)
+        WriteForm(session, referenceCardId, story, null, close, onFinished, onCreated, pane, bar, paneBack = paneBack)
         return
     }
     // The card loads straight from Firestore, painting a loader meanwhile; restored from the trash, it is read again.
@@ -256,7 +262,7 @@ fun WriteScreen(
             }
         }
         card.isTrashed -> TrashedWriter(session, card, bar, close) { attempt++ }
-        else -> androidx.compose.runtime.key(card) { WriteForm(session, referenceCardId, null, card, close, onFinished, pane = pane, bar = bar, beganNew = beganNew, publishing = publishing) }
+        else -> androidx.compose.runtime.key(card) { WriteForm(session, referenceCardId, null, card, close, onFinished, pane = pane, bar = bar, paneBack = paneBack, beganNew = beganNew, publishing = publishing) }
     }
 }
 
@@ -321,6 +327,7 @@ private fun WriteForm(
     onCreated: (String) -> Unit = {},
     pane: WriterHandle? = null,
     bar: Boolean = true,
+    paneBack: (() -> Unit)? = null,
     beganNew: Boolean = false,
     publishing: Boolean = false,
 ) {
@@ -405,10 +412,14 @@ private fun WriteForm(
     }
     // Back while writing (the bar's arrow, the system's key or swipe) with something written asks first; with nothing, it leaves at once.
     // A card in the trash keeps nothing: it asks only for words it holds nowhere, and says so ([WriteModel.leaveQuestion]).
+    // The writer alone in the workspace on a card from the map, the workspace takes it: the pane hides, its draft saved.
     val goBack: () -> Unit = {
         if (!leaving && !model.back()) {
             val question = model.leaveQuestion
-            if (question != null) {
+            if (paneBack != null) {
+                bridge.releaseKeyboard()
+                paneBack()
+            } else if (question != null) {
                 bridge.releaseKeyboard()
                 confirmingLeave = question
             } else leave()
@@ -584,7 +595,9 @@ private fun WriteForm(
                 uploadingImage = model.uploadingInline,
             )
         }
-        if (bar) {
+        // The pane given the whole width at the split, or the split again (round 15): the bar fades in (out)
+        // as the floating ✓ fades out (in), the page under them easing to its new top on the same curve.
+        AnimatedVisibility(bar, enter = fadeIn(tween(CHROME_FADE_MILLIS)), exit = fadeOut(tween(CHROME_FADE_MILLIS))) {
             // Leaving keeps what's written: the draft is saved on the way out.
             if (step == WriterStep.Write) OrganicInlineBar(
                 L10n.App.Nav.back, goBack, title = model.title, scrolled = writeScroll.scrolledPast20(),
@@ -594,11 +607,15 @@ private fun WriteForm(
                 L10n.Write.leaveStay, { model.back() }, title = model.stepTitle, scrolled = publishScroll.scrolledPast20(),
                 hasStatus = true, status = status,
             )
-        } else if (model.showsNext) {
-            // At the split: no bar — ✓ floats at the pane's top end, level with the Leave over the map, the save state
-            // just before it on the same line, and never scrolls.
+        }
+        // At the split: no bar — ✓ floats at the pane's top end, level with the Leave over the map, the save state
+        // just before it on the same line, and never scrolls.
+        AnimatedVisibility(
+            !bar && model.showsNext, Modifier.align(Alignment.TopEnd),
+            enter = fadeIn(tween(CHROME_FADE_MILLIS)), exit = fadeOut(tween(CHROME_FADE_MILLIS)),
+        ) {
             Row(
-                Modifier.align(Alignment.TopEnd).padding(top = splitTop() - (FINISH_BOX - SPLIT_ROW_HEIGHT) / 2, end = pad - (FINISH_BOX - 22.dp) / 2).onSizeChanged { pillWidth = it.width },
+                Modifier.padding(top = splitTop() - (FINISH_BOX - SPLIT_ROW_HEIGHT) / 2, end = tabletBarGlyphInset(pad) - FINISH_BOX / 2).onSizeChanged { pillWidth = it.width },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 SaveStateText(status)
@@ -690,6 +707,12 @@ private fun WritingStep(
     var viewportPx by remember { mutableIntStateOf(0) }
     var storyCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val top = if (bar) inlineBarTop() else splitTop()
+    // The page's top as the bar comes or goes (round 15): eased with the bar's fade, never a jump.
+    val reduced = LocalContext.current.prefersReducedMotion()
+    val pageTop by animateDpAsState(
+        top + (if (bar) writerHead(compact) else 0.dp),
+        if (reduced) snap() else tween(CHROME_FADE_MILLIS, easing = Ease), label = "writerTop",
+    )
     // What the bars cover of the page, the caret kept clear of it: the bar (or the split's first row) above,
     // the docked format bar below — by the page's own follow, and by Compose's keep-the-focused-thing-in-view
     // as the keyboard rises (the story reports its caret's line as its focused area: StoryWebView).
@@ -730,10 +753,10 @@ private fun WritingStep(
             .onBlankTap(bridge, dismissKeyboard)
             .verticalScroll(scroll)
             .then(if (compact) Modifier else Modifier.fillMaxWidth().wrapContentWidth().widthIn(max = columnMax))
-            // The bar lies over the page, so what scrolls shows right up to its pen line.
-            .padding(top = top)
-            // Under the bar the page's first line stands where a card page's title does (round 11 §4: the reading head).
-            .padding(start = pad, end = pad, top = if (bar) writerHead(compact) else 0.dp, bottom = 48.dp)
+            // The bar lies over the page, so what scrolls shows right up to its pen line; under the bar the page's first
+            // line stands where a card page's title does (round 11 §4: the reading head).
+            .padding(top = pageTop)
+            .padding(start = pad, end = pad, bottom = 48.dp)
             // The page's end clears what covers it: the docked bar, else the system's navigation bar (the keyboard down).
             .then(if (docked) Modifier.padding(bottom = with(density) { dockPx.toDp() }.coerceAtLeast(DOCK_BAR_HEIGHT)) else Modifier.navigationBarsPadding()),
     ) {
@@ -742,13 +765,19 @@ private fun WritingStep(
             model.trashed -> { { TrashedLine(model, onRestore) } }
             else -> null
         }
-        if (!bar || line != null) Box(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = if (bar) 0.dp else SPLIT_ROW_HEIGHT)
-                .padding(end = if (bar) 0.dp else with(density) { pillWidth.toDp() } + 12.dp),
-            contentAlignment = Alignment.CenterStart,
-        ) { line?.invoke() }
+        // Folding with the bar's fade as the pane takes the whole width, opening as it gives it back.
+        // Under the bar only a card in the trash keeps the row (its line, as tall as it is); folding, the row keeps
+        // its split height, so it folds from there rather than snapping shut first.
+        val lineUnderBar = bar && line != null
+        AnimatedVisibility(!bar || line != null, enter = splitRowIn(reduced), exit = splitRowOut(reduced)) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = if (lineUnderBar) 0.dp else SPLIT_ROW_HEIGHT)
+                    .padding(end = if (bar) 0.dp else with(density) { pillWidth.toDp() } + 12.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) { line?.invoke() }
+        }
         model.saveError?.let {
             Spacer(Modifier.height(6.dp))
             BasicText(it, style = AppFonts.body(13f, lineHeight = 1.5f, color = Tokens.Danger), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive })
@@ -908,20 +937,27 @@ private fun PublishStep(
         if (bar && !compact && cardFirstUnderBar(hint, mirrorOnScreen = mirrorShows || lineComposed)) writerHead(compact, cover = true) - writerHead(compact) else 0.dp,
         if (reduced) snap() else tween(200, easing = Ease), label = "previewLead",
     )
+    // The step's top as the bar comes or goes (round 15), eased with its fade.
+    val stepTop by animateDpAsState(
+        if (bar) inlineBarTop() - (if (tucks) HeaderEdgeHeight else 0.dp) + (if (!tucks) writerHead(compact) else 0.dp) else splitTop(),
+        if (reduced) snap() else tween(CHROME_FADE_MILLIS, easing = Ease), label = "stepTop",
+    )
     // Every section keeps its gap above it, so one that folds away (the mirror with nothing to say) takes its gap along.
     Column(
         Modifier
             .fillMaxSize()
             .verticalScroll(scroll)
             .then(if (compact) Modifier else Modifier.fillMaxWidth().wrapContentWidth().widthIn(max = columnMax))
-            // Where a band may tuck under the bar, the column starts at the bar's wave; what sits above the band keeps clear of it.
-            .padding(top = if (bar) inlineBarTop() - (if (tucks) HeaderEdgeHeight else 0.dp) else splitTop())
-            // Under the bar the step's first line stands where a card page's title does (round 11 §4: the reading head).
-            .padding(start = pad, end = pad, top = if (bar && !tucks) writerHead(compact) else 0.dp, bottom = 48.dp),
+            // Where a band may tuck under the bar, the column starts at the bar's wave; what sits above the band keeps clear
+            // of it. Under the bar the step's first line stands where a card page's title does (round 11 §4: the reading head).
+            .padding(top = stepTop)
+            .padding(start = pad, end = pad, bottom = 48.dp),
     ) {
-        if (!bar) {
-            StepHeading(model, status)
-            Spacer(Modifier.height(gap))
+        AnimatedVisibility(!bar, enter = splitRowIn(reduced), exit = splitRowOut(reduced)) {
+            Column {
+                StepHeading(model, status)
+                Spacer(Modifier.height(gap))
+            }
         }
         if (model.showsUpdateHint) {
             BasicText(L10n.Write.PublishPanel.updateHint, style = AppFonts.body(14f, lineHeight = 1.7f, color = Tokens.TextMuted))
@@ -1480,9 +1516,22 @@ private fun Modifier.bleed(pad: Dp): Modifier = layout { measurable, constraints
 private fun writerTop(bar: Boolean): Dp =
     if (bar) inlineBarTop() else WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-/** At the split, the pane's first row: level with the Leave over the map (the status bar, then 8). */
+/**
+ * At the split, the pane's first row: its middle on a pushed page's row line (round 15, [TabletBarRowLine]), where
+ * the Leave over the map stands too — so the floating ✓ is where the writer's bar puts it at the whole width.
+ */
 @Composable
-private fun splitTop(): Dp = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp
+private fun splitTop(): Dp = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + TabletBarRowLine - SPLIT_ROW_HEIGHT / 2
+
+/** The bar and the floating ✓ trading places as the pane takes the whole width or gives it back (round 15). */
+private const val CHROME_FADE_MILLIS = 250
+
+/** The split's first row opening (folding) with the bar's fade; at once under reduced motion. */
+private fun splitRowIn(reduced: Boolean): EnterTransition =
+    if (reduced) EnterTransition.None else expandVertically(tween(CHROME_FADE_MILLIS, easing = Ease)) + fadeIn(tween(CHROME_FADE_MILLIS))
+
+private fun splitRowOut(reduced: Boolean): ExitTransition =
+    if (reduced) ExitTransition.None else shrinkVertically(tween(CHROME_FADE_MILLIS, easing = Ease)) + fadeOut(tween(CHROME_FADE_MILLIS))
 
 /**
  * How the split workspace reaches the writer in its editor pane (round 5 E5): what it holds, and

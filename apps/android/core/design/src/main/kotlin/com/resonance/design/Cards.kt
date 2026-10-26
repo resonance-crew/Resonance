@@ -37,7 +37,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -139,12 +138,11 @@ fun OrganicImage(
     placeholder: @Composable () -> Unit,
 ) {
     // The bleed follows the box offered (what BoxWithConstraints read, now read while measuring, with
-    // no subcomposition); the clip takes it from there ([HeldBledShape]).
-    val held = remember { HeldBleed() }
-    val shape = remember(seed, radius, magFactor) { HeldBledShape(seed, held, radius, magFactor) }
+    // no subcomposition); the clip is set as the picture is placed, with that bleed in it ([bledLayout]).
+    val clip = remember(seed, radius, magFactor) { { bleed: Double -> BledShape(seed, bleed, radius, magFactor) } }
     Layout(
         content = {
-            Box(Modifier.clip(shape).then(if (grain > 0f) Modifier.grainOverlay(grain) else Modifier)) {
+            Box(if (grain > 0f) Modifier.grainOverlay(grain) else Modifier) {
                 var loading by remember(url) { mutableStateOf(url != null) }
                 if (loading) SkeletonCover() else placeholder()
                 if (url != null) AsyncImage(
@@ -157,35 +155,23 @@ fun OrganicImage(
             }
         },
         modifier = modifier,
-    ) { measurables, constraints -> bledLayout(measurables.single(), constraints, magFactor, held) }
-}
-
-/** The bleed the box was last measured with (dp), for its clip. */
-internal class HeldBleed {
-    var bleed = 0.0
-}
-
-/**
- * [BledShape] with the bleed its box was measured with ([bledLayout]). Its outline is asked again
- * whenever the picture's size changes, and that size (the box plus twice the bleed) is never the same
- * for two different bleeds — a bleed only grows with the box's shorter side — so it never draws a stale one.
- */
-internal data class HeldBledShape(private val seed: Double, private val held: HeldBleed, private val radius: Double, private val magFactor: Double) : Shape {
-    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline =
-        BledShape(seed, held.bleed, radius, magFactor).createOutline(size, layoutDirection, density)
+    ) { measurables, constraints -> bledLayout(measurables.single(), constraints, magFactor, clip) }
 }
 
 /**
  * What `BoxWithConstraints { Box(Modifier.requiredSize(maxWidth + bleed * 2, maxHeight + bleed * 2)) }`
  * measured and placed, worked out in one layout: the picture [bleed][imageBleed] larger than the box
  * offered on every side, centred on it (the half pixel rounding as `requiredSize` rounds it), the box
- * taking the size offered.
+ * taking the size offered — and clipped by [clip] for that bleed as it is placed. The clip is the
+ * placement layer's, never one set while composing: a lazy list's item taken over by another card keeps
+ * its layer and its size, and a shape set before this measure (its bleed not known yet) drew that card's
+ * picture unclipped, a bleed wider on every side.
  */
-internal fun MeasureScope.bledLayout(measurable: Measurable, constraints: Constraints, magFactor: Double, held: HeldBleed): MeasureResult {
+internal fun MeasureScope.bledLayout(measurable: Measurable, constraints: Constraints, magFactor: Double, clip: (Double) -> Shape): MeasureResult {
     val maxWidth = if (constraints.hasBoundedWidth) constraints.maxWidth.toDp() else Dp.Infinity
     val maxHeight = if (constraints.hasBoundedHeight) constraints.maxHeight.toDp() else Dp.Infinity
     val bleed = imageBleed(maxWidth.value, maxHeight.value, magFactor)
-    held.bleed = bleed.value.toDouble()
+    val shape = clip(bleed.value.toDouble())
     val innerW = (maxWidth + bleed * 2).roundToPx()
     val innerH = (maxHeight + bleed * 2).roundToPx()
     val placeable = measurable.measure(Constraints.fixed(innerW, innerH))
@@ -196,7 +182,10 @@ internal fun MeasureScope.bledLayout(measurable: Measurable, constraints: Constr
     val boxH = max(constraints.minHeight, seenH)
     return layout(boxW, boxH) {
         val at = Alignment.TopStart.align(IntSize(seenW, seenH), IntSize(boxW, boxH), layoutDirection)
-        placeable.place(at.x + (seenW - innerW) / 2, at.y + (seenH - innerH) / 2)
+        placeable.placeWithLayer(at.x + (seenW - innerW) / 2, at.y + (seenH - innerH) / 2) {
+            this.shape = shape
+            this.clip = true
+        }
     }
 }
 

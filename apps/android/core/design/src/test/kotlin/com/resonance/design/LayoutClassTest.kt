@@ -142,16 +142,20 @@ class LayoutClassTest {
         assertEquals(8f, (LayoutClass.Compact.storyHeadGap(true) - LayoutClass.Compact.storyHeadGap(false)).value, 0.001f)
     }
 
-    @Test fun aTabletsPagesStart32UnderTheHeadersPenLineAndAPhonesKeepTheirOwn() {
+    @Test fun aTabletsPagesStartUnderTheHeadersPenLineByItsWidthAndAPhonesKeepTheirOwn() {
         // Round 5 E2: measured from the bar's foot, its pen line 1.4 + INK above it.
-        assertEquals(16f, LayoutClass.Compact.firstContentGap(16.dp).value, 0.001f)
-        assertEquals(20f, LayoutClass.Compact.firstContentGap(20.dp).value, 0.001f)
-        for (cls in listOf(LayoutClass.Medium, LayoutClass.Expanded)) {
-            assertEquals(32f - 1.4f - Tokens.Ink.value, cls.firstContentGap(16.dp).value, 0.001f)
-            assertEquals(cls.firstContentGap(16.dp), cls.firstContentGap(20.dp))
+        val phone = WindowLayout(400.dp)
+        assertEquals(16f, phone.firstContentGap(16.dp).value, 0.001f)
+        assertEquals(20f, phone.firstContentGap(20.dp).value, 0.001f)
+        // 4 % of the width between 32 and 56: upright tablets keep 32, landscape ones grow with their sides.
+        for ((width, air) in listOf(600f to 32f, 800f to 32f, 1032f to 41.28f, 1280f to 51.2f, 1376f to 55.04f, 1600f to 56f)) {
+            val tablet = WindowLayout(width.dp)
+            assertEquals(air, tabletHeaderAir(width).value, 0.001f)
+            assertEquals(air - 1.4f - Tokens.Ink.value, tablet.firstContentGap(16.dp).value, 0.001f)
+            assertEquals(tablet.firstContentGap(16.dp), tablet.firstContentGap(20.dp))
+            // The feed's grid (its list starting under the bar's wave band): the same air under the line.
+            assertEquals(HeaderEdgeHeight.value + air - BarLineInset.value, tablet.gridUnderBar.value, 0.001f)
         }
-        // The feed's grid (an expanded window, its list starting under the bar's wave band): 32 under the line too.
-        assertEquals(HeaderEdgeHeight.value + 32f - BarLineInset.value, GridUnderBar.value, 0.001f)
     }
 
     @Test fun aTabletsPullIsHalfAsBigAgain() {

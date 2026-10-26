@@ -20,8 +20,21 @@ import Testing
             #expect(abs(drag.width - share) < 0.0001 && abs(drag.shown - share) < 0.0001)
             #expect(!drag.hides)
         }
-        // Past half the pane stops growing: the map keeps at least half.
-        #expect(at(0.7).width == EditorSplit.maxFraction && at(0.7).shown == EditorSplit.maxFraction)
+        // Past half the pane slides on over the map, after the finger, up to the whole width.
+        #expect(abs(at(0.7).shown - 0.7) < 0.0001 && abs(at(0.7).width - 0.7) < 0.0001 && !at(0.7).fills)
+        #expect(EditorSplit.drag(to: -40, width: width).shown == 1)
+    }
+
+    @Test func from75PercentTheReleaseGivesThePaneTheWholeWidth() {
+        #expect(at(0.75).fills && at(0.9).fills && at(1).fills)
+        #expect(!at(0.74).fills && !at(0.5).fills && !at(0.1).fills)
+        #expect(EditorSplit.release(shown: 0.75) == .fill)
+        #expect(EditorSplit.release(shown: 1) == .fill)
+        // Between half and 75 % it springs back to the 1:1 split — the way back from the whole width too.
+        #expect(EditorSplit.release(shown: 0.6) == .resize(EditorSplit.maxFraction))
+        #expect(EditorSplit.release(shown: 0.74) == .resize(EditorSplit.maxFraction))
+        // VoiceOver's step down from the whole width lands on the split.
+        #expect(EditorSplit.adjusted(1, steps: -1) == EditorSplit.maxFraction)
     }
 
     @Test func pastTheMinimumThePaneSlidesAfterTheFingerAtItsNarrowest() {
@@ -125,10 +138,30 @@ import Testing
 
 /// A tablet's air under the header and its pull to refresh (round 5 E2).
 @MainActor @Suite struct TabletAirTests {
-    @Test func aTabletPagesFirstContentStarts32UnderTheHeadersLine() {
+    @Test func aTabletPagesFirstContentStartsUnderTheHeadersLineByTheWindowsWidth() {
         // The scrolled content begins at the bar's foot, whose line rests its depth above it.
         #expect(HeaderEdge.lineDepth == 1.4 + Tokens.ink)
-        #expect(abs(HeaderChrome.contentTop + HeaderEdge.lineDepth - 32) < 0.0001)
+        #expect(abs(HeaderChrome.contentTop(width: 834) + HeaderEdge.lineDepth - 33.36) < 0.0001)
+        // Upright, a small tablet keeps 32; across, its sides wide with paper, the air grows to 56 at most.
+        #expect(HeaderChrome.contentGap(width: 744) == 32)
+        #expect(abs(HeaderChrome.contentGap(width: 1032) - 41.28) < 0.0001)
+        #expect(abs(HeaderChrome.contentGap(width: 1194) - 47.76) < 0.0001)
+        #expect(abs(HeaderChrome.contentGap(width: 1376) - 55.04) < 0.0001)
+        #expect(HeaderChrome.contentGap(width: 1600) == 56)
+    }
+
+    @Test func whatFloatsOverTheMapStandsWhereAPushedPagesBarPutsItsOwn() {
+        // The bar's row line: the 72 row's middle, 6 lower.
+        #expect(HeaderChrome.rowLine == 42)
+        // The ← glyph's centre, and the last action's from the other side: as far in as the row line lies under the
+        // status bar on a wide window (the pad would put it 57 in), 9 past the pad on a narrow one.
+        #expect(HeaderChrome.backCentre(width: 1376) == 42)
+        #expect(abs(HeaderChrome.glyphInset(width: 700) - (28 + 9)) < 0.0001)
+        // The map's Back (43 across) centres on it; the tools and the zoom sheet keep the same edge.
+        #expect(ThoughtMapScreen.tabletEdge(width: 1376) == 42 - 21.5)
+        // The pane's first rows centre on the same line: the writer's 44, the publish step's 38.
+        #expect(WriteWorkspace.paneTop(row: 44) + 22 == HeaderChrome.rowLine)
+        #expect(WriteWorkspace.paneTop(row: PublishStep.headingRowHeight) + PublishStep.headingRowHeight / 2 == HeaderChrome.rowLine)
     }
 
     @Test func aTabletsLoaderAndItsGapAreHalfAgainAPhones() {

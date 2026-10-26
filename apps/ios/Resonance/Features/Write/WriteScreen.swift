@@ -88,8 +88,11 @@ struct WriteScreen: View {
         }
         .background(Tokens.cream)
         .safeAreaInset(edge: .top, spacing: 0) {
-            if showsBar { bar }
+            if showsBar { bar.transition(.opacity) }
         }
+        // The pane given the whole width, or the split again: the bar fades in (out) as the floating ✓
+        // fades out (in), the page settling under it on the same curve.
+        .animation(.easeInOut(duration: Self.chromeFade), value: showsBar)
         .toolbar(.hidden, for: .navigationBar)
         // Leaving the app saves what is written now, not 1.5s later (the web's visibilitychange flush).
         .onChange(of: scenePhase) { _, phase in
@@ -371,15 +374,19 @@ struct WriteScreen: View {
                     finishButton(model)
                 }
                 .frame(height: Self.splitRow)
-                .padding(.top, WriteWorkspace.paneTop)
-                // The glyph's own pad sits in the margin, as the bar's do.
-                .padding(.trailing, window.pad - 12)
+                .padding(.top, WriteWorkspace.paneTop(row: Self.splitRow))
+                // The glyph's centre where the bar puts its last action's (its 44 target around it).
+                .padding(.trailing, HeaderChrome.glyphInset(width: window.width) - 22)
+                .transition(.opacity)
             }
         }
     }
 
     /// At the split, the first row: the floating ✓ (and the save state before it), a finger tall.
     private static let splitRow: CGFloat = 44
+
+    /// The bar and the floating ✓ trading places as the pane takes the whole width or gives it back.
+    static let chromeFade: Double = 0.25
 
     /// How much higher a title field's line starts than the title's CSS line box: the field's line is
     /// the face's own height, the box the title's leading — the glyphs centred in both.
@@ -419,7 +426,7 @@ struct WriteScreen: View {
         // Under the bar, the title's line box as far under its pen line as a card page's title stands
         // (round 11 §4: --story-head-gap, 48 on a phone, 64 wider) — writing a card and reading it start
         // at the same place. In the pane there is no bar: its first line sits level with the Back on the canvas.
-        .padding(.top, showsBar ? Self.headTop(typo: typo, font: font) : WriteWorkspace.paneTop)
+        .padding(.top, showsBar ? Self.headTop(typo: typo, font: font) : WriteWorkspace.paneTop(row: Self.splitRow))
         .padding(.bottom, 48)
         // Wider than a phone, the web's writing measure (680 and the page's pads), centred.
         .frame(maxWidth: window.layoutClass == .compact ? .infinity : Tokens.measure + 2 * window.pad)
@@ -559,9 +566,12 @@ struct WriteScreen: View {
     }
 
     /// Back (the arrow, the edge swipe): from the publish step to writing, no question; from writing,
-    /// the question first when there is writing to put away, otherwise at once.
+    /// the question first when there is writing to put away, otherwise at once — unless the workspace
+    /// takes it (``WritePane/backToMap``).
     private func goBack(_ model: WriteModel) {
         if model.stepBack() { return }
+        // The workspace's pane at the whole width over a card the map opened: back to the map.
+        if pane.backToMap() { return }
         leaveAsking(model)
     }
 

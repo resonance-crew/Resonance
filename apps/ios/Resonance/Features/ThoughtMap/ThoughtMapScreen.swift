@@ -22,6 +22,7 @@ struct ThoughtMapScreen: View {
     @Environment(WriteLauncher.self) private var writer
     @Environment(\.openRoute) private var openRoute
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.window) private var window
     /// The window's own controls (an iPad's app in a window): the Back on the canvas steps past them.
     @State private var controls = WindowControlsInset.zero
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -122,7 +123,8 @@ struct ThoughtMapScreen: View {
     }
 
     @ViewBuilder private func chrome(insets: EdgeInsets, size: CGSize) -> some View {
-        let top = insets.top + 8
+        let tablet = window.topTabs
+        let edge = tablet ? Self.tabletEdge(width: window.width) : 20
         ZStack(alignment: .topLeading) {
             // One row: Back at the leading end, the two tools at the trailing — all three one height
             // (the row's, the labelled pills'), Back a short rectangle round its arrow.
@@ -147,12 +149,15 @@ struct ThoughtMapScreen: View {
             .padding(.leading, controls.leading)
             .padding(.trailing, controls.trailing)
             .windowControlsInset($controls)
-            .padding(.horizontal, 20)
-            .padding(.top, top)
+            .padding(.horizontal, edge)
+            // A tablet's row stands on a pushed page's row line (its middle there, however tall); a phone's
+            // 8 under the status bar, where its bar's arrow is.
+            .frame(height: tablet ? 2 * HeaderChrome.rowLine : nil)
+            .padding(.top, insets.top + (tablet ? 0 : 8))
             zoomCluster
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                .padding(.leading, 16)
-                .padding(.bottom, 16 + insets.bottom)
+                .padding(.leading, tablet ? edge : 16)
+                .padding(.bottom, (tablet ? edge : 16) + insets.bottom)
             if store.loaded, store.isEmpty, !store.trayOpen { emptyState.frame(width: size.width, height: size.height) }
             if !store.loaded {
                 Group {
@@ -171,6 +176,13 @@ struct ThoughtMapScreen: View {
 
     /// Back's room either side of its 15pt arrow: 43 across beside the labelled pills' 36 of height.
     static let backPadding: CGFloat = 14
+    static let backWidth: CGFloat = 15 + 2 * backPadding
+
+    /// On a tablet the map's controls stand where a pushed page's bar puts its own: Back's arrow on the
+    /// header's ← (``HeaderChrome/backCentre(width:)``), the row on its row line, and every control this
+    /// far in from its edges — the tools from the trailing one, the zoom sheet from the leading one and
+    /// the foot. 34.5 in a 1376-wide window.
+    static func tabletEdge(width: CGFloat) -> CGFloat { HeaderChrome.backCentre(width: width) - backWidth / 2 }
 
     /// The zoom cluster: − 100% + and the eye (fit), on a sheet of card paper with its grain, cut with
     /// the toolbar's buttons' hand (``ZoomSheetShape``) and edged in the tray's pen line — a floating

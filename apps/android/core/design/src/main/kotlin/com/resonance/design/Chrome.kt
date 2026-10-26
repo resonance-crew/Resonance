@@ -261,9 +261,11 @@ object TopTabBadge {
  */
 @Immutable
 data class HeaderChrome(val width: Dp, val groupWidth: Dp, val pad: Dp, val labels: Boolean, val tabs: Boolean = true) {
-    val leadingMax: Dp get() = TopTabsFit.leadingMax(width.value, groupWidth.value, pad.value).dp
+    val leadingMax: Dp get() = TopTabsFit.leadingMax(width.value, groupWidth.value, edge.value).dp
+    /** Where a tab root's lockup starts and its pen ends (round 15: [tabletBarEdge]). */
+    val edge: Dp get() = tabletBarEdge(pad)
     /** The pen (56) and 8 before it on a tab's root; the pad alone on a pushed page (no pen there). */
-    val trailingPad: Dp get() = if (tabs) pad + PenChipWidth + 8.dp else pad
+    val trailingPad: Dp get() = if (tabs) edge + PenChipWidth + 8.dp else pad
 }
 
 /** The header's chrome where the window has tabs in it; null on a phone, in the writer and in a pane. */
@@ -559,7 +561,7 @@ fun OrganicBrandBar(
             .statusBarsPadding()
             .padding(bottom = HeaderEdgeHeight)
             .height(if (chrome != null) TopBarRow else BrandBarHeight)
-            .padding(start = chrome?.pad ?: 20.dp, end = chrome?.trailingPad ?: 20.dp),
+            .padding(start = chrome?.edge ?: 20.dp, end = chrome?.trailingPad ?: 20.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -696,9 +698,9 @@ fun OrganicInlineBar(
         }
         return
     }
-    // The arrow's hit box hangs 16 into the pad, the last action's 12 (their glyphs sit on it).
-    val startPad = chrome.pad - 16.dp
-    val endPad = chrome.pad - 12.dp
+    // The arrow's and the last action's 48 hit boxes centred on their glyphs' inset from the window's sides (round 15).
+    val startPad = tabletBarGlyphInset(chrome.pad) - 24.dp
+    val endPad = tabletBarGlyphInset(chrome.pad) - 24.dp
     // A pushed page's whole row sits a little under the bar's middle (round 11 §6), the bar's height and pen line kept.
     val drop = if (chrome.tabs) 0.dp else TabletBarRowDrop
     Layout(
@@ -742,6 +744,32 @@ fun OrganicInlineBar(
  * doesn't either.
  */
 val TabletBarRowDrop = 6.dp
+
+/**
+ * The line a tablet's pushed page stands its row on, under the status bar: the middle of [TopBarRow],
+ * [TabletBarRowDrop] lower (42). What floats where a bar would be — the thought map's controls, the
+ * writer's first row in the split's pane — stands on it too, so nothing moves as one page gives way to
+ * the other (round 15).
+ */
+val TabletBarRowLine: Dp = TopBarRow / 2 + TabletBarRowDrop
+
+/**
+ * How far in from the window's sides a tablet bar's ← and its last action stand their glyphs' centres (round 15): no
+ * further than its row line lies under the status bar ([TabletBarRowLine], 42), so the gap at the side reads as the one
+ * above — at the page's pad they stood 56 in on a 1280-wide tablet and looked set too far in — and on a narrow tablet
+ * no further in than they stood before (8 past the pad).
+ */
+fun tabletBarGlyphInset(pad: Dp): Dp = minOf(pad + 8.dp, TabletBarRowLine)
+
+/**
+ * Where a tab root's header starts its lockup and ends its pen, from the window's sides (round 15): where a pushed
+ * page's ← and last action end their glyphs (18 across, centred [tabletBarGlyphInset] in) — so the root's header
+ * and a pushed page's keep one edge as one gives way to the other.
+ */
+fun tabletBarEdge(pad: Dp): Dp = tabletBarGlyphInset(pad) - 9.dp
+
+/** The centre of a tablet pushed page's ← glyph from the window's leading edge ([tabletBarGlyphInset]). */
+fun tabletBackCentre(pad: Dp): Dp = tabletBarGlyphInset(pad)
 
 /**
  * Where a tablet bar's piece [height] tall goes in its row [row] tall: centred, then [drop] lower —

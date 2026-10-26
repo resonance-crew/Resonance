@@ -59,8 +59,8 @@ struct SettingsScreen: View {
     @State private var scrolled = false
 
     /// How far under the bar's foot the settings start on a phone: a titled tab's (TabScreen's
-    /// `phoneTop`). A tablet starts them 32 under the header's pen line instead, as Notifications'
-    /// and the feed's first rows (round 5 E2, ``View/headerGap(phone:)``) — 16 there sat too tight.
+    /// `phoneTop`). A tablet starts them under the header's pen line as Notifications' and the feed's
+    /// first rows do, by the window's width (``View/headerGap(phone:)``) — 16 there sat too tight.
     static let contentTop: CGFloat = 16
 
     var body: some View {

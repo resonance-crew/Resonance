@@ -128,7 +128,7 @@ fun androidx.compose.foundation.lazy.LazyListScope.storyCardSkeletons(count: Int
     // The bordered grid's skeleton: the same outlines in the same columns, the first row clear of the bar.
     item(key = "grid-skeleton") {
         androidx.compose.foundation.layout.Row(
-            Modifier.fillMaxWidth().padding(horizontal = layout.gridInset).padding(top = if (firstUnderBar) GridUnderBar else 0.dp),
+            Modifier.fillMaxWidth().padding(horizontal = layout.gridInset).padding(top = if (firstUnderBar) LocalWindowLayout.current.gridUnderBar else 0.dp),
             horizontalArrangement = Arrangement.spacedBy(Tokens.FeedGap.dp),
         ) {
             for (c in 0 until layout.columns) {
@@ -142,10 +142,10 @@ fun androidx.compose.foundation.lazy.LazyListScope.storyCardSkeletons(count: Int
 
 /**
  * Where a bordered grid's first row starts in a list that begins under the bar's wavy band (an
- * expanded window's feed): a tablet's [TabletHeaderAir] below the bar's pen line (round 5 E2), so
+ * expanded window's feed): a tablet's [tabletHeaderAir] below the bar's pen line (round 5 E2), so
  * no outline is under the bar at rest.
  */
-val GridUnderBar = HeaderEdgeHeight + TabletHeaderAir - BarLineInset
+val WindowLayout.gridUnderBar: Dp get() = HeaderEdgeHeight + tabletHeaderAir(width.value) - BarLineInset
 
 /**
  * CardDetailSkeleton.tsx: the article's own head and gaps (reading-type §11.1) — the cover at its
