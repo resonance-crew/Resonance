@@ -442,8 +442,17 @@ final class ThoughtMapStore {
 
     func edgeGeometry(_ edge: MapEdge) -> EdgeGeometry? {
         guard let s = nodeRect(edge.sourceCardId), let t = nodeRect(edge.targetCardId) else { return nil }
-        return organicEdgePath(s, t, seed: Double(seedFromString(edge.id)))
+        // The layers ask on every camera frame; an arrow changes only as the cards at its ends move.
+        if let kept = edgeMemo[edge.id], kept.source == s, kept.target == t { return kept.geometry }
+        let geometry = organicEdgePath(s, t, seed: Double(seedFromString(edge.id)))
+        if edgeMemo.count > edges.count * 2 + 64 { edgeMemo.removeAll(keepingCapacity: true) }
+        edgeMemo[edge.id] = (s, t, geometry)
+        return geometry
     }
+
+    /// Each arrow's geometry with the cards' rects it was drawn between (`edgeGeometry`): the same rects
+    /// and arrow (its id seeds it) make the same geometry.
+    @ObservationIgnored private var edgeMemo: [String: (source: Rect, target: Rect, geometry: EdgeGeometry)] = [:]
 
     /// Where the tab's two buttons split ("Open" on the left, the trash on the right).
     static let tabSplitX: Double = {

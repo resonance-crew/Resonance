@@ -178,11 +178,7 @@ struct ThoughtMapScreen: View {
     private var zoomCluster: some View {
         HStack(spacing: 4) {
             zoomButton(.minus, L10n.Me.ThoughtMap.zoomOut) { store.zoom(by: 1 / 1.25) }
-            Text(verbatim: "\(Int((store.camera.s * 100).rounded()))%")
-                .font(AppFonts.body(12))
-                .monospacedDigit()
-                .foregroundStyle(Tokens.textMuted)
-                .frame(minWidth: 38)
+            ZoomPercent(store: store)
             zoomButton(.plus, L10n.Me.ThoughtMap.zoomIn) { store.zoom(by: 1.25) }
             zoomButton(.eye, L10n.Me.ThoughtMap.zoomFit) { store.fit() }
         }
@@ -218,6 +214,20 @@ struct ThoughtMapScreen: View {
             OrganicButton(L10n.Me.ThoughtMap.addCard, icon: .plus) { store.trayOpen = true }
         }
         .padding(.horizontal, 24)
+    }
+}
+
+/// The zoom as a percentage, read here: the camera changes on every frame of a pan or a pinch, and
+/// only this label shows it — the screen around it isn't drawn again for each frame.
+private struct ZoomPercent: View {
+    let store: ThoughtMapStore
+
+    var body: some View {
+        Text(verbatim: "\(Int((store.camera.s * 100).rounded()))%")
+            .font(AppFonts.body(12))
+            .monospacedDigit()
+            .foregroundStyle(Tokens.textMuted)
+            .frame(minWidth: 38)
     }
 }
 

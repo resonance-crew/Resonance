@@ -32,6 +32,26 @@ public struct CSSText: UIViewRepresentable {
         self.alignment = alignment
     }
 
+    /// What the label was last given, and what it measured at a width since: an update bringing the
+    /// same leaves the label alone (setting its text again drops its layout and redraws it), and the
+    /// same width asked again is answered without laying the text out again.
+    struct Shown: Equatable {
+        let text: String
+        let font: UIFont
+        let lineHeight: CGFloat
+        let color: UIColor
+        let tracking: CGFloat
+        let lineLimit: Int
+        let alignment: NSTextAlignment
+    }
+
+    public final class Coordinator {
+        var shown: Shown?
+        var measured: (width: CGFloat, size: CGSize)?
+    }
+
+    public func makeCoordinator() -> Coordinator { Coordinator() }
+
     public func makeUIView(context: Context) -> UILabel {
         let label = UILabel()
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -39,6 +59,11 @@ public struct CSSText: UIViewRepresentable {
     }
 
     public func updateUIView(_ label: UILabel, context: Context) {
+        let shown = Shown(text: text, font: font, lineHeight: lineHeight, color: color, tracking: tracking, lineLimit: lineLimit,
+                          alignment: alignment)
+        guard shown != context.coordinator.shown else { return }
+        context.coordinator.shown = shown
+        context.coordinator.measured = nil
         label.numberOfLines = lineLimit
         label.attributedText = CSSText.attributed(text, font: font, lineHeight: lineHeight, color: color, tracking: tracking,
                                                   alignment: alignment)
@@ -48,7 +73,13 @@ public struct CSSText: UIViewRepresentable {
 
     public func sizeThatFits(_ proposal: ProposedViewSize, uiView: UILabel, context: Context) -> CGSize? {
         let width = proposal.width ?? 320
-        let size = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        let size: CGSize
+        if let measured = context.coordinator.measured, measured.width == width {
+            size = measured.size
+        } else {
+            size = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+            context.coordinator.measured = (width, size)
+        }
         return CGSize(width: fitsContent ? min(width, size.width.rounded(.up)) : width, height: size.height)
     }
 

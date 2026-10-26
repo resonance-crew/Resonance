@@ -69,15 +69,31 @@ nonisolated struct OrganicImageShape: Shape {
     func path(in rect: CGRect) -> Path {
         let w = rect.width - bleed * 2, h = rect.height - bleed * 2
         guard w > 0, h > 0 else { return Path() }
-        return wobRect(w, h, min(radius, min(w, h) / 2), seed: seed, mag: min(w, h) * 0.05, options: WobRectOptions(
-            curve: 0.4, cornerJitter: 1.1, cornerOffset: 6, segmentsH: .range(3, 4), segmentsV: .range(2, 3)
-        )).path(offsetX: bleed, offsetY: bleed)
+        // Kept by the geometry cache: a feed of covers asks for the same few sizes on every layout.
+        return GeometryCache.shared.wobRectPath(WobRectKey(w: w, h: h, r: min(radius, min(w, h) / 2), seed: seed, mag: min(w, h) * 0.05,
+                                                           options: Self.options, offsetX: bleed, offsetY: bleed))
     }
+
+    private static let options = WobRectOptions(curve: 0.4, cornerJitter: 1.1, cornerOffset: 6, segmentsH: .range(3, 4), segmentsV: .range(2, 3))
 }
 
 extension OrganicImage where Placeholder == Color {
     public init(url: URL?, seed: Double, radius: Double = 18, grain: Double = 0, fill: Color) {
         self.init(url: url, seed: seed, radius: radius, grain: grain) { fill }
+    }
+}
+
+/// Covers fetched before their cards come on screen: a list asks for the next few as each card
+/// appears. Only their bytes, into the image pipeline's HTTP disk cache — nothing decoded, nothing
+/// kept in memory — so the cover's own request, the same one (``OrganicImage``'s URL), is a cache hit
+/// when its card shows. At low priority, two at a time; what is in memory or on its way is skipped.
+public enum CoverPrefetch {
+    private static let prefetcher = ImagePrefetcher(destination: .diskCache)
+
+    /// Fetches the covers at `urls` ahead.
+    public static func ahead(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        prefetcher.startPrefetching(with: urls)
     }
 }
 

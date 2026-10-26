@@ -4,7 +4,7 @@ import SwiftUI
 
 /// One line of a card's table of contents: a heading among the story's own blocks (its place there
 /// is the ``StoryHeadingAnchor`` the page scrolls to), h2 or h3, by its words.
-struct TocEntry: Equatable, Identifiable {
+nonisolated struct TocEntry: Equatable, Identifiable, Sendable {
     let index: Int
     let level: Int
     let text: String
