@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { INK } from './strokes';
-import { WAVE_AMP, WAVE_DEPTH_EM, WAVE_TILE, WAVE_TILE_H, storyLinkWave, storyLinkWaveStyle, storyLinkWaveVars } from './storyLinkWave';
+import { WAVE_AMP, WAVE_DEPTH_EM, WAVE_INK, WAVE_TILE, WAVE_TILE_H, storyLinkWave, storyLinkWaveStyle, storyLinkWaveVars } from './storyLinkWave';
 import { penWaveTilePoints } from './wavyPath';
 import { seedFromString } from './prng';
 
@@ -69,6 +69,16 @@ describe('the wave’s placement in the story stylesheet', () => {
       expect(readFileSync(resolve(root, file), 'utf8')).toContain("import '@/styles/story.css';");
     }
     expect(readFileSync(resolve(root, 'scripts/native/build-editor.mjs'), 'utf8')).toContain("'src/styles/story.css'");
+  });
+
+  it('draws the wave the apps draw: the --link-wave ink and --link-wave-amp lean of tokens.css', () => {
+    const tokens = readFileSync(resolve(root, 'src/styles/tokens.css'), 'utf8');
+    expect(tokens).toMatch(new RegExp(`--link-wave-amp:\\s*${WAVE_AMP};`));
+    // oklch(65% 0.084 45) is #ba7f64 in sRGB (the apps' generated Tokens say so beside it).
+    expect(tokens).toMatch(/--link-wave:\s*oklch\(65% 0\.084 45\);/);
+    expect(WAVE_INK).toBe('rgb(186,127,100)');
+    expect(readFileSync(resolve(root, 'apps/ios/Packages/DesignSystem/Sources/DesignSystem/Generated/Tokens.swift'), 'utf8')).toContain('--link-wave · sRGB #ba7f64');
+    expect(svgOf(storyLinkWave('https://example.com/ink').rest)).toContain(`stroke="${WAVE_INK}"`);
   });
 
   it('puts the tile inside the link’s box, on its bottom edge', () => {

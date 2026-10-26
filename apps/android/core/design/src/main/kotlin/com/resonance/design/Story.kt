@@ -235,6 +235,12 @@ fun linkFragments(
  */
 const val WAVE_DEPTH_EM = 0.29f
 
+/**
+ * How far a link wave's crests lean off its line, in dp (tokens.css --link-wave-amp, the web's
+ * WAVE_AMP): flatter than the pen's own 1.2, a crest every 4.5 as ever. Its ink is [Tokens.LinkWave].
+ */
+const val LINK_WAVE_AMP = Tokens.LinkWaveAmp.toDouble()
+
 /** Where a story link's wave runs under a line whose baseline is at [baseline] (px), at a font size of [sizePx]. */
 fun linkWaveY(baseline: Float, sizePx: Float): Float = baseline + sizePx * WAVE_DEPTH_EM
 
@@ -252,7 +258,7 @@ internal fun linkStrokes(layout: Layout, spanned: Spanned, sizePx: Float, densit
         )
         frags.mapIndexed { i, f ->
             // Seeded by the link, and by the fragment so a wrapped link's parts don't repeat.
-            val wave = penWave(((f.right - f.left) / density).toDouble(), (seedFromString(span.url) + i).toDouble()).toPath(density)
+            val wave = penWave(((f.right - f.left) / density).toDouble(), (seedFromString(span.url) + i).toDouble(), amp = LINK_WAVE_AMP).toPath(density)
             LinkStroke(span.url, f.left, linkWaveY(f.baseline, sizePx), wave)
         }
     }
@@ -385,7 +391,7 @@ fun RichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl: (String) ->
                     // a descender's foot rests in its arch rather than being crossed by it.
                     val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                     strokes.forEach { s ->
-                        translate(s.x, s.y) { drawPath(s.wave, Tokens.Terracotta, alpha = if (s.url == pressedUrl.value) 1f else 0.7f, style = pen) }
+                        translate(s.x, s.y) { drawPath(s.wave, Tokens.LinkWave, alpha = if (s.url == pressedUrl.value) 1f else 0.7f, style = pen) }
                     }
                     drawIntoCanvas { layout.draw(it.nativeCanvas) }
                 }

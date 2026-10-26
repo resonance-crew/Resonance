@@ -37,7 +37,7 @@ public struct CSSTextView: UIViewRepresentable {
         layout.addTextContainer(container)
         storage.addLayoutManager(layout)
         let view = LinkWaveTextView(frame: .zero, textContainer: container)
-        view.waveColor = UIColor(Tokens.terracotta)
+        view.waveColor = LinkWaves.ink
         view.isEditable = false
         view.isSelectable = true
         view.isScrollEnabled = false

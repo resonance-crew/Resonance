@@ -19,6 +19,16 @@ import UIKit
         }
     }
 
+    @Test func theWaveLiesFlatterThanThePenInItsQuieterInk() {
+        // tokens.css --link-wave-amp and --link-wave, the web's WAVE_AMP and WAVE_INK (#ba7f64).
+        #expect(LinkWaves.amp == 0.75)
+        // Crest to crest, the whole stroke spans about 2pt and its pen (the pen's own wave: 3.2).
+        #expect(abs(LinkWaves.reach(fontSize: 17) - LinkWaves.clearance(fontSize: 17) - (2 * 1.35 * 0.75 + Tokens.ink)) < 1e-9)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        LinkWaves.ink.resolvedColor(with: UITraitCollection(userInterfaceStyle: .light)).getRed(&r, green: &g, blue: &b, alpha: &a)
+        #expect(abs(r * 255 - 186) < 1.5 && abs(g * 255 - 127) < 1.5 && abs(b * 255 - 100) < 1.5, "\(r * 255) \(g * 255) \(b * 255)")
+    }
+
     /// A line of `style` holding one link, drawn by the reader's text view in a window.
     func shown(_ style: ProseStyle) throws -> (window: UIWindow, view: UITextView) {
         let font = style.font

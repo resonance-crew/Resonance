@@ -40,6 +40,14 @@
      5.8:1 on --bubble-theirs, 5.7:1 on --bubble-mine, 5.3:1 on --bubble-quote
      (--color-text-muted is 4.3:1 there). The apps' link cards take the same. */
   --link-card-muted: oklch(45% 0.04 70);
+  /* A link's pen wave in text (a story's, a chat message's): the terracotta at
+     0.6× its chroma and a touch lighter, quieter than the deep-terracotta words
+     it runs under; its crests lean --link-wave-amp px off the line (the pen's
+     own wave leans 1.2), a crest every 4.5 as ever. The web draws it from
+     lib/design/storyLinkWave (a data URI, which can't read these, so it holds
+     the same two values and a test keeps them equal); the apps from these. */
+  --link-wave: oklch(65% 0.084 45);
+  --link-wave-amp: 0.75;
   /* The card page's reading progress: the header's own pen line drawn over
      from its leading end at the pen's own width (INK), in a brighter
      terracotta than any pen or button, with a soft glow of the same colour

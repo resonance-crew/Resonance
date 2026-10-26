@@ -172,7 +172,7 @@ private struct WriteNewRow: View {
     }
 }
 
-/// The words, with the story link's wave under them while pressed (LinkWaves' depth and pen).
+/// The words, with the story link's wave under them while pressed (LinkWaves' depth, lean, ink and pen).
 private struct WriteNewWords: View {
     @Environment(\.writeNewPressed) private var pressed
     private let size: CGFloat = 15
@@ -180,8 +180,8 @@ private struct WriteNewWords: View {
     var body: some View {
         Text(L10n.Card.ResonatePicker.writeNew).font(AppFonts.body(size, weight: .semibold))
             .overlay(alignment: .bottomLeading) {
-                PenWaveShape(seed: 59, amp: 1.2)
-                    .stroke(Tokens.terracotta, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round))
+                PenWaveShape(seed: 59, amp: Double(LinkWaves.amp))
+                    .stroke(Tokens.linkWave, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round))
                     .frame(height: 6)
                     // The wave's centre LinkWaves.depthEm under the baseline (the line box's foot is ~0.27em under it).
                     .offset(y: LinkWaves.drop(fontSize: size) - size * 0.27 + 3)

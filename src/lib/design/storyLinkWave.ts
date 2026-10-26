@@ -5,9 +5,10 @@ import { INK } from './strokes';
 /** Width of one repeating tile: eight crests at the pen's 4.5px rhythm. */
 export const WAVE_TILE = 36;
 /**
- * How far a crest leans off the line, in px: lower than the pen's own 1.2, so
- * under running text the wave keeps the pen's rhythm (a crest every 4.5px)
- * but lies flatter and smoother, a line under the words rather than a scribble.
+ * How far a crest leans off the line, in px (tokens.css --link-wave-amp, which
+ * the apps draw from): lower than the pen's own 1.2, so under running text the
+ * wave keeps the pen's rhythm (a crest every 4.5px) but lies flatter and
+ * smoother, a line under the words rather than a scribble.
  */
 export const WAVE_AMP = 0.75;
 /**
@@ -17,12 +18,11 @@ export const WAVE_AMP = 0.75;
  */
 export const WAVE_TILE_H = 6;
 /**
- * --color-terracotta with its chroma taken down to 0.6× and a touch lighter
- * (oklch ≈ 65% 0.084 45), as sRGB — a data URI can't read the page's CSS
- * variables. Quieter than the words it underlines, which keep the deep
- * terracotta label ink.
+ * tokens.css --link-wave (the terracotta at 0.6× its chroma, a touch lighter),
+ * as sRGB — a data URI can't read the page's CSS variables. Quieter than the
+ * words it underlines, which keep the deep terracotta label ink.
  */
-const WAVE_INK = 'rgb(187,127,100)';
+export const WAVE_INK = 'rgb(186,127,100)';
 
 /**
  * How far under the baseline the wave's centre runs, in em of the link's

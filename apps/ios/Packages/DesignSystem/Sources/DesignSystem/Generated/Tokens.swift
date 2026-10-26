@@ -32,6 +32,8 @@ public nonisolated enum Tokens {
     public static let bubbleQuote = Color(.displayP3, red: 0.8683, green: 0.8475, blue: 0.819, opacity: 1)
     /// --link-card-muted · sRGB #64523d
     public static let linkCardMuted = Color(.displayP3, red: 0.3801, green: 0.3227, blue: 0.2494, opacity: 1)
+    /// --link-wave · sRGB #ba7f64
+    public static let linkWave = Color(.displayP3, red: 0.6968, green: 0.5071, blue: 0.4094, opacity: 1)
     /// --reading-progress · sRGB #ef7926
     public static let readingProgress = Color(.displayP3, red: 0.8777, green: 0.4985, blue: 0.2387, opacity: 1)
     /// --field-border · sRGB #c5bcb0
@@ -101,6 +103,8 @@ public nonisolated enum Tokens {
     public static let inkLight: CGFloat = 1.2
     public static let inkStrong: CGFloat = 2.2
 
+    /// --link-wave-amp
+    public static let linkWaveAmp: CGFloat = 0.75
     /// --reading-progress-width
     public static let readingProgressWidth: CGFloat = 1.8
     /// --reading-progress-glow
