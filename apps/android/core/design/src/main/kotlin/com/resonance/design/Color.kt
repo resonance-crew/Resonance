@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.colorspace.ColorSpaces
 import com.resonance.design.generated.LocalResonanceColors
 import com.resonance.design.generated.ResonanceColors
+import com.resonance.design.generated.Tokens
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.min
@@ -196,6 +197,9 @@ class CardFamily(palette: ResonanceColors, index: Int) {
     val skeleton: Color = palette.CardSkeletons[index]
     /** A tag pill on the card (`card-tag`): a step from the fill, so it reads on the hover wash too. */
     val tag: Color = palette.CardTags[index]
+    /** A pill on the coverless frame (the writer's 加一張圖片): the deep pen in light, a tonal pill in dark, and its words. */
+    val pill: Color = palette.CardPills[index]
+    val pillInk: Color = palette.CardPillInks[index]
 }
 
 /**
@@ -207,12 +211,15 @@ object Mixes {
     /** OrganicMenu's destructive-row wash: color-mix(yellow 25%, the paper); 45% while pressed. */
     val MenuDangerWash: Color @Composable @ReadOnlyComposable get() = PaletteMixes.of(LocalResonanceColors.current).menuDangerWash
     val MenuDangerWashPressed: Color @Composable @ReadOnlyComposable get() = PaletteMixes.of(LocalResonanceColors.current).menuDangerWashPressed
-    /** Skeleton's sand: color-mix(color-mix(cream-dark 94%, text) 85%, transparent) in light; in dark the ink at a whisper on the paper, as a bubble of theirs. */
-    val SkeletonBase: Color @Composable @ReadOnlyComposable get() = PaletteMixes.of(LocalResonanceColors.current).skeletonBase
+    /** A loading block (`skeleton-base`: the well with a touch of ink in light, lifted off the night paper in dark). */
+    val SkeletonBase: Color @Composable @ReadOnlyComposable get() = Tokens.SkeletonBase
 
-    /** Skeleton's shimmer for a card of [hue] (the theme's accent family's, 55, by default). */
+    /**
+     * Skeleton's shimmer in the palette on screen: inside a card of [hue], that family's skeleton tint;
+     * elsewhere (null) the theme's own light accent — each met halfway by `skeleton-glow` in OKLab.
+     */
     @Composable @ReadOnlyComposable
-    fun skeletonHighlight(hue: Double = 55.0): Color = PaletteMixes.of(LocalResonanceColors.current).skeletonHighlight(hue)
+    fun skeletonHighlight(hue: Double? = null): Color = PaletteMixes.of(LocalResonanceColors.current).skeletonHighlight(hue)
 
     /** HandDrawnImage's ✕ chip: over a picture, the same in either scheme ([OverPicture]). */
     val ImageRemoveFill: Color get() = OverPicture.ChipFill
@@ -230,16 +237,19 @@ object Mixes {
 object OverPicture {
     /** `photo-shade` and `photo-ink`: the same in every palette. */
     private val shade: Color get() = ResonanceColors.LightTerracotta.PhotoShade
-    private val ink: Color get() = ResonanceColors.LightTerracotta.PhotoInk
+    private val light: Color get() = ResonanceColors.LightTerracotta.PhotoInk
+
+    /** A light glyph on a picture or on the viewer's dark (a chip's ✕, the viewer's close), in either scheme. */
+    val Ink: Color get() = light
 
     /** A dark translucent pebble (HandDrawnImage's ✕ chip). */
     val ChipFill: Color get() = shade.copy(alpha = 0.7f)
     /** Its pale rim. */
-    val ChipRim: Color get() = ink.copy(alpha = 0.75f)
+    val ChipRim: Color get() = light.copy(alpha = 0.75f)
     /** The crop's photo outside the avatar's outline. */
     val Scrim: Color get() = shade.copy(alpha = 0.5f)
     /** The ring round the avatar to be. */
-    val Rim: Color get() = ink.copy(alpha = 0.9f)
+    val Rim: Color get() = light.copy(alpha = 0.9f)
 }
 
 /** [Mixes] for one palette, mixed once. */
@@ -248,23 +258,15 @@ class PaletteMixes private constructor(private val palette: ResonanceColors) {
 
     val menuDangerWash: Color = mixed(lch("color-yellow"), lch("color-cream"), 0.25)
     val menuDangerWashPressed: Color = mixed(lch("color-yellow"), lch("color-cream"), 0.45)
-    val skeletonBase: Color = if (palette.dark) {
-        mixed(lch("color-text"), lch("color-cream"), 0.1).copy(alpha = 0.85f)
-    } else {
-        val sand = mix(lch("color-cream-dark"), lch("color-text"), 0.94)
-        OklchColor.of(sand[0], sand[1], sand[2], 0.85)
-    }
-
-    private val highlights = HashMap<Double, Color>()
+    private val highlights = HashMap<Double?, Color>()
 
     /**
-     * The shimmer's highlight for a card of [hue]: the family's skeleton tint (`card-skeleton`'s
-     * lightness and chroma at that hue) — in light mixed halfway to the paper in OKLab (the web's
-     * `color-mix(in oklab, highlight 50%, cream)`: the average of L, a and b, not round the hue
-     * circle, where a lavender card's light swung through red to pink); in dark as it is, a sweep of
-     * light over the [skeletonBase].
+     * The shimmer's highlight (the web's Skeleton): for a card of [hue] its family's skeleton tint
+     * (`card-skeleton`'s lightness and chroma at that hue), else (null) the theme's light accent
+     * (`color-terracotta-light`), mixed halfway with `skeleton-glow` in OKLab — the average of L, a
+     * and b, not round the hue circle, where a lavender card's light swung through red to pink.
      */
-    fun skeletonHighlight(hue: Double): Color = synchronized(highlights) {
+    fun skeletonHighlight(hue: Double?): Color = synchronized(highlights) {
         highlights.getOrPut(hue) { skeletonHighlightOklch(palette, hue).let { (l, c, h) -> OklchColor.of(l, c, h) } }
     }
 
@@ -275,13 +277,12 @@ class PaletteMixes private constructor(private val palette: ResonanceColors) {
             made.getOrPut(palette) { PaletteMixes(palette) }.also { if (made.size > 16) made.keys.retainAll(setOf(palette)) }
         }
 
-        internal fun skeletonHighlightOklch(palette: ResonanceColors, hue: Double): Triple<Double, Double, Double> {
-            val tint = palette.oklchOf("card-skeleton-0")
-            if (palette.dark) return Triple(tint[0], tint[1], hue)
+        internal fun skeletonHighlightOklch(palette: ResonanceColors, hue: Double?): Triple<Double, Double, Double> {
+            val tint = if (hue != null) palette.oklchOf("card-skeleton-0").let { doubleArrayOf(it[0], it[1], hue) } else palette.oklchOf("color-terracotta-light")
             fun lab(l: Double, c: Double, h: Double) = Triple(l, c * cos(Math.toRadians(h)), c * sin(Math.toRadians(h)))
-            val cream = palette.oklchOf("color-cream")
-            val (l1, a1, b1) = lab(tint[0], tint[1], hue)
-            val (l2, a2, b2) = lab(cream[0], cream[1], cream[2])
+            val glow = palette.oklchOf("skeleton-glow")
+            val (l1, a1, b1) = lab(tint[0], tint[1], tint[2])
+            val (l2, a2, b2) = lab(glow[0], glow[1], glow[2])
             val l = (l1 + l2) / 2
             val a = (a1 + a2) / 2
             val b = (b1 + b2) / 2

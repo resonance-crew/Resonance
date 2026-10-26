@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The night paper (palette.ts dark terracotta color-cream, oklch(20.5% 0.013 62)): the window under the first frame, and the launch's splash in dark mode. -->
+    <!-- Each theme's night paper and accent in dark (palette.ts color-cream, color-terracotta), as values/colors.xml's in light. -->
     <color name="paper">#1C1611</color>
+    <color name="paper_sage">#141913</color>
+    <color name="paper_lavender">#18161C</color>
+    <color name="paper_yellow">#1A170F</color>
+    <color name="accent_terracotta">#E58553</color>
+    <color name="accent_sage">#75BC78</color>
+    <color name="accent_lavender">#A99AEA</color>
+    <color name="accent_yellow">#E4B154</color>
 </resources>

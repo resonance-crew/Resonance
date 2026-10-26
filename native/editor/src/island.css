@@ -5,6 +5,9 @@
    scripts/native/build-editor.mjs ahead of this file under a :root of the
    web's tokens (scripts/native/islandRoot.ts). Nothing here sets type. */
 html, body { margin: 0; background: var(--color-cream); color: var(--color-text); -webkit-text-size-adjust: 100%; }
+/* Selected words: the theme's accent, see-through (the web's globals.css ::selection), never the
+   browser's blue; a WebView without color-mix() takes the accent's opaque wash. */
+::selection { background: var(--color-terracotta-light); background: color-mix(in oklch, var(--color-terracotta) 30%, transparent); }
 #editor { padding: 16px 20px 40vh; }
 .ProseMirror { outline: none; min-height: 60vh; }
 /* The quote's pen rail (the quote itself is story.css's blockquote). */

@@ -267,7 +267,7 @@ fun initialsScale(initials: String): Float {
 fun HandDrawnAvatar(
     initials: String,
     imageUrl: String? = null,
-    color: Color = Tokens.TerracottaLight,
+    color: Color = Tokens.AvatarWait,
     size: Dp = 32.dp,
     seed: Double = 7.0,
     /** The picture already loaded (a share card's recording draws nothing still on its way), in place of [imageUrl]. */
@@ -800,7 +800,8 @@ fun OnDarkIconButton(icon: IconName, label: String, size: Dp = 20.dp, onClick: (
             },
         contentAlignment = Alignment.Center,
     ) {
-        OrganicIcon(icon, size = size, color = Tokens.Cream, strokeWidth = Tokens.Ink.value)
+        // The viewer is dark in either scheme: its glyph is the light ink over a picture (photo-ink), never the paper.
+        OrganicIcon(icon, size = size, color = OverPicture.Ink, strokeWidth = Tokens.Ink.value)
     }
 }
 

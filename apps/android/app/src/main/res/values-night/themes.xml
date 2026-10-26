@@ -13,6 +13,8 @@
         <item name="android:windowLightNavigationBar">false</item>
         <item name="android:enforceStatusBarContrast">false</item>
         <item name="android:enforceNavigationBarContrast">false</item>
+        <item name="android:colorAccent">@color/accent_terracotta</item>
+        <item name="android:colorControlActivated">@color/accent_terracotta</item>
     </style>
 
     <style name="Base.Theme.Resonance.Starting" parent="Theme.SplashScreen">

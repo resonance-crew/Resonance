@@ -1,5 +1,7 @@
 package com.resonance.design
 
+import androidx.compose.foundation.text.selection.TextSelectionColors
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import com.resonance.design.generated.Tokens
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.ReadOnlyComposable
@@ -71,8 +73,11 @@ fun ResonanceTheme(scheme: AppearanceScheme, accent: AppearanceAccent, content: 
 @Composable
 fun ResonanceTheme(colors: ResonanceColors, content: @Composable () -> Unit) {
     val material = remember(colors) { materialColors(colors) }
+    val selection = remember(colors) { selectionColors(colors) }
     CompositionLocalProvider(LocalResonanceColors provides colors) {
-        MaterialTheme(colorScheme = material, content = content)
+        MaterialTheme(colorScheme = material) {
+            CompositionLocalProvider(LocalTextSelectionColors provides selection, content = content)
+        }
     }
 }
 
@@ -104,11 +109,15 @@ fun systemAccent(context: Context): DoubleArray? {
 /**
  * A profile's stored avatar colour as the screen's scheme draws it (palette.ts `avatarFill`): the
  * pastel itself in light, the same hue deep enough for the chalk initials in dark — a person keeps
- * their colour across schemes. [fallback] when there is none (or none that reads).
+ * their colour across schemes. [fallback] when there is none (or none that reads): `avatar-wait`, a
+ * disc raised off the paper, not a hole in it.
  */
 @Composable @ReadOnlyComposable
-fun avatarFill(stored: String?, fallback: Color = Tokens.TerracottaLight): Color =
+fun avatarFill(stored: String?, fallback: Color = Tokens.AvatarWait): Color =
     stored?.let { PaletteFormula.avatarFill(it, LocalResonanceColors.current.dark) } ?: fallback
+
+/** Selected words in a field: the accent's handles over a see-through wash of it (the web's ::selection, 30%). */
+fun selectionColors(c: ResonanceColors) = TextSelectionColors(handleColor = c.Terracotta, backgroundColor = c.Terracotta.copy(alpha = 0.3f))
 
 /** Material 3's roles, from the palette (what a Material component — pull to refresh, a selection handle — reads). */
 fun materialColors(c: ResonanceColors): ColorScheme {

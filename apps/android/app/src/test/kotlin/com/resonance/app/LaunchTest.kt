@@ -52,6 +52,28 @@ class LaunchTest {
         assertEquals(srgb(ResonanceColors.LightTerracotta.Cream), paper("values"))
     }
 
+    @Test fun eachThemeHasItsOwnPaperAndAccentOutsideTheScreens() {
+        // The launch's paper per theme (Android 13+ wears the chosen one) and the accent the system's own
+        // controls take (the writer WebView's selection handles), light and night, as the palette has them.
+        for (theme in PaletteTheme.entries) {
+            val name = if (theme == PaletteTheme.Terracotta) "paper" else "paper_${theme.key}"
+            near(theme.key, srgb(ResonanceColors.of(theme, dark = false).Cream), color("values", name))
+            near(theme.key, srgb(ResonanceColors.of(theme, dark = true).Cream), color("values-night", name))
+            near(theme.key, srgb(ResonanceColors.of(theme, dark = false).Terracotta), color("values", "accent_${theme.key}"))
+            near(theme.key, srgb(ResonanceColors.of(theme, dark = true).Terracotta), color("values-night", "accent_${theme.key}"))
+            if (theme != PaletteTheme.Terracotta) {
+                val splash = items("values", "Theme.Resonance.Starting.${theme.name}")
+                assertEquals("@color/paper_${theme.key}", splash["windowSplashScreenBackground"])
+            }
+            val overlay = items("values", "ThemeOverlay.Resonance.${theme.name}")
+            assertEquals("@color/accent_${theme.key}", overlay["android:colorAccent"])
+            assertEquals("@color/accent_${theme.key}", overlay["android:colorControlActivated"])
+        }
+        // Not Material's teal on the app's own theme either.
+        assertEquals("@color/accent_terracotta", items("values", "Theme.Resonance")["android:colorControlActivated"])
+        assertEquals("@color/accent_terracotta", items("values-night", "Theme.Resonance")["android:colorControlActivated"])
+    }
+
     private fun items(folder: String, style: String): Map<String, String> {
         val styles = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(File("src/main/res/$folder/themes.xml"))
             .documentElement.getElementsByTagName("style")
@@ -61,10 +83,18 @@ class LaunchTest {
         }
     }
 
-    private fun paper(folder: String): String {
+    private fun paper(folder: String): String = color(folder, "paper")
+
+    /** Two #RRGGBB within a step a channel (the generator rounds from OKLCH, the app from Display P3). */
+    private fun near(what: String, want: String, got: String) {
+        val channels = { hex: String -> (0 until 3).map { hex.substring(1 + it * 2, 3 + it * 2).toInt(16) } }
+        assertTrue("$what: $want vs $got", channels(want).zip(channels(got)).all { (a, b) -> kotlin.math.abs(a - b) <= 1 })
+    }
+
+    private fun color(folder: String, name: String): String {
         val colors = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(File("src/main/res/$folder/colors.xml"))
             .documentElement.getElementsByTagName("color")
-        return (0 until colors.length).map { colors.item(it) as Element }.single { it.getAttribute("name") == "paper" }.textContent.trim().uppercase()
+        return (0 until colors.length).map { colors.item(it) as Element }.single { it.getAttribute("name") == name }.textContent.trim().uppercase()
     }
 
     private fun srgb(c: androidx.compose.ui.graphics.Color): String =
