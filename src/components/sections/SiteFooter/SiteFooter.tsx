@@ -18,8 +18,8 @@ const HREFS: Record<(typeof LINK_KEYS)[number], string> = {
 
 export interface SiteFooterProps {
   /**
-   * The colour above the footer's wave: the landing page's terracotta CTA
-   * band by default; a page that ends on plain paper passes the cream so
+   * The colour above the footer's wave: the landing page's CTA band
+   * (`--cta-band`, the band's own token) by default; a page that ends on plain paper passes the cream so
    * the page runs straight into the wave.
    */
   edgeColor?: string;
@@ -32,7 +32,7 @@ export interface SiteFooterProps {
   download?: boolean;
 }
 
-export function SiteFooter({ edgeColor = 'var(--color-terracotta)', download = true }: SiteFooterProps = {}) {
+export function SiteFooter({ edgeColor = 'var(--cta-band)', download = true }: SiteFooterProps = {}) {
   const t = useTranslations('footer');
   return (
     <footer className={styles.footer}>
@@ -42,7 +42,7 @@ export function SiteFooter({ edgeColor = 'var(--color-terracotta)', download = t
         height={90}
         amplitude={0.14}
         steps={14}
-        stroke="oklch(20% 0.03 60 / 0.5)"
+        stroke="color-mix(in oklch, var(--shadow-ink) 50%, transparent)"
         strokeWidth={INK_LIGHT}
       />
       <div className={styles.container}>

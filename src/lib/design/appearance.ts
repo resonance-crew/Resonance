@@ -6,7 +6,7 @@
  * and set before the first paint by APPEARANCE_SCRIPT, so a saved theme never
  * flashes the default first.
  */
-import { srgbHex } from './oklch';
+import { encode, srgbHex, toLinearSrgb, type Oklch } from './oklch';
 import { ACCENTS, DEFAULT_ACCENT, SCHEMES, paletteFor, type Accent, type Scheme } from './palette';
 
 export const SCHEME_CHOICES = ['system', 'light', 'dark'] as const;
@@ -22,6 +22,29 @@ export const isSchemeChoice = (v: unknown): v is SchemeChoice => typeof v === 's
 export const THEME_COLORS: Record<Accent, Record<Scheme, string>> = Object.fromEntries(
   ACCENTS.map((a) => [a, Object.fromEntries(SCHEMES.map((s) => [s, srgbHex(paletteFor(a, s)['color-cream'])]))]),
 ) as Record<Accent, Record<Scheme, string>>;
+
+/** A translucent colour laid over an opaque one, as the browser composites them (in encoded sRGB), in hex. */
+function over(top: Oklch, bottom: Oklch): string {
+  const b = toLinearSrgb(bottom).map(encode);
+  const t = toLinearSrgb({ ...top, alpha: 1 }).map(encode);
+  return `#${b.map((v, i) => Math.round((v * (1 - top.alpha) + t[i] * top.alpha) * 255).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * The bars' colour while a dialog dims the page: the scrim (`--scrim`, the
+ * modal's backdrop) over each theme's paper in each scheme — so the browser's
+ * own bars dim with the page and no bright band is left at the top.
+ */
+export const DIMMED_THEME_COLORS: Record<Accent, Record<Scheme, string>> = Object.fromEntries(
+  ACCENTS.map((a) => [a, Object.fromEntries(SCHEMES.map((s) => [s, over(paletteFor(a, s).scrim, paletteFor(a, s)['color-cream'])]))]),
+) as Record<Accent, Record<Scheme, string>>;
+
+/** The scheme a theme-color meta stands for now: the reader's, else its own media query's. */
+export function metaScheme(meta: HTMLMetaElement, doc: Document = document): Scheme {
+  const chosen = doc.documentElement.getAttribute('data-scheme');
+  if (chosen === 'light' || chosen === 'dark') return chosen;
+  return /dark/.test(meta.media) ? 'dark' : 'light';
+}
 
 /** The theme-color metas the layout renders, one per scheme (Next's viewport.themeColor). */
 export const THEME_COLOR_METAS = SCHEMES.map((s) => ({ media: `(prefers-color-scheme: ${s})`, color: THEME_COLORS[DEFAULT_ACCENT][s] }));

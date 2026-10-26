@@ -148,6 +148,7 @@ export function RowInkWash({ uid, ink, boundaries, w, h, pad, fills }: RowInkWas
               cx={ink.cx}
               cy={ink.cy}
               r={ink.index === i ? ink.maxR : 0}
+              // colour-fixed: a mask's luminance, not a colour anyone sees
               fill="white"
             />
           </mask>

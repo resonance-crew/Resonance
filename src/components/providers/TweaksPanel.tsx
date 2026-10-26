@@ -143,6 +143,11 @@ export default function TweaksPanel() {
   useEffect(() => {
     applySavedTweaks();
     postToEditor({ type: '__edit_mode_available' });
+    // `await window.__contrastAudit()` in dev and emulator builds only — the
+    // condition is constant in a production build, so the module never ships.
+    if (process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_FIREBASE_EMULATOR === 'true') {
+      void import('@/lib/design/contrastAudit').then((m) => m.installContrastAudit());
+    }
   }, []);
 
   return null;

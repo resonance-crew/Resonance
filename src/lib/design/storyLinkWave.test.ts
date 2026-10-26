@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { INK } from './strokes';
 import { lightRootCss } from './paletteCss';
-import { WAVE_AMP, WAVE_DEPTH_EM, WAVE_INK, WAVE_TILE, WAVE_TILE_H, storyLinkWave, storyLinkWaveStyle, storyLinkWaveVars } from './storyLinkWave';
+import { WAVE_AMP, WAVE_DEPTH_EM, WAVE_INK, WAVE_TILE, WAVE_TILE_H, storyLinkWave, storyLinkWaveStyle, storyLinkWaveVars, waveInk } from './storyLinkWave';
 import { penWaveTilePoints } from './wavyPath';
 import { seedFromString } from './prng';
 
@@ -41,6 +41,17 @@ describe('storyLinkWave', () => {
     expect(svgOf(wave.rest)).toContain('stroke-opacity="0.7"');
     expect(svgOf(wave.strong)).toContain('stroke-opacity="1"');
     expect(svgOf(wave.rest).replace('stroke-opacity="0.7"', '')).toBe(svgOf(wave.strong).replace('stroke-opacity="1"', ''));
+  });
+
+  it('draws in the ink of the page’s theme and scheme (a data URI reads no CSS variable), the same wave in each', () => {
+    expect(waveInk('terracotta', 'light')).toBe(WAVE_INK);
+    const sage = waveInk('sage', 'dark');
+    expect(sage).not.toBe(WAVE_INK);
+    const wave = storyLinkWave('https://example.com/x', sage);
+    expect(svgOf(wave.rest)).toContain(`stroke="${sage}"`);
+    const path = (css: string) => svgOf(css).match(/ d="([^"]+)"/)![1];
+    expect(path(wave.rest)).toBe(path(storyLinkWave('https://example.com/x').rest));
+    expect(storyLinkWaveVars('https://example.com/x', sage)['--wave']).toBe(wave.rest);
   });
 
   it('hands over the tile’s size with the tile, as custom properties and as a style attribute', () => {

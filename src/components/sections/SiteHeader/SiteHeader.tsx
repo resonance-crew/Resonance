@@ -127,7 +127,7 @@ export function SiteHeader() {
         <path
           d={strokeD}
           fill="none"
-          stroke="oklch(55% 0.05 60 / 0.38)"
+          stroke="color-mix(in oklch, var(--soft-pen) 38%, transparent)"
           strokeWidth={INK_LIGHT}
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"

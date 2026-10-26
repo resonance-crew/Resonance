@@ -13,18 +13,9 @@ import { useIsMobile } from '@/lib/hooks/useIsMobile';
 import { wobRect } from '@/lib/design/wobRect';
 import { wavyLine } from '@/lib/design/wavyPath';
 import { INK, INK_LIGHT } from '@/lib/design/strokes';
-import { preferredPalette } from '@/lib/design/cardColours';
+import { cardVar, preferredPalette } from '@/lib/design/cardColours';
+import { personFill } from '@/lib/design/personFill';
 import styles from './MiniStoryCard.module.css';
-
-const CARD_BORDERS = [
-  'oklch(52% 0.13 55)',
-  'oklch(54% 0.10 290)',
-  'oklch(50% 0.12 140)',
-  'oklch(58% 0.14 88)',
-  'oklch(50% 0.10 215)',
-  'oklch(52% 0.09 18)',
-];
-const CARD_HUES = [55, 290, 140, 88, 215, 18];
 
 export interface MiniStoryCardProps {
   title: string;
@@ -76,15 +67,17 @@ export function MiniStoryCard({
 
   // The list's choice (no neighbour shares it), else the cover's family or the position's.
   const paletteIdx = palette ?? preferredPalette(accentHue, index);
-  const bc1 = CARD_BORDERS[paletteIdx];
-  const hue = CARD_HUES[paletteIdx];
-  const accent = authorAccent ?? `oklch(90% 0.06 ${hue})`;
+  // The family's palette tokens (palette.css), so the server's paint is right in either scheme.
+  const bc1 = cardVar('border', paletteIdx);
+  // The author's stored colour (drawn as the scheme draws avatars), else the family's accent.
+  const accent = authorAccent ?? cardVar('accent', paletteIdx);
+  const fallback = personFill(accent);
   const seed = index * 71 + 19;
   const R = 20;
   const mag = Math.min(w, h) * 0.025;
 
-  const cardInterior = `oklch(97.5% 0.012 ${hue})`;
-  const cardHovered = `oklch(92.5% 0.024 ${hue})`;
+  const cardInterior = cardVar('interior', paletteIdx);
+  const cardHovered = cardVar('hover', paletteIdx);
   const dividerPath = useMemo(() => wavyLine(200, seed + 17, 1.4, 7), [seed]);
 
   const borderPath = useMemo(() => {
@@ -172,7 +165,7 @@ export function MiniStoryCard({
           className={styles.imagePlaceholder}
         >
           {!imageUrl && (
-            <div className={styles.imageFallback} style={{ background: accent }} aria-hidden />
+            <div className={`${styles.imageFallback} ${fallback.className}`} style={{ ...fallback.style, background: fallback.fill }} aria-hidden />
           )}
           <GrainOverlay opacity={STORY_GRAIN.cover} />
         </OrganicImage>

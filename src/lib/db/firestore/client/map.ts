@@ -4,6 +4,7 @@ import { Timestamp } from './sdk';
 import type { Card, CardMedia, InsightSignature, Locale, User } from '@/lib/db/types';
 import { linkPreviewsOf } from '@/lib/links/previewShape';
 import { restorableVisibility } from '@/lib/cards/trash';
+import { LEGACY_AVATAR_COLOR } from '@/lib/design/avatarColors';
 
 type Raw = Record<string, unknown>;
 
@@ -80,7 +81,7 @@ export function mapUser(id: string, data: Raw): User {
     avatarSeed: String(data.avatarSeed ?? '0'),
     avatarUrl: data.avatarUrl as string | undefined,
     initials: String(data.initials ?? ''),
-    accentColor: String(data.accentColor ?? 'oklch(88% 0.08 55)'),
+    accentColor: String(data.accentColor ?? LEGACY_AVATAR_COLOR),
     joinedAt: toDate(data.joinedAt),
     handleChangedAt: toDate(data.handleChangedAt),
     hintsSeen: data.hintsSeen as Record<string, number> | undefined,

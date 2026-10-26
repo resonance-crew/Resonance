@@ -26,7 +26,7 @@ export function CardFeedSection({ cards, authors }: CardFeedSectionProps) {
         height={90}
         amplitude={0.14}
         steps={14}
-        stroke="oklch(55% 0.05 60 / 0.28)"
+        stroke="color-mix(in oklch, var(--soft-pen) 28%, transparent)"
         strokeWidth={INK_LIGHT}
       />
 

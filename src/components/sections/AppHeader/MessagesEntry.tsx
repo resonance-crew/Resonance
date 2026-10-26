@@ -65,7 +65,7 @@ export function MessagesEntry() {
             curve={1.5}
             cornerJitter={3}
             cornerOffset={badgeH * 0.06}
-            fillColor="var(--color-terracotta)"
+            fillColor="var(--button-fill)"
           />
           <span style={{ position: 'relative' }}>{unread}</span>
         </span>

@@ -183,56 +183,21 @@ textarea::placeholder {
   to   { opacity: 1; transform: translateY(0)   scale(1); }
 }
 
-/* ── Tweaks Panel ────────────────────────────────────────────────── */
-.tweaks-toggle {
-  position: fixed;
-  bottom: 24px; right: 24px;
-  width: 48px; height: 48px;
-  border-radius: 18px 22px 16px 20px;
-  background: var(--color-card-bg);
-  border: 1px solid oklch(80% 0.02 75);
-  box-shadow: 0 4px 16px oklch(20% 0.04 60 / 0.14);
-  color: var(--color-terracotta);
-  font-size: 22px; line-height: 1;
-  cursor: pointer; z-index: 9999;
-  display: flex; align-items: center; justify-content: center;
-  transition: transform 180ms ease, box-shadow 180ms ease;
+/* ── A person's colour ───────────────────────────────────────────
+   A profile's stored avatar pastel rides in --av (lib/design/personFill);
+   what paints with it reads --av-fill. Light draws it as stored; dark takes
+   the same hue at the ladder's avatar step (palette.ts avatarFill: L 0.4,
+   0.85× its chroma), so chalk initials read on it — in CSS, so the server's
+   HTML is right before any script runs. A browser without relative colours
+   draws the well instead. */
+.res-av { --av-fill: var(--av); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-scheme='light']) .res-av { --av-fill: var(--color-cream-dark); }
 }
-.tweaks-toggle:hover {
-  transform: rotate(-8deg) scale(1.05);
-  box-shadow: 0 6px 22px oklch(20% 0.04 60 / 0.2);
-}
-#tweaks-panel {
-  display: none;
-  position: fixed;
-  bottom: 84px; right: 24px;
-  width: 260px;
-  background: var(--color-card-bg);
-  border-radius: 20px 24px 18px 22px;
-  padding: 20px;
-  z-index: 9999;
-  box-shadow: 0 4px 24px oklch(20% 0.04 60 / 0.12);
-  border: 1px solid oklch(80% 0.02 75);
-  font-family: var(--font-body);
-}
-#tweaks-panel.open { display: block; }
-.tweak-label {
-  font-size: 12px; font-weight: 600; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--color-text-muted);
-  display: block; margin-bottom: 6px; margin-top: 14px;
-}
-.tweak-label:first-child { margin-top: 0; }
-.tweak-select, .tweak-range {
-  width: 100%;
-  font-family: var(--font-body); font-size: 13px;
-  border: 1px solid oklch(80% 0.02 75);
-  border-radius: 10px; padding: 7px 10px;
-  background: var(--color-cream); color: var(--color-text);
-  appearance: none; cursor: pointer;
-}
-.tweak-range { padding: 4px 0; border: none; background: none; accent-color: var(--color-terracotta); }
-.tweaks-title {
-  font-family: var(--font-heading); font-size: 15px; font-weight: 700;
-  color: var(--color-text); margin-bottom: 14px;
-  padding-bottom: 10px; border-bottom: 1px solid oklch(80% 0.02 75);
+:root[data-scheme='dark'] .res-av { --av-fill: var(--color-cream-dark); }
+@supports (color: oklch(from red l c h)) {
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-scheme='light']) .res-av { --av-fill: oklch(from var(--av) 0.4 calc(c * 0.85) h); }
+  }
+  :root[data-scheme='dark'] .res-av { --av-fill: oklch(from var(--av) 0.4 calc(c * 0.85) h); }
 }

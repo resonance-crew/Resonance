@@ -20,7 +20,7 @@
   top: 0;
   left: 0;
   pointer-events: none;
-  background-image: radial-gradient(oklch(82% 0.025 75) 1.2px, transparent 1.5px);
+  background-image: radial-gradient(var(--field-border) 1.2px, transparent 1.5px);
 }
 
 .dots[data-moving] {
@@ -201,8 +201,8 @@
 /* Hover deepens the card's own hue (set as --node-hue on the node), not the
    theme accent — a blue card's handle glows blue. */
 .linkHandle:hover {
-  border-color: oklch(45% 0.13 var(--node-hue, 55));
-  color: oklch(45% 0.13 var(--node-hue, 55));
+  border-color: oklch(var(--hue-ink) var(--node-hue, 55));
+  color: oklch(var(--hue-ink) var(--node-hue, 55));
 }
 
 .groupBox {
@@ -305,8 +305,8 @@
 }
 
 .groupDelete:hover {
-  color: oklch(42% 0.1 var(--group-hue, 55));
-  background: oklch(0% 0 0 / 0.07);
+  color: oklch(var(--hue-label) var(--group-hue, 55));
+  background: color-mix(in oklch, var(--toward-ink) 7%, transparent);
 }
 
 .groupResize {
@@ -392,8 +392,8 @@
 }
 
 .edgeBadgeDelete:hover {
-  color: oklch(40% 0.09 30);
-  background: oklch(0% 0 0 / 0.07);
+  color: color-mix(in oklch, var(--color-danger), var(--toward-ink) 30%);
+  background: color-mix(in oklch, var(--toward-ink) 7%, transparent);
 }
 
 /* Invisible twin of the input's text, for measuring the badge's reach. */
@@ -511,7 +511,7 @@
 }
 
 .nodeTabBtn:hover {
-  background: oklch(0% 0 0 / 0.07);
+  background: color-mix(in oklch, var(--toward-ink) 7%, transparent);
 }
 
 /* Dim scrim behind the centered card picker; a tap on it closes the picker. */
@@ -522,7 +522,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: oklch(30% 0.02 75 / 0.16);
+  background: color-mix(in oklch, var(--scrim) 67%, transparent);
 }
 
 /* The picker card's opaque fill comes from the wobbly border itself

@@ -65,7 +65,7 @@
   inset: 0;
   z-index: 0;
   border-radius: 20px 24px 18px 22px;
-  border: 1.5px solid oklch(86% 0.015 75);
+  border: 1.5px solid color-mix(in oklch, var(--field-border) 50%, var(--color-cream-dark));
 }
 
 /* Skeleton chrome switch, mirrored from the loaded card's two designs. */

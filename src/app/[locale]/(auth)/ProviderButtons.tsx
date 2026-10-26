@@ -32,6 +32,7 @@ function ProviderMark({ busy, disc, children }: { busy: boolean; disc: boolean; 
     <span className={styles.mark}>
       {disc && (
         <svg className={styles.disc} viewBox="0 0 30 30" aria-hidden="true">
+          {/* colour-fixed: Google's mark stands on white, whatever the scheme */}
           <path d={DISC} fill="#FFFFFF" />
         </svg>
       )}

@@ -86,7 +86,7 @@ export function OrganicSlider({
             <path
               d={barPath}
               fill="none"
-              stroke="oklch(84% 0.022 75)"
+              stroke="var(--toggle-off)"
               strokeWidth={TRACK_SW}
               strokeLinecap="round"
             />

@@ -21,7 +21,7 @@ export interface OrganiBlobProps {
 
 export function OrganiBlob({
   variant = 0,
-  fill = 'oklch(88% 0.08 55)',
+  fill = 'var(--color-terracotta-light)',
   size = 200,
   style = {},
   opacity = 1,
@@ -56,7 +56,8 @@ export function OrganiBlob({
         </defs>
       )}
       <path d={d} fill={fill} />
-      {grain > 0 && <path d={d} fill="black" filter={`url(#blob-grain-${id})`} />}
+      {/* colour-fixed: only its alpha counts — the filter keeps the noise inside the shape */}
+      {grain > 0 && <path d={d} fill="black" filter={`url(#blob-grain-${id})`} style={{ opacity: 'var(--grain-scale, 1)' }} />}
     </svg>
   );
 }

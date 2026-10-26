@@ -19,7 +19,7 @@
 
 .switch[aria-checked='true'] {
   --toggle-track: var(--color-terracotta);
-  --toggle-ink: color-mix(in oklch, var(--color-terracotta), black 25%);
+  --toggle-ink: var(--terracotta-deep);
 }
 
 /* No pen line of its own for focus to re-trace at a glance, so keyboard focus

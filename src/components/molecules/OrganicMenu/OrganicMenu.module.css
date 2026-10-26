@@ -43,7 +43,7 @@
 }
 /* It sits on a picture, light or dark: a soft shadow keeps the paper from melting into a pale one. */
 .pill > svg {
-  filter: drop-shadow(0 1px 3px oklch(0% 0 0 / 0.22));
+  filter: drop-shadow(0 1px 3px color-mix(in oklch, var(--shadow-ink) 22%, transparent));
 }
 /* A chip in colours of its own (triggerColors): opaque, and its pen line parts it from the picture — no shadow. */
 .pill[data-colored] > svg {

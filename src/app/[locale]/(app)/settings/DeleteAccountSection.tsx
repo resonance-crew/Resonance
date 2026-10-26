@@ -102,7 +102,7 @@ export function DeleteAccountSection() {
         </OrganicButton>
       </div>
       {error && (
-        <p role="alert" style={{ color: 'var(--color-danger, oklch(58% 0.16 25))', fontSize: 13 }}>
+        <p role="alert" style={{ color: 'var(--color-danger)', fontSize: 13 }}>
           {t('error')}
         </p>
       )}

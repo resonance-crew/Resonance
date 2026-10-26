@@ -43,7 +43,7 @@
   border-radius: 999px;
   background: var(--color-cream-dark);
   box-shadow: 0 0 0 3px var(--color-card-bg, var(--color-cream)),
-    inset 0 0 0 1.5px oklch(60% 0.05 60 / 0.45);
+    inset 0 0 0 1.5px color-mix(in oklch, var(--field-border-hover) 45%, transparent);
   font-family: var(--font-body);
   font-weight: 700;
   font-size: 12px;

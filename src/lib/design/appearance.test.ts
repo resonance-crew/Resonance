@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { APPEARANCE_SCRIPT, THEME_COLORS, applyAppearance, resolvedAccent, resolvedScheme, syncThemeColor } from './appearance';
+import { APPEARANCE_SCRIPT, DIMMED_THEME_COLORS, THEME_COLORS, applyAppearance, metaScheme, resolvedAccent, resolvedScheme, syncThemeColor } from './appearance';
+import { ACCENTS } from './palette';
 
 const root = document.documentElement;
 const run = () => new Function(APPEARANCE_SCRIPT)();
@@ -69,5 +70,20 @@ describe('applying a choice', () => {
 
   it('keeps the light bars the site always had', () => {
     expect(THEME_COLORS.terracotta.light).toBe('#faf2e9');
+  });
+});
+
+describe('the bars under a dialog', () => {
+  it('dim to the scrim over the paper: light terracotta as it always was, every theme darker than its paper', () => {
+    expect(DIMMED_THEME_COLORS.terracotta.light).toBe('#c9c0b6');
+    const L = (hex: string) => parseInt(hex.slice(1, 3), 16) + parseInt(hex.slice(3, 5), 16) + parseInt(hex.slice(5, 7), 16);
+    for (const a of ACCENTS) for (const s of ['light', 'dark'] as const) expect(L(DIMMED_THEME_COLORS[a][s])).toBeLessThan(L(THEME_COLORS[a][s]));
+  });
+
+  it('takes the scheme each bar stands for: the reader’s, else its own media query', () => {
+    const [light, dark] = metas();
+    expect([metaScheme(light), metaScheme(dark)]).toEqual(['light', 'dark']);
+    root.setAttribute('data-scheme', 'dark');
+    expect([metaScheme(light), metaScheme(dark)]).toEqual(['dark', 'dark']);
   });
 });

@@ -289,6 +289,7 @@ export function SegmentedActionBar({
                   cx={pos.x}
                   cy={pos.y}
                   r={hovered === i ? hoverMaxR : 0}
+                  // colour-fixed: a mask's luminance, not a colour anyone sees
                   fill="white"
                   style={{ transition: 'r 340ms linear' }}
                 />

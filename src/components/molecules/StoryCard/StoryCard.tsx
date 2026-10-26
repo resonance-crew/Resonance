@@ -16,7 +16,7 @@ import { useElementSize } from '@/lib/hooks/useElementSize';
 import { wobRect } from '@/lib/design/wobRect';
 import { wavyLine } from '@/lib/design/wavyPath';
 import { CARD_HUES } from '@/lib/design/dominantHue';
-import { CARD_BORDERS, CARD_FILLS, preferredPalette } from '@/lib/design/cardColours';
+import { CARD_BORDERS, CARD_FILLS, cardVar, preferredPalette } from '@/lib/design/cardColours';
 import styles from './StoryCard.module.css';
 
 export interface Story {
@@ -44,18 +44,17 @@ export { CARD_HUES };
 
 function StoryImage({
   label,
-  accentFill,
+  family,
   imageUrl,
   seed,
   slot,
 }: {
   label: string;
-  accentFill: string;
+  family: number;
   imageUrl?: string;
   seed: number;
   slot?: ReactNode;
 }) {
-  const stripeFill = accentFill.replace(/(\d+)%/, (_, n) => `${Math.max(0, +n - 7)}%`);
   return (
     <OrganicImage
       src={imageUrl}
@@ -72,7 +71,7 @@ function StoryImage({
           preserveAspectRatio="xMidYMid slice"
           aria-hidden="true"
         >
-          <rect width="320" height="200" fill={accentFill} />
+          <rect width="320" height="200" fill={cardVar('fill', family)} />
           {Array.from({ length: 22 }, (_, i) => (
             <line
               key={i}
@@ -80,7 +79,7 @@ function StoryImage({
               y1="0"
               x2={i * 22 + 160}
               y2="200"
-              stroke={stripeFill}
+              stroke={cardVar('stripe', family)}
               strokeWidth={INK_LIGHT}
               strokeOpacity="0.28"
             />
@@ -93,7 +92,7 @@ function StoryImage({
               dominantBaseline="middle"
               fontFamily="monospace"
               fontSize="10.5"
-              fill="oklch(28% 0.04 60)"
+              fill="var(--color-text)"
               fillOpacity="0.42"
             >
               {label}
@@ -215,19 +214,20 @@ export const StoryCard = memo(function StoryCard({
   // Palette family: the list's choice (no neighbour shares it) when given,
   // else the card's own — its cover's family, or its position's.
   const paletteIdx = palette ?? preferredPalette(story?.accentHue, index);
-  const accentFill = CARD_FILLS[paletteIdx];
+  // Every colour is the family's palette token (palette.css), so the server's
+  // HTML is already right in either scheme and a theme switch needs no render.
+  const accentFill = cardVar('fill', paletteIdx);
   // The tag pills are unstroked, and on desktop hover the card's interior
-  // washes to near accentFill — a pill in accentFill itself would blend into
-  // it. A few points deeper (StoryImage's stripeFill trick) keeps them readable.
-  const tagFill = accentFill.replace(/(\d+)%/, (_, n) => `${Math.max(0, +n - 5)}%`);
-  const [bc1] = CARD_BORDERS[paletteIdx];
-  const hue = CARD_HUES[paletteIdx];
+  // washes to near the fill — a pill in the fill itself would blend into it.
+  // The family's tag colour (a few points deeper in light) keeps them readable.
+  const tagFill = cardVar('tag', paletteIdx);
+  const bc1 = cardVar('border', paletteIdx);
   const seed = index * 77 + 13;
   const R = 22;
   const mag = Math.min(w, h) * 0.025;
 
-  const cardInterior = `oklch(97.5% 0.012 ${hue})`;
-  const cardHovered = `oklch(92.5% 0.024 ${hue})`;
+  const cardInterior = cardVar('interior', paletteIdx);
+  const cardHovered = cardVar('hover', paletteIdx);
 
   const dividerPath = useMemo(() => wavyLine(200, seed + 17, 1.4, 7), [seed]);
   const separatorPath = useMemo(() => wavyLine(200, seed + 91, 1.2, 6), [seed]);
@@ -260,7 +260,7 @@ export const StoryCard = memo(function StoryCard({
         ...(bleed ? { '--story-bleed': bleed } : {}),
         // Tint every placeholder shimmer inside with this card's own hue
         // (a lighter shade of the card family), overriding the theme accent.
-        '--skeleton-highlight': `oklch(88% 0.08 ${hue})`,
+        '--skeleton-highlight': cardVar('skeleton', paletteIdx),
       } as CSSProperties}
     >
       {loading ? (
@@ -330,7 +330,7 @@ export const StoryCard = memo(function StoryCard({
         ) : (
           <StoryImage
             label={story!.imageLabel || 'story illustration'}
-            accentFill={accentFill}
+            family={paletteIdx}
             imageUrl={story!.imageUrl}
             seed={seed + 5}
             slot={coverSlot}
@@ -378,7 +378,7 @@ export const StoryCard = memo(function StoryCard({
           <path
             d={separatorPath}
             transform="translate(0, 3)"
-            stroke={`oklch(55% 0.04 ${hue} / 0.4)`}
+            stroke={cardVar('separator', paletteIdx)}
             strokeWidth={INK_LIGHT}
             fill="none"
             strokeLinecap="round"
@@ -423,7 +423,7 @@ export const StoryCard = memo(function StoryCard({
         </div>
 
         {!loading && quote && (
-          <aside className={styles.systemNote} style={{ color: `oklch(44% 0.08 ${hue})` }}>
+          <aside className={styles.systemNote} style={{ color: cardVar('note-ink', paletteIdx) }}>
             <Icon
               name="sparkle"
               size={13}

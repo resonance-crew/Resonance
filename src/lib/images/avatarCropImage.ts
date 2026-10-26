@@ -1,6 +1,11 @@
 'use client';
 
 import { cropOutputSide, cropSourceSize, type CropRect } from './avatarCrop';
+import { srgbHex } from '@/lib/design/oklch';
+import { paletteFor } from '@/lib/design/palette';
+
+/** Under a transparent picture: light terracotta's paper, as stored pictures always were. */
+const PHOTO_BACKING = srgbHex(paletteFor('terracotta', 'light')['color-cream']);
 
 /** A picture ready to frame: decoded upright (EXIF applied), first frame only, ≤ 2048 on its long side. */
 export interface CropSource {
@@ -51,8 +56,10 @@ export function releaseCropSource(source: CropSource): void {
 }
 
 /**
- * The framed square as a JPEG (quality 0.9), 256…512 px, drawn on the page's
- * cream first so a transparent picture never turns black.
+ * The framed square as a JPEG (quality 0.9), 256…512 px, drawn on light
+ * terracotta's paper first so a transparent picture never turns black — the
+ * light paper whatever the page wears: the photo is stored and shown to
+ * everyone, in either scheme.
  */
 export async function renderCrop(source: CropSource, rect: CropRect): Promise<Blob> {
   const out = cropOutputSide(rect.side);
@@ -61,10 +68,7 @@ export async function renderCrop(source: CropSource, rect: CropRect): Promise<Bl
   canvas.height = out;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('No canvas');
-  const cream = getComputedStyle(document.documentElement).getPropertyValue('--color-cream').trim();
-  ctx.fillStyle = '#f7f1e6';
-  // An oklch() the canvas can't read leaves the fallback in place.
-  if (cream) ctx.fillStyle = cream;
+  ctx.fillStyle = PHOTO_BACKING;
   ctx.fillRect(0, 0, out, out);
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(source.canvas, rect.x, rect.y, rect.side, rect.side, 0, 0, out, out);

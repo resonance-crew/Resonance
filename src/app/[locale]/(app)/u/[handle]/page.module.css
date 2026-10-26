@@ -113,7 +113,7 @@
 }
 
 .skelBlock {
-  background: var(--color-surface-sunk, oklch(92% 0.01 80));
+  background: var(--color-cream-dark);
   border-radius: 8px;
   animation: profilePulse 1.4s ease-in-out infinite;
 }
