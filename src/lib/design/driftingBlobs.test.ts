@@ -189,3 +189,33 @@ describe('drifting blobs', () => {
     expect(tall).toBeLessThanOrEqual(6);
   });
 });
+
+// The outline is traced 30 times a second into arrays kept between frames:
+// a smaller grid after a larger one, or the same grid again, traces exactly
+// what a first trace would.
+describe('tracing outlines frame after frame', () => {
+  it('traces the same loops whatever was traced before it', () => {
+    const world = (w: number, h: number, x: number) =>
+      createWorld({
+        width: w, height: h, seed: 5, palette: [SAGE, LAVENDER], paper: PAPER,
+        blobs: [
+          { x, y: h / 2, R: 120, paint: SAGE, drift: [1, 0] },
+          { x: x + 260, y: h / 2 + 40, R: 90, paint: LAVENDER, drift: [-1, 0] },
+        ],
+      });
+    const wide = world(W, H, 400);
+    const small = world(640, 400, 120);
+    const first = outline(wide);
+    const firstSmall = outline(small);
+    expect(first.length).toBeGreaterThan(0);
+    expect(firstSmall.length).toBeGreaterThan(0);
+    // Again, and in another order: the leftovers of a larger grid change nothing.
+    expect(outline(small)).toEqual(firstSmall);
+    expect(outline(wide)).toEqual(first);
+    expect(outline(small)).toEqual(firstSmall);
+    // And a grid with nothing on it still has no outline.
+    const empty = makeGrid(320, 200, 6);
+    expect(traceContours(empty)).toEqual([]);
+    expect(outline(wide)).toEqual(first);
+  });
+});

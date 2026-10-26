@@ -8,7 +8,7 @@ vi.mock('./init', () => ({ getClientDb: vi.fn(() => ({})) }));
 const mockAuth = {
   currentUser: { uid: 'alice', getIdToken: async () => 'id-token' } as { uid: string; getIdToken: () => Promise<string> } | null,
 };
-vi.mock('@/lib/auth/firebase/client', () => ({ getFirebaseClientAuth: vi.fn(() => mockAuth) }));
+vi.mock('@/lib/auth/firebase/client', () => ({ getFirebaseClientAuth: vi.fn(() => mockAuth), ensureAppCheck: vi.fn() }));
 
 // The Lite SDK's Timestamp, as far as the inbox reads it.
 const { FakeTimestamp } = vi.hoisted(() => ({

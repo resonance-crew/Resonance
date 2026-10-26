@@ -32,7 +32,14 @@ import { ApiError, callApi } from '@/lib/db/firestore/client/api';
 import { hasSessionMark } from '@/lib/auth/firebase/client';
 import { linkPreviewsOf } from '@/lib/links/previewShape';
 import { trashExpired } from '@/lib/cards/trash';
-import type { CardBoxTabName, CardDetailBody, CardListBody, FeedPageBody, ProfileBody } from '@/lib/api/v1/schemas';
+import type {
+  CardBoxTabName,
+  CardDetailBody,
+  CardListBody,
+  FeedPageBody,
+  ProfileBody,
+  RecommendedFeedBody,
+} from '@/lib/api/v1/schemas';
 import type { Conversation, Notification } from '@/lib/db/types';
 import { useLive, type LiveState } from './live';
 import { anonymousAuthor, cardKey } from './cardPrefill';
@@ -111,32 +118,32 @@ export interface RecommendedFeed extends CardsWithAuthors {
 }
 
 /**
- * The signed-in viewer's personalized「為你共振」feed. Fetches the funnel's
- * result (card ids + resonance reasons) from the server, then the cards
- * themselves in one request (GET /api/v1/cards?keys=: those the viewer may
- * read, minus the named cards of people they blocked, an anonymous one
- * without its byline — and never left out for a block).
+ * The signed-in viewer's personalized「為你共振」feed: today's picks as cards,
+ * in one request — GET /api/v1/feed/recommended (as the apps ask), which
+ * resolves the funnel's picks to the cards the viewer may read, minus the
+ * named cards of people they blocked, an anonymous one without its byline
+ * (and never left out for a block), each with its reason.
  * Gated on a signed-in viewer — the API requires auth, and an anonymous user
  * has no profile to match from.
  *
  * The request carries the viewer's ID token (like `callApi`), so it never
  * waits for the session cookie. `isLoading` also covers the moments before
  * the fetch can start (auth still restoring), so the home page can tell
- * "not yet" from "nothing for you".
+ * "not yet" from "nothing for you". A failed request is no picks — the
+ * latest cards carry the feed.
  */
 export function useRecommendedFeed() {
   const { user, loading } = useAuth();
   const swr = useSWR<RecommendedFeed>(user && !loading ? `feed:recommended:${user.id}` : null, async () => {
-    let items: { cardId: string; reason: string }[];
+    let body: RecommendedFeedBody;
     try {
-      ({ items } = await callApi<{ items: { cardId: string; reason: string }[] }>('/api/recommend/feed'));
+      body = await callApi<RecommendedFeedBody>('/api/v1/feed/recommended');
     } catch {
       return { cards: [], authors: {}, reasons: {} };
     }
-    const { cards, authors } = items.length ? await fetchCardSummaries(items.map((i) => i.cardId)) : { cards: [], authors: {} };
     const reasons: Record<string, string> = {};
-    for (const item of items) reasons[item.cardId] = item.reason;
-    return { cards, authors, reasons };
+    for (const c of body.cards) if (c.reason) reasons[c.id] = c.reason;
+    return { ...summaryList(body.cards), reasons };
   });
   return { ...swr, isLoading: swr.isLoading || loading };
 }
@@ -193,13 +200,18 @@ export function useFeed(): FeedState {
   );
 
   const pages = data ?? [];
-  const merged: CardsWithAuthors | undefined =
-    pages.length > 0
-      ? {
-          cards: pages.flatMap((p) => p.cards),
-          authors: Object.assign({}, ...pages.map((p) => p.authors)),
-        }
-      : undefined;
+  // The same object until a page comes or goes, so the feed's grid and cards
+  // don't re-render with each render of the page.
+  const merged = useMemo<CardsWithAuthors | undefined>(
+    () =>
+      data && data.length > 0
+        ? {
+            cards: data.flatMap((p) => p.cards),
+            authors: Object.assign({}, ...data.map((p) => p.authors)),
+          }
+        : undefined,
+    [data],
+  );
   return {
     data: merged,
     isLoading: isLoading || !path,
@@ -714,21 +726,30 @@ export function useCardPageLists(id: string | undefined, referenceCardId: string
   const incoming = useResonanceCards(pub ? id : undefined);
   const source = useReferencedCard(pub ? referenceCardId : undefined);
 
-  if (path === 'v1') {
-    const d = signedIn.data;
-    if (d === undefined) return { embeds: signedIn.error ? null : { status: 'loading' } };
-    if (d === null) return { resonances: EMPTY, related: EMPTY, links: EMPTY, embeds: { status: 'ready', cards: EMPTY } };
-    return { resonances: d.resonances, related: d.related, links: d.links, embeds: { status: 'ready', cards: d.embeds } };
-  }
-  if (path === null) return { embeds: { status: 'loading' } };
-  return {
-    resonances: incoming.data || source.data ? mergeLists(source.data, incoming.data) : undefined,
-    related: related.data,
-    // Cards linking to a card are its author's to see — never a signed-out reader.
-    links: EMPTY,
-    embeds: null,
-  };
+  // The same object until something in it changes: the page re-renders for
+  // many reasons, and its story's embeds (which read `embeds` from context)
+  // and lists shouldn't re-render with it.
+  const d = signedIn.data;
+  const failed = !!signedIn.error;
+  return useMemo<CardPageLists>(() => {
+    if (path === 'v1') {
+      if (d === undefined) return { embeds: failed ? null : LOADING };
+      if (d === null) return { resonances: EMPTY, related: EMPTY, links: EMPTY, embeds: NONE_EMBEDDED };
+      return { resonances: d.resonances, related: d.related, links: d.links, embeds: { status: 'ready', cards: d.embeds } };
+    }
+    if (path === null) return { embeds: LOADING };
+    return {
+      resonances: incoming.data || source.data ? mergeLists(source.data, incoming.data) : undefined,
+      related: related.data,
+      // Cards linking to a card are its author's to see — never a signed-out reader.
+      links: EMPTY,
+      embeds: null,
+    };
+  }, [path, d, failed, incoming.data, source.data, related.data]);
 }
+
+const LOADING: CardEmbedSource = { status: 'loading' };
+const NONE_EMBEDDED: CardEmbedSource = { status: 'ready', cards: EMPTY };
 
 /** GET /api/v1/cards?keys= takes at most this many (CARD_KEYS_MAX in lib/api/v1/schemas). */
 const CARD_KEYS_MAX = 30;

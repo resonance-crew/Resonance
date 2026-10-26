@@ -8,12 +8,6 @@ interface AuthContextValue {
   user: AuthUser | null;
   /** True until the client SDK has restored (or ruled out) a signed-in user. */
   loading: boolean;
-  /**
-   * The server session cookie is in place for `user` (always true when signed
-   * out). Only what reads that cookie waits for it — an /api route called
-   * without a Bearer token; Firestore reads and the UI never do.
-   */
-  sessionReady: boolean;
   signIn(input: SignInInput): Promise<AuthUser>;
   signUp(input: SignUpInput): Promise<AuthUser>;
   signInWithGoogle(): Promise<AuthUser>;
@@ -25,11 +19,27 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+/**
+ * The server session cookie is in place for the signed-in user (always true
+ * when signed out) — a context of its own, so its flip after sign-in touches
+ * only the few readers of that cookie, not every reader of the user.
+ */
+const SessionReadyContext = createContext(false);
+
+/** Two reports of the same account: the token refreshing hourly changes nothing anyone draws. */
+function sameUser(a: AuthUser | null, b: AuthUser | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.id === b.id && a.email === b.email && a.phoneNumber === b.phoneNumber && a.emailVerified === b.emailVerified;
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUserState] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [sessionReady, setSessionReady] = useState(false);
+  // Every token tick reports the user anew: keep the object everyone holds
+  // while it names the same account the same way.
+  const setUser = useCallback((next: AuthUser | null) => setUserState((prev) => (sameUser(prev, next) ? prev : next)), []);
 
   useEffect(() => {
     // Subscribe (rather than a one-shot read) so the UI tracks token refreshes
@@ -51,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
     });
     return unsubscribe;
-  }, []);
+  }, [setUser]);
 
   // Emulator builds only (`npm run dev:emulator`): the sign-in page offers
   // Google alone, so browser tests sign the seeded accounts in from devtools —
@@ -67,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       delete w.__emulatorSignIn;
     };
-  }, []);
+  }, [setUser]);
 
   const refreshSession = useCallback(() => firebaseClientAuthProvider.refreshSession(), []);
 
@@ -75,7 +85,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       user,
       loading,
-      sessionReady,
       refreshSession,
       async signIn(input) {
         const next = await firebaseClientAuthProvider.signIn(input);
@@ -102,14 +111,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
       },
     }),
-    [loading, refreshSession, sessionReady, user]
+    [loading, refreshSession, setUser, user]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      <SessionReadyContext.Provider value={sessionReady}>{children}</SessionReadyContext.Provider>
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {
   const value = useContext(AuthContext);
   if (!value) throw new Error('useAuth must be used within AuthProvider');
   return value;
+}
+
+/**
+ * Whether the server session cookie is in place for the signed-in user
+ * (always true when signed out). Only what reads that cookie waits for it — an
+ * /api route called without a Bearer token; Firestore reads and the UI never do.
+ */
+export function useSessionReady(): boolean {
+  return useContext(SessionReadyContext);
 }

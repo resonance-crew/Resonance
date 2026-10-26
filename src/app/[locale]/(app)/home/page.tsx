@@ -12,10 +12,13 @@ import { useToast } from '@/components/providers/ToastProvider';
 import { penWave } from '@/lib/design/wavyPath';
 import { INK } from '@/lib/design/strokes';
 import { useFeed, useRecommendedFeed } from '@/lib/data/hooks';
+import type { Card } from '@/lib/db/types';
 import styles from './page.module.css';
 
 /** Which stream opened the page — fixed the moment the first cards show. */
 type Lead = 'recommended' | 'latest';
+
+const NO_CARDS: Card[] = [];
 
 export default function HomeFeedPage() {
   const t = useTranslations('home');
@@ -23,9 +26,9 @@ export default function HomeFeedPage() {
   const toast = useToast();
   const { data, isLoading, isLoadingMore, hasMore, loadMore } = useFeed();
   const { data: rec, isLoading: recLoading } = useRecommendedFeed();
-  const recCards = rec?.cards ?? [];
+  const recCards = rec?.cards ?? NO_CARDS;
   const hasRec = recCards.length > 0;
-  const latestCards = data?.cards ?? [];
+  const latestCards = data?.cards ?? NO_CARDS;
 
   // One feed, two streams: today's picks head it, then the latest public
   // cards deduped against them. Whichever reaches the reader first shows
@@ -45,11 +48,18 @@ export default function HomeFeedPage() {
 
   const [showLatest, setShowLatest] = useState(false);
 
-  const recIds = new Set(recCards.map((c) => c.id));
-  const latestDeduped = latestCards.filter((c) => !recIds.has(c.id));
   const latestVisible = !hasRec || nextLead === 'latest' || showLatest;
-  const feedCards = hasRec ? (latestVisible ? [...recCards, ...latestDeduped] : recCards) : latestCards;
-  const feedAuthors = { ...(data?.authors ?? {}), ...(rec?.authors ?? {}) };
+  // Made again only when a stream changes (the page renders for its toast,
+  // its lead and the reader's session too), so the grid's cards stay as drawn.
+  const feedCards = useMemo(() => {
+    if (!hasRec) return latestCards;
+    if (!latestVisible) return recCards;
+    const recIds = new Set(recCards.map((c) => c.id));
+    return [...recCards, ...latestCards.filter((c) => !recIds.has(c.id))];
+  }, [hasRec, latestVisible, recCards, latestCards]);
+  const latestAuthors = data?.authors;
+  const recAuthors = rec?.authors;
+  const feedAuthors = useMemo(() => ({ ...(latestAuthors ?? {}), ...(recAuthors ?? {}) }), [latestAuthors, recAuthors]);
 
   // Picks landing over cards already on screen: where the card the reader is
   // looking at stood, taken before the picks go in (read during this render,

@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('./init', () => ({ getClientDb: vi.fn(() => ({})) }));
 type MockUser = { uid: string; getIdToken: () => Promise<string> };
 const mockAuth = { currentUser: { uid: 'me', getIdToken: async () => 'id-token' } as MockUser | null };
-vi.mock('@/lib/auth/firebase/client', () => ({ getFirebaseClientAuth: vi.fn(() => mockAuth) }));
+vi.mock('@/lib/auth/firebase/client', () => ({ getFirebaseClientAuth: vi.fn(() => mockAuth), ensureAppCheck: vi.fn() }));
 
 import { ApiError } from './api';
 import { sendNote } from './notes';

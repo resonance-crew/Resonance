@@ -10,7 +10,10 @@ import type { Conversation, Message, User } from '@/lib/db/types';
 // layer (the thread's listener and older pages included), the v1 API
 // (callApi), auth and navigation are the module boundary.
 const mockUseAuth = vi.fn();
-vi.mock('@/components/providers/AuthProvider', () => ({ useAuth: () => mockUseAuth() }));
+vi.mock('@/components/providers/AuthProvider', () => ({
+  useAuth: () => mockUseAuth(),
+  useSessionReady: () => mockUseAuth().sessionReady ?? false,
+}));
 const mockPush = vi.fn();
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (

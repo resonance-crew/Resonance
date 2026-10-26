@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 // Check token ride along; an error answer throws its code.
 
 const auth = vi.hoisted(() => ({ currentUser: null as null | { getIdToken: () => Promise<string> } }));
-vi.mock('@/lib/auth/firebase/client', () => ({ getFirebaseClientAuth: () => auth }));
+const ensureAppCheck = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/auth/firebase/client', () => ({ getFirebaseClientAuth: () => auth, ensureAppCheck }));
 vi.mock('@/lib/auth/firebase/appCheck', () => ({ appCheckHeaders: vi.fn(async () => ({ 'X-Firebase-AppCheck': 'app-check-token' })) }));
 
 import { ApiError, callApi } from './api';
@@ -29,6 +30,16 @@ describe('callApi', () => {
       body: JSON.stringify({ bio: 'hi' }),
       headers: { 'X-Firebase-AppCheck': 'app-check-token', Authorization: 'Bearer id-token', 'Content-Type': 'application/json' },
     }));
+  });
+
+  // App Check starts with the first call that can carry its token, not with
+  // the app every page makes for Auth (lib/auth/firebase/client).
+  it('starts App Check before asking for its token', async () => {
+    vi.stubGlobal('fetch', fetch);
+    fetch.mockResolvedValueOnce(new Response('{}'));
+    ensureAppCheck.mockClear();
+    await callApi('/api/v1/me');
+    expect(ensureAppCheck).toHaveBeenCalledTimes(1);
   });
 
   it('throws the answer’s error code', async () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { CSSProperties, MouseEvent, ReactNode, useMemo, useRef, useState } from 'react';
+import { CSSProperties, MouseEvent, ReactNode, memo, useMemo, useRef, useState } from 'react';
 import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import { BrushWash } from '@/components/atoms/BrushWash/BrushWash';
 import { INK, INK_LIGHT } from '@/lib/design/strokes';
@@ -181,7 +181,14 @@ export interface StoryCardProps {
   labelledBy?: string;
 }
 
-export function StoryCard({
+/**
+ * A story card. Memoised: a list re-renders for reasons of its own (the
+ * viewer's session settling, a page appended, the picks arriving) and a card
+ * whose story, place and colour are what they were isn't drawn again — its
+ * list hands it the same story object while the card stays the same
+ * (CardLinkGrid).
+ */
+export const StoryCard = memo(function StoryCard({
   story,
   index = 0,
   isLast = false,
@@ -429,4 +436,4 @@ export function StoryCard({
       </div>
     </article>
   );
-}
+});

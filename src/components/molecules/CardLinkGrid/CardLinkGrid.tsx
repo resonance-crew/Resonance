@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { StoryCard } from '@/components/molecules/StoryCard/StoryCard';
+import { StoryCard, type Story } from '@/components/molecules/StoryCard/StoryCard';
 import type { Card, User } from '@/lib/db/types';
 import { cardToStory } from '@/lib/adapters/story';
 import { cardPalettes } from '@/lib/design/cardColours';
@@ -43,7 +43,7 @@ export interface CardLinkGridProps {
 /**
  * Column count mirroring the grid's CSS breakpoints (640 / 1024). Resolves
  * only on the client — `null` during SSR/hydration, where the CSS
- * fallback grid renders instead.
+ * fallback grid renders instead (and on a phone, where it is one column too).
  */
 function useFeedColumns(): number | null {
   const [cols, setCols] = useState<number | null>(null);
@@ -73,13 +73,26 @@ export function CardLinkGrid({ cards, authors, cardHref, renderActions, renderCa
   // One colouring for every width (no card wears the family of the three
   // before it): the server's grid, one column and two or three alike.
   const palettes = useMemo(() => cardPalettes(cards.map((c) => c.accentHue)), [cards]);
+  const anonymousLabel = t('anonymousAuthor');
+  // Each card's face, made once for as long as the card and its byline stay
+  // the same (its excerpt reads the whole story): the list re-renders when the
+  // viewer's session settles or more cards arrive, and a card whose face
+  // hasn't changed (StoryCard is memoised) isn't drawn again.
+  const stories = useRef(new WeakMap<Card, { author: User | undefined; label: string; story: Story }>());
+  const storyOf = (card: Card, author: User | undefined): Story => {
+    const kept = stories.current.get(card);
+    if (kept && kept.author === author && kept.label === anonymousLabel) return kept.story;
+    // An anonymous card needs no author: its byline is the anonymous one.
+    const story = author || card.anonymous
+      ? cardToStory(card, author, { anonymousLabel })
+      : { title: card.thoughtCore, excerpt: '', author: '—', authorInitials: '?', readTime: '—', tags: card.tags };
+    stories.current.set(card, { author, label: anonymousLabel, story });
+    return story;
+  };
 
   const renderItem = (card: Card, i: number) => {
     const author = authors[card.authorId];
-    // An anonymous card needs no author: its byline is the anonymous one.
-    const story = author || card.anonymous
-      ? cardToStory(card, author, { anonymousLabel: t('anonymousAuthor') })
-      : { title: card.thoughtCore, excerpt: '', author: '—', authorInitials: '?', readTime: '—', tags: card.tags };
+    const story = storyOf(card, author);
     return (
       <div key={card.id} data-card-id={card.id} className={styles.item} style={{ position: 'relative' }}>
         <Link
@@ -107,7 +120,9 @@ export function CardLinkGrid({ cards, authors, cardHref, renderActions, renderCa
     );
   };
 
-  if (cols === null) {
+  // One column (a phone) is the server's grid as it is: the same cards in the
+  // same nodes, so nothing the server drew is taken down and built again.
+  if (cols === null || cols === 1) {
     return (
       <div data-card-grid className={styles.grid}>
         {cards.map(renderItem)}

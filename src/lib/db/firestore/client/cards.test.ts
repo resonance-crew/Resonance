@@ -7,6 +7,7 @@ const mockAuth = {
 };
 vi.mock('@/lib/auth/firebase/client', () => ({
   getFirebaseClientAuth: vi.fn(() => mockAuth),
+  ensureAppCheck: vi.fn(),
 }));
 vi.mock('firebase/firestore/lite', () => ({
   addDoc: vi.fn(),

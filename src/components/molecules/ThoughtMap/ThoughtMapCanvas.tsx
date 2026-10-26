@@ -9,6 +9,8 @@ import {
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  type Ref,
+  type RefObject,
 } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
@@ -69,6 +71,82 @@ const WHEEL_IDLE_MS = 160;
 /** Where, in [-tile, 0), a grid that has a line at `offset` has its first one. */
 function withinTile(offset: number, tile: number): number {
   return (((offset % tile) + tile) % tile) - tile;
+}
+
+/** The world's transform for a camera. */
+function worldTransform(cam: Camera): string {
+  return `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`;
+}
+
+/** The dotted paper's shift for a camera: within one tile of `tile` px. */
+function dotsTransform(cam: Camera, tile: number): string {
+  return `translate(${withinTile(cam.x, tile)}px, ${withinTile(cam.y, tile)}px)`;
+}
+
+interface CameraPainter {
+  /** A gesture's move: kept, and painted once this frame. */
+  move(next: Camera): void;
+  /** A change on its own (fit, glide, the zoom buttons, the pane): painted and rendered now. */
+  commit(next: Camera): void;
+  /** A gesture's end: what it moved to, painted and rendered now. */
+  settle(): void;
+  dispose(): void;
+}
+
+/** The board's camera writes (see the board's `cameraRef`); one per board, made on its first render. */
+function cameraPainter(
+  view: { current: Camera },
+  world: RefObject<HTMLElement | null>,
+  dots: RefObject<HTMLElement | null>,
+  percent: RefObject<HTMLElement | null>,
+  render: (cam: Camera) => void,
+): CameraPainter {
+  let frame: number | null = null;
+  const paint = () => paintCamera(view.current, world.current, dots.current, percent.current);
+  const paintNow = () => {
+    if (frame != null) cancelAnimationFrame(frame);
+    frame = null;
+    paint();
+  };
+  return {
+    move(next) {
+      view.current = next;
+      frame ??= requestAnimationFrame(() => {
+        frame = null;
+        paint();
+      });
+    },
+    commit(next) {
+      view.current = next;
+      paintNow();
+      render(next);
+    },
+    settle() {
+      paintNow();
+      render(view.current);
+    },
+    dispose() {
+      if (frame != null) cancelAnimationFrame(frame);
+      frame = null;
+    },
+  };
+}
+
+/**
+ * A camera painted straight onto the board between renders (a gesture's
+ * frames): exactly the styles and text the board renders for it.
+ */
+function paintCamera(cam: Camera, world: HTMLElement | null, dots: HTMLElement | null, percent: HTMLElement | null) {
+  const tile = GRID * cam.s;
+  if (world) world.style.transform = worldTransform(cam);
+  if (dots) {
+    dots.style.right = `${-tile}px`;
+    dots.style.bottom = `${-tile}px`;
+    dots.style.backgroundSize = `${tile}px ${tile}px`;
+    dots.style.transform = dotsTransform(cam, tile);
+  }
+  const text = percent?.firstChild;
+  if (text && text.nodeType === Node.TEXT_NODE) text.nodeValue = `${Math.round(cam.s * 100)}%`;
 }
 
 export interface NodeState {
@@ -250,9 +328,22 @@ export function ThoughtMapCanvas({
     });
   }, [nodes, edges, groups]);
 
-  const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, s: 1 });
-  const cameraRef = useRef(camera);
-  cameraRef.current = camera;
+  // The camera as it is now. A gesture (a drag of the paper, a pinch, the
+  // wheel) moves it many times a frame: each move goes to `cameraRef` and is
+  // painted straight onto the world, the dotted paper and the zoom's percent
+  // once per frame (`cam.move`), and React hears of it when the gesture ends
+  // (`cam.settle`) — not a render of the whole board per pointer event. Every
+  // other change (fit, glide, the zoom buttons, the pane) commits at once
+  // (`cam.commit`). The board renders from `cameraRef`, which is never behind
+  // the state.
+  const [, setCamera] = useState<Camera>({ x: 0, y: 0, s: 1 });
+  const cameraRef = useRef<Camera>({ x: 0, y: 0, s: 1 });
+  const worldRef = useRef<HTMLDivElement>(null);
+  const dotsRef = useRef<HTMLDivElement>(null);
+  const percentRef = useRef<HTMLSpanElement>(null);
+  const cam = useRef<CameraPainter | null>(null);
+  cam.current ??= cameraPainter(cameraRef, worldRef, dotsRef, percentRef, setCamera);
+  useEffect(() => () => cam.current!.dispose(), []);
 
   const [selection, setSelection] = useState<Selection>(null);
   const [linkDraft, setLinkDraft] = useState<{ sourceId: string; wx: number; wy: number } | null>(
@@ -268,6 +359,8 @@ export function ThoughtMapCanvas({
    */
   const [moving, setMoving] = useState(false);
   const wheelIdleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The wheel's gesture ends (`cam.settle`) once it has been still a moment. */
+  const wheelSettleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Card being dragged right now — its group lights up like a drop folder. */
   const [dragNodeId, setDragNodeId] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState('');
@@ -305,7 +398,7 @@ export function ThoughtMapCanvas({
     ];
     if (glideRef.current != null) cancelAnimationFrame(glideRef.current);
     glideRef.current = null;
-    setCamera(fitCamera(rects, w, h));
+    cam.current!.commit(fitCamera(rects, w, h));
   };
   useEffect(() => {
     if (!vw || !vh) return;
@@ -344,8 +437,7 @@ export function ThoughtMapCanvas({
       const t = Math.min(1, (now - t0) / GLIDE_MS);
       const k = still ? 1 : 1 - (1 - t) ** 3;
       last = { s: from.s, x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k };
-      cameraRef.current = last;
-      setCamera(last);
+      cam.current!.commit(last);
       const settling = w !== lastW && now - t0 < GLIDE_FOLLOW_MS;
       lastW = w;
       glideRef.current = t < 1 || settling ? requestAnimationFrame(step) : null;
@@ -397,7 +489,8 @@ export function ThoughtMapCanvas({
     if (!toggled || !prev) return;
     const delta = (w - prev) / 2;
     if (Math.abs(delta) < 0.5) return;
-    setCamera((cam) => ({ ...cam, x: cam.x + delta }));
+    const now = cameraRef.current;
+    cam.current!.commit({ ...now, x: now.x + delta });
   }, [paneOpen, focusCardId, settleKey]);
 
   // Wheel: trackpad/wheel pans, ctrl/cmd (and pinch) zooms about the cursor.
@@ -411,11 +504,18 @@ export function ThoughtMapCanvas({
       const py = e.clientY - r.top;
       const zooming = e.ctrlKey || e.metaKey;
       takeCamera();
-      setCamera((cam) =>
+      const now = cameraRef.current;
+      cam.current!.move(
         zooming
-          ? zoomAt(cam, px, py, Math.exp(-e.deltaY * 0.002))
-          : { ...cam, x: cam.x - e.deltaX, y: cam.y - e.deltaY },
+          ? zoomAt(now, px, py, Math.exp(-e.deltaY * 0.002))
+          : { ...now, x: now.x - e.deltaX, y: now.y - e.deltaY },
       );
+      // The wheel's gesture ends when it has been still a moment: then React hears of the camera.
+      if (wheelSettleRef.current) clearTimeout(wheelSettleRef.current);
+      wheelSettleRef.current = setTimeout(() => {
+        wheelSettleRef.current = null;
+        cam.current!.settle();
+      }, WHEEL_IDLE_MS);
       // A scroll is a pan until the wheel has been still a moment.
       if (wheelIdleRef.current) clearTimeout(wheelIdleRef.current);
       wheelIdleRef.current = null;
@@ -433,6 +533,7 @@ export function ThoughtMapCanvas({
     return () => {
       el.removeEventListener('wheel', onWheel);
       if (wheelIdleRef.current) clearTimeout(wheelIdleRef.current);
+      if (wheelSettleRef.current) clearTimeout(wheelSettleRef.current);
     };
   }, []);
 
@@ -496,7 +597,8 @@ export function ThoughtMapCanvas({
   const startPan = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 || pinchRef.current) return;
     const { px, py } = localPoint(e);
-    dragRef.current = { kind: 'pan', px, py, camX: camera.x, camY: camera.y, moved: false };
+    const now = cameraRef.current;
+    dragRef.current = { kind: 'pan', px, py, camX: now.x, camY: now.y, moved: false };
     capture(e);
     setPanning(true);
   };
@@ -558,10 +660,8 @@ export function ThoughtMapCanvas({
         // the world point between the fingers stays pinned under them.
         const frame = pinchFrame();
         takeCamera();
-        setCamera((cam) => {
-          const z = zoomAt(cam, frame.cx, frame.cy, frame.dist / prev.dist);
-          return { ...z, x: z.x + (frame.cx - prev.cx), y: z.y + (frame.cy - prev.cy) };
-        });
+        const z = zoomAt(cameraRef.current, frame.cx, frame.cy, frame.dist / prev.dist);
+        cam.current!.move({ ...z, x: z.x + (frame.cx - prev.cx), y: z.y + (frame.cy - prev.cy) });
         pinchRef.current = frame;
         return;
       }
@@ -577,7 +677,7 @@ export function ThoughtMapCanvas({
           setMoving(true);
           takeCamera();
         }
-        setCamera((cam) => ({ ...cam, x: drag.camX + (px - drag.px), y: drag.camY + (py - drag.py) }));
+        cam.current!.move({ ...cameraRef.current, x: drag.camX + (px - drag.px), y: drag.camY + (py - drag.py) });
         break;
       case 'node':
         markMoved(drag, px, py);
@@ -633,6 +733,7 @@ export function ThoughtMapCanvas({
         // may have been holding one slot); fewer: the pinch is over. Either
         // way a pinch finger never falls through to click/select.
         pinchRef.current = touchesRef.current.size >= 2 ? pinchFrame() : null;
+        if (!pinchRef.current) cam.current!.settle();
         return;
       }
     }
@@ -647,6 +748,7 @@ export function ThoughtMapCanvas({
 
     switch (drag.kind) {
       case 'pan':
+        cam.current!.settle();
         if (!drag.moved) {
           setSelection(null);
           setTrayOpen(false);
@@ -916,7 +1018,7 @@ export function ThoughtMapCanvas({
 
   const zoom = (factor: number) => {
     takeCamera();
-    setCamera((cam) => zoomAt(cam, vw / 2, vh / 2, factor));
+    cam.current!.commit(zoomAt(cameraRef.current, vw / 2, vh / 2, factor));
   };
   // 顯示全部: everything framed, and kept so as the map changes size, until the reader moves it again.
   const fit = () => {
@@ -1321,6 +1423,8 @@ export function ThoughtMapCanvas({
   ]);
 
   const { w: boardW, h: boardH } = useElementSize(boardRef);
+  // Read from the ref: mid-gesture renders (the pan's layer, a selection) must draw the camera as it is now.
+  const camera = cameraRef.current;
   const tile = GRID * camera.s;
 
   return (
@@ -1357,19 +1461,21 @@ export function ThoughtMapCanvas({
             the camera within a tile: a pan moves it (like the world) rather
             than repainting the viewport's background on every frame. */}
         <div
+          ref={dotsRef}
           className={styles.dots}
           data-moving={moving || undefined}
           style={{
             right: -tile,
             bottom: -tile,
             backgroundSize: `${tile}px ${tile}px`,
-            transform: `translate(${withinTile(camera.x, tile)}px, ${withinTile(camera.y, tile)}px)`,
+            transform: dotsTransform(camera, tile),
           }}
         />
         <div
+          ref={worldRef}
           className={styles.world}
           data-moving={moving || undefined}
-          style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.s})` }}
+          style={{ transform: worldTransform(camera) }}
         >
           {world}
         </div>
@@ -1390,6 +1496,7 @@ export function ThoughtMapCanvas({
 
       <ZoomCluster
         percent={Math.round(camera.s * 100)}
+        percentRef={percentRef}
         onZoomOut={() => zoom(1 / 1.25)}
         onZoomIn={() => zoom(1.25)}
         onFit={fit}
@@ -1453,6 +1560,8 @@ export function ThoughtMapCanvas({
 
 interface ZoomClusterProps {
   percent: number;
+  /** The percent's own element, for a gesture to paint between renders. */
+  percentRef?: Ref<HTMLSpanElement>;
   onZoomOut: () => void;
   onZoomIn: () => void;
   onFit: () => void;
@@ -1470,7 +1579,7 @@ const ZOOM_SEED = 41;
  * itself. The sheet takes the cluster's measured size and is drawn behind the
  * controls.
  */
-function ZoomCluster({ percent, onZoomOut, onZoomIn, onFit }: ZoomClusterProps) {
+function ZoomCluster({ percent, percentRef, onZoomOut, onZoomIn, onFit }: ZoomClusterProps) {
   const t = useTranslations('me.thoughtMap');
   const ref = useRef<HTMLDivElement>(null);
   const { w, h } = useElementSize(ref);
@@ -1490,7 +1599,8 @@ function ZoomCluster({ percent, onZoomOut, onZoomIn, onFit }: ZoomClusterProps) 
       <button type="button" className={styles.iconButton} aria-label={t('zoomOut')} onClick={onZoomOut}>
         <Icon name="minus" size={16} />
       </button>
-      <span className={styles.zoomPct}>{percent}%</span>
+      {/* One text node, which a gesture's paint (paintCamera) updates in place between renders. */}
+      <span ref={percentRef} className={styles.zoomPct}>{`${percent}%`}</span>
       <button type="button" className={styles.iconButton} aria-label={t('zoomIn')} onClick={onZoomIn}>
         <Icon name="plus" size={16} />
       </button>

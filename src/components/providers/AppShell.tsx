@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { AppHeader } from '@/components/sections/AppHeader/AppHeader';
 import { AppChromeProvider } from '@/components/providers/AppChrome';
 import { AccountDeletionNotice } from '@/components/molecules/AccountDeletionNotice/AccountDeletionNotice';
-import { useAuth } from '@/components/providers/AuthProvider';
+import { useAuth, useSessionReady } from '@/components/providers/AuthProvider';
 import { ToastProvider } from '@/components/providers/ToastProvider';
 import { useMyProfile } from '@/lib/data/hooks';
 import { useRouter, usePathname } from '@/i18n/navigation';
@@ -37,7 +37,8 @@ function isPublicPath(pathname: string): boolean {
  * such a profile — POST /api/v1/me, createProfile).
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { user: authUser, loading, sessionReady } = useAuth();
+  const { user: authUser, loading } = useAuth();
+  const sessionReady = useSessionReady();
   const { data: profile, isLoading: profileLoading } = useMyProfile();
   const router = useRouter();
   const pathname = usePathname();
