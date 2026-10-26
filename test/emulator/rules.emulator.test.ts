@@ -683,6 +683,28 @@ describe('cards: what the author may write', () => {
     await assertFails(setDoc(doc(as('alice'), 'cards', '!aaaaaaaaaaaaaaaaaaa'), draft('alice')));
   });
 
+  // Resonances, bookmarks, a thread's cards and old links still name a deleted
+  // card's id: whoever took it would take them over.
+  it("refuses a new card under the id of one deleted for good (its tombstone), and lets no one read the tombstone", async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'cardTombstones', 'DeletedCardAAAAAAAAA'), { deletedAt: new Date() });
+    });
+    await assertFails(setDoc(doc(as('mallory'), 'cards', 'DeletedCardAAAAAAAAA'), draft('mallory')));
+    await assertSucceeds(setDoc(doc(as('mallory'), 'cards', 'FreshCardAAAAAAAAAAA'), draft('mallory')));
+    await assertFails(getDoc(doc(as('mallory'), 'cardTombstones', 'DeletedCardAAAAAAAAA')));
+    await assertFails(setDoc(doc(as('mallory'), 'cardTombstones', 'FreshCardAAAAAAAAAAA'), { deletedAt: new Date() }));
+  });
+
+  it("keeps a pending edit that names someone else from the card's owner (a copy left under an id another took)", async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'cards', 'TakenCardAAAAAAAAAAA'), publishedCard('mallory'));
+      await setDoc(doc(db, 'cards', 'TakenCardAAAAAAAAAAA', 'edits', 'current'), { authorId: 'alice', thoughtCore: 't', story: 'private words', tags: [] });
+    });
+    await assertFails(getDoc(doc(as('mallory'), 'cards', 'TakenCardAAAAAAAAAAA', 'edits', 'current')));
+    await assertFails(deleteDoc(doc(as('mallory'), 'cards', 'TakenCardAAAAAAAAAAA', 'edits', 'current')));
+    await assertSucceeds(deleteDoc(doc(as('alice'), 'cards', 'TakenCardAAAAAAAAAAA', 'edits', 'current')));
+  });
+
   it('lets a resonance answer only a card its author can read', async () => {
     await seed(async (db) => {
       await setDoc(doc(db, 'cards', 'pub'), publishedCard('bob'));

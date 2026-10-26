@@ -66,6 +66,8 @@ export async function applyCardEdit(db: Firestore, uid: string, id: string): Pro
     if (!edit.exists) return { id, slug, applied: false, stale: [], reaches: false, movedTo: null };
 
     const e = edit.data()!;
+    // A copy naming someone else (left under an id another card took) is not this author's to apply.
+    if (typeof e.authorId === 'string' && e.authorId !== uid) throw new ApiFailure('not_found', 'No such card.');
     const thoughtCore = typeof e.thoughtCore === 'string' ? e.thoughtCore : '';
     if (!thoughtCore.trim()) throw new ApiFailure('invalid_request', 'A card needs a title.');
     const story = typeof e.story === 'string' ? e.story : '';

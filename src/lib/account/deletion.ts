@@ -2,6 +2,7 @@ import type { BulkWriter, DocumentReference, Firestore, Query } from 'firebase-a
 import { cardPagePaths, landingPagePaths, profilePagePaths } from '@/lib/api/revalidate';
 import { CHAT_IMAGES, chatImageFiles } from '@/lib/api/v1/chatImages';
 import { HANDLES } from '@/lib/db/firestore/handles';
+import { TOMBSTONE, tombstoneRef } from '@/lib/db/firestore/tombstones';
 import { UPLOADS, uploadedKeys } from '@/lib/storage/uploads';
 import { DELETION_GRACE_DAYS } from './constants';
 
@@ -282,6 +283,8 @@ export async function purgeAccountData(db: Firestore, uid: string, opts: PurgeOp
   const deleteTree = async (ref: DocumentReference) => {
     const records = byCard.get(ref.path);
     if (records?.length) await deleteAll(db, records);
+    // A card's id stays dead (tombstoneRef): written, on its own, before the card goes, so no moment lets another take it.
+    if (ref.parent.id === 'cards') await tombstoneRef(db, ref.id).set(TOMBSTONE);
     await db.recursiveDelete(ref, writer);
   };
   try {

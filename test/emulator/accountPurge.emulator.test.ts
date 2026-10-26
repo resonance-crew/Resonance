@@ -237,6 +237,11 @@ describe('purgeAccount', () => {
     const missing = (await Promise.all(kept.map(async (p) => ((await exists(p)) ? null : p)))).filter(Boolean);
     expect(stillThere).toEqual([]);
     expect(missing).toEqual([]);
+    // Its cards' ids stay dead (no new card may take one: firestore.rules), their tombstones naming no one.
+    for (const id of ['alice-card', 'alice-draft']) {
+      expect(Object.keys((await db.doc(`cardTombstones/${id}`).get()).data() ?? {}), id).toEqual(['deletedAt']);
+    }
+    expect((await db.doc('cardTombstones/bob-card').get()).exists).toBe(false);
 
     expect(deleteAuthUser).toHaveBeenCalledWith('alice');
     // Older keys carry the uid; newer ones are found by their records.

@@ -1,6 +1,7 @@
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { ANONYMOUS_VISIBILITY_MESSAGE, anonymousForConnections, editedAudience } from '@/lib/db/firestore/cardContent';
 import { mapCard } from '@/lib/db/firestore/mapper';
+import { TOMBSTONE, tombstoneRef } from '@/lib/db/firestore/tombstones';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
 import { getVectorStore, type IVectorStore } from '@/lib/recommend/vectorStore';
 import { cardPagePaths, landingPagePaths } from '@/lib/api/revalidate';
@@ -182,6 +183,7 @@ export async function deleteCard(db: Firestore, uid: string, id: string, opts: D
     if (opts.onlyIfTrashed && trashedAt == null) throw new ApiFailure('conflict', NOT_IN_TRASH_MESSAGE);
     takeBack(tx, await readTakeBack(tx, db, uid, id));
     tx.delete(ref);
+    tx.set(tombstoneRef(db, id), TOMBSTONE);
     return snap.data()!;
   });
   if (!data) return { stale: [], deleted: false };
