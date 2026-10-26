@@ -61,5 +61,5 @@ extension Author {
         return Double((initials.unicodeScalars.first?.value ?? 7) * 13)
     }
 
-    var accent: Color { OKLCHColor.avatar(accentColor) ?? Tokens.terracottaLight }
+    var accent: Color { OKLCHColor.avatar(accentColor) ?? Tokens.avatarWait }
 }

@@ -210,7 +210,7 @@ struct ShareByline: View {
         case let .named(_, initials, photo, _, seed):
             ShareAvatar(initials: initials, photo: photo, fill: fill, size: R.avatarSize, seed: seed)
         case .anonymous:
-            ShareAvatar(initials: R.anonymousInitials, photo: nil, fill: Tokens.creamDark, size: R.avatarSize, seed: Double(R.anonymousSeed))
+            ShareAvatar(initials: R.anonymousInitials, photo: nil, fill: Tokens.avatarWait, size: R.avatarSize, seed: Double(R.anonymousSeed))
         }
     }
 

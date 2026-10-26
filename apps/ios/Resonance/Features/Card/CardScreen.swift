@@ -514,7 +514,7 @@ struct StoryBylineRow<Actions: View>: View {
                 HandDrawnAvatar(initials: author.initials, imageURL: author.avatarUrl.flatMap(URL.init(string:)),
                                 color: author.accent, size: avatar, seed: author.avatarSeedValue)
             } else {
-                HandDrawnAvatar(initials: "·", color: Tokens.creamDark, size: avatar, seed: 97)
+                HandDrawnAvatar(initials: "·", color: Tokens.avatarWait, size: avatar, seed: 97)
             }
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -615,7 +615,7 @@ private struct BarAuthor: View {
             .padding(.horizontal, -6)
         } else {
             HStack(spacing: 8) {
-                HandDrawnAvatar(initials: "·", color: Tokens.creamDark, size: 28, seed: 97)
+                HandDrawnAvatar(initials: "·", color: Tokens.avatarWait, size: 28, seed: 97)
                 Text(L10n.Card.anonymousAuthor)
                     .font(AppFonts.body(15, weight: .semibold))
                     .foregroundStyle(Tokens.textMuted)

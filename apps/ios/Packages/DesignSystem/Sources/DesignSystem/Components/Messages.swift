@@ -532,7 +532,7 @@ public struct CardByline: Equatable {
     }
 
     public static func anonymous(_ name: String) -> CardByline {
-        CardByline(name: name, initials: "·", imageURL: nil, color: Tokens.creamDark, avatarSeed: 97, isAnonymous: true)
+        CardByline(name: name, initials: "·", imageURL: nil, color: Tokens.avatarWait, avatarSeed: 97, isAnonymous: true)
     }
 }
 

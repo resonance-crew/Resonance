@@ -258,7 +258,7 @@ private struct ProfilePhotoRow: View {
         HStack(alignment: .center, spacing: 16) {
             Button { picking = true } label: {
                 HandDrawnAvatar(initials: me.initials, imageURL: me.avatarUrl.flatMap(URL.init(string:)),
-                                color: OKLCHColor.avatar(me.accentColor) ?? Tokens.terracottaLight, size: 88, seed: 77)
+                                color: OKLCHColor.avatar(me.accentColor) ?? Tokens.avatarWait, size: 88, seed: 77)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(hasPhoto ? L10n.Settings.Profile.avatarChange : L10n.Settings.Profile.avatarAdd)
@@ -661,7 +661,7 @@ private struct BlockedListContent: View {
     private func row(_ person: SafetyService.BlockedPerson) -> some View {
         HStack(spacing: 12) {
             HandDrawnAvatar(initials: person.initials, imageURL: person.avatarUrl.flatMap(URL.init(string:)),
-                            color: OKLCHColor.avatar(person.accentColor) ?? Tokens.creamDark, size: 36,
+                            color: OKLCHColor.avatar(person.accentColor) ?? Tokens.avatarWait, size: 36,
                             seed: person.avatarSeed ?? 5)
             VStack(alignment: .leading, spacing: 0) {
                 Text(person.handle ?? L10n.Safety.BlockedList.unknownUser)
