@@ -110,14 +110,14 @@ struct CardColumns<Item: View>: View {
         Group {
             if columns > 1 {
                 // Under the bar a card's outline is never beneath it at rest (design §2): it starts the
-                // tablet header's 32 under its line (round 5 E2). Under a block on top, a grid's gap.
+                // tablet header's gap under its line (round 5 E2, `HeaderChrome.contentGap(width:)`). Under a block on top, a grid's gap.
                 // The scroll's targets are the blocks, their gaps in them: the rest keep their place as a
                 // whole when a block comes on top, and the list's top is the first block's, gap and all.
                 VStack(spacing: 0) {
                     if split > 0 {
-                        grid(0..<split, columns: columns, top: underBar ? HeaderChrome.contentTop : 4).id(Self.topBlock)
+                        grid(0..<split, columns: columns, top: underBar ? HeaderChrome.contentTop(width: window.width) : 4).id(Self.topBlock)
                     }
-                    grid(split..<count, columns: columns, top: split > 0 ? Tokens.feedGap - 8 : underBar ? HeaderChrome.contentTop : 4)
+                    grid(split..<count, columns: columns, top: split > 0 ? Tokens.feedGap - 8 : underBar ? HeaderChrome.contentTop(width: window.width) : 4)
                         .id(Self.restBlock)
                 }
                 .scrollTargetLayout(isEnabled: ids != nil)

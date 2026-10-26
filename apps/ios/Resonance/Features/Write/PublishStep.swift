@@ -78,7 +78,7 @@ struct PublishStep: View {
     /// (`--story-head-cover-gap`); anything else first — the mirror's line, the update hint — where the
     /// writer's title stands (`--story-head-gap`). In the split's pane, level with the map's Leave.
     static func topPadding(_ model: WriteModel, showsBar: Bool, compact: Bool) -> CGFloat {
-        guard showsBar else { return WriteWorkspace.paneTop }
+        guard showsBar else { return WriteWorkspace.paneTop(row: headingRowHeight) }
         if bandUnderBar(model, showsBar: showsBar, compact: compact) { return 0 }
         if compact { return PenLineGap.fromFoot(Tokens.storyHeadGapCompact) }
         return PenLineGap.fromFoot(previewLeads(model) ? Tokens.storyHeadCoverGap : Tokens.storyHeadGap)

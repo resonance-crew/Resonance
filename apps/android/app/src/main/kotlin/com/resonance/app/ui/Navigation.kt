@@ -472,7 +472,7 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
                 Box(Modifier.fillMaxWidth().statusBarsPadding().height(TopBarRow)) {
                     TopTabs(tabs, tab, select, tabWidths, chrome.labels, L10n.App.Nav.main, Modifier.align(Alignment.Center))
                     val pen = tabItems.first { it.isAction }
-                    TopPen(pen.title, pen.icon, { select(Tab.Write) }, Modifier.align(Alignment.CenterEnd).padding(end = pad))
+                    TopPen(pen.title, pen.icon, { select(Tab.Write) }, Modifier.align(Alignment.CenterEnd).padding(end = chrome.edge))
                 }
             }
             // The deletion's undo: a modal over every screen.
@@ -491,18 +491,18 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
 /**
  * A page on a medium or expanded window (design note B2, round 5 part C): a tab's root has the
  * header's tabs over its bar, which leaves them room ([chrome]); a pushed page's bar is the whole
- * header, without them. Both are the header's 72 tall. The writer has the window to itself, its
- * bar as a phone's.
+ * header, without them. Both are the header's 72 tall.
  */
 @Composable
 private fun WithHeader(tab: Tab, route: Route, chrome: HeaderChrome?, page: @Composable () -> Unit) {
     // A page in the thread pane beside the conversations keeps the pane's own small bar (MessagesPanes
     // gives it no header chrome and the pane's row): the header above it is the Messages root's.
     val inPane = LocalTwoPane.current && route !is Route.Root
-    // The writer at the split is the workspace, with no bar; below it, on a tablet, its bar is a pushed page's header (round 5 E5).
+    // The writer's bar on a tablet is a pushed page's header (round 5 E5): below the split, and at it while the pane
+    // takes the whole width (round 15) — at the split itself the workspace draws no bar.
     val own = when {
         inPane -> LocalHeaderChrome.current
-        chrome == null || (route is Route.Write && LocalWindowLayout.current.writerSplit) -> null
+        chrome == null -> null
         route is Route.Root -> chrome
         else -> chrome.copy(tabs = false)
     }

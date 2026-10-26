@@ -64,8 +64,8 @@ import com.resonance.design.OrganicIcon
 import com.resonance.design.OrganicInlineBar
 import com.resonance.design.FieldLabel
 import com.resonance.design.inlineBarTop
-import com.resonance.design.LayoutClass
 import com.resonance.design.LocalWindowLayout
+import com.resonance.design.WindowLayout
 import com.resonance.design.OrganicLink
 import com.resonance.design.OrganicModal
 import com.resonance.design.OrganicRadio
@@ -148,15 +148,15 @@ fun SettingsScreen(open: (Route) -> Unit, back: () -> Unit) {
 
 /**
  * The settings pages' 20 at the sides and foot. Their first line starts under the bar as a tab's first
- * row does: 16 under the bar's foot on a phone (the web's 18 under the line), and on a tablet 32 under
- * the header's pen line, as Notifications' and the feed's do (round 5 E2) — 16 there sat too tight.
+ * row does: 16 under the bar's foot on a phone (the web's 18 under the line), and on a tablet the
+ * header's air under its pen line, as Notifications' and the feed's (round 5 E2) — 16 there sat too tight.
  */
 @Composable
 private fun Modifier.settingsPadding(): Modifier =
-    padding(start = 20.dp, end = 20.dp, bottom = 20.dp, top = settingsTop(LocalWindowLayout.current.cls))
+    padding(start = 20.dp, end = 20.dp, bottom = 20.dp, top = settingsTop(LocalWindowLayout.current))
 
 /** Under the bar's foot to the settings' first line (see [settingsPadding]). */
-internal fun settingsTop(cls: LayoutClass): Dp = titledBarGap(cls, tabletAir = true)
+internal fun settingsTop(layout: WindowLayout): Dp = titledBarGap(layout, tabletAir = true)
 
 @Composable
 private fun MenuRow(section: SettingsSection, onClick: () -> Unit) {

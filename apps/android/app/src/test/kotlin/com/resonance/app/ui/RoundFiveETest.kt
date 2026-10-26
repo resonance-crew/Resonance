@@ -3,6 +3,7 @@ package com.resonance.app.ui
 import androidx.compose.ui.unit.dp
 import com.resonance.app.thoughtmap.ThoughtMapStore
 import com.resonance.design.LayoutClass
+import com.resonance.design.WindowLayout
 import com.resonance.geometry.MapCamera
 import com.resonance.geometry.mapNodeRect
 import org.junit.Assert.assertEquals
@@ -30,21 +31,33 @@ class RoundFiveETest {
 
     // E2
 
-    @Test fun aTabletsTitledTabsStart32UnderThePenLineButMessagesKeepsItsPanes() {
+    @Test fun aTabletsTitledTabsStartUnderThePenLineByItsWidthButMessagesKeepsItsPanes() {
         val penLine = 1.4f + 1.8f
-        assertEquals(16f, titledBarGap(LayoutClass.Compact, tabletAir = true).value, 0.001f)
-        for (cls in listOf(LayoutClass.Medium, LayoutClass.Expanded)) {
-            assertEquals(32f - penLine, titledBarGap(cls, tabletAir = true).value, 0.001f)
-            assertEquals(16f, titledBarGap(cls, tabletAir = false).value, 0.001f)
+        assertEquals(16f, titledBarGap(WindowLayout(400.dp), tabletAir = true).value, 0.001f)
+        for ((width, air) in listOf(700f to 32f, 1000f to 40f, 1280f to 51.2f)) {
+            assertEquals(air - penLine, titledBarGap(WindowLayout(width.dp), tabletAir = true).value, 0.001f)
+            assertEquals(16f, titledBarGap(WindowLayout(width.dp), tabletAir = false).value, 0.001f)
         }
     }
 
-    @Test fun aTabletsSettingsStart32UnderThePenLineAsItsTabsDo() {
-        val penLine = 1.4f + 1.8f
-        assertEquals(16f, settingsTop(LayoutClass.Compact).value, 0.001f)
-        for (cls in listOf(LayoutClass.Medium, LayoutClass.Expanded)) {
-            assertEquals(32f - penLine, settingsTop(cls).value, 0.001f)
+    @Test fun whatFloatsOverTheMapStandsWhereAPushedPagesBarPutsItsOwn() {
+        // The bar's row line: the 72 row's middle, 6 lower; the ← glyph's centre, its 48 hit box hanging 16 into the pad.
+        assertEquals(42f, com.resonance.design.TabletBarRowLine.value, 0.001f)
+        // On a wide tablet as far in as the row line lies under the status bar (the pad would put it 56 in); 8 past a narrow one's pad.
+        assertEquals(42f, com.resonance.design.tabletBackCentre(48.dp).value, 0.001f)
+        assertEquals(32f, com.resonance.design.tabletBarGlyphInset(24.dp).value, 0.001f)
+        // A tab root's lockup and pen keep the edge where those glyphs end: 33 in on a wide tablet, the pad's 23–24 on a narrow one.
+        assertEquals(33f, com.resonance.design.tabletBarEdge(48.dp).value, 0.001f)
+        assertEquals(23f, com.resonance.design.tabletBarEdge(24.dp).value, 0.001f)
+    }
+
+    @Test fun aTabletsSettingsStartUnderThePenLineAsItsTabsDo() {
+        assertEquals(16f, settingsTop(WindowLayout(400.dp)).value, 0.001f)
+        for (width in listOf(700f, 1000f, 1280f)) {
+            assertEquals(titledBarGap(WindowLayout(width.dp), tabletAir = true), settingsTop(WindowLayout(width.dp)))
         }
+        // A landscape tablet's settings start lower than an upright one's: the air follows the sides.
+        assertTrue(settingsTop(WindowLayout(1280.dp)) > settingsTop(WindowLayout(800.dp)))
     }
 
     @Test fun aCardPagesListHeadingsHaveTheSameRoomOnATablet() {
@@ -93,8 +106,9 @@ class RoundFiveETest {
 
     @Test fun theDividerResizesTheEditorBetween32And50PercentAndHidesItFromUnder18() {
         val w = 1000f
-        // Toward the map grows it, never past half; toward the trailing edge the pane follows the finger.
-        assertEquals(0.5f, PaneDrag.follow(0.4f, -300f, w), 0.0001f)
+        // Toward the map grows it, past half over the map, never past the window; toward the trailing edge the pane follows the finger.
+        assertEquals(0.7f, PaneDrag.follow(0.4f, -300f, w), 0.0001f)
+        assertEquals(1f, PaneDrag.follow(0.4f, -900f, w), 0.0001f)
         assertEquals(0.36f, PaneDrag.follow(0.4f, 40f, w), 0.0001f)
         assertEquals(0.1f, PaneDrag.follow(0.4f, 300f, w), 0.0001f)
         assertEquals(0f, PaneDrag.follow(0.4f, 900f, w), 0.0001f)
@@ -112,6 +126,50 @@ class RoundFiveETest {
         // Docked: drawn far enough toward the map, it shows again.
         assertTrue(PaneDrag.reveals(20f, 16f))
         assertFalse(PaneDrag.reveals(10f, 16f))
+    }
+
+    @Test fun letGoFrom75PercentTheWriterTakesTheWholeWindowAndBetweenHalfAnd75ItSpringsBackToHalf() {
+        val w = 1000f
+        // Half stays half; past it, short of the full zone, it springs back to half.
+        assertEquals(PaneDrag.Release.Stay, PaneDrag.release(0.5f))
+        assertEquals(0.5f, PaneDrag.settle(0.5f))
+        assertEquals(PaneDrag.Release.SpringToHalf, PaneDrag.release(0.501f))
+        assertEquals(PaneDrag.Release.SpringToHalf, PaneDrag.release(0.749f))
+        assertEquals(0.5f, PaneDrag.settle(0.6f))
+        // The full zone: from 75 % it takes the whole window.
+        assertFalse(PaneDrag.inFullZone(0.749f))
+        assertTrue(PaneDrag.inFullZone(0.75f))
+        assertEquals(PaneDrag.Release.Full, PaneDrag.release(0.75f))
+        assertEquals(1f, PaneDrag.settle(0.75f))
+        assertEquals(1f, PaneDrag.settle(1f))
+        // From the whole window, dragged back toward the trailing side by the same rules.
+        assertEquals(PaneDrag.Release.Full, PaneDrag.release(PaneDrag.follow(1f, 200f, w)))
+        assertEquals(0.5f, PaneDrag.settle(PaneDrag.follow(1f, 400f, w)))
+        assertEquals(0.45f, PaneDrag.settle(PaneDrag.follow(1f, 550f, w)), 0.0001f)
+        assertEquals(PaneDrag.Release.Hide, PaneDrag.release(PaneDrag.follow(1f, 900f, w)))
+        // The grip docks 22 in from whichever edge the boundary has reached, and stands on the boundary between.
+        assertEquals(22f, PaneDrag.gripCentre(1f, w, 22f))
+        assertEquals(978f, PaneDrag.gripCentre(0f, w, 22f))
+        assertEquals(500f, PaneDrag.gripCentre(0.5f, w, 22f))
+        assertEquals(22f, PaneDrag.gripCentre(0.99f, w, 22f))
+    }
+
+    @Test fun hiddenFromTheWholeWindowThePaneShowsAgainAtHalf() {
+        assertEquals(0.5f, PaneDrag.showsAgainAt(1f))
+        assertEquals(0.4f, PaneDrag.showsAgainAt(0.4f))
+        assertEquals(0.32f, PaneDrag.showsAgainAt(0f))
+        // The writer alone is the whole window left open, held or not; covering the map once drawn all the way over it.
+        val alone = PaneState(PaneCard(ROUTE_SLOT, null, "c1", null, fromMap = true), open = true, frac = 1f)
+        assertTrue(alone.full)
+        assertTrue(alone.covers)
+        alone.drag = 0.8f
+        assertTrue(alone.full)
+        assertFalse(alone.covers)
+        assertTrue(alone.inFullZone)
+        alone.drag = 0.6f
+        assertFalse(alone.inFullZone)
+        assertFalse(PaneState(PaneCard(ROUTE_SLOT, null, "c1", null, fromMap = false), open = true, frac = 0.5f).full)
+        assertFalse(PaneState(PaneCard(ROUTE_SLOT, null, "c1", null, fromMap = false), open = false, frac = 1f).full)
     }
 
     @Test fun theWorkspacesPaneKeepsWhatItShowsAndWhereItWasLeft() {

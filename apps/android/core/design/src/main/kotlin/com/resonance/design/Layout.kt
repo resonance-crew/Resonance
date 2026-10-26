@@ -53,14 +53,19 @@ enum class LayoutClass {
 /** A bar's pen line above its foot: the wave's 1.4 and the pen ([headerLineY]). */
 val BarLineInset: Dp = (1.4f + Tokens.Ink.value).dp
 
-/** How far below the header's pen line a tablet's page starts its first content (round 5 E2). */
-val TabletHeaderAir: Dp = 32.dp
+/**
+ * How far below the header's pen line a tablet's page starts its first content (round 5 E2) in a
+ * window [width] across: 4 % of it — the rule the page's side pad follows — between 32 and 56. The
+ * air above grows with the paper at the sides: an upright tablet keeps about 32, a landscape one,
+ * its sides wide, gets 48 to 56 (a 1280-wide tablet 51).
+ */
+fun tabletHeaderAir(width: Float): Dp = (width * 0.04f).coerceIn(32f, 56f).dp
 
 /**
  * Where a page's first content starts below its bar's foot (round 5 E2): a phone keeps the page's
- * own [phone] gap; a tablet (medium, expanded) starts it [TabletHeaderAir] below the header's pen line.
+ * own [phone] gap; a tablet (medium, expanded) starts it [tabletHeaderAir] below the header's pen line.
  */
-fun LayoutClass.firstContentGap(phone: Dp): Dp = if (this == LayoutClass.Compact) phone else TabletHeaderAir - BarLineInset
+fun WindowLayout.firstContentGap(phone: Dp): Dp = if (cls == LayoutClass.Compact) phone else tabletHeaderAir(width.value) - BarLineInset
 
 /**
  * The reading head (round 9 §2, `--story-head-gap` / `--story-head-cover-gap`): from the bar's pen

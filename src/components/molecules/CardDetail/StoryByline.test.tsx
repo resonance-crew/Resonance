@@ -8,8 +8,8 @@ import zh from '@/messages/zh-TW.json';
 import { StoryByline } from './StoryByline';
 
 vi.mock('@/i18n/navigation', () => ({
-  Link: ({ href, children, className }: { href: string; children: ReactNode; className?: string }) => (
-    <a href={href} className={className}>
+  Link: ({ href, children, ...rest }: { href: string; children: ReactNode } & Record<string, unknown>) => (
+    <a href={href} {...rest}>
       {children}
     </a>
   ),
@@ -30,6 +30,15 @@ describe('StoryByline', () => {
     expect(container.querySelector('time')).toHaveAttribute('dateTime', published.dateTime);
     // The actions close the row.
     expect(container.firstElementChild!.lastElementChild).toContainElement(screen.getByRole('button', { name: '分享' }));
+  });
+
+  it('takes a tap on the avatar to the profile too, leaving the pen name the one link a keyboard or screen reader meets', () => {
+    const { container } = renderWithIntl(<StoryByline author={author} minutes={6} published={published} />, { locale: 'zh-TW', messages: zh });
+    const links = [...container.querySelectorAll('a')];
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/u/雨日小記', '/u/雨日小記']);
+    expect(links[0]).toHaveAttribute('tabindex', '-1');
+    expect(links[0]).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getAllByRole('link')).toHaveLength(1);
   });
 
   it('names no one on an anonymous card: the neutral mark and 匿名, linking nowhere', () => {

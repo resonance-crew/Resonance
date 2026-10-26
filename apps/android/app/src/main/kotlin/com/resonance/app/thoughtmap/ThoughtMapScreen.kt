@@ -94,6 +94,9 @@ import com.resonance.design.scrollFade
 import com.resonance.design.prefersReducedMotion
 import com.resonance.design.plainClickable
 import com.resonance.design.wavyLinePath
+import com.resonance.design.LocalWindowLayout
+import com.resonance.design.TabletBarRowLine
+import com.resonance.design.tabletBackCentre
 import com.resonance.geometry.MapCamera
 import com.resonance.geometry.seedFromString
 import com.resonance.kit.l10n.L10n
@@ -233,9 +236,11 @@ private const val CENTRE_MILLIS = 300f
 
 @Composable
 private fun BoxScope.Chrome(store: ThoughtMapStore, session: Session, leave: () -> Unit, addGroup: () -> Unit) {
-    val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp
+    val status = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val scope = rememberCoroutineScope()
+    val layout = LocalWindowLayout.current
+    val tablet = layout.topTabs
 
     // The controls float over the map's boxes and arrows, so none is framed in a pen line
     // that would tangle with theirs: the tools are tonal pills, the one verb (add a card) solid.
@@ -245,9 +250,14 @@ private fun BoxScope.Chrome(store: ThoughtMapStore, session: Session, leave: () 
     val density = LocalDensity.current
     var toolsHeight by remember { mutableIntStateOf(0) }
     val leaveHeight = if (toolsHeight > 0) with(density) { toolsHeight.toDp() } else with(density) { (14 * 1.3f).sp.toDp() } + 18.dp
+    // A phone's row 8 under the status bar, where its bar's arrow is. A tablet's stands where a pushed page's bar puts
+    // its own (round 15): its middle on the bar's row line, Leave's arrow on the header's ←, and every control as far
+    // in from its edges — the tools from the trailing one, the zoom sheet from the leading one and the foot.
+    val top = if (tablet) status + TabletBarRowLine - leaveHeight / 2 else status + 8.dp
+    val edge = if (tablet) tabletBackCentre(layout.pad) - leaveHeight * LEAVE_ASPECT / 2 else 20.dp
     OrganicButton(
         L10n.Me.ThoughtMap.leave,
-        Modifier.align(Alignment.TopStart).padding(start = 20.dp, top = top).size(leaveHeight * LEAVE_ASPECT, leaveHeight),
+        Modifier.align(Alignment.TopStart).padding(start = edge, top = top).size(leaveHeight * LEAVE_ASPECT, leaveHeight),
         variant = ButtonVariant.Tonal, icon = IconName.ArrowRight, small = true, iconOnly = true, iconSize = 15.dp, mirrorIcon = true,
     ) {
         store.commitEditors()
@@ -255,7 +265,7 @@ private fun BoxScope.Chrome(store: ThoughtMapStore, session: Session, leave: () 
     }
 
     Row(
-        Modifier.align(Alignment.TopEnd).padding(end = 20.dp, top = top).onSizeChanged { toolsHeight = it.height },
+        Modifier.align(Alignment.TopEnd).padding(end = edge, top = top).onSizeChanged { toolsHeight = it.height },
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         OrganicButton(L10n.Me.ThoughtMap.addGroupShort, variant = ButtonVariant.Tonal, icon = IconName.Frame, small = true, iconSize = 15.dp) {
@@ -269,7 +279,8 @@ private fun BoxScope.Chrome(store: ThoughtMapStore, session: Session, leave: () 
         }
     }
 
-    ZoomCluster(store, Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 16.dp + bottom))
+    val zoomEdge = if (tablet) edge else 16.dp
+    ZoomCluster(store, Modifier.align(Alignment.BottomStart).padding(start = zoomEdge, bottom = zoomEdge + bottom))
 
     if (store.loaded && store.isEmpty && !store.trayOpen) {
         Column(

@@ -6,12 +6,18 @@ import SwiftUI
 /// its grip makes of it. Between 32 % and 50 % it resizes the pane (the web's limits); past 32 %
 /// toward the trailing edge the pane, kept at 32 %, slides after the finger; under 18 % shown, it is
 /// in the hide zone, where letting go hides it. Let go between 18 % and 32 %, it springs back to 32 %.
+/// Past 50 % toward the leading edge the pane slides on over the map; let go from 75 % it takes the
+/// whole width — writing alone, under the writer's own bar — and between 50 % and 75 % it springs
+/// back to 50 %. From the whole width, the grip docked at the leading edge, the same rules bring it
+/// back: let go under 75 %, it is the 1:1 split again.
 enum EditorSplit {
     /// The web's MIN_EDITOR_FRAC and MAX_EDITOR_FRAC.
     static let minFraction: CGFloat = 0.32
     static let maxFraction: CGFloat = 0.5
     /// Narrower than this shown, a release hides the pane.
     static let hideFraction: CGFloat = 0.18
+    /// From this wide shown, a release gives the pane the whole width.
+    static let fillFraction: CGFloat = 0.75
     /// One VoiceOver swipe on the grip.
     static let step: CGFloat = 0.05
 
@@ -23,23 +29,29 @@ enum EditorSplit {
         var shown: CGFloat
         /// Let go here, the pane hides (it dims, the pill says so).
         var hides: Bool
+        /// Let go here, the pane takes the whole width (the pill says so).
+        var fills = false
     }
 
     /// The pane with its boundary at `x` in a workspace `width` across.
     static func drag(to x: CGFloat, width: CGFloat) -> Drag {
         guard width > 0 else { return Drag(width: maxFraction, shown: maxFraction, hides: false) }
-        let shown = min(max((width - x) / width, 0), maxFraction)
-        return Drag(width: max(shown, minFraction), shown: shown, hides: shown < hideFraction)
+        let shown = min(max((width - x) / width, 0), 1)
+        return Drag(width: max(shown, minFraction), shown: shown, hides: shown < hideFraction, fills: shown >= fillFraction)
     }
 
     enum Release: Equatable {
-        /// The pane stays, this wide (sprung back to the minimum when let go below it).
+        /// The pane stays, this wide (sprung back to the minimum when let go below it, to 50 % above it).
         case resize(CGFloat)
         case hide
+        /// The pane takes the whole width.
+        case fill
     }
 
     static func release(shown: CGFloat) -> Release {
-        shown < hideFraction ? .hide : .resize(min(max(shown, minFraction), maxFraction))
+        if shown < hideFraction { return .hide }
+        if shown >= fillFraction { return .fill }
+        return .resize(min(max(shown, minFraction), maxFraction))
     }
 
     /// The pane `steps` VoiceOver swipes wider (negative: narrower), within the limits.
@@ -69,6 +81,10 @@ enum EditorSplit {
     /// Out of the page from either step (the Leave on the map at the split): the question first while
     /// there is writing, then the page goes.
     var leave: (() -> Void)?
+    /// The workspace's own way back from writing, asked before the writer leaves the page: true when it
+    /// took it — the pane at the whole width over a card the map opened goes back to the map. Set by
+    /// the workspace, never cleared with the card.
+    var backToMap: () -> Bool = { false }
 
     func clear() {
         saveNow = {}
@@ -86,8 +102,12 @@ enum EditorSplit {
 /// the pane open on its card; the map page with the pane closed. One of my cards tapped on the map
 /// opens in the pane, in place (the card there saved first); anyone else's opens its page. Hidden,
 /// the map takes the width and the grip docks at the trailing edge while there is a card to show
-/// again, as it was. Narrower than 1200 nothing changes: the writer is the editor under its bar, the
-/// map page the map alone, whose cards push the writer.
+/// again, as it was. Dragged on toward the leading edge the pane takes the whole width (``EditorSplit``):
+/// the map under it, the writer under its own bar as below the split, whose back goes where the card
+/// came from — a card the map opened back to the map (the pane hidden, shown again at 1:1), the
+/// writer's own card out of the page to whatever opened it (a card page, the card box, the map page).
+/// Narrower than 1200 nothing changes: the writer is the editor under its bar, the map page the map
+/// alone, whose cards push the writer.
 struct WriteWorkspace: View {
     enum Entry: Equatable {
         case writer(WriteLauncher.Request)
@@ -123,8 +143,10 @@ struct WriteWorkspace: View {
     @State private var pane = WritePane()
     private static let space = "write.workspace"
 
-    /// The pane's first line, level with the Back floating on the canvas (both under the status bar).
-    static let paneTop: CGFloat = 8
+    /// Where the pane's first row, `row` tall, starts under the status bar: its middle on a pushed
+    /// page's row line, where the map's controls stand beside it (``HeaderChrome/rowLine``) — so the
+    /// floating ✓ is where the writer's bar puts it at the whole width, and nothing moves between the two.
+    static func paneTop(row: CGFloat) -> CGFloat { HeaderChrome.rowLine - row / 2 }
 
     init(entry: Entry) {
         self.entry = entry
@@ -140,6 +162,9 @@ struct WriteWorkspace: View {
 
     private var split: Bool { window.writerSplit }
     private var isWriter: Bool { entry != .map }
+    /// The pane takes the whole width at the split (a drag on its grip still counts: the chrome
+    /// changes only as it is let go).
+    private var full: Bool { split && open && card != nil && fraction >= 1 }
 
     var body: some View {
         GeometryReader { geo in
@@ -149,8 +174,17 @@ struct WriteWorkspace: View {
         .background(Tokens.cream)
         .toolbar(.hidden, for: .navigationBar)
         // The edge swipe asks the writer's question while the pane's card holds writing.
-        .takesSwipeBack(while: { pane.holds() }) { back() }
+        // At the whole width over a card the map opened, it goes back to the map rather than out of the page.
+        .takesSwipeBack(while: { pane.holds() || (full && fromMap) }) { back() }
         .sensoryFeedback(.impact(weight: .light), trigger: drag?.hides ?? false) { was, now in !was && now }
+        .sensoryFeedback(.impact(weight: .light), trigger: drag?.fills ?? false) { was, now in !was && now }
+        .onAppear {
+            pane.backToMap = {
+                guard full, fromMap else { return false }
+                backToMap()
+                return true
+            }
+        }
         .sensoryFeedback(.impact(weight: .light), trigger: hidings)
         // Narrowed under the split, the map page is the map alone again: a card in its pane is saved
         // and let go (its cards then push the writer, which would otherwise open it twice).
@@ -168,13 +202,16 @@ struct WriteWorkspace: View {
             if showsMap {
                 // The card the pane shows: the one opened over the writer's (or from the map), else the
                 // writer's own once it has an id.
+                // Under a pane wider than half, the map keeps its half: the pane slides over it.
                 ThoughtMapScreen(openCard: split ? { openFromMap($0) } : nil, back: { leaveFromMap() },
                                  focus: { card?.cardId ?? pane.cardId() }, settled: settled)
-                    .frame(width: split ? max(0, w - shown) : w)
+                    .frame(width: split ? max(0, w - min(shown, EditorSplit.maxFraction * w)) : w)
+                    .allowsHitTesting(!full)
+                    .accessibilityHidden(full)
             }
             if let card, split || isWriter {
                 let paneW = split ? paneWidth * w : w
-                WriteScreen(request: card, pane: pane, showsBar: !split, onDone: fromMap ? { done() } : nil)
+                WriteScreen(request: card, pane: pane, showsBar: !split || full, onDone: fromMap ? { done() } : nil)
                     .id(card)
                     .frame(width: paneW)
                     // The boundary: a hair of line on the pane's own leading edge, from the top.
@@ -214,7 +251,8 @@ struct WriteWorkspace: View {
     private func grip(width w: CGFloat, shown: CGFloat) -> some View {
         let docked = !open && drag == nil
         // Docked, and drawn out by a finger: the grip rides the pane's edge once it is past the dock.
-        let x = docked ? w - max(Self.dockInset, shown) : w - shown
+        // At the whole width it docks at the leading edge, as far in.
+        let x = docked ? w - max(Self.dockInset, shown) : max(Self.dockInset, w - shown)
         return GeometryReader { geo in
             EditorGripFace(active: drag != nil || docking != nil)
                     .frame(width: Self.gripTarget.width, height: Self.gripTarget.height)
@@ -223,10 +261,20 @@ struct WriteWorkspace: View {
                     // The pill by the grip, toward the map, while a release would hide the pane.
                     .overlay(alignment: .trailing) {
                         if drag?.hides == true {
-                            ReleasePill()
+                            ReleasePill(text: L10n.Write.releaseToClose)
                                 .fixedSize()
                                 // Its trailing end 4 before the grip's target, 12 before its face.
                                 .offset(x: -(Self.gripTarget.width + 4))
+                                .transition(.opacity)
+                        }
+                    }
+                    // The pill toward the pane while a release would give it the whole width (near the
+                    // leading edge there is no room on the map's side).
+                    .overlay(alignment: .leading) {
+                        if drag?.fills == true {
+                            ReleasePill(text: L10n.Write.releaseToFull)
+                                .fixedSize()
+                                .offset(x: Self.gripTarget.width + 4)
                                 .transition(.opacity)
                         }
                     }
@@ -243,9 +291,16 @@ struct WriteWorkspace: View {
                     .accessibilityAction(named: open ? L10n.Write.closeEditor : L10n.Write.openEditor) {
                         if open { hide() } else { show() }
                     }
+                    .accessibilityAction(named: full ? L10n.Write.showMap : L10n.Write.fullEditor) {
+                        if full { resize(to: EditorSplit.maxFraction) } else if open { fill() } else { show(); fill() }
+                    }
                     .position(x: x, y: geo.size.height / 2)
             .animation(.easeOut(duration: 0.12), value: drag?.hides ?? false)
+            .animation(.easeOut(duration: 0.12), value: drag?.fills ?? false)
         }
+        // The window's middle whatever the keyboard takes: the format bar coming up under the story
+        // never moves the grip.
+        .ignoresSafeArea(.keyboard)
     }
 
     /// The docked grip's centre, in from the trailing edge.
@@ -266,17 +321,18 @@ struct WriteWorkspace: View {
                 }
             }
             .onEnded { value in
-                if open {
+                if open, fraction >= 1, abs(value.translation.width) < 8, abs(value.translation.height) < 8 {
+                    // A tap on the grip docked at the leading edge: the 1:1 split again.
+                    resize(to: EditorSplit.maxFraction)
+                } else if open {
                     let last = EditorSplit.drag(to: w - fraction * w + value.translation.width, width: w)
                     switch EditorSplit.release(shown: last.shown) {
                     case .hide:
                         hide()
+                    case .fill:
+                        fill()
                     case let .resize(share):
-                        withAnimation(reduceMotion ? nil : .spring(duration: 0.3, bounce: 0.12)) {
-                            fraction = share
-                            drag = nil
-                        }
-                        settled += 1
+                        resize(to: share)
                     }
                 } else if EditorSplit.showsAgain(translation: value.translation) {
                     show()
@@ -284,6 +340,24 @@ struct WriteWorkspace: View {
                     withAnimation(.easeOut(duration: 0.2)) { docking = nil }
                 }
             }
+    }
+
+    /// The pane at `share` of the width, springing there.
+    private func resize(to share: CGFloat) {
+        withAnimation(reduceMotion ? nil : .spring(duration: 0.3, bounce: 0.12)) {
+            fraction = share
+            drag = nil
+        }
+        settled += 1
+    }
+
+    /// The pane over the whole width: writing alone, under the writer's own bar.
+    private func fill() {
+        withAnimation(reduceMotion ? nil : .spring(duration: 0.3, bounce: 0.12)) {
+            fraction = 1
+            drag = nil
+        }
+        UIAccessibility.post(notification: .screenChanged, argument: nil)
     }
 
     /// One VoiceOver swipe on the grip.
@@ -295,9 +369,10 @@ struct WriteWorkspace: View {
     // MARK: - Showing, hiding, opening
 
     /// Hides the pane (slides out in 200 ms; reduced motion: fades), the draft saved at once and the
-    /// editor kept as it is.
+    /// editor kept as it is. Hidden from the whole width, it comes back at the 1:1 split.
     private func hide() {
         pane.saveNow()
+        if fraction > EditorSplit.maxFraction { fraction = EditorSplit.maxFraction }
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         hidings += 1
         if reduceMotion {
@@ -351,6 +426,12 @@ struct WriteWorkspace: View {
         if open { settled += 1 } else { show() }
     }
 
+    /// Back from writing at the whole width over a card the map opened: the map as it was before the
+    /// card opened, the pane hidden (its card kept behind the docked grip, shown again at 1:1).
+    private func backToMap() {
+        hide()
+    }
+
     /// Done with a card the map opened (published, revised, dropped, saved and left): the pane hides
     /// and lets it go — there is nothing to show again.
     private func done() {
@@ -363,6 +444,8 @@ struct WriteWorkspace: View {
     }
 
     private func forget() {
+        // The next card opens at the split, not over the whole width.
+        if fraction > EditorSplit.maxFraction { fraction = EditorSplit.maxFraction }
         pane.clear()
         card = nil
         fromMap = false
@@ -402,10 +485,13 @@ private struct EditorGripFace: View {
     }
 }
 
-/// 「放開以收起編輯區」: the small tonal pill by the grip while a release would hide the pane.
+/// 「放開以收起編輯區」 / 「放開以全寬書寫」: the small tonal pill by the grip while a release would hide
+/// the pane, or give it the whole width.
 private struct ReleasePill: View {
+    let text: String
+
     var body: some View {
-        Text(L10n.Write.releaseToClose)
+        Text(text)
             .font(AppFonts.body(13, weight: .medium))
             .foregroundStyle(Tokens.buttonOnTonal)
             .padding(.horizontal, 12)

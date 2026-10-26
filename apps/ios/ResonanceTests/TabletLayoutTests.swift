@@ -26,7 +26,14 @@ import Testing
         // L = (W − G) / 2 − P − 16: a 600 window, glyphs alone (G 206), keeps 157 for the lockup —
         // not enough for the mark and the wordmark, which leave the mark alone.
         #expect(HeaderChrome.leadingRoom(width: 600, groupWidth: 206) == 157)
-        #expect(abs(HeaderChrome.leadingRoom(width: 1032, groupWidth: 420) - (306 - 41.28 - 16)) < 0.01)
+        // From the header's edge (round 15: 33 in on a wide window, where a pushed page's ← glyph ends).
+        #expect(abs(HeaderChrome.leadingRoom(width: 1032, groupWidth: 420) - (306 - 33 - 16)) < 0.01)
+        #expect(HeaderChrome.edge(width: 1376) == 33 && HeaderChrome.edge(width: 600) == 24)
+        // A bar row UIKit holds outside the window reads no inset: only a row in place measures the corner.
+        let window = CGRect(x: 0, y: 0, width: 1376, height: 1032)
+        #expect(WindowControlsInset.placed(CGRect(x: 33, y: 32, width: 1246, height: 72), in: window))
+        #expect(!WindowControlsInset.placed(CGRect(x: -109, y: -29, width: 154, height: 72), in: window))
+        #expect(!WindowControlsInset.placed(.zero, in: window))
         #expect(HeaderChrome.leadingRoom(width: 300, groupWidth: 400) == 0)
         // Words go when the labelled group is wider than W − 2 × (P + 152).
         #expect(abs(HeaderChrome.labelRoom(width: 900) - (900 - 2 * (36 + 152))) < 0.01)

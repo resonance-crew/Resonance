@@ -66,6 +66,7 @@ import com.resonance.design.AppFonts
 import com.resonance.design.LocalWindowLayout
 import com.resonance.design.Mixes
 import com.resonance.design.OrganicIcon
+import com.resonance.design.WobRectShape
 import com.resonance.design.cream
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
@@ -98,36 +99,58 @@ internal const val ROUTE_SLOT = "route"
  * The divider between the map and the editor pane (round 5 E5; the web's WorkspaceShell), as
  * fractions of the window's width. Dragged, the editor is 32 % to 50 % of it; dragged on toward
  * the trailing edge past 32 % the pane follows the finger, and under 18 % it is in the hide zone:
- * let go there it hides, let go between 18 % and 32 % it springs back to 32 %.
+ * let go there it hides, let go between 18 % and 32 % it springs back to 32 %. Dragged on toward
+ * the leading edge past half it slides over the map, and from 75 % it is in the full zone: let go
+ * there the pane takes the whole window ([WHOLE], the writer alone), let go between 50 % and 75 %
+ * it springs back to half — dragged back from the whole window by the same rules.
  */
 internal object PaneDrag {
     const val MIN = 0.32f
     const val MAX = 0.5f
     const val HIDE = 0.18f
+    const val FULL = 0.75f
+    const val WHOLE = 1f
 
-    /** Where a drag that began at [start] leaves the pane after [dx] px (+ toward the trailing edge) across a [width] px window: never wider than [MAX]. */
+    /** Where a drag that began at [start] leaves the pane after [dx] px (+ toward the trailing edge) across a [width] px window: never wider than the window. */
     fun follow(start: Float, dx: Float, width: Float): Float =
-        if (width <= 0f) start else (start - dx / width).coerceIn(0f, MAX)
+        if (width <= 0f) start else (start - dx / width).coerceIn(0f, WHOLE)
 
     fun inHideZone(fraction: Float): Boolean = fraction < HIDE
 
-    enum class Release { Hide, SpringBack, Stay }
+    fun inFullZone(fraction: Float): Boolean = fraction >= FULL
+
+    enum class Release { Hide, SpringBack, Stay, SpringToHalf, Full }
 
     fun release(fraction: Float): Release = when {
         fraction < HIDE -> Release.Hide
         fraction < MIN -> Release.SpringBack
-        else -> Release.Stay
+        fraction <= MAX -> Release.Stay
+        fraction < FULL -> Release.SpringToHalf
+        else -> Release.Full
     }
 
-    /** The width a release leaves the pane at: hidden (0), sprung back to [MIN], or where it was let go. */
+    /** The width a release leaves the pane at: hidden (0), sprung back to [MIN] or to half, where it was let go, or the whole window. */
     fun settle(fraction: Float): Float = when (release(fraction)) {
         Release.Hide -> 0f
         Release.SpringBack -> MIN
-        Release.Stay -> fraction.coerceAtMost(MAX)
+        Release.Stay -> fraction
+        Release.SpringToHalf -> MAX
+        Release.Full -> WHOLE
     }
+
+    /** The width showing a hidden pane again brings back: where it was left beside the map — half, after the whole window. */
+    fun showsAgainAt(frac: Float): Float = frac.coerceIn(MIN, MAX)
 
     /** A drag on the docked grip toward the leading side this far (px, of [reveal]) shows the pane again. */
     fun reveals(towardLeading: Float, reveal: Float): Boolean = towardLeading >= reveal
+
+    /**
+     * Where the grip's centre stands across a [window] px wide (px from the leading edge) with the
+     * pane drawn at [fraction]: on the boundary, never nearer either edge than [dock] — so hidden
+     * it waits docked at the trailing edge, and the pane taking the whole window, at the leading one.
+     */
+    fun gripCentre(fraction: Float, window: Float, dock: Float): Float =
+        if (fraction <= 0f) window - dock else (window * (1f - fraction)).coerceIn(dock, max(dock, window - dock))
 }
 
 /** The pane: what it shows, whether it is open, its last width, and the width it is drawn at now (all of the window). */
@@ -135,7 +158,7 @@ internal object PaneDrag {
 internal class PaneState(card: PaneCard?, open: Boolean, frac: Float, settled: Int = if (open && card != null) 1 else 0) {
     var card by mutableStateOf(card)
     var open by mutableStateOf(open && card != null)
-    /** The width the person last left it at (32 %…50 %): showing it again brings it back there. */
+    /** The width the person last left it at (32 %…50 %, or the whole window): showing it again brings it back there ([PaneDrag.showsAgainAt]). */
     var frac by mutableFloatStateOf(frac)
     /** The width it is drawn at (0: hidden), but while the grip is held. */
     val shown = Animatable(if (open && card != null) frac else 0f)
@@ -152,6 +175,14 @@ internal class PaneState(card: PaneCard?, open: Boolean, frac: Float, settled: I
 
     val drawn: Float get() = drag ?: shown.value
     val inHideZone: Boolean get() = drag?.let(PaneDrag::inHideZone) == true
+    val inFullZone: Boolean get() = drag?.let(PaneDrag::inFullZone) == true
+    /**
+     * The writer alone: the pane left at the whole window (the map under it hidden from TalkBack, the writer in its
+     * own bar) — while its grip is held too, so nothing changes under the finger until it lets go.
+     */
+    val full: Boolean get() = open && frac >= PaneDrag.WHOLE
+    /** [full], and drawn all the way over the map: the map is no longer placed, so it neither draws nor takes a touch. */
+    val covers: Boolean get() = full && drawn >= PaneDrag.WHOLE
 
     companion object {
         val Saver = listSaver<PaneState, Any?>(
@@ -177,6 +208,14 @@ internal class PaneState(card: PaneCard?, open: Boolean, frac: Float, settled: I
  * The divider's grip is the only way to hide the pane ([PaneDrag]); hidden, the map takes the
  * whole width and the grip waits docked at the trailing edge while there is a card to show again.
  * Hiding saves the draft at once and keeps the writer as it was, composed off screen.
+ *
+ * Dragged on toward the leading edge the pane slides over the map (which keeps its width at half)
+ * and, let go from 75 %, takes the whole window: the writer alone, in its own bar as below the
+ * split (the same writer, still composed), the map under it hidden and untouchable, the grip docked
+ * at the leading edge — tapped, or dragged back past 75 %, the split at half again. Its back from
+ * writing goes where the writer came from: a card from the map hides the pane (saved, no question;
+ * showing it again is the split at half), any other leaves the page by the writer's rule. Never kept
+ * from one visit to the next.
  *
  * The map opens framing everything on it (its 顯示全部), the writer's map too, and frames it again as
  * its width changes and each time it settles beside the pane — opened with it or shown again,
@@ -242,9 +281,11 @@ internal fun Workspace(
     }
 
     // Saves the draft at once and keeps the writer as it is; the pane slides out (or fades, without motion).
+    // Hidden from the whole window, it comes back at half beside the map.
     fun hide() {
         if (!pane.open) return
         pane.open = false
+        pane.frac = PaneDrag.showsAgainAt(pane.frac)
         handle.releaseKeyboard()
         scope.launch {
             handle.saveNow()
@@ -256,6 +297,24 @@ internal fun Workspace(
                 pane.shown.snapTo(0f)
                 pane.fade.snapTo(1f)
             } else pane.shown.animateTo(0f, tween(PANE_SLIDE_MILLIS, easing = EaseOut))
+        }
+    }
+
+    // The writer alone: the pane slides on over the map to the whole window (the map keeps its width under it).
+    fun toFull() {
+        if (!pane.open) return
+        pane.frac = PaneDrag.WHOLE
+        scope.launch {
+            if (reduced) pane.shown.snapTo(PaneDrag.WHOLE) else pane.shown.animateTo(PaneDrag.WHOLE, tween(PANE_SLIDE_MILLIS, easing = EaseOut))
+        }
+    }
+
+    // From the whole window back to the split at half (the docked grip tapped, TalkBack's 顯示思想地圖).
+    fun toHalf() {
+        if (!pane.open) return
+        pane.frac = PaneDrag.MAX
+        scope.launch {
+            if (reduced) pane.shown.snapTo(PaneDrag.MAX) else pane.shown.animateTo(PaneDrag.MAX, tween(PANE_SLIDE_MILLIS, easing = EaseOut))
         }
     }
 
@@ -288,6 +347,7 @@ internal fun Workspace(
             mapShown -> {
                 pane.open = false
                 pane.card = null
+                pane.frac = PaneDrag.showsAgainAt(pane.frac)
                 scope.launch { pane.shown.snapTo(0f) }
             }
             else -> leave()
@@ -297,9 +357,12 @@ internal fun Workspace(
     // At the split the back is the workspace's: the writer's leave, or — the map come into — the pane hidden first.
     BackHandler(enabled = split && writer != null) { leavePage() }
     BackHandler(enabled = split && writer == null && pane.open) { hide() }
-    // A light tick on entering the hide zone.
+    // A light tick on entering the hide zone, and the full zone.
     LaunchedEffect(pane) {
         snapshotFlow { pane.inHideZone }.collect { if (it) haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate) }
+    }
+    LaunchedEffect(pane) {
+        snapshotFlow { pane.inFullZone }.collect { if (it) haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate) }
     }
 
     BoxWithConstraints(Modifier.fillMaxSize().cream()) {
@@ -311,12 +374,18 @@ internal fun Workspace(
             writer != null -> true
             else -> pane.open
         }
+        // The writer alone, the map stays composed under it at half the window: hidden from TalkBack, and — once the
+        // pane has slid all the way over it — not placed, so it takes no touch.
+        val writerAlone = split && pane.full
         if (mapShown) Box(
-            Modifier.layout { measurable, constraints ->
-                val w = if (split) (constraints.maxWidth * (1f - pane.drawn)).roundToInt() else constraints.maxWidth
-                val placeable = measurable.measure(Constraints.fixed(w.coerceAtLeast(0), constraints.maxHeight))
-                layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(0, 0) }
-            },
+            Modifier
+                .layout { measurable, constraints ->
+                    // Past half the pane slides over the map, which keeps the width it had beside it at half.
+                    val w = if (split) (constraints.maxWidth * (1f - minOf(pane.drawn, PaneDrag.MAX))).roundToInt() else constraints.maxWidth
+                    val placeable = measurable.measure(Constraints.fixed(w.coerceAtLeast(0), constraints.maxHeight))
+                    layout(constraints.maxWidth, constraints.maxHeight) { if (!(split && pane.covers)) placeable.place(0, 0) }
+                }
+                .then(if (writerAlone) Modifier.clearAndSetSemantics { } else Modifier),
         ) {
             ThoughtMapScreen(
                 session, session.thoughtMap, open,
@@ -333,7 +402,8 @@ internal fun Workspace(
                     .layout { measurable, constraints ->
                         val full = constraints.maxWidth
                         val f = pane.drawn
-                        // At the split it is its width of the window, sliding out past 32 % rather than squeezing; off screen when hidden.
+                        // At the split it is its width of the window, sliding out past 32 % rather than squeezing, over the map past
+                        // half; off screen when hidden.
                         val w = if (split) (full * max(f, PaneDrag.MIN)).roundToInt() else full
                         val x = when {
                             !paneOnScreen -> full
@@ -363,8 +433,10 @@ internal fun Workspace(
                             if (!card.fromMap) onCreated(id)
                         },
                         pane = handle,
-                        // Its own bar and back below the split; the workspace's at it.
-                        bar = !split,
+                        // Its own bar and back below the split, and at it with the writer alone; the workspace's at the split.
+                        bar = !split || writerAlone,
+                        // The writer alone on a card from the map: back from writing hides the pane, its draft saved, no question.
+                        paneBack = if (writerAlone && card.fromMap) ::hide else null,
                     ) { key -> finishCard(card, key) }
                 }
             }
@@ -373,6 +445,8 @@ internal fun Workspace(
             PaneGrip(
                 pane, window, reduced,
                 show = ::show,
+                full = ::toFull,
+                half = ::toHalf,
                 hide = {
                     haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
                     hide()
@@ -385,7 +459,9 @@ internal fun Workspace(
                     }
                 },
             )
-            if (pane.inHideZone) ReleasePill(pane)
+            if (pane.inHideZone) ReleasePill(pane, window, L10n.Write.releaseToClose, paneSide = false)
+            // Near the leading edge there is no room on the map's side: this one stands on the pane's.
+            if (pane.inFullZone) ReleasePill(pane, window, L10n.Write.releaseToFull, paneSide = true)
         }
     }
 }
@@ -393,12 +469,23 @@ internal fun Workspace(
 /**
  * The divider's grip (the web's railGrip): a small inked chip on the boundary, in the middle of
  * its height — 28 × 34, a hair of the fields' border, the arrows glyph — in a 44 × 48 touch
- * target. Dragged it resizes the pane, hides it from the hide zone, and — docked at the trailing
- * edge while the pane is hidden — shows it again, as a tap there does. An adjustable control for
- * TalkBack (its value the editor's width), with hide / show as its actions.
+ * target. Dragged it resizes the pane, hides it from the hide zone, gives it the whole window from
+ * the full zone, and — docked at the trailing edge while the pane is hidden — shows it again, as a
+ * tap there does. With the writer alone it docks at the leading edge: dragged back toward the
+ * trailing side by the same rules, tapped it returns to half. An adjustable control for TalkBack
+ * (its value the editor's width), with hide / show and full width / show the map as its actions.
  */
 @Composable
-private fun PaneGrip(pane: PaneState, window: Float, reduced: Boolean, show: () -> Unit, hide: () -> Unit, resize: (Float) -> Unit) {
+private fun PaneGrip(
+    pane: PaneState,
+    window: Float,
+    reduced: Boolean,
+    show: () -> Unit,
+    hide: () -> Unit,
+    full: () -> Unit,
+    half: () -> Unit,
+    resize: (Float) -> Unit,
+) {
     val source = remember { MutableInteractionSource() }
     val dragged by source.collectIsDraggedAsState()
     val pressed by source.collectIsPressedAsState()
@@ -409,6 +496,7 @@ private fun PaneGrip(pane: PaneState, window: Float, reduced: Boolean, show: () 
     var start by remember { mutableFloatStateOf(0f) }
     var moved by remember { mutableFloatStateOf(0f) }
     val open = pane.open
+    val alone = pane.full
     val drag = rememberDraggableState { dx ->
         moved += dx
         pane.drag = if (open) PaneDrag.follow(start, moved, window)
@@ -420,8 +508,7 @@ private fun PaneGrip(pane: PaneState, window: Float, reduced: Boolean, show: () 
         Modifier
             .layout { measurable, constraints ->
                 val placeable = measurable.measure(Constraints())
-                val f = pane.drawn
-                val cx = if (f > 0f) window * (1f - f) else window - dock
+                val cx = PaneDrag.gripCentre(pane.drawn, window, dock)
                 layout(constraints.maxWidth, constraints.maxHeight) {
                     placeable.place((cx - placeable.width / 2f).roundToInt(), (constraints.maxHeight - placeable.height) / 2)
                 }
@@ -442,30 +529,49 @@ private fun PaneGrip(pane: PaneState, window: Float, reduced: Boolean, show: () 
                     pane.drag = null
                     if (open) when (PaneDrag.release(f)) {
                         PaneDrag.Release.Hide -> hide()
-                        PaneDrag.Release.SpringBack -> {
-                            pane.frac = PaneDrag.MIN
-                            if (reduced) pane.shown.snapTo(PaneDrag.MIN)
-                            else pane.shown.animateTo(PaneDrag.MIN, spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow))
+                        PaneDrag.Release.SpringBack, PaneDrag.Release.SpringToHalf -> {
+                            val to = PaneDrag.settle(f)
+                            pane.frac = to
+                            if (reduced) pane.shown.snapTo(to)
+                            else pane.shown.animateTo(to, spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow))
                             pane.settled++
                         }
                         PaneDrag.Release.Stay -> {
                             pane.frac = PaneDrag.settle(f)
                             pane.settled++
                         }
+                        PaneDrag.Release.Full -> full()
                     } else if (PaneDrag.reveals(-moved, reveal)) show()
                     else if (reduced) pane.shown.snapTo(0f) else pane.shown.animateTo(0f, tween(PANE_SLIDE_MILLIS, easing = EaseOut))
                 },
             )
-            .clickable(source, indication = null, enabled = !open, onClickLabel = L10n.Write.openEditor) { show() }
+            .clickable(
+                source, indication = null, enabled = !open || alone,
+                onClickLabel = if (alone) L10n.Write.showMap else L10n.Write.openEditor,
+            ) { if (alone) half() else show() }
             .semantics(mergeDescendants = true) {
                 contentDescription = L10n.Write.resizeDivider
-                if (open) {
+                if (alone) {
+                    // The writer alone: the whole window, on a scale running on from the split's.
+                    progressBarRangeInfo = ProgressBarRangeInfo(PaneDrag.WHOLE, PaneDrag.MIN..PaneDrag.WHOLE)
+                    setProgress { v ->
+                        if (!PaneDrag.inFullZone(v)) resize(v)
+                        true
+                    }
+                    customActions = listOf(
+                        CustomAccessibilityAction(L10n.Write.showMap) { half(); true },
+                        CustomAccessibilityAction(L10n.Write.closeEditor) { hide(); true },
+                    )
+                } else if (open) {
                     progressBarRangeInfo = ProgressBarRangeInfo(pane.frac, PaneDrag.MIN..PaneDrag.MAX)
                     setProgress { v ->
                         resize(v)
                         true
                     }
-                    customActions = listOf(CustomAccessibilityAction(L10n.Write.closeEditor) { hide(); true })
+                    customActions = listOf(
+                        CustomAccessibilityAction(L10n.Write.closeEditor) { hide(); true },
+                        CustomAccessibilityAction(L10n.Write.fullEditor) { full(); true },
+                    )
                 } else {
                     customActions = listOf(CustomAccessibilityAction(L10n.Write.openEditor) { show(); true })
                 }
@@ -484,28 +590,38 @@ private fun PaneGrip(pane: PaneState, window: Float, reduced: Boolean, show: () 
     }
 }
 
-/** 「放開以收起編輯區」by the grip while it is held in the hide zone: on the map's side of it, level with it. */
+/**
+ * What letting go of the held grip does, by it and level with it: 「放開以收起編輯區」in the hide zone on
+ * the map's side of it, 「放開以全寬書寫」in the full zone on the pane's ([paneSide]: near the leading
+ * edge the map's side has no room).
+ */
 @Composable
-private fun ReleasePill(pane: PaneState) {
+private fun ReleasePill(pane: PaneState, window: Float, text: String, paneSide: Boolean) {
     val density = LocalDensity.current
     val gap = with(density) { (GRIP_TOUCH_W / 2 + 4.dp).toPx() }
+    val dock = with(density) { (GRIP_TOUCH_W / 2).toPx() }
     BasicText(
-        L10n.Write.releaseToClose,
+        text,
         style = AppFonts.body(13f, 600, lineHeight = 1.3f, color = Mixes.ButtonOnTonal),
         maxLines = 1,
         modifier = Modifier
             .layout { measurable, constraints ->
                 val placeable = measurable.measure(Constraints())
-                val cx = constraints.maxWidth * (1f - pane.drawn)
+                val cx = PaneDrag.gripCentre(pane.drawn, window, dock)
+                val x = if (paneSide) cx + gap else cx - gap - placeable.width
                 layout(constraints.maxWidth, constraints.maxHeight) {
-                    placeable.place((cx - gap - placeable.width).roundToInt(), (constraints.maxHeight - placeable.height) / 2)
+                    placeable.place(x.roundToInt(), (constraints.maxHeight - placeable.height) / 2)
                 }
             }
-            .background(Mixes.ButtonTonal, RoundedCornerShape(50))
+            // The same hand as iOS's pill and the app's other tonal faces: a wobbly rounded rectangle, never a plain capsule.
+            .background(Mixes.ButtonTonal, ReleasePillShape)
             .padding(horizontal = 14.dp, vertical = 7.dp)
             .clearAndSetSemantics { },
     )
 }
+
+/** The release pill's face (iOS's ReleasePill: radius 14, seed 83). */
+private val ReleasePillShape = WobRectShape(14.0, 83.0)
 
 /** The web's grip: border-radius 11px 13px 12px 14px. */
 private val GripShape = RoundedCornerShape(topStart = 11.dp, topEnd = 13.dp, bottomEnd = 12.dp, bottomStart = 14.dp)

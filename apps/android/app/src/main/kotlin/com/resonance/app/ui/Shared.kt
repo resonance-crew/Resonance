@@ -9,8 +9,9 @@ import com.resonance.design.BorderedStoryCard
 import com.resonance.design.CardListLayout
 import com.resonance.design.CardPalette
 import com.resonance.design.GridBlockRows
-import com.resonance.design.GridUnderBar
+import com.resonance.design.gridUnderBar
 import com.resonance.design.LocalWindowLayout
+import com.resonance.design.WindowLayout
 import com.resonance.design.LayoutClass
 import com.resonance.design.PullLoaderSize
 import com.resonance.design.PullThreshold
@@ -245,7 +246,7 @@ internal fun LazyListScope.borderedCards(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = layout.gridInset)
-                .padding(top = if (b == 0) (if (firstUnderBar) GridUnderBar else 0.dp) else gap),
+                .padding(top = if (b == 0) (if (firstUnderBar) LocalWindowLayout.current.gridUnderBar else 0.dp) else gap),
             horizontalArrangement = Arrangement.spacedBy(gap),
         ) {
             for (c in 0 until n) {
@@ -420,7 +421,7 @@ fun TabScreen(
         // For whoever can't pull, the same refresh is the list's "Refresh" action (in TalkBack's Actions on any of its rows).
         val refreshAction = Modifier.sketchPullAction(pull, L10n.Native.refresh, enabled = onRefresh != null && refreshEnabled) { !list.canScrollBackward }
         val listTop = when {
-            titleInBar -> top + (headGap ?: titledBarGap(cls, tabletAir))
+            titleInBar -> top + (headGap ?: titledBarGap(LocalWindowLayout.current, tabletAir))
             title == null -> top - HeaderEdgeHeight
             else -> top
         }
@@ -459,12 +460,12 @@ private val TitledBarGap = 16.dp
 
 /**
  * Under the bar's foot to the first row of a tab whose title is in the bar: a phone's
- * [TitledBarGap]; a tablet's 32 below the header's pen line (round 5 E2) unless the page keeps its
- * panes as they are (Messages: not [tabletAir]).
+ * [TitledBarGap]; a tablet's header air below its pen line, by the window's width (round 5 E2:
+ * [firstContentGap]), unless the page keeps its panes as they are (Messages: not [tabletAir]).
  */
-internal fun titledBarGap(cls: LayoutClass, tabletAir: Boolean): Dp = when {
-    cls == LayoutClass.Compact -> TitledBarGap
-    tabletAir -> cls.firstContentGap(TitledBarGap)
+internal fun titledBarGap(layout: WindowLayout, tabletAir: Boolean): Dp = when {
+    layout.cls == LayoutClass.Compact -> TitledBarGap
+    tabletAir -> layout.firstContentGap(TitledBarGap)
     else -> TitledBarGap
 }
 

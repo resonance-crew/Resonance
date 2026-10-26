@@ -826,6 +826,12 @@ public enum L10n {
         public static var openEditor: String { Strings.shared.string("write.openEditor") }
         /// Release to hide the editor
         public static var releaseToClose: String { Strings.shared.string("write.releaseToClose") }
+        /// Release to write full width
+        public static var releaseToFull: String { Strings.shared.string("write.releaseToFull") }
+        /// Write full width
+        public static var fullEditor: String { Strings.shared.string("write.fullEditor") }
+        /// Show the thought map
+        public static var showMap: String { Strings.shared.string("write.showMap") }
         /// Leave for now?
         public static var leaveTitle: String { Strings.shared.string("write.leaveTitle") }
         /// What you've written is saved as a private card. You can pick it up again from My Card Box.

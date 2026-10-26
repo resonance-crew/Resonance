@@ -74,8 +74,8 @@ export interface StoryBylineProps {
  * The line under a card page's title: who wrote it, how long it takes to
  * read and when it was published, and the card's actions at its end.
  *
- * At every width it is the byline (round 8 §10.1) — the author's avatar, pen
- * name (a link to their profile), region flag and verified mark over the
+ * At every width it is the byline (round 8 §10.1) — the author's avatar and pen
+ * name (each a link to their profile), region flag and verified mark over the
  * meta line, the card's share and ⋯ at its end; the side rail holds only the
  * story's contents. An anonymous card shows the neutral「·」and 匿名 in muted
  * ink, linking nowhere, to everyone — its owner too.
@@ -88,10 +88,14 @@ export function StoryByline({ author, anonymous = false, minutes, published, pri
   const tApp = useTranslations('app');
   return (
     <div ref={ref} className={[styles.byline, className].filter(Boolean).join(' ')}>
-      <span className={styles.avatar}>
-        {anonymous ? (
+      {anonymous ? (
+        <span className={styles.avatar}>
           <HandDrawnAvatar initials="·" size={40} color="var(--color-cream-dark)" seed={97} />
-        ) : (
+        </span>
+      ) : (
+        // The avatar leads to the profile as the pen name does; the name is the one link a keyboard
+        // or a screen reader meets, so this one stays out of both.
+        <Link href={`/u/${author.handle}`} className={styles.avatar} tabIndex={-1} aria-hidden="true">
           <HandDrawnAvatar
             src={author.avatarUrl}
             initials={author.initials}
@@ -99,8 +103,8 @@ export function StoryByline({ author, anonymous = false, minutes, published, pri
             color={author.accentColor}
             seed={Number(author.avatarSeed)}
           />
-        )}
-      </span>
+        </Link>
+      )}
       <div className={styles.text}>
         <div className={styles.name}>
           {anonymous ? (

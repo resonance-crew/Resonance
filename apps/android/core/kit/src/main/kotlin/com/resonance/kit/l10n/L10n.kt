@@ -828,6 +828,12 @@ object L10n {
         val openEditor: String get() = Strings.string("write.openEditor")
         /** Release to hide the editor */
         val releaseToClose: String get() = Strings.string("write.releaseToClose")
+        /** Release to write full width */
+        val releaseToFull: String get() = Strings.string("write.releaseToFull")
+        /** Write full width */
+        val fullEditor: String get() = Strings.string("write.fullEditor")
+        /** Show the thought map */
+        val showMap: String get() = Strings.string("write.showMap")
         /** Leave for now? */
         val leaveTitle: String get() = Strings.string("write.leaveTitle")
         /** What you've written is saved as a private card. You can pick it up again from My Card Box. */

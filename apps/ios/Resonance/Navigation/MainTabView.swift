@@ -192,7 +192,7 @@ struct MainTabView: View {
                 Spacer(minLength: 0)
                 OrganicPenButton(title: AppTab.write.title, icon: AppTab.write.icon) { writer.open() }
             }
-            .padding(.trailing, window.pad)
+            .padding(.trailing, HeaderChrome.edge(width: window.width))
         }
         .frame(height: HeaderChrome.rowHeight)
     }
@@ -430,11 +430,11 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
     var headerSpacing: CGFloat
     var titleInBar: Bool
     /// With the title in the bar, how far under its line the content starts on a phone (the card box
-    /// keeps 8 more: round 5 E2), and whether a tablet gives it the header's 32 (not the Messages
+    /// keeps 8 more: round 5 E2), and whether a tablet gives it the header's gap (not the Messages
     /// list, whose panes are fixed).
     var phoneTop: CGFloat
     var tabletGap: Bool
-    /// A tablet's own air under the header in place of its 32 under the pen line (Me's people head, round 9 §9).
+    /// A tablet's own air under the header in place of the header's gap under the pen line (Me's people head, round 9 §9).
     var tabletTop: CGFloat?
     /// The list's first item as it is now (the feed's first card), for lists whose items anchor the
     /// scroll (a scroll target layout: a reader further down keeps the item they are reading where it
@@ -479,7 +479,7 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
     private var travel: CGFloat { window.topTabs ? 0 : 48 }
     private var topPadding: CGFloat {
         guard titleInBar else { return title.isEmpty ? 0 : 40 }
-        return window.topTabs && tabletGap ? tabletTop ?? HeaderChrome.contentTop : phoneTop
+        return window.topTabs && tabletGap ? tabletTop ?? HeaderChrome.contentTop(width: window.width) : phoneTop
     }
     /// What the tab bar takes at the foot (nothing when the tabs are in the header).
     private var bottomRoom: CGFloat { window.topTabs ? 0 : OrganicTabBar<AppTab>.height + HeaderEdge.height }
