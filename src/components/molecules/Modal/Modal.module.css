@@ -26,6 +26,13 @@
   animation: resModalPopIn 280ms cubic-bezier(.2, .9, .3, 1.05);
 }
 
+/* The stand-in paper (res-shape-stand-in) stays whole until the drawn paper has
+   faded in over it (res-shape-fade-in, 280ms), then steps aside at once — a
+   cross-fade of the two would let the page's words show through mid-way. */
+.dialog:global(.res-shape-stand-in) {
+  transition: background-color 0s linear 280ms, box-shadow 0s linear 280ms;
+}
+
 /* It takes focus as a whole when it opens; that is not a keyboard target. */
 .dialog:focus {
   outline: none;

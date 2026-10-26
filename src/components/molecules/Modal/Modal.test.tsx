@@ -12,6 +12,21 @@ afterEach(() => {
 const backdrop = () => screen.getByRole('dialog').parentElement!;
 
 describe('Modal', () => {
+  // The paper is drawn once measured and fades in; until then the box itself is a plain rounded paper of the same
+  // colour and pen (globals.css res-shape-stand-in), so the content never sits over the page's words.
+  it('stands in as a plain paper until its hand-drawn one is measured', () => {
+    render(
+      <Modal open ariaLabel="Notifications">
+        <p>Body</p>
+      </Modal>
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveClass('res-shape-stand-in');
+    expect(dialog).toHaveAttribute('data-shape-pending');
+    expect(dialog.style.getPropertyValue('--shape-fill')).toBe('var(--color-card-bg)');
+    expect(dialog.style.getPropertyValue('--shape-ink')).toBe('var(--modal-border)');
+  });
+
   it('renders nothing when closed', () => {
     render(
       <Modal open={false}>

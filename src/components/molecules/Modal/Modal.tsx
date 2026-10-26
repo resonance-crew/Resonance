@@ -220,8 +220,20 @@ export function Modal({
         aria-modal="true"
         aria-label={ariaLabel}
         tabIndex={-1}
-        className={styles.dialog}
-        style={{ maxWidth, padding }}
+        // Until the hand-drawn paper is measured (and while it fades in), the box stands in as a plain
+        // rounded one of the same paper and pen, so the content never sits over the page's own words.
+        className={`${styles.dialog} res-shape-stand-in`}
+        data-shape-pending={w && h ? undefined : ''}
+        style={
+          {
+            maxWidth,
+            padding,
+            '--shape-fill': fillColor,
+            '--shape-ink': borderColor,
+            '--shape-ink-width': `${INK}px`,
+            '--shape-radius': `${R}px`,
+          } as CSSProperties
+        }
       >
         <HandDrawnBorder
           w={w} h={h} R={R} seed={seed} mag={mag}
