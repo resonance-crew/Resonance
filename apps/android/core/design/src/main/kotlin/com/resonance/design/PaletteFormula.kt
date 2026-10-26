@@ -168,6 +168,11 @@ object PaletteFormula {
             "cta-ink" to cream,
             "cta-ghost" to mixWithBlack(accent, 0.18),
             "cta-verb-ink" to deepenUntil(accent, 0.22, over(wash, 0.75, well), 4.6),
+            "skeleton-base" to over(text, 0.06, well).copy(alpha = 0.85),
+            "skeleton-glow" to cream,
+            "avatar-wait" to well,
+            "apple-fill" to text,
+            "apple-label" to cream,
         )
     }
 
@@ -206,6 +211,11 @@ object PaletteFormula {
             "cta-ink" to lch(0.93, text.c, text.h),
             "cta-ghost" to mixWithBlack(band, 0.22),
             "cta-verb-ink" to deepenUntil(band, 0.0, lch(0.93, text.c, text.h), 4.6),
+            "skeleton-base" to over(text, 0.08, b.getValue("color-card-bg")).copy(alpha = 0.85),
+            "skeleton-glow" to lch(0.3, paper.c, paper.h),
+            "avatar-wait" to b.getValue("color-card-bg"),
+            "apple-fill" to lch(1.0, 0.0, 0.0),
+            "apple-label" to lch(0.0, 0.0, 0.0),
         )
     }
 
