@@ -275,7 +275,7 @@ struct OrganicModalStage<Card: View>: View {
                 // Over the whole screen, the status bar and the home indicator too, so no band
                 // of another brightness is left at either end. For VoiceOver it is the way out,
                 // read after the card (whose ✕ it used to be).
-                Tokens.backdrop
+                Tokens.scrim
                     .ignoresSafeArea()
                     .opacity(shown ? 1 : 0)
                     .contentShape(Rectangle())

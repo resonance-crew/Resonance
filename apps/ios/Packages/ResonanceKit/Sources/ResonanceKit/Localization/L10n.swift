@@ -274,7 +274,7 @@ public enum L10n {
         public static var `open`: String { Strings.shared.string("tweaks.open") }
         /// Close tweaks panel
         public static var close: String { Strings.shared.string("tweaks.close") }
-        /// Accent color
+        /// Theme color
         public static var accentColor: String { Strings.shared.string("tweaks.accentColor") }
         /// Terracotta (default)
         public static var accentTerracotta: String { Strings.shared.string("tweaks.accentTerracotta") }
@@ -308,6 +308,24 @@ public enum L10n {
         public static var grainMedium: String { Strings.shared.string("tweaks.grainMedium") }
         /// Heavy
         public static var grainHeavy: String { Strings.shared.string("tweaks.grainHeavy") }
+        /// Mode
+        public static var scheme: String { Strings.shared.string("tweaks.scheme") }
+        /// Match system
+        public static var schemeSystem: String { Strings.shared.string("tweaks.schemeSystem") }
+        /// Light
+        public static var schemeLight: String { Strings.shared.string("tweaks.schemeLight") }
+        /// Dark
+        public static var schemeDark: String { Strings.shared.string("tweaks.schemeDark") }
+        /// Wallpaper
+        public static var accentWallpaper: String { Strings.shared.string("tweaks.accentWallpaper") }
+        /// Terracotta
+        public static var themeTerracotta: String { Strings.shared.string("tweaks.themeTerracotta") }
+        /// Sage
+        public static var themeSage: String { Strings.shared.string("tweaks.themeSage") }
+        /// Lavender
+        public static var themeLavender: String { Strings.shared.string("tweaks.themeLavender") }
+        /// Gold
+        public static var themeYellow: String { Strings.shared.string("tweaks.themeYellow") }
     }
     public enum App {
         public enum Nav {

@@ -14,6 +14,7 @@ import { dirname, resolve } from 'node:path';
 import { INK, INK_LIGHT, INK_STRONG } from '../../src/lib/design/strokes';
 import { encode, linearSrgbToLinearP3, mix, mixWithBlack, parseOklch, srgbHex, toLinearSrgb, type Oklch } from './oklch';
 import { paletteFor, type PaletteToken } from '../../src/lib/design/palette';
+import { swiftTokenColours, swiftUITokens, writePaletteSwift } from './palette-swift';
 
 const root = resolve(__dirname, '../..');
 const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
@@ -87,16 +88,7 @@ const swift = `// ${header}
 import SwiftUI
 
 public enum Tokens {
-${tokens
-  .map(
-    (t) =>
-      `    /// ${t.source} · sRGB ${t.srgbHex}${t.inSrgbGamut ? '' : ' (outside sRGB)'}\n` +
-      `    public static let ${t.name} = Color(.displayP3, red: ${t.p3[0]}, green: ${t.p3[1]}, blue: ${t.p3[2]}, opacity: ${t.alpha})`,
-  )
-  .join('\n')}
-
-    public static let cardFills: [Color] = [${[0, 1, 2, 3, 4, 5].map((i) => `cardFill${i}`).join(', ')}]
-    public static let cardBorders: [Color] = [${[0, 1, 2, 3, 4, 5].map((i) => `cardBorder${i}`).join(', ')}]
+${swiftTokenColours()}
 
     /// One pen for the whole app (src/lib/design/strokes.ts).
     public static let ink: CGFloat = ${INK}
@@ -104,7 +96,7 @@ ${tokens
     public static let inkStrong: CGFloat = ${INK_STRONG}
 ${lengths.map((l) => `\n    /// ${l.source}\n    public static let ${l.name}: CGFloat = ${l.value}`).join('')}
 }
-`;
+${swiftUITokens()}`;
 
 const kt = `// ${header}
 package com.resonance.design.generated
@@ -143,6 +135,7 @@ const outputs: [string, string][] = [
     ),
   ],
 ];
+writePaletteSwift(root);
 for (const [p, body] of outputs) {
   mkdirSync(dirname(resolve(root, p)), { recursive: true });
   writeFileSync(resolve(root, p), body);

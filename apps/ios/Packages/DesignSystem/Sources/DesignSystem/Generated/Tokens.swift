@@ -2,101 +2,240 @@
 import SwiftUI
 
 public nonisolated enum Tokens {
-    /// --color-cream · sRGB #faf2e9
-    public static let cream = Color(.displayP3, red: 0.9737, green: 0.951, blue: 0.9163, opacity: 1)
-    /// --color-cream-dark · sRGB #efe6db
-    public static let creamDark = Color(.displayP3, red: 0.9319, green: 0.9049, blue: 0.8636, opacity: 1)
-    /// --color-card-bg · sRGB #faf6ef
-    public static let cardBg = Color(.displayP3, red: 0.9789, green: 0.9659, blue: 0.9416, opacity: 1)
-    /// --color-terracotta · sRGB #c96736
-    public static let terracotta = Color(.displayP3, red: 0.7388, green: 0.4228, blue: 0.2563, opacity: 1)
-    /// --color-terracotta-light · sRGB #ffcaa5 (outside sRGB)
-    public static let terracottaLight = Color(.displayP3, red: 0.9767, green: 0.8015, blue: 0.6686, opacity: 1)
-    /// --color-lavender · sRGB #bcb7e8
-    public static let lavender = Color(.displayP3, red: 0.735, green: 0.7172, blue: 0.8966, opacity: 1)
-    /// --color-sage · sRGB #a0c398
-    public static let sage = Color(.displayP3, red: 0.6548, green: 0.7603, blue: 0.6124, opacity: 1)
-    /// --color-yellow · sRGB #f1d589
-    public static let yellow = Color(.displayP3, red: 0.9271, green: 0.8396, blue: 0.5763, opacity: 1)
-    /// --color-sky · sRGB #90cfe4
-    public static let sky = Color(.displayP3, red: 0.6195, green: 0.8065, blue: 0.8829, opacity: 1)
-    /// --color-text · sRGB #2f2115
-    public static let text = Color(.displayP3, red: 0.1752, green: 0.13, blue: 0.0888, opacity: 1)
-    /// --color-text-muted · sRGB #786550
-    public static let textMuted = Color(.displayP3, red: 0.4591, green: 0.3997, blue: 0.324, opacity: 1)
-    /// --bubble-mine · sRGB #fddbbd
-    public static let bubbleMine = Color(.displayP3, red: 0.9711, green: 0.8626, blue: 0.756, opacity: 1)
-    /// --bubble-theirs · sRGB #eae2d7
-    public static let bubbleTheirs = Color(.displayP3, red: 0.9116, green: 0.8855, blue: 0.847, opacity: 1)
-    /// --bubble-quote · sRGB #dfd8d0
-    public static let bubbleQuote = Color(.displayP3, red: 0.8683, green: 0.8475, blue: 0.819, opacity: 1)
-    /// --link-card-muted · sRGB #64523d
-    public static let linkCardMuted = Color(.displayP3, red: 0.3801, green: 0.3227, blue: 0.2494, opacity: 1)
-    /// --link-wave · sRGB #ba7f64
-    public static let linkWave = Color(.displayP3, red: 0.6968, green: 0.5071, blue: 0.4094, opacity: 1)
-    /// --reading-progress · sRGB #ef7926
-    public static let readingProgress = Color(.displayP3, red: 0.8777, green: 0.4985, blue: 0.2387, opacity: 1)
-    /// --field-border · sRGB #c5bcb0
-    public static let fieldBorder = Color(.displayP3, red: 0.7681, green: 0.7392, blue: 0.695, opacity: 1)
-    /// --field-border-hover · sRGB #937b69
-    public static let fieldBorderHover = Color(.displayP3, red: 0.56, green: 0.4858, blue: 0.4191, opacity: 1)
-    /// --placeholder · sRGB #988979
-    public static let placeholder = Color(.displayP3, red: 0.5875, green: 0.5408, blue: 0.4814, opacity: 1)
-    /// StoryCard CARD_FILLS[0] · sRGB #ffd3b6 (outside sRGB)
-    public static let cardFill0 = Color(.displayP3, red: 0.9793, green: 0.836, blue: 0.7277, opacity: 1)
-    /// StoryCard CARD_FILLS[1] · sRGB #eae8ff (outside sRGB)
-    public static let cardFill1 = Color(.displayP3, red: 0.9171, green: 0.9103, blue: 0.9956, opacity: 1)
-    /// StoryCard CARD_FILLS[2] · sRGB #daefd5
-    public static let cardFill2 = Color(.displayP3, red: 0.8695, green: 0.9358, blue: 0.8432, opacity: 1)
-    /// StoryCard CARD_FILLS[3] · sRGB #f9e3ab
-    public static let cardFill3 = Color(.displayP3, red: 0.9631, green: 0.8914, blue: 0.6975, opacity: 1)
-    /// StoryCard CARD_FILLS[4] · sRGB #cdebf2
-    public static let cardFill4 = Color(.displayP3, red: 0.8259, green: 0.917, blue: 0.9463, opacity: 1)
-    /// StoryCard CARD_FILLS[5] · sRGB #f9cfcf
-    public static let cardFill5 = Color(.displayP3, red: 0.9485, green: 0.8178, blue: 0.815, opacity: 1)
-    /// StoryCard CARD_BORDERS[0][0] · sRGB #a05000 (outside sRGB)
-    public static let cardBorder0 = Color(.displayP3, red: 0.5861, green: 0.331, blue: 0.106, opacity: 1)
-    /// StoryCard CARD_BORDERS[0][1] · sRGB #6c2d00 (outside sRGB)
-    public static let cardBorder0Dark = Color(.displayP3, red: 0.3949, green: 0.1928, blue: 0, opacity: 1)
-    /// StoryCard CARD_BORDERS[1][0] · sRGB #6e64a5
-    public static let cardBorder1 = Color(.displayP3, red: 0.425, green: 0.3925, blue: 0.6283, opacity: 1)
-    /// StoryCard CARD_BORDERS[1][1] · sRGB #4d437a
-    public static let cardBorder1Dark = Color(.displayP3, red: 0.2953, green: 0.2651, blue: 0.4659, opacity: 1)
-    /// StoryCard CARD_BORDERS[2][0] · sRGB #3a732c
-    public static let cardBorder2 = Color(.displayP3, red: 0.2825, green: 0.4462, blue: 0.2104, opacity: 1)
-    /// StoryCard CARD_BORDERS[2][1] · sRGB #1c500e
-    public static let cardBorder2Dark = Color(.displayP3, red: 0.1656, green: 0.3075, blue: 0.0985, opacity: 1)
-    /// StoryCard CARD_BORDERS[3][0] · sRGB #9d7300 (outside sRGB)
-    public static let cardBorder3 = Color(.displayP3, red: 0.5895, green: 0.4584, blue: 0, opacity: 1)
-    /// StoryCard CARD_BORDERS[3][1] · sRGB #6e4c00 (outside sRGB)
-    public static let cardBorder3Dark = Color(.displayP3, red: 0.4111, green: 0.3045, blue: 0, opacity: 1)
-    /// StoryCard CARD_BORDERS[4][0] · sRGB #007187 (outside sRGB)
-    public static let cardBorder4 = Color(.displayP3, red: 0.1375, green: 0.4344, blue: 0.5176, opacity: 1)
-    /// StoryCard CARD_BORDERS[4][1] · sRGB #004d60 (outside sRGB)
-    public static let cardBorder4Dark = Color(.displayP3, red: 0, green: 0.2966, blue: 0.3679, opacity: 1)
-    /// StoryCard CARD_BORDERS[5][0] · sRGB #965255
-    public static let cardBorder5 = Color(.displayP3, red: 0.5517, green: 0.3358, blue: 0.3393, opacity: 1)
-    /// StoryCard CARD_BORDERS[5][1] · sRGB #6c3437
-    public static let cardBorder5Dark = Color(.displayP3, red: 0.3961, green: 0.2159, blue: 0.2208, opacity: 1)
-    /// color-mix(in oklch, terracotta, black 35%) — primary button stroke · sRGB #70361a
-    public static let terracottaInk = Color(.displayP3, red: 0.4083, green: 0.2239, blue: 0.1267, opacity: 1)
-    /// color-mix(in oklch, terracotta, black 25%) — toggle on stroke · sRGB #884322
-    public static let terracottaDeep = Color(.displayP3, red: 0.499, green: 0.2785, blue: 0.1623, opacity: 1)
-    /// ToggleSwitch off fill · sRGB #d9cfc3
-    public static let toggleOff = Color(.displayP3, red: 0.8441, green: 0.8147, blue: 0.7697, opacity: 1)
-    /// ToggleSwitch off stroke · sRGB #ab9c8b
-    public static let toggleOffStroke = Color(.displayP3, red: 0.66, green: 0.6123, blue: 0.5516, opacity: 1)
-    /// OrganicButton ghost stroke · sRGB #614f3a
-    public static let ghostStroke = Color(.displayP3, red: 0.369, green: 0.312, blue: 0.239, opacity: 1)
-    /// Modal border · sRGB #5f4025
-    public static let modalBorder = Color(.displayP3, red: 0.3559, green: 0.2548, blue: 0.1613, opacity: 1)
-    /// AuthCard interior: color-mix(in oklch, terracotta-light 14%, card-bg) · sRGB #faf1e4
-    public static let authInterior = Color(.displayP3, red: 0.9748, green: 0.9461, blue: 0.8996, opacity: 1)
-    /// AuthCard border: color-mix(in oklch, terracotta, black 18%) · sRGB #9a4d27
-    public static let authBorder = Color(.displayP3, red: 0.5644, green: 0.3178, blue: 0.1879, opacity: 1)
+    // The palette (src/lib/design/palette.ts, scripts/native/palette-swift.ts): every colour follows the
+    // interface style and the theme (`AccentTrait`) wherever it is drawn — a SwiftUI view, a UIKit view's
+    // dynamic colour, an attributed string. `Tokens.UI.<colour>` is the same colour as a UIColor.
+    /// --color-cream · terracotta: light #faf2e9, dark #1c1611
+    public static let cream = Color(uiColor: UI.cream)
+    /// --color-cream-dark · terracotta: light #efe6db, dark #130e0b
+    public static let creamDark = Color(uiColor: UI.creamDark)
+    /// --color-card-bg · terracotta: light #faf6ef, dark #241e18
+    public static let cardBg = Color(uiColor: UI.cardBg)
+    /// --color-terracotta · terracotta: light #c96736, dark #e58553
+    public static let terracotta = Color(uiColor: UI.terracotta)
+    /// --color-terracotta-light · terracotta: light #ffcaa5, dark #593219
+    public static let terracottaLight = Color(uiColor: UI.terracottaLight)
+    /// --color-text · terracotta: light #2f2115, dark #dfd6c9
+    public static let text = Color(uiColor: UI.text)
+    /// --color-text-muted · terracotta: light #786550, dark #a59585
+    public static let textMuted = Color(uiColor: UI.textMuted)
+    /// --field-border · terracotta: light #c5bcb0, dark #4f463c
+    public static let fieldBorder = Color(uiColor: UI.fieldBorder)
+    /// --field-border-hover · terracotta: light #937b69, dark #8f7c6a
+    public static let fieldBorderHover = Color(uiColor: UI.fieldBorderHover)
+    /// --placeholder · terracotta: light #988979, dark #867867
+    public static let placeholder = Color(uiColor: UI.placeholder)
+    /// --bubble-mine · terracotta: light #fddbbd, dark #4b2d17
+    public static let bubbleMine = Color(uiColor: UI.bubbleMine)
+    /// --bubble-theirs · terracotta: light #eae2d7, dark #2c2620
+    public static let bubbleTheirs = Color(uiColor: UI.bubbleTheirs)
+    /// --bubble-quote · terracotta: light #dfd8d0, dark #231e1a
+    public static let bubbleQuote = Color(uiColor: UI.bubbleQuote)
+    /// --link-card-muted · terracotta: light #64523d, dark #b9ac9c
+    public static let linkCardMuted = Color(uiColor: UI.linkCardMuted)
+    /// --reading-progress · terracotta: light #ef7926, dark #ff9a51
+    public static let readingProgress = Color(uiColor: UI.readingProgress)
+    /// --button-fill · terracotta: light #a9552c, dark #e58553
+    public static let buttonFill = Color(uiColor: UI.buttonFill)
+    /// --button-tonal · terracotta: light #fcd2b1, dark #462915
+    public static let buttonTonal = Color(uiColor: UI.buttonTonal)
+    /// --button-on-tonal · terracotta: light #904724, dark #f5af82
+    public static let buttonOnTonal = Color(uiColor: UI.buttonOnTonal)
+    /// --terracotta-ink · terracotta: light #70361a, dark #e2a577
+    public static let terracottaInk = Color(uiColor: UI.terracottaInk)
+    /// --terracotta-deep · terracotta: light #884322, dark #e39c6c
+    public static let terracottaDeep = Color(uiColor: UI.terracottaDeep)
+    /// --terracotta-outline · terracotta: light #a2512a, dark #e49362
+    public static let terracottaOutline = Color(uiColor: UI.terracottaOutline)
+    /// --auth-interior · terracotta: light #faf1e4, dark #2b2119
+    public static let authInterior = Color(uiColor: UI.authInterior)
+    /// --auth-border · terracotta: light #9a4d27, dark #e49665
+    public static let authBorder = Color(uiColor: UI.authBorder)
+    /// --toggle-off · terracotta: light #d9cfc3, dark #393129
+    public static let toggleOff = Color(uiColor: UI.toggleOff)
+    /// --toggle-off-stroke · terracotta: light #ab9c8b, dark #72675b
+    public static let toggleOffStroke = Color(uiColor: UI.toggleOffStroke)
+    /// --ghost-stroke · terracotta: light #614f3a, dark #c4b4a3
+    public static let ghostStroke = Color(uiColor: UI.ghostStroke)
+    /// --modal-border · terracotta: light #5f4025, dark #cdbba2
+    public static let modalBorder = Color(uiColor: UI.modalBorder)
+    /// --segment-idle-ink · terracotta: light #685744, dark #aa9c8b
+    public static let segmentIdleInk = Color(uiColor: UI.segmentIdleInk)
+    /// --link-wave · terracotta: light #ba7f64, dark #b98064
+    public static let linkWave = Color(uiColor: UI.linkWave)
+    /// --story-code-tint · terracotta: light #2f2115, dark #dfd6c9
+    public static let storyCodeTint = Color(uiColor: UI.storyCodeTint)
+    /// --footer-bg · terracotta: light #2f2115, dark #0e0a07
+    public static let footerBg = Color(uiColor: UI.footerBg)
+    /// --footer-ink · terracotta: light #faf2e9, dark #dfd6c9
+    public static let footerInk = Color(uiColor: UI.footerInk)
+    /// --cta-band · terracotta: light #c96736, dark #803c1a
+    public static let ctaBand = Color(uiColor: UI.ctaBand)
+    /// --cta-ink · terracotta: light #faf2e9, dark #f0e6da
+    public static let ctaInk = Color(uiColor: UI.ctaInk)
+    /// --color-danger · terracotta: light #c74b47, dark #ed756e
+    public static let danger = Color(uiColor: UI.danger)
+    /// --danger-fill · terracotta: light #b2423f, dark #e36b65
+    public static let dangerFill = Color(uiColor: UI.dangerFill)
+    /// --button-danger-tonal · terracotta: light #fdd2ce, dark #47211e
+    public static let buttonDangerTonal = Color(uiColor: UI.buttonDangerTonal)
+    /// --button-on-danger-tonal · terracotta: light #8e3331, dark #f7b4ad
+    public static let buttonOnDangerTonal = Color(uiColor: UI.buttonOnDangerTonal)
+    /// --color-lavender · terracotta: light #bcb7e8, dark #2d2a43
+    public static let lavender = Color(uiColor: UI.lavender)
+    /// --color-sage · terracotta: light #a0c398, dark #21331d
+    public static let sage = Color(uiColor: UI.sage)
+    /// --color-yellow · terracotta: light #f1d589, dark #3c2e0f
+    public static let yellow = Color(uiColor: UI.yellow)
+    /// --color-sky · terracotta: light #90cfe4, dark #0e333d
+    public static let sky = Color(uiColor: UI.sky)
+    /// --avatar-stroke · terracotta: light #54351a, dark #d7ccc0
+    public static let avatarStroke = Color(uiColor: UI.avatarStroke)
+    /// --tag-stroke · terracotta: light #452c17, dark #d8c8b6
+    public static let tagStroke = Color(uiColor: UI.tagStroke)
+    /// --scrim · terracotta: light #231103, dark #030101
+    public static let scrim = Color(uiColor: UI.scrim)
+    /// --shadow-ink · terracotta: light #231103, dark #010000
+    public static let shadowInk = Color(uiColor: UI.shadowInk)
+    /// --grain-ink · terracotta: light #000000, dark #f6f1eb
+    public static let grainInk = Color(uiColor: UI.grainInk)
+    /// --toward-ink · terracotta: light #000000, dark #ffffff
+    public static let towardInk = Color(uiColor: UI.towardInk)
+    /// --footer-ink-soft · terracotta: light #d4cdc3, dark #d4cdc3
+    public static let footerInkSoft = Color(uiColor: UI.footerInkSoft)
+    /// --picture-backing · terracotta: light #faf2e9, dark #ede7df
+    public static let pictureBacking = Color(uiColor: UI.pictureBacking)
+    /// --card-fill-0 · terracotta: light #ffd3b6, dark #412715
+    public static let cardFill0 = Color(uiColor: UI.cardFill0)
+    /// --card-fill-1 · terracotta: light #eae8ff, dark #2d2c39
+    public static let cardFill1 = Color(uiColor: UI.cardFill1)
+    /// --card-fill-2 · terracotta: light #daefd5, dark #253223
+    public static let cardFill2 = Color(uiColor: UI.cardFill2)
+    /// --card-fill-3 · terracotta: light #f9e3ab, dark #3b2e14
+    public static let cardFill3 = Color(uiColor: UI.cardFill3)
+    /// --card-fill-4 · terracotta: light #cdebf2, dark #1f3136
+    public static let cardFill4 = Color(uiColor: UI.cardFill4)
+    /// --card-fill-5 · terracotta: light #f9cfcf, dark #3e2727
+    public static let cardFill5 = Color(uiColor: UI.cardFill5)
+    /// --card-border-0 · terracotta: light #a05000, dark #d49468
+    public static let cardBorder0 = Color(uiColor: UI.cardBorder0)
+    /// --card-border-1 · terracotta: light #6e64a5, dark #a39dd1
+    public static let cardBorder1 = Color(uiColor: UI.cardBorder1)
+    /// --card-border-2 · terracotta: light #3a732c, dark #86b37d
+    public static let cardBorder2 = Color(uiColor: UI.cardBorder2)
+    /// --card-border-3 · terracotta: light #9d7300, dark #c0a152
+    public static let cardBorder3 = Color(uiColor: UI.cardBorder3)
+    /// --card-border-4 · terracotta: light #007187, dark #6ab1c2
+    public static let cardBorder4 = Color(uiColor: UI.cardBorder4)
+    /// --card-border-5 · terracotta: light #965255, dark #cc9495
+    public static let cardBorder5 = Color(uiColor: UI.cardBorder5)
+    /// --card-border-deep-0 · terracotta: light #6c2d00, dark #edc0a3
+    public static let cardBorder0Dark = Color(uiColor: UI.cardBorder0Dark)
+    /// --card-border-deep-1 · terracotta: light #4d437a, dark #c9c6ea
+    public static let cardBorder1Dark = Color(uiColor: UI.cardBorder1Dark)
+    /// --card-border-deep-2 · terracotta: light #1c500e, dark #b6d5b0
+    public static let cardBorder2Dark = Color(uiColor: UI.cardBorder2Dark)
+    /// --card-border-deep-3 · terracotta: light #6e4c00, dark #dec996
+    public static let cardBorder3Dark = Color(uiColor: UI.cardBorder3Dark)
+    /// --card-border-deep-4 · terracotta: light #004d60, dark #a6d3df
+    public static let cardBorder4Dark = Color(uiColor: UI.cardBorder4Dark)
+    /// --card-border-deep-5 · terracotta: light #6c3437, dark #e7bfbf
+    public static let cardBorder5Dark = Color(uiColor: UI.cardBorder5Dark)
+    /// --card-interior-0 · terracotta: light #fef5ef, dark #231c18
+    public static let cardInterior0 = Color(uiColor: UI.cardInterior0)
+    /// --card-interior-1 · terracotta: light #f6f6ff, dark #1e1d24
+    public static let cardInterior1 = Color(uiColor: UI.cardInterior1)
+    /// --card-interior-2 · terracotta: light #f3f9f1, dark #1b201a
+    public static let cardInterior2 = Color(uiColor: UI.cardInterior2)
+    /// --card-interior-3 · terracotta: light #faf6ee, dark #211e17
+    public static let cardInterior3 = Color(uiColor: UI.cardInterior3)
+    /// --card-interior-4 · terracotta: light #eef9fc, dark #172022
+    public static let cardInterior4 = Color(uiColor: UI.cardInterior4)
+    /// --card-interior-5 · terracotta: light #fff4f4, dark #241c1c
+    public static let cardInterior5 = Color(uiColor: UI.cardInterior5)
+    /// --card-separator-0 · terracotta: light #856c5b, dark #b99f8d
+    public static let cardSeparator0 = Color(uiColor: UI.cardSeparator0)
+    /// --card-separator-1 · terracotta: light #716e88, dark #a4a1bd
+    public static let cardSeparator1 = Color(uiColor: UI.cardSeparator1)
+    /// --card-separator-2 · terracotta: light #657861, dark #98ab94
+    public static let cardSeparator2 = Color(uiColor: UI.cardSeparator2)
+    /// --card-separator-3 · terracotta: light #7b7157, dark #afa489
+    public static let cardSeparator3 = Color(uiColor: UI.cardSeparator3)
+    /// --card-separator-4 · terracotta: light #577880, dark #89abb4
+    public static let cardSeparator4 = Color(uiColor: UI.cardSeparator4)
+    /// --card-separator-5 · terracotta: light #886869, dark #bd9b9b
+    public static let cardSeparator5 = Color(uiColor: UI.cardSeparator5)
+    /// --card-note-ink-0 · terracotta: light #744624, dark #e0aa86
+    public static let cardNoteInk0 = Color(uiColor: UI.cardNoteInk0)
+    /// --card-note-ink-1 · terracotta: light #524a7c, dark #b6afe8
+    public static let cardNoteInk1 = Color(uiColor: UI.cardNoteInk1)
+    /// --card-note-ink-2 · terracotta: light #3a5d32, dark #9dc494
+    public static let cardNoteInk2 = Color(uiColor: UI.cardNoteInk2)
+    /// --card-note-ink-3 · terracotta: light #654f14, dark #cdb57b
+    public static let cardNoteInk3 = Color(uiColor: UI.cardNoteInk3)
+    /// --card-note-ink-4 · terracotta: light #005d6e, dark #78c5d7
+    public static let cardNoteInk4 = Color(uiColor: UI.cardNoteInk4)
+    /// --card-note-ink-5 · terracotta: light #783f42, dark #e6a3a4
+    public static let cardNoteInk5 = Color(uiColor: UI.cardNoteInk5)
+    /// --card-stripe-0 · terracotta: light #e9bda0, dark #4e3421
+    public static let cardStripe0 = Color(uiColor: UI.cardStripe0)
+    /// --card-stripe-1 · terracotta: light #d3d1e8, dark #3a3946
+    public static let cardStripe1 = Color(uiColor: UI.cardStripe1)
+    /// --card-stripe-2 · terracotta: light #c3d8be, dark #323f2f
+    public static let cardStripe2 = Color(uiColor: UI.cardStripe2)
+    /// --card-stripe-3 · terracotta: light #e2cc95, dark #483b20
+    public static let cardStripe3 = Color(uiColor: UI.cardStripe3)
+    /// --card-stripe-4 · terracotta: light #b6d4db, dark #2c3e43
+    public static let cardStripe4 = Color(uiColor: UI.cardStripe4)
+    /// --card-stripe-5 · terracotta: light #e1b9b9, dark #4b3334
+    public static let cardStripe5 = Color(uiColor: UI.cardStripe5)
+    /// --card-accent-0 · terracotta: light #fed4b9, dark #573b28
+    public static let cardAccent0 = Color(uiColor: UI.cardAccent0)
+    /// --card-accent-1 · terracotta: light #ddd8ff, dark #423e5b
+    public static let cardAccent1 = Color(uiColor: UI.cardAccent1)
+    /// --card-accent-2 · terracotta: light #cae8c3, dark #34492f
+    public static let cardAccent2 = Color(uiColor: UI.cardAccent2)
+    /// --card-accent-3 · terracotta: light #efdcb1, dark #4d4122
+    public static let cardAccent3 = Color(uiColor: UI.cardAccent3)
+    /// --card-accent-4 · terracotta: light #b1e9f7, dark #1e4953
+    public static let cardAccent4 = Color(uiColor: UI.cardAccent4)
+    /// --card-accent-5 · terracotta: light #ffcfcf, dark #5a3738
+    public static let cardAccent5 = Color(uiColor: UI.cardAccent5)
+    /// --card-hover-0 · terracotta: light #f4e2d7, dark #2f241c
+    public static let cardHover0 = Color(uiColor: UI.cardHover0)
+    /// --card-hover-1 · terracotta: light #e5e4f6, dark #262531
+    public static let cardHover1 = Color(uiColor: UI.cardHover1)
+    /// --card-hover-2 · terracotta: light #deeadb, dark #21291f
+    public static let cardHover2 = Color(uiColor: UI.cardHover2)
+    /// --card-hover-3 · terracotta: light #ede6d5, dark #2b261a
+    public static let cardHover3 = Color(uiColor: UI.cardHover3)
+    /// --card-hover-4 · terracotta: light #d5ebf0, dark #1a292d
+    public static let cardHover4 = Color(uiColor: UI.cardHover4)
+    /// --card-hover-5 · terracotta: light #f6e0e0, dark #302222
+    public static let cardHover5 = Color(uiColor: UI.cardHover5)
+    /// --card-skeleton-0 · terracotta: light #ffcaa5, dark #4c311e
+    public static let cardSkeleton0 = Color(uiColor: UI.cardSkeleton0)
+    /// --card-skeleton-1 · terracotta: light #d6cfff, dark #373350
+    public static let cardSkeleton1 = Color(uiColor: UI.cardSkeleton1)
+    /// --card-skeleton-2 · terracotta: light #bce5b3, dark #2a3e25
+    public static let cardSkeleton2 = Color(uiColor: UI.cardSkeleton2)
+    /// --card-skeleton-3 · terracotta: light #eed59b, dark #433617
+    public static let cardSkeleton3 = Color(uiColor: UI.cardSkeleton3)
+    /// --card-skeleton-4 · terracotta: light #99e6f9, dark #123e48
+    public static let cardSkeleton4 = Color(uiColor: UI.cardSkeleton4)
+    /// --card-skeleton-5 · terracotta: light #ffc3c4, dark #4f2d2e
+    public static let cardSkeleton5 = Color(uiColor: UI.cardSkeleton5)
 
     public static let cardFills: [Color] = [cardFill0, cardFill1, cardFill2, cardFill3, cardFill4, cardFill5]
     public static let cardBorders: [Color] = [cardBorder0, cardBorder1, cardBorder2, cardBorder3, cardBorder4, cardBorder5]
+    public static let cardBordersDeep: [Color] = [cardBorder0Dark, cardBorder1Dark, cardBorder2Dark, cardBorder3Dark, cardBorder4Dark, cardBorder5Dark]
+    public static let cardInteriors: [Color] = [cardInterior0, cardInterior1, cardInterior2, cardInterior3, cardInterior4, cardInterior5]
+    public static let cardSeparators: [Color] = [cardSeparator0, cardSeparator1, cardSeparator2, cardSeparator3, cardSeparator4, cardSeparator5]
+    public static let cardNoteInks: [Color] = [cardNoteInk0, cardNoteInk1, cardNoteInk2, cardNoteInk3, cardNoteInk4, cardNoteInk5]
+    public static let cardStripes: [Color] = [cardStripe0, cardStripe1, cardStripe2, cardStripe3, cardStripe4, cardStripe5]
+    public static let cardAccents: [Color] = [cardAccent0, cardAccent1, cardAccent2, cardAccent3, cardAccent4, cardAccent5]
+    public static let cardHovers: [Color] = [cardHover0, cardHover1, cardHover2, cardHover3, cardHover4, cardHover5]
+    public static let cardSkeletons: [Color] = [cardSkeleton0, cardSkeleton1, cardSkeleton2, cardSkeleton3, cardSkeleton4, cardSkeleton5]
 
     /// One pen for the whole app (src/lib/design/strokes.ts).
     public static let ink: CGFloat = 1.8
@@ -263,4 +402,120 @@ public nonisolated enum Tokens {
     public static let labelSize: CGFloat = 12
     /// --hint-size
     public static let hintSize: CGFloat = 12
+}
+
+extension Tokens {
+    /// The palette's colours for UIKit: dynamic, resolved by whatever trait collection draws them.
+    public nonisolated enum UI {
+        public static let cream = Palette.uiColor(.cream)
+        public static let creamDark = Palette.uiColor(.creamDark)
+        public static let cardBg = Palette.uiColor(.cardBg)
+        public static let terracotta = Palette.uiColor(.terracotta)
+        public static let terracottaLight = Palette.uiColor(.terracottaLight)
+        public static let text = Palette.uiColor(.text)
+        public static let textMuted = Palette.uiColor(.textMuted)
+        public static let fieldBorder = Palette.uiColor(.fieldBorder)
+        public static let fieldBorderHover = Palette.uiColor(.fieldBorderHover)
+        public static let placeholder = Palette.uiColor(.placeholder)
+        public static let bubbleMine = Palette.uiColor(.bubbleMine)
+        public static let bubbleTheirs = Palette.uiColor(.bubbleTheirs)
+        public static let bubbleQuote = Palette.uiColor(.bubbleQuote)
+        public static let linkCardMuted = Palette.uiColor(.linkCardMuted)
+        public static let readingProgress = Palette.uiColor(.readingProgress)
+        public static let buttonFill = Palette.uiColor(.buttonFill)
+        public static let buttonTonal = Palette.uiColor(.buttonTonal)
+        public static let buttonOnTonal = Palette.uiColor(.buttonOnTonal)
+        public static let terracottaInk = Palette.uiColor(.terracottaInk)
+        public static let terracottaDeep = Palette.uiColor(.terracottaDeep)
+        public static let terracottaOutline = Palette.uiColor(.terracottaOutline)
+        public static let authInterior = Palette.uiColor(.authInterior)
+        public static let authBorder = Palette.uiColor(.authBorder)
+        public static let toggleOff = Palette.uiColor(.toggleOff)
+        public static let toggleOffStroke = Palette.uiColor(.toggleOffStroke)
+        public static let ghostStroke = Palette.uiColor(.ghostStroke)
+        public static let modalBorder = Palette.uiColor(.modalBorder)
+        public static let segmentIdleInk = Palette.uiColor(.segmentIdleInk)
+        public static let linkWave = Palette.uiColor(.linkWave)
+        public static let storyCodeTint = Palette.uiColor(.storyCodeTint)
+        public static let footerBg = Palette.uiColor(.footerBg)
+        public static let footerInk = Palette.uiColor(.footerInk)
+        public static let ctaBand = Palette.uiColor(.ctaBand)
+        public static let ctaInk = Palette.uiColor(.ctaInk)
+        public static let danger = Palette.uiColor(.danger)
+        public static let dangerFill = Palette.uiColor(.dangerFill)
+        public static let buttonDangerTonal = Palette.uiColor(.buttonDangerTonal)
+        public static let buttonOnDangerTonal = Palette.uiColor(.buttonOnDangerTonal)
+        public static let lavender = Palette.uiColor(.lavender)
+        public static let sage = Palette.uiColor(.sage)
+        public static let yellow = Palette.uiColor(.yellow)
+        public static let sky = Palette.uiColor(.sky)
+        public static let avatarStroke = Palette.uiColor(.avatarStroke)
+        public static let tagStroke = Palette.uiColor(.tagStroke)
+        public static let scrim = Palette.uiColor(.scrim)
+        public static let shadowInk = Palette.uiColor(.shadowInk)
+        public static let grainInk = Palette.uiColor(.grainInk)
+        public static let towardInk = Palette.uiColor(.towardInk)
+        public static let footerInkSoft = Palette.uiColor(.footerInkSoft)
+        public static let pictureBacking = Palette.uiColor(.pictureBacking)
+        public static let cardFill0 = Palette.uiColor(.cardFill0)
+        public static let cardFill1 = Palette.uiColor(.cardFill1)
+        public static let cardFill2 = Palette.uiColor(.cardFill2)
+        public static let cardFill3 = Palette.uiColor(.cardFill3)
+        public static let cardFill4 = Palette.uiColor(.cardFill4)
+        public static let cardFill5 = Palette.uiColor(.cardFill5)
+        public static let cardBorder0 = Palette.uiColor(.cardBorder0)
+        public static let cardBorder1 = Palette.uiColor(.cardBorder1)
+        public static let cardBorder2 = Palette.uiColor(.cardBorder2)
+        public static let cardBorder3 = Palette.uiColor(.cardBorder3)
+        public static let cardBorder4 = Palette.uiColor(.cardBorder4)
+        public static let cardBorder5 = Palette.uiColor(.cardBorder5)
+        public static let cardBorder0Dark = Palette.uiColor(.cardBorder0Dark)
+        public static let cardBorder1Dark = Palette.uiColor(.cardBorder1Dark)
+        public static let cardBorder2Dark = Palette.uiColor(.cardBorder2Dark)
+        public static let cardBorder3Dark = Palette.uiColor(.cardBorder3Dark)
+        public static let cardBorder4Dark = Palette.uiColor(.cardBorder4Dark)
+        public static let cardBorder5Dark = Palette.uiColor(.cardBorder5Dark)
+        public static let cardInterior0 = Palette.uiColor(.cardInterior0)
+        public static let cardInterior1 = Palette.uiColor(.cardInterior1)
+        public static let cardInterior2 = Palette.uiColor(.cardInterior2)
+        public static let cardInterior3 = Palette.uiColor(.cardInterior3)
+        public static let cardInterior4 = Palette.uiColor(.cardInterior4)
+        public static let cardInterior5 = Palette.uiColor(.cardInterior5)
+        public static let cardSeparator0 = Palette.uiColor(.cardSeparator0)
+        public static let cardSeparator1 = Palette.uiColor(.cardSeparator1)
+        public static let cardSeparator2 = Palette.uiColor(.cardSeparator2)
+        public static let cardSeparator3 = Palette.uiColor(.cardSeparator3)
+        public static let cardSeparator4 = Palette.uiColor(.cardSeparator4)
+        public static let cardSeparator5 = Palette.uiColor(.cardSeparator5)
+        public static let cardNoteInk0 = Palette.uiColor(.cardNoteInk0)
+        public static let cardNoteInk1 = Palette.uiColor(.cardNoteInk1)
+        public static let cardNoteInk2 = Palette.uiColor(.cardNoteInk2)
+        public static let cardNoteInk3 = Palette.uiColor(.cardNoteInk3)
+        public static let cardNoteInk4 = Palette.uiColor(.cardNoteInk4)
+        public static let cardNoteInk5 = Palette.uiColor(.cardNoteInk5)
+        public static let cardStripe0 = Palette.uiColor(.cardStripe0)
+        public static let cardStripe1 = Palette.uiColor(.cardStripe1)
+        public static let cardStripe2 = Palette.uiColor(.cardStripe2)
+        public static let cardStripe3 = Palette.uiColor(.cardStripe3)
+        public static let cardStripe4 = Palette.uiColor(.cardStripe4)
+        public static let cardStripe5 = Palette.uiColor(.cardStripe5)
+        public static let cardAccent0 = Palette.uiColor(.cardAccent0)
+        public static let cardAccent1 = Palette.uiColor(.cardAccent1)
+        public static let cardAccent2 = Palette.uiColor(.cardAccent2)
+        public static let cardAccent3 = Palette.uiColor(.cardAccent3)
+        public static let cardAccent4 = Palette.uiColor(.cardAccent4)
+        public static let cardAccent5 = Palette.uiColor(.cardAccent5)
+        public static let cardHover0 = Palette.uiColor(.cardHover0)
+        public static let cardHover1 = Palette.uiColor(.cardHover1)
+        public static let cardHover2 = Palette.uiColor(.cardHover2)
+        public static let cardHover3 = Palette.uiColor(.cardHover3)
+        public static let cardHover4 = Palette.uiColor(.cardHover4)
+        public static let cardHover5 = Palette.uiColor(.cardHover5)
+        public static let cardSkeleton0 = Palette.uiColor(.cardSkeleton0)
+        public static let cardSkeleton1 = Palette.uiColor(.cardSkeleton1)
+        public static let cardSkeleton2 = Palette.uiColor(.cardSkeleton2)
+        public static let cardSkeleton3 = Palette.uiColor(.cardSkeleton3)
+        public static let cardSkeleton4 = Palette.uiColor(.cardSkeleton4)
+        public static let cardSkeleton5 = Palette.uiColor(.cardSkeleton5)
+    }
 }

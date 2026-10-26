@@ -112,11 +112,19 @@ private final class LaunchCoverView: UIView {
 
     init() {
         super.init(frame: .zero)
-        backgroundColor = UIColor(Tokens.cream)
+        backgroundColor = Tokens.UI.cream
+        // The system drew the launch screen in its own appearance and knows no theme: the cover is that
+        // picture again — whatever Settings → 外觀 lays on the scene — and the dissolve shows the page.
+        traitOverrides.accent = .terracotta
         addSubview(mark)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if let screen = window?.windowScene?.screen { traitOverrides.userInterfaceStyle = screen.traitCollection.userInterfaceStyle }
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()

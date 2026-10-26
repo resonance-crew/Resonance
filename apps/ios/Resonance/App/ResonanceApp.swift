@@ -20,6 +20,7 @@ struct ResonanceApp: App {
         WindowGroup {
             RootView()
                 .environment(session)
+                .wearsAppearance(AppearanceStore.shared)
                 .onOpenURL { url in _ = GIDSignIn.sharedInstance.handle(url) }
         }
     }

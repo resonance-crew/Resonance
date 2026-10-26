@@ -67,7 +67,7 @@ struct MessageMenuOverlay: View {
             let frame = menu.frame.offsetBy(dx: -screen.minX, dy: -screen.minY)
             let place = Placement(frame: frame, height: geo.size.height, menuHeight: CGFloat(items.count) * menuRow + menuFooter, safe: safe)
             ZStack(alignment: .topLeading) {
-                Tokens.backdrop.opacity(shown ? 1 : 0)
+                Tokens.scrim.opacity(shown ? 1 : 0)
                     .contentShape(Rectangle())
                     .onTapGesture(perform: dismiss)
                     .accessibilityHidden(true)
