@@ -166,6 +166,8 @@ object PaletteFormula {
             "footer-ink" to cream,
             "cta-band" to accent,
             "cta-ink" to cream,
+            "cta-ghost" to mixWithBlack(accent, 0.18),
+            "cta-verb-ink" to deepenUntil(accent, 0.22, over(wash, 0.75, well), 4.6),
         )
     }
 
@@ -176,6 +178,7 @@ object PaletteFormula {
         val wash = b.getValue("color-terracotta-light")
         val text = b.getValue("color-text")
         val muted = b.getValue("color-text-muted")
+        val band = fitGamut(lch(0.44, accent.c * 0.78, accent.h - 2))
         return mapOf(
             "bubble-mine" to over(wash, 0.8, paper),
             "bubble-theirs" to over(text, 0.1, paper),
@@ -199,8 +202,10 @@ object PaletteFormula {
             "story-code-tint" to text.copy(alpha = 0.08),
             "footer-bg" to lch(0.15, paper.c * 0.75, paper.h),
             "footer-ink" to text,
-            "cta-band" to fitGamut(lch(0.44, accent.c * 0.78, accent.h - 2)),
+            "cta-band" to band,
             "cta-ink" to lch(0.93, text.c, text.h),
+            "cta-ghost" to mixWithBlack(band, 0.22),
+            "cta-verb-ink" to deepenUntil(band, 0.0, lch(0.93, text.c, text.h), 4.6),
         )
     }
 

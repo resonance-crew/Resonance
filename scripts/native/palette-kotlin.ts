@@ -14,7 +14,7 @@
  * Names: the token without `color-`, in PascalCase (`color-cream` → Cream,
  * `card-border-deep-3` → CardBorderDeep3), as the apps always called them.
  */
-import { ACCENTS, PALETTE_TOKENS, SCHEMES, SCHEME_NUMBERS, paletteFor, type PaletteToken } from '../../src/lib/design/palette';
+import { ACCENTS, HUE_ROLES, PALETTE_TOKENS, SCHEMES, SCHEME_NUMBERS, paletteFor, type PaletteToken } from '../../src/lib/design/palette';
 
 const pascal = (s: string) => s.replace(/^color-/, '').replace(/(^|-)([a-z0-9])/g, (_, __, c: string) => c.toUpperCase());
 const upperSnake = (s: string) => s.replace(/-/g, '_').toUpperCase();
@@ -102,6 +102,16 @@ ${lists.join('\n')}
 
 ${numbers.join('\n')}
 
+    private val hued = HashMap<Triple<HueRole, Double, Double>, Color>()
+
+    /** A [HueRole]'s colour at [hue] (and [alpha]) in this palette's scheme: a card's own cover hue, a thought-map group's. */
+    fun hue(role: HueRole, hue: Double, alpha: Double = 1.0): Color = synchronized(hued) {
+        hued.getOrPut(Triple(role, hue, alpha)) {
+            val (l, c) = if (dark) role.dark else role.light
+            OklchColor.of(l, c, ((hue % 360) + 360) % 360, alpha)
+        }
+    }
+
     /** A token's OKLCH (L 0…1, C, H, alpha) by its palette.ts name. */
     fun oklchOf(token: String): DoubleArray {
         val i = TOKENS.indexOf(token)
@@ -136,6 +146,15 @@ ${ACCENTS.map((a) => `                PaletteTheme.${accentName(a)} -> if (dark)
         /** Light terracotta: every screen's default, and what an image leaving the device is drawn in (the 9:16 card, an avatar's backing). */
         val LightTerracotta: ResonanceColors get() = of(PaletteTheme.Terracotta, false)
     }
+}
+
+/**
+ * palette.ts HUE_ROLES: colours drawn from any hue rather than a family's (a card's own cover hue
+ * in an embed or a picker, a thought-map group's, a card's own menu) — each role's lightness and
+ * chroma in light and in dark ([ResonanceColors.hue]).
+ */
+enum class HueRole(val key: String, val light: List<Double>, val dark: List<Double>) {
+${Object.entries(HUE_ROLES).map(([k, v]) => `    ${pascal(k)}("${k}", listOf(${num(v.light[0])}, ${num(v.light[1])}), listOf(${num(v.dark[0])}, ${num(v.dark[1])})),`).join('\n')}
 }
 
 /** The palette every [Tokens] colour reads; ResonanceTheme provides it (light terracotta outside one). */
@@ -174,6 +193,10 @@ ${colours.join('\n')}
 ${lists.join('\n')}
 
 ${numbers.join('\n')}
+
+    /** A [HueRole]'s colour at [hue] in the palette on screen. */
+    @Composable @ReadOnlyComposable
+    fun hue(role: HueRole, hue: Double, alpha: Double = 1.0): Color = LocalResonanceColors.current.hue(role, hue, alpha)
 
     /** One pen for the whole app (src/lib/design/strokes.ts). */
     val Ink = ${pens.ink}.dp

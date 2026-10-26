@@ -660,7 +660,7 @@ private fun StoryByline(
                         modifier = Modifier.weight(1f, fill = false).plainClickable { openAuthor(author.handle) },
                     )
                     AuthorRegionFlag(author.region, 14.dp)
-                    if (author.verified) OrganicIcon(IconName.Verified, Modifier.semantics { contentDescription = L10n.Card.verified }, size = 13.dp, color = Tokens.Sage, strokeWidth = 1.8f)
+                    if (author.verified) OrganicIcon(IconName.Verified, Modifier.semantics { contentDescription = L10n.Card.verified }, size = 13.dp, color = Tokens.VerifiedMark, strokeWidth = 1.8f)
                 } else {
                     BasicText(L10n.Card.anonymousAuthor, maxLines = 1, style = AppFonts.body(15f, 600, lineHeight = 1.35f, color = Tokens.TextMuted))
                 }

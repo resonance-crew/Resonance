@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import com.resonance.design.generated.HueRole
 import com.resonance.design.Mixes
 import com.resonance.design.avatarFill
 import androidx.compose.ui.layout.onSizeChanged
@@ -653,7 +654,7 @@ private fun SharedMediaContent(model: ThreadModel, opener: LinkOpener, onClose: 
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        val cover = Mixes.atHue("card-accent", card.accentHue ?: 55.0)
+                        val cover = Tokens.hue(HueRole.Accent, card.accentHue ?: 55.0)
                         OrganicImage(card.imageUrl, 7.0, Modifier.size(40.dp)) { Box(Modifier.fillMaxSize().background(cover)) }
                         BasicText(
                             card.title, maxLines = 2, overflow = TextOverflow.Ellipsis,

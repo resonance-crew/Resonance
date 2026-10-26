@@ -194,6 +194,8 @@ class CardFamily(palette: ResonanceColors, index: Int) {
     val accent: Color = palette.CardAccents[index]
     val hover: Color = palette.CardHovers[index]
     val skeleton: Color = palette.CardSkeletons[index]
+    /** A tag pill on the card (`card-tag`): a step from the fill, so it reads on the hover wash too. */
+    val tag: Color = palette.CardTags[index]
 }
 
 /**
@@ -216,14 +218,6 @@ object Mixes {
     val ImageRemoveFill: Color get() = OverPicture.ChipFill
     val ImageRemoveStroke: Color get() = OverPicture.ChipRim
 
-    /**
-     * A card family's tint ([token] without its index: `card-accent`, `card-hover`…) at any [hue], not
-     * only the six families' — a card's own cover hue: the family tokens' lightness and chroma (the
-     * same in every family) at that hue.
-     */
-    @Composable @ReadOnlyComposable
-    fun atHue(token: String, hue: Double): Color = PaletteMixes.of(LocalResonanceColors.current).atHue(token, hue)
-
     /** [PaletteMixes.skeletonHighlight] in light terracotta, as OKLCH numbers (L 0…1, C, H in degrees). */
     internal fun skeletonHighlightOklch(hue: Double): Triple<Double, Double, Double> = PaletteMixes.skeletonHighlightOklch(ResonanceColors.LightTerracotta, hue)
 }
@@ -234,14 +228,18 @@ object Mixes {
  * dark is.
  */
 object OverPicture {
+    /** `photo-shade` and `photo-ink`: the same in every palette. */
+    private val shade: Color get() = ResonanceColors.LightTerracotta.PhotoShade
+    private val ink: Color get() = ResonanceColors.LightTerracotta.PhotoInk
+
     /** A dark translucent pebble (HandDrawnImage's ✕ chip). */
-    val ChipFill: Color = OklchColor.of(0.3, 0.02, 70.0, 0.7)
+    val ChipFill: Color get() = shade.copy(alpha = 0.7f)
     /** Its pale rim. */
-    val ChipRim: Color = OklchColor.of(0.96, 0.02, 75.0, 0.75)
+    val ChipRim: Color get() = ink.copy(alpha = 0.75f)
     /** The crop's photo outside the avatar's outline. */
-    val Scrim: Color = OklchColor.of(0.3, 0.02, 70.0, 0.5)
-    /** The ring round the avatar to be: light terracotta's paper at 0.9. */
-    val Rim: Color = ResonanceColors.LightTerracotta.Cream.copy(alpha = 0.9f)
+    val Scrim: Color get() = shade.copy(alpha = 0.5f)
+    /** The ring round the avatar to be. */
+    val Rim: Color get() = ink.copy(alpha = 0.9f)
 }
 
 /** [Mixes] for one palette, mixed once. */
@@ -258,12 +256,6 @@ class PaletteMixes private constructor(private val palette: ResonanceColors) {
     }
 
     private val highlights = HashMap<Double, Color>()
-    private val tints = HashMap<String, Color>()
-
-    /** [Mixes.atHue]. */
-    fun atHue(token: String, hue: Double): Color = synchronized(tints) {
-        tints.getOrPut("$token|$hue") { lch("$token-0").let { t -> OklchColor.of(t[0], t[1], hue, t[3]) } }
-    }
 
     /**
      * The shimmer's highlight for a card of [hue]: the family's skeleton tint (`card-skeleton`'s
@@ -297,8 +289,13 @@ class PaletteMixes private constructor(private val palette: ResonanceColors) {
             return Triple(l, kotlin.math.sqrt(a * a + b * b), h)
         }
 
-        /** CSS Color 5 `color-mix(in oklch, a p, b)`: shorter-arc hue (palette.ts `mix`). */
+        /**
+         * CSS Color 5 `color-mix(in oklch, a p, b)`: shorter-arc hue (palette.ts `mix`); an achromatic
+         * colour (black, white: `toward-ink`) has no hue of its own, so the other's carries.
+         */
         internal fun mix(a: DoubleArray, b: DoubleArray, p: Double): DoubleArray {
+            if (b[1] < 1e-9) return doubleArrayOf(a[0] * p + b[0] * (1 - p), a[1] * p, a[2], a[3] * p + b[3] * (1 - p))
+            if (a[1] < 1e-9) return doubleArrayOf(a[0] * p + b[0] * (1 - p), b[1] * (1 - p), b[2], a[3] * p + b[3] * (1 - p))
             var dh = b[2] - a[2]
             if (dh > 180) dh -= 360
             if (dh < -180) dh += 360
@@ -306,6 +303,7 @@ class PaletteMixes private constructor(private val palette: ResonanceColors) {
             return doubleArrayOf(a[0] * p + b[0] * (1 - p), a[1] * p + b[1] * (1 - p), h, a[3] * p + b[3] * (1 - p))
         }
 
-        private fun mixed(a: DoubleArray, b: DoubleArray, p: Double): Color = mix(a, b, p).let { OklchColor.of(it[0], it[1], it[2], it[3]) }
+        /** [mix] as a colour. */
+        fun mixed(a: DoubleArray, b: DoubleArray, p: Double): Color = mix(a, b, p).let { OklchColor.of(it[0], it[1], it[2], it[3]) }
     }
 }

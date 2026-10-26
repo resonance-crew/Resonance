@@ -1,7 +1,8 @@
 /**
  * The Android app's colour literals, ratcheted: every colour a screen draws comes from the palette
  * (palette.ts → the generated ResonanceColors, read through Tokens and LocalResonanceColors), so it
- * follows the scheme and theme on screen. A literal — `Color(0x…)`, `Color.White`/`Black`, a
+ * follows the scheme and theme on screen (a colour from a card's own hue through the palette's hue
+ * roles). A literal — `Color(0x…)`, `Color.White`/`Black`, a
  * `Color(r, g, b)` of floats, an `oklch(…)` written out — is a colour that stays light in dark mode
  * (or dark in light). The few that mean to stay the same in both are listed below with why; a new
  * one anywhere fails, and so does a listed file holding fewer than it says (lower its count).
@@ -16,19 +17,12 @@ const android = join(root, 'apps/android');
 
 /** What is allowed to stay a literal, per file: how many, and why. */
 const ALLOWED: Record<string, { count: number; why: string }> = {
-  'app/src/main/kotlin/com/resonance/app/ui/PictureViewer.kt': { count: 3, why: 'the picture viewer is dark in either scheme: its backdrop and its white loader and glyph' },
   'app/src/main/kotlin/com/resonance/app/ui/Shared.kt': { count: 2, why: "fadingEdges' alpha mask (DstOut): black means opaque, not a colour" },
   'core/design/src/main/kotlin/com/resonance/design/Story.kt': { count: 2, why: "a table's sideways fade: an alpha mask" },
   'core/design/src/main/kotlin/com/resonance/design/StoryToc.kt': { count: 2, why: "the contents rail's fade: an alpha mask" },
-  'core/design/src/main/kotlin/com/resonance/design/Color.kt': { count: 3, why: 'OverPicture: a chip and a scrim over a photo read against the picture, the same in either scheme' },
-  'core/design/src/main/kotlin/com/resonance/design/Components.kt': { count: 2, why: "Google's mark on its white disc (the brand's), and the viewer's ✕ disc in the viewer's own dark" },
-  'core/design/src/main/kotlin/com/resonance/design/Dialogs.kt': { count: 4, why: "a card's own menu in light: the web's --menu-* at the card's hue (dark wears the family's tokens)" },
+  'core/design/src/main/kotlin/com/resonance/design/Components.kt': { count: 1, why: "Google's mark on its white disc (the brand's own)" },
   'core/design/src/main/kotlin/com/resonance/design/ShareCardRecipe.kt': { count: 1, why: "the 9:16 share card's recipe (it leaves the device, light terracotta), pinned to the web's" },
   'core/design/src/main/kotlin/com/resonance/design/Grain.kt': { count: 1, why: 'the tile itself is black: no tinted copy is made for black ink' },
-  'app/src/main/kotlin/com/resonance/app/thoughtmap/MapNodeView.kt': {
-    count: 34,
-    why: "the thought map's inks at any card's or region's hue (no palette token can be per hue): light the web's, dark the same roles on night paper",
-  },
 };
 
 /** One kind of literal each. */
@@ -65,7 +59,9 @@ function count(text: string): number {
 
 describe('Android colour literals', () => {
   const files = ['app', 'core'].flatMap((d) => sources(join(android, d)));
-  const found = Object.fromEntries(files.map((f) => [relative(android, f), count(readFileSync(f, 'utf8'))]).filter(([, n]) => (n as number) > 0));
+  const found: Record<string, number> = Object.fromEntries(
+    files.map((f) => [relative(android, f), count(readFileSync(f, 'utf8'))] as const).filter(([, n]) => n > 0),
+  );
 
   it('scans the app and its modules', () => {
     expect(files.length).toBeGreaterThan(100);

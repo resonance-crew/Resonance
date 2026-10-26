@@ -313,7 +313,7 @@ private fun ShareByline(model: ShareCardModel, palette: CardPalette) {
                         )
                         if (byline.verified) {
                             Spacer(Modifier.width(b.VERIFIED_GAP.dp))
-                            OrganicIcon(IconName.Verified, size = b.VERIFIED_SIZE.dp, color = Tokens.Sage, strokeWidth = 1.8f)
+                            OrganicIcon(IconName.Verified, size = b.VERIFIED_SIZE.dp, color = Tokens.VerifiedMark, strokeWidth = 1.8f)
                         }
                     }
                     ShareByline.Anonymous -> BasicText(

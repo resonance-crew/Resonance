@@ -106,158 +106,186 @@ class ResonanceColors(
     val CtaBand: Color = at(32)
     /** --cta-ink */
     val CtaInk: Color = at(33)
+    /** --cta-ghost */
+    val CtaGhost: Color = at(34)
+    /** --cta-verb-ink */
+    val CtaVerbInk: Color = at(35)
     /** --color-danger */
-    val Danger: Color = at(34)
+    val Danger: Color = at(36)
     /** --danger-fill */
-    val DangerFill: Color = at(35)
+    val DangerFill: Color = at(37)
     /** --button-danger-tonal */
-    val ButtonDangerTonal: Color = at(36)
+    val ButtonDangerTonal: Color = at(38)
     /** --button-on-danger-tonal */
-    val ButtonOnDangerTonal: Color = at(37)
+    val ButtonOnDangerTonal: Color = at(39)
     /** --color-lavender */
-    val Lavender: Color = at(38)
+    val Lavender: Color = at(40)
     /** --color-sage */
-    val Sage: Color = at(39)
+    val Sage: Color = at(41)
     /** --color-yellow */
-    val Yellow: Color = at(40)
+    val Yellow: Color = at(42)
     /** --color-sky */
-    val Sky: Color = at(41)
+    val Sky: Color = at(43)
     /** --avatar-stroke */
-    val AvatarStroke: Color = at(42)
+    val AvatarStroke: Color = at(44)
     /** --tag-stroke */
-    val TagStroke: Color = at(43)
+    val TagStroke: Color = at(45)
     /** --scrim — what a modal lays over the screen */
-    val Scrim: Color = at(44)
+    val Scrim: Color = at(46)
     /** --shadow-ink — a real drop shadow */
-    val ShadowInk: Color = at(45)
+    val ShadowInk: Color = at(47)
     /** --grain-ink — the grain's specks: dark on cream, light on night paper */
-    val GrainInk: Color = at(46)
+    val GrainInk: Color = at(48)
     /** --toward-ink — "further from the paper": black in light, white in dark (a press or hover wash, at a low alpha) */
-    val TowardInk: Color = at(47)
+    val TowardInk: Color = at(49)
     /** --footer-ink-soft */
-    val FooterInkSoft: Color = at(48)
+    val FooterInkSoft: Color = at(50)
     /** --picture-backing — behind a story picture: none in light, a light paper in dark (a transparent logo's black words still show) */
-    val PictureBacking: Color = at(49)
+    val PictureBacking: Color = at(51)
+    /** --soft-pen */
+    val SoftPen: Color = at(52)
+    /** --color-ok */
+    val Ok: Color = at(53)
+    /** --verified-mark */
+    val VerifiedMark: Color = at(54)
+    /** --photo-ink */
+    val PhotoInk: Color = at(55)
+    /** --photo-shade */
+    val PhotoShade: Color = at(56)
+    /** --viewer-ground */
+    val ViewerGround: Color = at(57)
     /** --card-fill-0 */
-    val CardFill0: Color = at(50)
+    val CardFill0: Color = at(58)
     /** --card-fill-1 */
-    val CardFill1: Color = at(51)
+    val CardFill1: Color = at(59)
     /** --card-fill-2 */
-    val CardFill2: Color = at(52)
+    val CardFill2: Color = at(60)
     /** --card-fill-3 */
-    val CardFill3: Color = at(53)
+    val CardFill3: Color = at(61)
     /** --card-fill-4 */
-    val CardFill4: Color = at(54)
+    val CardFill4: Color = at(62)
     /** --card-fill-5 */
-    val CardFill5: Color = at(55)
+    val CardFill5: Color = at(63)
     /** --card-border-0 */
-    val CardBorder0: Color = at(56)
+    val CardBorder0: Color = at(64)
     /** --card-border-1 */
-    val CardBorder1: Color = at(57)
+    val CardBorder1: Color = at(65)
     /** --card-border-2 */
-    val CardBorder2: Color = at(58)
+    val CardBorder2: Color = at(66)
     /** --card-border-3 */
-    val CardBorder3: Color = at(59)
+    val CardBorder3: Color = at(67)
     /** --card-border-4 */
-    val CardBorder4: Color = at(60)
+    val CardBorder4: Color = at(68)
     /** --card-border-5 */
-    val CardBorder5: Color = at(61)
+    val CardBorder5: Color = at(69)
     /** --card-border-deep-0 */
-    val CardBorderDeep0: Color = at(62)
+    val CardBorderDeep0: Color = at(70)
     /** --card-border-deep-1 */
-    val CardBorderDeep1: Color = at(63)
+    val CardBorderDeep1: Color = at(71)
     /** --card-border-deep-2 */
-    val CardBorderDeep2: Color = at(64)
+    val CardBorderDeep2: Color = at(72)
     /** --card-border-deep-3 */
-    val CardBorderDeep3: Color = at(65)
+    val CardBorderDeep3: Color = at(73)
     /** --card-border-deep-4 */
-    val CardBorderDeep4: Color = at(66)
+    val CardBorderDeep4: Color = at(74)
     /** --card-border-deep-5 */
-    val CardBorderDeep5: Color = at(67)
+    val CardBorderDeep5: Color = at(75)
     /** --card-interior-0 */
-    val CardInterior0: Color = at(68)
+    val CardInterior0: Color = at(76)
     /** --card-interior-1 */
-    val CardInterior1: Color = at(69)
+    val CardInterior1: Color = at(77)
     /** --card-interior-2 */
-    val CardInterior2: Color = at(70)
+    val CardInterior2: Color = at(78)
     /** --card-interior-3 */
-    val CardInterior3: Color = at(71)
+    val CardInterior3: Color = at(79)
     /** --card-interior-4 */
-    val CardInterior4: Color = at(72)
+    val CardInterior4: Color = at(80)
     /** --card-interior-5 */
-    val CardInterior5: Color = at(73)
+    val CardInterior5: Color = at(81)
     /** --card-separator-0 */
-    val CardSeparator0: Color = at(74)
+    val CardSeparator0: Color = at(82)
     /** --card-separator-1 */
-    val CardSeparator1: Color = at(75)
+    val CardSeparator1: Color = at(83)
     /** --card-separator-2 */
-    val CardSeparator2: Color = at(76)
+    val CardSeparator2: Color = at(84)
     /** --card-separator-3 */
-    val CardSeparator3: Color = at(77)
+    val CardSeparator3: Color = at(85)
     /** --card-separator-4 */
-    val CardSeparator4: Color = at(78)
+    val CardSeparator4: Color = at(86)
     /** --card-separator-5 */
-    val CardSeparator5: Color = at(79)
+    val CardSeparator5: Color = at(87)
     /** --card-note-ink-0 */
-    val CardNoteInk0: Color = at(80)
+    val CardNoteInk0: Color = at(88)
     /** --card-note-ink-1 */
-    val CardNoteInk1: Color = at(81)
+    val CardNoteInk1: Color = at(89)
     /** --card-note-ink-2 */
-    val CardNoteInk2: Color = at(82)
+    val CardNoteInk2: Color = at(90)
     /** --card-note-ink-3 */
-    val CardNoteInk3: Color = at(83)
+    val CardNoteInk3: Color = at(91)
     /** --card-note-ink-4 */
-    val CardNoteInk4: Color = at(84)
+    val CardNoteInk4: Color = at(92)
     /** --card-note-ink-5 */
-    val CardNoteInk5: Color = at(85)
+    val CardNoteInk5: Color = at(93)
     /** --card-stripe-0 */
-    val CardStripe0: Color = at(86)
+    val CardStripe0: Color = at(94)
     /** --card-stripe-1 */
-    val CardStripe1: Color = at(87)
+    val CardStripe1: Color = at(95)
     /** --card-stripe-2 */
-    val CardStripe2: Color = at(88)
+    val CardStripe2: Color = at(96)
     /** --card-stripe-3 */
-    val CardStripe3: Color = at(89)
+    val CardStripe3: Color = at(97)
     /** --card-stripe-4 */
-    val CardStripe4: Color = at(90)
+    val CardStripe4: Color = at(98)
     /** --card-stripe-5 */
-    val CardStripe5: Color = at(91)
+    val CardStripe5: Color = at(99)
     /** --card-accent-0 */
-    val CardAccent0: Color = at(92)
+    val CardAccent0: Color = at(100)
     /** --card-accent-1 */
-    val CardAccent1: Color = at(93)
+    val CardAccent1: Color = at(101)
     /** --card-accent-2 */
-    val CardAccent2: Color = at(94)
+    val CardAccent2: Color = at(102)
     /** --card-accent-3 */
-    val CardAccent3: Color = at(95)
+    val CardAccent3: Color = at(103)
     /** --card-accent-4 */
-    val CardAccent4: Color = at(96)
+    val CardAccent4: Color = at(104)
     /** --card-accent-5 */
-    val CardAccent5: Color = at(97)
+    val CardAccent5: Color = at(105)
     /** --card-hover-0 */
-    val CardHover0: Color = at(98)
+    val CardHover0: Color = at(106)
     /** --card-hover-1 */
-    val CardHover1: Color = at(99)
+    val CardHover1: Color = at(107)
     /** --card-hover-2 */
-    val CardHover2: Color = at(100)
+    val CardHover2: Color = at(108)
     /** --card-hover-3 */
-    val CardHover3: Color = at(101)
+    val CardHover3: Color = at(109)
     /** --card-hover-4 */
-    val CardHover4: Color = at(102)
+    val CardHover4: Color = at(110)
     /** --card-hover-5 */
-    val CardHover5: Color = at(103)
+    val CardHover5: Color = at(111)
     /** --card-skeleton-0 */
-    val CardSkeleton0: Color = at(104)
+    val CardSkeleton0: Color = at(112)
     /** --card-skeleton-1 */
-    val CardSkeleton1: Color = at(105)
+    val CardSkeleton1: Color = at(113)
     /** --card-skeleton-2 */
-    val CardSkeleton2: Color = at(106)
+    val CardSkeleton2: Color = at(114)
     /** --card-skeleton-3 */
-    val CardSkeleton3: Color = at(107)
+    val CardSkeleton3: Color = at(115)
     /** --card-skeleton-4 */
-    val CardSkeleton4: Color = at(108)
+    val CardSkeleton4: Color = at(116)
     /** --card-skeleton-5 */
-    val CardSkeleton5: Color = at(109)
+    val CardSkeleton5: Color = at(117)
+    /** --card-tag-0 */
+    val CardTag0: Color = at(118)
+    /** --card-tag-1 */
+    val CardTag1: Color = at(119)
+    /** --card-tag-2 */
+    val CardTag2: Color = at(120)
+    /** --card-tag-3 */
+    val CardTag3: Color = at(121)
+    /** --card-tag-4 */
+    val CardTag4: Color = at(122)
+    /** --card-tag-5 */
+    val CardTag5: Color = at(123)
 
     /** --card-fill-0…5, in CardPalette.HUES order. */
     val CardFills: List<Color> = listOf(CardFill0, CardFill1, CardFill2, CardFill3, CardFill4, CardFill5)
@@ -279,11 +307,23 @@ class ResonanceColors(
     val CardHovers: List<Color> = listOf(CardHover0, CardHover1, CardHover2, CardHover3, CardHover4, CardHover5)
     /** --card-skeleton-0…5, in CardPalette.HUES order. */
     val CardSkeletons: List<Color> = listOf(CardSkeleton0, CardSkeleton1, CardSkeleton2, CardSkeleton3, CardSkeleton4, CardSkeleton5)
+    /** --card-tag-0…5, in CardPalette.HUES order. */
+    val CardTags: List<Color> = listOf(CardTag0, CardTag1, CardTag2, CardTag3, CardTag4, CardTag5)
 
     /** --grain-scale */
     val GrainScale: Float = if (dark) 0.4f else 1.0f
     /** --reading-progress-glow-alpha */
     val ReadingProgressGlowAlpha: Float = if (dark) 0.4f else 0.55f
+
+    private val hued = HashMap<Triple<HueRole, Double, Double>, Color>()
+
+    /** A [HueRole]'s colour at [hue] (and [alpha]) in this palette's scheme: a card's own cover hue, a thought-map group's. */
+    fun hue(role: HueRole, hue: Double, alpha: Double = 1.0): Color = synchronized(hued) {
+        hued.getOrPut(Triple(role, hue, alpha)) {
+            val (l, c) = if (dark) role.dark else role.light
+            OklchColor.of(l, c, ((hue % 360) + 360) % 360, alpha)
+        }
+    }
 
     /** A token's OKLCH (L 0…1, C, H, alpha) by its palette.ts name. */
     fun oklchOf(token: String): DoubleArray {
@@ -335,6 +375,8 @@ class ResonanceColors(
             "footer-ink",
             "cta-band",
             "cta-ink",
+            "cta-ghost",
+            "cta-verb-ink",
             "color-danger",
             "danger-fill",
             "button-danger-tonal",
@@ -351,6 +393,12 @@ class ResonanceColors(
             "toward-ink",
             "footer-ink-soft",
             "picture-backing",
+            "soft-pen",
+            "color-ok",
+            "verified-mark",
+            "photo-ink",
+            "photo-shade",
+            "viewer-ground",
             "card-fill-0",
             "card-fill-1",
             "card-fill-2",
@@ -411,6 +459,12 @@ class ResonanceColors(
             "card-skeleton-3",
             "card-skeleton-4",
             "card-skeleton-5",
+            "card-tag-0",
+            "card-tag-1",
+            "card-tag-2",
+            "card-tag-3",
+            "card-tag-4",
+            "card-tag-5",
         )
 
         private val built = arrayOfNulls<ResonanceColors>(PaletteTheme.entries.size * 2)
@@ -431,6 +485,30 @@ class ResonanceColors(
         /** Light terracotta: every screen's default, and what an image leaving the device is drawn in (the 9:16 card, an avatar's backing). */
         val LightTerracotta: ResonanceColors get() = of(PaletteTheme.Terracotta, false)
     }
+}
+
+/**
+ * palette.ts HUE_ROLES: colours drawn from any hue rather than a family's (a card's own cover hue
+ * in an embed or a picker, a thought-map group's, a card's own menu) — each role's lightness and
+ * chroma in light and in dark ([ResonanceColors.hue]).
+ */
+enum class HueRole(val key: String, val light: List<Double>, val dark: List<Double>) {
+    Interior("interior", listOf(0.975, 0.012), listOf(0.235, 0.014)),
+    Accent("accent", listOf(0.9, 0.06), listOf(0.38, 0.05)),
+    Tint("tint", listOf(0.92, 0.06), listOf(0.33, 0.05)),
+    Pen("pen", listOf(0.52, 0.11), listOf(0.72, 0.0825)),
+    PenDeep("pen-deep", listOf(0.38, 0.09), listOf(0.84, 0.045)),
+    Menu("menu", listOf(0.98, 0.01), listOf(0.25, 0.014)),
+    Separator("separator", listOf(0.55, 0.04), listOf(0.72, 0.04)),
+    PillInk("pill-ink", listOf(0.5, 0.04), listOf(0.8, 0.04)),
+    Wash("wash", listOf(0.925, 0.045), listOf(0.31, 0.045)),
+    Emphasis("emphasis", listOf(0.38, 0.13), listOf(0.84, 0.08)),
+    Group("group", listOf(0.965, 0.032), listOf(0.265, 0.03)),
+    GroupPen("group-pen", listOf(0.6, 0.085), listOf(0.6, 0.07)),
+    GroupPenHot("group-pen-hot", listOf(0.45, 0.1), listOf(0.78, 0.085)),
+    GroupInk("group-ink", listOf(0.48, 0.09), listOf(0.76, 0.08)),
+    Ink("ink", listOf(0.45, 0.13), listOf(0.8, 0.1)),
+    Label("label", listOf(0.42, 0.1), listOf(0.8, 0.07)),
 }
 
 /** The palette every [Tokens] colour reads; ResonanceTheme provides it (light terracotta outside one). */
@@ -474,6 +552,8 @@ internal object PaletteTables {
         0.965, 0.015, 75.0, 1.0, // footer-ink
         0.62, 0.14, 45.0, 1.0, // cta-band
         0.965, 0.015, 75.0, 1.0, // cta-ink
+        0.5084, 0.1148, 45.0, 1.0, // cta-ghost
+        0.4836, 0.1092, 45.0, 1.0, // cta-verb-ink
         0.58, 0.16, 25.0, 1.0, // color-danger
         0.5336, 0.1472, 25.0, 1.0, // danger-fill
         0.9, 0.048, 25.0, 1.0, // button-danger-tonal
@@ -484,12 +564,18 @@ internal object PaletteTables {
         0.82, 0.07, 220.0, 1.0, // color-sky
         0.36, 0.06, 60.0, 0.55, // avatar-stroke
         0.32, 0.05, 60.0, 0.45, // tag-stroke
-        0.2, 0.04, 60.0, 0.28, // scrim
+        0.26, 0.03, 60.0, 0.24, // scrim
         0.2, 0.04, 60.0, 1.0, // shadow-ink
         0.0, 0.0, 0.0, 1.0, // grain-ink
         0.0, 0.0, 0.0, 1.0, // toward-ink
         0.85, 0.015, 75.0, 1.0, // footer-ink-soft
         0.965, 0.015, 75.0, 0.0, // picture-backing
+        0.55, 0.05, 60.0, 1.0, // soft-pen
+        0.55, 0.13, 140.0, 1.0, // color-ok
+        0.78, 0.07, 140.0, 1.0, // verified-mark
+        0.965, 0.015, 75.0, 1.0, // photo-ink
+        0.3, 0.02, 70.0, 1.0, // photo-shade
+        0.12, 0.01, 60.0, 1.0, // viewer-ground
         0.9, 0.065, 55.0, 1.0, // card-fill-0
         0.94, 0.032, 290.0, 1.0, // card-fill-1
         0.93, 0.042, 140.0, 1.0, // card-fill-2
@@ -550,6 +636,12 @@ internal object PaletteTables {
         0.88, 0.08, 88.0, 1.0, // card-skeleton-3
         0.88, 0.08, 215.0, 1.0, // card-skeleton-4
         0.88, 0.08, 18.0, 1.0, // card-skeleton-5
+        0.85, 0.065, 55.0, 1.0, // card-tag-0
+        0.89, 0.032, 290.0, 1.0, // card-tag-1
+        0.88, 0.042, 140.0, 1.0, // card-tag-2
+        0.87, 0.075, 88.0, 1.0, // card-tag-3
+        0.87, 0.033, 215.0, 1.0, // card-tag-4
+        0.84, 0.047, 18.0, 1.0, // card-tag-5
     )
 
     /** terracotta, dark. */
@@ -588,6 +680,8 @@ internal object PaletteTables {
         0.88, 0.02, 76.0, 1.0, // footer-ink
         0.44, 0.1053, 45.0, 1.0, // cta-band
         0.93, 0.02, 76.0, 1.0, // cta-ink
+        0.3432, 0.082134, 45.0, 1.0, // cta-ghost
+        0.44, 0.1053, 45.0, 1.0, // cta-verb-ink
         0.7, 0.15, 25.0, 1.0, // color-danger
         0.67, 0.15, 25.0, 1.0, // danger-fill
         0.3, 0.06, 25.0, 1.0, // button-danger-tonal
@@ -604,6 +698,12 @@ internal object PaletteTables {
         1.0, 0.0, 0.0, 1.0, // toward-ink
         0.85, 0.015, 75.0, 1.0, // footer-ink-soft
         0.93, 0.012, 75.0, 1.0, // picture-backing
+        0.72, 0.03, 66.0, 1.0, // soft-pen
+        0.74, 0.12, 145.0, 1.0, // color-ok
+        0.7, 0.1, 145.0, 1.0, // verified-mark
+        0.965, 0.015, 75.0, 1.0, // photo-ink
+        0.3, 0.02, 70.0, 1.0, // photo-shade
+        0.12, 0.01, 60.0, 1.0, // viewer-ground
         0.3, 0.04875, 55.0, 1.0, // card-fill-0
         0.3, 0.024, 290.0, 1.0, // card-fill-1
         0.3, 0.0315, 140.0, 1.0, // card-fill-2
@@ -664,6 +764,12 @@ internal object PaletteTables {
         0.34, 0.05, 88.0, 1.0, // card-skeleton-3
         0.34, 0.05, 215.0, 1.0, // card-skeleton-4
         0.34, 0.05, 18.0, 1.0, // card-skeleton-5
+        0.34, 0.04875, 55.0, 1.0, // card-tag-0
+        0.34, 0.024, 290.0, 1.0, // card-tag-1
+        0.34, 0.0315, 140.0, 1.0, // card-tag-2
+        0.35, 0.045, 85.0, 1.0, // card-tag-3
+        0.34, 0.02475, 215.0, 1.0, // card-tag-4
+        0.34, 0.03525, 18.0, 1.0, // card-tag-5
     )
 
     /** sage, light. */
@@ -702,6 +808,8 @@ internal object PaletteTables {
         0.965, 0.013, 140.0, 1.0, // footer-ink
         0.55, 0.13, 140.0, 1.0, // cta-band
         0.965, 0.013, 140.0, 1.0, // cta-ink
+        0.451, 0.1066, 140.0, 1.0, // cta-ghost
+        0.429, 0.1014, 140.0, 1.0, // cta-verb-ink
         0.58, 0.16, 25.0, 1.0, // color-danger
         0.5336, 0.1472, 25.0, 1.0, // danger-fill
         0.9, 0.048, 25.0, 1.0, // button-danger-tonal
@@ -712,12 +820,18 @@ internal object PaletteTables {
         0.82, 0.07, 220.0, 1.0, // color-sky
         0.36, 0.06, 60.0, 0.55, // avatar-stroke
         0.32, 0.05, 60.0, 0.45, // tag-stroke
-        0.2, 0.04, 60.0, 0.28, // scrim
+        0.26, 0.03, 60.0, 0.24, // scrim
         0.2, 0.04, 60.0, 1.0, // shadow-ink
         0.0, 0.0, 0.0, 1.0, // grain-ink
         0.0, 0.0, 0.0, 1.0, // toward-ink
         0.85, 0.015, 75.0, 1.0, // footer-ink-soft
         0.965, 0.015, 75.0, 0.0, // picture-backing
+        0.55, 0.05, 60.0, 1.0, // soft-pen
+        0.55, 0.13, 140.0, 1.0, // color-ok
+        0.78, 0.07, 140.0, 1.0, // verified-mark
+        0.965, 0.015, 75.0, 1.0, // photo-ink
+        0.3, 0.02, 70.0, 1.0, // photo-shade
+        0.12, 0.01, 60.0, 1.0, // viewer-ground
         0.9, 0.065, 55.0, 1.0, // card-fill-0
         0.94, 0.032, 290.0, 1.0, // card-fill-1
         0.93, 0.042, 140.0, 1.0, // card-fill-2
@@ -778,6 +892,12 @@ internal object PaletteTables {
         0.88, 0.08, 88.0, 1.0, // card-skeleton-3
         0.88, 0.08, 215.0, 1.0, // card-skeleton-4
         0.88, 0.08, 18.0, 1.0, // card-skeleton-5
+        0.85, 0.065, 55.0, 1.0, // card-tag-0
+        0.89, 0.032, 290.0, 1.0, // card-tag-1
+        0.88, 0.042, 140.0, 1.0, // card-tag-2
+        0.87, 0.075, 88.0, 1.0, // card-tag-3
+        0.87, 0.033, 215.0, 1.0, // card-tag-4
+        0.84, 0.047, 18.0, 1.0, // card-tag-5
     )
 
     /** sage, dark. */
@@ -816,6 +936,8 @@ internal object PaletteTables {
         0.88, 0.02, 154.0, 1.0, // footer-ink
         0.44, 0.0936, 143.0, 1.0, // cta-band
         0.93, 0.02, 154.0, 1.0, // cta-ink
+        0.3432, 0.073008, 143.0, 1.0, // cta-ghost
+        0.44, 0.0936, 143.0, 1.0, // cta-verb-ink
         0.7, 0.15, 25.0, 1.0, // color-danger
         0.67, 0.15, 25.0, 1.0, // danger-fill
         0.3, 0.06, 25.0, 1.0, // button-danger-tonal
@@ -832,6 +954,12 @@ internal object PaletteTables {
         1.0, 0.0, 0.0, 1.0, // toward-ink
         0.85, 0.015, 75.0, 1.0, // footer-ink-soft
         0.93, 0.012, 75.0, 1.0, // picture-backing
+        0.72, 0.03, 66.0, 1.0, // soft-pen
+        0.74, 0.12, 145.0, 1.0, // color-ok
+        0.7, 0.1, 145.0, 1.0, // verified-mark
+        0.965, 0.015, 75.0, 1.0, // photo-ink
+        0.3, 0.02, 70.0, 1.0, // photo-shade
+        0.12, 0.01, 60.0, 1.0, // viewer-ground
         0.3, 0.04875, 55.0, 1.0, // card-fill-0
         0.3, 0.024, 290.0, 1.0, // card-fill-1
         0.3, 0.0315, 140.0, 1.0, // card-fill-2
@@ -892,6 +1020,12 @@ internal object PaletteTables {
         0.34, 0.05, 88.0, 1.0, // card-skeleton-3
         0.34, 0.05, 215.0, 1.0, // card-skeleton-4
         0.34, 0.05, 18.0, 1.0, // card-skeleton-5
+        0.34, 0.04875, 55.0, 1.0, // card-tag-0
+        0.34, 0.024, 290.0, 1.0, // card-tag-1
+        0.34, 0.0315, 140.0, 1.0, // card-tag-2
+        0.35, 0.045, 85.0, 1.0, // card-tag-3
+        0.34, 0.02475, 215.0, 1.0, // card-tag-4
+        0.34, 0.03525, 18.0, 1.0, // card-tag-5
     )
 
     /** lavender, light. */
@@ -930,6 +1064,8 @@ internal object PaletteTables {
         0.965, 0.012, 300.0, 1.0, // footer-ink
         0.58, 0.14, 290.0, 1.0, // cta-band
         0.965, 0.012, 300.0, 1.0, // cta-ink
+        0.4756, 0.1148, 290.0, 1.0, // cta-ghost
+        0.4524, 0.1092, 290.0, 1.0, // cta-verb-ink
         0.58, 0.16, 25.0, 1.0, // color-danger
         0.5336, 0.1472, 25.0, 1.0, // danger-fill
         0.9, 0.048, 25.0, 1.0, // button-danger-tonal
@@ -940,12 +1076,18 @@ internal object PaletteTables {
         0.82, 0.07, 220.0, 1.0, // color-sky
         0.36, 0.06, 60.0, 0.55, // avatar-stroke
         0.32, 0.05, 60.0, 0.45, // tag-stroke
-        0.2, 0.04, 60.0, 0.28, // scrim
+        0.26, 0.03, 60.0, 0.24, // scrim
         0.2, 0.04, 60.0, 1.0, // shadow-ink
         0.0, 0.0, 0.0, 1.0, // grain-ink
         0.0, 0.0, 0.0, 1.0, // toward-ink
         0.85, 0.015, 75.0, 1.0, // footer-ink-soft
         0.965, 0.015, 75.0, 0.0, // picture-backing
+        0.55, 0.05, 60.0, 1.0, // soft-pen
+        0.55, 0.13, 140.0, 1.0, // color-ok
+        0.78, 0.07, 140.0, 1.0, // verified-mark
+        0.965, 0.015, 75.0, 1.0, // photo-ink
+        0.3, 0.02, 70.0, 1.0, // photo-shade
+        0.12, 0.01, 60.0, 1.0, // viewer-ground
         0.9, 0.065, 55.0, 1.0, // card-fill-0
         0.94, 0.032, 290.0, 1.0, // card-fill-1
         0.93, 0.042, 140.0, 1.0, // card-fill-2
@@ -1006,6 +1148,12 @@ internal object PaletteTables {
         0.88, 0.08, 88.0, 1.0, // card-skeleton-3
         0.88, 0.08, 215.0, 1.0, // card-skeleton-4
         0.88, 0.08, 18.0, 1.0, // card-skeleton-5
+        0.85, 0.065, 55.0, 1.0, // card-tag-0
+        0.89, 0.032, 290.0, 1.0, // card-tag-1
+        0.88, 0.042, 140.0, 1.0, // card-tag-2
+        0.87, 0.075, 88.0, 1.0, // card-tag-3
+        0.87, 0.033, 215.0, 1.0, // card-tag-4
+        0.84, 0.047, 18.0, 1.0, // card-tag-5
     )
 
     /** lavender, dark. */
@@ -1044,6 +1192,8 @@ internal object PaletteTables {
         0.88, 0.016923, 312.0, 1.0, // footer-ink
         0.44, 0.0897, 290.0, 1.0, // cta-band
         0.93, 0.016923, 312.0, 1.0, // cta-ink
+        0.3432, 0.069966, 290.0, 1.0, // cta-ghost
+        0.44, 0.0897, 290.0, 1.0, // cta-verb-ink
         0.7, 0.15, 25.0, 1.0, // color-danger
         0.67, 0.15, 25.0, 1.0, // danger-fill
         0.3, 0.06, 25.0, 1.0, // button-danger-tonal
@@ -1060,6 +1210,12 @@ internal object PaletteTables {
         1.0, 0.0, 0.0, 1.0, // toward-ink
         0.85, 0.015, 75.0, 1.0, // footer-ink-soft
         0.93, 0.012, 75.0, 1.0, // picture-backing
+        0.72, 0.03, 66.0, 1.0, // soft-pen
+        0.74, 0.12, 145.0, 1.0, // color-ok
+        0.7, 0.1, 145.0, 1.0, // verified-mark
+        0.965, 0.015, 75.0, 1.0, // photo-ink
+        0.3, 0.02, 70.0, 1.0, // photo-shade
+        0.12, 0.01, 60.0, 1.0, // viewer-ground
         0.3, 0.04875, 55.0, 1.0, // card-fill-0
         0.3, 0.024, 290.0, 1.0, // card-fill-1
         0.3, 0.0315, 140.0, 1.0, // card-fill-2
@@ -1120,6 +1276,12 @@ internal object PaletteTables {
         0.34, 0.05, 88.0, 1.0, // card-skeleton-3
         0.34, 0.05, 215.0, 1.0, // card-skeleton-4
         0.34, 0.05, 18.0, 1.0, // card-skeleton-5
+        0.34, 0.04875, 55.0, 1.0, // card-tag-0
+        0.34, 0.024, 290.0, 1.0, // card-tag-1
+        0.34, 0.0315, 140.0, 1.0, // card-tag-2
+        0.35, 0.045, 85.0, 1.0, // card-tag-3
+        0.34, 0.02475, 215.0, 1.0, // card-tag-4
+        0.34, 0.03525, 18.0, 1.0, // card-tag-5
     )
 
     /** yellow, light. */
@@ -1158,6 +1320,8 @@ internal object PaletteTables {
         0.965, 0.02, 95.0, 1.0, // footer-ink
         0.64, 0.13, 78.0, 1.0, // cta-band
         0.965, 0.02, 95.0, 1.0, // cta-ink
+        0.5248, 0.1066, 78.0, 1.0, // cta-ghost
+        0.4992, 0.1014, 78.0, 1.0, // cta-verb-ink
         0.58, 0.16, 25.0, 1.0, // color-danger
         0.5336, 0.1472, 25.0, 1.0, // danger-fill
         0.9, 0.048, 25.0, 1.0, // button-danger-tonal
@@ -1168,12 +1332,18 @@ internal object PaletteTables {
         0.82, 0.07, 220.0, 1.0, // color-sky
         0.36, 0.06, 60.0, 0.55, // avatar-stroke
         0.32, 0.05, 60.0, 0.45, // tag-stroke
-        0.2, 0.04, 60.0, 0.28, // scrim
+        0.26, 0.03, 60.0, 0.24, // scrim
         0.2, 0.04, 60.0, 1.0, // shadow-ink
         0.0, 0.0, 0.0, 1.0, // grain-ink
         0.0, 0.0, 0.0, 1.0, // toward-ink
         0.85, 0.015, 75.0, 1.0, // footer-ink-soft
         0.965, 0.015, 75.0, 0.0, // picture-backing
+        0.55, 0.05, 60.0, 1.0, // soft-pen
+        0.55, 0.13, 140.0, 1.0, // color-ok
+        0.78, 0.07, 140.0, 1.0, // verified-mark
+        0.965, 0.015, 75.0, 1.0, // photo-ink
+        0.3, 0.02, 70.0, 1.0, // photo-shade
+        0.12, 0.01, 60.0, 1.0, // viewer-ground
         0.9, 0.065, 55.0, 1.0, // card-fill-0
         0.94, 0.032, 290.0, 1.0, // card-fill-1
         0.93, 0.042, 140.0, 1.0, // card-fill-2
@@ -1234,6 +1404,12 @@ internal object PaletteTables {
         0.88, 0.08, 88.0, 1.0, // card-skeleton-3
         0.88, 0.08, 215.0, 1.0, // card-skeleton-4
         0.88, 0.08, 18.0, 1.0, // card-skeleton-5
+        0.85, 0.065, 55.0, 1.0, // card-tag-0
+        0.89, 0.032, 290.0, 1.0, // card-tag-1
+        0.88, 0.042, 140.0, 1.0, // card-tag-2
+        0.87, 0.075, 88.0, 1.0, // card-tag-3
+        0.87, 0.033, 215.0, 1.0, // card-tag-4
+        0.84, 0.047, 18.0, 1.0, // card-tag-5
     )
 
     /** yellow, dark. */
@@ -1272,6 +1448,8 @@ internal object PaletteTables {
         0.88, 0.023077, 102.0, 1.0, // footer-ink
         0.44, 0.0975, 78.0, 1.0, // cta-band
         0.93, 0.023077, 102.0, 1.0, // cta-ink
+        0.3432, 0.07605, 78.0, 1.0, // cta-ghost
+        0.44, 0.0975, 78.0, 1.0, // cta-verb-ink
         0.7, 0.15, 25.0, 1.0, // color-danger
         0.67, 0.15, 25.0, 1.0, // danger-fill
         0.3, 0.06, 25.0, 1.0, // button-danger-tonal
@@ -1288,6 +1466,12 @@ internal object PaletteTables {
         1.0, 0.0, 0.0, 1.0, // toward-ink
         0.85, 0.015, 75.0, 1.0, // footer-ink-soft
         0.93, 0.012, 75.0, 1.0, // picture-backing
+        0.72, 0.03, 66.0, 1.0, // soft-pen
+        0.74, 0.12, 145.0, 1.0, // color-ok
+        0.7, 0.1, 145.0, 1.0, // verified-mark
+        0.965, 0.015, 75.0, 1.0, // photo-ink
+        0.3, 0.02, 70.0, 1.0, // photo-shade
+        0.12, 0.01, 60.0, 1.0, // viewer-ground
         0.3, 0.04875, 55.0, 1.0, // card-fill-0
         0.3, 0.024, 290.0, 1.0, // card-fill-1
         0.3, 0.0315, 140.0, 1.0, // card-fill-2
@@ -1348,5 +1532,11 @@ internal object PaletteTables {
         0.34, 0.05, 88.0, 1.0, // card-skeleton-3
         0.34, 0.05, 215.0, 1.0, // card-skeleton-4
         0.34, 0.05, 18.0, 1.0, // card-skeleton-5
+        0.34, 0.04875, 55.0, 1.0, // card-tag-0
+        0.34, 0.024, 290.0, 1.0, // card-tag-1
+        0.34, 0.0315, 140.0, 1.0, // card-tag-2
+        0.35, 0.045, 85.0, 1.0, // card-tag-3
+        0.34, 0.02475, 215.0, 1.0, // card-tag-4
+        0.34, 0.03525, 18.0, 1.0, // card-tag-5
     )
 }

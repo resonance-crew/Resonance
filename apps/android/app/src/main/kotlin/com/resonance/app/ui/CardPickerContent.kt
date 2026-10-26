@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import com.resonance.design.generated.HueRole
 import com.resonance.design.GrainInk
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -196,7 +197,7 @@ private fun CardPickRow(card: FeedCard, index: Int, choosing: Boolean, chosen: B
 @Composable
 private fun PickThumb(url: String?, hue: Double, seed: Double, chosen: Boolean) {
     val shape = remember(seed) { pickThumbShape(seed) }
-    val cover = Mixes.atHue("card-accent", hue)
+    val cover = Tokens.hue(HueRole.Accent, hue)
     val rimInk = Tokens.AvatarStroke
     val chosenFace = Tokens.Terracotta.copy(alpha = 0.82f)
     val grainInk = GrainInk.current

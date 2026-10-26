@@ -394,7 +394,7 @@ private fun ColumnScope.StoryCardBody(
     }
     // The web renders the tag row even when empty (its 8px margin still counts).
     FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        content.tags.take(4).forEach { TagPill(it, fill = palette.fill) }
+        content.tags.take(4).forEach { TagPill(it, fill = palette.colors.tag) }
     }
     CssText(content.title, AppFonts.Family.Heading, 18f, 700, lineHeight = 1.3f, modifier = Modifier.fillMaxWidth())
     CssText(content.excerpt, AppFonts.Family.Body, 14f, 400, lineHeight = 1.65f, color = Tokens.TextMuted, modifier = Modifier.fillMaxWidth())

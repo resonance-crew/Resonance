@@ -1,5 +1,6 @@
 package com.resonance.design
 
+import com.resonance.design.generated.HueRole
 import com.resonance.design.generated.PaletteTheme
 import com.resonance.design.generated.ResonanceColors
 import androidx.compose.ui.graphics.luminance
@@ -63,6 +64,20 @@ class PaletteFormulaTest {
             val dark = sample["scheme"]!!.jsonPrimitive.content == "dark"
             matches("wallpaper $hue/$chroma ${if (dark) "dark" else "light"}", sample["palette"]!!.jsonObject, PaletteFormula.wallpaperPalette(hue, chroma, dark))
         }
+    }
+
+    @Test fun theHueRolesArePaletteTsAndDrawAnyHue() {
+        // A card's own hue (an embed, a picker's thumbnail, a thought-map group, a card's menu): each role's lightness and chroma per scheme.
+        val roles = fixture["hueRoles"]!!.jsonObject
+        assertEquals(roles.keys.toList(), HueRole.entries.map { it.key })
+        for (role in HueRole.entries) {
+            val want = roles[role.key]!!.jsonObject
+            assertEquals(role.key, want["light"]!!.jsonArray.map { it.jsonPrimitive.double }, role.light)
+            assertEquals(role.key, want["dark"]!!.jsonArray.map { it.jsonPrimitive.double }, role.dark)
+        }
+        val dark = ResonanceColors.of(PaletteTheme.Sage, dark = true)
+        assertEquals(OklchColor.of(0.72, 0.0825, 200.0, 0.55), dark.hue(HueRole.Pen, 200.0, 0.55))
+        assertEquals(OklchColor.of(0.975, 0.012, 20.0), ResonanceColors.LightTerracotta.hue(HueRole.Interior, 380.0))
     }
 
     @Test fun aGreyWallpaperWearsTerracotta() {

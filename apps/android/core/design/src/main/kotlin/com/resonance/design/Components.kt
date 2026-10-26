@@ -806,8 +806,8 @@ fun OnDarkIconButton(icon: IconName, label: String, size: Dp = 20.dp, onClick: (
 
 /** [OnDarkIconButton]'s disc: the viewer's backdrop ink, how strong it lies, and its outline. */
 object OnDarkDisc {
-    /** The viewer's own dark, `oklch(12% 0.01 60)` (the web viewer's backdrop). */
-    val Ink: Color = OklchColor.of(0.12, 0.01, 60.0)
+    /** The viewer's own dark (`viewer-ground`, the web viewer's backdrop), the same in either scheme. */
+    val Ink: Color get() = ResonanceColors.LightTerracotta.ViewerGround
     /** The disc at rest, and pressed. */
     const val REST = 0.5f
     const val PRESSED = 0.72f

@@ -1,6 +1,9 @@
 package com.resonance.app.thoughtmap
 
 import com.resonance.design.generated.LocalResonanceColors
+import com.resonance.design.generated.ResonanceColors
+import com.resonance.design.generated.HueRole
+import com.resonance.design.PaletteMixes
 import androidx.compose.runtime.ReadOnlyComposable
 import android.graphics.LinearGradient
 import android.graphics.Shader
@@ -352,45 +355,40 @@ private fun TabRow() {
 }
 
 /**
- * The map's inks: oklch colours per hue (a card's, a region's), made once — the web writes them as
- * CSS oklch(). Light is the web's; dark the same roles on night paper: a card's paper a low tint
- * of its hue, its pen bright (the "deeper" pen of light is the brighter one), regions a deep wash,
- * the arrows chalk. [current] is the screen's scheme's.
+ * The map's inks, the web's ThoughtMap's: a card's and a group's colours from their hue through the
+ * palette's hue roles (palette.ts HUE_ROLES: interior, wash, pen, emphasis, group…), the arrows
+ * and their pills from the palette's inks and well — so the map follows the scheme and theme on
+ * screen. [current] is the screen's palette's; each made once.
  */
-class MapInk private constructor(val dark: Boolean) {
-    private val cache = HashMap<String, Color>()
-
-    fun oklch(l: Double, c: Double, h: Double, alpha: Double = 1.0): Color =
-        synchronized(cache) { cache.getOrPut("$l|$c|$h|$alpha") { OklchColor.of(l, c, h, alpha) } }
-
-    fun nodeFill(hue: Double, emphasized: Boolean) =
-        if (dark) { if (emphasized) oklch(0.3, 0.04, hue) else oklch(0.235, 0.014, hue) }
-        else { if (emphasized) oklch(0.925, 0.045, hue) else oklch(0.975, 0.012, hue) }
-    fun nodeStroke(hue: Double, emphasized: Boolean) =
-        if (dark) { if (emphasized) oklch(0.84, 0.07, hue) else oklch(0.72, 0.09, hue) }
-        else { if (emphasized) oklch(0.38, 0.13, hue) else oklch(0.52, 0.11, hue) }
-    fun thumbRim(hue: Double) = if (dark) oklch(0.72, 0.09, hue, 0.55) else oklch(0.52, 0.11, hue, 0.55)
-    fun regionFill(hue: Double, hot: Boolean) = if (dark) oklch(0.27, 0.03, hue, if (hot) 0.92 else 0.78) else oklch(0.965, 0.032, hue, if (hot) 0.92 else 0.78)
-    fun regionStroke(hue: Double, strong: Boolean) =
-        if (dark) { if (strong) oklch(0.8, 0.08, hue) else oklch(0.62, 0.07, hue) }
-        else { if (strong) oklch(0.45, 0.1, hue) else oklch(0.6, 0.085, hue) }
-    fun edgeInk(selected: Boolean) =
-        if (dark) { if (selected) oklch(0.88, 0.02, 76.0) else oklch(0.66, 0.03, 70.0) }
-        else { if (selected) oklch(0.28, 0.05, 60.0) else oklch(0.46, 0.045, 60.0) }
-    fun linkInk(hue: Double) = if (dark) oklch(0.72, 0.09, hue) else oklch(0.52, 0.11, hue)
-    /** A region title's underline and its bar. */
-    fun regionUnderline(hue: Double) = if (dark) oklch(0.7, 0.08, hue) else oklch(0.48, 0.09, hue)
-    fun regionBar(hue: Double) = if (dark) oklch(0.27, 0.03, hue, 0.96) else oklch(0.965, 0.032, hue, 0.96)
-    val pillFill = if (dark) oklch(0.27, 0.015, 70.0) else oklch(0.94, 0.02, 75.0)
-    val pillFillSelected = if (dark) oklch(0.34, 0.025, 60.0) else oklch(0.88, 0.03, 60.0)
-    val dot = if (dark) oklch(0.36, 0.02, 70.0) else oklch(0.82, 0.025, 75.0)
-    val scrim = if (dark) oklch(0.08, 0.01, 60.0, 0.4) else oklch(0.3, 0.02, 75.0, 0.16)
+class MapInk private constructor(private val palette: ResonanceColors) {
+    fun nodeFill(hue: Double, emphasized: Boolean) = palette.hue(if (emphasized) HueRole.Wash else HueRole.Interior, hue)
+    fun nodeStroke(hue: Double, emphasized: Boolean) = palette.hue(if (emphasized) HueRole.Emphasis else HueRole.Pen, hue)
+    fun thumbRim(hue: Double) = palette.hue(HueRole.Pen, hue, 0.55)
+    fun regionFill(hue: Double, hot: Boolean) = palette.hue(HueRole.Group, hue, if (hot) 0.92 else 0.78)
+    fun regionStroke(hue: Double, strong: Boolean) = palette.hue(if (strong) HueRole.GroupPenHot else HueRole.GroupPen, hue)
+    /** An arrow: the muted ink a quarter of the way to the ink; chosen, the ink. */
+    fun edgeInk(selected: Boolean) = if (selected) palette.Text else edge
+    fun linkInk(hue: Double) = palette.hue(HueRole.Pen, hue)
+    /** A group title's underline and its bar. */
+    fun regionUnderline(hue: Double) = palette.hue(HueRole.GroupInk, hue)
+    fun regionBar(hue: Double) = palette.hue(HueRole.Group, hue, 0.96)
+    /** An arrow's label: on the well; chosen, a step further from the paper. */
+    val pillFill = palette.CreamDark
+    val pillFillSelected = PaletteMixes.mixed(palette.oklchOf("color-cream-dark"), palette.oklchOf("toward-ink"), 0.94)
+    /** The dot grid: the fields' pen. */
+    val dot = palette.FieldBorder
+    /** Behind the tray: the scrim at two thirds. */
+    val scrim = palette.Scrim.copy(alpha = palette.Scrim.alpha * 0.67f)
+    private val edge = PaletteMixes.mixed(palette.oklchOf("color-text-muted"), palette.oklchOf("color-text"), 0.75)
 
     companion object {
-        val Light = MapInk(false)
-        val Dark = MapInk(true)
+        private val made = HashMap<ResonanceColors, MapInk>()
 
-        /** The screen's scheme's inks. */
-        val current: MapInk @Composable @ReadOnlyComposable get() = if (LocalResonanceColors.current.dark) Dark else Light
+        fun of(palette: ResonanceColors): MapInk = synchronized(made) {
+            made.getOrPut(palette) { MapInk(palette) }.also { if (made.size > 8) made.keys.retainAll(setOf(palette)) }
+        }
+
+        /** The screen's palette's inks. */
+        val current: MapInk @Composable @ReadOnlyComposable get() = of(LocalResonanceColors.current)
     }
 }

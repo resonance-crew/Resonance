@@ -293,13 +293,14 @@ internal fun RefSquareFlag(code: String, size: Dp = 18.dp, seed: Double? = null)
         ))
     }
     val pad = maxOf(1.0, s * 0.06).dp
+    val rim = FlagRim
     Box(
         Modifier
             .size(size)
             .clearAndSetSemantics { }
             .drawWithContent {
                 drawContent()
-                drawOutline(shape.createOutline(this.size, layoutDirection, this), FlagRim, style = Stroke(Tokens.InkLight.toPx(), join = StrokeJoin.Round))
+                drawOutline(shape.createOutline(this.size, layoutDirection, this), rim, style = Stroke(Tokens.InkLight.toPx(), join = StrokeJoin.Round))
             }
             .clip(shape),
         contentAlignment = androidx.compose.ui.Alignment.Center,

@@ -1,5 +1,6 @@
 package com.resonance.design
 
+import com.resonance.design.generated.HueRole
 import android.os.Build
 import android.view.View
 import android.view.WindowInsetsController
@@ -459,30 +460,17 @@ internal class MenuColors(hue: Double?, palette: ResonanceColors) {
             divider = palette.Terracotta.copy(alpha = 0.4f)
             dangerWash = mixes.menuDangerWash
             dangerWashPressed = mixes.menuDangerWashPressed
-        } else if (palette.dark) {
-            // On night paper a card's own menu wears its family's colours: its pens, its paper, its rule.
-            val family = CardPalette(hue, 0).colorsIn(palette)
-            border = family.border
-            borderHover = family.deep
-            cream = family.interior
-            divider = family.separator
-            dangerWash = mixes.menuDangerWash
-            dangerWashPressed = mixes.menuDangerWashPressed
         } else {
-            // The web's light --menu-* of a card's hue (StoryCard's menu).
-            border = OklchColor.of(0.52, 0.11, hue)
-            borderHover = OklchColor.of(0.38, 0.09, hue)
-            cream = OklchColor.of(0.98, 0.01, hue)
-            divider = OklchColor.of(0.55, 0.04, hue, 0.4)
-            dangerWash = mixYellow(palette, hue, 0.25)
-            dangerWashPressed = mixYellow(palette, hue, 0.45)
+            // A card's own menu (the web's --menu-* from the card's hue): its pen, deeper pointed at, its paper, its rule.
+            border = palette.hue(HueRole.Pen, hue)
+            borderHover = palette.hue(HueRole.PenDeep, hue)
+            cream = palette.hue(HueRole.Menu, hue)
+            divider = palette.hue(HueRole.Separator, hue, 0.4)
+            val (l, c) = if (palette.dark) HueRole.Menu.dark else HueRole.Menu.light
+            val paper = doubleArrayOf(l, c, hue, 1.0)
+            dangerWash = PaletteMixes.mixed(palette.oklchOf("color-yellow"), paper, 0.25)
+            dangerWashPressed = PaletteMixes.mixed(palette.oklchOf("color-yellow"), paper, 0.45)
         }
-    }
-
-    /** color-mix(in oklch, yellow t, the menu's paper of [hue]): halfway round the shorter hue arc, as CSS interpolates. */
-    private fun mixYellow(palette: ResonanceColors, hue: Double, t: Double): Color {
-        val m = PaletteMixes.mix(palette.oklchOf("color-yellow"), doubleArrayOf(0.98, 0.01, hue, 1.0), t)
-        return OklchColor.of(m[0], m[1], m[2], m[3])
     }
 }
 

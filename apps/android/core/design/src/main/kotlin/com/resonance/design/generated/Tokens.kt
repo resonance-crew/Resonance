@@ -114,6 +114,12 @@ object Tokens {
     /** --cta-ink */
     val CtaInk: Color
         @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CtaInk
+    /** --cta-ghost */
+    val CtaGhost: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CtaGhost
+    /** --cta-verb-ink */
+    val CtaVerbInk: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CtaVerbInk
     /** --color-danger */
     val Danger: Color
         @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.Danger
@@ -162,6 +168,24 @@ object Tokens {
     /** --picture-backing — behind a story picture: none in light, a light paper in dark (a transparent logo's black words still show) */
     val PictureBacking: Color
         @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.PictureBacking
+    /** --soft-pen */
+    val SoftPen: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.SoftPen
+    /** --color-ok */
+    val Ok: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.Ok
+    /** --verified-mark */
+    val VerifiedMark: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.VerifiedMark
+    /** --photo-ink */
+    val PhotoInk: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.PhotoInk
+    /** --photo-shade */
+    val PhotoShade: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.PhotoShade
+    /** --viewer-ground */
+    val ViewerGround: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.ViewerGround
     /** --card-fill-0 */
     val CardFill0: Color
         @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardFill0
@@ -342,6 +366,24 @@ object Tokens {
     /** --card-skeleton-5 */
     val CardSkeleton5: Color
         @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardSkeleton5
+    /** --card-tag-0 */
+    val CardTag0: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardTag0
+    /** --card-tag-1 */
+    val CardTag1: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardTag1
+    /** --card-tag-2 */
+    val CardTag2: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardTag2
+    /** --card-tag-3 */
+    val CardTag3: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardTag3
+    /** --card-tag-4 */
+    val CardTag4: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardTag4
+    /** --card-tag-5 */
+    val CardTag5: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardTag5
 
     /** --card-fill-0…5, in CardPalette.HUES order. */
     val CardFills: List<Color>
@@ -373,6 +415,9 @@ object Tokens {
     /** --card-skeleton-0…5, in CardPalette.HUES order. */
     val CardSkeletons: List<Color>
         @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardSkeletons
+    /** --card-tag-0…5, in CardPalette.HUES order. */
+    val CardTags: List<Color>
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardTags
 
     /** --grain-scale */
     val GrainScale: Float
@@ -380,6 +425,10 @@ object Tokens {
     /** --reading-progress-glow-alpha */
     val ReadingProgressGlowAlpha: Float
         @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.ReadingProgressGlowAlpha
+
+    /** A [HueRole]'s colour at [hue] in the palette on screen. */
+    @Composable @ReadOnlyComposable
+    fun hue(role: HueRole, hue: Double, alpha: Double = 1.0): Color = LocalResonanceColors.current.hue(role, hue, alpha)
 
     /** One pen for the whole app (src/lib/design/strokes.ts). */
     val Ink = 1.8.dp

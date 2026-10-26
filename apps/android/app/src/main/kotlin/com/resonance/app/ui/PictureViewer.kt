@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import com.resonance.design.generated.Tokens
 import android.os.Build
 import android.view.View
 import android.view.WindowInsetsController
@@ -84,7 +85,7 @@ internal fun PictureViewer(picture: ChatPictureSource, loader: ImageLoader?, onD
             Modifier
                 .fillMaxSize()
                 .onSizeChanged { size = it }
-                .background(Color.Black.copy(alpha = 0.94f * backdrop))
+                .background(Tokens.ViewerGround.copy(alpha = 0.94f * backdrop))
                 .pointerInput(Unit) {
                     detectTapGestures(onDoubleTap = { at ->
                         if (scale > 1f) {
@@ -143,8 +144,8 @@ internal fun PictureViewer(picture: ChatPictureSource, loader: ImageLoader?, onD
                 onError = { state = Loading.Failed },
             )
             when (state) {
-                Loading.Busy -> SketchLoader(40.dp, Color.White.copy(alpha = 0.8f))
-                Loading.Failed -> OrganicIcon(IconName.Image, size = 30.dp, color = Color.White.copy(alpha = 0.7f))
+                Loading.Busy -> SketchLoader(40.dp, Tokens.PhotoInk.copy(alpha = 0.8f))
+                Loading.Failed -> OrganicIcon(IconName.Image, size = 30.dp, color = Tokens.PhotoInk.copy(alpha = 0.7f))
                 Loading.Done -> {}
             }
             // The ✕ on its disc of the viewer's dark (round 12 §1–2), the disc's centre 16 + 22 in from the
