@@ -477,6 +477,10 @@ describe('the pages that showed the account', () => {
     expect(revalidate).toHaveBeenCalledWith(report.pages);
     // Its slug is retired with it: no later card is given it, so its old links never open another's card.
     expect(Object.keys((await db.doc('retiredSlugs/a-card').get()).data() ?? {})).toEqual(['retiredAt']);
+    // Its pen name is held for no one: nobody takes it at once, and the hold says nothing of whose it was.
+    const hold = (await db.doc('handleHolds/alice').get()).data();
+    expect(hold?.heldFor).toBeNull();
+    expect(Object.keys(hold ?? {}).sort()).toEqual(['heldFor', 'releasedAt']);
   });
 
   // The trash, then the account: what anyone can ask of an anonymous card

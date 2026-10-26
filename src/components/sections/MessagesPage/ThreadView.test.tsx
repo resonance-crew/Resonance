@@ -172,6 +172,13 @@ describe('a pen name that has passed to someone else', () => {
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
+  it('follows them to their pen name now when nobody holds the old one', async () => {
+    vi.mocked(getUserByHandle).mockResolvedValue(null);
+    vi.mocked(getUsersByIds).mockResolvedValue({ formerAlice: { ...alice, id: 'formerAlice', handle: 'alice2' } });
+    render('formerAlice');
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/messages/alice2?note=n1&card=c1&u=formerAlice'));
+  });
+
   it('opens the thread as ever when the pen name is still theirs', async () => {
     render(alice.id);
     await waitFor(() => expect(getConversation).toHaveBeenCalled());

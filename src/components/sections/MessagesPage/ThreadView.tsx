@@ -97,8 +97,8 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
     `user:handle:${handle}`,
     () => getUserByHandle(handle),
   );
-  // The pen name has passed to someone else since the link was made: find the one it meant, by id.
-  const moved = !!userId && !!holder && holder.id !== userId;
+  // The pen name is no longer theirs (someone else took it, or nobody holds it now): find the one it meant, by id.
+  const moved = !!userId && !loadingHolder && holder?.id !== userId;
   const { data: meant, isLoading: loadingMeant } = useSWR(moved ? `user:id:${userId}` : null, () =>
     getUsersByIds([userId!]).then((found) => found[userId!] ?? null),
   );

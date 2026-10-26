@@ -1,6 +1,6 @@
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import type { AuthUser } from '@/lib/auth/types';
-import { handleKey, handleRef, handleTakenByOther, reservable, reserveHandle } from '@/lib/db/firestore/handles';
+import { handleKey, handleRef, handleTakenByOther, holdHandle, reservable, reserveHandle } from '@/lib/db/firestore/handles';
 import { avatarColorFor } from '@/lib/design/avatarColors';
 import { hasPenName } from './conversations';
 import { ApiFailure } from './http';
@@ -103,8 +103,12 @@ export async function updateProfile(db: Firestore, uid: string, input: UpdatePro
       patch.handleLower = handleKey(input.handle);
       patch.handleChangedAt = FieldValue.serverTimestamp();
       renamed = current;
-      // Release the old name — only ever this account's own reservation.
-      if (oldReservation?.exists && oldReservation.get('uid') === uid) tx.delete(oldReservation.ref);
+      // Release the old name — only ever this account's own reservation — into a hold for this account: links
+      // that named it by the old name must not reach someone who took it at once (handles.ts).
+      if (oldReservation?.exists && oldReservation.get('uid') === uid) {
+        tx.delete(oldReservation.ref);
+        holdHandle(db, current, uid, tx);
+      }
       reserveHandle(db, tx, uid, input.handle);
     }
     if (input.bio != null) patch.bio = input.bio;

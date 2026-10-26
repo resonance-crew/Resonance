@@ -70,7 +70,7 @@ export function MessagesPage({ activeHandle, replyNote, userId }: MessagesPagePr
     return (
       <Link
         key={person.id}
-        href={`/messages/${person.handle}`}
+        href={`/messages/${person.handle}?u=${encodeURIComponent(person.id)}`}
         className={styles.row}
         data-active={person.handle === activeHandle || undefined}
       >

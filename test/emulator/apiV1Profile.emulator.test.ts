@@ -3,6 +3,7 @@ import { deleteApp, initializeApp, type App } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { ApiFailure } from '@/lib/api/v1/http';
 import { createProfile, handleAvailable, updateProfile } from '@/lib/api/v1/profile';
+import { HANDLE_HOLD_DAYS } from '@/lib/db/firestore/handles';
 import { avatarColorFor } from '@/lib/design/avatarColors';
 import { reportCard } from '@/lib/api/v1/safety';
 import { CreateProfileRequest, UpdateProfileRequest } from '@/lib/api/v1/schemas';
@@ -153,11 +154,28 @@ describe('pen-name reservations', () => {
     expect(await handleAvailable(db, 'omar', 'dawn')).toBe(true);
   });
 
-  it('move with a rename: the new name is reserved, the old one freed for anyone', async () => {
+  it('move with a rename: the new name is reserved, the old one held for its former holder alone', async () => {
     await createProfile(db, newcomer, { handle: 'nina', region: 'TW', primaryLocale: 'en' });
     await updateProfile(db, 'nina', { handle: 'Nightingale' });
     expect(await reservation('nina')).toBeNull();
     expect(await reservation('nightingale')).toMatchObject({ uid: 'nina', handle: 'Nightingale' });
+    // Links that named nina by her old name must not reach someone who takes it at once: held, server-only.
+    expect((await db.doc('handleHolds/nina').get()).get('heldFor')).toBe('nina');
+    expect(await handleAvailable(db, 'omar', 'nina')).toBe(false);
+    expect((await failure(updateProfile(db, 'bob', { handle: 'Nina' }))).code).toBe('conflict');
+    // She may take it back, and then it is held no longer.
+    expect(await handleAvailable(db, 'nina', 'nina')).toBe(true);
+    await updateProfile(db, 'nina', { handle: 'nina' });
+    expect(await reservation('nina')).toMatchObject({ uid: 'nina' });
+    expect((await db.doc('handleHolds/nina').get()).exists).toBe(false);
+    expect((await db.doc('handleHolds/nightingale').get()).get('heldFor')).toBe('nina');
+  });
+
+  it('free a held name for anyone once its hold has lapsed', async () => {
+    await createProfile(db, newcomer, { handle: 'nina', region: 'TW', primaryLocale: 'en' });
+    await updateProfile(db, 'nina', { handle: 'Nightingale' });
+    const lapsed = new Date(Date.now() - (HANDLE_HOLD_DAYS + 1) * 86_400_000);
+    await db.doc('handleHolds/nina').set({ heldFor: 'nina', releasedAt: lapsed });
     expect(await handleAvailable(db, 'omar', 'nina')).toBe(true);
   });
 

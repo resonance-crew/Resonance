@@ -696,6 +696,15 @@ describe('cards: what the author may write', () => {
     await assertFails(setDoc(doc(as('mallory'), 'cardTombstones', 'FreshCardAAAAAAAAAAA'), { deletedAt: new Date() }));
   });
 
+  it('lets no client read or write a pen-name hold (server-only)', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'handleHolds', 'nina'), { heldFor: 'nina', releasedAt: new Date() });
+    });
+    await assertFails(getDoc(doc(as('mallory'), 'handleHolds', 'nina')));
+    await assertFails(setDoc(doc(as('mallory'), 'handleHolds', 'mallory'), { heldFor: 'mallory', releasedAt: new Date() }));
+    await assertFails(deleteDoc(doc(as('nina'), 'handleHolds', 'nina')));
+  });
+
   it('lets no client read or write a retired slug (server-only, as tombstones are)', async () => {
     await seed(async (db) => {
       await setDoc(doc(db, 'retiredSlugs', 'a-quiet-night'), { retiredAt: new Date() });
