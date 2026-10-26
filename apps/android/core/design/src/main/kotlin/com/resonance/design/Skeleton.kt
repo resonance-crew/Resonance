@@ -121,7 +121,7 @@ private fun Modifier.shimmer(): Modifier {
 /** Six (or `count`) StoryCards in their loading dress, as the web's FeedSkeleton. */
 fun androidx.compose.foundation.lazy.LazyListScope.storyCardSkeletons(count: Int = 6, firstUnderBar: Boolean = false, layout: CardListLayout = CardListLayout.Phone) {
     if (!layout.isGrid) {
-        items(count) { i -> StoryCardSkeleton(i, isLast = i == count - 1, isFirst = firstUnderBar && i == 0, inset = layout.inset) }
+        items(count, contentType = { "storyCardSkeleton" }) { i -> StoryCardSkeleton(i, isLast = i == count - 1, isFirst = firstUnderBar && i == 0, inset = layout.inset) }
         return
     }
     // The bordered grid's skeleton: the same outlines in the same columns, the first row clear of the bar.

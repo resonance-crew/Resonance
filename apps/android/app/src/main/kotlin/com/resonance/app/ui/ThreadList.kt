@@ -130,6 +130,23 @@ import kotlinx.coroutines.launch
  * what is on screen.
  */
 
+/**
+ * The kind of row a message makes, for the list's reuse of compositions (a picture's row is reused
+ * for a picture's): from what a message carries from the start and keeps — a picture, a card it
+ * was sent with, a note's card, a reply's quote — never from what arrives later (a link's preview,
+ * its delivery), so a row keeps its kind for as long as it is on screen.
+ */
+internal fun rowContentType(row: ThreadRow): Int {
+    val m = row.message
+    return when {
+        m.image != null -> 1
+        m.isNote -> 2
+        m.cardRef != null -> 3
+        m.replyTo != null -> 4
+        else -> 0
+    }
+}
+
 /** Everything a row of the thread needs from the screen around it. */
 internal class ThreadContext(
     val model: ThreadModel,
@@ -330,9 +347,9 @@ internal fun MessageList(
             contentPadding = padding,
         ) {
             // The letter's line is the thread's last item: it scrolls with the messages (round 9 §4).
-            if (notice != null) item(key = "notice") { ThreadNotice(notice) }
+            if (notice != null) item(key = "notice", contentType = "notice") { ThreadNotice(notice) }
             // The key a row had while it was sending is the one its document comes under, so it doesn't jump.
-            itemsIndexed(newestFirst, key = { _, r -> r.message.key }) { i, row ->
+            itemsIndexed(newestFirst, key = { _, r -> r.message.key }, contentType = { _, r -> rowContentType(r) }) { i, row ->
                 val gap = rowGap(labelled = row.dayLabel || row.timeLabel, joinsAbove = row.joinsAbove, quoted = row.message.replyTo != null || row.message.isNote)
                 // A run still on its way says so once, under its newest message: the stack stays one stack.
                 val sendingBelow = row.position.joinsBelow && newestFirst.getOrNull(i - 1)?.message?.delivery == Delivery.Sending
@@ -342,8 +359,8 @@ internal fun MessageList(
                     MessageItem(row, ctx, deliveryLine = !sendingBelow)
                 }
             }
-            if (quiet != null) item(key = "quiet") { QuietNote(quiet) }
-            else if (model.threadReady && rows.isNotEmpty()) item(key = "older") { OlderRow(model) }
+            if (quiet != null) item(key = "quiet", contentType = "quiet") { QuietNote(quiet) }
+            else if (model.threadReady && rows.isNotEmpty()) item(key = "older", contentType = "older") { OlderRow(model) }
         }
         // The pill rests 12 over the foot (the capsule, or the fade over its riding rows), wherever the keyboard has taken it.
         AnimatedVisibility(

@@ -198,7 +198,7 @@ fun LazyListScope.storyCards(
     if (layout.isGrid) return borderedCards(cards, open, onLast, firstUnderBar, layout, keyPrefix = keyPrefix, leading = leading)
     // No card wears the family of any of the three before it (design note B3), over the list as shown — each run as its own.
     val palettes = cardRunFamilies(cards, leading)
-    itemsIndexed(cards, key = { _, c -> keyPrefix + c.id }) { i, card ->
+    itemsIndexed(cards, key = { _, c -> keyPrefix + c.id }, contentType = { _, _ -> "storyCard" }) { i, card ->
         // Mapped once per card (its strings and accent), not on every recomposition of the list.
         val content = remember(card) { card.story() }
         StoryCard(
@@ -239,7 +239,7 @@ internal fun LazyListScope.borderedCards(
     val blocks = gridBlocks(cards.size, n * GridBlockRows, leading)
     // The same families as the list read top to bottom (each run as its own): row-major, so none shares one with the cards beside or above it.
     val palettes = cardRunFamilies(cards, leading)
-    itemsIndexed(blocks, key = { _, block -> "${keyPrefix}grid:${block.key}:${cards[block.indices.first()].id}" }) { b, block ->
+    itemsIndexed(blocks, key = { _, block -> "${keyPrefix}grid:${block.key}:${cards[block.indices.first()].id}" }, contentType = { _, _ -> "cardGrid" }) { b, block ->
         val gap = Tokens.FeedGap.dp
         Row(
             Modifier
@@ -336,7 +336,7 @@ internal fun LazyListScope.answerCards(cards: List<FeedCard>, open: (Route) -> U
 /** MiniCardGrid on a phone: the resonance and linked-cards lists, as pared-back bands. */
 fun LazyListScope.miniCards(cards: List<FeedCard>, open: (Route) -> Unit, keyPrefix: String) {
     val palettes = cardFamilies(cards)
-    itemsIndexed(cards, key = { _, c -> "$keyPrefix${c.id}" }) { i, card ->
+    itemsIndexed(cards, key = { _, c -> "$keyPrefix${c.id}" }, contentType = { _, _ -> "miniCard" }) { i, card ->
         // Wider than a phone, the band's content keeps to the centred reading column.
         MiniStoryCard(
             remember(card) { card.story() }, i, i == cards.lastIndex,

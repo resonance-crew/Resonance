@@ -96,7 +96,7 @@ fun ConversationsScreen(session: Session, open: (Route) -> Unit) {
             // Still reading: the rows' own shapes, so nothing jumps when they arrive.
             item(key = "skeleton") { ConversationsSkeleton() }
         }
-        items(state.conversations, key = { "c:${it.id}" }) { convo ->
+        items(state.conversations, key = { "c:${it.id}" }, contentType = { "conversation" }) { convo ->
             ConversationRow(convo.other, preview(convo), convo.sentAt?.let(::rowTime), convo.unread, open, chosen = chosen?.isWith(convo.other) == true)
         }
         if (state.starters.isNotEmpty()) {
@@ -108,7 +108,7 @@ fun ConversationsScreen(session: Session, open: (Route) -> Unit) {
                     modifier = Modifier.readableColumn().padding(start = 16.dp, end = 18.dp).padding(top = 16.dp, bottom = 4.dp).padding(horizontal = 14.dp),
                 )
             }
-            items(state.starters, key = { "s:${it.id}" }) { person ->
+            items(state.starters, key = { "s:${it.id}" }, contentType = { "conversation" }) { person ->
                 ConversationRow(person, L10n.Messages.noMessagesYet, null, 0, open, chosen = chosen?.isWith(person) == true)
             }
         }

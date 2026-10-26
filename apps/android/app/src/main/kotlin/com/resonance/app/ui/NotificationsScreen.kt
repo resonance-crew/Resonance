@@ -55,7 +55,7 @@ fun NotificationsScreen(session: Session, open: (Route) -> Unit) {
                     fill = true, modifier = Modifier.fillParentMaxHeight(),
                 )
             }
-            else -> itemsIndexed(items, key = { _, it -> it.id }) { i, item ->
+            else -> itemsIndexed(items, key = { _, it -> it.id }, contentType = { _, _ -> "notification" }) { i, item ->
                 Column(Modifier.readableColumn().padding(horizontal = 20.dp)) {
                     if (i > 0) WavyDivider(seed = 29.0 + i * 7)
                     NotificationRow(item, session, open)

@@ -439,7 +439,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                             )
                         }
                         answerCards(linked, open, keyPrefix = "linked:", related = relatedLayout)
-                        item { Spacer(Modifier.height(40.dp)) }
+                        item(contentType = "spacer") { Spacer(Modifier.height(40.dp)) }
                     }
                     // 與此文共振: the related list's full cards at every width (round 9 C1) — three, then 查看全部 for the rest, in place.
                     if (resonance.isNotEmpty()) {
@@ -451,12 +451,12 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                 OrganicButton(L10n.Card.ResonanceSection.showAll(resonance.size), variant = ButtonVariant.Tonal, small = true) { allResonances = true }
                             }
                         }
-                        item { Spacer(Modifier.height(16.dp)) }
+                        item(contentType = "spacer") { Spacer(Modifier.height(16.dp)) }
                     }
                     if (related.isNotEmpty() && !trashedOwn) {
                         sectionHeading(L10n.Card.related, cardSectionAir(cls, phoneBelow = 56))
                         storyCards(related, open, layout = relatedLayout)
-                        item { Spacer(Modifier.height(16.dp)) }
+                        item(contentType = "spacer") { Spacer(Modifier.height(16.dp)) }
                     }
                 }
             }
