@@ -490,14 +490,24 @@ async function ownShelf(db: Firestore, viewerId: string, shelf: OwnShelf, now: n
   const kept = (d: QueryDocumentSnapshot) => d.get('trashedAt') == null;
   if (shelf === 'trash') return trashShelf(db, viewerId, now);
   if (shelf === 'draft') {
-    // A draft has no stored summary (it is made at publish): its story comes along.
-    const snap = await own.where('publishedAt', '==', null).select(...LIST_FIELDS, 'story').limit(DRAFT_SCAN).get();
+    // Scanned without their stories: only the drafts shown have theirs read, after the cut.
+    const snap = await own.where('publishedAt', '==', null).select(...LIST_FIELDS).limit(DRAFT_SCAN).get();
     const edited = (d: QueryDocumentSnapshot) => {
       const at = d.get('updatedAt');
       return at instanceof Timestamp ? at.toMillis() : 0;
     };
     // Most recently edited first (sorted here: drafts are few, and this needs no composite index).
-    return snap.docs.filter(kept).sort((a, b) => edited(b) - edited(a)).slice(0, BOX_LIMIT).map((d) => listCard(d.id, d.data()));
+    return snap.docs
+      .filter(kept)
+      .sort((a, b) => edited(b) - edited(a))
+      .slice(0, BOX_LIMIT)
+      .map((d) => {
+        // A draft shows a summary of its story as it is (the summary stored at publish is no draft's):
+        // with none to stand in, getCardBoxShelves reads the shown drafts' stories in its one batch (withStories).
+        const card = listCard(d.id, d.data());
+        delete card.listing;
+        return card;
+      });
   }
   const isPrivate = shelf === 'private';
   const snap = await own
