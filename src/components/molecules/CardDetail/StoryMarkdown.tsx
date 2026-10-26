@@ -40,7 +40,7 @@ const StoryLinkCardsContext = createContext<StoryLinkCards | null>(null);
  */
 export const STORY_EMBED_MAX = 30;
 /** The order in which this story's card-link paragraphs come (by source offset), for STORY_EMBED_MAX. */
-const EmbedOrderContext = createContext<Map<number, number> | null>(null);
+const EmbedOrderContext = createContext<{ source: string; order: Map<number, number> } | null>(null);
 
 /** The paragraph's only element child (ignoring whitespace), if any. */
 function soleElementChild(node: Element | undefined): Element | null {
@@ -144,8 +144,9 @@ const components: Components = {
 };
 
 /** Whether the card-link paragraph at `offset` is among the story's first STORY_EMBED_MAX (rendered in reading order). */
-function withinEmbedMax(order: Map<number, number> | null, offset: number | undefined): boolean {
-  if (!order || offset == null) return true;
+function withinEmbedMax(embeds: { order: Map<number, number> } | null, offset: number | undefined): boolean {
+  if (!embeds || offset == null) return true;
+  const { order } = embeds;
   let n = order.get(offset);
   if (n === undefined) {
     n = order.size;
@@ -242,7 +243,7 @@ export function StoryMarkdown({ source, script, lang, density }: StoryMarkdownPr
   // A CJK story sets an apostrophe inside a Latin word in its Latin face (after the slugs, read from the words as they are).
   const rehypePlugins = setAs === 'latin' ? LATIN_PLUGINS : CJK_PLUGINS;
   // A new story, a new count.
-  const embedOrder = useMemo(() => new Map<number, number>(), [source]);
+  const embedOrder = useMemo(() => ({ source, order: new Map<number, number>() }), [source]);
   return (
     <div className="story-prose" data-script={setAs} data-density={density} lang={read ? read.lang : lang}>
       <StoryLinkCardsContext.Provider value={cards}>
