@@ -87,13 +87,13 @@ final class CardModel {
         defer { isLoading = false }
         do {
             let detail = try await fetch(key)
+            // Read off the main thread: the answer mostly arrives while the page is still sliding in.
+            let title = detail.card.title, story = detail.story
+            let read = await Task.detached(priority: .userInitiated) { CardModel.read(title: title, story: story) }.value
             self.detail = detail
-            storyType = ScriptRule.storyType(title: detail.card.title, story: detail.story)
-            // Addresses written bare are links, as on the web (where the link rules find one).
-            blocks = StoryBlock.linkingAddresses(StoryParser.parse(detail.story)) { words in
-                ChatLinks.links(in: words).map { (range: $0.range, url: $0.url.absoluteString) }
-            }
-            toc = TocEntry.entries(blocks)
+            storyType = read.type
+            blocks = read.blocks
+            toc = read.toc
             resonances = detail.resonances?.cards ?? []
             related = detail.related?.cards ?? []
             links = detail.links?.cards ?? []
@@ -112,6 +112,23 @@ final class CardModel {
             guard detail == nil else { return }
             phase = .failed((error as? APIFailure)?.message ?? error.localizedDescription)
         }
+    }
+
+    /// What the page draws of a story, read off its title and words.
+    nonisolated struct ReadStory: Sendable {
+        let type: StoryType
+        let blocks: [StoryBlock]
+        let toc: [TocEntry]
+    }
+
+    /// How the title and story are set, the story's blocks — its addresses written bare made links, as
+    /// on the web (where the link rules find one) — and its headings. Pure: run off the main thread.
+    nonisolated static func read(title: String, story: String) -> ReadStory {
+        let type = ScriptRule.storyType(title: title, story: story)
+        let blocks = StoryBlock.linkingAddresses(StoryParser.parse(story)) { words in
+            ChatLinks.links(in: words).map { (range: $0.range, url: $0.url.absoluteString) }
+        }
+        return ReadStory(type: type, blocks: blocks, toc: TocEntry.entries(blocks))
     }
 
     /// Whose connection the reader sees this card through: its author, when it is someone

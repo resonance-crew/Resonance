@@ -84,4 +84,15 @@ import UIKit
         #expect(OKLCHColor.parse("not a colour") == nil)
         #expect(OKLCHColor.parse("not a colour") == nil)
     }
+
+    @Test func aStoryIsReadOffTheMainThreadAsItWasOnIt() async {
+        let title = "雨後", story = "## 一\n\n去 https://example.com/a 看看。\n\n### 二\n\n走路。"
+        let read = await Task.detached { CardModel.read(title: title, story: story) }.value
+        #expect(read.type == ScriptRule.storyType(title: title, story: story))
+        #expect(read.blocks == StoryBlock.linkingAddresses(StoryParser.parse(story)) { words in
+            ChatLinks.links(in: words).map { (range: $0.range, url: $0.url.absoluteString) }
+        })
+        #expect(read.toc.map(\.text) == ["一", "二"])
+        #expect(read.toc.map(\.level) == [2, 3])
+    }
 }
