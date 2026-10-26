@@ -109,10 +109,11 @@ fun systemAccent(context: Context): DoubleArray? {
 /**
  * A profile's stored avatar colour as the screen's scheme draws it (palette.ts `avatarFill`): the
  * pastel itself in light, the same hue deep enough for the chalk initials in dark — a person keeps
- * their colour across schemes. [fallback] when there is none (or none that reads).
+ * their colour across schemes. [fallback] when there is none (or none that reads): `avatar-wait`, a
+ * disc raised off the paper, not a hole in it.
  */
 @Composable @ReadOnlyComposable
-fun avatarFill(stored: String?, fallback: Color = Tokens.TerracottaLight): Color =
+fun avatarFill(stored: String?, fallback: Color = Tokens.AvatarWait): Color =
     stored?.let { PaletteFormula.avatarFill(it, LocalResonanceColors.current.dark) } ?: fallback
 
 /** Selected words in a field: the accent's handles over a see-through wash of it (the web's ::selection, 30%). */

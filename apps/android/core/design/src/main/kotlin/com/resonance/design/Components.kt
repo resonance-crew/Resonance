@@ -267,7 +267,7 @@ fun initialsScale(initials: String): Float {
 fun HandDrawnAvatar(
     initials: String,
     imageUrl: String? = null,
-    color: Color = Tokens.TerracottaLight,
+    color: Color = Tokens.AvatarWait,
     size: Dp = 32.dp,
     seed: Double = 7.0,
     /** The picture already loaded (a share card's recording draws nothing still on its way), in place of [imageUrl]. */

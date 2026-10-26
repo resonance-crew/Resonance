@@ -556,7 +556,7 @@ private fun BarAuthor(card: FeedCard, anonymous: Boolean, visible: Boolean, open
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (shown) HandDrawnAvatar(author!!.initials, author.avatarUrl, author.accent(), 28.dp, author.avatarSeedValue())
-            else HandDrawnAvatar("·", color = Tokens.CreamDark, size = 28.dp, seed = 97.0)
+            else HandDrawnAvatar("·", color = Tokens.AvatarWait, size = 28.dp, seed = 97.0)
             BasicText(
                 if (shown) author!!.handle else L10n.Card.anonymousAuthor,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -650,7 +650,7 @@ private fun StoryByline(
         if (named) Box(Modifier.plainClickable(onClickLabel = author.handle) { openAuthor(author.handle) }) {
             HandDrawnAvatar(author.initials, author.avatarUrl, author.accent(), avatar, author.avatarSeedValue())
         }
-        else HandDrawnAvatar("·", color = Tokens.CreamDark, size = avatar, seed = 97.0)
+        else HandDrawnAvatar("·", color = Tokens.AvatarWait, size = avatar, seed = 97.0)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (named) {

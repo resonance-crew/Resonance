@@ -118,6 +118,21 @@ class ResonanceThemeTest {
         assertNotEquals(ResonanceColors.of(PaletteTheme.Terracotta, dark = true).CreamDark, ShareCardRecipe.Anonymous.FILL)
     }
 
+    @Test fun loadingBlocksAndAWaitingAvatarAreThePalettesOwn() {
+        val dark = ResonanceColors.of(PaletteTheme.Terracotta, dark = true)
+        // Lifted off the night paper, the shimmer toward its glow; a waiting avatar raised, not a hole.
+        assertEquals(dark.SkeletonBase, composed(dark) { Mixes.SkeletonBase })
+        assertEquals(dark.AvatarWait, composed(dark) { avatarFill(null) })
+        assertEquals(dark.CardBg, dark.AvatarWait)
+        // In light the shimmer outside a card is the theme's light accent met by the paper — terracotta's as it always was.
+        val (l, c, h) = Mixes.skeletonHighlightOklch(55.0)
+        assertEquals(OklchColor.of(l, c, h), composed { Mixes.skeletonHighlight() })
+        assertNotEquals(composed { Mixes.skeletonHighlight() }, composed(dark) { Mixes.skeletonHighlight() })
+        // The writer's empty cover: a tonal pill in dark, not light's deep pen.
+        assertEquals(dark.CardPills[2], CardPalette.of(2).colorsIn(dark).pill)
+        assertNotEquals(ResonanceColors.LightTerracotta.CardPills[2], dark.CardPills[2])
+    }
+
     @Test fun stored() {
         assertEquals(AppearanceScheme.System, AppearanceScheme.of(null))
         assertEquals(AppearanceScheme.Dark, AppearanceScheme.of("dark"))

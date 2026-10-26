@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import com.resonance.design.generated.HueRole
 import com.resonance.design.GrainInk
 import com.resonance.design.CardFamily
 import androidx.compose.runtime.ReadOnlyComposable
@@ -1303,8 +1304,9 @@ private fun CoverMenu(model: WriteModel, seed: Double, palette: CardPalette, pic
 
 /**
  * The writer's cover controls in a card's family (round 9 §8): [solid] — 加一張圖片 · 生成圖片 on a
- * coverless card — the family's deep pen as the face and its paper as the words; [resting], 生成圖片
- * with no story to draw from yet, the family's tonal step with a muted label (never alpha); [chip],
+ * coverless card — the family's pill (`card-pill`: its deep pen with its paper for words in light, a
+ * tonal pill with chalk words in dark); [resting], 生成圖片 with no story to draw from yet, the
+ * family's tonal step with the pill's quiet ink (never alpha); [chip],
  * 更換封面 over the picture, the family's fill with its deep pen for the words. A press washes black at
  * 0.14 on the deep face, the family's own ink on the light ones.
  */
@@ -1312,11 +1314,12 @@ internal class CoverFaces private constructor(val solid: ButtonFace, val resting
     companion object {
         /** The family's faces in the screen's palette. */
         @Composable @ReadOnlyComposable
-        fun of(palette: CardPalette): CoverFaces = of(palette.colors, Tokens.TextMuted, OrganicIndication.OnFill)
+        fun of(palette: CardPalette): CoverFaces = of(palette.colors, Tokens.hue(HueRole.PillInk, palette.hue), OrganicIndication.OnFill)
 
-        fun of(family: CardFamily, muted: Color, press: Color): CoverFaces = CoverFaces(
-            solid = ButtonFace.custom(family.deep, family.interior, press, seed = 3.0),
-            resting = ButtonFace.custom(family.accent, muted, press, seed = 3.0),
+        /** [family]'s faces: the pill `card-pill` with `card-pill-ink` (a tonal pill in dark, not a bright cream slab); resting, its accent with [restingInk]. */
+        fun of(family: CardFamily, restingInk: Color, press: Color): CoverFaces = CoverFaces(
+            solid = ButtonFace.custom(family.pill, family.pillInk, press, seed = 3.0),
+            resting = ButtonFace.custom(family.accent, restingInk, press, seed = 3.0),
             chip = ButtonFace.custom(family.fill, family.deep, family.deep.copy(alpha = 0.14f), seed = 401.0),
         )
     }

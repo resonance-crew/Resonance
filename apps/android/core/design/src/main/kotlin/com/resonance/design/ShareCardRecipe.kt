@@ -117,7 +117,7 @@ object ShareCardRecipe {
     object Anonymous {
         const val INITIALS = "·"
         const val SEED = 97.0
-        val FILL: Color get() = PALETTE.CreamDark
+        val FILL: Color get() = PALETTE.AvatarWait
         val NAME_COLOUR: Color get() = PALETTE.TextMuted
     }
 

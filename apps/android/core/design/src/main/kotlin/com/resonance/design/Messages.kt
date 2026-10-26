@@ -703,7 +703,7 @@ data class CardByline(
     companion object {
         /** A card posted anonymously: the mark the card page shows (a dot on paper) beside [name] (匿名) — never the author. */
         @Composable @ReadOnlyComposable
-        fun anonymous(name: String) = CardByline(name, "·", null, Tokens.CreamDark, 97.0, isAnonymous = true)
+        fun anonymous(name: String) = CardByline(name, "·", null, Tokens.AvatarWait, 97.0, isAnonymous = true)
     }
 }
 
