@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,6 +64,7 @@ import com.resonance.design.OrganicIcon
 import com.resonance.design.OrganicInlineBar
 import com.resonance.design.FieldLabel
 import com.resonance.design.inlineBarTop
+import com.resonance.design.LayoutClass
 import com.resonance.design.LocalWindowLayout
 import com.resonance.design.OrganicLink
 import com.resonance.design.OrganicModal
@@ -127,7 +129,7 @@ enum class SettingsSection(
  * Settings (SettingsClient's menu): one row per section — glyph, name, chevron — between wavy
  * rules, each opening its own screen. No panels: the web drops the frames at this width. The bar
  * names the page, as it names any pushed page — 設定 beside a phone's arrow, in the middle of a
- * tablet's header (as 私訊 heads Messages) — and the rows start under it as Messages' do.
+ * tablet's header (as 私訊 heads Messages) — and the rows start under it as a tab's first row does.
  */
 @Composable
 fun SettingsScreen(open: (Route) -> Unit, back: () -> Unit) {
@@ -145,12 +147,16 @@ fun SettingsScreen(open: (Route) -> Unit, back: () -> Unit) {
 }
 
 /**
- * The settings pages' 20 at the sides and foot. Their first line starts under the bar as Messages'
- * list does, on a phone and a tablet alike — 16 under the bar's foot (the web's 18 under the line).
+ * The settings pages' 20 at the sides and foot. Their first line starts under the bar as a tab's first
+ * row does: 16 under the bar's foot on a phone (the web's 18 under the line), and on a tablet 32 under
+ * the header's pen line, as Notifications' and the feed's do (round 5 E2) — 16 there sat too tight.
  */
 @Composable
 private fun Modifier.settingsPadding(): Modifier =
-    padding(start = 20.dp, end = 20.dp, bottom = 20.dp, top = titledBarGap(LocalWindowLayout.current.cls, tabletAir = false))
+    padding(start = 20.dp, end = 20.dp, bottom = 20.dp, top = settingsTop(LocalWindowLayout.current.cls))
+
+/** Under the bar's foot to the settings' first line (see [settingsPadding]). */
+internal fun settingsTop(cls: LayoutClass): Dp = titledBarGap(cls, tabletAir = true)
 
 @Composable
 private fun MenuRow(section: SettingsSection, onClick: () -> Unit) {

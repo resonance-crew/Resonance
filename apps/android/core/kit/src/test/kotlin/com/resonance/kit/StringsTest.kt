@@ -21,7 +21,7 @@ class StringsTest {
 
     @Test fun readsBothCatalogsThroughTheGeneratedAccessors() {
         Strings.language = Strings.Language.ZhTW
-        assertEquals("共振 Feed", L10n.App.Nav.home)
+        assertEquals("共振場", L10n.App.Nav.home)
         assertEquals("bob 寄來一張小紙條", L10n.App.Notifications.note(handle = "bob"))
     }
 
@@ -39,7 +39,7 @@ class StringsTest {
         Strings.load { lang -> reads += lang; File(messages, "${lang.tag}.json").readText() }
         assertEquals(emptyList(), reads)
         Strings.language = Strings.Language.ZhTW
-        assertEquals("共振 Feed", L10n.App.Nav.home)
+        assertEquals("共振場", L10n.App.Nav.home)
         assertEquals("bob 寄來一張小紙條", L10n.App.Notifications.note(handle = "bob"))
         assertEquals(listOf(Strings.Language.ZhTW), reads)
         // A key the language lacks reads English, once, for every miss after.

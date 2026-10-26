@@ -50,13 +50,14 @@ enum SettingsSection: Hashable, CaseIterable {
 /// Settings (SettingsClient's menu): one row per section — glyph, name, chevron — between wavy
 /// rules, each opening its own screen. No panels: the web drops the frames at this width. The bar
 /// names the page as a section's bar does — beside its arrow on a phone, in the middle of a tablet's
-/// header as any pushed page's context — and the rows start under it as Messages' list does.
+/// header as any pushed page's context — and the rows start under it as a tab's first row does.
 struct SettingsScreen: View {
     @Environment(\.openRoute) private var openRoute
     @State private var scrolled = false
 
-    /// How far under the bar's foot the settings start, on a phone and a tablet alike: the Messages
-    /// list's (TabScreen's `phoneTop`, which a tablet's two-pane list keeps too).
+    /// How far under the bar's foot the settings start on a phone: a titled tab's (TabScreen's
+    /// `phoneTop`). A tablet starts them 32 under the header's pen line instead, as Notifications'
+    /// and the feed's first rows (round 5 E2, ``View/headerGap(phone:)``) — 16 there sat too tight.
     static let contentTop: CGFloat = 16
 
     var body: some View {
@@ -70,7 +71,7 @@ struct SettingsScreen: View {
                 }
             }
             .padding([.horizontal, .bottom], 20)
-            .padding(.top, Self.contentTop)
+            .headerGap(phone: Self.contentTop)
             .padding(.bottom, 40)
             .readableColumn()
         }
@@ -122,7 +123,7 @@ struct SettingsSectionScreen: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding([.horizontal, .bottom], 20)
-            .padding(.top, SettingsScreen.contentTop)
+            .headerGap(phone: SettingsScreen.contentTop)
             .padding(.bottom, 40)
             .readableColumn()
         }

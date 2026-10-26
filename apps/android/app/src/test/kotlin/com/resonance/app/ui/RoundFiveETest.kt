@@ -39,6 +39,14 @@ class RoundFiveETest {
         }
     }
 
+    @Test fun aTabletsSettingsStart32UnderThePenLineAsItsTabsDo() {
+        val penLine = 1.4f + 1.8f
+        assertEquals(16f, settingsTop(LayoutClass.Compact).value, 0.001f)
+        for (cls in listOf(LayoutClass.Medium, LayoutClass.Expanded)) {
+            assertEquals(32f - penLine, settingsTop(cls).value, 0.001f)
+        }
+    }
+
     @Test fun aCardPagesListHeadingsHaveTheSameRoomOnATablet() {
         assertEquals(SectionAir(32, 40), cardSectionAir(LayoutClass.Compact, phoneBelow = 40))
         assertEquals(SectionAir(32, 56), cardSectionAir(LayoutClass.Compact, phoneBelow = 56))

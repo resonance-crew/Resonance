@@ -15,7 +15,7 @@ import Testing
     }
 
     @Test func readsBothCatalogs() {
-        #expect(strings(.zhTW).string("app.nav.home") == "共振 Feed")
+        #expect(strings(.zhTW).string("app.nav.home") == "共振場")
         #expect(strings(.en).string("app.nav.home") != "app.nav.home")
     }
 

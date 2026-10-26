@@ -129,7 +129,7 @@ export function AppHeader({ user, signedIn = true, authReady = true, activeKey }
                 {tNav('signIn')}
               </OrganicButton>
             </Link>
-            {/* Signed-out phones still get the menu — the 共振 Feed entry
+            {/* Signed-out phones still get the menu — the 共振場 entry
                 (and the 登入 shortcut) live in the same modal as always. */}
             {menuButton}
           </div>

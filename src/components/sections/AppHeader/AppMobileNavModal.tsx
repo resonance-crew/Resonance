@@ -35,7 +35,7 @@ const ITEMS: {
   { key: 'settings', href: '/settings' },
 ];
 
-/** The rows a signed-out viewer can actually visit — just the 共振 Feed. */
+/** The rows a signed-out viewer can actually visit — just the 共振場. */
 const PUBLIC_KEYS: ReadonlySet<(typeof ITEMS)[number]['key']> = new Set(['home']);
 
 export function AppMobileNavModal({ open, onClose, user, activeKey }: AppMobileNavModalProps) {
