@@ -21,6 +21,7 @@ import { DeleteAccountSection } from './DeleteAccountSection';
 import { NotificationsSection } from './NotificationsSection';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useTweaks } from '@/components/providers/TweaksPanel';
+import { isAccent } from '@/lib/design/appearance';
 import { useIsMobile } from '@/lib/hooks/useIsMobile';
 import { usePathname, useRouter } from '@/i18n/navigation';
 import type { Locale } from '@/lib/db/types';
@@ -356,7 +357,7 @@ export function SettingsClient({ initial }: SettingsClientProps) {
               <Select
                 seed={71}
                 value={tweaks.accentColor}
-                onChange={(v) => updateTweaks({ accentColor: v })}
+                onChange={(v) => isAccent(v) && updateTweaks({ accentColor: v })}
               >
                 <option value="terracotta">{tTweaks('accentTerracotta')}</option>
                 <option value="sage">{tTweaks('accentSage')}</option>

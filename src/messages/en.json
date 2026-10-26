@@ -182,7 +182,16 @@
     "grainNone": "None",
     "grainSoft": "Soft",
     "grainMedium": "Medium",
-    "grainHeavy": "Heavy"
+    "grainHeavy": "Heavy",
+    "scheme": "Dark mode",
+    "schemeSystem": "Match system",
+    "schemeLight": "Off",
+    "schemeDark": "On",
+    "accentWallpaper": "Wallpaper",
+    "themeTerracotta": "Terracotta",
+    "themeSage": "Sage",
+    "themeLavender": "Lavender",
+    "themeYellow": "Gold"
   },
   "app": {
     "nav": {

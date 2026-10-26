@@ -1,78 +1,23 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { TWEAKS_KEY, applyAppearance, isAccent, isSchemeChoice, type SchemeChoice } from '@/lib/design/appearance';
+import type { Accent } from '@/lib/design/palette';
 
 const TWEAK_DEFAULTS: TweakState = {
   accentColor: 'terracotta',
+  scheme: 'system',
   fontFamily: 'default',
   grainIntensity: 2,
 };
 
-/**
- * Each accent theme re-tints the whole neutral scale, not just the accent
- * pair: paper (cream), card fill, text inks, field borders and placeholder
- * all drift toward the accent's hue at low chroma, mirroring how the default
- * terracotta theme keeps its neutrals warm (hue 60–80). Every entry sets the
- * full token set so switching themes never leaves stale overrides behind —
- * `terracotta` restores the tokens.css defaults verbatim.
- * (`--field-border-focus` is var(--color-terracotta), so it follows for free.)
+/*
+ * The theme colour and the scheme are attributes on <html> (lib/design/
+ * appearance: data-accent, data-scheme), which palette.css turns into every
+ * colour of both schemes — each theme re-tints the whole neutral scale, not
+ * just the accent pair, as it always did. Nothing colour-related is written
+ * inline any more: an inline value would outrank the dark scheme's.
  */
-export const ACCENT_MAP: Record<string, Record<string, string>> = {
-  // Warm terracotta — the tokens.css defaults.
-  terracotta: {
-    '--color-terracotta': 'oklch(62% 0.14 45)',
-    '--color-terracotta-light': 'oklch(88% 0.08 55)',
-    '--color-cream': 'oklch(96.5% 0.015 75)',
-    '--color-cream-dark': 'oklch(93% 0.018 75)',
-    '--color-card-bg': 'oklch(97.5% 0.01 80)',
-    '--color-text': 'oklch(26% 0.03 60)',
-    '--color-text-muted': 'oklch(52% 0.04 70)',
-    '--field-border': 'oklch(80% 0.02 75)',
-    '--field-border-hover': 'oklch(60% 0.04 60)',
-    '--placeholder': 'oklch(64% 0.03 70)',
-  },
-  // Sage — celadon paper, fir-green inks.
-  sage: {
-    '--color-terracotta': 'oklch(55% 0.13 140)',
-    '--color-terracotta-light': 'oklch(86% 0.07 140)',
-    '--color-cream': 'oklch(96.5% 0.013 140)',
-    '--color-cream-dark': 'oklch(93% 0.016 140)',
-    '--color-card-bg': 'oklch(97.5% 0.009 145)',
-    '--color-text': 'oklch(26% 0.025 150)',
-    '--color-text-muted': 'oklch(50% 0.035 145)',
-    '--field-border': 'oklch(80% 0.02 140)',
-    '--field-border-hover': 'oklch(58% 0.04 142)',
-    '--placeholder': 'oklch(63% 0.03 142)',
-  },
-  // Lavender — cool lilac paper, plum-gray inks. Purple tints read strongly,
-  // so the neutrals carry slightly less chroma than the warm themes.
-  lavender: {
-    '--color-terracotta': 'oklch(58% 0.14 290)',
-    '--color-terracotta-light': 'oklch(87% 0.065 295)',
-    '--color-cream': 'oklch(96.5% 0.012 300)',
-    '--color-cream-dark': 'oklch(93.5% 0.015 300)',
-    '--color-card-bg': 'oklch(97.5% 0.008 305)',
-    '--color-text': 'oklch(26% 0.025 295)',
-    '--color-text-muted': 'oklch(50% 0.035 295)',
-    '--field-border': 'oklch(80% 0.02 295)',
-    '--field-border-hover': 'oklch(58% 0.04 292)',
-    '--placeholder': 'oklch(63% 0.03 295)',
-  },
-  // Gold — honeyed paper, umber inks. The accent sits a touch deeper than the
-  // old 68%-lightness gold so cream text on primary buttons stays legible.
-  yellow: {
-    '--color-terracotta': 'oklch(64% 0.13 78)',
-    '--color-terracotta-light': 'oklch(90% 0.09 90)',
-    '--color-cream': 'oklch(96.5% 0.02 95)',
-    '--color-cream-dark': 'oklch(93% 0.024 95)',
-    '--color-card-bg': 'oklch(97.5% 0.013 98)',
-    '--color-text': 'oklch(26% 0.03 80)',
-    '--color-text-muted': 'oklch(52% 0.045 88)',
-    '--field-border': 'oklch(80% 0.025 92)',
-    '--field-border-hover': 'oklch(60% 0.045 85)',
-    '--placeholder': 'oklch(64% 0.035 90)',
-  },
-};
 
 // The self-hosted faces are named through the variables next/font sets on
 // <html> (src/styles/fonts.ts) — their real family names are hashed. `default`
@@ -84,14 +29,17 @@ const FONT_MAP: Record<string, string> = {
 
 const GRAIN_MAP = [0, 0.055, 0.1, 0.18];
 
-const STORAGE_KEY = 'resonance-tweaks';
+const STORAGE_KEY = TWEAKS_KEY;
 
 // Card density is gone: it wrote grid-template-columns onto every card grid in
 // the page at load, which outlived the grid it was meant for (CardLinkGrid's
 // masonry reuses the node: an empty fourth column on a wide screen). Each grid
 // owns its columns.
 export interface TweakState {
-  accentColor: string;
+  /** A theme of lib/design/palette (an unknown saved one reads as terracotta). */
+  accentColor: Accent;
+  /** The reader's scheme: the system's (the default), or always light or dark. */
+  scheme: SchemeChoice;
   fontFamily: string;
   grainIntensity: number;
 }
@@ -109,7 +57,8 @@ export function loadTweaks(): TweakState {
     saved = {};
   }
   return {
-    accentColor: typeof saved.accentColor === 'string' ? saved.accentColor : TWEAK_DEFAULTS.accentColor,
+    accentColor: isAccent(saved.accentColor) ? saved.accentColor : TWEAK_DEFAULTS.accentColor,
+    scheme: isSchemeChoice(saved.scheme) ? saved.scheme : TWEAK_DEFAULTS.scheme,
     fontFamily: typeof saved.fontFamily === 'string' ? saved.fontFamily : TWEAK_DEFAULTS.fontFamily,
     grainIntensity: typeof saved.grainIntensity === 'number' ? saved.grainIntensity : TWEAK_DEFAULTS.grainIntensity,
   };
@@ -122,8 +71,7 @@ export function loadTweaks(): TweakState {
  */
 export function applyTweaks(vals: TweakState) {
   const root = document.documentElement;
-  const accent = ACCENT_MAP[vals.accentColor] || ACCENT_MAP.terracotta;
-  Object.entries(accent).forEach(([k, v]) => root.style.setProperty(k, v));
+  applyAppearance(vals.accentColor, vals.scheme);
   root.style.setProperty('--font-heading', FONT_MAP[vals.fontFamily] || FONT_MAP.default);
   root.style.setProperty('--grain-opacity', String(GRAIN_MAP[vals.grainIntensity] ?? 0.055));
   try {
@@ -169,14 +117,16 @@ export function useTweaks() {
 /**
  * What the provider does on each page load: the saved tweaks, applied — or,
  * when they are the defaults (nothing saved, or the defaults saved), nothing
- * at all: the defaults are tokens.css's own values, so writing them inline
- * onto <html> (a dozen properties, a style recalc of the whole page) and
- * saving them again changes nothing anyone sees. The editor still hears them.
+ * at all: the defaults are the stylesheets' own values, so writing them
+ * onto <html> (a style recalc of the whole page) and saving them again
+ * changes nothing anyone sees. The theme and scheme are on <html> already
+ * (APPEARANCE_SCRIPT, before the first paint). The editor still hears them.
  */
 export function applySavedTweaks(): void {
   const saved = loadTweaks();
   const defaults =
     saved.accentColor === TWEAK_DEFAULTS.accentColor &&
+    saved.scheme === TWEAK_DEFAULTS.scheme &&
     saved.fontFamily === TWEAK_DEFAULTS.fontFamily &&
     saved.grainIntensity === TWEAK_DEFAULTS.grainIntensity;
   if (defaults) postToEditor({ type: '__edit_mode_set_keys', edits: saved });

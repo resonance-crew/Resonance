@@ -10,15 +10,17 @@ import { OG_COVER_SIZE, ogCoverPath } from '@/lib/og';
 import { siteUrl } from '@/lib/site';
 import type { Locale } from '@/lib/db/types';
 import { fontVariables } from '@/styles/fonts';
+import { APPEARANCE_SCRIPT, THEME_COLOR_METAS } from '@/lib/design/appearance';
 import '@/styles/globals.css';
 
 export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
 }
 
-// The brand cream surface: what a phone browser tints its bars with.
+// The paper: what a phone browser tints its bars with, one per scheme (a saved
+// theme or scheme repoints them — lib/design/appearance).
 export const viewport: Viewport = {
-  themeColor: '#faf2e9',
+  themeColor: THEME_COLOR_METAS,
 };
 
 export async function generateMetadata({
@@ -82,7 +84,12 @@ export default async function LocaleLayout({
   const messages = await getMessages();
 
   return (
-    <html lang={locale} className={fontVariables}>
+    // The saved theme and scheme go onto <html> before the first paint, so its
+    // attributes differ from the server's by design (suppressHydrationWarning).
+    <html lang={locale} className={fontVariables} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: APPEARANCE_SCRIPT }} />
+      </head>
       <body suppressHydrationWarning>
         <NextIntlProvider messages={messages} locale={locale}>
           <AuthProvider>

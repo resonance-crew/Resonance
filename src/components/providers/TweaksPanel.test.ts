@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { lightRootCss } from '@/lib/design/paletteCss';
-import { ACCENT_MAP, TWEAK_DEFAULTS, applySavedTweaks, applyTweaks, loadTweaks } from './TweaksPanel';
+import { TWEAK_DEFAULTS, applySavedTweaks, applyTweaks, loadTweaks } from './TweaksPanel';
 
 const read = (p: string) => readFileSync(resolve(__dirname, '../../..', p), 'utf8');
 // Colours are palette.css's; light terracotta's :root stands for them beside tokens.css.
@@ -21,6 +21,8 @@ const fontVariables = [...fonts.matchAll(/variable: '(--[\w-]+)'/g)].map((m) => 
 
 afterEach(() => {
   document.documentElement.removeAttribute('style');
+  document.documentElement.removeAttribute('data-accent');
+  document.documentElement.removeAttribute('data-scheme');
   localStorage.clear();
 });
 
@@ -52,8 +54,10 @@ describe('without site storage', () => {
 
   it('reads what an older version saved, minus what no longer exists', () => {
     localStorage.setItem('resonance-tweaks', JSON.stringify({ accentColor: 'sage', cardDensity: 'airy', grainIntensity: 3 }));
-    expect(loadTweaks()).toEqual({ accentColor: 'sage', fontFamily: 'default', grainIntensity: 3 });
+    expect(loadTweaks()).toEqual({ accentColor: 'sage', scheme: 'system', fontFamily: 'default', grainIntensity: 3 });
     localStorage.setItem('resonance-tweaks', '"not an object"');
+    expect(loadTweaks()).toEqual(TWEAK_DEFAULTS);
+    localStorage.setItem('resonance-tweaks', JSON.stringify({ accentColor: 'ochre', scheme: 'dim' }));
     expect(loadTweaks()).toEqual(TWEAK_DEFAULTS);
   });
 });
@@ -100,14 +104,15 @@ describe('the heading-font tweak and the self-hosted faces', () => {
 describe('applying the saved tweaks on page load', () => {
   const same = (a: string, b: string) => a.replace(/\s+/g, ' ').trim() === b.replace(/\s+/g, ' ').trim();
 
-  it('takes the defaults to be exactly tokens.css', () => {
-    for (const [name, value] of Object.entries(ACCENT_MAP[TWEAK_DEFAULTS.accentColor])) {
-      expect(same(value, token(name)), name).toBe(true);
-    }
+  it('takes the defaults to be exactly the stylesheets', () => {
     applyTweaks({ ...TWEAK_DEFAULTS });
-    const style = document.documentElement.style;
-    expect(style.getPropertyValue('--font-heading')).toBe(token('--font-heading'));
-    expect(Number(style.getPropertyValue('--grain-opacity'))).toBe(Number(token('--grain-opacity')));
+    const root = document.documentElement;
+    expect(same(root.style.getPropertyValue('--font-heading'), token('--font-heading'))).toBe(true);
+    expect(Number(root.style.getPropertyValue('--grain-opacity'))).toBe(Number(token('--grain-opacity')));
+    // Terracotta and the system's scheme are palette.css's own :root.
+    expect(root.hasAttribute('data-accent')).toBe(false);
+    expect(root.hasAttribute('data-scheme')).toBe(false);
+    expect(root.style.getPropertyValue('--color-terracotta')).toBe('');
   });
 
   it('writes nothing for the defaults, saved or not', () => {
@@ -120,11 +125,16 @@ describe('applying the saved tweaks on page load', () => {
     expect(document.documentElement.getAttribute('style')).toBeNull();
   });
 
-  it('applies a saved look', () => {
-    localStorage.setItem('resonance-tweaks', JSON.stringify({ ...TWEAK_DEFAULTS, accentColor: 'sage', grainIntensity: 0 }));
+  it('applies a saved look: the theme and scheme as attributes, never inline colours', () => {
+    localStorage.setItem('resonance-tweaks', JSON.stringify({ ...TWEAK_DEFAULTS, accentColor: 'sage', scheme: 'dark', grainIntensity: 0 }));
     applySavedTweaks();
-    const style = document.documentElement.style;
-    expect(style.getPropertyValue('--color-terracotta')).toBe(ACCENT_MAP.sage['--color-terracotta']);
-    expect(style.getPropertyValue('--grain-opacity')).toBe('0');
+    const root = document.documentElement;
+    expect(root.getAttribute('data-accent')).toBe('sage');
+    expect(root.getAttribute('data-scheme')).toBe('dark');
+    expect(root.style.getPropertyValue('--color-terracotta')).toBe('');
+    expect(root.style.getPropertyValue('--grain-opacity')).toBe('0');
+    applyTweaks({ ...TWEAK_DEFAULTS });
+    expect(root.hasAttribute('data-accent')).toBe(false);
+    expect(root.hasAttribute('data-scheme')).toBe(false);
   });
 });

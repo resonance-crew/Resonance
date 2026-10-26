@@ -166,7 +166,7 @@
     "title": "微調",
     "open": "開啟微調面板",
     "close": "關閉微調面板",
-    "accentColor": "強調色",
+    "accentColor": "主題色",
     "accentTerracotta": "赤陶色(預設)",
     "accentSage": "鼠尾草綠",
     "accentLavender": "薰衣草紫",
@@ -182,7 +182,16 @@
     "grainNone": "無",
     "grainSoft": "輕微",
     "grainMedium": "中等",
-    "grainHeavy": "強烈"
+    "grainHeavy": "強烈",
+    "scheme": "深色模式",
+    "schemeSystem": "跟隨系統",
+    "schemeLight": "關閉",
+    "schemeDark": "開啟",
+    "accentWallpaper": "桌布配色",
+    "themeTerracotta": "赤陶",
+    "themeSage": "鼠尾草",
+    "themeLavender": "薰衣草",
+    "themeYellow": "金黃"
   },
   "app": {
     "nav": {
