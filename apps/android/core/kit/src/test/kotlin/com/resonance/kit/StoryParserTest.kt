@@ -22,6 +22,11 @@ import kotlin.test.assertTrue
 
 /** The reader's block rules against native/fixtures/markdown-corpus.json (same cases as iOS). */
 class StoryParserTest {
+    // The fixtures' pictures are on example hosts: read as before any API is configured (another test may have set one).
+    @org.junit.Before fun noSiteYet() {
+        com.resonance.kit.story.StoryPictures.siteHost = null
+    }
+
     private val corpus: Map<String, String> = Json.parseToJsonElement(
         File(System.getProperty("repoRoot"), "native/fixtures/markdown-corpus.json").readText(),
     ).jsonObject["cases"]!!.jsonArray.associate {
@@ -86,6 +91,21 @@ class StoryParserTest {
         val many = List(40) { "*a ".repeat(nesting.PARAGRAPH_DELIMITERS - 10) }.joinToString("\n\n")
         assertTrue(nesting.tooComplex(many))
         assertEquals(emptyList(), com.resonance.kit.story.SharePassages.blocks(deep + "\n\n第二段，平平常常的一段話，也值得被讀到。"))
+    }
+
+    @Test fun onlyTheSitesPicturesAreDrawnAnyOtherIsALink() {
+        val pictures = com.resonance.kit.story.StoryPictures
+        pictures.siteHost = "resonance.channel"
+        try {
+            assertEquals(StoryBlock.Image("https://img.resonance.channel/a.webp", "ours"), StoryParser.parse("![ours](https://img.resonance.channel/a.webp)").single())
+            assertEquals(StoryBlock.Image("/api/emulator-storage/x.webp", ""), StoryParser.parse("![](/api/emulator-storage/x.webp)").single())
+            for (elsewhere in listOf("https://pictures.example.invalid/p.png", "https://img.resonance.channel.example.invalid/p.png", "https://img.resonance.channel@pictures.example.invalid/p.png")) {
+                val block = StoryParser.parse("![那裡]($elsewhere)").single()
+                assertEquals(StoryBlock.Paragraph(listOf(InlineRun("那裡", link = elsewhere))), block)
+            }
+        } finally {
+            pictures.siteHost = null
+        }
     }
 
     @Test fun aTableIsItsHeadItsRowsAndItsColumnsAlignments() {

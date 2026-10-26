@@ -148,7 +148,9 @@ public nonisolated enum StoryParser {
                 return .cardEmbed(href: href, title: link.plainText)
             }
             if let image = meaningful[0] as? Markdown.Image, let src = image.source {
-                return .image(url: src, alt: image.plainText)
+                if StoryPictures.drawn(src) { return .image(url: src, alt: image.plainText) }
+                // Not the site's: a link to it, opened on purpose, never a fetch on opening the story.
+                return .paragraph([InlineRun(image.plainText.isEmpty ? src : image.plainText, link: src)])
             }
             if let link = meaningful[0] as? Link, let href = link.destination, isWeb(href), !holdsImage(link) {
                 return .soleLink(href: href, text: link.plainText, runs: inlines(p))

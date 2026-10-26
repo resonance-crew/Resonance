@@ -147,7 +147,11 @@ object StoryParser {
         val meaningful = children(p).filterNot { it is Text && it.literal.isBlank() }
         val only = meaningful.singleOrNull()
         if (only is Link && only.destination.startsWith("/card/")) return StoryBlock.CardEmbed(only.destination, plain(only))
-        if (only is Image) return StoryBlock.Image(only.destination, plain(only))
+        if (only is Image) {
+            if (StoryPictures.drawn(only.destination)) return StoryBlock.Image(only.destination, plain(only))
+            // Not the site's: a link to it, opened on purpose, never a fetch on opening the story.
+            return StoryBlock.Paragraph(listOf(InlineRun(plain(only).ifBlank { only.destination }, link = only.destination)))
+        }
         val runs = inlines(p)
         val linkKey = when (only) {
             // A linked picture is a picture, not a link of its own.

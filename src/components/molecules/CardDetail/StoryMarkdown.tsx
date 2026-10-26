@@ -86,6 +86,28 @@ function toOtherSite(href: string | undefined): boolean {
 /** How a link to another site opens, as its link card does: a tab of its own, sending no referrer and vouching for nothing. */
 const AWAY = { target: '_blank', rel: 'noopener noreferrer nofollow ugc' } as const;
 
+/**
+ * Whether a story picture is drawn: one on our own host or a host under it (stored pictures are on
+ * img.<site>), one written into the story (data:image/), or a path of ours. Any other is shown as a
+ * link the reader opens on purpose: a picture elsewhere is fetched by every reader's browser the
+ * moment the story opens, and its address, browser and the time go to whoever runs that host — an
+ * anonymous card's author too, on the page their notification opens. The apps keep the same rule
+ * (their StoryPictures). Judged as the browser will fetch it, by the URL parser.
+ */
+export function drawnPicture(src: string): boolean {
+  if (/^data:image\//i.test(src)) return true;
+  let url: URL;
+  try {
+    url = new URL(src, `https://${OWN_HOSTS[0]}`);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return false;
+  const host = url.hostname.replace(/\.$/, '').toLowerCase();
+  if (process.env.NODE_ENV !== 'production' && (host === 'localhost' || host === '127.0.0.1')) return true; // the emulators' storage
+  return OWN_HOSTS.some((own) => host === own || host.endsWith(`.${own}`));
+}
+
 const components: Components = {
   // A story's `#` is drawn as the reader's h2, and is one: the page has one h1, the card's title.
   h1: ({ node: _node, ...rest }) => <h2 {...rest} />,
@@ -133,14 +155,20 @@ const components: Components = {
   hr: () => <Divider seed={23} spacing="var(--s-rule)" />,
   // Story images get the same hand-drawn curved clip as the cover, hugging
   // the photo's natural size. Spans only, so it stays valid inside <p>.
-  img: ({ src, alt }) => (
-    <OrganicStoryImage
-      className={styles.storyImage}
-      src={String(src ?? '')}
-      alt={alt ?? ''}
-      seed={seedFromString(String(src ?? ''))}
-    />
-  ),
+  img: ({ src, alt }) => {
+    const url = String(src ?? '');
+    if (!drawnPicture(url)) {
+      // Not ours: a link to it, opened on purpose, never a fetch on opening the story.
+      return url ? (
+        <a href={url} {...AWAY} className="story-link" style={storyLinkWaveVars(url) as CSSProperties}>
+          {alt || url}
+        </a>
+      ) : (
+        <>{alt}</>
+      );
+    }
+    return <OrganicStoryImage className={styles.storyImage} src={url} alt={alt ?? ''} seed={seedFromString(url)} />;
+  },
   p: StoryParagraph,
 };
 

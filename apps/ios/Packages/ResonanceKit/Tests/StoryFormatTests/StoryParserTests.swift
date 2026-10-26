@@ -182,6 +182,16 @@ import Testing
         #expect(!StoryNesting.tooDeep("- a\n  - b\n    - c"))
     }
 
+    @Test func onlyTheSitesPicturesAreDrawnAnyOtherIsALink() {
+        StoryPictures.$scopedSite.withValue("resonance.channel") {
+        #expect(StoryParser.parse("![ours](https://img.resonance.channel/a.webp)") == [.image(url: "https://img.resonance.channel/a.webp", alt: "ours")])
+        #expect(StoryParser.parse("![](/api/emulator-storage/x.webp)") == [.image(url: "/api/emulator-storage/x.webp", alt: "")])
+        for elsewhere in ["https://pictures.example.invalid/p.png", "https://img.resonance.channel.example.invalid/p.png", "https://img.resonance.channel@pictures.example.invalid/p.png"] {
+            #expect(StoryParser.parse("![那裡](\(elsewhere))") == [.paragraph([InlineRun("那裡", link: elsewhere)])])
+        }
+        }
+    }
+
     @Test func aParagraphOfDelimitersThatNeverPairIsReadAsItsWords() {
         // `**` opened hundreds deep nests the parser as deep (a background thread's stack ran out at
         // 250 levels): past the paragraph's delimiter limit the story is its words, unparsed.
