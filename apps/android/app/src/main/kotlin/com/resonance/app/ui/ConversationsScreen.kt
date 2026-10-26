@@ -10,6 +10,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.width
+import com.resonance.design.SharedShimmer
 import com.resonance.design.Skeleton
 import com.resonance.design.readableColumn
 
@@ -207,21 +208,24 @@ private fun ConversationRow(person: Person, preview: String, time: String?, unre
  */
 @Composable
 private fun ConversationsSkeleton() {
-    val names = listOf(96, 128, 80, 112, 88, 120)
-    val lines = listOf(0.78f, 0.56f, 0.7f, 0.48f, 0.64f, 0.52f)
-    Column(Modifier.readableColumn().padding(start = 16.dp, end = 18.dp).semantics { contentDescription = L10n.Home.moreLoading }) {
-        for (i in 0 until 6) {
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Skeleton(height = 40.dp, circle = true)
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Skeleton(Modifier.width(names[i].dp), height = 13.dp)
-                    Skeleton(Modifier.fillMaxWidth(lines[i]), height = 12.dp)
+    // One clock for its blocks (composed together).
+    SharedShimmer {
+        val names = listOf(96, 128, 80, 112, 88, 120)
+        val lines = listOf(0.78f, 0.56f, 0.7f, 0.48f, 0.64f, 0.52f)
+        Column(Modifier.readableColumn().padding(start = 16.dp, end = 18.dp).semantics { contentDescription = L10n.Home.moreLoading }) {
+            for (i in 0 until 6) {
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Skeleton(height = 40.dp, circle = true)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Skeleton(Modifier.width(names[i].dp), height = 13.dp)
+                        Skeleton(Modifier.fillMaxWidth(lines[i]), height = 12.dp)
+                    }
+                    Skeleton(Modifier.width(30.dp), height = 10.dp)
                 }
-                Skeleton(Modifier.width(30.dp), height = 10.dp)
             }
         }
     }

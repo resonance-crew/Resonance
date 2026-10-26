@@ -773,27 +773,30 @@ private val SharedCardBand = 96.dp
  */
 @Composable
 fun ColumnScope.SharedCardSkeleton(pictureBleed: Dp = PictureBleed) {
-    Column(Modifier.fillMaxWidth().semantics { contentDescription = L10n.Home.moreLoading }) {
-        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Skeleton(height = 32.dp, circle = true)
-            Column(Modifier.weight(1f)) {
-                SkeletonLines(AppFonts.body(14f, 600, lineHeight = 1.3f), 12.dp, Modifier.width(88.dp))
-                SkeletonLines(AppFonts.body(12f, lineHeight = 1.35f), 10.dp, Modifier.width(64.dp))
+    // One clock for its blocks (composed together).
+    SharedShimmer {
+        Column(Modifier.fillMaxWidth().semantics { contentDescription = L10n.Home.moreLoading }) {
+            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Skeleton(height = 32.dp, circle = true)
+                Column(Modifier.weight(1f)) {
+                    SkeletonLines(AppFonts.body(14f, 600, lineHeight = 1.3f), 12.dp, Modifier.width(88.dp))
+                    SkeletonLines(AppFonts.body(12f, lineHeight = 1.35f), 10.dp, Modifier.width(64.dp))
+                }
             }
-        }
-        Box(Modifier.fillMaxWidth().height(SharedCardBand).bleedSides(pictureBleed).background(Tokens.Text.copy(alpha = 0.06f)))
-        Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            SkeletonLines(AppFonts.heading(16f, 700, lineHeight = 1.3f), 15.dp, Modifier.fillMaxWidth(0.85f))
-            SkeletonLines(AppFonts.body(13f, lineHeight = 1.45f), 11.dp, Modifier.fillMaxWidth(0.9f), Modifier.fillMaxWidth(0.6f))
-        }
-        Row(
-            Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            // The wave's slot holds a dot of its size, so the bar beside it doesn't read as indented.
-            Skeleton(height = 14.dp, circle = true)
-            Box(Modifier.weight(1f)) { SkeletonLines(AppFonts.body(12f, lineHeight = 1.3f), 11.dp, Modifier.width(56.dp)) }
+            Box(Modifier.fillMaxWidth().height(SharedCardBand).bleedSides(pictureBleed).background(Tokens.Text.copy(alpha = 0.06f)))
+            Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SkeletonLines(AppFonts.heading(16f, 700, lineHeight = 1.3f), 15.dp, Modifier.fillMaxWidth(0.85f))
+                SkeletonLines(AppFonts.body(13f, lineHeight = 1.45f), 11.dp, Modifier.fillMaxWidth(0.9f), Modifier.fillMaxWidth(0.6f))
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                // The wave's slot holds a dot of its size, so the bar beside it doesn't read as indented.
+                Skeleton(height = 14.dp, circle = true)
+                Box(Modifier.weight(1f)) { SkeletonLines(AppFonts.body(12f, lineHeight = 1.3f), 11.dp, Modifier.width(56.dp)) }
+            }
         }
     }
 }

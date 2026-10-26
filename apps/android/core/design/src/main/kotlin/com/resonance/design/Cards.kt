@@ -424,7 +424,8 @@ fun StoryCardSkeleton(position: Int, isLast: Boolean = false, modifier: Modifier
     val seed = position * 77.0 + 13
     WithSkeletonHue(palette.hue) {
         StoryBand(palette, seed + 17, isLast, 32.dp, 14.dp, modifier.semantics { contentDescription = L10n.Home.moreLoading }, isFirst, inset) {
-            StoryCardSkeletonBody(palette, seed)
+            // One clock for the card's blocks (a provider, not a layout: they stay the band's own children).
+            SharedShimmer { StoryCardSkeletonBody(palette, seed) }
         }
     }
 }
@@ -484,7 +485,7 @@ fun BorderedStoryCardSkeleton(position: Int, modifier: Modifier = Modifier, pale
     val seed = position * 77.0 + 13
     WithSkeletonHue(palette.hue) {
         BorderedCardFrame(palette, seed, modifier.semantics { contentDescription = L10n.Home.moreLoading }, hover = false) {
-            StoryCardSkeletonBody(palette, seed)
+            SharedShimmer { StoryCardSkeletonBody(palette, seed) }
         }
     }
 }

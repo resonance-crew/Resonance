@@ -59,6 +59,7 @@ import com.resonance.design.peopleHeadGap
 import com.resonance.design.ButtonVariant
 import com.resonance.design.EmptyAction
 import com.resonance.design.OrganicButton
+import com.resonance.design.SharedShimmer
 import com.resonance.design.Skeleton
 import com.resonance.design.cardListLayout
 import com.resonance.design.storyCardSkeletons
@@ -294,19 +295,22 @@ private fun BlockedNotice(session: Session, userId: String, handle: String, onUn
  */
 @Composable
 private fun ProfileHeroSkeleton() {
-    Column(
-        Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = LocalWindowLayout.current.cls.peopleHeadGap(), bottom = 20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        // The name's line is 38.4 (32 × 1.2); its 34 block sits in its middle, 16 under the avatar.
-        Skeleton(Modifier.padding(bottom = PeopleNameGap - 16.dp + 2.dp), height = 96.dp, circle = true)
-        Skeleton(Modifier.fillMaxWidth(0.6f).widthIn(max = 220.dp), height = 34.dp, radius = 10.dp)
-        Skeleton(Modifier.fillMaxWidth(0.8f).widthIn(max = 440.dp), height = 16.dp, radius = 8.dp)
-        Skeleton(Modifier.fillMaxWidth(0.6f).widthIn(max = 300.dp), height = 16.dp, radius = 8.dp)
-        Skeleton(Modifier.fillMaxWidth(0.7f).widthIn(max = 280.dp), height = 13.dp, radius = 8.dp)
+    // One clock for its blocks (composed together).
+    SharedShimmer {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = LocalWindowLayout.current.cls.peopleHeadGap(), bottom = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            // The name's line is 38.4 (32 × 1.2); its 34 block sits in its middle, 16 under the avatar.
+            Skeleton(Modifier.padding(bottom = PeopleNameGap - 16.dp + 2.dp), height = 96.dp, circle = true)
+            Skeleton(Modifier.fillMaxWidth(0.6f).widthIn(max = 220.dp), height = 34.dp, radius = 10.dp)
+            Skeleton(Modifier.fillMaxWidth(0.8f).widthIn(max = 440.dp), height = 16.dp, radius = 8.dp)
+            Skeleton(Modifier.fillMaxWidth(0.6f).widthIn(max = 300.dp), height = 16.dp, radius = 8.dp)
+            Skeleton(Modifier.fillMaxWidth(0.7f).widthIn(max = 280.dp), height = 13.dp, radius = 8.dp)
+        }
+        Spacer(Modifier.height(28.dp))
     }
-    Spacer(Modifier.height(28.dp))
 }
 
 /** A profile's masthead rows are this far apart; the pen name sits [PeopleNameGap] under the avatar. */

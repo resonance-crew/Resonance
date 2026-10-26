@@ -97,6 +97,7 @@ import com.resonance.design.REPLY_OVERLAP
 import com.resonance.design.SharedCardSection
 import com.resonance.design.BubblePictureBleed
 import com.resonance.design.SharedCardSkeleton
+import com.resonance.design.SharedShimmer
 import com.resonance.design.Skeleton
 import com.resonance.design.SketchLoader
 import com.resonance.design.fade
@@ -373,30 +374,33 @@ internal fun ThreadSkeleton(room: ComposerRoom, modifier: Modifier = Modifier) {
         value = true
     }
     val alpha by animateFloatAsState(if (shown) 1f else 0f, tween(200), label = "threadSkeleton")
-    Column(
-        modifier
-            .fillMaxSize()
-            .graphicsLayer { this.alpha = alpha }
-            .semantics { contentDescription = L10n.Home.moreLoading }
-            .padding(start = 16.dp, end = 16.dp, bottom = with(LocalDensity.current) { room.clear.toDp() }),
-        verticalArrangement = Arrangement.Bottom,
-    ) {
-        SKELETON_BUBBLES.forEachIndexed { i, (mine, width, height) ->
-            val runEnds = i == SKELETON_BUBBLES.lastIndex || SKELETON_BUBBLES[i + 1].first != mine
-            val gap = when {
-                i == 0 -> 0.dp
-                SKELETON_BUBBLES[i - 1].first == mine -> RUN_GAP + 2.dp
-                else -> BETWEEN_RUNS + 4.dp
-            }
-            Row(
-                Modifier.fillMaxWidth().padding(top = gap),
-                horizontalArrangement = if (mine) Arrangement.End else Arrangement.spacedBy(FACE_GAP),
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                if (!mine) {
-                    if (runEnds) Skeleton(height = FACE, circle = true) else Spacer(Modifier.size(FACE, 1.dp))
+    // One clock for its bubbles (composed together, while still unseen).
+    SharedShimmer {
+        Column(
+            modifier
+                .fillMaxSize()
+                .graphicsLayer { this.alpha = alpha }
+                .semantics { contentDescription = L10n.Home.moreLoading }
+                .padding(start = 16.dp, end = 16.dp, bottom = with(LocalDensity.current) { room.clear.toDp() }),
+            verticalArrangement = Arrangement.Bottom,
+        ) {
+            SKELETON_BUBBLES.forEachIndexed { i, (mine, width, height) ->
+                val runEnds = i == SKELETON_BUBBLES.lastIndex || SKELETON_BUBBLES[i + 1].first != mine
+                val gap = when {
+                    i == 0 -> 0.dp
+                    SKELETON_BUBBLES[i - 1].first == mine -> RUN_GAP + 2.dp
+                    else -> BETWEEN_RUNS + 4.dp
                 }
-                Skeleton(Modifier.width(width.dp), height = height.dp, radius = 18.dp)
+                Row(
+                    Modifier.fillMaxWidth().padding(top = gap),
+                    horizontalArrangement = if (mine) Arrangement.End else Arrangement.spacedBy(FACE_GAP),
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    if (!mine) {
+                        if (runEnds) Skeleton(height = FACE, circle = true) else Spacer(Modifier.size(FACE, 1.dp))
+                    }
+                    Skeleton(Modifier.width(width.dp), height = height.dp, radius = 18.dp)
+                }
             }
         }
     }

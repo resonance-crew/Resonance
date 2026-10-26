@@ -25,6 +25,7 @@ import com.resonance.design.AppFonts
 import com.resonance.design.EmptyAction
 import com.resonance.design.OrganicEmptyState
 import com.resonance.design.plainClickable
+import com.resonance.design.SharedShimmer
 import com.resonance.design.Skeleton
 import com.resonance.design.WavyDivider
 import com.resonance.design.generated.IconName
@@ -70,13 +71,16 @@ fun NotificationsScreen(session: Session, open: (Route) -> Unit) {
  */
 @Composable
 private fun NotificationsSkeleton() {
-    val lines = listOf(0.82f, 0.64f, 0.9f, 0.58f, 0.76f, 0.7f)
-    Column(Modifier.readableColumn().padding(horizontal = 20.dp).semantics { contentDescription = L10n.Home.moreLoading }) {
-        for (i in lines.indices) {
-            if (i > 0) WavyDivider(seed = 29.0 + i * 7)
-            Column(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 15.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Skeleton(Modifier.fillMaxWidth(lines[i]), height = 14.dp)
-                if (i == 1 || i == 3) Skeleton(Modifier.fillMaxWidth(0.46f), height = 12.dp)
+    // One clock for its blocks (composed together).
+    SharedShimmer {
+        val lines = listOf(0.82f, 0.64f, 0.9f, 0.58f, 0.76f, 0.7f)
+        Column(Modifier.readableColumn().padding(horizontal = 20.dp).semantics { contentDescription = L10n.Home.moreLoading }) {
+            for (i in lines.indices) {
+                if (i > 0) WavyDivider(seed = 29.0 + i * 7)
+                Column(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 15.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Skeleton(Modifier.fillMaxWidth(lines[i]), height = 14.dp)
+                    if (i == 1 || i == 3) Skeleton(Modifier.fillMaxWidth(0.46f), height = 12.dp)
+                }
             }
         }
     }
