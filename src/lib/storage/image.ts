@@ -51,6 +51,23 @@ export interface NormalizedImage {
  * camera, ICC) carried over. An animated GIF or WebP stays animated.
  */
 export async function normalizeUpload(input: Uint8Array, purpose: UploadPurpose): Promise<NormalizedImage> {
+  const { image, animated } = await openUpload(input);
+  return encodeUpload(image, purpose, animated);
+}
+
+/**
+ * A chat picture as kept (normalizeUpload's 'image') and as its thread draws
+ * it ('thumb'), both from one opening of the upload and encoded side by side
+ * — the thumb from the upload itself, not from a re-encode of the kept one.
+ */
+export async function normalizeUploadWithThumb(input: Uint8Array): Promise<{ full: NormalizedImage; thumb: NormalizedImage }> {
+  const { image, animated } = await openUpload(input);
+  const [full, thumb] = await Promise.all([encodeUpload(image.clone(), 'image', animated), encodeUpload(image.clone(), 'thumb', animated)]);
+  return { full, thumb };
+}
+
+/** The upload checked (a format we take, not too many pixels) and opened upright: still photos turned by their EXIF orientation. */
+async function openUpload(input: Uint8Array): Promise<{ image: sharp.Sharp; animated: boolean }> {
   const open = (animated: boolean) => sharp(input, { limitInputPixels: MAX_INPUT_PIXELS, animated, failOn: 'error' });
   let meta: sharp.Metadata;
   try {
@@ -62,7 +79,12 @@ export async function normalizeUpload(input: Uint8Array, purpose: UploadPurpose)
 
   const animated = (meta.pages ?? 1) > 1;
   // EXIF orientation is a still photo's; an animation has none to apply.
-  let image = animated ? open(true) : open(false).rotate();
+  return { image: animated ? open(true) : open(false).rotate(), animated };
+}
+
+/** An opened upload scaled for `purpose` and written as WebP, with no metadata. */
+async function encodeUpload(opened: sharp.Sharp, purpose: UploadPurpose, animated: boolean): Promise<NormalizedImage> {
+  let image = opened;
   const edge = purpose === 'thumb' ? THUMB_EDGE : IMAGE_MAX_EDGE;
   image =
     purpose === 'avatar'

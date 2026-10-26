@@ -88,6 +88,11 @@ export async function readChatImage(
   if (!picture.exists || typeof pair !== 'string' || typeof messageId !== 'string' || !PICTURE_ID.test(messageId) || isReservedId(messageId)) {
     return null;
   }
+  // The file is fetched beside the checks below and handed out only once they pass (a refused request costs a
+  // read of the store, nothing more).
+  const key = picture.get(size === 'thumb' ? 'thumbKey' : 'key');
+  const bytes = typeof key === 'string' ? store.get(key) : null;
+  bytes?.catch(() => {});
   const [convo, message] = await Promise.all([
     db.doc(`conversations/${pair}`).get(),
     db.doc(`conversations/${pair}/messages/${messageId}`).get(),
@@ -98,8 +103,7 @@ export async function readChatImage(
   const sentAt = message.get('sentAt');
   const since = convo.get('createdAt');
   if (sentAt instanceof Timestamp && since instanceof Timestamp && sentAt.toMillis() < since.toMillis()) return null;
-  const key = picture.get(size === 'thumb' ? 'thumbKey' : 'key');
-  return typeof key === 'string' ? store.get(key) : null;
+  return bytes;
 }
 
 /** The files of the pictures these records name (both sizes). */

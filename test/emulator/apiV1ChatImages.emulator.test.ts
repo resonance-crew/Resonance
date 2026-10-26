@@ -270,6 +270,24 @@ describe('the routes', () => {
     expect((await read('a/b')).status).toBe(404);
   });
 
+  it('answers 429 over budget before saying the sender may not message them, keeping nothing', async () => {
+    const bytes = await photo();
+    const file = () => new Blob([Buffer.from(bytes)], { type: 'image/jpeg' });
+    await db.doc('rateLimits/alice_chatImage').set({ userId: 'alice', bucket: 'chatImage', windowStart: Date.now(), used: 100 });
+    expect((await uploadRoute.POST(form({ file: file(), to: 'carol' }))).status).toBe(429);
+    expect((await uploadRoute.POST(form({ file: file(), to: 'bob' }))).status).toBe(429);
+    expect(await files()).toEqual([]);
+    expect((await db.collection('chatImages').get()).empty).toBe(true);
+  });
+
+  it('spends the budget on a picture refused for its recipient, and answers that refusal under budget', async () => {
+    const res = await uploadRoute.POST(form({ file: new Blob([Buffer.from(await photo())], { type: 'image/jpeg' }), to: 'carol' }));
+    expect(res.status).toBe(403);
+    expect((await db.doc('rateLimits/alice_chatImage').get()).get('used')).toBe(1);
+    expect((await db.doc('rateLimits/alice_chatImageBytes').get()).get('used')).toBeGreaterThan(0);
+    expect(await files()).toEqual([]);
+  });
+
   it('refuses a form without a file or with a bad recipient, and says so', async () => {
     const noFile = await uploadRoute.POST(form({ to: 'bob' }));
     expect(noFile.status).toBe(400);

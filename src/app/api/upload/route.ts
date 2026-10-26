@@ -42,7 +42,8 @@ export async function POST(req: Request) {
   const purpose: UploadPurpose = form?.get('purpose') === 'avatar' ? 'avatar' : 'image';
 
   const db = getAdminDb();
-  const refused = (await limited(db, user.id, 'upload')) ?? (await limited(db, user.id, 'uploadBytes', file.size));
+  // The count and the bytes in one transaction, as spent one after the other.
+  const refused = await limited(db, user.id, [['upload'], ['uploadBytes', file.size]]);
   if (refused) return refused;
 
   let image;
