@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
+import { revalidateLocalized } from '@/lib/api/revalidate';
 import { crossOriginCookieWrite } from '@/lib/api/sameOrigin';
 import { getCurrentUser } from '@/lib/auth';
 import { revokeSessions } from '@/lib/auth/firebase/server';
@@ -6,6 +7,8 @@ import { getAdminDb } from '@/lib/db/firestore/admin';
 import {
   cancelAccountDeletion,
   getAccountDeletion,
+  holdAnonymousCards,
+  releaseHeldCards,
   scheduleAccountDeletion,
   type AccountDeletion,
 } from '@/lib/account/deletion';
@@ -30,7 +33,8 @@ export async function GET() {
 }
 
 /**
- * Schedule deletion, and revoke the account's sessions (revokeSessions): no
+ * Schedule deletion, hold its published anonymous cards in its trash
+ * (holdAnonymousCards; cancelling brings them back), and revoke the account's sessions (revokeSessions): no
  * device can renew its sign-in, so every one — this one too — is signed out
  * within the hour its current ID token has left. Until then writes and these
  * account routes refuse it at once, reads within REVOCATION_CACHE_MS, and
@@ -46,8 +50,12 @@ export async function POST(req: Request) {
 
   const user = await getCurrentUser();
   if (!user) return unauthorized();
-  const deletion = await scheduleAccountDeletion(getAdminDb(), user.id);
+  const db = getAdminDb();
+  const deletion = await scheduleAccountDeletion(db, user.id);
+  // Its anonymous cards go out of sight now, not beside the profile at the purge (holdAnonymousCards).
+  const stale = await holdAnonymousCards(db, user.id);
   await revokeSessions(user.id);
+  if (stale.length) after(() => revalidateLocalized(stale));
   return NextResponse.json(body(deletion));
 }
 
@@ -58,6 +66,9 @@ export async function DELETE(req: Request) {
 
   const user = await getCurrentUser();
   if (!user) return unauthorized();
-  await cancelAccountDeletion(getAdminDb(), user.id);
+  const db = getAdminDb();
+  await cancelAccountDeletion(db, user.id);
+  const stale = await releaseHeldCards(db, user.id);
+  if (stale.length) after(() => revalidateLocalized(stale));
   return NextResponse.json(body(null));
 }

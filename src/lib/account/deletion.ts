@@ -1,6 +1,7 @@
 import { Timestamp, type BulkWriter, type DocumentReference, type Firestore, type Query } from 'firebase-admin/firestore';
 import { cardPagePaths, landingPagePaths, profilePagePaths } from '@/lib/api/revalidate';
 import { CHAT_IMAGES, chatImageFiles } from '@/lib/api/v1/chatImages';
+import { restoreCard, trashCard } from '@/lib/api/v1/trash';
 import { HANDLES } from '@/lib/db/firestore/handles';
 import { TOMBSTONE, tombstoneRef } from '@/lib/db/firestore/tombstones';
 import { UPLOADS, uploadedKeys } from '@/lib/storage/uploads';
@@ -63,6 +64,46 @@ export async function scheduleAccountDeletion(
     await batch.commit();
   }
   return deletion;
+}
+
+/**
+ * Out of sight from the moment the deletion is scheduled: the account's
+ * published anonymous cards go to its trash (marked `trashedFor: 'deletion'`),
+ * as if their author had put them there — so, private to everyone and
+ * answering every probe as a deleted card does, their notes deleted, their
+ * pages never revalidated beside the profile's. Left until the purge, an
+ * anonymous card would turn from "there" to "gone" in the same run as its
+ * author's profile and say whose it was; this way it goes days before, as any
+ * card its author trashed. Cancelling brings back these alone
+ * (releaseHeldCards). Returns the card pages to revalidate. Best effort, a
+ * card at a time: the deletion stands whatever this does.
+ */
+export async function holdAnonymousCards(db: Firestore, uid: string): Promise<string[]> {
+  const cards = await db.collection('cards').where('authorId', '==', uid).where('anonymous', '==', true).select('publishedAt', 'trashedAt').get();
+  const stale: string[] = [];
+  for (const d of cards.docs) {
+    if (d.get('publishedAt') == null || d.get('trashedAt') != null) continue;
+    try {
+      stale.push(...(await trashCard(db, uid, d.id, { forDeletion: true })).stale);
+    } catch (err) {
+      console.error(`Account deletion: could not hold card ${d.id}`, err);
+    }
+  }
+  return stale;
+}
+
+/** A cancelled deletion's held cards back from the trash, as they were (restoreCard). Returns the pages to revalidate. */
+export async function releaseHeldCards(db: Firestore, uid: string): Promise<string[]> {
+  const held = await db.collection('cards').where('authorId', '==', uid).where('trashedFor', '==', 'deletion').select().get();
+  const stale: string[] = [];
+  for (const d of held.docs) {
+    try {
+      stale.push(...(await restoreCard(db, uid, d.id)).stale);
+    } catch (err) {
+      console.error(`Account deletion: could not bring back card ${d.id}`, err);
+    }
+  }
+  return stale;
 }
 
 export async function cancelAccountDeletion(db: Firestore, uid: string): Promise<void> {

@@ -4,8 +4,10 @@ import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestor
 import {
   DELETION_GRACE_DAYS,
   getAccountDeletion,
+  holdAnonymousCards,
   purgeAccount,
   purgeDueAccounts,
+  releaseHeldCards,
   scheduleAccountDeletion,
   UPLOAD_DELETE_BATCH,
 } from '@/lib/account/deletion';
@@ -151,6 +153,65 @@ describe('scheduleAccountDeletion', () => {
     await scheduleAccountDeletion(db, 'alice');
     expect(await exists('devices/alice-phone-1')).toBe(false);
     expect(await exists('devices/bob-phone-1')).toBe(true);
+  });
+});
+
+// An anonymous card that ended in the purge's minute beside its author's
+// profile (and was revalidated in the same call) would say whose it was: it
+// goes out of sight when the deletion is scheduled, as any card its author
+// trashed, and comes back if the deletion is cancelled.
+describe('holding anonymous cards while the account waits to be deleted', () => {
+  async function seedCards() {
+    const published = Timestamp.fromDate(new Date('2026-09-01T00:00:00Z'));
+    const set = (path: string, data: Record<string, unknown>) => db.doc(path).set(data);
+    await Promise.all([
+      set('users/zoe', { handle: 'zoe', handleLower: 'zoe' }),
+      set('cards/zoeAnon', { authorId: 'zoe', thoughtCore: 'A', story: 's', visibility: 'public', anonymous: true, publishedAt: published, slug: 'quiet-zoe' }),
+      set('cards/zoeNamed', { authorId: 'zoe', thoughtCore: 'N', story: 's', visibility: 'public', anonymous: false, publishedAt: published }),
+      set('cards/zoeDraft', { authorId: 'zoe', thoughtCore: 'D', story: 's', visibility: 'private', anonymous: true, publishedAt: null }),
+      set('cards/zoeTrashed', {
+        authorId: 'zoe', thoughtCore: 'T', story: 's', visibility: 'private', anonymous: true, publishedAt: published,
+        trashedAt: Timestamp.fromDate(new Date('2026-09-20T00:00:00Z')), trashedFrom: { visibility: 'public', referenceCardId: null },
+      }),
+    ]);
+  }
+
+  it('trashes the published anonymous cards alone, hidden from everyone at once, and never their profile page', async () => {
+    await seedCards();
+    await scheduleAccountDeletion(db, 'zoe', new Date());
+    const stale = await holdAnonymousCards(db, 'zoe');
+    const anon = (await db.doc('cards/zoeAnon').get()).data()!;
+    expect(anon).toMatchObject({ visibility: 'private', trashedFor: 'deletion', trashedFrom: { visibility: 'public' } });
+    expect(await readCardForPage('zoeAnon')).toEqual({ id: null, card: null, author: null });
+    expect((await db.doc('cards/zoeNamed').get()).data()).toMatchObject({ visibility: 'public' });
+    expect((await db.doc('cards/zoeNamed').get()).get('trashedAt')).toBeUndefined();
+    expect((await db.doc('cards/zoeDraft').get()).get('trashedAt')).toBeUndefined();
+    expect((await db.doc('cards/zoeTrashed').get()).get('trashedFor')).toBeUndefined();
+    expect(stale).toEqual(expect.arrayContaining(['/card/zoeAnon']));
+    expect(stale).not.toContain('/u/zoe');
+  });
+
+  it('brings back only what it held when the deletion is cancelled', async () => {
+    await seedCards();
+    await holdAnonymousCards(db, 'zoe');
+    await releaseHeldCards(db, 'zoe');
+    const anon = (await db.doc('cards/zoeAnon').get()).data()!;
+    expect(anon.visibility).toBe('public');
+    expect(anon.trashedAt).toBeUndefined();
+    expect(anon.trashedFor).toBeUndefined();
+    // A card its author had put in the trash themselves stays there.
+    expect((await db.doc('cards/zoeTrashed').get()).get('trashedAt')).toBeDefined();
+  });
+
+  it("purges a held card with the account, its page not among the profile's", async () => {
+    await seedCards();
+    await scheduleAccountDeletion(db, 'zoe', new Date('2026-09-01T00:00:00Z'));
+    await holdAnonymousCards(db, 'zoe');
+    const revalidate = vi.fn();
+    const run = await purgeDueAccounts({ db, deleteAuthUser: vi.fn(async () => {}), revalidate }, { now: new Date('2026-10-01T00:00:00Z') });
+    expect(run.purged).toEqual(['zoe']);
+    expect((await db.doc('cards/zoeAnon').get()).exists).toBe(false);
+    expect(revalidate.mock.calls.flat(2)).not.toContain('/card/zoeAnon');
   });
 });
 

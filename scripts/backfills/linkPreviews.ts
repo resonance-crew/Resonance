@@ -32,7 +32,7 @@ export async function backfillLinkPreviews(
   const candidates = snap.docs
     .map((doc) => ({
       id: doc.id,
-      links: standaloneLinks(String(doc.get('story') ?? '')),
+      links: linksOf(doc.id, String(doc.get('story') ?? ''), log),
       storedFor: doc.get('linkPreviewsFor'),
       previewed: new Set(linkPreviewsOf(doc.get('linkPreviews')).map((p) => p.url)),
     }))
@@ -67,4 +67,14 @@ export async function backfillLinkPreviews(
 
 function sameLinks(a: string[], b: unknown[]): boolean {
   return a.length === b.length && a.every((link, i) => link === b[i]);
+}
+
+/** A card's standalone links; one story that can't be read (a parser's throw) is left out, never the run. */
+function linksOf(id: string, story: string, log: (line: string) => void): string[] {
+  try {
+    return standaloneLinks(story);
+  } catch (e) {
+    log(`  ${id}: story not read (${e instanceof Error ? e.message : String(e)}); left as it is`);
+    return [];
+  }
 }

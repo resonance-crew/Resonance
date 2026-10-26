@@ -94,7 +94,7 @@ export async function trashCard(
   db: Firestore,
   uid: string,
   id: string,
-  opts: { vectors?: Pick<IVectorStore, 'setVisibility'>; now?: number } = {},
+  opts: { vectors?: Pick<IVectorStore, 'setVisibility'>; now?: number; forDeletion?: boolean } = {},
 ): Promise<TrashedCardResult> {
   if (isReservedId(id)) throw notFound();
   const now = opts.now ?? Date.now();
@@ -115,7 +115,14 @@ export async function trashCard(
     };
     const trashedAt = Timestamp.fromMillis(now);
     // Never updatedAt nor excerptAt: a draft keeps its place in edit order, a list its stored summary.
-    tx.update(ref, { trashedAt, trashedFrom, visibility: 'private', referenceCardId: FieldValue.delete() });
+    tx.update(ref, {
+      trashedAt,
+      trashedFrom,
+      visibility: 'private',
+      referenceCardId: FieldValue.delete(),
+      // Held while its author's account waits to be deleted (lib/account/deletion): cancelling brings back these alone.
+      ...(opts.forDeletion ? { trashedFor: 'deletion' } : {}),
+    });
     const { referenceCardId: _parked, ...rest } = data;
     return { before: data, after: { ...rest, trashedAt, trashedFrom, visibility: 'private' }, changed: true, me: meSnap.data() };
   });
@@ -223,10 +230,11 @@ export async function restoreCard(
       visibility: from.visibility,
       trashedAt: FieldValue.delete(),
       trashedFrom: FieldValue.delete(),
+      trashedFor: FieldValue.delete(),
       ...(repoint ? { referenceCardId: original } : {}),
     };
     tx.update(ref, restored);
-    const { trashedAt: _at, trashedFrom: _from, ...rest } = data;
+    const { trashedAt: _at, trashedFrom: _from, trashedFor: _for, ...rest } = data;
     const after: DocumentData = { ...rest, visibility: from.visibility, ...(repoint ? { referenceCardId: original } : {}) };
     alignPendingEdit(tx, edit, after, at);
     const bell = repoint && becameReachable(data, after) ? reachOriginal(tx, db, id, after, reach!) : null;
