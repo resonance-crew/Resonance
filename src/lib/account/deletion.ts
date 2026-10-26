@@ -1,4 +1,4 @@
-import type { BulkWriter, DocumentReference, Firestore, Query } from 'firebase-admin/firestore';
+import { Timestamp, type BulkWriter, type DocumentReference, type Firestore, type Query } from 'firebase-admin/firestore';
 import { cardPagePaths, landingPagePaths, profilePagePaths } from '@/lib/api/revalidate';
 import { CHAT_IMAGES, chatImageFiles } from '@/lib/api/v1/chatImages';
 import { HANDLES } from '@/lib/db/firestore/handles';
@@ -29,6 +29,8 @@ const IN_CHUNK = 30;
 const TREE_CONCURRENCY = 16;
 /** Accounts purged at once in one run. */
 const ACCOUNT_CONCURRENCY = 2;
+/** No account takes more than this share of a purge run's budget (its cut-short rest waits for the next run). */
+const ACCOUNT_SHARE = 4;
 
 export interface AccountDeletion {
   uid: string;
@@ -450,33 +452,55 @@ export interface PurgeRun {
 
 /**
  * Purge every account whose grace period has ended, longest overdue first, a
- * few at a time through one BulkWriter, within `budgetMs`.
+ * few at a time through one BulkWriter, within `budgetMs`. No account takes
+ * more than 1/ACCOUNT_SHARE of the run, and one a run cut short (or that
+ * failed) waits behind every account due before that run (`triedAt`), so two
+ * accounts too big to finish in a run — thousands of drafts, say — make
+ * progress each day without keeping everyone else's deletion from starting.
  */
 export async function purgeDueAccounts(deps: PurgeDeps, opts: PurgeRunOptions = {}): Promise<PurgeRun> {
   const clock = opts.clock ?? Date.now;
   const deadline = opts.budgetMs === undefined ? undefined : clock() + opts.budgetMs;
   const late = () => deadline !== undefined && clock() >= deadline;
+  const now = opts.now ?? new Date();
   const due = await deps.db
     .collection(DELETIONS_COLLECTION)
-    .where('purgeAfter', '<=', opts.now ?? new Date())
-    .orderBy('purgeAfter')
-    .select()
+    .where('purgeAfter', '<=', now)
+    .select('purgeAfter', 'triedAt')
     .get();
+  const at = (v: unknown) => (v instanceof Timestamp ? v.toMillis() : v instanceof Date ? v.getTime() : 0);
+  const order = due.docs
+    .map((d) => ({ uid: d.id, at: at(d.get('triedAt')) || at(d.get('purgeAfter')) }))
+    .sort((a, b) => a.at - b.at || (a.uid < b.uid ? -1 : 1));
+  const share = opts.budgetMs === undefined ? undefined : opts.budgetMs / ACCOUNT_SHARE;
+  // Cut short or failed: behind every account already due, from the next run on. Its request stays either way.
+  const tried = (uid: string) =>
+    deps.db
+      .collection(DELETIONS_COLLECTION)
+      .doc(uid)
+      .update({ triedAt: now })
+      .catch((err) => console.error(`Account purge: could not note the try for ${uid}`, err));
   const run: PurgeRun = { purged: [], failed: [], deferred: [] };
   const writer = deps.db.bulkWriter();
   try {
     const { notStarted } = await pool(
-      due.docs.map((d) => d.id),
+      order.map((o) => o.uid),
       opts.concurrency ?? ACCOUNT_CONCURRENCY,
       async (uid) => {
+        const own = deadline === undefined || share === undefined ? deadline : Math.min(deadline, clock() + share);
         try {
-          const report = await purgeAccount(deps, uid, { writer, deadline, clock });
-          (report.complete ? run.purged : run.deferred).push(uid);
+          const report = await purgeAccount(deps, uid, { writer, deadline: own, clock });
+          if (report.complete) run.purged.push(uid);
+          else {
+            run.deferred.push(uid);
+            await tried(uid);
+          }
         } catch (err) {
           // One failure must not stall everyone else's deletion; the request
           // stays in place and tomorrow's run retries it.
           console.error(`Account purge failed for ${uid}`, err);
           run.failed.push(uid);
+          await tried(uid);
         }
       },
       late,

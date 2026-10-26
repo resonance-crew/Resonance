@@ -527,6 +527,33 @@ describe('purgeDueAccounts', () => {
     expect(await exists('users/quinn')).toBe(false);
   });
 
+  // Two accounts too big to finish in a run used to be first in line every day
+  // (the longest overdue), holding both slots: nobody due after them was ever purged.
+  it('lets an account a run cut short wait behind the accounts due before that run', async () => {
+    await prolific('heavy', 40);
+    await prolific('quinn', 2);
+    await scheduleAccountDeletion(db, 'heavy', new Date('2026-09-01T00:00:00Z'));
+    await scheduleAccountDeletion(db, 'quinn', new Date('2026-09-10T00:00:00Z'));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let calls = 0;
+    // Day one: time is up a few cards into the heavy account, the longest overdue; quinn never starts.
+    const first = await purgeDueAccounts(
+      { db, deleteAuthUser: vi.fn(async () => {}) },
+      { now: new Date('2026-10-01T00:00:00Z'), budgetMs: 1000, concurrency: 1, clock: () => (++calls > 6 ? 1_000_000 : 0) },
+    );
+    expect(first).toEqual({ purged: [], failed: [], deferred: ['heavy', 'quinn'] });
+    // Day two has room for one account: quinn, whose grace ended before day one tried the heavy one.
+    let now = 0;
+    const deleteAuthUser = vi.fn(async () => void (now += 60_000));
+    const second = await purgeDueAccounts(
+      { db, deleteAuthUser },
+      { now: new Date('2026-10-02T00:00:00Z'), budgetMs: 30_000, concurrency: 1, clock: () => now },
+    );
+    expect(second.purged).toEqual(['quinn']);
+    expect(await exists('users/quinn')).toBe(false);
+    expect(await getAccountDeletion(db, 'heavy')).not.toBeNull();
+  });
+
   it('stops part way through an account cleanly: its profile and request stay until the next run finishes it', async () => {
     await prolific('pat', 40);
     await scheduleAccountDeletion(db, 'pat', new Date('2026-09-01T00:00:00Z'));
