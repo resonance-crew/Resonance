@@ -76,6 +76,13 @@ class StoryParserTest {
         assertTrue(!nesting.tooComplex(List(6) { "| a | b | c |\n| --- | --- | --- |\n" + "| x | y | z |\n".repeat(40) }.joinToString("\n")))
         assertTrue(!nesting.tooComplex("> 一\r\n> > 二\r\n\r\n**粗體** 與 *斜體*\r\n\r\n".repeat(2_000)))
         assertTrue(!nesting.tooComplex(("一行詩\n".repeat(400) + "---\n").repeat(6)))
+        // Only what CommonMark reads as a fence hides its inside, and a fence ends with its container.
+        val big = "|" + "a|".repeat(1_000) + "\n|" + "-|".repeat(1_000) + "\n" + "a\n".repeat(1_000)
+        for (before in listOf("    ```\n\n", "```a`\n\n", "> ```\n\n", "- ```\n  code\nx\n\n")) assertTrue(nesting.tooComplex(before + big))
+        assertTrue(nesting.tooComplex("    ```\n\n" + List(30) { "*a ".repeat(2_000) }.joinToString("\n\n")))
+        assertTrue(!nesting.tooComplex("- 步驟\n\n  ```js\n" + "  const snake_case = a_b * c_d;\n".repeat(200) + "  ```\n\n- 下一步"))
+        assertTrue(!nesting.tooComplex("> ```\n" + "> snake_case_name = __dunder__\n".repeat(200) + "> ```"))
+        assertTrue(!nesting.tooComplex("~~~\n" + "a_b_c * d\n".repeat(200) + "~~~\n\n````md\n```\n" + "x_y * z\n".repeat(200) + "````"))
         val many = List(40) { "*a ".repeat(nesting.PARAGRAPH_DELIMITERS - 10) }.joinToString("\n\n")
         assertTrue(nesting.tooComplex(many))
         assertEquals(emptyList(), com.resonance.kit.story.SharePassages.blocks(deep + "\n\n第二段，平平常常的一段話，也值得被讀到。"))

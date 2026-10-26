@@ -153,7 +153,7 @@ A card or a profile is shared by its link, and `src/lib/share/links.ts` is the o
 
 ### Security headers
 
-`next.config.ts` sends, on every path (`src/lib/api/securityHeaders.ts`): `X-Frame-Options: SAMEORIGIN` + CSP `frame-ancestors 'self'`, `nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, a restrictive `Permissions-Policy`, and a **report-only** CSP (reports to `/api/csp-report`) listing what the site loads — Firebase Auth's iframe and endpoints, apis.google.com, Turnstile (challenges.cloudflare.com), the R2 image origin (and a former one during a move), fonts. Watch the `[csp]` logs before enforcing it; a new script, frame, font or API origin must be added there.
+`next.config.ts` turns Next's image optimizer off (`images.unoptimized`, with patterns that admit nothing as a backstop: nothing draws next/image, and `/_next/image` would otherwise resize any local path for anyone) and sends, on every path (`src/lib/api/securityHeaders.ts`): `X-Frame-Options: SAMEORIGIN` + CSP `frame-ancestors 'self'`, `nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, a restrictive `Permissions-Policy`, and a **report-only** CSP (reports to `/api/csp-report`) listing what the site loads — Firebase Auth's iframe and endpoints, apis.google.com, Turnstile (challenges.cloudflare.com), the R2 image origin (and a former one during a move), fonts. Watch the `[csp]` logs before enforcing it; a new script, frame, font or API origin must be added there.
 
 ### App Check (watched, not enforced)
 

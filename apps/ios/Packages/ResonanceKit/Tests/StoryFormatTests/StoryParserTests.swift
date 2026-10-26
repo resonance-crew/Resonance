@@ -216,6 +216,13 @@ import Testing
         #expect(!StoryNesting.tooComplex(Array(repeating: few, count: 6).joined(separator: "\n")))
         #expect(!StoryNesting.tooComplex(String(repeating: "> 一\r\n> > 二\r\n\r\n**粗體** 與 *斜體*\r\n\r\n", count: 2_000)))
         #expect(!StoryNesting.tooComplex(String(repeating: String(repeating: "一行詩\n", count: 400) + "---\n", count: 6)))
+        // Only what CommonMark reads as a fence hides its inside, and a fence ends with its container.
+        let big = "|" + String(repeating: "a|", count: 1_000) + "\n|" + String(repeating: "-|", count: 1_000) + "\n" + String(repeating: "a\n", count: 1_000)
+        for before in ["    ```\n\n", "```a`\n\n", "> ```\n\n", "- ```\n  code\nx\n\n"] { #expect(StoryNesting.tooComplex(before + big)) }
+        #expect(StoryNesting.tooComplex("    ```\n\n" + Array(repeating: String(repeating: "*a ", count: 2_000), count: 30).joined(separator: "\n\n")))
+        #expect(!StoryNesting.tooComplex("- 步驟\n\n  ```js\n" + String(repeating: "  const snake_case = a_b * c_d;\n", count: 200) + "  ```\n\n- 下一步"))
+        #expect(!StoryNesting.tooComplex("> ```\n" + String(repeating: "> snake_case_name = __dunder__\n", count: 200) + "> ```"))
+        #expect(!StoryNesting.tooComplex("~~~\n" + String(repeating: "a_b_c * d\n", count: 200) + "~~~\n\n````md\n```\n" + String(repeating: "x_y * z\n", count: 200) + "````"))
         // Many paragraphs near the limit add up.
         let many = Array(repeating: String(repeating: "*a ", count: StoryNesting.paragraphDelimiters - 10), count: 40).joined(separator: "\n\n")
         #expect(StoryNesting.tooComplex(many))

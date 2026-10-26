@@ -49,8 +49,15 @@ const nextConfig: NextConfig = {
   // No image optimizer: nothing here draws next/image (pictures are plain
   // <img>, already resized where they are stored), and left on with its
   // defaults /_next/image would resize any local path under any query, width
-  // and quality for anyone — billed work no page asks for.
-  images: { unoptimized: true },
+  // and quality for anyone — billed work no page asks for. The patterns are a
+  // backstop for an optimizer that reads them whatever `unoptimized` says:
+  // only build-time media (there is none), one quality, no remote host.
+  images: {
+    unoptimized: true,
+    localPatterns: [{ pathname: '/_next/static/media/**', search: '' }],
+    remotePatterns: [],
+    qualities: [75],
+  },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders(process.env) }];
   },

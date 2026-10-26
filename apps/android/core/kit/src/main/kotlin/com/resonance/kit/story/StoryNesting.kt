@@ -39,19 +39,34 @@ object StoryNesting {
      */
     fun tooComplex(story: String): Boolean = tooDeep(story) || tooManyDelimiters(story)
 
-    /** Counts each paragraph's inline delimiters after its lines' quote and list markers, skipping fenced code. */
+    /**
+     * Counts each paragraph's inline delimiters after its lines' quote and list markers, skipping
+     * fenced code (opened as CommonMark opens one, and closed early when its container ends), and
+     * every line's table cells, fenced or not.
+     */
     fun tooManyDelimiters(story: String): Boolean {
         val n = story.length
         fun space(c: Char) = c == ' ' || c == '\t'
         fun delimiter(c: Char) = c == '*' || c == '_' || c == '~' || c == '`' || c == '[' || c == ']'
         fun delimiterRowChar(c: Char) = c == '|' || c == ':' || c == '-' || c == '>' || c == ' ' || c == '\t'
+        fun run(from: Int, to: Int, c: Char): Int {
+            var k = from
+            while (k < to && story[k] == c) k++
+            return k - from
+        }
+        fun holds(from: Int, to: Int, c: Char): Boolean = (from until to).any { story[it] == c }
+        fun onlySpace(from: Int, to: Int): Boolean = (from until to).all { space(story[it]) }
         var paragraph = 0L
         var load = 0L
         var columns = 0L
         var rows = 0L
         var table = false
         var cells = 0L
+        // While inside a fenced code block: its character, run length, quotes and column.
         var fence = 0.toChar()
+        var fenceLength = 0
+        var fenceQuotes = 0
+        var fenceColumn = 0
         fun endParagraph(): Boolean {
             load += paragraph * paragraph
             if (table) cells += (columns + 1) * rows
@@ -64,19 +79,34 @@ object StoryNesting {
         var i = 0
         while (i < n) {
             var depth = 0
+            var quotes = 0
+            var lead = 0
+            var column = 0
             prefix@ while (true) {
-                while (i < n && space(story[i])) i++
+                lead = 0
+                while (i < n && space(story[i])) {
+                    val w = if (story[i] == '\t') 4 else 1
+                    lead += w
+                    column += w
+                    i++
+                }
                 if (i >= n) break
                 when (story[i]) {
-                    '>' -> i++
+                    '>' -> {
+                        i++
+                        column++
+                        quotes++
+                    }
                     '-', '*', '+' -> {
                         if (i + 1 >= n || !space(story[i + 1])) break@prefix
                         i += 2
+                        column += 2
                     }
                     in '0'..'9' -> {
                         var j = i
                         while (j < n && j - i < 9 && story[j] in '0'..'9') j++
                         if (j + 1 >= n || (story[j] != '.' && story[j] != ')') || !space(story[j + 1])) break@prefix
+                        column += j + 2 - i
                         i = j + 2
                     }
                     else -> break@prefix
@@ -87,32 +117,52 @@ object StoryNesting {
             while (i < n && story[i] != '\n' && story[i] != '\r') i++
             val end = i
             i += if (i + 1 < n && story[i] == '\r' && story[i + 1] == '\n') 2 else 1
-            if (start == end) {
+            if (start == end && depth == 0) {
                 // A blank line ends the paragraph.
-                if (depth == 0 && endParagraph()) return true
-                continue
-            }
-            val first = story[start]
-            if ((first == '`' || first == '~') && start + 2 < n && story[start + 1] == first && story[start + 2] == first) {
-                // A code fence opens or closes: what is inside is never read inline.
-                if (fence == 0.toChar()) fence = first else if (fence == first) fence = 0.toChar()
                 if (endParagraph()) return true
                 continue
             }
-            if (fence != 0.toChar()) continue
+            // Tables are counted on every line, inside what looks like a code fence too: a fence
+            // misread must never hide one.
             var pipes = 0L
             var delimiterRow = true
             var dash = false
             for (k in start until end) {
                 val c = story[k]
-                if (delimiter(c)) paragraph++ else if (c == '|') pipes++
+                if (c == '|') pipes++
                 if (c == '-') dash = true else if (!delimiterRowChar(c)) delimiterRow = false
             }
-            if (paragraph > PARAGRAPH_DELIMITERS) return true
             if (pipes > columns) columns = pipes
             rows++
             if (delimiterRow && dash) table = true
             if (table && cells + (columns + 1) * rows > TABLE_CELLS) return true
+            if (fence != 0.toChar()) {
+                // A fence ends with its container: closing early only counts more.
+                if (quotes < fenceQuotes || column < fenceColumn) {
+                    fence = 0.toChar()
+                } else {
+                    val r = run(start, end, fence)
+                    if (lead <= 3 && r >= fenceLength && onlySpace(start + r, end)) {
+                        fence = 0.toChar()
+                        if (endParagraph()) return true
+                    }
+                    continue // what is inside is never read inline
+                }
+            }
+            // A fence opens as CommonMark reads one: three or more ` or ~, indented at most three
+            // columns, and a backtick fence's info string holds no backtick.
+            val first = if (start < end) story[start] else ' '
+            val r = if (first == '`' || first == '~') run(start, end, first) else 0
+            if (r >= 3 && lead <= 3 && (first == '~' || !holds(start + r, end, '`'))) {
+                fence = first
+                fenceLength = r
+                fenceQuotes = quotes
+                fenceColumn = column
+                if (endParagraph()) return true
+                continue
+            }
+            for (k in start until end) if (delimiter(story[k])) paragraph++
+            if (paragraph > PARAGRAPH_DELIMITERS) return true
         }
         return endParagraph()
     }

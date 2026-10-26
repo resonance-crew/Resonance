@@ -28,6 +28,12 @@ const hostile: Record<string, string> = {
   'many small tables': Array.from({ length: 200 }, () => '|' + 'a|'.repeat(100) + '\n|' + '-|'.repeat(100) + '\n' + 'a\n'.repeat(48)).join('\n'),
   'a table written with CR line ends': '|' + 'a|'.repeat(1_000) + '\r|' + '-|'.repeat(1_000) + '\r' + 'a\r'.repeat(80_000),
   'quotes opened after a CR': 'x\r' + '> '.repeat(5_000) + 'x',
+  'a table after an indented fence (indented code, not a fence)': '    ```\n\n|' + 'a|'.repeat(1_000) + '\n|' + '-|'.repeat(1_000) + '\n' + 'a\n'.repeat(1_000),
+  'a table after a backtick fence with a backtick in its info (a paragraph)': '```a`\n\n|' + 'a|'.repeat(1_000) + '\n|' + '-|'.repeat(1_000) + '\n' + 'a\n'.repeat(1_000),
+  'delimiters after an indented fence': '    ```\n\n' + Array.from({ length: 30 }, () => '*a '.repeat(2_000)).join('\n\n'),
+  'a table after a quoted fence the quote leaves': '> ```\n\n|' + 'a|'.repeat(1_000) + '\n|' + '-|'.repeat(1_000) + '\n' + 'a\n'.repeat(1_000),
+  'a table after a list fence the list leaves': '- ```\n  code\nx\n\n|' + 'a|'.repeat(1_000) + '\n|' + '-|'.repeat(1_000) + '\n' + 'a\n'.repeat(1_000),
+  'a table inside a code fence': '```\n|' + 'a|'.repeat(1_000) + '\n|' + '-|'.repeat(1_000) + '\n' + 'a\n'.repeat(1_000) + '```',
   'many paragraphs each near the limit': Array.from({ length: 40 }, () => '*a '.repeat(PARAGRAPH_DELIMITER_LIMIT - 10)).join('\n\n'),
 };
 
@@ -37,6 +43,9 @@ const ordinary: Record<string, string> = {
   'a paragraph heavy with bold and italics': Array.from({ length: 18 }, (_, i) => `**粗體${i}** 與 *斜體* 與 ~~刪除~~`).join('，'),
   'every paragraph with some emphasis': fit('這段有 **重點** 和 *強調*，還有 [連結](https://example.com)。\n\n'.repeat(6_000)),
   'code fences full of underscores': '```python\n' + 'snake_case_name = other_value_here * __dunder__\n'.repeat(400) + '```\n\nafter',
+  'a code fence in a list item': '- 步驟\n\n  ```js\n' + '  const snake_case = a_b * c_d;\n'.repeat(200) + '  ```\n\n- 下一步',
+  'a quoted code fence': '> ```\n' + '> snake_case_name = __dunder__\n'.repeat(200) + '> ```',
+  'a tilde fence and a longer backtick fence': '~~~\n' + 'a_b_c * d\n'.repeat(200) + '~~~\n\n````md\n```\n' + 'x_y * z\n'.repeat(200) + '````',
   'a table': '| a | b |\n| --- | --- |\n' + '| **x** | *y* |\n'.repeat(30),
   'a story with a few tables': Array.from({ length: 6 }, () => '| a | b | c |\n| --- | --- | --- |\n' + '| x | y | z |\n'.repeat(40)).join('\n'),
   'a story written with CRLF line ends': fit('> 一\r\n> > 二\r\n\r\n**粗體** 與 *斜體*\r\n\r\n'.repeat(5_000)),
