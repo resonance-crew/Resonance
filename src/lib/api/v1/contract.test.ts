@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { CreateProfileRequest, hasInvisible } from './schemas';
+import { HANDLE_FORBIDDEN } from '@/lib/db/firestore/client/profile';
 
 const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
@@ -216,5 +218,23 @@ describe('round-4 request shapes', () => {
     expect(UpdateNotificationSettingsRequest.parse({ picks: true, connectionCards: null })).toEqual({ picks: true, connectionCards: null });
     expect(UpdateNotificationSettingsRequest.parse({})).toEqual({});
     expect(UpdateNotificationSettingsRequest.safeParse({ picks: 'on' }).success).toBe(false);
+  });
+});
+
+// A pen name belongs to one person: the reservation tells only case apart, so
+// a character that shows nothing would let a second account hold a name that
+// renders exactly as someone else's.
+describe('pen names (Handle)', () => {
+  const ok = (handle: string) => CreateProfileRequest.safeParse({ handle, region: 'TW', primaryLocale: 'zh-TW' }).success;
+  it('refuses zero-width and bidi-control characters', () => {
+    for (const h of ['alice​', '‮ecila', 'al⁦ice⁩', 'ali‍ce']) expect(ok(h), JSON.stringify(h)).toBe(false);
+  });
+  it('takes ordinary names in any script, and emoji joined with the zero-width joiner', () => {
+    for (const h of ['alice', '小雨', 'Ana María', '👨‍👩‍👧', 'rain🏳️‍🌈']) expect(ok(h), JSON.stringify(h)).toBe(true);
+  });
+  it('agrees with what the web strips as it is typed', () => {
+    expect(hasInvisible('alice​')).toBe(true);
+    expect('alice​‮'.replace(HANDLE_FORBIDDEN, '')).toBe('alice');
+    expect('👨‍👩‍👧'.replace(HANDLE_FORBIDDEN, '')).toBe('👨‍👩‍👧');
   });
 });

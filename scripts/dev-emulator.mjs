@@ -20,7 +20,11 @@ function devPort() {
   return process.env.PORT || '3000';
 }
 
-const child = spawn('npx', ['next', 'dev', ...args], {
+// Loopback only: against the emulators the server takes unsigned ID tokens
+// (FIREBASE_AUTH_EMULATOR_HOST), so nothing on the network may reach it. The
+// simulators reach localhost, the Android emulator reaches it at 10.0.2.2.
+const hostname = args.some((a) => a === '--hostname' || a === '-H' || a.startsWith('--hostname=')) ? [] : ['--hostname', '127.0.0.1'];
+const child = spawn('npx', ['next', 'dev', ...hostname, ...args], {
   stdio: 'inherit',
   env: { ...process.env, ...emulatorEnv, R2_PUBLIC_BASE: `http://localhost:${devPort()}/api/emulator-storage` },
 });
