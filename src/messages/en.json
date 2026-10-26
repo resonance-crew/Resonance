@@ -194,6 +194,7 @@
     "themeYellow": "Gold"
   },
   "app": {
+    "pageNotFound": "This page can't be found",
     "nav": {
       "home": "Resonance Feed",
       "me": "My Card Box",

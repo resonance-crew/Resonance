@@ -1,0 +1,27 @@
+/* The card page's not-found, standing alone: centred on the page's paper. */
+.page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 48px var(--page-pad-x, 24px);
+  background: var(--color-cream);
+  text-align: center;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-text);
+  text-wrap: balance;
+}
+
+.back {
+  text-decoration: none;
+  border-radius: 16px;
+}

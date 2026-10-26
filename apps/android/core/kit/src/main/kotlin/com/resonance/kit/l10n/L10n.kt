@@ -330,6 +330,8 @@ object L10n {
         val themeYellow: String get() = Strings.string("tweaks.themeYellow")
     }
     object App {
+        /** This page can't be found */
+        val pageNotFound: String get() = Strings.string("app.pageNotFound")
         object Nav {
             /** Resonance Feed */
             val home: String get() = Strings.string("app.nav.home")

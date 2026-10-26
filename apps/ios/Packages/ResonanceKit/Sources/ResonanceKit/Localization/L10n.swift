@@ -328,6 +328,8 @@ public enum L10n {
         public static var themeYellow: String { Strings.shared.string("tweaks.themeYellow") }
     }
     public enum App {
+        /// This page can't be found
+        public static var pageNotFound: String { Strings.shared.string("app.pageNotFound") }
         public enum Nav {
             /// Resonance Feed
             public static var home: String { Strings.shared.string("app.nav.home") }

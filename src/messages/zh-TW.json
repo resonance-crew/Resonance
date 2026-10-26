@@ -194,6 +194,7 @@
     "themeYellow": "金黃"
   },
   "app": {
+    "pageNotFound": "找不到這個頁面",
     "nav": {
       "home": "共振場",
       "me": "我的卡片盒",
