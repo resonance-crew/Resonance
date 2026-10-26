@@ -4,6 +4,7 @@ import { connectFirestoreEmulator, initializeFirestore, type Firestore } from 'f
 import {
   EMULATOR_FIRESTORE_PORT,
   USE_FIREBASE_EMULATOR,
+  ensureAppCheck,
   getFirebaseClientApp,
   getFirebaseClientAuth,
 } from '@/lib/auth/firebase/client';
@@ -25,6 +26,8 @@ export function getClientDb(): Firestore {
   // first (it's the same instance AuthProvider uses); each token then waits
   // for the signed-in user to be restored.
   getFirebaseClientAuth();
+  // The first read starts App Check, so its token rides along once it's in hand.
+  ensureAppCheck();
   cached = initializeFirestore(getFirebaseClientApp(), {
     ignoreUndefinedProperties: true,
   });

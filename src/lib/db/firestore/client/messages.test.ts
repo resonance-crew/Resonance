@@ -10,6 +10,7 @@ type MockUser = { uid: string; getIdToken: () => Promise<string> };
 const mockAuth = { currentUser: { uid: 'bbb', getIdToken: async () => 'id-token' } as MockUser | null };
 vi.mock('@/lib/auth/firebase/client', () => ({
   getFirebaseClientAuth: vi.fn(() => mockAuth),
+  ensureAppCheck: vi.fn(),
 }));
 
 const batch = { set: vi.fn(), update: vi.fn(), commit: vi.fn() };

@@ -40,10 +40,19 @@ function firebaseConfig() {
 export function getFirebaseClientApp() {
   const existing = getApps()[0];
   if (existing) return existing;
-  const app = initializeApp(firebaseConfig());
-  // Firestore and Auth pick App Check up whenever it starts (./appCheck).
-  void startAppCheck(app);
-  return app;
+  return initializeApp(firebaseConfig());
+}
+
+/**
+ * Start App Check (./appCheck) — once, with the first read or call that can
+ * carry its token: Firestore's first instance (client/init, client/realtime)
+ * and the first /api call (client/api). Not with the app itself, which every
+ * page makes for Auth: a signed-out visitor on the landing page reads
+ * nothing, and shouldn't load Turnstile's script, frame and challenge for it.
+ * Firestore and Auth pick App Check up whenever it starts.
+ */
+export function ensureAppCheck(): void {
+  void startAppCheck(getFirebaseClientApp());
 }
 
 /** Local-emulator mode (`npm run dev:emulator`); see scripts/emulator-env.mjs. */
@@ -182,24 +191,40 @@ export interface SessionState {
 const SIGN_IN_PATH = /^\/(?:[A-Za-z-]+\/)?(?:signin|signup)(?:\/|$)/;
 
 /**
- * Whether this page load should set Auth up with the popup resolver.
+ * Whether this page load should set Auth up with the popup resolver: on the
+ * sign-in pages only.
  *
  * On Safari and mobile browsers Firebase loads Google's gapi script and auth
  * iframe up front when it has the resolver, so a later signInWithPopup opens
  * its window straight from the click — load it lazily and Safari blocks the
  * popup. But that up-front load also holds back restoring the signed-in user
- * (and with it every Firestore read). So the resolver is set up where a popup
- * may follow: the sign-in pages, and for anyone not signed in in this browser
- * (a client-side navigation to the sign-in page keeps this Auth instance).
- * Signed-in readers elsewhere skip it.
+ * (and with it every read), and costs every other page a script and two
+ * frames. So only the sign-in pages set it up; one reached by a client-side
+ * hop from another page, whose Auth came up without it, reloads itself once
+ * on such a browser (reloadForPopupOnce).
  */
 function wantsPopupResolver(): boolean {
   if (typeof window === 'undefined') return true;
-  if (SIGN_IN_PATH.test(window.location.pathname)) return true;
-  return readSessionMark() === null;
+  return SIGN_IN_PATH.test(window.location.pathname);
+}
+
+/**
+ * Whether Firebase loads the popup's iframe before the click on this browser
+ * — its own rule (BrowserPopupRedirectResolver._shouldInitProactively:
+ * mobile browsers, Safari and iOS), read off the same user agent the same way.
+ */
+export function initsPopupProactively(userAgent: string): boolean {
+  const ua = userAgent.toLowerCase();
+  const ios = /iphone|ipad|ipod/.test(ua) || (/macintosh/.test(ua) && /mobile/.test(ua));
+  const mobile =
+    ios || /android/.test(ua) || /webos/.test(ua) || /blackberry/.test(ua) || /windows phone/.test(ua) || /iemobile/.test(ua);
+  const safari = ua.includes('safari/') && !ua.includes('chrome/') && !ua.includes('crios/') && !ua.includes('android');
+  return mobile || safari || ios;
 }
 
 let clientAuth: Auth | null = null;
+/** The Auth instance was set up with the popup resolver (by getAuth). */
+let clientAuthHasResolver = false;
 let authEmulatorConnected = false;
 
 export function getFirebaseClientAuth(): Auth {
@@ -208,13 +233,14 @@ export function getFirebaseClientAuth(): Auth {
   let auth: Auth;
   if (wantsPopupResolver()) {
     auth = getAuth(app); // the browser default: IndexedDB persistence + the popup resolver
+    clientAuthHasResolver = true;
   } else {
     try {
       auth = initializeAuth(app, {
         persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence],
       });
     } catch {
-      auth = getAuth(app); // already initialised (hot reload)
+      auth = getAuth(app); // already initialised (hot reload) — as it was set up, which this can't tell
     }
   }
   if (USE_FIREBASE_EMULATOR && !authEmulatorConnected) {
@@ -223,6 +249,43 @@ export function getFirebaseClientAuth(): Auth {
   }
   clientAuth = auth;
   return auth;
+}
+
+/**
+ * A sign-in page that can't open its popup from a click as things stand: Auth
+ * came up on another page without the resolver (a client-side hop brought the
+ * reader here), nobody is signed in, and this browser is one where Firebase
+ * must load the popup's frame before the click.
+ */
+export function popupNeedsReload(userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent): boolean {
+  return clientAuth !== null && !clientAuthHasResolver && !clientAuth.currentUser && initsPopupProactively(userAgent);
+}
+
+/** When this tab last reloaded a sign-in page for its popup (epoch ms). */
+export const POPUP_RELOAD_KEY = 'resonance:popup-reload';
+const POPUP_RELOAD_WINDOW_MS = 30_000;
+
+/**
+ * Called by the sign-in pages as they mount: reload once when the popup
+ * couldn't open (popupNeedsReload), so this page's own load sets Auth up with
+ * the resolver. At most once per half minute in a tab, so nothing can loop;
+ * without storage to remember that by, it doesn't reload (the button still
+ * tries, as before). True when it reloads.
+ */
+export function reloadForPopupOnce({
+  userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent,
+  reload = () => window.location.reload(),
+}: { userAgent?: string; reload?: () => void } = {}): boolean {
+  if (!popupNeedsReload(userAgent)) return false;
+  try {
+    const last = Number(window.sessionStorage.getItem(POPUP_RELOAD_KEY) ?? 0);
+    if (Date.now() - last < POPUP_RELOAD_WINDOW_MS) return false;
+    window.sessionStorage.setItem(POPUP_RELOAD_KEY, String(Date.now()));
+  } catch {
+    return false;
+  }
+  reload();
+  return true;
 }
 
 export function mapFirebaseUser(user: FirebaseUser): AuthUser {

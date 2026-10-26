@@ -175,6 +175,25 @@ describe('appCheckHeaders', () => {
     expect(await appCheckHeaders()).toEqual({});
   });
 
+  // A first visit solves its challenge before App Check starts (a second or
+  // two, ten at worst): an API call made meanwhile goes without a token
+  // rather than waiting for it.
+  it('never waits for App Check to start, either', async () => {
+    window.localStorage.clear();
+    // Cloudflare's script never answers.
+    window.turnstile = { render: vi.fn(() => 'widget-1'), remove: vi.fn() };
+    void startAppCheck(app);
+    const before = Date.now();
+    expect(await appCheckHeaders()).toEqual({});
+    expect(Date.now() - before).toBeLessThan(1_000);
+    expect(sdk.initializeAppCheck).not.toHaveBeenCalled();
+  });
+
+  it('is empty before anything started App Check', async () => {
+    expect(await appCheckHeaders()).toEqual({});
+    expect(sdk.getToken).not.toHaveBeenCalled();
+  });
+
   it('is empty where App Check does not run', async () => {
     vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://resonance-world.vercel.app');
     await startAppCheck(app);

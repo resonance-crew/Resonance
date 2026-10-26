@@ -1,6 +1,6 @@
 'use client';
 
-import { getFirebaseClientAuth } from '@/lib/auth/firebase/client';
+import { ensureAppCheck, getFirebaseClientAuth } from '@/lib/auth/firebase/client';
 import { appCheckHeaders } from '@/lib/auth/firebase/appCheck';
 
 /** A failed /api/v1 call: the HTTP status and the body's `{ error: { code, message } }`. */
@@ -23,6 +23,7 @@ export class ApiError extends Error {
  * answer throws an ApiError.
  */
 export async function callApi<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+  ensureAppCheck();
   const user = getFirebaseClientAuth().currentUser;
   // The App Check token rides along when one is at hand (lib/auth/firebase/appCheck).
   const [idToken, appCheck] = await Promise.all([user?.getIdToken(), appCheckHeaders()]);
@@ -40,6 +41,7 @@ export async function callApi<T>(path: string, init: { method?: string; body?: u
 
 /** callApi for a multipart form (an upload): the same token, App Check and errors; the browser sets the boundary. */
 export async function callApiForm<T>(path: string, form: FormData): Promise<T> {
+  ensureAppCheck();
   const user = getFirebaseClientAuth().currentUser;
   const [idToken, appCheck] = await Promise.all([user?.getIdToken(), appCheckHeaders()]);
   const headers: Record<string, string> = { ...appCheck };

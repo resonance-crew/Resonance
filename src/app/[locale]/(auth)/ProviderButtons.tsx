@@ -1,12 +1,13 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useLayoutEffect, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { ButtonLoader } from '@/components/atoms/ButtonLoader/ButtonLoader';
 import { GoogleMark } from '@/components/atoms/GoogleMark/GoogleMark';
 import { AppleMark } from '@/components/atoms/AppleMark/AppleMark';
 import { APPLE_SIGN_IN, type SignInProvider } from '@/lib/auth/providers';
+import { reloadForPopupOnce } from '@/lib/auth/firebase/client';
 import { wobCircle } from '@/lib/design/wobCircle';
 import styles from './auth.module.css';
 
@@ -55,6 +56,12 @@ export function ProviderButtons({
   onPick: (provider: SignInProvider) => void;
 }) {
   const t = useTranslations('auth');
+  // Reached by a client-side hop from a page whose Auth came up without the
+  // popup resolver, a Safari or phone browser would block the popup these
+  // buttons open: the page loads itself once more, with it (lib/auth/firebase/client).
+  useLayoutEffect(() => {
+    reloadForPopupOnce();
+  }, []);
   const button = (provider: SignInProvider) => (
     <OrganicButton
       key={provider}

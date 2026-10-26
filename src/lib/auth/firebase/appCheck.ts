@@ -130,14 +130,25 @@ function idle(): Promise<void> {
  * (asking does start one, for the calls after it).
  */
 export async function appCheckHeaders(): Promise<Record<string, string>> {
-  const appCheck = started ? await started : null;
-  if (!appCheck) return {};
-  const { getToken } = await import('firebase/app-check');
-  const token = getToken(appCheck, false).then(
-    (result) => result.token,
-    () => null,
-  );
-  const value = await Promise.race([token, new Promise<null>((resolve) => setTimeout(() => resolve(null), HEADER_WAIT_MS))]);
+  if (!started) return {};
+  // App Check still starting (a first visit's challenge) counts as no token
+  // at hand too: the wait covers the start and the token alike.
+  const token = started.then(async (appCheck) => {
+    if (!appCheck) return null;
+    const { getToken } = await import('firebase/app-check');
+    return getToken(appCheck, false).then(
+      (result) => result.token,
+      () => null,
+    );
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const value = await Promise.race([
+    token,
+    new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), HEADER_WAIT_MS);
+    }),
+  ]);
+  clearTimeout(timer);
   return value ? { [APP_CHECK_HEADER]: value } : {};
 }
 
