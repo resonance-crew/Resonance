@@ -230,16 +230,19 @@ object Mixes {
 object OverPicture {
     /** `photo-shade` and `photo-ink`: the same in every palette. */
     private val shade: Color get() = ResonanceColors.LightTerracotta.PhotoShade
-    private val ink: Color get() = ResonanceColors.LightTerracotta.PhotoInk
+    private val light: Color get() = ResonanceColors.LightTerracotta.PhotoInk
+
+    /** A light glyph on a picture or on the viewer's dark (a chip's ✕, the viewer's close), in either scheme. */
+    val Ink: Color get() = light
 
     /** A dark translucent pebble (HandDrawnImage's ✕ chip). */
     val ChipFill: Color get() = shade.copy(alpha = 0.7f)
     /** Its pale rim. */
-    val ChipRim: Color get() = ink.copy(alpha = 0.75f)
+    val ChipRim: Color get() = light.copy(alpha = 0.75f)
     /** The crop's photo outside the avatar's outline. */
     val Scrim: Color get() = shade.copy(alpha = 0.5f)
     /** The ring round the avatar to be. */
-    val Rim: Color get() = ink.copy(alpha = 0.9f)
+    val Rim: Color get() = light.copy(alpha = 0.9f)
 }
 
 /** [Mixes] for one palette, mixed once. */

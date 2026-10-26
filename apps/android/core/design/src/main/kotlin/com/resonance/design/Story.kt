@@ -724,7 +724,9 @@ private fun StoryImage(url: String, alt: String, atStart: Boolean = false) {
                 },
                 modifier = Modifier
                     .requiredSize(maxWidth + bleed * 2, maxHeight + bleed * 2)
-                    .clip(remember(seed, bleed) { BledShape(seed, bleed.value.toDouble(), radius = 12.0, magFactor = 0.025) }),
+                    .clip(remember(seed, bleed) { BledShape(seed, bleed.value.toDouble(), radius = 12.0, magFactor = 0.025) })
+                    // A transparent picture (a logo's black words) on a light paper in dark; nothing in light (--picture-backing).
+                    .background(Tokens.PictureBacking),
             )
         }
     }

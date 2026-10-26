@@ -184,7 +184,7 @@ fun ImageRemoveButton(label: String, seed: Double, modifier: Modifier = Modifier
             .plainClickable(role = Role.Button, onClick = onRemove)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
-    ) { OrganicIcon(IconName.Close, size = 16.dp, color = Tokens.Cream) }
+    ) { OrganicIcon(IconName.Close, size = 16.dp, color = OverPicture.Ink) }
 }
 
 /**

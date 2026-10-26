@@ -800,7 +800,8 @@ fun OnDarkIconButton(icon: IconName, label: String, size: Dp = 20.dp, onClick: (
             },
         contentAlignment = Alignment.Center,
     ) {
-        OrganicIcon(icon, size = size, color = Tokens.Cream, strokeWidth = Tokens.Ink.value)
+        // The viewer is dark in either scheme: its glyph is the light ink over a picture (photo-ink), never the paper.
+        OrganicIcon(icon, size = size, color = OverPicture.Ink, strokeWidth = Tokens.Ink.value)
     }
 }
 
