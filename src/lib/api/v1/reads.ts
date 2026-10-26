@@ -1,6 +1,6 @@
 import { Timestamp, type DocumentData, type Firestore, type QueryDocumentSnapshot, type QuerySnapshot } from 'firebase-admin/firestore';
 import { trashExpired } from '@/lib/cards/trash';
-import { cardByKey, slugHolder } from '@/lib/db/firestore/cardKey';
+import { cardByKey, slugHolder, slugShaped } from '@/lib/db/firestore/cardKey';
 import { uidForHandle } from '@/lib/db/firestore/handles';
 import { mapCard } from '@/lib/db/firestore/mapper';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
@@ -34,9 +34,10 @@ import { LIST_FIELDS, listCard, withStories, type ListCard } from './summary';
  * and asserted in test/emulator/apiV1Reads.emulator.test.ts.
  *
  * Reads that don't depend on each other run together — the viewer's blocks
- * beside the list they filter — but a key that may be a slug is resolved
+ * beside the list they filter — but a key shaped like a slug is resolved
  * before its document is read (reading both at once would double the reads
- * of the usual case, a slug that hits).
+ * of the usual case, a slug that hits); one that can't be a slug the server
+ * made, an id, is read both ways at once (cardByKey).
  *
  * Lists read their cards without the story (LIST_FIELDS): a card shows its
  * stored summary, and only a card without a current one has its story read,
@@ -124,15 +125,23 @@ async function cardsByIds(db: Firestore, ids: string[]): Promise<ListCard[]> {
 }
 
 /**
- * cardByKey for many keys (slugs or ids): one query for the slugs, then one
- * batched read for the keys no slug named. In key order, each card once (a
- * card named by both its slug and its id comes back at the first); unknown
- * keys drop out. Read without their stories, for a list.
+ * cardByKey for many keys (slugs or ids): one query for the slugs, and one
+ * batched read for the keys no slug named — the keys that can't be a slug
+ * the server made (slugShaped) read beside the query, the rest after it.
+ * Either way a slug's holder comes first, as in cardByKey. In key order,
+ * each card once (a card named by both its slug and its id comes back at the
+ * first); unknown keys drop out. Read without their stories, for a list.
  */
-async function cardsByKeys(db: Firestore, keys: string[]): Promise<ListCard[]> {
+export async function cardsByKeys(db: Firestore, keys: string[]): Promise<ListCard[]> {
   const unique = [...new Set(keys)].filter((k) => k && !k.includes('/')).slice(0, CARD_KEYS_MAX);
   if (!unique.length) return [];
-  const bySlug = await db.collection('cards').where('slug', 'in', unique).select(...LIST_FIELDS).get();
+  const read = (ids: string[]) => (ids.length ? db.getAll(...ids.map((k) => db.doc(`cards/${k}`)), { fieldMask: [...LIST_FIELDS] }) : Promise.resolve([]));
+  // An id Firestore keeps for itself names no card (reading it would throw).
+  const readable = unique.filter((k) => !isReservedId(k));
+  const [bySlug, early] = await Promise.all([
+    db.collection('cards').where('slug', 'in', unique).select(...LIST_FIELDS).get(),
+    read(readable.filter((k) => !slugShaped(k))),
+  ]);
   const sharing = new Map<string, QueryDocumentSnapshot[]>();
   for (const d of bySlug.docs) {
     const slug = String(d.get('slug'));
@@ -143,10 +152,8 @@ async function cardsByKeys(db: Firestore, keys: string[]): Promise<ListCard[]> {
     const holder = slugHolder(docs);
     if (holder) named.set(slug, holder);
   }
-  // An id Firestore keeps for itself names no card (reading it would throw).
-  const rest = unique.filter((k) => !named.has(k) && !isReservedId(k));
-  const byId = rest.length ? await db.getAll(...rest.map((k) => db.doc(`cards/${k}`)), { fieldMask: [...LIST_FIELDS] }) : [];
-  const ids = new Map(byId.filter((s) => s.exists).map((s) => [s.id, s]));
+  const late = await read(readable.filter((k) => slugShaped(k) && !named.has(k)));
+  const ids = new Map([...early, ...late].filter((s) => s.exists).map((s) => [s.id, s]));
   const seen = new Set<string>();
   const cards: ListCard[] = [];
   for (const key of unique) {
