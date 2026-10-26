@@ -66,6 +66,8 @@ export function swiftTokenColours(): string {
     family('cardHovers', (i) => `cardHover${i}`),
     family('cardSkeletons', (i) => `cardSkeleton${i}`),
     family('cardTags', (i) => `cardTag${i}`),
+    family('cardPills', (i) => `cardPill${i}`),
+    family('cardPillInks', (i) => `cardPillInk${i}`),
   ].join('\n');
 }
 

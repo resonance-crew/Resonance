@@ -103,11 +103,14 @@ import Testing
         #expect(PublishStep.previewPalette(accentHue: nil, cardId: nil).index == 0)
         #expect(PublishStep.previewPalette(accentHue: nil, cardId: "m1").index == CardPalette.family(id: "m1"))
         #expect(PublishStep.previewPalette(accentHue: 140, cardId: "m1").index == 2)
-        // The faces: the family's deep pen with its paper's words, its tonal step when it can't be pressed,
-        // its fill with its deep pen's words on the picture.
+        // The faces: the family's pill with its ink (in light the deep pen and its paper's words, in dark a
+        // tonal tint with chalk), its tonal step when it can't be pressed, its fill with its deep pen's
+        // words on the picture.
         let palette = CardPalette(index: 4)
-        #expect(OrganicButtonFace.cardDeep(palette).fill == palette.deep)
-        #expect(OrganicButtonFace.cardDeep(palette).label == palette.interior)
+        #expect(OrganicButtonFace.cardDeep(palette).fill == palette.pill)
+        #expect(OrganicButtonFace.cardDeep(palette).label == palette.pillInk)
+        #expect(Palette.oklch(.cardPill4, accent: .terracotta, scheme: .light) == Palette.oklch(.cardBorder4Dark, accent: .terracotta, scheme: .light))
+        #expect(Palette.oklch(.cardPillInk4, accent: .terracotta, scheme: .light) == Palette.oklch(.cardInterior4, accent: .terracotta, scheme: .light))
         #expect(OrganicButtonFace.cardDeepDisabled(palette).fill == palette.accent)
         #expect(OrganicButtonFace.cardChip(palette).fill == palette.fill)
         #expect(OrganicButtonFace.cardChip(palette).label == palette.deep)

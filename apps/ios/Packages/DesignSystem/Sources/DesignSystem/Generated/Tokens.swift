@@ -299,6 +299,8 @@ public nonisolated enum Tokens {
     public static let cardHovers: [Color] = [cardHover0, cardHover1, cardHover2, cardHover3, cardHover4, cardHover5]
     public static let cardSkeletons: [Color] = [cardSkeleton0, cardSkeleton1, cardSkeleton2, cardSkeleton3, cardSkeleton4, cardSkeleton5]
     public static let cardTags: [Color] = [cardTag0, cardTag1, cardTag2, cardTag3, cardTag4, cardTag5]
+    public static let cardPills: [Color] = [cardPill0, cardPill1, cardPill2, cardPill3, cardPill4, cardPill5]
+    public static let cardPillInks: [Color] = [cardPillInk0, cardPillInk1, cardPillInk2, cardPillInk3, cardPillInk4, cardPillInk5]
 
     /// One pen for the whole app (src/lib/design/strokes.ts).
     public static let ink: CGFloat = 1.8

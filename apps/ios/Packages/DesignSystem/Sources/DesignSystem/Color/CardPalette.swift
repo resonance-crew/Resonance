@@ -39,6 +39,10 @@ public nonisolated struct CardPalette: Sendable {
     public var skeleton: Color { Tokens.cardSkeletons[index] }
     /// A tag's pill on the card (`card-tag-*`: the fill a step deeper in light, a step above it in dark).
     public var tag: Color { Tokens.cardTags[index] }
+    /// A control's face in the card's colours over its cover slot (`card-pill-*`: the deep pen in light,
+    /// a tonal tint in dark) and its words (`card-pill-ink-*`: the card's paper in light, chalk in dark).
+    public var pill: Color { Tokens.cardPills[index] }
+    public var pillInk: Color { Tokens.cardPillInks[index] }
 
     public init(accentHue: Double?, position: Int) {
         index = Self.preferred(accentHue: accentHue, position: position)
@@ -116,11 +120,12 @@ public nonisolated struct CardPalette: Sendable {
 // MARK: - Controls in a card's colours (round 9 §8)
 
 extension OrganicButtonFace {
-    /// 加一張圖片 · 生成圖片 over a coverless card's striped picture: the family's deep pen as the face,
-    /// its words and glyph in the family's paper, the buttons' grain; a press darkens it as every solid
+    /// 加一張圖片 · 生成圖片 over a coverless card's striped picture: the family's pill (its deep pen in
+    /// light, a tonal tint in dark) as the face, its words and glyph in the pill's ink (the family's paper
+    /// in light, chalk in dark), the buttons' grain; a press goes further from the paper as every solid
     /// face's does.
     public static func cardDeep(_ palette: CardPalette) -> OrganicButtonFace {
-        OrganicButtonFace(fill: palette.deep, label: palette.interior, pressInk: Tokens.towardInk.opacity(0.14), seed: 3)
+        OrganicButtonFace(fill: palette.pill, label: palette.pillInk, pressInk: Tokens.towardInk.opacity(0.14), seed: 3)
     }
 
     /// The same button while it can't be pressed (生成圖片 with no story yet): the family's tonal step as
