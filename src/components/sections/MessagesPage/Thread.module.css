@@ -404,7 +404,13 @@
 
 /* ── What a bubble carries: a link's preview, a shared card ───────── */
 
-/* A shared card is molecules/SharedCard; an own bubble gives its title a deeper hover colour. */
+/* A shared card is molecules/SharedCard; an own bubble gives its title a deeper hover colour. Its quiet
+   words take the link preview's deeper muted ink, which clears 4.5:1 on every bubble's paper (the
+   page's muted ink is 4.3 on mine, in both schemes). */
+.bubble {
+  --shared-card-muted: var(--link-card-muted);
+}
+
 .bubble[data-own] {
   --shared-card-hover: var(--terracotta-deep);
 }

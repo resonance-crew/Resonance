@@ -67,8 +67,9 @@
   color: var(--color-text);
 }
 
+/* The chosen tab's label in the tonal label's deep accent (plain terracotta on its wash was 3:1). */
 .tab.active {
-  color: var(--color-terracotta);
+  color: var(--button-on-tonal);
   font-weight: 600;
 }
 
@@ -119,6 +120,6 @@
 }
 
 .activeSurface .tab {
-  color: var(--color-terracotta);
+  color: var(--button-on-tonal);
   font-weight: 600;
 }

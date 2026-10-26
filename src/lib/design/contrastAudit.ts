@@ -11,7 +11,7 @@
  *   await window.__contrastAudit()                  // what is on screen now
  *   await window.__contrastAudit({ fullPage: true }) // scrolls the page through
  */
-import { contrastRatio, flatten, hexOf, isBrightIsland, minimumRatio, oklabLightness, parseCssColor, type Rgba } from './contrast';
+import { contrastRatio, flatten, hexOf, isBrightIsland, minimumRatio, oklabLightness, over, parseCssColor, type Rgba } from './contrast';
 import { resolvedAccent, resolvedScheme } from './appearance';
 
 export interface AuditFailure {
@@ -84,12 +84,16 @@ function layerOf(el: Element): Layer | null {
   if (tag === 'img' || tag === 'video' || tag === 'canvas' || tag === 'image' || tag === 'iframe') return { unknown: tag, el };
   if (el instanceof SVGElement) {
     if (!['path', 'rect', 'circle', 'ellipse', 'polygon'].includes(tag)) return null;
+    // A hover wash revealed through a mask (OrganicButton's, a segmented bar's): hit-testable at rest, shown by none.
+    if (el.closest('[mask]')) return null;
     const fill = parseCssColor(style.fill);
     if (isGrain(el, style, fill)) return null;
     if (!fill || fill.a === 0) return style.fill.startsWith('url(') ? { unknown: 'gradient', el } : null;
     const a = fill.a * (Number(style.fillOpacity) || 0) * opacityOf(el);
     return a > 0.01 ? { colour: { ...fill, a }, el } : null;
   }
+  // A drawn shape's stand-in rests transparent once the shape is there (a hidden page may hold its fade mid-way).
+  if (el.matches('.res-shape-stand-in:not([data-shape-pending])')) return null;
   let bg = parseCssColor(style.backgroundColor);
   const image = style.backgroundImage;
   if (image && image !== 'none') {
@@ -99,6 +103,14 @@ function layerOf(el: Element): Layer | null {
     const stops = gradientStops(image);
     const solid = stops.reduce<Rgba | null>((best, c) => (!best || c.a > best.a ? c : best), null);
     if (solid && solid.a > (bg?.a ?? 0)) bg = solid;
+  }
+  // A ::before / ::after laid over the box (a chat bubble's paper, worn under its clip-path) paints with it.
+  for (const pseudo of ['::before', '::after'] as const) {
+    const ps = getComputedStyle(el, pseudo);
+    if (ps.content === 'none' || ps.position !== 'absolute' || ps.visibility === 'hidden' || ps.display === 'none') continue;
+    const fill = parseCssColor(ps.backgroundColor);
+    const a = (fill?.a ?? 0) * (Number(ps.opacity) || 0);
+    if (fill && a > 0.01) bg = bg && bg.a > 0 ? over({ ...fill, a }, bg) : { ...fill, a };
   }
   if (!bg || bg.a === 0) return null;
   const a = bg.a * opacityOf(el);
@@ -142,12 +154,12 @@ function auditViewport(report: AuditReport, seen: Set<string>): void {
     let at = stack.findIndex((s) => s === el || s.contains(el));
     if (at < 0) at = 0;
     const layers: Rgba[] = [];
-    let over: string | null = null;
+    let picture: string | null = null;
     for (const s of stack.slice(at)) {
       const layer = layerOf(s);
       if (!layer) continue;
       if ('unknown' in layer) {
-        over = `${layer.unknown} (${describe(layer.el)})`;
+        picture = `${layer.unknown} (${describe(layer.el)})`;
         break;
       }
       layers.push(layer.colour);
@@ -157,8 +169,8 @@ function auditViewport(report: AuditReport, seen: Set<string>): void {
     if (seen.has(key)) continue;
     seen.add(key);
     report.checked++;
-    if (over) {
-      report.unknown.push({ text, over, where: path(el) });
+    if (picture) {
+      report.unknown.push({ text, over: picture, where: path(el) });
       continue;
     }
     const style = getComputedStyle(el);
@@ -185,8 +197,11 @@ function auditViewport(report: AuditReport, seen: Set<string>): void {
   }
 }
 
-// While it measures, every element answers a hit test (the hand-drawn papers' SVGs take no pointer at rest).
-const AUDIT_STYLE = '*, *::before, *::after { pointer-events: auto !important; } svg *, svg { pointer-events: visiblePainted !important; }';
+// While it measures, every element answers a hit test (the hand-drawn papers' SVGs take no pointer at rest), and
+// every transition stands at its end — a hidden page never runs one, so a theme switched there would be read
+// half-way (a bubble's ink, the send segment's face).
+const AUDIT_STYLE =
+  '*, *::before, *::after { pointer-events: auto !important; transition: none !important; } svg *, svg { pointer-events: visiblePainted !important; }';
 
 export async function contrastAudit({ fullPage = false, log = true }: { fullPage?: boolean; log?: boolean } = {}): Promise<AuditReport> {
   const report: AuditReport = { scheme: resolvedScheme(), accent: resolvedAccent(), failures: [], unknown: [], islands: [], checked: 0 };

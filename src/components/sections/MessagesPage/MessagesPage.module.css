@@ -168,8 +168,14 @@
   color: var(--color-text-muted);
 }
 
+/* The open conversation's row: on the accent's wash, the name in the tonal label's deep accent and the
+   quiet words in the link preview's deeper muted ink — plain terracotta there was 3:1, the muted ink 4.3. */
 .row[data-active] .rowHandle {
-  color: var(--color-terracotta);
+  color: var(--button-on-tonal);
+}
+
+.row[data-active] :is(.rowPreview, .rowTime) {
+  color: var(--link-card-muted);
 }
 
 .startSectionTitle {
