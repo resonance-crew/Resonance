@@ -51,10 +51,34 @@ public enum OpenEnums {
     /// The answer with every unknown enum value replaced; untouched when there is none (or it isn't JSON).
     static func normalize(_ data: Data) -> Data {
         guard let root = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else { return data }
+        // Looked through first, as it was read (nothing copied): almost every answer holds no unknown
+        // value, and goes on as it came.
+        guard holdsUnknown(root) else { return data }
         var changed = false
         let fixed = normalize(root, changed: &changed)
         guard changed, let out = try? JSONSerialization.data(withJSONObject: fixed, options: [.fragmentsAllowed]) else { return data }
         return out
+    }
+
+    /// Whether `value` holds an enum value this build doesn't know, anywhere in it: the fields
+    /// `normalize` would change, found the way it finds them, read in place.
+    static func holdsUnknown(_ value: Any) -> Bool {
+        if let object = value as? NSDictionary {
+            var found = false
+            object.enumerateKeysAndObjects { key, child, stop in
+                if let key = key as? String, let field = fields[key], let string = child as? String {
+                    found = !field.known.contains(string)
+                } else {
+                    found = holdsUnknown(child)
+                }
+                if found { stop.pointee = true }
+            }
+            return found
+        }
+        if let array = value as? NSArray {
+            return array.contains { holdsUnknown($0) }
+        }
+        return false
     }
 
     private static func normalize(_ value: Any, changed: inout Bool) -> Any {

@@ -70,6 +70,26 @@ import Testing
         #expect(OpenEnums.normalize(Data("<html>".utf8)) == Data("<html>".utf8))
     }
 
+    /// The look through an answer finds an unknown value wherever `normalize` would change one — deep in
+    /// a list, in an object in a list, under a field of the table's name that holds an object — and
+    /// nothing else: a known value, a field outside the table, a table field holding no string.
+    @Test func anUnknownValueIsFoundWhereverItIsAndOnlyThen() throws {
+        func holds(_ json: String) throws -> Bool {
+            try OpenEnums.holdsUnknown(JSONSerialization.jsonObject(with: Data(json.utf8), options: [.fragmentsAllowed]))
+        }
+        #expect(try holds(#"{"a":{"b":[1,{"visibility":"followers"}]}}"#))
+        #expect(try holds(#"[[{"code":"suspended"}]]"#))
+        #expect(try holds(#"{"status":{"primaryLocale":"ja"}}"#))
+        #expect(try !holds(#"{"a":{"b":[1,{"visibility":"public"}]},"status":"fresh"}"#))
+        #expect(try !holds(#"{"kind":"followers","visibility":null,"code":7,"status":["warming"]}"#))
+        #expect(try !holds(#""followers""#))
+        // What it finds is exactly what normalizing changes.
+        let unknown = Data(#"{"cards":[{"visibility":"followers","title":"t"}],"status":"fresh"}"#.utf8)
+        let fixed = try #require(JSONSerialization.jsonObject(with: OpenEnums.normalize(unknown)) as? [String: Any])
+        #expect((fixed["cards"] as? [[String: Any]])?.first?["visibility"] as? String == "private")
+        #expect(fixed["status"] as? String == "fresh")
+    }
+
     /// Every enum the contract's answers carry is in the table, by a property
     /// name no other answer field uses, with the values this build knows — so
     /// a new enum in an answer fails here until it is covered.
