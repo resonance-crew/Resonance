@@ -81,7 +81,8 @@ npm run apps:generate   # tokens, string accessors, icons, openapi.json, editor 
 
 | Output | From | Script |
 | --- | --- | --- |
-| `DesignSystem/.../Generated/Tokens.swift` | `src/styles/tokens.css` (with a story's type: `--story-*` → `Tokens.story*`, the numbers the readers take), StoryCard palette, strokes | `scripts/native/tokens.ts` |
+| `DesignSystem/.../Generated/Tokens.swift` | `src/styles/tokens.css` (with a story's type: `--story-*` → `Tokens.story*`, the numbers the readers take), the palette's colours, strokes | `scripts/native/tokens.ts` |
+| `DesignSystem/.../Generated/PaletteTables.swift`, `Assets.xcassets` LaunchBackground / LaunchMark | `src/lib/design/palette.ts`: every colour of every theme in light and dark, the hue-made roles (`HUE_INKS`), the launch screen's paper and mark in both appearances | `scripts/native/palette-swift.ts` (run by `tokens.ts`) |
 | `ResonanceKit/.../Localization/L10n.swift` | `src/messages/*.json` (bundled as-is, read at runtime) | `scripts/apps/l10n.ts` |
 | `DesignSystem/.../Generated/Icons.swift` | the hand-drawn icons in `src/components/atoms/Icon` | `scripts/apps/icons.ts` |
 | `Resonance/Resources/{en,zh-Hant}.lproj/InfoPlist.strings` | the purpose strings the system shows itself (`share.image.photoAccess` for the photo prompt); project.yml keeps the English one, checked against the catalog | `scripts/apps/l10n.ts` |
@@ -126,6 +127,27 @@ xcrun simctl launch booted com.resonance.stories
 
 Tests: `cd Packages/ResonanceKit && swift test` (API client, localization,
 story format — on the Mac, in seconds) and `xcodebuild … test` (app).
+
+Dark mode and themes: every `Tokens.<colour>` is dynamic — a UIColor provider
+(`Palette` in DesignSystem `Color/Palette.swift`) that looks the token up for
+the trait collection it is drawn in, its `userInterfaceStyle` and `AccentTrait`
+(a `UITraitDefinition`, bridged to SwiftUI's `\.accent`); `Tokens.UI.<colour>`
+is the same colour for UIKit. Settings → 外觀 (`AppearanceSettings`) keeps the
+choice in UserDefaults (`appearance.scheme`: system | light | dark,
+`appearance.accent`: terracotta | sage | lavender | yellow) and
+`AppearanceStore` lays it on the window scene's trait overrides, so sheets,
+alerts, the keyboard, the photo picker and the in-app browser follow, live,
+with no screen rebuilt. A colour the palette has no token for is a `Palette.hue`
+(a role of `HUE_INKS` at a hue the data carries), a `Palette.mix` of two tokens,
+or `Palette.schemed(light:dark:)`; a colour that must not follow (a picture
+that leaves the device, what stands on a photo) is `Palette.shared` or
+`Tokens.onPicture`. A CALayer's CGColor or a view drawn by hand takes its ink
+again in `registerForTraitChanges`. `src/lib/design/colourLiterals.ios.test.ts`
+fails on a colour literal outside its short list. The story editor island
+wears `data-scheme` / `data-accent` from its web view's traits. Screen checks:
+`-appearance.scheme dark -appearance.accent sage` (any launch), and
+`-appearanceCycle <seconds>` steps through dark terracotta, dark sage, light
+lavender and light terracotta on whatever screen is open (Debug).
 Launch arguments for checking screens (Debug): `-route /card/<slug>` or
 `-route /u/<handle>` opens that page; the seed has `rich-story`, a card with
 every kind of content. `-writeTitle "…" -writeStory "…"` start a new card with
