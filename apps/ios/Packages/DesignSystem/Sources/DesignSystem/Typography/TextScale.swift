@@ -38,8 +38,22 @@ public nonisolated enum TextScale {
     /// The factor for `style` at the person's current text size. Reading it in
     /// a view's body makes the view re-run when the size changes.
     @MainActor public static func factor(relativeTo style: UIFont.TextStyle) -> CGFloat {
-        effective(system: system(relativeTo: style, in: TextSizeSetting.shared.category))
+        effective(system: currentSystem(relativeTo: style))
     }
+
+    /// `system(relativeTo:in:)` at the person's current text size, worked out once per style and size
+    /// (each answer makes a trait collection and font metrics). Reads `TextSizeSetting.shared.category`
+    /// every time, so a view reading it still re-runs when the size changes.
+    @MainActor static func currentSystem(relativeTo style: UIFont.TextStyle) -> CGFloat {
+        let category = TextSizeSetting.shared.category
+        if systemFactors.category != category { systemFactors = (category, [:]) }
+        if let kept = systemFactors.byStyle[style] { return kept }
+        let factor = system(relativeTo: style, in: category)
+        systemFactors.byStyle[style] = factor
+        return factor
+    }
+
+    @MainActor private static var systemFactors: (category: UIContentSizeCategory, byStyle: [UIFont.TextStyle: CGFloat]) = (.unspecified, [:])
 
     // MARK: The reading curve
 
@@ -57,7 +71,7 @@ public nonisolated enum TextScale {
 
     /// The reading factor for `style` at the person's current text size (re-run on a change, as `factor`).
     @MainActor public static func readingFactor(relativeTo style: UIFont.TextStyle) -> CGFloat {
-        reading(system: system(relativeTo: style, in: TextSizeSetting.shared.category))
+        reading(system: currentSystem(relativeTo: style))
     }
 }
 

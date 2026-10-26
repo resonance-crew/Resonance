@@ -40,4 +40,30 @@ import UIKit
         #expect(zh.timeZone == TimeZone.current)
         #expect(zh.dateFormat == "a h:mm")
     }
+
+    @Test func aFaceIsMatchedOnceAndIsTheFaceAskedFor() {
+        let body = AppFonts.uiFont(.body, size: 15)
+        #expect(AppFonts.uiFont(.body, size: 15) === body)
+        for other in [AppFonts.uiFont(.body, size: 15, weight: .bold), AppFonts.uiFont(.body, size: 15, oblique: true),
+                      AppFonts.uiFont(.body, size: 15, lining: true), AppFonts.uiFont(.heading, size: 15),
+                      AppFonts.uiFont(.body, size: 16)] {
+            #expect(other !== body)
+        }
+        // The face Core Text matches for the family and weight.
+        let matched = UIFont(descriptor: UIFontDescriptor(fontAttributes: [
+            .family: AppFonts.Family.body.rawValue, .traits: [UIFontDescriptor.TraitKey.weight: UIFont.Weight.regular],
+        ]), size: 15)
+        #expect(body.fontName == matched.fontName)
+        #expect(body.pointSize == 15)
+        #expect(AppFonts.uiFont(.body, size: 15, weight: .bold).fontName != body.fontName)
+        #expect(AppFonts.body(13) == AppFonts.body(13))
+    }
+
+    @Test func theTextSizeFactorIsTheSystemsAsBefore() {
+        let category = UIApplication.shared.preferredContentSizeCategory
+        for style in [UIFont.TextStyle.body, .title1, .caption1] {
+            #expect(TextScale.factor(relativeTo: style) == TextScale.effective(system: TextScale.system(relativeTo: style, in: category)))
+            #expect(TextScale.readingFactor(relativeTo: style) == TextScale.reading(system: TextScale.system(relativeTo: style, in: category)))
+        }
+    }
 }
