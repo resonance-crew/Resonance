@@ -11,7 +11,7 @@ import coil3.disk.DiskCache
 import coil3.disk.directory
 import coil3.imageDecoderEnabled
 import com.resonance.design.OklchColor
-import com.resonance.design.generated.Tokens
+import com.resonance.design.generated.ResonanceColors
 import com.resonance.kit.chat.ChatPush
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -95,7 +95,7 @@ class ChatAvatarTest {
         server.enqueue(MockResponse().setResponseCode(404))
         val face = ChatAvatar.draw(app, push.copy(fromAvatarUrl = server.url("/avatars/gone.png").toString()), px = 96, loader = loader())
         // No colour on the profile (an older server): the avatar's own terracotta.
-        near(Tokens.TerracottaLight.toArgb(), face.getPixel(48, 5))
+        near(ResonanceColors.LightTerracotta.TerracottaLight.toArgb(), face.getPixel(48, 5))
         assertEquals(1, server.requestCount)
     }
 

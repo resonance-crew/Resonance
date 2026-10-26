@@ -20,7 +20,7 @@ import coil3.size.Size
 import coil3.toBitmap
 import com.resonance.design.AppFonts
 import com.resonance.design.OklchColor
-import com.resonance.design.generated.Tokens
+import com.resonance.design.generated.ResonanceColors
 import com.resonance.design.initialsScale
 import com.resonance.kit.chat.ChatPush
 import kotlinx.coroutines.runBlocking
@@ -33,7 +33,9 @@ import kotlin.math.roundToInt
  * profile photo, else their avatar as the app draws it — the initials in ink on their colour — so
  * the shade never shows the system's own letter in its place. Drawn round (the shade rounds a
  * sender's picture itself on most versions; a round one looks the same either way), at the
- * largest the shade draws a sender for this screen.
+ * largest the shade draws a sender for this screen. Always in light terracotta's ink and
+ * fallback colour, whatever the app wears: the shade is the system's, and the face is the same
+ * sticker the person's avatar is everywhere.
  */
 internal object ChatAvatar {
     /** The conversation icon's side in the shade, the largest a sender is drawn. */
@@ -58,7 +60,8 @@ internal object ChatAvatar {
         val face = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(face)
         val r = px / 2f
-        val fill = push.fromColor?.let(OklchColor::parse) ?: Tokens.TerracottaLight
+        val light = ResonanceColors.LightTerracotta
+        val fill = push.fromColor?.let(OklchColor::parse) ?: light.TerracottaLight
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { color = fill.toArgb() }
         canvas.drawCircle(r, r, r, paint)
         if (photo != null) {
@@ -75,7 +78,7 @@ internal object ChatAvatar {
                 typeface = runCatching { AppFonts.typeface(AppFonts.Family.Body, 700) }.getOrNull() ?: Typeface.DEFAULT_BOLD
                 textSize = px * initialsScale(initials)
                 textAlign = Paint.Align.CENTER
-                color = Tokens.Text.toArgb()
+                color = light.Text.toArgb()
             }
             val m = text.fontMetrics
             canvas.drawText(initials, r, r - (m.ascent + m.descent) / 2, text)

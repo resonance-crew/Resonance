@@ -685,8 +685,9 @@ describe('its pictures', () => {
     expect(photo).toHaveAttribute('loading', 'lazy');
     expect(photo).toHaveAttribute('decoding', 'async');
 
-    // The byline sits in the header and the aside (CSS shows one).
-    const avatars = screen.getAllByRole('img', { name: 'AU' });
+    // The byline sits in the header and the aside (CSS shows one); its avatar is a link out of the
+    // accessibility tree (the pen name is the one link a screen reader meets).
+    const avatars = screen.getAllByRole('img', { name: 'AU', hidden: true });
     expect(avatars.length).toBeGreaterThan(0);
     for (const avatar of avatars) {
       expect(avatar).toHaveAttribute('src', 'https://img.test/author.avif');
