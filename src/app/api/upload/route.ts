@@ -8,6 +8,8 @@ import { limited } from '@/lib/api/rateLimit';
 import { getAdminDb } from '@/lib/db/firestore/admin';
 
 export const runtime = 'nodejs';
+// A re-encode is bounded (normalizeUpload's pixel and frame limits); this bounds the rest.
+export const maxDuration = 30;
 
 const tooLarge = () => NextResponse.json({ error: 'Image is too large' }, { status: 413 });
 
