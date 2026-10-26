@@ -688,11 +688,6 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // --- uploads (server-only) ---
-    // Whose each stored picture is (keyed by its storage key's file name):
-    // the keys themselves name no one, so an anonymous card's cover can't
-    // point at its author, and the account purge deletes a person's pictures
-    // from these records.
     // --- card tombstones (server-only) ---
     // The ids of cards deleted for good, written in the transaction that
     // deletes one (deleteCard, the account purge): no new card takes such an
@@ -701,6 +696,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // --- uploads (server-only) ---
+    // Whose each stored picture is (keyed by its storage key's file name):
+    // the keys themselves name no one, so an anonymous card's cover can't
+    // point at its author, and the account purge deletes a person's pictures
+    // from these records.
     match /uploads/{uploadId} {
       allow read, write: if false;
     }
