@@ -77,8 +77,24 @@ const gradientStops = (css: string): Rgba[] =>
 
 type Layer = { colour: Rgba; el: Element } | { unknown: string; el: Element };
 
+/** Whether a positioned pseudo-element's box (its resolved inset and size) holds the point. */
+function pseudoHolds(el: Element, ps: CSSStyleDeclaration, point: { x: number; y: number } | undefined): boolean {
+  const w = parseFloat(ps.width);
+  const h = parseFloat(ps.height);
+  // A rule or a hairline (the writer's split divider), not a paper.
+  if (w < 4 || h < 4) return false;
+  const cs = getComputedStyle(el);
+  const left = parseFloat(ps.left);
+  const top = parseFloat(ps.top);
+  if (!point || cs.position === 'static' || !Number.isFinite(left) || !Number.isFinite(top) || !Number.isFinite(w) || !Number.isFinite(h)) return true;
+  const r = el.getBoundingClientRect();
+  const x0 = r.left + (parseFloat(cs.borderLeftWidth) || 0) + left;
+  const y0 = r.top + (parseFloat(cs.borderTopWidth) || 0) + top;
+  return point.x >= x0 && point.x <= x0 + w && point.y >= y0 && point.y <= y0 + h;
+}
+
 /** What an element paints at a point, as one layer (or none). */
-function layerOf(el: Element): Layer | null {
+function layerOf(el: Element, point?: { x: number; y: number }): Layer | null {
   const style = getComputedStyle(el);
   const tag = el.tagName.toLowerCase();
   if (tag === 'img' || tag === 'video' || tag === 'canvas' || tag === 'image' || tag === 'iframe') return { unknown: tag, el };
@@ -108,6 +124,7 @@ function layerOf(el: Element): Layer | null {
   for (const pseudo of ['::before', '::after'] as const) {
     const ps = getComputedStyle(el, pseudo);
     if (ps.content === 'none' || ps.position !== 'absolute' || ps.visibility === 'hidden' || ps.display === 'none') continue;
+    if (!pseudoHolds(el, ps, point)) continue;
     const fill = parseCssColor(ps.backgroundColor);
     const a = (fill?.a ?? 0) * (Number(ps.opacity) || 0);
     if (fill && a > 0.01) bg = bg && bg.a > 0 ? over({ ...fill, a }, bg) : { ...fill, a };
@@ -156,7 +173,7 @@ function auditViewport(report: AuditReport, seen: Set<string>): void {
     const layers: Rgba[] = [];
     let picture: string | null = null;
     for (const s of stack.slice(at)) {
-      const layer = layerOf(s);
+      const layer = layerOf(s, { x, y });
       if (!layer) continue;
       if ('unknown' in layer) {
         picture = `${layer.unknown} (${describe(layer.el)})`;
