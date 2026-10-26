@@ -70,7 +70,7 @@ export function SharedCardContent({ card, author, titleId }: SharedCardContentPr
             seed={Number(byline.avatarSeed) || 3}
           />
         ) : (
-          <HandDrawnAvatar initials="·" size={32} color="var(--color-cream-dark)" seed={(card.id.charCodeAt(0) || 7) * 31} />
+          <HandDrawnAvatar initials="·" size={32} color="var(--avatar-wait)" seed={(card.id.charCodeAt(0) || 7) * 31} />
         )}
         <span className={styles.byline}>
           <span className={styles.author} data-anonymous={byline ? undefined : ''}>

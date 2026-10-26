@@ -42,7 +42,7 @@ export function OriginalCardPanel({ cardId }: OriginalCardPanelProps) {
     <div className={styles.panel}>
       <header className={styles.authorHeader}>
         {card.anonymous ? (
-          <HandDrawnAvatar initials="·" size={40} color="var(--color-cream-dark)" seed={97} />
+          <HandDrawnAvatar initials="·" size={40} color="var(--avatar-wait)" seed={97} />
         ) : (
           <HandDrawnAvatar
             src={author.avatarUrl}

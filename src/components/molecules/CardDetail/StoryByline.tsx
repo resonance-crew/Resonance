@@ -90,7 +90,7 @@ export function StoryByline({ author, anonymous = false, minutes, published, pri
     <div ref={ref} className={[styles.byline, className].filter(Boolean).join(' ')}>
       <span className={styles.avatar}>
         {anonymous ? (
-          <HandDrawnAvatar initials="·" size={40} color="var(--color-cream-dark)" seed={97} />
+          <HandDrawnAvatar initials="·" size={40} color="var(--avatar-wait)" seed={97} />
         ) : (
           <HandDrawnAvatar
             src={author.avatarUrl}

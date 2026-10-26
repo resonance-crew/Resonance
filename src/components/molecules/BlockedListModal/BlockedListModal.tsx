@@ -71,7 +71,7 @@ export function BlockedListModal({ open, onClose }: BlockedListModalProps) {
                   src={row.user?.avatarUrl}
                   initials={row.user?.initials ?? '··'}
                   size={36}
-                  color={row.user?.accentColor ?? 'var(--color-cream-dark)'}
+                  color={row.user?.accentColor ?? 'var(--avatar-wait)'}
                   seed={Number(row.user?.avatarSeed) || 5}
                 />
                 <span className={styles.who}>

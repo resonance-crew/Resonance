@@ -19,6 +19,8 @@ export interface PersonFill {
 }
 
 export function personFill(color: string): PersonFill {
+  // No colour yet (a profile still on its way): the waiting disc — the well in light, a raised one in dark.
+  if (!color.trim()) return { fill: 'var(--avatar-wait)', className: '', style: {} };
   if (color.trim().startsWith('var(')) return { fill: color, className: '', style: {} };
   return { fill: 'var(--av-fill)', className: 'res-av', style: { '--av': color } as CSSProperties };
 }

@@ -26,7 +26,7 @@ export function anonymousAuthor(card: Card): User {
     phoneHash: '',
     avatarSeed: String((card.id.charCodeAt(0) ?? 7) * 31),
     initials: '·',
-    accentColor: 'var(--color-cream-dark)',
+    accentColor: 'var(--avatar-wait)',
     joinedAt: new Date(0),
     handleChangedAt: new Date(0),
   };

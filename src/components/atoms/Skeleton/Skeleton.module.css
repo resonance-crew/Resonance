@@ -15,12 +15,15 @@
      declaration would shadow the value inherited from the card and pin every
      skeleton to the theme accent. The highlight meets the cream in OKLab, not
      OKLCH: mixed by hue, a lavender card's light swung through red to pink on
-     its way to cream (and a blue one's through green). */
+     its way to cream (and a blue one's through green). The block and the
+     colour the highlight meets are the palette's (--skeleton-base, the well with
+     a touch of ink; --skeleton-glow, the paper): in dark the block is lifted off
+     the night paper, where the well would sink into it. */
   background: linear-gradient(
     90deg,
-    color-mix(in oklch, color-mix(in oklch, var(--color-cream-dark) 94%, var(--color-text)) 85%, transparent) 25%,
-    color-mix(in oklab, var(--skeleton-highlight, var(--color-terracotta-light)) 50%, var(--color-cream)) 37%,
-    color-mix(in oklch, color-mix(in oklch, var(--color-cream-dark) 94%, var(--color-text)) 85%, transparent) 63%
+    var(--skeleton-base) 25%,
+    color-mix(in oklab, var(--skeleton-highlight, var(--color-terracotta-light)) 50%, var(--skeleton-glow)) 37%,
+    var(--skeleton-base) 63%
   );
   background-size: 400% 100%;
   animation: skeleton-shimmer 1.5s ease infinite;

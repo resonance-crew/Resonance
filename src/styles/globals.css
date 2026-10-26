@@ -29,6 +29,17 @@ main { display: block; width: 100%; max-width: 100%; overflow-x: clip; }
   background: color-mix(in oklch, var(--color-terracotta) 30%, transparent);
 }
 
+/* ── Keyboard focus ─────────────────────────────────────────────
+   A control that draws no focus of its own (the header's icons, a select's
+   trigger) wears the palette's focus pen — the theme's accent, in either
+   scheme — rather than the browser's blue. Kept weakest (:where): every
+   control that styles its focus, or turns the ring off, keeps its own. Text
+   fields and the writer's canvas show focus in their own pen and caret. */
+:where(a[href], button, summary, [role='button'], [role='tab'], [role='menuitem'], [role='option'], [role='switch'], [role='radio'], [role='checkbox'], [tabindex]:not([tabindex='-1'])):where(:not([contenteditable])):focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: 2px;
+}
+
 /* ── Form placeholders (global, applied to all inputs/textareas) ── */
 input::placeholder,
 textarea::placeholder {
@@ -189,12 +200,12 @@ textarea::placeholder {
    the same hue at the ladder's avatar step (palette.ts avatarFill: L 0.4,
    0.85× its chroma), so chalk initials read on it — in CSS, so the server's
    HTML is right before any script runs. A browser without relative colours
-   draws the well instead. */
+   draws the waiting disc instead (--avatar-wait: raised, in dark). */
 .res-av { --av-fill: var(--av); }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-scheme='light']) .res-av { --av-fill: var(--color-cream-dark); }
+  :root:not([data-scheme='light']) .res-av { --av-fill: var(--avatar-wait); }
 }
-:root[data-scheme='dark'] .res-av { --av-fill: var(--color-cream-dark); }
+:root[data-scheme='dark'] .res-av { --av-fill: var(--avatar-wait); }
 @supports (color: oklch(from red l c h)) {
   @media (prefers-color-scheme: dark) {
     :root:not([data-scheme='light']) .res-av { --av-fill: oklch(from var(--av) 0.4 calc(c * 0.85) h); }

@@ -113,7 +113,7 @@
 }
 
 .skelBlock {
-  background: var(--color-cream-dark);
+  background: var(--skeleton-base);
   border-radius: 8px;
   animation: profilePulse 1.4s ease-in-out infinite;
 }
