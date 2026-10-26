@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.ReadOnlyComposable
 import android.content.Context
 import android.os.Build
+import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +46,7 @@ enum class AppearanceAccent(val key: String, val theme: PaletteTheme?) {
         fun of(key: String?): AppearanceAccent = entries.firstOrNull { it.key == key } ?: Terracotta
 
         /** The wallpaper's colour is offered from Android 12 (its system palette). */
+        @get:ChecksSdkIntAtLeast(api = Build.VERSION_CODES.S)
         val wallpaperOffered: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     }
 }
