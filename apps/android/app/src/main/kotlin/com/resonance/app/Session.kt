@@ -350,6 +350,8 @@ class Session(
         // The pushes it got, still in the shade, what this install told the server, and the mark that it has a profile.
         PushCenter.clearDelivered()
         PushCenter.lastRegistration = null
+        // Its pushes stop here even when the unregister never reached the server.
+        scope.launch(NonCancellable) { PushCenter.forgetToken(config.usesEmulator) }
         prefs.edit().remove(profileKey(who)).apply()
         // Firestore's own copy of it: messages, notifications, drafts, writes not yet sent.
         return scope.launch { withContext(NonCancellable) { AppFirebase.clearLocalData() } }

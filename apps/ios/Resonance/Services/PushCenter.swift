@@ -154,6 +154,19 @@ final class PushCenter {
         onToken?(token)
     }
 
+    /// Drops this install's FCM token once an account signs out of it (or is switched from): the
+    /// server may still hold it under that account — the sign-out's unregister is a best effort, and
+    /// a sign-out the SDK makes itself sends none — and every push it sends there now fails (the
+    /// server forgets a dead token). FCM hands the install a new token, registered under whoever
+    /// signs in next (`onToken`).
+    func forgetToken() async {
+        token = nil
+        guard !AppConfig.current.usesEmulator else { return }
+        try? await Messaging.messaging().deleteToken()
+        // A fresh one at once: an account signing in meanwhile registers it, never the dead one.
+        if let fresh = try? await Messaging.messaging().token() { tokenChanged(fresh) }
+    }
+
     func open(route: String, notificationId: String?, fromUserId: String? = nil, chat: ChatPush? = nil) {
         opened = Opened(route: route, notificationId: notificationId, fromUserId: fromUserId, chat: chat)
     }
