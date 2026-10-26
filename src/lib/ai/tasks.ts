@@ -10,6 +10,25 @@ import { slugify } from './slugify';
 import { parseTagList } from './tags';
 
 /**
+ * How long the slug's call may take before it is abandoned. Publishing waits
+ * for it SLUG_WAIT_MS (8 s) and then answers without it, writing the slug
+ * when it comes; past this the card stays at its id (as when the call fails)
+ * rather than holding the function until its maxDuration.
+ */
+export const SLUG_TIMEOUT_MS = 20_000;
+/**
+ * The slug's reply is 2–5 words. Sized for a model that answers without
+ * reasoning — the default model's default (gpt-5.4-mini: `none`): one that
+ * reasons by default spends its thinking from the same cap (an empty reply,
+ * a 'story' slug), so raise this with OPENAI_LLM_MODEL if it ever does.
+ */
+export const SLUG_MAX_TOKENS = 200;
+/** Tag suggestions (the writer is waiting on them, beside the publish panel): abandoned past this. */
+export const TAGS_TIMEOUT_MS = 15_000;
+/** The insight signature, after a publish or an applied edit's response: abandoned past this (the next save tries again). */
+export const SIGNATURE_TIMEOUT_MS = 25_000;
+
+/**
  * Translate a story title into an English slug *base* (not yet uniqueness-
  * checked). Falls back to a transliteration-free empty string when the title is
  * blank — the caller substitutes a default.
@@ -17,14 +36,17 @@ import { parseTagList } from './tags';
 export async function titleToSlugBase(title: string): Promise<string> {
   const clean = title.trim();
   if (!clean) return '';
-  const out = await chat([
-    {
-      role: 'system',
-      content:
-        'You turn a story title into a short English URL slug phrase. Reply with ONLY 2 to 5 lowercase English words that capture the core meaning, separated by single spaces. No punctuation, no quotes, no explanation.',
-    },
-    { role: 'user', content: clean },
-  ]);
+  const out = await chat(
+    [
+      {
+        role: 'system',
+        content:
+          'You turn a story title into a short English URL slug phrase. Reply with ONLY 2 to 5 lowercase English words that capture the core meaning, separated by single spaces. No punctuation, no quotes, no explanation.',
+      },
+      { role: 'user', content: clean },
+    ],
+    { signal: AbortSignal.timeout(SLUG_TIMEOUT_MS), maxTokens: SLUG_MAX_TOKENS },
+  );
   return slugify(out);
 }
 
@@ -56,10 +78,13 @@ export async function suggestStoryTags(input: SuggestTagsInput): Promise<string[
   ]
     .filter(Boolean)
     .join('\n');
-  const out = await chat([
-    { role: 'system', content: system },
-    { role: 'user', content: text },
-  ]);
+  const out = await chat(
+    [
+      { role: 'system', content: system },
+      { role: 'user', content: text },
+    ],
+    { signal: AbortSignal.timeout(TAGS_TIMEOUT_MS) },
+  );
   return parseTagList(out, 3).filter((tag) => !input.existingTags.includes(tag));
 }
 
@@ -76,8 +101,13 @@ export interface ExtractSignatureInput {
  * when their wording is far apart. Also scores how much transferable insight
  * the piece carries, which gates whether it enters the candidate pool.
  */
+/** Exactly what extractInsightSignature reads of a card: its title and the opening of its story. */
+export function signatureText(input: ExtractSignatureInput): string {
+  return `${input.title.trim()}\n\n${input.story.trim()}`.trim().slice(0, MAX_STORY_CHARS);
+}
+
 export async function extractInsightSignature(input: ExtractSignatureInput): Promise<InsightSignature> {
-  const text = `${input.title.trim()}\n\n${input.story.trim()}`.trim().slice(0, MAX_STORY_CHARS);
+  const text = signatureText(input);
   const raw = await chatJSON<Record<string, unknown>>([
     {
       role: 'system',
@@ -94,7 +124,7 @@ export async function extractInsightSignature(input: ExtractSignatureInput): Pro
       ].join('\n'),
     },
     { role: 'user', content: text },
-  ]);
+  ], { signal: AbortSignal.timeout(SIGNATURE_TIMEOUT_MS) });
   return parseSignature(raw);
 }
 

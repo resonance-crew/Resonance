@@ -252,3 +252,22 @@ describe('unfurlCardLinks', () => {
     expect(card().linkPreviews).toEqual([{ url: 'https://example.com/a', title: 'A' }]);
   });
 });
+
+describe('unfurlCardLinks, reading', () => {
+  it('runs no transaction for a story without a link and a card holding no previews', async () => {
+    store = fakeAdminDb({ 'cards/c1': published('只是文字，[一個連結](https://example.com/a)在句子裡。') });
+    const transaction = vi.spyOn(store.db, 'runTransaction');
+    expect(await unfurl({ fetch: sites().fetch })).toEqual({ links: 0, fetched: 0, previews: 0, written: false, overBudget: false });
+    expect(transaction).not.toHaveBeenCalled();
+    expect(store.reads).toEqual(['cards/c1']);
+    expect(store.writes).toEqual([]);
+  });
+
+  it('still takes away the previews of links a story no longer holds', async () => {
+    store = fakeAdminDb({
+      'cards/c1': published('只是文字。', { linkPreviews: [{ url: 'https://example.com/a', title: 'A' }], linkPreviewsFor: ['https://example.com/a'] }),
+    });
+    expect(await unfurl({ fetch: sites().fetch })).toMatchObject({ links: 0, written: true });
+    expect(card()).not.toHaveProperty('linkPreviews');
+  });
+});

@@ -1,7 +1,7 @@
 import { FieldValue, type DocumentSnapshot, type Firestore } from 'firebase-admin/firestore';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
 import { chatImageKeys, type ChatImageStore } from '@/lib/storage/chatImages';
-import { normalizeUpload, UnsupportedImage } from '@/lib/storage/image';
+import { normalizeUploadWithThumb, UnsupportedImage } from '@/lib/storage/image';
 import { CHAT_IMAGES, chatImageRef } from './chatImages';
 import { mayMessage, pairOf } from './conversations';
 import { ApiFailure } from './http';
@@ -32,34 +32,46 @@ export async function keptChatImage(db: Firestore, uid: string, to: string, clie
 
 /**
  * Keeps a picture `uid` is about to send `to`: refused for someone they may
- * not message, re-encoded (upright, metadata gone; the thread's size made
- * from the kept one, not the upload, so the upload is decoded once), stored,
- * and recorded unsent (`unsentAt`). A `clientId` becomes its id, so an upload
- * sent again after a lost answer finds the picture already kept and stores
- * nothing. A record never names a file that isn't there, and no file is kept
- * without a record to find it by.
+ * not message, re-encoded (upright, metadata gone; both sizes from one
+ * opening of the upload, side by side), stored, and recorded unsent
+ * (`unsentAt`). A `clientId` becomes its id, so an upload sent again after a
+ * lost answer finds the picture already kept and stores nothing. A record
+ * never names a file that isn't there, and no file is kept without a record
+ * to find it by.
+ *
+ * `spent` is the sender's budget for it (the route's spendAll), asked beside
+ * whether they may message `to`: its refusal (429) is the answer whatever
+ * else is wrong, as when it was spent first, and nothing is decoded before
+ * both are in. `resendAsked`: the caller has asked keptChatImage already.
  */
 export async function uploadChatImage(
   db: Firestore,
   store: ChatImageStore,
   uid: string,
   input: { to: string; clientId?: string | null; bytes: Uint8Array },
+  opts: { spent?: Promise<void>; resendAsked?: boolean } = {},
 ): Promise<UploadedChatImage> {
-  if (input.clientId && isReservedId(input.clientId)) throw new ApiFailure('invalid_request', 'Not a valid client id.');
-  // An id Firestore keeps for itself names no one to message.
-  if (isReservedId(input.to)) throw new ApiFailure('forbidden', 'You can message people you are connected with.');
   const pair = pairOf(uid, input.to);
-  const ref = input.clientId ? chatImageRef(db, input.clientId) : db.collection(CHAT_IMAGES).doc();
-  if (input.clientId) {
-    const existing = await ref.get();
-    if (existing.exists) return resent(existing, uid, pair);
-  }
-  await mayMessage(db, uid, input.to);
+  const ref = input.clientId && !isReservedId(input.clientId) ? chatImageRef(db, input.clientId) : db.collection(CHAT_IMAGES).doc();
+  const allowed = async (): Promise<UploadedChatImage | null> => {
+    if (input.clientId && isReservedId(input.clientId)) throw new ApiFailure('invalid_request', 'Not a valid client id.');
+    // An id Firestore keeps for itself names no one to message.
+    if (isReservedId(input.to)) throw new ApiFailure('forbidden', 'You can message people you are connected with.');
+    if (input.clientId && !opts.resendAsked) {
+      const existing = await ref.get();
+      if (existing.exists) return resent(existing, uid, pair);
+    }
+    await mayMessage(db, uid, input.to);
+    return null;
+  };
+  const [budget, gate] = await Promise.allSettled([opts.spent ?? Promise.resolve(), allowed()]);
+  if (budget.status === 'rejected') throw budget.reason;
+  if (gate.status === 'rejected') throw gate.reason;
+  if (gate.value) return gate.value;
 
   let full, thumb;
   try {
-    full = await normalizeUpload(input.bytes, 'image');
-    thumb = await normalizeUpload(full.data, 'thumb');
+    ({ full, thumb } = await normalizeUploadWithThumb(input.bytes));
   } catch (e) {
     if (e instanceof UnsupportedImage) throw new ApiFailure('invalid_request', 'Not a picture that can be sent.');
     throw e;

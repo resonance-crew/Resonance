@@ -7,6 +7,7 @@ import { deleteCard } from '@/lib/api/v1/cards';
 import { acceptInvite } from '@/lib/api/v1/invites';
 import { resonateWith } from '@/lib/api/v1/resonate';
 import { SendMessageRequest, SendNoteRequest } from '@/lib/api/v1/schemas';
+import { LIMITS, spend } from '@/lib/api/rateLimit';
 
 // Notes and messages through the v1 API against the Firestore emulator — what
 // the web's sendNote() and openConversation() + sendMessage() write from the
@@ -1075,5 +1076,75 @@ describe('sendMessage', () => {
       expect(again.duplicate).toBe(true);
       expect((await db.doc(`conversations/alice_bob/messages/${clientId}`).get()).get('replyTo')).toMatchObject({ id: original.id, text: 'question?' });
     });
+  });
+});
+
+// The routes start the sender's budget (spend) beside the send rather than
+// before it, and hand it in: the send waits for it before any refusal and
+// any write. Every attempt still spends, and over budget the answer is the
+// 429 whatever else is wrong — as when the budget was spent first.
+describe("the sender's budget, spent beside the send", () => {
+  const exhaust = (bucket: 'message' | 'note') =>
+    db.doc(`rateLimits/alice_${bucket}`).set({ userId: 'alice', bucket, windowStart: Date.now(), used: LIMITS[bucket].max });
+  const used = async (bucket: 'message' | 'note') => (await db.doc(`rateLimits/alice_${bucket}`).get()).get('used');
+  const rateLimited = async (p: Promise<unknown>) => expect((await failure(p)).code).toBe('rate_limited');
+  const clientId = 'client-0123456789abcdef';
+
+  beforeEach(async () => {
+    await db.doc('connections/alice_bob').set({ userIds: ['alice', 'bob'], establishedAt: Timestamp.now() });
+  });
+
+  it('answers a message 429 over budget before any other refusal, writing nothing', async () => {
+    await exhaust('message');
+    const send = (input: Parameters<typeof sendMessage>[2]) => sendMessage(db, 'alice', input, spend(db, 'alice', 'message'));
+    await rateLimited(send({ to: 'bob', text: 'hi' }));
+    await rateLimited(send({ to: 'alice', text: 'hi' }));
+    await rateLimited(send({ to: 'carol', text: 'hi' }));
+    await rateLimited(send({ to: 'bob', text: '', cardRef: 'secret' }));
+    await rateLimited(send({ to: 'bob', text: 'hi', clientId: '__reserved_id_12345__' }));
+    await db.doc('users/bob/blocks/alice').set({ blockedUid: 'alice' });
+    await rateLimited(send({ to: 'bob', text: 'hi' }));
+    expect((await db.doc('conversations/alice_bob').get()).exists).toBe(false);
+    expect(await docs('notifications')).toHaveLength(0);
+  });
+
+  it('answers a resent message 429 over budget too, as before', async () => {
+    await sendMessage(db, 'alice', { to: 'bob', text: 'hi', clientId });
+    await exhaust('message');
+    await rateLimited(sendMessage(db, 'alice', { to: 'bob', text: 'hi', clientId }, spend(db, 'alice', 'message')));
+  });
+
+  it('answers a note 429 over budget before any other refusal, writing nothing', async () => {
+    await exhaust('note');
+    const send = (input: Parameters<typeof sendNote>[2]) => sendNote(db, 'alice', input, spend(db, 'alice', 'note'));
+    await rateLimited(send({ cardId: 'walk', text: 'hi' }));
+    await rateLimited(send({ cardId: 'secret', text: 'hi' }));
+    await rateLimited(send({ cardId: 'missing', text: 'hi' }));
+    await rateLimited(send({ cardId: 'walk', text: 'hi', clientId: '__reserved_id_12345__' }));
+    expect(await docs('notes')).toHaveLength(0);
+    expect(await docs('notifications')).toHaveLength(0);
+  });
+
+  it('answers a resent note 429 over budget too, as before', async () => {
+    await sendNote(db, 'alice', { cardId: 'walk', text: 'hi', clientId });
+    await exhaust('note');
+    await rateLimited(sendNote(db, 'alice', { cardId: 'walk', text: 'hi', clientId }, spend(db, 'alice', 'note')));
+  });
+
+  it('still spends on an attempt that is refused, and answers that refusal under budget', async () => {
+    expect((await failure(sendMessage(db, 'alice', { to: 'carol', text: 'hi' }, spend(db, 'alice', 'message')))).code).toBe('forbidden');
+    expect((await failure(sendMessage(db, 'alice', { to: 'bob', text: '', cardRef: 'secret' }, spend(db, 'alice', 'message')))).code).toBe('not_found');
+    expect(await used('message')).toBe(2);
+    expect((await failure(sendNote(db, 'alice', { cardId: 'secret', text: 'hi' }, spend(db, 'alice', 'note')))).code).toBe('not_found');
+    expect(await used('note')).toBe(1);
+  });
+
+  it('sends, a card attached, once the budget has room', async () => {
+    const sent = await sendMessage(db, 'alice', { to: 'bob', text: '', cardRef: 'walk' }, spend(db, 'alice', 'message'));
+    expect((await db.doc(`conversations/alice_bob/messages/${sent.id}`).get()).get('cardRef')).toBe('walk');
+    expect((await db.doc('conversations/alice_bob').get()).get('lastMessage.text')).toBe('title walk');
+    const note = await sendNote(db, 'alice', { cardId: 'walk', text: 'hi' }, spend(db, 'alice', 'note'));
+    expect((await db.doc(`notes/${note.id}`).get()).get('toUserId')).toBe('bob');
+    expect([await used('message'), await used('note')]).toEqual([1, 1]);
   });
 });

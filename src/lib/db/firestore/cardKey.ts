@@ -16,18 +16,36 @@ export function slugHolder<T extends Pick<QueryDocumentSnapshot, 'id' | 'get'>>(
 }
 
 /**
+ * Whether a key could be a slug the server made: slugify writes only
+ * lowercase ASCII letters, digits and hyphens. A key that can't be one — an
+ * auto-id nearly always has a capital — is still asked of the slugs first
+ * (an older client could write a slug itself), but its document is read in
+ * the same breath rather than after the miss.
+ */
+export const slugShaped = (key: string) => /^[a-z0-9-]+$/.test(key);
+
+/**
  * The card a URL segment names — by its slug, else by its document id — as
  * a snapshot, or null. Shared by every server-side resolver (the card page's
  * metadata, /api/cards/resolve, the v1 card reads) so they always agree.
+ *
+ * A key shaped like a slug is resolved before its document is read (reading
+ * both at once would double the reads of the usual case, a slug that hits);
+ * any other key is read both ways at once, the slug's holder still first.
  */
 export async function cardByKey(db: Firestore, key: string) {
   if (!key || key.includes('/')) return null;
-  const bySlug = await db.collection('cards').where('slug', '==', key).limit(10).get();
-  const holder = slugHolder(bySlug.docs);
-  if (holder) return holder;
+  const slugQuery = () => db.collection('cards').where('slug', '==', key).limit(10).get();
   // An id Firestore keeps for itself names no card (reading it would throw).
-  if (isReservedId(key)) return null;
-  const byId = await db.collection('cards').doc(key).get();
+  if (isReservedId(key)) return slugHolder((await slugQuery()).docs);
+  const idRead = () => db.collection('cards').doc(key).get();
+  if (!slugShaped(key)) {
+    const [bySlug, byId] = await Promise.all([slugQuery(), idRead()]);
+    return slugHolder(bySlug.docs) ?? (byId.exists ? byId : null);
+  }
+  const holder = slugHolder((await slugQuery()).docs);
+  if (holder) return holder;
+  const byId = await idRead();
   return byId.exists ? byId : null;
 }
 

@@ -407,6 +407,36 @@ describe('the warm-up', () => {
     expect(build).toHaveBeenCalledTimes(1);
   });
 
+  // Review: pages of readers were a barrier — the next page waited for the slowest build of the last.
+  it('keeps its builds going across pages of readers: one pool over the whole walk', async () => {
+    const uids = ['r1', 'r2', 'r3', 'r4', 'r5', 'r6'];
+    for (const uid of uids) await reader(uid, ['x']);
+    // No build finishes before four run at once: with pages of two as barriers, it never would.
+    let running = 0;
+    let most = 0;
+    let four!: () => void;
+    const fourRunning = new Promise<void>((resolve) => (four = resolve));
+    const build = vi.fn(async (_uid: string) => {
+      most = Math.max(most, ++running);
+      if (running === 4) four();
+      await fourRunning;
+      running--;
+      return built(['y']);
+    });
+    const run = await warmPicks(db, { build, clock: () => NOW, pageSize: 2, concurrency: 4 });
+    expect(run).toEqual({ readers: 6, outcomes: { built: 6 }, deferred: 0 });
+    expect(most).toBe(4);
+    expect(build.mock.calls.map(([uid]) => uid).sort()).toEqual(uids);
+  });
+
+  it('counts the readers it had no time for, those read and the rest of the walk', async () => {
+    for (const uid of ['r1', 'r2', 'r3', 'r4', 'r5']) await reader(uid, ['x']);
+    let late = false;
+    const build = vi.fn(async () => ((late = true), built(['y'])));
+    const run = await warmPicks(db, { build, clock: () => (late ? NOW + 1 : NOW), deadline: NOW + 1, pageSize: 2, concurrency: 1 });
+    expect(run).toEqual({ readers: 1, outcomes: { built: 1 }, deferred: 4 });
+  });
+
   it("warms a different stretch of readers each day when a run hasn't time for everyone", async () => {
     const [first, second] = [dailyWalkStart(NOW), dailyWalkStart(NOW + DAY)];
     const [ann, ben] = [`${first}0`, `${second}0`];

@@ -153,6 +153,31 @@ export async function multicastTo(
   return { sent, dead };
 }
 
+/** One multicast of several sent together (multicastAll): to these installs, built by `build`. */
+export interface MulticastGroup {
+  targets: DeviceTarget[];
+  build: (tokens: string[]) => MulticastMessage;
+}
+
+/**
+ * Several multicasts — one per language, say — sent side by side rather than
+ * one after another: what FCM took and the installs it gave up on, over all
+ * of them. A group that fails doesn't stop the others; once all are in, its
+ * failure is thrown (the first), as a multicast's own would be.
+ */
+export async function multicastAll(sender: PushSender, groups: MulticastGroup[]): Promise<{ sent: number; dead: DocumentReference[] }> {
+  const results = await Promise.allSettled(groups.map((g) => multicastTo(sender, g.targets, g.build)));
+  const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+  if (failed) throw failed.reason;
+  let sent = 0;
+  const dead: DocumentReference[] = [];
+  for (const r of results as PromiseFulfilledResult<{ sent: number; dead: DocumentReference[] }>[]) {
+    sent += r.value.sent;
+    dead.push(...r.value.dead);
+  }
+  return { sent, dead };
+}
+
 /** Delete the device records of tokens FCM has given up on. */
 export async function forgetDevices(db: Firestore, dead: DocumentReference[]): Promise<void> {
   // A batch holds 500 writes, as a multicast holds 500 tokens.
@@ -188,6 +213,9 @@ export async function pushNotification(db: Firestore, id: string, sender: PushSe
   let payload: Payload = claimed.payload ?? {};
   const from = str(payload.fromUserId);
   if (!to || !TEXT_KEY[type]) return null;
+  // Read beside the blocks and the sender: only read early, never sent to before the blocks are asked.
+  const devicesRead = db.collection('devices').where('userId', '==', to).get();
+  devicesRead.catch(() => {});
   if (from) {
     const noteId = type === 'note' ? str(payload.noteId) : '';
     const [out, inn, sender, note] = await Promise.all([
@@ -209,7 +237,7 @@ export async function pushNotification(db: Firestore, id: string, sender: PushSe
     };
   }
 
-  const devices = await db.collection('devices').where('userId', '==', to).get();
+  const devices = await devicesRead;
   if (devices.empty) return { sent: 0, pruned: 0 };
 
   // One multicast per language, each device reading the push in the app's own UI language.
@@ -218,21 +246,22 @@ export async function pushNotification(db: Firestore, id: string, sender: PushSe
   // apps open a conversation by uid (a pen name can change before the tap).
   const opensThread = from && OPENS_THREAD.has(type) && !onAnonymousCard(type, payload);
   const data: Record<string, string> = { notificationId: id, type, route, ...(opensThread ? { fromUserId: from } : {}) };
-  let sent = 0;
-  const dead: DocumentReference[] = [];
+  const groups: MulticastGroup[] = [];
   for (const [locale, targets] of groupByLocale(deviceTargets(devices.docs))) {
     const text = pushText(locale, type, payload);
     if (!text) continue;
-    const result = await multicastTo(sender, targets, (tokens) => ({
-      tokens,
-      notification: text,
-      data,
-      android: { notification: { channelId: ANDROID_CHANNEL, tag: id } },
-      apns: { payload: { aps: { sound: 'default', threadId: type } } },
-    }));
-    sent += result.sent;
-    dead.push(...result.dead);
+    groups.push({
+      targets,
+      build: (tokens) => ({
+        tokens,
+        notification: text,
+        data,
+        android: { notification: { channelId: ANDROID_CHANNEL, tag: id } },
+        apns: { payload: { aps: { sound: 'default', threadId: type } } },
+      }),
+    });
   }
+  const { sent, dead } = await multicastAll(sender, groups);
   await forgetDevices(db, dead);
   return { sent, pruned: dead.length };
 }

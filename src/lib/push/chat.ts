@@ -1,4 +1,4 @@
-import type { DocumentReference, Firestore } from 'firebase-admin/firestore';
+import type { Firestore } from 'firebase-admin/firestore';
 import type { MulticastMessage } from 'firebase-admin/messaging';
 import { createTranslator } from 'next-intl';
 import en from '@/messages/en.json';
@@ -10,8 +10,9 @@ import {
   deviceTargets,
   forgetDevices,
   groupByLocale,
-  multicastTo,
+  multicastAll,
   pushRoute,
+  type MulticastGroup,
   type DeviceTarget,
   type PushResult,
   type PushSender,
@@ -103,13 +104,9 @@ export async function pushMessage(db: Firestore, push: MessagePush, sender: Push
   const kind: Record<string, string> = message.get('kind') === NOTE_MESSAGE_KIND ? { kind: NOTE_MESSAGE_KIND } : {};
   const picture = message.get('image') != null;
 
-  let sent = 0;
-  const dead: DocumentReference[] = [];
-  const send = async (targets: DeviceTarget[], build: (tokens: string[]) => MulticastMessage) => {
-    const result = await multicastTo(sender, targets, build);
-    sent += result.sent;
-    dead.push(...result.dead);
-  };
+  // Every language's and kind's multicast side by side (multicastAll).
+  const groups: MulticastGroup[] = [];
+  const queue = (targets: DeviceTarget[], build: (tokens: string[]) => MulticastMessage) => void groups.push({ targets, build });
 
   for (const [locale, targets] of groupByLocale(deviceTargets(devices.docs))) {
     const body = words || attachmentLine(locale, picture);
@@ -119,7 +116,7 @@ export async function pushMessage(db: Firestore, push: MessagePush, sender: Push
     const system = targets.filter((t) => !draws(t));
 
     if (own.length) {
-      await send(own, (tokens) => ({
+      queue(own, (tokens) => ({
         tokens,
         // `toUserId`: the app draws it only while that account is the one signed in (a sign-out whose unregister never
         // reached us leaves the install registered to them for a while).
@@ -128,7 +125,7 @@ export async function pushMessage(db: Firestore, push: MessagePush, sender: Push
       }));
     }
     if (system.length) {
-      await send(system, (tokens) => ({
+      queue(system, (tokens) => ({
         tokens,
         notification: { title, body },
         // No `notificationId`: no bell row stands behind a message, and an empty one made older Android builds
@@ -139,6 +136,7 @@ export async function pushMessage(db: Firestore, push: MessagePush, sender: Push
       }));
     }
   }
+  const { sent, dead } = await multicastAll(sender, groups);
   await forgetDevices(db, dead);
   return { sent, pruned: dead.length };
 }

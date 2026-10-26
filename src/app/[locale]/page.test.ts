@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // The landing page's head: only what it adds to the locale layout's.
-vi.mock('@/lib/db', () => ({ repos: {} }));
+vi.mock('@/lib/db/firestore/admin', () => ({ getAdminDb: () => ({}) }));
 vi.mock('next-intl/server', () => ({ setRequestLocale: vi.fn() }));
 
 import { generateMetadata } from './page';

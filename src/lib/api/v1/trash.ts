@@ -121,17 +121,20 @@ export async function trashCard(
   });
   const card = mapCard(id, after);
   if (changed) {
-    // An anonymous card's notes go now, as deleting it takes them (see the module comment). Once more on a failure.
-    if (before.anonymous === true) {
-      await deleteNotesOn(db, id)
-        .catch(() => deleteNotesOn(db, id))
-        .catch((e) => console.error('[trash] notes', id, e));
-    }
-    if (before.visibility !== 'private') {
-      await Promise.resolve()
-        .then(() => (opts.vectors ?? getVectorStore()).setVisibility(id, 'private'))
-        .catch((e) => console.error('[trash] vectors', id, e));
-    }
+    // Both before the answer, side by side, each failing alone.
+    await Promise.all([
+      // An anonymous card's notes go now, as deleting it takes them (see the module comment). Once more on a failure.
+      before.anonymous === true
+        ? deleteNotesOn(db, id)
+            .catch(() => deleteNotesOn(db, id))
+            .catch((e) => console.error('[trash] notes', id, e))
+        : null,
+      before.visibility !== 'private'
+        ? Promise.resolve()
+            .then(() => (opts.vectors ?? getVectorStore()).setVisibility(id, 'private'))
+            .catch((e) => console.error('[trash] vectors', id, e))
+        : null,
+    ]);
   }
   return {
     card: toFeedCard(card, me, { deanonymize: true, own: true }),
