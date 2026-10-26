@@ -68,7 +68,12 @@ android {
     // The fonts are stored, not deflated, so AppFonts maps each file once (shared, clean pages)
     // instead of inflating a private copy per weight, and the writer's WebView reads them as they lie.
     // The APK on the device grows by about 5 MB; Play compresses the download itself.
-    androidResources { noCompress += "ttf" }
+    androidResources {
+        noCompress += "ttf"
+        // src/messages is an asset folder as it is: its punctuation test (punctuation.test.ts) stays
+        // out of the APK. aapt's own ignore list first — setting one replaces it.
+        ignoreAssetsPatterns += listOf("!.svn", "!.git", "!.ds_store", "!*.scc", ".*", "<dir>_*", "!CVS", "!thumbs.db", "!picasa.ini", "!*~", "!*.ts")
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
