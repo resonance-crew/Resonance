@@ -21,7 +21,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -52,6 +51,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.CacheDrawScope
+import androidx.compose.ui.draw.DrawResult
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -84,6 +85,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import coil3.ImageLoader
@@ -131,7 +133,7 @@ private const val QUOTE_RADIUS = 16.0
  * them): the first of a run tucks its bottom one, a middle one both, the last its top one
  * ([RunPosition]). A bubble that carries a preview or a card is still one shape, and tucks the same.
  */
-class MessageBubbleShape(
+data class MessageBubbleShape(
     private val seed: Double,
     private val mine: Boolean = true,
     private val run: RunPosition = RunPosition.Single,
@@ -191,14 +193,25 @@ fun bubbleFill(mine: Boolean): Color = if (mine) Tokens.BubbleMine else Tokens.B
  * to edge and ends where the bubble does. [flash] (0…1, read while drawing) washes it terracotta:
  * the message a reply's quote jumped to.
  */
-fun Modifier.bubbleSurface(shape: Shape, fill: Color, flash: () -> Float = { 0f }): Modifier = drawWithCache {
-    val outline = shape.createOutline(size, layoutDirection, this)
-    val clip = Path().apply { addOutline(outline) }
-    onDrawWithContent {
-        drawOutline(outline, fill)
-        val pulse = flash()
-        if (pulse > 0f) drawOutline(outline, Tokens.Terracotta, alpha = 0.3f * pulse)
-        clipPath(clip) { this@onDrawWithContent.drawContent() }
+fun Modifier.bubbleSurface(shape: Shape, fill: Color, flash: () -> Float = NoFlash): Modifier = drawWithCacheOf(BubbleSurface(shape, fill, flash))
+
+/** No pulse: one value, so two resting bubbles' surfaces are equal. */
+private val NoFlash: () -> Float = { 0f }
+
+/**
+ * [bubbleSurface]'s drawing, as a value ([drawWithCacheOf]): recomposed with equal inputs it is an equal modifier,
+ * which keeps what it cached (outline, paths, grain) instead of building it again at the next draw.
+ */
+private data class BubbleSurface(val shape: Shape, val fill: Color, val flash: () -> Float) : (CacheDrawScope) -> DrawResult {
+    override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
+        val outline = shape.createOutline(size, layoutDirection, this)
+        val clip = Path().apply { addOutline(outline) }
+        onDrawWithContent {
+            drawOutline(outline, fill)
+            val pulse = flash()
+            if (pulse > 0f) drawOutline(outline, Tokens.Terracotta, alpha = 0.3f * pulse)
+            clipPath(clip) { this@onDrawWithContent.drawContent() }
+        }
     }
 }
 
@@ -341,23 +354,24 @@ fun ChatText(
     val density = scaled.density
     val tap by rememberUpdatedState(onTap)
     val press by rememberUpdatedState(onLongPress)
-    BoxWithConstraints(modifier) {
-        val widthPx = constraints.maxWidth
-        val layout = remember(text, sizeSp, weight, lineHeight, widthPx, density, scaled.fontScale, color, linkColor, links, highlights, highlightWeight, maxLines, AppFonts.useBundledCJK) {
-            buildChatLayout(text, sizeSp, weight, lineHeight, widthPx, scaled, color, links, linkColor, highlightWeight.takeIf { highlights.isNotEmpty() }?.let { highlights to it }, maxLines)
-        }
-        val widest = ceil((0 until layout.lineCount).maxOfOrNull { layout.getLineMax(it) } ?: 0f).toInt()
-        val boxPx = min(layout.width, widest)
-        val hit: (Float, Float) -> Int? = { x, y -> linkAt(layout, links, x, y, 6f * density) }
-        val sizePx = scaled.cssFontPx(sizeSp)
-        val waves = remember(layout, links, sizePx, density) { chatLinkWaves(layout, links, sizePx, density) }
-        var pressed by remember { mutableStateOf<Int?>(null) }
+    // Laid out while measured, for the width offered (no subcomposition: [builtForWidth]); a tap reads what was laid out.
+    val built = remember { WidthBuilt<ChatTextLayout>() }
+    val hit: (Float, Float) -> Int? = { x, y -> built.value?.let { linkAt(it.layout, links, x, y, 6f * density) } }
+    val pressed = remember { mutableStateOf<Int?>(null) }
+    Box(modifier) {
         Box(
             Modifier
-                .width(Dp(boxPx / density))
-                .height(Dp(layout.height / density))
-                .semantics { this.text = AnnotatedString(text) }
-                .drawBehind {
+                .builtForWidth(
+                    key = ChatTextKey(text, sizeSp, weight, lineHeight, density, scaled.fontScale, color, linkColor, links, highlights, highlightWeight, maxLines, AppFonts.useBundledCJK),
+                    built = built,
+                    build = { widthPx ->
+                        val layout = buildChatLayout(text, sizeSp, weight, lineHeight, widthPx, scaled, color, links, linkColor, highlightWeight.takeIf { highlights.isNotEmpty() }?.let { highlights to it }, maxLines)
+                        val widest = ceil((0 until layout.lineCount).maxOfOrNull { layout.getLineMax(it) } ?: 0f).toInt()
+                        ChatTextLayout(layout, min(layout.width, widest), chatLinkWaves(layout, links, scaled.cssFontPx(sizeSp), density))
+                    },
+                    size = { IntSize(it.boxPx, it.layout.height) },
+                    drawKey = highlightColor,
+                ) { (layout, _, waves) ->
                     if (highlights.isNotEmpty()) {
                         val r = 4.dp.toPx()
                         val lift = cssFontPx(sizeSp) * 1.3f
@@ -369,19 +383,20 @@ fun ChatText(
                     if (waves.isNotEmpty()) {
                         val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                         waves.forEach { w ->
-                            translate(w.x, w.y) { drawPath(w.path, Tokens.Terracotta, alpha = if (w.link == pressed) 1f else 0.7f, style = pen) }
+                            translate(w.x, w.y) { drawPath(w.path, Tokens.Terracotta, alpha = if (w.link == pressed.value) 1f else 0.7f, style = pen) }
                         }
                     }
                     drawIntoCanvas { layout.draw(it.nativeCanvas) }
                 }
+                .semantics { this.text = AnnotatedString(text) }
                 .then(
-                    if (onTap != null || onLongPress != null) Modifier.pointerInput(layout, links) {
+                    if (onTap != null || onLongPress != null) Modifier.pointerInput(built, links, density) {
                         detectTapGestures(
                             // The pen presses harder while the finger is on a link: the web's hover.
                             onPress = { p ->
-                                pressed = hit(p.x, p.y)
+                                pressed.value = hit(p.x, p.y)
                                 tryAwaitRelease()
-                                pressed = null
+                                pressed.value = null
                             },
                             onTap = { p -> hit(p.x, p.y)?.let { i -> tap?.invoke(i) } },
                             onLongPress = { p -> press?.invoke(hit(p.x, p.y)) },
@@ -392,12 +407,22 @@ fun ChatText(
     }
 }
 
+/** A [ChatText]'s words laid out for a width: the layout, the box it hugs (px) and its links' waves. */
+internal data class ChatTextLayout(val layout: StaticLayout, val boxPx: Int, val waves: List<ChatWave>)
+
+/** Everything a [ChatText]'s layout comes from but the width. */
+private data class ChatTextKey(
+    val text: String, val sizeSp: Float, val weight: Int, val lineHeight: Float, val density: Float, val fontScale: Float,
+    val color: Color, val linkColor: Color, val links: List<IntRange>, val highlights: List<IntRange>, val highlightWeight: Int?,
+    val maxLines: Int, val bundledCJK: Boolean,
+)
+
 /**
  * [CssLayout.build] with spans: the same CSS line boxes and greedy breaks, [links] coloured (their
  * waves are drawn apart, [chatLinkWaves]), an optional heavier face for some ranges, and at most
  * [maxLines] lines (cut with …).
  */
-private fun buildChatLayout(
+internal fun buildChatLayout(
     text: String,
     sizeSp: Float,
     weight: Int,
@@ -442,10 +467,10 @@ private fun buildChatLayout(
 }
 
 /** One line's share of a link's wave: which link, where it starts (px) and the stroke. */
-private class ChatWave(val link: Int, val x: Float, val y: Float, val path: androidx.compose.ui.graphics.Path)
+internal class ChatWave(val link: Int, val x: Float, val y: Float, val path: androidx.compose.ui.graphics.Path)
 
 /** The story links' waves under [links] in [layout]: one `penWave` per line a link covers, seeded by its words. */
-private fun chatLinkWaves(layout: StaticLayout, links: List<IntRange>, sizePx: Float, density: Float): List<ChatWave> {
+internal fun chatLinkWaves(layout: StaticLayout, links: List<IntRange>, sizePx: Float, density: Float): List<ChatWave> {
     val length = layout.text.length
     // A line cut with … draws nothing past its end.
     val shown = if (layout.lineCount == 0) 0 else layout.getLineEnd(layout.lineCount - 1) - layout.getEllipsisCount(layout.lineCount - 1)
@@ -472,7 +497,7 @@ private fun clamp(r: IntRange, length: Int): Pair<Int, Int>? {
 }
 
 /** The link under the point (x, y) of the text, if any; `slop` is the room round a line's words that still counts. */
-private fun linkAt(layout: StaticLayout, links: List<IntRange>, x: Float, y: Float, slop: Float): Int? {
+internal fun linkAt(layout: StaticLayout, links: List<IntRange>, x: Float, y: Float, slop: Float): Int? {
     if (links.isEmpty() || y < 0 || y > layout.height) return null
     val line = layout.getLineForVertical(y.toInt())
     val left = layout.getLineLeft(line)
@@ -487,7 +512,7 @@ private fun linkAt(layout: StaticLayout, links: List<IntRange>, x: Float, y: Flo
  * Where each highlighted range falls: one rect per line it crosses, as tall as the glyphs (`lift`),
  * centred on the line box, `grow` wider than the words at each end.
  */
-private fun highlightRects(layout: StaticLayout, ranges: List<IntRange>, lift: Float, grow: Float): List<RectF> {
+internal fun highlightRects(layout: StaticLayout, ranges: List<IntRange>, lift: Float, grow: Float): List<RectF> {
     val out = ArrayList<RectF>()
     val length = layout.text.length
     for (r in ranges) {
@@ -748,27 +773,30 @@ private val SharedCardBand = 96.dp
  */
 @Composable
 fun ColumnScope.SharedCardSkeleton(pictureBleed: Dp = PictureBleed) {
-    Column(Modifier.fillMaxWidth().semantics { contentDescription = L10n.Home.moreLoading }) {
-        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Skeleton(height = 32.dp, circle = true)
-            Column(Modifier.weight(1f)) {
-                SkeletonLines(AppFonts.body(14f, 600, lineHeight = 1.3f), 12.dp, Modifier.width(88.dp))
-                SkeletonLines(AppFonts.body(12f, lineHeight = 1.35f), 10.dp, Modifier.width(64.dp))
+    // One clock for its blocks (composed together).
+    SharedShimmer {
+        Column(Modifier.fillMaxWidth().semantics { contentDescription = L10n.Home.moreLoading }) {
+            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Skeleton(height = 32.dp, circle = true)
+                Column(Modifier.weight(1f)) {
+                    SkeletonLines(AppFonts.body(14f, 600, lineHeight = 1.3f), 12.dp, Modifier.width(88.dp))
+                    SkeletonLines(AppFonts.body(12f, lineHeight = 1.35f), 10.dp, Modifier.width(64.dp))
+                }
             }
-        }
-        Box(Modifier.fillMaxWidth().height(SharedCardBand).bleedSides(pictureBleed).background(Tokens.Text.copy(alpha = 0.06f)))
-        Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            SkeletonLines(AppFonts.heading(16f, 700, lineHeight = 1.3f), 15.dp, Modifier.fillMaxWidth(0.85f))
-            SkeletonLines(AppFonts.body(13f, lineHeight = 1.45f), 11.dp, Modifier.fillMaxWidth(0.9f), Modifier.fillMaxWidth(0.6f))
-        }
-        Row(
-            Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            // The wave's slot holds a dot of its size, so the bar beside it doesn't read as indented.
-            Skeleton(height = 14.dp, circle = true)
-            Box(Modifier.weight(1f)) { SkeletonLines(AppFonts.body(12f, lineHeight = 1.3f), 11.dp, Modifier.width(56.dp)) }
+            Box(Modifier.fillMaxWidth().height(SharedCardBand).bleedSides(pictureBleed).background(Tokens.Text.copy(alpha = 0.06f)))
+            Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SkeletonLines(AppFonts.heading(16f, 700, lineHeight = 1.3f), 15.dp, Modifier.fillMaxWidth(0.85f))
+                SkeletonLines(AppFonts.body(13f, lineHeight = 1.45f), 11.dp, Modifier.fillMaxWidth(0.9f), Modifier.fillMaxWidth(0.6f))
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                // The wave's slot holds a dot of its size, so the bar beside it doesn't read as indented.
+                Skeleton(height = 14.dp, circle = true)
+                Box(Modifier.weight(1f)) { SkeletonLines(AppFonts.body(12f, lineHeight = 1.3f), 11.dp, Modifier.width(56.dp)) }
+            }
         }
     }
 }

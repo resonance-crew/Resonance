@@ -16,6 +16,7 @@ import {
 import {
   EMULATOR_FIRESTORE_PORT,
   USE_FIREBASE_EMULATOR,
+  ensureAppCheck,
   getFirebaseClientApp,
   getFirebaseClientAuth,
 } from '@/lib/auth/firebase/client';
@@ -37,6 +38,7 @@ let cached: Firestore | null = null;
 function realtimeDb(): Firestore {
   if (cached) return cached;
   getFirebaseClientAuth(); // the listener signs in with the same user (see ./init)
+  ensureAppCheck();
   cached = initializeFirestore(getFirebaseClientApp(), { ignoreUndefinedProperties: true });
   if (USE_FIREBASE_EMULATOR) connectFirestoreEmulator(cached, '127.0.0.1', EMULATOR_FIRESTORE_PORT);
   return cached;

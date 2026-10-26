@@ -1,6 +1,6 @@
 import { Timestamp, type DocumentData, type Firestore, type QueryDocumentSnapshot, type QuerySnapshot } from 'firebase-admin/firestore';
 import { trashExpired } from '@/lib/cards/trash';
-import { cardByKey, slugHolder } from '@/lib/db/firestore/cardKey';
+import { anonymousBySlug, cardByKey, slugHolder, slugShaped } from '@/lib/db/firestore/cardKey';
 import { uidForHandle } from '@/lib/db/firestore/handles';
 import { mapCard } from '@/lib/db/firestore/mapper';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
@@ -34,9 +34,10 @@ import { LIST_FIELDS, listCard, withStories, type ListCard } from './summary';
  * and asserted in test/emulator/apiV1Reads.emulator.test.ts.
  *
  * Reads that don't depend on each other run together — the viewer's blocks
- * beside the list they filter — but a key that may be a slug is resolved
+ * beside the list they filter — but a key shaped like a slug is resolved
  * before its document is read (reading both at once would double the reads
- * of the usual case, a slug that hits).
+ * of the usual case, a slug that hits); one that can't be a slug the server
+ * made, an id, is read both ways at once (cardByKey).
  *
  * Lists read their cards without the story (LIST_FIELDS): a card shows its
  * stored summary, and only a card without a current one has its story read,
@@ -51,16 +52,19 @@ const PROFILE_COUNT_LIMIT = 40;
 
 const notFound = () => new ApiFailure('not_found', 'No such card.');
 
-async function cardDoc(db: Firestore, id: string): Promise<Card | null> {
+/** The card `id`, whole or only the `fields` named (Firestore's field mask) — or null. */
+async function cardDoc(db: Firestore, id: string, fields?: readonly string[]): Promise<Card | null> {
   // An id Firestore keeps for itself names no card (reading it would throw).
   if (isReservedId(id)) return null;
-  const snap = await db.doc(`cards/${id}`).get();
+  const ref = db.doc(`cards/${id}`);
+  const snap = fields ? (await db.getAll(ref, { fieldMask: [...fields] }))[0] : await ref.get();
   return snap.exists ? mapCard(snap.id, snap.data()!) : null;
 }
 
 /** A card the viewer may read, by slug or document id — else not_found (never "forbidden": that would confirm it exists). */
 export async function visibleCard(db: Firestore, viewerId: string, key: string): Promise<Card> {
-  const snap = await cardByKey(db, key);
+  const found = await cardByKey(db, key);
+  const snap = found && !anonymousBySlug(found, key, viewerId) ? found : null;
   const card = snap ? mapCard(snap.id, snap.data()!) : null;
   if (!card || !(await canView(db, card, viewerId))) throw notFound();
   return card;
@@ -69,11 +73,12 @@ export async function visibleCard(db: Firestore, viewerId: string, key: string):
 /**
  * A card the viewer may read, by its document id only — for the routes whose
  * parameter is always an id (a card's lists, notes, a message's card): no
- * slug lookup first.
+ * slug lookup first. `fields` reads only those (they must hold what canView
+ * asks: present's CARD_VISIBILITY_FIELDS) — a note or a message needs no story.
  */
-export async function visibleCardById(db: Firestore, viewerId: string, id: string): Promise<Card> {
+export async function visibleCardById(db: Firestore, viewerId: string, id: string, fields?: readonly string[]): Promise<Card> {
   if (!id || id.includes('/')) throw notFound();
-  const card = await cardDoc(db, id);
+  const card = await cardDoc(db, id, fields);
   if (!card || !(await canView(db, card, viewerId))) throw notFound();
   return card;
 }
@@ -124,15 +129,23 @@ async function cardsByIds(db: Firestore, ids: string[]): Promise<ListCard[]> {
 }
 
 /**
- * cardByKey for many keys (slugs or ids): one query for the slugs, then one
- * batched read for the keys no slug named. In key order, each card once (a
- * card named by both its slug and its id comes back at the first); unknown
- * keys drop out. Read without their stories, for a list.
+ * cardByKey for many keys (slugs or ids): one query for the slugs, and one
+ * batched read for the keys no slug named — the keys that can't be a slug
+ * the server made (slugShaped) read beside the query, the rest after it.
+ * Either way a slug's holder comes first, as in cardByKey. In key order,
+ * each card once (a card named by both its slug and its id comes back at the
+ * first); unknown keys drop out. Read without their stories, for a list.
  */
-async function cardsByKeys(db: Firestore, keys: string[]): Promise<ListCard[]> {
+export async function cardsByKeys(db: Firestore, keys: string[]): Promise<ListCard[]> {
   const unique = [...new Set(keys)].filter((k) => k && !k.includes('/')).slice(0, CARD_KEYS_MAX);
   if (!unique.length) return [];
-  const bySlug = await db.collection('cards').where('slug', 'in', unique).select(...LIST_FIELDS).get();
+  const read = (ids: string[]) => (ids.length ? db.getAll(...ids.map((k) => db.doc(`cards/${k}`)), { fieldMask: [...LIST_FIELDS] }) : Promise.resolve([]));
+  // An id Firestore keeps for itself names no card (reading it would throw).
+  const readable = unique.filter((k) => !isReservedId(k));
+  const [bySlug, early] = await Promise.all([
+    db.collection('cards').where('slug', 'in', unique).select(...LIST_FIELDS).get(),
+    read(readable.filter((k) => !slugShaped(k))),
+  ]);
   const sharing = new Map<string, QueryDocumentSnapshot[]>();
   for (const d of bySlug.docs) {
     const slug = String(d.get('slug'));
@@ -143,10 +156,8 @@ async function cardsByKeys(db: Firestore, keys: string[]): Promise<ListCard[]> {
     const holder = slugHolder(docs);
     if (holder) named.set(slug, holder);
   }
-  // An id Firestore keeps for itself names no card (reading it would throw).
-  const rest = unique.filter((k) => !named.has(k) && !isReservedId(k));
-  const byId = rest.length ? await db.getAll(...rest.map((k) => db.doc(`cards/${k}`)), { fieldMask: [...LIST_FIELDS] }) : [];
-  const ids = new Map(byId.filter((s) => s.exists).map((s) => [s.id, s]));
+  const late = await read(readable.filter((k) => slugShaped(k) && !named.has(k)));
+  const ids = new Map([...early, ...late].filter((s) => s.exists).map((s) => [s.id, s]));
   const seen = new Set<string>();
   const cards: ListCard[] = [];
   for (const key of unique) {
@@ -168,7 +179,26 @@ async function cardsByKeys(db: Firestore, keys: string[]): Promise<ListCard[]> {
  */
 export async function getCardsByKeys(db: Firestore, viewerId: string, keys: string[]): Promise<CardListBody> {
   const [cards, blocked] = await Promise.all([cardsByKeys(db, keys), blockedByViewer(db, viewerId)]);
-  return { cards: await present(db, viewerId, cards, { blocked }) };
+  return { cards: await present(db, viewerId, askedByKey(cards, keys, viewerId), { blocked }) };
+}
+
+/** The cards a story embeds; one that can't be read for them gives none (embeds only save the reader a request each). */
+function embedKeysOf(id: string, story: string): string[] {
+  try {
+    return embeddedCardKeys(story);
+  } catch (e) {
+    console.error('[api/v1] embeds', id, e);
+    return [];
+  }
+}
+
+/**
+ * The cards keys named, minus an anonymous card a slug led to for someone
+ * other than its author (anonymousBySlug): named by its id it stays.
+ */
+function askedByKey(cards: ListCard[], keys: string[], viewerId: string): ListCard[] {
+  const asked = new Set(keys);
+  return cards.filter((c) => !(c.anonymous === true && !asked.has(c.id) && c.authorId !== viewerId));
 }
 
 /**
@@ -222,7 +252,7 @@ export async function getCardDetail(
   const trashed = isOwner && trashedAtOf(card) != null;
   const lists = trashed ? new Set<CardInclude>([...include].filter((i) => i === 'embeds')) : include;
   const ownerLinks = lists.has('links') && isOwner;
-  const embedKeys = include.has('embeds') ? embeddedCardKeys(String(card.story ?? '')) : [];
+  const embedKeys = include.has('embeds') ? embedKeysOf(card.id, String(card.story ?? '')) : [];
   // The card itself is never kept from the viewer by their blocks: a named
   // one by someone they blocked is the client's to hide (its page knows the
   // byline), and an anonymous one is there for everyone (blockHides). The
@@ -234,7 +264,7 @@ export async function getCardDetail(
     lists.has('resonances') ? resonancesOf(db, card.id).get().then(toCards) : [],
     lists.has('related') ? recentPublic(db).get().then(toCards) : [],
     ownerLinks ? cardsLinkingTo(db, card.id) : [],
-    embedKeys.length ? cardsByKeys(db, embedKeys) : [],
+    embedKeys.length ? cardsByKeys(db, embedKeys).then((cards) => askedByKey(cards, embedKeys, viewerId)) : [],
   ]);
   const [referenceCard, resonanceCards, relatedCards, linkCards, embedCards] = await presentAll(
     db,
@@ -480,14 +510,24 @@ async function ownShelf(db: Firestore, viewerId: string, shelf: OwnShelf, now: n
   const kept = (d: QueryDocumentSnapshot) => d.get('trashedAt') == null;
   if (shelf === 'trash') return trashShelf(db, viewerId, now);
   if (shelf === 'draft') {
-    // A draft has no stored summary (it is made at publish): its story comes along.
-    const snap = await own.where('publishedAt', '==', null).select(...LIST_FIELDS, 'story').limit(DRAFT_SCAN).get();
+    // Scanned without their stories: only the drafts shown have theirs read, after the cut.
+    const snap = await own.where('publishedAt', '==', null).select(...LIST_FIELDS).limit(DRAFT_SCAN).get();
     const edited = (d: QueryDocumentSnapshot) => {
       const at = d.get('updatedAt');
       return at instanceof Timestamp ? at.toMillis() : 0;
     };
     // Most recently edited first (sorted here: drafts are few, and this needs no composite index).
-    return snap.docs.filter(kept).sort((a, b) => edited(b) - edited(a)).slice(0, BOX_LIMIT).map((d) => listCard(d.id, d.data()));
+    return snap.docs
+      .filter(kept)
+      .sort((a, b) => edited(b) - edited(a))
+      .slice(0, BOX_LIMIT)
+      .map((d) => {
+        // A draft shows a summary of its story as it is (the summary stored at publish is no draft's):
+        // with none to stand in, getCardBoxShelves reads the shown drafts' stories in its one batch (withStories).
+        const card = listCard(d.id, d.data());
+        delete card.listing;
+        return card;
+      });
   }
   const isPrivate = shelf === 'private';
   const snap = await own

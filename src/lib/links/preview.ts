@@ -2,7 +2,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import type { LinkPreview } from '@/lib/db/types';
 import { createMemo } from './memo';
 import { parseOpenGraph } from './openGraph';
-import { imageProxyPath } from './imageProxy';
+import { imageProxyPath } from './imageSigning';
 import { parseYouTubeOEmbed, youTubeOEmbedUrl, youTubeVideoId } from './oembed';
 import { safeFetch as defaultFetch, SafeFetchError, type SafeFetchOptions, type SafeFetchResult } from './safeFetch';
 import { firstLink } from './url';

@@ -1,6 +1,7 @@
 package com.resonance.kit.api
 
 import java.util.concurrent.TimeUnit
+import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 
@@ -25,11 +26,13 @@ object AppHttp {
         .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .writeTimeout(WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .addInterceptor(Interceptor { chain -> chain.proceed(chain.request().newBuilder().header("User-Agent", userAgent).build()) })
-        .addInterceptor(Interceptor { chain ->
+        // A network interceptor: asked again on every hop, so a redirect off our API never carries the token.
+        .addNetworkInterceptor(Interceptor { chain ->
             val request = chain.request()
             val token = AppCheckHeader.token
-            // Our API only: the pictures come from another host, which has no business with it.
-            if (token == null || !request.url.encodedPath.startsWith("/api/")) chain.proceed(request)
+            // Our API only, by its host: the same client loads every picture — a story's from any host an
+            // author names, `/api/` in its path or not — and no other host has any business with the token.
+            if (token == null || !AppCheckHeader.isApi(request.url)) chain.proceed(request)
             else chain.proceed(request.newBuilder().header(AppCheckHeader.NAME, token).build())
         })
         .build()
@@ -42,6 +45,15 @@ object AppHttp {
  */
 object AppCheckHeader {
     const val NAME = "X-Firebase-AppCheck"
+
+    /** The API's origin (the session's ApiConfiguration sets it): the one host the token goes to. */
+    @Volatile var apiOrigin: HttpUrl? = null
+
+    /** Whether [url] is our API: the configured origin's scheme, host and port, under `/api/`. */
+    fun isApi(url: HttpUrl): Boolean {
+        val api = apiOrigin ?: return false
+        return url.scheme == api.scheme && url.host == api.host && url.port == api.port && url.encodedPath.startsWith("/api/")
+    }
 
     @Volatile var token: String? = null
         set(value) {

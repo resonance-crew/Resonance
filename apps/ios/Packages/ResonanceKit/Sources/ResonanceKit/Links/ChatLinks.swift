@@ -77,25 +77,46 @@ public enum ChatLinks {
         return found
     }
 
+    /// The words a link starts with, as code points, in the order they are tried.
+    private static let schemes: [[UInt32]] = ["https://", "http://", "www."].map { $0.unicodeScalars.map(\.value) }
+
     /// `http://`, `https://` or `www.` (any case) starting at `i`: its length.
+    ///
+    /// Compared code point by code point, ASCII letters folded to lower case: the same answer as
+    /// lower-casing each character and comparing (no other character lower-cases to one of
+    /// `h t p s w : / .`), without making a string for every character of the message.
     private static func schemeLength(_ s: [Unicode.Scalar], at i: Int) -> Int? {
-        func matches(_ word: String) -> Bool {
-            let w = Array(word.unicodeScalars)
-            guard i + w.count <= s.count else { return false }
-            return (0..<w.count).allSatisfy { String(s[i + $0]).lowercased() == String(w[$0]) }
+        // Most characters start no link: only an h or a w can.
+        switch s[i].value {
+        case 0x68, 0x48, 0x77, 0x57: break
+        default: return nil
         }
-        for word in ["https://", "http://", "www."] where matches(word) { return word.unicodeScalars.count }
+        for word in schemes where i + word.count <= s.count {
+            var k = 0
+            while k < word.count, lowerASCII(s[i + k].value) == word[k] { k += 1 }
+            if k == word.count { return word.count }
+        }
         return nil
     }
+
+    /// An ASCII capital as its small letter; any other code point as it is.
+    private static func lowerASCII(_ cp: UInt32) -> UInt32 {
+        (0x41...0x5a).contains(cp) ? cp + 0x20 : cp
+    }
+
+    /// The single code points that end a link, besides the ranges below.
+    private static let endingPoints: Set<UInt32> = [0x3c, 0x3e, 0x22, 0x60, 0x5c, 0x5e, 0xa0, 0xab, 0xbb, 0x1680, 0x2028, 0x2029,
+                                                    0x2026, 0x202f, 0x205f, 0xfeff]
+    /// The ranges of code points that end a link.
+    private static let endingRanges: [ClosedRange<UInt32>] = [0x2000...0x200f, 0x2018...0x201f, 0x2190...0x2bff, 0x3000...0x303f,
+                                                             0xfe00...0xfe0f, 0xfe30...0xfe6f, 0xff00...0xffef, 0x1f000...0x1ffff]
 
     /// Whether this code point ends a link (url.ts `endsLink`).
     private static func endsLink(_ c: Unicode.Scalar) -> Bool {
         let cp = c.value
         if cp <= 0x20 || (0x7f...0x9f).contains(cp) { return true }
-        if [0x3c, 0x3e, 0x22, 0x60, 0x5c, 0x5e, 0xa0, 0xab, 0xbb, 0x1680, 0x2028, 0x2029, 0x2026, 0x202f, 0x205f, 0xfeff].contains(cp) { return true }
-        let ranges: [ClosedRange<UInt32>] = [0x2000...0x200f, 0x2018...0x201f, 0x2190...0x2bff, 0x3000...0x303f,
-                                              0xfe00...0xfe0f, 0xfe30...0xfe6f, 0xff00...0xffef, 0x1f000...0x1ffff]
-        return ranges.contains { $0.contains(cp) }
+        if endingPoints.contains(cp) { return true }
+        return endingRanges.contains { $0.contains(cp) }
     }
 
     /// Where the link starting at `start` stops (url.ts `linkEnd`).
@@ -110,18 +131,20 @@ public enum ChatLinks {
             }
             i += 1
         }
+        // The brackets the link holds, counted once and taken off as closers are trimmed (url.ts):
+        // recounting the link for every closer made a long run of them quadratic.
+        var held: [Unicode.Scalar: Int] = [:]
+        for c in s[start..<i] where pairs[c] != nil || pairs.values.contains(c) { held[c, default: 0] += 1 }
         while i - start > schemeLength {
             let last = s[i - 1]
             if trailing.contains(last) {
                 i -= 1
                 continue
             }
-            if let opener = pairs[last] {
-                let slice = s[start..<i]
-                if slice.filter({ $0 == last }).count > slice.filter({ $0 == opener }).count {
-                    i -= 1
-                    continue
-                }
+            if let opener = pairs[last], held[last, default: 0] > held[opener, default: 0] {
+                held[last, default: 0] -= 1
+                i -= 1
+                continue
             }
             break
         }

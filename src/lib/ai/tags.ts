@@ -66,3 +66,16 @@ export function topTags(tagLists: readonly (readonly string[])[], limit = 20): s
     .slice(0, limit)
     .map(([tag]) => tag);
 }
+
+/** The tags a request names, no more than a card may carry (`limits`: the route passes CARD_LIMITS). */
+export function cardSizedTags(raw: unknown, limits: { tags: number; tagsJoined: number }): string[] {
+  const kept: string[] = [];
+  let joined = -1;
+  for (const t of Array.isArray(raw) ? raw : []) {
+    if (typeof t !== 'string' || !t.trim()) continue;
+    if (kept.length >= limits.tags || joined + 1 + t.length > limits.tagsJoined) break;
+    kept.push(t);
+    joined += 1 + t.length;
+  }
+  return kept;
+}

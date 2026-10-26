@@ -20,8 +20,16 @@ function devPort() {
   return process.env.PORT || '3000';
 }
 
-const child = spawn('npx', ['next', 'dev', ...args], {
+// Loopback only: against the emulators the server takes unsigned ID tokens
+// (FIREBASE_AUTH_EMULATOR_HOST), so nothing on the network may reach it. Bound
+// by the name `localhost` (Next's middleware rewrites go to the origin a page
+// was asked by, and must find the server itself there), resolved to IPv4 first:
+// the Android emulator reaches the host's 127.0.0.1 at 10.0.2.2, the simulators
+// and browsers reach localhost.
+const hostname = args.some((a) => a === '--hostname' || a === '-H' || a.startsWith('--hostname=')) ? [] : ['--hostname', 'localhost'];
+const nodeOptions = [process.env.NODE_OPTIONS, '--dns-result-order=ipv4first'].filter(Boolean).join(' ');
+const child = spawn('npx', ['next', 'dev', ...hostname, ...args], {
   stdio: 'inherit',
-  env: { ...process.env, ...emulatorEnv, R2_PUBLIC_BASE: `http://localhost:${devPort()}/api/emulator-storage` },
+  env: { ...process.env, ...emulatorEnv, NODE_OPTIONS: nodeOptions, R2_PUBLIC_BASE: `http://localhost:${devPort()}/api/emulator-storage` },
 });
 child.on('exit', (code) => process.exit(code ?? 0));

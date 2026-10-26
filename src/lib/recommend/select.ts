@@ -1,5 +1,8 @@
 import type { ChatMessage } from '@/lib/ai/openai';
 
+/** The longest a pick's reason is kept, in code points (the push cuts it again, to 80). */
+export const REASON_MAX = 120;
+
 /** A finalist passed to the strong model for the last, expensive judgment. */
 export interface SelectCandidate {
   ref: string;
@@ -56,7 +59,8 @@ export function parseSelection(raw: unknown): Selection[] {
     if (entry && typeof entry === 'object') {
       const e = entry as Record<string, unknown>;
       const ref = e.ref != null ? String(e.ref) : '';
-      const reason = typeof e.reason === 'string' ? e.reason.trim() : '';
+      // Shown to the reader (feed, push): one short line, whatever the model wrote.
+      const reason = typeof e.reason === 'string' ? Array.from(e.reason.replace(/\s+/g, ' ').trim()).slice(0, REASON_MAX).join('') : '';
       if (ref) out.push({ ref, reason });
     }
   }

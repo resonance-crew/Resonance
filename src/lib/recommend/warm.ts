@@ -1,6 +1,5 @@
 import { Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { PICK_PUSHES, pickGate, readPickLog } from '@/lib/push/picks';
-import { runPool } from '@/lib/push/pool';
 import { dailyWalkStart, optedIn } from '@/lib/push/settings';
 import { planServe, warmRecommendations, type BuildFeed, type WarmOutcome } from './daily';
 import { RECOMMENDATIONS, readStored, recommendationDay } from './stored';
@@ -70,31 +69,62 @@ export interface WarmRun {
 /**
  * Warm every opted-in reader who needs it, a few builds at a time, starting
  * none past `deadline` and finishing each by `buildDeadline` (both ms on
- * `clock`), from the day's point in the walk round to it.
+ * `clock`), from the day's point in the walk round to it. One pool over the
+ * whole walk: the next page of readers is read when the pool runs short,
+ * never waiting for a page's slowest build before the next page starts.
  */
 export async function warmPicks(
   db: Firestore,
-  opts: { deadline?: number; buildDeadline?: number; clock?: () => number; build?: BuildFeed; concurrency?: number } = {},
+  opts: { deadline?: number; buildDeadline?: number; clock?: () => number; build?: BuildFeed; concurrency?: number; pageSize?: number } = {},
 ): Promise<WarmRun> {
   const clock = opts.clock ?? Date.now;
   const stop = () => opts.deadline !== undefined && clock() >= opts.deadline;
   const run: WarmRun = { readers: 0, outcomes: {}, deferred: 0 };
   const tally = (o: WarmReaderOutcome | 'error') => (run.outcomes[o] = (run.outcomes[o] ?? 0) + 1);
   const reader = { build: opts.build, clock, buildDeadline: opts.buildDeadline };
-  for await (const uids of optedIn(db, 'picks', { from: dailyWalkStart(clock()) })) {
-    if (stop()) {
-      run.deferred += uids.length;
-      continue;
+  const pages = optedIn(db, 'picks', { from: dailyWalkStart(clock()), pageSize: opts.pageSize });
+
+  const queue: string[] = [];
+  let walked = false;
+  let failure: { error: unknown } | null = null;
+  let reading: Promise<void> | null = null;
+  /** The next reader of the walk (reading its next page, once for all the workers, when the queue is empty). */
+  const next = async (): Promise<string | undefined> => {
+    while (!queue.length && !walked) {
+      reading ??= pages
+        .next()
+        .then(
+          (page) => (page.done ? void (walked = true) : void queue.push(...page.value)),
+          (error: unknown) => void ((failure = { error }), (walked = true)),
+        )
+        .finally(() => (reading = null));
+      await reading;
     }
-    const { notStarted } = await runPool(
-      uids,
-      opts.concurrency ?? CONCURRENCY,
-      (uid) => warmReader(db, uid, { ...reader, now: clock() }).then(tally, (e) => (tally('error'), Promise.reject(e))),
-      { stop, tag: '[warm-picks]' },
-    );
-    run.readers += uids.length - notStarted;
-    run.deferred += notStarted;
-  }
+    return queue.shift();
+  };
+  const worker = async () => {
+    while (!stop()) {
+      const uid = await next();
+      if (uid === undefined) return;
+      // Reading a page took time: past the deadline, the reader waits for the next run.
+      if (stop()) {
+        queue.unshift(uid);
+        return;
+      }
+      run.readers++;
+      try {
+        tally(await warmReader(db, uid, { ...reader, now: clock() }));
+      } catch (e) {
+        tally('error');
+        console.error('[warm-picks]', e);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, opts.concurrency ?? CONCURRENCY) }, worker));
+  if (failure) throw (failure as { error: unknown }).error;
+  // Left for lack of time: what was read and not started, and the rest of the walk.
+  run.deferred += queue.length;
+  if (!walked) for await (const uids of pages) run.deferred += uids.length;
   if (run.deferred) console.warn(`[warm-picks] out of time: ${run.deferred} readers left unwarmed`);
   return run;
 }

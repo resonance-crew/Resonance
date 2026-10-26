@@ -229,9 +229,11 @@ struct ThreadScreen: View {
         if visible { model.resume() } else { model.stop() }
     }
 
+    /// Read from the list's ids alone (`listedIds`), which change only as conversations come and go —
+    /// not from its rows, which change with every message: the thread isn't drawn again for those.
     private var conversationListed: Bool {
         guard let pair = model?.pairId else { return false }
-        return session.conversations.conversations.contains { $0.id == pair }
+        return session.conversations.listedIds.contains(pair)
     }
 
     // MARK: Content
@@ -538,9 +540,10 @@ struct ThreadScreen: View {
     private func menuShown(_ model: ThreadModel) -> Bool {
         guard model.phase == .loading || model.phase == .ready else { return false }
         if model.conversationExists { return true }
-        let listed = session.conversations.conversations.contains { conversation in
-            if let pair = model.pairId { return conversation.id == pair }
-            return conversation.other.handle.caseInsensitiveCompare(model.displayHandle) == .orderedSame
+        let listed = if let pair = model.pairId {
+            session.conversations.listedIds.contains(pair)
+        } else {
+            session.conversations.listedHandles.contains { $0.caseInsensitiveCompare(model.displayHandle) == .orderedSame }
         }
         return listed || (!session.conversations.loaded && !model.threadReady)
     }
@@ -702,11 +705,26 @@ struct ThreadScreen: View {
     }
 
     private static func formatted(_ date: Date, _ pattern: String, _ language: Strings.Language) -> String {
+        formatter(pattern, language).string(from: date)
+    }
+
+    /// A formatter for each pattern, language and time zone, made once: making one (its pattern
+    /// compiled) cost more than the label it formats, and every row with a time label asked for one
+    /// each time it was drawn. The time zone is in the key, so one changed while the app runs is
+    /// followed as a new formatter's would be.
+    static func formatter(_ pattern: String, _ language: Strings.Language) -> DateFormatter {
+        let zone = TimeZone.current
+        let key = "\(language)|\(pattern)|\(zone.identifier)"
+        if let kept = formatters[key] { return kept }
         let format = DateFormatter()
         format.locale = locale(language)
+        format.timeZone = zone
         format.dateFormat = pattern
-        return format.string(from: date)
+        formatters[key] = format
+        return format
     }
+
+    private static var formatters: [String: DateFormatter] = [:]
 }
 
 /// Lives as long as the thread screen's state: SwiftUI lets go of it only when the screen is gone for

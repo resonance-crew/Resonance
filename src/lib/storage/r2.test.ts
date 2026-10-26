@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import type { DeleteObjectsCommand, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const send = vi.fn();
 vi.mock('@aws-sdk/client-s3', async (importOriginal) => ({
@@ -60,5 +60,23 @@ describe('R2StorageProvider.getObject', () => {
 
     send.mockResolvedValueOnce({ Body: body(new Uint8Array(11)), ContentLength: 11 });
     await expect(r2.getObject('image/alice/2026-10/big.avif', 10)).rejects.toThrow('larger than 10 bytes');
+  });
+});
+
+// The account purge hands the store a person's pictures in batches (lib/account/deletion).
+describe('R2StorageProvider.deleteObjects', () => {
+  it('deletes a thousand keys a request, quietly, and throws when any could not be deleted', async () => {
+    send.mockReset().mockResolvedValue({});
+    const keys = Array.from({ length: 1_001 }, (_, i) => `image/2026-10/${i}.webp`);
+    await new R2StorageProvider().deleteObjects(keys);
+    const inputs = send.mock.calls.map(([c]) => (c as DeleteObjectsCommand).input);
+    expect(inputs.map((i) => [i.Bucket, i.Delete?.Objects?.length, i.Delete?.Quiet])).toEqual([
+      ['bucket', 1000, true],
+      ['bucket', 1, true],
+    ]);
+    expect(inputs[1].Delete?.Objects).toEqual([{ Key: 'image/2026-10/1000.webp' }]);
+
+    send.mockReset().mockResolvedValue({ Errors: [{ Key: 'image/2026-10/0.webp', Code: 'InternalError' }] });
+    await expect(new R2StorageProvider().deleteObjects(['image/2026-10/0.webp'])).rejects.toThrow('1 of 1 objects were not deleted');
   });
 });

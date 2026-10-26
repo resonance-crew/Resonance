@@ -270,6 +270,24 @@ describe('the routes', () => {
     expect((await read('a/b')).status).toBe(404);
   });
 
+  it('answers 429 over budget before saying the sender may not message them, keeping nothing', async () => {
+    const bytes = await photo();
+    const file = () => new Blob([Buffer.from(bytes)], { type: 'image/jpeg' });
+    await db.doc('rateLimits/alice_chatImage').set({ userId: 'alice', bucket: 'chatImage', windowStart: Date.now(), used: 100 });
+    expect((await uploadRoute.POST(form({ file: file(), to: 'carol' }))).status).toBe(429);
+    expect((await uploadRoute.POST(form({ file: file(), to: 'bob' }))).status).toBe(429);
+    expect(await files()).toEqual([]);
+    expect((await db.collection('chatImages').get()).empty).toBe(true);
+  });
+
+  it('spends the budget on a picture refused for its recipient, and answers that refusal under budget', async () => {
+    const res = await uploadRoute.POST(form({ file: new Blob([Buffer.from(await photo())], { type: 'image/jpeg' }), to: 'carol' }));
+    expect(res.status).toBe(403);
+    expect((await db.doc('rateLimits/alice_chatImage').get()).get('used')).toBe(1);
+    expect((await db.doc('rateLimits/alice_chatImageBytes').get()).get('used')).toBeGreaterThan(0);
+    expect(await files()).toEqual([]);
+  });
+
   it('refuses a form without a file or with a bad recipient, and says so', async () => {
     const noFile = await uploadRoute.POST(form({ to: 'bob' }));
     expect(noFile.status).toBe(400);
@@ -300,6 +318,30 @@ describe('what goes', () => {
     expect((await db.doc(`chatImages/${sentOld.id}`).get()).exists).toBe(true);
     expect((await db.doc(`chatImages/${fresh.id}`).get()).exists).toBe(true);
     expect(await files()).toHaveLength(4);
+  });
+
+  it('deletes several at once, each only while it is still unsent', async () => {
+    const dayAgo = Timestamp.fromMillis(Date.now() - UNSENT_KEEP_MS - 60_000);
+    const ids: string[] = [];
+    for (let i = 0; i < 8; i++) {
+      const { id } = await upload();
+      await db.doc(`chatImages/${id}`).update({ unsentAt: dayAgo });
+      ids.push(id);
+    }
+    let active = 0;
+    let most = 0;
+    const counting = Object.assign(Object.create(store) as typeof store, {
+      delete: async (key: string) => {
+        most = Math.max(most, ++active);
+        await new Promise((r) => setTimeout(r, 20));
+        active--;
+        return store.delete(key);
+      },
+    });
+    expect(await purgeUnsentChatImages(db, counting)).toEqual({ deleted: 8, failed: 0 });
+    // Two files a picture: one picture at a time never deletes more than two at once.
+    expect(most).toBeGreaterThan(2);
+    expect(await files()).toEqual([]);
   });
 
   // Found by age, the longest waiting first, past any number of fresh ones (ids an uploader chooses sort first).

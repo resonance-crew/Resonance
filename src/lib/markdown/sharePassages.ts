@@ -1,4 +1,5 @@
 import { fromMarkdown } from 'mdast-util-from-markdown';
+import { storyTooComplex } from './storyLimits';
 import { cardKeyOfHref } from '@/lib/api/v1/embeds';
 import { soleLinkParagraphs } from '@/lib/links/storyLinks';
 import { plainText } from './plainText';
@@ -91,6 +92,8 @@ function embedsCard(p: MdNode, definitions: Map<string, string>): boolean {
 export function passageBlocks(whole: string): string[] {
   const story = head(whole);
   if (!story.trim()) return [];
+  // Too costly to read as a tree (lib/markdown/storyLimits): drawn as its words, quoted from nowhere — as the apps' SharePassages.
+  if (storyTooComplex(story)) return [];
   const root = fromMarkdown(story) as MdNode;
   const definitions = new Map<string, string>();
   const collect = (node: MdNode) => {

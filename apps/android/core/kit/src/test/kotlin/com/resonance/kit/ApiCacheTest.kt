@@ -28,6 +28,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * What a cold start draws before the server answers: the feed, today's picks, the profile and the
@@ -69,6 +70,25 @@ class ApiCacheTest {
         assertEquals(listOf("p1"), next.picks()?.map { it.id })
         assertEquals(me, next.me())
         assertEquals(listOf("mine"), next.published()?.map { it.id })
+    }
+
+    @Test fun aKeptAnswerIsDecodedOnceAndWhatWasWrittenStaysAsWritten() = runBlocking {
+        val cards = mutableListOf(feedCard("a"), feedCard("b"))
+        val account = launch().of("alice")
+        account.savePublished(cards)
+        // Changed after it was written: what was kept is what was written.
+        cards.add(feedCard("c"))
+        val first = account.published()
+        assertEquals(listOf("a", "b"), first?.map { it.id })
+        // Read again, the same decoded value comes back (nothing decoded twice), and on the next launch too.
+        assertTrue(account.published() === first)
+        val next = launch().of("alice")
+        val read = next.published()
+        assertEquals(listOf("a", "b"), read?.map { it.id })
+        assertTrue(next.published() === read)
+        // A new write is read anew.
+        next.savePublished(listOf(feedCard("d")))
+        assertEquals(listOf("d"), next.published()?.map { it.id })
     }
 
     @Test fun aScheduledDeletionAndTheNextPagesTokenAreKeptToo() = runBlocking {

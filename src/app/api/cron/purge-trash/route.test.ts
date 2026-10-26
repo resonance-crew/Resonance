@@ -13,8 +13,8 @@ import { getChatImageStore } from '@/lib/storage/chatImages';
 import { GET } from './route';
 
 // The trash's daily purge, as Vercel Cron calls it: only with the secret,
-// within the function's time, each purged card's cached pages dropped — then
-// the chat pictures uploaded a day ago and never sent.
+// within the function's time, each purged card's cached pages dropped — and,
+// beside it, the chat pictures uploaded a day ago and never sent.
 
 function call(authorization?: string) {
   return GET(new Request('http://localhost/api/cron/purge-trash', { headers: authorization ? { authorization } : {} }));
@@ -50,6 +50,18 @@ describe('/api/cron/purge-trash', () => {
     vi.mocked(getChatImageStore).mockReturnValue(null);
     expect(((await (await call('Bearer s3cret')).json()) as { unsentPictures: unknown }).unsentPictures).toBeNull();
     expect(purgeUnsentChatImages).toHaveBeenCalledTimes(1);
+  });
+
+  it('purges the pictures beside the trash, not after it: a long trash purge never starves them', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret');
+    let finish!: () => void;
+    vi.mocked(purgeExpiredTrash).mockReturnValue(
+      new Promise((resolve) => (finish = () => resolve({ purged: 0, skipped: 0, failed: 0, deferred: 0, stale: [] }))),
+    );
+    const res = call('Bearer s3cret');
+    await vi.waitFor(() => expect(purgeUnsentChatImages).toHaveBeenCalledTimes(1));
+    finish();
+    expect((await res).status).toBe(200);
   });
 
   it('gives the run its time budget: the function may live 300 s, the run starts nothing past 270', async () => {

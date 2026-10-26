@@ -65,6 +65,16 @@ android {
         }
     }
 
+    // The fonts are stored, not deflated, so AppFonts maps each file once (shared, clean pages)
+    // instead of inflating a private copy per weight, and the writer's WebView reads them as they lie.
+    // The APK on the device grows by about 5 MB; Play compresses the download itself.
+    androidResources {
+        noCompress += "ttf"
+        // src/messages is an asset folder as it is: its punctuation test (punctuation.test.ts) stays
+        // out of the APK. aapt's own ignore list first — setting one replaces it.
+        ignoreAssetsPatterns += listOf("!.svn", "!.git", "!.ds_store", "!*.scc", ".*", "<dir>_*", "!CVS", "!thumbs.db", "!picasa.ini", "!*~", "!*.ts")
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -97,6 +107,18 @@ tasks.matching { it.name == "preDebugBuild" }.configureEach {
             val bar = "=".repeat(78)
             logger.warn("\n$bar\nWARNING: $message\nThis debug build will have NO story editor.\n$bar\n")
         }
+    }
+}
+
+// The kit's and the geometry's immutable values are stable to Compose (compose-stability.conf), so a
+// row or a card rebuilt with equal values skips. `-PcomposeReports` writes the compiler's reports and
+// metrics (build/compose-reports): which composables can skip and which parameters it reads as
+// unstable, for an audit.
+composeCompiler {
+    stabilityConfigurationFiles.add(rootProject.layout.projectDirectory.file("compose-stability.conf"))
+    if (providers.gradleProperty("composeReports").isPresent) {
+        reportsDestination = layout.buildDirectory.dir("compose-reports")
+        metricsDestination = layout.buildDirectory.dir("compose-reports")
     }
 }
 

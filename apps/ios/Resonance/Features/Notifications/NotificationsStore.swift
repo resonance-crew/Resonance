@@ -30,7 +30,9 @@ final class NotificationsStore {
     /// The listener failed: the list stays as last read (or the screen offers
     /// a retry, with nothing read yet) until it listens again (`resume`).
     private(set) var failed = false
-    var unreadCount: Int { items.filter(\.isUnread).count }
+    /// The tab's badge: the unread rows. Kept apart from `items` (and set beside it), so what reads
+    /// only the badge — the tab bar — is drawn again when the count changes, not for every row's.
+    private(set) var unreadCount = 0
 
     @ObservationIgnored private let listeners = LiveListeners()
 
@@ -51,6 +53,7 @@ final class NotificationsStore {
                             return
                         }
                         self.items = items
+                        self.unreadCount = items.filter(\.isUnread).count
                         self.loaded = true
                         self.failed = false
                     }
@@ -67,6 +70,7 @@ final class NotificationsStore {
     func stop() {
         listeners.removeAll()
         items = []
+        unreadCount = 0
         loaded = false
         failed = false
     }

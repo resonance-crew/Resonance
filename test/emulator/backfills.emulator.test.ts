@@ -15,6 +15,7 @@ import { sendNote } from '@/lib/api/v1/conversations';
 import { backfillLinkPreviews } from '../../scripts/backfills/linkPreviews';
 import { backfillAnonymousBells } from '../../scripts/backfills/anonymousBells';
 import { backfillAvatarColors } from '../../scripts/backfills/avatarColors';
+import { backfillCardTombstones } from '../../scripts/backfills/cardTombstones';
 import { avatarColorFor, LEGACY_AVATAR_COLOR } from '@/lib/design/avatarColors';
 import type { PreviewFetch } from '@/lib/links/preview';
 
@@ -657,5 +658,33 @@ describe('link-previews', () => {
     ]);
     expect((done.updatedAt as Timestamp).isEqual(stamp)).toBe(true);
     expect(await backfillLinkPreviews(db, { apply: true, missing: true, log: quiet, fetch: fetchPages })).toMatchObject({ candidates: 0 });
+  });
+});
+
+// Cards deleted before deleting one left a tombstone: what still names their
+// ids would follow whoever created a card under one, so those ids get theirs.
+describe('card-tombstones', () => {
+  it('tombstones the ids still named whose card is gone — only those, holding no uid, once', async () => {
+    const at = Timestamp.fromMillis(1_000);
+    await Promise.all([
+      db.doc('cards/LiveCardAAAAAAAAAAAA').set({ authorId: 'bob', visibility: 'public', publishedAt: at }),
+      db.doc('cards/AnswerAAAAAAAAAAAAAA').set({ authorId: 'carol', referenceCardId: 'GoneOriginalAAAAAAAA', publishedAt: at }),
+      db.doc('users/carol/bookmarks/GoneMarkedAAAAAAAAAA').set({ cardId: 'GoneMarkedAAAAAAAAAA', createdAt: at }),
+      db.doc('users/carol/bookmarks/LiveCardAAAAAAAAAAAA').set({ cardId: 'LiveCardAAAAAAAAAAAA', createdAt: at }),
+      db.doc('conversations/a_b/messages/m1').set({ senderId: 'a', cardRef: 'GoneSharedAAAAAAAAAA', sentAt: at }),
+      db.doc('cards/GoneEditedAAAAAAAAAA/edits/current').set({ authorId: 'dave', story: 'left behind' }),
+      // Not an id a client could take, so nothing to guard.
+      db.doc('users/carol/bookmarks/not-a-card-id').set({ cardId: 'not-a-card-id', createdAt: at }),
+    ]);
+    const dry = await backfillCardTombstones(db, { apply: false, log: () => {} });
+    expect(dry).toMatchObject({ gone: 4, written: 0 });
+    expect((await db.collection('cardTombstones').get()).empty).toBe(true);
+
+    const run = await backfillCardTombstones(db, { apply: true, log: () => {} });
+    expect(run).toMatchObject({ gone: 4, written: 4 });
+    const stones = await db.collection('cardTombstones').get();
+    expect(stones.docs.map((d) => d.id).sort()).toEqual(['GoneEditedAAAAAAAAAA', 'GoneMarkedAAAAAAAAAA', 'GoneOriginalAAAAAAAA', 'GoneSharedAAAAAAAAAA']);
+    for (const d of stones.docs) expect(Object.keys(d.data())).toEqual(['deletedAt']);
+    expect(await backfillCardTombstones(db, { apply: true, log: () => {} })).toMatchObject({ gone: 0, written: 0 });
   });
 });

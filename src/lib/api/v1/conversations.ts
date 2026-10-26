@@ -5,7 +5,7 @@ import type { MessagePush } from '@/lib/push/chat';
 import { chatImageRef, messageImageOf, pictureToSend } from './chatImages';
 import { ApiFailure } from './http';
 import { addReason, answeredBy, connect, letterReason, originsRef } from './origins';
-import { cardVisible } from './present';
+import { CARD_VISIBILITY_FIELDS, cardVisible } from './present';
 import { visibleCardById } from './reads';
 
 /** notes.ts / firestore.rules: a note's length, and the bell's preview of it. */
@@ -117,6 +117,33 @@ export function hasPenName(me: DocumentSnapshot | null | undefined): boolean {
 export const noPenName = () => new ApiFailure('forbidden', 'Choose a pen name first.');
 
 /**
+ * The sender's budget for this send (rateLimit `spend`), which the route
+ * starts beside the send rather than before it, so the two overlap. Every
+ * attempt spends it, and it still answers first: a send waits for it before
+ * any refusal and before writing anything (its transaction awaits it right
+ * after its reads), so over budget the answer is the 429 whatever else is
+ * wrong with the request — exactly as when the budget was spent first.
+ */
+async function budgetFirst<T>(spent: Promise<void>, send: () => Promise<T>): Promise<T> {
+  // Handled from the start: refused while the send's reads run, it is awaited below all the same.
+  spent.catch(() => {});
+  let result: T;
+  try {
+    result = await send();
+  } catch (e) {
+    await spent;
+    throw e;
+  }
+  await spent;
+  return result;
+}
+
+/** What a note's card is read with: whose it is and who may read it (no story). */
+const NOTE_CARD_FIELDS = CARD_VISIBILITY_FIELDS;
+/** What a message's card is read with: who may read it, and its title for the conversation list's preview. */
+const MESSAGE_CARD_FIELDS = [...CARD_VISIBILITY_FIELDS, 'thoughtCore'] as const;
+
+/**
  * Whether `uid` may message `other` now, as sendMessage asks it (outside a
  * transaction: the message's own send asks again). A pen name, no block
  * either way, and a connection — or a letter of theirs waiting for this answer.
@@ -224,18 +251,31 @@ export async function sendNote(
   db: Firestore,
   uid: string,
   input: { cardId: string; text: string; clientId?: string | null },
+  spent: Promise<void> = Promise.resolve(),
+): Promise<SentNote> {
+  return budgetFirst(spent, () => leaveNote(db, uid, input, spent));
+}
+
+async function leaveNote(
+  db: Firestore,
+  uid: string,
+  input: { cardId: string; text: string; clientId?: string | null },
+  spent: Promise<void>,
 ): Promise<SentNote> {
   // Firestore's own ids (`__name__`, see isReservedId): a `clientId` is the document's id.
   if (input.clientId && isReservedId(input.clientId)) throw new ApiFailure('invalid_request', 'Not a valid client id.');
   const notes = db.collection('notes');
   const sent = input.clientId ? notes.doc(input.clientId) : null;
-  // A resend first, before the card is read: one hidden since must not turn the answer into a 404 (one deleted
-  // since took the note with it: that resend is the 404 of a missing card).
-  if (sent) {
-    const existing = await sent.get();
-    if (existing.exists) return resentNote(existing, uid);
-  }
-  const card = await visibleCardById(db, uid, input.cardId);
+  // A resend first, before the card is asked: one hidden since must not turn the answer into a 404 (one deleted
+  // since took the note with it: that resend is the 404 of a missing card). Both are read at once.
+  const [resend, readable] = await Promise.allSettled([
+    sent ? sent.get() : null,
+    visibleCardById(db, uid, input.cardId, NOTE_CARD_FIELDS),
+  ]);
+  if (resend.status === 'rejected') throw resend.reason;
+  if (resend.value?.exists) return resentNote(resend.value, uid);
+  if (readable.status === 'rejected') throw readable.reason;
+  const card = readable.value;
   if (!card.publishedAt) throw new ApiFailure('not_found', 'No such card.');
   const author = card.authorId;
   if (author === uid) throw new ApiFailure('invalid_request', 'You cannot send a note to yourself.');
@@ -247,7 +287,7 @@ export async function sendNote(
 
   return db.runTransaction(async (tx) => {
     const [now, me, blockOut, blockIn, connected, convo, mine, origins, existing, inThread] = await Promise.all([
-      tx.get(db.doc(`cards/${card.id}`)),
+      tx.getAll(db.doc(`cards/${card.id}`), { fieldMask: [...NOTE_CARD_FIELDS] }).then(([snap]) => snap),
       tx.get(db.doc(`users/${uid}`)),
       tx.get(db.doc(`users/${uid}/blocks/${author}`)),
       tx.get(db.doc(`users/${author}/blocks/${uid}`)),
@@ -258,6 +298,8 @@ export async function sendNote(
       sent ? tx.get(sent) : Promise.resolve(null),
       sent ? tx.get(conversation.collection('messages').doc(sent.id)) : Promise.resolve(null),
     ]);
+    // The budget answers before anything else, and before anything is written (see budgetFirst).
+    await spent;
     // The same note again (two sends at once, the first just written): what the first send wrote is the answer.
     if (existing?.exists) return resentNote(existing, uid);
     // The card as it is now: one deleted or hidden from the sender since the read above takes no note.
@@ -432,19 +474,21 @@ export interface SentMessage {
  * The sender needs a pen name (hasPenName): the thread, its bell and every
  * push name them. It is asked before the blocks, as everywhere.
  */
-export async function sendMessage(
-  db: Firestore,
-  uid: string,
-  input: {
-    to: string;
-    text: string;
-    cardRef?: string | null;
-    noteRef?: { cardId: string; noteId: string } | null;
-    replyTo?: string | null;
-    clientId?: string | null;
-    image?: string | null;
-  },
-): Promise<SentMessage> {
+export interface SendMessageInput {
+  to: string;
+  text: string;
+  cardRef?: string | null;
+  noteRef?: { cardId: string; noteId: string } | null;
+  replyTo?: string | null;
+  clientId?: string | null;
+  image?: string | null;
+}
+
+export async function sendMessage(db: Firestore, uid: string, input: SendMessageInput, spent: Promise<void> = Promise.resolve()): Promise<SentMessage> {
+  return budgetFirst(spent, () => writeMessage(db, uid, input, spent));
+}
+
+async function writeMessage(db: Firestore, uid: string, input: SendMessageInput, spent: Promise<void>): Promise<SentMessage> {
   const other = input.to;
   if (other === uid) throw new ApiFailure('invalid_request', 'You cannot message yourself.');
   if (!input.text && !input.cardRef && !input.image) throw new ApiFailure('invalid_request', 'A message needs text, a card or a picture.');
@@ -454,9 +498,9 @@ export async function sendMessage(
   if (input.clientId && isReservedId(input.clientId)) throw new ApiFailure('invalid_request', 'Not a valid client id.');
   // An id Firestore keeps for itself names no message (and would throw if asked for as a document).
   if (input.replyTo && isReservedId(input.replyTo)) throw new ApiFailure('invalid_request', 'No such message to reply to.');
-  const card = input.cardRef ? await visibleCardById(db, uid, input.cardRef) : null;
-  // A draft, or your own card in the trash (no one else can read one), is no card to share.
-  if (card && (!card.publishedAt || card.trashedAt != null)) throw new ApiFailure('not_found', 'No such card.');
+  // The card it shares is read beside the transaction's reads, and asked first once they are in.
+  const cardRead = input.cardRef ? visibleCardById(db, uid, input.cardRef, MESSAGE_CARD_FIELDS) : null;
+  cardRead?.catch(() => {});
   // A noteRef naming an id Firestore keeps for itself names no note: read as one that isn't there (one answer for all).
   const noteRef = input.noteRef && !isReservedId(input.noteRef.noteId) && !isReservedId(input.noteRef.cardId) ? input.noteRef : null;
   const pair = pairOf(uid, other);
@@ -478,6 +522,11 @@ export async function sendMessage(
       input.replyTo ? tx.get(messages.doc(input.replyTo)) : Promise.resolve(null),
       input.image ? tx.get(chatImageRef(db, input.image)) : Promise.resolve(null),
     ]);
+    // The budget answers before anything else, and before anything is written (see budgetFirst).
+    await spent;
+    const card = cardRead ? await cardRead : null;
+    // A draft, or your own card in the trash (no one else can read one), is no card to share.
+    if (card && (!card.publishedAt || card.trashedAt != null)) throw new ApiFailure('not_found', 'No such card.');
     // The same message again: what the first send wrote is the answer, whatever has changed since.
     if (existing?.exists) {
       if (existing.get('senderId') !== uid) throw new ApiFailure('invalid_request', 'Not a valid client id.');
@@ -547,7 +596,8 @@ export async function sendMessage(
     // (`image`, written or taken away every time — the preview is merged into the one before).
     tx.set(conversation, {
       lastMessage: {
-        text: cut(input.text || card?.thoughtCore || '', LAST_MESSAGE_PREVIEW),
+        // A card's title only when anyone may read the card: the list is the recipient's even when the card isn't.
+        text: cut(input.text || (card && card.visibility === 'public' ? card.thoughtCore : '') || '', LAST_MESSAGE_PREVIEW),
         senderId: uid,
         sentAt: FieldValue.serverTimestamp(),
         image: picture ? true : FieldValue.delete(),
@@ -588,4 +638,29 @@ function replyQuote(original: DocumentSnapshot): { id: string; senderId: string;
     ...(typeof cardRef === 'string' && cardRef ? { cardRef } : {}),
     ...(messageImageOf(original.get('image')) ? { image: true as const } : {}),
   };
+}
+
+/**
+ * Delete a conversation, everything in it, for both of its people (DELETE
+ * /conversations/{pair}): its messages and the conversation itself, with its
+ * letter if one waits (the writer withdraws it, its recipient declines it; the
+ * count of three is kept apart, in letters/*, and stays). Either participant
+ * may; for anyone else it is a missing conversation's 404 whether it exists or
+ * not (who talks to whom is no one else's to probe). One already gone is
+ * nothing (a retry after a lost answer). The messages go before the
+ * conversation, so one cut short is still listed and can be deleted again.
+ */
+export async function deleteConversation(db: Firestore, uid: string, pair: string): Promise<void> {
+  const other = pair.startsWith(`${uid}_`) ? pair.slice(uid.length + 1) : pair.endsWith(`_${uid}`) ? pair.slice(0, -uid.length - 1) : '';
+  if (!other || other === uid || pairOf(uid, other) !== pair || isReservedId(pair)) {
+    throw new ApiFailure('not_found', 'No such conversation.');
+  }
+  const ref = db.doc(`conversations/${pair}`);
+  const snap = await ref.get();
+  if (snap.exists) {
+    const participants = snap.get('participants');
+    if (!Array.isArray(participants) || !participants.includes(uid)) throw new ApiFailure('not_found', 'No such conversation.');
+  }
+  // recursiveDelete takes what is under the conversation before the conversation itself.
+  await db.recursiveDelete(ref);
 }

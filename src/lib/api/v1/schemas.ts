@@ -310,7 +310,21 @@ const Handle = z
   .min(HANDLE_MIN)
   .max(HANDLE_MAX)
   .regex(/^[^/?#\\\p{Cc}]+$/u, 'Not a valid pen name.')
-  .refine((h) => h !== '..' && !/^__.*__$/.test(h.toLowerCase()), 'Not a valid pen name.');
+  .refine((h) => h !== '..' && !/^__.*__$/.test(h.toLowerCase()), 'Not a valid pen name.')
+  .refine((h) => !hasInvisible(h), 'Not a valid pen name.');
+
+/**
+ * Whether a pen name holds a character that shows nothing: a format character
+ * (zero-width space, bidi overrides and isolates, …) would let a second
+ * account hold a name that renders exactly as someone else's — the
+ * reservation tells only case apart. The zero-width joiner stays where it
+ * joins two emoji (👨‍👩‍👧).
+ */
+export function hasInvisible(h: string): boolean {
+  if (/(?!\u200D)\p{Cf}/u.test(h)) return true;
+  const joinedEmoji = /(\p{Extended_Pictographic}\uFE0F?)\u200D(?=\p{Extended_Pictographic})/gu;
+  return h.replace(joinedEmoji, '$1').includes('\u200D');
+}
 const Locale = z.enum(['en', 'zh-TW']);
 const Region = z.string().trim().min(1).max(40);
 
@@ -663,6 +677,8 @@ export const InviteIdParam = DocId;
 export const NotificationIdParam = DocId;
 /** An app install's own stable id (a UUID it keeps; Firebase Installations' id also fits). */
 export const InstallationIdParam = z.string().regex(/^[A-Za-z0-9_.:-]{8,128}$/, 'Not a valid installation id.');
+/** A conversation's id: its two participants' uids, sorted, joined by `_` (as the connection's). */
+export const ConversationIdParam = z.string().min(3).max(257).regex(/^[^/]+_[^/]+$/, 'Not a valid conversation id.');
 /** Pen names may be any script (2–20 characters); never a path. */
 export const HandleParam = z.string().trim().min(1).max(40).regex(/^[^/?#]+$/, 'Not a valid handle.');
 

@@ -33,6 +33,10 @@
  *       delete notes whose card is gone (left by older builds' client deletes, or a clean-up that failed
  *       after the card went), and those still on an anonymous card in the trash (they go as it goes in);
  *       notes naming no card are reported, not deleted — production runs are the owner's call
+ *   npx tsx scripts/backfill.ts card-tombstones [--apply] [--emulator]
+ *       tombstones for cards deleted before deleting one left a tombstone, when something still names
+ *       them (a resonance, a bookmark, a thread's card, a bell, a thought-map node, a card link, a pending
+ *       edit): the rules then refuse a new card under that id, which would take those over
  *   npx tsx scripts/backfill.ts link-previews [--missing] [--apply] [--emulator]
  *       published cards get the previews of their stories' standalone links (fetches the pages;
  *       --apply against production needs LINK_PREVIEW_SECRET or FIREBASE_PRIVATE_KEY — the deployment's —
@@ -147,6 +151,11 @@ async function main() {
       await deleteOrphanNotes(db, { apply });
       return;
     }
+    case 'card-tombstones': {
+      const { backfillCardTombstones } = await import('./backfills/cardTombstones');
+      await backfillCardTombstones(db, { apply });
+      return;
+    }
     case 'link-previews': {
       // The pictures' paths are signed by this process: with a key the deployment doesn't have, they 404.
       const source = process.env.LINK_PREVIEW_SECRET?.trim()
@@ -163,7 +172,7 @@ async function main() {
       return;
     }
     default:
-      throw new Error(`Unknown task "${task ?? ''}" (anonymous | handles | edits | storage-host | rekey-images | rehost-images | square-avatars | avatar-colors | notes | anonymous-bells | orphan-notes | link-previews)`);
+      throw new Error(`Unknown task "${task ?? ''}" (anonymous | handles | edits | storage-host | rekey-images | rehost-images | square-avatars | avatar-colors | notes | anonymous-bells | orphan-notes | card-tombstones | link-previews)`);
   }
 }
 

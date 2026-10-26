@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { CreateProfileRequest, hasInvisible } from './schemas';
+import { HANDLE_FORBIDDEN } from '@/lib/db/firestore/client/profile';
 
 const getCurrentUser = vi.fn();
 vi.mock('@/lib/auth', () => ({ getCurrentUser: (...a: unknown[]) => getCurrentUser(...a) }));
@@ -45,18 +47,49 @@ describe('POST /api/v1/messages (every write route shares these)', () => {
 
   beforeEach(() => {
     getCurrentUser.mockReset().mockResolvedValue({ id: 'alice' });
-    sendMessage.mockReset().mockResolvedValue(SENT);
+    // As the service does: the budget it is handed answers before anything else (apiV1Conversations pins the order).
+    sendMessage.mockReset().mockImplementation(async (_db: unknown, _uid: unknown, _input: unknown, spent: Promise<void>) => {
+      await spent;
+      return SENT;
+    });
     afterMessageSent.mockReset();
     spend.mockReset().mockResolvedValue(undefined);
   });
 
-  it('is 429 once the sender has spent their budget, and sends nothing', async () => {
+  // SameSite=Lax keeps the cookie off cross-site requests but not off a sibling
+  // subdomain's: a write with the cookie must come from the site's own pages.
+  it('refuses a cookie write another origin made — a same-site subdomain included — and lets the site and Bearer clients through', async () => {
+    const send = (headers: Record<string, string>) =>
+      POST(new Request('http://localhost/api/v1/messages', { method: 'POST', headers, body: JSON.stringify({ to: 'bob', text: 'hi' }) }));
+    const variants: Record<string, string>[] = [{ 'sec-fetch-site': 'same-site' }, { 'sec-fetch-site': 'cross-site' }, { origin: 'https://hi.resonance.channel', host: 'resonance.channel' }];
+    for (const headers of variants) {
+      const res = await send(headers);
+      expect(res.status, JSON.stringify(headers)).toBe(403);
+    }
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect((await send({ 'sec-fetch-site': 'same-origin' })).status).toBe(201);
+    expect((await send({ 'sec-fetch-site': 'cross-site', authorization: 'Bearer token' })).status).toBe(201);
+    expect((await send({})).status).toBe(201);
+  });
+
+  it('is 429 once the sender has spent their budget, with nothing sent after it', async () => {
     spend.mockRejectedValue(new ApiFailure('rate_limited', 'Too many requests. Please try again later.'));
     const res = await post({ to: 'bob', text: 'hi' });
     expect(res.status).toBe(429);
     expect((await res.json()).error.code).toBe('rate_limited');
     expect(spend).toHaveBeenCalledWith({}, 'alice', 'message');
-    expect(sendMessage).not.toHaveBeenCalled();
+    expect(sendMessage.mock.calls[0][3]).toBe(spend.mock.results[0].value);
+    expect(afterMessageSent).not.toHaveBeenCalled();
+  });
+
+  it('starts the send beside the budget, handing it the spend to wait for', async () => {
+    let settle!: () => void;
+    spend.mockReturnValue(new Promise<void>((resolve) => (settle = resolve)));
+    const res = post({ to: 'bob', text: 'hi' });
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+    expect(afterMessageSent).not.toHaveBeenCalled();
+    settle();
+    expect((await res).status).toBe(201);
   });
 
   it('is 401 with the ApiError shape when nobody is signed in', async () => {
@@ -92,14 +125,15 @@ describe('POST /api/v1/messages (every write route shares these)', () => {
     const res = await post({ to: 'bob', text: '  hi  ', extra: 'ignored' });
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ conversationId: 'alice_bob', id: 'm1' });
-    expect(sendMessage).toHaveBeenCalledWith({}, 'alice', { to: 'bob', text: 'hi' });
-    expect(afterMessageSent).toHaveBeenCalledWith({}, SENT);
+    expect(sendMessage).toHaveBeenCalledWith({}, 'alice', { to: 'bob', text: 'hi' }, expect.any(Promise));
+    // The words sent go along: without a link, nothing is unfurled.
+    expect(afterMessageSent).toHaveBeenCalledWith({}, SENT, 'hi');
   });
 
   it('passes the message it answers and the sender\'s own id on to the service', async () => {
     const res = await post({ to: 'bob', text: 'hi', replyTo: 'm0', clientId: 'client-0123456789abcdef' });
     expect(res.status).toBe(201);
-    expect(sendMessage).toHaveBeenCalledWith({}, 'alice', { to: 'bob', text: 'hi', replyTo: 'm0', clientId: 'client-0123456789abcdef' });
+    expect(sendMessage).toHaveBeenCalledWith({}, 'alice', { to: 'bob', text: 'hi', replyTo: 'm0', clientId: 'client-0123456789abcdef' }, expect.any(Promise));
   });
 
   it('answers a message sent again exactly as the first time, and leaves the after-work to the service\'s own flag', async () => {
@@ -108,7 +142,7 @@ describe('POST /api/v1/messages (every write route shares these)', () => {
     const res = await post({ to: 'bob', text: 'hi', clientId: 'client-0123456789abcdef' });
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ conversationId: 'alice_bob', id: 'm1' });
-    expect(afterMessageSent).toHaveBeenCalledWith({}, duplicate);
+    expect(afterMessageSent).toHaveBeenCalledWith({}, duplicate, 'hi');
   });
 
   it('refuses a reply or client id that is not well-formed, before sending anything', async () => {
@@ -216,5 +250,23 @@ describe('round-4 request shapes', () => {
     expect(UpdateNotificationSettingsRequest.parse({ picks: true, connectionCards: null })).toEqual({ picks: true, connectionCards: null });
     expect(UpdateNotificationSettingsRequest.parse({})).toEqual({});
     expect(UpdateNotificationSettingsRequest.safeParse({ picks: 'on' }).success).toBe(false);
+  });
+});
+
+// A pen name belongs to one person: the reservation tells only case apart, so
+// a character that shows nothing would let a second account hold a name that
+// renders exactly as someone else's.
+describe('pen names (Handle)', () => {
+  const ok = (handle: string) => CreateProfileRequest.safeParse({ handle, region: 'TW', primaryLocale: 'zh-TW' }).success;
+  it('refuses zero-width and bidi-control characters', () => {
+    for (const h of ['alice​', '‮ecila', 'al⁦ice⁩', 'ali‍ce']) expect(ok(h), JSON.stringify(h)).toBe(false);
+  });
+  it('takes ordinary names in any script, and emoji joined with the zero-width joiner', () => {
+    for (const h of ['alice', '小雨', 'Ana María', '👨‍👩‍👧', 'rain🏳️‍🌈']) expect(ok(h), JSON.stringify(h)).toBe(true);
+  });
+  it('agrees with what the web strips as it is typed', () => {
+    expect(hasInvisible('alice​')).toBe(true);
+    expect('alice​‮'.replace(HANDLE_FORBIDDEN, '')).toBe('alice');
+    expect('👨‍👩‍👧'.replace(HANDLE_FORBIDDEN, '')).toBe('👨‍👩‍👧');
   });
 });

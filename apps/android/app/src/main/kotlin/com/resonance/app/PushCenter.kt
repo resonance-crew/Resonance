@@ -231,6 +231,20 @@ object PushCenter {
         onToken?.invoke(token)
     }
 
+    /**
+     * Drops this install's FCM token once an account signs out of it (or is switched from): the
+     * server may still hold it under that account — the sign-out's unregister is a best effort, and
+     * a sign-out the SDK makes itself sends none — and every push it sends there now fails (the
+     * server forgets a dead token). A fresh token is fetched at once, registered under whoever is
+     * signed in (onToken) — never the dead one.
+     */
+    suspend fun forgetToken(usesEmulator: Boolean) {
+        token = null
+        if (usesEmulator) return
+        runCatching { FirebaseMessaging.getInstance().deleteToken().await() }
+        fetchToken(usesEmulator)
+    }
+
     fun open(route: String, notificationId: String?, fromUserId: String? = null) {
         // An empty id (a message push has no bell row; older servers sent "") names no notification to mark read.
         _opened.value = Opened(route, notificationId?.takeIf { it.isNotEmpty() }, fromUserId?.takeIf { it.isNotEmpty() })

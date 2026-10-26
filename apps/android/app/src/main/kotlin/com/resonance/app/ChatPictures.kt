@@ -6,6 +6,7 @@ import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import coil3.ImageLoader
 import coil3.annotation.ExperimentalCoilApi
@@ -39,10 +40,13 @@ class ChatPictures(val loader: ImageLoader) {
     /** A picture this phone can't read (or can't make small enough to send): 不支援這種圖片格式. */
     class Unsupported(cause: Throwable? = null) : Exception("Not a picture that can be sent.", cause)
 
-    /** The pictures sent from here, by the id the server keeps them under: the newest [KEPT]. */
-    private val local = object : LinkedHashMap<String, Prepared>(16, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Prepared>?) = size > KEPT
-    }
+    /**
+     * The pictures sent from here, by the id the server keeps them under: the newest [KEPT], within
+     * [KEPT_BYTES] — each holds what went up (up to 4 MB) and the thread's copy (up to 1080 px, ARGB:
+     * ~4.7 MB), so forty could have taken ~350 MB. One let go is drawn from the server's copy, as any
+     * other; the newest is always kept, whatever its size.
+     */
+    private val local = KeptPictures<Prepared>(KEPT, KEPT_BYTES) { it.image.bytes.size.toLong() + it.preview.asAndroidBitmap().allocationByteCount }
 
     /** Draws [picture] as picture [id] from now on (the message's client id). */
     @Synchronized fun keep(id: String, picture: Prepared) {
@@ -62,6 +66,9 @@ class ChatPictures(val loader: ImageLoader) {
     companion object {
         /** How many pictures sent from here are kept to draw (a session's worth). */
         const val KEPT = 40
+
+        /** How much memory they may take together. */
+        const val KEPT_BYTES = 64L * 1024 * 1024
 
         /** What a picture is made ready to: at most this on its longest side (the server keeps 2048). */
         const val MAX_SIDE = 2048
@@ -182,4 +189,43 @@ internal object PicturesOnly : CacheStrategy {
         options: Options,
     ): CacheStrategy.WriteResult =
         if (networkResponse.code in 200..299) CacheStrategy.WriteResult(networkResponse) else CacheStrategy.WriteResult.DISABLED
+}
+
+/**
+ * The newest pictures by id, most recently used last: at most [maxCount], and at most [maxBytes]
+ * together by [sizeOf] — the least recently used let go first, never the one just kept.
+ */
+internal class KeptPictures<V : Any>(private val maxCount: Int, private val maxBytes: Long, private val sizeOf: (V) -> Long) {
+    private val entries = LinkedHashMap<String, V>(16, 0.75f, true)
+    private val sizes = HashMap<String, Long>()
+    var bytes = 0L
+        private set
+    val size: Int get() = entries.size
+
+    operator fun get(id: String): V? = entries[id]
+
+    operator fun set(id: String, value: V) {
+        remove(id)
+        val size = sizeOf(value)
+        entries[id] = value
+        sizes[id] = size
+        bytes += size
+        val oldest = entries.keys.iterator()
+        while ((entries.size > maxCount || bytes > maxBytes) && entries.size > 1) {
+            val key = oldest.next()
+            if (key == id) break
+            oldest.remove()
+            bytes -= sizes.remove(key) ?: 0L
+        }
+    }
+
+    fun remove(id: String) {
+        if (entries.remove(id) != null) bytes -= sizes.remove(id) ?: 0L
+    }
+
+    fun clear() {
+        entries.clear()
+        sizes.clear()
+        bytes = 0L
+    }
 }

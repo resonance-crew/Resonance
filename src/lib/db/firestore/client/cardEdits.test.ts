@@ -12,6 +12,7 @@ const signedIn = (): MockUser => ({ uid: 'me', getIdToken: async () => 'id-token
 const mockAuth = { currentUser: signedIn() as MockUser | null };
 vi.mock('@/lib/auth/firebase/client', () => ({
   getFirebaseClientAuth: vi.fn(() => mockAuth),
+  ensureAppCheck: vi.fn(),
 }));
 
 vi.mock('firebase/firestore/lite', () => ({

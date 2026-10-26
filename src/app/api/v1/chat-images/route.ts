@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { spend } from '@/lib/api/rateLimit';
+import { spendAll } from '@/lib/api/rateLimit';
 import { keptChatImage, uploadChatImage } from '@/lib/api/v1/chatImageUpload';
 import { ApiFailure, parse, withUser } from '@/lib/api/v1/http';
 import { ChatImageUploadForm } from '@/lib/api/v1/schemas';
@@ -36,12 +36,17 @@ export const POST = withUser(async (user, req) => {
   if (kept) return NextResponse.json(kept, { status: 201 });
   const store = getChatImageStore();
   if (!store) throw new ApiFailure('internal', "Pictures can't be sent right now.");
-  await spend(db, user.id, 'chatImage');
-  await spend(db, user.id, 'chatImageBytes', file.size);
-  const uploaded = await uploadChatImage(db, store, user.id, {
-    to: fields.to,
-    clientId: fields.clientId,
-    bytes: new Uint8Array(await file.arrayBuffer()),
-  });
+  // The count and the bytes in one transaction; asked beside whether the sender may message `to` at all
+  // (uploadChatImage answers the budget's refusal first, and decodes nothing before both are in).
+  const spent = spendAll(db, user.id, [['chatImage'], ['chatImageBytes', file.size]]);
+  spent.catch(() => {});
+  const uploaded = await uploadChatImage(
+    db,
+    store,
+    user.id,
+    { to: fields.to, clientId: fields.clientId, bytes: new Uint8Array(await file.arrayBuffer()) },
+    // The resend was asked above.
+    { spent, resendAsked: true },
+  );
   return NextResponse.json(uploaded, { status: 201 });
 });

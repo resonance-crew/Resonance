@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { Profiler } from 'react';
 import { act, renderWithIntl, fireEvent, screen } from '@/../test/render';
 import { mockElementSize } from '@/../test/organic';
 import type { Card } from '@/lib/db/types';
@@ -170,6 +171,80 @@ describe('ThoughtMapCanvas panning', () => {
       fireEvent.wheel(viewport, { deltaX: 0, deltaY: 40, clientX: 400, clientY: 300 });
       fireEvent.wheel(viewport, { deltaY: -40, ctrlKey: true, clientX: 400, clientY: 300 });
       expect(world).not.toHaveAttribute('data-moving');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A pan or a pinch moves the camera on every pointer event (more than one a
+  // frame on a fast screen). The board — over a thousand lines of React — is
+  // not rendered for each: the move is painted onto the world, the paper and
+  // the zoom's percent once a frame, and committed when the gesture ends.
+  it('paints a pan once a frame without rendering the board for each move, and commits it at the end', () => {
+    vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+    try {
+      let commits = 0;
+      renderWithIntl(
+        <Profiler id="map" onRender={() => commits++}>
+          <ThoughtMapCanvas data={mapData()} style={{ height: 600 }} />
+        </Profiler>,
+      );
+      const node = screen.getByText('Core of a').closest('[role="button"]') as HTMLElement;
+      const world = node.closest('div[style*="translate("]') as HTMLElement;
+      const viewport = world.parentElement as HTMLElement;
+      const dots = viewport.firstElementChild as HTMLElement;
+      const [, x0, y0, s] = world.style.transform.match(/translate\(([-\d.]+)px, ([-\d.]+)px\) scale\(([\d.]+)\)/)!.map(Number);
+
+      fireEvent.pointerDown(viewport, { button: 0, pointerId: 1, clientX: 400, clientY: 300 });
+      fireEvent.pointerMove(viewport, { pointerId: 1, clientX: 412, clientY: 307 });
+      const started = commits;
+      for (let i = 2; i <= 8; i++) {
+        fireEvent.pointerMove(viewport, { pointerId: 1, clientX: 400 + i * 12, clientY: 300 + i * 7 });
+      }
+      // Seven moves: none renders the board (React may take one pass of its own to see the pan's layer is set).
+      expect(commits - started).toBeLessThanOrEqual(1);
+      const moved = commits;
+
+      // The next frame shows where the pan is, the paper with it.
+      act(() => void vi.advanceTimersToNextFrame());
+      expect(world.style.transform).toBe(`translate(${x0 + 96}px, ${y0 + 56}px) scale(${s})`);
+      const tile = 26 * s;
+      const [, dx] = dots.style.transform.match(/translate\(([-\d.]+)px/)!.map(Number);
+      expect(Math.abs((x0 + 96 - dx) / tile - Math.round((x0 + 96 - dx) / tile))).toBeLessThan(1e-6);
+      expect(commits).toBe(moved);
+
+      // The gesture's end renders: the camera committed, the pan's layer let go.
+      fireEvent.pointerUp(viewport, { pointerId: 1, clientX: 496, clientY: 356 });
+      expect(commits).toBeGreaterThan(moved);
+      expect(commits - moved).toBeLessThanOrEqual(2);
+      expect(world.style.transform).toBe(`translate(${x0 + 96}px, ${y0 + 56}px) scale(${s})`);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows a pinch’s zoom in the percent as it goes, and the zoom buttons carry on from it', () => {
+    vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+    try {
+      const { world, viewport } = board();
+      const percent = () => screen.getByText(/^\d+%$/).textContent;
+      const at = percent();
+      const touch = (type: 'pointerDown' | 'pointerMove' | 'pointerUp', id: number, x: number, y: number) =>
+        fireEvent[type](viewport, { pointerId: id, pointerType: 'touch', button: 0, clientX: x, clientY: y });
+      touch('pointerDown', 1, 300, 300);
+      touch('pointerDown', 2, 500, 300);
+      touch('pointerMove', 2, 700, 300);
+      act(() => void vi.advanceTimersToNextFrame());
+      const pinched = percent();
+      expect(pinched).not.toBe(at);
+      const [, , , s] = world.style.transform.match(/translate\(([-\d.]+)px, ([-\d.]+)px\) scale\(([\d.]+)\)/)!.map(Number);
+      expect(pinched).toBe(`${Math.round(s * 100)}%`);
+      touch('pointerUp', 2, 700, 300);
+      touch('pointerUp', 1, 300, 300);
+      expect(percent()).toBe(pinched);
+
+      act(() => void screen.getByRole('button', { name: 'Zoom in' }).click());
+      expect(percent()).toBe(`${Math.round(s * 1.25 * 100)}%`);
     } finally {
       vi.useRealTimers();
     }

@@ -25,6 +25,8 @@ import { afterMessageSent, afterNoteSent } from './afterMessage';
 
 const db = {} as Firestore;
 const push = { conversationId: 'alice_bob', messageId: 'm1', from: 'alice', to: 'bob' };
+/** What was sent: words with a link in them. */
+const LINKED = '你看這個 https://example.com/a-walk-after-rain';
 const sent = (over: Partial<SentMessage> = {}): SentMessage => ({
   conversationId: 'alice_bob',
   id: 'm1',
@@ -48,7 +50,7 @@ const settle = () => Promise.all(later);
 
 describe('afterMessageSent', () => {
   it("rings the recipient and unfurls the message's link", async () => {
-    afterMessageSent(db, sent());
+    afterMessageSent(db, sent(), LINKED);
     await settle();
     expect(pushMessage).toHaveBeenCalledWith(db, push, messaging);
     expect(unfurlMessage).toHaveBeenCalledWith(db, 'alice_bob', 'm1');
@@ -57,7 +59,7 @@ describe('afterMessageSent', () => {
   it('does both at once: a slow page never holds up the buzz', async () => {
     let finishUnfurl!: () => void;
     unfurlMessage.mockReturnValue(new Promise<null>((resolve) => (finishUnfurl = () => resolve(null))));
-    afterMessageSent(db, sent());
+    afterMessageSent(db, sent(), LINKED);
     await vi.waitFor(() => expect(pushMessage).toHaveBeenCalledTimes(1));
     expect(unfurlMessage).toHaveBeenCalledTimes(1);
     finishUnfurl();
@@ -66,13 +68,13 @@ describe('afterMessageSent', () => {
 
   it('still unfurls when the push fails, and still pushes when the unfurl fails, logging each', async () => {
     pushMessage.mockRejectedValue(new Error('fcm down'));
-    afterMessageSent(db, sent());
+    afterMessageSent(db, sent(), LINKED);
     await settle();
     expect(unfurlMessage).toHaveBeenCalledTimes(1);
 
     pushMessage.mockResolvedValue(null);
     unfurlMessage.mockRejectedValue(new Error('page exploded'));
-    afterMessageSent(db, sent());
+    afterMessageSent(db, sent(), LINKED);
     await settle();
     expect(pushMessage).toHaveBeenCalledTimes(2);
 
@@ -83,7 +85,7 @@ describe('afterMessageSent', () => {
 
   it('unfurls even when Firebase Messaging cannot be reached at all', async () => {
     getAdminMessaging.mockRejectedValueOnce(new Error('no credentials'));
-    afterMessageSent(db, sent());
+    afterMessageSent(db, sent(), LINKED);
     await settle();
     expect(pushMessage).not.toHaveBeenCalled();
     expect(unfurlMessage).toHaveBeenCalledTimes(1);
@@ -96,13 +98,20 @@ describe('afterMessageSent', () => {
     unfurlMessage.mockImplementation(async () => {
       throw new Error('failure');
     });
-    expect(() => afterMessageSent(db, sent())).not.toThrow();
+    expect(() => afterMessageSent(db, sent(), LINKED)).not.toThrow();
     await expect(settle()).resolves.toBeDefined();
   });
 
+  it('rings without reading the message again when it holds no link: nothing to unfurl', async () => {
+    for (const text of ['謝謝你', 'see example.com', '']) afterMessageSent(db, sent(), text);
+    await settle();
+    expect(pushMessage).toHaveBeenCalledTimes(3);
+    expect(unfurlMessage).not.toHaveBeenCalled();
+  });
+
   it('does nothing for a message that was only sent again: it has been pushed and unfurled already', async () => {
-    afterMessageSent(db, sent({ duplicate: true }));
-    afterMessageSent(db, sent({ push: null }));
+    afterMessageSent(db, sent({ duplicate: true }), LINKED);
+    afterMessageSent(db, sent({ push: null }), LINKED);
     await settle();
     expect(later).toHaveLength(0);
     expect(pushMessage).not.toHaveBeenCalled();

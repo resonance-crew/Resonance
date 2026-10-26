@@ -9,8 +9,18 @@ import type { VectorChannel } from './vectorStore/types';
  */
 export const INSIGHT_INDEX_THRESHOLD = 0.45;
 
+/**
+ * The longest a signature field is kept, in code points. The fields are model
+ * output about an author's card, and they go whole into other readers'
+ * ranking prompts: one line each, never a page a card could talk the model
+ * into writing (or extra lines in the prompt's candidate list).
+ */
+export const SIGNATURE_FIELD_MAX = 200;
+
 function str(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
+  if (typeof value !== 'string') return '';
+  const line = value.replace(/\s+/g, ' ').trim();
+  return Array.from(line).slice(0, SIGNATURE_FIELD_MAX).join('');
 }
 
 /** Clamp an arbitrary value into a 0–1 score, defaulting to 0. */

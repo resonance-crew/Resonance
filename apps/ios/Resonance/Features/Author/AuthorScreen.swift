@@ -225,6 +225,7 @@ private struct ProfileSkeleton: View {
             .readableColumn()
             FeedSkeleton(count: 4)
         }
+        .skeletonTimeline()
     }
 }
 

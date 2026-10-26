@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
+import { crossOriginCookieWrite } from '@/lib/api/sameOrigin';
 import { getCurrentUser } from '@/lib/auth';
 import { getAdminDb } from '@/lib/db/firestore/admin';
 import { suggestStoryTags } from '@/lib/ai/tasks';
-import { topTags } from '@/lib/ai/tags';
+import { cardSizedTags, topTags } from '@/lib/ai/tags';
 import { limited } from '@/lib/api/rateLimit';
+import { CARD_LIMITS } from '@/lib/db/firestore/cardContent';
 
 export const runtime = 'nodejs';
 
@@ -13,6 +15,8 @@ export const runtime = 'nodejs';
 // rank them here — `select('tags')` keeps the payload to a few bytes per card.
 const HISTORY_CARDS_LIMIT = 200;
 const HISTORY_TAGS_LIMIT = 20;
+/** More of the story than the model is shown (suggestStoryTags cuts it again). */
+const STORY_READ_CHARS = 4_000;
 
 /**
  * Suggest 2–3 tags for the card being written. The draft may be unsaved, so the
@@ -21,6 +25,8 @@ const HISTORY_TAGS_LIMIT = 20;
  * the LLM so suggestions match their existing vocabulary.
  */
 export async function POST(req: Request) {
+  // A write with the session cookie from another origin (a same-site subdomain too) is never the caller's own page.
+  if (crossOriginCookieWrite(req)) return NextResponse.json({ error: 'This request did not come from the site' }, { status: 403 });
   // Signed out (or a revoked session) is a 401 — what makes a client renew its token — not a crash.
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
@@ -30,11 +36,11 @@ export async function POST(req: Request) {
     story?: unknown;
     tags?: unknown;
   } | null;
-  const title = typeof body?.thoughtCore === 'string' ? body.thoughtCore : '';
-  const story = typeof body?.story === 'string' ? body.story : '';
-  const existingTags = Array.isArray(body?.tags)
-    ? body.tags.filter((t): t is string => typeof t === 'string')
-    : [];
+  // Held to what a card may carry: one unit of the budget buys one card-sized
+  // prompt, whatever a caller sends (the tags go into the prompt whole).
+  const title = typeof body?.thoughtCore === 'string' ? body.thoughtCore.slice(0, CARD_LIMITS.title) : '';
+  const story = typeof body?.story === 'string' ? body.story.slice(0, STORY_READ_CHARS) : '';
+  const existingTags = cardSizedTags(body?.tags, CARD_LIMITS);
   if (!title.trim() && !story.trim()) {
     return NextResponse.json({ error: 'Nothing to tag' }, { status: 400 });
   }

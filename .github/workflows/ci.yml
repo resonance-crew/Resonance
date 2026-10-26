@@ -5,11 +5,17 @@ on:
     branches: [main]
   pull_request:
 
+# Read-only: the jobs check code and need no write access to the repository.
+permissions:
+  contents: read
+
 jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -27,6 +33,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -36,5 +44,6 @@ jobs:
           distribution: temurin
           java-version: 21
       - run: npm ci
-      - run: npm install -g firebase-tools@15
+      # An exact version: the CLI runs the suite, so it is pinned like the lockfile's packages.
+      - run: npm install -g firebase-tools@15.26.0
       - run: npm run test:emulator

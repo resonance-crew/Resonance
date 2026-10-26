@@ -58,7 +58,8 @@ export class FirestoreVectorStore implements IVectorStore {
   }
 
   async deleteByCard(cardId: string): Promise<void> {
-    const snap = await this.db().collection(COLLECTION).where('cardId', '==', cardId).get();
+    // The references only: a vector is 1536 floats nobody here reads.
+    const snap = await this.db().collection(COLLECTION).where('cardId', '==', cardId).select().get();
     if (snap.empty) return;
     const batch = this.db().batch();
     snap.docs.forEach((d) => batch.delete(d.ref));
@@ -66,7 +67,7 @@ export class FirestoreVectorStore implements IVectorStore {
   }
 
   async setVisibility(cardId: string, visibility: Visibility): Promise<void> {
-    const snap = await this.db().collection(COLLECTION).where('cardId', '==', cardId).get();
+    const snap = await this.db().collection(COLLECTION).where('cardId', '==', cardId).select().get();
     if (snap.empty) return;
     const batch = this.db().batch();
     snap.docs.forEach((d) => batch.update(d.ref, { visibility, updatedAt: FieldValue.serverTimestamp() }));
@@ -74,13 +75,18 @@ export class FirestoreVectorStore implements IVectorStore {
   }
 
   async listByAuthor(authorId: string, channel: VectorChannel): Promise<AuthorVector[]> {
-    // `authorId` equality is auto-indexed; the channel filter is applied in code
-    // to avoid a second composite index for this owner-scoped read.
-    const snap = await this.db().collection(COLLECTION).where('authorId', '==', authorId).get();
+    // Two equality filters: Firestore merges the single-field indexes on
+    // `authorId` and `channel`, so no composite index is needed — and the
+    // other channel's vectors (and the signature fields) are never downloaded.
+    const snap = await this.db()
+      .collection(COLLECTION)
+      .where('authorId', '==', authorId)
+      .where('channel', '==', channel)
+      .select('cardId', 'vector')
+      .get();
     const out: AuthorVector[] = [];
     for (const doc of snap.docs) {
       const data = doc.data();
-      if (data.channel !== channel) continue;
       const vector = (data.vector?.toArray?.() ?? []) as number[];
       if (vector.length > 0) out.push({ cardId: String(data.cardId), vector });
     }

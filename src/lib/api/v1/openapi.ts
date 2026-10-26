@@ -405,6 +405,18 @@ export function buildOpenApi(): Json {
           responses: { '201': { description: 'Created', ...json(ref('SendMessageResponse')) }, ...errors(400, 401, 403, 404) },
         },
       },
+      '/conversations/{pair}': {
+        delete: {
+          operationId: 'deleteConversation',
+          summary:
+            'Delete a conversation for both of its people: its messages, then the conversation (with a letter that waits in ' +
+            'it — the writer withdraws it, its recipient declines it; the count of three unanswered notes is kept apart and ' +
+            'stays). Either participant may; for anyone else it is `404`, whether the conversation exists or not. One already ' +
+            'gone answers `204` (a retry after a lost answer)',
+          parameters: [pathParam('pair', "The conversation's id: its two participants' uids, sorted, joined by `_`")],
+          responses: { '204': { description: 'Deleted (or already gone)' }, ...errors(400, 401, 404) },
+        },
+      },
       '/chat-images': {
         post: {
           operationId: 'uploadChatImage',

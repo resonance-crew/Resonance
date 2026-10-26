@@ -8,7 +8,7 @@ import { recommendationDay } from '@/lib/recommend/stored';
 import type { DeviceLocale } from './devices';
 import { PICKS_CHANNEL, PICK_TITLE_CHARS, cardRoute } from './picks';
 import { runPool } from './pool';
-import { deviceTargets, forgetDevices, groupByLocale, multicastTo, type PushSender } from './send';
+import { deviceTargets, forgetDevices, groupByLocale, multicastAll, type MulticastGroup, type PushSender } from './send';
 import { NOTIFICATION_SETTINGS, readNotificationSettings } from './settings';
 
 /**
@@ -52,6 +52,9 @@ function mutedBy(muted: unknown, uid: string): boolean {
 }
 
 /** A card that may be announced: published, public, named, with a title. */
+/** What announcing reads of the card (never its story), at the start and again before each push. */
+const ANNOUNCE_FIELDS = ['authorId', 'publishedAt', 'visibility', 'anonymous', 'thoughtCore', 'slug', 'referenceCardId'] as const;
+
 function announceable(data: DocumentData | undefined): boolean {
   return !!data && data.publishedAt != null && data.visibility === 'public' && data.anonymous !== true && !!str(data.thoughtCore).trim();
 }
@@ -99,7 +102,8 @@ export async function pushConnectionCard(
   const run: ConnectionCardRun = { recipients: 0, outcomes: {}, sent: 0 };
   if (!cardId || cardId.includes('/') || isReservedId(cardId)) return { ...run, skipped: 'not-announceable' };
   const cardRef = db.doc(`cards/${cardId}`);
-  const card = await cardRef.get();
+  const readCard = async () => (await db.getAll(cardRef, { fieldMask: [...ANNOUNCE_FIELDS] }))[0];
+  const card = await readCard();
   if (!announceable(card.data())) return { ...run, skipped: 'not-announceable' };
   const author = str(card.get('authorId'));
   const reference = str(card.get('referenceCardId'));
@@ -165,24 +169,26 @@ export async function pushConnectionCard(
     const targets = deviceTargets(devices.docs);
     if (!targets.length) return 'no-device';
     // Read again at send time: made private, anonymous or deleted since the publish, it goes to no one.
-    const now = await cardRef.get();
+    const now = await readCard();
     if (!announceable(now.data()) || now.get('authorId') !== author) return 'gone';
     if (!(await claim(db.doc(`${CONNECTION_CARD_PUSHES}/${uid}`), cardId, day))) return 'capped';
 
-    const data = { type: 'new_card', cardId, route: cardRoute({ id: cardId, slug: now.get('slug') }) };
-    const dead: DocumentReference[] = [];
-    for (const [locale, group] of groupByLocale(targets)) {
+    const data = { type: 'new_card', cardId, route: cardRoute({ id: cardId, slug: now.get('slug'), anonymous: now.get('anonymous') }) };
+    const groups: MulticastGroup[] = [...groupByLocale(targets)].map(([locale, group]) => {
       const text = connectionCardText(locale, handle, str(now.get('thoughtCore')) || title);
-      const result = await multicastTo(sender, group, (tokens) => ({
-        tokens,
-        notification: text,
-        data,
-        android: { notification: { channelId: PICKS_CHANNEL, tag: `card-${cardId}` } },
-        apns: { payload: { aps: { sound: 'default', threadId: PICKS_CHANNEL } } },
-      }));
-      run.sent += result.sent;
-      dead.push(...result.dead);
-    }
+      return {
+        targets: group,
+        build: (tokens) => ({
+          tokens,
+          notification: text,
+          data,
+          android: { notification: { channelId: PICKS_CHANNEL, tag: `card-${cardId}` } },
+          apns: { payload: { aps: { sound: 'default', threadId: PICKS_CHANNEL } } },
+        }),
+      };
+    });
+    const { sent, dead } = await multicastAll(sender, groups);
+    run.sent += sent;
     await forgetDevices(db, dead);
     return 'sent';
   }

@@ -94,4 +94,21 @@ class MessagingApiTest {
         assertEquals(403, failure.status)
         assertEquals("You cannot message this person.", failure.message)
     }
+
+    @Test fun deletesAConversationOnTheServer() = runBlocking {
+        server.enqueue(MockResponse().setResponseCode(204))
+        api().deleteConversation("alice_bob")
+        val request = server.takeRequest()
+        assertEquals("DELETE", request.method)
+        assertEquals("/api/v1/conversations/alice_bob", request.path)
+    }
+
+    @Test fun aConversationTheViewerIsntInIsNotFound() = runBlocking {
+        server.enqueue(
+            MockResponse().setResponseCode(404).setHeader("Content-Type", "application/json")
+                .setBody("""{"error":{"code":"not_found","message":"No such conversation."}}"""),
+        )
+        val failure = assertFailsWith<ApiFailure> { api().deleteConversation("bob_carol") }
+        assertEquals(404, failure.status)
+    }
 }

@@ -813,20 +813,12 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
         }
     }
 
-    /** Deletes the whole conversation, for both people (deleteConversation: messages in batches, then the parent). */
+    /** Deletes the whole conversation, for both people (DELETE /api/v1/conversations/{pair}: the server deletes it whole). */
     suspend fun deleteConversation(): Boolean {
         val pair = pairId ?: return false
-        val db = AppFirebase.db
-        val ref = db.collection("conversations").document(pair)
         return try {
             stop()
-            val all = ref.collection("messages").get().await().documents
-            for (chunk in all.chunked(450)) {
-                val batch = db.batch()
-                chunk.forEach { batch.delete(it.reference) }
-                batch.commit().await()
-            }
-            ref.delete().await()
+            session.messaging.deleteConversation(pair)
             session.outboxes.forget(pair)
             resetHistory()
             true

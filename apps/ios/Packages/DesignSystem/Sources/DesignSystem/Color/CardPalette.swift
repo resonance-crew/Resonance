@@ -33,13 +33,19 @@ public nonisolated struct CardPalette: Sendable {
         Int(seedFromId(id)) % hues.count
     }
     /// `oklch(97.5% 0.012 hue)` — the card's paper.
-    public var interior: Color { OKLCHColor.parse("oklch(97.5% 0.012 \(hue))") ?? Tokens.cardBg }
+    public var interior: Color { Self.interiors[index] }
     /// `oklch(92.5% 0.024 hue)` — the bordered card's paper under a pointer (the web's BrushWash).
-    public var hovered: Color { OKLCHColor.parse("oklch(92.5% 0.024 \(hue))") ?? Tokens.cardBg }
+    public var hovered: Color { Self.hovereds[index] }
     /// `oklch(55% 0.04 hue / 0.4)` — the wavy rule above the byline.
-    public var separator: Color { OKLCHColor.parse("oklch(55% 0.04 \(hue) / 0.4)") ?? Tokens.fieldBorder }
+    public var separator: Color { Self.separators[index] }
     /// `oklch(44% 0.08 hue)` — Resonance's handwritten margin note.
-    public var noteInk: Color { OKLCHColor.parse("oklch(44% 0.08 \(hue))") ?? Tokens.textMuted }
+    public var noteInk: Color { Self.noteInks[index] }
+
+    // Each family's, worked out once from the very CSS strings they were read from on every access.
+    static let interiors = hues.map { OKLCHColor.parse("oklch(97.5% 0.012 \($0))") ?? Tokens.cardBg }
+    static let hovereds = hues.map { OKLCHColor.parse("oklch(92.5% 0.024 \($0))") ?? Tokens.cardBg }
+    static let separators = hues.map { OKLCHColor.parse("oklch(55% 0.04 \($0) / 0.4)") ?? Tokens.fieldBorder }
+    static let noteInks = hues.map { OKLCHColor.parse("oklch(44% 0.08 \($0))") ?? Tokens.textMuted }
     /// `oklch(90% 0.06 hue)` — MiniStoryCard's cover and avatar fallback.
     public var accent: Color { OKLCHColor.color(0.9, 0.06, hue) }
     /// The cover placeholder's hatching: the fill darkened by 7 L, at 0.28.

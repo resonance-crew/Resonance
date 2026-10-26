@@ -169,7 +169,7 @@ describe('POST /api/v1/cards/{id}/edits/apply', () => {
     expect(indexCard).toHaveBeenCalledWith('c1');
   });
 
-  it("brings the story's link previews up to date before the pages are rendered again", async () => {
+  it("brings the story's link previews up to date before the pages are rendered again, indexing beside them", async () => {
     const order: string[] = [];
     unfurlCardLinks.mockImplementationOnce(async () => {
       await new Promise((r) => setTimeout(r, 10));
@@ -183,7 +183,8 @@ describe('POST /api/v1/cards/{id}/edits/apply', () => {
     await settled();
     expect(unfurlCardLinks).toHaveBeenCalledWith({}, 'c1');
     expect(order.indexOf('unfurl')).toBeLessThan(order.indexOf('revalidate'));
-    expect(order.at(-1)).toBe('index');
+    // The index never waits for the previews (as after a publish).
+    expect(order[0]).toBe('index');
   });
 
   it('still revalidates when the previews fail', async () => {

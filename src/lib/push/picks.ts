@@ -9,7 +9,7 @@ import type { Card, RecommendationItem } from '@/lib/db/types';
 import { RECOMMENDATIONS, readStored, recommendationDay } from '@/lib/recommend/stored';
 import type { DeviceLocale } from './devices';
 import { runPool } from './pool';
-import { deviceTargets, forgetDevices, groupByLocale, multicastTo, type PushSender } from './send';
+import { deviceTargets, forgetDevices, groupByLocale, multicastAll, type MulticastGroup, type PushSender } from './send';
 import { NOTIFICATION_SETTINGS, dailyWalkStart, optedIn, readNotificationSettings } from './settings';
 
 /**
@@ -101,9 +101,13 @@ export function pickText(locale: DeviceLocale, cardTitle: string, reason: string
   return { title: t('pickTitle'), body: `${cut(cardTitle.trim(), PICK_TITLE_CHARS)}\n${why}` };
 }
 
-/** Where the push opens: the card's page, by its slug when it has one (both apps open `/card/{key}`). */
-export function cardRoute(card: { id: string; slug?: unknown }): string {
-  const key = typeof card.slug === 'string' && card.slug ? card.slug : card.id;
+/**
+ * Where the push opens: the card's page, by its slug when it has one (both
+ * apps open `/card/{key}`) — an anonymous card always by its id, as it is
+ * shared (cardShareKey): its slug may end in its author's pen name.
+ */
+export function cardRoute(card: { id: string; slug?: unknown; anonymous?: unknown }): string {
+  const key = card.anonymous !== true && typeof card.slug === 'string' && card.slug ? card.slug : card.id;
   return `/card/${encodeURIComponent(key)}`;
 }
 
@@ -193,21 +197,21 @@ export async function pushPick(db: Firestore, uid: string, sender: PushSender, o
 
   // No notificationId: no bell row stands behind it (see lib/push/chat on why an empty one is worse than none).
   const data = { type: 'pick', cardId: card.id, route: cardRoute(card) };
-  let sent = 0;
-  const dead: DocumentReference[] = [];
-  for (const [locale, group] of groupByLocale(targets)) {
+  const groups: MulticastGroup[] = [...groupByLocale(targets)].map(([locale, group]) => {
     const text = pickText(locale, String(card.thoughtCore), reason);
-    const result = await multicastTo(sender, group, (tokens) => ({
-      tokens,
-      notification: text,
-      data,
-      // One evening's card replaces the last one's.
-      android: { notification: { channelId: PICKS_CHANNEL, tag: PICKS_CHANNEL } },
-      apns: { payload: { aps: { sound: 'default', threadId: PICKS_CHANNEL } } },
-    }));
-    sent += result.sent;
-    dead.push(...result.dead);
-  }
+    return {
+      targets: group,
+      build: (tokens) => ({
+        tokens,
+        notification: text,
+        data,
+        // One evening's card replaces the last one's.
+        android: { notification: { channelId: PICKS_CHANNEL, tag: PICKS_CHANNEL } },
+        apns: { payload: { aps: { sound: 'default', threadId: PICKS_CHANNEL } } },
+      }),
+    };
+  });
+  const { sent, dead } = await multicastAll(sender, groups);
   await forgetDevices(db, dead);
   return { outcome: 'sent', cardId: card.id, sent };
 }

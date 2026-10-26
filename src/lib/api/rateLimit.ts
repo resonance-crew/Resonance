@@ -19,6 +19,12 @@ export const LIMITS = {
   /** Publishing: a slug LLM call, the index, maybe a bell. */
   publish: { max: 30, windowMs: DAY },
   /**
+   * Saving changes to a published card re-indexes it after the response (an
+   * LLM call and embeddings). Over it the save goes through and the re-index
+   * is skipped (the card keeps its last index, its visibility moved anyway).
+   */
+  reindex: { max: 50, windowMs: DAY },
+  /**
    * Resonating with a card with one already written: rings the original
    * author once per card, and may connect the two — which taking it back
    * undoes, so a tight budget keeps that from becoming a way to reach anyone.
@@ -73,16 +79,32 @@ export type Bucket = keyof typeof LIMITS;
  * transaction so concurrent requests can't both take the last unit.
  */
 export async function spend(db: Firestore, uid: string, bucket: Bucket, weight = 1, now = Date.now()): Promise<void> {
-  const { max, windowMs } = LIMITS[bucket];
-  const ref = db.doc(`rateLimits/${uid}_${bucket}`);
+  await spendAll(db, uid, [[bucket, weight]], now);
+}
+
+/** A bucket and what to spend of it (1 when left out). */
+export type Spend = readonly [bucket: Bucket, weight?: number];
+
+/**
+ * spend() of several buckets in one transaction (a picture's count and its
+ * bytes), as spending them one after another would: in order, each spent
+ * while it has room, the first without room refusing the request (429) —
+ * the ones before it stay spent, the ones after it untouched.
+ */
+export async function spendAll(db: Firestore, uid: string, spends: readonly Spend[], now = Date.now()): Promise<void> {
+  const refs = spends.map(([bucket]) => db.doc(`rateLimits/${uid}_${bucket}`));
   const allowed = await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const start = snap.get('windowStart');
-    const used = snap.get('used');
-    const fresh = typeof start !== 'number' || typeof used !== 'number' || now - start >= windowMs;
-    const next = (fresh ? 0 : used) + weight;
-    if (next > max) return false;
-    tx.set(ref, { userId: uid, bucket, windowStart: fresh ? now : start, used: next });
+    const snaps = await tx.getAll(...refs);
+    for (const [i, [bucket, weight = 1]] of spends.entries()) {
+      const { max, windowMs } = LIMITS[bucket];
+      const snap = snaps[i];
+      const start = snap.get('windowStart');
+      const used = snap.get('used');
+      const fresh = typeof start !== 'number' || typeof used !== 'number' || now - start >= windowMs;
+      const next = (fresh ? 0 : used) + weight;
+      if (next > max) return false;
+      tx.set(refs[i], { userId: uid, bucket, windowStart: fresh ? now : start, used: next });
+    }
     return true;
   });
   if (!allowed) throw new ApiFailure('rate_limited', 'Too many requests. Please try again later.');
@@ -90,11 +112,12 @@ export async function spend(db: Firestore, uid: string, bucket: Bucket, weight =
 
 /**
  * spend() for the routes outside /api/v1: the 429 response to return, or
- * null when the request may go ahead.
+ * null when the request may go ahead. Several buckets at once (spendAll)
+ * when given a list.
  */
-export async function limited(db: Firestore, uid: string, bucket: Bucket, weight = 1): Promise<Response | null> {
+export async function limited(db: Firestore, uid: string, bucket: Bucket | readonly Spend[], weight = 1): Promise<Response | null> {
   try {
-    await spend(db, uid, bucket, weight);
+    await spendAll(db, uid, typeof bucket === 'string' ? [[bucket, weight]] : bucket);
     return null;
   } catch (e) {
     if (e instanceof ApiFailure) return apiError(e.code, e.message);

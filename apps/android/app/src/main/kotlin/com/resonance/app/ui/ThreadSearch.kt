@@ -156,7 +156,7 @@ internal fun SearchResults(
                         }
                     }
                 }
-                itemsIndexed(hits, key = { _, h -> h.messageId }) { i, hit ->
+                itemsIndexed(hits, key = { _, h -> h.messageId }, contentType = { _, _ -> "hit" }) { i, hit ->
                     val message = byId[hit.messageId]
                     if (i > 0) WavyDivider(seed = (131 + (i % 7) * 17).toDouble(), modifier = Modifier.padding(horizontal = 20.dp))
                     if (message != null) ResultRow(message, hit, model.isMine(message), model.other?.handle.orEmpty()) { onPick(hit) }

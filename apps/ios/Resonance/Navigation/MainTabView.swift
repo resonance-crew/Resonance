@@ -128,10 +128,6 @@ struct MainTabView: View {
     /// The conversation beside the list (expanded windows).
     private var twoPane: Bool { window.layoutClass == .expanded }
 
-    private var tabItems: [OrganicTabItem<AppTab>] {
-        Self.tabItems(notifications: session.notifications.unreadCount, messages: session.conversations.unreadTotal)
-    }
-
     /// The bar's five items in its order, the pen among them as its action; the header's group takes
     /// the four tabs of them (``OrganicTopTabs/segments(_:)``).
     static func tabItems(notifications: Int, messages: Int) -> [OrganicTabItem<AppTab>] {
@@ -187,9 +183,11 @@ struct MainTabView: View {
     /// status bar that the root's bar shares. It fades as a page pushes over the root.
     private var headerTabs: some View {
         ZStack {
-            OrganicTopTabs(items: tabItems, selection: tab, labels: window.layoutClass.tabLabels,
-                           room: HeaderChrome.labelRoom(width: window.width), label: L10n.App.Nav.main,
-                           onSelect: select) { groupWidth = $0 }
+            BadgedTabs { items in
+                OrganicTopTabs(items: items, selection: tab, labels: window.layoutClass.tabLabels,
+                               room: HeaderChrome.labelRoom(width: window.width), label: L10n.App.Nav.main,
+                               onSelect: select) { groupWidth = $0 }
+            }
             HStack {
                 Spacer(minLength: 0)
                 OrganicPenButton(title: AppTab.write.title, icon: AppTab.write.icon) { writer.open() }
@@ -208,6 +206,7 @@ struct MainTabView: View {
                         .appRoutes()
                 }
                 .environment(\.openRoute, OpenRouteAction(
+                    tab: t,
                     push: { route in
                         if ThreadPlacement.opensInMessages(route, from: t, layout: window.layoutClass) {
                             open(route)
@@ -229,7 +228,7 @@ struct MainTabView: View {
                 .accessibilityHidden(t != tab)
             }
             if bottomBar {
-                OrganicTabBar(items: tabItems, selection: tab, onSelect: select)
+                BadgedTabs { items in OrganicTabBar(items: items, selection: tab, onSelect: select) }
                     // A field's keyboard rises over it rather than carrying it up.
                     .ignoresSafeArea(.keyboard, edges: .bottom)
                     // In place, fading: back from a page it gave way to it is simply there again (a slide
@@ -397,6 +396,17 @@ struct MainTabView: View {
         guard t == .messages, twoPane else { return Binding(get: { paths[t] ?? [] }, set: { paths[t] = $0 }) }
         return Binding(get: { MessagesPanes.split(paths[.messages] ?? []).pushed },
                        set: { paths[.messages] = MessagesPanes.merge(detail: MessagesPanes.split(paths[.messages] ?? []).detail, pushed: $0) })
+    }
+}
+
+/// The tabs with their badges (``MainTabView/tabItems(notifications:messages:)``), the counts read
+/// here: a badge that changes draws the bar again, not the tab view and its four stacks.
+private struct BadgedTabs<Content: View>: View {
+    @Environment(SessionStore.self) private var session
+    @ViewBuilder let content: ([OrganicTabItem<AppTab>]) -> Content
+
+    var body: some View {
+        content(MainTabView.tabItems(notifications: session.notifications.unreadCount, messages: session.conversations.unreadTotal))
     }
 }
 

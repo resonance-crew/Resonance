@@ -8,7 +8,7 @@ import { fireEvent, renderWithIntl, screen, waitFor } from '@/../test/render';
 // onboarding names it (POST /api/v1/me).
 
 const auth = { user: { id: 'nina' } as { id: string } | null, loading: false, sessionReady: true };
-vi.mock('@/components/providers/AuthProvider', () => ({ useAuth: () => auth }));
+vi.mock('@/components/providers/AuthProvider', () => ({ useAuth: () => auth, useSessionReady: () => auth.sessionReady }));
 const profile = { data: undefined as unknown, isLoading: false };
 vi.mock('@/lib/data/hooks', () => ({ useMyProfile: () => profile }));
 const replace = vi.fn();

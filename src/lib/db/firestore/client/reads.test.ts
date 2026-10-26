@@ -93,106 +93,106 @@ describe('isConnected', () => {
   });
 });
 
-// --- profiles: one page-wide cache, batched reads -----------------------------
+// --- profiles: one page-wide cache, a get each ------------------------------
 
 /** What Firestore holds under users/*: every uid but the ones listed as missing. */
-function usersQueryAnswer(missing: string[] = []) {
-  vi.mocked(getDocs).mockImplementation((async (q: { filters: { value: string[] }[] }) => {
-    const ids = q.filters[0].value.filter((id) => !missing.includes(id));
-    return { docs: ids.map((id) => ({ id, data: () => ({ handle: `h-${id}` }) })) };
+function usersAnswer(missing: string[] = []) {
+  vi.mocked(getDoc).mockImplementation((async (ref: { path: string }) => {
+    const id = ref.path.replace(/^users\//, '');
+    const there = !missing.includes(id);
+    return { id, exists: () => there, data: () => (there ? { handle: `h-${id}` } : undefined) };
   }) as never);
 }
-/** The uids each `documentId() in` query asked for, in order. */
-const inQueries = () =>
-  vi.mocked(getDocs).mock.calls.map(([q]) => {
-    const f = (q as unknown as { filters: { field: string; op: string; value: string[] }[] }).filters[0];
-    expect(f).toMatchObject({ field: '__name__', op: 'in' });
-    return f.value;
+/** The uids read, in order. */
+const profileReads = () =>
+  vi.mocked(getDoc).mock.calls.map(([ref]) => {
+    const path = (ref as unknown as { path: string }).path;
+    expect(path).toMatch(/^users\//);
+    return path.replace(/^users\//, '');
   });
 
 describe('profiles', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getDoc).mockReset();
     forgetCachedUser();
   });
 
-  it('reads a list\'s authors together, at most 30 per query, not one read each', async () => {
-    usersQueryAnswer();
+  it("reads a list's authors once each, a get per profile, never a list query", async () => {
+    usersAnswer();
     const ids = Array.from({ length: 35 }, (_, i) => `u${i}`);
     const authors = await getUsersByIds([...ids, 'u0', 'u1']);
 
     expect(Object.keys(authors)).toHaveLength(35);
     expect(authors.u34.handle).toBe('h-u34');
-    const asked = inQueries();
-    expect(asked.map((chunk) => chunk.length)).toEqual([30, 5]);
-    // Each query says how many it reads: the rules list profiles a page (≤ 30) at a time.
-    const limits = vi.mocked(getDocs).mock.calls.map(([q]) => (q as unknown as { filters: unknown[] }).filters[1]);
-    expect(limits).toEqual([{ limit: 30 }, { limit: 5 }]);
-    expect(asked.flat().sort()).toEqual([...ids].sort());
-    expect(getDoc).not.toHaveBeenCalled();
+    // The rules list no profiles: a list query, however small its pages, walks the whole directory.
+    expect(getDocs).not.toHaveBeenCalled();
+    expect(profileReads().sort()).toEqual([...ids].sort());
   });
 
   it('serves the next list from the cache, reading only the people it has not seen', async () => {
-    usersQueryAnswer();
+    usersAnswer();
     await getUsersByIds(['a', 'b']);
-    vi.mocked(getDocs).mockClear();
+    vi.mocked(getDoc).mockClear();
 
     const authors = await getUsersByIds(['a', 'b', 'c']);
     expect(Object.keys(authors).sort()).toEqual(['a', 'b', 'c']);
-    expect(inQueries()).toEqual([['c']]);
+    expect(profileReads()).toEqual(['c']);
 
     // A single profile read (a card page's author) is a cache hit too.
+    vi.mocked(getDoc).mockClear();
     await expect(getUserById('a')).resolves.toMatchObject({ handle: 'h-a' });
     expect(getDoc).not.toHaveBeenCalled();
   });
 
   it('shares a read already on its way instead of starting another', async () => {
-    usersQueryAnswer();
+    usersAnswer();
     const [first, second] = await Promise.all([getUsersByIds(['a', 'b']), getUsersByIds(['b', 'a'])]);
     expect(first.a.handle).toBe('h-a');
     expect(second.b.handle).toBe('h-b');
-    expect(getDocs).toHaveBeenCalledTimes(1);
+    expect(getDoc).toHaveBeenCalledTimes(2);
   });
 
   it('remembers who is missing, and leaves them out', async () => {
-    usersQueryAnswer(['gone']);
+    usersAnswer(['gone']);
     expect(await getUsersByIds(['a', 'gone'])).not.toHaveProperty('gone');
-    vi.mocked(getDocs).mockClear();
+    vi.mocked(getDoc).mockClear();
     expect(await getUsersByIds(['gone'])).toEqual({});
-    expect(getDocs).not.toHaveBeenCalled();
+    expect(getDoc).not.toHaveBeenCalled();
   });
 
   it('reads a profile again once it is a few minutes old', async () => {
-    usersQueryAnswer();
+    usersAnswer();
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     await getUsersByIds(['a']);
     now.mockReturnValue(1_000_000 + 6 * 60 * 1000);
-    vi.mocked(getDocs).mockClear();
+    vi.mocked(getDoc).mockClear();
     await getUsersByIds(['a']);
-    expect(inQueries()).toEqual([['a']]);
+    expect(profileReads()).toEqual(['a']);
     now.mockRestore();
   });
 
   it("always reads the viewer's own profile fresh, and forgets a profile its owner just edited", async () => {
-    usersQueryAnswer();
+    usersAnswer();
     await getUsersByIds(['me']);
     vi.mocked(getDoc).mockResolvedValue({ id: 'me', exists: () => true, data: () => ({ handle: 'renamed' }) } as never);
 
     await expect(getCurrentUserProfile()).resolves.toMatchObject({ handle: 'renamed' });
     // …and the lists pick up what it read.
-    vi.mocked(getDocs).mockClear();
+    vi.mocked(getDoc).mockClear();
     expect((await getUsersByIds(['me'])).me.handle).toBe('renamed');
-    expect(getDocs).not.toHaveBeenCalled();
+    expect(getDoc).not.toHaveBeenCalled();
 
     forgetCachedUser('me');
+    usersAnswer();
     await getUsersByIds(['me']);
-    expect(inQueries()).toEqual([['me']]);
+    expect(profileReads()).toEqual(['me']);
   });
 
   it('lets a failed read fail, and caches nothing from it', async () => {
-    vi.mocked(getDocs).mockRejectedValueOnce(new Error('offline'));
+    vi.mocked(getDoc).mockRejectedValueOnce(new Error('offline'));
     await expect(getUsersByIds(['a'])).rejects.toThrow('offline');
-    usersQueryAnswer();
+    usersAnswer();
     expect((await getUsersByIds(['a'])).a.handle).toBe('h-a');
   });
 });
@@ -234,12 +234,15 @@ describe('getUserByHandle', () => {
     expect(getDocs).not.toHaveBeenCalled();
   });
 
-  it('falls back to the profiles themselves for a name not reserved yet (one at most)', async () => {
+  it('names no one for a name with no reservation, and never lists the profiles', async () => {
     vi.mocked(getDoc).mockResolvedValue({ exists: () => false } as never);
-    vi.mocked(getDocs).mockResolvedValue({ docs: [{ id: 'bob', data: () => ({ handle: 'Bob' }) }] } as never);
-    await expect(getUserByHandle('BOB')).resolves.toMatchObject({ id: 'bob' });
-    const q = vi.mocked(getDocs).mock.calls[0][0] as unknown as { filters: unknown[] };
-    expect(q.filters).toEqual([{ field: 'handleLower', op: '==', value: 'bob' }, { limit: 1 }]);
+    await expect(getUserByHandle('BOB')).resolves.toBeNull();
+    expect(getDocs).not.toHaveBeenCalled();
+  });
+
+  it('lets an offline read fail rather than answer "no such person"', async () => {
+    vi.mocked(getDoc).mockRejectedValue(offline());
+    await expect(getUserByHandle('bob')).rejects.toThrow('offline');
   });
 });
 

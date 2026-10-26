@@ -17,7 +17,10 @@ const fb = vi.hoisted(() => {
     signOut: vi.fn(async () => undefined),
   };
 });
-vi.mock('firebase/app', () => ({ getApps: () => [{}], initializeApp: vi.fn() }));
+const app = vi.hoisted(() => ({ made: [] as object[], initializeApp: vi.fn() }));
+vi.mock('firebase/app', () => ({ getApps: () => app.made, initializeApp: app.initializeApp }));
+const startAppCheck = vi.hoisted(() => vi.fn());
+vi.mock('./appCheck', () => ({ startAppCheck }));
 vi.mock('firebase/auth', () => ({
   getAuth: fb.getAuth,
   initializeAuth: fb.initializeAuth,
@@ -77,6 +80,8 @@ function remember(uid: string, expiresAt: number) {
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 beforeEach(() => {
+  app.made = [{ name: '[DEFAULT]' }];
+  startAppCheck.mockClear();
   posts = [];
   fb.listeners.length = 0;
   fb.auth.currentUser = null;
@@ -276,10 +281,136 @@ describe('setting Auth up', () => {
     expect(fb.initializeAuth).not.toHaveBeenCalled();
   });
 
-  it('keeps it for a visitor who is not signed in (the sign-in page may be a client-side hop away)', async () => {
+  it('skips it for a visitor who is not signed in, away from the sign-in pages too', async () => {
+    const { getFirebaseClientAuth } = await load();
+    getFirebaseClientAuth();
+    expect(fb.initializeAuth).toHaveBeenCalled();
+    expect(fb.getAuth).not.toHaveBeenCalled();
+  });
+
+  it('keeps it on the sign-up page', async () => {
+    window.history.replaceState({}, '', '/en/signup?step=profile');
     const { getFirebaseClientAuth } = await load();
     getFirebaseClientAuth();
     expect(fb.getAuth).toHaveBeenCalled();
     expect(fb.initializeAuth).not.toHaveBeenCalled();
+  });
+});
+
+const UA = {
+  iPhoneSafari:
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+  iPhoneChrome:
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/130.0.0.0 Mobile/15E148 Safari/604.1',
+  // An iPad asking for the desktop site says Macintosh — and Mobile.
+  iPadDesktop:
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+  androidChrome:
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36',
+  macSafari:
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
+  macChrome:
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+  windowsEdge:
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0',
+  firefox: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14.0; rv:131.0) Gecko/20100101 Firefox/131.0',
+};
+
+// Firebase loads the popup's frame before the click on mobile browsers,
+// Safari and iOS — the same rule, read off the same user agent.
+describe('which browsers need the popup resolver before the click', () => {
+  it('phones, iPads and Safari do; desktop Chrome, Edge and Firefox load it at the click', async () => {
+    const { initsPopupProactively } = await load();
+    expect(initsPopupProactively(UA.iPhoneSafari)).toBe(true);
+    expect(initsPopupProactively(UA.iPhoneChrome)).toBe(true);
+    expect(initsPopupProactively(UA.iPadDesktop)).toBe(true);
+    expect(initsPopupProactively(UA.androidChrome)).toBe(true);
+    expect(initsPopupProactively(UA.macSafari)).toBe(true);
+    expect(initsPopupProactively(UA.macChrome)).toBe(false);
+    expect(initsPopupProactively(UA.windowsEdge)).toBe(false);
+    expect(initsPopupProactively(UA.firefox)).toBe(false);
+  });
+});
+
+// A sign-in page reached by a client-side hop keeps the Auth the first page
+// made — without the resolver now that only the sign-in pages set it up — so
+// on those browsers it loads itself once more, and only once.
+describe('a sign-in page reached without the popup resolver', () => {
+  /** Auth made on the landing page, then a client-side hop to the sign-in page. */
+  async function hopToSignIn() {
+    window.history.replaceState({}, '', '/zh-TW');
+    const client = await load();
+    client.getFirebaseClientAuth();
+    window.history.replaceState({}, '', '/zh-TW/signin');
+    return client;
+  }
+
+  beforeEach(() => window.sessionStorage.clear());
+
+  it('reloads once on a phone or Safari, and not again for half a minute', async () => {
+    const { reloadForPopupOnce } = await hopToSignIn();
+    const reload = vi.fn();
+    expect(reloadForPopupOnce({ userAgent: UA.iPhoneSafari, reload })).toBe(true);
+    expect(reload).toHaveBeenCalledTimes(1);
+    // Had the reload come back without the resolver all the same, it would not loop.
+    expect(reloadForPopupOnce({ userAgent: UA.iPhoneSafari, reload })).toBe(false);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays put on desktop Chrome or Firefox, whose popup loads its frame at the click', async () => {
+    const { reloadForPopupOnce } = await hopToSignIn();
+    const reload = vi.fn();
+    expect(reloadForPopupOnce({ userAgent: UA.macChrome, reload })).toBe(false);
+    expect(reloadForPopupOnce({ userAgent: UA.firefox, reload })).toBe(false);
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it('stays put when the page itself set Auth up (opened directly, or after its reload)', async () => {
+    window.history.replaceState({}, '', '/zh-TW/signin');
+    const { getFirebaseClientAuth, reloadForPopupOnce } = await load();
+    const reload = vi.fn();
+    // Before anything made Auth (the buttons mount before the provider subscribes).
+    expect(reloadForPopupOnce({ userAgent: UA.iPhoneSafari, reload })).toBe(false);
+    getFirebaseClientAuth();
+    expect(reloadForPopupOnce({ userAgent: UA.iPhoneSafari, reload })).toBe(false);
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it('stays put for someone already signed in (the sign-up page’s profile step needs no popup)', async () => {
+    const { reloadForPopupOnce } = await hopToSignIn();
+    fb.auth.currentUser = firebaseUser('u1');
+    const reload = vi.fn();
+    expect(reloadForPopupOnce({ userAgent: UA.androidChrome, reload })).toBe(false);
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it('stays put without storage to remember the reload by', async () => {
+    const { reloadForPopupOnce } = await hopToSignIn();
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('blocked', 'SecurityError');
+    });
+    const reload = vi.fn();
+    expect(reloadForPopupOnce({ userAgent: UA.iPhoneSafari, reload })).toBe(false);
+    expect(reload).not.toHaveBeenCalled();
+  });
+});
+
+// Every page makes the app for Auth; only a read or an /api call needs App
+// Check — a signed-out visitor on the landing page loads no Turnstile.
+describe('App Check', () => {
+  it('does not start with the app, and starts with the first read or call', async () => {
+    app.made = [];
+    const made = { name: '[DEFAULT]' };
+    app.initializeApp.mockImplementationOnce(() => {
+      app.made = [made];
+      return made;
+    });
+    const { ensureAppCheck, getFirebaseClientAuth } = await load();
+    getFirebaseClientAuth();
+    expect(app.initializeApp).toHaveBeenCalledTimes(1);
+    expect(startAppCheck).not.toHaveBeenCalled();
+
+    ensureAppCheck();
+    expect(startAppCheck).toHaveBeenCalledWith(made);
   });
 });

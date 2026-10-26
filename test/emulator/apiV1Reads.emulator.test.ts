@@ -510,6 +510,17 @@ describe('cards written before the rules closed publishedAt and slug', () => {
     await card('!draft', 'dana', 0, { slug: 'a-quiet-morning', publishedAt: null });
     expect((await getCardDetail(db, 'alice', 'a-quiet-morning')).card.id).toBe('victim');
   });
+
+  // A key that can't be a slug the server made is read by id beside the slug query (cardByKey): the slug still wins.
+  it("resolves a copied slug that is another card's id to the slug's holder, by itself or among keys", async () => {
+    await card('Zx81kQpLmNoPqRsTuVwX', 'bob', 60);
+    await card('copy', 'dana', 30, { slug: 'Zx81kQpLmNoPqRsTuVwX' });
+    await card('Yw72jP', 'bob', 20);
+    expect((await getCardDetail(db, 'alice', 'Zx81kQpLmNoPqRsTuVwX')).card.id).toBe('copy');
+    expect((await getCardDetail(db, 'alice', 'Yw72jP')).card.id).toBe('Yw72jP');
+    const listed = await getCardsByKeys(db, 'alice', ['Yw72jP', 'Zx81kQpLmNoPqRsTuVwX', 'copy', 'Missing1']);
+    expect(listed.cards.map((c) => c.id)).toEqual(['Yw72jP', 'copy']);
+  });
 });
 
 // One request for a whole screen (`include`): the card page and the profile

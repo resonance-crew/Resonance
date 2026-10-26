@@ -130,6 +130,18 @@ struct MessagingAPITests {
         let failure = await #expect(throws: APIFailure.self) { try await api(missing).chatImage("p9", thumb: true) }
         #expect(failure?.isNotFound == true)
     }
+
+    @Test func deletesAConversationOnTheServer() async throws {
+        let transport = StubTransport(status: .noContent, body: "")
+        try await api(transport).deleteConversation("alice_bob")
+        #expect(transport.requests.first?.method == .delete)
+        #expect(transport.requests.first?.path?.hasSuffix("/conversations/alice_bob") == true)
+    }
+
+    @Test func aConversationTheViewerIsntInIsNotFound() async throws {
+        let transport = StubTransport(status: .notFound, body: #"{"error":{"code":"not_found","message":"No such conversation."}}"#)
+        await #expect(throws: APIFailure.self) { try await api(transport).deleteConversation("bob_carol") }
+    }
 }
 
 /// A transport that keeps each request's raw body and answers with the bytes it is given.

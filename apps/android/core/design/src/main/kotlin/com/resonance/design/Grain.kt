@@ -14,6 +14,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ShaderBrush
 import java.nio.ShortBuffer
+import kotlin.concurrent.thread
 
 enum class GrainMode { None, Tile, Shader }
 
@@ -41,12 +42,28 @@ object Grain {
     private lateinit var appContext: Context
     private val tiles = HashMap<String, Bitmap>()
 
+    /** Every tile there is (apps/ios/…/Resources/grain). */
+    private val TILES = listOf("grain-card", "grain-button", "grain-overlay")
+
     fun init(context: Context) {
         appContext = context.applicationContext
     }
 
-    private fun tile(name: String): Bitmap = tiles.getOrPut(name) {
-        appContext.assets.open("grain/$name@3x.png").use { BitmapFactory.decodeStream(it) }
+    /**
+     * Decodes the tiles on a thread of their own, ahead of the first band's draw, which would
+     * otherwise decode each (160–370 KB of PNG) on the main thread inside the first frames. A draw
+     * that comes first decodes its tile itself, or waits for the one being decoded.
+     */
+    fun warmUp() {
+        thread(name = "grain-tiles", isDaemon = true, priority = Thread.NORM_PRIORITY - 1) {
+            for (name in TILES) runCatching { tile(name) }
+        }
+    }
+
+    private fun tile(name: String): Bitmap = synchronized(tiles) {
+        tiles.getOrPut(name) {
+            appContext.assets.open("grain/$name@3x.png").use { BitmapFactory.decodeStream(it) }
+        }
     }
 
     fun brush(mode: GrainMode, tile: String, size: Size, density: Float, opacity: Float): Brush? = when (mode) {

@@ -67,6 +67,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.CacheDrawScope
+import androidx.compose.ui.draw.DrawResult
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -878,40 +880,51 @@ val HeaderEdgeHeight = 10.dp
  * rule beside the pane, where it meets it.
  */
 fun Modifier.headerEdge(
-    lineAlpha: () -> Float = { 1f },
+    lineAlpha: () -> Float = FullInk,
     progress: (() -> Float)? = null,
     pen: Color? = null,
     lead: Dp = 0.dp,
-): Modifier = drawWithCache {
-    val ink = Tokens.Ink.toPx()
-    val (line, fill) = headerEdgePaths(size.width, size.height, density)
-    val leadIn = if (pen != null && lead > 0.dp) {
-        val y = headerLineY(size.height, density)
-        Path().apply { moveTo(-lead.toPx(), y); lineTo(0f, y) }
-    } else null
-    val measure = if (progress != null) PathMeasure().apply { setPath(line, false) } else null
-    val read = Path()
-    val readPen = Stroke(ReadingProgressPen.width.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-    val glow = if (progress != null) ReadingProgressPen.glowPaint(readPen.width, ReadingProgressPen.glow.toPx()) else null
-    val stroke = Stroke(ink, cap = StrokeCap.Round)
-    onDrawBehind {
-        drawPath(fill, Tokens.Cream)
-        if (pen != null) {
-            // Opaque, so the lead-in, the line and the rule they meet never darken where they overlap.
-            leadIn?.let { drawPath(it, pen, style = stroke) }
-            drawPath(line, pen, style = stroke)
-        } else {
-            drawPath(line, Tokens.FieldBorderHover, alpha = lineAlpha(), style = stroke)
-        }
-        // How far the story has been read: a marker over the pen line itself, centred on it and
-        // covering it, from the leading edge; nothing at all before the first step (no lone cap dot).
-        val p = progress?.invoke() ?: 0f
-        if (measure != null && p >= READ_MIN) {
-            read.reset()
-            measure.getSegment(0f, p.coerceAtMost(1f) * measure.length, read, true)
-            // Its soft glow first, behind it: the same stroke blurred, in the same colour at 55 % (round 5 E1).
-            glow?.let { paint -> drawIntoCanvas { it.nativeCanvas.drawPath(read.asAndroidPath(), paint) } }
-            drawPath(read, ReadingProgressPen.color, style = readPen)
+): Modifier = drawWithCacheOf(HeaderEdge(lineAlpha, progress, pen, lead))
+
+/** The line at full ink: one value, so two bars' edges are equal. */
+private val FullInk: () -> Float = { 1f }
+
+/**
+ * [headerEdge]'s drawing, as a value ([drawWithCacheOf]): recomposed with equal inputs it is an equal modifier,
+ * which keeps what it cached (outline, paths, grain) instead of building it again at the next draw.
+ */
+private data class HeaderEdge(val lineAlpha: () -> Float, val progress: (() -> Float)?, val pen: Color?, val lead: Dp) : (CacheDrawScope) -> DrawResult {
+    override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
+        val ink = Tokens.Ink.toPx()
+        val (line, fill) = headerEdgePaths(size.width, size.height, density)
+        val leadIn = if (pen != null && lead > 0.dp) {
+            val y = headerLineY(size.height, density)
+            Path().apply { moveTo(-lead.toPx(), y); lineTo(0f, y) }
+        } else null
+        val measure = if (progress != null) PathMeasure().apply { setPath(line, false) } else null
+        val read = Path()
+        val readPen = Stroke(ReadingProgressPen.width.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val glow = if (progress != null) ReadingProgressPen.glowPaint(readPen.width, ReadingProgressPen.glow.toPx()) else null
+        val stroke = Stroke(ink, cap = StrokeCap.Round)
+        onDrawBehind {
+            drawPath(fill, Tokens.Cream)
+            if (pen != null) {
+                // Opaque, so the lead-in, the line and the rule they meet never darken where they overlap.
+                leadIn?.let { drawPath(it, pen, style = stroke) }
+                drawPath(line, pen, style = stroke)
+            } else {
+                drawPath(line, Tokens.FieldBorderHover, alpha = lineAlpha(), style = stroke)
+            }
+            // How far the story has been read: a marker over the pen line itself, centred on it and
+            // covering it, from the leading edge; nothing at all before the first step (no lone cap dot).
+            val p = progress?.invoke() ?: 0f
+            if (measure != null && p >= READ_MIN) {
+                read.reset()
+                measure.getSegment(0f, p.coerceAtMost(1f) * measure.length, read, true)
+                // Its soft glow first, behind it: the same stroke blurred, in the same colour at 55 % (round 5 E1).
+                glow?.let { paint -> drawIntoCanvas { it.nativeCanvas.drawPath(read.asAndroidPath(), paint) } }
+                drawPath(read, ReadingProgressPen.color, style = readPen)
+            }
         }
     }
 }
@@ -1012,28 +1025,36 @@ fun readingProgress(storyTop: Float, storyHeight: Float, lineY: Float, visible: 
  * content scrolled beneath shows right down to the line. The line rests at
  * half ink, like the header's before the page scrolls.
  */
-fun Modifier.footerEdge(lineAlpha: Float = 0.5f): Modifier = drawWithCache {
-    val d = density
-    val ink = Tokens.Ink.toPx()
-    val y0 = 1.4 + Tokens.Ink.value
-    val pts = wavyPoints((size.width / d).toDouble(), y0, 1.4, 223.0, 12).map { (it.x * d).toFloat() to (it.y * d).toFloat() }
-    val line = Path().apply {
-        moveTo(pts[0].first, pts[0].second)
-        for (i in 1 until pts.size) {
-            val (x0, y0p) = pts[i - 1]
-            val (x1, y1) = pts[i]
-            val mid = (x0 + x1) / 2
-            cubicTo(mid, y0p, mid, y1, x1, y1)
+fun Modifier.footerEdge(lineAlpha: Float = 0.5f): Modifier = drawWithCacheOf(FooterEdge(lineAlpha))
+
+/**
+ * [footerEdge]'s drawing, as a value ([drawWithCacheOf]): recomposed with equal inputs it is an equal modifier,
+ * which keeps what it cached (outline, paths, grain) instead of building it again at the next draw.
+ */
+private data class FooterEdge(val lineAlpha: Float) : (CacheDrawScope) -> DrawResult {
+    override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
+        val d = density
+        val ink = Tokens.Ink.toPx()
+        val y0 = 1.4 + Tokens.Ink.value
+        val pts = wavyPoints((size.width / d).toDouble(), y0, 1.4, 223.0, 12).map { (it.x * d).toFloat() to (it.y * d).toFloat() }
+        val line = Path().apply {
+            moveTo(pts[0].first, pts[0].second)
+            for (i in 1 until pts.size) {
+                val (x0, y0p) = pts[i - 1]
+                val (x1, y1) = pts[i]
+                val mid = (x0 + x1) / 2
+                cubicTo(mid, y0p, mid, y1, x1, y1)
+            }
         }
-    }
-    val fill = Path().apply {
-        addPath(line)
-        lineTo(size.width, size.height)
-        lineTo(0f, size.height)
-        close()
-    }
-    onDrawBehind {
-        drawPath(fill, Tokens.Cream)
-        drawPath(line, Tokens.FieldBorderHover, alpha = lineAlpha, style = Stroke(ink, cap = StrokeCap.Round))
+        val fill = Path().apply {
+            addPath(line)
+            lineTo(size.width, size.height)
+            lineTo(0f, size.height)
+            close()
+        }
+        onDrawBehind {
+            drawPath(fill, Tokens.Cream)
+            drawPath(line, Tokens.FieldBorderHover, alpha = lineAlpha, style = Stroke(ink, cap = StrokeCap.Round))
+        }
     }
 }

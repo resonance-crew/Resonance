@@ -114,6 +114,8 @@ final class ThreadModel {
     var searchLoading: Bool { loadingOlder && !searchQuery.isBlank }
 
     @ObservationIgnored private let session: SessionStore
+    /// `links(in:)`'s answers, by text.
+    @ObservationIgnored private var linkMemo: [String: [ChatLinks.Link]] = [:]
     @ObservationIgnored private var listeners: [ListenerRegistration] = []
     /// Which `attach` the live listeners belong to (a late callback of a removed one is ignored).
     @ObservationIgnored private var listening = 0
@@ -742,20 +744,12 @@ final class ThreadModel {
 
     // MARK: - Deleting
 
-    /// Deletes the whole conversation, for both people (deleteConversation: messages in batches, then the parent).
+    /// Deletes the whole conversation, for both people (DELETE /api/v1/conversations/{pair}: the server deletes it whole).
     func deleteConversation() async -> Bool {
         guard let pairId else { return false }
-        let db = FirebaseBootstrap.db
-        let ref = db.collection("conversations").document(pairId)
         do {
             stop()
-            let all = try await ref.collection("messages").getDocuments().documents
-            for chunk in stride(from: 0, to: all.count, by: 450).map({ Array(all[$0..<min($0 + 450, all.count)]) }) {
-                let batch = db.batch()
-                chunk.forEach { batch.deleteDocument($0.reference) }
-                try await batch.commit()
-            }
-            try await ref.delete()
+            try await MessagingAPI(client: session.api).deleteConversation(pairId)
             session.outboxes.forget(pairId)
             resetHistory()
             return true
@@ -803,12 +797,26 @@ final class ThreadModel {
         }
     }
 
+    /// The links in `text` (`ChatLinks.links`), read once per text: a row asks each time it is drawn,
+    /// and a message's words seldom change.
+    func links(in text: String) -> [ChatLinks.Link] {
+        if let kept = linkMemo[text] { return kept }
+        let found = ChatLinks.links(in: text)
+        if linkMemo.count >= Self.linkMemoSize { linkMemo.removeAll(keepingCapacity: true) }
+        linkMemo[text] = found
+        return found
+    }
+
+    /// How many texts' links are kept (a search's whole history is up to 5000 messages; the rows on
+    /// screen and around them are what is asked again).
+    private static let linkMemoSize = 1000
+
     /// Cards shared here (in thread order, once each) and links written in messages.
     var shared: (cards: [String], links: [ChatLinks.Link]) {
         var seenCards: [String] = [], seenLinks: [ChatLinks.Link] = []
         for m in messages {
             if let id = m.cardRef, !seenCards.contains(id) { seenCards.append(id) }
-            for link in ChatLinks.links(in: m.text) where !seenLinks.contains(where: { $0.url == link.url }) {
+            for link in links(in: m.text) where !seenLinks.contains(where: { $0.url == link.url }) {
                 seenLinks.append(link)
             }
         }

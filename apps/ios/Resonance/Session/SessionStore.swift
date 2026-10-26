@@ -4,6 +4,7 @@ import GoogleSignIn
 import Observation
 import ResonanceAPI
 import ResonanceKit
+import SafariServices
 import UIKit
 import UserNotifications
 
@@ -360,6 +361,10 @@ final class SessionStore {
     /// profile.
     nonisolated static func forget(_ uid: String) async {
         await FirebaseBootstrap.clearLocalData()
+        // Its pushes stop here even when the unregister never reached the server.
+        await PushCenter.shared.forgetToken()
+        // A sign-in to the site made in the in-app browser (a policy page's header offers one) is the account's too.
+        await SFSafariViewController.DataStore.default.clearWebsiteData()
         let center = UNUserNotificationCenter.current()
         center.removeAllDeliveredNotifications()
         try? await center.setBadgeCount(0)

@@ -24,7 +24,8 @@ async function main() {
 
   for (const doc of targets) {
     try {
-      const result = await indexCard(doc.id);
+      // --all makes every signature again, even one whose text is unchanged (a new prompt, say).
+      const result = await indexCard(doc.id, { force: reindexAll });
       console.log(`  ${doc.id}: ${result.indexed ? `indexed (${result.channels} channels)` : `skipped (${result.reason})`}`);
     } catch (err) {
       console.error(`  ${doc.id}: FAILED`, err);

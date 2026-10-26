@@ -95,7 +95,8 @@ export async function publishCard(
   });
 
   // Publishing never waits long on — or fails for — the AI step; the id is a working URL.
-  const slugP = assignSlug(db, id, slugBase).catch((e) => (console.error('[api/v1] slug', e), null));
+  // The card as the transaction read it: its title, byline, author and slug are what publishing left them.
+  const slugP = assignSlug(db, id, slugBase, card.data).catch((e) => (console.error('[api/v1] slug', e), null));
   const resonance = card.firstPublish && typeof card.data.referenceCardId === 'string' && reachable(card.data);
   const [slug, notificationId] = await Promise.all([
     within(slugP, opts.slugWaitMs ?? SLUG_WAIT_MS),

@@ -129,16 +129,21 @@ object Linkify {
     }
 
     private fun trimmed(text: String, begin: Int, run: Int): Int {
+        // The brackets the link holds, counted once and taken off as closers are trimmed (the web's
+        // linkEnd): recounting the link for every closer made a long run of them quadratic.
+        val held = IntArray(BRACKETS.length)
+        for (i in begin until run) {
+            val k = BRACKETS.indexOf(text[i])
+            if (k >= 0) held[k]++
+        }
         var end = run
         while (end > begin) {
             val c = text[end - 1]
+            val k = BRACKETS.indexOf(c)
             if (c in ".,;:!?'*~") {
                 end--
-            } else if (c == ')' && unbalanced(text, begin, end, '(', ')')) {
-                end--
-            } else if (c == ']' && unbalanced(text, begin, end, '[', ']')) {
-                end--
-            } else if (c == '}' && unbalanced(text, begin, end, '{', '}')) {
+            } else if (k % 2 == 1 && held[k] > held[k - 1]) {
+                held[k]--
                 end--
             } else {
                 break
@@ -147,14 +152,8 @@ object Linkify {
         return end
     }
 
-    private fun unbalanced(text: String, from: Int, to: Int, open: Char, close: Char): Boolean {
-        var opens = 0
-        var closes = 0
-        for (i in from until to) {
-            if (text[i] == open) opens++ else if (text[i] == close) closes++
-        }
-        return closes > opens
-    }
+    /** Each opener followed by its closer, so a closer's index is odd and its opener's one less. */
+    private const val BRACKETS = "()[]{}"
 
     // Normalizing
 

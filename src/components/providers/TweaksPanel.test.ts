@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { TWEAK_DEFAULTS, applyTweaks, loadTweaks } from './TweaksPanel';
+import { ACCENT_MAP, TWEAK_DEFAULTS, applySavedTweaks, applyTweaks, loadTweaks } from './TweaksPanel';
 
 const read = (p: string) => readFileSync(resolve(__dirname, '../../..', p), 'utf8');
 const tokens = read('src/styles/tokens.css');
@@ -88,5 +88,41 @@ describe('the heading-font tweak and the self-hosted faces', () => {
   it('keeps the Chinese fallback of the handwritten heading on the self-hosted face', () => {
     applyTweaks({ ...TWEAK_DEFAULTS, fontFamily: 'handwritten' });
     expect(document.documentElement.style.getPropertyValue('--font-heading')).toBe(token('--font-handwritten'));
+  });
+});
+
+// On every page load: the defaults are tokens.css's own values, so a reader
+// who never changed the look (or changed it back) gets nothing written onto
+// <html> — no dozen inline properties, no page-wide style recalc — and the
+// page looks exactly the same.
+describe('applying the saved tweaks on page load', () => {
+  const same = (a: string, b: string) => a.replace(/\s+/g, ' ').trim() === b.replace(/\s+/g, ' ').trim();
+
+  it('takes the defaults to be exactly tokens.css', () => {
+    for (const [name, value] of Object.entries(ACCENT_MAP[TWEAK_DEFAULTS.accentColor])) {
+      expect(same(value, token(name)), name).toBe(true);
+    }
+    applyTweaks({ ...TWEAK_DEFAULTS });
+    const style = document.documentElement.style;
+    expect(style.getPropertyValue('--font-heading')).toBe(token('--font-heading'));
+    expect(Number(style.getPropertyValue('--grain-opacity'))).toBe(Number(token('--grain-opacity')));
+  });
+
+  it('writes nothing for the defaults, saved or not', () => {
+    applySavedTweaks();
+    expect(document.documentElement.getAttribute('style')).toBeNull();
+    expect(localStorage.getItem('resonance-tweaks')).toBeNull();
+
+    localStorage.setItem('resonance-tweaks', JSON.stringify(TWEAK_DEFAULTS));
+    applySavedTweaks();
+    expect(document.documentElement.getAttribute('style')).toBeNull();
+  });
+
+  it('applies a saved look', () => {
+    localStorage.setItem('resonance-tweaks', JSON.stringify({ ...TWEAK_DEFAULTS, accentColor: 'sage', grainIntensity: 0 }));
+    applySavedTweaks();
+    const style = document.documentElement.style;
+    expect(style.getPropertyValue('--color-terracotta')).toBe(ACCENT_MAP.sage['--color-terracotta']);
+    expect(style.getPropertyValue('--grain-opacity')).toBe('0');
   });
 });

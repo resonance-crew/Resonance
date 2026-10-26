@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -100,19 +101,23 @@ fun OrganicIcon(
 fun OrganicRadio(selected: Boolean, seed: Double = 21.0, modifier: Modifier = Modifier) {
     val dot by animateFloatAsState(if (selected) 1f else 0f, spring(dampingRatio = 0.7f, stiffness = 600f), label = "radio")
     val ring = if (selected) Tokens.TerracottaDeep else Tokens.ToggleOffStroke
-    Canvas(modifier.size(22.dp).clearAndSetSemantics { }) {
+    // Canvas's own Spacer + drawBehind, with the ring's outline built when the size changes, not on every draw.
+    Spacer(modifier.size(22.dp).clearAndSetSemantics { }.drawWithCache {
         val ringOutline = WobCircleShape(seed, WobCircleOptions(segments = 7, mag = 0.7, cpJitter = 0.4))
             .createOutline(size, layoutDirection, this)
-        drawOutline(ringOutline, ring, style = Stroke(Tokens.Ink.toPx()))
-        if (dot > 0.01f) {
-            val inset = 5.5.dp.toPx()
-            val d = (size.width - inset * 2) * (0.2f + 0.8f * dot)
-            val o = WobCircleShape(seed + 5, WobCircleOptions(segments = 6, mag = 0.5, cpJitter = 0.3))
-                .createOutline(androidx.compose.ui.geometry.Size(d, d), layoutDirection, this)
-            val off = (size.width - d) / 2
-            drawContext.transform.translate(off, off)
-            drawOutline(o, Tokens.Terracotta, alpha = dot)
-            drawContext.transform.translate(-off, -off)
+        val ringPen = Stroke(Tokens.Ink.toPx())
+        onDrawBehind {
+            drawOutline(ringOutline, ring, style = ringPen)
+            if (dot > 0.01f) {
+                val inset = 5.5.dp.toPx()
+                val d = (size.width - inset * 2) * (0.2f + 0.8f * dot)
+                val o = WobCircleShape(seed + 5, WobCircleOptions(segments = 6, mag = 0.5, cpJitter = 0.3))
+                    .createOutline(androidx.compose.ui.geometry.Size(d, d), layoutDirection, this)
+                val off = (size.width - d) / 2
+                drawContext.transform.translate(off, off)
+                drawOutline(o, Tokens.Terracotta, alpha = dot)
+                drawContext.transform.translate(-off, -off)
+            }
         }
-    }
+    })
 }

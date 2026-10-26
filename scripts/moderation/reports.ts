@@ -17,6 +17,7 @@
  * (credentials come from .env otherwise).
  */
 import 'dotenv/config';
+import { inertJson, terminalSafe } from './terminal';
 import { emulatorEnv, EMULATOR_PROJECT_ID } from '../emulator-env.mjs';
 import { purgeAtOf } from '../../src/lib/cards/trash';
 
@@ -58,13 +59,14 @@ async function main() {
     snap.docs.forEach((d, i) => {
       const r = d.data();
       const when = r.createdAt?.toDate?.().toISOString() ?? '?';
+      const t = terminalSafe;
       console.log(
-        `${d.id}  ${when}  [${r.status}]  ${r.reason}  ${r.targetType}:${r.targetId}` +
-          `  against ${r.targetUserId}  by ${r.reporterId}` +
-          (r.contextId ? `  (context ${r.contextId})` : '') +
-          (r.detail ? `\n    “${r.detail}”` : ''),
+        `${t(d.id)}  ${when}  [${t(r.status)}]  ${t(r.reason)}  ${t(r.targetType)}:${t(r.targetId)}` +
+          `  against ${t(r.targetUserId)}  by ${t(r.reporterId)}` +
+          (r.contextId ? `  (context ${t(r.contextId)})` : '') +
+          (r.detail ? `\n    “${t(r.detail)}”` : ''),
       );
-      console.log(`    ${summarize(evidence[i].data())}`);
+      console.log(`    ${t(summarize(evidence[i].data()))}`);
     });
     return;
   }
@@ -74,7 +76,7 @@ async function main() {
     if (!id) throw new Error('Usage: show <reportId>');
     const [report, evidence] = await db.getAll(db.doc(`reports/${id}`), db.doc(`reportEvidence/${id}`));
     if (!report.exists) throw new Error(`No report ${id}`);
-    console.log(JSON.stringify({ report: plain(report.data()), evidence: plain(evidence.data()) ?? null }, null, 2));
+    console.log(inertJson(JSON.stringify({ report: plain(report.data()), evidence: plain(evidence.data()) ?? null }, null, 2)));
     // What became of a reported card since: the evidence keeps it as it read when it was filed.
     const r = report.data()!;
     const cardId = r.targetType === 'card' && typeof r.targetId === 'string' && !r.targetId.includes('/') ? r.targetId : null;

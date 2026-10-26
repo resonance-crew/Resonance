@@ -15,6 +15,17 @@ import Testing
         #expect(texts("(https://example.com/x)") == ["https://example.com/x"])
         #expect(texts("https://en.wikipedia.org/wiki/A_(b) ok") == ["https://en.wikipedia.org/wiki/A_(b)"])
         #expect(texts("go to https://example.com!?") == ["https://example.com"])
+        #expect(texts("((https://example.com/x(y)))") == ["https://example.com/x(y)"])
+    }
+
+    @Test func trimsALongRunOfClosersInAMoment() {
+        // Every trimmed closer recounted the link before: a story of one link and 199 000 closers took minutes.
+        for closer in [")", "]", "}"] {
+            let text = "https://a.com/" + String(repeating: closer, count: 199_000)
+            let started = Date()
+            #expect(texts(text) == ["https://a.com/"])
+            #expect(Date().timeIntervalSince(started) < 5)
+        }
     }
 
     @Test func followsTheServersRulesAroundChineseText() {
@@ -110,6 +121,20 @@ import Testing
         #expect(ChatLinks.links(in: text).map(\.url.absoluteString)
             == ["https://one.example.com/x", "https://www.two.example.com/", "http://three.example.org/(y)"])
         #expect(ChatLinks.links(in: "nothing to see").isEmpty)
+    }
+
+    @Test func aLinkStartsAtItsWordsInAnyCaseAndAtNothingThatOnlyLooksLikeThem() {
+        #expect(texts("a HTTPS://example.com b hTtP://example.org c WwW.example.net") ==
+            ["HTTPS://example.com", "hTtP://example.org", "WwW.example.net"])
+        // Full-width letters, a dotless or dotted I, a Kelvin sign: none of them is the ASCII letter.
+        #expect(texts("ｈttps://example.com ｗww.example.com") == [])
+        #expect(texts("https:／/example.com wwW。example.com") == [])
+        #expect(texts("\u{212A}https://example.com") == ["https://example.com"])
+        // Cut short at the message's end, or a word that only begins like one.
+        #expect(texts("https:/") == [])
+        #expect(texts("http") == [])
+        #expect(texts("ww") == [])
+        #expect(texts("whttps://example.com hhttp://example.com") == [])
     }
 
     @Test func aSchemeOrHostInTheWrongCaseIsStillAnOrdinaryLink() {

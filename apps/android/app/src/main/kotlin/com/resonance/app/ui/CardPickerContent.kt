@@ -57,6 +57,7 @@ import com.resonance.design.ModalTitle
 import com.resonance.design.OklchColor
 import com.resonance.design.OrganicIcon
 import com.resonance.design.fade
+import com.resonance.design.SharedShimmer
 import com.resonance.design.Skeleton
 import com.resonance.design.OrganicButton
 import com.resonance.design.ButtonVariant
@@ -274,21 +275,24 @@ internal fun publicCards(cards: List<FeedCard>): List<FeedCard> =
  */
 @Composable
 internal fun PickSkeleton(rows: Int) {
-    Column(Modifier.semantics { contentDescription = L10n.Home.moreLoading }) {
-        repeat(rows) { i ->
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 10.dp, horizontal = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Skeleton(Modifier.size(40.dp), height = 40.dp, shape = remember(i) { pickThumbShape((i * 7 + 3).toDouble()) })
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    // As tall as the title's line (15 × 1.3) and the meta's (13 × 1.4), a bar in the middle of each.
-                    Box(Modifier.fillMaxWidth().height(19.5.dp), contentAlignment = Alignment.CenterStart) {
-                        Skeleton(Modifier.fillMaxWidth(0.6f), height = 14.dp)
-                    }
-                    Box(Modifier.fillMaxWidth().height(18.2.dp), contentAlignment = Alignment.CenterStart) {
-                        Skeleton(Modifier.fillMaxWidth(0.35f), height = 11.dp)
+    // One clock for its blocks (composed together).
+    SharedShimmer {
+        Column(Modifier.semantics { contentDescription = L10n.Home.moreLoading }) {
+            repeat(rows) { i ->
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 10.dp, horizontal = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Skeleton(Modifier.size(40.dp), height = 40.dp, shape = remember(i) { pickThumbShape((i * 7 + 3).toDouble()) })
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        // As tall as the title's line (15 × 1.3) and the meta's (13 × 1.4), a bar in the middle of each.
+                        Box(Modifier.fillMaxWidth().height(19.5.dp), contentAlignment = Alignment.CenterStart) {
+                            Skeleton(Modifier.fillMaxWidth(0.6f), height = 14.dp)
+                        }
+                        Box(Modifier.fillMaxWidth().height(18.2.dp), contentAlignment = Alignment.CenterStart) {
+                            Skeleton(Modifier.fillMaxWidth(0.35f), height = 11.dp)
+                        }
                     }
                 }
             }

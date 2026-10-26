@@ -39,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,6 +80,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -237,9 +239,9 @@ const val WAVE_DEPTH_EM = 0.29f
 fun linkWaveY(baseline: Float, sizePx: Float): Float = baseline + sizePx * WAVE_DEPTH_EM
 
 /** A link's strokes, ready to draw: its url (for the press state), wave paths and where they sit. */
-private class LinkStroke(val url: String, val x: Float, val y: Float, val wave: androidx.compose.ui.graphics.Path)
+internal class LinkStroke(val url: String, val x: Float, val y: Float, val wave: androidx.compose.ui.graphics.Path)
 
-private fun linkStrokes(layout: Layout, spanned: Spanned, sizePx: Float, density: Float): List<LinkStroke> =
+internal fun linkStrokes(layout: Layout, spanned: Spanned, sizePx: Float, density: Float): List<LinkStroke> =
     spanned.getSpans(0, spanned.length, LinkSpan::class.java).flatMap { span ->
         val frags = linkFragments(
             spanned.getSpanStart(span), spanned.getSpanEnd(span),
@@ -358,47 +360,61 @@ private const val TABULAR_FIGURES = "tnum"
 /** Rich story text in exact CSS line boxes, with tappable links. */
 @Composable
 fun RichCssText(runs: List<InlineRun>, style: ProseStyle, onOpenUrl: (String) -> Unit, modifier: Modifier = Modifier) {
+    val open by rememberUpdatedState(onOpenUrl)
     val scaled = LocalDensity.current
     val density = scaled.density
-    BoxWithConstraints(modifier.fillMaxWidth()) {
-        val widthPx = constraints.maxWidth
-        val (layout, spanned) = remember(runs, style, widthPx, density, scaled.fontScale) { buildRichLayout(runs, style, widthPx, scaled) }
-        val plain = remember(runs, style.lang) { proseSemantics(runs.joinToString("") { it.text }, style.lang) }
-        val sizePx = scaled.cssFontPx(style.size)
-        val strokes = remember(layout, spanned, sizePx, density) { linkStrokes(layout, spanned, sizePx, density) }
-        var pressedUrl by remember { mutableStateOf<String?>(null) }
+    val plain = remember(runs, style.lang) { proseSemantics(runs.joinToString("") { it.text }, style.lang) }
+    // Laid out while measured, for the width offered (no subcomposition: [builtForWidth]); a tap reads what was laid out.
+    val built = remember { WidthBuilt<RichTextLayout>() }
+    val pressedUrl = remember { mutableStateOf<String?>(null) }
+    // Whether its words hold a link at all; one whose strokes came out empty (only spaces) takes no tap, as before.
+    val linked = remember(runs) { runs.any { it.link != null && it.text.isNotEmpty() } }
+    Box(modifier.fillMaxWidth()) {
         Box(
             Modifier
-                .width(Dp(layout.width / density))
-                .height(Dp(layout.height / density))
-                .semantics { this.text = plain }
-                .then(if (strokes.isEmpty()) Modifier else Modifier.pointerInput(layout) {
-                    fun linkAt(p: androidx.compose.ui.geometry.Offset): LinkSpan? {
-                        val line = layout.getLineForVertical(p.y.roundToInt())
-                        val offset = layout.getOffsetForHorizontal(line, p.x)
-                        return spanned.getSpans(offset, offset, LinkSpan::class.java).firstOrNull()
-                    }
-                    detectTapGestures(
-                        onPress = { p ->
-                            // The pen presses harder while the finger is down: the web's hover.
-                            pressedUrl = linkAt(p)?.url
-                            tryAwaitRelease()
-                            pressedUrl = null
-                        },
-                    ) { p -> linkAt(p)?.let { onOpenUrl(it.url) } }
-                })
-                .drawBehind {
+                .builtForWidth(
+                    key = RichTextKey(runs, style, density, scaled.fontScale),
+                    built = built,
+                    build = { widthPx ->
+                        val (layout, spanned) = buildRichLayout(runs, style, widthPx, scaled)
+                        RichTextLayout(layout, spanned, linkStrokes(layout, spanned, scaled.cssFontPx(style.size), density))
+                    },
+                    size = { IntSize(it.layout.width, it.layout.height) },
+                ) { (layout, _, strokes) ->
                     // The waves first, under the letters (the web paints them as the link's background):
                     // a descender's foot rests in its arch rather than being crossed by it.
                     val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                     strokes.forEach { s ->
-                        translate(s.x, s.y) { drawPath(s.wave, Tokens.Terracotta, alpha = if (s.url == pressedUrl) 1f else 0.7f, style = pen) }
+                        translate(s.x, s.y) { drawPath(s.wave, Tokens.Terracotta, alpha = if (s.url == pressedUrl.value) 1f else 0.7f, style = pen) }
                     }
                     drawIntoCanvas { layout.draw(it.nativeCanvas) }
-                },
+                }
+                .semantics { this.text = plain }
+                .then(if (!linked) Modifier else Modifier.pointerInput(built) {
+                    fun linkAt(p: androidx.compose.ui.geometry.Offset): LinkSpan? {
+                        val laid = built.value?.takeIf { it.strokes.isNotEmpty() } ?: return null
+                        val line = laid.layout.getLineForVertical(p.y.roundToInt())
+                        val offset = laid.layout.getOffsetForHorizontal(line, p.x)
+                        return laid.spanned.getSpans(offset, offset, LinkSpan::class.java).firstOrNull()
+                    }
+                    detectTapGestures(
+                        onPress = { p ->
+                            // The pen presses harder while the finger is down: the web's hover.
+                            pressedUrl.value = linkAt(p)?.url
+                            tryAwaitRelease()
+                            pressedUrl.value = null
+                        },
+                    ) { p -> linkAt(p)?.let { open(it.url) } }
+                }),
         )
     }
 }
+
+/** A run of story text laid out for a width: the layout, its spanned text and its links' strokes. */
+internal data class RichTextLayout(val layout: StaticLayout, val spanned: Spanned, val strokes: List<LinkStroke>)
+
+/** Everything a [RichCssText]'s layout comes from but the width. */
+private data class RichTextKey(val runs: List<InlineRun>, val style: ProseStyle, val density: Float, val fontScale: Float)
 
 /**
  * Where a title breaks between its clauses (LatinMarkText on the web): Chinese breaks between any
@@ -460,21 +476,25 @@ fun StoryTitle(text: String, type: StoryType, lang: String?, modifier: Modifier 
     val scaled = LocalDensity.current
     val density = scaled.density
     val style = remember(type, lang) { ProseStyle.title(type, lang) }
-    BoxWithConstraints(modifier.fillMaxWidth()) {
-        val widthPx = constraints.maxWidth
-        val layout = remember(text, style, widthPx, density, scaled.fontScale, AppFonts.useBundledCJK) {
-            titleLayout(text, style, widthPx, scaled, clauses = type.cjk)
-        }
-        val read = remember(text, lang) { proseSemantics(text, lang) }
+    val read = remember(text, lang) { proseSemantics(text, lang) }
+    // Laid out while measured, for the width offered (no subcomposition: [builtForWidth]).
+    val built = remember { WidthBuilt<StaticLayout>() }
+    Box(modifier.fillMaxWidth()) {
         Box(
             Modifier
-                .width(Dp(layout.width / density))
-                .height(Dp(layout.height / density))
-                .semantics { this.text = read }
-                .drawBehind { drawIntoCanvas { layout.draw(it.nativeCanvas) } },
+                .builtForWidth(
+                    key = TitleKey(text, style, density, scaled.fontScale, AppFonts.useBundledCJK, type.cjk),
+                    built = built,
+                    build = { widthPx -> titleLayout(text, style, widthPx, scaled, clauses = type.cjk) },
+                    size = { IntSize(it.width, it.height) },
+                ) { layout -> drawIntoCanvas { layout.draw(it.nativeCanvas) } }
+                .semantics { this.text = read },
         )
     }
 }
+
+/** Everything a [StoryTitle]'s layout comes from but the width. */
+private data class TitleKey(val text: String, val style: ProseStyle, val density: Float, val fontScale: Float, val bundledCJK: Boolean, val clauses: Boolean)
 
 /** The title's layout: broken between its clauses when [clauses] and they all fit their lines, else balanced as one text. */
 internal fun titleLayout(title: String, style: ProseStyle, widthPx: Int, density: Density, clauses: Boolean): StaticLayout {
@@ -683,7 +703,7 @@ private fun StoryImage(url: String, alt: String, atStart: Boolean = false) {
                 },
                 modifier = Modifier
                     .requiredSize(maxWidth + bleed * 2, maxHeight + bleed * 2)
-                    .clip(BledShape(seed, bleed.value.toDouble(), radius = 12.0, magFactor = 0.025)),
+                    .clip(remember(seed, bleed) { BledShape(seed, bleed.value.toDouble(), radius = 12.0, magFactor = 0.025) }),
             )
         }
     }

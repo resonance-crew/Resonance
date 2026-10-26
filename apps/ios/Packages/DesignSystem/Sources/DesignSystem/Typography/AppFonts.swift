@@ -69,10 +69,34 @@ public enum AppFonts {
     /// by the same 0.25 shear on its baseline — done here with the font matrix.
     nonisolated static let obliqueMatrix = CGAffineTransform(a: 1, b: 0, c: 0.25, d: 1, tx: 0, ty: 0)
 
+    /// Everything that shapes a face: what `uiFont` is asked for (the size already scaled).
+    struct FontKey: Hashable {
+        let family: Family
+        let size: CGFloat
+        let weight: CGFloat
+        let oblique: Bool
+        let lining: Bool
+    }
+
+    /// Each face made once: matching a descriptor with its cascade list through Core Text cost more
+    /// than anything else a view's update did, and the same few faces are asked for everywhere.
+    private static var faces: [FontKey: UIFont] = [:]
+    /// The SwiftUI font of each face `font` gave (the same one each time, so a `Text` keeps it).
+    private static var swiftUIFaces: [FontKey: Font] = [:]
+
     /// The face at `size`, falling back glyph by glyph as its CSS stack does (`Family.fallback`,
     /// then the system's). `lining` sets lining figures, in the fallback too (a title's digits).
     public static func uiFont(_ family: Family, size: CGFloat, weight: UIFont.Weight = .regular, oblique: Bool = false,
                               lining: Bool = false) -> UIFont {
+        let key = FontKey(family: family, size: size, weight: weight.rawValue, oblique: oblique, lining: lining)
+        if let kept = faces[key] { return kept }
+        let face = makeFont(family, size: size, weight: weight, oblique: oblique, lining: lining)
+        faces[key] = face
+        return face
+    }
+
+    /// The face as Core Text matches it (what `uiFont` keeps).
+    static func makeFont(_ family: Family, size: CGFloat, weight: UIFont.Weight, oblique: Bool, lining: Bool) -> UIFont {
         let traits: [UIFontDescriptor.TraitKey: Any] = [.weight: weight]
         var fallback: [UIFontDescriptor.AttributeName: Any] = [.family: family.fallback, .traits: traits]
         var attributes: [UIFontDescriptor.AttributeName: Any] = [.family: family.rawValue, .traits: traits]
@@ -130,7 +154,11 @@ public enum AppFonts {
     public static func font(_ family: Family, size: CGFloat, weight: UIFont.Weight = .regular, oblique: Bool = false,
                             relativeTo textStyle: UIFont.TextStyle? = nil) -> Font {
         let scaled = (size * TextScale.factor(relativeTo: textStyle ?? family.textStyle)).rounded()
-        return Font(uiFont(family, size: scaled, weight: weight, oblique: oblique))
+        let key = FontKey(family: family, size: scaled, weight: weight.rawValue, oblique: oblique, lining: false)
+        if let kept = swiftUIFaces[key] { return kept }
+        let font = Font(uiFont(family, size: scaled, weight: weight, oblique: oblique))
+        swiftUIFaces[key] = font
+        return font
     }
 
     public static func heading(_ size: CGFloat, weight: UIFont.Weight = .bold) -> Font {

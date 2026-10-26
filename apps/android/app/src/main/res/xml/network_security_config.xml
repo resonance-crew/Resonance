@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Plain HTTP only to the Mac's loopback as the Android emulator sees it
-     (10.0.2.2): the local Firebase emulators and the dev server. -->
+<!-- Release builds: HTTPS only (the platform's default since API 28, written out). The debug
+     build's own file (src/debug) allows plain HTTP to the emulators' loopback. -->
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">10.0.2.2</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="false" />
 </network-security-config>

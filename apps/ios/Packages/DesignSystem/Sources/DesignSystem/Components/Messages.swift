@@ -1080,6 +1080,27 @@ public struct ChatText: UIViewRepresentable {
         self.onLinkTap = onLinkTap
     }
 
+    /// What the words were last drawn from: an update that brings the same (a row drawn again for
+    /// something else) leaves the view as it is — no new string, no new layout, no redraw.
+    struct Drawn: Equatable {
+        let text: String
+        let font: UIFont
+        let heavier: UIFont?
+        let lineHeight: CGFloat
+        let color: Color
+        let links: [MessageLinkRange]
+        let linkColor: Color
+        let highlights: [NSRange]
+        let highlightColor: Color
+        let maxLines: Int
+    }
+
+    public final class Coordinator {
+        var drawn: Drawn?
+    }
+
+    public func makeCoordinator() -> Coordinator { Coordinator() }
+
     public func makeUIView(context: Context) -> ChatTextView {
         let view = ChatTextView()
         view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -1087,7 +1108,17 @@ public struct ChatText: UIViewRepresentable {
     }
 
     public func updateUIView(_ view: ChatTextView, context: Context) {
+        // The fonts are asked for every time (they follow the person's text size), the rest compared.
         let font = AppFonts.scaledUIFont(.body, size: size, weight: weight)
+        let heavier = highlightWeight.map { AppFonts.scaledUIFont(.body, size: size, weight: $0) }
+        let drawn = Drawn(text: text, font: font, heavier: heavier, lineHeight: lineHeight, color: color, links: links,
+                          linkColor: linkColor, highlights: highlights, highlightColor: highlightColor, maxLines: maxLines)
+        guard drawn != context.coordinator.drawn else {
+            // Only the tap's callback is new (it does the same).
+            view.setLinkTap(onLinkTap)
+            return
+        }
+        context.coordinator.drawn = drawn
         let out = NSMutableAttributedString(string: text, attributes: [.font: font, .foregroundColor: UIColor(color)])
         let all = NSRange(location: 0, length: out.length)
         for link in links {
@@ -1095,8 +1126,7 @@ public struct ChatText: UIViewRepresentable {
             guard r.length > 0 else { continue }
             out.addAttributes([.foregroundColor: UIColor(linkColor)], range: r)
         }
-        if let highlightWeight {
-            let heavier = AppFonts.scaledUIFont(.body, size: size, weight: highlightWeight)
+        if let heavier {
             for range in highlights {
                 let r = NSIntersectionRange(range, all)
                 if r.length > 0 { out.addAttribute(.font, value: heavier, range: r) }
@@ -1149,25 +1179,41 @@ public final class ChatTextView: UIView, UIGestureRecognizerDelegate {
 
     func set(text: NSAttributedString, font: UIFont, lineHeight: CGFloat, maxLines: Int, links: [MessageLinkRange],
              highlights: [NSRange], highlightColor: UIColor, onLinkTap: ((URL) -> Void)?) {
+        // Drawn again only when something drawn changed: drawing is by hand, on the CPU.
+        var changed = false
         if lineBoxes?.font != font || lineBoxes?.lineBox != font.pointSize * lineHeight {
             let boxes = CSSLineBoxes(font: font, lineHeight: lineHeight)
             lineBoxes = boxes
             layout.delegate = boxes
+            changed = true
         }
-        container.maximumNumberOfLines = maxLines
-        container.lineBreakMode = maxLines > 0 ? .byTruncatingTail : .byWordWrapping
+        let breakMode: NSLineBreakMode = maxLines > 0 ? .byTruncatingTail : .byWordWrapping
+        if container.maximumNumberOfLines != maxLines || container.lineBreakMode != breakMode {
+            container.maximumNumberOfLines = maxLines
+            container.lineBreakMode = breakMode
+            changed = true
+        }
         if !storage.isEqual(to: text) {
             storage.setAttributedString(text)
             invalidateIntrinsicContentSize()
+            changed = true
+        }
+        if self.links != links || self.highlights != highlights || self.highlightColor != highlightColor {
+            changed = true
         }
         self.links = links
         self.highlights = highlights
         self.highlightColor = highlightColor
+        setLinkTap(onLinkTap)
+        glyphHeight = font.pointSize * 1.3
+        if changed { setNeedsDisplay() }
+    }
+
+    /// What a tap on a link calls.
+    func setLinkTap(_ onLinkTap: ((URL) -> Void)?) {
         self.onLinkTap = onLinkTap
         // Words without a link to tap leave every touch to what they sit in (a bubble, a row of results).
         isUserInteractionEnabled = onLinkTap != nil && !links.isEmpty
-        glyphHeight = font.pointSize * 1.3
-        setNeedsDisplay()
     }
 
     /// The words laid out across `width`: as wide as their longest line, as tall as their lines —

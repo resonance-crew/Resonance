@@ -1,7 +1,7 @@
 import Foundation
 
 /// `number | [lo, hi]` from the web: a fixed turn count, or a seeded pick in a range.
-public enum SegValue: Sendable, Equatable {
+public enum SegValue: Sendable, Hashable {
     case count(Double)
     case range(Int, Int)
 }
@@ -9,7 +9,7 @@ public enum SegValue: Sendable, Equatable {
 /// Each corner's own radius, clockwise from the top left (a bubble in a stack keeps its outer
 /// corners round and tucks the ones that face its neighbours). Each is jittered and capped the way
 /// `R` is; without it all four are `R`. The twin of the Kotlin `CornerRadii` and the web's `cornerRadii`.
-public struct CornerRadii: Sendable, Equatable {
+public struct CornerRadii: Sendable, Hashable {
     public var topLeft: Double, topRight: Double, bottomRight: Double, bottomLeft: Double
     public init(topLeft: Double, topRight: Double, bottomRight: Double, bottomLeft: Double) {
         self.topLeft = topLeft

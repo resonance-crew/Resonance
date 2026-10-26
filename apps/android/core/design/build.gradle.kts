@@ -26,6 +26,18 @@ android {
     }
 }
 
+// The kit's and the geometry's immutable values are stable to Compose (compose-stability.conf), so a
+// row or a card rebuilt with equal values skips. `-PcomposeReports` writes the compiler's reports and
+// metrics (build/compose-reports): which composables can skip and which parameters it reads as
+// unstable, for an audit.
+composeCompiler {
+    stabilityConfigurationFiles.add(rootProject.layout.projectDirectory.file("compose-stability.conf"))
+    if (providers.gradleProperty("composeReports").isPresent) {
+        reportsDestination = layout.buildDirectory.dir("compose-reports")
+        metricsDestination = layout.buildDirectory.dir("compose-reports")
+    }
+}
+
 dependencies {
     api("com.resonance:resonance-geometry:0.1.0")
     api(project(":core:kit"))

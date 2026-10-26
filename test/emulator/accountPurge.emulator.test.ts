@@ -4,9 +4,12 @@ import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestor
 import {
   DELETION_GRACE_DAYS,
   getAccountDeletion,
+  holdAnonymousCards,
   purgeAccount,
   purgeDueAccounts,
+  releaseHeldCards,
   scheduleAccountDeletion,
+  UPLOAD_DELETE_BATCH,
 } from '@/lib/account/deletion';
 import { exportAccountData, exportAccountJson } from '@/lib/account/export';
 import { sendNote } from '@/lib/api/v1/conversations';
@@ -153,6 +156,66 @@ describe('scheduleAccountDeletion', () => {
   });
 });
 
+// An anonymous card that ended in the purge's minute beside its author's
+// profile (and was revalidated in the same call) would say whose it was: it
+// goes out of sight when the deletion is scheduled, as any card its author
+// trashed, and comes back if the deletion is cancelled.
+describe('holding anonymous cards while the account waits to be deleted', () => {
+  async function seedCards() {
+    const published = Timestamp.fromDate(new Date('2026-09-01T00:00:00Z'));
+    const set = (path: string, data: Record<string, unknown>) => db.doc(path).set(data);
+    await Promise.all([
+      set('users/zoe', { handle: 'zoe', handleLower: 'zoe' }),
+      set('cards/zoeAnon', { authorId: 'zoe', thoughtCore: 'A', story: 's', visibility: 'public', anonymous: true, publishedAt: published, slug: 'quiet-zoe' }),
+      set('cards/zoeNamed', { authorId: 'zoe', thoughtCore: 'N', story: 's', visibility: 'public', anonymous: false, publishedAt: published }),
+      set('cards/zoeDraft', { authorId: 'zoe', thoughtCore: 'D', story: 's', visibility: 'private', anonymous: true, publishedAt: null }),
+      set('cards/zoeTrashed', {
+        authorId: 'zoe', thoughtCore: 'T', story: 's', visibility: 'private', anonymous: true, publishedAt: published,
+        trashedAt: Timestamp.fromDate(new Date('2026-09-20T00:00:00Z')), trashedFrom: { visibility: 'public', referenceCardId: null },
+      }),
+    ]);
+  }
+
+  it('trashes the published anonymous cards alone, hidden from everyone at once, and never their profile page', async () => {
+    await seedCards();
+    expect((await readCardForPage(db, 'zoeAnon')).id).toBe('zoeAnon');
+    await scheduleAccountDeletion(db, 'zoe', new Date());
+    const stale = await holdAnonymousCards(db, 'zoe');
+    const anon = (await db.doc('cards/zoeAnon').get()).data()!;
+    expect(anon).toMatchObject({ visibility: 'private', trashedFor: 'deletion', trashedFrom: { visibility: 'public' } });
+    expect(await readCardForPage(db, 'zoeAnon')).toEqual({ id: null, card: null, author: null });
+    expect((await db.doc('cards/zoeNamed').get()).data()).toMatchObject({ visibility: 'public' });
+    expect((await db.doc('cards/zoeNamed').get()).get('trashedAt')).toBeUndefined();
+    expect((await db.doc('cards/zoeDraft').get()).get('trashedAt')).toBeUndefined();
+    expect((await db.doc('cards/zoeTrashed').get()).get('trashedFor')).toBeUndefined();
+    expect(stale).toEqual(expect.arrayContaining(['/card/zoeAnon']));
+    expect(stale).not.toContain('/u/zoe');
+  });
+
+  it('brings back only what it held when the deletion is cancelled', async () => {
+    await seedCards();
+    await holdAnonymousCards(db, 'zoe');
+    await releaseHeldCards(db, 'zoe');
+    const anon = (await db.doc('cards/zoeAnon').get()).data()!;
+    expect(anon.visibility).toBe('public');
+    expect(anon.trashedAt).toBeUndefined();
+    expect(anon.trashedFor).toBeUndefined();
+    // A card its author had put in the trash themselves stays there.
+    expect((await db.doc('cards/zoeTrashed').get()).get('trashedAt')).toBeDefined();
+  });
+
+  it("purges a held card with the account, its page not among the profile's", async () => {
+    await seedCards();
+    await scheduleAccountDeletion(db, 'zoe', new Date('2026-09-01T00:00:00Z'));
+    await holdAnonymousCards(db, 'zoe');
+    const revalidate = vi.fn();
+    const run = await purgeDueAccounts({ db, deleteAuthUser: vi.fn(async () => {}), revalidate }, { now: new Date('2026-10-01T00:00:00Z') });
+    expect(run.purged).toEqual(['zoe']);
+    expect((await db.doc('cards/zoeAnon').get()).exists).toBe(false);
+    expect(revalidate.mock.calls.flat(2)).not.toContain('/card/zoeAnon');
+  });
+});
+
 describe('purgeAccount', () => {
   it('removes everything of the deleted user and nothing of anyone else', async () => {
     await seedWorld();
@@ -237,6 +300,11 @@ describe('purgeAccount', () => {
     const missing = (await Promise.all(kept.map(async (p) => ((await exists(p)) ? null : p)))).filter(Boolean);
     expect(stillThere).toEqual([]);
     expect(missing).toEqual([]);
+    // Its cards' ids stay dead (no new card may take one: firestore.rules), their tombstones naming no one.
+    for (const id of ['alice-card', 'alice-draft']) {
+      expect(Object.keys((await db.doc(`cardTombstones/${id}`).get()).data() ?? {}), id).toEqual(['deletedAt']);
+    }
+    expect((await db.doc('cardTombstones/bob-card').get()).exists).toBe(false);
 
     expect(deleteAuthUser).toHaveBeenCalledWith('alice');
     // Older keys carry the uid; newer ones are found by their records.
@@ -318,6 +386,40 @@ describe('purgeAccount', () => {
     expect(await exists('cards/alice-trashed/edits/current')).toBe(false);
     expect(await exists('cards/alice-trashed-draft')).toBe(false);
     expect(await exists('notes/on-trashed')).toBe(false);
+  });
+
+  it("hands the store the account's pictures a batch at a time, starting none past the deadline", async () => {
+    await seedWorld();
+    const writer = db.bulkWriter();
+    for (let i = 0; i < UPLOAD_DELETE_BATCH + 5; i++) void writer.set(db.doc(`uploads/many-${i}`), { ownerId: 'alice', key: `image/2026-10/m${i}.webp`, kind: 'image' });
+    await writer.close();
+    const deleteStorageObjects = vi.fn(async (_keys: string[]) => {});
+    const deleteAuthUser = vi.fn(async () => {});
+    // Out of time before the first batch: nothing of the account is touched, its pictures' records stay for next time.
+    const cut = await purgeAccount({ db, deleteAuthUser, deleteStorageObjects }, 'alice', { deadline: 0, clock: () => 1 });
+    expect(cut.complete).toBe(false);
+    expect(deleteStorageObjects).not.toHaveBeenCalled();
+    expect(await exists('uploads/many-0')).toBe(true);
+    expect(await exists('users/alice')).toBe(true);
+    expect(deleteAuthUser).not.toHaveBeenCalled();
+    // In time: two calls (a thousand, then the rest), then the account.
+    await purgeAccount({ db, deleteAuthUser, deleteStorageObjects }, 'alice');
+    expect(deleteStorageObjects.mock.calls.map(([keys]) => keys.length)).toEqual([UPLOAD_DELETE_BATCH, 6]);
+    expect(deleteStorageObjects.mock.calls.flatMap(([keys]) => keys)).toContain('image/2026-10/a1.webp');
+    expect(await exists('uploads/many-0')).toBe(false);
+    expect(deleteAuthUser).toHaveBeenCalledWith('alice');
+  });
+
+  it('goes on with the account when a batch of pictures cannot be deleted (logged)', async () => {
+    await seedWorld();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const deleteStorageObjects = vi.fn(async () => {
+      throw new Error('r2 down');
+    });
+    const report = await purgeAccount({ db, deleteAuthUser: vi.fn(async () => {}), deleteStorageObjects }, 'alice');
+    expect(report.complete).toBe(true);
+    expect(await exists('users/alice')).toBe(false);
+    expect(error.mock.calls.some((c) => String(c[0]).includes('storage cleanup failed'))).toBe(true);
   });
 
   it('removes the notes on a card before the card, so a purge cut short leaves none its next run could no longer find', async () => {
@@ -485,6 +587,33 @@ describe('purgeDueAccounts', () => {
 
     expect(await purgeDueAccounts({ db, deleteAuthUser }, { now: new Date('2026-10-02T00:00:00Z') })).toEqual({ purged: ['quinn'], failed: [], deferred: [] });
     expect(await exists('users/quinn')).toBe(false);
+  });
+
+  // Two accounts too big to finish in a run used to be first in line every day
+  // (the longest overdue), holding both slots: nobody due after them was ever purged.
+  it('lets an account a run cut short wait behind the accounts due before that run', async () => {
+    await prolific('heavy', 40);
+    await prolific('quinn', 2);
+    await scheduleAccountDeletion(db, 'heavy', new Date('2026-09-01T00:00:00Z'));
+    await scheduleAccountDeletion(db, 'quinn', new Date('2026-09-10T00:00:00Z'));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let calls = 0;
+    // Day one: time is up a few cards into the heavy account, the longest overdue; quinn never starts.
+    const first = await purgeDueAccounts(
+      { db, deleteAuthUser: vi.fn(async () => {}) },
+      { now: new Date('2026-10-01T00:00:00Z'), budgetMs: 1000, concurrency: 1, clock: () => (++calls > 6 ? 1_000_000 : 0) },
+    );
+    expect(first).toEqual({ purged: [], failed: [], deferred: ['heavy', 'quinn'] });
+    // Day two has room for one account: quinn, whose grace ended before day one tried the heavy one.
+    let now = 0;
+    const deleteAuthUser = vi.fn(async () => void (now += 60_000));
+    const second = await purgeDueAccounts(
+      { db, deleteAuthUser },
+      { now: new Date('2026-10-02T00:00:00Z'), budgetMs: 30_000, concurrency: 1, clock: () => now },
+    );
+    expect(second.purged).toEqual(['quinn']);
+    expect(await exists('users/quinn')).toBe(false);
+    expect(await getAccountDeletion(db, 'heavy')).not.toBeNull();
   });
 
   it('stops part way through an account cleanly: its profile and request stay until the next run finishes it', async () => {

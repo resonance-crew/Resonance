@@ -1,5 +1,5 @@
 import type { LinkPreview } from '@/lib/db/types';
-import { imageProxyPath } from './imageProxy';
+import { imageProxyPath } from './imageSigning';
 import { cleanText, DESCRIPTION_MAX, TITLE_MAX } from './openGraph';
 import { normalizeLink } from './url';
 

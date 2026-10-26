@@ -64,6 +64,29 @@ class AppHttpTest {
         }
     }
 
+    // The same client loads every picture, a story's from any host its author names: a path under
+    // /api/ on another host, or a redirect off our API, must never carry the token.
+    @Test fun theTokenGoesToOurApiHostAloneRedirectsIncluded() = runBlocking {
+        val other = MockWebServer().apply { start() }
+        try {
+            val client = AppHttp.client("Resonance/test")
+            configuration // our API is this server
+            AppCheckHeader.token = "attested"
+            other.enqueue(MockResponse().setBody("image"))
+            client.newCall(okhttp3.Request.Builder().url(other.url("/api/x.png")).build()).execute().close()
+            assertEquals(null, other.takeRequest().getHeader(AppCheckHeader.NAME))
+
+            server.enqueue(MockResponse().setResponseCode(302).setHeader("Location", other.url("/api/y").toString()))
+            other.enqueue(MockResponse().setBody("{}"))
+            client.newCall(okhttp3.Request.Builder().url(server.url("/api/v1/feed")).build()).execute().close()
+            assertEquals("attested", server.takeRequest().getHeader(AppCheckHeader.NAME))
+            assertEquals(null, other.takeRequest().getHeader(AppCheckHeader.NAME))
+        } finally {
+            AppCheckHeader.token = null
+            other.shutdown()
+        }
+    }
+
     @Test fun waitsLongerThanOkHttpsTenSecondsButNotForever() {
         val client = AppHttp.client("Resonance/test")
         assertEquals(15_000, client.connectTimeoutMillis)

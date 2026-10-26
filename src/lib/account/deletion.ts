@@ -1,7 +1,9 @@
-import type { BulkWriter, DocumentReference, Firestore, Query } from 'firebase-admin/firestore';
+import { Timestamp, type BulkWriter, type DocumentReference, type Firestore, type Query } from 'firebase-admin/firestore';
 import { cardPagePaths, landingPagePaths, profilePagePaths } from '@/lib/api/revalidate';
 import { CHAT_IMAGES, chatImageFiles } from '@/lib/api/v1/chatImages';
+import { restoreCard, trashCard } from '@/lib/api/v1/trash';
 import { HANDLES } from '@/lib/db/firestore/handles';
+import { TOMBSTONE, tombstoneRef } from '@/lib/db/firestore/tombstones';
 import { UPLOADS, uploadedKeys } from '@/lib/storage/uploads';
 import { DELETION_GRACE_DAYS } from './constants';
 
@@ -28,6 +30,8 @@ const IN_CHUNK = 30;
 const TREE_CONCURRENCY = 16;
 /** Accounts purged at once in one run. */
 const ACCOUNT_CONCURRENCY = 2;
+/** No account takes more than this share of a purge run's budget (its cut-short rest waits for the next run). */
+const ACCOUNT_SHARE = 4;
 
 export interface AccountDeletion {
   uid: string;
@@ -60,6 +64,46 @@ export async function scheduleAccountDeletion(
     await batch.commit();
   }
   return deletion;
+}
+
+/**
+ * Out of sight from the moment the deletion is scheduled: the account's
+ * published anonymous cards go to its trash (marked `trashedFor: 'deletion'`),
+ * as if their author had put them there — so, private to everyone and
+ * answering every probe as a deleted card does, their notes deleted, their
+ * pages never revalidated beside the profile's. Left until the purge, an
+ * anonymous card would turn from "there" to "gone" in the same run as its
+ * author's profile and say whose it was; this way it goes days before, as any
+ * card its author trashed. Cancelling brings back these alone
+ * (releaseHeldCards). Returns the card pages to revalidate. Best effort, a
+ * card at a time: the deletion stands whatever this does.
+ */
+export async function holdAnonymousCards(db: Firestore, uid: string): Promise<string[]> {
+  const cards = await db.collection('cards').where('authorId', '==', uid).where('anonymous', '==', true).select('publishedAt', 'trashedAt').get();
+  const stale: string[] = [];
+  for (const d of cards.docs) {
+    if (d.get('publishedAt') == null || d.get('trashedAt') != null) continue;
+    try {
+      stale.push(...(await trashCard(db, uid, d.id, { forDeletion: true })).stale);
+    } catch (err) {
+      console.error(`Account deletion: could not hold card ${d.id}`, err);
+    }
+  }
+  return stale;
+}
+
+/** A cancelled deletion's held cards back from the trash, as they were (restoreCard). Returns the pages to revalidate. */
+export async function releaseHeldCards(db: Firestore, uid: string): Promise<string[]> {
+  const held = await db.collection('cards').where('authorId', '==', uid).where('trashedFor', '==', 'deletion').select().get();
+  const stale: string[] = [];
+  for (const d of held.docs) {
+    try {
+      stale.push(...(await restoreCard(db, uid, d.id)).stale);
+    } catch (err) {
+      console.error(`Account deletion: could not bring back card ${d.id}`, err);
+    }
+  }
+  return stale;
 }
 
 export async function cancelAccountDeletion(db: Firestore, uid: string): Promise<void> {
@@ -282,6 +326,8 @@ export async function purgeAccountData(db: Firestore, uid: string, opts: PurgeOp
   const deleteTree = async (ref: DocumentReference) => {
     const records = byCard.get(ref.path);
     if (records?.length) await deleteAll(db, records);
+    // A card's id stays dead (tombstoneRef): written, on its own, before the card goes, so no moment lets another take it.
+    if (ref.parent.id === 'cards') await tombstoneRef(db, ref.id).set(TOMBSTONE);
     await db.recursiveDelete(ref, writer);
   };
   try {
@@ -342,6 +388,9 @@ async function purgeChatPictures(
   return true;
 }
 
+/** How many uploaded files the purge hands the store at once (R2's DeleteObjects takes a thousand). */
+export const UPLOAD_DELETE_BATCH = 1000;
+
 export interface PurgeDeps {
   db: Firestore;
   /** Removes the sign-in account (firebase-admin `auth.deleteUser`). */
@@ -350,6 +399,11 @@ export interface PurgeDeps {
   deleteStoragePrefix?: (prefix: string) => Promise<number>;
   /** Removes one uploaded file (the ones `uploads/*` records as the user's); failures are logged, not fatal. */
   deleteStorageObject?: (key: string) => Promise<void>;
+  /**
+   * Removes many uploaded files at once (a store's batch delete, UPLOAD_DELETE_BATCH a call), in place of
+   * deleteStorageObject; failures are logged, not fatal.
+   */
+  deleteStorageObjects?: (keys: string[]) => Promise<void>;
   /** Removes chat pictures' files (lib/storage/chatImages, a page's at once); failures are logged, not fatal. */
   deleteChatImageFiles?: (keys: string[]) => Promise<void>;
   /** Drops cached pages (logical paths, `revalidateLocalized` in the cron); failures are logged, not fatal. */
@@ -365,19 +419,25 @@ export interface PurgeDeps {
  * rest — storage, sign-in, the request — to the next run.
  */
 export async function purgeAccount(deps: PurgeDeps, uid: string, opts: PurgeOptions = {}): Promise<PurgeReport> {
-  // The pictures recorded as theirs go before the records that list them.
-  if (deps.deleteStorageObject) {
-    for (const key of await uploadedKeys(deps.db, uid)) {
+  const clock = opts.clock ?? Date.now;
+  const late = () => opts.deadline !== undefined && clock() >= opts.deadline;
+  // The pictures recorded as theirs go before the records that list them — a batch at a time, none started past
+  // the deadline: cut short, the rest of the account waits for the next run (its records would otherwise go
+  // before their files), which finds the same records and deletes what is left.
+  if (deps.deleteStorageObjects || deps.deleteStorageObject) {
+    const keys = await uploadedKeys(deps.db, uid);
+    const batch = deps.deleteStorageObjects ? UPLOAD_DELETE_BATCH : 1;
+    for (let i = 0; i < keys.length; i += batch) {
+      if (late()) return { trees: 0, documents: 0, pages: [], complete: false };
+      const some = keys.slice(i, i + batch);
       try {
-        await deps.deleteStorageObject(key);
+        await (deps.deleteStorageObjects ? deps.deleteStorageObjects(some) : deps.deleteStorageObject!(some[0]));
       } catch (err) {
-        console.error(`Account purge: storage cleanup failed for ${key}`, err);
+        console.error(`Account purge: storage cleanup failed for ${some.length === 1 ? some[0] : `${some.length} files`}`, err);
       }
     }
   }
   if (deps.deleteChatImageFiles) {
-    const clock = opts.clock ?? Date.now;
-    const late = () => opts.deadline !== undefined && clock() >= opts.deadline;
     // Cut short, the rest of the account waits: its records would otherwise go before their files.
     if (!(await purgeChatPictures(deps.db, deps.deleteChatImageFiles, uid, late))) {
       return { trees: 0, documents: 0, pages: [], complete: false };
@@ -433,33 +493,55 @@ export interface PurgeRun {
 
 /**
  * Purge every account whose grace period has ended, longest overdue first, a
- * few at a time through one BulkWriter, within `budgetMs`.
+ * few at a time through one BulkWriter, within `budgetMs`. No account takes
+ * more than 1/ACCOUNT_SHARE of the run, and one a run cut short (or that
+ * failed) waits behind every account due before that run (`triedAt`), so two
+ * accounts too big to finish in a run — thousands of drafts, say — make
+ * progress each day without keeping everyone else's deletion from starting.
  */
 export async function purgeDueAccounts(deps: PurgeDeps, opts: PurgeRunOptions = {}): Promise<PurgeRun> {
   const clock = opts.clock ?? Date.now;
   const deadline = opts.budgetMs === undefined ? undefined : clock() + opts.budgetMs;
   const late = () => deadline !== undefined && clock() >= deadline;
+  const now = opts.now ?? new Date();
   const due = await deps.db
     .collection(DELETIONS_COLLECTION)
-    .where('purgeAfter', '<=', opts.now ?? new Date())
-    .orderBy('purgeAfter')
-    .select()
+    .where('purgeAfter', '<=', now)
+    .select('purgeAfter', 'triedAt')
     .get();
+  const at = (v: unknown) => (v instanceof Timestamp ? v.toMillis() : v instanceof Date ? v.getTime() : 0);
+  const order = due.docs
+    .map((d) => ({ uid: d.id, at: at(d.get('triedAt')) || at(d.get('purgeAfter')) }))
+    .sort((a, b) => a.at - b.at || (a.uid < b.uid ? -1 : 1));
+  const share = opts.budgetMs === undefined ? undefined : opts.budgetMs / ACCOUNT_SHARE;
+  // Cut short or failed: behind every account already due, from the next run on. Its request stays either way.
+  const tried = (uid: string) =>
+    deps.db
+      .collection(DELETIONS_COLLECTION)
+      .doc(uid)
+      .update({ triedAt: now })
+      .catch((err) => console.error(`Account purge: could not note the try for ${uid}`, err));
   const run: PurgeRun = { purged: [], failed: [], deferred: [] };
   const writer = deps.db.bulkWriter();
   try {
     const { notStarted } = await pool(
-      due.docs.map((d) => d.id),
+      order.map((o) => o.uid),
       opts.concurrency ?? ACCOUNT_CONCURRENCY,
       async (uid) => {
+        const own = deadline === undefined || share === undefined ? deadline : Math.min(deadline, clock() + share);
         try {
-          const report = await purgeAccount(deps, uid, { writer, deadline, clock });
-          (report.complete ? run.purged : run.deferred).push(uid);
+          const report = await purgeAccount(deps, uid, { writer, deadline: own, clock });
+          if (report.complete) run.purged.push(uid);
+          else {
+            run.deferred.push(uid);
+            await tried(uid);
+          }
         } catch (err) {
           // One failure must not stall everyone else's deletion; the request
           // stays in place and tomorrow's run retries it.
           console.error(`Account purge failed for ${uid}`, err);
           run.failed.push(uid);
+          await tried(uid);
         }
       },
       late,

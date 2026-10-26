@@ -159,6 +159,7 @@ private struct ConversationsSkeleton: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L10n.Home.moreLoading)
+        .skeletonTimeline()
     }
 }
 

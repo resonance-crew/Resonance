@@ -50,7 +50,17 @@ struct StoryCardList: View {
         .onAppear {
             session.cardPreviews.remember(card)
             if i == cards.count - 1 { onAppearLast?() }
+            CoverPrefetch.ahead(Self.coversAhead(of: i, in: cards))
         }
+    }
+
+    /// How many covers past a card on screen are fetched ahead of the reader.
+    static let coversAhead = 6
+
+    /// The covers of the few cards after card `i`, which the reader comes to next.
+    static func coversAhead(of i: Int, in cards: [FeedCard]) -> [URL] {
+        guard i + 1 < cards.count else { return [] }
+        return cards[(i + 1)..<min(cards.count, i + 1 + coversAhead)].compactMap { $0.imageUrl.flatMap(URL.init(string:)) }
     }
 
     /// The cards' identities when the scroll anchors on them (a card twice in a list keeps both).
@@ -185,5 +195,6 @@ struct FeedSkeleton: View {
         }
         .accessibilityElement()
         .accessibilityLabel("Loading")
+        .skeletonTimeline()
     }
 }

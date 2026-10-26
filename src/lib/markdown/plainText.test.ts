@@ -70,6 +70,8 @@ describe('plainText', () => {
     const floods = ['[', '![', '[a](', '[](', '\n', ' \n', '-\n', '\t\n\n'].map((unit) => unit.repeat(Math.floor(200_000 / unit.length)));
     // A long run of spaces before the words in front of an address and its full stop (17 s once).
     floods.push(`a${' '.repeat(199_000)}b https://example.com.`, `a${'\n'.repeat(199_000)}b https://example.com.`);
+    // An address followed by a run of closing brackets (each trimmed closer recounted the address: minutes).
+    floods.push(`https://a.com/${')'.repeat(199_000)}`, `https://a.com/${']'.repeat(199_000)}`);
     // The bounded patterns read each flood in about 0.2 s on a laptop and up to about 1 s on a shared CI runner
     // busy with the rest of the suite; a pattern that reads again from each place takes seconds to minutes even
     // on the laptop. Three seconds sits far from both.

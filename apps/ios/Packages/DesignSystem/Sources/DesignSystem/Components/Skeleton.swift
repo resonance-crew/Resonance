@@ -25,6 +25,8 @@ public struct SkeletonBlock: View {
 
     @Environment(\.skeletonHue) private var hue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The shimmer's place in its pass, from the one timeline of a skeleton screen (``SkeletonTimeline``).
+    @Environment(\.skeletonPhase) private var sharedPhase
 
     public var body: some View {
         if circle {
@@ -47,14 +49,21 @@ public struct SkeletonBlock: View {
     @ViewBuilder private var fill: some View {
         if reduceMotion {
             Self.base
+        } else if let sharedPhase {
+            Self.shimmer(phase: sharedPhase, highlight: Self.highlight(hue))
+                .accessibilityHidden(true)
         } else {
             let highlight = Self.highlight(hue)
             TimelineView(.animation) { timeline in
-                let t = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.5) / 1.5
-                Self.shimmer(phase: Self.ease(t), highlight: highlight)
+                Self.shimmer(phase: Self.phase(at: timeline.date), highlight: highlight)
             }
             .accessibilityHidden(true)
         }
+    }
+
+    /// Where the shimmer is in its 1.5 s pass at `date`, eased: every block on screen shares it.
+    static func phase(at date: Date) -> Double {
+        ease(date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.5) / 1.5)
     }
 
     /// color-mix(in oklch, color-mix(cream-dark 94%, text) 85%, transparent).
@@ -118,4 +127,40 @@ extension EnvironmentValues {
     /// The card hue a skeleton's shimmer takes (a StoryCard sets
     /// --skeleton-highlight to its own family); nil is the theme's.
     @Entry public var skeletonHue: Double? = nil
+    /// The shimmer's eased place in its pass, from a ``SkeletonTimeline`` around the blocks; nil, each
+    /// block keeps a timeline of its own.
+    @Entry var skeletonPhase: Double? = nil
+}
+
+/// One timeline for every ``SkeletonBlock`` inside: a skeleton screen's blocks (a loading feed has
+/// some sixty) take their shimmer's phase from it rather than each running a display-rate timeline
+/// of its own. The phase is the same — every block's comes from the frame's time — so the shimmer
+/// looks exactly as before. Inside another one, it leaves the outer timeline to do it. Paused under
+/// Reduce Motion, where the blocks are plain sand.
+public struct SkeletonTimeline<Content: View>: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.skeletonPhase) private var outer
+    let content: Content
+
+    public init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    public var body: some View {
+        if outer != nil {
+            content
+        } else {
+            TimelineView(.animation(minimumInterval: nil, paused: reduceMotion)) { timeline in
+                content.environment(\.skeletonPhase, SkeletonBlock.phase(at: timeline.date))
+            }
+        }
+    }
+}
+
+extension View {
+    /// The skeleton blocks in this view shimmer from one timeline (``SkeletonTimeline``): for a view
+    /// that is a skeleton all through, never around content that stays (the timeline runs while it shows).
+    public func skeletonTimeline() -> some View {
+        SkeletonTimeline { self }
+    }
 }

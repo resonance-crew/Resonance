@@ -57,4 +57,10 @@ class MessagingApi(private val api: DefaultApi) {
         )
         Sent(sent.conversationId, sent.id)
     }
+
+    /**
+     * Deletes a conversation for both of its people (DELETE /api/v1/conversations/{pair}): its messages, then the
+     * conversation, on the server. One already gone is nothing; one the viewer isn't in is `not_found`.
+     */
+    suspend fun deleteConversation(pair: String) = call { api.deleteConversation(pair) }
 }

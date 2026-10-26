@@ -176,6 +176,39 @@ import Testing
         let atLimit = String(repeating: "> ", count: StoryNesting.limit) + "雨停了"
         #expect(!StoryNesting.tooDeep(atLimit))
         guard case .quote = StoryParser.parse(atLimit).first else { return #expect(Bool(false)) }
+        // Lists nest by indenting too: a line per level, each further in.
+        let indented = (0..<200).map { String(repeating: "  ", count: $0) + "- a" }.joined(separator: "\n")
+        #expect(StoryNesting.tooDeep(indented))
+        #expect(!StoryNesting.tooDeep("- a\n  - b\n    - c"))
+    }
+
+    @Test func aParagraphOfDelimitersThatNeverPairIsReadAsItsWords() {
+        // `**` opened hundreds deep nests the parser as deep (a background thread's stack ran out at
+        // 250 levels): past the paragraph's delimiter limit the story is its words, unparsed.
+        let deep = String(repeating: "**", count: 5_000) + "雨" + String(repeating: "**", count: 5_000)
+        #expect(StoryNesting.tooComplex(deep))
+        #expect(StoryParser.parse(deep) == [.paragraph([InlineRun(deep)])])
+        for flood in [String(repeating: "*_", count: 2_000) + "x", String(repeating: "~~a ", count: 2_000), String(repeating: "*[", count: 2_000) + "x"] {
+            #expect(StoryNesting.tooComplex(flood))
+        }
+        // At the limit it is parsed as ever, nesting included.
+        let half = StoryNesting.paragraphDelimiters / 4
+        let atLimit = String(repeating: "*_", count: half) + "雨" + String(repeating: "_*", count: half)
+        #expect(!StoryNesting.tooComplex(atLimit))
+        #expect(StoryParser.parse(atLimit).count == 1)
+        // Ordinary emphasis, and code fences full of underscores, stay Markdown.
+        let ordinary = (0..<40).map { "這段有 **重點** 和 *強調*，第\($0)段。" }.joined(separator: "\n\n")
+        #expect(!StoryNesting.tooComplex(ordinary))
+        let code = "```\n" + String(repeating: "snake_case_name = other_value * __dunder__\n", count: 300) + "```"
+        #expect(!StoryNesting.tooComplex(code))
+        // A wide header over many short lines is millions of padded cells; an ordinary table is not.
+        let wide = "|" + String(repeating: "a|", count: 1_000) + "\n|" + String(repeating: "-|", count: 1_000) + "\n" + String(repeating: "a\n", count: 80_000)
+        #expect(StoryNesting.tooComplex(wide))
+        let table = "| a | b | c |\n| --- | --- | --- |\n" + String(repeating: "| x | y | z |\n", count: 400)
+        #expect(!StoryNesting.tooComplex(table))
+        // Many paragraphs near the limit add up.
+        let many = Array(repeating: String(repeating: "*a ", count: StoryNesting.paragraphDelimiters - 10), count: 40).joined(separator: "\n\n")
+        #expect(StoryNesting.tooComplex(many))
     }
 
     // MARK: Tables (round 8 §5.2; the corpus's table-* cases)

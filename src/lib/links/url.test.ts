@@ -46,6 +46,18 @@ describe('where a link starts and ends', () => {
     expect(written('(https://en.wikipedia.org/wiki/Rust_(language))')).toEqual(['https://en.wikipedia.org/wiki/Rust_(language)']);
     expect(written('[https://a.com/x]')).toEqual(['https://a.com/x']);
     expect(written('{https://a.com/x}')).toEqual(['https://a.com/x']);
+    expect(written('((https://a.com/x(y)))')).toEqual(['https://a.com/x(y)']);
+    expect(written('https://a.com/x]).')).toEqual(['https://a.com/x']);
+  });
+
+  it('trims a long run of closers in a moment: the link is not counted again for each one', () => {
+    // A link followed by 200 000 closers took minutes when every trimmed closer recounted the link.
+    for (const closer of [')', ']', '}']) {
+      const text = `https://a.com/${closer.repeat(199_000)}`;
+      const started = performance.now();
+      expect(written(text)).toEqual(['https://a.com/']);
+      expect(performance.now() - started).toBeLessThan(1_000);
+    }
   });
 
   it('stops at white space, angle brackets and quotes', () => {

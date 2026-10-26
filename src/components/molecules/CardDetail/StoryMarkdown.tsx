@@ -4,7 +4,7 @@ import Markdown, { type Components, type ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSlug from 'rehype-slug';
 import type { Element, ElementContent } from 'hast';
-import { createContext, useContext, useMemo, type CSSProperties, type ReactNode } from 'react';
+import { createContext, memo, useContext, useMemo, type CSSProperties, type ReactNode } from 'react';
 import { Divider } from '@/components/atoms/Divider/Divider';
 import { OrganicStoryImage } from '@/components/atoms/OrganicImage/OrganicStoryImage';
 import { CardEmbedLink } from '@/components/molecules/EmbedStoryCard/CardEmbedLink';
@@ -13,6 +13,7 @@ import { StoryLinkPreviewsContext } from '@/components/molecules/StoryLinkCard/S
 import { StoryTable } from './StoryTable';
 import type { LinkPreview } from '@/lib/db/types';
 import { isBlankParagraph } from '@/lib/markdown/blankLines';
+import { storyTooComplex } from '@/lib/markdown/storyLimits';
 import { SITE_HOSTS, soleLinkParagraphs } from '@/lib/links/storyLinks';
 import { seedFromString } from '@/lib/design/prng';
 import { storyLinkWaveVars } from '@/lib/design/storyLinkWave';
@@ -31,6 +32,16 @@ interface StoryLinkCards {
   previews: ReadonlyMap<string, LinkPreview>;
 }
 const StoryLinkCardsContext = createContext<StoryLinkCards | null>(null);
+
+/**
+ * How many card links a story draws as cards — the server's EMBED_LIMIT
+ * (lib/api/v1/embeds), which caps what a page's include=embeds reads. Each
+ * card past it would read its own card: a long story of card links would
+ * make every reader's browser read thousands. The rest stay plain links.
+ */
+export const STORY_EMBED_MAX = 30;
+/** The order in which this story's card-link paragraphs come (by source offset), for STORY_EMBED_MAX. */
+const EmbedOrderContext = createContext<{ source: string; order: Map<number, number> } | null>(null);
 
 /** The paragraph's only element child (ignoring whitespace), if any. */
 function soleElementChild(node: Element | undefined): Element | null {
@@ -62,9 +73,11 @@ const OWN_HOSTS: readonly string[] = (() => {
 
 /** A link to another site's page (http or https, a host not ours) — not a page of ours, an anchor or a mail address. */
 function toOtherSite(href: string | undefined): boolean {
-  if (!href || !/^https?:\/\//i.test(href)) return false;
+  if (!href) return false;
   try {
-    return !OWN_HOSTS.includes(new URL(href).hostname.replace(/\.$/, '').toLowerCase());
+    // Read as the browser will: '//host' and '/\\host' are other sites too, a path is ours.
+    const url = new URL(href, `https://${OWN_HOSTS[0]}`);
+    return /^https?:$/.test(url.protocol) && !OWN_HOSTS.includes(url.hostname.replace(/\.$/, '').toLowerCase());
   } catch {
     return false;
   }
@@ -131,6 +144,18 @@ const components: Components = {
   p: StoryParagraph,
 };
 
+/** Whether the card-link paragraph at `offset` is among the story's first STORY_EMBED_MAX (rendered in reading order). */
+function withinEmbedMax(embeds: { order: Map<number, number> } | null, offset: number | undefined): boolean {
+  if (!embeds || offset == null) return true;
+  const { order } = embeds;
+  let n = order.get(offset);
+  if (n === undefined) {
+    n = order.size;
+    order.set(offset, n);
+  }
+  return n < STORY_EMBED_MAX;
+}
+
 /**
  * Paragraphs that hold a single card link become that card as a block (the
  * shared card a thread draws, in a link card's container); a paragraph that
@@ -142,10 +167,11 @@ const components: Components = {
  */
 function StoryParagraph({ node, children }: { children?: ReactNode } & ExtraProps) {
   const cards = useContext(StoryLinkCardsContext);
+  const order = useContext(EmbedOrderContext);
   const sole = soleElementChild(node);
   if (sole?.tagName === 'a') {
     const href = String(sole.properties?.href ?? '');
-    if (href.startsWith('/card/')) {
+    if (href.startsWith('/card/') && withinEmbedMax(order, node?.position?.start.offset)) {
       return (
         <div className={`${styles.embedBlock} story-embed`}>
           <CardEmbedLink href={href} title={hastText(sole)} />
@@ -175,6 +201,24 @@ function StoryParagraph({ node, children }: { children?: ReactNode } & ExtraProp
   return <p>{children}</p>;
 }
 
+/**
+ * A story too costly to read as Markdown (lib/markdown/storyLimits: nested
+ * thousands deep, or thousands of delimiters in a paragraph): its words, a
+ * paragraph per blank-line block, its line breaks kept.
+ */
+function StoryWords({ source }: { source: string }) {
+  return source
+    .split(/\n[ \t\r]*\n/)
+    .filter((block) => block.trim())
+    .map((block, i) => (
+      <p key={i} className={styles.words}>
+        {block}
+      </p>
+    ));
+}
+
+// The plugin lists are the same objects on every render (react-markdown takes them as props).
+const REMARK_PLUGINS = [remarkGfm];
 const LATIN_PLUGINS = [rehypeSlug];
 const CJK_PLUGINS = [rehypeSlug, rehypeLatinMarks];
 
@@ -201,8 +245,15 @@ export interface StoryMarkdownProps {
  * Table of Contents can anchor-scroll to them. The page may provide its
  * card's link previews (StoryLinkPreviewsContext); a standalone link with one
  * is drawn as its link card.
+ *
+ * Parsing a story is the costliest thing a card page does in the browser, so
+ * it happens only when the story, how it is set, or its previews change —
+ * not on each of the page's own renders (auth settling, the lists around the
+ * card arriving, the reader scrolling the byline out of view). What a story
+ * draws that depends on the page — its embedded cards — reads the page's
+ * context itself and updates on its own.
  */
-export function StoryMarkdown({ source, script, lang, density }: StoryMarkdownProps) {
+export const StoryMarkdown = memo(function StoryMarkdown({ source, script, lang, density }: StoryMarkdownProps) {
   const previews = useContext(StoryLinkPreviewsContext);
   // Parsed again (as CommonMark, like the server) only when there is a preview to place.
   const cards = useMemo<StoryLinkCards | null>(
@@ -217,13 +268,22 @@ export function StoryMarkdown({ source, script, lang, density }: StoryMarkdownPr
   const setAs = script ?? read?.script;
   // A CJK story sets an apostrophe inside a Latin word in its Latin face (after the slugs, read from the words as they are).
   const rehypePlugins = setAs === 'latin' ? LATIN_PLUGINS : CJK_PLUGINS;
+  // A new story, a new count.
+  const embedOrder = useMemo(() => ({ source, order: new Map<number, number>() }), [source]);
+  const asWords = useMemo(() => storyTooComplex(source), [source]);
   return (
     <div className="story-prose" data-script={setAs} data-density={density} lang={read ? read.lang : lang}>
-      <StoryLinkCardsContext.Provider value={cards}>
-        <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={components}>
-          {source}
-        </Markdown>
-      </StoryLinkCardsContext.Provider>
+      {asWords ? (
+        <StoryWords source={source} />
+      ) : (
+        <StoryLinkCardsContext.Provider value={cards}>
+          <EmbedOrderContext.Provider value={embedOrder}>
+            <Markdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={rehypePlugins} components={components}>
+              {source}
+            </Markdown>
+          </EmbedOrderContext.Provider>
+        </StoryLinkCardsContext.Provider>
+      )}
     </div>
   );
-}
+});

@@ -82,6 +82,7 @@ struct CardPickSkeleton: View {
         }
         .accessibilityElement()
         .accessibilityLabel(L10n.Home.moreLoading)
+        .skeletonTimeline()
     }
 }
 

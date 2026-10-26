@@ -1,10 +1,12 @@
-import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto';
-import { isIP } from 'node:net';
 import sharp from 'sharp';
-import { isInternalHostName, isPublicAddress } from './ip';
+import { signingKey, verifyImageSignature } from './imageSigning';
 import { createMemo } from './memo';
 import { IMAGE_MAX_BYTES, safeFetch as defaultFetch, SafeFetchError, type SafeFetchOptions, type SafeFetchResult } from './safeFetch';
 import { LINK_MAX_LENGTH, normalizeLink } from './url';
+
+// Signing lives apart (./imageSigning, node:crypto only), so the routes that only sign a picture's
+// address — a message's unfurl, a story's previews — never load sharp. Re-exported for the rest.
+export { LINK_IMAGE_PATH, imageProxyPath, signImageUrl, signingKey, verifyImageSignature } from './imageSigning';
 
 /**
  * The picture of a link preview, served from our own origin.
@@ -19,8 +21,8 @@ import { LINK_MAX_LENGTH, normalizeLink } from './url';
  *
  * The route is public — `<img>` and the apps' image loaders carry no
  * credentials — so it must not become an open proxy. Every URL it will fetch
- * carries an HMAC, made here when a message is unfurled: only an address the
- * server itself chose to preview can be asked for, and nobody can mint a new
+ * carries an HMAC, made when a message is unfurled (./imageSigning): only an
+ * address the server itself chose to preview can be asked for, and nobody can mint a new
  * one without the key. The signature is checked before anything else
  * happens, in constant time.
  *
@@ -47,13 +49,14 @@ import { LINK_MAX_LENGTH, normalizeLink } from './url';
 /** The longest side of the picture we send (a card shows it at most ~300 dp wide). */
 export const PROXY_EDGE = 720;
 export const PROXY_QUALITY = 80;
-export const LINK_IMAGE_PATH = '/api/link-image';
 /**
  * The most pixels a picture may decode to. Far above any preview image (a
  * social card is ~1.2 MP, a phone photo 12 MP) and well under what an upload
  * may be: this decodes strangers' files on request, a few at a time.
  */
 export const PROXY_MAX_PIXELS = 30_000_000;
+/** An AVIF/HEIF picture's own cap: it decodes whole (no shrink-on-load), so far less than PROXY_MAX_PIXELS. */
+export const HEIF_MAX_PIXELS = 4_000_000;
 /** How many pictures are fetched and decoded at once, and how many more may wait their turn. */
 export const MAX_CONCURRENT = 3;
 export const MAX_WAITING = 16;
@@ -84,56 +87,6 @@ const REMEMBER_MAX = 100;
 /** What sharp may report after the bytes passed `sniffImage` (it names an AVIF `heif`). */
 const FORMATS = new Set(['jpeg', 'png', 'webp', 'gif', 'heif']);
 
-/** Used only where there is no secret at all: tests, the emulators, `next dev`. */
-const DEV_KEY = Buffer.from('resonance link-image development key (not a secret)');
-
-/**
- * The HMAC key. `LINK_PREVIEW_SECRET` if it is set; otherwise one derived
- * (HKDF-SHA256, info "resonance link-image v1") from the Firebase service
- * account's private key, which every deployment has and which is never sent
- * anywhere — so a deployment needs no extra setting, and the key it signs
- * with is not the one that signs anything else. Without either, only a
- * non-production process (emulators, dev, tests) gets a fixed key; production
- * fails closed, which means no pictures, not pictures anyone can sign.
- * Changing the secret orphans the pictures of previews already written (they
- * 404 and the card shows none) — the text of a preview keeps working.
- */
-export function signingKey(env: Record<string, string | undefined> = process.env): Buffer {
-  const explicit = env.LINK_PREVIEW_SECRET?.trim();
-  if (explicit) return Buffer.from(explicit);
-  const pem = env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n').trim();
-  if (pem) return Buffer.from(hkdfSync('sha256', pem, 'resonance', 'resonance link-image v1', 32));
-  if (env.FIRESTORE_EMULATOR_HOST || env.NODE_ENV !== 'production') return DEV_KEY;
-  throw new Error('Set LINK_PREVIEW_SECRET (or FIREBASE_PRIVATE_KEY) to sign link-preview pictures.');
-}
-
-/** base64url(HMAC-SHA256(key, url)). */
-export function signImageUrl(url: string, key: Buffer = signingKey()): string {
-  return createHmac('sha256', key).update(url).digest('base64url');
-}
-
-/** Whether `signature` is the signature of `url` — compared in constant time, any malformed value is a no. */
-export function verifyImageSignature(url: string, signature: string, key: Buffer = signingKey()): boolean {
-  if (!/^[A-Za-z0-9_-]{43}$/.test(signature)) return false;
-  const expected = Buffer.from(signImageUrl(url, key));
-  const given = Buffer.from(signature);
-  return expected.length === given.length && timingSafeEqual(expected, given);
-}
-
-/**
- * The site-relative path a preview stores for its picture; clients resolve it
- * against their API/site origin. Null when `image` is not a URL the link
- * rules take (the card then shows no picture).
- */
-export function imageProxyPath(image: string): string | null {
-  const url = normalizeLink(image);
-  if (!url) return null;
-  // An address that can only be on our own network is not worth a signature (the fetch would refuse it anyway).
-  const host = new URL(url).hostname;
-  if (isIP(host) ? !isPublicAddress(host) : isInternalHostName(host)) return null;
-  return `${LINK_IMAGE_PATH}?u=${encodeURIComponent(url)}&s=${signImageUrl(url)}`;
-}
-
 /** Which picture format these bytes are, by their first bytes — or null. SVG, PDF, HTML and the rest are null. */
 export function sniffImage(bytes: Uint8Array): 'jpeg' | 'png' | 'gif' | 'webp' | 'avif' | null {
   const at = (i: number) => bytes[i];
@@ -156,6 +109,9 @@ export async function toPreviewWebp(bytes: Uint8Array): Promise<Buffer> {
     const image = sharp(bytes, { limitInputPixels: PROXY_MAX_PIXELS, failOn: 'error', sequentialRead: true });
     const meta = await image.metadata();
     if (!meta.format || !FORMATS.has(meta.format)) throw new ImageRefused(`format ${meta.format}`);
+    // AVIF/HEIF decodes whole with no shrink-on-load: a 1 KB file at the pixel
+    // cap took ~700 MB, three at once over 2 GB. A preview never needs that many.
+    if (meta.format === 'heif' && (meta.width ?? 0) * (meta.height ?? 0) > HEIF_MAX_PIXELS) throw new ImageRefused('heif too large');
     return await image
       .rotate()
       .resize(PROXY_EDGE, PROXY_EDGE, { fit: 'inside', withoutEnlargement: true })

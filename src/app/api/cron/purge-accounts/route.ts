@@ -29,7 +29,7 @@ export async function GET(req: Request) {
       db: getAdminDb(),
       deleteAuthUser: (uid) => getAdminAuth().deleteUser(uid),
       deleteStoragePrefix: (prefix) => getStorageProvider().deletePrefix(prefix),
-      deleteStorageObject: (key) => getStorageProvider().deleteObject(key),
+      deleteStorageObjects: (keys) => getStorageProvider().deleteObjects(keys),
       deleteChatImageFiles: async (keys) => {
         await getChatImageStore()?.deleteMany(keys);
       },
