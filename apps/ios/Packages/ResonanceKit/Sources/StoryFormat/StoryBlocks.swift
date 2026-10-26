@@ -68,11 +68,12 @@ public nonisolated enum StoryParser {
     /// server read it: `'` and `"` stay as written (a link's `?q=what's` stays one link), `--` and
     /// `...` too.
     ///
-    /// A story opening quotes and lists deeper than `StoryNesting.limit` on a line would run Apple's
-    /// recursive parser out of stack: it is drawn as its words instead, a paragraph per blank-line
-    /// gap, nothing parsed.
+    /// A story opening quotes and lists deeper than `StoryNesting.limit` on a line, or a paragraph of
+    /// more inline delimiters than `StoryNesting.paragraphDelimiters`, would run Apple's recursive
+    /// parser out of stack: it is drawn as its words instead, a paragraph per blank-line gap, nothing
+    /// parsed.
     public static func parse(_ markdown: String) -> [StoryBlock] {
-        guard !StoryNesting.tooDeep(markdown) else { return unparsed(markdown) }
+        guard !StoryNesting.tooComplex(markdown) else { return unparsed(markdown) }
         let document = Document(parsing: markdown, options: [.disableSmartOpts])
         return document.children.compactMap(block)
     }

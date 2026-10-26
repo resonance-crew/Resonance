@@ -1,6 +1,7 @@
 package com.resonance.kit
 
 import com.resonance.kit.story.SharePassages
+import com.resonance.kit.story.StoryNesting
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
@@ -89,14 +90,13 @@ class SharePassagesTest {
     }
 
     @Test fun quotesNestedThousandsDeepAreReadWithoutRunningOutOfStack() {
-        // A quote a hundred deep is quoted as the web quotes it.
-        assertEquals("外婆把青梅一顆顆擦乾。", openingOnASmallStack("> ".repeat(100) + "外婆把青梅一顆顆擦乾。"))
-        // The rules let a story open with `> > > …` as deep as its length allows. commonmark-java
-        // stops opening blocks past its own depth (the rest is a paragraph's text, so the card
-        // quotes marks); the share sheet still opens, never a crash — the web's reader runs out of
-        // stack there.
-        val deep = openingOnASmallStack("> ".repeat(9_000) + "外婆把青梅一顆顆擦乾。")
-        assertTrue(SharePassages.graphemeCount(deep) <= SharePassages.MAX_GRAPHEMES + 1)
+        // A quote as deep as the readers parse is quoted as the web quotes it.
+        val atLimit = "> ".repeat(StoryNesting.LIMIT) + "外婆把青梅一顆顆擦乾。"
+        assertEquals("外婆把青梅一顆顆擦乾。", openingOnASmallStack(atLimit))
+        // Deeper, the readers draw the story as its words and a share card quotes none of it (the
+        // web and iOS alike, StoryNesting) — never a crash, however deep the rules let it go.
+        assertEquals("", openingOnASmallStack("> ".repeat(100) + "外婆把青梅一顆顆擦乾。"))
+        assertEquals("", openingOnASmallStack("> ".repeat(9_000) + "外婆把青梅一顆顆擦乾。"))
     }
 
     @Test fun theStoryIsReadWithoutGfmAsTheServerReadsIt() {

@@ -54,6 +54,22 @@ class StoryParserTest {
         assertTrue(!com.resonance.kit.story.StoryNesting.tooDeep("- a\n  - b\n    - c"))
     }
 
+    @Test fun aParagraphOfDelimitersThatNeverPairIsReadAsItsWords() {
+        val nesting = com.resonance.kit.story.StoryNesting
+        val deep = "**".repeat(5_000) + "雨" + "**".repeat(5_000)
+        assertTrue(nesting.tooComplex(deep))
+        assertEquals(1, StoryParser.parse(deep).size)
+        for (flood in listOf("*_".repeat(2_000) + "x", "~~a ".repeat(2_000), "*[".repeat(2_000) + "x")) assertTrue(nesting.tooComplex(flood))
+        val half = nesting.PARAGRAPH_DELIMITERS / 4
+        assertTrue(!nesting.tooComplex("*_".repeat(half) + "雨" + "_*".repeat(half)))
+        val ordinary = (0 until 40).joinToString("\n\n") { "這段有 **重點** 和 *強調*，第${it}段。" }
+        assertTrue(!nesting.tooComplex(ordinary))
+        assertTrue(!nesting.tooComplex("```\n" + "snake_case_name = other_value * __dunder__\n".repeat(300) + "```"))
+        val many = List(40) { "*a ".repeat(nesting.PARAGRAPH_DELIMITERS - 10) }.joinToString("\n\n")
+        assertTrue(nesting.tooComplex(many))
+        assertEquals(emptyList(), com.resonance.kit.story.SharePassages.blocks(deep + "\n\n第二段，平平常常的一段話，也值得被讀到。"))
+    }
+
     @Test fun aTableIsItsHeadItsRowsAndItsColumnsAlignments() {
         val b = blocks("table-basic")
         assertEquals(3, b.size)
