@@ -66,6 +66,27 @@ function fakeFcm(dead: string[] = []) {
 
 const exists = async (path: string) => (await db.doc(path).get()).exists;
 
+/**
+ * A fake FCM that answers no multicast until `together` of them have been
+ * asked: sent one after another, the first would wait for ever (the test's
+ * timeout); sent side by side, all go. `failing` tokens' multicast throws.
+ */
+function fcmAnsweringTogether(together: number, failing: string[] = []) {
+  const fcm = fakeFcm();
+  let asked = 0;
+  let all!: () => void;
+  const allAsked = new Promise<void>((resolve) => (all = resolve));
+  const sender: PushSender = {
+    async sendEachForMulticast(message) {
+      if (++asked === together) all();
+      await allAsked;
+      if (message.tokens.some((t) => failing.includes(t))) throw new Error('fcm unavailable');
+      return fcm.sender.sendEachForMulticast(message);
+    },
+  };
+  return { sender, sent: fcm.sent };
+}
+
 describe('the device registry', () => {
   it('keys a device by its install, so signing in as someone else moves it to them', async () => {
     await registerDevice(db, 'alice', 'install-0001', { token: 't1', platform: 'ios', locale: 'zh-Hant-TW', appVersion: '1.0' });
@@ -161,6 +182,17 @@ describe('pushNotification', () => {
     const results = await Promise.all([1, 2, 3].map(() => pushNotification(db, notificationId!, fcm.sender)));
     expect(results.filter(Boolean)).toHaveLength(1);
     expect(fcm.sent).toHaveLength(2); // one multicast per language, once
+  });
+
+  it("sends each language's multicast side by side, and one failing stops none of the others", async () => {
+    const { notificationId } = await sendNote(db, 'alice', { cardId: 'masked', text: 'hi' });
+    const fcm = fcmAnsweringTogether(2);
+    expect(await pushNotification(db, notificationId!, fcm.sender)).toEqual({ sent: 2, pruned: 0 });
+
+    const again = await sendNote(db, 'alice', { cardId: 'masked', text: 'again' });
+    const failing = fcmAnsweringTogether(2, ['bob-zh']);
+    await expect(pushNotification(db, again.notificationId!, failing.sender)).rejects.toThrow('fcm unavailable');
+    expect(failing.sent.map((m) => m.tokens.join())).toEqual(['bob-en']);
   });
 
   it("stays silent when a block went up after the bell rang, and for a row that's already read", async () => {
@@ -334,6 +366,12 @@ describe('pushMessage', () => {
       ['pixel-en', 'data'],
       ['pixel-zh', 'data'],
     ]);
+  });
+
+  it('sends those multicasts side by side', async () => {
+    const fcm = fcmAnsweringTogether(4);
+    expect(await pushMessage(db, await send('hi'), fcm.sender)).toEqual({ sent: 5, pruned: 0 });
+    expect(fcm.sent).toHaveLength(4);
   });
 
   it('says "shared a card" in the device\'s own language for a message that is only a card', async () => {
