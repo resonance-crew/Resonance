@@ -87,7 +87,9 @@ object StoryParser {
      * words instead, a paragraph per blank-line gap, nothing parsed (as the iOS reader and the web do).
      */
     fun parse(markdown: String): List<StoryBlock> =
-        if (StoryNesting.tooComplex(markdown)) unparsed(markdown) else children(parser.parse(markdown)).mapNotNull(::block)
+        if (StoryNesting.tooComplex(markdown)) unparsed(markdown)
+        // The parser refuses some inputs by throwing (a table past its own cell cap): its words, never a crash.
+        else runCatching { children(parser.parse(markdown)).mapNotNull(::block) }.getOrElse { unparsed(markdown) }
 
     /** The story as written, a paragraph of words per run of lines between blank ones. */
     fun unparsed(markdown: String): List<StoryBlock> {
