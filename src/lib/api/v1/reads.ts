@@ -52,10 +52,12 @@ const PROFILE_COUNT_LIMIT = 40;
 
 const notFound = () => new ApiFailure('not_found', 'No such card.');
 
-async function cardDoc(db: Firestore, id: string): Promise<Card | null> {
+/** The card `id`, whole or only the `fields` named (Firestore's field mask) — or null. */
+async function cardDoc(db: Firestore, id: string, fields?: readonly string[]): Promise<Card | null> {
   // An id Firestore keeps for itself names no card (reading it would throw).
   if (isReservedId(id)) return null;
-  const snap = await db.doc(`cards/${id}`).get();
+  const ref = db.doc(`cards/${id}`);
+  const snap = fields ? (await db.getAll(ref, { fieldMask: [...fields] }))[0] : await ref.get();
   return snap.exists ? mapCard(snap.id, snap.data()!) : null;
 }
 
@@ -70,11 +72,12 @@ export async function visibleCard(db: Firestore, viewerId: string, key: string):
 /**
  * A card the viewer may read, by its document id only — for the routes whose
  * parameter is always an id (a card's lists, notes, a message's card): no
- * slug lookup first.
+ * slug lookup first. `fields` reads only those (they must hold what canView
+ * asks: present's CARD_VISIBILITY_FIELDS) — a note or a message needs no story.
  */
-export async function visibleCardById(db: Firestore, viewerId: string, id: string): Promise<Card> {
+export async function visibleCardById(db: Firestore, viewerId: string, id: string, fields?: readonly string[]): Promise<Card> {
   if (!id || id.includes('/')) throw notFound();
-  const card = await cardDoc(db, id);
+  const card = await cardDoc(db, id, fields);
   if (!card || !(await canView(db, card, viewerId))) throw notFound();
   return card;
 }

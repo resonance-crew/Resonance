@@ -23,8 +23,10 @@ export const POST = withUser(async (user, req) => {
   });
   const input = parse(SendMessageRequest, body);
   const db = getAdminDb();
-  await spend(db, user.id, 'message');
-  const sent = await sendMessage(db, user.id, input);
-  afterMessageSent(db, sent);
+  // Spent beside the send's reads, and still before any refusal or write (sendMessage awaits it).
+  const spent = spend(db, user.id, 'message');
+  spent.catch(() => {});
+  const sent = await sendMessage(db, user.id, input, spent);
+  afterMessageSent(db, sent, input.text);
   return NextResponse.json({ conversationId: sent.conversationId, id: sent.id }, { status: 201 });
 });

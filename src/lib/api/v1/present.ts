@@ -160,6 +160,9 @@ export async function connected(db: Firestore, a: string, b: string): Promise<bo
   return (await db.doc(`connections/${pair}`).get()).exists;
 }
 
+/** What cardVisible (and canView) decide a card's readers by: a card read for that alone needs only these. */
+export const CARD_VISIBILITY_FIELDS = ['authorId', 'publishedAt', 'visibility', 'anonymous', 'trashedAt'] as const;
+
 /**
  * firestore.rules `cardOpen` once the viewer's connection to the author is
  * known — `isConnected` is only asked for a published, named connections

@@ -45,18 +45,33 @@ describe('POST /api/v1/messages (every write route shares these)', () => {
 
   beforeEach(() => {
     getCurrentUser.mockReset().mockResolvedValue({ id: 'alice' });
-    sendMessage.mockReset().mockResolvedValue(SENT);
+    // As the service does: the budget it is handed answers before anything else (apiV1Conversations pins the order).
+    sendMessage.mockReset().mockImplementation(async (_db: unknown, _uid: unknown, _input: unknown, spent: Promise<void>) => {
+      await spent;
+      return SENT;
+    });
     afterMessageSent.mockReset();
     spend.mockReset().mockResolvedValue(undefined);
   });
 
-  it('is 429 once the sender has spent their budget, and sends nothing', async () => {
+  it('is 429 once the sender has spent their budget, with nothing sent after it', async () => {
     spend.mockRejectedValue(new ApiFailure('rate_limited', 'Too many requests. Please try again later.'));
     const res = await post({ to: 'bob', text: 'hi' });
     expect(res.status).toBe(429);
     expect((await res.json()).error.code).toBe('rate_limited');
     expect(spend).toHaveBeenCalledWith({}, 'alice', 'message');
-    expect(sendMessage).not.toHaveBeenCalled();
+    expect(sendMessage.mock.calls[0][3]).toBe(spend.mock.results[0].value);
+    expect(afterMessageSent).not.toHaveBeenCalled();
+  });
+
+  it('starts the send beside the budget, handing it the spend to wait for', async () => {
+    let settle!: () => void;
+    spend.mockReturnValue(new Promise<void>((resolve) => (settle = resolve)));
+    const res = post({ to: 'bob', text: 'hi' });
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+    expect(afterMessageSent).not.toHaveBeenCalled();
+    settle();
+    expect((await res).status).toBe(201);
   });
 
   it('is 401 with the ApiError shape when nobody is signed in', async () => {
@@ -92,14 +107,15 @@ describe('POST /api/v1/messages (every write route shares these)', () => {
     const res = await post({ to: 'bob', text: '  hi  ', extra: 'ignored' });
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ conversationId: 'alice_bob', id: 'm1' });
-    expect(sendMessage).toHaveBeenCalledWith({}, 'alice', { to: 'bob', text: 'hi' });
-    expect(afterMessageSent).toHaveBeenCalledWith({}, SENT);
+    expect(sendMessage).toHaveBeenCalledWith({}, 'alice', { to: 'bob', text: 'hi' }, expect.any(Promise));
+    // The words sent go along: without a link, nothing is unfurled.
+    expect(afterMessageSent).toHaveBeenCalledWith({}, SENT, 'hi');
   });
 
   it('passes the message it answers and the sender\'s own id on to the service', async () => {
     const res = await post({ to: 'bob', text: 'hi', replyTo: 'm0', clientId: 'client-0123456789abcdef' });
     expect(res.status).toBe(201);
-    expect(sendMessage).toHaveBeenCalledWith({}, 'alice', { to: 'bob', text: 'hi', replyTo: 'm0', clientId: 'client-0123456789abcdef' });
+    expect(sendMessage).toHaveBeenCalledWith({}, 'alice', { to: 'bob', text: 'hi', replyTo: 'm0', clientId: 'client-0123456789abcdef' }, expect.any(Promise));
   });
 
   it('answers a message sent again exactly as the first time, and leaves the after-work to the service\'s own flag', async () => {
@@ -108,7 +124,7 @@ describe('POST /api/v1/messages (every write route shares these)', () => {
     const res = await post({ to: 'bob', text: 'hi', clientId: 'client-0123456789abcdef' });
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ conversationId: 'alice_bob', id: 'm1' });
-    expect(afterMessageSent).toHaveBeenCalledWith({}, duplicate);
+    expect(afterMessageSent).toHaveBeenCalledWith({}, duplicate, 'hi');
   });
 
   it('refuses a reply or client id that is not well-formed, before sending anything', async () => {

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// POST /api/v1/notes: spends the caller's budget, sends (apiV1Conversations
-// covers the transaction) and rings the author once after the response —
+// POST /api/v1/notes: spends the caller's budget beside the send (which waits
+// for it before any refusal or write: apiV1Conversations covers the
+// transaction, and the order) and rings the author once after the response —
 // through the chat push when the note went into their thread, through its
 // bell row when the card is anonymous. Neither id leaves the server.
 
@@ -30,7 +31,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   getCurrentUser.mockResolvedValue({ id: 'alice' });
   spend.mockResolvedValue(undefined);
-  sendNote.mockResolvedValue({ id: 'n1', notificationId: 'bell1', push, duplicate: false });
+  // As the service does: the budget answers before anything else.
+  sendNote.mockImplementation(async (_db: unknown, _uid: unknown, _input: unknown, spent: Promise<void>) => {
+    await spent;
+    return { id: 'n1', notificationId: 'bell1', push, duplicate: false };
+  });
   // Every refusal as it is, unless the request comes from a build before letters (preLetter.test.ts).
   refusalForPreLetterBuild.mockImplementation(async (_db: unknown, _uid: unknown, _req: unknown, e: unknown) => e);
 });
@@ -41,7 +46,7 @@ describe('POST /api/v1/notes', () => {
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ id: 'n1' });
     expect(spend).toHaveBeenCalledWith({}, 'alice', 'note');
-    expect(sendNote).toHaveBeenCalledWith({}, 'alice', { cardId: 'walk', text: '謝謝你' });
+    expect(sendNote).toHaveBeenCalledWith({}, 'alice', { cardId: 'walk', text: '謝謝你' }, expect.any(Promise));
     expect(afterNoteSent).toHaveBeenCalledWith({}, push);
     // Its bell row is already marked pushed: never two buzzes.
     expect(ringAfter).not.toHaveBeenCalled();
@@ -63,7 +68,7 @@ describe('POST /api/v1/notes', () => {
     const res = await post({ cardId: 'walk', text: 'hi', clientId });
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ id: clientId });
-    expect(sendNote).toHaveBeenCalledWith({}, 'alice', { cardId: 'walk', text: 'hi', clientId });
+    expect(sendNote).toHaveBeenCalledWith({}, 'alice', { cardId: 'walk', text: 'hi', clientId }, expect.any(Promise));
     expect(afterNoteSent).not.toHaveBeenCalled();
     expect(ringAfter).not.toHaveBeenCalled();
   });
@@ -77,10 +82,21 @@ describe('POST /api/v1/notes', () => {
     expect(sendNote).toHaveBeenCalledTimes(2);
   });
 
-  it('is 429 over budget, sending nothing', async () => {
+  it('is 429 over budget, ringing nothing', async () => {
     spend.mockRejectedValue(new ApiFailure('rate_limited', 'Too many requests. Please try again later.'));
     expect((await post({ cardId: 'walk', text: 'hi' })).status).toBe(429);
-    expect(sendNote).not.toHaveBeenCalled();
+    expect(afterNoteSent).not.toHaveBeenCalled();
+    expect(ringAfter).not.toHaveBeenCalled();
+  });
+
+  it('starts the send beside the budget, handing it the spend to wait for', async () => {
+    let settle!: () => void;
+    spend.mockReturnValue(new Promise<void>((resolve) => (settle = resolve)));
+    const res = post({ cardId: 'walk', text: 'hi' });
+    await vi.waitFor(() => expect(sendNote).toHaveBeenCalledTimes(1));
+    expect(sendNote.mock.calls[0][3]).toBe(spend.mock.results[0].value);
+    settle();
+    expect((await res).status).toBe(201);
   });
 
   it("rings nothing when the service refuses: a block, a card you can't read", async () => {

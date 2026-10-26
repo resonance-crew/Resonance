@@ -25,8 +25,10 @@ export const POST = withUser(async (user, req) => {
   });
   const input = parse(SendNoteRequest, body);
   const db = getAdminDb();
-  await spend(db, user.id, 'note');
-  const { id, notificationId, push, duplicate } = await sendNote(db, user.id, input).catch(async (e: unknown) => {
+  // Spent beside the send's reads, and still before any refusal or write (sendNote awaits it).
+  const spent = spend(db, user.id, 'note');
+  spent.catch(() => {});
+  const { id, notificationId, push, duplicate } = await sendNote(db, user.id, input, spent).catch(async (e: unknown) => {
     // A build before letters knows no 409 here: it is told the same with a 403, whose words it shows.
     throw await refusalForPreLetterBuild(db, user.id, req, e);
   });
