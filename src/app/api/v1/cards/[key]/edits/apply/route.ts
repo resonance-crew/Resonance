@@ -24,13 +24,17 @@ export const POST = withUser(async (user, _req, ctx: RouteContext<'key'>) => {
   const { stale, reaches, ...result } = await applyCardEdit(db, user.id, id);
   if (reaches) ringAfter(db, () => tryReachResonance(db, user.id, id));
   if (result.applied) {
-    after(async () => {
-      // After "save changes": the story's link previews (new links fetched,
-      // removed ones dropped), the cached pages, then the recommendation index.
-      await unfurlCardLinks(getAdminDb(), id).catch((e) => console.error('[api/v1] unfurl', e));
-      revalidateLocalized(stale);
-      await indexCard(id).catch((e) => console.error('[api/v1] index', e));
-    });
+    after(() =>
+      // After "save changes", side by side as publishing does: the story's link previews (new links fetched,
+      // removed ones dropped) and then the cached pages; and the recommendation index.
+      Promise.all([
+        (async () => {
+          await unfurlCardLinks(getAdminDb(), id).catch((e) => console.error('[api/v1] unfurl', e));
+          revalidateLocalized(stale);
+        })(),
+        indexCard(id).catch((e) => console.error('[api/v1] index', e)),
+      ]),
+    );
   }
   return NextResponse.json(result);
 });

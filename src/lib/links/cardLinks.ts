@@ -38,6 +38,8 @@ export interface UnfurlCardResult {
 }
 
 const DOC_ID = /^[A-Za-z0-9_-]{1,128}$/;
+/** What an unfurl reads of the card (no signature, no cover, no summary): there, and in its transaction. */
+const UNFURL_FIELDS = ['publishedAt', 'story', 'linkPreviews', 'linkPreviewsFor', 'authorId'];
 
 /**
  * Give a published card the previews of the links standing alone in its
@@ -65,10 +67,13 @@ export async function unfurlCardLinks(db: Firestore, cardId: string, deps: Unfur
   const nothing: UnfurlCardResult = { links: 0, fetched: 0, previews: 0, written: false, overBudget: false };
   if (!DOC_ID.test(cardId)) return nothing;
   const ref = db.doc(`cards/${cardId}`);
-  const snap = await ref.get();
+  const [snap] = await db.getAll(ref, { fieldMask: UNFURL_FIELDS });
   if (!snap.exists || snap.get('publishedAt') == null) return nothing;
 
   const links = standaloneLinks(String(snap.get('story') ?? ''));
+  // No link to preview and none stored (most stories): nothing to write, so no transaction to find that out.
+  // A story saved meanwhile with links has its own unfurl, which its save started.
+  if (!links.length && snap.get('linkPreviews') === undefined && snap.get('linkPreviewsFor') === undefined) return nothing;
   const stored = byUrl(linkPreviewsOf(snap.get('linkPreviews'), STORY_PREVIEW_LIMIT));
   let missing = links.filter((link) => !stored.has(link));
   let overBudget = false;
@@ -83,7 +88,7 @@ export async function unfurlCardLinks(db: Firestore, cardId: string, deps: Unfur
   const fetched = await fetchAll(missing, deps);
 
   const outcome = await db.runTransaction(async (tx) => {
-    const now = await tx.get(ref);
+    const [now] = await tx.getAll(ref, { fieldMask: UNFURL_FIELDS });
     if (!now.exists || now.get('publishedAt') == null) return null;
     const current = standaloneLinks(String(now.get('story') ?? ''));
     // Also what another unfurl stored meanwhile (two saves in a row).
