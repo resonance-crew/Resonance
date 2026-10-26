@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import { CardLinkGrid } from '@/components/molecules/CardLinkGrid/CardLinkGrid';
 import { FeedSkeleton } from '@/components/atoms/CardSkeleton/CardSkeleton';
@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/molecules/EmptyState/EmptyState';
 import { useToast } from '@/components/providers/ToastProvider';
 import { penWave } from '@/lib/design/wavyPath';
 import { INK } from '@/lib/design/strokes';
+import { storyLinkWaveVars } from '@/lib/design/storyLinkWave';
 import { useFeed, useRecommendedFeed } from '@/lib/data/hooks';
 import type { Card } from '@/lib/db/types';
 import styles from './page.module.css';
@@ -183,6 +184,9 @@ function cardInView(): { id: string; top: number } | null {
  * loop draws itself before the label (as a button's does); the button keeps
  * its focus, takes no click and says it is busy. The apps' FeedMoreButton.
  */
+/** The wave the label wears under a pointer: a story link's, seeded once. */
+const MORE_WAVE = storyLinkWaveVars('feed-more') as CSSProperties;
+
 function FeedMore({ label, loading, onClick }: { label: string; loading: boolean; onClick: () => void }) {
   return (
     <button
@@ -193,7 +197,9 @@ function FeedMore({ label, loading, onClick }: { label: string; loading: boolean
       aria-disabled={loading || undefined}
     >
       {loading && <ButtonLoader size={15} />}
-      {label}
+      <span className={styles.moreLabel} style={MORE_WAVE}>
+        {label}
+      </span>
     </button>
   );
 }

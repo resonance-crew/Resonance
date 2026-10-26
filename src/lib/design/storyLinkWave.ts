@@ -5,13 +5,24 @@ import { INK } from './strokes';
 /** Width of one repeating tile: eight crests at the pen's 4.5px rhythm. */
 export const WAVE_TILE = 36;
 /**
+ * How far a crest leans off the line, in px (tokens.css --link-wave-amp, which
+ * the apps draw from): lower than the pen's own 1.2, so under running text the
+ * wave keeps the pen's rhythm (a crest every 4.5px) but lies flatter and
+ * smoother, a line under the words rather than a scribble.
+ */
+export const WAVE_AMP = 0.75;
+/**
  * The tile's height, centred on the pen's line: the crests (at most
- * 1.35 × 1.2 = 1.62px off the line) plus half the INK stroke fit inside it,
+ * 1.35 × WAVE_AMP ≈ 1px off the line) plus half the INK stroke fit inside it,
  * so nothing of the wave is ever cut at the tile's edge.
  */
 export const WAVE_TILE_H = 6;
-/** --color-terracotta, as sRGB: a data URI can't read the page's CSS variables. */
-const TERRACOTTA = 'rgb(201,103,54)';
+/**
+ * tokens.css --link-wave (the terracotta at 0.6× its chroma, a touch lighter),
+ * as sRGB — a data URI can't read the page's CSS variables. Quieter than the
+ * words it underlines, which keep the deep terracotta label ink.
+ */
+export const WAVE_INK = 'rgb(186,127,100)';
 
 /**
  * How far under the baseline the wave's centre runs, in em of the link's
@@ -35,7 +46,7 @@ const cache = new Map<string, StoryLinkWave>();
 function tile(d: string, opacity: number): string {
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${WAVE_TILE}" height="${WAVE_TILE_H}" viewBox="0 ${-WAVE_TILE_H / 2} ${WAVE_TILE} ${WAVE_TILE_H}">` +
-    `<path d="${d}" fill="none" stroke="${TERRACOTTA}" stroke-opacity="${opacity}" stroke-width="${INK}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    `<path d="${d}" fill="none" stroke="${WAVE_INK}" stroke-opacity="${opacity}" stroke-width="${INK}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 
@@ -50,7 +61,7 @@ function tile(d: string, opacity: number): string {
 export function storyLinkWave(href: string): StoryLinkWave {
   let hit = cache.get(href);
   if (!hit) {
-    const d = penWaveTile(WAVE_TILE, seedFromString(href));
+    const d = penWaveTile(WAVE_TILE, seedFromString(href), WAVE_AMP);
     hit = { rest: tile(d, 0.7), strong: tile(d, 1), size: `${WAVE_TILE}px ${WAVE_TILE_H}px` };
     if (cache.size > 500) cache.clear();
     cache.set(href, hit);

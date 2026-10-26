@@ -36,6 +36,8 @@ object Tokens {
     val BubbleQuote = Color(0.8683f, 0.8475f, 0.819f, 1f, ColorSpaces.DisplayP3)
     /** --link-card-muted · sRGB #64523d */
     val LinkCardMuted = Color(0.3801f, 0.3227f, 0.2494f, 1f, ColorSpaces.DisplayP3)
+    /** --link-wave · sRGB #ba7f64 */
+    val LinkWave = Color(0.6968f, 0.5071f, 0.4094f, 1f, ColorSpaces.DisplayP3)
     /** --reading-progress · sRGB #ef7926 */
     val ReadingProgress = Color(0.8777f, 0.4985f, 0.2387f, 1f, ColorSpaces.DisplayP3)
     /** --field-border · sRGB #c5bcb0 */
@@ -105,6 +107,8 @@ object Tokens {
     val InkLight = 1.2.dp
     val InkStrong = 2.2.dp
 
+    /** --link-wave-amp */
+    const val LinkWaveAmp = 0.75f
     /** --reading-progress-width */
     const val ReadingProgressWidth = 1.8f
     /** --reading-progress-glow */

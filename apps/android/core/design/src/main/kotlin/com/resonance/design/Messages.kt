@@ -383,7 +383,7 @@ fun ChatText(
                     if (waves.isNotEmpty()) {
                         val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                         waves.forEach { w ->
-                            translate(w.x, w.y) { drawPath(w.path, Tokens.Terracotta, alpha = if (w.link == pressed.value) 1f else 0.7f, style = pen) }
+                            translate(w.x, w.y) { drawPath(w.path, Tokens.LinkWave, alpha = if (w.link == pressed.value) 1f else 0.7f, style = pen) }
                         }
                     }
                     drawIntoCanvas { layout.draw(it.nativeCanvas) }
@@ -484,7 +484,7 @@ internal fun chatLinkWaves(layout: StaticLayout, links: List<IntRange>, sizePx: 
             { line, o -> if (o == layout.getLineEnd(line)) layout.getLineRight(line) else layout.getPrimaryHorizontal(o) },
             { layout.getLineBaseline(it).toFloat() },
         ).mapIndexed { i, f ->
-            ChatWave(index, f.left, linkWaveY(f.baseline, sizePx), penWave(((f.right - f.left) / density).toDouble(), (seed + i).toDouble()).toPath(density))
+            ChatWave(index, f.left, linkWaveY(f.baseline, sizePx), penWave(((f.right - f.left) / density).toDouble(), (seed + i).toDouble(), amp = LINK_WAVE_AMP).toPath(density))
         }
     }
 }

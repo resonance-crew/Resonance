@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.sp
+import com.resonance.design.LINK_WAVE_AMP
 import com.resonance.design.linkWaveY
 import com.resonance.design.toPath
 import com.resonance.geometry.penWave
@@ -244,10 +245,10 @@ private fun WriteNewRow(enabled: Boolean, onClick: () -> Unit) {
             style = AppFonts.body(15f, 600, lineHeight = 1.3f, color = if (pressed) WriteNewPressed else Mixes.ButtonOnTonal),
             onTextLayout = { baseline = it.firstBaseline },
             modifier = Modifier.drawWithCache {
-                val wave = penWave((size.width / density).toDouble(), seedFromString("write-new").toDouble()).toPath(density)
+                val wave = penWave((size.width / density).toDouble(), seedFromString("write-new").toDouble(), amp = LINK_WAVE_AMP).toPath(density)
                 val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                 onDrawBehind {
-                    if (pressed && !baseline.isNaN()) translate(top = linkWaveY(baseline, 15.sp.toPx())) { drawPath(wave, Tokens.Terracotta, style = pen) }
+                    if (pressed && !baseline.isNaN()) translate(top = linkWaveY(baseline, 15.sp.toPx())) { drawPath(wave, Tokens.LinkWave, style = pen) }
                 }
             },
         )

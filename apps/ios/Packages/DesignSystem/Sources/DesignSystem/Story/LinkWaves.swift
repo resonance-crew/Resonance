@@ -16,20 +16,27 @@ public struct LinkFragment: Equatable, Sendable {
 public enum LinkWaves {
     /// How far under the baseline the wave's centre runs, in em of the link's text — the depth
     /// every platform draws a story link's wave at (the web's WAVE_DEPTH_EM, storyLinkWave.ts):
-    /// the up crests (at most 1.62pt off the line, plus half the INK stroke) stay clear of the feet
+    /// the up crests (at most 1.35 × ``amp`` off the line, plus half the INK stroke) stay clear of the feet
     /// of Chinese glyphs (their ink ends about 0.12em down), and Latin descenders only dip into them.
     public static let depthEm: CGFloat = 0.29
+
+    /// How far the wave's crests lean off its line (tokens.css --link-wave-amp, the web's WAVE_AMP):
+    /// flatter than the pen's own 1.2, a crest every 4.5pt as ever.
+    public static let amp: CGFloat = Tokens.linkWaveAmp
+
+    /// The wave's ink (tokens.css --link-wave): the terracotta, quieter, under deep-terracotta words.
+    public static let ink = UIColor(Tokens.linkWave)
 
     /// The wave's centre under the baseline for text of `fontSize`.
     public static func drop(fontSize: CGFloat) -> CGFloat { fontSize * depthEm }
 
     /// How far under the baseline the wave's highest point reaches (its up crests and half the pen):
     /// the room it leaves the glyphs above it.
-    public static func clearance(fontSize: CGFloat) -> CGFloat { drop(fontSize: fontSize) - 1.2 * 1.35 - Tokens.ink / 2 }
+    public static func clearance(fontSize: CGFloat) -> CGFloat { drop(fontSize: fontSize) - amp * 1.35 - Tokens.ink / 2 }
 
     /// How far under the baseline the wave's lowest point reaches (its down crests and half the
     /// pen): on a heading's last line that is past the line box's foot.
-    public static func reach(fontSize: CGFloat) -> CGFloat { drop(fontSize: fontSize) + 1.2 * 1.35 + Tokens.ink / 2 }
+    public static func reach(fontSize: CGFloat) -> CGFloat { drop(fontSize: fontSize) + amp * 1.35 + Tokens.ink / 2 }
 
     /// The link attribute's runs: the URL and the character range it covers.
     public static func links(in storage: NSAttributedString) -> [(url: URL, range: NSRange)] {
@@ -66,7 +73,7 @@ public enum LinkWaves {
     }
 }
 
-/// A text view that draws the link wave under each link: terracotta, INK wide,
+/// A text view that draws the link wave under each link: ``LinkWaves/ink``, INK wide,
 /// ``LinkWaves/depthEm`` under the baseline, 70% at rest and 100% while a finger
 /// is on the link. Drawn beneath the glyphs, as the web paints its wave as the
 /// link's background: a descender that dips into a crest stands on it, never
@@ -108,7 +115,7 @@ final class LinkWaveTextView: UITextView, UIGestureRecognizerDelegate {
             let path = UIBezierPath()
             let frags = LinkWaves.fragments(of: link.range, layoutManager: layoutManager, container: textContainer)
             for (i, f) in frags.enumerated() {
-                let wave = penWave(Double(f.maxX - f.minX), seed: Double(seedFromString(link.url.absoluteString) + i))
+                let wave = penWave(Double(f.maxX - f.minX), seed: Double(seedFromString(link.url.absoluteString) + i), amp: Double(LinkWaves.amp))
                     .path(offsetX: Double(f.minX + textContainerInset.left), offsetY: Double(f.baseline + waveDrop + textContainerInset.top))
                 path.append(UIBezierPath(cgPath: wave.cgPath))
             }

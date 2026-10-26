@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { INK } from './strokes';
-import { WAVE_DEPTH_EM, WAVE_TILE, WAVE_TILE_H, storyLinkWave, storyLinkWaveStyle, storyLinkWaveVars } from './storyLinkWave';
+import { WAVE_AMP, WAVE_DEPTH_EM, WAVE_INK, WAVE_TILE, WAVE_TILE_H, storyLinkWave, storyLinkWaveStyle, storyLinkWaveVars } from './storyLinkWave';
 import { penWaveTilePoints } from './wavyPath';
 import { seedFromString } from './prng';
 
@@ -15,9 +15,11 @@ describe('storyLinkWave', () => {
       const svg = svgOf(storyLinkWave(href).rest);
       expect(svg).toContain(`width="${WAVE_TILE}" height="${WAVE_TILE_H}" viewBox="0 ${-WAVE_TILE_H / 2} ${WAVE_TILE} ${WAVE_TILE_H}"`);
       expect(svg).toContain(`stroke-width="${INK}"`);
-      // Its farthest crest (at most 1.35 × 1.2px off the line), plus half the pen, stays inside the half tile.
-      const ys = penWaveTilePoints(WAVE_TILE, seedFromString(href)).map(([, y]) => Math.abs(y));
-      expect(Math.max(...ys)).toBeLessThanOrEqual(1.62 + 1e-9);
+      // Its farthest crest (at most 1.35 × WAVE_AMP off the line), plus half the pen, stays inside the half tile.
+      const ys = penWaveTilePoints(WAVE_TILE, seedFromString(href), WAVE_AMP).map(([, y]) => Math.abs(y));
+      expect(Math.max(...ys)).toBeLessThanOrEqual(1.35 * WAVE_AMP + 1e-9);
+      // Flatter than the pen's own wave: the whole stroke spans at most ~2px from crest to crest.
+      expect(2 * Math.max(...ys)).toBeLessThanOrEqual(2.1);
       expect(Math.max(...ys) + INK / 2).toBeLessThanOrEqual(WAVE_TILE_H / 2);
     }
   });
@@ -67,6 +69,16 @@ describe('the wave’s placement in the story stylesheet', () => {
       expect(readFileSync(resolve(root, file), 'utf8')).toContain("import '@/styles/story.css';");
     }
     expect(readFileSync(resolve(root, 'scripts/native/build-editor.mjs'), 'utf8')).toContain("'src/styles/story.css'");
+  });
+
+  it('draws the wave the apps draw: the --link-wave ink and --link-wave-amp lean of tokens.css', () => {
+    const tokens = readFileSync(resolve(root, 'src/styles/tokens.css'), 'utf8');
+    expect(tokens).toMatch(new RegExp(`--link-wave-amp:\\s*${WAVE_AMP};`));
+    // oklch(65% 0.084 45) is #ba7f64 in sRGB (the apps' generated Tokens say so beside it).
+    expect(tokens).toMatch(/--link-wave:\s*oklch\(65% 0\.084 45\);/);
+    expect(WAVE_INK).toBe('rgb(186,127,100)');
+    expect(readFileSync(resolve(root, 'apps/ios/Packages/DesignSystem/Sources/DesignSystem/Generated/Tokens.swift'), 'utf8')).toContain('--link-wave · sRGB #ba7f64');
+    expect(svgOf(storyLinkWave('https://example.com/ink').rest)).toContain(`stroke="${WAVE_INK}"`);
   });
 
   it('puts the tile inside the link’s box, on its bottom edge', () => {

@@ -1238,17 +1238,17 @@ public final class ChatTextView: UIView, UIGestureRecognizerDelegate {
         }
     }
 
-    /// The story link's wave (LinkWaveTextView's recipe): terracotta at 70%, INK wide, round caps,
+    /// The story link's wave (LinkWaveTextView's recipe): ``LinkWaves/ink`` at 70%, INK wide, round caps,
     /// ``LinkWaves/depthEm`` under the baseline, seeded per link and line — beneath the glyphs.
     private func drawWaves() {
         let all = NSRange(location: 0, length: storage.length)
         let drop = LinkWaves.drop(fontSize: fontSize)
-        UIColor(Tokens.terracotta).withAlphaComponent(0.7).setStroke()
+        LinkWaves.ink.withAlphaComponent(0.7).setStroke()
         for link in links {
             let r = NSIntersectionRange(link.range, all)
             guard r.length > 0 else { continue }
             for (i, f) in LinkWaves.fragments(of: r, layoutManager: layout, container: container).enumerated() {
-                let wave = penWave(Double(f.maxX - f.minX), seed: Double(seedFromString(link.url.absoluteString) + i))
+                let wave = penWave(Double(f.maxX - f.minX), seed: Double(seedFromString(link.url.absoluteString) + i), amp: Double(LinkWaves.amp))
                     .path(offsetX: Double(f.minX), offsetY: Double(f.baseline + drop))
                 let path = UIBezierPath(cgPath: wave.cgPath)
                 path.lineWidth = Tokens.ink

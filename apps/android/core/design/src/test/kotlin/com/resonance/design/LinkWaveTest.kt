@@ -26,9 +26,20 @@ class LinkWaveTest {
         assertEquals(100f + 17f * 0.29f, linkWaveY(100f, 17f), 1e-4f)
     }
 
+    @Test fun itLiesFlatterThanThePenInItsQuieterInk() {
+        // tokens.css --link-wave-amp and --link-wave, the web's WAVE_AMP and WAVE_INK (#ba7f64).
+        assertEquals(0.75, LINK_WAVE_AMP, 0.0)
+        val swing = (1..200).maxOf { seed -> penWavePoints(120.0, seed.toDouble(), amp = LINK_WAVE_AMP).maxOf { abs(it.y) } }
+        assertTrue(swing <= 1.35 * 0.75 + 1e-9)
+        val srgb = Tokens.LinkWave.convert(androidx.compose.ui.graphics.colorspace.ColorSpaces.Srgb)
+        assertEquals(186f, srgb.red * 255, 1.5f)
+        assertEquals(127f, srgb.green * 255, 1.5f)
+        assertEquals(100f, srgb.blue * 255, 1.5f)
+    }
+
     @Test fun itsCrestsNeverTouchTheFeetOfChineseGlyphs() {
         // The highest a crest reaches above the wave's centre, in dp: the pen's swing and half its stroke.
-        val swing = (1..200).maxOf { seed -> penWavePoints(120.0, seed.toDouble()).maxOf { abs(it.y) } }
+        val swing = (1..200).maxOf { seed -> penWavePoints(120.0, seed.toDouble(), amp = LINK_WAVE_AMP).maxOf { abs(it.y) } }
         val reach = swing + Tokens.Ink.value / 2
         for (density in listOf(1f, 2f, 2.625f, 3.5f)) {
             for (size in listOf(17f, 18f, 22f)) {
