@@ -24,11 +24,11 @@ import org.aomedia.avif.android.AvifDecoder as LibAvif
  */
 class AvifDecoder(private val result: SourceFetchResult, private val options: Options) : Decoder {
     override suspend fun decode(): DecodeResult? = runInterruptible {
-        val bytes = result.source.use { it.source().readByteArray() }
+        val bytes = result.source.use { readBounded(it.source()) } ?: return@runInterruptible null
         // libavif reads from native memory.
         val buffer = ByteBuffer.allocateDirect(bytes.size).put(bytes)
         val info = LibAvif.Info()
-        if (!LibAvif.getInfo(buffer, bytes.size, info) || info.width <= 0 || info.height <= 0) return@runInterruptible null
+        if (!LibAvif.getInfo(buffer, bytes.size, info) || !fitsDecodeBounds(info.width, info.height)) return@runInterruptible null
         val full = Bitmap.createBitmap(info.width, info.height, Bitmap.Config.ARGB_8888)
         if (!LibAvif.decode(buffer, bytes.size, full)) {
             full.recycle()
@@ -51,6 +51,17 @@ class AvifDecoder(private val result: SourceFetchResult, private val options: Op
     companion object {
         private val FTYP = "ftyp".encodeUtf8()
         private val BRANDS = setOf("avif", "avis")
+        internal const val MAX_BYTES = 10 * 1024 * 1024
+        internal const val MAX_SIDE = 4096
+        internal const val MAX_PIXELS = 16_777_216L
+
+        internal fun fitsDecodeBounds(width: Int, height: Int): Boolean =
+            width in 1..MAX_SIDE && height in 1..MAX_SIDE && width.toLong() * height.toLong() <= MAX_PIXELS
+
+        internal fun readBounded(source: BufferedSource, maxBytes: Int = MAX_BYTES): ByteArray? {
+            if (source.request(maxBytes + 1L)) return null
+            return source.readByteArray()
+        }
 
         /** An ISO-BMFF file whose `ftyp` box names an AVIF brand (major or compatible). */
         internal fun isAvif(source: BufferedSource): Boolean = runCatching {

@@ -118,10 +118,14 @@ describe('the sheet', () => {
     for (let step = from * 64; step <= to * 64; step++) {
       const at = step / 64;
       const shown = chromeShows(bands, at);
-      expect(shown, `${at}px`).toHaveLength(1);
-      expect(exactShows(bands, at).length, `${at}px`).toBeLessThanOrEqual(1);
-      if (Number.isInteger(at)) expect(shown, `${at}px`).toEqual([expected(at)]);
+      if (shown.length !== 1) expect(shown, `${at}px`).toHaveLength(1);
+      const exact = exactShows(bands, at);
+      if (exact.length > 1) expect(exact.length, `${at}px`).toBeLessThanOrEqual(1);
+      if (Number.isInteger(at) && (shown.length !== 1 || shown[0] !== expected(at))) {
+        expect(shown, `${at}px`).toEqual([expected(at)]);
+      }
     }
+    expect(chromeShows(bands, to)).toEqual([expected(to)]);
   };
 
   it('shows the top strip whose turns fit the width, one at every stacked width', () => {

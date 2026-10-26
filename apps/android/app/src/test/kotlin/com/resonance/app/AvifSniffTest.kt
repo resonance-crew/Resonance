@@ -4,6 +4,8 @@ import okio.Buffer
 import okio.ByteString.Companion.decodeHex
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -39,5 +41,15 @@ class AvifSniffTest {
         val size = source.size
         AvifDecoder.isAvif(source)
         assertEquals(size, source.size)
+    }
+
+    @Test fun refusesOversizedDimensionsAndBodiesBeforeAllocatingFullBitmap() {
+        assertTrue(AvifDecoder.fitsDecodeBounds(2048, 2048))
+        assertTrue(AvifDecoder.fitsDecodeBounds(4096, 4096))
+        assertFalse(AvifDecoder.fitsDecodeBounds(0, 100))
+        assertFalse(AvifDecoder.fitsDecodeBounds(4097, 100))
+        assertFalse(AvifDecoder.fitsDecodeBounds(16384, 16384))
+        assertNotNull(AvifDecoder.readBounded(Buffer().write(ByteArray(1024)), maxBytes = 1024))
+        assertNull(AvifDecoder.readBounded(Buffer().write(ByteArray(1025)), maxBytes = 1024))
     }
 }
