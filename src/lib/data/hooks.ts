@@ -32,7 +32,14 @@ import { ApiError, callApi } from '@/lib/db/firestore/client/api';
 import { hasSessionMark } from '@/lib/auth/firebase/client';
 import { linkPreviewsOf } from '@/lib/links/previewShape';
 import { trashExpired } from '@/lib/cards/trash';
-import type { CardBoxTabName, CardDetailBody, CardListBody, FeedPageBody, ProfileBody } from '@/lib/api/v1/schemas';
+import type {
+  CardBoxTabName,
+  CardDetailBody,
+  CardListBody,
+  FeedPageBody,
+  ProfileBody,
+  RecommendedFeedBody,
+} from '@/lib/api/v1/schemas';
 import type { Conversation, Notification } from '@/lib/db/types';
 import { useLive, type LiveState } from './live';
 import { anonymousAuthor, cardKey } from './cardPrefill';
@@ -111,32 +118,32 @@ export interface RecommendedFeed extends CardsWithAuthors {
 }
 
 /**
- * The signed-in viewer's personalized「為你共振」feed. Fetches the funnel's
- * result (card ids + resonance reasons) from the server, then the cards
- * themselves in one request (GET /api/v1/cards?keys=: those the viewer may
- * read, minus the named cards of people they blocked, an anonymous one
- * without its byline — and never left out for a block).
+ * The signed-in viewer's personalized「為你共振」feed: today's picks as cards,
+ * in one request — GET /api/v1/feed/recommended (as the apps ask), which
+ * resolves the funnel's picks to the cards the viewer may read, minus the
+ * named cards of people they blocked, an anonymous one without its byline
+ * (and never left out for a block), each with its reason.
  * Gated on a signed-in viewer — the API requires auth, and an anonymous user
  * has no profile to match from.
  *
  * The request carries the viewer's ID token (like `callApi`), so it never
  * waits for the session cookie. `isLoading` also covers the moments before
  * the fetch can start (auth still restoring), so the home page can tell
- * "not yet" from "nothing for you".
+ * "not yet" from "nothing for you". A failed request is no picks — the
+ * latest cards carry the feed.
  */
 export function useRecommendedFeed() {
   const { user, loading } = useAuth();
   const swr = useSWR<RecommendedFeed>(user && !loading ? `feed:recommended:${user.id}` : null, async () => {
-    let items: { cardId: string; reason: string }[];
+    let body: RecommendedFeedBody;
     try {
-      ({ items } = await callApi<{ items: { cardId: string; reason: string }[] }>('/api/recommend/feed'));
+      body = await callApi<RecommendedFeedBody>('/api/v1/feed/recommended');
     } catch {
       return { cards: [], authors: {}, reasons: {} };
     }
-    const { cards, authors } = items.length ? await fetchCardSummaries(items.map((i) => i.cardId)) : { cards: [], authors: {} };
     const reasons: Record<string, string> = {};
-    for (const item of items) reasons[item.cardId] = item.reason;
-    return { cards, authors, reasons };
+    for (const c of body.cards) if (c.reason) reasons[c.id] = c.reason;
+    return { ...summaryList(body.cards), reasons };
   });
   return { ...swr, isLoading: swr.isLoading || loading };
 }

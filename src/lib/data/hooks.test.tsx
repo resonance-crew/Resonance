@@ -86,7 +86,7 @@ import { listenNotifications } from '@/lib/db/firestore/client/notifications';
 import { resetLive } from './live';
 import { ApiError, callApi } from '@/lib/db/firestore/client/api';
 import { loadMyThoughtMap } from '@/lib/db/firestore/client/thoughtMap';
-import type { CardDetailBody, FeedCardBody, FeedPageBody } from '@/lib/api/v1/schemas';
+import type { CardDetailBody, FeedCardBody, FeedPageBody, RecommendedFeedBody } from '@/lib/api/v1/schemas';
 import { getMyBlockedIds } from '@/lib/db/firestore/client/blocks';
 import {
   useCard,
@@ -1104,20 +1104,37 @@ describe('useFeed paging', () => {
 });
 
 describe('useRecommendedFeed', () => {
-  it("asks with the viewer's ID token (callApi), then for the picks themselves in one request", async () => {
+  it("asks for today's picks as cards in one request, with the viewer's ID token (callApi)", async () => {
     api({
-      '/api/recommend/feed': { items: [{ cardId: 'r1', reason: 'why' }, { cardId: 'r2', reason: 'unsigned' }] },
-      '/api/v1/cards?keys=r1,r2': { cards: [summary('r1', 'a2'), summary('r2', null)] },
+      '/api/v1/feed/recommended': {
+        cards: [summary('r1', 'a2', { reason: 'why' }), summary('r2', null, { reason: 'unsigned' }), summary('r3', 'a3')],
+        status: 'fresh',
+      } satisfies RecommendedFeedBody,
     });
 
     const { result } = renderHook(() => useRecommendedFeed(), { wrapper });
     await waitFor(() => expect(result.current.data).toBeDefined());
-    expect(callApi).toHaveBeenCalledWith('/api/recommend/feed');
-    // An anonymous pick comes too, without its author; nothing is read through the rules.
-    expect(result.current.data!.cards.map((c) => c.id)).toEqual(['r1', 'r2']);
+    // One round trip: the picks come resolved to cards, not as ids to read after.
+    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(callApi).toHaveBeenCalledWith('/api/v1/feed/recommended');
+    // In the server's order; an anonymous pick comes too, without its author; nothing is read through the rules.
+    expect(result.current.data!.cards.map((c) => c.id)).toEqual(['r1', 'r2', 'r3']);
     expect(result.current.data!.cards[1]).toMatchObject({ authorId: '', anonymous: true });
+    expect(result.current.data!.cards[0]).toMatchObject({ summary: { readMinutes: 1 } });
+    expect(Object.keys(result.current.data!.authors)).toEqual(['a2', 'a3']);
+    expect(result.current.data!.authors.a2.handle).toBe('h-a2');
+    // A pick without a reason (a quick first pass) has none.
     expect(result.current.data!.reasons).toEqual({ r1: 'why', r2: 'unsigned' });
     expect(getCardById).not.toHaveBeenCalled();
+    expect(getUsersByIds).not.toHaveBeenCalled();
+  });
+
+  it('shows no picks for a viewer who has none yet', async () => {
+    api({ '/api/v1/feed/recommended': { cards: [], status: 'stale' } satisfies RecommendedFeedBody });
+    const { result } = renderHook(() => useRecommendedFeed(), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data).toEqual({ cards: [], authors: {}, reasons: {} });
+    expect(result.current.isLoading).toBe(false);
   });
 
   it('counts as loading while auth is still restoring, so "none yet" never reads as "none"', async () => {
