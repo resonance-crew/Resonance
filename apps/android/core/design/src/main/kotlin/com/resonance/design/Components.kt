@@ -52,6 +52,8 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.CacheDrawScope
+import androidx.compose.ui.draw.DrawResult
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
@@ -130,11 +132,19 @@ fun Modifier.organicSurface(
 }
 
 /** Grain over a rectangle (the web's GrainOverlay): black ink at 2× opacity, so the mean darkening is `opacity`. */
-fun Modifier.grainOverlay(opacity: Float): Modifier = drawWithCache {
-    val brush = Grain.brush(GrainMode.Tile, "grain-overlay", size, density, 1f)
-    onDrawWithContent {
-        drawContent()
-        brush?.let { drawRect(it, alpha = (opacity * 2).coerceAtMost(1f)) }
+fun Modifier.grainOverlay(opacity: Float): Modifier = drawWithCacheOf(GrainOverlay(opacity))
+
+/**
+ * [grainOverlay]'s drawing, as a value ([drawWithCacheOf]): recomposed with equal inputs it is an equal modifier,
+ * which keeps what it cached (outline, paths, grain) instead of building it again at the next draw.
+ */
+private data class GrainOverlay(val opacity: Float) : (CacheDrawScope) -> DrawResult {
+    override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
+        val brush = Grain.brush(GrainMode.Tile, "grain-overlay", size, density, 1f)
+        onDrawWithContent {
+            drawContent()
+            brush?.let { drawRect(it, alpha = (opacity * 2).coerceAtMost(1f)) }
+        }
     }
 }
 
@@ -253,10 +263,13 @@ fun HandDrawnAvatar(
     image: ImageBitmap? = null,
 ) {
     val s = size.value.toDouble()
-    val shape = WobRectShape(
-        s * 0.4, seed, mag = s * 0.022,
-        options = WobRectOptions(curve = 1.3, cornerJitter = 3.2, cornerOffset = s * 0.06, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0)),
-    )
+    // One shape while the size and seed hold: its rim's cache and the picture's clip survive a recomposition.
+    val shape = remember(s, seed) {
+        WobRectShape(
+            s * 0.4, seed, mag = s * 0.022,
+            options = WobRectOptions(curve = 1.3, cornerJitter = 3.2, cornerOffset = s * 0.06, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0)),
+        )
+    }
     Box(
         Modifier
             .size(size)
@@ -697,7 +710,7 @@ class ButtonFace private constructor(
  * corner drift scaled to the button (4% and 3% of its short side). A fixed
  * wobble reads as lumpy on a 48dp-tall button, most of all along the top edge.
  */
-class OrganicButtonShape(private val seed: Double) : Shape {
+data class OrganicButtonShape(private val seed: Double) : Shape {
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
         val m = (minOf(size.width, size.height) / density.density).toDouble()
         return WobRectShape(16.0, seed, mag = m * 0.04, options = WobRectOptions(
@@ -1050,15 +1063,26 @@ fun FieldLabel(text: String) {
  * (`Tokens.FieldPadX` × `FieldPadY`); `focused` is read while drawing, so a
  * focus change redraws without recomposing.
  */
-fun Modifier.fieldSurface(seed: Double = 13.0, focused: () -> Boolean = { false }, curve: Double? = null): Modifier = drawWithCache {
-    val shape = curve?.let { AutoWobRectShape(Tokens.RadiusMd.toDouble(), seed, it) } ?: WobRectShape(Tokens.RadiusMd.toDouble(), seed)
-    val o = shape.createOutline(size, layoutDirection, this)
-    val s = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-    val r = CornerRadius(Tokens.RadiusMd.dp.toPx())
-    onDrawBehind {
-        // The web fills the field's plain rounded box; the pen line wobbles around it.
-        drawRoundRect(Tokens.Cream, cornerRadius = r)
-        drawOutline(o, if (focused()) Tokens.Terracotta else Tokens.FieldBorder, style = s)
+fun Modifier.fieldSurface(seed: Double = 13.0, focused: () -> Boolean = NotFocused, curve: Double? = null): Modifier = drawWithCacheOf(FieldSurface(seed, focused, curve))
+
+/** Never focused: one value, so two resting fields' surfaces are equal. */
+private val NotFocused: () -> Boolean = { false }
+
+/**
+ * [fieldSurface]'s drawing, as a value ([drawWithCacheOf]): recomposed with equal inputs it is an equal modifier,
+ * which keeps what it cached (outline, paths, grain) instead of building it again at the next draw.
+ */
+private data class FieldSurface(val seed: Double, val focused: () -> Boolean, val curve: Double?) : (CacheDrawScope) -> DrawResult {
+    override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
+        val shape = curve?.let { AutoWobRectShape(Tokens.RadiusMd.toDouble(), seed, it) } ?: WobRectShape(Tokens.RadiusMd.toDouble(), seed)
+        val o = shape.createOutline(size, layoutDirection, this)
+        val s = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val r = CornerRadius(Tokens.RadiusMd.dp.toPx())
+        onDrawBehind {
+            // The web fills the field's plain rounded box; the pen line wobbles around it.
+            drawRoundRect(Tokens.Cream, cornerRadius = r)
+            drawOutline(o, if (focused()) Tokens.Terracotta else Tokens.FieldBorder, style = s)
+        }
     }
 }
 

@@ -437,10 +437,10 @@ private fun LazyListScope.trashShelf(cards: List<FeedCard>, open: (Route) -> Uni
             }
         },
     )
-    itemsIndexed(shown, key = { _, c -> "trash:${c.id}" }) { i, card ->
+    itemsIndexed(shown, key = { _, c -> "trash:${c.id}" }, contentType = { _, _ -> "trashCard" }) { i, card ->
         val hue = CardPalette.of(palettes[i]).hue
         Box(Modifier.fillMaxWidth()) {
-            StoryCard(card.story(), i, i == shown.lastIndex, Modifier.plainClickable { open(tap(card)) }, inset = layout.inset, palette = palettes[i])
+            StoryCard(remember(card) { card.story() }, i, i == shown.lastIndex, Modifier.plainClickable { open(tap(card)) }, inset = layout.inset, palette = palettes[i])
             Box(Modifier.align(Alignment.TopEnd).padding(top = 14.dp - 3.dp, end = layout.inset - 4.dp - 3.dp)) {
                 TrashActionsMenu(TrashRef(card.id, card.title), seed = hue, hue = hue)
             }
@@ -557,11 +557,11 @@ private fun LazyListScope.managedCards(session: Session, cards: List<FeedCard>, 
             CardMenu(session, card, open, hue)
         }
     })
-    itemsIndexed(cards, key = { _, c -> c.id }) { i, card ->
+    itemsIndexed(cards, key = { _, c -> c.id }, contentType = { _, _ -> "shelfCard" }) { i, card ->
         val hue = CardPalette.of(palettes[i]).hue
         Column(Modifier.fillMaxWidth()) {
             Box {
-                StoryCard(card.story(), i, i == cards.lastIndex, Modifier.plainClickable { open(tap(card)) }, inset = layout.inset, palette = palettes[i])
+                StoryCard(remember(card) { card.story() }, i, i == cards.lastIndex, Modifier.plainClickable { open(tap(card)) }, inset = layout.inset, palette = palettes[i])
                 // The chip 14 in from the card's corner (the card's box sits 20 in from the screen, or
                 // its column's inset less the band's 18); the trigger's 44dp hit box reaches 3 past the 38dp chip.
                 Box(Modifier.align(Alignment.TopEnd).padding(top = 14.dp - 3.dp, end = layout.inset - 4.dp - 3.dp)) {

@@ -2,6 +2,10 @@ package com.resonance.kit.reading
 
 import com.resonance.api.models.CardDetail
 import com.resonance.api.models.FeedCard
+import com.resonance.kit.story.StoryBlock
+import com.resonance.kit.story.StoryParser
+import com.resonance.kit.story.StoryScripts
+import com.resonance.kit.story.StoryText
 
 /**
  * What the signed-in person has already seen of cards: a list's card (its
@@ -22,7 +26,17 @@ class CardCache(private val capacity: Int = 24) {
         val links: List<FeedCard> = emptyList(),
         /** The cards its story embeds that this reader may see ([embedFor] finds a link's). */
         val embeds: List<FeedCard> = emptyList(),
-    )
+    ) {
+        /**
+         * The story as the reader draws it, parsed once for the page and kept with it — the loader
+         * parses it off the main thread ([CardPageLoader]), so neither a revisit nor the page's first
+         * frame parses it again.
+         */
+        val blocks: List<StoryBlock> by lazy { StoryParser.parse(detail.story) }
+
+        /** The story's script and language, read off its title and words together ([StoryScripts.storyType]), once. */
+        val storyText: StoryText by lazy { StoryScripts.storyType(detail.card.title, detail.story) }
+    }
 
     private val pages = lru<Page>(capacity)
     private val previews = lru<FeedCard>(capacity * 4)

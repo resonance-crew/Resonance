@@ -10,6 +10,7 @@ import com.resonance.kit.reading.embedFor
 import com.resonance.kit.reading.profilePage
 import com.resonance.kit.story.StoryBlock
 import com.resonance.kit.story.StoryParser
+import com.resonance.kit.story.StoryScripts
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockWebServer
 import kotlin.test.AfterTest
@@ -75,6 +76,18 @@ class CardPageLoaderTest {
         assertEquals("c1", cache.page("a-walk")?.detail?.card?.id)
         assertEquals(listOf("r1"), cache.page("c1")?.resonances?.map { it.id })
         assertEquals(listOf("e1"), cache.page("a-walk")?.embeds?.map { it.id })
+    }
+
+    @Test fun theStoryIsParsedOnceWithThePageAndKeptWithIt() = runBlocking {
+        val story = "湖中央，我看見了**知行合一**。\n\n## 第二段\n\n- one\n- two"
+        routes.on("/cards/a-walk") { json(detailJson("c1", "a-walk", story = story)) }
+        val page = loader.load("a-walk")
+        // What the reader draws, as the parser makes it, and the type its title and words are set in.
+        assertEquals(StoryParser.parse(story), page.blocks)
+        assertEquals(StoryScripts.storyType(page.detail.card.title, story), page.storyText)
+        // A revisit draws from the same parse: nothing is parsed again for it.
+        assertTrue(cache.page("a-walk")!!.blocks === page.blocks)
+        assertTrue(cache.page("c1")!!.storyText === page.storyText)
     }
 
     @Test fun aCardThatIsGoneIsNotFoundAndNotCached() = runBlocking {

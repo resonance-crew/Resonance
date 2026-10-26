@@ -6,9 +6,11 @@ import com.resonance.api.models.Profile
 import com.resonance.kit.api.CardKey
 import com.resonance.kit.api.ReadingApi
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import java.net.URLDecoder
 
 /**
@@ -31,6 +33,11 @@ class CardPageLoader(private val api: ReadingApi, private val cache: CardCache) 
             links = if (detail.isOwner) detail.links?.cards.orEmpty() else emptyList(),
             embeds = detail.embeds?.cards.orEmpty(),
         )
+        // The story parsed and its script read here, off the main thread, before the page draws it.
+        withContext(Dispatchers.Default) {
+            page.blocks
+            page.storyText
+        }
         cache.rememberPage(key, page)
         return page
     }

@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.State
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -69,14 +70,39 @@ fun SkeletonCover() {
     Box(Modifier.fillMaxSize().shimmer())
 }
 
+/** The shimmer's phase (0…1) over its 1.5 s, or null with animations removed (the block rests as plain sand). */
+@Composable
+private fun shimmerPhase(): State<Float>? {
+    val context = LocalContext.current
+    val still = remember(context) { context.prefersReducedMotion() }
+    return if (still) null else rememberInfiniteTransition(label = "skeleton").animateFloat(
+        0f, 1f, infiniteRepeatable(tween(1500, easing = Ease)), label = "shimmer",
+    )
+}
+
+/** A [SharedShimmer]'s clock, for the blocks inside it. */
+private class ShimmerClock(val phase: State<Float>?)
+
+private val LocalShimmerClock = compositionLocalOf<ShimmerClock?> { null }
+
+/**
+ * One shimmer clock for every block of a skeleton composed together — a card's eleven blocks, a
+ * list's rows — instead of an infinite animation each, resumed every frame. Blocks that start
+ * together run in step either way, so nothing shows of it: wrap only blocks composed with the
+ * skeleton itself (one shown later starts its own clock, outside any).
+ */
+@Composable
+fun SharedShimmer(content: @Composable () -> Unit) {
+    val phase = shimmerPhase()
+    val clock = remember(phase) { ShimmerClock(phase) }
+    CompositionLocalProvider(LocalShimmerClock provides clock, content = content)
+}
+
 @Composable
 private fun Modifier.shimmer(): Modifier {
     val highlight = LocalSkeletonHighlight.current
-    val context = LocalContext.current
-    val still = remember(context) { context.prefersReducedMotion() }
-    val t = if (still) null else rememberInfiniteTransition(label = "skeleton").animateFloat(
-        0f, 1f, infiniteRepeatable(tween(1500, easing = Ease)), label = "shimmer",
-    )
+    val shared = LocalShimmerClock.current
+    val t = if (shared != null) shared.phase else shimmerPhase()
     return clearAndSetSemantics { }
         .drawBehind {
             val p = t?.value ?: return@drawBehind drawRect(Mixes.SkeletonBase)
@@ -95,7 +121,7 @@ private fun Modifier.shimmer(): Modifier {
 /** Six (or `count`) StoryCards in their loading dress, as the web's FeedSkeleton. */
 fun androidx.compose.foundation.lazy.LazyListScope.storyCardSkeletons(count: Int = 6, firstUnderBar: Boolean = false, layout: CardListLayout = CardListLayout.Phone) {
     if (!layout.isGrid) {
-        items(count) { i -> StoryCardSkeleton(i, isLast = i == count - 1, isFirst = firstUnderBar && i == 0, inset = layout.inset) }
+        items(count, contentType = { "storyCardSkeleton" }) { i -> StoryCardSkeleton(i, isLast = i == count - 1, isFirst = firstUnderBar && i == 0, inset = layout.inset) }
         return
     }
     // The bordered grid's skeleton: the same outlines in the same columns, the first row clear of the bar.
@@ -130,6 +156,7 @@ val GridUnderBar = HeaderEdgeHeight + TabletHeaderAir - BarLineInset
 @Composable
 fun CardDetailSkeleton(modifier: Modifier = Modifier, compact: Boolean = true, byline: Boolean = true) {
     val type = StoryType(StoryScript.Cjk, compact)
+    SharedShimmer {
     Column(modifier.fillMaxWidth().semantics { contentDescription = L10n.Home.moreLoading }) {
         Skeleton(Modifier.aspectRatio(1 / 0.52f), height = Dp.Unspecified, radius = 18.dp)
         Spacer(Modifier.height(type.coverGap.dp))
@@ -148,6 +175,7 @@ fun CardDetailSkeleton(modifier: Modifier = Modifier, compact: Boolean = true, b
         Spacer(Modifier.height(type.leadGap.dp))
         StorySkeleton(compact = compact)
     }
+    }
 }
 
 /**
@@ -158,13 +186,15 @@ fun CardDetailSkeleton(modifier: Modifier = Modifier, compact: Boolean = true, b
 @Composable
 fun StorySkeleton(modifier: Modifier = Modifier, compact: Boolean = true) {
     val type = StoryType(StoryScript.Cjk, compact)
-    Column(modifier.fillMaxWidth()) {
-        Column(Modifier.padding(bottom = type.endGap.dp), verticalArrangement = Arrangement.spacedBy(if (compact) 13.6.dp else 15.dp)) {
-            repeat(3) { Skeleton(height = type.bodySize.dp) }
-            Skeleton(Modifier.fillMaxWidth(0.65f), height = type.bodySize.dp)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(64, 84, 56).forEach { Skeleton(Modifier.width(it.dp), height = 26.dp, radius = 13.dp) }
+    SharedShimmer {
+        Column(modifier.fillMaxWidth()) {
+            Column(Modifier.padding(bottom = type.endGap.dp), verticalArrangement = Arrangement.spacedBy(if (compact) 13.6.dp else 15.dp)) {
+                repeat(3) { Skeleton(height = type.bodySize.dp) }
+                Skeleton(Modifier.fillMaxWidth(0.65f), height = type.bodySize.dp)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(64, 84, 56).forEach { Skeleton(Modifier.width(it.dp), height = 26.dp, radius = 13.dp) }
+            }
         }
     }
 }

@@ -86,17 +86,26 @@ class ApiCache(private val root: File, private val clock: Clock = Clock.systemUT
             forgotten = true
         }
 
+        /**
+         * What was kept under [name], decoded — off the caller's thread (the feed reads on Main), and
+         * once: the value is kept beside its JSON, so every read after the first hands the same back.
+         */
         @Suppress("UNCHECKED_CAST")
         private suspend fun <T> read(name: String, serializer: KSerializer<T>, today: Boolean = false): T? = lock.withLock {
             if (forgotten) return@withLock null
             val entry = memory.getOrPut(name) { withContext(Dispatchers.IO) { load(name) } } as Entry?
             if (entry == null || (today && entry.day != LocalDate.now(clock).toString())) return@withLock null
-            runCatching { json.decodeFromJsonElement(serializer, entry.data) }.getOrNull()
+            entry.decoded?.let { return@withLock it as T }
+            withContext(Dispatchers.Default) { runCatching { json.decodeFromJsonElement(serializer, entry.data) }.getOrNull() }
+                ?.also { entry.decoded = it }
         }
 
         private suspend fun <T> write(name: String, serializer: KSerializer<T>, value: T) = lock.withLock {
             if (forgotten) return@withLock
-            val entry = Entry(LocalDate.now(clock).toString(), json.encodeToJsonElement(serializer, value))
+            // Encoded off the caller's thread. What a read hands back is decoded from this JSON (a value the
+            // caller still holds might change after it was written; what was written can't).
+            val data = withContext(Dispatchers.Default) { json.encodeToJsonElement(serializer, value) }
+            val entry = Entry(LocalDate.now(clock).toString(), data)
             memory[name] = entry
             withContext(Dispatchers.IO) {
                 runCatching {
@@ -118,7 +127,8 @@ class ApiCache(private val root: File, private val clock: Clock = Clock.systemUT
         }.getOrNull()
     }
 
-    private class Entry(val day: String, val data: kotlinx.serialization.json.JsonElement)
+    /** A kept answer: the UTC day it was written, its JSON, and the value it decodes to once it has been read. */
+    private class Entry(val day: String, val data: kotlinx.serialization.json.JsonElement, @Volatile var decoded: Any? = null)
 
     private companion object {
         const val LATEST = "latest"

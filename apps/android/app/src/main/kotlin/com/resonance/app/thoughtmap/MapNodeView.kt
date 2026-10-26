@@ -278,9 +278,14 @@ private fun MapThumb(url: String, hue: Double, seed: Double, modifier: Modifier)
     Box(
         modifier
             .size(56.dp)
-            .drawWithContent {
-                drawContent()
-                drawOutline(clip.createOutline(size, layoutDirection, this), MapInk.thumbRim(hue), style = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            .drawWithCache {
+                // The rim's outline built when the size changes, not on every draw.
+                val rim = clip.createOutline(size, layoutDirection, this)
+                val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                onDrawWithContent {
+                    drawContent()
+                    drawOutline(rim, MapInk.thumbRim(hue), style = pen)
+                }
             },
     ) {
         Box(Modifier.size(56.dp).clip(clip)) {

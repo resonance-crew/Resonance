@@ -97,6 +97,7 @@ import com.resonance.design.REPLY_OVERLAP
 import com.resonance.design.SharedCardSection
 import com.resonance.design.BubblePictureBleed
 import com.resonance.design.SharedCardSkeleton
+import com.resonance.design.SharedShimmer
 import com.resonance.design.Skeleton
 import com.resonance.design.SketchLoader
 import com.resonance.design.fade
@@ -128,6 +129,23 @@ import kotlinx.coroutines.launch
  * read in. A reversed list: the bottom is where it starts, and what is read in above never moves
  * what is on screen.
  */
+
+/**
+ * The kind of row a message makes, for the list's reuse of compositions (a picture's row is reused
+ * for a picture's): from what a message carries from the start and keeps — a picture, a card it
+ * was sent with, a note's card, a reply's quote — never from what arrives later (a link's preview,
+ * its delivery), so a row keeps its kind for as long as it is on screen.
+ */
+internal fun rowContentType(row: ThreadRow): Int {
+    val m = row.message
+    return when {
+        m.image != null -> 1
+        m.isNote -> 2
+        m.cardRef != null -> 3
+        m.replyTo != null -> 4
+        else -> 0
+    }
+}
 
 /** Everything a row of the thread needs from the screen around it. */
 internal class ThreadContext(
@@ -329,9 +347,9 @@ internal fun MessageList(
             contentPadding = padding,
         ) {
             // The letter's line is the thread's last item: it scrolls with the messages (round 9 §4).
-            if (notice != null) item(key = "notice") { ThreadNotice(notice) }
+            if (notice != null) item(key = "notice", contentType = "notice") { ThreadNotice(notice) }
             // The key a row had while it was sending is the one its document comes under, so it doesn't jump.
-            itemsIndexed(newestFirst, key = { _, r -> r.message.key }) { i, row ->
+            itemsIndexed(newestFirst, key = { _, r -> r.message.key }, contentType = { _, r -> rowContentType(r) }) { i, row ->
                 val gap = rowGap(labelled = row.dayLabel || row.timeLabel, joinsAbove = row.joinsAbove, quoted = row.message.replyTo != null || row.message.isNote)
                 // A run still on its way says so once, under its newest message: the stack stays one stack.
                 val sendingBelow = row.position.joinsBelow && newestFirst.getOrNull(i - 1)?.message?.delivery == Delivery.Sending
@@ -341,8 +359,8 @@ internal fun MessageList(
                     MessageItem(row, ctx, deliveryLine = !sendingBelow)
                 }
             }
-            if (quiet != null) item(key = "quiet") { QuietNote(quiet) }
-            else if (model.threadReady && rows.isNotEmpty()) item(key = "older") { OlderRow(model) }
+            if (quiet != null) item(key = "quiet", contentType = "quiet") { QuietNote(quiet) }
+            else if (model.threadReady && rows.isNotEmpty()) item(key = "older", contentType = "older") { OlderRow(model) }
         }
         // The pill rests 12 over the foot (the capsule, or the fade over its riding rows), wherever the keyboard has taken it.
         AnimatedVisibility(
@@ -373,30 +391,33 @@ internal fun ThreadSkeleton(room: ComposerRoom, modifier: Modifier = Modifier) {
         value = true
     }
     val alpha by animateFloatAsState(if (shown) 1f else 0f, tween(200), label = "threadSkeleton")
-    Column(
-        modifier
-            .fillMaxSize()
-            .graphicsLayer { this.alpha = alpha }
-            .semantics { contentDescription = L10n.Home.moreLoading }
-            .padding(start = 16.dp, end = 16.dp, bottom = with(LocalDensity.current) { room.clear.toDp() }),
-        verticalArrangement = Arrangement.Bottom,
-    ) {
-        SKELETON_BUBBLES.forEachIndexed { i, (mine, width, height) ->
-            val runEnds = i == SKELETON_BUBBLES.lastIndex || SKELETON_BUBBLES[i + 1].first != mine
-            val gap = when {
-                i == 0 -> 0.dp
-                SKELETON_BUBBLES[i - 1].first == mine -> RUN_GAP + 2.dp
-                else -> BETWEEN_RUNS + 4.dp
-            }
-            Row(
-                Modifier.fillMaxWidth().padding(top = gap),
-                horizontalArrangement = if (mine) Arrangement.End else Arrangement.spacedBy(FACE_GAP),
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                if (!mine) {
-                    if (runEnds) Skeleton(height = FACE, circle = true) else Spacer(Modifier.size(FACE, 1.dp))
+    // One clock for its bubbles (composed together, while still unseen).
+    SharedShimmer {
+        Column(
+            modifier
+                .fillMaxSize()
+                .graphicsLayer { this.alpha = alpha }
+                .semantics { contentDescription = L10n.Home.moreLoading }
+                .padding(start = 16.dp, end = 16.dp, bottom = with(LocalDensity.current) { room.clear.toDp() }),
+            verticalArrangement = Arrangement.Bottom,
+        ) {
+            SKELETON_BUBBLES.forEachIndexed { i, (mine, width, height) ->
+                val runEnds = i == SKELETON_BUBBLES.lastIndex || SKELETON_BUBBLES[i + 1].first != mine
+                val gap = when {
+                    i == 0 -> 0.dp
+                    SKELETON_BUBBLES[i - 1].first == mine -> RUN_GAP + 2.dp
+                    else -> BETWEEN_RUNS + 4.dp
                 }
-                Skeleton(Modifier.width(width.dp), height = height.dp, radius = 18.dp)
+                Row(
+                    Modifier.fillMaxWidth().padding(top = gap),
+                    horizontalArrangement = if (mine) Arrangement.End else Arrangement.spacedBy(FACE_GAP),
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    if (!mine) {
+                        if (runEnds) Skeleton(height = FACE, circle = true) else Spacer(Modifier.size(FACE, 1.dp))
+                    }
+                    Skeleton(Modifier.width(width.dp), height = height.dp, radius = 18.dp)
+                }
             }
         }
     }
@@ -850,8 +871,9 @@ private fun SwipeToReply(enabled: Boolean, mine: Boolean, onReply: () -> Unit, c
         ticked = false
         if (pulled != 0f) animate(pulled, 0f, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium)) { v, _ -> pulled = v }
     }
-    // Past the threshold the message gives, but with resistance.
-    val shown = if (pulled <= threshold) pulled else threshold + (pulled - threshold) * 0.3f
+    // Read while laying out and drawing, not composing: a drag recomposes only when the glyph comes, goes or inks in.
+    val pulling by remember { derivedStateOf { pulled > 0f } }
+    val full by remember(threshold) { derivedStateOf { pulled / threshold >= 1f } }
     Box(
         Modifier
             .fillMaxWidth()
@@ -861,17 +883,25 @@ private fun SwipeToReply(enabled: Boolean, mine: Boolean, onReply: () -> Unit, c
                 onDragStopped = { if (pulled >= threshold) onReply() },
             ),
     ) {
-        if (pulled > 0f) {
-            val progress = (pulled / threshold).coerceIn(0f, 1f)
+        if (pulling) {
             Box(
                 Modifier
                     .align(if (mine) Alignment.CenterEnd else Alignment.CenterStart)
                     .padding(horizontal = 6.dp)
-                    .graphicsLayer { alpha = progress; scaleX = 0.6f + 0.4f * progress; scaleY = scaleX }
+                    .graphicsLayer {
+                        val progress = (pulled / threshold).coerceIn(0f, 1f)
+                        alpha = progress; scaleX = 0.6f + 0.4f * progress; scaleY = scaleX
+                    }
                     .semantics { contentDescription = L10n.Messages.reply },
-            ) { OrganicIcon(IconName.Reply, size = 20.dp, color = if (progress >= 1f) Tokens.Terracotta else Tokens.TextMuted) }
+            ) { OrganicIcon(IconName.Reply, size = 20.dp, color = if (full) Tokens.Terracotta else Tokens.TextMuted) }
         }
-        Box(Modifier.offset { IntOffset((if (mine) -shown else shown).toInt(), 0) }) { content() }
+        Box(
+            Modifier.offset {
+                // Past the threshold the message gives, but with resistance.
+                val shown = if (pulled <= threshold) pulled else threshold + (pulled - threshold) * 0.3f
+                IntOffset((if (mine) -shown else shown).toInt(), 0)
+            },
+        ) { content() }
     }
 }
 

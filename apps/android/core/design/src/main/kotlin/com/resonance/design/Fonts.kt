@@ -16,6 +16,9 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.resonance.design.generated.Tokens
+import java.io.FileInputStream
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
 
 /**
  * The web's type stack on Android.
@@ -77,8 +80,11 @@ object AppFonts {
         registrationMs = (System.nanoTime() - start) / 1e6
     }
 
-    // Font files are memory-mapped into direct buffers (Noto TC is 12–17 MB),
-    // so each (file, weight) instance and each fallback chain is built once.
+    // Each font file is memory-mapped once (the APK stores .ttf uncompressed: app/build.gradle.kts'
+    // noCompress) and every weight instanced from that one read-only buffer — clean, shared pages
+    // instead of a private inflated copy per (file, weight), as Android's own SystemFonts does.
+    // Each (file, weight) instance and each fallback chain is still built once.
+    private val buffers = HashMap<String, ByteBuffer?>()
     private val fonts = HashMap<String, Font>()
     private val typefaces = HashMap<String, PlatformTypeface>()
 
@@ -86,12 +92,27 @@ object AppFonts {
      *  receive a variation setting — Android then draws every glyph with zero advance. */
     private val variable = setOf("PlayfairDisplay.ttf", "DMSans.ttf", "NotoSansTC.ttf", "NotoSerifTC.ttf")
 
-    private fun font(asset: String, weight: Int): Font = fonts.getOrPut("$asset|$weight") {
-        Font.Builder(context.assets, asset)
+    /**
+     * The asset's bytes mapped in place, or null when it can't be (a compressed asset, a test's
+     * asset manager): the font is then built from the asset manager, as before. Not through
+     * `createInputStream().channel`, whose channel newer Androids already offset by the asset's start.
+     */
+    private fun buffer(asset: String): ByteBuffer? = buffers.getOrPut(asset) {
+        runCatching {
+            context.assets.openFd(asset).use { fd ->
+                FileInputStream(fd.fileDescriptor).channel.map(FileChannel.MapMode.READ_ONLY, fd.startOffset, fd.declaredLength)
+            }
+        }.getOrNull()
+    }
+
+    private fun font(asset: String, weight: Int): Font = fonts.getOrPut("$asset|$weight") { buildFont(buffer(asset), asset, weight) }
+
+    /** One weight of [asset]: from its [mapped] bytes when there are some, else through the asset manager. */
+    internal fun buildFont(mapped: ByteBuffer?, asset: String, weight: Int): Font =
+        (if (mapped != null) Font.Builder(mapped) else Font.Builder(context.assets, asset))
             .setWeight(weight)
             .apply { if (asset in variable) setFontVariationSettings("'wght' $weight") }
             .build()
-    }
 
     fun typeface(family: Family, weight: Int): PlatformTypeface = typefaces.getOrPut("${family.name}|$weight|$useBundledCJK") {
         val primary = PlatformFontFamily.Builder(font(family.asset, weight)).build()

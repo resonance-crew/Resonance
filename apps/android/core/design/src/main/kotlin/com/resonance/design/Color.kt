@@ -1,5 +1,6 @@
 package com.resonance.design
 
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.colorspace.ColorSpaces
 import com.resonance.design.generated.Tokens
@@ -17,7 +18,20 @@ import kotlin.math.sin
 object OklchColor {
     private val pattern = Regex("""oklch\(\s*([\d.]+)(%?)\s+([\d.]+)\s+([\d.]+)(?:\s*/\s*([\d.]+))?\s*\)""")
 
-    fun parse(css: String): Color? {
+    /** The colours parsed lately, by their string (a few dozen accents and mixes repeat across every card). */
+    private val parsed = object : LinkedHashMap<String, Color?>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Color?>?) = size > PARSED_KEPT
+    }
+    private const val PARSED_KEPT = 128
+
+    fun parse(css: String): Color? = synchronized(parsed) {
+        if (parsed.containsKey(css)) return parsed[css]
+        val color = convert(css)
+        parsed[css] = color
+        color
+    }
+
+    private fun convert(css: String): Color? {
         val m = pattern.find(css) ?: return null
         var l = m.groupValues[1].toDouble()
         if (m.groupValues[2] == "%") l /= 100
@@ -57,6 +71,7 @@ object OklchColor {
  * card's own preference. A card in a list wears the family [palettes] gives it
  * there instead ([of]), so no card shares one with the three before it.
  */
+@Immutable
 class CardPalette private constructor(val index: Int) {
     constructor(accentHue: Double?, position: Int) : this(preferred(accentHue, position))
     val hue: Double get() = HUES[index]
@@ -65,21 +80,32 @@ class CardPalette private constructor(val index: Int) {
     /** The family's deeper pen (`CARD_BORDERS[f][1]`): the face of the writer's cover buttons (round 9 §8). */
     val deep: Color get() = DEEP[index]
     /** `oklch(97.5% 0.012 hue)` — the card's paper. */
-    val interior: Color get() = OklchColor.parse("oklch(97.5% 0.012 $hue)") ?: Tokens.CardBg
+    val interior: Color get() = INTERIOR[index]
     /** `oklch(55% 0.04 hue / 0.4)` — the wavy rule above the byline. */
-    val separator: Color get() = OklchColor.parse("oklch(55% 0.04 $hue / 0.4)") ?: Tokens.FieldBorder
+    val separator: Color get() = SEPARATOR[index]
     /** `oklch(44% 0.08 hue)` — Resonance's handwritten margin note. */
-    val noteInk: Color get() = OklchColor.parse("oklch(44% 0.08 $hue)") ?: Tokens.TextMuted
+    val noteInk: Color get() = NOTE_INK[index]
     /** The cover placeholder's hatching: the fill 7 L darker (StoryCard's `stripeFill`), drawn at 0.28. */
-    val stripe: Color get() = FILL_LC[index].let { (l, c) -> OklchColor.parse("oklch(${l - 7}% $c $hue)") } ?: fill
+    val stripe: Color get() = STRIPE[index]
     /** `oklch(90% 0.06 hue)` — MiniStoryCard's cover fallback and avatar when the author has no accent. */
-    val accent: Color get() = OklchColor.parse("oklch(90% 0.06 $hue)") ?: fill
+    val accent: Color get() = ACCENT[index]
+
+    /** A family is its index: two palettes of one family are the same palette. */
+    override fun equals(other: Any?): Boolean = other is CardPalette && other.index == index
+    override fun hashCode(): Int = index
 
     companion object {
         /** CARD_HUES, in palette order. */
         val HUES = listOf(55.0, 290.0, 140.0, 88.0, 215.0, 18.0)
         /** CARD_BORDERS' deeper twins, in palette order. */
         private val DEEP = listOf(Tokens.CardBorder0Dark, Tokens.CardBorder1Dark, Tokens.CardBorder2Dark, Tokens.CardBorder3Dark, Tokens.CardBorder4Dark, Tokens.CardBorder5Dark)
+
+        // Each family's mixes, worked out once from the same strings (every card wore them, parsed again on every read).
+        private val INTERIOR by lazy { HUES.map { hue -> OklchColor.parse("oklch(97.5% 0.012 $hue)") ?: Tokens.CardBg } }
+        private val SEPARATOR by lazy { HUES.map { hue -> OklchColor.parse("oklch(55% 0.04 $hue / 0.4)") ?: Tokens.FieldBorder } }
+        private val NOTE_INK by lazy { HUES.map { hue -> OklchColor.parse("oklch(44% 0.08 $hue)") ?: Tokens.TextMuted } }
+        private val STRIPE by lazy { HUES.indices.map { i -> FILL_LC[i].let { (l, c) -> OklchColor.parse("oklch(${l - 7}% $c ${HUES[i]})") } ?: Tokens.CardFills[i] } }
+        private val ACCENT by lazy { HUES.indices.map { i -> OklchColor.parse("oklch(90% 0.06 ${HUES[i]})") ?: Tokens.CardFills[i] } }
 
         /**
          * A card's own family before it has a cover (round 9 §8): from its id, by the bubbles' hash

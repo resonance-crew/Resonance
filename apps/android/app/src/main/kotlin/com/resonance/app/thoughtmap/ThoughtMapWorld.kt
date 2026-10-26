@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.PointMode
 import androidx.compose.ui.graphics.ShaderBrush
@@ -139,14 +140,11 @@ fun MapGridLayer(store: ThoughtMapStore) {
             val i1 = ceil((w - x0) / spacing).toInt() + 1
             val j0 = kotlin.math.floor(-y0 / spacing - 0.5f).toInt() - 1
             val j1 = ceil((h - y0) / spacing).toInt() + 1
-            val points = FloatArray(max(0, (i1 - i0 + 1) * (j1 - j0 + 1) * 2))
-            var n = 0
-            for (j in j0..j1) for (i in i0..i1) {
-                points[n++] = x0 + spacing * (i + 0.5f)
-                points[n++] = y0 + spacing * (j + 0.5f)
-            }
             fallbackPaint.strokeWidth = 2.7f * d
-            drawContext.canvas.drawRawPoints(PointMode.Points, points.copyOf(n), fallbackPaint)
+            // Point by point, as drawRawPoints(Points) draws them — without the two arrays it took on every pan frame.
+            val canvas = drawContext.canvas.nativeCanvas
+            val paint = fallbackPaint.asFrameworkPaint()
+            for (j in j0..j1) for (i in i0..i1) canvas.drawPoint(x0 + spacing * (i + 0.5f), y0 + spacing * (j + 0.5f), paint)
         }
     }
 }
