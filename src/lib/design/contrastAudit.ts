@@ -48,10 +48,14 @@ const path = (el: Element | null) => {
   return out.join(' > ');
 };
 
+/** A shape still fading in (res-shape-fade-in) is measured as it will stand: a hidden page never ends the fade. */
+const fadingIn = (e: Element) =>
+  e.classList.contains('res-shape-fade-in') && e.getAnimations().some((a) => (a as CSSAnimation).animationName === 'resShapeFadeIn');
+
 /** The product of an element's own opacity and every ancestor's. */
 function opacityOf(el: Element): number {
   let o = 1;
-  for (let e: Element | null = el; e; e = e.parentElement) o *= Number(getComputedStyle(e).opacity) || 0;
+  for (let e: Element | null = el; e; e = e.parentElement) if (!fadingIn(e)) o *= Number(getComputedStyle(e).opacity) || 0;
   return o;
 }
 
@@ -112,6 +116,8 @@ function textPieces(): { el: Element; text: string; x: number; y: number }[] {
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
     const el = n.parentElement;
     if (!el || el.closest('script, style, noscript, template, option, svg title')) continue;
+    // A disabled control asks nothing of its contrast (WCAG 1.4.3's exception).
+    if (el.closest(':disabled, [aria-disabled="true"]')) continue;
     const range = document.createRange();
     range.selectNodeContents(n);
     const rect = Array.from(range.getClientRects()).find((r) => r.width > 1 && r.height > 1);
@@ -179,14 +185,14 @@ function auditViewport(report: AuditReport, seen: Set<string>): void {
   }
 }
 
-const POINTER_STYLE = '*, *::before, *::after { pointer-events: auto !important; } svg *, svg { pointer-events: visiblePainted !important; }';
+// While it measures, every element answers a hit test (the hand-drawn papers' SVGs take no pointer at rest).
+const AUDIT_STYLE = '*, *::before, *::after { pointer-events: auto !important; } svg *, svg { pointer-events: visiblePainted !important; }';
 
 export async function contrastAudit({ fullPage = false, log = true }: { fullPage?: boolean; log?: boolean } = {}): Promise<AuditReport> {
   const report: AuditReport = { scheme: resolvedScheme(), accent: resolvedAccent(), failures: [], unknown: [], islands: [], checked: 0 };
   const seen = new Set<string>();
-  // Hit-testing finds the hand-drawn papers too (their SVGs take no pointer at rest).
   const style = document.createElement('style');
-  style.textContent = POINTER_STYLE;
+  style.textContent = AUDIT_STYLE;
   document.head.appendChild(style);
   const startY = scrollY;
   try {
@@ -194,7 +200,9 @@ export async function contrastAudit({ fullPage = false, log = true }: { fullPage
     else {
       for (let y = 0; y < document.documentElement.scrollHeight; y += Math.max(200, innerHeight - 80)) {
         scrollTo({ top: y, behavior: 'instant' });
-        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        // Past a frame and the shapes' fade-in (res-shape-fade-in, 280ms): a shape drawn anew as the page
+        // scrolls (the header's, once something is under it) would otherwise be measured half there.
+        await new Promise((r) => setTimeout(r, 360));
         auditViewport(report, seen);
       }
       scrollTo({ top: startY, behavior: 'instant' });

@@ -16,13 +16,14 @@
   pointer-events: none;
 }
 
-/* The marker's soft glow, in its own colour at 55 % behind the line (on the
-   svg, which holds the marker alone: a filter on an SVG child isn't drawn by
-   every engine). */
+/* The marker's soft glow, in its own colour behind the line — at 55 % on
+   light paper, less on the night paper, where a glow reads as neon
+   (--reading-progress-glow-alpha) — on the svg, which holds the marker
+   alone: a filter on an SVG child isn't drawn by every engine. */
 .svg {
   display: block;
   overflow: visible;
-  filter: drop-shadow(0 0 var(--reading-progress-glow) color-mix(in oklch, var(--reading-progress) 55%, transparent));
+  filter: drop-shadow(0 0 var(--reading-progress-glow) color-mix(in oklch, var(--reading-progress) calc(var(--reading-progress-glow-alpha) * 100%), transparent));
 }
 
 /* Its own pen: at the bar line's own width, over it, in a brighter colour —

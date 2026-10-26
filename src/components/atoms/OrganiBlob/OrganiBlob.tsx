@@ -57,7 +57,7 @@ export function OrganiBlob({
       )}
       <path d={d} fill={fill} />
       {/* colour-fixed: only its alpha counts — the filter keeps the noise inside the shape */}
-      {grain > 0 && <path d={d} fill="black" filter={`url(#blob-grain-${id})`} />}
+      {grain > 0 && <path d={d} fill="black" filter={`url(#blob-grain-${id})`} style={{ opacity: 'var(--grain-scale, 1)' }} />}
     </svg>
   );
 }
