@@ -16,8 +16,10 @@ extension Tokens {
     /// The picture viewer's own dark (Thread.module.css `.viewer`: oklch(12% 0.01 60)) — what its ✕
     /// stands on, at half strength (round 12 §1–2). Dark in both schemes.
     public nonisolated static let viewerInk = OKLCHColor.color(0.12, 0.01, 60) // fixed: the viewer's dark
-    /// The ✕ glyph on the viewer's dark disc, and the viewer's own words: a light ink in both schemes.
-    public nonisolated static let viewerLabel = Palette.shared(.cream).swiftUI
+    /// A light ink on a picture or on the viewer's dark — the ✕ on the viewer's disc and on an image's
+    /// chip, the crop's ring, a picture's loader — light cream in both schemes (cream itself is the
+    /// night paper in dark).
+    public nonisolated static let onPicture = Palette.shared(.cream).swiftUI
 }
 
 extension UIColor {

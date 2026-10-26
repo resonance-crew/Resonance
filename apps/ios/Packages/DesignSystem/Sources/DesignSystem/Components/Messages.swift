@@ -1173,6 +1173,8 @@ public final class ChatTextView: UIView, UIGestureRecognizerDelegate {
         let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
         tap.delegate = self
         addGestureRecognizer(tap)
+        // Drawn by hand: a light/dark switch or a new theme draws the words, waves and washes again.
+        registerForTraitChanges([UITraitUserInterfaceStyle.self, AccentTrait.self]) { (view: ChatTextView, _) in view.setNeedsDisplay() }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }

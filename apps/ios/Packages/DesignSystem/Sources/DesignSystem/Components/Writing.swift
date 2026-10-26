@@ -111,7 +111,7 @@ public struct HandDrawnImage<Overlay: View>: View {
                             curve: 1.3, cornerJitter: 3.2, cornerOffset: 34 * 0.06, segmentsH: .count(1), segmentsV: .count(1)))
                         chip.fill(Tokens.imageRemoveFill)
                         chip.stroke(Tokens.imageRemoveStroke, lineWidth: Tokens.ink)
-                        OrganicIcon(.close, size: 16, color: Tokens.cream)
+                        OrganicIcon(.close, size: 16, color: Tokens.onPicture)
                     }
                     .frame(width: 34, height: 34)
                 }

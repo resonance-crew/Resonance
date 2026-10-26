@@ -40,20 +40,20 @@ struct ChatPictureViewer: View {
                     .accessibilityAddTraits(.isImage)
                 } else if failed {
                     Button { attempt += 1 } label: {
-                        OrganicIcon(.image, size: 30, color: Tokens.cream.opacity(0.7))
+                        OrganicIcon(.image, size: 30, color: Tokens.onPicture.opacity(0.7))
                             .frame(width: 88, height: 88)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(L10n.Native.retry)
                 } else {
-                    SketchLoader(size: 40, color: Tokens.cream)
+                    SketchLoader(size: 40, color: Tokens.onPicture)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea()
             Button(action: close) {
-                OrganicIcon(.close, size: ViewerClose.glyph, color: Tokens.cream, strokeWidth: Tokens.ink)
+                OrganicIcon(.close, size: ViewerClose.glyph, color: Tokens.onPicture, strokeWidth: Tokens.ink)
                     .frame(width: ViewerClose.tapArea, height: ViewerClose.tapArea)
                     .contentShape(Rectangle())
             }

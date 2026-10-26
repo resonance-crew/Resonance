@@ -91,6 +91,15 @@ import UIKit
                 "\(accent) \(scheme)")
     }
 
+    @MainActor @Test func aTokenAtAnOpacityHandedToUIKitStillFollows() {
+        let wash = UIColor(highlightWash(strong: false))
+        let light = wash.resolvedColor(with: Self.traits(.light, .terracotta))
+        let dark = wash.resolvedColor(with: Self.traits(.dark, .sage))
+        #expect(!Self.close(light, dark), "a wash resolved once, at conversion")
+        let alpha = Tokens.UI.terracotta.withAlphaComponent(0.24).resolvedColor(with: Self.traits(.dark, .sage))
+        #expect(Self.close(alpha.withAlphaComponent(1), Palette.resolved(.terracotta, accent: .sage, scheme: .dark)))
+    }
+
     @Test func aMixOfTokensFollowsTheScheme() {
         var light = EnvironmentValues()
         light.colorScheme = .light

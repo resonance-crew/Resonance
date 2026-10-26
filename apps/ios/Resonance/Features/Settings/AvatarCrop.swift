@@ -236,7 +236,7 @@ struct AvatarCropStage: View {
         }
         .overlay {
             AvatarOutlineShape(seed: 77)
-                .stroke(Tokens.cream.opacity(0.9), style: StrokeStyle(lineWidth: Tokens.ink, lineJoin: .round))
+                .stroke(Tokens.onPicture.opacity(0.9), style: StrokeStyle(lineWidth: Tokens.ink, lineJoin: .round))
                 .frame(width: mask, height: mask)
                 .allowsHitTesting(false)
         }
