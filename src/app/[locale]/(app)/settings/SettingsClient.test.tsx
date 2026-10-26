@@ -34,10 +34,11 @@ vi.mock('@/components/molecules/BlockedListModal/BlockedListModal', () => ({
 vi.mock('@/components/providers/AppChrome', () => ({
   useAppChrome: () => ({ setMobileHeader: vi.fn() }),
 }));
+const mockUpdateTweaks = vi.fn();
 vi.mock('@/components/providers/TweaksPanel', () => ({
   useTweaks: () => ({
-    state: { accentColor: 'terracotta', fontFamily: 'default', grainIntensity: 1 },
-    update: vi.fn(),
+    state: { accentColor: 'terracotta', scheme: 'system', fontFamily: 'default', grainIntensity: 1 },
+    update: mockUpdateTweaks,
   }),
 }));
 vi.mock('@/i18n/navigation', () => ({
@@ -407,3 +408,29 @@ describe('SettingsClient notifications', () => {
   });
 });
 
+
+describe('SettingsClient appearance', () => {
+  const openAppearance = async () => {
+    renderWithIntl(<SettingsClient initial={initial} />);
+    await userEvent.click(screen.getByRole('tab', { name: 'Appearance' }));
+  };
+
+  it('chooses the mode from three segments, Match system pressed by default', async () => {
+    await openAppearance();
+    const system = screen.getByRole('button', { name: 'Match system' });
+    expect(system).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Light' })).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(screen.getByRole('button', { name: 'Dark' }));
+    expect(mockUpdateTweaks).toHaveBeenCalledWith({ scheme: 'dark' });
+  });
+
+  it('chooses the theme colour from its swatches, a radio group with terracotta checked', async () => {
+    await openAppearance();
+    const group = screen.getByRole('radiogroup', { name: 'Theme color' });
+    const radios = within(group).getAllByRole('radio');
+    expect(radios.map((r) => r.textContent)).toEqual(['Terracotta', 'Sage', 'Lavender', 'Gold']);
+    expect(within(group).getByRole('radio', { name: 'Terracotta' })).toHaveAttribute('aria-checked', 'true');
+    await userEvent.click(within(group).getByRole('radio', { name: 'Lavender' }));
+    expect(mockUpdateTweaks).toHaveBeenCalledWith({ accentColor: 'lavender' });
+  });
+});
