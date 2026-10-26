@@ -109,9 +109,9 @@ public struct HandDrawnImage<Overlay: View>: View {
                     ZStack {
                         let chip = WobRectShape(radius: 34 * 0.4, seed: seed + 5, mag: 34 * 0.022, options: WobRectOptions(
                             curve: 1.3, cornerJitter: 3.2, cornerOffset: 34 * 0.06, segmentsH: .count(1), segmentsV: .count(1)))
-                        chip.fill(Tokens.imageRemoveFill)
-                        chip.stroke(Tokens.imageRemoveStroke, lineWidth: Tokens.ink)
-                        OrganicIcon(.close, size: 16, color: Tokens.onPicture)
+                        chip.fill(Tokens.photoShade.opacity(0.7))
+                        chip.stroke(Tokens.photoInk.opacity(0.75), lineWidth: Tokens.ink)
+                        OrganicIcon(.close, size: 16, color: Tokens.photoInk)
                     }
                     .frame(width: 34, height: 34)
                 }

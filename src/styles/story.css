@@ -408,6 +408,13 @@
   margin-bottom: var(--s-block);
 }
 
+/* A picture with transparency (a logo's black words) stands on a light paper
+   in dark (--picture-backing; none in light), inside the picture's own clip;
+   a photo covers it whole. */
+.story-prose :where(.story-picture) img {
+  background: var(--picture-backing);
+}
+
 /* A card sets its own type: the prose's tracking, justification and
    breaking stop at its edge. */
 .story-prose :where(.story-embed) {

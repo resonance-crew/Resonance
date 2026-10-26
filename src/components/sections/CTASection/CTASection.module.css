@@ -1,6 +1,9 @@
 .section {
   position: relative;
-  background: var(--color-terracotta);
+  /* The accent as a band (--cta-band: the accent itself in light, a deep one
+     in dark, where a bright band across the page would glare); the footer's
+     wave rising into it takes the same token. */
+  background: var(--cta-band);
   /* The top padding includes the 100px wavy edge, and the footer's own wave
      rises into the bottom one: these leave the words and buttons centred in
      the terracotta that shows. */
@@ -41,7 +44,7 @@
   font-family: var(--font-heading);
   font-size: clamp(30px, 4.5vw, 52px);
   font-weight: 800;
-  color: var(--color-cream);
+  color: var(--cta-ink);
   margin: 0 0 20px;
   line-height: 1.15;
   letter-spacing: -0.025em;
@@ -57,7 +60,7 @@
 .description {
   font-family: var(--font-body);
   font-size: 17px;
-  color: color-mix(in oklch, var(--color-cream) 80%, transparent);
+  color: color-mix(in oklch, var(--cta-ink) 80%, transparent);
   margin: 0 0 clamp(44px, 5vw, 56px);
   line-height: 1.65;
   text-wrap: pretty;

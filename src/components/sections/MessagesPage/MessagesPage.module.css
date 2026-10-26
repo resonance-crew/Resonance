@@ -116,7 +116,7 @@
 }
 
 .row:hover {
-  --row-fill: oklch(0% 0 0 / 0.045);
+  --row-fill: color-mix(in oklch, var(--toward-ink) 4.5%, transparent);
 }
 
 .row[data-active] {
@@ -168,8 +168,14 @@
   color: var(--color-text-muted);
 }
 
+/* The open conversation's row: on the accent's wash, the name in the tonal label's deep accent and the
+   quiet words in the link preview's deeper muted ink — plain terracotta there was 3:1, the muted ink 4.3. */
 .row[data-active] .rowHandle {
-  color: var(--color-terracotta);
+  color: var(--button-on-tonal);
+}
+
+.row[data-active] :is(.rowPreview, .rowTime) {
+  color: var(--link-card-muted);
 }
 
 .startSectionTitle {
@@ -271,7 +277,7 @@
 }
 
 .headerBack:hover {
-  background: oklch(0% 0 0 / 0.07);
+  background: color-mix(in oklch, var(--toward-ink) 7%, transparent);
 }
 
 .quietNote {

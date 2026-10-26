@@ -44,7 +44,7 @@ export interface AvatarCropModalProps {
 }
 
 /** The scrim over the picture outside the mask (the avatar dropzone's wash). */
-const SCRIM = 'oklch(30% 0.02 70 / 0.5)';
+const SCRIM = 'color-mix(in oklch, var(--photo-shade) 50%, transparent)';
 /** The avatar's shape (HandDrawnAvatar's seed in settings) and the stage's paper outline (HandDrawnImage's recipe). */
 const MASK_SEED = 77;
 const STAGE_SEED = 79;

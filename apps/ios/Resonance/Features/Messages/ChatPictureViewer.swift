@@ -25,7 +25,7 @@ struct ChatPictureViewer: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             // Solid while the picture is looked at; the thread shows through as it is pulled away.
-            Color.black
+            Tokens.viewerGround
                 .opacity(1 - min(pull / 500, 0.6))
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
@@ -40,20 +40,20 @@ struct ChatPictureViewer: View {
                     .accessibilityAddTraits(.isImage)
                 } else if failed {
                     Button { attempt += 1 } label: {
-                        OrganicIcon(.image, size: 30, color: Tokens.onPicture.opacity(0.7))
+                        OrganicIcon(.image, size: 30, color: Tokens.photoInk.opacity(0.7))
                             .frame(width: 88, height: 88)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(L10n.Native.retry)
                 } else {
-                    SketchLoader(size: 40, color: Tokens.onPicture)
+                    SketchLoader(size: 40, color: Tokens.photoInk)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea()
             Button(action: close) {
-                OrganicIcon(.close, size: ViewerClose.glyph, color: Tokens.onPicture, strokeWidth: Tokens.ink)
+                OrganicIcon(.close, size: ViewerClose.glyph, color: Tokens.photoInk, strokeWidth: Tokens.ink)
                     .frame(width: ViewerClose.tapArea, height: ViewerClose.tapArea)
                     .contentShape(Rectangle())
             }
@@ -127,7 +127,7 @@ private struct ViewerCloseStyle: ButtonStyle {
         configuration.label
             .background {
                 WobCircleShape(seed: ViewerClose.seed, options: ViewerClose.shape)
-                    .fill(Tokens.viewerInk.opacity(ViewerClose.alpha(pressed: configuration.isPressed)))
+                    .fill(Tokens.viewerGround.opacity(ViewerClose.alpha(pressed: configuration.isPressed)))
                     .frame(width: ViewerClose.disc, height: ViewerClose.disc)
                     .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
                     .allowsHitTesting(false)

@@ -141,7 +141,7 @@ with no screen rebuilt. A colour the palette has no token for is a `Palette.hue`
 (a role of `HUE_INKS` at a hue the data carries), a `Palette.mix` of two tokens,
 or `Palette.schemed(light:dark:)`; a colour that must not follow (a picture
 that leaves the device, what stands on a photo) is `Palette.shared` or
-`Tokens.onPicture`. A CALayer's CGColor or a view drawn by hand takes its ink
+`Tokens.photoInk` / `photoShade` / `viewerGround`. A CALayer's CGColor or a view drawn by hand takes its ink
 again in `registerForTraitChanges`. `src/lib/design/colourLiterals.ios.test.ts`
 fails on a colour literal outside its short list. The story editor island
 wears `data-scheme` / `data-accent` from its web view's traits. Screen checks:
@@ -400,7 +400,7 @@ plain image loader: the thread's size for a bubble (`MessagePictureSize`: as
 wide as the bubble, at most 320 tall, its shape held between 1:2 and 2:1) and
 the full one in `ChatPictureViewer` (pinch or double-tap to zoom; a pull down or
 its ✕ closes it — a cream glyph on an always-shown wobbly disc of the viewer's ink,
-`Tokens.viewerInk` at 50 %, 72 % pressed, 40 in its 44 tap area 16 inside the safe
+`Tokens.viewerGround` at 50 %, 72 % pressed, 40 in its 44 tap area 16 inside the safe
 area: round 12 §1–2's `ViewerClose`, so it reads on a light picture that fills the screen). `FreshnessMiddleware` never asks for one again (its bytes
 never change); `ChatImageStore` keeps them decoded, per account. One that
 couldn't be read keeps its fill with the picture glyph, and a tap asks again.

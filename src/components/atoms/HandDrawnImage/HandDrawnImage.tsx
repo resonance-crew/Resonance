@@ -123,8 +123,9 @@ export function HandDrawnImage({
             R={34 * 0.4}
             seed={seed + 5}
             mag={34 * 0.022}
-            fillColor="oklch(30% 0.02 70 / 0.7)"
-            strokeColor="oklch(96% 0.02 75 / 0.75)"
+            // Over the picture: the same in either scheme.
+            fillColor="color-mix(in oklch, var(--photo-shade) 70%, transparent)"
+            strokeColor="color-mix(in oklch, var(--photo-ink) 75%, transparent)"
             strokeWidth={INK}
             segmentsH={1}
             segmentsV={1}
@@ -132,7 +133,7 @@ export function HandDrawnImage({
             cornerJitter={3.2}
             cornerOffset={34 * 0.06}
           />
-          <Icon name="close" size={16} color="var(--color-cream)" />
+          <Icon name="close" size={16} color="var(--photo-ink)" />
         </button>
       )}
     </div>

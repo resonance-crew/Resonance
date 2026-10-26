@@ -43,7 +43,7 @@
 /* The ink answers, as the rows' does: deeper, and the pen's wave under it. */
 @media (hover: hover) {
   .writeNew:hover:not(:disabled) .writeTitle {
-    color: color-mix(in oklch, var(--color-terracotta), black 34%);
+    color: var(--terracotta-ink);
     background-image: var(--wave-strong);
   }
 }
@@ -91,6 +91,6 @@
 .error {
   font-size: 13px;
   line-height: 1.5;
-  color: var(--color-danger, oklch(58% 0.16 25));
+  color: var(--color-danger);
   margin: -6px 0 12px;
 }

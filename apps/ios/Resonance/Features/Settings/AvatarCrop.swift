@@ -212,8 +212,8 @@ struct AvatarCropStage: View {
     let side: CGFloat
     @State private var lastDrag: CGSize = .zero
     @State private var lastMagnification: CGFloat = 1
-    /// `oklch(30% 0.02 70 / 0.5)`.
-    static let scrim = OKLCHColor.color(0.30, 0.02, 70, alpha: 0.5)
+    /// The shade over the photo outside the crop (--photo-shade at 0.5: the same in both schemes).
+    static let scrim = Tokens.photoShade.opacity(0.5)
 
     var body: some View {
         let frame = AutoWobRectShape(radius: 16, seed: 79, curve: 0.8)
@@ -236,7 +236,7 @@ struct AvatarCropStage: View {
         }
         .overlay {
             AvatarOutlineShape(seed: 77)
-                .stroke(Tokens.onPicture.opacity(0.9), style: StrokeStyle(lineWidth: Tokens.ink, lineJoin: .round))
+                .stroke(Tokens.photoInk.opacity(0.9), style: StrokeStyle(lineWidth: Tokens.ink, lineJoin: .round))
                 .frame(width: mask, height: mask)
                 .allowsHitTesting(false)
         }

@@ -1,6 +1,7 @@
-/* The page dims under a light ink scrim — enough to set the dialog apart, not
-   so much that the cream turns grey. Modal.tsx's DIMMED_THEME_COLOR is this
-   over the cream: change them together. */
+/* The page dims under the scrim (--scrim: the ink at 24% in light, a deep
+   night veil in dark) — enough to set the dialog apart, not so much that the
+   cream turns grey. The bars' DIMMED_THEME_COLORS (lib/design/appearance) are
+   this over the paper. */
 .backdrop {
   position: fixed;
   inset: 0;
@@ -9,7 +10,7 @@
   align-items: center;
   justify-content: center;
   padding: clamp(12px, 3vw, 32px);
-  background: color-mix(in oklch, var(--color-text) 24%, transparent);
+  background: var(--scrim);
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
   animation: resModalFadeIn 220ms ease;
@@ -84,7 +85,7 @@
   font-family: var(--font-body);
   font-size: 13px;
   line-height: 1.5;
-  color: var(--color-danger, oklch(58% 0.16 25));
+  color: var(--color-danger);
 }
 
 /* The close a screen reader finds (there is no ✕). Out of sight until the

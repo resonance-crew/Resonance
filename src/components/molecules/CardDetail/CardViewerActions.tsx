@@ -130,7 +130,7 @@ export function CardViewerActions({
       label,
       fill: 'var(--button-fill)',
       textColor: 'var(--color-cream)',
-      hoverOverlay: 'oklch(0% 0 0 / 0.14)',
+      hoverOverlay: 'color-mix(in oklch, var(--toward-ink) 14%, transparent)',
       onClick: onTrigger,
     },
     {

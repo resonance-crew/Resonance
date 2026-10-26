@@ -1,6 +1,8 @@
 import { penWaveTile } from './wavyPath';
 import { seedFromString } from './prng';
 import { INK } from './strokes';
+import { encode, toLinearSrgb } from './oklch';
+import { DEFAULT_ACCENT, paletteFor, type Accent, type Scheme } from './palette';
 
 /** Width of one repeating tile: eight crests at the pen's 4.5px rhythm. */
 export const WAVE_TILE = 36;
@@ -18,11 +20,22 @@ export const WAVE_AMP = 0.75;
  */
 export const WAVE_TILE_H = 6;
 /**
- * tokens.css --link-wave (the terracotta at 0.6× its chroma, a touch lighter),
- * as sRGB — a data URI can't read the page's CSS variables. Quieter than the
- * words it underlines, which keep the deep terracotta label ink.
+ * The palette's --link-wave (the accent at 0.6× its chroma, a touch lighter
+ * in light, a touch darker in dark) for a theme and scheme, as sRGB — a data
+ * URI can't read the page's CSS variables, so the page hands each link the
+ * ink it wears now (useLinkWaveInk). Quieter than the words it underlines,
+ * which keep the deep accent label ink.
  */
-export const WAVE_INK = 'rgb(186,127,100)';
+export function waveInk(accent: Accent, scheme: Scheme): string {
+  const [r, g, b] = toLinearSrgb(paletteFor(accent, scheme)['link-wave']).map((v) => Math.round(encode(v) * 255));
+  return `rgb(${r},${g},${b})`;
+}
+
+/**
+ * Light terracotta's wave — what the server's HTML carries (it can't know the
+ * reader's theme), and what dark terracotta's barely differs from.
+ */
+export const WAVE_INK = waveInk(DEFAULT_ACCENT, 'light');
 
 /**
  * How far under the baseline the wave's centre runs, in em of the link's
@@ -43,10 +56,10 @@ export interface StoryLinkWave {
 
 const cache = new Map<string, StoryLinkWave>();
 
-function tile(d: string, opacity: number): string {
+function tile(d: string, opacity: number, ink: string): string {
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${WAVE_TILE}" height="${WAVE_TILE_H}" viewBox="0 ${-WAVE_TILE_H / 2} ${WAVE_TILE} ${WAVE_TILE_H}">` +
-    `<path d="${d}" fill="none" stroke="${WAVE_INK}" stroke-opacity="${opacity}" stroke-width="${INK}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    `<path d="${d}" fill="none" stroke="${ink}" stroke-opacity="${opacity}" stroke-width="${INK}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 
@@ -56,28 +69,30 @@ function tile(d: string, opacity: number): string {
  * (not one long stroke) because an inline link that wraps needs a stroke
  * under every line fragment; the tile starts and ends on the same crest, so
  * the repeats join without a step. Seeded by the link so neighbours don't
- * wave in step.
+ * wave in step. `ink` is the wave's colour (waveInk; light terracotta's by
+ * default).
  */
-export function storyLinkWave(href: string): StoryLinkWave {
-  let hit = cache.get(href);
+export function storyLinkWave(href: string, ink: string = WAVE_INK): StoryLinkWave {
+  const key = `${ink}|${href}`;
+  let hit = cache.get(key);
   if (!hit) {
     const d = penWaveTile(WAVE_TILE, seedFromString(href), WAVE_AMP);
-    hit = { rest: tile(d, 0.7), strong: tile(d, 1), size: `${WAVE_TILE}px ${WAVE_TILE_H}px` };
+    hit = { rest: tile(d, 0.7, ink), strong: tile(d, 1, ink), size: `${WAVE_TILE}px ${WAVE_TILE_H}px` };
     if (cache.size > 500) cache.clear();
-    cache.set(href, hit);
+    cache.set(key, hit);
   }
   return hit;
 }
 
 /** The three custom properties a link (or a whole editor) wears its wave through. */
-export function storyLinkWaveVars(href: string): Record<'--wave' | '--wave-strong' | '--wave-size', string> {
-  const wave = storyLinkWave(href);
+export function storyLinkWaveVars(href: string, ink?: string): Record<'--wave' | '--wave-strong' | '--wave-size', string> {
+  const wave = storyLinkWave(href, ink);
   return { '--wave': wave.rest, '--wave-strong': wave.strong, '--wave-size': wave.size };
 }
 
 /** {@link storyLinkWaveVars} as an inline `style` attribute's text, for a surface styled outside React (the editors). */
-export function storyLinkWaveStyle(href: string): string {
-  return Object.entries(storyLinkWaveVars(href))
+export function storyLinkWaveStyle(href: string, ink?: string): string {
+  return Object.entries(storyLinkWaveVars(href, ink))
     .map(([name, value]) => `${name}: ${value}`)
     .join('; ');
 }

@@ -58,7 +58,10 @@ export function ShapeGrain({
           <path d={d} />
         </clipPath>
       </defs>
-      <g clipPath={`url(#sgc-${id})`}>
+      {/* Grey specks lighten a night paper louder than they darken cream: the scheme's grain scale
+          (on the group — the svg's own opacity is its fade-in's). */}
+      <g clipPath={`url(#sgc-${id})`} style={{ opacity: 'var(--grain-scale, 1)' }}>
+        {/* colour-fixed: only its alpha counts — the filter keeps the noise inside the shape */}
         <path d={d} fill="black" filter={`url(#sg-${id})`} />
       </g>
     </svg>

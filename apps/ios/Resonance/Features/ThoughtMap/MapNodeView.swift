@@ -149,8 +149,8 @@ struct MapNodeView: View, Equatable {
                            seed: seed, options: WobTabRectOptions(R: 18, tabR: 9, mag: 2.4, curve: 1))
             }.path()
             ZStack {
-                path.fill(Palette.hue(.nodeWash, hue))
-                path.stroke(Palette.hue(.nodePenDeep, hue), style: StrokeStyle(lineWidth: Tokens.inkStrong, lineCap: .round, lineJoin: .round))
+                path.fill(Palette.hue(.wash, hue))
+                path.stroke(Palette.hue(.emphasis, hue), style: StrokeStyle(lineWidth: Tokens.inkStrong, lineCap: .round, lineJoin: .round))
             }
             .frame(width: mapNodeW, height: mapNodeH + ThoughtMapStore.tabH, alignment: .topLeading)
             .offset(y: -ThoughtMapStore.tabH)
@@ -158,8 +158,8 @@ struct MapNodeView: View, Equatable {
             let shape = WobRectShape(radius: 18, seed: seed, mag: 4, options: WobRectOptions(
                 curve: 1, cornerJitter: 0.8, cornerOffset: 3, segmentsH: .range(3, 4), segmentsV: .count(2)))
             ZStack {
-                shape.fill(emphasized ? Palette.hue(.nodeWash, hue) : Palette.hue(.nodePaper, hue))
-                shape.stroke(emphasized ? Palette.hue(.nodePenDeep, hue) : Palette.hue(.nodePen, hue),
+                shape.fill(emphasized ? Palette.hue(.wash, hue) : Palette.hue(.interior, hue))
+                shape.stroke(emphasized ? Palette.hue(.emphasis, hue) : Palette.hue(.pen, hue),
                              style: StrokeStyle(lineWidth: emphasized ? Tokens.inkStrong : Tokens.ink, lineJoin: .round))
             }
             .frame(width: mapNodeW, height: mapNodeH)
@@ -175,7 +175,7 @@ struct MapNodeView: View, Equatable {
                 .frame(width: 64, height: 64)
                 .frame(width: 56, height: 56)
                 .clipShape(clip)
-            clip.stroke(Palette.hue(.nodePen, hue, alpha: 0.55), style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
+            clip.stroke(Palette.hue(.pen, hue, alpha: 0.55), style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
         }
         .frame(width: 56, height: 56)
     }

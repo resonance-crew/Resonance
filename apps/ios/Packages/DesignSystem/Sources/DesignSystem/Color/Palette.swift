@@ -166,15 +166,15 @@ public nonisolated enum Palette {
 
     // MARK: Hue-made colours
 
-    /// A HueInk's lightness and chroma in a scheme (palette.ts HUE_INKS).
-    public static func hueLC(_ role: HueInk, _ scheme: PaletteScheme) -> (L: Double, C: Double) {
+    /// A HueRole's lightness and chroma in a scheme (palette.ts HUE_ROLES).
+    public static func hueLC(_ role: HueRole, _ scheme: PaletteScheme) -> (L: Double, C: Double) {
         let k = role.rawValue * 4 + scheme.index * 2
-        return (PaletteTables.hueInks[k], PaletteTables.hueInks[k + 1])
+        return (PaletteTables.hueRoles[k], PaletteTables.hueRoles[k + 1])
     }
 
     /// The colour a role wears at `hue` in a scheme, as oklch (`hueInk`): light as it was always
-    /// drawn, dark held inside Display P3.
-    public static func hueOKLCH(_ role: HueInk, _ hue: Double, _ scheme: PaletteScheme) -> (L: Double, C: Double, H: Double) {
+    /// drawn, dark held inside Display P3 (as a browser maps an oklch() it can't show).
+    public static func hueOKLCH(_ role: HueRole, _ hue: Double, _ scheme: PaletteScheme) -> (L: Double, C: Double, H: Double) {
         let (L, C) = hueLC(role, scheme)
         let H = (hue.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360)
         return scheme == .dark ? OKLCHColor.fitted(L, C, H) : (L, C, H)
@@ -183,9 +183,9 @@ public nonisolated enum Palette {
     private struct HueKey: Hashable { let role: Int; let hue: Int; let alpha: Int }
     private static let hueColours = Mutex<[HueKey: Color]>([:])
 
-    /// A role of HUE_INKS at a hue the data carries (a map card's, a region's, a card's cover), dynamic
-    /// by scheme. Remembered: a map draws the same few on every frame.
-    public static func hue(_ role: HueInk, _ hue: Double, alpha: Double = 1) -> Color {
+    /// A role of HUE_ROLES at a hue the data carries (a map card's, a group's, a card's cover) — the web's
+    /// `oklch(var(--hue-<role>) <hue>)` — dynamic by scheme. Remembered: a map draws the same few on every frame.
+    public static func hue(_ role: HueRole, _ hue: Double, alpha: Double = 1) -> Color {
         let key = HueKey(role: role.rawValue, hue: Int((hue * 100).rounded()), alpha: Int((alpha * 1000).rounded()))
         if let kept = hueColours.withLock({ $0[key] }) { return kept }
         func make(_ scheme: PaletteScheme) -> UIColor {

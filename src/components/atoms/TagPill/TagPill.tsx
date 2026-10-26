@@ -72,7 +72,7 @@ export function TagPill({
   const R = h > 0 ? h * 0.5 : SIZE_FALLBACK_HEIGHT[size] * 0.5;
   const interactive = Boolean(onClick);
 
-  const rim = outlined ? 'oklch(32% 0.05 60 / 0.45)' : undefined;
+  const rim = outlined ? 'var(--tag-stroke)' : undefined;
 
   const tag = (
     <span

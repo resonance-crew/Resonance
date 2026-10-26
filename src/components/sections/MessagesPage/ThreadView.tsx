@@ -957,7 +957,7 @@ function SharedCardRow({ cardKey }: { cardKey: string }) {
           {!card.media?.url && (
             <span
               className={pageStyles.mediaThumbFallback}
-              style={{ background: `oklch(90% 0.06 ${card.accentHue ?? 55})` }}
+              style={{ background: `oklch(var(--hue-accent) ${card.accentHue ?? 55})` }}
             />
           )}
         </OrganicImage>

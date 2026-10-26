@@ -37,6 +37,8 @@ public nonisolated struct CardPalette: Sendable {
     public var stripe: Color { Tokens.cardStripes[index].opacity(0.28) }
     /// A loading block's highlight on a card of the family (`card-skeleton-*`).
     public var skeleton: Color { Tokens.cardSkeletons[index] }
+    /// A tag's pill on the card (`card-tag-*`: the fill a step deeper in light, a step above it in dark).
+    public var tag: Color { Tokens.cardTags[index] }
 
     public init(accentHue: Double?, position: Int) {
         index = Self.preferred(accentHue: accentHue, position: position)

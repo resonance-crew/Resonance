@@ -14,6 +14,7 @@ import {
   step,
   traceContours,
 } from '@/lib/design/driftingBlobs';
+import { useAppearance } from '@/lib/design/useAppearance';
 import styles from './DriftingBlobs.module.css';
 
 /** A colour the blobs may take (a tokens.css variable) and how strongly it shows. */
@@ -66,6 +67,10 @@ export function DriftingBlobs({ palette, children, crowd }: DriftingBlobsProps) 
   const [fewest, most] = crowd ?? [3, 4];
   const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Reads the colours again (the page's theme or scheme changed) and redraws, without restarting the drift.
+  const recolourRef = useRef<() => void>(() => {});
+  const { accent, scheme } = useAppearance();
+  useEffect(() => recolourRef.current(), [accent, scheme]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -75,9 +80,18 @@ export function DriftingBlobs({ palette, children, crowd }: DriftingBlobsProps) 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const css = getComputedStyle(root);
-    const lab = (name: string) => parseOklch(css.getPropertyValue(name)) ?? FALLBACK;
-    const paints: Paint[] = palette.map((p) => ({ ink: lab(p.color), alpha: p.alpha }));
+    // Every paint with the variable it was read from, so a theme or scheme change re-reads them in place.
+    const inks: { paint: Paint; name: string }[] = [];
+    const lab = (name: string) => parseOklch(getComputedStyle(root).getPropertyValue(name)) ?? FALLBACK;
+    const paintOf = (name: string, alpha: number): Paint => {
+      const paint = { ink: lab(name), alpha };
+      inks.push({ paint, name });
+      return paint;
+    };
+    // The sand's strength follows the scheme's (light specks on night paper read louder).
+    const grainScale = () => Number.parseFloat(getComputedStyle(root).getPropertyValue('--grain-scale')) || 1;
+    let grainAlpha = GRAIN * grainScale();
+    const paints: Paint[] = palette.map((p) => paintOf(p.color, p.alpha));
     const box = root.getBoundingClientRect();
     let width = Math.max(1, box.width);
     let height = Math.max(1, box.height);
@@ -91,7 +105,7 @@ export function DriftingBlobs({ palette, children, crowd }: DriftingBlobsProps) 
         x: r.left - box.left + r.width / 2,
         y: r.top - box.top + r.height / 2,
         R: r.width * STAND_IN_RADIUS,
-        paint: { ink: lab(el.dataset.driftColor ?? ''), alpha: Number(getComputedStyle(el).opacity) || 0.3 },
+        paint: paintOf(el.dataset.driftColor ?? '', Number(getComputedStyle(el).opacity) || 0.3),
         drift: [dx || 0, dy || 0],
       });
     });
@@ -187,7 +201,7 @@ export function DriftingBlobs({ palette, children, crowd }: DriftingBlobsProps) 
         const px = Math.max(1, Math.round(dpr));
         ctx.setTransform(px, 0, 0, px, 0, 0);
         ctx.imageSmoothingEnabled = false;
-        ctx.globalAlpha = GRAIN;
+        ctx.globalAlpha = grainAlpha;
         ctx.fillStyle = grain;
         ctx.fillRect(0, 0, canvas.width / px, canvas.height / px);
       }
@@ -225,6 +239,25 @@ export function DriftingBlobs({ palette, children, crowd }: DriftingBlobsProps) 
     root.dataset.live = '';
     run();
 
+    recolourRef.current = () => {
+      const before = inks.map(({ paint }) => paint.ink);
+      for (const { paint, name } of inks) paint.ink = lab(name);
+      // A blob two fused into wears a paint of its own: it takes the new ink of the paint nearest its old one.
+      const tracked = new Set(inks.map(({ paint }) => paint));
+      for (const blob of world.blobs) {
+        if (tracked.has(blob.paint) || !inks.length) continue;
+        const [, a, b] = blob.paint.ink;
+        let best = 0;
+        before.forEach(([, x, y], i) => {
+          if (Math.hypot(x - a, y - b) < Math.hypot(before[best][1] - a, before[best][2] - b)) best = i;
+        });
+        blob.paint = { ...blob.paint, ink: inks[best].paint.ink };
+      }
+      world.paper = lab('--color-cream');
+      grainAlpha = GRAIN * grainScale();
+      draw();
+    };
+
     const io = new IntersectionObserver(([entry]) => {
       onScreen = entry.isIntersecting;
       if (onScreen) run();
@@ -244,6 +277,7 @@ export function DriftingBlobs({ palette, children, crowd }: DriftingBlobsProps) 
     ro.observe(root);
 
     return () => {
+      recolourRef.current = () => {};
       halt();
       io.disconnect();
       ro.disconnect();

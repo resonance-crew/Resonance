@@ -52,14 +52,17 @@ private func writingAPI() -> WritingAPI {
     }
 
     @Test func theViewersInkIsTheWebsViewerDark() {
-        // oklch(12% 0.01 60): a warm near-black, darker than the modal backdrop's ink.
-        let ink = UIColor(Tokens.viewerInk)
-        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, alpha: CGFloat = 0
-        #expect(ink.getRed(&r, green: &g, blue: &b, alpha: &alpha))
-        #expect(alpha == 1)
-        #expect(max(r, g, b) < 0.06)
-        // Warm: red over blue.
-        #expect(r >= b)
+        // oklch(12% 0.01 60) (--viewer-ground): a warm near-black, darker than the modal backdrop's
+        // ink — the same in both schemes.
+        for style in [UIUserInterfaceStyle.light, .dark] {
+            let ink = UIColor(Tokens.viewerGround).resolvedColor(with: UITraitCollection(userInterfaceStyle: style))
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, alpha: CGFloat = 0
+            #expect(ink.getRed(&r, green: &g, blue: &b, alpha: &alpha))
+            #expect(alpha == 1)
+            #expect(max(r, g, b) < 0.06)
+            // Warm: red over blue.
+            #expect(r >= b)
+        }
     }
 
     // MARK: §3 — a 私人卡's ⋯ on its own page

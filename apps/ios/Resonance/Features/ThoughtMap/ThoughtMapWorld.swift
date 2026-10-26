@@ -33,7 +33,7 @@ struct MapGridLayer: View {
         Rectangle()
             .fill(Tokens.cardBg)
             .colorEffect(ShaderLibrary.mapDots(.float(26 * cam.s), .float2(Float(cam.x), Float(cam.y)),
-                                                .color(Palette.hue(.mapDot, 75))))
+                                                .color(Tokens.fieldBorder)))
     }
 }
 
@@ -54,14 +54,14 @@ struct MapUnderLayer: View {
                 let path = regionPath(g)
                 let isHot = hot == g.id
                 let strong = isHot || selection == .group(g.id)
-                ctx.fill(path, with: .color(Palette.hue(.regionFill, g.hue, alpha: isHot ? 0.92 : 0.78)))
-                ctx.stroke(path, with: .color(strong ? Palette.hue(.regionPenStrong, g.hue) : Palette.hue(.regionPen, g.hue)),
+                ctx.fill(path, with: .color(Palette.hue(.group, g.hue, alpha: isHot ? 0.92 : 0.78)))
+                ctx.stroke(path, with: .color(strong ? Palette.hue(.groupPenHot, g.hue) : Palette.hue(.groupPen, g.hue)),
                            style: StrokeStyle(lineWidth: strong ? Tokens.inkStrong : Tokens.inkLight, lineJoin: .round))
             }
             for (edge, geo) in geometries {
                 guard let geo else { continue }
                 let selected = selection == .edge(edge.id)
-                let color = selected ? Palette.hue(.mapInkStrong, 60) : Palette.hue(.mapInk, 60)
+                let color = selected ? Tokens.text : Palette.mix(.textMuted, 0.75, .text)
                 let style = StrokeStyle(lineWidth: selected ? Tokens.inkStrong : Tokens.ink, lineCap: .round)
                 ctx.stroke(cgPath(geo.path), with: .color(color), style: style)
                 let seed = Double(seedFromString(edge.id)) + 7
@@ -93,7 +93,7 @@ struct MapOverLayer: View {
         Canvas { ctx, _ in
             ctx.concatenate(worldTransform(cam))
             if let draft, let source {
-                let linkColor = Palette.hue(.nodePen, sourceHue)
+                let linkColor = Palette.hue(.pen, sourceHue)
                 let to = targetRect ?? Rect(x: draft.wx - 1, y: draft.wy - 1, w: 2, h: 2)
                 let geo = organicEdgePath(source, to, seed: Double(seedFromString(draft.sourceId)))
                 let style = StrokeStyle(lineWidth: Tokens.inkStrong, lineCap: .round, dash: targetRect == nil ? [7, 6] : [])
@@ -113,7 +113,7 @@ struct MapOverLayer: View {
             }
             for g in groups {
                 let strong = hot == g.id || selection == .group(g.id)
-                ctx.stroke(regionPath(g), with: .color(strong ? Palette.hue(.regionPenStrong, g.hue) : Palette.hue(.regionPen, g.hue)),
+                ctx.stroke(regionPath(g), with: .color(strong ? Palette.hue(.groupPenHot, g.hue) : Palette.hue(.groupPen, g.hue)),
                            style: StrokeStyle(lineWidth: strong ? Tokens.inkStrong : Tokens.inkLight, lineJoin: .round))
             }
         }
@@ -214,7 +214,7 @@ struct MapEdgeLabels: View {
                     let text = store.labelText(e)
                     let size = ThoughtMapStore.pillSize(text)
                     let selected = store.selection == .edge(id)
-                    TagPill(text, fill: selected ? Palette.hue(.mapPillOn, 60) : Palette.hue(.mapPill, 75), size: .sm)
+                    TagPill(text, fill: selected ? Palette.mix(.creamDark, 0.94, .towardInk) : Tokens.creamDark, size: .sm)
                         .fixedSize()
                         .frame(width: size.width, height: size.height)
                         .offset(x: geo.mid.x - size.width / 2, y: geo.mid.y - size.height / 2)

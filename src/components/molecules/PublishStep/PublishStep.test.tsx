@@ -5,7 +5,7 @@ import { act, fireEvent, renderWithIntl, screen, userEvent, waitFor, within } fr
 import en from '@/messages/en.json';
 import type { CardMedia, Visibility } from '@/lib/db/types';
 import { PublishStep, type PublishStepProps, type PublishStepValues } from './PublishStep';
-import { CARD_BORDERS, previewPalette } from '@/lib/design/cardColours';
+import { cardVar, previewPalette } from '@/lib/design/cardColours';
 import { CARD_HUES } from '@/lib/design/dominantHue';
 
 vi.mock('@/lib/data/hooks', () => ({
@@ -355,8 +355,9 @@ describe('PublishStep', () => {
     const f = familyOf(id);
     const view = renderWithIntl(<Step cardId={id} />);
     for (const pill of pills()) {
-      expect(pill.style.getPropertyValue('--shape-fill')).toBe(CARD_BORDERS[f][1]);
-      expect(pill.style.color).toBe(asColor(`oklch(97.5% 0.012 ${CARD_HUES[f]})`));
+      // The family's palette tokens, which the scheme draws (in dark the deep pen is the bright one).
+      expect(pill.style.getPropertyValue('--shape-fill')).toBe(cardVar('border-deep', f));
+      expect(pill.style.color).toBe(asColor(cardVar('interior', f)));
     }
     view.unmount();
 
@@ -364,7 +365,7 @@ describe('PublishStep', () => {
     renderWithIntl(<Step cardId={id} start={{ story: '' }} />);
     const resting = screen.getByRole('button', { name: en.write.mediaGenerate });
     expect(resting).toBeDisabled();
-    expect(resting.style.getPropertyValue('--shape-fill')).toBe(`oklch(90% 0.06 ${CARD_HUES[f]})`);
+    expect(resting.style.getPropertyValue('--shape-fill')).toBe(cardVar('accent', f));
     await echoSettled();
   });
 
@@ -373,7 +374,7 @@ describe('PublishStep', () => {
     renderWithIntl(<Step cardId="card-a" start={{ media: cover, accentHue: 140 }} />);
     const chip = screen.getByRole('button', { name: en.write.coverChange });
     const f = CARD_HUES.indexOf(140);
-    expect(chip.style.color).toBe(asColor(CARD_BORDERS[f][1]));
+    expect(chip.style.color).toBe(asColor(cardVar('border-deep', f)));
     expect(chip).toHaveAttribute('data-colored');
     await echoSettled();
   });
@@ -390,7 +391,7 @@ describe('PublishStep', () => {
     });
     const loader = await screen.findByRole('status', { name: en.write.mediaUploading });
     expect(en.write.mediaUploading).toBe('Uploading the picture…');
-    const deep = CARD_BORDERS[CARD_HUES.indexOf(140)][1];
+    const deep = cardVar('border-deep', CARD_HUES.indexOf(140));
     for (const path of loader.querySelectorAll('path')) expect(path).toHaveAttribute('stroke', deep);
     const busy = screen.getByText(en.write.mediaUploading).parentElement!;
     expect(busy).toHaveAttribute('data-veiled');

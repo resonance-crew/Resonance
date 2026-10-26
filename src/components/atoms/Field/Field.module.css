@@ -23,7 +23,7 @@
 }
 
 .hint[data-tone='error'] { color: var(--color-terracotta); }
-.hint[data-tone='ok']    { color: oklch(55% 0.13 140); }
+.hint[data-tone='ok']    { color: var(--color-ok); }
 
 .charCount {
   margin-top: 6px;

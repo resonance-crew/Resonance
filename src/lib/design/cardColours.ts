@@ -25,7 +25,11 @@
 import { seedFromId } from './bubble';
 import { CARD_HUES, cardHueIndex, hueDistance, nearestCardHue } from './dominantHue';
 
-/** The fills of the six palette families, in CARD_HUES order (a shared card's band in a thread draws with them too). */
+/**
+ * The fills of the six palette families, in CARD_HUES order — as light
+ * draws them, for what draws without the page's stylesheet (the link-preview
+ * image, the apps' 9:16 card). A page draws a family through `cardVar`.
+ */
 export const CARD_FILLS = [
   'oklch(90% 0.065 55)',
   'oklch(94% 0.032 290)',
@@ -44,6 +48,26 @@ export const CARD_BORDERS = [
   ['oklch(50% 0.10 215)', 'oklch(38% 0.09 215)'],
   ['oklch(52% 0.09 18)',  'oklch(40% 0.08 18)'],
 ];
+
+/** What a family colours, each a palette token per scheme (lib/design/palette FAMILY_TOKENS). */
+export type CardRole =
+  | 'fill'
+  | 'border'
+  | 'border-deep'
+  | 'interior'
+  | 'separator'
+  | 'note-ink'
+  | 'stripe'
+  | 'accent'
+  | 'hover'
+  | 'skeleton'
+  | 'tag';
+
+/**
+ * A family's colour as the page draws it now (palette.css's `--card-<role>-<i>`),
+ * so a card rendered on the server is already right in either scheme.
+ */
+export const cardVar = (role: CardRole, family: number) => `var(--card-${role}-${family})`;
 
 /** How many cards before a card its family must differ from. */
 export const CARD_COLOUR_WINDOW = 3;

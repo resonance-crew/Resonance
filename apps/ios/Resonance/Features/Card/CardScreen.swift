@@ -528,7 +528,7 @@ struct StoryBylineRow<Actions: View>: View {
                             .layoutPriority(-1)
                         AuthorRegionFlag(region: author.region, size: 14)
                         if author.verified {
-                            OrganicIcon(.verified, size: 13, color: Tokens.sage, strokeWidth: 1.8)
+                            OrganicIcon(.verified, size: 13, color: Tokens.verifiedMark, strokeWidth: 1.8)
                                 .accessibilityLabel(L10n.Card.verified)
                         }
                     } else {

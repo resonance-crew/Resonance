@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
  * dynamic by scheme and theme). A colour written into a Swift file stays the same in dark mode and in
  * every theme — the "small component left unconverted" (spec §6.2). This scans apps/ios for colour
  * literals outside generated code and tests; a file may hold only what ALLOWED says, each with why.
+ * What stands on a picture is a palette token too (photo-ink, photo-shade, viewer-ground).
  * The counts are exact, so the list only ever shrinks: remove one, lower its number.
  */
 const root = resolve(__dirname, '../../..');
@@ -28,10 +29,6 @@ const ALLOWED: Record<string, [number, string]> = {
   'Packages/DesignSystem/Sources/DesignSystem/Components/OrganicIcon.swift': [1, 'a template image (tinted where drawn)'],
   // Google's mark stands on a white disc in both schemes (its brand rules).
   'Packages/DesignSystem/Sources/DesignSystem/Components/OrganicButton.swift': [1, "Google's mark on its white disc"],
-  // The picture viewer is dark in both schemes, and what stands on a picture is fixed.
-  'Resonance/Features/Messages/ChatPictureViewer.swift': [1, "the picture viewer's black"],
-  'Packages/DesignSystem/Sources/DesignSystem/Color/DerivedTokens.swift': [3, "the image chip over a picture, the viewer's dark"],
-  'Resonance/Features/Settings/AvatarCrop.swift': [1, 'the crop scrim over the photo'],
   // The 9:16 share card leaves the device: always light terracotta (spec §1.5).
   'Packages/DesignSystem/Sources/DesignSystem/Cards/ShareCardRecipe.swift': [1, 'the share card (light terracotta always)'],
   // `.black` here is a font weight, not a colour.

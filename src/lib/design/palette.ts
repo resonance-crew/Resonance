@@ -210,6 +210,8 @@ const DERIVED_TOKENS = [
   'footer-ink',
   'cta-band',
   'cta-ink',
+  'cta-ghost',
+  'cta-verb-ink',
 ] as const;
 type DerivedToken = (typeof DERIVED_TOKENS)[number];
 
@@ -231,6 +233,12 @@ const SCHEME_TOKENS = [
   'toward-ink',
   'footer-ink-soft',
   'picture-backing',
+  'soft-pen',
+  'color-ok',
+  'verified-mark',
+  'photo-ink',
+  'photo-shade',
+  'viewer-ground',
 ] as const;
 type SchemeToken = (typeof SCHEME_TOKENS)[number];
 
@@ -246,6 +254,7 @@ const FAMILY_TOKENS = [
   'card-accent',
   'card-hover',
   'card-skeleton',
+  'card-tag',
 ] as const;
 type FamilyToken = (typeof FAMILY_TOKENS)[number];
 
@@ -303,6 +312,9 @@ const RECIPES: Record<Scheme, (b: Base) => Record<DerivedToken, Oklch>> = {
     'footer-ink': b['color-cream'],
     'cta-band': b['color-terracotta'],
     'cta-ink': b['color-cream'],
+    // On the band: the second action a deeper accent under the band's words, the verb a paper pill with the tonal label.
+    'cta-ghost': mixWithBlack(b['color-terracotta'], 0.18),
+    'cta-verb-ink': deepenUntil(b['color-terracotta'], 0.22, over(b['color-terracotta-light'], 0.75, b['color-cream-dark']), 4.6),
   }),
   dark: (b) => {
     const accent = b['color-terracotta'];
@@ -336,6 +348,8 @@ const RECIPES: Record<Scheme, (b: Base) => Record<DerivedToken, Oklch>> = {
       'footer-ink': b['color-text'],
       'cta-band': fitGamut(lch(0.44, accent.C * 0.78, accent.H - 2)),
       'cta-ink': lch(0.93, b['color-text'].C, b['color-text'].H),
+      'cta-ghost': mixWithBlack(fitGamut(lch(0.44, accent.C * 0.78, accent.H - 2)), 0.22),
+      'cta-verb-ink': deepenUntil(fitGamut(lch(0.44, accent.C * 0.78, accent.H - 2)), 0, lch(0.93, b['color-text'].C, b['color-text'].H), 4.6),
     };
   },
 };
@@ -352,7 +366,8 @@ const SCHEME_VALUES: Record<Scheme, Record<SchemeToken, Oklch>> = {
     'color-sky': o('oklch(82% 0.07 220)'),
     'avatar-stroke': o('oklch(36% 0.06 60 / 0.55)'),
     'tag-stroke': o('oklch(32% 0.05 60 / 0.45)'),
-    scrim: o('oklch(20% 0.04 60 / 0.28)'),
+    // Behind a dialog or a picker: the ink at 24%, as the modal's backdrop always was.
+    scrim: o('oklch(26% 0.03 60 / 0.24)'),
     'shadow-ink': o('oklch(20% 0.04 60)'),
     'grain-ink': o('oklch(0% 0 0)'),
     // What "further from the paper" mixes toward (color-mix(in oklch, X, var(--toward-ink) N%)); real shadows stay --shadow-ink.
@@ -361,6 +376,16 @@ const SCHEME_VALUES: Record<Scheme, Record<SchemeToken, Oklch>> = {
     'footer-ink-soft': o('oklch(85% 0.015 75)'),
     // Behind a story picture: none in light; in dark a light paper, so a transparent logo's black words still show.
     'picture-backing': o('oklch(96.5% 0.015 75 / 0)'),
+    // A quiet pen beside the hand-drawn edges and rules (taken at 0.28–0.45 with color-mix).
+    'soft-pen': o('oklch(55% 0.05 60)'),
+    // A hint that says yes (a pen name is free); the verified mark beside a pen name.
+    'color-ok': o('oklch(55% 0.13 140)'),
+    'verified-mark': o('oklch(78% 0.07 140)'),
+    // Over a picture the scheme doesn't reach — the same in both: a light glyph,
+    // the dark wash behind it (taken at 0.5–0.7), the picture viewer's dark ground.
+    'photo-ink': o('oklch(96.5% 0.015 75)'),
+    'photo-shade': o('oklch(30% 0.02 70)'),
+    'viewer-ground': o('oklch(12% 0.01 60)'),
   },
   dark: {
     'color-danger': o('oklch(70% 0.15 25)'),
@@ -380,6 +405,12 @@ const SCHEME_VALUES: Record<Scheme, Record<SchemeToken, Oklch>> = {
     'toward-ink': o('oklch(100% 0 0)'),
     'footer-ink-soft': o('oklch(85% 0.015 75)'),
     'picture-backing': o('oklch(93% 0.012 75)'),
+    'soft-pen': o('oklch(72% 0.03 66)'),
+    'color-ok': o('oklch(74% 0.12 145)'),
+    'verified-mark': o('oklch(70% 0.1 145)'),
+    'photo-ink': o('oklch(96.5% 0.015 75)'),
+    'photo-shade': o('oklch(30% 0.02 70)'),
+    'viewer-ground': o('oklch(12% 0.01 60)'),
   },
 };
 
@@ -421,6 +452,8 @@ function family(scheme: Scheme, i: number): Record<FamilyToken, Oklch> {
       'card-accent': lch(0.9, 0.06, h),
       'card-hover': lch(0.925, 0.024, h),
       'card-skeleton': lch(0.88, 0.08, h),
+      // A tag on the card: a few points under the fill, so it still reads on the hover wash.
+      'card-tag': lch(L - 0.05, C, h),
     };
   }
   // Each family keeps its own calibration (yellow needs more chroma to read as yellow), at 0.75×;
@@ -437,61 +470,8 @@ function family(scheme: Scheme, i: number): Record<FamilyToken, Oklch> {
     'card-accent': lch(0.38, 0.05, h),
     'card-hover': lch(0.27, 0.022, h),
     'card-skeleton': lch(0.34, 0.05, h),
+    'card-tag': fitGamut(lch(fill.L + 0.04, fill.C, fill.H)),
   };
-}
-
-/**
- * Colours made from a hue the data carries rather than from a card family —
- * a thought-map card or region in its own hue, a menu in a card's colours, a
- * coverless card's tile — and the map's warm neutrals (hue 60/75): each
- * role's [lightness, chroma] per scheme, worn at that hue (`hueInk`). Light is
- * what the web and the apps drew before there was a dark scheme; dark follows
- * the families' ladder (papers ~24%, washes ~30%, pens 72%, deep pens 84%).
- */
-export const HUE_INKS = {
-  /** A map card's paper (the family interior's step). */
-  'node-paper': { light: [0.975, 0.012], dark: [0.235, 0.014] },
-  /** A chosen map card's paper, its folder tab. */
-  'node-wash': { light: [0.925, 0.045], dark: [0.3, 0.04] },
-  /** A map card's pen; an arrow from it; a menu's pen in a card's colours. */
-  'node-pen': { light: [0.52, 0.11], dark: [0.72, 0.085] },
-  /** A chosen map card's pen. */
-  'node-pen-deep': { light: [0.38, 0.13], dark: [0.84, 0.065] },
-  /** A menu's pen under a pointer, in a card's colours. */
-  'menu-pen-hover': { light: [0.38, 0.09], dark: [0.84, 0.055] },
-  /** A menu's paper in a card's colours. */
-  'menu-paper': { light: [0.98, 0.01], dark: [0.25, 0.014] },
-  /** The rule between rows in a card's colours (callers take it at 0.4). */
-  'card-rule': { light: [0.55, 0.04], dark: [0.72, 0.04] },
-  /** A map region's wash (callers take it at 0.78–0.96). */
-  'region-fill': { light: [0.965, 0.032], dark: [0.26, 0.03] },
-  /** A map region's pen at rest. */
-  'region-pen': { light: [0.6, 0.085], dark: [0.6, 0.07] },
-  /** A map region's pen chosen or under a pointer. */
-  'region-pen-strong': { light: [0.45, 0.1], dark: [0.76, 0.085] },
-  /** A region's label pen. */
-  'region-label-pen': { light: [0.48, 0.09], dark: [0.72, 0.075] },
-  /** A coverless card's tile (MiniStoryCard's cover, a thread's card glyph tile). */
-  'card-tile': { light: [0.9, 0.06], dark: [0.38, 0.05] },
-  /** The map's dot grid (hue 75). */
-  'map-dot': { light: [0.82, 0.025], dark: [0.36, 0.02] },
-  /** An arrow's pen and the label pill's (hue 60). */
-  'map-ink': { light: [0.46, 0.045], dark: [0.74, 0.04] },
-  /** A chosen arrow's pen (hue 60). */
-  'map-ink-strong': { light: [0.28, 0.05], dark: [0.9, 0.03] },
-  /** A label pill's paper (hue 75). */
-  'map-pill': { light: [0.94, 0.02], dark: [0.28, 0.016] },
-  /** A chosen label pill's paper (hue 60). */
-  'map-pill-on': { light: [0.88, 0.03], dark: [0.36, 0.03] },
-} as const satisfies Record<string, Record<Scheme, readonly [number, number]>>;
-export type HueInk = keyof typeof HUE_INKS;
-
-/** A hue-made colour (HUE_INKS) at `hue` in a scheme. */
-export function hueInk(role: HueInk, hue: number, scheme: Scheme, alpha = 1): Oklch {
-  const [L, C] = HUE_INKS[role][scheme];
-  const c = lch(L, C, hue, alpha);
-  // Light is drawn as it always was (a screen clamps what P3 can't show); dark stays inside P3.
-  return scheme === 'dark' ? fitGamut(c) : c;
 }
 
 function assemble(b: Base, scheme: Scheme): Palette {
@@ -619,6 +599,53 @@ export function avatarFill(stored: string, scheme: Scheme): string {
 /** The browser chrome's colour for a scheme (<meta name="theme-color">): the paper. */
 export function themeColor(accent: Accent, scheme: Scheme): Oklch {
   return paletteFor(accent, scheme)['color-cream'];
+}
+
+/**
+ * Colours drawn from any hue rather than a family's (a card's own cover hue
+ * in an embed or a picker, a thought-map group's): each role's lightness and
+ * chroma per scheme. palette.css writes `--hue-<role>: L C`, so CSS draws
+ * `oklch(var(--hue-pen) <hue>)` with the hue as data; `hueColour()` gives
+ * script the same. Light is what the components drew as literals.
+ */
+export const HUE_ROLES = {
+  /** A card's paper (an embed, a thought-map card, the writer's cover slot). */
+  interior: { light: [0.975, 0.012], dark: [0.235, 0.014] },
+  /** A coverless thumbnail, a resting pill. */
+  accent: { light: [0.9, 0.06], dark: [0.38, 0.05] },
+  /** A tag in the card's hue. */
+  tint: { light: [0.92, 0.06], dark: [0.33, 0.05] },
+  /** A card's outline. */
+  pen: { light: [0.52, 0.11], dark: [0.72, 0.0825] },
+  /** The outline pointed at. */
+  'pen-deep': { light: [0.38, 0.09], dark: [0.84, 0.045] },
+  /** A menu's paper of that hue. */
+  menu: { light: [0.98, 0.01], dark: [0.25, 0.014] },
+  /** A rule between rows (taken at 0.4 alpha). */
+  separator: { light: [0.55, 0.04], dark: [0.72, 0.04] },
+  /** A resting pill's words. */
+  'pill-ink': { light: [0.5, 0.04], dark: [0.8, 0.04] },
+  /** A chosen card's paper (the thought map). */
+  wash: { light: [0.925, 0.045], dark: [0.31, 0.045] },
+  /** A chosen card's outline. */
+  emphasis: { light: [0.38, 0.13], dark: [0.84, 0.08] },
+  /** A thought-map group's ground (taken at 0.78–0.92 alpha). */
+  group: { light: [0.965, 0.032], dark: [0.265, 0.03] },
+  /** A group's outline, at rest and chosen. */
+  'group-pen': { light: [0.6, 0.085], dark: [0.6, 0.07] },
+  'group-pen-hot': { light: [0.45, 0.1], dark: [0.78, 0.085] },
+  /** A group title's underline. */
+  'group-ink': { light: [0.48, 0.09], dark: [0.76, 0.08] },
+  /** Words and handles in a card's hue, pointed at. */
+  ink: { light: [0.45, 0.13], dark: [0.8, 0.1] },
+  label: { light: [0.42, 0.1], dark: [0.8, 0.07] },
+} as const satisfies Record<string, Record<Scheme, readonly [number, number]>>;
+export type HueRole = keyof typeof HUE_ROLES;
+
+/** A hue role's colour at a hue (and alpha), as CSS text. */
+export function hueColour(role: HueRole, hue: number, scheme: Scheme, alpha = 1): string {
+  const [L, C] = HUE_ROLES[role][scheme];
+  return cssOklch(lch(L, C, hue, alpha));
 }
 
 /** Numbers that change with the scheme (CSS custom properties beside the colours). */

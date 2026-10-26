@@ -98,7 +98,8 @@ export function NotificationBell() {
               curve={1.5}
               cornerJitter={3}
               cornerOffset={badgeH * 0.06}
-              fillColor="var(--color-terracotta)"
+              // The count in the paper's colour on the verb's fill: 4.6:1 in light (plain terracotta was 3.5), the bright accent in dark.
+              fillColor="var(--button-fill)"
             />
             <span style={{ position: 'relative' }}>{unreadCount}</span>
           </span>

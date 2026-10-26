@@ -10,7 +10,8 @@ import { SketchLoader } from '@/components/atoms/SketchLoader/SketchLoader';
 import { OrganicMenu, type OrganicMenuItem } from '@/components/molecules/OrganicMenu/OrganicMenu';
 import type { GenerateImageEvent } from '@/app/api/generate-image/route';
 import type { CardMedia } from '@/lib/db/types';
-import { CARD_BORDERS, CARD_FILLS } from '@/lib/design/cardColours';
+import { CARD_FAMILY_COUNT } from '@/lib/design/palette';
+import { cardVar } from '@/lib/design/cardColours';
 import { CARD_HUES } from '@/lib/design/dominantHue';
 import { extractAccentHue } from '@/lib/images/accentHue';
 import { UnsupportedImage, uploadImageFile } from '@/lib/images/upload';
@@ -288,16 +289,19 @@ export function CoverFrame({ cover, palette = 0 }: { cover: CoverEditor; palette
  * deep pen too — the loader and its words — over a wash of its paper.
  */
 export function coverColors(palette: number) {
-  const hue = CARD_HUES[palette] ?? CARD_HUES[0];
-  const [pen, deep] = CARD_BORDERS[palette] ?? CARD_BORDERS[0];
-  const paper = `oklch(97.5% 0.012 ${hue})`;
+  const family = palette >= 0 && palette < CARD_FAMILY_COUNT ? palette : 0;
+  const hue = CARD_HUES[family];
+  // The family's palette tokens: in dark its deep pen is the bright one, its paper the deep one.
+  const pen = cardVar('border', family);
+  const deep = cardVar('border-deep', family);
+  const paper = cardVar('interior', family);
   return {
     hue,
     ink: deep,
     busy: { '--cover-ink': deep, '--cover-paper': paper } as CSSProperties,
     pill: { fillColor: deep, color: paper },
-    pillResting: { fillColor: `oklch(90% 0.06 ${hue})`, color: `oklch(50% 0.04 ${hue})` },
-    chip: { fill: CARD_FILLS[palette] ?? CARD_FILLS[0], pen, ink: deep },
+    pillResting: { fillColor: cardVar('accent', family), color: `oklch(var(--hue-pill-ink) ${hue})` },
+    chip: { fill: cardVar('fill', family), pen, ink: deep },
   };
 }
 

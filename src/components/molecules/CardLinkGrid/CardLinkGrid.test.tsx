@@ -45,11 +45,11 @@ function card(id: string, accentHue?: number, extra: Partial<Card> = {}): Card {
   };
 }
 
-/** The hue each drawn card wears, read from its paper (`--card-interior: oklch(97.5% 0.012 <hue>)`). */
+/** The hue each drawn card wears, read from its paper (`--card-interior: var(--card-interior-<family>)`). */
 function wornHues(container: HTMLElement): number[] {
   return Array.from(container.querySelectorAll('article')).map((el) => {
     const paper = (el as HTMLElement).style.getPropertyValue('--card-interior');
-    return Number(paper.match(/([\d.]+)\)$/)![1]);
+    return CARD_HUES[Number(paper.match(/--card-interior-(\d)\)$/)![1])];
   });
 }
 
@@ -88,8 +88,8 @@ describe('card lists never put one colour beside itself', () => {
     const cards = hues.map((h, i) => card(`m${i}`, h));
     const { container } = renderWithIntl(<MiniCardGrid cards={cards} authors={{}} />);
     const worn = Array.from(container.querySelectorAll('article')).map((el) => {
-      // A card with no picture shows its family's wash instead: oklch(90% 0.06 <hue>).
-      return Number(el.outerHTML.match(/oklch\(90% 0\.06 ([\d.]+)\)/)![1]);
+      // A card with no picture shows its family's wash instead: var(--card-accent-<family>).
+      return CARD_HUES[Number(el.outerHTML.match(/var\(--card-accent-(\d)\)/)![1])];
     });
     expect(worn).toEqual(cardPalettes(hues).map((p) => CARD_HUES[p]));
   });

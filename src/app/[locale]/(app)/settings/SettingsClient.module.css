@@ -43,3 +43,8 @@
     margin-top: 8px;
   }
 }
+
+/* 顯示模式's segmented choice: as wide as its words, as the publish step's 卡片類型. */
+.appearanceChoice {
+  display: flex;
+}

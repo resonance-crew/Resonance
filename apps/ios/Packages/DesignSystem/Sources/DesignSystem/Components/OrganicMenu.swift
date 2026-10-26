@@ -582,10 +582,10 @@ struct MenuColors {
     init(hue: Double?) {
         self.hue = hue
         if let hue {
-            border = Palette.hue(.nodePen, hue)
-            borderHover = Palette.hue(.menuPenHover, hue)
-            cream = Palette.hue(.menuPaper, hue)
-            divider = Palette.hue(.cardRule, hue, alpha: 0.4)
+            border = Palette.hue(.pen, hue)
+            borderHover = Palette.hue(.penDeep, hue)
+            cream = Palette.hue(.menu, hue)
+            divider = Palette.hue(.separator, hue, alpha: 0.4)
         } else {
             border = Tokens.terracotta
             borderHover = Tokens.terracottaDeep
@@ -599,7 +599,7 @@ struct MenuColors {
         let t = pressed ? 0.45 : 0.25
         guard let hue else { return Palette.mix(.yellow, t, .cream) }
         func wash(_ scheme: PaletteScheme) -> Color {
-            let paper = Palette.hueOKLCH(.menuPaper, hue, scheme)
+            let paper = Palette.hueOKLCH(.menu, hue, scheme)
             let yellow = OKLCHColor.components(Palette.oklch(.yellow, accent: .terracotta, scheme: scheme)) ?? (0.88, 0.1, 90, 1)
             let m = Palette.mixOKLCH(yellow, t, (paper.L, paper.C, paper.H, 1))
             return OKLCHColor.color(m.L, m.C, m.H)

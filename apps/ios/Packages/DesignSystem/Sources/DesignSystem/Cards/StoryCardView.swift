@@ -114,7 +114,7 @@ public struct StoryCardView: View {
 
             if !content.tags.isEmpty {
                 FlowRow(spacing: 6) {
-                    ForEach(content.tags.prefix(4), id: \.self) { TagPill($0, fill: palette.fill) }
+                    ForEach(content.tags.prefix(4), id: \.self) { TagPill($0, fill: palette.tag) }
                 }
                 .padding(.top, 8)
             }

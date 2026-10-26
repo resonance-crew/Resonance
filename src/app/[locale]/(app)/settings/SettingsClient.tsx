@@ -21,7 +21,9 @@ import { DeleteAccountSection } from './DeleteAccountSection';
 import { NotificationsSection } from './NotificationsSection';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useTweaks } from '@/components/providers/TweaksPanel';
-import { isAccent } from '@/lib/design/appearance';
+import { SCHEME_CHOICES, type SchemeChoice } from '@/lib/design/appearance';
+import { SegmentedActionBar, type SegmentSpec } from '@/components/molecules/SegmentedActionBar/SegmentedActionBar';
+import { ThemeSwatches } from './ThemeSwatches';
 import { useIsMobile } from '@/lib/hooks/useIsMobile';
 import { usePathname, useRouter } from '@/i18n/navigation';
 import type { Locale } from '@/lib/db/types';
@@ -60,6 +62,13 @@ const SECTIONS: Section[] = [
 function profilePaths(...handles: string[]): string[] {
   return [...new Set(handles.flatMap((h) => [`/u/${h}`, `/u/${encodeURIComponent(h)}`]))];
 }
+
+/** Each 顯示模式 choice's words. */
+const SCHEME_LABEL: Record<SchemeChoice, 'schemeSystem' | 'schemeLight' | 'schemeDark'> = {
+  system: 'schemeSystem',
+  light: 'schemeLight',
+  dark: 'schemeDark',
+};
 
 /** Hand-drawn glyph leading each row in the phone settings menu. */
 const SECTION_ICONS: Record<Section, IconName> = {
@@ -353,17 +362,39 @@ export function SettingsClient({ initial }: SettingsClientProps) {
         )}
         {active === 'appearance' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <Field label={tTweaks('scheme')}>
+              {/* A segmented choice, as the publish step's 卡片類型: a quiet well for its extent,
+                  the chosen side the tonal face with its label, the others a muted ink that reads on the well. */}
+              <div className={styles.appearanceChoice}>
+                <SegmentedActionBar
+                  fill="var(--color-cream-dark)"
+                  segments={SCHEME_CHOICES.map((choice) => {
+                    const chosen = tweaks.scheme === choice;
+                    return {
+                      key: choice,
+                      label: tTweaks(SCHEME_LABEL[choice]),
+                      fill: chosen ? 'var(--button-tonal)' : 'transparent',
+                      textColor: chosen ? 'var(--button-on-tonal)' : 'var(--segment-idle-ink)',
+                      hoverOverlay: 'color-mix(in oklch, var(--toward-ink) 5%, transparent)',
+                      pressed: chosen,
+                      onClick: () => updateTweaks({ scheme: choice }),
+                    } satisfies SegmentSpec;
+                  })}
+                />
+              </div>
+            </Field>
             <Field label={tTweaks('accentColor')}>
-              <Select
-                seed={71}
+              <ThemeSwatches
                 value={tweaks.accentColor}
-                onChange={(v) => isAccent(v) && updateTweaks({ accentColor: v })}
-              >
-                <option value="terracotta">{tTweaks('accentTerracotta')}</option>
-                <option value="sage">{tTweaks('accentSage')}</option>
-                <option value="lavender">{tTweaks('accentLavender')}</option>
-                <option value="yellow">{tTweaks('accentYellow')}</option>
-              </Select>
+                onChange={(accentColor) => updateTweaks({ accentColor })}
+                label={tTweaks('accentColor')}
+                names={{
+                  terracotta: tTweaks('themeTerracotta'),
+                  sage: tTweaks('themeSage'),
+                  lavender: tTweaks('themeLavender'),
+                  yellow: tTweaks('themeYellow'),
+                }}
+              />
             </Field>
             <Field label={tTweaks('fontFamily')}>
               <Select
@@ -441,7 +472,7 @@ export function SettingsClient({ initial }: SettingsClientProps) {
             {SECTIONS.map((s, i) => {
               const danger = s === 'delete';
               const tint = danger
-                ? 'var(--color-danger, oklch(58% 0.16 25))'
+                ? 'var(--color-danger)'
                 : 'var(--color-terracotta)';
               return (
                 <Fragment key={s}>

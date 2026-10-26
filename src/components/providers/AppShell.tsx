@@ -10,11 +10,12 @@ import { useMyProfile } from '@/lib/data/hooks';
 import { useRouter, usePathname } from '@/i18n/navigation';
 import { nextQuery } from '@/lib/auth/nextPath';
 import { needsProfile, signupProfileQuery } from '@/lib/auth/afterSignIn';
+import { LEGACY_AVATAR_COLOR } from '@/lib/design/avatarColors';
 
 const PLACEHOLDER_USER = {
   initials: '··',
   handle: '',
-  accentColor: 'oklch(88% 0.08 55)',
+  accentColor: LEGACY_AVATAR_COLOR,
 };
 
 // Routes a logged-out visitor may view (public cards & profiles). Everything

@@ -72,7 +72,7 @@ export function SquareFlag({ code, size = 18, seed, label }: SquareFlagProps) {
       <path
         d={path}
         fill="none"
-        stroke="oklch(36% 0.06 60 / 0.55)"
+        stroke="var(--avatar-stroke)"
         strokeWidth={INK_LIGHT}
         strokeLinejoin="round"
       />

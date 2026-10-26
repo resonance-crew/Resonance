@@ -13,7 +13,7 @@ import UIKit
     struct Fixture: Decodable {
         let tokens: [String]
         let accents: [String: [String: [String: String]]]
-        let hueInks: [String: [String: [Double]]]
+        let hueRoles: [String: [String: [Double]]]
         struct Avatar: Decodable { let stored: String; let scheme: String; let fill: String }
         let avatars: [Avatar]
     }
@@ -117,19 +117,19 @@ import UIKit
     }
 
     @Test func hueMadeColoursArePaletteJsons() throws {
-        #expect(HueInk.allCases.map(\.paletteName).sorted() == Self.fixture.hueInks.keys.sorted())
-        for role in HueInk.allCases {
-            let want = try #require(Self.fixture.hueInks[role.paletteName])
+        #expect(HueRole.allCases.map(\.paletteName).sorted() == Self.fixture.hueRoles.keys.sorted())
+        for role in HueRole.allCases {
+            let want = try #require(Self.fixture.hueRoles[role.paletteName])
             for scheme in PaletteScheme.allCases {
                 let (L, C) = Palette.hueLC(role, scheme)
                 #expect([L, C] == want[scheme.rawValue], "\(role.paletteName) \(scheme)")
             }
         }
         // Light as drawn before there was a dark scheme; dark inside Display P3.
-        let pen = Palette.hueOKLCH(.nodePen, 290, .light)
+        let pen = Palette.hueOKLCH(.pen, 290, .light)
         #expect(pen.L == 0.52 && pen.C == 0.11 && pen.H == 290)
         for h in stride(from: 0.0, to: 360, by: 15) {
-            let d = Palette.hueOKLCH(.nodePenDeep, h, .dark)
+            let d = Palette.hueOKLCH(.emphasis, h, .dark)
             #expect(OKLCHColor.inP3(d.L, d.C, d.H))
         }
     }

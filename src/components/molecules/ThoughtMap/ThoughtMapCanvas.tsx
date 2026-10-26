@@ -64,6 +64,12 @@ import { useEdgeFades } from '@/lib/hooks/useEdgeFades';
 import styles from './ThoughtMap.module.css';
 
 const GROUP_HUES = [88, 215, 290, 140, 55, 18];
+// An arrow between cards and the pill naming it: the muted ink a quarter of
+// the way to the ink, the ink itself when chosen; the chosen pill a step
+// further from the paper than a resting one (the well).
+const EDGE_INK = 'color-mix(in oklch, var(--color-text-muted), var(--color-text) 25%)';
+const EDGE_INK_CHOSEN = 'var(--color-text)';
+const EDGE_PILL_CHOSEN = 'color-mix(in oklch, var(--color-cream-dark), var(--toward-ink) 6%)';
 const GRID = 26;
 /** How long the wheel stays still before a scroll-pan counts as over. */
 const WHEEL_IDLE_MS = 160;
@@ -1055,7 +1061,7 @@ export function ThoughtMapCanvas({
   // visibly belongs to that card (matches the node's own border color).
   const linkSourceCard = linkDraft ? data.cards[linkDraft.sourceId] : undefined;
   const linkColor = linkSourceCard
-    ? `oklch(52% 0.11 ${nodeHue(linkSourceCard)})`
+    ? `oklch(var(--hue-pen) ${nodeHue(linkSourceCard)})`
     : 'var(--color-terracotta)';
 
   // --- the world -------------------------------------------------------------
@@ -1158,8 +1164,8 @@ export function ThoughtMapCanvas({
                 h={g.h}
                 R={34}
                 seed={seedFromString(g.id)}
-                fillColor={`oklch(96.5% 0.032 ${g.hue} / ${hot ? 0.92 : 0.78})`}
-                strokeColor={sel || hot ? `oklch(45% 0.1 ${g.hue})` : `oklch(60% 0.085 ${g.hue})`}
+                fillColor={`oklch(var(--hue-group) ${g.hue} / ${hot ? 0.92 : 0.78})`}
+                strokeColor={sel || hot ? `oklch(var(--hue-group-pen-hot) ${g.hue})` : `oklch(var(--hue-group-pen) ${g.hue})`}
                 strokeWidth={sel || hot ? INK_STRONG : INK_LIGHT}
                 curve={0.6}
                 cornerOffset={5}
@@ -1223,8 +1229,8 @@ export function ThoughtMapCanvas({
             const seed = seedFromString(edge.id);
             const geo = organicEdgePath(nodeRect(s), nodeRect(target), seed);
             const sel = selection?.kind === 'edge' && selection.id === edge.id;
-            // Selection darkens the ink rather than jumping to the accent.
-            const color = sel ? 'oklch(28% 0.05 60)' : 'oklch(46% 0.045 60)';
+            // Selection deepens the ink rather than jumping to the accent (in dark, brightens it).
+            const color = sel ? EDGE_INK_CHOSEN : EDGE_INK;
             return (
               <g key={edge.id}>
                 <path
@@ -1288,7 +1294,7 @@ export function ThoughtMapCanvas({
                    input focused, delete riding inside on the right. */
                 <TagPill
                   size="sm"
-                  color={sel ? 'oklch(88% 0.03 60)' : 'oklch(94% 0.02 75)'}
+                  color={sel ? EDGE_PILL_CHOSEN : 'var(--color-cream-dark)'}
                   onClick={() => act.editEdge(edge.id)}
                 >
                   {edge.label || t('edgeLabelPlaceholder')}
@@ -1335,7 +1341,7 @@ export function ThoughtMapCanvas({
                 h={g.h}
                 R={34}
                 seed={seedFromString(g.id)}
-                strokeColor={sel || hot ? `oklch(45% 0.1 ${g.hue})` : `oklch(60% 0.085 ${g.hue})`}
+                strokeColor={sel || hot ? `oklch(var(--hue-group-pen-hot) ${g.hue})` : `oklch(var(--hue-group-pen) ${g.hue})`}
                 strokeWidth={sel || hot ? INK_STRONG : INK_LIGHT}
                 curve={0.6}
                 cornerOffset={5}
@@ -1653,8 +1659,8 @@ function EdgeLabelEditor({
         h={h}
         R={h / 2}
         seed={seed + 5}
-        fillColor="oklch(88% 0.03 60)"
-        strokeColor="oklch(46% 0.045 60)"
+        fillColor={EDGE_PILL_CHOSEN}
+        strokeColor={EDGE_INK}
         strokeWidth={INK_LIGHT}
       />
       <input
@@ -1750,7 +1756,7 @@ function GroupTitleEditor({ value, placeholder, hue, seed, onChange, onCommit, o
           d={underline}
           transform="translate(0,3)"
           fill="none"
-          stroke={`oklch(48% 0.09 ${hue})`}
+          stroke={`oklch(var(--hue-group-ink) ${hue})`}
           strokeWidth={INK_LIGHT}
           strokeLinecap="round"
         />

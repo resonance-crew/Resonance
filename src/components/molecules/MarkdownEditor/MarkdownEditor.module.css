@@ -199,7 +199,7 @@
 }
 
 .toolBtn:hover:not(:disabled) {
-  --tool-btn-fill: oklch(0% 0 0 / 0.05);
+  --tool-btn-fill: color-mix(in oklch, var(--toward-ink) 5%, transparent);
 }
 
 .toolBtn:disabled {

@@ -24,3 +24,21 @@ describe('the avatar’s initials', () => {
     expect(screen.getByText('念誠')).toHaveStyle({ fontSize: `${40 * initialsScale('念誠')}px` });
   });
 });
+
+// A stored pastel is a person's colour: drawn through --av (globals.css .res-av), which dark takes to the
+// ladder's avatar step in CSS — so the server's HTML is right in either scheme. A token draws as it is.
+describe('the avatar’s colour', () => {
+  it('carries a stored colour as --av and paints with --av-fill', () => {
+    const { container } = render(<HandDrawnAvatar initials="AL" size={40} color="oklch(90% 0.05 215)" />);
+    const disc = container.firstElementChild as HTMLElement;
+    expect(disc).toHaveClass('res-av');
+    expect(disc.style.getPropertyValue('--av')).toBe('oklch(90% 0.05 215)');
+  });
+
+  it('paints a palette token as it is', () => {
+    const { container } = render(<HandDrawnAvatar initials="AL" size={40} color="var(--card-fill-2)" />);
+    const disc = container.firstElementChild as HTMLElement;
+    expect(disc).not.toHaveClass('res-av');
+    expect(disc.style.getPropertyValue('--av')).toBe('');
+  });
+});

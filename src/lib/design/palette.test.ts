@@ -4,21 +4,21 @@ import { describe, expect, it } from 'vitest';
 import { parseOklch } from './oklch';
 import {
   ACCENTS,
+  HUE_ROLES,
   PALETTE_TOKENS,
   SCHEMES,
   THEME_SPECS,
   avatarFill,
   contrast,
   cssOklch,
-  hueInk,
+  fitGamut,
+  hueColour,
   inP3,
   lightBaseOf,
   paletteFor,
   paletteForHue,
-  type HueInk,
   type Palette,
   type PaletteToken,
-  type Scheme,
   wallpaperPalette,
 } from './palette';
 import { paletteCss } from './paletteCss';
@@ -46,9 +46,13 @@ const PAIRS: [PaletteToken, PaletteToken, number][] = [
   ['color-cream', 'button-fill', 4.5],
   ['button-on-tonal', 'button-tonal', 4.5],
   ['button-on-tonal', 'color-cream', 4.5],
+  // The call-to-action band's two buttons: the verb a paper pill, the second action a deeper band.
+  ['cta-verb-ink', 'cta-ink', 4.5],
+  ['cta-ink', 'cta-ghost', 4.5],
   ['color-cream', 'danger-fill', 4.5],
   ['button-on-danger-tonal', 'button-danger-tonal', 4.5],
   ['color-danger', 'color-cream', 4],
+  ['color-ok', 'color-cream', 3.4],
   // The accent itself never carries a label; as a pen or an icon it clears 3.
   ['color-terracotta', 'color-cream', 3],
   ['field-border-hover', 'color-cream', 3],
@@ -56,6 +60,7 @@ const PAIRS: [PaletteToken, PaletteToken, number][] = [
   ['placeholder', 'color-cream', 2.4],
   ...[0, 1, 2, 3, 4, 5].flatMap((i): [PaletteToken, PaletteToken, number][] => [
     ['color-text', `card-fill-${i}` as PaletteToken, 7],
+    ['color-text', `card-tag-${i}` as PaletteToken, 7],
     [`card-note-ink-${i}` as PaletteToken, `card-fill-${i}` as PaletteToken, 4.5],
     [`card-border-${i}` as PaletteToken, `card-fill-${i}` as PaletteToken, 2.5],
   ]),
@@ -109,6 +114,38 @@ describe('palette', () => {
       expect(p['color-cream-dark'].L).toBeLessThan(p['color-cream'].L);
       expect(p['color-cream'].L).toBeLessThan(p['color-card-bg'].L);
     }
+  });
+
+  it('the hue roles read at every hue: words on their paper, pens beside it, the ink on the washes', () => {
+    const at = (role: keyof typeof HUE_ROLES, hue: number, scheme: 'light' | 'dark') => {
+      const [L, C] = HUE_ROLES[role][scheme];
+      return fitGamut({ L, C, H: hue, alpha: 1 });
+    };
+    for (const scheme of SCHEMES) {
+      const ink = paletteFor('terracotta', scheme)['color-text'];
+      for (let hue = 0; hue < 360; hue += 15) {
+        for (const role of ['ink', 'label', 'pill-ink'] as const) {
+          expect(contrast(at(role, hue, scheme), at('interior', hue, scheme)), `${scheme} ${role} at ${hue}`).toBeGreaterThan(4.5);
+        }
+        for (const role of ['pen', 'emphasis', 'group-pen-hot'] as const) {
+          expect(contrast(at(role, hue, scheme), at('interior', hue, scheme)), `${scheme} ${role} at ${hue}`).toBeGreaterThan(3);
+        }
+        for (const role of ['interior', 'tint', 'wash', 'group', 'menu'] as const) {
+          expect(contrast(ink, at(role, hue, scheme)), `${scheme} ink on ${role} at ${hue}`).toBeGreaterThan(7);
+        }
+        // A thumbnail's ground, or a pill under its own (pill-ink) words.
+        expect(contrast(ink, at('accent', hue, scheme)), `${scheme} ink on accent at ${hue}`).toBeGreaterThan(6);
+      }
+    }
+  });
+
+  it('the hue roles in light are the colours the components drew before them', () => {
+    expect(hueColour('interior', 55, 'light')).toBe('oklch(97.5% 0.012 55)');
+    expect(hueColour('accent', 140, 'light')).toBe('oklch(90% 0.06 140)');
+    expect(hueColour('pen', 290, 'light')).toBe('oklch(52% 0.11 290)');
+    expect(hueColour('separator', 88, 'light', 0.4)).toBe('oklch(55% 0.04 88 / 0.4)');
+    expect(paletteCss('oklch')).toContain('--hue-pen: 0.52 0.11;');
+    expect(paletteCss('oklch')).toContain('--hue-pen: 0.72 0.0825;');
   });
 
   it('a grey wallpaper wears terracotta', () => {
@@ -179,32 +216,6 @@ describe('palette', () => {
     expect(dark.H).toBeCloseTo(55);
     expect(contrast(paletteFor('terracotta', 'dark')['color-text'], dark)).toBeGreaterThan(4.5);
     expect(avatarFill('#abcdef', 'dark')).toBe('#abcdef');
-  });
-
-  it('a hue-made colour (a map card, a region, a menu in a card\'s colours) reads at every hue, in every theme', () => {
-    const at = (role: HueInk, h: number, s: Scheme) => hueInk(role, h, s);
-    for (const accent of ACCENTS) {
-      for (const scheme of SCHEMES) {
-        const p = paletteFor(accent, scheme);
-        for (let h = 0; h < 360; h += 10) {
-          const where = `${accent} ${scheme} ${h}`;
-          expect(contrast(p['color-text'], at('node-paper', h, scheme)), `${where} text on a map card`).toBeGreaterThan(7);
-          expect(contrast(p['color-text-muted'], at('node-paper', h, scheme)), `${where} muted on a map card`).toBeGreaterThan(4.5);
-          expect(contrast(p['color-text'], at('node-wash', h, scheme)), `${where} text on a chosen map card`).toBeGreaterThan(7);
-          expect(contrast(at('node-pen', h, scheme), at('node-paper', h, scheme)), `${where} a map card's pen`).toBeGreaterThan(3);
-          expect(contrast(at('node-pen-deep', h, scheme), at('node-wash', h, scheme)), `${where} a chosen card's pen`).toBeGreaterThan(3);
-          expect(contrast(at('region-pen-strong', h, scheme), p['color-cream']), `${where} a chosen region`).toBeGreaterThan(3);
-          expect(contrast(at('region-label-pen', h, scheme), at('region-fill', h, scheme)), `${where} a region's label`).toBeGreaterThan(4.5);
-          expect(contrast(p['color-text'], at('menu-paper', h, scheme)), `${where} a menu in a card's colours`).toBeGreaterThan(7);
-          if (scheme === 'dark') expect(inP3(at('node-pen-deep', h, scheme))).toBe(true);
-        }
-        expect(contrast(at('map-ink', 60, scheme), p['color-cream']), `${accent} ${scheme} an arrow`).toBeGreaterThan(4.5);
-        expect(contrast(p['color-text'], at('map-pill', 75, scheme)), `${accent} ${scheme} a label pill`).toBeGreaterThan(7);
-        expect(contrast(p['color-text'], at('map-pill-on', 60, scheme)), `${accent} ${scheme} a chosen label pill`).toBeGreaterThan(7);
-      }
-    }
-    // Light is what was drawn before there was a dark scheme.
-    expect(cssOklch(hueInk('node-pen', 55, 'light'))).toBe('oklch(52% 0.11 55)');
   });
 
   it('palette.css and native/fixtures/palette.json are what the palette says (npx tsx scripts/web/palette-css.ts)', () => {

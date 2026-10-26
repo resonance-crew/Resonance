@@ -52,8 +52,8 @@ struct PenNameField: View {
             note(L10n.Auth.handleChecking, color: Tokens.textMuted)
         case .available:
             HStack(spacing: 4) {
-                OrganicIcon(.check, size: 12, color: Tokens.sage, strokeWidth: 1.8)
-                note(L10n.Auth.handleAvailable, color: Tokens.sage)
+                OrganicIcon(.check, size: 12, color: Tokens.ok, strokeWidth: 1.8)
+                note(L10n.Auth.handleAvailable, color: Tokens.ok)
             }
             .accessibilityElement(children: .combine)
         case .taken:

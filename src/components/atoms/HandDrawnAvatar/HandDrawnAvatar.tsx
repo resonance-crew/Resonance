@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { avatarWobPath, initialsScale } from '@/lib/design/avatar';
 import { HandDrawnBorder } from '../HandDrawnBorder/HandDrawnBorder';
 import { INK } from '@/lib/design/strokes';
+import { personFill } from '@/lib/design/personFill';
 
 export interface HandDrawnAvatarProps {
   initials?: string;
@@ -33,9 +34,11 @@ export function HandDrawnAvatar({
     () => (src ? avatarWobPath(size, seed) : ''),
     [src, size, seed]
   );
+  // A stored colour is drawn as the scheme draws a person's colour (lib/design/personFill).
+  const disc = personFill(color);
 
   return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+    <div className={disc.className || undefined} style={{ ...disc.style, position: 'relative', width: size, height: size, flexShrink: 0 }}>
       {src ? (
         // The picture is a plain <img> clipped to the outline (an SVG <image>
         // can't load lazily, and avatars sit on every card of a feed), with
@@ -68,7 +71,7 @@ export function HandDrawnAvatar({
             <path
               d={path}
               fill="none"
-              stroke="oklch(36% 0.06 60 / 0.55)"
+              stroke="var(--avatar-stroke)"
               strokeWidth={INK}
               strokeLinejoin="round"
             />
@@ -82,8 +85,8 @@ export function HandDrawnAvatar({
             R={R}
             seed={seed}
             mag={mag}
-            fillColor={color}
-            strokeColor="oklch(36% 0.06 60 / 0.55)"
+            fillColor={disc.fill}
+            strokeColor="var(--avatar-stroke)"
             strokeWidth={INK}
             segmentsH={1}
             segmentsV={1}

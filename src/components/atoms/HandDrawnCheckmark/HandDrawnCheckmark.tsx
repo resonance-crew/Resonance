@@ -12,7 +12,7 @@ export interface HandDrawnCheckmarkProps {
 
 export function HandDrawnCheckmark({
   size = 14,
-  color = 'var(--color-sage, oklch(55% 0.13 140))',
+  color = 'var(--verified-mark)',
   strokeWidth = 1.8,
   title = 'Verified',
   style,

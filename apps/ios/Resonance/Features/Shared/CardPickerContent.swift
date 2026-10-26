@@ -171,7 +171,7 @@ struct CardPickList<Lead: View, Empty: View>: View {
         return Button { onPick(card) } label: {
             HStack(spacing: 12) {
                 // The avatar's shape at a smaller radius (design §6); chosen, washed in the accent with the grain and a tick.
-                HandDrawnThumb(url: card.imageUrl.flatMap(URL.init(string:)), fill: Palette.hue(.cardTile, card.accentHue ?? 55),
+                HandDrawnThumb(url: card.imageUrl.flatMap(URL.init(string:)), fill: Palette.hue(.accent, card.accentHue ?? 55),
                                size: 40, seed: Double(i * 7 + 3), chosen: chosen)
                 VStack(alignment: .leading, spacing: 3) {
                     // One line: a long title ends in an ellipsis rather than making its row taller.

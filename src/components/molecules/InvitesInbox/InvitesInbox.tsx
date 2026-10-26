@@ -88,7 +88,7 @@ export function InvitesInbox() {
         marginBottom: 32,
         padding: '20px 22px',
         borderRadius: 18,
-        background: 'oklch(95% 0.04 75 / 0.6)',
+        background: 'color-mix(in oklch, var(--color-terracotta-light) 30%, transparent)',
       }}
     >
       {items.length > 0 && (
@@ -112,8 +112,8 @@ export function InvitesInbox() {
               style={{
                 padding: '12px 14px',
                 borderRadius: 12,
-                background: 'oklch(98% 0.01 75)',
-                border: '1px solid oklch(86% 0.02 75)',
+                background: 'var(--color-card-bg)',
+                border: '1px solid color-mix(in oklch, var(--field-border) 50%, var(--color-cream-dark))',
               }}
             >
               <div

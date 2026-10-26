@@ -189,7 +189,7 @@ struct ShareByline: View {
                     switch byline {
                     case let .named(name, _, _, verified, _):
                         Text(name).font(Self.font(.body, R.nameSize, R.nameWeight)).foregroundStyle(Tokens.text).lineLimit(1)
-                        if verified { OrganicIcon(.verified, size: R.verifiedSize, color: Tokens.sage, strokeWidth: Tokens.ink) }
+                        if verified { OrganicIcon(.verified, size: R.verifiedSize, color: Tokens.verifiedMark, strokeWidth: Tokens.ink) }
                     case let .anonymous(label):
                         Text(label).font(Self.font(.body, R.nameSize, R.nameWeight)).foregroundStyle(Tokens.textMuted).lineLimit(1)
                     }
