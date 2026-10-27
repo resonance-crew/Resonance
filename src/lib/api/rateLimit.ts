@@ -40,6 +40,10 @@ export const LIMITS = {
   note: { max: 20, windowMs: HOUR },
   /** Messages (only the first of a conversation rings). */
   message: { max: 300, windowMs: HOUR },
+  /** Reacting to a message (PUT …/reaction): quiet — no bell, no push — but a write on the other person's thread. */
+  react: { max: 300, windowMs: DAY },
+  /** Unsending a message: rewrites it and its quotes, keeps a copy for moderation, and tells the recipient's phone. */
+  unsend: { max: 100, windowMs: DAY },
   report: { max: 20, windowMs: DAY },
   /** /api/upload: files, and their bytes (see `weight`). */
   upload: { max: 50, windowMs: DAY },
