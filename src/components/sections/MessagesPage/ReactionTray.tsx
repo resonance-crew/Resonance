@@ -24,7 +24,7 @@ export interface ReactionTrayProps {
 
 /**
  * The five reactions over a held message (round 16 §3, §4): a borderless
- * paper sheet (atoms/PaperSheet) holding ❤️ 🥹 😂 🤗 👍 in that order, each a
+ * paper sheet (atoms/PaperSheet) holding ❤️ 🥹 😆 🫂 👍 in that order, each a
  * 44 cell with its sticker at 32, popping in one after another. The viewer's
  * own sits on a terracotta-light wobbly disc and is pressed: choosing it
  * again takes it back. A toolbar to the keyboard — one stop in the Tab order,

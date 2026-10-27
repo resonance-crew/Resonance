@@ -94,7 +94,7 @@ export interface ReactionCount {
 
 /**
  * A message's reactions as its chips show them: each distinct reaction once,
- * in the tray's order (❤️ 🥹 😂 🤗 👍), with how many gave it and whether the
+ * in the tray's order (❤️ 🥹 😆 🫂 👍), with how many gave it and whether the
  * viewer did. None, an empty list.
  */
 export function reactionCounts(reactions: Message['reactions'], viewerId: string): ReactionCount[] {

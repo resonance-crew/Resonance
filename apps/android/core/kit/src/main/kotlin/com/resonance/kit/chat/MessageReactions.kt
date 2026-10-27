@@ -9,7 +9,7 @@ import java.util.Date
  * takes it back.
  */
 object MessageReactions {
-    /** ❤️ heart · 🥹 moved · 😂 laugh · 🤗 hug · 👍 thumbs — that order everywhere. */
+    /** ❤️ heart · 🥹 moved · 😆 laugh · 🫂 hug · 👍 thumbs — that order everywhere. */
     val KNOWN: List<String> = listOf("heart", "moved", "laugh", "hug", "thumbs")
 
     /** How long after it was sent a message may be unsent (the server's `UNSEND_WINDOW_MS`). */
