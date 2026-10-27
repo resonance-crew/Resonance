@@ -124,6 +124,9 @@ struct PublishStep: View {
         compact ? Tokens.publishSectionGapCompact : Tokens.publishSectionGap
     }
     static let labelGap: CGFloat = Tokens.publishLabelGap
+    /// The step's content as its scroll holds it (padding included): where the tag field measures its own top,
+    /// so a change above it — not a scroll — is what moves it (``TagField``).
+    static let space = "publishStepContent"
 
     // MARK: The heading at the split
 
@@ -213,7 +216,7 @@ struct PublishStep: View {
 
     private var tags: some View {
         @Bindable var model = model
-        // The label and the chosen tags share the row above the field (round 16 §1).
+        // The label on its own line, the chosen tags under it, then the field (round 16 §1, review S1).
         return TagField(tags: model.values.tags, draft: $model.tagDraft, placeholder: L10n.Write.tagsPlaceholder,
                         suggesting: model.suggestingTags, error: model.tagError, onRemove: model.removeTag, onAdd: model.addTag,
                         onSuggest: { Task { await model.suggestTags() } }, onShift: onShift) {
@@ -317,8 +320,10 @@ struct PublishStep: View {
             .loading(model.pending && model.busyVerb == .leave)
     }
 
+    /// A section's label (PublishStep's `.label`): in sentence case, as the web and Android set it — 「Tags」,
+    /// 「Card type」, never TAGS (round 16 review F15).
     private func label(_ text: String) -> some View {
-        Text(text.uppercased())
+        Text(text)
             .font(AppFonts.body(Tokens.labelSize, weight: .semibold))
             .tracking(Tokens.labelSize * 0.06)
             .foregroundStyle(Tokens.textMuted)

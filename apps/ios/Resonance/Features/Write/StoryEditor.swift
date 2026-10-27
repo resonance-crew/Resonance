@@ -484,46 +484,87 @@ struct StoryFormatBar: View {
     /// The wave's place above the row, where the paper begins.
     static let waveTop: CGFloat = 8
     @State private var fades = (leading: false, trailing: false)
+    /// Where each tool that is on lies across the row's visible width (by its id), and that width: a tool
+    /// that is on is never faded at an end (review F3: the 連結 tool's wash was cut under the trailing fade).
+    @State private var onFrames: [String: CGRect] = [:]
+    @State private var rowWidth: CGFloat = 0
+
+    /// The tools that are on now, by id, in the row's order.
+    private var onTools: [String] {
+        Self.toolOrder.filter { id in
+            switch id {
+            case "bold": bridge.active.bold
+            case "italic": bridge.active.italic
+            case "link": bridge.link != nil
+            case "h2": bridge.active.h2
+            case "h3": bridge.active.h3
+            case "quote": bridge.active.blockquote
+            case "bullets": bridge.active.bulletList
+            case "numbers": bridge.active.orderedList
+            default: false
+            }
+        }
+    }
+
+    /// The row's tools in order, by id.
+    static let toolOrder = ["image", "card", "bold", "italic", "link", "h2", "h3", "quote", "bullets", "numbers"]
 
     var body: some View {
         HStack(spacing: 0) {
-            ScrollView(.horizontal) {
-                HStack(spacing: 2) {
-                    tool(L10n.Write.Editor.insertImage, icon: .image, busy: uploadingImage, seed: 77, action: onInsertImage)
-                        .disabled(uploadingImage)
-                    tool(L10n.Write.Editor.insertCard, icon: .cards, seed: 70, action: onInsertCard)
-                    rule(3)
-                    tool(L10n.Write.Editor.bold, on: bridge.active.bold, seed: 21) { bridge.exec("bold") }
-                    tool(L10n.Write.Editor.italic, on: bridge.active.italic, seed: 28) { bridge.exec("italic") }
-                    // On (washed) while the selection is in a link.
-                    tool(L10n.Write.Editor.link, on: bridge.link != nil, icon: .link, seed: 31, action: onLink)
-                    rule(9)
-                    tool("H2", spoken: L10n.Write.Editor.h2, on: bridge.active.h2, seed: 35) { bridge.exec("h2") }
-                    tool("H3", spoken: L10n.Write.Editor.h3, on: bridge.active.h3, seed: 42) { bridge.exec("h3") }
-                    rule(15)
-                    tool(L10n.Write.Editor.quote, on: bridge.active.blockquote, seed: 63) { bridge.exec("blockquote") }
-                    tool(L10n.Write.Editor.bulletList, on: bridge.active.bulletList, seed: 49) { bridge.exec("bulletList") }
-                    tool(L10n.Write.Editor.orderedList, on: bridge.active.orderedList, seed: 56) { bridge.exec("orderedList") }
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal) {
+                    // Android's measures (review F3): the tools side by side, 8 in from the row's ends.
+                    HStack(spacing: 0) {
+                        tool(L10n.Write.Editor.insertImage, id: "image", icon: .image, busy: uploadingImage, seed: 77, action: onInsertImage)
+                            .disabled(uploadingImage)
+                        tool(L10n.Write.Editor.insertCard, id: "card", icon: .cards, seed: 70, action: onInsertCard)
+                        rule(3)
+                        tool(L10n.Write.Editor.bold, id: "bold", on: bridge.active.bold, seed: 21) { bridge.exec("bold") }
+                        tool(L10n.Write.Editor.italic, id: "italic", on: bridge.active.italic, seed: 28) { bridge.exec("italic") }
+                        // On (washed) while the selection is in a link.
+                        tool(L10n.Write.Editor.link, id: "link", on: bridge.link != nil, icon: .link, seed: 31, action: onLink)
+                        rule(9)
+                        tool("H2", id: "h2", spoken: L10n.Write.Editor.h2, on: bridge.active.h2, seed: 35) { bridge.exec("h2") }
+                        tool("H3", id: "h3", spoken: L10n.Write.Editor.h3, on: bridge.active.h3, seed: 42) { bridge.exec("h3") }
+                        rule(15)
+                        tool(L10n.Write.Editor.quote, id: "quote", on: bridge.active.blockquote, seed: 63) { bridge.exec("blockquote") }
+                        tool(L10n.Write.Editor.bulletList, id: "bullets", on: bridge.active.bulletList, seed: 49) { bridge.exec("bulletList") }
+                        tool(L10n.Write.Editor.orderedList, id: "numbers", on: bridge.active.orderedList, seed: 56) { bridge.exec("orderedList") }
+                    }
+                    .padding(.horizontal, Self.rowInset)
                 }
-                .padding(.horizontal, 12)
-            }
-            .scrollIndicators(.hidden)
-            .onScrollGeometryChange(for: [Bool].self) { geo in
-                let range = geo.contentSize.width - geo.containerSize.width
-                return [range > 1 && geo.contentOffset.x > 1, range > 1 && geo.contentOffset.x < range - 1]
-            } action: { _, ends in
-                fades = (ends[0], ends[1])
-            }
-            .mask {
-                HStack(spacing: 0) {
-                    LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
-                        .frame(width: fades.leading ? Self.fade : 0)
-                    Color.black
-                    LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
-                        .frame(width: fades.trailing ? Self.fade : 0)
+                .scrollIndicators(.hidden)
+                .coordinateSpace(.named(Self.rowSpace))
+                .onScrollGeometryChange(for: [Bool].self) { geo in
+                    let range = geo.contentSize.width - geo.containerSize.width
+                    return [range > 1 && geo.contentOffset.x > 1, range > 1 && geo.contentOffset.x < range - 1]
+                } action: { _, ends in
+                    fades = (ends[0], ends[1])
                 }
-                .animation(.easeOut(duration: 0.15), value: fades.leading)
-                .animation(.easeOut(duration: 0.15), value: fades.trailing)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { rowWidth = $0 }
+                // A tool coming on out of sight (the caret into a link, a heading, a list) is scrolled into view, by
+                // the least distance that shows it — and one already on when the bar comes back with the keyboard.
+                .onChange(of: onTools) { before, now in
+                    guard let first = now.first(where: { !before.contains($0) }) else { return }
+                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(first) }
+                }
+                .task {
+                    // After the row's first layout: the bar is made again each time the story takes the focus.
+                    try? await Task.sleep(for: .milliseconds(50))
+                    if let first = onTools.first { proxy.scrollTo(first) }
+                }
+                .mask {
+                    let fade = Self.fadeWidths(fades: fades, onFrames: Array(onFrames.values), width: rowWidth)
+                    HStack(spacing: 0) {
+                        LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: fade.leading)
+                        Color.black
+                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: fade.trailing)
+                    }
+                    .animation(.easeOut(duration: 0.15), value: fade.leading)
+                    .animation(.easeOut(duration: 0.15), value: fade.trailing)
+                }
             }
             // Pinned outside the row: the keyboard goes, and the bar with it.
             Button { bridge.blur() } label: {
@@ -555,6 +596,17 @@ struct StoryFormatBar: View {
 
     /// The edge fade where more of the row lies (the web's useEdgeFades).
     static let fade: CGFloat = 16
+    /// The row's tools start this far in from its ends (Android's DockTool row).
+    static let rowInset: CGFloat = 8
+    private static let rowSpace = "storyFormatRow"
+
+    /// How wide each end's fade is: ``fade`` where more of the row lies that way — but none over a tool that is
+    /// on (its wash would read as cut), whose frame across the visible row is in `onFrames`.
+    static func fadeWidths(fades: (leading: Bool, trailing: Bool), onFrames: [CGRect], width: CGFloat) -> (leading: CGFloat, trailing: CGFloat) {
+        let leadingCovers = onFrames.contains { $0.minX < fade && $0.maxX > 0 }
+        let trailingCovers = width > 0 && onFrames.contains { $0.maxX > width - fade && $0.minX < width }
+        return (fades.leading && !leadingCovers ? fade : 0, fades.trailing && !trailingCovers ? fade : 0)
+    }
 
     /// The toolbar's vertical Divider (amplitude 1.2, 4 either side), as tall as a button's face.
     private func rule(_ offset: Double) -> some View {
@@ -566,7 +618,7 @@ struct StoryFormatBar: View {
 
     /// ToolButton: 13pt semibold on nothing, or on its wobbly terracotta wash when on; a 44 target
     /// round a 36 face.
-    private func tool(_ label: String, spoken: String? = nil, on: Bool = false, icon: IconName? = nil, busy: Bool = false,
+    private func tool(_ label: String, id: String, spoken: String? = nil, on: Bool = false, icon: IconName? = nil, busy: Bool = false,
                       seed: Double, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 5) {
@@ -587,6 +639,11 @@ struct StoryFormatBar: View {
         .buttonStyle(ToolButtonStyle())
         .accessibilityLabel(spoken ?? label)
         .accessibilityAddTraits(on ? .isSelected : [])
+        .id(id)
+        // Where a tool that is on lies across the visible row, so no fade covers it.
+        .onGeometryChange(for: CGRect?.self) { on ? $0.frame(in: .named(Self.rowSpace)) : nil } action: { frame in
+            onFrames[id] = frame
+        }
     }
 }
 

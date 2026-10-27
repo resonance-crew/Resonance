@@ -88,6 +88,18 @@ extension PressSheet {
     public static var paper: Color {
         Palette.schemed(light: Tokens.menuPaper, dark: Palette.mix(.menuPaper, 0.94, .towardInk))
     }
+
+    /// The disc under the viewer's own reaction in the tray: the accent's light wash on paper; at night the
+    /// accent itself at 30 % over the tray's raised paper (review F4: the light wash there, ≈ 1.2 : 1 against
+    /// the paper, all but vanished — this lands near L 38 % on the paper's 28 %). The web's `.trayWash`.
+    public static let chosenDisc: Color = Palette.made { accent, scheme in
+        func token(_ t: PaletteToken) -> (L: Double, C: Double, H: Double, alpha: Double) {
+            OKLCHColor.components(Palette.oklch(t, accent: accent, scheme: scheme)) ?? (0, 0, 0, 1)
+        }
+        guard scheme == .dark else { return token(.terracottaLight) }
+        let nightPaper = Palette.mixOKLCH(token(.menuPaper), 0.94, token(.towardInk))
+        return Palette.mixOKLCH(token(.terracotta), 0.3, nightPaper)
+    }
 }
 
 /// The sheet's paper and grain behind its content.
@@ -195,13 +207,33 @@ public struct ReactionChips: View {
 }
 
 /// The chips' measures: 18 stickers in a 24 capsule, 3 of paper at its ends, a 2 ring round it; it
-/// overlaps the bubble's edge by 6.
+/// overlaps the bubble's edge by 6. A finger's target round it is at least 44 × 44 (review S7).
 public nonisolated enum ReactionChipMetrics {
     public static let sticker: CGFloat = 18
     public static let height: CGFloat = 24
     public static let padX: CGFloat = 3
     public static let ring: CGFloat = 2
     public static let overlap: CGFloat = 6
+    public static let target: CGFloat = 44
+}
+
+/// A tap target at least `side` × `side`, centred on what it is given (an unseen `contentShape`): a small
+/// control — a reaction chip — keeps a finger's 44 while it is drawn smaller.
+public nonisolated struct MinimumTarget: Shape {
+    public var side: CGFloat
+
+    public init(side: CGFloat = ReactionChipMetrics.target) {
+        self.side = side
+    }
+
+    public func path(in rect: CGRect) -> Path {
+        Path(Self.frame(rect, side: side))
+    }
+
+    /// `rect` grown about its centre to at least `side` on each axis.
+    public static func frame(_ rect: CGRect, side: CGFloat) -> CGRect {
+        rect.insetBy(dx: -max(0, side - rect.width) / 2, dy: -max(0, side - rect.height) / 2)
+    }
 }
 
 // MARK: - The unsent line

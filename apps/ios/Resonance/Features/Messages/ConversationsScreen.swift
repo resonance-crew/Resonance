@@ -31,7 +31,7 @@ struct ConversationsScreen: View {
                     ConversationsSkeleton()
                 }
                 ForEach(store.conversations) { convo in
-                    ConversationRow(person: convo.other, preview: preview(convo), time: convo.sentAt.map(Self.time),
+                    ConversationRow(person: convo.other, preview: preview(convo), time: convo.sentAt.map { Self.time($0) },
                                     unread: convo.unread)
                         .id(convo.other.id)
                 }
@@ -85,12 +85,13 @@ struct ConversationsScreen: View {
         return (fromMe ? L10n.Messages.youPrefix : "") + shown
     }
 
-    /// Today: the time, two-digit hour as the web's Intl (下午03:04); earlier: the date (9/29).
-    static func time(_ date: Date) -> String {
-        let style = Date.FormatStyle(locale: Strings.shared.locale)
-        return Calendar.current.isDateInToday(date)
-            ? date.formatted(style.hour(.twoDigits(amPM: .abbreviated)).minute(.twoDigits))
-            : date.formatted(style.month(.defaultDigits).day(.defaultDigits))
+    /// Today: the time as the thread says it (下午3:04, ``ThreadScreen/time(_:language:)``); earlier: the date (9/29).
+    static func time(_ date: Date, now: Date = .now, language: Strings.Language = Strings.shared.language) -> String {
+        guard Calendar.current.isDate(date, inSameDayAs: now) else {
+            let locale = Locale(identifier: language == .zhTW ? "zh-Hant-TW" : "en")
+            return date.formatted(Date.FormatStyle(locale: locale).month(.defaultDigits).day(.defaultDigits))
+        }
+        return ThreadScreen.time(date, language: language)
     }
 }
 

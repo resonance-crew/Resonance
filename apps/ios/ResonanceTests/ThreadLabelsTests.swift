@@ -11,17 +11,18 @@ import Testing
     let afternoon = Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: 29, hour: 15, minute: 4))!
 
     @Test func aTimeLabelReadsAsItDoesOnTheOtherPlatforms() {
-        #expect(ThreadScreen.time(afternoon, language: .zhTW) == "下午 3:04")
+        // One time of day across the chat (round 16 review F5): no space after 下午, no leading zero.
+        #expect(ThreadScreen.time(afternoon, language: .zhTW) == "下午3:04")
         #expect(ThreadScreen.time(afternoon, language: .en) == "3:04 PM")
         #expect(ThreadScreen.day(afternoon, language: .zhTW) == "9月29日")
         #expect(ThreadScreen.day(afternoon, language: .en) == "September 29")
-        #expect(ThreadScreen.full(afternoon, language: .zhTW) == "9月29日 下午03:04")
-        #expect(ThreadScreen.full(afternoon, language: .en) == "September 29 at 03:04 PM")
+        #expect(ThreadScreen.full(afternoon, language: .zhTW) == "9月29日 下午3:04")
+        #expect(ThreadScreen.full(afternoon, language: .en) == "September 29 at 3:04 PM")
     }
 
     @Test func aResultSaysTheTimeTodayTheDayThisYearAndTheYearBefore() {
         let later = afternoon.addingTimeInterval(3 * 3600)
-        #expect(ThreadScreen.resultTime(afternoon, now: later, language: .zhTW) == "下午 3:04")
+        #expect(ThreadScreen.resultTime(afternoon, now: later, language: .zhTW) == "下午3:04")
         let nextMonth = Calendar.current.date(byAdding: .month, value: 1, to: afternoon)!
         #expect(ThreadScreen.resultTime(afternoon, now: nextMonth, language: .zhTW) == "9月29日")
         let nextYear = Calendar.current.date(byAdding: .year, value: 1, to: afternoon)!

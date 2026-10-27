@@ -259,6 +259,43 @@ struct OrganicModalPresenter<Card: View>: ViewModifier {
     }
 }
 
+/// Whether an organic modal is up (round 16 review F8): the app softens the screen under it by 2 pt
+/// (``View/softenedUnderModals()`` on its root), as the web's Modal backdrop blurs what it covers — the
+/// press layer over a thread does the same (``View/softened(_:)``), so a confirm a tap after it looks alike.
+/// Counted, as one modal can open over another's close.
+@MainActor @Observable public final class ModalBackdrop {
+    public static let shared = ModalBackdrop()
+    public private(set) var depth = 0
+    public var isUp: Bool { depth > 0 }
+
+    func raise() { depth += 1 }
+    func lower() { depth = max(0, depth - 1) }
+}
+
+/// How far the screen under a modal or the press layer is softened (the web's `blur(2px)`).
+public nonisolated enum Soften {
+    public static let radius: CGFloat = 2
+    public static let duration: Double = 0.15
+}
+
+extension View {
+    /// Softens this view by ``Soften/radius`` while `on`, fading in and out with the scrim over it.
+    public func softened(_ on: Bool) -> some View {
+        animation(.easeOut(duration: Soften.duration)) { $0.blur(radius: on ? Soften.radius : 0) }
+    }
+
+    /// The app's root: softened while an organic modal is up over it (``ModalBackdrop``).
+    public func softenedUnderModals() -> some View {
+        modifier(SoftenedUnderModals())
+    }
+}
+
+private struct SoftenedUnderModals: ViewModifier {
+    func body(content: Content) -> some View {
+        content.softened(ModalBackdrop.shared.isUp)
+    }
+}
+
 struct OrganicModalStage<Card: View>: View {
     @Binding var isPresented: Bool
     @Binding var coverShown: Bool
@@ -268,6 +305,8 @@ struct OrganicModalStage<Card: View>: View {
     let dismissible: Bool
     let card: () -> Card
     @State private var shown = false
+    /// This modal counts toward ``ModalBackdrop`` (from its appearing to its closing).
+    @State private var raised = false
 
     var body: some View {
         GeometryReader { geo in
@@ -310,13 +349,26 @@ struct OrganicModalStage<Card: View>: View {
         }
         .onAppear {
             withAnimation(.timingCurve(0.2, 0.9, 0.3, 1.05, duration: 0.28)) { shown = true }
+            if !raised {
+                raised = true
+                ModalBackdrop.shared.raise()
+            }
         }
         .onChange(of: isPresented) { _, open in
             guard !open else { return }
+            // The screen under it sharpens as the scrim lifts.
+            lowerBackdrop()
             withAnimation(.easeIn(duration: 0.16)) { shown = false } completion: {
                 withTransaction(\.disablesAnimations, true) { coverShown = false }
             }
         }
+        .onDisappear(perform: lowerBackdrop)
+    }
+
+    private func lowerBackdrop() {
+        guard raised else { return }
+        raised = false
+        ModalBackdrop.shared.lower()
     }
 
     private func close() {

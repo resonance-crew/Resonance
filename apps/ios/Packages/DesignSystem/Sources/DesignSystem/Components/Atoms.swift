@@ -18,6 +18,8 @@ public struct TagPill: View {
     var seed: Double?
     var size: Size
     var outlined: Bool
+    var quiet: Bool
+    var removeLabel: String?
     var onRemove: (() -> Void)?
 
     /// The web's TagPill: auto wobble and the given fill. A tag on a card (sm,
@@ -26,13 +28,20 @@ public struct TagPill: View {
     /// `outlined` overrides that (default: lg only) for a pill that sits on
     /// bare page paper rather than inside a framed card — the shelves'
     /// "anonymous" badge is cream-dark on the cream page and vanishes without
-    /// its rim. `onRemove` adds its hand-drawn × (the writer's chosen tags).
-    public init(_ text: String, fill: Color = Tokens.yellow, seed: Double? = nil, size: Size = .md, outlined: Bool? = nil, onRemove: (() -> Void)? = nil) {
+    /// its rim. `onRemove` adds its hand-drawn × (the writer's chosen tags),
+    /// which VoiceOver names `removeLabel` (which tag: 「移除標籤：日常」).
+    /// `quiet` (TagPill's `quiet`, the writer's chosen tags beside the publish
+    /// button, round 16 review S2): its rim the soft pen at INK_LIGHT, its words
+    /// at 500, its × in the muted ink.
+    public init(_ text: String, fill: Color = Tokens.yellow, seed: Double? = nil, size: Size = .md, outlined: Bool? = nil,
+                quiet: Bool = false, removeLabel: String? = nil, onRemove: (() -> Void)? = nil) {
         self.text = text
         self.fill = fill
         self.seed = seed
         self.size = size
         self.outlined = outlined ?? (size == .lg)
+        self.quiet = quiet
+        self.removeLabel = removeLabel
         self.onRemove = onRemove
     }
 
@@ -49,7 +58,7 @@ public struct TagPill: View {
         let font = size.font
         HStack(spacing: 6) {
             Text(text.uppercased())
-                .font(AppFonts.body(font, weight: .semibold))
+                .font(AppFonts.body(font, weight: quiet ? .medium : .semibold))
                 .tracking(font * size.tracking)
                 .foregroundStyle(Tokens.text)
                 // CJK ink rides high in DM Sans' line box; the web nudges it 0.04em.
@@ -57,16 +66,16 @@ public struct TagPill: View {
             if let onRemove {
                 Button(action: onRemove) {
                     TagRemoveGlyph()
-                        .stroke(Tokens.text, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round))
+                        .stroke(quiet ? Tokens.textMuted : Tokens.text, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round))
                         .frame(width: 10, height: 10)
-                        .opacity(0.55)
+                        .opacity(quiet ? 1 : 0.55)
                         .padding(.leading, 2)
                         .offset(y: font * 0.02)
                         // The writer's lg pill: an invisible 44 × 44 target round the 10pt glyph (round 16 §1).
                         .contentShape(Rectangle().inset(by: size == .lg ? -17 : -8))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Remove tag")
+                .accessibilityLabel(removeLabel ?? "Remove tag")
             }
         }
         .padding(.horizontal, size.padX)
@@ -75,10 +84,13 @@ public struct TagPill: View {
             GeometryReader { geo in
                 let shape = WobRectShape(radius: geo.size.height / 2, seed: seed ?? Self.autoSeed(text))
                 shape.fill(fill)
-                if outlined { shape.stroke(Tokens.tagStroke, lineWidth: Tokens.ink) }
+                if outlined {
+                    shape.stroke(quiet ? Tokens.softPen : Tokens.tagStroke, lineWidth: quiet ? Tokens.inkLight : Tokens.ink)
+                }
             }
         }
-        .accessibilityElement(children: .combine)
+        // A removable pill is two things to VoiceOver, as on the web: the tag, and its × named for it.
+        .accessibilityElement(children: onRemove == nil ? .combine : .contain)
     }
 }
 

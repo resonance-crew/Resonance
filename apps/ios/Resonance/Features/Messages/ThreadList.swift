@@ -93,11 +93,13 @@ final class FrameBook {
     var frames: [String: CGRect] = [:]
 }
 
-/// A message pressed and held: the row, where it is on the screen, and the link it offers.
+/// A message pressed and held: the row, where it is on the screen, and the link it offers — the one under
+/// the finger (`onLink`: its rows then lead the list), else the one the message leads to.
 struct MessageMenu {
     let row: ThreadRow
     let frame: CGRect
     let link: URL?
+    var onLink = false
 }
 
 /// How far up the thread is scrolled (in screens) before "latest messages" offers the way back down.
@@ -435,7 +437,11 @@ private struct MessageItem: View {
                 // (A card the viewer can't see, sent alone: nothing to draw — not even a face beside it.)
                 SwipeToReply(enabled: model.canReply(message), mine: mine, onReply: { ctx.onReply(message) }) {
                     HStack(alignment: .bottom, spacing: 0) {
-                        if mine { Spacer(minLength: 0) } else { TheirFace(shown: !row.position.joinsBelow, ctx: ctx) }
+                        if mine {
+                            Spacer(minLength: 0)
+                        } else {
+                            TheirFace(shown: !row.position.joinsBelow, lifted: ctx.lifted == message.key, ctx: ctx)
+                        }
                         VStack(alignment: mine ? .trailing : .leading, spacing: 0) {
                             MessageCore(row: row, ctx: ctx, interactive: true)
                             if deliveryLine { DeliveryLine(message: message, model: model) }
@@ -452,8 +458,11 @@ private struct MessageItem: View {
 }
 
 /// Their face, bottom-aligned beside the last bubble of their run (`shown`); else the empty column. A tap goes to their page.
+/// While its message is lifted into the press layer it fades out (120 ms, review F9): the message may glide
+/// away from it, and a face left beside the actions' list would read as the list's.
 private struct TheirFace: View {
     let shown: Bool
+    var lifted = false
     let ctx: ThreadContext
 
     var body: some View {
@@ -470,6 +479,7 @@ private struct TheirFace: View {
             }
         }
         .frame(width: face, height: face)
+        .animation(.easeOut(duration: 0.12)) { $0.opacity(lifted ? 0 : 1) }
         .padding(.trailing, faceGap)
     }
 }
@@ -533,7 +543,8 @@ private struct MessageReactions: View {
             let chips = ReactionChips(drawn.entries, outward: mine ? .leading : .trailing, seed: seedFromId(message.key, start: 41))
             Group {
                 if let onTap {
-                    Button(action: onTap) { chips.contentShape(Rectangle()) }.buttonStyle(.plain)
+                    // A finger's 44 × 44 round the 24-tall chip, centred on it and unseen (review S7).
+                    Button(action: onTap) { chips.contentShape(MinimumTarget()) }.buttonStyle(.plain)
                 } else {
                     chips
                 }
@@ -671,7 +682,7 @@ struct MessageCore: View {
         let message = row.message
         let frame = ctx.frames.frames[message.key] ?? .zero
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        ctx.onMenu(MessageMenu(row: row, frame: frame, link: link ?? carried.link(of: message)))
+        ctx.onMenu(MessageMenu(row: row, frame: frame, link: link ?? carried.link(of: message), onLink: link != nil))
     }
 }
 

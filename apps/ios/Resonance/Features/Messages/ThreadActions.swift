@@ -3,49 +3,89 @@ import ResonanceKit
 import SwiftUI
 
 // What a long-press on a message offers (round 16 §3, LINE's and Instagram's way): the thread dims and
-// the message is lifted where it lies — the lift is what says it is the one chosen — with the five
-// reactions always directly above it and its actions always directly below: Reply, Copy, the link it
-// leads to (Open, Copy), 收回 for one's own plain message of the last day, 檢舉這則訊息 for theirs,
-// and Retry / Delete for one that didn't go, over a quiet line with the full time. When both don't fit
-// round the message where it is, the message moves, never the menus. The twin of Android's ThreadActions.
+// softens and the message is lifted where it lies — the lift is what says it is the one chosen — with the
+// five reactions always directly above it and its actions always directly below: Reply, Copy, the link it
+// leads to (Open, Copy — leading the list when the finger was on it), 收回 for one's own plain message of
+// the last day, 檢舉這則訊息 for theirs, and Retry / Delete for one that didn't go, over a quiet line with
+// the full time. When both don't fit round the message where it is, the message moves, never the menus.
+// The twin of Android's ThreadActions.
 
 extension MessageMenu {
-    /// The list's rows for the message pressed, in their order.
+    /// A row the list can hold.
+    nonisolated enum Row: String, CaseIterable {
+        case openLink = "open-link", copyLink = "copy-link", reply, copy, unsend, report, retry, discard
+
+        /// Its glyph: 開啟連結 the arrow out and 複製連結 the link (review S8 — never 複製's twin two rows
+        /// away); 收回 the turn back, 檢舉 the flag.
+        var icon: IconName {
+            switch self {
+            case .openLink: .arrowRight
+            case .copyLink: .link
+            case .reply: .reply
+            case .copy: .copy
+            case .unsend: .restore
+            case .report: .flag
+            case .retry: .send
+            case .discard: .trash
+            }
+        }
+    }
+
+    /// Which rows the list has, in their order (pure, so it is pinned): Reply, Copy, the link's Open and Copy,
+    /// 收回, 檢舉這則訊息, then Retry and Delete for one that didn't go — the link's two first when the finger
+    /// was on it (review S8).
+    nonisolated static func rows(link: Bool, onLink: Bool, reply: Bool, copy: Bool, unsend: Bool, report: Bool,
+                                 failed: Bool) -> [Row] {
+        var rows: [Row] = []
+        let linkRows: [Row] = link ? [.openLink, .copyLink] : []
+        if onLink { rows += linkRows }
+        if reply { rows.append(.reply) }
+        if copy { rows.append(.copy) }
+        if !onLink { rows += linkRows }
+        if unsend { rows.append(.unsend) }
+        if report { rows.append(.report) }
+        if failed { rows += [.retry, .discard] }
+        return rows
+    }
+
+    /// The list's rows for the message pressed, in their order (``rows(link:onLink:reply:copy:unsend:report:failed:)``).
     /// `copied` is told when something went to the clipboard (the thread says so: nothing else would).
     func items(model: ThreadModel, reply: @escaping () -> Void, openLink: @escaping (URL) -> Void,
                copied: @escaping () -> Void, unsend: @escaping () -> Void, report: @escaping () -> Void) -> [OrganicMenuItem] {
         let message = row.message
-        var items: [OrganicMenuItem] = []
-        if model.canReply(message) {
-            items.append(OrganicMenuItem(id: "reply", title: L10n.Messages.reply, icon: .reply, action: reply))
+        let rows = Self.rows(link: link != nil, onLink: onLink && link != nil, reply: model.canReply(message), copy: !message.text.isEmpty,
+                             unsend: model.me.map { message.canUnsend(viewer: $0) } ?? false,
+                             report: !model.isMine(message) && message.delivery == .delivered && !message.isUnsent,
+                             failed: message.delivery == .failed)
+        return rows.map { row in
+            switch row {
+            case .openLink:
+                return OrganicMenuItem(id: row.rawValue, title: L10n.Messages.openLink, icon: row.icon) { if let link { openLink(link) } }
+            case .copyLink:
+                return OrganicMenuItem(id: row.rawValue, title: L10n.Messages.copyLink, icon: row.icon) {
+                    UIPasteboard.general.url = link
+                    copied()
+                }
+            case .reply:
+                return OrganicMenuItem(id: row.rawValue, title: L10n.Messages.reply, icon: row.icon, action: reply)
+            case .copy:
+                return OrganicMenuItem(id: row.rawValue, title: L10n.Native.copy, icon: row.icon) {
+                    UIPasteboard.general.string = message.text
+                    copied()
+                }
+            case .unsend:
+                // Plain colour: taking one's own words back is no danger (its confirm says what it does).
+                return OrganicMenuItem(id: row.rawValue, title: L10n.Messages.unsend, icon: row.icon, action: unsend)
+            case .report:
+                return OrganicMenuItem(id: row.rawValue, title: L10n.Safety.reportThisMessage, icon: row.icon, action: report)
+            case .retry:
+                return OrganicMenuItem(id: row.rawValue, title: L10n.Messages.retry, icon: row.icon) { model.retry(message.key) }
+            case .discard:
+                return OrganicMenuItem(id: row.rawValue, title: L10n.Messages.discardFailed, icon: row.icon, danger: true) {
+                    model.discard(message.key)
+                }
+            }
         }
-        if !message.text.isEmpty {
-            items.append(OrganicMenuItem(id: "copy", title: L10n.Native.copy, icon: .copy) {
-                UIPasteboard.general.string = message.text
-                copied()
-            })
-        }
-        if let link {
-            items.append(OrganicMenuItem(id: "open-link", title: L10n.Messages.openLink, icon: .link) { openLink(link) })
-            items.append(OrganicMenuItem(id: "copy-link", title: L10n.Messages.copyLink, icon: .copy) {
-                UIPasteboard.general.url = link
-                copied()
-            })
-        }
-        if let me = model.me, message.canUnsend(viewer: me) {
-            // Plain colour: taking one's own words back is no danger (its confirm says what it does).
-            items.append(OrganicMenuItem(id: "unsend", title: L10n.Messages.unsend, icon: .restore, action: unsend))
-        }
-        if !model.isMine(message), message.delivery == .delivered, !message.isUnsent {
-            items.append(OrganicMenuItem(id: "report", title: L10n.Safety.reportThisMessage, icon: .flag, action: report))
-        }
-        if message.delivery == .failed {
-            items.append(OrganicMenuItem(id: "retry", title: L10n.Messages.retry, icon: .send) { model.retry(message.key) })
-            items.append(OrganicMenuItem(id: "discard", title: L10n.Messages.discardFailed, icon: .trash, danger: true) {
-                model.discard(message.key)
-            })
-        }
-        return items
     }
 }
 
@@ -210,9 +250,12 @@ struct MessageMenuOverlay: View {
     }
 }
 
-/// A lifted message taller than the room: its top `height`, the last 24 fading out.
+/// A lifted message taller than the room: its top `height`, the last 24 fading out — cut in height only, so
+/// what hangs out at its sides (a reaction chip in the gutter) is never sliced by a straight edge (review F2).
 private struct ClippedFoot: ViewModifier {
     let height: CGFloat?
+    /// How far past the message's sides the mask reaches: past any chip in its gutter.
+    private let sides: CGFloat = 80
 
     func body(content: Content) -> some View {
         if let height {
@@ -223,6 +266,7 @@ private struct ClippedFoot: ViewModifier {
                         Color.black
                         LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 24)
                     }
+                    .padding(.horizontal, -sides)
                 }
         } else {
             content
@@ -253,7 +297,7 @@ private struct ReactionTray: View {
                         .background {
                             if current == id {
                                 WobCircleShape(seed: Double(i) * 7 + 3)
-                                    .fill(Tokens.terracottaLight)
+                                    .fill(PressSheet.chosenDisc)
                                     .padding(2)
                                     .transition(.opacity)
                             }

@@ -37,6 +37,15 @@ public struct StoryLinkCard: View {
         self.onOpen = onOpen
     }
 
+    /// A standalone address whose page was never read (round 16 review S3: a private or unpublished card, which
+    /// the server never unfurls; a story an older build wrote): the writer's card for it — the host as its
+    /// title over the address as written, beside the link glyph, on the same quiet fill; no picture, nothing
+    /// fetched. 卡片 always looks like a card.
+    public static func address(host: String, address: String, seed: Double, openLabel: String,
+                               onOpen: @escaping () -> Void) -> StoryLinkCard {
+        StoryLinkCard(title: host, description: nil, host: address, imageURL: nil, seed: seed, openLabel: openLabel, onOpen: onOpen)
+    }
+
     /// The card's look, as the web's: the chat card bubble's fill, the quote's under a finger, no stroke.
     public enum Look {
         public static let fill = Tokens.bubbleTheirs

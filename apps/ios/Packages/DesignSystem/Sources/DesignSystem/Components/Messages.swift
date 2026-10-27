@@ -167,7 +167,8 @@ public struct MessageBubble<Attachment: View>: View {
                     if let quoteLabel {
                         HStack(spacing: 5) {
                             OrganicIcon(.note, size: 13, color: Tokens.textMuted)
-                            Text(quoteLabel).font(AppFonts.body(12, oblique: true)).foregroundStyle(Tokens.textMuted)
+                            // Slanted in a Latin script only: Chinese has no italic (review S6).
+                            Text(quoteLabel).font(AppFonts.body(12, oblique: Slant.takes(quoteLabel))).foregroundStyle(Tokens.textMuted)
                         }
                     }
                     if !text.isEmpty {
