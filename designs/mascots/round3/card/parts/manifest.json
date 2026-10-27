@@ -1,0 +1,341 @@
+{
+ "name": "聆聆 Nod",
+ "prefix": "cd-",
+ "ground": [
+  350,
+  700
+ ],
+ "faceCenter": [
+  350,
+  467
+ ],
+ "height": 309,
+ "walk": "walk",
+ "viewBox": [
+  700,
+  760
+ ],
+ "scale": 0.8,
+ "parts": [
+  {
+   "name": "shadow",
+   "parent": "root",
+   "pivot": [
+    350,
+    700
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 0,
+   "x": 161.25,
+   "y": 685,
+   "w": 377.5,
+   "h": 31.25,
+   "img": "shadow.png"
+  },
+  {
+   "name": "leg-l",
+   "parent": "root",
+   "pivot": [
+    300,
+    622
+   ],
+   "angle": null,
+   "len": 78,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 1,
+   "x": 251.25,
+   "y": 602.5,
+   "w": 78.75,
+   "h": 111.25,
+   "img": "leg-l.png"
+  },
+  {
+   "name": "leg-r",
+   "parent": "root",
+   "pivot": [
+    400,
+    622
+   ],
+   "angle": null,
+   "len": 78,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 2,
+   "x": 375,
+   "y": 602.5,
+   "w": 80,
+   "h": 112.5,
+   "img": "leg-r.png"
+  },
+  {
+   "name": "arm-l",
+   "parent": "body",
+   "pivot": [
+    185,
+    508
+   ],
+   "angle": 126,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 3,
+   "x": 95,
+   "y": 486.25,
+   "w": 118.75,
+   "h": 138.75,
+   "img": "arm-l.png"
+  },
+  {
+   "name": "arm-r",
+   "parent": "body",
+   "pivot": [
+    515,
+    508
+   ],
+   "angle": 54,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 4,
+   "x": 491.25,
+   "y": 486.25,
+   "w": 117.5,
+   "h": 137.5,
+   "img": "arm-r.png"
+  },
+  {
+   "name": "torso",
+   "parent": "body",
+   "pivot": [
+    350,
+    632
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 5,
+   "x": 153.75,
+   "y": 385,
+   "w": 397.5,
+   "h": 262.5,
+   "img": "torso.png"
+  },
+  {
+   "name": "torso-alt",
+   "parent": "body",
+   "pivot": [
+    350,
+    632
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "torso",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 6,
+   "x": 153.75,
+   "y": 385,
+   "w": 397.5,
+   "h": 262.5,
+   "img": "torso-alt.png"
+  },
+  {
+   "name": "deco",
+   "parent": "body",
+   "pivot": [
+    480,
+    394
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 7,
+   "x": 276.25,
+   "y": 337.5,
+   "w": 292.5,
+   "h": 110,
+   "img": "deco.png"
+  },
+  {
+   "name": "cheeks",
+   "parent": "face",
+   "pivot": [
+    350,
+    480
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 8,
+   "x": 260,
+   "y": 462.5,
+   "w": 180,
+   "h": 26.25,
+   "img": "cheeks.png"
+  },
+  {
+   "name": "eye-l",
+   "parent": "face",
+   "pivot": [
+    300,
+    454
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 9,
+   "x": 286.25,
+   "y": 437.5,
+   "w": 27.5,
+   "h": 32.5,
+   "img": "eye-l.png"
+  },
+  {
+   "name": "eye-r",
+   "parent": "face",
+   "pivot": [
+    400,
+    454
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 10,
+   "x": 387.5,
+   "y": 438.75,
+   "w": 25,
+   "h": 30,
+   "img": "eye-r.png"
+  },
+  {
+   "name": "eye-l-shut",
+   "parent": "face",
+   "pivot": [
+    300,
+    454
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "eye-l",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 11,
+   "x": 283.75,
+   "y": 443.75,
+   "w": 32.5,
+   "h": 18.75,
+   "img": "eye-l-shut.png"
+  },
+  {
+   "name": "eye-r-shut",
+   "parent": "face",
+   "pivot": [
+    400,
+    454
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "eye-r",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 12,
+   "x": 383.75,
+   "y": 443.75,
+   "w": 32.5,
+   "h": 18.75,
+   "img": "eye-r-shut.png"
+  },
+  {
+   "name": "mouth",
+   "parent": "face",
+   "pivot": [
+    350,
+    480
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 13,
+   "x": 335,
+   "y": 471.25,
+   "w": 30,
+   "h": 15,
+   "img": "mouth.png"
+  },
+  {
+   "name": "mouth-o",
+   "parent": "face",
+   "pivot": [
+    350,
+    480
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "mouth",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 14,
+   "x": 342.5,
+   "y": 472.5,
+   "w": 15,
+   "h": 17.5,
+   "img": "mouth-o.png"
+  },
+  {
+   "name": "mouth-open",
+   "parent": "face",
+   "pivot": [
+    350,
+    480
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "mouth",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 15,
+   "x": 337.5,
+   "y": 473.75,
+   "w": 25,
+   "h": 15,
+   "img": "mouth-open.png"
+  }
+ ]
+}

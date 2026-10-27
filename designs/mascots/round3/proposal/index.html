@@ -1,0 +1,603 @@
+<title>共振角色第三輪</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&family=Playfair+Display:ital,wght@0,600;1,500&display=swap">
+<style>
+/* Layout: the round-2 page's reading column on the site's cream paper, so the three rounds sit side by side.
+   Tuck's four fixes first, then the five together, the live landing stage, each character, the critics, the call. */
+:root {
+  --paper: oklch(96.5% 0.015 75);
+  --card: oklch(98.5% 0.008 80);
+  --ink: oklch(26% 0.03 60);
+  --muted: oklch(50% 0.04 70);
+  --rule: oklch(84% 0.02 75);
+  --accent: oklch(58% 0.14 45);
+  --on-accent: oklch(99% 0.005 80);
+  --wash: oklch(91% 0.05 60);
+  --sheet: oklch(96.5% 0.015 75);
+  /* the site's two papers, shown as they are whatever the viewer's theme */
+  --day-paper: oklch(96.5% 0.015 75);
+  --night-paper: oklch(21% 0.012 60);
+  /* names the stage prototype reads */
+  --surface: var(--card); --line: var(--rule); --chip: oklch(93.5% 0.018 75); --frame: oklch(25% 0.012 60);
+  /* one colour per character, from its paper */
+  --c-tuck: oklch(66% 0.07 150);
+  --c-tag: oklch(66% 0.07 230);
+  --c-card: oklch(64% 0.08 292);
+  --c-dot: oklch(72% 0.12 90);
+  --c-night: oklch(45% 0.07 260);
+  --font-display: 'Playfair Display', 'Noto Serif TC', Georgia, serif;
+  --font-heading: 'Noto Serif TC', 'Songti TC', Georgia, serif;
+  --font-body: 'Noto Sans TC', 'PingFang TC', system-ui, sans-serif;
+  --measure: 46rem;
+  --wide: 68rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: oklch(21% 0.012 60); --card: oklch(25% 0.014 60); --ink: oklch(88% 0.02 76);
+    --muted: oklch(70% 0.03 70); --rule: oklch(38% 0.02 70); --accent: oklch(74% 0.12 52);
+    --on-accent: oklch(18% 0.01 60); --wash: oklch(32% 0.05 55); --chip: oklch(28% 0.014 60);
+    --frame: oklch(12% 0.008 60);
+    --c-tuck: oklch(74% 0.07 150); --c-tag: oklch(74% 0.07 230); --c-card: oklch(74% 0.07 292);
+    --c-dot: oklch(80% 0.11 90); --c-night: oklch(66% 0.08 260); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: oklch(21% 0.012 60); --card: oklch(25% 0.014 60); --ink: oklch(88% 0.02 76);
+  --muted: oklch(70% 0.03 70); --rule: oklch(38% 0.02 70); --accent: oklch(74% 0.12 52);
+  --on-accent: oklch(18% 0.01 60); --wash: oklch(32% 0.05 55); --chip: oklch(28% 0.014 60);
+  --frame: oklch(12% 0.008 60);
+  --c-tuck: oklch(74% 0.07 150); --c-tag: oklch(74% 0.07 230); --c-card: oklch(74% 0.07 292);
+  --c-dot: oklch(80% 0.11 90); --c-night: oklch(66% 0.08 260); color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.75;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 96px;
+}
+.wrap { max-width: var(--wide); margin: 0 auto; }
+.read { max-width: var(--measure); }
+h1, h2, h3 { font-family: var(--font-heading); font-weight: 700; text-wrap: balance; margin: 0; line-height: 1.3; }
+p { margin: 0; }
+a { color: var(--accent); }
+.latin { font-family: var(--font-display); font-weight: 600; }
+.small { font-size: 13px; color: var(--muted); }
+code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.88em; background: var(--wash); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+
+/* Masthead */
+.mast { padding-block: 56px 32px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+.eyebrow { font-size: 13px; letter-spacing: 0.08em; color: var(--muted); }
+.mast h1 { font-size: clamp(30px, 5vw, 46px); }
+.wave { position: relative; white-space: nowrap; }
+.wave svg { position: absolute; left: 0; right: 0; bottom: -10px; width: 100%; height: 12px; }
+.lede { font-size: 17px; }
+.lede + .lede { color: var(--muted); font-size: 15px; }
+
+.index { list-style: none; padding: 0; margin: 8px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.index a { display: grid; gap: 4px; padding: 14px 16px; border-radius: 14px; background: var(--card); border: 1px solid var(--rule); color: var(--ink); text-decoration: none; height: 100%; }
+.index a:hover, .index a:focus-visible { border-color: var(--accent); }
+.index .k { font-size: 12px; letter-spacing: 0.06em; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.index .n { font-family: var(--font-heading); font-size: 20px; font-weight: 700; }
+.index .o { font-size: 14px; color: var(--muted); line-height: 1.6; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.dot.tuck { background: var(--c-tuck); } .dot.tag { background: var(--c-tag); } .dot.card { background: var(--c-card); }
+.dot.dotc { background: var(--c-dot); } .dot.night { background: var(--c-night); }
+
+.pen { display: block; width: 100%; height: 14px; color: var(--rule); margin-block: 56px 40px; }
+
+/* Section heads */
+.sec-head { display: grid; gap: 8px; margin-bottom: 20px; }
+.sec-head h2 { font-size: clamp(24px, 3.4vw, 30px); }
+.sec-head p { color: var(--muted); font-size: 15px; }
+section { scroll-margin-top: 24px; }
+
+figure { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.sheet { border-radius: 12px; overflow: hidden; border: 1px solid var(--rule); background: var(--sheet); }
+.sheet img { display: block; width: 100%; height: auto; }
+figcaption { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.toggle { display: inline-flex; border: 1px solid var(--rule); border-radius: 999px; padding: 2px; gap: 2px; background: var(--card); }
+.toggle button { font: inherit; font-size: 13px; color: var(--muted); background: none; border: 0; border-radius: 999px; padding: 4px 12px; min-height: 30px; cursor: pointer; }
+.toggle button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.toggle button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Tuck's four fixes */
+.four { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; counter-reset: four; }
+.four li { background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 12px 14px; display: grid; gap: 4px; align-content: start; min-width: 0; counter-increment: four; }
+.four .t { font-family: var(--font-heading); font-weight: 700; font-size: 16px; display: flex; gap: 8px; align-items: baseline; }
+.four .t::before { content: counter(four); font-family: var(--font-display); font-style: italic; font-weight: 500; color: var(--accent); }
+.four p { font-size: 14px; line-height: 1.65; }
+.four .ask-line { font-size: 13px; color: var(--muted); }
+
+/* The five together */
+.band { border-radius: 14px; border: 1px solid var(--rule); background: var(--day-paper); padding: 28px 16px 14px; overflow-x: auto; transition: background-color .25s ease; }
+.band[data-paper="night"] { background: var(--night-paper); }
+.row { display: flex; align-items: flex-end; justify-content: center; gap: clamp(4px, 2vw, 28px); min-width: 620px; }
+.row figure { gap: 6px; justify-items: center; }
+.row img { height: clamp(150px, 26vw, 240px); width: auto; max-width: none; display: block; }
+.row figcaption { display: block; text-align: center; font-size: 13px; line-height: 1.4; color: oklch(40% 0.03 60); }
+.row figcaption b { display: block; font-family: var(--font-heading); font-size: 15px; color: oklch(26% 0.03 60); }
+.band[data-paper="night"] figcaption { color: oklch(72% 0.03 70); }
+.band[data-paper="night"] figcaption b { color: oklch(90% 0.02 76); }
+.band-bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; margin-top: 10px; font-size: 13px; color: var(--muted); }
+
+.table-scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 12px; background: var(--card); margin-top: 20px; }
+table { border-collapse: collapse; width: 100%; min-width: 820px; font-size: 14px; line-height: 1.6; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
+tr:last-child th, tr:last-child td { border-bottom: 0; }
+thead th { font-family: var(--font-heading); font-size: 14px; background: var(--wash); white-space: nowrap; }
+tbody th { font-family: var(--font-heading); font-weight: 700; white-space: nowrap; }
+tbody th .dot { margin-right: 6px; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.note { font-size: 13px; color: var(--muted); margin-top: 10px; }
+
+.family { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.family div { background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 12px 14px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.family .t { font-size: 12px; letter-spacing: 0.06em; color: var(--muted); }
+.family p { font-size: 14px; line-height: 1.65; }
+
+/* The stage */
+.stage-intro { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px 32px; margin-bottom: 20px; }
+.stage-intro p { font-size: 15px; }
+.tips { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; font-size: 14px; }
+#stage { min-height: 360px; }
+#stage .fail { display: block; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 10px; }
+.acts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 28px; margin-top: 28px; }
+.acts section { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.acts h3 { font-size: 16px; }
+.acts p, .acts li { font-size: 14px; line-height: 1.7; }
+.acts ul { margin: 0; padding-left: 1.2em; display: grid; gap: 2px; }
+
+/* A character */
+.who { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.who + .who { margin-top: 64px; }
+.who-head { display: grid; gap: 8px; }
+.who-head .k { display: flex; align-items: center; gap: 8px; font-size: 13px; letter-spacing: 0.06em; color: var(--muted); }
+.who-head h3 { font-size: clamp(24px, 3.6vw, 32px); }
+.who-head h3 .latin { font-size: 0.8em; color: var(--muted); margin-left: 6px; }
+.who-head .one { font-size: 17px; }
+.facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.fact { background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 12px 14px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.fact .t { font-size: 12px; letter-spacing: 0.06em; color: var(--muted); }
+.fact p { font-size: 14px; line-height: 1.65; }
+.changed { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px 32px; }
+.changed section { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.changed h4 { margin: 0; font-family: var(--font-heading); font-size: 15px; }
+.changed ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; font-size: 14px; line-height: 1.7; }
+
+/* Critics */
+.critique { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.critique section { display: grid; gap: 6px; align-content: start; min-width: 0; padding-top: 12px; border-top: 3px solid var(--rule); }
+.critique h3 { font-size: 17px; }
+.critique p, .critique li { font-size: 14px; line-height: 1.7; }
+.critique ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+.quote { border-left: 3px solid var(--accent); padding-left: 12px; color: var(--muted); }
+
+.ask { display: grid; gap: 12px; }
+.pick { border-radius: 14px; padding: 20px 22px; background: var(--wash); display: grid; gap: 10px; }
+.pick h3 { font-size: 20px; }
+.pick p { font-size: 16px; }
+.ask ol { margin: 0; padding-left: 1.3em; display: grid; gap: 10px; font-size: 16px; }
+.ask ol p { font-size: 15px; color: var(--muted); margin-top: 2px; }
+
+@media (max-width: 860px) {
+  .four, .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .acts, .critique { grid-template-columns: minmax(0, 1fr); }
+  .stage-intro, .changed, .family { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 520px) {
+  .four, .facts { grid-template-columns: minmax(0, 1fr); }
+  .row { min-width: 0; flex-wrap: wrap; row-gap: 18px; }
+  .row img { height: 132px; }
+  .mast { padding-block: 32px 24px; }
+  .pen { margin-block: 40px 28px; }
+}
+@media (prefers-reduced-motion: reduce) { .band { transition: none; } }
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">共振 Resonance　第二階段　第三輪</p>
+  <h1>摺摺和它的四個<span class="wave">朋友<svg viewBox="0 0 200 12" preserveAspectRatio="none" aria-hidden="true"><path d="M2 7 C 20 2, 30 11, 50 6 S 80 2, 100 7 S 130 11, 150 6 S 180 2, 198 6" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg></span></h1>
+  <p class="lede read">你選了方向 C 的摺摺，請我們把肩膀放低、銅釘往內移、手臂縮短，頭上那一根看不出是什麼的東西改成頭髮或頭飾；再做大約五隻同一系列、身形和手腳長短各不相同的角色；最後設計首頁的動態：一次一到兩隻，從隨機的位置進來，做點事、和頁面上的東西互動，遇到彼此會互動，結束後走出畫面換別人，而且要比第二輪的示意小一點。</p>
+  <p class="lede read">這一輪做了五隻（摺摺加四個新角色），每隻由一位子代理畫。畫完請三位評審看：一位看造型，一位看首頁動態，一位不讀任何說明、只看圖說第一印象。之後五位修改者各改一隻，另一位修首頁動態的引擎。首頁動態目前是原型，放在首頁的截圖上跑，還沒有放進網站，等你看過再決定。</p>
+  <ul class="index" aria-label="五個角色">
+    <li><a href="#tuck"><span class="k"><span class="dot tuck"></span>你選定的那一隻</span><span class="n">摺摺 <span class="latin">Tuck</span></span><span class="o">折著一角的鼠尾草綠撕紙，迴紋針夾著紙瀏海</span></a></li>
+    <li><a href="#tag"><span class="k"><span class="dot tag"></span>最高、最瘦</span><span class="n">牽牽 <span class="latin">Twine</span></span><span class="o">霧藍禮物吊牌，背面寫著「給：」，紙繩打成蝴蝶結</span></a></li>
+    <li><a href="#card"><span class="k"><span class="dot card"></span>最寬、腿最短</span><span class="n">聆聆 <span class="latin">Nod</span></span><span class="o">淡紫橫線索引卡，歪戴一頂紙貝雷帽，最愛聽人說話</span></a></li>
+    <li><a href="#dot"><span class="k"><span class="dot dotc"></span>最小、用跳的</span><span class="n">點點 <span class="latin">Pip</span></span><span class="o">從黃色筆記頁打洞打下來的小圓點，頭上三圈捲紙</span></a></li>
+    <li><a href="#night"><span class="k"><span class="dot night"></span>唯一的深色紙</span><span class="n">悄悄 <span class="latin">Hush</span></span><span class="o">紙劇場夜空布景的一角，針孔星星，月亮髮夾</span></a></li>
+  </ul>
+</header>
+
+<svg class="pen" viewBox="0 0 1000 14" preserveAspectRatio="none" aria-hidden="true"><path d="M2 8 C 120 3, 220 12, 360 7 S 600 3, 740 8 S 920 11, 998 6" fill="none" stroke="currentColor" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>
+
+<!-- ───────── Tuck's four fixes ───────── -->
+<section id="fixes" aria-labelledby="fixes-title">
+  <div class="sec-head read">
+    <h2 id="fixes-title">摺摺：你說的四點</h2>
+    <p>左邊是你選定的第二輪，右邊是第三輪，同一個比例。其他地方照第二輪：折角和底下的字、臉、三道腮紅、風琴腿、綠色腳、奶油色手套。</p>
+  </div>
+  <figure>
+    <div class="sheet"><img src="img/tuck-r2r3.webp" width="1600" height="825" alt="摺摺第二輪與第三輪並排：第三輪的銅釘移到嘴巴下方、在紙面上離撕邊兩顆釘遠，手臂變短、藏在紙後面，頭上的紙舌換成四綹撕紙瀏海和迴紋針" loading="lazy"></div>
+    <figcaption><span>這張是第三輪初版。評審後又小改了四處：瀏海深一階、揮手的手再往外 7°、肚子上的舊摺痕往下移、折角下的字寫大一點（見下面<a href="#tuck">摺摺</a>一段）。</span></figcaption>
+  </figure>
+  <ol class="four" style="margin-top:16px">
+    <li><span class="t">肩膀往下</span><p>肩膀的銅釘從眼睛下方移到嘴巴下方（嘴下約 27，原本和腮紅同高），手臂從紙片還寬的地方伸出來。</p><p class="ask-line">如果你覺得太低，退路是再往上 10。</p></li>
+    <li><span class="t">銅釘往內</span><p>銅釘釘在紙面上，離撕邊大約兩顆釘的寬度；手臂的紙條藏在紙後面，只從撕邊下伸出來，看起來是釘在紙上，不是釘在邊上。</p></li>
+    <li><span class="t">手臂短一點</span><p>肩膀到手套從 164 縮到 120，垂下時手套剛好在紙片底緣，整隻看起來更圓。代價是手舉不過頭頂，五隻都一樣。</p></li>
+    <li><span class="t">頭上換成瀏海</span><p>那根像耳朵又不是耳朵的紙舌拿掉，換成四綹往左撥的撕紙瀏海，用一根銅色迴紋針夾著，免得讀字時掉下來擋住。瀏海和腿是同一張麥黃紙。</p></li>
+  </ol>
+</section>
+
+<svg class="pen" viewBox="0 0 1000 14" preserveAspectRatio="none" aria-hidden="true"><path d="M2 6 C 140 11, 260 2, 400 7 S 640 11, 780 6 S 930 3, 998 8" fill="none" stroke="currentColor" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>
+
+<!-- ───────── The five together ───────── -->
+<section id="family" aria-labelledby="family-title">
+  <div class="sec-head read">
+    <h2 id="family-title">一個系列，五種身形</h2>
+    <p>五隻放在同一個比例。每隻是一種勞作桌上找得到的紙：撕下來的紙、禮物吊牌、索引卡、打洞的圓點、紙劇場的夜空布景。頭上都換成看得出是什麼的東西：瀏海、蝴蝶結、貝雷帽、捲髮、月亮髮夾。</p>
+  </div>
+  <div class="band" id="band" data-paper="day">
+    <div class="row">
+      <figure><img src="img/lineup-tuck.webp" width="382" height="480" alt="摺摺 Tuck 站姿"><figcaption><b>摺摺</b>Tuck</figcaption></figure>
+      <figure><img src="img/lineup-tag.webp" width="222" height="480" alt="牽牽 Twine 站姿"><figcaption><b>牽牽</b>Twine</figcaption></figure>
+      <figure><img src="img/lineup-card.webp" width="421" height="480" alt="聆聆 Nod 站姿"><figcaption><b>聆聆</b>Nod</figcaption></figure>
+      <figure><img src="img/lineup-dot.webp" width="210" height="480" alt="點點 Pip 站姿"><figcaption><b>點點</b>Pip</figcaption></figure>
+      <figure><img src="img/lineup-night.webp" width="388" height="480" alt="悄悄 Hush 站姿"><figcaption><b>悄悄</b>Hush</figcaption></figure>
+    </div>
+  </div>
+  <div class="band-bar">
+    <span>評審後的版本，從同一組拆件組出來的靜止站姿。</span>
+    <span class="toggle" role="group" aria-label="紙色">
+      <button type="button" data-paper="day" aria-pressed="true">日間首頁</button>
+      <button type="button" data-paper="night" aria-pressed="false">夜間首頁</button>
+    </span>
+  </div>
+
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th scope="col">角色</th><th scope="col">紙</th><th scope="col">頭上</th><th scope="col">身形</th><th scope="col">手</th><th scope="col">腳</th><th scope="col">怎麼走</th><th scope="col">首頁上的高度</th></tr></thead>
+      <tbody>
+        <tr><th scope="row"><span class="dot tuck"></span>摺摺</th><td>撕下來的鼠尾草綠紙，右上折一角</td><td>撕紙瀏海＋迴紋針</td><td>圓，寬高差不多</td><td>中等，手套垂在紙片底緣</td><td>麥黃風琴摺</td><td>風琴腿一伸一縮</td><td class="num">桌機 120 px<br>手機 80 px</td></tr>
+        <tr><th scope="row"><span class="dot tag"></span>牽牽</th><td>霧藍模切吊牌，黃銅雞眼</td><td>赤陶色紙繩蝴蝶結</td><td>高瘦，系列最高</td><td>短，手套在身體下角旁</td><td>長，膝蓋有銅釘</td><td>大步、身體挺直</td><td class="num">桌機約 150 px<br>手機約 100 px</td></tr>
+        <tr><th scope="row"><span class="dot card"></span>聆聆</th><td>淡紫橫線索引卡，赤陶標題線</td><td>青綠紙貝雷帽</td><td>橫的長方形，系列最寬</td><td>中等，藏在卡片後</td><td>短短兩截</td><td>小碎步，不趕時間</td><td class="num">桌機約 95 px<br>手機約 63 px</td></tr>
+        <tr><th scope="row"><span class="dot dotc"></span>點點</th><td>黃色筆記紙打洞的圓點，帶一條橫線和「…ry」</td><td>三圈芥末色捲紙</td><td>小圓片，系列最小</td><td>很短，同一條捲紙條</td><td>Z 字摺的捲紙條</td><td>用跳的</td><td class="num">桌機約 77 px<br>手機約 51 px</td></tr>
+        <tr><th scope="row"><span class="dot night"></span>悄悄</th><td>深藍夜空紙，針孔星星</td><td>彎月＋銅髮夾</td><td>寬圓頂，底邊剪直</td><td>中等，板岩藍紙條</td><td>直直的板岩藍紙條</td><td>慢慢走</td><td class="num">桌機約 116 px<br>手機約 77 px</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">首頁上的高度：摺摺定在桌機 120 px（第二輪的示意約 200 px）、手機 80 px；其他角色依身高換算，但把差距壓小一點，所以牽牽不會比 QR 碼那一塊還高，點點也不會小到看不見。可以在下面的原型用「大小」滑桿試。</p>
+
+  <div class="family">
+    <div><span class="t">五隻共用的</span><p>白色纖維撕邊和往右下的膠水陰影、奶油色連指手套（有拇指）、黃銅兩腳釘關節、同一張鉛筆臉（豆豆眼、小嘴）和三道斜斜的腮紅。手臂一律從紙後面伸出來，銅釘離邊約兩到三顆釘；只有牽牽的手在前面，因為它要用雙手捧著紙條。</p></div>
+    <div><span class="t">各自不同的</span><p>身形、紙材、頭上的東西、手腳長短、走路的樣子，還有一個招牌動作：摺摺掀開折角、牽牽轉身讓你看「給：」、聆聆脫帽打招呼、點點在故事卡上找自己原本那一頁、悄悄在頁尾睡著。沒有膚色、沒有脖子、沒有動物耳朵。</p></div>
+  </div>
+</section>
+
+<svg class="pen" viewBox="0 0 1000 14" preserveAspectRatio="none" aria-hidden="true"><path d="M2 8 C 120 3, 220 12, 360 7 S 600 3, 740 8 S 920 11, 998 6" fill="none" stroke="currentColor" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>
+
+<!-- ───────── The stage ───────── -->
+<section id="stage-sec" aria-labelledby="stage-title">
+  <div class="sec-head read">
+    <h2 id="stage-title">首頁動態原型</h2>
+  </div>
+  <div class="stage-intro">
+    <p>這是首頁現在的樣子（截圖），上面跑著真的動態。角色一次來一到兩隻，從畫面邊緣走進來、從卡片後面爬上來或探出頭，或在標題上冒出來；做幾件小事，再從進來的那邊離開，過幾秒換別人。兩隻碰到時會互相揮手、一起「共振」。可以在框裡捲動，看卡片區、行動呼籲和頁尾。</p>
+    <ul class="tips">
+      <li>把滑鼠移到角色身上，它會看你、揮揮手；點一下會開心跳起來，再點一下就害羞地先走了。</li>
+      <li>「下一位」馬上請一隻進來，「讓兩隻相遇」直接看相遇。</li>
+      <li>可以切換桌機或手機、淺色或深色，用「大小」滑桿試大小。</li>
+      <li>「每秒 12 格」是紙偶定格動畫的感覺，「流暢」是一般動畫。</li>
+    </ul>
+  </div>
+  <div id="stage" aria-label="首頁動態原型"></div>
+
+  <div class="acts">
+    <section>
+      <h3>做的事，跟頁面上的東西有關</h3>
+      <ul>
+        <li>站在 QR 碼旁邊指給你看，靠在「瀏覽所有故事」按鈕上</li>
+        <li>坐在故事卡的上緣，腳垂在卡片前面；從卡片側邊探頭再縮回去</li>
+        <li>站在早期說故事的人那一排頭像尾端，像排進隊伍</li>
+        <li>拿一本小書翻頁；在小紙片上寫字，再遞向按鈕</li>
+        <li>各自的招牌：掀折角、轉身給你看「給：」、脫帽、找原本那一頁、在頁尾打盹</li>
+      </ul>
+    </section>
+    <section>
+      <h3>相遇</h3>
+      <ul>
+        <li>走得到對方：一個走過去，兩個先揮手，三道鉛筆波紋在中間一起跳、臉紅一下，再交換一張紙條或「碰碰手」，然後各走各的路</li>
+        <li>隔得遠（例如標題的兩端、App Store 徽章兩邊）：不走過去，轉向對方揮手，波紋在兩隻中間跳</li>
+        <li>首頁第一屏在模擬裡，12 次有 11 次在一分鐘內看得到一次相遇或遠遠打招呼</li>
+      </ul>
+    </section>
+    <section>
+      <h3>不打擾</h3>
+      <ul>
+        <li>只有紙片本身接收滑鼠，手腳和透明的地方不會擋住按鈕；模擬裡角色擋住點擊 0 次</li>
+        <li>不站在文字和按鈕上，不擋住卡片的作者那一行</li>
+        <li>分頁切走、角色捲出畫面就暫停</li>
+        <li>系統設定「減少動態」時，只有一隻安靜站在畫面裡，不會動</li>
+        <li>夜間模式時角色稍微調暗，不比頁面上的文字還亮</li>
+      </ul>
+    </section>
+  </div>
+</section>
+
+<svg class="pen" viewBox="0 0 1000 14" preserveAspectRatio="none" aria-hidden="true"><path d="M2 6 C 140 11, 260 2, 400 7 S 640 11, 780 6 S 930 3, 998 8" fill="none" stroke="currentColor" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>
+
+<!-- ───────── The five, one by one ───────── -->
+<section aria-labelledby="cast-title">
+  <div class="sec-head read">
+    <h2 id="cast-title">五個角色</h2>
+    <p>每張概念圖都可以切到「評審前後」，看第一版和修改後並排。</p>
+  </div>
+
+  <article class="who" id="tuck">
+    <div class="who-head">
+      <p class="k"><span class="dot tuck"></span>你選定的那一隻</p>
+      <h3>摺摺 <span class="latin">Tuck</span></h3>
+      <p class="one read">一張被撕下來的鼠尾草綠紙。它一直折著一個角，因為折角底下藏著幾行字。它習慣把重要的東西收好，連瀏海都用迴紋針夾起來。</p>
+    </div>
+    <figure data-fig>
+      <div class="sheet"><img src="img/tuck-concept.webp" width="1600" height="1000" alt="摺摺概念圖：站姿、揮手、掀開折角給你看底下的字，以及在首頁上的樣子" loading="lazy"></div>
+      <figcaption><span>概念圖</span><span class="toggle" role="group" aria-label="摺摺的圖"><button type="button" aria-pressed="true" data-src="img/tuck-concept.webp" data-w="1600" data-h="1000">概念圖</button><button type="button" aria-pressed="false" data-src="img/tuck-review.webp" data-w="1600" data-h="1000">評審前後</button></span></figcaption>
+    </figure>
+    <div class="facts">
+      <div class="fact"><span class="t">個性</span><p>有點害羞、很認真，會把重要的東西好好收著；但它會先對你揮手。</p></div>
+      <div class="fact"><span class="t">招牌動作</span><p>右手繞到紙前面捏起折角，讓你看底下的字，過一兩秒再折回去。</p></div>
+      <div class="fact"><span class="t">在首頁</span><p>站在 QR 碼和下載徽章旁、靠著「瀏覽所有故事」、坐在故事卡上讀。</p></div>
+      <div class="fact"><span class="t">評審判定</span><p>保留。你說的四點都做到了；造型評審說這是系列裡最清楚落在紙面上的銅釘。</p></div>
+    </div>
+    <div class="changed">
+      <section><h4>評審後改了</h4><ul>
+        <li>揮手的手再往外 7°，撕邊外露出一條紙，不是一個細楔形</li>
+        <li>瀏海深一階，和米白的折角分開（只看圖的評審說折角像第二個頭飾）</li>
+        <li>肚子上的舊摺痕往下移，不再和兩顆銅釘排成一條腰帶</li>
+        <li>折角下的字寫大、寫深，首頁大小也看得出是幾行字；掀角時手套到紙前面捏住折角</li>
+      </ul></section>
+      <section><h4>沒有改的，和原因</h4><ul>
+        <li>「圓形的紙沒有角可以折」：折角是你選的招牌，任何紙都能往前折一個角</li>
+        <li>腿和身體是不同的紙：刻意的，瀏海也撕自同一張麥黃紙，頭和腳互相呼應</li>
+        <li>肩膀、銅釘、手臂長度：照你的修改，沒有再動</li>
+      </ul></section>
+    </div>
+  </article>
+
+  <article class="who" id="tag">
+    <div class="who-head">
+      <p class="k"><span class="dot tag"></span>最高、最瘦</p>
+      <h3>牽牽 <span class="latin">Twine</span></h3>
+      <p class="one read">一張還沒綁到禮物上的霧藍色吊牌。背面寫著「給：」，後面空著，因為它還在找那個人。名字取自「牽線」「牽掛」：吊牌靠一條繩子牽在禮物上，它頭上的蝴蝶結就是自己的那條繩子。</p>
+    </div>
+    <figure data-fig>
+      <div class="sheet"><img src="img/tag-concept.webp" width="1600" height="1000" alt="牽牽概念圖：站姿、雙手捧紙條、轉身露出背面的「給：」" loading="lazy"></div>
+      <figcaption><span>概念圖</span><span class="toggle" role="group" aria-label="牽牽的圖"><button type="button" aria-pressed="true" data-src="img/tag-concept.webp" data-w="1600" data-h="1000">概念圖</button><button type="button" aria-pressed="false" data-src="img/tag-review.webp" data-w="1320" data-h="1035">評審前後</button></span></figcaption>
+    </figure>
+    <div class="facts">
+      <div class="fact"><span class="t">個性</span><p>溫和、有禮貌、有點拘謹。遞東西一定用雙手，打招呼前先微微鞠躬；緊張時會去整理蝴蝶結。</p></div>
+      <div class="fact"><span class="t">招牌動作</span><p>轉過身，讓你看背面的「給：」；雙手捧著一張折好的小紙條。</p></div>
+      <div class="fact"><span class="t">在首頁</span><p>用長腿沿著波浪大步走進來；手機上從「寫下你的故事」按鈕後面只探出頭和蝴蝶結。</p></div>
+      <div class="fact"><span class="t">評審判定</span><p>保留。身高 1.35 倍但很瘦，面積比摺摺還小；和摺摺一高一矮很好看。</p></div>
+    </div>
+    <div class="changed">
+      <section><h4>評審後改了</h4><ul>
+        <li>轉到背面時不再有臉：背面只有「給：」，手和蝴蝶結在紙後面露出一點</li>
+        <li>肩膀銅釘往內 9，離邊約三顆釘；手套垂在身體下角旁邊，不再像抱著肚子</li>
+        <li>蝴蝶結綁正，兩個環扁一點、往外張，縮小後不再像兩個小耳朵；動的時候最多晃 8° 就回正中</li>
+        <li>臉往下 12，下半身不再一大片空白；腿寬一點，不像踩高蹺</li>
+      </ul></section>
+      <section><h4>沒有改的，和原因</h4><ul>
+        <li>身高：首頁上改成壓縮換算，桌機約 150 px，不用把吊牌改矮</li>
+        <li>赤陶色蝴蝶結：它在 48 px 還認得出牽牽，彩度已比網站的赤陶色低</li>
+        <li>手在身體前面：它要雙手捧紙條，銅釘已照「在前面就離邊三顆釘」</li>
+      </ul></section>
+    </div>
+  </article>
+
+  <article class="who" id="card">
+    <div class="who-head">
+      <p class="k"><span class="dot card"></span>最寬、腿最短</p>
+      <h3>聆聆 <span class="latin">Nod</span></h3>
+      <p class="one read">一張從某人的卡片盒裡走出來的淡紫色索引卡。你說話的時候，它一邊點頭，一邊把重要的話記在格線上；聽到真正打動它的故事，整張卡會被字寫滿。</p>
+    </div>
+    <figure data-fig>
+      <div class="sheet"><img src="img/card-concept.webp" width="1600" height="1000" alt="聆聆概念圖：站姿、脫帽打招呼、整張卡寫滿字" loading="lazy"></div>
+      <figcaption><span>概念圖</span><span class="toggle" role="group" aria-label="聆聆的圖"><button type="button" aria-pressed="true" data-src="img/card-concept.webp" data-w="1600" data-h="1000">概念圖</button><button type="button" aria-pressed="false" data-src="img/card-review.webp" data-w="1240" data-h="820">評審前後</button></span></figcaption>
+    </figure>
+    <div class="facts">
+      <div class="fact"><span class="t">個性</span><p>溫暖、穩重、很會聽。很少說話，用點頭、帽子和卡片上的字表達：聽得越投入，寫得越多。</p></div>
+      <div class="fact"><span class="t">招牌動作</span><p>右手套舉起來碰帽簷，脫帽打招呼；聽完一個故事，卡片寫滿字。</p></div>
+      <div class="fact"><span class="t">在首頁</span><p>坐在故事卡上點頭讀標題、在「寫下你的故事」旁招手、靠在「瀏覽所有故事」上；滑鼠靠近就脫帽。</p></div>
+      <div class="fact"><span class="t">評審判定</span><p>修改。第一版太大、帽子太大太暗，像快滑下來；縮小後過關。</p></div>
+    </div>
+    <div class="changed">
+      <section><h4>評審後改了</h4><ul>
+        <li>整隻縮小：卡片 ×0.9，面積從摺摺的 1.5 倍降到 1.18 倍</li>
+        <li>貝雷帽小了將近一半、亮一點，帽緣壓在卡片頂邊上，右邊軟軟塌在卡角，看起來是戴著的，不是浮著</li>
+        <li>手臂改藏在卡片後面，銅釘離側邊 18 → 24；手沒有加長</li>
+        <li>臉保持原大小，所以在小一點的卡上看起來大一點；手寫字從四段減成三段</li>
+      </ul></section>
+      <section><h4>沒有改的，和原因</h4><ul>
+        <li>「像海綿寶寶、剪影像廂型車」：索引卡的剪影一定是長方形，靠帽子、格線和臉分開</li>
+        <li>寫滿字時臉還在：那是同一面寫滿了，不是背面</li>
+        <li>寬度停在 144 px（評審建議 135）：再窄手套就貼著卡片，看不出是手</li>
+      </ul></section>
+    </div>
+  </article>
+
+  <article class="who" id="dot">
+    <div class="who-head">
+      <p class="k"><span class="dot dotc"></span>最小、用跳的</p>
+      <h3>點點 <span class="latin">Pip</span></h3>
+      <p class="one read">有人在黃色橫線筆記本上寫了一段故事，後來把那頁拿去打洞歸檔，「喀」一聲掉下一顆小圓點。它身上只裝得下一條橫線，和 story 最後的「…ry」。它是別人故事裡的一小片，所以對每個故事都很好奇。</p>
+    </div>
+    <figure data-fig>
+      <div class="sheet"><img src="img/dot-concept.webp" width="1600" height="1000" alt="點點概念圖：站姿、跳躍、站在故事卡上緣往下看" loading="lazy"></div>
+      <figcaption><span>概念圖</span><span class="toggle" role="group" aria-label="點點的圖"><button type="button" aria-pressed="true" data-src="img/dot-concept.webp" data-w="1600" data-h="1000">概念圖</button><button type="button" aria-pressed="false" data-src="img/dot-review.webp" data-w="1600" data-h="653">評審前後</button></span></figcaption>
+    </figure>
+    <div class="facts">
+      <div class="fact"><span class="t">個性</span><p>精力充沛、坐不住，誰在附近就先跳過去打招呼；被稱讚太久會害羞。</p></div>
+      <div class="fact"><span class="t">招牌動作</span><p>站在故事卡上緣往下看標題，眨眨眼，臉左右滑一下（不是這頁），再跳到下一張。</p></div>
+      <div class="fact"><span class="t">在首頁</span><p>擠進早期說故事的人那一排頭像的尾端，在卡片之間跳來跳去。</p></div>
+      <div class="fact"><span class="t">評審判定</span><p>修改。兩位評審都說它太像黃色笑臉 emoji；第一版的捲髮縮小後像炸彈引信。</p></div>
+    </div>
+    <div class="changed">
+      <section><h4>評審後改了</h4><ul>
+        <li>捲髮從站在頭頂改成貼在左上額頭、往前傾，縮小後是一撮捲毛，不再像引信或字母</li>
+        <li>臉往上 10，肚子上的橫線改成印刷的藍線、「…ry」深一點，離 🙂 的排法遠一點</li>
+        <li>紙色深一點、膠水陰影重一點：第一版在手機首頁的桃色色塊上幾乎看不見</li>
+        <li>手臂改藏在圓片後面，銅釘離邊約三顆釘</li>
+      </ul></section>
+      <section><h4>沒有改的，和原因</h4><ul>
+        <li>黃色：再深就變芥末色，和手腳黏在一起</li>
+        <li>手腳顏色和身體不同：手、腳、捲髮是同一條捲紙條，這是它的設定</li>
+        <li>比例 0.55 倍：首頁上壓縮換算後桌機約 77 px，不會小到看不見</li>
+      </ul></section>
+    </div>
+  </article>
+
+  <article class="who" id="night">
+    <div class="who-head">
+      <p class="k"><span class="dot night"></span>唯一的深色紙</p>
+      <h3>悄悄 <span class="latin">Hush</span></h3>
+      <p class="one read">紙劇場的背景最上面是一片夜空，有人拿針在上面刺了星星，對著燈就會透光。悄悄是從那片夜空撕下來的一角，自己剪了一枚彎月別在頭上。它說話很小聲，好像怕吵醒誰。</p>
+    </div>
+    <figure data-fig>
+      <div class="sheet"><img src="img/night-concept.webp" width="1600" height="1000" alt="悄悄概念圖：站姿、揉眼睛、在頁尾睡著、夜間模式星星透光" loading="lazy"></div>
+      <figcaption><span>概念圖</span><span class="toggle" role="group" aria-label="悄悄的圖"><button type="button" aria-pressed="true" data-src="img/night-concept.webp" data-w="1600" data-h="1000">概念圖</button><button type="button" aria-pressed="false" data-src="img/night-review.webp" data-w="1440" data-h="1070">評審前後</button></span></figcaption>
+    </figure>
+    <div class="facts">
+      <div class="fact"><span class="t">個性</span><p>安靜、動作慢、有點睏。白天眼皮比較重，晚上身上的星星透光，它才真的醒過來。</p></div>
+      <div class="fact"><span class="t">招牌動作</span><p>坐在頁尾靠著 Resonance 字標睡著，頭上冒幾個鉛筆 z，星星一明一滅。</p></div>
+      <div class="fact"><span class="t">在首頁</span><p>白天多在行動呼籲和頁尾出現，少待在最亮的首屏；夜間模式來得比較勤。</p></div>
+      <div class="fact"><span class="t">評審判定</span><p>修改。只看圖的評審最喜歡它；造型評審說白天的眼睛有點像幽靈。</p></div>
+    </div>
+    <div class="changed">
+      <section><h4>評審後改了</h4><ul>
+        <li>眼睛換成暖白鉛筆塗實，不再是淡藍空心的眼睛；嘴畫粗、畫長一點，首頁大小也看得到笑</li>
+        <li>彎月收進圓頂裡，尖角朝內，剪影回到乾淨的圓頂，不再像一支小角</li>
+        <li>月亮外面那圈銅環（被看成天使光環）換成一支銅髮夾</li>
+        <li>身體亮一階、鞋底改成板岩藍，夜間首頁上不再融進背景；紙紋少一點，比較像紙、不像絨布</li>
+        <li>手臂改藏在圓頂後面，銅釘離撕邊約三顆釘</li>
+      </ul></section>
+      <section><h4>沒有改的，和原因</h4><ul>
+        <li>眼睛沒有黑瞳孔：深色紙上畫黑眼珠看不見，淺色的眼睛是夜空紙的鉛筆</li>
+        <li>寬圓頂、底邊剪直、針孔星星、慢慢走、在頁尾睡覺：兩位評審都要保留</li>
+      </ul></section>
+    </div>
+  </article>
+</section>
+
+<svg class="pen" viewBox="0 0 1000 14" preserveAspectRatio="none" aria-hidden="true"><path d="M2 8 C 120 3, 220 12, 360 7 S 600 3, 740 8 S 920 11, 998 6" fill="none" stroke="currentColor" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>
+
+<!-- ───────── Critics ───────── -->
+<section id="critics" aria-labelledby="critics-title">
+  <div class="sec-head read">
+    <h2 id="critics-title">三位評審怎麼說</h2>
+    <p>他們看的是第一版；上面每隻的「評審後改了」就是回應。</p>
+  </div>
+  <div class="critique">
+    <section>
+      <h3>造型評審</h3>
+      <p>是一家人，也是五個人：48 px 的剪影五個都分得開。最喜歡摺摺和牽牽。</p>
+      <ul>
+        <li>最大的問題：聆聆、點點、悄悄的手臂紙條壓在身體前面、跨過輪廓，銅釘又像釘在邊上，正是你對第二輪摺摺說的那件事。改成和摺摺一樣，手藏在紙後面。</li>
+        <li>太大的是聆聆的面積，不是牽牽的身高。</li>
+        <li>點點最接近現成的東西（黃色笑臉、Mr. Men）；悄悄的臉白天偏幽靈。</li>
+      </ul>
+    </section>
+    <section>
+      <h3>首頁動態評審</h3>
+      <p>引擎很穩，平均每格不到 0.3 毫秒；探頭、坐在卡片上、頁尾打盹、手機上牽牽從按鈕後探頭都好看。</p>
+      <ul>
+        <li>兩隻會搶同一個位置疊在一起；離開時後面那隻會穿過前面那隻。</li>
+        <li>手腳的透明處會擋住按鈕的點擊。</li>
+        <li>首屏很少看到相遇：相遇點都在第一屏下面。所以加了「遠遠打招呼」。</li>
+        <li>大小：桌機 120 剛好，手機可以再小，系列的高矮差距要壓小。</li>
+      </ul>
+      <p class="small">以上都修好了，修好後的數字在「首頁動態原型」一段。</p>
+    </section>
+    <section>
+      <h3>只看圖的第一印象</h3>
+      <p>家族感很強，像日韓文具角色的溫度，也有紙藝遊戲的手感；五種身形不會撞形。最喜歡悄悄：「唯一一個不只是長了臉的文具，而是讓人想知道它有什麼故事的角色」。概念最清楚的是牽牽，一張要送給某人的吊牌。</p>
+      <ul>
+        <li>它覺得摺摺最不像一家人：其他四隻是邊緣平整的紙片，只有摺摺是撕過、有毛邊、頭上是真的頭髮。</li>
+        <li>五張臉一樣，小尺寸時靠頭飾分辨，頭飾縮小後容易壞掉。</li>
+      </ul>
+    </section>
+  </div>
+</section>
+
+<svg class="pen" viewBox="0 0 1000 14" preserveAspectRatio="none" aria-hidden="true"><path d="M2 6 C 140 11, 260 2, 400 7 S 640 11, 780 6 S 930 3, 998 8" fill="none" stroke="currentColor" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>
+
+<!-- ───────── The call ───────── -->
+<section id="ask" class="ask" aria-labelledby="ask-title">
+  <div class="pick">
+    <h3>我們的建議</h3>
+    <p>五隻都留，但上線時先放三隻：摺摺、牽牽、悄悄。這三隻在三位評審那裡都最穩，一高一圓一深，首頁上也最好分。聆聆和點點等你看過修改版再決定。</p>
+  </div>
+  <h2 id="ask-title" style="font-size:clamp(22px,3vw,26px);margin-top:12px">需要你決定的事</h2>
+  <ol>
+    <li>五隻裡留哪幾隻？上線時要一次放五隻，還是先放三隻？</li>
+    <li>大小：桌機摺摺 120 px、手機 80 px 合適嗎？<p>原型的「大小」滑桿可以從 60% 試到 160%。</p></li>
+    <li>點點像不像黃色笑臉？<p>修改後已經拉開一點；如果你還是覺得像，可以換一種紙（例如郵票、標籤貼紙）。</p></li>
+    <li>摺摺要不要和其他四隻更像一家？<p>只看圖的評審覺得摺摺的撕邊和頭髮讓它像外人；另一個看法是摺摺是主角，本來就可以特別一點。我們傾向不動摺摺。</p></li>
+    <li>首頁動態的節奏：每隻待 9 到 16 秒，中間空 3 到 7 秒，同時最多兩隻。會太熱鬧嗎？</li>
+    <li>可以把動態放進真的首頁嗎？<p>放進去時會改用頁面元素的真實位置（不是截圖）、角色只在首頁出現、尊重「減少動態」設定，並在真的手機上測過。這個原型還沒在真的手機上測。</p></li>
+  </ol>
+</section>
+
+</div>
+
+<script src="../stage/stage.bundle.js"></script>
+<script>
+(() => {
+  // Day / night paper for the lineup
+  const band = document.getElementById('band');
+  const paperBtns = document.querySelectorAll('.band-bar .toggle button');
+  const setPaper = p => {
+    band.dataset.paper = p;
+    paperBtns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.paper === p)));
+  };
+  paperBtns.forEach(b => b.addEventListener('click', () => setPaper(b.dataset.paper)));
+  const dark = document.documentElement.dataset.theme === 'dark' ||
+    (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
+  if (dark) setPaper('night');
+
+  // Concept ↔ before/after on each character
+  document.querySelectorAll('[data-fig]').forEach(fig => {
+    const img = fig.querySelector('img');
+    const label = fig.querySelector('figcaption > span:first-child');
+    const btns = fig.querySelectorAll('.toggle button');
+    btns.forEach(b => b.addEventListener('click', () => {
+      img.src = b.dataset.src; img.width = +b.dataset.w; img.height = +b.dataset.h;
+      label.textContent = b.textContent === '概念圖' ? '概念圖' : '左：第一版　右：評審後（同一比例）';
+      btns.forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    }));
+  });
+
+  // The live stage
+  const host = document.getElementById('stage');
+  (async () => {
+    try {
+      if (!window.MascotStage) throw new Error('動態程式沒有載入');
+      window.__msp = await MascotStage.mountPrototype(host, { base: '../stage/', ledges: MascotStage.LEDGES });
+    } catch (err) {
+      console.error(err);
+      const p = document.createElement('p'); p.className = 'fail';
+      p.textContent = '原型載入失敗：' + err.message;
+      host.append(p);
+    }
+  })();
+})();
+</script>
