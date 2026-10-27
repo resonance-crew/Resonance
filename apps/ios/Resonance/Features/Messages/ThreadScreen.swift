@@ -199,9 +199,13 @@ struct ThreadScreen: View {
             .padding(.bottom, keyboardHold.padding ?? 0)
             .ignoresSafeArea(keyboardHold.padding == nil ? [] : .keyboard, edges: .bottom)
             .accessibilityHidden(menu != nil)
+            // Under the press layer the thread softens 2 pt beside dimming (review F8: its neighbours' words
+            // competed with the lifted message), as under a modal.
+            .softened(menu != nil)
             bar
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { barHeight = $0 }
                 .accessibilityHidden(menu != nil)
+                .softened(menu != nil)
             // Beside the list: the rule between the panes and the bar's foot from it, over the bar's paper.
             if inPane { PaneLines(barHeight: barHeight) }
             if let menu, let model {

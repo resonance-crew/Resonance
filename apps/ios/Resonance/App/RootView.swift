@@ -45,6 +45,8 @@ struct RootView: View {
                 }
             }
         }
+        // Softened 2 pt under an organic modal, as the web's Modal backdrop blurs (round 16 review F8).
+        .softenedUnderModals()
         .animation(phaseChange, value: session.phase)
         .animation(phaseChange, value: session.landing)
         .tint(Tokens.terracotta)
