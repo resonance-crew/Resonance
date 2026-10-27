@@ -4,7 +4,8 @@ import ResonanceAPI
 
 /// Notes and messages — the writes that reach another person, so they go
 /// through the server (POST /api/v1/notes, /api/v1/messages), which re-checks
-/// connections and blocks and rings the right bell — deleting a conversation
+/// connections and blocks and rings the right bell — reacting to a message and unsending one
+/// (round 16: PUT/DELETE …/messages/{id}/reaction, POST …/messages/{id}/unsend), deleting a conversation
 /// (DELETE /api/v1/conversations/{pair}, both people's at once) and the pictures sent in a
 /// conversation (POST /api/v1/chat-images, read back with GET
 /// /api/v1/chat-images/{id}: for the two people of the conversation only, so
@@ -107,6 +108,52 @@ public struct MessagingAPI: Sendable {
         case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
         case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
         case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
+        case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
+        }
+    }
+
+    /// Answers a message of the conversation `pairId` with a reaction (PUT …/messages/{id}/reaction): one per
+    /// person per message, a second replacing the first. `reaction` is the stored id (`heart`, `moved`,
+    /// `laugh`, `hug`, `thumbs`); one the contract doesn't know is `invalid_request` without asking.
+    /// Quiet on the server's side: no bell, no push, no unread. 403 `forbidden` / `blocked` for a letter
+    /// not yet answered, no pen name or a block; 404 for a message gone or unsent; 429 past the day's budget.
+    public func setReaction(_ reaction: String, pairId: String, messageId: String) async throws {
+        guard let value = Components.Schemas.Reaction(rawValue: reaction) else {
+            throw APIFailure(code: "invalid_request", message: "Not a reaction.", status: 400)
+        }
+        switch try await client.setReaction(path: .init(pair: pairId, messageId: messageId), body: .json(.init(reaction: value))) {
+        case .noContent: return
+        case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
+        case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
+        case let .forbidden(r): throw APIFailure(try r.body.json, status: 403)
+        case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
+        case let .tooManyRequests(r): throw APIFailure(try r.body.json, status: 429)
+        case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
+        }
+    }
+
+    /// Takes the viewer's reaction to a message back (DELETE …/reaction); one already gone is nothing.
+    public func removeReaction(pairId: String, messageId: String) async throws {
+        switch try await client.removeReaction(path: .init(pair: pairId, messageId: messageId)) {
+        case .noContent: return
+        case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
+        case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
+        case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
+        case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
+        }
+    }
+
+    /// Unsends one of the viewer's messages (POST …/messages/{id}/unsend): it becomes a line saying it was
+    /// unsent, for both people, and the quotes of it with it. Already unsent is nothing. A note copied from a
+    /// card is 400; past 24 hours 409 `conflict` (too late); someone else's message 404; 429 past the budget.
+    public func unsendMessage(pairId: String, messageId: String) async throws {
+        switch try await client.unsendMessage(path: .init(pair: pairId, messageId: messageId)) {
+        case .noContent: return
+        case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
+        case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
+        case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
+        case let .conflict(r): throw APIFailure(try r.body.json, status: 409)
+        case let .tooManyRequests(r): throw APIFailure(try r.body.json, status: 429)
         case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
         }
     }

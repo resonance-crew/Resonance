@@ -16,8 +16,9 @@ public nonisolated indirect enum StoryBlock: Hashable, Sendable {
     /// A paragraph that may be one web link standing alone (src/lib/links/storyLinks.ts):
     /// `[words](https://…)`, `<https://…>` or a reference link with no picture inside (`href` is
     /// its address), or a bare address with nothing round it (`href` nil — CommonMark leaves it
-    /// text; `text` is the address as written). Whether it is one, and which page it names, is the
-    /// link rules' to say (`StoryLinks.key` in ResonanceKit): the reader draws the page's preview
+    /// text; `text` is the address as written, or the link's words). Whether it is one, and which page
+    /// it names, is the link rules' to say (`StoryLinks.key` in ResonanceKit — a link whose words are
+    /// not its own address is none, round 16 §6): the reader draws the page's preview
     /// card when the story has one for it, and otherwise `runs`, the paragraph as it always was
     /// (its bare address a link, `linkingAddresses`).
     case soleLink(href: String?, text: String, runs: [InlineRun])
