@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import fixture from '../../../native/fixtures/story-link-cards.json';
-import { soleLinkParagraphs, standaloneLinks, STORY_PREVIEW_LIMIT, unfurlable } from './storyLinks';
+import { cardnessChanges, soleLinkParagraphs, standaloneLinks, STORY_PREVIEW_LIMIT, unfurlable } from './storyLinks';
 
 interface Case {
   id: string;
@@ -70,5 +70,16 @@ describe('unfurlable', () => {
     expect(unfurlable('https://mine.example/x', 'mine.example')).toBe(false);
     expect(unfurlable('https://example.com/x')).toBe(true);
     expect(unfurlable('not a url')).toBe(false);
+  });
+});
+
+describe('cardnessChanges (backfill.ts link-previews, round 16 §6)', () => {
+  it('lists the lone links with words of their own — cards before, words now — and nothing else', () => {
+    const story = '前言\n\n[下雨天](https://example.com/rain)\n\n<https://example.com/b>\n\n[https://example.com/c](https://example.com/c)\n\n> [引言裡的](https://example.com/q)\n\n[我們的](https://resonance.channel/en)';
+    expect(cardnessChanges(story)).toEqual([
+      { offset: story.indexOf('[下雨天]'), url: 'https://example.com/rain', card: false },
+      { offset: story.indexOf('[引言裡的]'), url: 'https://example.com/q', card: false },
+    ]);
+    expect(cardnessChanges('沒有連結的故事')).toEqual([]);
   });
 });
