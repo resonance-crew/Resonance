@@ -26,7 +26,7 @@ struct FeedScreen: View {
     @State private var picksNotice = PicksNotice()
 
     var body: some View {
-        TabScreen("", head: model?.cards.first?.id, toTopRequests: upRequests, onAtTop: reachedTop) {
+        TabScreen("", head: model?.cards.first?.id, toTopRequests: upRequests, onAtTop: reachedTop, hidesTabBar: true) {
             content
         }
         .animation(.easeInOut(duration: 0.25), value: model?.refreshFailure)

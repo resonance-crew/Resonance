@@ -25,6 +25,76 @@ enum AppTab: Hashable, CaseIterable {
         case .cardBox: .cards
         }
     }
+
+    /// The glyph's solid twin, for the chosen tab (round 16 §2). The pen is an action, never chosen.
+    var selectedIcon: IconName? {
+        switch self {
+        case .feed: .sparkleFill
+        case .messages: .chatFill
+        case .write: nil
+        case .notifications: .bellFill
+        case .cardBox: .cardsFill
+        }
+    }
+}
+
+/// The phone's tab bar giving the home feed the screen (round 16 §2): after 24 pt of downward scroll past
+/// the first 80 of the list it slides away; 12 pt back up, reaching the top or reaching the end bring it
+/// back. Pure, so the rule is pinned without a scroll view (the twin of Android's TabBarScroll).
+nonisolated struct TabBarScroll: Equatable {
+    static let hideAfter: CGFloat = 24
+    static let showAfter: CGFloat = 12
+    static let pastTop: CGFloat = 80
+
+    private(set) var hidden = false
+    private var last: CGFloat?
+    /// The scroll so far in one direction: positive down, negative up.
+    private var run: CGFloat = 0
+
+    /// The list at `y` (its offset from its top, kept within 0…`limit` so a rubber band past either end
+    /// moves nothing): whether the bar is hidden now.
+    @discardableResult
+    mutating func scrolled(to y: CGFloat, limit: CGFloat) -> Bool {
+        defer { last = y }
+        guard let last else { return hidden }
+        // At the top, or at the end with nothing more to read: the bar is back.
+        if y <= 0 || (limit > 0 && y >= limit - 0.5) {
+            run = 0
+            hidden = false
+            return hidden
+        }
+        let step = y - last
+        guard step != 0 else { return hidden }
+        if run != 0, (step > 0) != (run > 0) { run = 0 }
+        run += step
+        if !hidden, run >= Self.hideAfter, y > Self.pastTop { hidden = true; run = 0 }
+        if hidden, run <= -Self.showAfter { hidden = false; run = 0 }
+        return hidden
+    }
+
+    /// Shown again (a status-bar tap, back to the top, a tab change, the app coming back).
+    mutating func show() {
+        hidden = false
+        run = 0
+    }
+}
+
+/// Whether the phone's tab bar is out of the way now: the home feed says so as it scrolls, the tab
+/// view shows it again on a tab change or coming back to the app.
+@Observable
+final class TabBarHiding {
+    private(set) var hidden = false
+    @ObservationIgnored private var rule = TabBarScroll()
+
+    func scrolled(to y: CGFloat, limit: CGFloat) {
+        let now = rule.scrolled(to: y, limit: limit)
+        if now != hidden { hidden = now }
+    }
+
+    func show() {
+        rule.show()
+        if hidden { hidden = false }
+    }
 }
 
 extension EnvironmentValues {
@@ -111,6 +181,14 @@ struct MainTabView: View {
     @State private var groupWidth: CGFloat = 0
     /// Taps on each tab while it was chosen and at its root (``EnvironmentValues/scrollToTop``).
     @State private var toTop: [AppTab: Int] = [:]
+    /// The phone's tab bar slid away while the home feed is read (round 16 §2).
+    @State private var barHiding = TabBarHiding()
+    /// The window's bottom safe area: how far the bar travels to be out of sight.
+    @State private var bottomInset: CGFloat = 0
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+    @Environment(\.accessibilitySwitchControlEnabled) private var switchControl
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let push = PushCenter.shared
 
     private let tabs: [AppTab] = [.feed, .messages, .notifications, .cardBox]
@@ -125,6 +203,9 @@ struct MainTabView: View {
     /// The phone's bottom bar over the current tab's page.
     private var bottomBar: Bool { TabChrome.bottomBar(window.layoutClass, pushed: path(tab).wrappedValue) }
 
+    /// The bar out of the way: the feed scrolled it off — never while VoiceOver or Switch Control is on.
+    private var barAway: Bool { bottomBar && barHiding.hidden && !voiceOver && !switchControl }
+
     /// The conversation beside the list (expanded windows).
     private var twoPane: Bool { window.layoutClass == .expanded }
 
@@ -132,7 +213,7 @@ struct MainTabView: View {
     /// the four tabs of them (``OrganicTopTabs/segments(_:)``).
     static func tabItems(notifications: Int, messages: Int) -> [OrganicTabItem<AppTab>] {
         AppTab.allCases.map {
-            OrganicTabItem(id: $0, title: $0.title, icon: $0.icon, isAction: $0 == .write,
+            OrganicTabItem(id: $0, title: $0.title, icon: $0.icon, selectedIcon: $0.selectedIcon, isAction: $0 == .write,
                            badge: $0 == .notifications ? notifications : $0 == .messages ? messages : 0)
         }
     }
@@ -151,16 +232,24 @@ struct MainTabView: View {
             .animation(.easeOut(duration: 0.16), value: topTabs)
             // The app's one toast, over whichever page asked for it and the ones after it.
             .overlay(alignment: .bottom) {
+                // A toast rides with the bar: down with it when the feed has scrolled it away.
                 ToastHost(session.toasts)
-                    .padding(.bottom, ToastPlacement.bottom(window.layoutClass, tabBar: bottomBar))
+                    .padding(.bottom, ToastPlacement.bottom(window.layoutClass, tabBar: bottomBar && !barAway))
                     .animation(.easeOut(duration: 0.12), value: bottomBar)
+                    .animation(barMotion, value: barAway)
             }
         // The window's width: the root's own plus the safe areas at its sides (a landscape iPhone's notch).
         .onGeometryChange(for: WindowLayout.self) { geo in
             WindowLayout(width: geo.size.width + geo.safeAreaInsets.leading + geo.safeAreaInsets.trailing,
                          height: geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom)
         } action: { window = $0 }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { bottomInset = $0 }
         .environment(\.window, window)
+        .environment(barHiding)
+        // Another tab, the app back in front, a page over the root and back: the bar is there again.
+        .onChange(of: tab) { barHiding.show() }
+        .onChange(of: bottomBar) { barHiding.show() }
+        .onChange(of: scenePhase) { _, phase in if phase == .active { barHiding.show() } }
         // The hardware keyboard's ⌘N opens the writer, as the pen does; ⌘1…⌘4 choose a tab, as a tap does.
         .background {
             Button(L10n.App.Nav.write) { writer.open() }
@@ -231,11 +320,27 @@ struct MainTabView: View {
                 BadgedTabs { items in OrganicTabBar(items: items, selection: tab, onSelect: select) }
                     // A field's keyboard rises over it rather than carrying it up.
                     .ignoresSafeArea(.keyboard, edges: .bottom)
+                    // Scrolled away by the feed (round 16 §2): down out of sight with its wavy edge, over the
+                    // list (which keeps its room at the foot, so nothing reflows) — or, under Reduce Motion, a fade.
+                    .offset(y: barAway && !reduceMotion ? barTravel : 0)
+                    .opacity(barAway && reduceMotion ? 0 : 1)
+                    .allowsHitTesting(!barAway)
+                    .accessibilityHidden(barAway)
+                    .animation(barMotion, value: barAway)
                     // In place, fading: back from a page it gave way to it is simply there again (a slide
                     // up after the pop has finished read as arriving late), and it gives way as quickly.
                     .transition(.opacity)
             }
         }
+    }
+
+    /// How far the bar goes to be out of sight: itself, its wavy edge and the home indicator's room.
+    private var barTravel: CGFloat { OrganicTabBar<AppTab>.height + HeaderEdge.height + bottomInset + 8 }
+
+    /// Going: 200 ms easing in; coming back: 220 ms easing out; under Reduce Motion a 150 ms fade.
+    private var barMotion: Animation {
+        if reduceMotion { return .easeInOut(duration: 0.15) }
+        return barAway ? .easeIn(duration: 0.2) : .easeOut(duration: 0.22)
     }
 
     /// What the tab view does around its stacks: the deletion's undo, the writer's requests, links and pushes.
@@ -447,6 +552,9 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
     var toTopRequests = 0
     /// Told whether the list rests at its top, each time that changes.
     var onAtTop: (Bool) -> Void = { _ in }
+    /// The phone's tab bar slides away as this list is read down (round 16 §2: the home feed only).
+    var hidesTabBar = false
+    @Environment(TabBarHiding.self) private var barHiding: TabBarHiding?
     let trailing: Trailing
     let banner: Banner
     let content: Content
@@ -486,8 +594,9 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
 
     init(_ title: String, headerSpacing: CGFloat = 20, titleInBar: Bool = false, phoneTop: CGFloat = 16, tabletGap: Bool = true,
          tabletTop: CGFloat? = nil, head: String? = nil, toTopRequests: Int = 0, onAtTop: @escaping (Bool) -> Void = { _ in },
-         @ViewBuilder trailing: () -> Trailing = { EmptyView() },
+         hidesTabBar: Bool = false, @ViewBuilder trailing: () -> Trailing = { EmptyView() },
          @ViewBuilder banner: () -> Banner, @ViewBuilder content: () -> Content) {
+        self.hidesTabBar = hidesTabBar
         self.title = title
         self.headerSpacing = headerSpacing
         self.titleInBar = titleInBar
@@ -543,6 +652,14 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
         } action: { old, new in
             hidden = new <= 0 ? 0 : min(travel, max(0, hidden + new - old))
         }
+        // The tab bar's own rule (round 16 §2), from the same offset and its end.
+        .onScrollGeometryChange(for: [CGFloat].self) { geo in
+            let limit = max(0, geo.contentSize.height + geo.contentInsets.top + geo.contentInsets.bottom - geo.containerSize.height)
+            return [min(max(geo.contentOffset.y + geo.contentInsets.top, 0), limit), limit]
+        } action: { _, now in
+            guard hidesTabBar, !window.topTabs else { return }
+            barHiding?.scrolled(to: now[0], limit: now[1])
+        }
         .onScrollPhaseChange { _, phase, context in
             guard phase == .idle else { return }
             let y = context.geometry.contentOffset.y + context.geometry.contentInsets.top
@@ -575,15 +692,16 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
     private func backToTop() {
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) { position.scrollTo(edge: .top) }
         withAnimation(.easeOut(duration: 0.18)) { hidden = 0 }
+        if hidesTabBar { barHiding?.show() }
     }
 }
 
 extension TabScreen where Banner == EmptyView {
     init(_ title: String, headerSpacing: CGFloat = 20, titleInBar: Bool = false, phoneTop: CGFloat = 16, tabletGap: Bool = true,
          tabletTop: CGFloat? = nil, head: String? = nil, toTopRequests: Int = 0, onAtTop: @escaping (Bool) -> Void = { _ in },
-         @ViewBuilder trailing: () -> Trailing = { EmptyView() }, @ViewBuilder content: () -> Content) {
+         hidesTabBar: Bool = false, @ViewBuilder trailing: () -> Trailing = { EmptyView() }, @ViewBuilder content: () -> Content) {
         self.init(title, headerSpacing: headerSpacing, titleInBar: titleInBar, phoneTop: phoneTop, tabletGap: tabletGap,
-                  tabletTop: tabletTop, head: head, toTopRequests: toTopRequests, onAtTop: onAtTop, trailing: trailing, banner: { EmptyView() },
-                  content: content)
+                  tabletTop: tabletTop, head: head, toTopRequests: toTopRequests, onAtTop: onAtTop, hidesTabBar: hidesTabBar,
+                  trailing: trailing, banner: { EmptyView() }, content: content)
     }
 }
