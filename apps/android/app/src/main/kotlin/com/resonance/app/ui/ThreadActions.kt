@@ -213,11 +213,17 @@ internal class TrayOffer(val chosen: ReactionId?, val choose: (ReactionId) -> Un
 /**
  * A message pressed and held (round 16 §3): the thread dims under the scrim and the message is lifted
  * where it lies — drawn again, all it carries, at 1.03 on a spring (the "selected" signal) — with the
- * five reactions on a borderless paper sheet right above it ([ReactionTray], when [tray] offers them)
- * and the actions on the same sheet right under it ([MessageActionSheet]), both flush with its side.
+ * five reactions floating right above it, no paper under them ([ReactionTray], when [tray] offers them)
+ * and the actions on the menu sheet right under it ([MessageActionSheet]), both flush with its side.
  * When they don't fit round it the message glides (220 ms) the least that fits ([placeHeldMessage]);
  * one too tall is clipped from its top with a 24 fade at its foot. A reaction chosen: the selection
  * tick, the chip pops onto the bubble, and the overlay goes 150 ms later (its ink shown).
+ *
+ * The scrim itself is the screen's to draw (round 17 §2.1: over the thread's body only — from the foot of
+ * the thread's bar down, the composer included — never the bar, the conversations or the rule between),
+ * as far up as [over] says; this layer only takes the taps beside what it lifted, the bar's too, which
+ * close it. [regionTop] is where that body starts (px, from this layer's top): the tray and the list
+ * keep 12 under it as they keep 12 over the window's foot.
  */
 @Composable
 internal fun MessageMenuOverlay(
@@ -227,8 +233,10 @@ internal fun MessageMenuOverlay(
     footer: String,
     tray: TrayOffer?,
     onDismiss: () -> Unit,
-    /** How far the overlay is up (0…1), for the screen to soften what lies under its scrim (round 16 review F8). */
+    /** How far the overlay is up (0…1), for the screen to draw its scrim and soften what lies under it (round 16 review F8). */
     over: MutableFloatState? = null,
+    /** Where the thread's body starts under its bar (px from this layer's top); null: under the status bar. */
+    regionTop: Int? = null,
 ) {
     val message = menu.row.message
     val mine = ctx.model.isMine(message)
@@ -282,20 +290,14 @@ internal fun MessageMenuOverlay(
         val bottom = (menu.bounds.bottom - at.y).toInt()
         val place = placeHeldMessage(
             top, bottom, trayH, with(density) { TrayGap.roundToPx() }, listH, with(density) { ListGap.roundToPx() },
-            safeTop = topInset + margin, safeBottom = screenH - bottomInset - margin, least = with(density) { ClippedLeast.roundToPx() },
+            safeTop = (regionTop ?: topInset) + margin, safeBottom = screenH - bottomInset - margin, least = with(density) { ClippedLeast.roundToPx() },
         )
         LaunchedEffect(place.shift, origin != null) {
             if (origin == null || leaving) return@LaunchedEffect
             if (reduced) glide.snapTo(place.shift.toFloat()) else glide.animateTo(place.shift.toFloat(), tween(GLIDE_MILLIS, easing = FastOutSlowInEasing))
         }
-        val scrim = ModalScrim
-        Box(
-            Modifier
-                .fillMaxSize()
-                // The modals' scrim, over the bars too (the activity is edge to edge).
-                .drawBehind { drawRect(scrim, alpha = appear.value) }
-                .plainClickable(onClick = dismiss),
-        )
+        // A tap beside what is lifted — on the dimmed thread, or on the bar left sharp above it — closes it.
+        Box(Modifier.fillMaxSize().plainClickable(onClick = dismiss))
         if (origin == null) return@BoxWithConstraints
         CappedTextScale {
             val fade = with(density) { ClippedFade.toPx() }
