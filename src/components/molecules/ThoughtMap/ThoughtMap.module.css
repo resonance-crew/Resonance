@@ -424,6 +424,11 @@
   composes: overlay;
   top: 16px;
   right: 16px;
+  /* A host may send the tools away (--map-tools-away: 1, --map-tools-events: none): the workspace while the
+     writer's pane is dragged on past 1:1, so the map's tools fade before the Leave can meet them (round 17
+     review W12), taking no click while gone. */
+  opacity: calc(1 - var(--map-tools-away, 0));
+  pointer-events: var(--map-tools-events, auto);
   transition: opacity 120ms ease;
 }
 
@@ -457,6 +462,8 @@
   bottom: 16px;
   gap: 4px;
   padding: 6px 10px;
+  opacity: calc(1 - var(--map-tools-away, 0));
+  pointer-events: var(--map-tools-events, auto);
   transition: opacity 120ms ease;
 }
 

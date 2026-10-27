@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { act, fireEvent, renderWithIntl, screen, userEvent, within } from '@/../test/render';
@@ -609,15 +611,22 @@ describe('the workspace at the split', () => {
         <p>editor</p>
       </WorkspaceShell>,
     );
+    const mapPane = () => screen.getByTestId('map').closest('[class*="mapPane"]')!;
+    expect(mapPane()).not.toHaveAttribute('data-beyond');
     fireEvent.pointerDown(divider(), { button: 0, pointerId: 1, clientX: 500 });
     fireEvent.pointerMove(divider(), { pointerId: 1, clientX: 300 });
     expect(divider()).toHaveAttribute('aria-valuenow', '70');
     expect(screen.queryByText('Release to write full width')).toBeNull();
+    // The map's tools give way while the pane is past 1:1, before the Leave can meet them (round 17 review W12).
+    expect(mapPane()).toHaveAttribute('data-beyond');
+    const css = readFileSync(join(process.cwd(), 'src/components/sections/WriteWorkspace/WriteWorkspace.module.css'), 'utf8');
+    expect(css).toMatch(/\.mapPane\[data-beyond\] \{\s*--map-tools-away: 1;\s*--map-tools-events: none;/);
     fireEvent.pointerMove(divider(), { pointerId: 1, clientX: 200 });
     expect(screen.getByText('Release to write full width')).toBeInTheDocument();
     fireEvent.pointerUp(divider(), { pointerId: 1, clientX: 200 });
     expect(divider()).toHaveAttribute('aria-valuenow', '100');
     expect(divider()).toHaveAttribute('data-docked', 'start');
+    expect(mapPane()).not.toHaveAttribute('data-beyond');
     expect(divider()).toHaveAccessibleName('Show the thought map');
     expect(divider()).toHaveAttribute('aria-valuetext', 'Write full width');
     // No bar comes in; the Leave is still the way out, where it was, and the map behind it is out of reach.
@@ -806,6 +815,50 @@ describe('the workspace at the split', () => {
       );
       drag(500, 680);
       throwThrough(16, 680, 640, 600);
+      expect(divider()).toHaveAttribute('aria-valuenow', '50');
+      expect(divider()).not.toHaveAttribute('data-docked');
+    });
+
+    // Round 17 review W1: the speed is the moves' alone. A mouse or a trackpad lets go a frame after its last move, at
+    // the same x — counted, that frame added time with no distance and a drag that felt fast sprang back to 1:1
+    // ("快速拖的話沒有用"). At 30 fps the old reckoning read 0.7 px/ms as 0.35; at 60 fps it read 0.6 as 0.48.
+    /** Moves `ms` apart at `speed` px/ms toward the map from 500, `n` of them, released one frame later at the last. */
+    const flick = (ms: number, speed: number, n: number, releaseAfter = ms) => {
+      fireEvent.pointerDown(divider(), { button: 0, pointerId: 1, clientX: 500 });
+      let x = 500;
+      for (let i = 0; i < n; i++) {
+        vi.advanceTimersByTime(ms);
+        x -= speed * ms;
+        fireEvent.pointerMove(divider(), { pointerId: 1, clientX: x });
+      }
+      vi.advanceTimersByTime(releaseAfter);
+      fireEvent.pointerUp(divider(), { pointerId: 1, clientX: x });
+    };
+
+    it('takes a 30 fps drag at 0.7 px/ms, released a frame after its last move, to the whole width', () => {
+      writer();
+      // 3 moves of 23.1 px: 69 px, released at 57 % — short of 3/4, so only a throw goes on.
+      flick(33, 0.7, 3);
+      expect(divider()).toHaveAttribute('aria-valuenow', '100');
+      expect(divider()).toHaveAttribute('data-docked', 'start');
+    });
+
+    it('takes a 60 fps drag, released a frame after its last move, to the whole width', () => {
+      writer();
+      // The reviewer's: moves every 16 ms at 0.7 px/ms.
+      flick(16, 0.7, 6);
+      expect(divider()).toHaveAttribute('aria-valuenow', '100');
+    });
+
+    it('takes a 60 fps drag at 0.6 px/ms (once read as 0.48) to the whole width', () => {
+      writer();
+      flick(16, 0.6, 6);
+      expect(divider()).toHaveAttribute('aria-valuenow', '100');
+    });
+
+    it('is no throw when the release comes more than 50 ms after the last move: the hand had stopped', () => {
+      writer();
+      flick(16, 1.2, 4, 60);
       expect(divider()).toHaveAttribute('aria-valuenow', '50');
       expect(divider()).not.toHaveAttribute('data-docked');
     });

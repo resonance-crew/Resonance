@@ -82,6 +82,13 @@
   visibility: visible;
 }
 
+/* The writer's pane dragged on past 1:1 squeezes the map under the Leave: its tools fade first, so the two never
+   meet (round 17 review W12; the narrow map's container query does the same under 360). */
+.mapPane[data-beyond] {
+  --map-tools-away: 1;
+  --map-tools-events: none;
+}
+
 /* When a document (the resonance original) replaces the map, its subtree
    keeps clear of the floating Back (the split's: --editor-pad-top down, a
    38px pill), so the panel's author line starts below it, not under it. */
@@ -94,27 +101,81 @@
 /* Single Back control over the map — the workspace's only chrome. Its inset
    matches the editor column's horizontal padding (--page-pad-x) so the left
    chrome lines up with the draft's text edge on the other side; its top lands
-   on the「編輯草稿」title's line (--editor-pad-top). */
+   on the「編輯草稿」title's line (--editor-pad-top). It stands as tall as the
+   ✓ across the pane (a bare glyph's 36, 44 under a finger) with the pill
+   centred in it, so the ← — the pill's and the bare one — sits on the ✓'s
+   centre line (round 17 review W8). */
 .back {
   position: absolute;
   z-index: 7;
   top: var(--editor-pad-top);
   left: var(--page-pad-x);
+  display: flex;
+  align-items: center;
+  height: 36px;
   /* Its own width, whatever the pane's: at the writer's whole width the map
      pane is 0 wide, and a shrink-to-fit pill wrapped to 「離／開」. */
   width: max-content;
   white-space: nowrap;
 }
 
+@media (pointer: coarse) {
+  .back {
+    height: 44px;
+  }
+}
+
+/* The morph (round 17 §5.2, review W8). To the glyph:
+   0–80     the words fade;
+   80–260   their track draws in to nothing and the paper's sides come in to a
+            disc round the glyph — the pill re-measured each frame, so its own
+            wobble narrows (no clip, no straight edge) — while the ← grows to
+            the ✓'s size (15 → 22) and takes its ink and pen (the tonal label's
+            terracotta → --color-text, INK_STRONG → INK, in the 24 box);
+   260      the bare ← (BareIconButton, the ✓'s look) takes its place in the
+            same instant, identical — never two arrows to see;
+   260–380  the paper fades.
+   Back in the reverse order: the paper (0–120), the swap (120), the growth
+   (130–310), the words (310–390). The glyph's centre never moves. */
+.backPill {
+  display: inline-flex;
+  transition: opacity 120ms ease 0ms;
+}
+
+.backPill > button {
+  transition:
+    padding 180ms cubic-bezier(0.2, 0, 0, 1) 130ms,
+    transform 180ms cubic-bezier(0.2, 0, 0, 1) 130ms;
+}
+
 .backIcon {
   display: inline-flex;
   transform: scaleX(-1);
-  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1) 80ms;
+  transition:
+    transform 180ms cubic-bezier(0.2, 0, 0, 1) 130ms,
+    color 180ms ease 130ms,
+    opacity 0s linear 120ms;
+}
+
+.backIcon svg {
+  transition: stroke-width 180ms ease 130ms;
+}
+
+/* The words' track: as wide as the words, or nothing (the label's own gap, 6, goes with it). */
+.backWords {
+  display: inline-grid;
+  grid-template-columns: 1fr;
+  transition:
+    grid-template-columns 180ms cubic-bezier(0.2, 0, 0, 1) 130ms,
+    margin 180ms cubic-bezier(0.2, 0, 0, 1) 130ms;
 }
 
 /* Its words, new ones fading in as the step changes them (離開 ↔ 繼續寫, round 17 §5.3). */
 .backLabel {
+  min-width: 0;
+  overflow: hidden;
   animation: backLabelIn 160ms ease-out;
+  transition: opacity 80ms ease 310ms;
 }
 
 @keyframes backLabelIn {
@@ -126,46 +187,53 @@
   }
 }
 
-/* At the whole width the pill becomes its glyph alone (round 17 §5.2): the words fade (80 ms), the paper draws
-   in to the glyph (180 ms, the release's ease), then the paper and pen fade (120 ms) as the bare glyph — the
-   ✓'s size and line, BareIconButton's look — comes in where the pill's glyph stood; the glyph never moves.
-   Back again in the reverse order. The pill's glyph sits 18 in (its padding), 15 wide: the bare one's 36 box
-   is centred on it. */
-.backPill {
-  display: inline-flex;
-  transition: opacity 120ms ease 0ms;
-}
-
-.backPill > button {
-  clip-path: inset(-8px -8px -8px -8px round 22px);
-  transition: clip-path 180ms cubic-bezier(0.2, 0, 0, 1) 120ms;
-}
-
-.backPill .backLabel {
-  transition: opacity 80ms ease 300ms;
-}
-
 .back[data-glyph] .backPill {
   opacity: 0;
   transition: opacity 120ms ease 260ms;
 }
 
+/* A disc round the glyph: the sides 10.5 in (15 + 21 = 36, the bare glyph's box), moved over by what the start
+   side gave up, so the glyph stays where it stood (18 in). */
 .back[data-glyph] .backPill > button {
-  clip-path: inset(-2px calc(100% - 43.5px) -2px 7.5px round 18px);
-  transition: clip-path 180ms cubic-bezier(0.2, 0, 0, 1) 80ms;
+  padding-left: 10.5px;
+  padding-right: 10.5px;
+  transform: translateX(7.5px);
+  transition:
+    padding 180ms cubic-bezier(0.2, 0, 0, 1) 80ms,
+    transform 180ms cubic-bezier(0.2, 0, 0, 1) 80ms;
 }
 
-.back[data-glyph] .backPill .backLabel {
+.back[data-glyph] .backWords {
+  grid-template-columns: 0fr;
+  margin-left: -6px;
+  transition:
+    grid-template-columns 180ms cubic-bezier(0.2, 0, 0, 1) 80ms,
+    margin 180ms cubic-bezier(0.2, 0, 0, 1) 80ms;
+}
+
+.back[data-glyph] .backLabel {
   opacity: 0;
   transition: opacity 80ms ease 0ms;
 }
 
-/* The pill's glyph grows to the bare one's — the ✓'s size (15 → 22) — as the paper draws in, so the crossfade
-   is seamless. */
+/* The pill's glyph becomes the bare one — the ✓'s size (15 → 22), ink and pen — as the paper draws in, then gives
+   way to it in one frame. */
 .back[data-glyph] .backPill .backIcon {
   transform: scaleX(-1) scale(1.467);
+  color: var(--color-text);
+  opacity: 0;
+  transition:
+    transform 180ms cubic-bezier(0.2, 0, 0, 1) 80ms,
+    color 180ms ease 80ms,
+    opacity 0s linear 260ms;
 }
 
+.back[data-glyph] .backPill .backIcon svg {
+  stroke-width: 1.8;
+  transition: stroke-width 180ms ease 80ms;
+}
+
+/* The bare glyph, centred on the pill's (18 + 7.5 in, the row's middle — the ✓'s). */
 .backGlyph {
   position: absolute;
   top: 50%;
@@ -173,26 +241,45 @@
   transform: translate(-50%, -50%);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 120ms ease 0ms;
+  transition: opacity 0s linear 130ms;
 }
 
 .back[data-glyph] .backGlyph {
   opacity: 1;
   pointer-events: auto;
-  transition: opacity 120ms ease 260ms;
+  transition: opacity 0s linear 250ms;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* A crossfade: nothing draws in, nothing grows. */
+  /* A crossfade: nothing draws in, nothing grows — the pill, words and all, fades as the bare glyph comes in. */
   .backPill > button,
   .back[data-glyph] .backPill > button {
-    clip-path: none;
+    padding-left: 18px;
+    padding-right: 18px;
+    transform: none;
+    transition: none;
+  }
+
+  .backWords,
+  .back[data-glyph] .backWords {
+    grid-template-columns: 1fr;
+    margin-left: 0;
     transition: none;
   }
 
   .backIcon,
   .back[data-glyph] .backPill .backIcon {
     transform: scaleX(-1);
+    opacity: 1;
+    transition: none;
+  }
+
+  .back[data-glyph] .backPill .backIcon {
+    color: inherit;
+  }
+
+  .backIcon svg,
+  .back[data-glyph] .backPill .backIcon svg {
     transition: none;
   }
 
@@ -200,13 +287,14 @@
   .back[data-glyph] .backPill,
   .backGlyph,
   .back[data-glyph] .backGlyph,
-  .backPill .backLabel,
-  .back[data-glyph] .backPill .backLabel {
+  .backLabel,
+  .back[data-glyph] .backLabel {
     transition: opacity 150ms ease;
   }
 
   .backLabel {
     animation: none;
+    opacity: 1;
   }
 }
 

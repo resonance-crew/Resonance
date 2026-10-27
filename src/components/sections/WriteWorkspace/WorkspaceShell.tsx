@@ -51,24 +51,39 @@ const KEY_STEP = 0.02;
 /** How far the docked grip is dragged toward the map before it shows the pane. */
 const SHOW_DRAG_PX = 8;
 /**
- * A throw (round 17 §5.1): released moving at least this fast (px per ms, over the last {@link THROW_WINDOW_MS})
- * after at least {@link THROW_TRAVEL_PX} of travel, the divider goes on to the next stop in its direction — toward
- * the map, the whole width (the writer's pane; 1:1 for another); back toward the pane's side, folded away.
+ * A throw (round 17 §5.1): released moving at least this fast (px per ms, over the last {@link THROW_WINDOW_MS}
+ * of its moves) after at least {@link THROW_TRAVEL_PX} of travel, the divider goes on to the next stop in its
+ * direction — toward the map, the whole width (the writer's pane; 1:1 for another); back toward the pane's side,
+ * folded away.
  */
 export const THROW_SPEED = 0.5;
 export const THROW_WINDOW_MS = 80;
 export const THROW_TRAVEL_PX = 24;
+/**
+ * A release this long after the last move is a hand that had stopped (round 17 review W1): no throw. Within it
+ * the release is one frame after the last move, as a mouse or a trackpad lets go (33 ms at 30 fps).
+ */
+export const THROW_STOP_MS = 50;
 /** Samples nearer together than this say nothing of a speed (one frame's coalesced moves). */
 const THROW_MIN_SPAN_MS = 8;
 
-/** The pointer's speed over the last {@link THROW_WINDOW_MS} before `t` (px per ms, negative toward the left), 0 when unknown. */
-export function releaseSpeed(samples: { t: number; x: number }[], t: number): number {
-  const recent = samples.filter((p) => p.t >= t - THROW_WINDOW_MS && p.t <= t);
+/**
+ * How fast the pointer was going as it let go at `t` (px per ms, negative toward the left; 0 when unknown or
+ * stopped) — from its moves alone (round 17 review W1): the last {@link THROW_WINDOW_MS} of `moves` (the press
+ * among them), the release point `x` counted only when it moved past the last one. A release usually comes a
+ * frame after the last move at the same x; counted, it added time with no distance and a fast drag sprang back.
+ * More than {@link THROW_STOP_MS} after the last move, the hand had stopped: 0.
+ */
+export function releaseSpeed(moves: { t: number; x: number }[], t: number, x?: number): number {
+  const last = moves[moves.length - 1];
+  if (!last || t - last.t > THROW_STOP_MS) return 0;
+  const points = x != null && x !== last.x && t > last.t ? [...moves, { t, x }] : moves;
+  const end = points[points.length - 1];
+  const recent = points.filter((p) => p.t >= end.t - THROW_WINDOW_MS && p.t <= end.t);
   if (recent.length < 2) return 0;
   const first = recent[0];
-  const last = recent[recent.length - 1];
-  const span = last.t - first.t;
-  return span >= THROW_MIN_SPAN_MS ? (last.x - first.x) / span : 0;
+  const span = end.t - first.t;
+  return span >= THROW_MIN_SPAN_MS ? (end.x - first.x) / span : 0;
 }
 
 /** The grip's box and its mark (round 17 §5.4): a short vertical pen stroke, 40 tall, three gentle waves of the hand. */
@@ -361,7 +376,7 @@ export function WorkspaceShell({
     // Thrown (round 17 §5.1): released moving fast after a real travel, the divider goes on to the next stop in
     // its direction — toward the map the whole width (the writer's pane; another stops at 1:1), back toward the
     // pane's side folded away, to come back at the width it had.
-    const speed = t == null ? 0 : releaseSpeed([...d.samples, { t, x: clientX }], t);
+    const speed = t == null ? 0 : releaseSpeed(d.samples, t, clientX);
     const thrown = !cancelled && Math.abs(clientX - d.x) >= THROW_TRAVEL_PX && Math.abs(speed) >= THROW_SPEED;
     // Released past the hide line: the pane slides away, to come back at the width it had. Between it and the
     // narrowest, the pane springs back to the narrowest. Past 3/4 of the width it takes the whole; between 1:1
@@ -610,6 +625,7 @@ export function WorkspaceShell({
         ref={mapRef}
         className={leftOverride ? `${styles.mapPane} ${styles.mapPaneDoc}` : styles.mapPane}
         data-full={full || undefined}
+        data-beyond={beyond != null || undefined}
         inert={mapCovered}
       >
         {leftOverride ??
@@ -628,8 +644,10 @@ export function WorkspaceShell({
           // writer's only at the split (below it, its bar has the way back). At the whole width it stays where
           // it was, over the pane's edge (the map behind it is hidden, the pill is not).
           // At the whole width the pill becomes its glyph alone (round 17 §5.2): the words fade, the paper draws in
-          // to the glyph and fades, the ← left where it stood at the ✓'s size and line — and back when the map
-          // comes back. Its words follow the step (round 17 §5.3), and so does its name.
+          // to the glyph (its own shape narrowing — review W8) as the ← grows to the ✓'s size and ink, then the
+          // bare ← takes its place in the same instant and the paper fades — one arrow throughout, on the ✓'s
+          // line — and back when the map comes back. Its words follow the step (round 17 §5.3), and so does its
+          // name.
           <div className={styles.back} data-split-only={bar ? '' : undefined} data-over-pane={full || undefined} data-glyph={full || undefined}>
             <span className={styles.backPill} aria-hidden={full || undefined} inert={full}>
               <OrganicButton variant="tonal" size="sm" onClick={leave} disabled={leaveDisabled}>
@@ -641,8 +659,12 @@ export function WorkspaceShell({
                   />
                 </span>
                 {!isMobile && (
-                  <span key={leaveLabel} className={styles.backLabel}>
-                    {leaveLabel}
+                  // Its words in a track of their own, which draws in to nothing at the whole width: the pill's
+                  // paper narrows with it, its own wobble re-drawn as it goes — never a straight cut.
+                  <span className={styles.backWords}>
+                    <span key={leaveLabel} className={styles.backLabel}>
+                      {leaveLabel}
+                    </span>
                   </span>
                 )}
               </OrganicButton>
@@ -732,6 +754,9 @@ export function WorkspaceShell({
           <section
             id={paneId}
             className={styles.editorPane}
+            // What the pane's dialogs centre over (the link editor, round 17 review W10): the pane at the split,
+            // the window at the whole width and below the split, where the pane is the window.
+            data-dialog-host=""
             data-folded={folded || undefined}
             data-dragging={dragging || undefined}
             data-ease={ease}
