@@ -1,7 +1,8 @@
 /* ── Subnavbar (account menu) ───────────────────────────────────────
-   The avatar is the trigger; clicking it drops an organic wobbly card —
-   the same hand-drawn language as <Select> — listing account actions,
-   separated by wavy pen dividers, the active row washed along the curve. */
+   The avatar is the trigger; clicking it drops the one menu sheet — the
+   exact twin of OrganicMenu's (round 17 §1, review W3): paper and grain, no
+   pen, no dividers, the glyphs in the menu's terracotta, the row ink under
+   the pointer or the keyboard. */
 .root {
   position: relative;
 }
@@ -71,7 +72,7 @@
   background: transparent;
   font-family: var(--font-body);
   font-size: 14.5px;
-  line-height: normal;
+  line-height: 1;
   color: var(--color-text);
   text-align: left;
   text-decoration: none;
@@ -89,20 +90,22 @@
 .option[aria-busy='true'] .optionIcon {
   display: inline-flex;
 }
-.option[data-active] {
-  color: var(--color-terracotta);
+.option:focus {
+  outline: none;
 }
-.option[data-tone='danger'][data-active] {
-  color: var(--color-terracotta);
+/* The inked row's words and glyph: the menu's deep pen (OrganicMenu's --menu-border-hover). */
+.option[data-active] {
+  color: var(--terracotta-deep);
 }
 
+/* The glyphs in the menu's pen, terracotta (OrganicMenu's --menu-border), deeper on the inked row. */
 .optionIcon {
   flex-shrink: 0;
-  color: var(--color-text-muted);
+  color: var(--color-terracotta);
   transition: color 120ms ease;
 }
 .option[data-active] .optionIcon {
-  color: var(--color-terracotta);
+  color: var(--terracotta-deep);
 }
 
 .optionLabel {

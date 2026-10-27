@@ -96,26 +96,39 @@ describe('OrganicMenu row ink', () => {
     for (const band of bands) expect(band).toMatch(/^path\('M .* C .* Z'\)$/);
   });
 
-  it('keeps the destructive row yellow at rest and inks it a deeper yellow', async () => {
-    await openMenu();
-    // The resting warning wash is drawn under the ink, before any hover — see-through, so the paper's grain shows…
-    const rest = document.querySelector('[data-row-brushes] [data-rest] path')!;
-    expect(rest.getAttribute('fill')).toContain('yellow) 30%, transparent');
-    expect(rest.closest('[data-rest]')).toHaveAttribute('data-rest', '2');
+  // Round 17 review D1: a row that ends or removes something is told by the danger ink alone — every such row,
+  // not only the first — its ink spreading in the danger hue at the others' strength, and no wash at rest.
+  it('draws every destructive row in the danger ink, with no wash at rest and its ink in the danger hue', async () => {
+    const items: OrganicMenuItem[] = [
+      { key: 'search', icon: 'search', label: 'Search' },
+      { key: 'block', icon: 'ban', label: 'Block', danger: true },
+      { key: 'delete', icon: 'trash', label: 'Delete', danger: true },
+    ];
+    render(<OrganicMenu items={items} onChoose={vi.fn()} label="Manage" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Manage' }));
+    // Nothing rests on any row before a pointer, a finger or the keyboard comes.
+    expect(document.querySelector('[data-row-brushes] [data-rest]')).toBeNull();
+    expect(inkBrushes().map((b) => b.on)).toEqual([false, false, false]);
 
-    // …and each row keeps its own ink colour: ordinary rows the menu accent,
-    // the delete row a stronger yellow.
+    const block = screen.getByRole('menuitem', { name: 'Block' });
+    const del = screen.getByRole('menuitem', { name: 'Delete' });
+    expect(block).toHaveAttribute('data-tone', 'danger');
+    expect(del).toHaveAttribute('data-tone', 'danger');
+    expect(screen.getByRole('menuitem', { name: 'Search' })).not.toHaveAttribute('data-tone');
+    // Their glyphs and words wear the danger ink (the deepened one words need on the paper), at rest and inked.
+    const sheet = css('src/components/molecules/OrganicMenu/OrganicMenu.module.css');
+    expect(sheet).toMatch(/\.option\[data-tone='danger'\][^{]*\.option\[data-tone='danger'\] \.optionIcon[^{]*\{\s*color: var\(--danger-fill\);/s);
+
+    // Each row's ink at one strength: the menu's pen, or the danger hue.
     const fills = inkBrushes().map((b) => b.color);
-    expect(fills[0]).toContain('--menu-border-hover) 15%');
-    expect(fills[1]).toContain('--menu-border-hover) 15%');
-    expect(fills[2]).toContain('yellow) 55%, transparent');
+    expect(fills[0]).toContain('--menu-border-hover');
+    expect(fills[0]).toContain('15%');
+    expect(fills[1]).toBe('color-mix(in oklch, var(--color-danger) 15%, transparent)');
+    expect(fills[2]).toBe(fills[1]);
+    expect(fills.some((f) => f.includes('yellow'))).toBe(false);
 
-    fireEvent.mouseEnter(screen.getByRole('menuitem', { name: 'Delete' }), {
-      clientX: 100,
-      clientY: 100,
-    });
+    fireEvent.mouseEnter(del, { clientX: 100, clientY: 100 });
     expect(inkBrushes().map((b) => b.on)).toEqual([false, false, true]);
-    expect(rest.isConnected).toBe(true);
   });
 
   it('still chooses the row that was inked', async () => {

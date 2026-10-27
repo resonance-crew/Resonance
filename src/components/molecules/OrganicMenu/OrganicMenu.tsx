@@ -16,7 +16,7 @@ import { createPortal } from 'react-dom';
 import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import { useElementSize } from '@/lib/hooks/useElementSize';
 import { Icon, type IconName } from '@/components/atoms/Icon';
-import { RowBrushes, useRowInk } from '@/components/atoms/RowInk/RowInk';
+import { RowBrushes, menuRowWash, useRowInk } from '@/components/atoms/RowInk/RowInk';
 import { PaperSheet, sheetPath } from '@/components/atoms/PaperSheet/PaperSheet';
 import { wobCircle } from '@/lib/design/wobCircle';
 import { rowBoundary, rowRegion } from '@/lib/design/rowMenu';
@@ -30,7 +30,10 @@ export interface OrganicMenuItem {
   label: ReactNode;
   /** The row's accessible name, when it says more than its label (「分享到 LINE」 for a row reading LINE). */
   ariaLabel?: string;
-  /** Destructive rows get the warning wash (the card menu's delete-row language). */
+  /**
+   * A row that ends or removes something (刪除, 封鎖, 永久刪除): told by the danger ink alone — its glyph and
+   * words in `--color-danger`, its ink spreading in that hue — and no wash at rest (round 17 review D1).
+   */
   danger?: boolean;
 }
 
@@ -412,6 +415,12 @@ export interface OrganicMenuPanelProps {
   onTabOut?: () => void;
   /** A message's action list: 216 wide at least, 280 at most (every other menu: 168 at least). */
   wide?: boolean;
+  /**
+   * It opened under a finger still down (a held message): a row acts only on a press that began on it after the
+   * panel came, or on the keyboard — the lift of the hold that opened it chooses nothing, whatever row glided
+   * under it (round 17 review D4).
+   */
+  freshPress?: boolean;
   className?: string;
 }
 
@@ -420,11 +429,11 @@ export interface OrganicMenuPanelProps {
  * long-press menu, which hangs it under the message it lifted, and a fine
  * pointer's ⋯ beside a message. The same sheet and row ink as the dropdown's.
  */
-export function OrganicMenuPanel({ items, onChoose, seed, busy = false, footer, hue, origin, autoFocus = null, onTabOut, wide = false, className }: OrganicMenuPanelProps) {
+export function OrganicMenuPanel({ items, onChoose, seed, busy = false, footer, hue, origin, autoFocus = null, onTabOut, wide = false, freshPress = false, className }: OrganicMenuPanelProps) {
   const uid = useId().replace(/:/g, '');
   return (
     <div className={className} style={{ ...menuColors(hue), ...(origin ? { transformOrigin: origin } : {}) }}>
-      <MenuPanel uid={uid} seed={seed} items={items} busy={busy} footer={footer} placed wide={wide} autoFocus={autoFocus} onTabOut={onTabOut} onChoose={onChoose} />
+      <MenuPanel uid={uid} seed={seed} items={items} busy={busy} footer={footer} placed wide={wide} autoFocus={autoFocus} onTabOut={onTabOut} freshPress={freshPress} onChoose={onChoose} />
     </div>
   );
 }
@@ -472,6 +481,8 @@ interface MenuPanelProps {
   onTabOut?: () => void;
   /** A message's action list (216–280 wide). */
   wide?: boolean;
+  /** A row acts only on a press that began on it (or the keyboard): see OrganicMenuPanel's `freshPress`. */
+  freshPress?: boolean;
   onChoose: (key: string) => void;
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -487,6 +498,7 @@ function MenuPanel({
   autoFocus = null,
   onTabOut,
   wide = false,
+  freshPress = false,
   onChoose,
   ref: outerRef,
 }: MenuPanelProps) {
@@ -571,13 +583,29 @@ function MenuPanel({
   };
 
   const ready = w > 0 && regions.length === bands;
-  const dangerIndex = items.findIndex((it) => it.danger);
 
   // The pointer's row takes the ink, and so does the keyboard's (a row focused from the keyboard: the arrows,
   // Tab), growing from its centre — the same wash, never a box around it.
   const [keyRow, setKeyRow] = useState<number | null>(null);
   const inkRows = useMemo(() => items.map((_, i) => ({ top: SHEET_TOP + i * ROW_H, height: ROW_H })), [items]);
   const ink = useRowInk({ panelRef: ref, rows: inkRows, w, h, activeIndex: keyRow });
+  // The row a press began on since the panel came (`freshPress`): a click elsewhere — the lift of the hold that
+  // opened it, over a row that glided under the finger — is no choice. Nor does the lift's compatibility
+  // mouseenter ink the row it lands on: under `freshPress` a row takes the hover ink only from a real mouse.
+  const pressedRow = useRef<number | null>(null);
+  const lastPointer = useRef<string | null>(null);
+  useEffect(() => {
+    if (!freshPress) return;
+    const note = (e: globalThis.PointerEvent) => {
+      lastPointer.current = e.pointerType;
+    };
+    document.addEventListener('pointermove', note, true);
+    document.addEventListener('pointerdown', note, true);
+    return () => {
+      document.removeEventListener('pointermove', note, true);
+      document.removeEventListener('pointerdown', note, true);
+    };
+  }, [freshPress]);
   // Whether the focus is the keyboard's to show: it opened the menu, or a key moved it since a pointer last did —
   // anywhere, not only in the rows: a host's own Tab (the message overlay's, from its reactions) lands on a row too
   // (WCAG 2.4.7), as :focus-visible would judge it.
@@ -596,16 +624,12 @@ function MenuPanel({
       document.removeEventListener('pointerdown', pointer, true);
     };
   }, []);
-  const washes: string[] = items.map((_, i) =>
-    i === dangerIndex
-      ? 'color-mix(in oklch, var(--color-yellow) 55%, transparent)'
-      : 'color-mix(in oklch, var(--menu-border-hover) 15%, transparent)',
-  );
+  // Every row's ink at one strength, a destructive row's in the danger hue (round 17 review D1: no warning wash at
+  // rest — the danger ink of its glyph and words says it). See-through: the paper's grain shows through it, so an
+  // inked row is the same paper, never a second layer on it.
+  const washes: string[] = items.map((it) => menuRowWash(it.danger));
   // The footer's band takes no ink.
   if (hasFooter) washes.push('transparent');
-  // A destructive row rests on its warning wash before any ink. Every wash is see-through: the paper's grain shows
-  // through it, so an inked or warned row is the same paper, never a second layer on it.
-  const rests = washes.map((_, i) => (i === dangerIndex ? 'color-mix(in oklch, var(--color-yellow) 30%, transparent)' : null));
 
   return (
     <div
@@ -614,7 +638,7 @@ function MenuPanel({
       style={{ height: `${h}px` }}
     >
       {w > 0 && <PaperSheet w={w} h={h} R={SHEET_R} seed={seed + 100} />}
-      {ready && <RowBrushes w={w} h={h} outline={outline} bands={regions} ink={ink} fills={washes} rests={rests} />}
+      {ready && <RowBrushes w={w} h={h} outline={outline} bands={regions} ink={ink} fills={washes} />}
       <div
         id={`${uid}-menu`}
         ref={listRef}
@@ -624,26 +648,40 @@ function MenuPanel({
         onKeyDown={onListKey}
         onPointerDown={() => (byKeys.current = false)}
       >
-        {items.map((it, i) => (
-          <button
-            key={it.key}
-            type="button"
-            role="menuitem"
-            className={styles.option}
-            data-active={ink.index === i || undefined}
-            disabled={busy}
-            {...ink.rowProps(i, () => setKeyRow(null))}
-            onFocus={() => setKeyRow(byKeys.current ? i : null)}
-            onBlur={() => setKeyRow((cur) => (cur === i ? null : cur))}
-            onClick={() => onChoose(it.key)}
-            aria-label={it.ariaLabel}
-          >
-            <span className={styles.optionIcon}>
-              {typeof it.icon === 'string' ? <Icon name={it.icon} size={17} strokeWidth={INK} /> : it.icon}
-            </span>
-            {it.label}
-          </button>
-        ))}
+        {items.map((it, i) => {
+          const row = ink.rowProps(i, () => setKeyRow(null));
+          return (
+            <button
+              key={it.key}
+              type="button"
+              role="menuitem"
+              className={styles.option}
+              data-active={ink.index === i || undefined}
+              data-tone={it.danger ? 'danger' : undefined}
+              disabled={busy}
+              {...row}
+              onMouseEnter={(e) => (!freshPress || lastPointer.current === 'mouse') && row.onMouseEnter(e)}
+              onMouseMove={(e) => (!freshPress || lastPointer.current === 'mouse') && row.onMouseMove(e)}
+              onPointerDown={(e) => {
+                pressedRow.current = i;
+                row.onPointerDown(e);
+              }}
+              onFocus={() => setKeyRow(byKeys.current ? i : null)}
+              onBlur={() => setKeyRow((cur) => (cur === i ? null : cur))}
+              onClick={(e) => {
+                // The keyboard's click (Enter, Space) has no pointer behind it (`detail` 0).
+                if (freshPress && e.detail !== 0 && pressedRow.current !== i) return;
+                onChoose(it.key);
+              }}
+              aria-label={it.ariaLabel}
+            >
+              <span className={styles.optionIcon}>
+                {typeof it.icon === 'string' ? <Icon name={it.icon} size={17} strokeWidth={INK} /> : it.icon}
+              </span>
+              {it.label}
+            </button>
+          );
+        })}
         {hasFooter && (
           <div ref={footerRef} className={footerWrap ? `${styles.footer} ${styles.footerWrap}` : styles.footer}>
             {footer}

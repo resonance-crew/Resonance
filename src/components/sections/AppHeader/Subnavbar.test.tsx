@@ -118,8 +118,17 @@ describe('Subnavbar', () => {
     };
     const inked = () => inkBrushes().map((b) => b.on);
 
-    it('rests the ink on the first row, from its centre, when opened', async () => {
-      await open();
+    // Round 17 review W3: the one sheet's rules — a pointer's opening inks no row (with no pen, that read as a stuck
+    // hover, and on /settings it lit the wrong page); the keyboard's starts on the first, from its centre.
+    it('inks no row when a pointer opens it, and the first when the keyboard does', async () => {
+      const trigger = await open();
+      expect(inked()).toEqual([false, false, false, false]);
+      expect(screen.getByRole('menuitem', { name: 'My Card Box' })).not.toHaveAttribute('data-active');
+
+      await userEvent.keyboard('{Escape}');
+      expect(screen.queryByRole('menu')).toBeNull();
+      trigger.focus();
+      await userEvent.keyboard('{Enter}');
       expect(inked()).toEqual([true, false, false, false]);
       // The sheet's 6 of paper over its first row (round 17 §1), then the row's 44.
       expect(inkBrushes()[0]).toMatchObject({ cx: 100, cy: 6 + 22 });
@@ -162,17 +171,17 @@ describe('Subnavbar', () => {
       expect(inked()).toEqual([false, false, true, false]);
     });
 
-    it('keeps the sign-out row yellow — resting under the ink, and as the ink itself', async () => {
+    // Leaving isn't destroying: 登出 is a plain row, every row's ink the menus' one, nothing at rest.
+    it('draws 登出 as a plain row: no wash at rest, the same ink as every row, the glyphs in the menu pen', async () => {
       await open();
       // The menus' one sheet (round 17 §1): no pen line round it, none between its rows.
       expect(screen.getByRole('menu').parentElement!.querySelector('path[stroke]')).toBeNull();
-      const rest = document.querySelector('[data-row-brushes] [data-rest] path')!;
-      expect(rest.getAttribute('fill')).toContain('yellow) 30%, transparent');
-      expect(rest.closest('[data-rest]')).toHaveAttribute('data-rest', '3');
-
+      expect(document.querySelector('[data-row-brushes] [data-rest]')).toBeNull();
       const fills = inkBrushes().map((b) => b.color);
-      expect(fills.slice(0, 3).every((f) => f.includes('--color-terracotta) 13%'))).toBe(true);
-      expect(fills[3]).toContain('yellow) 40%');
+      expect(new Set(fills).size).toBe(1);
+      expect(fills[0]).toContain('15%');
+      expect(fills.some((f) => f.includes('yellow'))).toBe(false);
+      expect(screen.getByRole('menuitem', { name: 'Sign out' })).not.toHaveAttribute('data-tone');
 
       fireEvent.mouseEnter(screen.getByRole('menuitem', { name: 'Sign out' }), {
         clientX: 30,

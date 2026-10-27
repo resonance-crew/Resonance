@@ -524,6 +524,37 @@ describe('Messenger’s thread, drawn by hand', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
+  // Round 17 review D4: the message glides so its menus fit, and a row can land under the finger that held it — its
+  // lift (a browser may call it a click on that row, or on a sticker) chooses nothing; a tap of its own does.
+  it('chooses nothing on the lift of the hold, whatever row or sticker glided under the finger', async () => {
+    server.messages = [text('m1', 'hold me', { sentAt: at(10, 0) })];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    const { container } = renderWithIntl(thread());
+    await screen.findByText('hold me');
+
+    const message = container.querySelector<HTMLElement>('[data-message-id="m1"] div[class*="message"]')!;
+    fireEvent.pointerDown(message, { pointerType: 'touch', button: 0, clientX: 40, clientY: 40 });
+    const menu = await screen.findByRole('dialog', {}, { timeout: 1500 });
+    const reply = within(menu).getByRole('menuitem', { name: 'Reply' });
+    // The lift lands on 回覆 (and the tray's first sticker): its pointerup, then the browser's click — no press began
+    // on either since the menu came.
+    fireEvent.pointerUp(reply, { pointerType: 'touch', button: 0 });
+    fireEvent.click(reply, { detail: 1 });
+    const heart = within(within(menu).getByRole('toolbar')).getAllByRole('button')[0];
+    fireEvent.click(heart, { detail: 1 });
+    await new Promise((r) => setTimeout(r, 200));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByText('Replying to alice')).not.toBeInTheDocument();
+    expect(vi.mocked(callApi).mock.calls.some(([path]) => String(path).includes('/reaction'))).toBe(false);
+
+    // A tap of its own on the row (its press, then its click) chooses it.
+    fireEvent.pointerDown(reply, { pointerType: 'touch', button: 0 });
+    fireEvent.pointerUp(reply, { pointerType: 'touch', button: 0 });
+    fireEvent.click(reply, { detail: 1 });
+    expect(screen.getByText('Replying to alice')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
   it('leads with the link’s open and copy when the finger held the link itself', async () => {
     server.messages = [text('m1', 'read https://example.com/a', { sentAt: at(10, 0) })];
     vi.mocked(callApi).mockResolvedValue({ cards: [] });

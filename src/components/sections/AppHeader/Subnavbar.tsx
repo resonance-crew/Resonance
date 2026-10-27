@@ -14,7 +14,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { HandDrawnAvatar } from '@/components/atoms/HandDrawnAvatar/HandDrawnAvatar';
 import { ButtonLoader } from '@/components/atoms/ButtonLoader/ButtonLoader';
 import { Icon, type IconName } from '@/components/atoms/Icon';
-import { RowBrushes, useRowInk } from '@/components/atoms/RowInk/RowInk';
+import { RowBrushes, menuRowWash, useRowInk } from '@/components/atoms/RowInk/RowInk';
 import { PaperSheet, sheetPath } from '@/components/atoms/PaperSheet/PaperSheet';
 import { SignOutConfirmModal } from '@/components/molecules/SignOutConfirmModal/SignOutConfirmModal';
 import { useAuth } from '@/components/providers/AuthProvider';
@@ -29,23 +29,18 @@ interface MenuItem {
   key: ItemKey;
   icon: IconName;
   href?: '/me' | '/messages' | '/settings';
-  tone?: 'danger';
 }
 
+// 登出 is a plain row: leaving isn't destroying (round 17 review W3), so it wears no danger ink.
 const ITEMS: MenuItem[] = [
   { key: 'me', icon: 'cards', href: '/me' },
   { key: 'messages', icon: 'chat', href: '/messages' },
   { key: 'settings', icon: 'pen', href: '/settings' },
-  { key: 'signOut', icon: 'logout', tone: 'danger' },
+  { key: 'signOut', icon: 'logout' },
 ];
 
-// The ink of each row: terracotta, and the warning yellow for signing out (which rests on a lighter one).
-const INK_WASHES = ITEMS.map((item) =>
-  item.key === 'signOut'
-    ? 'color-mix(in oklch, var(--color-yellow) 40%, transparent)'
-    : 'color-mix(in oklch, var(--color-terracotta) 13%, transparent)',
-);
-const REST_WASHES = ITEMS.map((item) => (item.key === 'signOut' ? 'color-mix(in oklch, var(--color-yellow) 30%, transparent)' : null));
+// Every row's ink: the menus' one (OrganicMenu's), at the same strength.
+const INK_WASHES = ITEMS.map(() => menuRowWash());
 /** The sheet (round 17 §1, OrganicMenu's): 6 of paper over the first row and under the last, rows 44, corners 20. */
 const SHEET_PAD = 6;
 const ROW_H = 44;
@@ -65,9 +60,11 @@ export interface SubnavbarProps {
 
 /**
  * Account menu hanging off the header avatar. Closed, it's just the avatar;
- * clicking it drops an organic wobbly card — the same hand-drawn language as
- * `<Select>` — listing 我的卡片盒 / 設定 / 登出, with wavy pen dividers between
- * rows and the active row washed in along the curved divider regions.
+ * clicking it drops the one menu sheet (round 17 §1, OrganicMenu's exact twin —
+ * review W3): paper and grain, no pen, no dividers, the glyphs in the menu's
+ * terracotta, the row ink under the pointer or the keyboard alone (a pointer's
+ * opening inks no row; the keyboard's starts on the first), listing 我的卡片盒 /
+ * 私訊 / 設定 / 登出 — 登出 a plain row.
  */
 export function Subnavbar({ user, seed = 91 }: SubnavbarProps) {
   const t = useTranslations('app.nav');
@@ -84,9 +81,10 @@ export function Subnavbar({ user, seed = 91 }: SubnavbarProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const uid = useId().replace(/:/g, '');
 
-  function openMenu() {
+  /** Opens it: from the keyboard with its first row inked, from a pointer with none (a stuck hover otherwise). */
+  function openMenu(byKeyboard: boolean) {
     setActiveIndex(0);
-    setInteractionMode('keyboard');
+    setInteractionMode(byKeyboard ? 'keyboard' : 'mouse');
     setOpen(true);
   }
 
@@ -136,22 +134,19 @@ export function Subnavbar({ user, seed = 91 }: SubnavbarProps) {
       case 'ArrowDown':
         e.preventDefault();
         setInteractionMode('keyboard');
-        if (!open) openMenu();
+        if (!open) openMenu(true);
         else setActiveIndex((i) => Math.min(ITEMS.length - 1, i + 1));
         break;
       case 'ArrowUp':
         e.preventDefault();
         setInteractionMode('keyboard');
-        if (!open) openMenu();
+        if (!open) openMenu(true);
         else setActiveIndex((i) => Math.max(0, i - 1));
         break;
       case 'Enter':
       case ' ':
         e.preventDefault();
-        if (!open) {
-          setInteractionMode('keyboard');
-          openMenu();
-        }
+        if (!open) openMenu(true);
         else void activate(activeIndex);
         break;
       case 'Escape':
@@ -179,7 +174,8 @@ export function Subnavbar({ user, seed = 91 }: SubnavbarProps) {
         aria-controls={`${uid}-menu`}
         aria-label={user.handle}
         aria-activedescendant={open ? `${uid}-opt-${activeIndex}` : undefined}
-        onClick={() => (open ? setOpen(false) : openMenu())}
+        // Enter and Space open it in onKeyDown; a click with no pointer behind it (`detail` 0) is the keyboard's too.
+        onClick={(e) => (open ? setOpen(false) : openMenu(e.detail === 0))}
         onKeyDown={onKeyDown}
         onMouseEnter={() => setInteractionMode('mouse')}
         onMouseDown={() => setInteractionMode('mouse')}
@@ -284,7 +280,7 @@ function SubnavPanel({
     <div ref={ref} className={styles.panel} style={{ height: `${h}px` }}>
       {w > 0 && <PaperSheet w={w} h={h} R={SHEET_R} seed={seed + 100} />}
       {regions.length === ITEMS.length && (
-        <RowBrushes w={w} h={h} outline={outline} bands={regions} ink={ink} fills={INK_WASHES} rests={REST_WASHES} />
+        <RowBrushes w={w} h={h} outline={outline} bands={regions} ink={ink} fills={INK_WASHES} />
       )}
       <div id={`${uid}-menu`} className={styles.list} role="menu" aria-label={label('me')}>
         {ITEMS.map((item, i) => (
@@ -295,7 +291,6 @@ function SubnavPanel({
             id={`${uid}-opt-${i}`}
             className={styles.option}
             data-active={i === ink.index || undefined}
-            data-tone={item.tone}
             disabled={item.key === 'signOut' && signingOut}
             aria-busy={(item.key === 'signOut' && signingOut) || undefined}
             onClick={() => onChoose(i)}

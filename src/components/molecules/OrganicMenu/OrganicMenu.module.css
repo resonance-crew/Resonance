@@ -314,3 +314,16 @@
 .option:focus-visible .optionIcon {
   color: var(--menu-glyph-active, var(--menu-border-hover));
 }
+
+/* A row that ends or removes something (刪除, 封鎖, 永久刪除 — round 17 review D1): its glyph and words in the
+   danger ink, at rest and under its ink alike (which spreads in the same hue); no wash of its own at rest. The
+   words' danger ink is the deepened one (--danger-fill, the dangerText button's): --color-danger is 4.2:1 on the
+   menu paper by day, this 5.1:1 (5.1:1 at night too). */
+.option[data-tone='danger'],
+.option[data-tone='danger'][data-active],
+.option[data-tone='danger']:focus-visible,
+.option[data-tone='danger'] .optionIcon,
+.option[data-tone='danger'][data-active] .optionIcon,
+.option[data-tone='danger']:focus-visible .optionIcon {
+  color: var(--danger-fill);
+}
