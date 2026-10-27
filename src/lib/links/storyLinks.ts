@@ -155,3 +155,29 @@ export function standaloneLinks(story: string, max = STORY_PREVIEW_LIMIT): strin
   }
   return links;
 }
+
+/** A paragraph of a story whose card-ness the words rule (round 16 §6) changed. */
+export interface CardnessChange {
+  /** Where the paragraph starts in the story (a UTF-16 offset, as the reader keys it). */
+  offset: number;
+  /** The link it stands for, normalized. */
+  url: string;
+  /** A card now (true), or words now that were a card (false). */
+  card: boolean;
+}
+
+/**
+ * The paragraphs whose card-ness changed when a lone link became a card only
+ * if its words are its address (round 16 §6): under the rule before, any
+ * link alone on its line was its card; now one with words of its own reads
+ * as those words. Only addresses a card was ever drawn for count (not our
+ * own pages, not an IP address); a story too costly to read has none.
+ */
+export function cardnessChanges(story: string): CardnessChange[] {
+  const before = soleLinkParagraphs(story, { anyWords: true });
+  const now = soleLinkParagraphs(story);
+  const out: CardnessChange[] = [];
+  for (const [offset, url] of before) if (!now.has(offset) && unfurlable(url)) out.push({ offset, url, card: false });
+  for (const [offset, url] of now) if (!before.has(offset) && unfurlable(url)) out.push({ offset, url, card: true });
+  return out.sort((a, b) => a.offset - b.offset);
+}

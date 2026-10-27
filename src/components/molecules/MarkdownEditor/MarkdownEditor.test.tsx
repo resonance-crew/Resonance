@@ -233,3 +233,116 @@ describe('the canvas', () => {
   });
 });
 
+
+// The writer's link tool (round 16 §6): 連結 in the bubble, ⌘K, the "+"'s 連結, the keyboard bar's glyph —
+// each opening one link editor; a link alone on its line is its card, as the reader draws it.
+describe('the link tool', () => {
+  const L = en.write.editor;
+
+  it('links selected words from the bubble’s 連結, as those words — no 卡片 inside a sentence', async () => {
+    pointer(true);
+    const onChange = vi.fn();
+    renderWithIntl(<MarkdownEditor variant="canvas" value="A quiet morning" onChange={onChange} ariaLabel="Story" />);
+    const story = await screen.findByRole('textbox', { name: 'Story' });
+    act(() => void editorOf(story).chain().focus().setTextSelection({ from: 3, to: 8 }).run());
+    const bubble = await screen.findByRole('toolbar', { name: L.toolbarLabel });
+    await userEvent.click(within(bubble).getByRole('button', { name: L.link }));
+
+    const sheet = await screen.findByRole('group', { name: L.link });
+    const field = within(sheet).getByRole('textbox', { name: L.linkPlaceholder });
+    await waitFor(() => expect(field).toHaveFocus());
+    expect(within(sheet).queryByText(L.linkShowAs)).toBeNull();
+    expect(within(sheet).queryByRole('button', { name: L.linkRemove })).toBeNull();
+    await userEvent.type(field, 'example.com/rain{Enter}');
+    expect(onChange).toHaveBeenLastCalledWith('A [quiet](https://example.com/rain) morning');
+    await waitFor(() => expect(screen.queryByRole('group', { name: L.link })).toBeNull());
+  });
+
+  it('opens on ⌘K / Ctrl+K on an empty line with 卡片 chosen, and makes the line the address’s card', async () => {
+    pointer(true);
+    const onChange = vi.fn();
+    renderWithIntl(<MarkdownEditor variant="canvas" value="" onChange={onChange} ariaLabel="Story" />);
+    const story = await screen.findByRole('textbox', { name: 'Story' });
+    act(() => void editorOf(story).commands.focus('start'));
+    fireEvent.keyDown(story, { key: 'k', ctrlKey: true });
+
+    const sheet = await screen.findByRole('group', { name: L.link });
+    expect(within(sheet).getByText(L.linkShowAs)).toBeInTheDocument();
+    expect(within(sheet).getByRole('button', { name: L.linkAsCard })).toHaveAttribute('aria-pressed', 'true');
+    const field = within(sheet).getByRole('textbox', { name: L.linkPlaceholder });
+    // Not an address we link to: it stays open and says so, the story untouched.
+    await userEvent.type(field, 'javascript:alert(1)');
+    await userEvent.click(within(sheet).getByRole('button', { name: L.linkApply }));
+    expect(within(sheet).getByText(L.linkInvalid)).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+
+    await userEvent.clear(field);
+    await userEvent.type(field, 'https://example.com/rain');
+    await userEvent.click(within(sheet).getByRole('button', { name: L.linkApply }));
+    expect(onChange).toHaveBeenLastCalledWith('<https://example.com/rain>');
+    // Drawn as the reader's card: its host over its address, pressable to edit.
+    expect(await screen.findByRole('button', { name: L.linkCardLabel.replace('{host}', 'example.com') })).toHaveTextContent('https://example.com/rain');
+  });
+
+  it('opens on a pressed card with 卡片 chosen and its address, and turns it to words', async () => {
+    pointer(true);
+    const onChange = vi.fn();
+    renderWithIntl(<MarkdownEditor variant="canvas" value={'Before\n\n<https://www.example.com/rain>\n\nAfter'} onChange={onChange} ariaLabel="Story" />);
+    await screen.findByRole('textbox', { name: 'Story' });
+    await userEvent.click(await screen.findByRole('button', { name: L.linkCardLabel.replace('{host}', 'example.com') }));
+
+    const sheet = await screen.findByRole('group', { name: L.link });
+    expect(within(sheet).getByRole('textbox', { name: L.linkPlaceholder })).toHaveValue('https://www.example.com/rain');
+    expect(within(sheet).getByRole('button', { name: L.linkAsCard })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(sheet).getByRole('button', { name: L.linkRemove })).toBeInTheDocument();
+    await userEvent.click(within(sheet).getByRole('button', { name: L.linkAsText }));
+    await userEvent.click(within(sheet).getByRole('button', { name: L.linkApply }));
+    expect(onChange).toHaveBeenLastCalledWith('Before\n\n[example.com/rain](https://www.example.com/rain)\n\nAfter');
+  });
+
+  it('shows a live card’s stored preview on its link card', async () => {
+    pointer(true);
+    renderWithIntl(
+      <MarkdownEditor
+        variant="canvas"
+        value="<https://example.com/rain>"
+        onChange={vi.fn()}
+        ariaLabel="Story"
+        linkPreviews={[{ url: 'https://example.com/rain', title: 'Walking in the rain', image: '/api/link-image?u=x&s=y' }]}
+      />,
+    );
+    const card = await screen.findByRole('button', { name: L.linkCardLabel.replace('{host}', 'example.com') });
+    expect(card).toHaveTextContent('Walking in the rain');
+    expect(card.querySelector('img')).toHaveAttribute('src', '/api/link-image?u=x&s=y');
+  });
+
+  it('offers 連結 in the "+" of an empty line', async () => {
+    pointer(true);
+    renderWithIntl(<MarkdownEditor variant="canvas" value="" onChange={vi.fn()} ariaLabel="Story" />);
+    const story = await screen.findByRole('textbox', { name: 'Story' });
+    act(() => void editorOf(story).commands.focus('start'));
+    await userEvent.click(await screen.findByRole('button', { name: L.insert }));
+    await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: L.link }));
+    const sheet = await screen.findByRole('group', { name: L.link });
+    expect(within(sheet).getByRole('button', { name: L.linkAsCard })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('turns the keyboard bar into the link editor from its link glyph, and back on Escape', async () => {
+    pointer(false);
+    const onChange = vi.fn();
+    renderWithIntl(<MarkdownEditor variant="canvas" value="A quiet morning" onChange={onChange} ariaLabel="Story" />);
+    const story = await screen.findByRole('textbox', { name: 'Story' });
+    act(() => void editorOf(story).chain().focus().setTextSelection({ from: 3, to: 8 }).run());
+    const bar = await screen.findByRole('toolbar', { name: L.toolbarLabel });
+    await userEvent.click(within(bar).getByRole('button', { name: L.link }));
+
+    const sheet = await screen.findByRole('group', { name: L.link });
+    expect(screen.queryByRole('toolbar')).toBeNull();
+    const field = within(sheet).getByRole('textbox', { name: L.linkPlaceholder });
+    await waitFor(() => expect(field).toHaveFocus());
+    fireEvent.keyDown(field, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('group', { name: L.link })).toBeNull());
+    expect(onChange).not.toHaveBeenCalled();
+    expect(await screen.findByRole('toolbar', { name: L.toolbarLabel })).toBeInTheDocument();
+  });
+});

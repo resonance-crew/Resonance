@@ -24,7 +24,7 @@ import {
   savePendingCardEdit,
 } from '@/lib/db/firestore/client/cardEdits';
 import { getCardById } from '@/lib/db/firestore/client/reads';
-import type { Card, CardMedia, Visibility, Locale } from '@/lib/db/types';
+import type { Card, CardMedia, LinkPreview, Visibility, Locale } from '@/lib/db/types';
 import { useRouter } from '@/i18n/navigation';
 import { ApiError } from '@/lib/db/firestore/client/api';
 import { useOpenedOnce } from '@/lib/hooks/useOpenedOnce';
@@ -80,6 +80,8 @@ export interface CardEditorProps {
     media?: CardMedia;
     accentHue?: number;
     anonymous?: boolean;
+    /** A live card's stored link previews: the story's link cards show their pages' titles and pictures. */
+    linkPreviews?: LinkPreview[];
   };
   /**
    * Words the writer brings along to start the story with (a note grown into
@@ -956,6 +958,7 @@ export function CardEditor({
             lang={type.lang}
             onUploadingChange={setStoryBusy}
             onFocusChange={(focused) => focused && (lastField.current = 'story')}
+            linkPreviews={initial?.linkPreviews}
           />
 
         </div>

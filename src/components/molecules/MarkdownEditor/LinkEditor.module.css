@@ -1,0 +1,56 @@
+/* The link editor (LinkEditor): the address field, 顯示為 卡片 | 文字, then
+   移除連結 · 完成 — in the chrome its host gives it (the bubble's paper, the
+   keyboard bar's). */
+.editor {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(340px, calc(100vw - 32px));
+  box-sizing: border-box;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The field is a story field's: 16 (iOS Safari doesn't zoom into it). */
+.field input {
+  font-size: 16px;
+}
+
+/* One muted line under the field when the address isn't one we link to; no room kept while there is none. */
+.error:empty {
+  display: none;
+}
+
+.showAs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.label {
+  flex: none;
+  font-family: var(--font-body);
+  font-size: var(--label-size);
+  letter-spacing: var(--label-tracking);
+  color: var(--color-text-muted);
+}
+
+.choice {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spacer {
+  flex: 1;
+}

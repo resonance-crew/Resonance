@@ -598,6 +598,14 @@ describe('link-previews', () => {
     asked.length = 0;
     await Promise.all([
       db.doc('cards/old').set(published('一段。\n\nhttps://example.com/old\n\n<https://example.com/two>')),
+      // Made under the rule before round 16, when a lone link of the writer's own words was a card too: its
+      // preview goes (its paragraph is words now), and the dry run lists that paragraph.
+      db.doc('cards/worded').set(
+        published('一段。\n\n[第二篇](https://example.com/two)', {
+          linkPreviews: [{ url: 'https://example.com/two', title: 'Two' }],
+          linkPreviewsFor: ['https://example.com/two'],
+        }),
+      ),
       // Done already: same links as its previews were made for (one of them said nothing).
       db.doc('cards/done').set(
         published('https://example.com/done\n\nhttps://example.com/quiet', {
@@ -618,15 +626,19 @@ describe('link-previews', () => {
   });
 
   it('counts the published cards whose previews are not for their links, and changes nothing without --apply', async () => {
-    const report = await backfillLinkPreviews(db, { apply: false, log: quiet, fetch: fetchPages });
-    expect(report).toEqual({ cards: 4, candidates: 2, links: 3, written: 0, previews: 0 });
+    const lines: string[] = [];
+    const report = await backfillLinkPreviews(db, { apply: false, log: (line) => lines.push(line), fetch: fetchPages });
+    expect(report).toEqual({ cards: 5, candidates: 3, links: 3, written: 0, previews: 0, cardness: 1 });
     expect(asked).toEqual([]);
     expect(await data('cards/old')).not.toHaveProperty('linkPreviews');
+    expect((await data('cards/worded'))!.linkPreviews).toHaveLength(1);
+    // Each paragraph the words rule took a card from: the card, where the paragraph starts, its link.
+    expect(lines).toContain('  worded · paragraph at 5: https://example.com/two — words now, a card before');
   });
 
   it('unfurls them as a save would — no budget charged, no stamp moved — and is done after one run', async () => {
     const report = await backfillLinkPreviews(db, { apply: true, log: quiet, fetch: fetchPages });
-    expect(report).toMatchObject({ candidates: 2, written: 2, previews: 3 });
+    expect(report).toMatchObject({ candidates: 3, written: 3, previews: 3 });
     expect(asked.sort()).toEqual(['https://example.com/new', 'https://example.com/old', 'https://example.com/two']);
 
     const old = (await data('cards/old'))!;
@@ -639,6 +651,7 @@ describe('link-previews', () => {
     expect((await data('cards/moved'))!.linkPreviews).toEqual([{ url: 'https://example.com/new', title: 'Page /new' }]);
     expect(await data('cards/plain')).not.toHaveProperty('linkPreviews');
     expect(await data('cards/draft')).not.toHaveProperty('linkPreviews');
+    expect(await data('cards/worded')).not.toHaveProperty('linkPreviews');
     expect(await data('rateLimits/a_unfurl')).toBeNull();
 
     expect(await backfillLinkPreviews(db, { apply: true, log: quiet, fetch: fetchPages })).toMatchObject({ candidates: 0, written: 0 });

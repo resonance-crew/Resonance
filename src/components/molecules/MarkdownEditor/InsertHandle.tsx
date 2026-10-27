@@ -21,8 +21,9 @@ const HANDLE_OPTIONS = { placement: 'left' as const, offset: 8, flip: false, shi
  * The canvas's way to put a picture or a card in the story, where a fine
  * pointer writes: a "+" in the margin left of an empty line while the caret
  * is on it (Tiptap's FloatingMenu, kept on screen), which opens the floating
- * OrganicMenu — 插入圖片 (the file picker; the pictures land on that line)
- * or 插入卡片 (the card picker). It follows the story in the tab order.
+ * OrganicMenu — 插入圖片 (the file picker; the pictures land on that line),
+ * 插入卡片 (the card picker) or 連結 (the link editor, a link there being
+ * its card). It follows the story in the tab order.
  * Pasting or dropping a picture still works anywhere.
  */
 export function InsertHandle({
@@ -30,11 +31,14 @@ export function InsertHandle({
   seed,
   onInsertImage,
   onInsertCard,
+  onInsertLink,
 }: {
   editor: Editor;
   seed: number;
   onInsertImage: () => void;
   onInsertCard: () => void;
+  /** 連結: the link editor on this line (卡片 chosen: a link alone on its line is its card). */
+  onInsertLink?: () => void;
 }) {
   const t = useTranslations('write.editor');
   return (
@@ -56,8 +60,9 @@ export function InsertHandle({
         items={[
           { key: 'image', icon: 'image', label: t('insertImage') },
           { key: 'card', icon: 'cards', label: t('insertCard') },
+          ...(onInsertLink ? [{ key: 'link', icon: 'link' as const, label: t('link') }] : []),
         ]}
-        onChoose={(key) => (key === 'image' ? onInsertImage() : onInsertCard())}
+        onChoose={(key) => (key === 'image' ? onInsertImage() : key === 'link' ? onInsertLink?.() : onInsertCard())}
       />
     </FloatingMenu>
   );

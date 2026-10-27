@@ -41,7 +41,9 @@
  *       published cards get the previews of their stories' standalone links (fetches the pages;
  *       --apply against production needs LINK_PREVIEW_SECRET or FIREBASE_PRIVATE_KEY — the deployment's —
  *       to sign their pictures); --missing also asks again for every link that has no preview yet
- *       (after previews learn a site, as YouTube's videos in round 5)
+ *       (after previews learn a site, as YouTube's videos in round 5); a dry run also lists every published
+ *       paragraph whose card-ness the words rule changed (round 16: a lone link with words of its own reads as
+ *       those words) — card id, where the paragraph starts, its link
  *
  * Production credentials come from .env; `--emulator` runs against the local
  * emulators (EMULATOR_FIRESTORE_PORT etc., see scripts/emulator-env.mjs) and

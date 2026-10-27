@@ -2,7 +2,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { unfurlCardLinks } from '../../src/lib/links/cardLinks';
 import { createPreviewMemo, type PreviewFetch } from '../../src/lib/links/preview';
 import { linkPreviewsOf } from '../../src/lib/links/previewShape';
-import { standaloneLinks } from '../../src/lib/links/storyLinks';
+import { cardnessChanges, standaloneLinks, type CardnessChange } from '../../src/lib/links/storyLinks';
 
 /**
  * Cards published before stories had link previews (or whose story changed
@@ -19,7 +19,10 @@ import { standaloneLinks } from '../../src/lib/links/storyLinks';
  * `missing` (`--missing`) asks again for every link that has no preview yet:
  * after the previews learn a site they couldn't read (YouTube's videos, read
  * through oEmbed since round 5), its links already tried get their cards. With
- * `apply: false` it only counts. Pictures are signed with the running
+ * `apply: false` it only counts — and lists every published paragraph whose
+ * card-ness the words rule changed (`cardnessChanges`: the card's id, where
+ * the paragraph starts, its link), for the owner to read before the run
+ * that drops their cards. Pictures are signed with the running
  * process's key (imageSigning `signingKey`): run it with the deployment's own
  * LINK_PREVIEW_SECRET / FIREBASE_PRIVATE_KEY, or the pictures 404.
  */
@@ -40,10 +43,21 @@ export async function backfillLinkPreviews(
       ({ links, storedFor, previewed }) =>
         !sameLinks(links, Array.isArray(storedFor) ? storedFor : []) || (opts.missing === true && links.some((link) => !previewed.has(link))),
     );
+  // Before anything is fetched: the paragraphs the words rule took a card from (or gave one to).
+  let cardness = 0;
+  if (!opts.apply) {
+    for (const doc of snap.docs) {
+      for (const change of changesOf(doc.id, String(doc.get('story') ?? ''), log)) {
+        cardness++;
+        log(`  ${doc.id} · paragraph at ${change.offset}: ${change.url} — ${change.card ? 'a card now' : 'words now, a card before'}`);
+      }
+    }
+    log(`paragraphs whose card-ness the words rule changed: ${cardness}`);
+  }
   const links = candidates.reduce((n, c) => n + c.links.length, 0);
   const which = opts.missing ? 'or with a link that has no preview' : '';
   log(`published cards: ${snap.size}, whose previews are not for the links they hold${which ? ` ${which}` : ''}: ${candidates.length} (${links} link(s))`);
-  const report = { cards: snap.size, candidates: candidates.length, links, written: 0, previews: 0 };
+  const report = { cards: snap.size, candidates: candidates.length, links, written: 0, previews: 0, cardness };
   if (!opts.apply || !candidates.length) return report;
 
   const memo = createPreviewMemo({ max: 2000 });
@@ -67,6 +81,16 @@ export async function backfillLinkPreviews(
 
 function sameLinks(a: string[], b: unknown[]): boolean {
   return a.length === b.length && a.every((link, i) => link === b[i]);
+}
+
+/** A card's card-ness changes; one story that can't be read is left out, never the run. */
+function changesOf(id: string, story: string, log: (line: string) => void): CardnessChange[] {
+  try {
+    return cardnessChanges(story);
+  } catch (e) {
+    log(`  ${id}: story not read (${e instanceof Error ? e.message : String(e)}); left as it is`);
+    return [];
+  }
 }
 
 /** A card's standalone links; one story that can't be read (a parser's throw) is left out, never the run. */

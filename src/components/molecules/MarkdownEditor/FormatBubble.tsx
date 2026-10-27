@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useRef, useState, type Ref } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type Ref } from 'react';
 import { useTranslations } from 'next-intl';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { useEditorState, type Editor } from '@tiptap/react';
@@ -15,6 +15,7 @@ import {
   FORMAT_GROUPS,
   FORMAT_LABEL_KEY,
   FORMAT_SEED,
+  LINK_TOOL_SEED,
   NO_FORMATS,
   runFormat,
 } from './formatting';
@@ -31,27 +32,13 @@ export function bubbleShows(editor: Editor): boolean {
   return state.doc.textBetween(from, to, ' ').trim().length > 0;
 }
 
-const showBubble = ({ editor }: { editor: Editor }) => bubbleShows(editor);
-
 /**
- * The canvas's formatting, where a fine pointer selects: a small toolbar
- * floating over the selected words (Tiptap's BubbleMenu, placed by
- * floating-ui: above, flipped under it near the top, kept on screen) — 粗體 ·
- * 斜體 ┆ H2 · H3 ┆ 引言 · 清單 · 編號 — in the OrganicMenu panel's chrome (a
- * hand-drawn card on the card paper, its pen line in ink, drawn once
- * measured). Option/Alt+F10 in the story moves the focus into it (the
- * editor's own key, MarkdownEditor), ← and → walk it, Escape gives the focus
- * back to the words with the selection kept; the shortcuts (⌘B, ⌘I, ⌘⌥2…)
- * and the Markdown input rules stay the editor's. Never on a picture or a
- * card selected as a whole.
+ * Where the bubble over the story floats (floating-ui, through Tiptap's menus):
+ * above the selection, flipped under it before it would go under the
+ * writer's bar (below the split the story scrolls behind it — the bar's
+ * height is the page's --app-header-h where the editor is), kept on screen.
  */
-export function FormatBubble({ editor, seed, ref }: { editor: Editor; seed: number; ref?: Ref<HTMLDivElement> }) {
-  const t = useTranslations('write.editor');
-  const states = useEditorState({ editor, selector: (ctx) => activeFormats(ctx.editor) }) ?? NO_FORMATS;
-  const panelRef = useRef<HTMLDivElement>(null);
-  const { w, h } = useElementSize(panelRef);
-  // Under the writer's bar (below the split) the story scrolls behind it: the bubble flips under the words
-  // before it would go under the bar. The bar's height is the page's --app-header-h where the editor is.
+function useBubbleOptions(editor: Editor) {
   const [topClear, setTopClear] = useState(8);
   useEffect(() => {
     const read = () => {
@@ -62,7 +49,7 @@ export function FormatBubble({ editor, seed, ref }: { editor: Editor; seed: numb
     window.addEventListener('resize', read);
     return () => window.removeEventListener('resize', read);
   }, [editor]);
-  const options = useMemo(
+  return useMemo(
     () => ({
       placement: 'top' as const,
       offset: 8,
@@ -71,13 +58,54 @@ export function FormatBubble({ editor, seed, ref }: { editor: Editor; seed: numb
     }),
     [topClear],
   );
+}
+
+/**
+ * The canvas's formatting, where a fine pointer selects: a small toolbar
+ * floating over the selected words (Tiptap's BubbleMenu, placed by
+ * floating-ui: above, flipped under it near the top, kept on screen) — 粗體 ·
+ * 斜體 · 連結 ┆ H2 · H3 ┆ 引言 · 清單 · 編號 — in the OrganicMenu panel's chrome (a
+ * hand-drawn card on the card paper, its pen line in ink, drawn once
+ * measured). Option/Alt+F10 in the story moves the focus into it (the
+ * editor's own key, MarkdownEditor), ← and → walk it, Escape gives the focus
+ * back to the words with the selection kept; the shortcuts (⌘B, ⌘I, ⌘⌥2…)
+ * and the Markdown input rules stay the editor's. Never on a picture or a
+ * card selected as a whole.
+ */
+export function FormatBubble({
+  editor,
+  seed,
+  ref,
+  linkActive,
+  onLink,
+  hidden = false,
+}: {
+  editor: Editor;
+  seed: number;
+  ref?: Ref<HTMLDivElement>;
+  /** The selection is in a link: 連結 shows washed. */
+  linkActive: boolean;
+  /** 連結: the bubble turns into the link editor in its place. */
+  onLink: () => void;
+  /** The link editor stands in its place. */
+  hidden?: boolean;
+}) {
+  const t = useTranslations('write.editor');
+  const states = useEditorState({ editor, selector: (ctx) => activeFormats(ctx.editor) }) ?? NO_FORMATS;
+  const panelRef = useRef<HTMLDivElement>(null);
+  const { w, h } = useElementSize(panelRef);
+  const options = useBubbleOptions(editor);
+  // Read when the menu asks (a ref: the plugin keeps the function it was given).
+  const hiddenRef = useRef(hidden);
+  hiddenRef.current = hidden;
+  const shouldShow = useCallback(({ editor: e }: { editor: Editor }) => !hiddenRef.current && bubbleShows(e), []);
   return (
     <BubbleMenu
       ref={ref}
       editor={editor}
       pluginKey="formatBubble"
       className={styles.bubble}
-      shouldShow={showBubble}
+      shouldShow={shouldShow}
       options={options}
     >
       <div ref={panelRef} className={styles.bubblePanel}>
@@ -119,6 +147,17 @@ export function FormatBubble({ editor, seed, ref }: { editor: Editor; seed: numb
                   onClick={() => runFormat(editor, command)}
                 />
               ))}
+              {/* 連結 after 粗體 · 斜體: the marks' group (round 16 §6). */}
+              {g === 0 && (
+                <ToolButton
+                  label={t('link')}
+                  aria={t('link')}
+                  active={linkActive}
+                  seed={seed + LINK_TOOL_SEED}
+                  tabIndex={-1}
+                  onClick={onLink}
+                />
+              )}
             </Fragment>
           ))}
         </div>
