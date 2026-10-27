@@ -142,6 +142,51 @@ struct MessagingAPITests {
         let transport = StubTransport(status: .notFound, body: #"{"error":{"code":"not_found","message":"No such conversation."}}"#)
         await #expect(throws: APIFailure.self) { try await api(transport).deleteConversation("bob_carol") }
     }
+
+    /// Round 16 §4: a reaction is the stored id, put on the message under its conversation.
+    @Test func aReactionIsPutOnTheMessage() async throws {
+        let transport = StubTransport(status: .noContent, body: "")
+        try await api(transport).setReaction("moved", pairId: "alice_bob", messageId: "m1")
+        let request = try #require(transport.requests.first)
+        #expect(request.method == .put)
+        #expect(request.path?.hasSuffix("/conversations/alice_bob/messages/m1/reaction") == true)
+        let json = try #require(transport.sentJSON.first ?? nil)
+        #expect(json["reaction"] as? String == "moved")
+    }
+
+    @Test func aReactionTheContractDoesntKnowIsNeverSent() async throws {
+        let transport = StubTransport(status: .noContent, body: "")
+        let failure = await #expect(throws: APIFailure.self) { try await api(transport).setReaction("wave", pairId: "alice_bob", messageId: "m1") }
+        #expect(failure?.code == "invalid_request")
+        #expect(transport.requests.isEmpty)
+    }
+
+    @Test func aLetterNotYetAnsweredTakesNoReaction() async throws {
+        let transport = StubTransport(status: .forbidden, body: #"{"error":{"code":"forbidden","message":"You can react once you are connected."}}"#)
+        let failure = await #expect(throws: APIFailure.self) { try await api(transport).setReaction("heart", pairId: "alice_bob", messageId: "m1") }
+        #expect(failure?.status == 403)
+    }
+
+    @Test func aReactionIsTakenBack() async throws {
+        let transport = StubTransport(status: .noContent, body: "")
+        try await api(transport).removeReaction(pairId: "alice_bob", messageId: "m1")
+        #expect(transport.requests.first?.method == .delete)
+        #expect(transport.requests.first?.path?.hasSuffix("/conversations/alice_bob/messages/m1/reaction") == true)
+    }
+
+    /// Round 16 §3: unsending posts to the message; past the day it is a conflict the thread says is too late.
+    @Test func aMessageIsUnsent() async throws {
+        let transport = StubTransport(status: .noContent, body: "")
+        try await api(transport).unsendMessage(pairId: "alice_bob", messageId: "m1")
+        #expect(transport.requests.first?.method == .post)
+        #expect(transport.requests.first?.path?.hasSuffix("/conversations/alice_bob/messages/m1/unsend") == true)
+    }
+
+    @Test func tooLateToUnsendIsAConflict() async throws {
+        let transport = StubTransport(status: .conflict, body: #"{"error":{"code":"conflict","message":"This message can no longer be unsent."}}"#)
+        let failure = await #expect(throws: APIFailure.self) { try await api(transport).unsendMessage(pairId: "alice_bob", messageId: "m1") }
+        #expect(failure?.isConflict == true)
+    }
 }
 
 /// A transport that keeps each request's raw body and answers with the bytes it is given.

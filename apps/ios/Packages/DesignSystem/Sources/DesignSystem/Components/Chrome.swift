@@ -10,26 +10,33 @@ public struct OrganicTabItem<ID: Hashable>: Identifiable {
     public let id: ID
     public let title: String
     public let icon: IconName
+    /// The glyph's solid twin, drawn while the tab is chosen (round 16 §2): `sparkleFill` for `sparkle`…
+    public let selectedIcon: IconName?
     /// A prominent action in the bar (the pen) rather than a tab.
     public var isAction: Bool
     public var badge: Int
 
-    public init(id: ID, title: String, icon: IconName, isAction: Bool = false, badge: Int = 0) {
+    public init(id: ID, title: String, icon: IconName, selectedIcon: IconName? = nil, isAction: Bool = false, badge: Int = 0) {
         self.id = id
         self.title = title
         self.icon = icon
+        self.selectedIcon = selectedIcon
         self.isAction = isAction
         self.badge = badge
     }
+
+    /// The glyph as the tab is now: the solid twin while chosen, when it has one.
+    public func glyph(selected: Bool) -> IconName { selected ? selectedIcon ?? icon : icon }
 }
 
 /// The tab bar, docked like the header and edged the same way: cream paper
 /// that begins on a wavy pen line (``FooterEdge``), so the top and bottom
-/// chrome are one pair and nothing floats or draws a frame. Tabs are the glyph
-/// over its label; the selected one inks terracotta on a wash behind the
-/// glyph cut like torn paper (wavy edges, lopsided corners, no rim). The pen
-/// sits among them as a solid terracotta squircle the tabs' height — the one
-/// filled thing in the bar, without a rim.
+/// chrome are one pair and nothing floats or draws a frame. Round 16 §2: the
+/// tabs are their glyphs alone at 26 (the names stay for VoiceOver, the Large
+/// Content Viewer and a pointer's tooltip) in a 52 bar; the chosen one is its
+/// solid twin in the accent, the others the outline in the muted ink — no wash
+/// behind it. The pen sits among them as a solid terracotta squircle, 48 × 36 —
+/// the one filled thing in the bar besides the chosen glyph, without a rim.
 /// Re-implements what the system bar gives for free: selection haptics, tab
 /// traits for VoiceOver, and the Large Content Viewer on long press.
 public struct OrganicTabBar<ID: Hashable>: View {
@@ -37,8 +44,8 @@ public struct OrganicTabBar<ID: Hashable>: View {
     let selection: ID
     let onSelect: (ID) -> Void
 
-    /// The bar's height above the home indicator, without its wavy edge.
-    public static var height: CGFloat { 60 }
+    /// The bar's height above the home indicator, without its wavy edge (round 16 §2: 60 → 52).
+    public static var height: CGFloat { 52 }
 
     public init(items: [OrganicTabItem<ID>], selection: ID, onSelect: @escaping (ID) -> Void) {
         self.items = items
@@ -71,7 +78,7 @@ public struct OrganicTabBar<ID: Hashable>: View {
     /// The pen: a solid terracotta squircle as tall as a tab, the nib in cream; it darkens while pressed.
     private func actionButton(_ item: OrganicTabItem<ID>) -> some View {
         Button { onSelect(item.id) } label: {
-            PenChip(icon: item.icon)
+            PenChip(icon: item.icon, size: PenChip.barSize)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
         }
@@ -82,43 +89,41 @@ public struct OrganicTabBar<ID: Hashable>: View {
     }
 }
 
-/// A tab as the bar draws it: the glyph over its label, the chosen one inked terracotta
-/// on a wash cut like torn paper; under a pointer, the wash half-shown.
+/// A tab as the bar draws it (round 16 §2): its glyph alone at 26, the chosen one its solid twin in the
+/// accent, the others the outline in the muted ink — the change a 120 ms cross-fade with a 0.9 → 1 spring
+/// on the glyph coming in. Under a pointer, the glyph a little darker; its name the pointer's tooltip.
 struct OrganicTabButton<ID: Hashable>: View {
     let item: OrganicTabItem<ID>
     let index: Int
     let selected: Bool
     let action: () -> Void
     @State private var hovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    static var glyph: CGFloat { 26 }
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 3) {
-                OrganicIcon(item.icon, size: 24)
-                    .overlay(alignment: .topTrailing) {
-                        // Where the web's chip hangs off its 34pt icon button.
-                        if item.badge > 0 { UnreadBadge(count: item.badge).offset(x: 9, y: -8) }
-                    }
-                    .frame(width: 56, height: 32)
-                    .background {
-                        // A scrap of torn paper, not a pill: a radius well under half
-                        // the height, wavy long edges and lopsided corners, each tab
-                        // its own seed.
-                        WobRectShape(radius: 12, seed: Double(index * 29 + 7), mag: 3.2, options: WobRectOptions(
-                            curve: 1.2, cornerJitter: 3.6, cornerOffset: 3, segmentsH: .count(2), segmentsV: .count(1)))
-                            .fill(Tokens.terracottaLight.opacity(0.55))
-                            .opacity(selected ? 1 : hovered ? 0.45 : 0)
-                            .animation(.easeOut(duration: 0.16), value: selected)
-                            .animation(.easeOut(duration: 0.16), value: hovered)
-                    }
-                Text(item.title).font(AppFonts.body(10.5, weight: selected ? .semibold : .regular)).lineLimit(1)
+            ZStack {
+                // Both glyphs stay drawn, one shown: the solid twin comes in springing from 0.9, the outline goes.
+                OrganicIcon(item.icon, size: Self.glyph, color: hovered ? Tokens.text : Tokens.textMuted, strokeWidth: Tokens.ink)
+                    .opacity(selected ? 0 : 1)
+                OrganicIcon(item.glyph(selected: true), size: Self.glyph, color: Tokens.terracotta, strokeWidth: Tokens.ink)
+                    .opacity(selected ? 1 : 0)
+                    .scaleEffect(selected || reduceMotion ? 1 : 0.9)
             }
-            .foregroundStyle(selected ? Tokens.terracotta : Tokens.textMuted)
+            .animation(.easeOut(duration: 0.12), value: selected)
+            .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.55), value: selected)
+            .overlay(alignment: .topTrailing) {
+                // Where the web's chip hangs off its icon; a ring of the bar's paper parts it from a solid glyph.
+                if item.badge > 0 { UnreadBadge(count: item.badge, ring: Tokens.cream).offset(x: 10, y: -8) }
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
         }
         .buttonStyle(TabPressStyle())
         .onHover { hovered = $0 }
+        .help(item.title)
         .accessibilityLabel(item.badge > 0 ? "\(item.title), \(item.badge)" : item.title)
         .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
         .accessibilityShowsLargeContentViewer { Label { Text(item.title) } icon: { OrganicIcon(item.icon) } }
@@ -416,7 +421,8 @@ struct TopTabSegment<ID: Hashable>: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: TopTabBadge.labelGap) {
-                OrganicIcon(item.icon, size: labelled ? 20 : 22, strokeWidth: Tokens.ink)
+                // The chosen segment's glyph is its solid twin, in the segment's ink (round 16 §2).
+                OrganicIcon(item.glyph(selected: selected), size: labelled ? 20 : 22, strokeWidth: Tokens.ink)
                     .overlay(alignment: .topTrailing) {
                         if item.badge > 0 { UnreadBadge(count: item.badge).offset(x: TopTabBadge.offsetX, y: TopTabBadge.offsetY) }
                     }
@@ -497,7 +503,7 @@ public struct OrganicPenButton: View {
 
     public var body: some View {
         Button(action: action) {
-            PenChip(icon: icon).contentShape(Rectangle())
+            PenChip(icon: icon, size: PenChip.headerSize).contentShape(Rectangle())
         }
         .buttonStyle(PenPressStyle())
         .help(title)
@@ -529,13 +535,18 @@ private extension EnvironmentValues {
 
 private struct PenChip: View {
     let icon: IconName
+    var size: CGSize
     @Environment(\.penPressed) private var pressed
 
+    /// In the phone's 52 bar (round 16 §2), and at the tablet header's end.
+    static let barSize = CGSize(width: 48, height: 36)
+    static let headerSize = CGSize(width: 56, height: 40)
+
     var body: some View {
-        let shape = WobRectShape(radius: 17, seed: 3, mag: 1.1, options: WobRectOptions(
+        let shape = WobRectShape(radius: size.height * 0.425, seed: 3, mag: 1.1, options: WobRectOptions(
             curve: 1.3, cornerJitter: 3, cornerOffset: 2.4, segmentsH: .count(1), segmentsV: .count(1)))
         OrganicIcon(icon, size: 22, color: Tokens.cream)
-            .frame(width: 56, height: 40)
+            .frame(width: size.width, height: size.height)
             .background {
                 // The verb's face (buttonFill): cream on plain terracotta was 3.5:1.
                 shape.fill(Tokens.buttonFill)
@@ -591,21 +602,33 @@ nonisolated struct FooterEdgeShape: Shape {
 /// terracotta tag with the count, wider once it takes two digits.
 public struct UnreadBadge: View {
     let count: Int
+    /// A ring of this paper round the chip (round 16 §2: the tab bar's cream, 2 pt), so it parts from a
+    /// solid glyph under it: a second, larger wob behind.
+    let ring: Color?
 
-    public init(count: Int) {
+    public init(count: Int, ring: Color? = nil) {
         self.count = count
+        self.ring = ring
     }
 
     public var body: some View {
         let h: CGFloat = 18
+        let shape = WobRectShape(radius: h * 0.4, seed: 9, mag: 1.3, options: WobRectOptions(
+            curve: 1.5, cornerJitter: 3, cornerOffset: h * 0.06, segmentsH: .count(1), segmentsV: .count(1)))
         Text("\(count)")
             .font(AppFonts.body(10, weight: .bold))
             .foregroundStyle(Tokens.cream)
             .frame(width: count > 9 ? 26 : 19, height: h)
             .background {
-                WobRectShape(radius: h * 0.4, seed: 9, mag: 1.3, options: WobRectOptions(
-                    curve: 1.5, cornerJitter: 3, cornerOffset: h * 0.06, segmentsH: .count(1), segmentsV: .count(1)))
-                    .fill(Tokens.terracotta)
+                shape.fill(Tokens.terracotta)
+            }
+            .background {
+                if let ring {
+                    WobRectShape(radius: (h + 4) * 0.4, seed: 9, mag: 1.3, options: WobRectOptions(
+                        curve: 1.5, cornerJitter: 3, cornerOffset: h * 0.06, segmentsH: .count(1), segmentsV: .count(1)))
+                        .fill(ring)
+                        .padding(-2)
+                }
             }
             .accessibilityHidden(true)
     }

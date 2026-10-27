@@ -18,7 +18,9 @@ public enum Delivery: Equatable, Sendable {
 /// What a reply carries of the message it answers (the server's `replyTo` snapshot, kept on the
 /// reply): the quote is read from here, never from the original, which may be far up the thread
 /// or gone. `text` is at most `maxText` code points; empty when the original was a card or a
-/// picture alone (`image`: it carried one — a quote is words, so only that it did).
+/// picture alone (`image`: it carried one — a quote is words, so only that it did). An original
+/// its sender unsent leaves `{ id, senderId, unsent: true }` (round 16 §3): the quote then says so
+/// (`unsent`) and nothing of what it said.
 public struct ReplyQuote: Equatable, Hashable, Sendable {
     public static let maxText = 140
 
@@ -27,24 +29,28 @@ public struct ReplyQuote: Equatable, Hashable, Sendable {
     public let text: String
     public let cardRef: String?
     public let image: Bool
+    /// The original was unsent: the quote reads 已收回的訊息 (`messages.unsentQuote`).
+    public let unsent: Bool
 
-    public init(id: String, senderId: String, text: String, cardRef: String? = nil, image: Bool = false) {
+    public init(id: String, senderId: String, text: String, cardRef: String? = nil, image: Bool = false, unsent: Bool = false) {
         self.id = id
         self.senderId = senderId
-        self.text = text
-        self.cardRef = cardRef
-        self.image = image
+        self.text = unsent ? "" : text
+        self.cardRef = unsent ? nil : cardRef
+        self.image = unsent ? false : image
+        self.unsent = unsent
     }
 
     /// The quote a reply to `message` carries (the same cut the server makes).
     public static func of(_ message: ChatMessage) -> ReplyQuote {
         ReplyQuote(id: message.id, senderId: message.senderId, text: cut(message.text), cardRef: message.cardRef,
-                   image: message.image != nil)
+                   image: message.image != nil, unsent: message.isUnsent)
     }
 
     /// What the quote says: its words — or, with none, what the message was: a picture
-    /// (`picture`, 一張圖片) or a card (`card`, 一張卡片).
-    public func summary(picture: String, card: String) -> String {
+    /// (`picture`, 一張圖片) or a card (`card`, 一張卡片); an unsent original, `unsentQuote`.
+    public func summary(picture: String, card: String, unsentQuote: String = "") -> String {
+        if unsent { return unsentQuote }
         guard text.isEmpty else { return text }
         return image ? picture : card
     }
@@ -133,30 +139,72 @@ public struct ChatMessage: Equatable, Sendable {
     public var preview: LinkPreview?
     /// A picture sent with it (a message carries a card or a picture, never both).
     public let image: ChatImage?
+    /// The two people's reactions to it (round 16 §4): each one's uid → the reaction's id as the
+    /// server stores it (`heart`, `moved`, `laugh`, `hug`, `thumbs`). An id this build doesn't know
+    /// is kept here and drawn as nothing (``knownReactions(_:)``).
+    public var reactions: [String: String]
+    /// Its sender unsent it (round 16 §3: the document keeps only `senderId`, `sentAt` and
+    /// `unsentAt`): the thread draws one quiet line in its place, and nothing it said.
+    public var isUnsent: Bool
     public var delivery: Delivery
     public var key: String
 
     public init(id: String, senderId: String, text: String, sentAt: Date, cardRef: String? = nil, noteRef: MessagingAPI.NoteRef? = nil,
                 isNote: Bool = false, replyTo: ReplyQuote? = nil, preview: LinkPreview? = nil, image: ChatImage? = nil,
-                delivery: Delivery = .delivered, key: String? = nil) {
+                reactions: [String: String] = [:], isUnsent: Bool = false, delivery: Delivery = .delivered, key: String? = nil) {
         self.id = id
         self.senderId = senderId
-        self.text = text
+        self.isUnsent = isUnsent
+        // An unsent message says nothing: whatever an older snapshot held is not drawn.
+        self.text = isUnsent ? "" : text
         self.sentAt = sentAt
-        self.cardRef = cardRef
-        self.noteRef = noteRef
-        self.isNote = isNote
-        self.replyTo = replyTo
-        self.preview = preview
-        self.image = image
+        self.cardRef = isUnsent ? nil : cardRef
+        self.noteRef = isUnsent ? nil : noteRef
+        self.isNote = isUnsent ? false : isNote
+        self.replyTo = isUnsent ? nil : replyTo
+        self.preview = isUnsent ? nil : preview
+        self.image = isUnsent ? nil : image
+        self.reactions = isUnsent ? [:] : reactions
         self.delivery = delivery
         self.key = key ?? id
     }
 
+    /// The reactions to draw, in the stickers' order (`order`, the ids this build knows: heart, moved,
+    /// laugh, hug, thumbs), each with the people who gave it — an id outside `order` is left out.
+    public func knownReactions(_ order: [String]) -> [(id: String, by: [String])] {
+        order.compactMap { id in
+            let by = reactions.filter { $0.value == id }.map(\.key).sorted()
+            return by.isEmpty ? nil : (id, by)
+        }
+    }
+
+    /// The reaction `uid` gave it, if any (whether this build knows it or not).
+    public func reaction(of uid: String) -> String? { reactions[uid] }
+
+    /// It with `uid`'s reaction set to `id` (nil takes it back): what the thread draws at once while the
+    /// server is asked, and puts back if it refuses.
+    public func reacting(_ uid: String, with id: String?) -> ChatMessage {
+        var next = self
+        next.reactions[uid] = id
+        return next
+    }
+
     /// Still on its way, or failed: nothing is known of it by the server (yet).
     public var isPending: Bool { delivery != .delivered }
-    /// A reply names a document of the conversation, so only delivered messages can be replied to.
-    public var canReply: Bool { delivery == .delivered }
+    /// A reply names a document of the conversation, so only delivered messages can be replied to (an
+    /// unsent one has nothing left to answer).
+    public var canReply: Bool { delivery == .delivered && !isUnsent }
+    /// Reactions go on a message the conversation holds, still standing.
+    public var canReact: Bool { delivery == .delivered && !isUnsent }
+
+    /// How long after sending its sender can unsend it (the server's `UNSEND_WINDOW_MS`: 24 h).
+    public static let unsendWindow: TimeInterval = 24 * 60 * 60
+
+    /// Whether `viewer` can unsend it at `now` (round 16 §3): their own, delivered, a plain message (a
+    /// note copied from a card stays), still standing, and sent within ``unsendWindow``.
+    public func canUnsend(viewer: String, now: Date = Date()) -> Bool {
+        senderId == viewer && delivery == .delivered && !isNote && !isUnsent && now.timeIntervalSince(sentAt) <= Self.unsendWindow
+    }
 
     /// Oldest first: the send time, then the id (messages sent in the same instant keep a stable order).
     public static func isOrderedBefore(_ a: ChatMessage, _ b: ChatMessage) -> Bool {
@@ -168,6 +216,10 @@ public struct ChatMessage: Equatable, Sendable {
     /// API's — a preview's picture is a path of it. Missing or odd fields leave a message without
     /// that part; none of them fails it.
     public static func from(id: String, fields: [String: Any], sentAt: Date, origin: URL) -> ChatMessage {
+        // Unsent (round 16 §3): the document keeps its sender, its time and `unsentAt`, nothing else.
+        if let unsentAt = fields["unsentAt"], !(unsentAt is NSNull) {
+            return ChatMessage(id: id, senderId: fields["senderId"] as? String ?? "", text: "", sentAt: sentAt, isUnsent: true)
+        }
         let note = fields["noteRef"] as? [String: Any]
         let noteRef = (note?["cardId"] as? String).flatMap { card in
             (note?["noteId"] as? String).map { MessagingAPI.NoteRef(cardId: card, noteId: $0) }
@@ -184,15 +236,26 @@ public struct ChatMessage: Equatable, Sendable {
             isNote: fields["kind"] as? String == "note" && cardRef != nil,
             replyTo: quote(fields["replyTo"] as? [String: Any]),
             preview: preview(fields["preview"] as? [String: Any], origin: origin),
-            image: ChatImage.from(fields["image"] as? [String: Any])
+            image: ChatImage.from(fields["image"] as? [String: Any]),
+            reactions: reactions(fields["reactions"] as? [String: Any])
         )
+    }
+
+    /// The `reactions` map: uid → reaction id, strings only (anything else is left out).
+    static func reactions(_ map: [String: Any]?) -> [String: String] {
+        guard let map else { return [:] }
+        var out: [String: String] = [:]
+        for (uid, value) in map {
+            if !uid.isEmpty, let id = value as? String, !id.isEmpty { out[uid] = id }
+        }
+        return out
     }
 
     private static func quote(_ map: [String: Any]?) -> ReplyQuote? {
         guard let map, let id = map["id"] as? String, !id.isEmpty else { return nil }
         return ReplyQuote(id: id, senderId: map["senderId"] as? String ?? "", text: ReplyQuote.cut(map["text"] as? String ?? ""),
                           cardRef: (map["cardRef"] as? String).flatMap { $0.isEmpty ? nil : $0 },
-                          image: map["image"] as? Bool == true)
+                          image: map["image"] as? Bool == true, unsent: map["unsent"] as? Bool == true)
     }
 
     private static func preview(_ map: [String: Any]?, origin: URL) -> LinkPreview? {

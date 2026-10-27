@@ -22,6 +22,9 @@ struct PublishStep: View {
     var onPickCover: () -> Void
     var onSubmit: () -> Void
     var onSecondary: () -> Void
+    /// The tags' row changed height while the tag field was in use: the step's scroll moves by as much,
+    /// so the field stays under the caret (round 16 §1).
+    var onShift: (CGFloat) -> Void = { _ in }
     @Environment(SessionStore.self) private var session
     @Environment(\.window) private var window
 
@@ -210,21 +213,13 @@ struct PublishStep: View {
 
     private var tags: some View {
         @Bindable var model = model
-        return VStack(alignment: .leading, spacing: Self.labelGap) {
+        // The label and the chosen tags share the row above the field (round 16 §1).
+        return TagField(tags: model.values.tags, draft: $model.tagDraft, placeholder: L10n.Write.tagsPlaceholder,
+                        suggesting: model.suggestingTags, error: model.tagError, onRemove: model.removeTag, onAdd: model.addTag,
+                        onSuggest: { Task { await model.suggestTags() } }, onShift: onShift) {
             label(L10n.Write.tagsLabel)
-            VStack(alignment: .leading, spacing: 6) {
-                TagField(tags: model.values.tags, draft: $model.tagDraft, placeholder: L10n.Write.tagsPlaceholder,
-                         suggesting: model.suggestingTags, onRemove: model.removeTag, onAdd: model.addTag,
-                         onSuggest: { Task { await model.suggestTags() } })
-                    .onChange(of: model.tagDraft) { _, text in model.typedTag(text) }
-                // No help line under the field (round 8 §2.2): the slot shows only an error.
-                if let error = model.tagError {
-                    Text(error)
-                        .font(AppFonts.body(Tokens.hintSize))
-                        .foregroundStyle(Tokens.terracotta)
-                }
-            }
         }
+        .onChange(of: model.tagDraft) { _, text in model.typedTag(text) }
     }
 
     // MARK: 4 — the card's type

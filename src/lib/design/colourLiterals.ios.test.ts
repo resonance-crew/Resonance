@@ -23,6 +23,9 @@ const ALLOWED: Record<string, [number, string]> = {
   'Packages/DesignSystem/Sources/DesignSystem/Story/StoryTable.swift': [3, 'a mask (alpha only)'],
   'Resonance/Features/Write/StoryEditor.swift': [3, 'a mask (alpha only)'],
   'Resonance/Features/ThoughtMap/MapNodeView.swift': [1, 'a mask (alpha only)'],
+  'Resonance/Features/Messages/ThreadActions.swift': [2, 'a mask (alpha only): a lifted message too tall for the room fading at its foot'],
+  // The reaction stickers' own colours (generated P3), the same in both schemes as emoji keep theirs; their rim is the palette's.
+  'Packages/DesignSystem/Sources/DesignSystem/Components/PressLayer.swift': [1, "the reaction stickers' fixed colours (Generated/Reactions.swift)"],
   // A shape's coverage handed to the grain shader, which draws --grain-ink itself.
   'Packages/DesignSystem/Sources/DesignSystem/Grain/GrainLayer.swift': [1, 'coverage for the grain shader'],
   // A template image: UIKit tints it.

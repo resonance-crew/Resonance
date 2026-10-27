@@ -27,15 +27,18 @@ import Testing
 
     @Test func aLinkStandingAloneFindsThePageTheServerReadForIt() async throws {
         let model = await page(
-            story: "前一段。\n\nhttps://Example.com/rain\n\n[一篇好文章](https://blog.example.com/post/42)\n\n看 https://example.com/inline 這篇。",
+            story: "前一段。\n\nhttps://Example.com/rain\n\n<https://blog.example.com/post/42>\n\n[一篇好文章](https://blog.example.com/post/43)\n\n看 https://example.com/inline 這篇。",
             previews: [
                 .init(url: "https://example.com/rain", title: " 雨停了 ", description: "巷口的積水", siteName: "Example",
                       image: "/api/link-image?u=x&s=y"),
                 .init(url: "https://blog.example.com/post/42", title: "一篇好文章", image: "https://tracker.example.net/pixel.gif"),
+                // A link with words of its own reads as those words (round 16 §6): no card, whatever is stored.
+                .init(url: "https://blog.example.com/post/43", title: "另一篇"),
             ])
         let links = soleLinks(model.blocks)
         // The sentence with a link in it is no card, whatever is stored.
-        #expect(links.count == 2)
+        #expect(links.count == 3)
+        #expect(model.linkPreview(href: links[2].href, text: links[2].text) == nil)
 
         let bare = try #require(model.linkPreview(href: links[0].href, text: links[0].text))
         #expect(bare.title == "雨停了" && bare.description == "巷口的積水")
@@ -66,7 +69,7 @@ import Testing
         // The server keys each page by the link as a browser writes it (`new URL(…).href`): an apostrophe in the
         // query encoded, dot segments resolved, an international host in punycode.
         let model = await page(
-            story: "https://example.com/search?q=what's+up\n\nhttps://example.com/a/./b/../c\n\n[例子](https://例子.tw/x)\n\n[八十](https://example.com:80/x)",
+            story: "https://example.com/search?q=what's+up\n\nhttps://example.com/a/./b/../c\n\n<https://例子.tw/x>\n\n[https://example.com:80/x](https://example.com:80/x)",
             previews: [
                 .init(url: "https://example.com/search?q=what%27s+up", title: "What's up"),
                 .init(url: "https://example.com/a/c", title: "C"),

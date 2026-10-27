@@ -34,6 +34,8 @@ final class ConversationsStore {
         let lastFromMe: Bool
         /// The last message was a picture (`lastMessage.image`).
         var lastImage = false
+        /// The last message was unsent (`lastMessage.unsent`, round 16 §3): the row says so, as the thread does.
+        var lastUnsent = false
         let sentAt: Date?
         let unread: Int
     }
@@ -188,6 +190,7 @@ final class ConversationsStore {
             let unread = ((doc.get("unread") as? [String: Any])?[uid] as? NSNumber)?.intValue ?? 0
             return Conversation(id: doc.documentID, other: other, lastText: last?["text"] as? String,
                                 lastFromMe: last?["senderId"] as? String == uid, lastImage: last?["image"] as? Bool == true,
+                                lastUnsent: Self.unsent(last),
                                 sentAt: (last?["sentAt"] as? Timestamp)?.dateValue(), unread: unread)
         })
         let talking = Set(conversations.map(\.other.id))
@@ -219,6 +222,13 @@ final class ConversationsStore {
     /// Whose connection began or ended between two reads of the list.
     nonisolated static func moved(from before: [String], to after: [String]) -> Set<String> {
         Set(before).symmetricDifference(after)
+    }
+
+    /// The last message was unsent: `unsent: true` and none of what a message says beside it (a preview
+    /// written over an older one may keep a stale flag next to new words — the words win).
+    nonisolated static func unsent(_ last: [String: Any]?) -> Bool {
+        guard let last, last["unsent"] as? Bool == true else { return false }
+        return last["text"] == nil && last["image"] == nil && last["cardRef"] == nil
     }
 
     private static func other(in doc: QueryDocumentSnapshot, me: String) -> String? {

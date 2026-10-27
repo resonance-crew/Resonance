@@ -803,23 +803,25 @@ public nonisolated struct ComposerCapsuleShape: Shape {
 }
 
 /// The capsule drawn: the paper, the send segment's face, its seam, the grain over the segment, and
-/// the pen line over all.
-private struct ComposerCapsuleFace: View {
+/// the pen line over all. `segmentWidth` is the end segment's (the composer's Send, 52; the writer's tag
+/// field its two faces' wider, round 16 §1).
+struct ComposerCapsuleFace: View {
     let seed: Double
     let focused: Bool
     let canSend: Bool
     let pressed: Bool
+    var segmentWidth: CGFloat = ComposerMetrics.sendWidth
 
     var body: some View {
         let shape = ComposerCapsuleShape(seed: seed)
-        let segment = ComposerSendSegment(seed: seed)
+        let segment = ComposerSendSegment(seed: seed, width: segmentWidth)
         ZStack {
             shape.fill(Tokens.cream)
             ZStack {
                 segment.fill(canSend ? Tokens.buttonFill : Tokens.buttonTonal)
                 GrainLayer(shape: segment, mode: .tile, opacity: 0.38, tile: "grain-button", overflow: 16)
                 segment.fill(canSend ? Tokens.towardInk.opacity(0.14) : Tokens.terracotta.opacity(0.14)).opacity(pressed ? 1 : 0)
-                ComposerSendSeam(seed: seed).stroke(Tokens.cream, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round))
+                ComposerSendSeam(seed: seed, width: segmentWidth).stroke(Tokens.cream, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round))
             }
             .clipShape(shape)
             .animation(.easeOut(duration: 0.14), value: canSend)
@@ -832,26 +834,28 @@ private struct ComposerCapsuleFace: View {
     }
 }
 
-/// The send segment's region in the capsule's frame: the last 52, cut from the text by the seam (the
-/// capsule's outline trims it).
+/// The send segment's region in the capsule's frame: the last `width` (52), cut from the text by the
+/// seam (the capsule's outline trims it).
 nonisolated struct ComposerSendSegment: Shape {
     let seed: Double
+    var width: CGFloat = ComposerMetrics.sendWidth
 
     func path(in rect: CGRect) -> Path {
-        SegmentRegion(left: ComposerMetrics.seamSeed(seed), right: nil).path(in: Self.frame(in: rect))
+        SegmentRegion(left: ComposerMetrics.seamSeed(seed), right: nil).path(in: Self.frame(in: rect, width: width))
     }
 
-    static func frame(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.maxX - ComposerMetrics.sendWidth, y: rect.minY, width: ComposerMetrics.sendWidth, height: rect.height)
+    static func frame(in rect: CGRect, width: CGFloat = ComposerMetrics.sendWidth) -> CGRect {
+        CGRect(x: rect.maxX - width, y: rect.minY, width: width, height: rect.height)
     }
 }
 
 /// The seam at the send segment's start, across the capsule.
 nonisolated struct ComposerSendSeam: Shape {
     let seed: Double
+    var width: CGFloat = ComposerMetrics.sendWidth
 
     func path(in rect: CGRect) -> Path {
-        SegmentRegion.leftSeam(seed: ComposerMetrics.seamSeed(seed)).path(in: ComposerSendSegment.frame(in: rect))
+        SegmentRegion.leftSeam(seed: ComposerMetrics.seamSeed(seed)).path(in: ComposerSendSegment.frame(in: rect, width: width))
     }
 }
 

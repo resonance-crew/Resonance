@@ -11,16 +11,63 @@ import ResonanceAPI
 /// Shared with the web and Android case by case through native/fixtures/story-link-cards.json.
 public enum StoryLinks {
     /// The key of a paragraph the story parser found standing alone (`StoryBlock.soleLink`): for an
-    /// explicit link, its address as the link rules take it; for a bare address, the one link the
-    /// rules find in the words — when it is all of them (`https://example.com很棒` is the link
+    /// explicit link, its address as the link rules take it — only when its words are that address
+    /// (``wordsAreTheAddress(_:href:)``: `<url>`, `[url](url)`, `[www.x.com](http://www.x.com)`; a link the
+    /// writer gave words of their own reads as those words, round 16 §6); for a bare address, the one
+    /// link the rules find in the words — when it is all of them (`https://example.com很棒` is the link
     /// `https://example.com/` and two more words, so it stays words). Nil when the rules take no
     /// link there (another scheme, a port, a user name, an address in disguise such as `127.1`).
     public static func key(href: String?, text: String) -> String? {
-        if let href { return serverKey(href.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        if let href {
+            guard wordsAreTheAddress(text, href: href) else { return nil }
+            return serverKey(href.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
         let found = ChatLinks.links(in: text)
         guard found.count == 1, let only = found.first, only.range.location == 0, only.range.length == text.utf16.count
         else { return nil }
         return serverKey(only.text)
+    }
+
+    /// Whether a link's words are its own address (`wordsAreTheAddress` in src/lib/links/storyLinks.ts): the
+    /// words, trimmed, are one address the link rules take, naming the same page as `href` once each is
+    /// written as the server keys it and `http(s)://` and one trailing `/` are set aside — the writer's
+    /// way of saying "show the page" rather than "read my words".
+    public static func wordsAreTheAddress(_ words: String, href: String) -> Bool {
+        guard let said = serverKey(words.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let target = serverKey(href.trimmingCharacters(in: .whitespacesAndNewlines)) else { return false }
+        return bare(said) == bare(target)
+    }
+
+    /// The address the writer's link sheet links to, from what was typed or pasted into its field — or nil
+    /// when it isn't one we link to (the sheet then says `linkInvalid`): `linkTarget` in src/lib/links/soleLink.ts.
+    /// http(s) only, as the link rules take it; a bare `www.…` or `example.com/x` gets `https://`; another
+    /// scheme (`javascript:`, `data:`, `mailto:` …) or a user name is refused. The island checks it again.
+    public static func linkTarget(_ input: String) -> String? {
+        let value = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        let written: String
+        if value.range(of: "^https?://", options: [.regularExpression, .caseInsensitive]) != nil {
+            written = value
+        } else if value.range(of: "^[a-z][a-z0-9+.-]*:(?![0-9])", options: [.regularExpression, .caseInsensitive]) != nil {
+            // A scheme of its own (a colon before any slash, not a port's): never ours to link.
+            return nil
+        } else if value.hasPrefix("//") {
+            written = "https:" + value
+        } else {
+            written = "https://" + value
+        }
+        return serverKey(written) == nil ? nil : written
+    }
+
+    /// An address with its scheme and one trailing slash set aside.
+    static func bare(_ url: String) -> String {
+        var rest = Substring(url)
+        for scheme in ["https://", "http://"] where rest.lowercased().hasPrefix(scheme) {
+            rest = rest.dropFirst(scheme.count)
+            break
+        }
+        if rest.hasSuffix("/") { rest = rest.dropLast() }
+        return String(rest)
     }
 
     /// A link as the server keys it — `normalizeLink` in src/lib/links/url.ts, which is the URL

@@ -49,6 +49,55 @@ import Testing
         #expect(read(["replyTo": ["senderId": "alice", "text": "x"]]).replyTo == nil)
     }
 
+    /// Round 16 §4: each person's reaction by uid; anything not a string is left out, and an id this
+    /// build doesn't know is kept but never drawn (the stickers' order decides what is).
+    @Test func reactionsAreReadByPersonAndUnknownOnesAreNotDrawn() {
+        let m = read(["senderId": "bob", "text": "hi", "reactions": ["alice": "moved", "bob": "moved", "carol": 7, "dora": "wave"]])
+        #expect(m.reactions == ["alice": "moved", "bob": "moved", "dora": "wave"])
+        let order = ["heart", "moved", "laugh", "hug", "thumbs"]
+        let drawn = m.knownReactions(order)
+        #expect(drawn.map(\.id) == ["moved"])
+        #expect(drawn.first?.by == ["alice", "bob"])
+        #expect(m.reaction(of: "alice") == "moved")
+        // Changed at once while the server is asked, and put back when it refuses.
+        let mine = m.reacting("alice", with: "heart")
+        #expect(mine.knownReactions(order).map(\.id) == ["heart", "moved"])
+        #expect(mine.reacting("alice", with: nil).reaction(of: "alice") == nil)
+        #expect(read(["text": "hi"]).reactions.isEmpty)
+    }
+
+    /// Round 16 §3: an unsent message keeps its sender and its time and says nothing, even if an older
+    /// snapshot of it still held words; it can't be replied to, reacted to or unsent again.
+    @Test func anUnsentMessageSaysNothing() {
+        let m = read(["senderId": "bob", "text": "oops", "cardRef": "walk", "unsentAt": Date(), "reactions": ["alice": "heart"]])
+        #expect(m.isUnsent)
+        #expect(m.senderId == "bob" && m.sentAt == at)
+        #expect(m.text.isEmpty && m.cardRef == nil && m.image == nil && m.reactions.isEmpty)
+        #expect(!m.canReply && !m.canReact && !m.canUnsend(viewer: "bob", now: at))
+        #expect(!read(["senderId": "bob", "text": "hi", "unsentAt": NSNull()]).isUnsent)
+    }
+
+    /// A quote of a message since unsent is `{ id, senderId, unsent: true }`: it says so, and nothing else.
+    @Test func aQuoteOfAnUnsentMessageSaysItWasUnsent() throws {
+        let quote = try #require(read(["text": "ok", "replyTo": ["id": "m0", "senderId": "alice", "unsent": true]]).replyTo)
+        #expect(quote.unsent)
+        #expect(quote.summary(picture: "一張圖片", card: "一張卡片", unsentQuote: "已收回的訊息") == "已收回的訊息")
+        #expect(ReplyQuote(id: "m0", senderId: "a", text: "x", unsent: true).text.isEmpty)
+    }
+
+    /// Unsending is for the sender's own delivered plain message within 24 hours.
+    @Test func onlyTheSendersOwnPlainMessageOfTheLastDayCanBeUnsent() {
+        let sent = Date(timeIntervalSince1970: 1_000_000)
+        let mine = ChatMessage(id: "m1", senderId: "alice", text: "hi", sentAt: sent)
+        #expect(mine.canUnsend(viewer: "alice", now: sent.addingTimeInterval(23 * 3600)))
+        #expect(!mine.canUnsend(viewer: "alice", now: sent.addingTimeInterval(24 * 3600 + 1)))
+        #expect(!mine.canUnsend(viewer: "bob", now: sent))
+        let note = ChatMessage(id: "n1", senderId: "alice", text: "hi", sentAt: sent, cardRef: "walk", isNote: true)
+        #expect(!note.canUnsend(viewer: "alice", now: sent))
+        let failed = ChatMessage(id: "c1", senderId: "alice", text: "hi", sentAt: sent, delivery: .failed)
+        #expect(!failed.canUnsend(viewer: "alice", now: sent))
+    }
+
     /// A picture sent in a message: its id and size as kept (round 7 §4.1) — what the bubble takes its
     /// shape from before the picture arrives; a field without an id is no picture.
     @Test func aPictureComesWithItsSize() throws {

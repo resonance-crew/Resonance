@@ -56,8 +56,35 @@ import Testing
 
     @Test func aBareAddressIsKeyedAsItIsWritten() {
         #expect(StoryLinks.key(href: nil, text: "https://example.com/search?q=what's+up") == "https://example.com/search?q=what%27s+up")
-        #expect(StoryLinks.key(href: " https://例子.tw/x ", text: "例子") == "https://xn--fsqu00a.tw/x")
+        #expect(StoryLinks.key(href: " https://例子.tw/x ", text: "https://例子.tw/x") == "https://xn--fsqu00a.tw/x")
+        // A link the writer gave words of their own reads as those words (round 16 §6): no card.
+        #expect(StoryLinks.key(href: "https://例子.tw/x", text: "例子") == nil)
         // In other letters the host is no bare link at all (the rules end it at `https://`).
         #expect(StoryLinks.key(href: nil, text: "https://例子.tw/x") == nil)
+    }
+
+    /// Round 16 §6 (`wordsAreTheAddress` in src/lib/links/storyLinks.ts): the words, trimmed, name the
+    /// href's page once both are keyed and the scheme and one trailing slash are set aside.
+    @Test func aLinksWordsAreItsAddressOnlyWhenTheyNameItsPage() {
+        #expect(StoryLinks.wordsAreTheAddress("www.example.com", href: "http://www.example.com"))
+        #expect(StoryLinks.wordsAreTheAddress(" https://example.com/a/ ", href: "https://example.com/a"))
+        #expect(StoryLinks.wordsAreTheAddress("https://EXAMPLE.com/a", href: "http://example.com/a/"))
+        #expect(!StoryLinks.wordsAreTheAddress("看這篇", href: "https://example.com/b"))
+        // `example.com/c` is no address the rules take: words.
+        #expect(!StoryLinks.wordsAreTheAddress("example.com/c", href: "https://example.com/c"))
+        #expect(!StoryLinks.wordsAreTheAddress("https://elsewhere.example.com", href: "https://example.com/real"))
+        #expect(!StoryLinks.wordsAreTheAddress("https://example.com/a", href: "javascript:alert(1)"))
+    }
+
+    /// Round 16 §6: what the writer's link sheet takes (`linkTarget` in src/lib/links/soleLink.ts).
+    @Test func theLinkSheetTakesWebAddressesOnly() {
+        #expect(StoryLinks.linkTarget(" https://example.com/rain ") == "https://example.com/rain")
+        #expect(StoryLinks.linkTarget("www.example.com") == "https://www.example.com")
+        #expect(StoryLinks.linkTarget("example.com/x") == "https://example.com/x")
+        #expect(StoryLinks.linkTarget("//example.com/x") == "https://example.com/x")
+        for refused in ["javascript:alert(1)", "data:text/html,hi", "mailto:a@example.com", "https://user@example.com/",
+                        "localhost", "", "   ", "ftp://example.com/"] {
+            #expect(StoryLinks.linkTarget(refused) == nil, "\(refused)")
+        }
     }
 }

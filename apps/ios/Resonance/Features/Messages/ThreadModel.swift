@@ -1,3 +1,4 @@
+import DesignSystem
 import FirebaseFirestore
 import Foundation
 import Observation
@@ -139,6 +140,11 @@ final class ThreadModel {
     @ObservationIgnored private var openedFor: MessagingAPI.NoteRef?
     /// Each message's shared card, worked out once per version of the message.
     @ObservationIgnored private var shares: [String: (message: ChatMessage, share: CardShare?)] = [:]
+    /// The viewer's reactions asked of the server and not yet in the documents, by message id (nil: taken back).
+    @ObservationIgnored private var pendingReactions: [String: String?] = [:]
+    /// Messages whose reaction request hasn't been answered yet (the latest asked wins).
+    @ObservationIgnored private var reactionsInFlight: Set<String> = []
+    @ObservationIgnored private var reactionTokens: [String: Int] = [:]
 
     init(handle: String, uid: String?, noteRef: MessagingAPI.NoteRef?, session: SessionStore) {
         self.handle = handle
@@ -475,7 +481,19 @@ final class ThreadModel {
         let box = outbox
         let held = history
         box?.reconcile { $0.isIn(held) }
-        let built = thread.build(held, onItsWay: box?.entries ?? [])
+        var built = thread.build(held, onItsWay: box?.entries ?? [])
+        // The viewer's reactions still on their way are drawn at once (round 16 §4); one the document now
+        // carries as asked is no longer pending.
+        if !pendingReactions.isEmpty, let me {
+            for (id, wanted) in pendingReactions {
+                guard let i = built.lastIndex(where: { $0.id == id }) else { continue }
+                if built[i].reaction(of: me) == wanted, !reactionsInFlight.contains(id) {
+                    pendingReactions[id] = nil
+                } else if built[i].canReact {
+                    built[i] = built[i].reacting(me, with: wanted)
+                }
+            }
+        }
         guard built != messages else { return }
         messages = built
         rows = ThreadRows.build(built)
@@ -705,6 +723,67 @@ final class ThreadModel {
 
     func cancelReply() {
         replyingTo = nil
+    }
+
+    // MARK: - Reactions and unsending (round 16 §3–§4)
+
+    /// Reactions go on a message the conversation holds, still standing, between two people connected and
+    /// not blocked (a letter not yet answered takes none).
+    func canReact(_ message: ChatMessage) -> Bool { message.canReact && connected == true && !isBlocked }
+
+    /// The viewer's reaction to `message`, as the thread draws it (a pending one included), if known.
+    func myReaction(to message: ChatMessage) -> ReactionId? {
+        guard let me else { return nil }
+        return message.reaction(of: me).flatMap(ReactionId.init(rawValue:))
+    }
+
+    /// Reacts to `message` with `id` (nil takes the viewer's back): drawn at once, then asked of the server;
+    /// refused or lost, the chip goes back and the toast says so.
+    func react(_ message: ChatMessage, with id: ReactionId?) {
+        guard canReact(message), let pairId, me != nil else { return }
+        let key = message.id
+        pendingReactions[key] = .some(id?.rawValue)
+        reactionsInFlight.insert(key)
+        let token = (reactionTokens[key] ?? 0) + 1
+        reactionTokens[key] = token
+        rebuild()
+        let api = MessagingAPI(client: session.api)
+        Task { @MainActor [weak self] in
+            do {
+                if let id {
+                    try await api.setReaction(id.rawValue, pairId: pairId, messageId: key)
+                } else {
+                    try await api.removeReaction(pairId: pairId, messageId: key)
+                }
+                guard let self, self.reactionTokens[key] == token else { return }
+                self.reactionsInFlight.remove(key)
+                // The document may already say so (then it is no longer pending), or will in a moment.
+                self.rebuild()
+            } catch {
+                guard let self, self.reactionTokens[key] == token else { return }
+                self.reactionsInFlight.remove(key)
+                self.pendingReactions[key] = nil
+                self.rebuild()
+                self.session.toasts.show(L10n.Messages.reactError)
+            }
+        }
+    }
+
+    /// How an unsend went.
+    enum UnsendResult: Equatable { case done, tooLate, failed }
+
+    /// Unsends one of the viewer's messages (POST …/unsend): the documents then say so for both people.
+    func unsend(_ message: ChatMessage) async -> UnsendResult {
+        guard let pairId, let me, message.canUnsend(viewer: me) else { return .failed }
+        do {
+            try await MessagingAPI(client: session.api).unsendMessage(pairId: pairId, messageId: message.id)
+            pendingReactions[message.id] = nil
+            return .done
+        } catch let failure as APIFailure where failure.isConflict {
+            return .tooLate
+        } catch {
+            return .failed
+        }
     }
 
     // MARK: - Shared cards

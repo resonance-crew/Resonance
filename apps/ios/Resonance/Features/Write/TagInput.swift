@@ -28,36 +28,18 @@ nonisolated enum TagInput {
         return next
     }
 
-    /// One line of the tag field: how many pills it holds and whether the input row ends it.
-    nonisolated struct Line: Equatable {
-        var pills: Int
-        var entry: Bool
+    /// What is typed, trimmed: the tag it would add.
+    static func trimmed(_ draft: String) -> String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// Whether the field holds a word to add (round 16 §1): something typed, and no input method still
+    /// composing it — zhuyin's underlined candidate is not a word yet.
+    static func ready(draft: String, composing: Bool) -> Bool {
+        !composing && !trimmed(draft).isEmpty
     }
 
-    /// Breaks the tag field into lines: pills fill a line in order (a pill that
-    /// doesn't fit starts the next; one wider than the field sits alone), and
-    /// the input row takes the last line if `entryMin` of it is left, else a
-    /// line of its own. The same rule as Android's `breakTagLines`.
-    static func breakLines(pillWidths: [CGFloat], entryMin: CGFloat, maxWidth: CGFloat, gap: CGFloat) -> [Line] {
-        var lines: [Line] = []
-        var count = 0
-        var used: CGFloat = 0
-        for width in pillWidths {
-            let needs = count == 0 ? width : used + gap + width
-            if count > 0, needs > maxWidth {
-                lines.append(Line(pills: count, entry: false))
-                count = 0
-            }
-            used = count == 0 ? width : used + gap + width
-            count += 1
-        }
-        let needs = count == 0 ? entryMin : used + gap + entryMin
-        if count > 0, needs > maxWidth {
-            lines.append(Line(pills: count, entry: false))
-            lines.append(Line(pills: 0, entry: true))
-        } else {
-            lines.append(Line(pills: count, entry: true))
-        }
-        return lines
+    /// Whether a hardware keyboard's Backspace takes the last tag back: only in an empty field, nothing
+    /// being composed (Backspace then belongs to the input method).
+    static func takesBackLast(draft: String, composing: Bool) -> Bool {
+        draft.isEmpty && !composing
     }
 }
