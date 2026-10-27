@@ -1,12 +1,29 @@
 'use client';
 
-import { useId, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type CSSProperties,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
+} from 'react';
 import { useTranslations } from 'next-intl';
-import { HandDrawnDashedSurface } from '@/components/atoms/HandDrawnDashedBorder/HandDrawnDashedBorder';
+import { BrushWash } from '@/components/atoms/BrushWash/BrushWash';
+import { ButtonLoader } from '@/components/atoms/ButtonLoader/ButtonLoader';
 import { FieldHint } from '@/components/atoms/Field/Field';
 import { Icon } from '@/components/atoms/Icon';
-import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
+import { ShapeGrain } from '@/components/atoms/ShapeGrain/ShapeGrain';
 import { TagPill } from '@/components/atoms/TagPill/TagPill';
+import { CAPSULE_R, segmentCapsuleShape } from '@/components/molecules/SegmentedActionBar/segmentCapsule';
+import { INK } from '@/lib/design/strokes';
+import { useElementSize } from '@/lib/hooks/useElementSize';
+import { keyboardInset } from '@/lib/hooks/useKeyboardInset';
 import styles from './TagField.module.css';
 
 export interface TagFieldProps {
@@ -16,38 +33,140 @@ export interface TagFieldProps {
   /** Ask the model for 2–3 tags (the host merges them into the list). */
   onSuggest: () => void;
   suggesting: boolean;
-  /** Replaces the helper line while it is set. */
+  /** Why the model's suggestion failed, under the field while it is set. */
   error?: string | null;
-  /** Lets a `<label htmlFor>` focus the text input. */
+  /** The text input's id. */
   id?: string;
 }
 
 /** A tag ends at a comma of either width or the enumeration comma (、). */
 const SEPARATORS = /[,，、]/;
+/** The field's seed: its wobble, its seam, its grain. */
+const SEED = 53;
 
 /**
- * The writer's tags as one control: a single input frame holding the chosen
- * tags (bare `md` pills — one frame per layer, so no pen line inside this one),
- * then the text input filling the rest of the row, then one trailing action
- * that follows the context: with nothing typed it asks the model for tags, with
- * something typed it adds that tag. Enter, a comma (，、 too) or the action
- * adds; Backspace on an empty input takes the last tag back. The pills wrap, and
- * the input and its action wrap together onto the next line when the row fills.
- * The frame takes the field's idle / hover / focus colours, focus meaning
- * anything inside it. Under it one muted line says how, or the error.
+ * Whether a key comes from a hardware keyboard: a screen with a fine pointer
+ * among its pointers (a desktop, an iPad with a trackpad) and no on-screen
+ * keyboard up. A phone's soft keyboard never takes a tag back with Backspace
+ * (round 16 §1): its Backspace repeats as it is held, and nothing on the
+ * keyboard says a pill is next.
+ */
+function hardwareKeyboard(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+  return window.matchMedia('(any-pointer: fine)').matches && keyboardInset() === 0;
+}
+
+/** The element that scrolls the field — the publish step's pane, else the page. */
+function scrollerOf(el: HTMLElement | null): Element {
+  for (let p = el?.parentElement ?? null; p; p = p.parentElement) {
+    const { overflowY } = getComputedStyle(p);
+    if ((overflowY === 'auto' || overflowY === 'scroll') && p.scrollHeight > p.clientHeight) return p;
+  }
+  return document.scrollingElement ?? document.documentElement;
+}
+
+/**
+ * The writer's tags (round 16 §1). Above, one wrapping row: the section's
+ * label 「標籤」 then the chosen tags as removable pills (TagPill lg,
+ * outlined, the accent's light fill, a 44 × 44 target round each ✕), a new
+ * one popping in. Below, the field in the chat composer's language — one
+ * capsule (its wobble, cream, its pen darkening while written in), one line
+ * exactly 48 tall, ending in a segment behind a wavy seam: with nothing typed
+ * (or an input method mid-word) the tonal 「✦ AI 建議」, which asks the model
+ * (its pen loop in the sparkle's place while it thinks); with a word typed
+ * the solid 「＋ 新增」, which adds it. The segment is as wide as the wider of
+ * its two faces, so the seam never moves when typing starts.
  *
- * The apps' twin is `Tags` in WriteScreen (Android and iOS).
+ * Enter, a comma (，、 too) or the segment adds; a tap on the segment while an
+ * input method is mid-word ends the word first and adds it. Backspace in the
+ * empty field takes the last tag back, one per press, only from a hardware
+ * keyboard. When the row grows or shrinks (a tag wraps onto a new line, or
+ * one goes) while the field is being written in, or the model's tags arrive,
+ * the page scrolls by as much in the same frame: the field never moves under
+ * the caret. Tags added are said politely (`tagsAdded`); a failed suggestion
+ * is said under the field.
+ *
+ * The apps' twins are `Tags` in WriteScreen (Android) and WriteParts (iOS).
  */
 export function TagField({ tags, onChange, onSuggest, suggesting, error, id }: TagFieldProps) {
   const t = useTranslations('write');
   const [draft, setDraft] = useState('');
-  const [hover, setHover] = useState(false);
   const [focused, setFocused] = useState(false);
+  // An input method (Zhuyin, Pinyin …) is mid-word: Enter and the separators belong to it.
+  const [composing, setComposing] = useState(false);
+  const composingRef = useRef(false);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const ownId = useId();
+  const inputId = id ?? ownId;
+  const errorId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
-  // An IME (Zhuyin, Pinyin …) is mid-word: Enter and the separators belong to it.
-  const composing = useRef(false);
-  const helpId = useId();
-  const canAdd = draft.trim().length > 0;
+  const rowRef = useRef<HTMLDivElement>(null);
+  const capsuleRef = useRef<HTMLDivElement>(null);
+  const segmentRef = useRef<HTMLButtonElement>(null);
+  const ready = !composing && draft.trim() !== '';
+  const busy = suggesting && !ready;
+
+  // The capsule's shape at its size, its end segment as wide as the segment's wider face.
+  const { w, h } = useElementSize(capsuleRef);
+  const { w: segmentW } = useElementSize(segmentRef);
+  const shape = useMemo(() => (segmentW ? segmentCapsuleShape(w, h, segmentW, SEED) : null), [w, h, segmentW]);
+  const clipId = `tag-field-clip-${useId().replace(/:/g, '')}`;
+  const [hover, setHover] = useState({ x: 0, y: 0, on: false });
+  const brush = (e: MouseEvent<HTMLButtonElement>, on: boolean) => {
+    const r = capsuleRef.current?.getBoundingClientRect();
+    if (r) setHover({ x: e.clientX - r.left, y: e.clientY - r.top, on });
+  };
+
+  // Pills already there when the step opened stand still; a new one pops in.
+  const [standing] = useState(() => new Set(tags));
+
+  // ── Tags added, said politely: typed, or the model's arriving. ──
+  const [said, setSaid] = useState('');
+  const knownRef = useRef(tags);
+  useEffect(() => {
+    const added = tags.filter((tag) => !knownRef.current.includes(tag)).length;
+    knownRef.current = tags;
+    // A trailing mark of its own each time, so the same words twice are said twice.
+    if (added > 0) setSaid((before) => `${t('tagsAdded', { count: added })}${before.endsWith('​') ? '' : '​'}`);
+  }, [tags, t]);
+
+  // ── The field stays where it is while what is above it changes height. ──
+  // A tag wraps the row onto a new line (or one goes), and the preview card above takes its tags too: the field
+  // would move by as much. Its place in the scroller's content (never moved by scrolling) is kept after every
+  // change, and a ResizeObserver keeps it through changes of anything else (a picture loaded, the window).
+  const fieldPlace = useRef<number | null>(null);
+  // The change in flight came from the field's segment (the model's tags arrive after the field may have lost the focus).
+  const fromSegment = useRef(false);
+  const placeOf = (scroller: Element) => {
+    const top = capsuleRef.current?.getBoundingClientRect().top ?? 0;
+    return top + (scroller === document.scrollingElement ? window.scrollY : scroller.scrollTop);
+  };
+  useEffect(() => {
+    const capsule = capsuleRef.current;
+    if (!capsule || typeof ResizeObserver === 'undefined') return;
+    const keep = () => (fieldPlace.current = placeOf(scrollerOf(capsule)));
+    const seen = new ResizeObserver(keep);
+    seen.observe(capsule.closest('section') ?? document.body);
+    if (rowRef.current) seen.observe(rowRef.current);
+    return () => seen.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    const capsule = capsuleRef.current;
+    if (!capsule) return;
+    const scroller = scrollerOf(capsule);
+    const now = placeOf(scroller);
+    const before = fieldPlace.current;
+    const follow = fromSegment.current || document.activeElement === inputRef.current;
+    fromSegment.current = false;
+    fieldPlace.current = now;
+    if (before == null || Math.abs(now - before) < 0.5 || !follow) return;
+    scroller.scrollBy({ top: now - before, behavior: 'instant' as ScrollBehavior });
+  }, [tags]);
+  // A suggestion that brought nothing new leaves no change in flight.
+  useLayoutEffect(() => {
+    if (!suggesting) fromSegment.current = false;
+  }, [suggesting]);
 
   /** Add the given words, in order, skipping blanks and tags already there. */
   function add(words: string[]) {
@@ -60,8 +179,9 @@ export function TagField({ tags, onChange, onSuggest, suggesting, error, id }: T
   }
 
   function commit() {
-    if (!canAdd) return;
-    add([draft]);
+    const word = draftRef.current;
+    if (!word.trim()) return;
+    add([word]);
     setDraft('');
     inputRef.current?.focus();
   }
@@ -79,7 +199,7 @@ export function TagField({ tags, onChange, onSuggest, suggesting, error, id }: T
   }
 
   function onInput(e: ChangeEvent<HTMLInputElement>) {
-    if (composing.current) setDraft(e.target.value);
+    if (composingRef.current) setDraft(e.target.value);
     else take(e.target.value);
   }
 
@@ -90,93 +210,141 @@ export function TagField({ tags, onChange, onSuggest, suggesting, error, id }: T
     if (e.key === 'Enter') {
       e.preventDefault();
       commit();
-    } else if (e.key === 'Backspace' && draft === '' && tags.length > 0 && !e.repeat) {
-      // One tag per press: holding the key clears the text, then stops.
+    } else if (e.key === 'Backspace' && draft === '' && tags.length > 0 && !e.repeat && hardwareKeyboard()) {
+      // One tag per press from a keyboard: holding the key clears the text, then stops.
       onChange(tags.slice(0, -1));
     }
   }
 
-  const busy = suggesting && !canAdd;
+  // A tap on the segment mid-word ends the word (an input method commits it as its field loses the focus) and
+  // adds it; otherwise the press keeps the focus, and the keyboard, in the field.
+  const tappedMidWord = useRef(false);
+  function onSegmentDown(e: PointerEvent<HTMLButtonElement>) {
+    if (composingRef.current) {
+      tappedMidWord.current = true;
+      inputRef.current?.blur();
+      return;
+    }
+    if (document.activeElement === inputRef.current) e.preventDefault();
+  }
+  function onSegment() {
+    const midWord = tappedMidWord.current;
+    tappedMidWord.current = false;
+    if (midWord || draftRef.current.trim()) {
+      fromSegment.current = true;
+      commit();
+      return;
+    }
+    if (suggesting) return;
+    fromSegment.current = true;
+    onSuggest();
+  }
+
+  const typed = draft.trim();
 
   return (
-    <div>
-      <HandDrawnDashedSurface
-        seed={53}
-        R={16}
-        state={focused ? 'focus' : hover ? 'hover' : 'idle'}
-        className={styles.surface}
-      >
-        <div
-          className={styles.field}
-          onMouseEnter={() => setHover(true)}
-          onMouseLeave={() => setHover(false)}
-          onFocus={() => setFocused(true)}
-          onBlur={(e) => {
-            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false);
-          }}
-          onClick={(e) => {
-            // The empty parts of the frame are the input's too.
-            if (!(e.target as HTMLElement).closest('button, input')) inputRef.current?.focus();
-          }}
-        >
-          {tags.map((tag) => (
-            <TagPill
-              key={tag}
-              size="md"
-              color="var(--color-terracotta-light)"
-              onRemove={() => onChange(tags.filter((x) => x !== tag))}
-            >
+    <div className={styles.field}>
+      <div ref={rowRef} className={styles.row}>
+        <label className={styles.label} htmlFor={inputId}>
+          {t('tagsLabel')}
+        </label>
+        {tags.map((tag) => (
+          <span key={tag} className={styles.pill} data-standing={standing.has(tag) || undefined}>
+            <TagPill size="lg" outlined color="var(--color-terracotta-light)" onRemove={() => onChange(tags.filter((x) => x !== tag))}>
               {tag}
             </TagPill>
-          ))}
-          <div className={styles.entry}>
-            <input
-              ref={inputRef}
-              id={id}
-              type="text"
-              className={styles.input}
-              value={draft}
-              placeholder={t('tagsPlaceholder')}
-              aria-label={t('tagsPlaceholder')}
-              aria-describedby={helpId}
-              enterKeyHint="done"
-              autoComplete="off"
-              onChange={onInput}
-              onKeyDown={onKeyDown}
-              onCompositionStart={() => {
-                composing.current = true;
-              }}
-              onCompositionEnd={(e) => {
-                composing.current = false;
-                take(e.currentTarget.value);
-              }}
-            />
-            <OrganicButton
-              variant="textAccent"
-              size="sm"
-              className={styles.action}
-              onClick={canAdd ? commit : onSuggest}
-              // Asking the model: the sparkle's place draws the pen loop until the tags arrive.
-              loading={!canAdd && busy}
-            >
-              {canAdd ? (
-                <>
-                  <Icon name="plus" size={12} />
-                  {t('tagsAdd')}
-                </>
-              ) : (
-                <>
-                  <Icon name="sparkle" size={15} />
-                  {t('tagsSuggest')}
-                </>
-              )}
-            </OrganicButton>
-          </div>
-        </div>
-      </HandDrawnDashedSurface>
-      {/* Only why the model's suggestion failed (round 8 §2.2: no help line — the field and its button say it). */}
-      <div id={helpId} aria-live="polite">
+          </span>
+        ))}
+      </div>
+
+      <div
+        ref={capsuleRef}
+        className={`${styles.capsule} res-shape-stand-in`}
+        data-focus={focused || undefined}
+        data-ready={ready || undefined}
+        data-shape-pending={shape ? undefined : ''}
+        style={{ '--shape-radius': `${CAPSULE_R}px`, '--shape-ink-width': `${INK}px` } as CSSProperties}
+      >
+        {shape && (
+          <>
+            {/* The field's cream and the segment's face — under what is in it. */}
+            <svg aria-hidden="true" className={styles.capsuleShape} width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
+              <defs>
+                <clipPath id={clipId}>
+                  <path d={shape.outline} />
+                </clipPath>
+              </defs>
+              <path d={shape.outline} className={styles.paper} />
+              <path d={shape.segment} className={styles.segmentFace} clipPath={`url(#${clipId})`} />
+            </svg>
+            {/* The segment's grain and its hover brush, cut to the capsule's outline. */}
+            <div className={styles.segmentLayer} style={{ width: w, height: h, clipPath: `path('${shape.outline}')` }} aria-hidden="true">
+              <ShapeGrain w={w} h={h} d={shape.segment} seed={SEED} opacity={0.38} frequency={1.1} />
+              <BrushWash w={w} h={h} d={shape.segment} color="color-mix(in oklch, var(--toward-ink) 14%, transparent)" x={hover.x} y={hover.y} on={hover.on} duration={340} overshoot={4} />
+            </div>
+            {/* The seam in the paper's colour and the pen line over everything. */}
+            <svg aria-hidden="true" className={styles.capsuleShape} width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
+              <path d={shape.seam} className={styles.seam} strokeWidth={INK} clipPath={`url(#${clipId})`} />
+              <path d={shape.outline} className={styles.pen} strokeWidth={INK} />
+            </svg>
+          </>
+        )}
+        <input
+          ref={inputRef}
+          id={inputId}
+          type="text"
+          className={styles.input}
+          value={draft}
+          placeholder={t('tagsPlaceholder')}
+          aria-describedby={error ? errorId : undefined}
+          enterKeyHint="done"
+          autoComplete="off"
+          onChange={onInput}
+          onKeyDown={onKeyDown}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          onCompositionStart={() => {
+            composingRef.current = true;
+            setComposing(true);
+          }}
+          onCompositionEnd={(e) => {
+            composingRef.current = false;
+            setComposing(false);
+            take(e.currentTarget.value);
+          }}
+        />
+        <button
+          ref={segmentRef}
+          type="button"
+          className={styles.segment}
+          aria-label={ready ? t('tagsAddLabel', { tag: typed }) : t('tagsSuggestLabel')}
+          title={ready ? t('tagsAddLabel', { tag: typed }) : t('tagsSuggestLabel')}
+          aria-busy={busy || undefined}
+          onPointerDown={onSegmentDown}
+          onClick={onSegment}
+          onMouseEnter={(e) => brush(e, true)}
+          onMouseLeave={(e) => brush(e, false)}
+        >
+          {/* Both faces in one cell: the wider sets the segment's width, so the seam never moves. */}
+          <span className={styles.face} data-face="suggest" aria-hidden="true">
+            <span className={styles.glyph}>{busy ? <ButtonLoader size={15} /> : <Icon name="sparkle" size={15} />}</span>
+            {t('tagsSuggestShort')}
+          </span>
+          <span className={styles.face} data-face="add" aria-hidden="true">
+            <span className={styles.glyph}>
+              <Icon name="plus" size={13} />
+            </span>
+            {t('tagsAdd')}
+          </span>
+        </button>
+      </div>
+
+      {/* Only why the model's suggestion failed (no help line: the field and its segment say how). */}
+      <div id={errorId} aria-live="polite" className={styles.error}>
         {error && <FieldHint tone="error">{error}</FieldHint>}
+      </div>
+      <div className={styles.said} role="status" aria-live="polite">
+        {said}
       </div>
     </div>
   );
