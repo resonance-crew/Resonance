@@ -126,6 +126,13 @@ val TabBarHeight = 52.dp
 val TabIconSize = 26.dp
 
 /**
+ * The bar's one pen (round 17 §7): every outline glyph in it — the tabs' and the middle pencil's — at
+ * INK_STRONG (2.2 in the glyph's 24 box), a step heavier than the bare glyphs' INK elsewhere, so they hold
+ * their own at 26 on the bar's paper. The solid twins are filled and take no pen.
+ */
+val TabGlyphPen: Float = Tokens.InkStrong.value
+
+/**
  * The tab bar, docked like the header and edged the same way: cream paper that begins on a wavy pen
  * line, so the top and bottom chrome are one pair and nothing floats or draws a frame. Round 16 §2:
  * the tabs are their glyphs alone (each named for TalkBack and a pointer's tooltip by its title); the
@@ -207,8 +214,8 @@ private fun <T> TabFace(item: OrganicTabItem<T>, selected: Boolean, pressed: Boo
     Box(modifier.tabTooltip(item.title), contentAlignment = Alignment.Center) {
         Box(Modifier.graphicsLayer { val k = pop.value * press; scaleX = k; scaleY = k }) {
             // The outline fades out under the solid twin as it fades in: one glyph to the eye.
-            if (solid < 1f) OrganicIcon(item.icon, Modifier.graphicsLayer { alpha = 1f - solid }, size = TabIconSize, color = if (selected) accent else muted)
-            if (solid > 0f) OrganicIcon(item.selectedIcon ?: item.icon, Modifier.graphicsLayer { alpha = solid }, size = TabIconSize, color = accent)
+            if (solid < 1f) OrganicIcon(item.icon, Modifier.graphicsLayer { alpha = 1f - solid }, size = TabIconSize, color = if (selected) accent else muted, strokeWidth = TabGlyphPen)
+            if (solid > 0f) OrganicIcon(item.selectedIcon ?: item.icon, Modifier.graphicsLayer { alpha = solid }, size = TabIconSize, color = accent, strokeWidth = TabGlyphPen)
             if (item.badge > 0) CountBadge(item.badge, Modifier.align(Alignment.TopEnd).offset(x = 10.dp, y = (-8).dp), ring = Tokens.Cream)
         }
     }
@@ -540,7 +547,7 @@ private fun PenChip(pressed: Boolean, icon: IconName, chip: androidx.compose.ui.
                 }
             },
         contentAlignment = Alignment.Center,
-    ) { OrganicIcon(icon, size = if (chip.height < 40.dp) 20.dp else 22.dp, color = Tokens.Cream) }
+    ) { OrganicIcon(icon, size = if (chip.height < 40.dp) 20.dp else 22.dp, color = Tokens.Cream, strokeWidth = TabGlyphPen) }
 }
 
 /**
@@ -759,7 +766,9 @@ fun OrganicInlineBar(
                 // Puts the arrow on the page's 20 margin, as the web's -8 margin + 8 padding does.
                 .padding(start = 4.dp, end = 8.dp)
                 .padding(top = air, bottom = HeaderEdgeHeight)
-                .height(LocalInlineBarHeight.current - air),
+                // Its row as tall as ever — unless a title with its save state under it needs more (round 17 §8: a large
+                // text size), when the bar grows to hold both lines rather than cutting the second off.
+                .heightIn(min = LocalInlineBarHeight.current - air),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             back()

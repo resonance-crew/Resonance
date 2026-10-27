@@ -13,6 +13,7 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -99,12 +100,6 @@ import androidx.compose.runtime.ReadOnlyComposable
 import com.resonance.geometry.SegValue
 import com.resonance.geometry.WobCircleOptions
 import com.resonance.geometry.WobRectOptions
-import com.resonance.geometry.autoCurve
-import com.resonance.geometry.autoMag
-import com.resonance.geometry.autoSegments
-import com.resonance.geometry.dividerPath
-import com.resonance.geometry.rowBoundary
-import com.resonance.geometry.rowRegion
 import com.resonance.geometry.wobCircle
 import com.resonance.geometry.wobRect
 import com.resonance.kit.l10n.L10n
@@ -180,11 +175,6 @@ fun OrganicModal(
     closeLabel: String = L10n.Safety.Report.close,
     /** The card's widest (Modal's `maxWidth`): 460 unless a small dialog asks for less. */
     maxWidth: Dp = 460.dp,
-    /**
-     * A compact sheet at the window's foot, riding the keyboard (round 16 §6: the writer's link sheet), in
-     * place of the card in the middle: the same card, 12 from the edges and the keyboard, tighter inside.
-     */
-    atFoot: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     // The screens under it are softened while it is up (review F8): the root listens.
@@ -221,8 +211,8 @@ fun OrganicModal(
                     .fillMaxSize()
                     // Clear of the bars and the cutout, and above the keyboard (a note or a report being typed), the card scrolling if it has to.
                     .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(if (atFoot) 12.dp else 16.dp),
-                contentAlignment = if (atFoot) Alignment.BottomCenter else Alignment.Center,
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center,
             ) {
                 val scroll = rememberScrollState()
                 val card = Tokens.CardBg
@@ -256,7 +246,7 @@ fun OrganicModal(
                         // A card taller than the room scrolls, its words fading where there is more.
                         .scrollFade(scroll, ModalScrollFade)
                         .verticalScroll(scroll)
-                        .then(if (atFoot) Modifier.padding(horizontal = 22.dp, vertical = 22.dp) else Modifier.padding(horizontal = 28.dp, vertical = 32.dp)),
+                        .padding(horizontal = 28.dp, vertical = 32.dp),
                     verticalArrangement = Arrangement.spacedBy(ModalGap),
                     content = content,
                 )
@@ -493,17 +483,17 @@ class OrganicMenuItem(val title: String, val icon: IconName, val destructive: Bo
 /**
  * OrganicMenu's colors (the web's `--menu-*`): the theme terracotta, or — for
  * a card's own menu — its hue: the pen `oklch(52% 0.11 h)`, deeper `oklch(38%
- * 0.09 h)` when pressed, paper `oklch(98% 0.01 h)`, dividers `oklch(55% 0.04 h
- * / 0.4)`, and the destructive row's wash `color-mix(yellow 25%, paper)` (45% pressed).
+ * 0.09 h)` when pressed, paper `oklch(98% 0.01 h)`, and the destructive row's wash
+ * `color-mix(yellow 25%, paper)` (45% pressed). The sheet's paper ([sheet], round 17 §1) is that
+ * paper raised a step toward the ink at night, as PaperSheet raises the menus' (94 % paper).
  */
 internal class MenuColors(hue: Double?, palette: ResonanceColors) {
     /** The glyphs' pen (the trigger's, each row's icon). */
     val border: Color
     val borderHover: Color
-    /** The panel's outline: the menus' frame (the accent, quieter at night), or the card's pen. */
-    val frame: Color
     val cream: Color
-    val divider: Color
+    /** What the menu's sheet is filled with: [cream], raised at night. */
+    val sheet: Color
     val dangerWash: Color
     val dangerWashPressed: Color
 
@@ -512,21 +502,19 @@ internal class MenuColors(hue: Double?, palette: ResonanceColors) {
         if (hue == null) {
             border = palette.Terracotta
             borderHover = palette.TerracottaDeep
-            frame = palette.MenuFrame
             // The menus' paper: the page's in light, raised onto the card's at night.
             cream = palette.MenuPaper
-            divider = palette.MenuFrame.copy(alpha = 0.4f)
+            sheet = mixes.reactionSheet
             dangerWash = mixes.menuDangerWash
             dangerWashPressed = mixes.menuDangerWashPressed
         } else {
-            // A card's own menu (the web's --menu-* from the card's hue): its pen, deeper pointed at, its paper, its rule.
+            // A card's own menu (the web's --menu-* from the card's hue): its pen, deeper pointed at, its paper.
             border = palette.hue(HueRole.Pen, hue)
             borderHover = palette.hue(HueRole.PenDeep, hue)
-            frame = border
             cream = palette.hue(HueRole.Menu, hue)
-            divider = palette.hue(HueRole.Separator, hue, 0.4)
             val (l, c) = if (palette.dark) HueRole.Menu.dark else HueRole.Menu.light
             val paper = doubleArrayOf(l, c, hue, 1.0)
+            sheet = if (palette.dark) PaletteMixes.mixed(paper, palette.oklchOf("toward-ink"), 0.94) else cream
             dangerWash = PaletteMixes.mixed(palette.oklchOf("color-yellow"), paper, 0.25)
             dangerWashPressed = PaletteMixes.mixed(palette.oklchOf("color-yellow"), paper, 0.45)
         }
@@ -620,17 +608,10 @@ private const val ChooseLingerMillis = 150L
 private val BareHitBox = 48.dp
 private val BareWashInset = 4.dp
 
-/** OrganicMenu's rows are 42 tall. */
-private const val MenuRowHeight = 42.0
-
-/** A row that can't be chosen now (OrganicMenu.module.css's `.option:disabled`). */
-private const val MenuRowDisabledAlpha = 0.55f
-
 /**
- * The web's OrganicMenu: the ⋯ chip, dropping a hand-drawn cream panel 8
- * under its trailing edge — terracotta pen (or a card's `hue`), wavy dividers
- * between rows, the destructive row on a yellow wash — not Material's menu. Not [enabled], the
- * trigger is in its place and takes no tap.
+ * The web's OrganicMenu: the ⋯ chip, dropping the menu sheet 8 under its trailing edge (round 17 §1:
+ * [MenuSheet] — paper and grain, no pen, no rules, a shadow following its wobble; no scrim) — not
+ * Material's menu. Not [enabled], the trigger is in its place and takes no tap.
  */
 @Composable
 fun OrganicMenu(
@@ -688,24 +669,34 @@ private fun MenuHost(
         if (open) {
             val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
             val insetPx = with(LocalDensity.current) { inset.roundToPx() }
+            val roomPx = with(LocalDensity.current) { SheetShadow.Room.roundToPx() }
             Popup(
-                popupPositionProvider = remember(gap, insetPx, above, alignStart) { MenuPlacement(gap, insetPx, above, alignStart) },
+                popupPositionProvider = remember(gap, insetPx, roomPx, above, alignStart) { MenuPlacement(gap, insetPx, above, alignStart, roomPx) },
                 onDismissRequest = { open = false },
-                properties = PopupProperties(focusable = true),
+                // The window keeps room round the sheet for its shadow and its wobble (nothing of either cut straight), and
+                // that room may run past the screen's edge: the sheet itself is kept inside it ([MenuPlacement]).
+                properties = PopupProperties(focusable = true, clippingEnabled = false),
             ) {
                 // Like a dialog, a popup is a window of its own with the system's whole text scale.
                 CappedTextScale {
-                    MenuPanel(items, seed, colors, null, TransformOrigin(if (alignStart) 0f else 1f, if (above) 1f else 0f), { item ->
-                        if (choosing) return@MenuPanel
-                        choosing = true
-                        menuScope.launch {
-                            // A tap is shorter than the ink's spread: the panel stays long enough to show it.
-                            delay(ChooseLingerMillis)
-                            open = false
-                            choosing = false
-                            item.onClick()
-                        }
-                    })
+                    // The room is the popup's own window but not the sheet: a tap there is a tap beside the menu.
+                    Box(
+                        Modifier
+                            .pointerInput(Unit) { detectTapGestures { open = false } }
+                            .padding(SheetShadow.Room),
+                    ) {
+                        MenuPanel(items, seed, colors, null, TransformOrigin(if (alignStart) 0f else 1f, if (above) 1f else 0f), { item ->
+                            if (choosing) return@MenuPanel
+                            choosing = true
+                            menuScope.launch {
+                                // A tap is shorter than the ink's spread: the panel stays long enough to show it.
+                                delay(ChooseLingerMillis)
+                                open = false
+                                choosing = false
+                                item.onClick()
+                            }
+                        })
+                    }
                 }
             }
         }
@@ -716,29 +707,38 @@ private fun MenuHost(
  * Where a menu's panel goes (px): [gap] under its trigger (the web's `top: 100% + 8px`), or over it
  * when [above] — on the other side when that side has no room and this one has, and kept in the
  * window across; the trailing edges lined up (`right: 0`), or the leading ones when [alignStart].
- * [inset]: how far in from the anchor's box the trigger itself is drawn.
+ * [inset]: how far in from the anchor's box the trigger itself is drawn. [room]: how far the popup's
+ * content reaches past the sheet on every side (its shadow's room): the sheet is placed, the room
+ * hangs round it.
  */
-internal class MenuPlacement(private val gap: Int, private val inset: Int, private val above: Boolean = false, private val alignStart: Boolean = false) : PopupPositionProvider {
+internal class MenuPlacement(
+    private val gap: Int,
+    private val inset: Int,
+    private val above: Boolean = false,
+    private val alignStart: Boolean = false,
+    private val room: Int = 0,
+) : PopupPositionProvider {
     override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
-        val start = if (alignStart) anchorBounds.left + inset else anchorBounds.right - inset - popupContentSize.width
-        val x = start.coerceIn(0, max(0, windowSize.width - popupContentSize.width))
+        val w = (popupContentSize.width - 2 * room).coerceAtLeast(0)
+        val h = (popupContentSize.height - 2 * room).coerceAtLeast(0)
+        val start = if (alignStart) anchorBounds.left + inset else anchorBounds.right - inset - w
+        val x = start.coerceIn(0, max(0, windowSize.width - w))
         val under = anchorBounds.bottom - inset + gap
-        val over = anchorBounds.top + inset - gap - popupContentSize.height
-        val fitsUnder = under + popupContentSize.height <= windowSize.height
+        val over = anchorBounds.top + inset - gap - h
+        val fitsUnder = under + h <= windowSize.height
         val fitsOver = over >= 0
         val y = when {
             above -> if (fitsOver || !fitsUnder) over.coerceAtLeast(0) else under
             else -> if (fitsUnder || !fitsOver) under else over
         }
-        return IntOffset(x, y)
+        return IntOffset(x - room, y - room)
     }
 }
 
 /**
- * The panel of an [OrganicMenu] on its own, for a menu that opens somewhere other than under a ⋯
- * (the long-press menu of a message): the same hand-drawn card, wavy dividers and ink, with an
- * optional quiet [footer] line under the rows (no ink, no action), and `origin` the edge it
- * scales in from. [onChoose] gets the row pressed.
+ * The panel of an [OrganicMenu] on its own, for a menu that opens somewhere other than under a ⋯:
+ * the same sheet and ink, with an optional quiet [footer] line at the end under the rows (no ink, no
+ * action), and `origin` the edge it scales in from. [onChoose] gets the row pressed.
  */
 @Composable
 fun OrganicMenuPanel(
@@ -755,9 +755,6 @@ fun OrganicMenuPanel(
     MenuPanel(items, seed, colors, footer, origin, onChoose, modifier)
 }
 
-/** A menu panel's footer line is a little shorter than a row. */
-private const val MenuFooterHeight = 38.0
-
 @Composable
 private fun MenuPanel(
     items: List<OrganicMenuItem>,
@@ -770,92 +767,24 @@ private fun MenuPanel(
 ) {
     val appear = remember { Animatable(0f) }
     LaunchedEffect(Unit) { appear.animateTo(1f, tween(180, easing = CubicBezierEasing(0.2f, 0.8f, 0.3f, 1f))) }
-    // The row being pressed, and its ink spreading from the finger (every control's press, [InkSpread]).
-    var pressed by remember { mutableStateOf<Int?>(null) }
-    val spread = remember { InkSpread() }
-    val scope = rememberCoroutineScope()
-    val rowPx = with(LocalDensity.current) { MenuRowHeight.dp.toPx() }
-    val padPx = with(LocalDensity.current) { 8.dp.toPx() }
-    val danger = items.indexOfFirst { it.destructive }
-    Column(
-        modifier
-            .graphicsLayer {
-                val v = appear.value
-                // Faded per drawing, not through an offscreen layer: a layer is cut at the panel's box,
-                // and the pen line wobbles past it — the outline would show clipped straight until opaque.
-                compositingStrategy = CompositingStrategy.ModulateAlpha
-                alpha = v
-                scaleX = 0.94f + 0.06f * v
-                scaleY = scaleX
-                // It settles toward the edge it grew from.
-                translationY = (if (origin.pivotFractionY >= 0.5f) 4.dp.toPx() else -4.dp.toPx()) * (1 - v)
-                transformOrigin = origin
-            }
-            .widthIn(min = 180.dp)
-            .width(IntrinsicSize.Max)
-            .drawWithCache {
-                val w = (size.width / density).toDouble()
-                val h = (size.height / density).toDouble()
-                val pad = max(10.0, h * 0.04)
-                val outline = wobRect(w, h, 16.0, seed + 100, autoMag(w, h), WobRectOptions(
-                    curve = autoCurve(w, h), segmentsH = SegValue.Count(autoSegments(w).toDouble()), segmentsV = SegValue.Count(autoSegments(h).toDouble()),
-                )).toPath(density)
-                // A footer is one more band under the rows: a divider above it, and no ink in it.
-                val bands = items.size + if (footer != null) 1 else 0
-                val boundaries = (1 until bands).map { i -> rowBoundary(i * MenuRowHeight, w, seed + (i - 1) * 31 + 7, 2.0, pad) }
-                val dividers = boundaries.map { dividerPath(it).toPath(density) }
-                val regions = items.indices.map { rowRegion(it, bands, boundaries, w, h, pad).toPath(density) }
-                val light = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round)
-                val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                onDrawBehind {
-                    clipPath(outline) {
-                        drawPath(outline, colors.cream)
-                        if (danger >= 0) drawPath(regions[danger], colors.dangerWash)
-                        pressed?.let { with(spread) { draw(regions[it], if (it == danger) colors.dangerWashPressed else colors.borderHover.copy(alpha = 0.15f)) } }
-                        dividers.forEach { drawPath(it, colors.divider, style = light) }
-                    }
-                    drawPath(outline, colors.frame, style = pen)
-                }
-            }
-            .padding(horizontal = 8.dp),
-    ) {
-        items.forEachIndexed { i, item ->
-            val source = remember { MutableInteractionSource() }
-            val down by source.collectIsPressedAsState()
-            LaunchedEffect(source) {
-                source.interactions.collect {
-                    when (it) {
-                        is PressInteraction.Press -> {
-                            pressed = i
-                            // The row's touch point, in the panel's space.
-                            spread.press(scope, Offset(it.pressPosition.x + padPx, it.pressPosition.y + i * rowPx))
-                        }
-                        is PressInteraction.Release, is PressInteraction.Cancel -> spread.release(scope)
-                    }
-                }
-            }
-            val ink = if (down) colors.borderHover else colors.border
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(MenuRowHeight.dp)
-                    .clickable(source, indication = null, enabled = item.enabled, role = Role.Button) { onChoose(item) }
-                    // A row that can't be chosen now keeps its place, faded (the web's `.option:disabled`).
-                    .fade(if (item.enabled) 1f else MenuRowDisabledAlpha)
-                    .padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OrganicIcon(item.icon, size = 17.dp, color = ink, strokeWidth = Tokens.Ink.value)
-                BasicText(item.title, maxLines = 1, style = AppFonts.body(14f, lineHeight = 1.3f, color = if (down) colors.borderHover else Tokens.Text))
-            }
-        }
-        if (footer != null) {
-            Box(Modifier.fillMaxWidth().height(MenuFooterHeight.dp).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterStart) {
-                BasicText(footer, maxLines = 1, style = AppFonts.body(12f, lineHeight = 1.3f, color = Tokens.TextMuted))
-            }
-        }
-    }
+    val rows = remember(items) { items.map { SheetRow(it.title, it.icon, enabled = it.enabled, warning = it.destructive) } }
+    val inks = remember(colors) { colors.sheetInks() }
+    PaperMenuSheet(
+        rows, seed + 100, inks, footer,
+        onChoose = { onChoose(items[it]) },
+        modifier = modifier.graphicsLayer {
+            val v = appear.value
+            // Faded per drawing, not through an offscreen layer: a layer is cut at the panel's box, and the
+            // wobble and its shadow run past it — they would show clipped straight until opaque.
+            compositingStrategy = CompositingStrategy.ModulateAlpha
+            alpha = v
+            scaleX = 0.94f + 0.06f * v
+            scaleY = scaleX
+            // It settles toward the edge it grew from.
+            translationY = (if (origin.pivotFractionY >= 0.5f) 4.dp.toPx() else -4.dp.toPx()) * (1 - v)
+            transformOrigin = origin
+        },
+    )
 }
 
 /**

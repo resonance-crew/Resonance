@@ -130,31 +130,6 @@ private fun layerPath(layer: ReactionLayer): Path {
 /** The reactions in the order every surface shows them (round 16 §4). */
 val ReactionOrder: List<ReactionId> = listOf(ReactionId.Heart, ReactionId.Moved, ReactionId.Laugh, ReactionId.Hug, ReactionId.Thumbs)
 
-/**
- * The sheet the tray and the action list are cut from (round 16 §3): a borderless paper — the menus'
- * paper (`--menu-paper`), raised a step toward the ink at night (94 % menu paper, 6 % toward-ink, ≈ L
- * 28 %) — with the thought map's cluster grain at 0.3, its wobble's radius [radius]; no pen line.
- */
-fun Modifier.reactionSheet(palette: ResonanceColors, grain: GrainInk, seed: Double, radius: Double): Modifier =
-    drawWithCacheOf(ReactionSheet(sheetPaper(palette), grain, seed, radius))
-
-/** The sheet's paper ([reactionSheet]). */
-fun sheetPaper(palette: ResonanceColors): Color = PaletteMixes.of(palette).reactionSheet
-
-private data class ReactionSheet(val paper: Color, val grain: GrainInk, val seed: Double, val radius: Double) : (CacheDrawScope) -> DrawResult {
-    override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
-        val o = WobRectShape(radius, seed).createOutline(size, layoutDirection, this)
-        val brush = Grain.brush(GrainMode.Tile, "grain-card", size, density, SHEET_GRAIN, grain)
-        onDrawBehind {
-            drawOutline(o, paper)
-            brush?.let { drawOutline(o, it, alpha = SHEET_GRAIN) }
-        }
-    }
-}
-
-/** The sheet's grain (the thought map's zoom-cluster recipe). */
-private const val SHEET_GRAIN = 0.3f
-
 /** The tray: 5 cells of 44 in 6 of padding → 232 × 52. */
 val ReactionTrayCell = 44.dp
 val ReactionTrayPad = 6.dp
@@ -162,9 +137,10 @@ val ReactionTrayWidth: Dp = ReactionTrayCell * 5 + ReactionTrayPad * 2
 val ReactionTrayHeight: Dp = ReactionTrayCell + ReactionTrayPad * 2
 
 /**
- * The five reactions over a held message (round 16 §3): one borderless sheet ([reactionSheet], R 26),
- * a 44 cell each, the stickers at 32. The viewer's own reaction ([chosen]) sits on a wobbly disc (2 in
- * from its cell; the accent's light wash, at night the accent at 30 % over the sheet —
+ * The five reactions over a held message (round 16 §3, round 17 §2.2): no paper under them — the scrim
+ * already dims and softens the thread, so the stickers float over it — a 44 cell each, the stickers at
+ * 32. The viewer's own reaction ([chosen]) sits on a wobbly disc (2 in from its cell, opaque: the
+ * accent's light wash, at night the accent at 30 % over the menus' raised paper —
  * [PaletteMixes.reactionChosen]) and is said as selected; tapping it again takes it back
  * ([onChoose] with it). The stickers pop in 20 ms apart (0.6 → 1; a plain fade with animations off).
  * Each cell is named [label] (以 愛心 回應), the chosen one [removeLabel] too.
@@ -180,14 +156,12 @@ fun ReactionTray(
     seed: Double = 61.0,
 ) {
     val palette = LocalResonanceColors.current
-    val grain = GrainInk.current
     val context = LocalContext.current
     val still = remember(context) { context.prefersReducedMotion() }
     val disc = PaletteMixes.of(palette).reactionChosen
     Row(
         modifier
             .size(ReactionTrayWidth, ReactionTrayHeight)
-            .reactionSheet(palette, grain, seed, TRAY_RADIUS)
             .padding(ReactionTrayPad)
             .selectableGroup()
             .semantics { contentDescription = groupLabel },
@@ -204,7 +178,6 @@ fun ReactionTray(
             Box(
                 Modifier
                     .size(ReactionTrayCell)
-                    .drawWithCacheOf(TrayDisc(on, disc, seed + i * 13))
                     .clickable(source, indication = null, role = Role.Button) { onChoose(id) }
                     .clearAndSetSemantics {
                         contentDescription = if (on) removeLabel else label(id)
@@ -214,6 +187,18 @@ fun ReactionTray(
                     },
                 contentAlignment = Alignment.Center,
             ) {
+                // The chosen disc comes with its sticker: with no paper under the tray, a disc ahead of it read as a stain.
+                if (on) Box(
+                    Modifier
+                        .matchParentSize()
+                        .graphicsLayer {
+                            alpha = pop.value
+                            val s = if (still) 1f else 0.6f + 0.4f * pop.value
+                            scaleX = s
+                            scaleY = s
+                        }
+                        .drawWithCacheOf(TrayDisc(true, disc, seed + i * 13)),
+                )
                 ReactionGlyph(
                     id, 32.dp,
                     Modifier.graphicsLayer {
@@ -229,7 +214,6 @@ fun ReactionTray(
     }
 }
 
-private const val TRAY_RADIUS = 26.0
 private const val POP_STAGGER_MILLIS = 20L
 private val PopEasing = CubicBezierEasing(0.2f, 0.9f, 0.3f, 1.2f)
 
@@ -248,23 +232,16 @@ private data class TrayDisc(val on: Boolean, val fill: Color, val seed: Double) 
 /** A row of a held message's action list ([destructive]: a permanent loss, its words in the danger ink). */
 class MessageAction(val title: String, val icon: IconName, val destructive: Boolean = false, val onClick: () -> Unit)
 
-/** The action list's rows and its foot. */
-val MessageActionRow = 44.dp
-val MessageActionFooter = 32.dp
-/** The air over the foot, past the rows' own. */
-val MessageActionFooterGap = 6.dp
-val MessageActionMinWidth = 216.dp
-val MessageActionMaxWidth = 280.dp
-
-/** How tall the action list is for [rows] rows and its foot. */
-fun messageActionsHeight(rows: Int): Dp = MessageActionRow * rows + MessageActionFooterGap + MessageActionFooter + 12.dp
+/** How tall the action list is for [rows] rows and its foot (round 17 §2.3: [MenuSheet.height]). */
+fun messageActionsHeight(rows: Int): Dp = MenuSheet.height(rows, footer = true)
 
 /**
- * What a held message offers (round 16 §3): a vertical list on the tray's sheet — no pen line, no
- * rules between the rows — at least 216 wide, growing to its longest row (280 at most). Rows of 44,
- * the glyph in the accent (17; the danger ink for a loss) and the words; a press spreads the accent's
- * ink inside its row. Under them, 6 further on, the
- * quiet last line [footer] (the full send time, 32). A row taps once ([onChoose]).
+ * What a held message offers (round 16 §3, round 17 §1–§2): the one menu sheet ([MenuSheet]) — paper and
+ * grain, no pen, no rules between the rows, its shadow under it over the scrim — as wide as its longest
+ * row. Rows of 44, the glyph in the accent (17; the danger ink, words too, for a loss) 12 before the
+ * words, 20 in from either side; a press spreads the accent's ink inside its row's band. The quiet
+ * last line [footer] (the full send time) at the end of a 24-tall line right under the rows. A row taps
+ * once ([onChoose]).
  */
 @Composable
 fun MessageActionSheet(
@@ -275,81 +252,9 @@ fun MessageActionSheet(
     seed: Double = 67.0,
 ) {
     val palette = LocalResonanceColors.current
-    val grain = GrainInk.current
-    var pressed by remember { mutableStateOf<Int?>(null) }
-    val spread = remember { InkSpread() }
-    val scope = rememberCoroutineScope()
-    val density = LocalDensity.current
-    val rowPx = with(density) { MessageActionRow.toPx() }
-    val top = with(density) { 6.dp.toPx() }
-    val wash = OrganicIndication.Wash
-    Column(
-        modifier
-            .widthIn(min = MessageActionMinWidth, max = MessageActionMaxWidth)
-            .width(IntrinsicSize.Max)
-            .reactionSheet(palette, grain, seed, SHEET_RADIUS)
-            .drawWithCacheOf(SheetPress(actions.size, rowPx, top, wash) { pressed to spread })
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-    ) {
-        actions.forEachIndexed { i, action ->
-            val source = remember { MutableInteractionSource() }
-            LaunchedEffect(source) {
-                source.interactions.collect {
-                    when (it) {
-                        is PressInteraction.Press -> {
-                            pressed = i
-                            spread.press(scope, Offset(it.pressPosition.x + with(density) { 8.dp.toPx() }, it.pressPosition.y + top + i * rowPx))
-                        }
-                        is PressInteraction.Release, is PressInteraction.Cancel -> spread.release(scope)
-                    }
-                }
-            }
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(MessageActionRow)
-                    .clickable(source, indication = null, role = Role.Button) { onChoose(action) }
-                    .padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                // The glyph in the accent (the danger ink for a loss), 17 as iOS and the web draw it; the words in the ink.
-                OrganicIcon(action.icon, size = MessageActionGlyph, color = if (action.destructive) Tokens.Danger else Tokens.Terracotta, strokeWidth = Tokens.Ink.value)
-                BasicText(action.title, maxLines = 1, style = AppFonts.body(15f, lineHeight = 1.3f, color = if (action.destructive) Tokens.Danger else Tokens.Text))
-            }
-        }
-        Spacer(Modifier.height(MessageActionFooterGap))
-        Box(Modifier.fillMaxWidth().heightIn(min = MessageActionFooter).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterStart) {
-            BasicText(footer, maxLines = 1, style = AppFonts.body(12f, lineHeight = 1.3f, color = Tokens.TextMuted))
-        }
-    }
-}
-
-private const val SHEET_RADIUS = 22.0
-
-/** An action row's glyph (round 16 review F7: the web's and iOS's 17). */
-private val MessageActionGlyph = 17.dp
-
-/** The pressed row's ink, inside its own band of the sheet (no rules drawn). */
-private class SheetPress(
-    val rows: Int,
-    val rowPx: Float,
-    val top: Float,
-    val wash: Color,
-    val state: () -> Pair<Int?, InkSpread>,
-) : (CacheDrawScope) -> DrawResult {
-    override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
-        val bands = (0 until rows).map { i ->
-            Path().apply { addRect(Rect(0f, top + i * rowPx, size.width, top + (i + 1) * rowPx)) }
-        }
-        onDrawBehind {
-            val (i, spread) = state()
-            if (i != null && i in bands.indices) with(spread) { draw(bands[i], wash) }
-        }
-    }
-
-    override fun equals(other: Any?) = other is SheetPress && other.rows == rows && other.rowPx == rowPx && other.top == top && other.wash == wash
-    override fun hashCode() = (rows * 31 + rowPx.hashCode()) * 31 + wash.hashCode()
+    val rows = remember(actions) { actions.map { SheetRow(it.title, it.icon, danger = it.destructive) } }
+    val inks = remember(palette) { MenuColors(null, palette).sheetInks() }
+    PaperMenuSheet(rows, seed, inks, footer, onChoose = { onChoose(actions[it]) }, modifier = modifier)
 }
 
 /**

@@ -4,6 +4,9 @@ import com.resonance.design.generated.HueRole
 import com.resonance.design.Mixes
 import com.resonance.design.avatarFill
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.draw.drawBehind
+import com.resonance.design.ModalScrim
 import com.resonance.design.LayoutClass
 import com.resonance.design.LocalWindowLayout
 import com.resonance.design.readableColumn
@@ -279,8 +282,11 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
 
     // How far a held message's overlay is up (0…1): what lies under its scrim is softened as much (round 16 review F8).
     val heldOver = remember { mutableFloatStateOf(0f) }
+    // How tall the thread's bar is (px, its wave's band included): where the body a held message dims starts.
+    var barHeight by remember { mutableIntStateOf(0) }
     Box(Modifier.fillMaxSize().cream().onSizeChanged { listWidth = with(density) { it.width.toDp() } }) {
-        // The thread and its bar, softened under a held message's scrim; the overlay itself lies above, sharp.
+        // The thread's body — the messages and the composer — softened under a held message's scrim (round 17 §2.1:
+        // the body alone); the bar over it, and the overlay over both, stay sharp.
         Box(Modifier.fillMaxSize().softenedUnder { heldOver.floatValue }) {
         when (model.phase) {
             // One layout while it is found and once it is: what the thread always has is there from the
@@ -344,8 +350,16 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
             }
         }
 
+        }
+
+        // The held message's scrim, under the bar: dimming the body from the bar's wavy line down, the bar's own
+        // paper keeping the rest — the bar, the conversations beside the pane and the rule between stay as they are.
+        val scrim = ModalScrim
+        Box(Modifier.fillMaxSize().drawBehind { heldOver.floatValue.takeIf { it > 0f }?.let { drawRect(scrim, alpha = it) } })
+
         val conversations by session.conversations.state.collectAsStateWithLifecycle()
         val conversationIds by session.conversations.ids.collectAsStateWithLifecycle()
+        Box(Modifier.onSizeChanged { barHeight = it.height }) {
         ThreadBar(
             model, handle, searching, query, showResults, currentHit, searchFocus,
             scrolled = if (searching && showResults) resultsList.canScrollBackward else list.canScrollForward,
@@ -383,6 +397,7 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                 } else null,
                 onDismiss = { menu = null },
                 over = heldOver,
+                regionTop = barHeight.takeIf { it > 0 },
             )
         }
     }

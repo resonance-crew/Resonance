@@ -695,7 +695,7 @@ fun StoryCanvas(bridge: StoryEditorBridge, minHeight: Dp, modifier: Modifier = M
 /**
  * The format bar on the keyboard (writer.spec §1.5, touch): while the story has the focus, a cream
  * strip rides the keyboard with the toolbar's wave as its top edge — 插入圖片 · 插入卡片 ┆ 粗體 ·
- * 斜體 ┆ H2 · H3 ┆ 引言 · 清單 · 編號 in one row that scrolls sideways (fading where more lies), and
+ * 斜體 ┆ H2 · H3 ┆ 引言 · 清單 · 編號 ┆ 連結 in one row that scrolls sideways (fading where more lies), and
  * 收起鍵盤 pinned at its end. Its buttons never take the focus from the story. With the keyboard down
  * (the story still holding the focus) its paper runs on to the screen's bottom edge, under the
  * system's navigation bar — gesture or three-button — the row standing above it (the inset is the
@@ -708,7 +708,7 @@ fun StoryFormatBar(
     onInsertCard: () -> Unit,
     uploadingImage: Boolean,
     modifier: Modifier = Modifier,
-    /** 連結 (round 16 §6): the link sheet for the selection, or the caret's link. */
+    /** 連結 (round 16 §6, round 17 §6): the link editor for the selection, or the caret's link. */
     onLink: () -> Unit = {},
 ) {
     val scroll = rememberScrollState()
@@ -735,8 +735,6 @@ fun StoryFormatBar(
             DockRule(3.0)
             DockTool(L10n.Write.Editor.bold, on = a.bold, seed = 21.0) { bridge.exec("bold") }
             DockTool(L10n.Write.Editor.italic, on = a.italic, seed = 28.0) { bridge.exec("italic") }
-            // Washed while the selection is in a link (round 16 §6).
-            DockTool(L10n.Write.Editor.link, on = bridge.link != null, icon = IconName.Link, seed = 31.0, onClick = onLink)
             DockRule(9.0)
             DockTool("H2", on = a.h2, seed = 35.0, spoken = L10n.Write.Editor.h2) { bridge.exec("h2") }
             DockTool("H3", on = a.h3, seed = 42.0, spoken = L10n.Write.Editor.h3) { bridge.exec("h3") }
@@ -744,6 +742,9 @@ fun StoryFormatBar(
             DockTool(L10n.Write.Editor.quote, on = a.blockquote, seed = 63.0) { bridge.exec("blockquote") }
             DockTool(L10n.Write.Editor.bulletList, on = a.bulletList, seed = 49.0) { bridge.exec("bulletList") }
             DockTool(L10n.Write.Editor.orderedList, on = a.orderedList, seed = 56.0) { bridge.exec("orderedList") }
+            // 連結 last, after a rule of its own (round 17 §6.1), its glyph and words kept; washed while the selection is in a link.
+            DockRule(21.0)
+            DockTool(L10n.Write.Editor.link, on = bridge.link != null, icon = IconName.Link, seed = 31.0, onClick = onLink)
         }
         Box(
             Modifier

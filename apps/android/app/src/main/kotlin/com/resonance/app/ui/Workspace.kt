@@ -387,9 +387,18 @@ internal fun Workspace(
                 }
                 .then(if (writerAlone) Modifier.clearAndSetSemantics { } else Modifier),
         ) {
+            // The workspace's one back (round 17 §9): from the pane's publish step it goes back to writing, named for it.
+            val stepBack = split && pane.open && handle.inPublishStep
             ThoughtMapScreen(
                 session, session.thoughtMap, open,
-                leave = { if (split) leavePage() else leave() },
+                leave = {
+                    when {
+                        !split -> leave()
+                        stepBack -> handle.stepBack()
+                        else -> leavePage()
+                    }
+                },
+                leaveLabel = if (stepBack) L10n.Write.leaveStay else L10n.Me.ThoughtMap.leave,
                 openMine = if (split) ::openFromMap else null,
                 paneCardId = card?.cardId?.takeIf { split && pane.open },
                 paneSettled = pane.settled,

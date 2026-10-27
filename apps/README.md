@@ -772,3 +772,20 @@ link sheet opens with its field focused, 完成 waiting for an address, 顯示�
 turns on out of sight scrolls into the row; and the reader draws a standalone link with no stored preview as the
 writer's quiet card — its host over its address — wherever the server would fetch it (`StoryLinks.unfurlable`: not the
 site's hosts, not an IP address).
+
+Round 17 (2026-10-27), Android: every menu is the press menu's sheet (`PaperMenuSheet` / `MenuSheet` in `core/design`:
+OrganicMenu, OrganicMenuFrom, OrganicMenuPanel and `MessageActionSheet` alike) — the menus' paper raised at night and the
+sheet grain over the whole wobble, no pen line, no rules between rows, a blurred shadow following the wobble
+(`SheetShadow`: by day 0 8 24 and 0 1 3, at night 0 10 28), rows 44 with the glyph 17, 12 to the words and 20 in from
+either side, the sheet as wide as its longest row (280 at most); a row's ink spreads from the finger inside its own
+wavy band (`rowRegion`), the warning row keeps its wash; a popup keeps `SheetShadow.Room` (40) round its sheet so
+neither is cut by its window, a tap there closing it. A held message: the tray floats over the scrim with no paper, the
+chosen disc popping in with its sticker; the list's time at the end of a 24 line right under the last row; the scrim
+and the softening cover the thread's body only — drawn under the thread's bar, which stays sharp, as do the
+conversations and the rule beside a tablet's pane — and the glide keeps 12 under that bar (`regionTop`). The chosen
+tags are rimless pills in the AI 建議 segment's colours (`TagPill` `ink`). The format bar ends ┆ 連結, and the link
+editor is the app's modal (`StoryLinkDialog`: 插入連結 / 編輯連結, the address focused and selected, 顯示為 over 卡片 |
+文字 where a card can stand, 移除連結 · 完成; no sheet at the foot). The phone bar grows to hold a title and its save
+state at the 1.25 text cap (`OrganicInlineBar` with `hasStatus`). The tab bar's one pen is `TabGlyphPen` (INK_STRONG). At
+the writer's split the publish step has no back of its own: the map's Leave is step-aware (`WriterHandle.inPublishStep`
+/ `stepBack`), back to writing and named 繼續寫 from the step.
