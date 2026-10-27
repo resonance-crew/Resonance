@@ -593,6 +593,8 @@ struct WriteScreen: View {
                 .padding(.bottom, 48)
                 .frame(maxWidth: compact ? .infinity : Tokens.measure + 2 * window.pad)
                 .frame(maxWidth: .infinity)
+                // What the tag field measures its top in: the content, whatever the scroll.
+                .coordinateSpace(.named(PublishStep.space))
         }
         .scrollPosition($publishScroll)
         // Where the step rests, for the tag field's shift (``PublishStep/onShift``).
