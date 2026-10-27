@@ -156,6 +156,25 @@ describe('the menu sheet', () => {
     expect(menu).toMatch(/\.footer \{[^}]*justify-content: flex-end;[^}]*height: 24px;/);
   });
 
+  // The lead's addendum to round 17 §1: no menu shrinks to a blob; a message's action list keeps its 216–280.
+  it('is 168 wide at least — a message’s action list 216 to 280', () => {
+    const menu = css('src/components/molecules/OrganicMenu/OrganicMenu.module.css');
+    expect(menu).toMatch(/\.panel \{[^}]*min-width: 168px;[^}]*max-width: 300px;/);
+    expect(menu).toMatch(/\.wide \{\s*min-width: 216px;\s*max-width: 280px;/);
+  });
+
+  // A card's own ⋯ keeps its card's menu paper (raised at night as every sheet is).
+  it("lies on a card's own menu paper when it has the card's hue", async () => {
+    const layout = stubRowLayout({ width: 200, rowHeight: 44 });
+    const { container } = render(<OrganicMenu items={ITEMS} onChoose={vi.fn()} label="Manage" hue={140} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Manage' }));
+    expect((container.firstElementChild as HTMLElement).style.getPropertyValue('--sheet-base')).toBe('oklch(var(--hue-menu) 140)');
+    const sheet = css('src/components/atoms/PaperSheet/PaperSheet.module.css');
+    expect(sheet).toMatch(/\.sheet \{\s*--sheet-paper: var\(--sheet-base, var\(--menu-paper\)\);/);
+    expect(sheet.match(/--sheet-paper: color-mix\(in oklch, var\(--sheet-base, var\(--menu-paper\)\) 94%, var\(--toward-ink\)\);/g)).toHaveLength(2);
+    layout.restore();
+  });
+
   it('turns the spread off for people who prefer reduced motion', () => {
     // jsdom cannot evaluate media queries, so pin the stylesheet contract (the rows' brushes).
     expect(css('src/components/atoms/RowInk/RowInk.module.css')).toMatch(

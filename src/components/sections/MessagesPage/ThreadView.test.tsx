@@ -581,8 +581,9 @@ describe('Messenger’s thread, drawn by hand', () => {
     const tray = within(menu).getByRole('toolbar');
     expect(within(tray).getAllByRole('button')).toHaveLength(5);
     expect(tray.querySelector('path[fill="var(--sheet-paper)"]')).toBeNull();
-    // The actions keep theirs, the time at their end.
+    // The actions keep theirs, the time at their end, 216–280 wide.
     expect(within(menu).getByRole('menu').parentElement!.querySelector('[class*="footer"]')).toHaveTextContent(/\d/);
+    expect(within(menu).getByRole('menu').parentElement!.className).toMatch(/wide/);
 
     // A press on the crisp header (outside the scrim) puts it away as the scrim does.
     fireEvent.pointerDown(menu, { pointerType: 'touch', button: 0 });

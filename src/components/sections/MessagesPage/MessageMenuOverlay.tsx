@@ -208,6 +208,7 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose, areaOf }: 
             items={items}
             seed={seedFromId(message.key, 23)}
             footer={fullTime}
+          wide
             origin={`top ${side}`}
             onChoose={(key) => {
               // Done in the tap itself — a copy, a page opened, the field focused for a reply (iOS raises the

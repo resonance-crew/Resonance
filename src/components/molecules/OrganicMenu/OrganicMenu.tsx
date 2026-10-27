@@ -115,11 +115,12 @@ export interface OrganicMenuProps {
 /**
  * The `--menu-*` colours a menu draws with: the theme's terracotta (the
  * glyphs and the row ink), or the accent `hue` at the scheme's lightness
- * (palette.ts HUE_ROLES) — and the chip trigger's paper. The panel itself is
- * the sheet's paper whatever the hue (round 17 §1: one menu surface).
+ * (palette.ts HUE_ROLES) — and the chip trigger's paper. A card's own menu
+ * (a `hue`) keeps the card's menu paper as its sheet's (`--sheet-base`,
+ * raised at night as every sheet is); every other menu is the menu paper.
  */
 function menuColors(hue: number | undefined): CSSProperties {
-  return (
+  const colors: Record<string, string> =
     hue === undefined
       ? {
           '--menu-border': 'var(--color-terracotta)',
@@ -130,8 +131,9 @@ function menuColors(hue: number | undefined): CSSProperties {
           '--menu-border': `oklch(var(--hue-pen) ${hue})`,
           '--menu-border-hover': `oklch(var(--hue-pen-deep) ${hue})`,
           '--menu-cream': `oklch(var(--hue-menu) ${hue})`,
-        }
-  ) as CSSProperties;
+          '--sheet-base': `oklch(var(--hue-menu) ${hue})`,
+        };
+  return colors as CSSProperties;
 }
 
 /**
@@ -408,6 +410,8 @@ export interface OrganicMenuPanelProps {
   autoFocus?: 'row' | 'panel' | null;
   /** Tab leaves its rows (a panel floating out of the page's tab order closes on it, as OrganicMenu's `floating`). */
   onTabOut?: () => void;
+  /** A message's action list: 216 wide at least, 280 at most (every other menu: 168 at least). */
+  wide?: boolean;
   className?: string;
 }
 
@@ -416,11 +420,11 @@ export interface OrganicMenuPanelProps {
  * long-press menu, which hangs it under the message it lifted, and a fine
  * pointer's ⋯ beside a message. The same sheet and row ink as the dropdown's.
  */
-export function OrganicMenuPanel({ items, onChoose, seed, busy = false, footer, hue, origin, autoFocus = null, onTabOut, className }: OrganicMenuPanelProps) {
+export function OrganicMenuPanel({ items, onChoose, seed, busy = false, footer, hue, origin, autoFocus = null, onTabOut, wide = false, className }: OrganicMenuPanelProps) {
   const uid = useId().replace(/:/g, '');
   return (
     <div className={className} style={{ ...menuColors(hue), ...(origin ? { transformOrigin: origin } : {}) }}>
-      <MenuPanel uid={uid} seed={seed} items={items} busy={busy} footer={footer} placed autoFocus={autoFocus} onTabOut={onTabOut} onChoose={onChoose} />
+      <MenuPanel uid={uid} seed={seed} items={items} busy={busy} footer={footer} placed wide={wide} autoFocus={autoFocus} onTabOut={onTabOut} onChoose={onChoose} />
     </div>
   );
 }
@@ -466,6 +470,8 @@ interface MenuPanelProps {
   autoFocus?: 'row' | 'panel' | null;
   /** Tab leaves its rows (a panel out of the page's tab order closes on it). */
   onTabOut?: () => void;
+  /** A message's action list (216–280 wide). */
+  wide?: boolean;
   onChoose: (key: string) => void;
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -480,6 +486,7 @@ function MenuPanel({
   placed = false,
   autoFocus = null,
   onTabOut,
+  wide = false,
   onChoose,
   ref: outerRef,
 }: MenuPanelProps) {
@@ -603,7 +610,7 @@ function MenuPanel({
   return (
     <div
       ref={setRef}
-      className={[styles.panel, placed ? styles.placed : ''].filter(Boolean).join(' ')}
+      className={[styles.panel, placed ? styles.placed : '', wide ? styles.wide : ''].filter(Boolean).join(' ')}
       style={{ height: `${h}px` }}
     >
       {w > 0 && <PaperSheet w={w} h={h} R={SHEET_R} seed={seed + 100} />}

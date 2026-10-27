@@ -163,14 +163,15 @@
   }
 }
 
-/* The sheet: as wide as its longest row with 20 each side (200 at least, so a
-   short menu still reads as one, 300 at most), as tall as MenuPanel says. */
+/* The sheet: as wide as its longest row with 20 each side — 168 at least, so a
+   two-row menu (圖片 · 卡片) is still a sheet, not a blob; 300 at most — as
+   tall as MenuPanel says. */
 .panel {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
   z-index: 40;
-  min-width: 200px;
+  min-width: 168px;
   max-width: 300px;
   background: transparent;
   padding: 0;
@@ -191,6 +192,12 @@
   .panel {
     animation: none;
   }
+}
+
+/* A message's action list (held, or a fine pointer's ⋯): 216–280 wide, room for its time at the end. */
+.wide {
+  min-width: 216px;
+  max-width: 280px;
 }
 
 /* A panel its host (or the floating wrapper) places: no hanging under the

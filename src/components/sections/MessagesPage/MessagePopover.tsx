@@ -198,6 +198,7 @@ export function MessagePopover({ pressed, own, fullTime, onClose }: MessagePopov
           items={items}
           seed={seedFromId(message.key, 23)}
           footer={fullTime}
+          wide
           origin={`${place?.side === 'above' ? 'bottom' : 'top'} ${side}`}
           autoFocus={pressed.byKeyboard ? 'row' : 'panel'}
           onTabOut={() => dismiss(true)}
