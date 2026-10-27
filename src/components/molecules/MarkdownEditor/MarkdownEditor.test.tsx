@@ -339,7 +339,8 @@ describe('the link tool', () => {
     const story = await screen.findByRole('textbox', { name: 'Story' });
     act(() => void editorOf(story).commands.focus('start'));
     await userEvent.click(await screen.findByRole('button', { name: L.insert }));
-    await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: L.link }));
+    // 插入連結, beside 插入圖片 · 插入卡片 (round 16 review S5).
+    await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: L.insertLink }));
     const sheet = await screen.findByRole('group', { name: L.link });
     expect(within(sheet).getByRole('button', { name: L.linkAsCard })).toHaveAttribute('aria-pressed', 'true');
   });

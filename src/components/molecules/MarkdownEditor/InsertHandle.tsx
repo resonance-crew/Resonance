@@ -60,7 +60,7 @@ export function InsertHandle({
         items={[
           { key: 'image', icon: 'image', label: t('insertImage') },
           { key: 'card', icon: 'cards', label: t('insertCard') },
-          ...(onInsertLink ? [{ key: 'link', icon: 'link' as const, label: t('link') }] : []),
+          ...(onInsertLink ? [{ key: 'link', icon: 'link' as const, label: t('insertLink') }] : []),
         ]}
         onChoose={(key) => (key === 'image' ? onInsertImage() : key === 'link' ? onInsertLink?.() : onInsertCard())}
       />

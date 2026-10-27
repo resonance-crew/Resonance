@@ -43,7 +43,9 @@ const DISPLAYS: LinkDisplay[] = ['card', 'text'];
  * link rules don't take (`linkTarget`: http(s) only, a bare `example.com/x`
  * gets https://) keeps the editor open with one muted line under the field.
  * Its host gives it its chrome: the selection bubble's paper sheet for a fine
- * pointer, the keyboard bar's paper on a touch screen.
+ * pointer, the keyboard bar's paper on a touch screen. From 900 wide its foot
+ * is one row — 顯示為 at its start, 移除連結 · 完成 at its end — and without
+ * 顯示為 those stand at the field's end (round 16 review S9).
  */
 export function LinkEditor({ session, onApply, onRemove, onCancel, seed }: LinkEditorProps) {
   const t = useTranslations('write.editor');
@@ -83,6 +85,7 @@ export function LinkEditor({ session, onApply, onRemove, onCancel, seed }: LinkE
   return (
     <div
       className={styles.editor}
+      data-show-as={session.offerCard || undefined}
       role="group"
       aria-label={t('link')}
       onKeyDown={onKeyDown}

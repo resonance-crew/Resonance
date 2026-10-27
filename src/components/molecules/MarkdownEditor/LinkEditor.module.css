@@ -54,3 +54,47 @@
 .spacer {
   flex: 1;
 }
+
+/* From 900 wide (round 16 review S9): no row for a lone 完成. The foot is one
+   row — 顯示為 卡片 | 文字 at its start, 移除連結 · 完成 at its end — and
+   without 顯示為 those stand at the field's end, centred on its one line (an
+   invalid address's line hangs under the field alone). */
+@media (min-width: 900px) {
+  .editor {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 12px;
+    width: min(448px, calc(100vw - 32px));
+  }
+
+  .field {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .editor[data-show-as] .field {
+    flex-basis: 100%;
+  }
+
+  .showAs {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .actions {
+    flex: none;
+  }
+
+  .spacer {
+    display: none;
+  }
+
+  .editor:not([data-show-as]) {
+    align-items: flex-start;
+  }
+
+  .editor:not([data-show-as]) .actions {
+    height: calc(2 * var(--field-pad-y) + 16px * 1.6);
+  }
+}

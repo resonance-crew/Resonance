@@ -325,11 +325,15 @@
 }
 
 /* Each thing the writer's pane can show (the draft, a card opened from the
-   map) scrolls on its own: going back to the draft finds it where it was left. */
+   map) scrolls on its own: going back to the draft finds it where it was left.
+   Its scrollbar's room is kept whether it scrolls or not, so a link sheet
+   opened near the foot (the page growing a scrollbar) never shifts the column
+   sideways where scrollbars take room. */
 .paneLayer {
   position: absolute;
   inset: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 /* At the split the pane has no bar: what it does next (下一步) floats at its
