@@ -47,11 +47,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /** A card on my map. Position and filing are snapshot state of their own, so dragging one card redraws just that card. */
 @Stable
@@ -157,6 +160,26 @@ class ThoughtMapStore(private val reading: ReadingApi) {
      */
     private var readAt: Long? = null
     private var seenChanges = 0
+    /**
+     * Every read begun, numbered; the latest of the whole board ([load]) and of all my cards ([load],
+     * [refreshCards]); and of each card read on its own (`refreshCards(ids)`). The cards change under
+     * reads on their way — a card moved to the trash and restored a moment later is read twice — and an
+     * answer a newer read of the same cards took over never puts back what was before it (the card
+     * box's `readBy`).
+     */
+    private var reads = 0
+    private var boardRead = 0
+    private var allCardsRead = 0
+    private val cardRead = HashMap<String, Int>()
+    /**
+     * How long the map's first read may keep it on its loader: past it, the map says it couldn't read
+     * and offers 再試一次 (a read Firestore never answers — a stream stuck reconnecting — has no end of
+     * its own). The read still shows the map should it answer, unless 再試一次 started a newer one.
+     */
+    internal var firstReadPatience: Duration = 10.seconds
+    /** The whole board as a read finds it, and one card as it is now (the map's reads, apart for tests). */
+    internal var readBoard: suspend (ThoughtMapService) -> Board = { read(it) }
+    internal var readCard: suspend (ThoughtMapService, String) -> MapCard? = { service, id -> service.card(id) }
     // Writes outlive the screen (they are the gesture's ending), like iOS's unstructured Tasks.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -178,6 +201,18 @@ class ThoughtMapStore(private val reading: ReadingApi) {
             cam.copy(x = vw / 2 - (rect.x + rect.w / 2) * cam.s, y = vh / 2 - (rect.y + rect.h / 2) * cam.s)
 
         fun hue(card: MapCard): Double = card.accentHue ?: nodeHues[seedFromString(card.id) % nodeHues.size]
+
+        suspend fun read(service: ThoughtMapService): Board = coroutineScope {
+            val mapJob = async { service.load() }
+            val cardJob = async { service.cards() }
+            val m = mapJob.await()
+            val c = cardJob.await()
+            val byId = LinkedHashMap(c.cards)
+            // A placed card older than the newest 40 is still on the map: read it by id.
+            val missing = m.nodes.map { it.cardId }.filter { byId[it] == null }
+            for (card in service.cards(missing)) byId[card.id] = card
+            Board(m, byId, c.resonated)
+        }
 
         /** As the feed: what was read longer ago than this is read again. */
         val STALE_AFTER_MS = FeedLoader.STALE_AFTER.inWholeMilliseconds
@@ -276,28 +311,66 @@ class ThoughtMapStore(private val reading: ReadingApi) {
 
     // Loading
 
+    /** What a read of the whole board found: the map, my cards and the originals I resonated with. */
+    class Board(val map: ThoughtMapService.Loaded, val cards: Map<String, MapCard>, val resonated: Set<String>)
+
+    /**
+     * Reads the whole board (再試一次 too, which shows the loader again). Only the latest read's
+     * answer is shown; a first read with no answer past [firstReadPatience] says so (再試一次).
+     */
     suspend fun load(uid: String) {
         val service = ThoughtMapService(uid, reading).also { this.service = it }
+        val earlierBoard = boardRead
+        val earlierAll = allCardsRead
+        val read = begin()
+        boardRead = read
+        allCardsRead = read
+        failed = false
         val started = System.currentTimeMillis()
-        try {
-            coroutineScope {
-                val mapJob = async { service.load() }
-                val cardJob = async { service.cards() }
-                val m = mapJob.await()
-                val c = cardJob.await()
-                val byId = LinkedHashMap(c.cards)
-                // A placed card older than the newest 40 is still on the map: read it by id.
-                val missing = m.nodes.map { it.cardId }.filter { byId[it] == null }
-                for (card in service.cards(missing)) byId[card.id] = card
-                place(m, byId, c.resonated)
-                readAt = started
+        coroutineScope {
+            val patience = launch {
+                delay(firstReadPatience)
+                if (!loaded && boardRead == read) failed = true
             }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w("ThoughtMap", "load failed", e)
-            failed = !loaded
+            try {
+                val board = readBoard(service)
+                if (boardRead != read) return@coroutineScope
+                val (byId, resonated) = merged(board.cards, board.resonated, read, ids = null)
+                place(board.map, byId, resonated)
+                readAt = started
+            } catch (e: Exception) {
+                // Failed, or left: an earlier read still on its way may answer in its place.
+                if (allCardsRead == read) allCardsRead = earlierAll
+                val latest = boardRead == read
+                if (latest) boardRead = earlierBoard
+                if (e is CancellationException) throw e
+                Log.w("ThoughtMap", "load failed", e)
+                if (latest) failed = !loaded
+            } finally {
+                patience.cancel()
+            }
         }
+    }
+
+    private fun begin(): Int = ++reads
+
+    /**
+     * The cards shown with read [read]'s [answer] laid over them — every card ([ids] null: absent
+     * from the answer, gone) or just [ids] — except a card a newer read has begun for since, which
+     * stays as it is until that read's answer. A whole read hands its cards over in its own order
+     * (the drafts last edited first); a read of a few keeps the order shown.
+     */
+    private fun merged(answer: Map<String, MapCard>, others: Set<String>, read: Int, ids: Collection<String>?): Pair<Map<String, MapCard>, Set<String>> {
+        val asked = ids?.toSet()
+        val byId = LinkedHashMap<String, MapCard>()
+        val resonated = resonated.toMutableSet()
+        for (id in if (asked == null) answer.keys + cards.keys else cards.keys + asked) {
+            val laid = (asked == null || id in asked) && max(allCardsRead, cardRead[id] ?: 0) <= read
+            (if (laid) answer[id] else cards[id])?.let { byId[id] = it }
+            if (!laid) continue
+            if (id in others) resonated += id else resonated -= id
+        }
+        return byId to resonated
     }
 
     /**
@@ -337,48 +410,71 @@ class ThoughtMapStore(private val reading: ReadingApi) {
     /** Titles and tags may have changed in the writer: refresh the cards, keep the map. */
     suspend fun refreshCards() {
         val service = service ?: return
-        try {
+        val earlier = allCardsRead
+        val read = begin()
+        allCardsRead = read
+        val (answer, others) = try {
             val c = service.cards()
             val byId = LinkedHashMap(c.cards)
             val missing = (nodeOrder + parked.keys).filter { byId[it] == null }
             for (card in service.cards(missing)) byId[card.id] = card
-            applyCards(byId, c.resonated)
-            parkNodes(nodes, nodeOrder, parked, cards::containsKey)
-            frameIfFraming()
-        } catch (e: CancellationException) {
-            throw e
+            byId to c.resonated
         } catch (e: Exception) {
+            // Failed, or left: an earlier read still on its way may answer in its place.
+            if (allCardsRead == read) allCardsRead = earlier
+            if (e is CancellationException) throw e
             Log.w("ThoughtMap", "refresh failed", e)
+            return
         }
+        val (shown, resonated) = merged(answer, others, read, ids = null)
+        applyCards(shown, resonated)
+        parkNodes(nodes, nodeOrder, parked, cards::containsKey)
+        frameIfFraming()
     }
 
     /**
      * Just these cards, as they are now: one that's gone (deleted, or an original I can no longer
      * read) drops out of view, as a fresh load would leave it; one that couldn't be read for now
-     * stays as it was.
+     * stays as it was. Laid over the cards as they are when it answers, not as they were when it
+     * began: the trash's read of a card landing after its restore's leaves the card back on the map.
      */
     suspend fun refreshCards(ids: List<String>) {
         val service = service ?: return
-        val byId = LinkedHashMap(cards)
-        val resonated = resonated.toMutableSet()
-        for (id in ids) {
-            val read = try {
-                service.card(id)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                continue
-            }
-            if (read != null) {
-                byId[id] = read
-                // Someone else's: the original of my resonance.
-                if (read.authorId != service.uid) resonated += id
-            } else {
-                byId.remove(id)
-                resonated -= id
-            }
+        val read = begin()
+        val earlier = ids.associateWith { cardRead[it] }
+        for (id in ids) cardRead[id] = read
+        // A card this read couldn't read for now (or was left before it answered): an earlier read of it may still answer for it.
+        fun giveBack(id: String) {
+            if (cardRead[id] != read) return
+            val before = earlier[id]
+            if (before == null) cardRead.remove(id) else cardRead[id] = before
         }
-        applyCards(byId, resonated)
+        val answer = HashMap<String, MapCard>()
+        val others = HashSet<String>()
+        val answered = LinkedHashSet<String>()
+        try {
+            for (id in ids) {
+                val found = try {
+                    readCard(service, id)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    continue
+                }
+                answered += id
+                if (found != null) {
+                    answer[id] = found
+                    // Someone else's: the original of my resonance.
+                    if (found.authorId != service.uid) others += id
+                }
+            }
+        } catch (e: CancellationException) {
+            ids.forEach(::giveBack)
+            throw e
+        }
+        ids.filter { it !in answered }.forEach(::giveBack)
+        val (shown, resonated) = merged(answer, others, read, answered)
+        applyCards(shown, resonated)
         parkNodes(nodes, nodeOrder, parked, cards::containsKey)
         frameIfFraming()
     }
