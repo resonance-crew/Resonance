@@ -3,6 +3,8 @@
  * tested on its own and the apps can match it: the reactions are always
  * directly above the message, the actions always directly below. When that
  * doesn't fit where the message is, the message moves — never the menus.
+ * All of it stays in the thread's body (round 17 §2.1: under the thread's
+ * header, which the scrim leaves crisp), 12 in from its edges.
  */
 
 /** Room kept from the window's edges. */
@@ -25,6 +27,8 @@ export interface MenuPlacementInput {
   height: number;
   /** The window's height (the visual viewport's: what the keyboard leaves). */
   viewport: number;
+  /** Where the thread's body starts (the foot of its header's wave): nothing goes above it. 0 by default. */
+  areaTop?: number;
   /** The tray's height, or 0 when no reactions are offered. */
   trayH: number;
   /** The action list's height, or 0 when it has no rows. */
@@ -48,8 +52,8 @@ export interface MenuPlacement {
  * nothing when both fit where the message is. A message taller than the room
  * left between them is shown clipped to that room, from its top.
  */
-export function placeMessageMenu({ top, height, viewport, trayH, listH }: MenuPlacementInput): MenuPlacement {
-  const first = MENU_MARGIN;
+export function placeMessageMenu({ top, height, viewport, areaTop = 0, trayH, listH }: MenuPlacementInput): MenuPlacement {
+  const first = areaTop + MENU_MARGIN;
   const last = viewport - MENU_MARGIN;
   // Lifted from its side's centre, it grows by `grow` above and below.
   const grow = (height * (LIFT_SCALE - 1)) / 2;
@@ -73,11 +77,13 @@ export function placeMessageMenu({ top, height, viewport, trayH, listH }: MenuPl
 /**
  * Where a piece `width` wide lines up with the message: its right edge on the
  * message's for the viewer's own (`right`), its left edge on theirs — kept
- * {@link MENU_MARGIN} from the window's sides.
+ * {@link MENU_MARGIN} from the sides of the thread's body (from `areaLeft`,
+ * beside the conversation list, to the window's right edge).
  */
-export function alignToMessage(width: number, left: number, right: number, own: boolean, windowWidth: number): number {
+export function alignToMessage(width: number, left: number, right: number, own: boolean, windowWidth: number, areaLeft = 0): number {
   const x = own ? right - width : left;
-  return Math.min(Math.max(MENU_MARGIN, x), Math.max(MENU_MARGIN, windowWidth - MENU_MARGIN - width));
+  const min = areaLeft + MENU_MARGIN;
+  return Math.min(Math.max(min, x), Math.max(min, windowWidth - MENU_MARGIN - width));
 }
 
 /** Between a fine pointer's popover and the button it belongs to (the ☺, the ⋯, a reaction chip). */

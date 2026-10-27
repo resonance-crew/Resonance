@@ -20,17 +20,24 @@ export interface ReactionTrayProps {
   /** A sticker was chosen: that one, or null when it was the current one (taken back). */
   onPick: (reaction: ReactionId | null) => void;
   seed: number;
+  /**
+   * The stickers lie on a paper sheet (a fine pointer's ☺ popover, over the bare thread: the default), or float
+   * on their own (round 17 §2.2: over the held message's scrim, which already sets them apart).
+   */
+  paper?: boolean;
 }
 
 /**
- * The five reactions over a held message (round 16 §3, §4): a borderless
- * paper sheet (atoms/PaperSheet) holding ❤️ 🥹 😂 🤗 👍 in that order, each a
- * 44 cell with its sticker at 32, popping in one after another. The viewer's
- * own sits on a terracotta-light wobbly disc and is pressed: choosing it
- * again takes it back. A toolbar to the keyboard — one stop in the Tab order,
+ * The five reactions (round 16 §3, §4): ❤️ 🥹 😂 🤗 👍 in that order, each a
+ * 44 cell with its sticker at 32, popping in one after another — floating on
+ * the held message's scrim (round 17 §2.2), or on a borderless paper sheet
+ * (atoms/PaperSheet, with its shadow) where a fine pointer's ☺ opens them
+ * over the bare thread. The viewer's own sits on an opaque wobbly disc (the
+ * accent's light wash; at night the accent over the raised paper) and is
+ * pressed: choosing it again takes it back. A toolbar to the keyboard — one stop in the Tab order,
  * ← → (and Home / End) walking it, starting on the chosen one.
  */
-export const ReactionTray = forwardRef<HTMLDivElement, ReactionTrayProps>(function ReactionTray({ current, onPick, seed }, ref) {
+export const ReactionTray = forwardRef<HTMLDivElement, ReactionTrayProps>(function ReactionTray({ current, onPick, seed, paper = true }, ref) {
   const t = useTranslations('messages');
   const [focus, setFocus] = useState(() => Math.max(0, current ? REACTION_IDS.indexOf(current) : 0));
   const cells = useRef<(HTMLButtonElement | null)[]>([]);
@@ -65,7 +72,7 @@ export const ReactionTray = forwardRef<HTMLDivElement, ReactionTrayProps>(functi
       tabIndex={-1}
       onKeyDown={onKeyDown}
     >
-      <PaperSheet w={TRAY_W} h={TRAY_H} R={TRAY_R} seed={seed} />
+      {paper && <PaperSheet w={TRAY_W} h={TRAY_H} R={TRAY_R} seed={seed} />}
       {REACTION_IDS.map((id, i) => {
         const chosen = current === id;
         return (

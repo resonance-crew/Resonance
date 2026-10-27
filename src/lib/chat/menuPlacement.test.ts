@@ -6,7 +6,7 @@ import { LIFT_SCALE, LIST_GAP, MENU_MARGIN, POPOVER_GAP, TRAY_GAP, alignToMessag
 // is, the message moves by the least distance that fits, never the menus.
 
 const TRAY = 52;
-const LIST = 4 + 3 * 44 + 6 + 32; // a sheet list of three rows and its time
+const LIST = 6 + 3 * 44 + 24 + 10; // a sheet list of three rows and its time (round 17 §2.3)
 const VIEW = 812;
 const grow = (h: number) => (h * (LIFT_SCALE - 1)) / 2;
 
@@ -41,6 +41,16 @@ describe('placeMessageMenu', () => {
     expect(p.trayTop).toBe(20);
   });
 
+  // Round 17 §2.1: the scrim leaves the thread's header crisp, and nothing of the menu goes over it.
+  it("keeps the tray under the thread's header, 12 below the foot of its wave", () => {
+    const p = placeMessageMenu({ top: 90, height: 40, viewport: VIEW, areaTop: 65, trayH: TRAY, listH: LIST });
+    expect(p.shift).toBeGreaterThan(0);
+    expect(p.trayTop).toBeCloseTo(65 + MENU_MARGIN);
+    const clipped = placeMessageMenu({ top: 100, height: 900, viewport: VIEW, areaTop: 65, trayH: TRAY, listH: LIST });
+    expect(clipped.trayTop).toBeCloseTo(65 + MENU_MARGIN);
+    expect(clipped.listTop + LIST).toBeCloseTo(VIEW - MENU_MARGIN);
+  });
+
   it('shows a message taller than the room from its top, clipped to what is left between the two', () => {
     const p = placeMessageMenu({ top: 100, height: 900, viewport: VIEW, trayH: TRAY, listH: LIST });
     expect(p.clipped).toBe(true);
@@ -61,6 +71,11 @@ describe('alignToMessage', () => {
     expect(alignToMessage(232, 300, 340, true, 375)).toBe(340 - 232);
     expect(alignToMessage(232, 260, 300, false, 375)).toBe(375 - 12 - 232);
     expect(alignToMessage(232, 0, 100, true, 375)).toBe(12);
+  });
+
+  it('keeps clear of the conversation list beside the thread (two panes): 12 in from the body\'s own left edge', () => {
+    expect(alignToMessage(232, 340, 400, false, 1440, 320)).toBe(340);
+    expect(alignToMessage(232, 330, 360, true, 1440, 320)).toBe(332);
   });
 });
 
