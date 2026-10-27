@@ -422,6 +422,20 @@ own rule, and opens `StoryLinkModal` in the app's modal. The phone's tab bar sta
 the writer's bar grows round its title and save line at a large text size (`BarTitles.scaledSubtitleLine`); and at the
 split the map's Leave is the workspace's one back — from the publish step back to writing, named 繼續寫 (`WritePane.publishing`).
 
+Round 17's review, iOS: an animation tied to a value that flips in the same update as a layout change carries that
+change too, so the composer's and the tag field's faces animate their colour or opacity alone (`.animation(_:body:)`),
+and what must keep its place behind a press or a value's animation is a `.geometryGroup()` outside it — committing a tag
+moved the field down under the new pills while its end segment glided in from where it had been (the owner's 「跳動」;
+`RoundSeventeenTagJumpTests` reads the screen frame by frame). A destructive row is told by the danger ink alone, its
+glyph and words in the deeper danger red (`Tokens.dangerFill`, ≈ 5 : 1 on the menu paper by day) at rest and pressed,
+its press ink the danger hue at the row's usual 15 %, never a wash at rest (`MenuRowInks`).
+In two panes the press scrim starts on the rule's own line and follows its wave (`PaneScrim`), the rule drawn over it.
+The link dialog's controls are one height, 44 (`StoryLinkModal.Metrics.control`, `SegmentedActionBar(height:)`),
+移除連結 a quiet word in the text ink (`QuietTextButton`), and the address is selected through the field's own
+`TextSelection` once it has the focus — never a select-all sent to whatever is first responder, which could be the
+story. A bare menu trigger wears the web's open state while its menu is open — the composer's ＋ (圖片 · 卡片) and every
+bar's ⋯ (`OrganicMenu` `.bare`): the full text ink on a wobbly disc of it at 8 % (`BareTriggerDisc`), never terracotta.
+
 The app hosts its unit tests; run them with `xcodebuild test … -destination
 'id=<udid>'`. Under XCTest the app points at a local stack that isn't there
 (no backend, not even a simulator's saved account on production) unless the
