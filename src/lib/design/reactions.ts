@@ -30,7 +30,7 @@ export const REACTION_COLOURS = {
   blush: 'oklch(80% 0.09 20)',
   cream: 'oklch(98% 0.01 80)',
   sleeve: 'oklch(80% 0.07 235)',
-  slate: 'oklch(58% 0.065 250)',
+  navy: 'oklch(52% 0.095 252)',
 } as const;
 export type ReactionColour = keyof typeof REACTION_COLOURS;
 
@@ -99,24 +99,25 @@ export const REACTION_GLYPHS: Record<ReactionId, readonly ReactionLayer[]> = {
     fill('M7.4,13.7 C10.5,14.4 13.5,14.4 16.6,13.7 C16.5,14.4 16.3,14.9 16.1,15.3 C13.4,15.9 10.6,15.9 7.9,15.3 C7.7,14.9 7.5,14.4 7.4,13.7 Z', 'cream'),
     fill('M9.3,17.7 C10.0,16.7 11.1,16.4 12.0,16.8 C12.9,16.4 14.0,16.7 14.7,17.7 C14.0,18.3 13.0,18.5 12.0,18.5 C11.0,18.5 10.0,18.3 9.3,17.7 Z', 'heart'),
   ],
-  // 🫂 抱抱 — two people holding each other, after Noto's: no faces, cheek to cheek, each with an arm over the
-  // other's shoulder and a hand on its back — the front one slate, the other the sleeve's blue (round 17 §3:
-  // round 16's 🤗, a face with mittens, read as a hug to too few).
+  // 🫂 抱抱 — two people holding each other, after Noto's: no faces, their heads leaning in, cheek to cheek;
+  // each one's arm a thick band in its own colour across the other's back, a round fist past the other's far
+  // edge — the front one the faces' yellow, the other navy, a warm and a cool, a light and a deep (round 17
+  // review: two blues side by side read as 👥 at the chip's 18; a skin-like peach read as a skin tone).
   hug: [
-    // the other (sleeve): its back, its head
-    { d: 'M10.5,20.1 C10.3,15.6 12.4,11.8 15.9,11.0 C18.5,10.5 20.5,12.4 20.7,15.2 C20.9,16.9 20.8,18.5 20.6,20.1 C17.3,20.4 13.9,20.4 10.5,20.1 Z', fill: 'sleeve', stroke: 'outline', width: 1.3 },
-    { d: 'M14.3,3.7 C16.3,3.6 17.7,5.1 17.6,7.1 C17.6,9.1 16.1,10.6 14.2,10.6 C12.2,10.6 10.7,9.1 10.8,7.1 C10.9,5.1 12.4,3.7 14.3,3.7 Z', fill: 'sleeve', stroke: 'outline', width: 1.3 },
-    // the front one (slate): its shoulders and the arm over the other's shoulder, its hand flat on the other's back
-    {
-      d: 'M3.4,20.1 C3.2,16.5 4.8,13.3 7.7,12.5 C9.8,11.8 12.0,11.6 14.0,11.2 C15.9,10.9 17.7,10.9 19.1,11.8 C20.3,12.7 20.6,14.3 20.1,15.3 C19.7,16.1 18.6,16.4 17.8,16.0 C17.3,15.8 17.2,15.0 17.0,14.4 C16.7,13.9 15.9,13.8 15.4,14.2 C15.0,14.4 14.7,14.7 14.6,15.0 C15.3,16.6 15.7,18.3 15.7,20.1 C11.5,20.4 7.5,20.4 3.4,20.1 Z',
-      fill: 'slate',
-      stroke: 'outline',
-      width: 1.3,
-    },
-    // the other's arm over the front one's shoulder, its hand on the front one's back (its start under the head)
-    { d: 'M9.9,10.5 C8.1,10.8 6.2,11.0 5.0,11.9 C3.7,12.8 3.4,14.3 3.9,15.3 C4.3,16.1 5.4,16.4 6.2,16.0 C6.7,15.8 6.8,15.0 7.0,14.4 C7.3,13.9 8.1,13.7 8.8,13.4 C9.7,13.0 10.3,12.5 10.8,11.5 Z', fill: 'sleeve', stroke: 'outline', width: 1.3 },
-    // the front one's head, cheek to the other's
-    { d: 'M9.7,4.9 C11.7,4.8 13.3,6.3 13.3,8.2 C13.3,10.2 11.9,11.8 9.9,11.8 C8.0,11.9 6.4,10.4 6.4,8.4 C6.3,6.5 7.8,5.0 9.7,4.9 Z', fill: 'slate', stroke: 'outline', width: 1.3 },
+    // the other (navy): its back, its head
+    { d: 'M12.0,20.4 C11.9,18.9 11.5,16.8 11.6,15.4 C11.7,14.0 12.1,13.0 12.8,12.2 C13.5,11.5 14.7,11.0 15.6,10.9 C16.5,10.8 17.7,11.0 18.4,11.6 C19.1,12.2 19.5,12.9 19.7,14.4 C19.9,15.9 19.8,18.6 19.8,20.4 C17.5,20.4 14.3,20.4 12.0,20.4 Z', fill: 'navy', stroke: 'outline', width: 1.3 },
+    { d: 'M13.3,3.4 C14.9,3.0 16.7,4.1 17.2,6.1 C17.8,7.9 16.9,9.8 15.3,10.3 C13.6,10.8 11.9,9.6 11.3,7.8 C10.8,5.8 11.7,3.9 13.3,3.4 Z', fill: 'navy', stroke: 'outline', width: 1.3 },
+    // the front one (yellow): its back
+    { d: 'M4.2,20.4 C4.2,18.9 4.0,16.7 4.2,15.4 C4.4,14.1 4.7,13.1 5.4,12.4 C6.1,11.7 7.2,11.3 8.2,11.1 C9.2,10.9 10.4,11.0 11.2,11.4 C12.0,11.9 12.6,12.9 13.0,13.8 C13.4,14.7 13.5,15.9 13.6,17.0 C13.7,18.1 13.6,19.4 13.6,20.4 C10.8,20.4 7.0,20.4 4.2,20.4 Z', fill: 'face', stroke: 'outline', width: 1.3 },
+    // the other's arm across the front one's shoulders, from inside its own shoulder to a fist past the front
+    // one's far side — filled, then rimmed only where it lies on the front one (so it grows out of its body)
+    { d: 'M17.5,11.7 C16.4,11.3 14.9,10.6 13.8,10.3 C12.6,10.1 11.4,10.1 10.4,10.1 C9.3,10.1 8.3,10.5 7.4,10.4 C6.6,10.3 5.9,9.4 5.2,9.3 C4.4,9.3 3.5,9.7 3.1,10.2 C2.8,10.7 2.6,11.8 2.9,12.4 C3.1,13.0 3.8,13.5 4.7,13.7 C5.5,13.9 6.8,13.7 7.8,13.6 C8.7,13.5 9.5,13.3 10.4,13.3 C11.3,13.3 12.0,13.2 13.0,13.5 C14.1,13.7 15.4,14.3 16.5,14.7 C16.8,13.8 17.2,12.6 17.5,11.7 Z', fill: 'navy' },
+    line('M10.4,10.1 C9.3,10.1 8.3,10.5 7.4,10.4 C6.6,10.3 5.9,9.4 5.2,9.3 C4.4,9.3 3.5,9.7 3.1,10.2 C2.8,10.7 2.6,11.8 2.9,12.4 C3.1,13.0 3.8,13.5 4.7,13.7 C5.5,13.9 6.8,13.7 7.8,13.6 C8.7,13.5 9.5,13.3 10.4,13.3 C11.3,13.3 12.0,13.2 13.0,13.5', 1.3, 'outline'),
+    // the front one's arm across the other's back, from inside its own side to a fist past the other's far side
+    { d: 'M11.8,18.2 C12.7,18.1 13.7,18.0 14.6,17.7 C15.5,17.5 16.5,17.1 17.4,16.7 C18.3,16.3 19.4,16.0 20.1,15.4 C20.7,14.9 21.0,14.1 21.0,13.4 C20.9,12.8 20.3,11.9 19.8,11.6 C19.2,11.3 18.2,11.4 17.6,11.8 C17.0,12.1 16.9,13.2 16.2,13.7 C15.6,14.2 14.6,14.4 13.8,14.7 C13.0,14.9 12.1,14.9 11.4,15.0 C11.5,16.0 11.7,17.2 11.8,18.2 Z', fill: 'face' },
+    line('M14.6,17.7 C15.5,17.5 16.5,17.1 17.4,16.7 C18.3,16.3 19.4,16.0 20.1,15.4 C20.7,14.9 21.0,14.1 21.0,13.4 C20.9,12.8 20.3,11.9 19.8,11.6 C19.2,11.3 18.2,11.4 17.6,11.8 C17.0,12.1 16.9,13.2 16.2,13.7 C15.6,14.2 14.6,14.4 13.8,14.7', 1.3, 'outline'),
+    // the front one's head, leaning in, cheek to the other's
+    { d: 'M10.7,3.7 C12.4,4.2 13.3,6.2 12.7,8.2 C12.1,10.2 10.3,11.4 8.7,11.0 C7.0,10.5 6.2,8.5 6.8,6.5 C7.3,4.5 9.1,3.2 10.7,3.7 Z', fill: 'face', stroke: 'outline', width: 1.3 },
   ],
   // 👍 — a sleeve, a fist, the thumb up.
   thumbs: [
