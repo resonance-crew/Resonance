@@ -53,7 +53,7 @@ const o = (s: string) => parseOklch(s);
 const base = (t: Record<BaseToken, string>): Base =>
   Object.fromEntries(Object.entries(t).map(([k, v]) => [k, o(v)])) as Base;
 
-/** Each theme's light table, verbatim from the site as it was (TweaksPanel ACCENT_MAP); the papers are worn at ThemeSpec.paperTint of it. */
+/** Each theme's light table, verbatim from the site as it was (TweaksPanel ACCENT_MAP); its papers and inks are worn at ThemeSpec.paperTint / inkTint of it. */
 const LIGHT_BASES: Record<Accent, Base> = {
   terracotta: base({
     'color-terracotta': 'oklch(62% 0.14 45)',
@@ -127,21 +127,29 @@ export interface ThemeSpec {
    * scheme: a tinted sheet reads as a colour of its own, more so at night and in a cool hue.
    */
   paperTint: Record<Scheme, number>;
+  /**
+   * The share the ink family keeps (the ink, the muted ink, the placeholder, the field's pens):
+   * a dark ink holds its chroma at a tenth of its lightness, so a green or violet one reads as a
+   * colour long before a paper does. Terracotta's brown ink is the brand's and stays whole.
+   */
+  inkTint: Record<Scheme, number>;
 }
 
 export const THEME_SPECS: Record<Accent, ThemeSpec> = {
-  terracotta: { accentHue: 45, accentChroma: 0.14, neutralHue: 75, neutralChroma: 0.015, darkNeutralHue: 62, darkNeutralChroma: 0.013, darkAccent: { L: 0.71, C: 0.135, H: 47 }, paperTint: { light: 0.85, dark: 0.8 } },
-  sage: { accentHue: 140, accentChroma: 0.13, neutralHue: 142, neutralChroma: 0.013, darkNeutralHue: 140, darkNeutralChroma: 0.013, darkAccent: { L: 0.73, C: 0.12, H: 145 }, paperTint: { light: 0.75, dark: 0.7 } },
-  lavender: { accentHue: 290, accentChroma: 0.14, neutralHue: 298, neutralChroma: 0.012, darkNeutralHue: 298, darkNeutralChroma: 0.011, darkAccent: { L: 0.73, C: 0.115, H: 292 }, paperTint: { light: 0.75, dark: 0.7 } },
-  yellow: { accentHue: 78, accentChroma: 0.13, neutralHue: 92, neutralChroma: 0.02, darkNeutralHue: 88, darkNeutralChroma: 0.015, darkAccent: { L: 0.79, C: 0.125, H: 80 }, paperTint: { light: 0.75, dark: 0.7 } },
+  terracotta: { accentHue: 45, accentChroma: 0.14, neutralHue: 75, neutralChroma: 0.015, darkNeutralHue: 62, darkNeutralChroma: 0.013, darkAccent: { L: 0.71, C: 0.135, H: 47 }, paperTint: { light: 0.7, dark: 0.65 }, inkTint: { light: 1, dark: 1 } },
+  sage: { accentHue: 140, accentChroma: 0.13, neutralHue: 142, neutralChroma: 0.013, darkNeutralHue: 140, darkNeutralChroma: 0.013, darkAccent: { L: 0.73, C: 0.12, H: 145 }, paperTint: { light: 0.55, dark: 0.5 }, inkTint: { light: 0.7, dark: 0.7 } },
+  lavender: { accentHue: 290, accentChroma: 0.14, neutralHue: 298, neutralChroma: 0.012, darkNeutralHue: 298, darkNeutralChroma: 0.011, darkAccent: { L: 0.73, C: 0.115, H: 292 }, paperTint: { light: 0.55, dark: 0.5 }, inkTint: { light: 0.7, dark: 0.7 } },
+  yellow: { accentHue: 78, accentChroma: 0.13, neutralHue: 92, neutralChroma: 0.02, darkNeutralHue: 88, darkNeutralChroma: 0.015, darkAccent: { L: 0.79, C: 0.125, H: 80 }, paperTint: { light: 0.55, dark: 0.5 }, inkTint: { light: 0.7, dark: 0.7 } },
 };
 
 const PAPERS = ['color-cream', 'color-cream-dark', 'color-card-bg'] as const;
+const INKS = ['color-text', 'color-text-muted', 'placeholder', 'field-border', 'field-border-hover'] as const;
 
-/** The base with its papers at `share` of their tint (ThemeSpec.paperTint); everything drawn on or from them follows. */
-function tintPapers(b: Base, share: number): Base {
+/** The base with its papers and its ink family at the spec's share of their tint; everything drawn on or from them follows. */
+function tintNeutrals(b: Base, s: ThemeSpec, scheme: Scheme): Base {
   const out = { ...b };
-  for (const t of PAPERS) out[t] = { ...b[t], C: b[t].C * share };
+  for (const t of PAPERS) out[t] = { ...b[t], C: b[t].C * s.paperTint[scheme] };
+  for (const t of INKS) out[t] = { ...b[t], C: b[t].C * s.inkTint[scheme] };
   return out;
 }
 
@@ -557,7 +565,7 @@ const LIGHT_TERRACOTTA_EXACT: Partial<Record<PaletteToken, Oklch>> = {
 /** The palette a theme wears in a scheme. */
 export function paletteFor(accent: Accent, scheme: Scheme): Palette {
   const spec = THEME_SPECS[accent];
-  const p = assemble(tintPapers(scheme === 'light' ? LIGHT_BASES[accent] : darkBase(spec), spec.paperTint[scheme]), scheme);
+  const p = assemble(tintNeutrals(scheme === 'light' ? LIGHT_BASES[accent] : darkBase(spec), spec, scheme), scheme);
   return accent === DEFAULT_ACCENT && scheme === 'light' ? ({ ...p, ...LIGHT_TERRACOTTA_EXACT } as Palette) : p;
 }
 
@@ -570,7 +578,7 @@ export function paletteFor(accent: Accent, scheme: Scheme): Palette {
  */
 export function paletteForHue(hue: number, chroma: number, scheme: Scheme): Palette {
   const spec = specForHue(hue, chroma);
-  return assemble(tintPapers(scheme === 'light' ? lightBase(spec) : darkBase(spec), spec.paperTint[scheme]), scheme);
+  return assemble(tintNeutrals(scheme === 'light' ? lightBase(spec) : darkBase(spec), spec, scheme), scheme);
 }
 
 /**
@@ -588,7 +596,8 @@ export function specForHue(hue: number, chroma: number): ThemeSpec {
     darkNeutralHue: hue + 10,
     darkNeutralChroma: 0.012,
     darkAccent: { L: 0.73, C: Math.min(0.13, accentChroma), H: hue + 2 },
-    paperTint: { light: 0.75, dark: 0.7 },
+    paperTint: { light: 0.55, dark: 0.5 },
+    inkTint: { light: 0.7, dark: 0.7 },
   };
 }
 

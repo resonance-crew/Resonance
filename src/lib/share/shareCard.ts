@@ -64,7 +64,7 @@ export const COLOUR_TOKENS = {
   '--color-text': 'oklch(26% 0.03 60)',
   '--color-text-muted': 'oklch(52% 0.04 70)',
   '--color-terracotta': 'oklch(62% 0.14 45)',
-  '--color-cream-dark': 'oklch(93% 0.0153 75)',
+  '--color-cream-dark': 'oklch(93% 0.0126 75)',
 } as const;
 export type ColourTokenName = keyof typeof COLOUR_TOKENS;
 

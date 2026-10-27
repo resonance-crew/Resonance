@@ -8,10 +8,10 @@
       theme's own from Android 13, AppearanceStore), the accent the system's own controls take — the
       text-selection handles in the writer's WebView among them.
     -->
-    <color name="paper">#F9F2EA</color>
-    <color name="paper_sage">#F0F5EF</color>
-    <color name="paper_lavender">#F4F2F9</color>
-    <color name="paper_yellow">#F6F4E8</color>
+    <color name="paper">#F8F3EC</color>
+    <color name="paper_sage">#F1F5F0</color>
+    <color name="paper_lavender">#F4F2F7</color>
+    <color name="paper_yellow">#F6F3EB</color>
     <color name="paper_wallpaper">@color/paper</color>
     <color name="accent_terracotta">#C96736</color>
     <color name="accent_sage">#448335</color>

@@ -43,6 +43,9 @@ object PaletteFormula {
         /** palette.ts ThemeSpec.paperTint: the share of their tint the papers keep, light and dark. */
         val paperTintLight: Double,
         val paperTintDark: Double,
+        /** palette.ts ThemeSpec.inkTint: the share the ink family keeps. */
+        val inkTintLight: Double,
+        val inkTintDark: Double,
     )
 
     /** palette.ts `specForHue`. */
@@ -56,8 +59,10 @@ object PaletteFormula {
             darkNeutralHue = hue + 10,
             darkNeutralChroma = 0.012,
             darkAccent = Lch(0.73, min(0.13, accentChroma), hue + 2),
-            paperTintLight = 0.75,
-            paperTintDark = 0.7,
+            paperTintLight = 0.55,
+            paperTintDark = 0.5,
+            inkTintLight = 0.7,
+            inkTintDark = 0.7,
         )
     }
 
@@ -68,7 +73,7 @@ object PaletteFormula {
     /** palette.ts `paletteForHue`. */
     fun paletteForHue(hue: Double, chroma: Double, dark: Boolean): ResonanceColors {
         val spec = specForHue(hue, chroma)
-        val base = tintPapers(if (dark) darkBase(spec) else lightBase(spec), if (dark) spec.paperTintDark else spec.paperTintLight)
+        val base = tintNeutrals(if (dark) darkBase(spec) else lightBase(spec), spec, dark)
         val own = base + if (dark) darkRecipes(base) else lightRecipes(base)
         // The scheme's own tokens and the families': the same in every theme of a scheme.
         val shared = ResonanceColors.of(PaletteTheme.Terracotta, dark).oklch
@@ -87,11 +92,21 @@ object PaletteFormula {
         return ResonanceColors(dark, out)
     }
 
-    /** palette.ts `tintPapers`: the paper, its well and the raised card at [share] of their tint. */
-    private fun tintPapers(b: Map<String, Lch>, share: Double): Map<String, Lch> =
-        b.mapValues { (token, c) -> if (token in PAPERS) c.copy(c = c.c * share) else c }
+    /** palette.ts `tintNeutrals`: the papers and the ink family at the spec's share of their tint. */
+    private fun tintNeutrals(b: Map<String, Lch>, s: Spec, dark: Boolean): Map<String, Lch> {
+        val paper = if (dark) s.paperTintDark else s.paperTintLight
+        val ink = if (dark) s.inkTintDark else s.inkTintLight
+        return b.mapValues { (token, c) ->
+            when (token) {
+                in PAPERS -> c.copy(c = c.c * paper)
+                in INKS -> c.copy(c = c.c * ink)
+                else -> c
+            }
+        }
+    }
 
     private val PAPERS = setOf("color-cream", "color-cream-dark", "color-card-bg")
+    private val INKS = setOf("color-text", "color-text-muted", "placeholder", "field-border", "field-border-hover")
 
     /** palette.ts `darkBase`: night paper at 20.5%, the raised card at 24%, the well at 17%, chalk ink at 88%. */
     private fun darkBase(s: Spec): Map<String, Lch> {

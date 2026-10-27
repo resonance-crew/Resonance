@@ -579,9 +579,9 @@ val LocalResonanceColors = staticCompositionLocalOf { ResonanceColors.LightTerra
 internal object PaletteTables {
     /** terracotta, light. */
     val TERRACOTTA_LIGHT: DoubleArray get() = doubleArrayOf(
-        0.965, 0.01275, 75.0, 1.0, // color-cream
-        0.93, 0.0153, 75.0, 1.0, // color-cream-dark
-        0.975, 0.0085, 80.0, 1.0, // color-card-bg
+        0.965, 0.0105, 75.0, 1.0, // color-cream
+        0.93, 0.0126, 75.0, 1.0, // color-cream-dark
+        0.975, 0.007, 80.0, 1.0, // color-card-bg
         0.62, 0.14, 45.0, 1.0, // color-terracotta
         0.88, 0.08, 55.0, 1.0, // color-terracotta-light
         0.26, 0.03, 60.0, 1.0, // color-text
@@ -590,38 +590,38 @@ internal object PaletteTables {
         0.6, 0.04, 60.0, 1.0, // field-border-hover
         0.64, 0.03, 70.0, 1.0, // placeholder
         0.912, 0.055, 62.6, 1.0, // bubble-mine
-        0.91565, 0.013957, 73.95, 1.0, // bubble-theirs
-        0.88745, 0.014648, 73.35, 1.0, // bubble-quote
+        0.91565, 0.011865, 73.95, 1.0, // bubble-theirs
+        0.88745, 0.012645, 73.35, 1.0, // bubble-quote
         0.45, 0.04, 70.0, 1.0, // link-card-muted
         0.7, 0.17, 50.0, 1.0, // reading-progress
         0.5456, 0.1232, 45.0, 1.0, // button-fill
-        0.8925, 0.063825, 60.0, 1.0, // button-tonal
+        0.8925, 0.06315, 60.0, 1.0, // button-tonal
         0.4836, 0.1092, 45.0, 1.0, // button-on-tonal
         0.403, 0.091, 45.0, 1.0, // terracotta-ink
         0.465, 0.105, 45.0, 1.0, // terracotta-deep
         0.527, 0.119, 45.0, 1.0, // terracotta-outline
-        0.9617, 0.01851, 76.5, 1.0, // auth-interior
+        0.9617, 0.01722, 76.5, 1.0, // auth-interior
         0.5084, 0.1148, 45.0, 1.0, // auth-border
-        0.86, 0.016958, 75.0, 1.0, // toggle-off
+        0.86, 0.013965, 75.0, 1.0, // toggle-off
         0.7, 0.03, 70.0, 1.0, // toggle-off-stroke
         0.44, 0.04, 70.0, 1.0, // ghost-stroke
         0.4, 0.06, 60.0, 1.0, // modal-border
-        0.965, 0.01275, 75.0, 1.0, // menu-paper
+        0.965, 0.0105, 75.0, 1.0, // menu-paper
         0.62, 0.14, 45.0, 1.0, // menu-frame
         0.468, 0.036, 70.0, 1.0, // segment-idle-ink
         0.65, 0.084, 45.0, 1.0, // link-wave
         0.26, 0.03, 60.0, 0.06, // story-code-tint
         0.26, 0.03, 60.0, 1.0, // footer-bg
-        0.965, 0.01275, 75.0, 1.0, // footer-ink
+        0.965, 0.0105, 75.0, 1.0, // footer-ink
         0.5146, 0.1162, 45.0, 1.0, // cta-band
-        0.965, 0.01275, 75.0, 1.0, // cta-ink
+        0.965, 0.0105, 75.0, 1.0, // cta-ink
         0.3646, 0.082329, 45.0, 1.0, // cta-ghost
         0.4836, 0.1092, 45.0, 1.0, // cta-verb-ink
-        0.8898, 0.016182, 74.1, 0.85, // skeleton-base
-        0.965, 0.01275, 75.0, 1.0, // skeleton-glow
-        0.93, 0.0153, 75.0, 1.0, // avatar-wait
+        0.8898, 0.013644, 74.1, 0.85, // skeleton-base
+        0.965, 0.0105, 75.0, 1.0, // skeleton-glow
+        0.93, 0.0126, 75.0, 1.0, // avatar-wait
         0.26, 0.03, 60.0, 1.0, // apple-fill
-        0.965, 0.01275, 75.0, 1.0, // apple-label
+        0.965, 0.0105, 75.0, 1.0, // apple-label
         0.58, 0.16, 25.0, 1.0, // color-danger
         0.5336, 0.1472, 25.0, 1.0, // danger-fill
         0.9, 0.048, 25.0, 1.0, // button-danger-tonal
@@ -726,9 +726,9 @@ internal object PaletteTables {
 
     /** terracotta, dark. */
     val TERRACOTTA_DARK: DoubleArray get() = doubleArrayOf(
-        0.205, 0.0104, 62.0, 1.0, // color-cream
-        0.17, 0.00884, 60.0, 1.0, // color-cream-dark
-        0.24, 0.011232, 64.0, 1.0, // color-card-bg
+        0.205, 0.00845, 62.0, 1.0, // color-cream
+        0.17, 0.007183, 60.0, 1.0, // color-cream-dark
+        0.24, 0.009126, 64.0, 1.0, // color-card-bg
         0.71, 0.135, 47.0, 1.0, // color-terracotta
         0.36, 0.0675, 52.0, 1.0, // color-terracotta-light
         0.88, 0.02, 76.0, 1.0, // color-text
@@ -736,37 +736,37 @@ internal object PaletteTables {
         0.4, 0.02, 70.0, 1.0, // field-border
         0.48, 0.025, 66.0, 1.0, // field-border-hover
         0.58, 0.03, 70.0, 1.0, // placeholder
-        0.329, 0.05608, 54.0, 1.0, // bubble-mine
-        0.2725, 0.01136, 63.4, 1.0, // bubble-theirs
-        0.24, 0.00884, 66.0, 1.0, // bubble-quote
+        0.329, 0.05569, 54.0, 1.0, // bubble-mine
+        0.2725, 0.009605, 63.4, 1.0, // bubble-theirs
+        0.24, 0.007182, 66.0, 1.0, // bubble-quote
         0.75, 0.0265, 72.1, 1.0, // link-card-muted
         0.78, 0.15, 54.0, 1.0, // reading-progress
         0.71, 0.135, 47.0, 1.0, // button-fill
-        0.3125, 0.052835, 54.0, 1.0, // button-tonal
+        0.3125, 0.052421, 54.0, 1.0, // button-tonal
         0.81, 0.10125, 54.0, 1.0, // button-on-tonal
         0.7695, 0.09475, 57.15, 1.0, // terracotta-ink
         0.7525, 0.10625, 54.25, 1.0, // terracotta-deep
         0.7355, 0.11775, 51.35, 1.0, // terracotta-outline
-        0.2568, 0.01911, 62.32, 1.0, // auth-interior
+        0.2568, 0.017298, 62.32, 1.0, // auth-interior
         0.6, 0.081, 47.0, 1.0, // auth-border
-        0.32, 0.013832, 70.0, 1.0, // toggle-off
+        0.32, 0.011239, 70.0, 1.0, // toggle-off
         0.52, 0.0225, 70.0, 1.0, // toggle-off-stroke
         0.62, 0.03, 70.0, 1.0, // ghost-stroke
         0.6, 0.04, 76.0, 1.0, // modal-border
-        0.24, 0.011232, 64.0, 1.0, // menu-paper
+        0.24, 0.009126, 64.0, 1.0, // menu-paper
         0.52, 0.0675, 47.0, 1.0, // menu-frame
         0.7, 0.029, 70.6, 1.0, // segment-idle-ink
         0.65, 0.081, 47.0, 1.0, // link-wave
         0.88, 0.02, 76.0, 0.08, // story-code-tint
-        0.15, 0.0078, 62.0, 1.0, // footer-bg
+        0.15, 0.006337, 62.0, 1.0, // footer-bg
         0.88, 0.02, 76.0, 1.0, // footer-ink
         0.4, 0.081, 45.0, 1.0, // cta-band
         0.93, 0.02, 76.0, 1.0, // cta-ink
         0.312, 0.06318, 45.0, 1.0, // cta-ghost
         0.4, 0.081, 45.0, 1.0, // cta-verb-ink
-        0.2912, 0.011933, 64.96, 0.85, // skeleton-base
-        0.3, 0.0104, 62.0, 1.0, // skeleton-glow
-        0.24, 0.011232, 64.0, 1.0, // avatar-wait
+        0.2912, 0.009996, 64.96, 0.85, // skeleton-base
+        0.3, 0.00845, 62.0, 1.0, // skeleton-glow
+        0.24, 0.009126, 64.0, 1.0, // avatar-wait
         1.0, 0.0, 0.0, 1.0, // apple-fill
         0.0, 0.0, 0.0, 1.0, // apple-label
         0.7, 0.15, 25.0, 1.0, // color-danger
@@ -873,49 +873,49 @@ internal object PaletteTables {
 
     /** sage, light. */
     val SAGE_LIGHT: DoubleArray get() = doubleArrayOf(
-        0.965, 0.00975, 140.0, 1.0, // color-cream
-        0.93, 0.012, 140.0, 1.0, // color-cream-dark
-        0.975, 0.00675, 145.0, 1.0, // color-card-bg
+        0.965, 0.00715, 140.0, 1.0, // color-cream
+        0.93, 0.0088, 140.0, 1.0, // color-cream-dark
+        0.975, 0.00495, 145.0, 1.0, // color-card-bg
         0.55, 0.13, 140.0, 1.0, // color-terracotta
         0.86, 0.07, 140.0, 1.0, // color-terracotta-light
-        0.26, 0.025, 150.0, 1.0, // color-text
-        0.5, 0.035, 145.0, 1.0, // color-text-muted
-        0.8, 0.02, 140.0, 1.0, // field-border
-        0.58, 0.04, 142.0, 1.0, // field-border-hover
-        0.63, 0.03, 142.0, 1.0, // placeholder
-        0.8999, 0.047105, 140.0, 1.0, // bubble-mine
-        0.91565, 0.010817, 140.7, 1.0, // bubble-theirs
-        0.88745, 0.011428, 141.1, 1.0, // bubble-quote
-        0.4352, 0.0323, 146.35, 1.0, // link-card-muted
+        0.26, 0.0175, 150.0, 1.0, // color-text
+        0.5, 0.0245, 145.0, 1.0, // color-text-muted
+        0.8, 0.014, 140.0, 1.0, // field-border
+        0.58, 0.028, 142.0, 1.0, // field-border-hover
+        0.63, 0.021, 142.0, 1.0, // placeholder
+        0.8999, 0.046117, 140.0, 1.0, // bubble-mine
+        0.91565, 0.007875, 140.7, 1.0, // bubble-theirs
+        0.88745, 0.008289, 141.1, 1.0, // bubble-quote
+        0.4352, 0.02261, 146.35, 1.0, // link-card-muted
         0.63, 0.16, 145.0, 1.0, // reading-progress
         0.484, 0.1144, 140.0, 1.0, // button-fill
-        0.8775, 0.0555, 140.0, 1.0, // button-tonal
+        0.8775, 0.0547, 140.0, 1.0, // button-tonal
         0.429, 0.1014, 140.0, 1.0, // button-on-tonal
         0.3575, 0.0845, 140.0, 1.0, // terracotta-ink
         0.4125, 0.0975, 140.0, 1.0, // terracotta-deep
         0.4675, 0.1105, 140.0, 1.0, // terracotta-outline
-        0.9589, 0.015605, 144.3, 1.0, // auth-interior
+        0.9589, 0.014057, 144.3, 1.0, // auth-interior
         0.451, 0.1066, 140.0, 1.0, // auth-border
-        0.86, 0.012968, 140.0, 1.0, // toggle-off
-        0.7, 0.02625, 145.0, 1.0, // toggle-off-stroke
-        0.44, 0.035, 145.0, 1.0, // ghost-stroke
-        0.4, 0.05, 150.0, 1.0, // modal-border
-        0.965, 0.00975, 140.0, 1.0, // menu-paper
+        0.86, 0.00951, 140.0, 1.0, // toggle-off
+        0.7, 0.018375, 145.0, 1.0, // toggle-off-stroke
+        0.44, 0.0245, 145.0, 1.0, // ghost-stroke
+        0.4, 0.035, 150.0, 1.0, // modal-border
+        0.965, 0.00715, 140.0, 1.0, // menu-paper
         0.55, 0.13, 140.0, 1.0, // menu-frame
-        0.45, 0.0315, 145.0, 1.0, // segment-idle-ink
+        0.45, 0.02205, 145.0, 1.0, // segment-idle-ink
         0.58, 0.078, 140.0, 1.0, // link-wave
-        0.26, 0.025, 150.0, 0.06, // story-code-tint
-        0.26, 0.025, 150.0, 1.0, // footer-bg
-        0.965, 0.00975, 140.0, 1.0, // footer-ink
+        0.26, 0.0175, 150.0, 0.06, // story-code-tint
+        0.26, 0.0175, 150.0, 1.0, // footer-bg
+        0.965, 0.00715, 140.0, 1.0, // footer-ink
         0.484, 0.1144, 140.0, 1.0, // cta-band
-        0.965, 0.00975, 140.0, 1.0, // cta-ink
+        0.965, 0.00715, 140.0, 1.0, // cta-ink
         0.334, 0.078945, 140.0, 1.0, // cta-ghost
         0.429, 0.1014, 140.0, 1.0, // cta-verb-ink
-        0.8898, 0.01278, 140.6, 0.85, // skeleton-base
-        0.965, 0.00975, 140.0, 1.0, // skeleton-glow
-        0.93, 0.012, 140.0, 1.0, // avatar-wait
-        0.26, 0.025, 150.0, 1.0, // apple-fill
-        0.965, 0.00975, 140.0, 1.0, // apple-label
+        0.8898, 0.009322, 140.6, 0.85, // skeleton-base
+        0.965, 0.00715, 140.0, 1.0, // skeleton-glow
+        0.93, 0.0088, 140.0, 1.0, // avatar-wait
+        0.26, 0.0175, 150.0, 1.0, // apple-fill
+        0.965, 0.00715, 140.0, 1.0, // apple-label
         0.58, 0.16, 25.0, 1.0, // color-danger
         0.5336, 0.1472, 25.0, 1.0, // danger-fill
         0.9, 0.048, 25.0, 1.0, // button-danger-tonal
@@ -1020,47 +1020,47 @@ internal object PaletteTables {
 
     /** sage, dark. */
     val SAGE_DARK: DoubleArray get() = doubleArrayOf(
-        0.205, 0.0091, 140.0, 1.0, // color-cream
-        0.17, 0.007735, 138.0, 1.0, // color-cream-dark
-        0.24, 0.009828, 142.0, 1.0, // color-card-bg
+        0.205, 0.0065, 140.0, 1.0, // color-cream
+        0.17, 0.005525, 138.0, 1.0, // color-cream-dark
+        0.24, 0.00702, 142.0, 1.0, // color-card-bg
         0.73, 0.12, 145.0, 1.0, // color-terracotta
         0.36, 0.06, 150.0, 1.0, // color-terracotta-light
-        0.88, 0.02, 154.0, 1.0, // color-text
-        0.68, 0.03, 148.0, 1.0, // color-text-muted
-        0.4, 0.02, 148.0, 1.0, // field-border
-        0.48, 0.025, 144.0, 1.0, // field-border-hover
-        0.58, 0.03, 148.0, 1.0, // placeholder
-        0.329, 0.04982, 148.0, 1.0, // bubble-mine
-        0.2725, 0.01019, 141.4, 1.0, // bubble-theirs
-        0.24, 0.007735, 144.0, 1.0, // bubble-quote
-        0.75, 0.0265, 150.1, 1.0, // link-card-muted
+        0.88, 0.014, 154.0, 1.0, // color-text
+        0.68, 0.021, 148.0, 1.0, // color-text-muted
+        0.4, 0.014, 148.0, 1.0, // field-border
+        0.48, 0.0175, 144.0, 1.0, // field-border-hover
+        0.58, 0.021, 148.0, 1.0, // placeholder
+        0.329, 0.0493, 148.0, 1.0, // bubble-mine
+        0.2725, 0.00725, 141.4, 1.0, // bubble-theirs
+        0.24, 0.005525, 144.0, 1.0, // bubble-quote
+        0.75, 0.01855, 150.1, 1.0, // link-card-muted
         0.8, 0.135, 152.0, 1.0, // reading-progress
         0.73, 0.12, 145.0, 1.0, // button-fill
-        0.3125, 0.046934, 147.0, 1.0, // button-tonal
+        0.3125, 0.046381, 147.0, 1.0, // button-tonal
         0.83, 0.09, 152.0, 1.0, // button-on-tonal
-        0.7825, 0.085, 148.15, 1.0, // terracotta-ink
-        0.7675, 0.095, 147.25, 1.0, // terracotta-deep
-        0.7525, 0.105, 146.35, 1.0, // terracotta-outline
-        0.2568, 0.016852, 143.12, 1.0, // auth-interior
+        0.7825, 0.0829, 148.15, 1.0, // terracotta-ink
+        0.7675, 0.0935, 147.25, 1.0, // terracotta-deep
+        0.7525, 0.1041, 146.35, 1.0, // terracotta-outline
+        0.2568, 0.014437, 143.12, 1.0, // auth-interior
         0.6, 0.072, 145.0, 1.0, // auth-border
-        0.32, 0.012103, 148.0, 1.0, // toggle-off
-        0.52, 0.0225, 148.0, 1.0, // toggle-off-stroke
-        0.62, 0.03, 148.0, 1.0, // ghost-stroke
-        0.6, 0.04, 154.0, 1.0, // modal-border
-        0.24, 0.009828, 142.0, 1.0, // menu-paper
+        0.32, 0.008645, 148.0, 1.0, // toggle-off
+        0.52, 0.01575, 148.0, 1.0, // toggle-off-stroke
+        0.62, 0.021, 148.0, 1.0, // ghost-stroke
+        0.6, 0.028, 154.0, 1.0, // modal-border
+        0.24, 0.00702, 142.0, 1.0, // menu-paper
         0.52, 0.06, 145.0, 1.0, // menu-frame
-        0.7, 0.029, 148.6, 1.0, // segment-idle-ink
+        0.7, 0.0203, 148.6, 1.0, // segment-idle-ink
         0.67, 0.072, 145.0, 1.0, // link-wave
-        0.88, 0.02, 154.0, 0.08, // story-code-tint
-        0.15, 0.006825, 140.0, 1.0, // footer-bg
-        0.88, 0.02, 154.0, 1.0, // footer-ink
+        0.88, 0.014, 154.0, 0.08, // story-code-tint
+        0.15, 0.004875, 140.0, 1.0, // footer-bg
+        0.88, 0.014, 154.0, 1.0, // footer-ink
         0.4, 0.072, 143.0, 1.0, // cta-band
-        0.93, 0.02, 154.0, 1.0, // cta-ink
+        0.93, 0.014, 154.0, 1.0, // cta-ink
         0.312, 0.05616, 143.0, 1.0, // cta-ghost
         0.4, 0.072, 143.0, 1.0, // cta-verb-ink
-        0.2912, 0.010642, 142.96, 0.85, // skeleton-base
-        0.3, 0.0091, 140.0, 1.0, // skeleton-glow
-        0.24, 0.009828, 142.0, 1.0, // avatar-wait
+        0.2912, 0.007578, 142.96, 0.85, // skeleton-base
+        0.3, 0.0065, 140.0, 1.0, // skeleton-glow
+        0.24, 0.00702, 142.0, 1.0, // avatar-wait
         1.0, 0.0, 0.0, 1.0, // apple-fill
         0.0, 0.0, 0.0, 1.0, // apple-label
         0.7, 0.15, 25.0, 1.0, // color-danger
@@ -1167,49 +1167,49 @@ internal object PaletteTables {
 
     /** lavender, light. */
     val LAVENDER_LIGHT: DoubleArray get() = doubleArrayOf(
-        0.965, 0.009, 300.0, 1.0, // color-cream
-        0.935, 0.01125, 300.0, 1.0, // color-cream-dark
-        0.975, 0.006, 305.0, 1.0, // color-card-bg
+        0.965, 0.0066, 300.0, 1.0, // color-cream
+        0.935, 0.00825, 300.0, 1.0, // color-cream-dark
+        0.975, 0.0044, 305.0, 1.0, // color-card-bg
         0.58, 0.14, 290.0, 1.0, // color-terracotta
         0.87, 0.065, 295.0, 1.0, // color-terracotta-light
-        0.26, 0.025, 295.0, 1.0, // color-text
-        0.5, 0.035, 295.0, 1.0, // color-text-muted
-        0.8, 0.02, 295.0, 1.0, // field-border
-        0.58, 0.04, 292.0, 1.0, // field-border-hover
-        0.63, 0.03, 295.0, 1.0, // placeholder
-        0.9061, 0.04372, 296.9, 1.0, // bubble-mine
-        0.91565, 0.01012, 299.65, 1.0, // bubble-theirs
-        0.88745, 0.01076, 299.45, 1.0, // bubble-quote
-        0.4352, 0.0323, 295.0, 1.0, // link-card-muted
+        0.26, 0.0175, 295.0, 1.0, // color-text
+        0.5, 0.0245, 295.0, 1.0, // color-text-muted
+        0.8, 0.014, 295.0, 1.0, // field-border
+        0.58, 0.028, 292.0, 1.0, // field-border-hover
+        0.63, 0.021, 295.0, 1.0, // placeholder
+        0.9061, 0.042808, 296.9, 1.0, // bubble-mine
+        0.91565, 0.007363, 299.65, 1.0, // bubble-theirs
+        0.88745, 0.007799, 299.45, 1.0, // bubble-quote
+        0.4352, 0.02261, 295.0, 1.0, // link-card-muted
         0.66, 0.17, 295.0, 1.0, // reading-progress
         0.5104, 0.1232, 290.0, 1.0, // button-fill
-        0.88625, 0.051563, 296.25, 1.0, // button-tonal
+        0.88625, 0.050813, 296.25, 1.0, // button-tonal
         0.4524, 0.1092, 290.0, 1.0, // button-on-tonal
         0.377, 0.091, 290.0, 1.0, // terracotta-ink
         0.435, 0.105, 290.0, 1.0, // terracotta-deep
         0.493, 0.119, 290.0, 1.0, // terracotta-outline
-        0.9603, 0.01426, 303.6, 1.0, // auth-interior
+        0.9603, 0.012884, 303.6, 1.0, // auth-interior
         0.4756, 0.1148, 290.0, 1.0, // auth-border
-        0.86, 0.01197, 300.0, 1.0, // toggle-off
-        0.7, 0.02625, 295.0, 1.0, // toggle-off-stroke
-        0.44, 0.035, 295.0, 1.0, // ghost-stroke
-        0.4, 0.05, 295.0, 1.0, // modal-border
-        0.965, 0.009, 300.0, 1.0, // menu-paper
+        0.86, 0.008778, 300.0, 1.0, // toggle-off
+        0.7, 0.018375, 295.0, 1.0, // toggle-off-stroke
+        0.44, 0.0245, 295.0, 1.0, // ghost-stroke
+        0.4, 0.035, 295.0, 1.0, // modal-border
+        0.965, 0.0066, 300.0, 1.0, // menu-paper
         0.58, 0.14, 290.0, 1.0, // menu-frame
-        0.45, 0.0315, 295.0, 1.0, // segment-idle-ink
+        0.45, 0.02205, 295.0, 1.0, // segment-idle-ink
         0.61, 0.084, 290.0, 1.0, // link-wave
-        0.26, 0.025, 295.0, 0.06, // story-code-tint
-        0.26, 0.025, 295.0, 1.0, // footer-bg
-        0.965, 0.009, 300.0, 1.0, // footer-ink
+        0.26, 0.0175, 295.0, 0.06, // story-code-tint
+        0.26, 0.0175, 295.0, 1.0, // footer-bg
+        0.965, 0.0066, 300.0, 1.0, // footer-ink
         0.5104, 0.1232, 290.0, 1.0, // cta-band
-        0.965, 0.009, 300.0, 1.0, // cta-ink
+        0.965, 0.0066, 300.0, 1.0, // cta-ink
         0.3604, 0.086993, 290.0, 1.0, // cta-ghost
         0.4524, 0.1092, 290.0, 1.0, // cta-verb-ink
-        0.8945, 0.012075, 299.7, 0.85, // skeleton-base
-        0.965, 0.009, 300.0, 1.0, // skeleton-glow
-        0.935, 0.01125, 300.0, 1.0, // avatar-wait
-        0.26, 0.025, 295.0, 1.0, // apple-fill
-        0.965, 0.009, 300.0, 1.0, // apple-label
+        0.8945, 0.008805, 299.7, 0.85, // skeleton-base
+        0.965, 0.0066, 300.0, 1.0, // skeleton-glow
+        0.935, 0.00825, 300.0, 1.0, // avatar-wait
+        0.26, 0.0175, 295.0, 1.0, // apple-fill
+        0.965, 0.0066, 300.0, 1.0, // apple-label
         0.58, 0.16, 25.0, 1.0, // color-danger
         0.5336, 0.1472, 25.0, 1.0, // danger-fill
         0.9, 0.048, 25.0, 1.0, // button-danger-tonal
@@ -1314,47 +1314,47 @@ internal object PaletteTables {
 
     /** lavender, dark. */
     val LAVENDER_DARK: DoubleArray get() = doubleArrayOf(
-        0.205, 0.0077, 298.0, 1.0, // color-cream
-        0.17, 0.006545, 296.0, 1.0, // color-cream-dark
-        0.24, 0.008316, 300.0, 1.0, // color-card-bg
+        0.205, 0.0055, 298.0, 1.0, // color-cream
+        0.17, 0.004675, 296.0, 1.0, // color-cream-dark
+        0.24, 0.00594, 300.0, 1.0, // color-card-bg
         0.73, 0.115, 292.0, 1.0, // color-terracotta
         0.36, 0.0575, 297.0, 1.0, // color-terracotta-light
-        0.88, 0.016923, 312.0, 1.0, // color-text
-        0.68, 0.025385, 306.0, 1.0, // color-text-muted
-        0.4, 0.016923, 306.0, 1.0, // field-border
-        0.48, 0.021154, 302.0, 1.0, // field-border-hover
-        0.58, 0.025385, 306.0, 1.0, // placeholder
-        0.329, 0.04754, 297.2, 1.0, // bubble-mine
-        0.2725, 0.008622, 299.4, 1.0, // bubble-theirs
-        0.24, 0.006545, 302.0, 1.0, // bubble-quote
-        0.75, 0.022423, 308.1, 1.0, // link-card-muted
+        0.88, 0.011846, 312.0, 1.0, // color-text
+        0.68, 0.017769, 306.0, 1.0, // color-text-muted
+        0.4, 0.011846, 306.0, 1.0, // field-border
+        0.48, 0.014808, 302.0, 1.0, // field-border-hover
+        0.58, 0.017769, 306.0, 1.0, // placeholder
+        0.329, 0.0471, 297.2, 1.0, // bubble-mine
+        0.2725, 0.006135, 299.4, 1.0, // bubble-theirs
+        0.24, 0.004675, 302.0, 1.0, // bubble-quote
+        0.75, 0.015696, 308.1, 1.0, // link-card-muted
         0.8, 0.128889, 299.0, 1.0, // reading-progress
         0.73, 0.115, 292.0, 1.0, // button-fill
-        0.3125, 0.044761, 296.75, 1.0, // button-tonal
+        0.3125, 0.044294, 296.75, 1.0, // button-tonal
         0.83, 0.08625, 299.0, 1.0, // button-on-tonal
-        0.7825, 0.080673, 299.0, 1.0, // terracotta-ink
-        0.7675, 0.090481, 297.0, 1.0, // terracotta-deep
-        0.7525, 0.100288, 295.0, 1.0, // terracotta-outline
-        0.2568, 0.015202, 299.58, 1.0, // auth-interior
+        0.7825, 0.078896, 299.0, 1.0, // terracotta-ink
+        0.7675, 0.089212, 297.0, 1.0, // terracotta-deep
+        0.7525, 0.099527, 295.0, 1.0, // terracotta-outline
+        0.2568, 0.013158, 299.58, 1.0, // auth-interior
         0.6, 0.069, 292.0, 1.0, // auth-border
-        0.32, 0.010241, 306.0, 1.0, // toggle-off
-        0.52, 0.019038, 306.0, 1.0, // toggle-off-stroke
-        0.62, 0.025385, 306.0, 1.0, // ghost-stroke
-        0.6, 0.033846, 312.0, 1.0, // modal-border
-        0.24, 0.008316, 300.0, 1.0, // menu-paper
+        0.32, 0.007315, 306.0, 1.0, // toggle-off
+        0.52, 0.013327, 306.0, 1.0, // toggle-off-stroke
+        0.62, 0.017769, 306.0, 1.0, // ghost-stroke
+        0.6, 0.023692, 312.0, 1.0, // modal-border
+        0.24, 0.00594, 300.0, 1.0, // menu-paper
         0.52, 0.0575, 292.0, 1.0, // menu-frame
-        0.7, 0.024538, 306.6, 1.0, // segment-idle-ink
+        0.7, 0.017177, 306.6, 1.0, // segment-idle-ink
         0.67, 0.069, 292.0, 1.0, // link-wave
-        0.88, 0.016923, 312.0, 0.08, // story-code-tint
-        0.15, 0.005775, 298.0, 1.0, // footer-bg
-        0.88, 0.016923, 312.0, 1.0, // footer-ink
+        0.88, 0.011846, 312.0, 0.08, // story-code-tint
+        0.15, 0.004125, 298.0, 1.0, // footer-bg
+        0.88, 0.011846, 312.0, 1.0, // footer-ink
         0.4, 0.069, 290.0, 1.0, // cta-band
-        0.93, 0.016923, 312.0, 1.0, // cta-ink
+        0.93, 0.011846, 312.0, 1.0, // cta-ink
         0.312, 0.05382, 290.0, 1.0, // cta-ghost
         0.4, 0.069, 290.0, 1.0, // cta-verb-ink
-        0.2912, 0.009005, 300.96, 0.85, // skeleton-base
-        0.3, 0.0077, 298.0, 1.0, // skeleton-glow
-        0.24, 0.008316, 300.0, 1.0, // avatar-wait
+        0.2912, 0.006412, 300.96, 0.85, // skeleton-base
+        0.3, 0.0055, 298.0, 1.0, // skeleton-glow
+        0.24, 0.00594, 300.0, 1.0, // avatar-wait
         1.0, 0.0, 0.0, 1.0, // apple-fill
         0.0, 0.0, 0.0, 1.0, // apple-label
         0.7, 0.15, 25.0, 1.0, // color-danger
@@ -1461,49 +1461,49 @@ internal object PaletteTables {
 
     /** yellow, light. */
     val YELLOW_LIGHT: DoubleArray get() = doubleArrayOf(
-        0.965, 0.015, 95.0, 1.0, // color-cream
-        0.93, 0.018, 95.0, 1.0, // color-cream-dark
-        0.975, 0.00975, 98.0, 1.0, // color-card-bg
+        0.965, 0.011, 95.0, 1.0, // color-cream
+        0.93, 0.0132, 95.0, 1.0, // color-cream-dark
+        0.975, 0.00715, 98.0, 1.0, // color-card-bg
         0.64, 0.13, 78.0, 1.0, // color-terracotta
         0.9, 0.09, 90.0, 1.0, // color-terracotta-light
-        0.26, 0.03, 80.0, 1.0, // color-text
-        0.52, 0.045, 88.0, 1.0, // color-text-muted
-        0.8, 0.025, 92.0, 1.0, // field-border
-        0.6, 0.045, 85.0, 1.0, // field-border-hover
-        0.64, 0.035, 90.0, 1.0, // placeholder
-        0.9247, 0.0615, 91.9, 1.0, // bubble-mine
-        0.91565, 0.01605, 93.95, 1.0, // bubble-theirs
-        0.88745, 0.01665, 93.35, 1.0, // bubble-quote
-        0.4498, 0.04095, 85.84, 1.0, // link-card-muted
+        0.26, 0.021, 80.0, 1.0, // color-text
+        0.52, 0.0315, 88.0, 1.0, // color-text-muted
+        0.8, 0.0175, 92.0, 1.0, // field-border
+        0.6, 0.0315, 85.0, 1.0, // field-border-hover
+        0.64, 0.0245, 90.0, 1.0, // placeholder
+        0.9247, 0.05998, 91.9, 1.0, // bubble-mine
+        0.91565, 0.0117, 93.95, 1.0, // bubble-theirs
+        0.88745, 0.0121, 93.35, 1.0, // bubble-quote
+        0.4498, 0.028665, 85.84, 1.0, // link-card-muted
         0.72, 0.16, 83.0, 1.0, // reading-progress
         0.5376, 0.1092, 78.0, 1.0, // button-fill
-        0.9075, 0.072, 91.25, 1.0, // button-tonal
+        0.9075, 0.0708, 91.25, 1.0, // button-tonal
         0.4992, 0.1014, 78.0, 1.0, // button-on-tonal
         0.416, 0.0845, 78.0, 1.0, // terracotta-ink
         0.48, 0.0975, 78.0, 1.0, // terracotta-deep
         0.544, 0.1105, 78.0, 1.0, // terracotta-outline
-        0.9645, 0.020985, 96.88, 1.0, // auth-interior
+        0.9645, 0.018749, 96.88, 1.0, // auth-interior
         0.5248, 0.1066, 78.0, 1.0, // auth-border
-        0.86, 0.01995, 95.0, 1.0, // toggle-off
-        0.7, 0.03375, 88.0, 1.0, // toggle-off-stroke
-        0.44, 0.045, 88.0, 1.0, // ghost-stroke
-        0.4, 0.06, 80.0, 1.0, // modal-border
-        0.965, 0.015, 95.0, 1.0, // menu-paper
+        0.86, 0.01463, 95.0, 1.0, // toggle-off
+        0.7, 0.023625, 88.0, 1.0, // toggle-off-stroke
+        0.44, 0.0315, 88.0, 1.0, // ghost-stroke
+        0.4, 0.042, 80.0, 1.0, // modal-border
+        0.965, 0.011, 95.0, 1.0, // menu-paper
         0.64, 0.13, 78.0, 1.0, // menu-frame
-        0.468, 0.0405, 88.0, 1.0, // segment-idle-ink
+        0.468, 0.02835, 88.0, 1.0, // segment-idle-ink
         0.67, 0.078, 78.0, 1.0, // link-wave
-        0.26, 0.03, 80.0, 0.06, // story-code-tint
-        0.26, 0.03, 80.0, 1.0, // footer-bg
-        0.965, 0.015, 95.0, 1.0, // footer-ink
+        0.26, 0.021, 80.0, 0.06, // story-code-tint
+        0.26, 0.021, 80.0, 1.0, // footer-bg
+        0.965, 0.011, 95.0, 1.0, // footer-ink
         0.512, 0.104, 78.0, 1.0, // cta-band
-        0.965, 0.015, 95.0, 1.0, // cta-ink
+        0.965, 0.011, 95.0, 1.0, // cta-ink
         0.362, 0.073531, 78.0, 1.0, // cta-ghost
         0.4992, 0.1014, 78.0, 1.0, // cta-verb-ink
-        0.8898, 0.01872, 94.1, 0.85, // skeleton-base
-        0.965, 0.015, 95.0, 1.0, // skeleton-glow
-        0.93, 0.018, 95.0, 1.0, // avatar-wait
-        0.26, 0.03, 80.0, 1.0, // apple-fill
-        0.965, 0.015, 95.0, 1.0, // apple-label
+        0.8898, 0.013668, 94.1, 0.85, // skeleton-base
+        0.965, 0.011, 95.0, 1.0, // skeleton-glow
+        0.93, 0.0132, 95.0, 1.0, // avatar-wait
+        0.26, 0.021, 80.0, 1.0, // apple-fill
+        0.965, 0.011, 95.0, 1.0, // apple-label
         0.58, 0.16, 25.0, 1.0, // color-danger
         0.5336, 0.1472, 25.0, 1.0, // danger-fill
         0.9, 0.048, 25.0, 1.0, // button-danger-tonal
@@ -1608,47 +1608,47 @@ internal object PaletteTables {
 
     /** yellow, dark. */
     val YELLOW_DARK: DoubleArray get() = doubleArrayOf(
-        0.205, 0.0105, 88.0, 1.0, // color-cream
-        0.17, 0.008925, 86.0, 1.0, // color-cream-dark
-        0.24, 0.01134, 90.0, 1.0, // color-card-bg
+        0.205, 0.0075, 88.0, 1.0, // color-cream
+        0.17, 0.006375, 86.0, 1.0, // color-cream-dark
+        0.24, 0.0081, 90.0, 1.0, // color-card-bg
         0.79, 0.125, 80.0, 1.0, // color-terracotta
         0.36, 0.0625, 85.0, 1.0, // color-terracotta-light
-        0.88, 0.023077, 102.0, 1.0, // color-text
-        0.68, 0.034615, 96.0, 1.0, // color-text-muted
-        0.4, 0.023077, 96.0, 1.0, // field-border
-        0.48, 0.028846, 92.0, 1.0, // field-border-hover
-        0.58, 0.034615, 96.0, 1.0, // placeholder
-        0.329, 0.0521, 85.6, 1.0, // bubble-mine
-        0.2725, 0.011758, 89.4, 1.0, // bubble-theirs
-        0.24, 0.008925, 92.0, 1.0, // bubble-quote
-        0.75, 0.030577, 98.1, 1.0, // link-card-muted
+        0.88, 0.016154, 102.0, 1.0, // color-text
+        0.68, 0.024231, 96.0, 1.0, // color-text-muted
+        0.4, 0.016154, 96.0, 1.0, // field-border
+        0.48, 0.020192, 92.0, 1.0, // field-border-hover
+        0.58, 0.024231, 96.0, 1.0, // placeholder
+        0.329, 0.0515, 85.6, 1.0, // bubble-mine
+        0.2725, 0.008365, 89.4, 1.0, // bubble-theirs
+        0.24, 0.006375, 92.0, 1.0, // bubble-quote
+        0.75, 0.021404, 98.1, 1.0, // link-card-muted
         0.86, 0.14, 87.0, 1.0, // reading-progress
         0.79, 0.125, 80.0, 1.0, // button-fill
-        0.3125, 0.049106, 85.25, 1.0, // button-tonal
+        0.3125, 0.048469, 85.25, 1.0, // button-tonal
         0.89, 0.09375, 87.0, 1.0, // button-on-tonal
-        0.8215, 0.089327, 87.7, 1.0, // terracotta-ink
-        0.8125, 0.099519, 85.5, 1.0, // terracotta-deep
-        0.8035, 0.109712, 83.3, 1.0, // terracotta-outline
-        0.2568, 0.018502, 89.3, 1.0, // auth-interior
+        0.8215, 0.086904, 87.7, 1.0, // terracotta-ink
+        0.8125, 0.097788, 85.5, 1.0, // terracotta-deep
+        0.8035, 0.108673, 83.3, 1.0, // terracotta-outline
+        0.2568, 0.015716, 89.3, 1.0, // auth-interior
         0.6, 0.075, 80.0, 1.0, // auth-border
-        0.32, 0.013965, 96.0, 1.0, // toggle-off
-        0.52, 0.025962, 96.0, 1.0, // toggle-off-stroke
-        0.62, 0.034615, 96.0, 1.0, // ghost-stroke
-        0.6, 0.046154, 102.0, 1.0, // modal-border
-        0.24, 0.01134, 90.0, 1.0, // menu-paper
+        0.32, 0.009975, 96.0, 1.0, // toggle-off
+        0.52, 0.018173, 96.0, 1.0, // toggle-off-stroke
+        0.62, 0.024231, 96.0, 1.0, // ghost-stroke
+        0.6, 0.032308, 102.0, 1.0, // modal-border
+        0.24, 0.0081, 90.0, 1.0, // menu-paper
         0.52, 0.0625, 80.0, 1.0, // menu-frame
-        0.7, 0.033462, 96.6, 1.0, // segment-idle-ink
+        0.7, 0.023423, 96.6, 1.0, // segment-idle-ink
         0.73, 0.075, 80.0, 1.0, // link-wave
-        0.88, 0.023077, 102.0, 0.08, // story-code-tint
-        0.15, 0.007875, 88.0, 1.0, // footer-bg
-        0.88, 0.023077, 102.0, 1.0, // footer-ink
+        0.88, 0.016154, 102.0, 0.08, // story-code-tint
+        0.15, 0.005625, 88.0, 1.0, // footer-bg
+        0.88, 0.016154, 102.0, 1.0, // footer-ink
         0.4, 0.075, 78.0, 1.0, // cta-band
-        0.93, 0.023077, 102.0, 1.0, // cta-ink
+        0.93, 0.016154, 102.0, 1.0, // cta-ink
         0.312, 0.0585, 78.0, 1.0, // cta-ghost
         0.4, 0.075, 78.0, 1.0, // cta-verb-ink
-        0.2912, 0.012279, 90.96, 0.85, // skeleton-base
-        0.3, 0.0105, 88.0, 1.0, // skeleton-glow
-        0.24, 0.01134, 90.0, 1.0, // avatar-wait
+        0.2912, 0.008744, 90.96, 0.85, // skeleton-base
+        0.3, 0.0075, 88.0, 1.0, // skeleton-glow
+        0.24, 0.0081, 90.0, 1.0, // avatar-wait
         1.0, 0.0, 0.0, 1.0, // apple-fill
         0.0, 0.0, 0.0, 1.0, // apple-label
         0.7, 0.15, 25.0, 1.0, // color-danger

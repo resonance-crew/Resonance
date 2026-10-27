@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Each theme's night paper and accent in dark (palette.ts color-cream, color-terracotta), as values/colors.xml's in light. -->
-    <color name="paper">#1B1612</color>
-    <color name="paper_sage">#151814</color>
-    <color name="paper_lavender">#17161A</color>
-    <color name="paper_yellow">#191712</color>
+    <color name="paper">#1A1613</color>
+    <color name="paper_sage">#161815</color>
+    <color name="paper_lavender">#171719</color>
+    <color name="paper_yellow">#191713</color>
     <color name="accent_terracotta">#E58553</color>
     <color name="accent_sage">#75BC78</color>
     <color name="accent_lavender">#A99AEA</color>
