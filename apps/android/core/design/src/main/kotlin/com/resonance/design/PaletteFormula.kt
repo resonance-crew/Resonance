@@ -95,7 +95,7 @@ object PaletteFormula {
             "color-text" to lch(0.88, 0.02 * k, h + 14),
             "color-text-muted" to lch(0.68, 0.03 * k, h + 8),
             "field-border" to lch(0.4, 0.02 * k, h + 8),
-            "field-border-hover" to lch(0.6, 0.035 * k, h + 4),
+            "field-border-hover" to lch(0.48, 0.025 * k, h + 4),
             "placeholder" to lch(0.58, 0.03 * k, h + 8),
             "color-terracotta" to accent,
             "color-terracotta-light" to fitGamut(lch(0.36, accent.c * 0.5, accent.h + 5)),
@@ -141,6 +141,7 @@ object PaletteFormula {
         val well = b.getValue("color-cream-dark")
         val text = b.getValue("color-text")
         val muted = b.getValue("color-text-muted")
+        val lightBand = deepenUntil(accent, 0.12, cream, 5.2)
         return mapOf(
             "bubble-mine" to over(wash, 0.62, cream),
             "bubble-theirs" to over(text, 0.07, cream),
@@ -164,9 +165,9 @@ object PaletteFormula {
             "story-code-tint" to text.copy(alpha = 0.06),
             "footer-bg" to text,
             "footer-ink" to cream,
-            "cta-band" to accent,
+            "cta-band" to lightBand,
             "cta-ink" to cream,
-            "cta-ghost" to mixWithBlack(accent, 0.18),
+            "cta-ghost" to ctaGhost(lightBand),
             "cta-verb-ink" to deepenUntil(accent, 0.22, over(wash, 0.75, well), 4.6),
             "skeleton-base" to over(text, 0.06, well).copy(alpha = 0.85),
             "skeleton-glow" to cream,
@@ -183,7 +184,7 @@ object PaletteFormula {
         val wash = b.getValue("color-terracotta-light")
         val text = b.getValue("color-text")
         val muted = b.getValue("color-text-muted")
-        val band = fitGamut(lch(0.44, accent.c * 0.78, accent.h - 2))
+        val band = fitGamut(lch(0.4, accent.c * 0.6, accent.h - 2))
         return mapOf(
             "bubble-mine" to over(wash, 0.8, paper),
             "bubble-theirs" to over(text, 0.1, paper),
@@ -197,11 +198,11 @@ object PaletteFormula {
             "terracotta-deep" to over(accent, 0.75, text),
             "terracotta-outline" to over(accent, 0.85, text),
             "auth-interior" to over(wash, 0.14, b.getValue("color-card-bg")),
-            "auth-border" to over(accent, 0.82, text),
+            "auth-border" to fitGamut(lch(0.6, accent.c * 0.6, accent.h)),
             "toggle-off" to lch(0.32, paper.c * 1.33, paper.h + 8),
             "toggle-off-stroke" to lch(0.52, muted.c * 0.75, muted.h),
-            "ghost-stroke" to lch(0.78, muted.c, muted.h),
-            "modal-border" to lch(0.8, text.c * 2, text.h),
+            "ghost-stroke" to lch(0.62, muted.c, muted.h),
+            "modal-border" to lch(0.6, text.c * 2, text.h),
             "segment-idle-ink" to over(text, 0.1, muted),
             "link-wave" to lch(accent.l - 0.06, accent.c * 0.6, accent.h),
             "story-code-tint" to text.copy(alpha = 0.08),
@@ -238,6 +239,9 @@ object PaletteFormula {
     }
 
     // ── colour maths (palette.ts / oklch.ts) ─────────────────────────────────────
+
+    /** palette.ts `ctaGhost`: the call-to-action band's second action, 15 points of lightness under the band. */
+    private fun ctaGhost(band: Lch): Lch = mixWithBlack(band, min(0.5, 0.15 / band.l))
 
     /** CSS Color 5 `color-mix(in oklch, c, black share)`: black has no hue, so c's carries. */
     private fun mixWithBlack(c: Lch, share: Double): Lch {

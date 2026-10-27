@@ -76,7 +76,7 @@ class PaletteFormulaTest {
             assertEquals(role.key, want["dark"]!!.jsonArray.map { it.jsonPrimitive.double }, role.dark)
         }
         val dark = ResonanceColors.of(PaletteTheme.Sage, dark = true)
-        assertEquals(OklchColor.of(0.72, 0.0825, 200.0, 0.55), dark.hue(HueRole.Pen, 200.0, 0.55))
+        assertEquals(OklchColor.of(0.56, 0.05, 200.0, 0.55), dark.hue(HueRole.Pen, 200.0, 0.55))
         assertEquals(OklchColor.of(0.975, 0.012, 20.0), ResonanceColors.LightTerracotta.hue(HueRole.Interior, 380.0))
     }
 
