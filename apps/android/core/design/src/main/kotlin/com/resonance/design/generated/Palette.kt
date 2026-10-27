@@ -168,162 +168,164 @@ class ResonanceColors(
     val PhotoShade: Color = at(63)
     /** --viewer-ground */
     val ViewerGround: Color = at(64)
+    /** --reaction-outline */
+    val ReactionOutline: Color = at(65)
     /** --card-fill-0 */
-    val CardFill0: Color = at(65)
+    val CardFill0: Color = at(66)
     /** --card-fill-1 */
-    val CardFill1: Color = at(66)
+    val CardFill1: Color = at(67)
     /** --card-fill-2 */
-    val CardFill2: Color = at(67)
+    val CardFill2: Color = at(68)
     /** --card-fill-3 */
-    val CardFill3: Color = at(68)
+    val CardFill3: Color = at(69)
     /** --card-fill-4 */
-    val CardFill4: Color = at(69)
+    val CardFill4: Color = at(70)
     /** --card-fill-5 */
-    val CardFill5: Color = at(70)
+    val CardFill5: Color = at(71)
     /** --card-border-0 */
-    val CardBorder0: Color = at(71)
+    val CardBorder0: Color = at(72)
     /** --card-border-1 */
-    val CardBorder1: Color = at(72)
+    val CardBorder1: Color = at(73)
     /** --card-border-2 */
-    val CardBorder2: Color = at(73)
+    val CardBorder2: Color = at(74)
     /** --card-border-3 */
-    val CardBorder3: Color = at(74)
+    val CardBorder3: Color = at(75)
     /** --card-border-4 */
-    val CardBorder4: Color = at(75)
+    val CardBorder4: Color = at(76)
     /** --card-border-5 */
-    val CardBorder5: Color = at(76)
+    val CardBorder5: Color = at(77)
     /** --card-border-deep-0 */
-    val CardBorderDeep0: Color = at(77)
+    val CardBorderDeep0: Color = at(78)
     /** --card-border-deep-1 */
-    val CardBorderDeep1: Color = at(78)
+    val CardBorderDeep1: Color = at(79)
     /** --card-border-deep-2 */
-    val CardBorderDeep2: Color = at(79)
+    val CardBorderDeep2: Color = at(80)
     /** --card-border-deep-3 */
-    val CardBorderDeep3: Color = at(80)
+    val CardBorderDeep3: Color = at(81)
     /** --card-border-deep-4 */
-    val CardBorderDeep4: Color = at(81)
+    val CardBorderDeep4: Color = at(82)
     /** --card-border-deep-5 */
-    val CardBorderDeep5: Color = at(82)
+    val CardBorderDeep5: Color = at(83)
     /** --card-interior-0 */
-    val CardInterior0: Color = at(83)
+    val CardInterior0: Color = at(84)
     /** --card-interior-1 */
-    val CardInterior1: Color = at(84)
+    val CardInterior1: Color = at(85)
     /** --card-interior-2 */
-    val CardInterior2: Color = at(85)
+    val CardInterior2: Color = at(86)
     /** --card-interior-3 */
-    val CardInterior3: Color = at(86)
+    val CardInterior3: Color = at(87)
     /** --card-interior-4 */
-    val CardInterior4: Color = at(87)
+    val CardInterior4: Color = at(88)
     /** --card-interior-5 */
-    val CardInterior5: Color = at(88)
+    val CardInterior5: Color = at(89)
     /** --card-separator-0 */
-    val CardSeparator0: Color = at(89)
+    val CardSeparator0: Color = at(90)
     /** --card-separator-1 */
-    val CardSeparator1: Color = at(90)
+    val CardSeparator1: Color = at(91)
     /** --card-separator-2 */
-    val CardSeparator2: Color = at(91)
+    val CardSeparator2: Color = at(92)
     /** --card-separator-3 */
-    val CardSeparator3: Color = at(92)
+    val CardSeparator3: Color = at(93)
     /** --card-separator-4 */
-    val CardSeparator4: Color = at(93)
+    val CardSeparator4: Color = at(94)
     /** --card-separator-5 */
-    val CardSeparator5: Color = at(94)
+    val CardSeparator5: Color = at(95)
     /** --card-note-ink-0 */
-    val CardNoteInk0: Color = at(95)
+    val CardNoteInk0: Color = at(96)
     /** --card-note-ink-1 */
-    val CardNoteInk1: Color = at(96)
+    val CardNoteInk1: Color = at(97)
     /** --card-note-ink-2 */
-    val CardNoteInk2: Color = at(97)
+    val CardNoteInk2: Color = at(98)
     /** --card-note-ink-3 */
-    val CardNoteInk3: Color = at(98)
+    val CardNoteInk3: Color = at(99)
     /** --card-note-ink-4 */
-    val CardNoteInk4: Color = at(99)
+    val CardNoteInk4: Color = at(100)
     /** --card-note-ink-5 */
-    val CardNoteInk5: Color = at(100)
+    val CardNoteInk5: Color = at(101)
     /** --card-stripe-0 */
-    val CardStripe0: Color = at(101)
+    val CardStripe0: Color = at(102)
     /** --card-stripe-1 */
-    val CardStripe1: Color = at(102)
+    val CardStripe1: Color = at(103)
     /** --card-stripe-2 */
-    val CardStripe2: Color = at(103)
+    val CardStripe2: Color = at(104)
     /** --card-stripe-3 */
-    val CardStripe3: Color = at(104)
+    val CardStripe3: Color = at(105)
     /** --card-stripe-4 */
-    val CardStripe4: Color = at(105)
+    val CardStripe4: Color = at(106)
     /** --card-stripe-5 */
-    val CardStripe5: Color = at(106)
+    val CardStripe5: Color = at(107)
     /** --card-accent-0 */
-    val CardAccent0: Color = at(107)
+    val CardAccent0: Color = at(108)
     /** --card-accent-1 */
-    val CardAccent1: Color = at(108)
+    val CardAccent1: Color = at(109)
     /** --card-accent-2 */
-    val CardAccent2: Color = at(109)
+    val CardAccent2: Color = at(110)
     /** --card-accent-3 */
-    val CardAccent3: Color = at(110)
+    val CardAccent3: Color = at(111)
     /** --card-accent-4 */
-    val CardAccent4: Color = at(111)
+    val CardAccent4: Color = at(112)
     /** --card-accent-5 */
-    val CardAccent5: Color = at(112)
+    val CardAccent5: Color = at(113)
     /** --card-hover-0 */
-    val CardHover0: Color = at(113)
+    val CardHover0: Color = at(114)
     /** --card-hover-1 */
-    val CardHover1: Color = at(114)
+    val CardHover1: Color = at(115)
     /** --card-hover-2 */
-    val CardHover2: Color = at(115)
+    val CardHover2: Color = at(116)
     /** --card-hover-3 */
-    val CardHover3: Color = at(116)
+    val CardHover3: Color = at(117)
     /** --card-hover-4 */
-    val CardHover4: Color = at(117)
+    val CardHover4: Color = at(118)
     /** --card-hover-5 */
-    val CardHover5: Color = at(118)
+    val CardHover5: Color = at(119)
     /** --card-skeleton-0 */
-    val CardSkeleton0: Color = at(119)
+    val CardSkeleton0: Color = at(120)
     /** --card-skeleton-1 */
-    val CardSkeleton1: Color = at(120)
+    val CardSkeleton1: Color = at(121)
     /** --card-skeleton-2 */
-    val CardSkeleton2: Color = at(121)
+    val CardSkeleton2: Color = at(122)
     /** --card-skeleton-3 */
-    val CardSkeleton3: Color = at(122)
+    val CardSkeleton3: Color = at(123)
     /** --card-skeleton-4 */
-    val CardSkeleton4: Color = at(123)
+    val CardSkeleton4: Color = at(124)
     /** --card-skeleton-5 */
-    val CardSkeleton5: Color = at(124)
+    val CardSkeleton5: Color = at(125)
     /** --card-tag-0 */
-    val CardTag0: Color = at(125)
+    val CardTag0: Color = at(126)
     /** --card-tag-1 */
-    val CardTag1: Color = at(126)
+    val CardTag1: Color = at(127)
     /** --card-tag-2 */
-    val CardTag2: Color = at(127)
+    val CardTag2: Color = at(128)
     /** --card-tag-3 */
-    val CardTag3: Color = at(128)
+    val CardTag3: Color = at(129)
     /** --card-tag-4 */
-    val CardTag4: Color = at(129)
+    val CardTag4: Color = at(130)
     /** --card-tag-5 */
-    val CardTag5: Color = at(130)
+    val CardTag5: Color = at(131)
     /** --card-pill-0 */
-    val CardPill0: Color = at(131)
+    val CardPill0: Color = at(132)
     /** --card-pill-1 */
-    val CardPill1: Color = at(132)
+    val CardPill1: Color = at(133)
     /** --card-pill-2 */
-    val CardPill2: Color = at(133)
+    val CardPill2: Color = at(134)
     /** --card-pill-3 */
-    val CardPill3: Color = at(134)
+    val CardPill3: Color = at(135)
     /** --card-pill-4 */
-    val CardPill4: Color = at(135)
+    val CardPill4: Color = at(136)
     /** --card-pill-5 */
-    val CardPill5: Color = at(136)
+    val CardPill5: Color = at(137)
     /** --card-pill-ink-0 */
-    val CardPillInk0: Color = at(137)
+    val CardPillInk0: Color = at(138)
     /** --card-pill-ink-1 */
-    val CardPillInk1: Color = at(138)
+    val CardPillInk1: Color = at(139)
     /** --card-pill-ink-2 */
-    val CardPillInk2: Color = at(139)
+    val CardPillInk2: Color = at(140)
     /** --card-pill-ink-3 */
-    val CardPillInk3: Color = at(140)
+    val CardPillInk3: Color = at(141)
     /** --card-pill-ink-4 */
-    val CardPillInk4: Color = at(141)
+    val CardPillInk4: Color = at(142)
     /** --card-pill-ink-5 */
-    val CardPillInk5: Color = at(142)
+    val CardPillInk5: Color = at(143)
 
     /** --card-fill-0…5, in CardPalette.HUES order. */
     val CardFills: List<Color> = listOf(CardFill0, CardFill1, CardFill2, CardFill3, CardFill4, CardFill5)
@@ -450,6 +452,7 @@ class ResonanceColors(
             "photo-ink",
             "photo-shade",
             "viewer-ground",
+            "reaction-outline",
             "card-fill-0",
             "card-fill-1",
             "card-fill-2",
@@ -646,6 +649,7 @@ internal object PaletteTables {
         0.965, 0.015, 75.0, 1.0, // photo-ink
         0.3, 0.02, 70.0, 1.0, // photo-shade
         0.12, 0.01, 60.0, 1.0, // viewer-ground
+        0.3, 0.035, 45.0, 1.0, // reaction-outline
         0.9, 0.065, 55.0, 1.0, // card-fill-0
         0.94, 0.032, 290.0, 1.0, // card-fill-1
         0.93, 0.042, 140.0, 1.0, // card-fill-2
@@ -793,6 +797,7 @@ internal object PaletteTables {
         0.965, 0.015, 75.0, 1.0, // photo-ink
         0.3, 0.02, 70.0, 1.0, // photo-shade
         0.12, 0.01, 60.0, 1.0, // viewer-ground
+        0.9, 0.015, 75.0, 1.0, // reaction-outline
         0.3, 0.04875, 55.0, 1.0, // card-fill-0
         0.3, 0.024, 290.0, 1.0, // card-fill-1
         0.3, 0.0315, 140.0, 1.0, // card-fill-2
@@ -940,6 +945,7 @@ internal object PaletteTables {
         0.965, 0.015, 75.0, 1.0, // photo-ink
         0.3, 0.02, 70.0, 1.0, // photo-shade
         0.12, 0.01, 60.0, 1.0, // viewer-ground
+        0.3, 0.035, 45.0, 1.0, // reaction-outline
         0.9, 0.065, 55.0, 1.0, // card-fill-0
         0.94, 0.032, 290.0, 1.0, // card-fill-1
         0.93, 0.042, 140.0, 1.0, // card-fill-2
@@ -1087,6 +1093,7 @@ internal object PaletteTables {
         0.965, 0.015, 75.0, 1.0, // photo-ink
         0.3, 0.02, 70.0, 1.0, // photo-shade
         0.12, 0.01, 60.0, 1.0, // viewer-ground
+        0.9, 0.015, 75.0, 1.0, // reaction-outline
         0.3, 0.04875, 55.0, 1.0, // card-fill-0
         0.3, 0.024, 290.0, 1.0, // card-fill-1
         0.3, 0.0315, 140.0, 1.0, // card-fill-2
@@ -1234,6 +1241,7 @@ internal object PaletteTables {
         0.965, 0.015, 75.0, 1.0, // photo-ink
         0.3, 0.02, 70.0, 1.0, // photo-shade
         0.12, 0.01, 60.0, 1.0, // viewer-ground
+        0.3, 0.035, 45.0, 1.0, // reaction-outline
         0.9, 0.065, 55.0, 1.0, // card-fill-0
         0.94, 0.032, 290.0, 1.0, // card-fill-1
         0.93, 0.042, 140.0, 1.0, // card-fill-2
@@ -1381,6 +1389,7 @@ internal object PaletteTables {
         0.965, 0.015, 75.0, 1.0, // photo-ink
         0.3, 0.02, 70.0, 1.0, // photo-shade
         0.12, 0.01, 60.0, 1.0, // viewer-ground
+        0.9, 0.015, 75.0, 1.0, // reaction-outline
         0.3, 0.04875, 55.0, 1.0, // card-fill-0
         0.3, 0.024, 290.0, 1.0, // card-fill-1
         0.3, 0.0315, 140.0, 1.0, // card-fill-2
@@ -1528,6 +1537,7 @@ internal object PaletteTables {
         0.965, 0.015, 75.0, 1.0, // photo-ink
         0.3, 0.02, 70.0, 1.0, // photo-shade
         0.12, 0.01, 60.0, 1.0, // viewer-ground
+        0.3, 0.035, 45.0, 1.0, // reaction-outline
         0.9, 0.065, 55.0, 1.0, // card-fill-0
         0.94, 0.032, 290.0, 1.0, // card-fill-1
         0.93, 0.042, 140.0, 1.0, // card-fill-2
@@ -1675,6 +1685,7 @@ internal object PaletteTables {
         0.965, 0.015, 75.0, 1.0, // photo-ink
         0.3, 0.02, 70.0, 1.0, // photo-shade
         0.12, 0.01, 60.0, 1.0, // viewer-ground
+        0.9, 0.015, 75.0, 1.0, // reaction-outline
         0.3, 0.04875, 55.0, 1.0, // card-fill-0
         0.3, 0.024, 290.0, 1.0, // card-fill-1
         0.3, 0.0315, 140.0, 1.0, // card-fill-2

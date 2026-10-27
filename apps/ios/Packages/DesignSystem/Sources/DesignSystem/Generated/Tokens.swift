@@ -135,6 +135,8 @@ public nonisolated enum Tokens {
     public static let photoShade = Color(uiColor: UI.photoShade)
     /// --viewer-ground · terracotta: light #080503, dark #080503
     public static let viewerGround = Color(uiColor: UI.viewerGround)
+    /// --reaction-outline · terracotta: light #3d281f, dark #e4ddd3
+    public static let reactionOutline = Color(uiColor: UI.reactionOutline)
     /// --card-fill-0 · terracotta: light #ffd3b6, dark #412715
     public static let cardFill0 = Color(uiColor: UI.cardFill0)
     /// --card-fill-1 · terracotta: light #eae8ff, dark #2d2c39
@@ -541,6 +543,7 @@ extension Tokens {
         public static let photoInk = Palette.uiColor(.photoInk)
         public static let photoShade = Palette.uiColor(.photoShade)
         public static let viewerGround = Palette.uiColor(.viewerGround)
+        public static let reactionOutline = Palette.uiColor(.reactionOutline)
         public static let cardFill0 = Palette.uiColor(.cardFill0)
         public static let cardFill1 = Palette.uiColor(.cardFill1)
         public static let cardFill2 = Palette.uiColor(.cardFill2)

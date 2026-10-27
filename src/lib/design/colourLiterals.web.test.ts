@@ -22,6 +22,7 @@ const ALLOWED: { path: string; why: string }[] = [
   { path: 'src/styles/palette.css', why: 'generated from the palette' },
   { path: 'src/lib/design/cardColours.ts', why: "light card families for what draws without the page's CSS (og image, share card)" },
   { path: 'src/lib/design/avatarColors.ts', why: 'stored avatar colours (data, drawn through personFill)' },
+  { path: 'src/lib/design/reactions.ts', why: "the reaction stickers keep their colours in both schemes, as emoji do (the rim is the palette's)" },
   { path: 'src/lib/share/', why: 'the 9:16 share card: always light terracotta' },
   { path: 'src/lib/linkImage/', why: 'the og image: always light terracotta' },
   { path: 'src/app/api/og/', why: 'the og image routes: always light terracotta' },

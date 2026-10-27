@@ -207,6 +207,9 @@ object Tokens {
     /** --viewer-ground */
     val ViewerGround: Color
         @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.ViewerGround
+    /** --reaction-outline */
+    val ReactionOutline: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.ReactionOutline
     /** --card-fill-0 */
     val CardFill0: Color
         @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.CardFill0

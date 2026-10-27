@@ -270,6 +270,7 @@ const SCHEME_TOKENS = [
   'photo-ink',
   'photo-shade',
   'viewer-ground',
+  'reaction-outline',
 ] as const;
 type SchemeToken = (typeof SCHEME_TOKENS)[number];
 
@@ -447,6 +448,9 @@ const SCHEME_VALUES: Record<Scheme, Record<SchemeToken, Oklch>> = {
     'photo-ink': o('oklch(96.5% 0.015 75)'),
     'photo-shade': o('oklch(30% 0.02 70)'),
     'viewer-ground': o('oklch(12% 0.01 60)'),
+    // A reaction sticker's outer rim (lib/design/reactions): its deep brown on paper, chalk on the night's — a
+    // die-cut sticker's edge, so it never melts into the dark. Its features stay brown in both.
+    'reaction-outline': o('oklch(30% 0.035 45)'),
   },
   dark: {
     'color-danger': o('oklch(70% 0.15 25)'),
@@ -472,6 +476,7 @@ const SCHEME_VALUES: Record<Scheme, Record<SchemeToken, Oklch>> = {
     'photo-ink': o('oklch(96.5% 0.015 75)'),
     'photo-shade': o('oklch(30% 0.02 70)'),
     'viewer-ground': o('oklch(12% 0.01 60)'),
+    'reaction-outline': o('oklch(90% 0.015 75)'),
   },
 };
 
