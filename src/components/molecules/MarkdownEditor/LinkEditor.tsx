@@ -34,6 +34,8 @@ export interface LinkEditorProps {
   /** Closed with nothing changed (the backdrop, Escape): back to the story. */
   onCancel: () => void;
   seed: number;
+  /** The part of the page it centres over (the writer's pane at the desktop split), else the window. */
+  centerOver?: () => HTMLElement | null;
 }
 
 const DISPLAYS: LinkDisplay[] = ['card', 'text'];
@@ -46,13 +48,17 @@ const DISPLAYS: LinkDisplay[] = ['card', 'text'];
  * the writer's), focused with its text selected; 顯示為 on its own line and
  * the 卡片 | 文字 choice under it — the publish step's segmented choice — only
  * where the link is or will be alone in its paragraph; and the foot:
- * 移除連結 (quiet) at its start for a link being edited, 完成 at its end.
- * Enter is 完成. An address the link rules don't take (`linkTarget`: http(s)
+ * 移除連結 (a quiet text button: words alone, the muted ink — it removes only
+ * the link, so never red) at its start for a link being edited, 完成 at its
+ * end; the field, the choice and the buttons one height, 44 (round 17 review
+ * D5 / W10). Enter is 完成. An address the link rules don't take (`linkTarget`: http(s)
  * only, a bare `example.com/x` gets https://) keeps it open with one muted
  * line under the field. On a phone it sits centred in the room the keyboard
- * leaves; closed, the story has its focus and selection back (its host's).
+ * leaves; at the desktop split, over the writer's pane (`centerOver`), not
+ * across the map beside it; closed, the story has its focus and selection back
+ * (its host's).
  */
-export function LinkEditor({ session, sessionKey, onApply, onRemove, onCancel, seed }: LinkEditorProps) {
+export function LinkEditor({ session, sessionKey, onApply, onRemove, onCancel, seed, centerOver }: LinkEditorProps) {
   const t = useTranslations('write.editor');
   const title = session?.editing ? t('linkEdit') : t('insertLink');
   return (
@@ -64,6 +70,7 @@ export function LinkEditor({ session, sessionKey, onApply, onRemove, onCancel, s
       padding="26px 24px 22px"
       ariaLabel={title}
       keyboardAware
+      centerOver={centerOver}
     >
       {session && <LinkForm key={sessionKey} session={session} title={title} seed={seed} onApply={onApply} onRemove={onRemove} />}
     </Modal>
@@ -184,7 +191,7 @@ function LinkForm({
       )}
       <div className={styles.actions}>
         {session.editing && (
-          <OrganicButton variant="text" size="sm" onClick={onRemove}>
+          <OrganicButton variant="quiet" size="sm" onClick={onRemove}>
             {t('linkRemove')}
           </OrganicButton>
         )}

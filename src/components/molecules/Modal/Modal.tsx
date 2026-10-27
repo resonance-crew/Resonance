@@ -1,6 +1,6 @@
 'use client';
 
-import { CSSProperties, ReactNode, useEffect, useRef, useState } from 'react';
+import { CSSProperties, ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { keyboardInset } from '@/lib/hooks/useKeyboardInset';
 import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
@@ -42,6 +42,13 @@ export interface ModalProps {
    * room the keyboard leaves (the visual viewport), not behind the keyboard.
    */
   keyboardAware?: boolean;
+  /**
+   * The part of the page it belongs to, asked as it opens (and as the window resizes): it centres over that
+   * element rather than the window when the element is narrower than the window — the link editor over the
+   * writer's pane at the desktop split, not across the map beside it (round 17 review W10). Null, or the whole
+   * window, centres it over the window as ever. The scrim still dims the whole window.
+   */
+  centerOver?: () => HTMLElement | null;
 }
 
 /**
@@ -72,6 +79,48 @@ function useVisibleBox(active: boolean): { top: number; bottom: number } {
     };
   }, [active]);
   return box;
+}
+
+/**
+ * Where the element `centerOver` names lies across the window (its left and right), while `ask` is given; null when
+ * there is none, or it spans the window (nothing to centre over but the window).
+ */
+function useHostBox(ask: (() => HTMLElement | null) | undefined): { left: number; right: number } | null {
+  const [box, setBox] = useState<{ left: number; right: number } | null>(null);
+  const askRef = useRef(ask);
+  askRef.current = ask;
+  const active = ask != null;
+  useLayoutEffect(() => {
+    if (!active) {
+      setBox(null);
+      return;
+    }
+    const update = () => {
+      const r = askRef.current?.()?.getBoundingClientRect();
+      const next = r && r.width > 0 && r.width < window.innerWidth - 1 ? { left: r.left, right: r.right } : null;
+      setBox((now) => (now?.left === next?.left && now?.right === next?.right ? now : next));
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, [active]);
+  return box;
+}
+
+/** Room kept between a dialog centred over part of the page and the window's edges. */
+const EDGE_ROOM = 16;
+
+/**
+ * The backdrop's side padding that centres a dialog `w` wide over `host` (its left and right on the screen) in a
+ * window `winW` wide: a content box exactly the dialog's width, its middle the host's — moved in as far as it must
+ * to keep the dialog {@link EDGE_ROOM} inside the window. Null until the dialog is measured.
+ */
+export function sidePadding(host: { left: number; right: number }, w: number, winW: number): { left: number; right: number } | null {
+  if (!w) return null;
+  const box = Math.min(w + 2, winW - 2 * EDGE_ROOM);
+  const half = box / 2;
+  const mid = Math.min(Math.max((host.left + host.right) / 2, EDGE_ROOM + half), winW - EDGE_ROOM - half);
+  return { left: Math.round(mid - half), right: Math.round(winW - mid - half) };
 }
 
 /**
@@ -172,6 +221,7 @@ export function Modal({
   closeLabel,
   closeButton = false,
   keyboardAware = false,
+  centerOver,
 }: ModalProps) {
   const t = useTranslations('safety.report');
   const close = closeLabel ?? t('close');
@@ -214,6 +264,8 @@ export function Modal({
 
   useDimmedChrome(open);
   const visible = useVisibleBox(open && keyboardAware);
+  const over = useHostBox(open && mounted ? centerOver : undefined);
+  const across = over ? sidePadding(over, w, window.innerWidth) : null;
 
   // Focus goes into the dialog when it opens (unless a field in it took it
   // already), so a screen reader is in it and Tab starts there; it goes back
@@ -245,7 +297,10 @@ export function Modal({
   return createPortal(
     <div
       className={styles.backdrop}
-      style={keyboardAware && (visible.top || visible.bottom) ? { top: visible.top, bottom: visible.bottom } : undefined}
+      style={{
+        ...(keyboardAware && (visible.top || visible.bottom) ? { top: visible.top, bottom: visible.bottom } : null),
+        ...(across ? { paddingLeft: across.left, paddingRight: across.right } : null),
+      }}
       onPointerDown={(e) => {
         pressedBackdrop.current = e.target === e.currentTarget;
       }}
