@@ -1439,9 +1439,10 @@ describe('reactions and unsending (round 16)', () => {
     expect(within(tray).getByRole('button', { name: 'Love' })).toHaveFocus();
     await user.keyboard('{ArrowRight}');
     expect(within(tray).getByRole('button', { name: 'Moved' })).toHaveFocus();
-    // One stop in the Tab order: Tab goes on to the actions.
+    // One stop in the Tab order: Tab goes on to the actions — the row it lands on shows it (its ink and colour).
     await user.keyboard('{Tab}');
     expect(screen.getByRole('menuitem', { name: 'Reply' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Reply' })).toHaveAttribute('data-active');
     await user.keyboard('{Escape}');
     await gone();
     await waitFor(() => expect(react).toHaveFocus());
