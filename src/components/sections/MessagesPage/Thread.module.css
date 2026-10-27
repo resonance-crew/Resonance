@@ -390,9 +390,15 @@
   height: 14px;
 }
 
-/* A quote of a message since unsent: its words gone, it says so. */
+/* A quote of a message since unsent: its words gone, it says so — slanted
+   in a Latin script; Chinese has no italic (a synthetic oblique), and the
+   muted ink already marks it. */
 .quoteText[data-unsent] {
   font-style: italic;
+}
+
+.quoteText[data-unsent]:lang(zh-TW) {
+  font-style: normal;
 }
 
 .quoteText {
@@ -572,6 +578,17 @@
 
 span.chips {
   cursor: default;
+}
+
+/* A finger's 44 × 44 round the chip (30 tall), centred on it, unseen. */
+button.chips::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, 44px);
+  height: 44px;
+  transform: translate(-50%, -50%);
 }
 
 .chips:focus-visible {
@@ -765,13 +782,17 @@ span.chips {
   }
 }
 
-/* The thread dims under the modals' scrim (the whole window: no bright
-   band), whose colour the browser's bars take meanwhile. */
+/* The thread dims and softens under the modals' scrim and blur (the whole
+   window: no bright band; Modal's backdrop, so the unsend confirm a tap later
+   looks the same), whose colour the browser's bars take meanwhile. The blur
+   keeps the neighbours' words from competing with the lifted message. */
 .scrim {
   all: unset;
   position: absolute;
   inset: 0;
   background: var(--scrim);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
   -webkit-tap-highlight-color: transparent;
 }
 
