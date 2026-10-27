@@ -152,6 +152,16 @@ class StoryEditorBridge(
         private set
     var active by mutableStateOf(Active())
         private set
+    /**
+     * The link the story's selection is in (round 16 §6: the island's `state.link` — a picked link card
+     * included), or null; and whether the link sheet offers 卡片 for the selection now (`state.canCard`).
+     */
+    var link by mutableStateOf<IslandLink?>(null)
+        private set
+    var canCard by mutableStateOf(false)
+        private set
+    /** A link card in the story was tapped (it is picked now): the host opens its link sheet with 卡片 chosen. */
+    var onLinkTap: (String) -> Unit = {}
     var focused by mutableStateOf(false)
         private set
     /** How the story is set now (the island's `script` message): the title field beside it follows. */
@@ -276,6 +286,32 @@ class StoryEditorBridge(
         webView.evaluateJavascript("(function(){var e=document.querySelector('#editor .ProseMirror');if(e)e.style.minHeight='${px}px';})()", null)
     }
 
+    /**
+     * Whether the story's selection holds words (the link sheet's default: 文字 for words selected, 卡片 on
+     * an empty line), asked of the page; [answer] on the main thread.
+     */
+    fun selectionHasWords(answer: (Boolean) -> Unit) {
+        if (!ready) return answer(false)
+        webView.evaluateJavascript("(function(){var s=document.getSelection();return !!s&&!s.isCollapsed&&s.toString().trim().length>0})()") { result ->
+            answer(result == "true")
+        }
+    }
+
+    /**
+     * The link sheet's 完成 (round 16 §6): links the selection (or the caret's link, or a picked card) to
+     * [href], shown as a card or as words ([display]); [done] hears whether the island took it (false: an
+     * address it doesn't link to, or 卡片 where none can stand).
+     */
+    fun applyLink(href: String, display: LinkDisplay, done: (Boolean) -> Unit = {}) {
+        val args = JsonObject(mapOf("href" to JsonPrimitive(href), "display" to JsonPrimitive(display.key)))
+        webView.evaluateJavascript("ResonanceEditor.exec('link', $args)") { done(it == "true") }
+    }
+
+    /** 移除連結: a picked card goes, a link's words stay. */
+    fun removeLink() {
+        webView.evaluateJavascript("ResonanceEditor.exec('unlink')", null)
+    }
+
     /** Puts the caret in the story, at its end (a tap under the words, the title's Next). */
     fun focus() {
         webView.requestFocus()
@@ -386,7 +422,12 @@ class StoryEditorBridge(
             }
             is IslandMessage.Change -> onChange(m.markdown)
             is IslandMessage.Height -> height = maxOf(if (canvas) 0 else FIELD_MIN_HEIGHT, m.px)
-            is IslandMessage.State -> active = m.active
+            is IslandMessage.State -> {
+                active = m.active
+                link = m.link
+                canCard = m.canCard
+            }
+            is IslandMessage.LinkTap -> onLinkTap(m.href)
             is IslandMessage.Focus -> {
                 focused = m.focused
                 if (!m.focused) {
@@ -554,13 +595,21 @@ internal fun focusedSpan(line: IntRange?, touchY: Int?, above: Int, below: Int, 
     return (known.first - above)..(known.last + below)
 }
 
+/** How a link shows (round 16 §6): its page's card, alone on its line, or words that link. */
+enum class LinkDisplay(val key: String) { Card("card"), Text("text") }
+
+/** The link the story's selection is in, as the island says it (`state.link`). */
+data class IslandLink(val href: String, val display: LinkDisplay, val standalone: Boolean, val words: String)
+
 /** What the island posts (native/editor/src/island.ts `Message`); a type it doesn't know is left alone. */
 sealed interface IslandMessage {
     data object Ready : IslandMessage
     data class Change(val markdown: String) : IslandMessage
     /** The page's height, in CSS px (dp at the device's width). */
     data class Height(val px: Int) : IslandMessage
-    data class State(val active: StoryEditorBridge.Active) : IslandMessage
+    data class State(val active: StoryEditorBridge.Active, val link: IslandLink? = null, val canCard: Boolean = false) : IslandMessage
+    /** A link card was tapped (round 16 §6). */
+    data class LinkTap(val href: String) : IslandMessage
     data class Focus(val focused: Boolean) : IslandMessage
     /** How the story is set now: CJK or Latin, and its language when it says. */
     data class Script(val script: StoryScript, val lang: String?) : IslandMessage
@@ -581,8 +630,23 @@ sealed interface IslandMessage {
                 "state" -> {
                     val a = runCatching { m["active"]?.jsonObject }.getOrNull()
                     fun on(key: String) = (a?.get(key) as? JsonPrimitive)?.booleanOrNull ?: false
-                    State(StoryEditorBridge.Active(on("bold"), on("italic"), on("h2"), on("h3"), on("bulletList"), on("orderedList"), on("blockquote")))
+                    val l = runCatching { m["link"]?.jsonObject }.getOrNull()
+                    fun linkString(key: String) = (l?.get(key) as? JsonPrimitive)?.contentOrNull
+                    val link = linkString("href")?.takeIf { it.isNotEmpty() }?.let { href ->
+                        IslandLink(
+                            href,
+                            if (linkString("display") == "card") LinkDisplay.Card else LinkDisplay.Text,
+                            (l?.get("standalone") as? JsonPrimitive)?.booleanOrNull ?: false,
+                            linkString("words") ?: "",
+                        )
+                    }
+                    State(
+                        StoryEditorBridge.Active(on("bold"), on("italic"), on("h2"), on("h3"), on("bulletList"), on("orderedList"), on("blockquote")),
+                        link,
+                        (m["canCard"] as? JsonPrimitive)?.booleanOrNull ?: false,
+                    )
                 }
+                "linkTap" -> string("href")?.takeIf { it.isNotEmpty() }?.let { LinkTap(it) }
                 "focus" -> Focus((m["focused"] as? JsonPrimitive)?.booleanOrNull ?: false)
                 "script" -> Script(if (string("script") == "latin") StoryScript.Latin else StoryScript.Cjk, string("lang"))
                 "caret" -> {
@@ -638,6 +702,8 @@ fun StoryFormatBar(
     onInsertCard: () -> Unit,
     uploadingImage: Boolean,
     modifier: Modifier = Modifier,
+    /** 連結 (round 16 §6): the link sheet for the selection, or the caret's link. */
+    onLink: () -> Unit = {},
 ) {
     val scroll = rememberScrollState()
     Row(
@@ -663,6 +729,8 @@ fun StoryFormatBar(
             DockRule(3.0)
             DockTool(L10n.Write.Editor.bold, on = a.bold, seed = 21.0) { bridge.exec("bold") }
             DockTool(L10n.Write.Editor.italic, on = a.italic, seed = 28.0) { bridge.exec("italic") }
+            // Washed while the selection is in a link (round 16 §6).
+            DockTool(L10n.Write.Editor.link, on = bridge.link != null, icon = IconName.Link, seed = 31.0, onClick = onLink)
             DockRule(9.0)
             DockTool("H2", on = a.h2, seed = 35.0, spoken = L10n.Write.Editor.h2) { bridge.exec("h2") }
             DockTool("H3", on = a.h3, seed = 42.0, spoken = L10n.Write.Editor.h3) { bridge.exec("h3") }

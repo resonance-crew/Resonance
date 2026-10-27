@@ -138,6 +138,11 @@ fun OrganicModal(
     closeLabel: String = L10n.Safety.Report.close,
     /** The card's widest (Modal's `maxWidth`): 460 unless a small dialog asks for less. */
     maxWidth: Dp = 460.dp,
+    /**
+     * A compact sheet at the window's foot, riding the keyboard (round 16 §6: the writer's link sheet), in
+     * place of the card in the middle: the same card, 12 from the edges and the keyboard, tighter inside.
+     */
+    atFoot: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Dialog(
@@ -168,8 +173,8 @@ fun OrganicModal(
                     .fillMaxSize()
                     // Clear of the bars and the cutout, and above the keyboard (a note or a report being typed), the card scrolling if it has to.
                     .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center,
+                    .padding(if (atFoot) 12.dp else 16.dp),
+                contentAlignment = if (atFoot) Alignment.BottomCenter else Alignment.Center,
             ) {
                 val scroll = rememberScrollState()
                 val card = Tokens.CardBg
@@ -203,7 +208,7 @@ fun OrganicModal(
                         // A card taller than the room scrolls, its words fading where there is more.
                         .scrollFade(scroll, ModalScrollFade)
                         .verticalScroll(scroll)
-                        .padding(horizontal = 28.dp, vertical = 32.dp),
+                        .then(if (atFoot) Modifier.padding(horizontal = 22.dp, vertical = 22.dp) else Modifier.padding(horizontal = 28.dp, vertical = 32.dp)),
                     verticalArrangement = Arrangement.spacedBy(ModalGap),
                     content = content,
                 )

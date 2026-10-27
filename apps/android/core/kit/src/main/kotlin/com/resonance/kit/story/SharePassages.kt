@@ -120,12 +120,20 @@ object SharePassages {
 
     /** A paragraph that is one link of the web and nothing else (the reader's rule, [StoryLinks]). */
     private fun soleLink(p: Paragraph): Boolean = when (val only = meaningful(p).singleOrNull()) {
-        is Link -> !holdsImage(only) && StoryLinks.keyOf(only.destination) != null
+        // A link with words of its own reads as those words (round 16 §6): quoted like any line.
+        is Link -> !holdsImage(only) && StoryLinks.wordsAreTheAddress(words(only), only.destination) && StoryLinks.keyOf(only.destination) != null
         is Text -> StoryLinks.bareKey(only.literal) != null
         else -> false
     }
 
     private fun holdsImage(node: Node): Boolean = node is Image || children(node).any(::holdsImage)
+
+    /** The words a node shows (a link's text, however it is emphasized inside: the web's `wordsOf`). */
+    private fun words(node: Node): String = when (node) {
+        is org.commonmark.node.Text -> node.literal
+        is org.commonmark.node.Code -> node.literal
+        else -> children(node).joinToString("") { words(it) }
+    }
 
     /**
      * The card a `/card/…` link names, or null — the server's cardKeyOfHref: the segment after

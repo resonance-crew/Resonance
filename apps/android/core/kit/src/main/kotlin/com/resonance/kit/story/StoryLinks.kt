@@ -43,6 +43,31 @@ object StoryLinks {
         return bareAddress(said) == bareAddress(target)
     }
 
+    /**
+     * The address the writer's link sheet links to, from what was typed or pasted into its field (round 16
+     * §6, the web's `linkTarget`) — or null when it isn't one we link to (the sheet then says
+     * `linkInvalid`): http(s) only, as the link rules take it ([Linkify.normalize]); a bare `www.…` or
+     * `example.com/x` gets `https://`; another scheme (`javascript:`, `data:`, `mailto:` …) or a user name is
+     * refused. The writer's own spelling is kept unless it holds something the story can't carry as written
+     * (white space, `<>"\` and the backquote), when it is the normalized form.
+     */
+    fun linkTarget(input: String): String? {
+        val value = input.trim()
+        if (value.isEmpty()) return null
+        val written = when {
+            HTTP.containsMatchIn(value) -> value
+            // A scheme of its own (a colon before any slash, not a port's): never ours to link.
+            OWN_SCHEME.containsMatchIn(value) -> return null
+            value.startsWith("//") -> "https:$value"
+            else -> "https://$value"
+        }
+        val normalized = Linkify.normalize(written) ?: return null
+        return if (UNSAFE_IN_ADDRESS.containsMatchIn(written)) normalized else written
+    }
+
+    private val OWN_SCHEME = Regex("^[a-z][a-z0-9+.-]*:(?!\\d)", RegexOption.IGNORE_CASE)
+    private val UNSAFE_IN_ADDRESS = Regex("[\\s<>\"`\\\\]")
+
     /** An address with its scheme and one trailing slash set aside (how a link's words are matched to its href). */
     private fun bareAddress(url: String): String = url.replaceFirst(Regex("^https?://", RegexOption.IGNORE_CASE), "").removeSuffix("/")
 

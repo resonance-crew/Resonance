@@ -179,4 +179,32 @@ class RoundSixteenTest {
         // Not unsent: as before.
         assertEquals("你：早安", conversationPreview("早安", image = false, fromMe = true))
     }
+
+    // §6 the link sheet
+
+    @Test fun theLinkSheetStartsWithACardOnAnEmptyLineAndWordsOverWords() {
+        assertEquals(LinkDisplay.Card, linkSheetDisplay(null, canCard = true, wordsSelected = false))
+        assertEquals(LinkDisplay.Text, linkSheetDisplay(null, canCard = true, wordsSelected = true))
+        assertEquals(LinkDisplay.Text, linkSheetDisplay(null, canCard = false, wordsSelected = false))
+        val card = IslandLink("https://example.com/a", LinkDisplay.Card, standalone = true, words = "https://example.com/a")
+        assertEquals(LinkDisplay.Card, linkSheetDisplay(card, canCard = true, wordsSelected = false))
+        assertEquals(LinkDisplay.Text, linkSheetDisplay(card.copy(display = LinkDisplay.Text, words = "看這篇"), canCard = true, wordsSelected = true))
+    }
+
+    @Test fun theIslandSaysTheSelectionsLinkAndWhetherACardCanStand() {
+        val state = IslandMessage.parse(
+            """{"type":"state","active":{"bold":true},"canUndo":true,"canRedo":false,""" +
+                """"link":{"href":"https://example.com/a","display":"card","standalone":true,"words":"https://example.com/a"},"canCard":true}""",
+        ) as IslandMessage.State
+        assertTrue(state.active.bold)
+        assertEquals(IslandLink("https://example.com/a", LinkDisplay.Card, true, "https://example.com/a"), state.link)
+        assertTrue(state.canCard)
+        val none = IslandMessage.parse("""{"type":"state","active":{},"link":null,"canCard":false}""") as IslandMessage.State
+        assertNull(none.link)
+        assertFalse(none.canCard)
+        // An older island says neither.
+        assertNull((IslandMessage.parse("""{"type":"state","active":{}}""") as IslandMessage.State).link)
+        assertEquals(IslandMessage.LinkTap("https://example.com/b"), IslandMessage.parse("""{"type":"linkTap","href":"https://example.com/b"}"""))
+        assertNull(IslandMessage.parse("""{"type":"linkTap"}"""))
+    }
 }

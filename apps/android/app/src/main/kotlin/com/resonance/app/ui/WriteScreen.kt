@@ -388,6 +388,8 @@ private fun WriteForm(
     // Leaving the app saves what is written now, not 1.5s later.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { model.flush() }
     var pickingCard by remember { mutableStateOf(false) }
+    // 連結 (round 16 §6): the link sheet, for the selection or the caret's link, or a link card tapped.
+    var linkSheet by remember { mutableStateOf<LinkSheetRequest?>(null) }
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { model.setCover(context, it) } }
     // Back from the picker, picked or not, the story has its caret, keyboard and format bar where they were — before the upload ends.
     val inlinePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -594,6 +596,11 @@ private fun WriteForm(
                 onInsertImage = { inlinePicker.launch(images) },
                 onInsertCard = { pickingCard = true },
                 uploadingImage = model.uploadingInline,
+                onLink = {
+                    bridge.selectionHasWords { words ->
+                        linkSheet = LinkSheetRequest(bridge.link, bridge.canCard, linkSheetDisplay(bridge.link, bridge.canCard, words))
+                    }
+                },
             )
         }
         // The pane given the whole width at the split, or the split again (round 15): the bar fades in (out)
@@ -642,6 +649,32 @@ private fun WriteForm(
             if (then != null) then() else leave()
         },
     ) }
+
+    // A link card in the story tapped: the sheet with 卡片 chosen (the island picked the card; its state may still be on its way).
+    DisposableEffect(bridge) {
+        bridge.onLinkTap = { href -> linkSheet = LinkSheetRequest(IslandLink(href, LinkDisplay.Card, standalone = true, words = href), canCard = true, LinkDisplay.Card) }
+        onDispose { bridge.onLinkTap = {} }
+    }
+    // The link sheet over the keyboard; whatever it ends with, the story has its caret, keyboard and bar back.
+    linkSheet?.let { request ->
+        StoryLinkSheet(
+            request,
+            onApply = { href, display ->
+                linkSheet = null
+                bridge.applyLink(href, display)
+                bridge.refocusWhenBack()
+            },
+            onRemove = {
+                linkSheet = null
+                bridge.removeLink()
+                bridge.refocusWhenBack()
+            },
+            onDismiss = {
+                linkSheet = null
+                bridge.refocusWhenBack()
+            },
+        )
+    }
 
     // 插入卡片: the modal takes the window a moment; picked or not, the story has its caret, keyboard and bar back.
     if (pickingCard) OrganicModal(
