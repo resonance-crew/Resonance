@@ -488,6 +488,9 @@ object Tokens {
     /** --reading-progress-glow-alpha */
     val ReadingProgressGlowAlpha: Float
         @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.ReadingProgressGlowAlpha
+    /** --map-dot-alpha */
+    val MapDotAlpha: Float
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.MapDotAlpha
 
     /** A [HueRole]'s colour at [hue] in the palette on screen. */
     @Composable @ReadOnlyComposable

@@ -721,9 +721,11 @@ export function hueColour(role: HueRole, hue: number, scheme: Scheme, alpha = 1)
 }
 
 /** Numbers that change with the scheme (CSS custom properties beside the colours). */
-export const SCHEME_NUMBERS: Record<Scheme, Record<'grain-scale' | 'reading-progress-glow-alpha', number>> = {
+export const SCHEME_NUMBERS: Record<Scheme, Record<'grain-scale' | 'reading-progress-glow-alpha' | 'map-dot-alpha', number>> = {
   // Light specks on night paper read louder than dark ones on cream.
-  light: { 'grain-scale': 1, 'reading-progress-glow-alpha': 0.55 },
-  // A glow on dark reads as neon at light's strength.
-  dark: { 'grain-scale': 0.4, 'reading-progress-glow-alpha': 0.4 },
+  light: { 'grain-scale': 1, 'reading-progress-glow-alpha': 0.55, 'map-dot-alpha': 1 },
+  // A glow on dark reads as neon at light's strength. The thought map's dots (field-border on the
+  // card paper, L 0.40 on 0.24) outshone the cards' own paper over them (0.235): at 0.45, L ≈ 0.315,
+  // ΔL under half of light's — near the grain's share.
+  dark: { 'grain-scale': 0.4, 'reading-progress-glow-alpha': 0.4, 'map-dot-alpha': 0.45 },
 };

@@ -4,6 +4,7 @@
   color-scheme: light;
   --grain-scale: 1;
   --reading-progress-glow-alpha: 0.55;
+  --map-dot-alpha: 1;
   --hue-interior: 0.975 0.012;
   --hue-accent: 0.9 0.06;
   --hue-tint: 0.92 0.06;
@@ -308,6 +309,7 @@
     color-scheme: dark;
     --grain-scale: 0.4;
     --reading-progress-glow-alpha: 0.4;
+    --map-dot-alpha: 0.45;
     --hue-interior: 0.235 0.007;
     --hue-accent: 0.38 0.05;
     --hue-tint: 0.33 0.05;
@@ -606,6 +608,7 @@
   color-scheme: dark;
   --grain-scale: 0.4;
   --reading-progress-glow-alpha: 0.4;
+  --map-dot-alpha: 0.45;
   --hue-interior: 0.235 0.007;
   --hue-accent: 0.38 0.05;
   --hue-tint: 0.33 0.05;

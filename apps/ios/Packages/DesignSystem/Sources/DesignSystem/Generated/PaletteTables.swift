@@ -2673,6 +2673,8 @@ nonisolated enum PaletteTables {
 
     /// SCHEME_NUMBERS: how strong the grain is drawn, light then dark.
     static let grainScale: [Double] = [1, 0.4]
+    /// SCHEME_NUMBERS: how strong the thought map's dotted paper is inked, light then dark.
+    static let mapDotAlpha: [Double] = [1, 0.45]
     /// SCHEME_NUMBERS: the reading progress line's glow, light then dark.
     static let readingProgressGlowAlpha: [Double] = [0.55, 0.4]
 }

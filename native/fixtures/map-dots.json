@@ -1,0 +1,236 @@
+{
+  "generatedBy": "src/components/molecules/ThoughtMap/mapDots.test.ts (UPDATE_MAP_DOTS=1). The thought map's dotted paper at a zoom s: a dot at the centre of every `grid`-unit world tile i = floor(x / grid), j = floor(y / grid); it shows at levels[dotLevel(i, j)] (levels finest first; a tile is in lattice k when i and j are both multiples of 2^k, dotLevel = the coarsest, at most levels − 1), with `radius` screen points (an edge of `edge` more, antialiased from radius to radius + edge), in field-border at alpha × that level × the scheme's `map-dot-alpha` (palette.ts SCHEME_NUMBERS: the apps' Palette.mapDotAlpha / Tokens.MapDotAlpha), on color-card-bg.",
+  "grid": 26,
+  "levels": 3,
+  "radius": 1.2,
+  "edge": 0.3,
+  "cases": [
+    {
+      "s": 0.25,
+      "tile": 6.5,
+      "levels": [
+        0,
+        0,
+        1
+      ],
+      "radius": 1.02,
+      "alpha": 0.8
+    },
+    {
+      "s": 0.3,
+      "tile": 7.8,
+      "levels": [
+        0,
+        0.14666666666666667,
+        1
+      ],
+      "radius": 1.0498721219136353,
+      "alpha": 0.8331912465707061
+    },
+    {
+      "s": 0.35,
+      "tile": 9.1,
+      "levels": [
+        0,
+        0.3199999999999999,
+        1
+      ],
+      "radius": 1.075128641119829,
+      "alpha": 0.861254045688699
+    },
+    {
+      "s": 0.4,
+      "tile": 10.4,
+      "levels": [
+        0,
+        0.5200000000000002,
+        1
+      ],
+      "radius": 1.09700683319936,
+      "alpha": 0.885563147999289
+    },
+    {
+      "s": 0.45,
+      "tile": 11.700000000000001,
+      "levels": [
+        0,
+        0.746666666666667,
+        1
+      ],
+      "radius": 1.116304766270773,
+      "alpha": 0.9070052958564145
+    },
+    {
+      "s": 0.5,
+      "tile": 13,
+      "levels": [
+        0,
+        1,
+        1
+      ],
+      "radius": 1.1335673556428623,
+      "alpha": 0.9261859507142914
+    },
+    {
+      "s": 0.55,
+      "tile": 14.3,
+      "levels": [
+        0.07000000000000006,
+        1,
+        1
+      ],
+      "radius": 1.149183267226718,
+      "alpha": 0.9435369635852422
+    },
+    {
+      "s": 0.6,
+      "tile": 15.6,
+      "levels": [
+        0.14666666666666667,
+        1,
+        1
+      ],
+      "radius": 1.1634394775564978,
+      "alpha": 0.9593771972849976
+    },
+    {
+      "s": 0.7,
+      "tile": 18.2,
+      "levels": [
+        0.3199999999999999,
+        1,
+        1
+      ],
+      "radius": 1.1886959967626913,
+      "alpha": 0.9874399964029905
+    },
+    {
+      "s": 0.8,
+      "tile": 20.8,
+      "levels": [
+        0.5200000000000002,
+        1,
+        1
+      ],
+      "radius": 1.2,
+      "alpha": 1
+    },
+    {
+      "s": 0.9,
+      "tile": 23.400000000000002,
+      "levels": [
+        0.746666666666667,
+        1,
+        1
+      ],
+      "radius": 1.2,
+      "alpha": 1
+    },
+    {
+      "s": 1,
+      "tile": 26,
+      "levels": [
+        1,
+        1,
+        1
+      ],
+      "radius": 1.2,
+      "alpha": 1
+    },
+    {
+      "s": 1.25,
+      "tile": 32.5,
+      "levels": [
+        1,
+        1,
+        1
+      ],
+      "radius": 1.2,
+      "alpha": 1
+    },
+    {
+      "s": 1.5,
+      "tile": 39,
+      "levels": [
+        1,
+        1,
+        1
+      ],
+      "radius": 1.2,
+      "alpha": 1
+    },
+    {
+      "s": 2,
+      "tile": 52,
+      "levels": [
+        1,
+        1,
+        1
+      ],
+      "radius": 1.2,
+      "alpha": 1
+    }
+  ],
+  "dotLevel": [
+    {
+      "i": 0,
+      "j": 0,
+      "level": 2
+    },
+    {
+      "i": 1,
+      "j": 0,
+      "level": 0
+    },
+    {
+      "i": 2,
+      "j": 0,
+      "level": 1
+    },
+    {
+      "i": 2,
+      "j": 2,
+      "level": 1
+    },
+    {
+      "i": 4,
+      "j": 2,
+      "level": 1
+    },
+    {
+      "i": 4,
+      "j": 4,
+      "level": 2
+    },
+    {
+      "i": 8,
+      "j": 12,
+      "level": 2
+    },
+    {
+      "i": -1,
+      "j": 0,
+      "level": 0
+    },
+    {
+      "i": -2,
+      "j": -2,
+      "level": 1
+    },
+    {
+      "i": -4,
+      "j": -4,
+      "level": 2
+    },
+    {
+      "i": -4,
+      "j": 6,
+      "level": 1
+    },
+    {
+      "i": -3,
+      "j": -8,
+      "level": 0
+    }
+  ]
+}

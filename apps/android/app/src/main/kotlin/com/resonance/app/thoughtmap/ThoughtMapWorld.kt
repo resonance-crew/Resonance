@@ -58,7 +58,10 @@ import com.resonance.geometry.rectContains
 import com.resonance.geometry.seedFromString
 import com.resonance.design.toPath
 import kotlin.math.ceil
+import kotlin.math.log2
 import kotlin.math.max
+import kotlin.math.pow
+import kotlin.math.roundToInt
 
 // The map's layers, bottom to top in the web's paint order: the dot grid;
 // regions and arrows; the regions' titles; the cards (filed ones inside their
@@ -108,14 +111,15 @@ fun FixedFontScale(content: @Composable () -> Unit) {
 // The dot grid
 
 /**
- * The dot grid (radial-gradient(oklch(82% 0.025 75) 1.2px, transparent 1.5px) on a
- * (26·s)px tile positioned at the camera, over card-bg paper): a dot at the centre
- * of every tile, its radius fixed at every zoom, only the spacing scaled. An AGSL
- * shader on API 33+, else a batch of points.
+ * The dot grid over card-bg paper: a dot at the centre of every 26-unit world tile, at the
+ * camera's zoom as [MapDots.at] says (the web's mapDots.ts) — the sparse lattices whole, the
+ * finer ones fading as their dots would crowd, smaller and fainter zoomed out, and quieter at
+ * night (`map-dot-alpha`). An AGSL shader on API 33+, else a batch of points.
  */
 @Composable
 fun MapGridLayer(store: ThoughtMapStore) {
     val inks = MapInk.current
+    val schemeAlpha = Tokens.MapDotAlpha
     val shader = remember(inks) { if (MapDots.useShader && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) MapDots.shader(inks.dot) else null }
     val fallbackPaint = remember(inks) {
         Paint().apply {
@@ -129,57 +133,130 @@ fun MapGridLayer(store: ThoughtMapStore) {
         drawRect(paper)
         val cam = store.camera
         val d = density
-        val spacing = (26 * cam.s * d).toFloat()
+        val dots = MapDots.at(cam.s)
+        val strength = dots.alpha * schemeAlpha
+        val spacing = (dots.tile * d).toFloat()
         if (shader != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            MapDots.draw(this, shader, spacing, (cam.x * d).toFloat(), (cam.y * d).toFloat())
+            MapDots.draw(this, shader, dots, strength.toFloat(), spacing, (cam.x * d).toFloat(), (cam.y * d).toFloat())
         } else {
-            // Dots at cam + spacing·(i + ½), radius ~1.35 (the gradient's soft edge from 1.2 to 1.5).
+            // Dots at cam + spacing·(i + ½), each drawn once at its lattice's strength; tiles of a
+            // lattice too faint to show are stepped over. The radius is the soft edge's middle.
             val w = size.width
             val h = size.height
             val x0 = (cam.x * d).toFloat()
             val y0 = (cam.y * d).toFloat()
-            val i0 = kotlin.math.floor(-x0 / spacing - 0.5f).toInt() - 1
+            val alphas = IntArray(dots.levels.size) { k -> (inks.dot.alpha * strength * dots.levels[k] * 255).roundToInt().coerceIn(0, 255) }
+            val step = 1 shl alphas.indexOfFirst { it > 0 }.coerceAtLeast(0)
+            val i0 = Math.floorDiv(kotlin.math.floor(-x0 / spacing - 0.5f).toInt() - 1, step) * step
             val i1 = ceil((w - x0) / spacing).toInt() + 1
-            val j0 = kotlin.math.floor(-y0 / spacing - 0.5f).toInt() - 1
+            val j0 = Math.floorDiv(kotlin.math.floor(-y0 / spacing - 0.5f).toInt() - 1, step) * step
             val j1 = ceil((h - y0) / spacing).toInt() + 1
-            fallbackPaint.strokeWidth = 2.7f * d
+            fallbackPaint.strokeWidth = (2 * dots.radius + MapDots.EDGE).toFloat() * d
             // Point by point, as drawRawPoints(Points) draws them — without the two arrays it took on every pan frame.
             val canvas = drawContext.canvas.nativeCanvas
             val paint = fallbackPaint.asFrameworkPaint()
-            for (j in j0..j1) for (i in i0..i1) canvas.drawPoint(x0 + spacing * (i + 0.5f), y0 + spacing * (j + 0.5f), paint)
+            paint.color = inks.dot.toArgb()
+            var j = j0
+            while (j <= j1) {
+                var i = i0
+                while (i <= i1) {
+                    paint.alpha = alphas[MapDots.level(i, j)]
+                    canvas.drawPoint(x0 + spacing * (i + 0.5f), y0 + spacing * (j + 0.5f), paint)
+                    i += step
+                }
+                j += step
+            }
         }
     }
 }
 
-/** The grid's AGSL: distance to the nearest tile centre, a dot with a fixed radius and a soft edge. */
+/**
+ * The dotted paper at a zoom — the web's mapDots.ts, number for number
+ * (native/fixtures/map-dots.json): drawn at one size whatever the zoom, a zoomed-out board turned
+ * into a haze of dots that looked larger than the cards beside them, so the paper keeps its tone on
+ * screen instead — every 2nd, then every 4th dot (nested lattices: each coarser one a subset of the
+ * finer), the dots in between fading so the ink per area stays the same at every zoom up to 100 % —
+ * and recedes a little as the board does: smaller, fainter. And the grid's AGSL: distance to
+ * the nearest tile centre, a dot with a soft edge, at its lattice's strength.
+ */
 object MapDots {
     /** Off, the point-batch fallback draws the grid (what an API 29–32 phone gets). */
     var useShader = true
+
+    /** World units between neighbouring dots. */
+    const val GRID = 26.0
+    /** The lattices: every tile, every 2nd, every 4th. */
+    const val LEVELS = 3
+    /** A dot's radius at 100 % and above, and its antialiased edge beyond. */
+    const val RADIUS = 1.2
+    const val EDGE = 0.3
+    /** A lattice is whole at GRID dp apart on screen and gone at half that. */
+    private const val GONE = GRID / 2
+    /** From NEAR_SCALE down to FAR_SCALE (by octaves) the dot loses FAR_RADIUS of its radius and FAR_ALPHA of its ink. */
+    private const val NEAR_SCALE = 0.75
+    private const val FAR_SCALE = 0.25
+    private const val FAR_RADIUS = 0.15
+    private const val FAR_ALPHA = 0.2
+
+    /**
+     * The paper at one zoom: dp between tiles, each lattice's strength (finest first; a dot takes its
+     * coarsest lattice's), the dot's radius in dp and the ink before the scheme's `map-dot-alpha`.
+     */
+    data class Paper(val tile: Double, val levels: List<Double>, val radius: Double, val alpha: Double)
+
+    fun at(s: Double): Paper {
+        val tile = GRID * s
+        // A lattice p dp apart is drawn at ((p / GONE)² − 1) / 3: with the next one whole and the
+        // finer ones gone, the ink per area is 100 %'s, and no dot is inked twice.
+        val levels = List(LEVELS) { k ->
+            if (k == LEVELS - 1) 1.0 else ((tile * (1 shl k) / GONE).pow(2) / 3 - 1.0 / 3).coerceIn(0.0, 1.0)
+        }
+        val far = (log2(NEAR_SCALE / s) / log2(NEAR_SCALE / FAR_SCALE)).coerceIn(0.0, 1.0)
+        return Paper(tile, levels, RADIUS * (1 - FAR_RADIUS * far), 1 - FAR_ALPHA * far)
+    }
+
+    /** The coarsest lattice the dot of tile (i, j) belongs to (0 = every tile only). */
+    fun level(i: Int, j: Int): Int {
+        var k = 0
+        while (k < LEVELS - 1 && Math.floorMod(i, 2 shl k) == 0 && Math.floorMod(j, 2 shl k) == 0) k++
+        return k
+    }
 
     private const val Source = """
         uniform float spacing;
         uniform float2 origin;
         uniform float r0;
         uniform float r1;
+        uniform float fine;
+        uniform float mid;
+        uniform float strength;
         layout(color) uniform half4 dotColor;
         half4 main(float2 coord) {
             float2 local = coord - origin;
-            float2 cell = local - spacing * floor(local / spacing);
+            float2 tile = floor(local / spacing);
+            float2 cell = local - spacing * tile;
             float d = distance(cell, float2(spacing * 0.5));
-            half a = half(1.0 - smoothstep(r0, r1, d));
+            float2 by4 = tile - 4.0 * floor(tile * 0.25);
+            float2 by2 = tile - 2.0 * floor(tile * 0.5);
+            float level = (by4.x == 0.0 && by4.y == 0.0) ? 1.0 : (by2.x == 0.0 && by2.y == 0.0) ? mid : fine;
+            half a = half((1.0 - smoothstep(r0, r1, d)) * level * strength);
             return half4(dotColor.rgb * a, a);
         }
     """
 
+    /** The grid's shader in the dot's ink (opaque: how much of it the paper takes is `strength`). */
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    fun shader(dot: androidx.compose.ui.graphics.Color): RuntimeShader = RuntimeShader(Source).apply { setColorUniform("dotColor", dot.toArgb()) }
+    fun shader(dot: androidx.compose.ui.graphics.Color): RuntimeShader = RuntimeShader(Source).apply { setColorUniform("dotColor", dot.copy(alpha = 1f).toArgb()) }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    fun draw(scope: DrawScope, shader: RuntimeShader, spacing: Float, ox: Float, oy: Float) {
+    fun draw(scope: DrawScope, shader: RuntimeShader, dots: Paper, strength: Float, spacing: Float, ox: Float, oy: Float) {
+        shader.setFloatUniform("strength", strength)
         shader.setFloatUniform("spacing", spacing)
         shader.setFloatUniform("origin", ox, oy)
-        shader.setFloatUniform("r0", 1.2f * scope.density)
-        shader.setFloatUniform("r1", 1.5f * scope.density)
+        shader.setFloatUniform("r0", (dots.radius * scope.density).toFloat())
+        shader.setFloatUniform("r1", ((dots.radius + EDGE) * scope.density).toFloat())
+        shader.setFloatUniform("fine", dots.levels[0].toFloat())
+        shader.setFloatUniform("mid", dots.levels[1].toFloat())
         scope.drawRect(ShaderBrush(shader))
     }
 }

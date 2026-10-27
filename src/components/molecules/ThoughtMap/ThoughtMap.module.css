@@ -12,15 +12,15 @@
   border-radius: 26px;
 }
 
-/* Dotted paper; the dot grid pans/zooms with the camera (an inline transform
-   within one tile, and background-size) so the ground feels physically
-   attached. The viewport clips it; its right/bottom reach a tile past. */
+/* Dotted paper; the dot grid pans/zooms with the camera (inline: its lattices'
+   gradients and sizes, a transform within one period — mapDots.ts) so the
+   ground feels physically attached. The viewport clips it; its right/bottom
+   reach a period past. */
 .dots {
   position: absolute;
   top: 0;
   left: 0;
   pointer-events: none;
-  background-image: radial-gradient(var(--field-border) 1.2px, transparent 1.5px);
 }
 
 .dots[data-moving] {

@@ -356,6 +356,8 @@ class ResonanceColors(
     val GrainScale: Float = if (dark) 0.4f else 1.0f
     /** --reading-progress-glow-alpha */
     val ReadingProgressGlowAlpha: Float = if (dark) 0.4f else 0.55f
+    /** --map-dot-alpha */
+    val MapDotAlpha: Float = if (dark) 0.45f else 1.0f
 
     private val hued = HashMap<Triple<HueRole, Double, Double>, Color>()
 

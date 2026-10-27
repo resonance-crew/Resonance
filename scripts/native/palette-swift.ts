@@ -152,6 +152,8 @@ ${hueRows.join('\n')}
 
     /// SCHEME_NUMBERS: how strong the grain is drawn, light then dark.
     static let grainScale: [Double] = [${SCHEMES.map((s) => SCHEME_NUMBERS[s]['grain-scale']).join(', ')}]
+    /// SCHEME_NUMBERS: how strong the thought map's dotted paper is inked, light then dark.
+    static let mapDotAlpha: [Double] = [${SCHEMES.map((s) => SCHEME_NUMBERS[s]['map-dot-alpha']).join(', ')}]
     /// SCHEME_NUMBERS: the reading progress line's glow, light then dark.
     static let readingProgressGlowAlpha: [Double] = [${SCHEMES.map((s) => SCHEME_NUMBERS[s]['reading-progress-glow-alpha']).join(', ')}]
 }

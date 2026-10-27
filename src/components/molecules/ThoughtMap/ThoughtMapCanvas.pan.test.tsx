@@ -35,6 +35,7 @@ vi.mock('@/lib/design/edgePath', async (importOriginal) => {
 
 import { wobRect } from '@/lib/design/wobRect';
 import { organicEdgePath } from '@/lib/design/edgePath';
+import { mapDots } from './mapDots';
 import { ThoughtMapCanvas } from './ThoughtMapCanvas';
 
 // The board and its controls draw only once measured.
@@ -106,8 +107,9 @@ describe('ThoughtMapCanvas panning', () => {
 
   // The dot grid used to be the viewport's background, re-positioned on every
   // frame (a repaint of the whole viewport). It is its own layer now, shifted
-  // within one tile: the same dots, at the same places, for any camera.
-  it('keeps the dotted paper on the camera, moved within one tile', () => {
+  // within one period of its coarsest lattice (mapDots.ts): the same dots, at
+  // the same places, for any camera — the sparse ones never hop between tiles.
+  it('keeps the dotted paper on the camera, moved within one period', () => {
     const { world, viewport } = board();
     const dots = viewport.firstElementChild as HTMLElement;
     expect(dots).not.toBe(world);
@@ -115,16 +117,21 @@ describe('ThoughtMapCanvas panning', () => {
     const check = () => {
       const [, cx, cy, s] = world.style.transform.match(/translate\(([-\d.]+)px, ([-\d.]+)px\) scale\(([\d.]+)\)/)!.map(Number);
       const [, dx, dy] = dots.style.transform.match(/translate\(([-\d.]+)px, ([-\d.]+)px\)/)!.map(Number);
-      const tile = 26 * s;
-      expect(dots.style.backgroundSize).toBe(`${tile}px ${tile}px`);
+      const { tile, levels } = mapDots(s);
+      const period = tile * 4;
+      // One tile: the finest lattice shown, or twice its spacing while it fades (its coarse dot and the three between).
+      const k = levels.findIndex((v) => v > 0);
+      const size = tile * 2 ** k * (levels[k] < 1 ? 2 : 1);
+      expect(dots.style.backgroundSize).toBe(`${size}px ${size}px`);
+      expect(period % size).toBeCloseTo(0, 6);
       for (const [d, c] of [[dx, cx], [dy, cy]]) {
-        expect(d).toBeGreaterThanOrEqual(-tile);
+        expect(d).toBeGreaterThanOrEqual(-period);
         expect(d).toBeLessThan(0);
-        // A dot lands where the camera puts one: d ≡ c (mod tile).
-        const k = (c - d) / tile;
+        // A dot of the sparsest lattice lands where the camera puts one: d ≡ c (mod period).
+        const k = (c - d) / period;
         expect(Math.abs(k - Math.round(k))).toBeLessThan(1e-6);
       }
-      expect(dots.style.right).toBe(`${-tile}px`);
+      expect(dots.style.right).toBe(`${-period}px`);
     };
     check();
     fireEvent.pointerDown(viewport, { button: 0, pointerId: 1, clientX: 400, clientY: 300 });

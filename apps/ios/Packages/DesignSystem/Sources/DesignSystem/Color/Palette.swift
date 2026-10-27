@@ -122,6 +122,10 @@ public nonisolated enum Palette {
     /// night paper read louder than dark ones on cream.
     public static func grainScale(_ scheme: PaletteScheme) -> Double { PaletteTables.grainScale[scheme.index] }
 
+    /// How strong the thought map's dotted paper is inked in a scheme (SCHEME_NUMBERS `map-dot-alpha`):
+    /// light dots on night paper outshine the cards over them at light's strength.
+    public static func mapDotAlpha(_ scheme: PaletteScheme) -> Double { PaletteTables.mapDotAlpha[scheme.index] }
+
     /// The reading progress line's glow in a scheme (SCHEME_NUMBERS `reading-progress-glow-alpha`).
     public static func readingProgressGlowAlpha(_ scheme: PaletteScheme) -> Double {
         PaletteTables.readingProgressGlowAlpha[scheme.index]

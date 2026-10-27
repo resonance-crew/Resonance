@@ -24,16 +24,72 @@ private func worldTransform(_ cam: MapCamera) -> CGAffineTransform {
     CGAffineTransform(translationX: cam.x, y: cam.y).scaledBy(x: cam.s, y: cam.s)
 }
 
-/// The dot grid (card-bg paper, a dot per 26-unit tile).
+/// The dotted paper at a zoom — the web's mapDots.ts, number for number (native/fixtures/map-dots.json):
+/// a dot at the centre of every 26-unit world tile. Drawn at one size whatever the zoom, a
+/// zoomed-out board turned into a haze of dots that looked larger than the cards beside them, so
+/// the paper keeps its tone on screen instead — every 2nd, then every 4th dot (nested lattices:
+/// each coarser one a subset of the finer), the dots in between fading so the ink per area stays
+/// the same at every zoom up to 100 % — and recedes a little as the board does: smaller, fainter.
+struct MapDots: Equatable {
+    /// World units between neighbouring dots.
+    static let grid = 26.0
+    /// The lattices: every tile, every 2nd, every 4th.
+    static let levelCount = 3
+    /// A dot's radius at 100 % and above, and its antialiased edge beyond.
+    static let fullRadius = 1.2
+    static let edge = 0.3
+    /// A lattice is whole at `grid` points apart on screen and gone at half that.
+    private static let gone = grid / 2
+    /// From `nearScale` down to `farScale` (by octaves) the dot loses `farRadius` of its radius
+    /// and `farAlpha` of its ink.
+    private static let nearScale = 0.75, farScale = 0.25, farRadius = 0.15, farAlpha = 0.2
+
+    /// Points between neighbouring tiles.
+    let tile: Double
+    /// Each lattice's strength, finest first; a dot takes its coarsest lattice's.
+    let levels: [Double]
+    /// The dot's radius in points.
+    let radius: Double
+    /// The paper's ink, before the scheme's `map-dot-alpha`.
+    let alpha: Double
+
+    init(scale s: Double) {
+        func clamp01(_ v: Double) -> Double { min(1, max(0, v)) }
+        let tile = Self.grid * s
+        self.tile = tile
+        // A lattice p points apart is drawn at ((p / gone)² − 1) / 3: with the next one whole and
+        // the finer ones gone, the ink per area is 100 %'s, and no dot is inked twice.
+        levels = (0..<Self.levelCount).map { k in
+            if k == Self.levelCount - 1 { return 1 }
+            return clamp01(pow(tile * pow(2, Double(k)) / Self.gone, 2) / 3 - 1.0 / 3)
+        }
+        let far = clamp01(log2(Self.nearScale / s) / log2(Self.nearScale / Self.farScale))
+        radius = Self.fullRadius * (1 - Self.farRadius * far)
+        alpha = 1 - Self.farAlpha * far
+    }
+
+    /// The coarsest lattice the dot of tile (i, j) belongs to (0 = every tile only).
+    static func level(_ i: Int, _ j: Int) -> Int {
+        var k = 0
+        while k < levelCount - 1, i % (1 << (k + 1)) == 0, j % (1 << (k + 1)) == 0 { k += 1 }
+        return k
+    }
+}
+
+/// The dot grid: card-bg paper, its dots at the camera's zoom (``MapDots``), quieter at night.
 struct MapGridLayer: View {
     let store: ThoughtMapStore
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         let cam = store.camera
+        let dots = MapDots(scale: cam.s)
+        let strength = dots.alpha * Palette.mapDotAlpha(PaletteScheme(colorScheme))
         Rectangle()
             .fill(Tokens.cardBg)
-            .colorEffect(ShaderLibrary.mapDots(.float(26 * cam.s), .float2(Float(cam.x), Float(cam.y)),
-                                                .color(Tokens.fieldBorder)))
+            .colorEffect(ShaderLibrary.mapDots(.float(dots.tile), .float2(Float(cam.x), Float(cam.y)), .color(Tokens.fieldBorder),
+                                                .float(dots.levels[0]), .float(dots.levels[1]),
+                                                .float(dots.radius), .float(MapDots.edge), .float(strength)))
     }
 }
 

@@ -59,6 +59,7 @@ import {
   NODE_W,
   type Camera,
 } from './mapMath';
+import { DOT_EDGE, DOT_PERIOD, mapDots } from './mapDots';
 import { NODE_CHALK_SEEDS, ThoughtMapNode, nodeHue, type ThoughtMapNodeProps } from './ThoughtMapNode';
 import { useEdgeFades } from '@/lib/hooks/useEdgeFades';
 import styles from './ThoughtMap.module.css';
@@ -70,7 +71,6 @@ const GROUP_HUES = [88, 215, 290, 140, 55, 18];
 const EDGE_INK = 'color-mix(in oklch, var(--color-text-muted), var(--color-text) 25%)';
 const EDGE_INK_CHOSEN = 'var(--color-text)';
 const EDGE_PILL_CHOSEN = 'color-mix(in oklch, var(--color-cream-dark), var(--toward-ink) 6%)';
-const GRID = 26;
 /** How long the wheel stays still before a scroll-pan counts as over. */
 const WHEEL_IDLE_MS = 160;
 
@@ -84,9 +84,35 @@ function worldTransform(cam: Camera): string {
   return `translate(${cam.x}px, ${cam.y}px) scale(${cam.s})`;
 }
 
-/** The dotted paper's shift for a camera: within one tile of `tile` px. */
-function dotsTransform(cam: Camera, tile: number): string {
-  return `translate(${withinTile(cam.x, tile)}px, ${withinTile(cam.y, tile)}px)`;
+/**
+ * The dotted paper for a camera (mapDots). Only the finest lattice still shown
+ * is drawn — every coarser one is its subset — on one tile twice its spacing
+ * when it is fading: the coarse dot whole at `pitch / 2`, the three between at
+ * their share, each dot painted once. Shifted within one period of the
+ * coarsest lattice, so a pan moves the layer rather than repainting it, and
+ * the sparse dots never hop between tiles.
+ */
+function dotsStyle(cam: Camera) {
+  const { tile, levels, radius, alpha } = mapDots(cam.s);
+  const period = tile * DOT_PERIOD;
+  const k = levels.findIndex((v) => v > 0);
+  const pitch = tile * 2 ** k;
+  const dot = (x: number, y: number, ink: string) =>
+    `radial-gradient(circle at ${x}px ${y}px, ${ink} ${radius}px, transparent ${radius + DOT_EDGE}px)`;
+  const whole = 'var(--field-border)';
+  const fading = levels[k] < 1;
+  const part = `color-mix(in srgb, var(--field-border) ${+(levels[k] * 100).toFixed(2)}%, transparent)`;
+  const [a, b] = [pitch / 2, pitch * 1.5];
+  const size = fading ? pitch * 2 : pitch;
+  return {
+    right: `${-period}px`,
+    bottom: `${-period}px`,
+    backgroundImage: fading ? [dot(a, a, whole), dot(b, a, part), dot(a, b, part), dot(b, b, part)].join(', ') : dot(a, a, whole),
+    backgroundSize: `${size}px ${size}px`,
+    transform: `translate(${withinTile(cam.x, period)}px, ${withinTile(cam.y, period)}px)`,
+    // Night paper's dots at the scheme's share (palette.ts SCHEME_NUMBERS).
+    opacity: `calc(var(--map-dot-alpha, 1) * ${+alpha.toFixed(4)})`,
+  };
 }
 
 interface CameraPainter {
@@ -143,14 +169,8 @@ function cameraPainter(
  * frames): exactly the styles and text the board renders for it.
  */
 function paintCamera(cam: Camera, world: HTMLElement | null, dots: HTMLElement | null, percent: HTMLElement | null) {
-  const tile = GRID * cam.s;
   if (world) world.style.transform = worldTransform(cam);
-  if (dots) {
-    dots.style.right = `${-tile}px`;
-    dots.style.bottom = `${-tile}px`;
-    dots.style.backgroundSize = `${tile}px ${tile}px`;
-    dots.style.transform = dotsTransform(cam, tile);
-  }
+  if (dots) Object.assign(dots.style, dotsStyle(cam));
   const text = percent?.firstChild;
   if (text && text.nodeType === Node.TEXT_NODE) text.nodeValue = `${Math.round(cam.s * 100)}%`;
 }
@@ -1431,7 +1451,6 @@ export function ThoughtMapCanvas({
   const { w: boardW, h: boardH } = useElementSize(boardRef);
   // Read from the ref: mid-gesture renders (the pan's layer, a selection) must draw the camera as it is now.
   const camera = cameraRef.current;
-  const tile = GRID * camera.s;
 
   return (
     <div
@@ -1463,19 +1482,14 @@ export function ThoughtMapCanvas({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
-        {/* The dotted paper, one tile larger than the viewport and shifted by
-            the camera within a tile: a pan moves it (like the world) rather
-            than repainting the viewport's background on every frame. */}
+        {/* The dotted paper, a period larger than the viewport and shifted by
+            the camera within one (dotsStyle): a pan moves it (like the world)
+            rather than repainting the viewport's background on every frame. */}
         <div
           ref={dotsRef}
           className={styles.dots}
           data-moving={moving || undefined}
-          style={{
-            right: -tile,
-            bottom: -tile,
-            backgroundSize: `${tile}px ${tile}px`,
-            transform: dotsTransform(camera, tile),
-          }}
+          style={dotsStyle(camera)}
         />
         <div
           ref={worldRef}
