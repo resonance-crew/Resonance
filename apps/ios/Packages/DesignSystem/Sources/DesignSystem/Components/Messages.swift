@@ -772,10 +772,13 @@ public struct ComposerCapsule<Field: View>: View {
             } label: {
                 OrganicIcon(.send, size: ComposerMetrics.sendGlyph, color: canSend ? Tokens.cream : Tokens.terracotta,
                             strokeWidth: Tokens.ink)
+                    // Its ink changes in 140 ms; where it sits follows the capsule at once (a sent message's
+                    // lines going flip `canSend` in the same update: the plane never glides down to the row).
+                    .animation(ComposerCapsuleFace.faceChange, value: canSend)
+                    .geometryGroup()
                     .frame(width: ComposerMetrics.sendWidth, height: ComposerMetrics.height)
                     .frame(maxHeight: .infinity, alignment: .bottom)
                     .contentShape(Rectangle())
-                    .animation(.easeOut(duration: 0.14), value: canSend)
             }
             .buttonStyle(PressReport(pressed: $sendPressed))
             .disabled(!canSend)
@@ -819,20 +822,30 @@ struct ComposerCapsuleFace: View {
         ZStack {
             shape.fill(Tokens.cream)
             ZStack {
-                segment.fill(canSend ? Tokens.buttonFill : Tokens.buttonTonal)
+                // The faces change by their colour alone (round 17 review A2): each animation is scoped to the
+                // opacity it fades, never to a frame. Once it covered the whole segment, and committing a tag —
+                // which flips `canSend` in the same update that moves the field under the new pills — slid the
+                // segment in from where the field had been while the field itself stood still.
+                segment.fill(Tokens.buttonTonal)
+                segment.fill(Tokens.buttonFill)
+                    .animation(Self.faceChange) { $0.opacity(canSend ? 1 : 0) }
                 GrainLayer(shape: segment, mode: .tile, opacity: 0.38, tile: "grain-button", overflow: 16)
-                segment.fill(canSend ? Tokens.towardInk.opacity(0.14) : Tokens.terracotta.opacity(0.14)).opacity(pressed ? 1 : 0)
+                segment.fill(Tokens.terracotta.opacity(0.14))
+                    .animation(Self.pressChange) { $0.opacity(pressed && !canSend ? 1 : 0) }
+                segment.fill(Tokens.towardInk.opacity(0.14))
+                    .animation(Self.pressChange) { $0.opacity(pressed && canSend ? 1 : 0) }
                 ComposerSendSeam(seed: seed, width: segmentWidth).stroke(Tokens.cream, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round))
             }
             .clipShape(shape)
-            .animation(.easeOut(duration: 0.14), value: canSend)
-            .animation(.easeOut(duration: 0.12), value: pressed)
-            shape.stroke(ComposerMetrics.pen(focused: focused),
-                         style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
-                .animation(.easeOut(duration: 0.15), value: focused)
+            shape.stroke(style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
+                .animation(.easeOut(duration: 0.15)) { $0.foregroundStyle(ComposerMetrics.pen(focused: focused)) }
         }
         .accessibilityHidden(true)
     }
+
+    /// The segment's faces crossfading (tonal ⇄ solid) and its press wash.
+    static let faceChange = Animation.easeOut(duration: 0.14)
+    static let pressChange = Animation.easeOut(duration: 0.12)
 }
 
 /// The send segment's region in the capsule's frame: the last `width` (52), cut from the text by the
