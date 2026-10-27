@@ -717,6 +717,9 @@ public nonisolated enum ComposerMetrics {
     /// over those 6 and the top 6 of the first row); nothing otherwise (it lies over the capsule's top 12).
     public static func fadeRoom(riding: Bool) -> CGFloat { riding ? rideFadeRoom : 0 }
 
+    /// ＋'s ink: muted at rest, the text ink while its menu is open (the web's bare trigger, `data-open`).
+    public static func attachInk(open: Bool) -> Color { open ? Tokens.text : Tokens.textMuted }
+
     /// The send segment's seam: SegmentedActionBar's seed for the seam after the text.
     static func seamSeed(_ seed: Double) -> Double { seed + 11 }
 }
@@ -732,6 +735,9 @@ public nonisolated enum ComposerMetrics {
 public struct ComposerCapsule<Field: View>: View {
     let focused: Bool
     let canSend: Bool
+    /// ＋'s menu (圖片 · 卡片) is open: ＋ wears the web's open bare trigger — the text ink on a soft wobbly
+    /// disc of it (round 17 review A10).
+    var attachOpen: Bool = false
     let seed: Double
     let attachLabel: String
     let sendLabel: String
@@ -741,10 +747,11 @@ public struct ComposerCapsule<Field: View>: View {
     @State private var attachFrame: CGRect = .zero
     @State private var sendPressed = false
 
-    public init(focused: Bool, canSend: Bool, seed: Double = 17, attachLabel: String, sendLabel: String,
+    public init(focused: Bool, canSend: Bool, attachOpen: Bool = false, seed: Double = 17, attachLabel: String, sendLabel: String,
                 onAttach: @escaping (CGRect) -> Void, onSend: @escaping () -> Void, @ViewBuilder field: () -> Field) {
         self.focused = focused
         self.canSend = canSend
+        self.attachOpen = attachOpen
         self.seed = seed
         self.attachLabel = attachLabel
         self.sendLabel = sendLabel
@@ -756,12 +763,17 @@ public struct ComposerCapsule<Field: View>: View {
     public var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
             Button { onAttach(attachFrame) } label: {
-                OrganicIcon(.plus, size: ComposerMetrics.attachGlyph, color: Tokens.textMuted, strokeWidth: Tokens.ink)
+                OrganicIcon(.plus, size: ComposerMetrics.attachGlyph, color: ComposerMetrics.attachInk(open: attachOpen),
+                            strokeWidth: Tokens.ink)
+                    .animation(BareTriggerDisc.change, value: attachOpen)
+                    .geometryGroup()
                     .frame(width: ComposerMetrics.attachWidth, height: ComposerMetrics.height)
+                    .background { BareTriggerDisc(open: attachOpen, seed: seed + 3) }
                     .contentShape(Rectangle())
             }
             .buttonStyle(OrganicPressStyle(inset: 2))
             .accessibilityLabel(attachLabel)
+            .accessibilityAddTraits(attachOpen ? .isSelected : [])
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { attachFrame = $0 }
             field
                 .frame(maxWidth: .infinity, minHeight: ComposerMetrics.height, alignment: .leading)
@@ -790,6 +802,37 @@ public struct ComposerCapsule<Field: View>: View {
         .background {
             ComposerCapsuleFace(seed: seed, focused: focused, canSend: canSend, pressed: sendPressed)
         }
+    }
+}
+
+/// The web's bare menu trigger while its menu is open (OrganicMenu `.bare[data-open] .wash`): a wobbly disc
+/// of the text ink at 8 %, 92 % of the trigger's width (its 46 in a 100 box), growing from 0.4 as it fades in
+/// (160 ms). Laid behind the composer's ＋ while 圖片 · 卡片 is open (round 17 review A10).
+public struct BareTriggerDisc: View {
+    let open: Bool
+    var seed: Double
+
+    public init(open: Bool, seed: Double = 17) {
+        self.open = open
+        self.seed = seed
+    }
+
+    /// The web's `transform 160ms cubic-bezier(0.2, 0.8, 0.3, 1), opacity 160ms ease`.
+    public static let change = Animation.timingCurve(0.2, 0.8, 0.3, 1, duration: 0.16)
+    public static let ink: Double = 0.08
+    public static let reach: CGFloat = 0.92
+
+    public var body: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height) * Self.reach
+            WobCircleShape(seed: seed, options: WobCircleOptions(segments: 8, mag: Double(side) / 2 * 2.2 / 46, cpJitter: 0.4))
+                .fill(Tokens.text.opacity(Self.ink))
+                .frame(width: side, height: side)
+                .position(x: geo.size.width / 2, y: geo.size.height / 2)
+                .animation(Self.change) { $0.scaleEffect(open ? 1 : 0.4).opacity(open ? 1 : 0) }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 

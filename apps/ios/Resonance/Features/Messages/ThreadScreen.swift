@@ -374,7 +374,7 @@ struct ThreadScreen: View {
             if model.accessKnown {
                 switch model.access {
                 case .open, .replyToConnect:
-                    ThreadComposer(model: model, composing: $composing) { attachMenu = $0 }
+                    ThreadComposer(model: model, composing: $composing, attachOpen: attachMenu != nil) { attachMenu = $0 }
                 case .awaitingReply:
                     ComposerSlip(seed: 29) {
                         ThreadFootNote(text: L10n.Messages.awaitingReply)

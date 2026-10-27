@@ -124,12 +124,15 @@ public struct OrganicMenu: View {
             Button(action: show) {
                 Group {
                     if trigger == .bare {
-                        OrganicIcon(icon, size: 20, color: open ? Tokens.terracotta : Tokens.text, strokeWidth: OrganicIconButton.restingStroke)
+                        // Open, the web's bare trigger (round 17 review A10, the lead's addendum): the full ink on
+                        // a soft wobbly disc of it at 8 % — never terracotta.
+                        OrganicIcon(icon, size: 20, color: Tokens.text, strokeWidth: OrganicIconButton.restingStroke)
                     } else {
                         OrganicMenuChip(size: triggerSize, seed: seed, icon: icon, colors: colors, active: open)
                     }
                 }
                 .frame(minWidth: 44, minHeight: 44)
+                .background { if trigger == .bare { BareTriggerDisc(open: open, seed: seed) } }
                 .contentShape(Rectangle())
             }
             .buttonStyle(OrganicPressStyle(inset: trigger == .bare ? 4 : max(0, (44 - triggerSize) / 2)))

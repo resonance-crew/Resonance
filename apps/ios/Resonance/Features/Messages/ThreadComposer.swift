@@ -14,6 +14,8 @@ import SwiftUI
 struct ThreadComposer: View {
     @Bindable var model: ThreadModel
     var composing: FocusState<Bool>.Binding
+    /// ＋'s menu is open over the thread (＋ wears its open state, review A10).
+    var attachOpen = false
     /// The ＋ was tapped: where it is on the screen, for its menu to hang from.
     let onAttach: (CGRect) -> Void
 
@@ -35,7 +37,7 @@ struct ThreadComposer: View {
                 .padding(.bottom, ComposerMetrics.slipGap)
                 .transition(.opacity)
             }
-            ComposerCapsule(focused: composing.wrappedValue, canSend: model.canSend, attachLabel: L10n.Messages.attach,
+            ComposerCapsule(focused: composing.wrappedValue, canSend: model.canSend, attachOpen: attachOpen, attachLabel: L10n.Messages.attach,
                             sendLabel: L10n.Messages.send, onAttach: onAttach, onSend: { if model.canSend { model.send() } }) {
                 ComposerField(model: model, composing: composing)
             }
