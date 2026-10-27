@@ -701,8 +701,8 @@ export const HUE_ROLES = {
   wash: { light: [0.925, 0.045], dark: [0.31, 0.045] },
   /** A chosen card's outline. */
   emphasis: { light: [0.38, 0.13], dark: [0.76, 0.06] },
-  /** A thought-map group's ground (taken at 0.78–0.92 alpha). */
-  group: { light: [0.965, 0.032], dark: [0.265, 0.03] },
+  /** A thought-map group's ground (taken at 0.78–0.92 alpha): a hint of its hue, quieted with the papers (2026-10-27). */
+  group: { light: [0.965, 0.02], dark: [0.265, 0.018] },
   /** A group's outline, at rest and chosen. */
   'group-pen': { light: [0.6, 0.085], dark: [0.5, 0.045] },
   'group-pen-hot': { light: [0.45, 0.1], dark: [0.66, 0.06] },

@@ -564,7 +564,7 @@ enum class HueRole(val key: String, val light: List<Double>, val dark: List<Doub
     PillInk("pill-ink", listOf(0.5, 0.04), listOf(0.8, 0.04)),
     Wash("wash", listOf(0.925, 0.045), listOf(0.31, 0.045)),
     Emphasis("emphasis", listOf(0.38, 0.13), listOf(0.76, 0.06)),
-    Group("group", listOf(0.965, 0.032), listOf(0.265, 0.03)),
+    Group("group", listOf(0.965, 0.02), listOf(0.265, 0.018)),
     GroupPen("group-pen", listOf(0.6, 0.085), listOf(0.5, 0.045)),
     GroupPenHot("group-pen-hot", listOf(0.45, 0.1), listOf(0.66, 0.06)),
     GroupInk("group-ink", listOf(0.48, 0.09), listOf(0.66, 0.06)),

@@ -14,7 +14,7 @@
   --hue-pill-ink: 0.5 0.04;
   --hue-wash: 0.925 0.045;
   --hue-emphasis: 0.38 0.13;
-  --hue-group: 0.965 0.032;
+  --hue-group: 0.965 0.02;
   --hue-group-pen: 0.6 0.085;
   --hue-group-pen-hot: 0.45 0.1;
   --hue-group-ink: 0.48 0.09;
@@ -318,7 +318,7 @@
     --hue-pill-ink: 0.8 0.04;
     --hue-wash: 0.31 0.045;
     --hue-emphasis: 0.76 0.06;
-    --hue-group: 0.265 0.03;
+    --hue-group: 0.265 0.018;
     --hue-group-pen: 0.5 0.045;
     --hue-group-pen-hot: 0.66 0.06;
     --hue-group-ink: 0.66 0.06;
@@ -616,7 +616,7 @@
   --hue-pill-ink: 0.8 0.04;
   --hue-wash: 0.31 0.045;
   --hue-emphasis: 0.76 0.06;
-  --hue-group: 0.265 0.03;
+  --hue-group: 0.265 0.018;
   --hue-group-pen: 0.5 0.045;
   --hue-group-pen-hot: 0.66 0.06;
   --hue-group-ink: 0.66 0.06;
