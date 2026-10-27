@@ -103,6 +103,28 @@ public nonisolated enum PressMetrics {
     public static func listHeight(rows: Int, footer: Bool) -> CGFloat {
         MenuSheetMetrics.height(rows: rows, footer: footer)
     }
+
+    /// The sticker under the finger (round 17, the owner's 「被點擊的時候變大，像 Instagram」): grown 1.45 × and
+    /// risen 6 over its cell, drawn above its neighbours, on a spring (response 0.25, damping 0.6) — its own sticker
+    /// alone, the disc under the viewer's choice staying as it is. Under Reduce Motion it doesn't grow: it fades
+    /// to 0.7 while pressed.
+    public static let stickerPressScale: CGFloat = 1.45
+    public static let stickerPressRise: CGFloat = 6
+    public static let stickerPressResponse: Double = 0.25
+    public static let stickerPressDamping: Double = 0.6
+    public static let stickerPressFade: Double = 0.7
+    /// How far above or below the tray a finger still presses the sticker whose column it is in.
+    public static let trayPressSlop: CGFloat = 16
+
+    /// Which sticker a finger at `point` (in the tray's own space) presses: the one whose cell's column it is in,
+    /// no further than ``trayPressSlop`` above or below the tray. Slid past the tray's ends or further off it
+    /// presses none (nil), and lifted there it chooses none. A finger sliding along the tray presses each
+    /// sticker it comes over, and lifted chooses the one under it.
+    public static func trayIndex(at point: CGPoint) -> Int? {
+        guard point.x >= 0, point.x < trayWidth,
+              point.y >= -trayPressSlop, point.y <= trayHeight + trayPressSlop else { return nil }
+        return Int(point.x / trayCell)
+    }
 }
 
 // MARK: - Reaction chips

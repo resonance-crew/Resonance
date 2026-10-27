@@ -71,6 +71,10 @@ struct WriteScreen: View {
     @State private var publishScroll = ScrollPosition(edge: .top)
     /// The publish step's offset from its top (its content offset past the bar's inset).
     @State private var publishOffset: CGFloat = 0
+    /// The height the publish step's scroll shows (its content is never shorter: the paper under it takes taps too).
+    @State private var publishRoom: CGFloat = 0
+    /// The tag field's capsule in the publish step's content: taps there are the field's own.
+    @State private var tagFieldFrame: CGRect = .null
     private static let writeSpace = "write.content"
     @State private var writeScroll = ScrollPosition(edge: .top)
     @State private var writeViewport = CaretFollow.Viewport(offset: 0, insetTop: 0, height: 0)
@@ -591,19 +595,33 @@ struct WriteScreen: View {
                             var still = Transaction()
                             still.disablesAnimations = true
                             withTransaction(still) { publishScroll.scrollTo(y: max(0, publishOffset + delta)) }
-                        })
+                        },
+                        onTagFieldPlaced: { tagFieldFrame = $0 })
                 .padding(.horizontal, compact ? 20 : window.pad)
                 // A phone's preview band with nothing above it starts right at the bar's line, as home's first card.
                 .padding(.top, PublishStep.topPadding(model, showsBar: showsBar, compact: compact))
                 .padding(.bottom, 48)
                 .frame(maxWidth: compact ? .infinity : Tokens.measure + 2 * window.pad)
                 .frame(maxWidth: .infinity)
+                // At least as tall as what the scroll shows, so the paper under a short step (a tablet's) is the
+                // step's too, and a tap on it is one beside the fields.
+                .frame(minHeight: publishRoom, alignment: .top)
+                // A tap anywhere the step's controls don't take it themselves puts the keyboard away (the owner's
+                // round 17 ask) — the tag field's capsule aside, whose taps are its own (``PublishStep/tapPutsKeyboardAway(at:field:)``).
+                // The step's buttons, pills and choices keep their taps; what is typed stays in the field.
+                .contentShape(Rectangle())
+                .onTapGesture { point in
+                    if PublishStep.tapPutsKeyboardAway(at: point, field: tagFieldFrame) { putKeyboardAway(model) }
+                }
                 // What the tag field measures its top in: the content, whatever the scroll.
                 .coordinateSpace(.named(PublishStep.space))
         }
         .scrollPosition($publishScroll)
         // Where the step rests, for the tag field's shift (``PublishStep/onShift``).
         .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, y in publishOffset = y }
+        // The height the scroll shows its content in (less its bars, and the keyboard while it is up).
+        .onScrollGeometryChange(for: CGFloat.self) { max(0, $0.containerSize.height - $0.contentInsets.top - $0.contentInsets.bottom) }
+            action: { _, room in publishRoom = room }
         .onHeaderScroll($scrolledPublish)
         .scrollDismissesKeyboard(.interactively)
         // Pulled down while the band leads under the bar (round 8 §6.3): the gap wears the band's own paper,

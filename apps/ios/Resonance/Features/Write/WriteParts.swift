@@ -29,6 +29,9 @@ struct TagField<Label: View>: View {
     /// The row of tags above the field changed height by this much while the field was in use: the page
     /// scrolls by it, so the field stays where it was on the screen.
     var onShift: (CGFloat) -> Void = { _ in }
+    /// Where the capsule (the text and its segment) lies in the step's content (``PublishStep/space``): a tap
+    /// there is the field's own, never a tap beside it that puts the keyboard away (``PublishStep/tapPutsKeyboardAway(at:field:)``).
+    var onPlaced: (CGRect) -> Void = { _ in }
     @ViewBuilder let label: Label
 
     @FocusState private var focused: Bool
@@ -70,6 +73,7 @@ struct TagField<Label: View>: View {
                                 onSegment: tapSegment) {
                     entry
                 }
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(PublishStep.space)) } action: { onPlaced($0) }
                 // No help line under the field (round 8 §2.2): the slot shows only an error.
                 if let error {
                     Text(error)
