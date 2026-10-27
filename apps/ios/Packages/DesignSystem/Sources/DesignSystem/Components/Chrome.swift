@@ -46,9 +46,10 @@ public struct OrganicTabBar<ID: Hashable>: View {
 
     /// The bar's height above the home indicator, without its wavy edge (round 16 §2: 60 → 52).
     public static var height: CGFloat { 52 }
-    /// Where the row's middle stands over the screen's foot on a device with a home indicator (round 17 §7):
-    /// 42, so the row reaches down into the indicator's room (18 of an iPhone's 34) rather than standing on it.
-    public static var rowCentreAboveFoot: CGFloat { 42 }
+    /// Where the row's middle stands over the screen's foot on a device with a home indicator: 50 (round 17
+    /// addendum A2; round 17 §7 had 42, round 16 stood it on the indicator's room at 60 on an iPhone) — the row
+    /// reaches 10 into an iPhone's 34 and keeps a little air over the indicator, as the big social apps do.
+    public static var rowCentreAboveFoot: CGFloat { 50 }
 
     /// How far the bar sits under the bottom safe area's top edge, given that safe area: the row lowered to
     /// stand ``rowCentreAboveFoot`` over the screen's foot — never raised, and not at all without a home

@@ -410,17 +410,23 @@ list says 傳送了一張圖片 for one sent without words.
 Round 17 (2026-10-27), iOS: every menu is one sheet (`OrganicMenuPanel`, DesignSystem `OrganicMenu.swift`) — the ⋯
 dropped from its trigger (no scrim), the composer's ＋ and a held message's actions alike: borderless paper
 (`MenuColors.paper`, raised at night) under the grain laid past the wobble (`MenuSheetMetrics.grainOverflow`), no pen and
-no rules, a shadow that follows the wobble (`SheetShadow`), rows 44 with the glyph 17 and the words 12 apart and 20 in
+no rules, the paper-cut shadow following the wobble (`CutoutShadow`, below), rows 44 with the glyph 17 and the words 12 apart and 20 in
 from either side, 168 to 300 wide (a held message's list 216 to 280; `MenuSheetMetrics`), the ink spreading from the finger inside its row's band, and a
 held message's time at the trailing end right under its rows. Holding a message dims and softens the thread's body alone
 (the scrim is the thread's, under its header and short of the rule beside the list; `PressPlacement` keeps the
 reactions and the list 12 inside it), and the five stickers float on it with no paper. A chosen tag is the 「AI 建議」
 segment's face (`TagField.pillFill` / `pillInk`), and Return in the tag field is a line break taken out at once
 (`TagInput.returned`), so the field keeps the keyboard and nothing moves. 連結 is the format bar's last tool, after its
-own rule, and opens `StoryLinkModal` in the app's modal. The phone's tab bar stands 18 into the home indicator's room
-(`OrganicTabBar.lowered(bottomInset:)`: the row's middle 42 over the screen's foot) with its outline glyphs at INK_STRONG;
+own rule, and opens `StoryLinkModal` in the app's modal. The phone's tab bar stands 10 into the home indicator's room
+(`OrganicTabBar.lowered(bottomInset:)`: the row's middle 50 over the screen's foot — the addendum's A2; §7 had 42) with
+its outline glyphs at INK_STRONG;
 the writer's bar grows round its title and save line at a large text size (`BarTitles.scaledSubtitleLine`); and at the
 split the map's Leave is the workspace's one back — from the publish step back to writing, named 繼續寫 (`WritePane.publishing`).
+Its addendum, iOS: whatever lies on the page like a piece of cut paper casts one shadow, tight and a little deep
+(`CutoutShadow`, `.cutoutShadow()`: by day `0 2 3` at 22 % and `0 0.5 1` at 14 % of the palette's shadow ink, at night
+`0 2 4` at 60 % — the web's `--cutout-shadow`) — every menu sheet, the toast's and the thread's pill (`OrganicPill`), and a
+chip over a card or its cover (the card box's ⋯ chip, `OrganicMenuChip`; the writer's 更換封面 pill and its error chip);
+a bare glyph in a bar, the press tray's stickers and anything flat cast none.
 
 Round 17's review, iOS: an animation tied to a value that flips in the same update as a layout change carries that
 change too, so the composer's and the tag field's faces animate their colour or opacity alone (`.animation(_:body:)`),

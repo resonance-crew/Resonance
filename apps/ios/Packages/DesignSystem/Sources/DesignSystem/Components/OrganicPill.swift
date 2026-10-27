@@ -2,7 +2,8 @@ import SwiftUI
 
 /// A small word over the page that something happened, or the way to act on it — the web's
 /// atoms/InkPill: a wobbly terracotta-light wash with no pen line (a fill marks a button: the whole
-/// pill is one when it has an action). The face of the thread's way back to the latest message and
+/// pill is one when it has an action), lying on the page like cut paper with its shadow
+/// (``CutoutShadow``). The face of the thread's way back to the latest message and
 /// its 已複製 (`.small`), and of every toast (`.toast`, `ToastHost`). Its numbers are the thread
 /// pill's tuned recipe, moved here as they were.
 public struct OrganicPill: View {
@@ -80,7 +81,8 @@ public struct OrganicPill: View {
         .padding(.horizontal, m.horizontalPadding).padding(.vertical, m.verticalPadding)
         .frame(minHeight: m.minHeight)
         .background {
-            Self.shape.fill(Tokens.cream)
+            // A piece of cut paper on the page (round 17 addendum A1): the cream casts the paper-cut shadow.
+            Self.shape.fill(Tokens.cream).cutoutShadow()
             Self.shape.fill(Tokens.terracottaLight.opacity(0.9))
         }
         .contentShape(Rectangle())

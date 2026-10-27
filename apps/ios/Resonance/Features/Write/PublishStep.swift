@@ -470,7 +470,7 @@ private struct CoverSlot: View {
 
 /// Why the last try at a cover didn't work, over the cover that stays (round 8 §3): the 更換封面
 /// chip's sibling — paper with the hand-drawn edge (the web's CoverErrorChip: the menu chip's
-/// squircle in the cream at 94 %, a soft shadow under it) — its words in the error's ink, 12
+/// squircle in the cream at 94 %, the paper-cut shadow under it, ``CutoutShadow``) — its words in the error's ink, 12
 /// semibold, wrapping within 70 % of the picture's width. It goes with the next cover action.
 private struct CoverErrorChip: View {
     let message: String
@@ -488,7 +488,7 @@ private struct CoverErrorChip: View {
             .background {
                 CoverErrorChipShape()
                     .fill(Tokens.cream.opacity(0.94))
-                    .shadow(color: Tokens.shadowInk.opacity(0.22), radius: 1.5, y: 1)
+                    .cutoutShadow()
             }
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isStaticText)

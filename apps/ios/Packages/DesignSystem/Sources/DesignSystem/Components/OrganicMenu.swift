@@ -28,12 +28,13 @@ public struct OrganicMenuItem: Identifiable {
 }
 
 /// How a menu's trigger is drawn. In a bar (the card page's header) it is a
-/// `bare` glyph like the back arrow beside it — the bar is the frame. Over
-/// content (a card's cover in the card box) it is a `chip`: a wobbly cream
-/// squircle with no rim, so it stays legible over a picture without adding a
-/// pen line. A `pill` says what it opens in words beside its glyph, on the
-/// paper button's face (the writer's 更換封面 on the cover it changes): solid
-/// paper reads on any picture.
+/// `bare` glyph like the back arrow beside it — the bar is the frame — and
+/// casts no shadow. Over content (a card's cover in the card box) it is a
+/// `chip`: a wobbly cream squircle with no rim, so it stays legible over a
+/// picture without adding a pen line. A `pill` says what it opens in words
+/// beside its glyph, on the paper button's face (the writer's 更換封面 on the
+/// cover it changes): solid paper reads on any picture. A chip and a pill lie
+/// on what they're drawn over and cast the paper-cut shadow (``CutoutShadow``).
 public enum MenuTrigger: Sendable, Equatable {
     case chip, bare
     case pill(String, IconName)
@@ -118,6 +119,10 @@ public struct OrganicMenu: View {
                     OrganicButton(title, icon: glyph, variant: .paper, size: .sm, action: show)
                 }
             }
+            // A chip on the picture it changes: a second paper, with the paper-cut shadow (round 17 addendum A1),
+            // cast by the face as one piece — never by its words over its own paper.
+            .compositingGroup()
+            .cutoutShadow()
             .fixedSize()
             .frame(minHeight: 44)
         case .chip, .bare:
@@ -263,7 +268,9 @@ public struct OrganicChipFace: View {
 }
 
 /// The trigger: a squircle chip (radius 0.42 of its side, one turn a side)
-/// in the menu's cream, no rim, the glyph at 0.53 of the side in the pen.
+/// in the menu's cream, no rim, the glyph at 0.53 of the side in the pen. It lies over a card or its
+/// cover, a second paper on the first, and casts the paper-cut shadow (``CutoutShadow``; round 17
+/// addendum A1) — a bare glyph in a bar never does.
 struct OrganicMenuChip: View {
     let size: CGFloat
     let seed: Double
@@ -276,7 +283,7 @@ struct OrganicMenuChip: View {
             curve: 1.4, cornerJitter: 2.4, segmentsH: .count(1), segmentsV: .count(1)))
         OrganicIcon(icon, size: (size * 0.53).rounded(), color: active ? colors.borderHover : colors.border, strokeWidth: Tokens.ink)
             .frame(width: size, height: size)
-            .background { shape.fill(colors.cream.opacity(0.94)) }
+            .background { shape.fill(colors.cream.opacity(0.94)).cutoutShadow() }
     }
 }
 
@@ -352,8 +359,8 @@ public nonisolated enum MenuDrop {
 /// The menus' one surface (round 17 §1): every menu — a ⋯ dropped from its trigger, the composer's ＋,
 /// a message held — is this paper sheet. Borderless paper (``MenuColors/paper``: the menus' paper, a
 /// step toward the ink at night) under the paper's grain (0.3) over the whole wobbly outline, no pen
-/// and no rule between the rows, lifted off the page by a soft shadow that follows the wobble
-/// (``SheetShadow``) instead of an outline. Rows 44: the glyph 17, 12, the words at 15, 20 in from
+/// and no rule between the rows, lifted off the page by the paper-cut shadow that follows the wobble
+/// (``CutoutShadow``) instead of an outline. Rows 44: the glyph 17, 12, the words at 15, 20 in from
 /// either side, the sheet as wide as its longest row (``MenuSheetMetrics/width(titles:footer:widths:)``, 168 to 300;
 /// a held message's list 216 to 280).
 /// A press spreads the ink from the finger, clipped to its row's band inside the outline (the bands
@@ -498,7 +505,7 @@ struct MenuRowStyle: ButtonStyle {
 }
 
 /// The sheet's paper, its shadow, the washes and its grain, all of them one outline: the paper's fill
-/// casts the shadow; the pressed row's ink (red on a destructive row) is cut to its band inside it; the
+/// casts the paper-cut shadow (``CutoutShadow``); the pressed row's ink (red on a destructive row) is cut to its band inside it; the
 /// grain covers exactly the paper — laid wider than the box by ``MenuSheetMetrics/grainOverflow`` and
 /// clipped to the same outline, since the wobble swings past the box (round 17 §1: a strip at the top
 /// edge had paper and no grain, and the sheet read as two layers).
@@ -521,7 +528,7 @@ struct MenuSheetBackground: View {
         let boundaries = MenuSheetMetrics.boundaries(bands: bands, width: w, height: h, seed: seed)
         let pad = MenuSheetMetrics.pad(height: h)
         ZStack(alignment: .topLeading) {
-            shape.fill(colors.paper).sheetShadow()
+            shape.fill(colors.paper).cutoutShadow()
             if let row = ink.row, row < rows {
                 let origin = ink.origin ?? CGPoint(x: size.width / 2, y: MenuSheetMetrics.padTop + (CGFloat(row) + 0.5) * MenuSheetMetrics.row)
                 let far = hypot(max(origin.x, size.width - origin.x), max(origin.y, size.height - origin.y)) + 4
@@ -619,37 +626,68 @@ public nonisolated enum MenuSheetMetrics {
     }
 }
 
-/// The floating sheets' elevation (round 17 §1), in place of an outline: by day two shadows of a warm
-/// ink — `0 8 24` at 16 % and `0 1 3` at 10 % (oklch 30 % 0.04 50) — at night one deep one, `0 10 28` black
-/// at 45 %. A CSS blur is twice a layer's shadow radius.
-public nonisolated enum SheetShadow {
-    public static let far: Color = Palette.made { _, scheme in scheme == .dark ? (0, 0, 0, 0.45) : (0.30, 0.04, 50, 0.16) }
-    public static let near: Color = Palette.made { _, scheme in scheme == .dark ? (0, 0, 0, 0) : (0.30, 0.04, 50, 0.10) }
+/// The paper-cut shadow (round 17 addendum A1): the one shadow of anything lying on the page like a piece
+/// of cut paper — every menu sheet, the toast (``OrganicPill``), a menu chip over a card or its cover. Tight
+/// and a little deep, one sheet lifted a millimetre rather than floating (it replaced round 17 §1's soft
+/// `0 8 24`). By day two layers of the palette's shadow ink — `0 2 3` at 22 % and `0 0.5 1` at 14 % — at
+/// night one, `0 2 4` at 60 % (the web's `--cutout-shadow`). A CSS blur is twice a layer's shadow radius.
+/// Bare glyph buttons, the tray's stickers and anything flat wear none.
+public nonisolated enum CutoutShadow {
+    /// One layer: its ink's strength, its blur as a layer's radius (half the CSS blur), its drop.
+    public struct Layer: Equatable, Sendable {
+        public var alpha: Double
+        public var radius: CGFloat
+        public var y: CGFloat
 
-    /// The far shadow's radius and drop, by scheme.
-    public static func far(dark: Bool) -> (radius: CGFloat, y: CGFloat) { dark ? (14, 10) : (12, 8) }
-    public static let nearRadius: CGFloat = 1.5
-    public static let nearY: CGFloat = 1
+        public init(alpha: Double, radius: CGFloat, y: CGFloat) {
+            self.alpha = alpha
+            self.radius = radius
+            self.y = y
+        }
+    }
+
+    /// The layers of a scheme: by day the drop and the hairline under the paper's edge; at night the drop alone.
+    public static func layers(dark: Bool) -> [Layer] {
+        dark ? [Layer(alpha: 0.60, radius: 2, y: 2)]
+            : [Layer(alpha: 0.22, radius: 1.5, y: 2), edge]
+    }
+
+    /// The drop: `0 2 3` by day, `0 2 4` at night.
+    public static func drop(dark: Bool) -> Layer { layers(dark: dark)[0] }
+    /// The hairline: `0 0.5 1` by day; none at night.
+    public static let edge = Layer(alpha: 0.14, radius: 0.5, y: 0.5)
+
+    /// The layers' inks: the palette's shadow ink (`--shadow-ink`) at each layer's strength, by scheme — the
+    /// hairline clear at night.
+    public static let dropInk = ink { $0 == .dark ? drop(dark: true).alpha : drop(dark: false).alpha }
+    public static let edgeInk = ink { $0 == .dark ? 0 : edge.alpha }
+
+    private static func ink(_ alpha: (PaletteScheme) -> Double) -> Color {
+        Palette.made { accent, scheme in
+            let c = OKLCHColor.components(Palette.oklch(.shadowInk, accent: accent, scheme: scheme)) ?? (0, 0, 0, 1)
+            return (c.L, c.C, c.H, c.alpha * alpha(scheme))
+        }
+    }
 }
 
-private struct SheetShadowModifier: ViewModifier {
+private struct CutoutShadowModifier: ViewModifier {
     @Environment(\.colorScheme) private var scheme
 
     func body(content: Content) -> some View {
-        let far = SheetShadow.far(dark: scheme == .dark)
+        let drop = CutoutShadow.drop(dark: scheme == .dark)
+        // Nothing drawn twice (a chip's 94 % cream keeps what shows through it): the drop, then the hairline —
+        // cast by the paper and the drop's own fringe together, a hundredth of ink or so more, unseen.
         content
-            .shadow(color: SheetShadow.near, radius: SheetShadow.nearRadius, x: 0, y: SheetShadow.nearY)
-            .background {
-                // The far one on a copy under it, so neither shadows the other.
-                content.shadow(color: SheetShadow.far, radius: far.radius, x: 0, y: far.y)
-            }
+            .shadow(color: CutoutShadow.dropInk, radius: drop.radius, x: 0, y: drop.y)
+            .shadow(color: CutoutShadow.edgeInk, radius: CutoutShadow.edge.radius, x: 0, y: CutoutShadow.edge.y)
     }
 }
 
 extension View {
-    /// A floating sheet's shadow (``SheetShadow``), following the outline of what it is given — a filled shape.
-    public func sheetShadow() -> some View {
-        modifier(SheetShadowModifier())
+    /// The paper-cut shadow (``CutoutShadow``), following the outline of what it is given — a filled shape, or a
+    /// face composited into one (`.compositingGroup()` first, or its words would cast their own).
+    public func cutoutShadow() -> some View {
+        modifier(CutoutShadowModifier())
     }
 }
 
