@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 460">
+<defs>
+  <filter id="b-x-rough" x="-10%" y="-10%" width="120%" height="120%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="4" result="w"/>
+    <feDisplacementMap in="SourceGraphic" in2="w" scale="9" result="d"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="9" result="n"/>
+    <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -2.2 1.35" result="holes"/>
+    <feComposite in="d" in2="holes" operator="in"/>
+  </filter>
+  <filter id="b-x-goo" x="-20%" y="-20%" width="140%" height="140%">
+    <feGaussianBlur stdDeviation="14" result="bl"/>
+    <feColorMatrix in="bl" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -8" result="g"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="2" result="w"/>
+    <feDisplacementMap in="g" in2="w" scale="8"/>
+  </filter>
+  <clipPath id="b-x-dome"><path d="M 510,355 C 488,300 496,220 540,170 C 575,128 632,108 672,128 C 712,150 720,205 712,252 C 706,300 722,338 700,355 Z"/></clipPath>
+</defs>
+<rect width="1600" height="460" fill="oklch(96.5% 0.015 75)"/>
+<g font-family="PingFang TC, Noto Sans TC, sans-serif" font-size="18" fill="oklch(45% 0.03 60)">
+  <text x="200" y="430" text-anchor="middle">① 雙球頸：兩團融成一個</text>
+  <text x="600" y="430" text-anchor="middle">② 三道漣漪：會起伏的花紋</text>
+  <text x="1000" y="430" text-anchor="middle">③ 拖痕：走過留下一抹</text>
+</g>
+<!-- 1 fused pair -->
+<ellipse cx="200" cy="370" rx="120" ry="10" fill="oklch(88% 0.02 70)"/>
+<g filter="url(#b-x-goo)">
+  <ellipse cx="195" cy="295" rx="112" ry="70" fill="oklch(78% 0.06 290)"/>
+  <circle cx="228" cy="168" r="70" fill="oklch(84% 0.07 55)"/>
+</g>
+<g fill="oklch(28% 0.03 50)"><ellipse cx="205" cy="168" rx="7" ry="10"/><ellipse cx="248" cy="166" rx="7" ry="10"/></g>
+<path d="M 220,192 q 8,7 16,0" stroke="oklch(28% 0.03 50)" stroke-width="3" fill="none" stroke-linecap="round"/>
+
+<!-- 2 banded dome -->
+<ellipse cx="610" cy="362" rx="120" ry="10" fill="oklch(88% 0.02 70)"/>
+<g filter="url(#b-x-rough)">
+  <path d="M 510,355 C 488,300 496,220 540,170 C 575,128 632,108 672,128 C 712,150 720,205 712,252 C 706,300 722,338 700,355 Z" fill="oklch(84% 0.065 60)"/>
+  <path d="M 515,262 C 488,240 470,222 476,205 C 482,192 500,200 512,220 Z" fill="oklch(84% 0.065 60)"/>
+  <g clip-path="url(#b-x-dome)" fill="none" stroke="oklch(66% 0.11 42)" stroke-width="13" stroke-linecap="round">
+    <path d="M 480,265 q 30,-22 60,0 t 60,0 t 60,0 t 60,0"/>
+    <path d="M 480,300 q 30,-22 60,0 t 60,0 t 60,0 t 60,0"/>
+    <path d="M 480,335 q 30,-22 60,0 t 60,0 t 60,0 t 60,0"/>
+  </g>
+</g>
+<g fill="oklch(28% 0.03 50)"><ellipse cx="610" cy="190" rx="7" ry="10"/><ellipse cx="656" cy="186" rx="7" ry="10"/></g>
+<path d="M 626,214 q 8,7 16,0" stroke="oklch(28% 0.03 50)" stroke-width="3" fill="none" stroke-linecap="round"/>
+
+<!-- 3 drip trail -->
+<g filter="url(#b-x-rough)">
+  <path d="M 1110,362 C 1128,300 1100,212 1040,198 C 985,188 950,240 940,300 C 900,320 860,335 820,345 C 790,352 760,352 800,362 Z" fill="oklch(80% 0.06 215)"/>
+  <path d="M 790,356 C 740,358 700,354 660,358" stroke="oklch(80% 0.06 215)" stroke-width="10" stroke-linecap="round" fill="none" opacity="0.6"/>
+</g>
+<g fill="oklch(28% 0.03 50)"><ellipse cx="1050" cy="245" rx="7" ry="10"/><ellipse cx="1090" cy="243" rx="7" ry="10"/></g>
+
+<!-- chosen: ①'s neck + ③'s mark it leaves → a drop rising out of its own pool, carrying ripples -->
+<line x1="1210" y1="40" x2="1210" y2="400" stroke="oklch(70% 0.03 60)" stroke-width="1.5" stroke-dasharray="4 6"/>
+<g transform="translate(1180,10)">
+  <g fill="none" stroke="oklch(70% 0.05 300)" stroke-width="5" stroke-linecap="round" opacity="0.8">
+    <path d="M 70,372 C 110,392 290,392 330,372"/><path d="M 40,382 C 100,410 300,410 360,382" opacity="0.6"/>
+  </g>
+  <g filter="url(#b-x-goo)">
+    <path d="M 82,372 C 82,330 150,318 200,318 C 260,318 318,332 318,372 Z" fill="oklch(78% 0.05 300)"/>
+    <path d="M 200,330 C 196,290 192,250 206,212" stroke="oklch(82% 0.06 30)" stroke-width="86" fill="none" stroke-linecap="round"/>
+    <ellipse cx="208" cy="170" rx="84" ry="72" fill="oklch(85% 0.06 60)"/>
+    <path d="M 270,340 C 278,300 290,268 300,250" stroke="oklch(82% 0.06 30)" stroke-width="20" fill="none" stroke-linecap="round"/>
+    <circle cx="304" cy="240" r="17" fill="oklch(84% 0.06 50)"/>
+  </g>
+  <g fill="oklch(28% 0.03 50)"><path d="M 182,160 c 6,8 10,16 10,22 a 10,10 0 0 1 -20,0 c 0,-6 4,-14 10,-22 z"/><path d="M 232,156 c 6,8 10,16 10,22 a 10,10 0 0 1 -20,0 c 0,-6 4,-14 10,-22 z"/></g>
+  <path d="M 214,118 m -8,0 a 8,6 0 1 1 8,6" fill="none" stroke="oklch(66% 0.09 40)" stroke-width="4" stroke-linecap="round"/>
+</g>
+<g font-family="PingFang TC, Noto Sans TC, sans-serif" fill="oklch(45% 0.03 60)" text-anchor="middle">
+  <text x="1400" y="430" font-size="18">→ 選定：①的頸 ＋ ③的痕</text>
+  <text x="1400" y="452" font-size="13" fill="oklch(58% 0.025 60)">一滴從自己的池子裡升起來、帶著漣漪</text>
+</g>
+</svg>
