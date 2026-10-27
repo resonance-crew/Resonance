@@ -401,6 +401,8 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
             session, SafetyService.Target.Message(message.id, message.senderId, pair), other.handle,
             onBlocked = { scope.launch { model.refreshConnection() } },
             offerBlock = !model.isBlocked,
+            // Titled for that one message, not the conversation (the bar's 檢舉 keeps 檢舉與 bob 的對話).
+            customTitle = L10n.Safety.reportThisMessage,
         ) { reportingMessage = null }
     }
     // 收回 asks first, in the plain colour (it takes the words back, it doesn't destroy them for good).

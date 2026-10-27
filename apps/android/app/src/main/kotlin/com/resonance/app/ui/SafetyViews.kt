@@ -110,6 +110,8 @@ fun ReportDialog(
     onBlocked: () -> Unit,
     /** Offer "also block" (not when they're already blocked, nor for an anonymous card). */
     offerBlock: Boolean = true,
+    /** The dialog's title in place of the target's own (one message of a conversation: 檢舉這則訊息, round 16 §3). */
+    customTitle: String? = null,
     onClose: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -121,11 +123,7 @@ fun ReportDialog(
     var done by remember { mutableStateOf<Boolean?>(null) }
     val name = handle ?: L10n.Safety.anonymousAuthor
     val blocks = offerBlock && target.userId != null
-    val title = when (target) {
-        is SafetyService.Target.Card -> L10n.Safety.Report.titleCard
-        is SafetyService.Target.User -> L10n.Safety.Report.titleUser(name)
-        is SafetyService.Target.Message -> L10n.Safety.Report.titleMessage(name)
-    }
+    val title = reportTitle(target, name, customTitle)
 
     OrganicModal(if (busy) null else onClose, title, seed = 83.0, closeLabel = reportCloseLabel(sent = done != null)) {
         val blocked = done
@@ -179,6 +177,16 @@ fun ReportDialog(
             }
         })
     }
+}
+
+/**
+ * The report dialog's title: [customTitle] when the caller has one (檢舉這則訊息 for one message, the
+ * web's ReportModal title), else the target's own — the card, the person, the conversation with [name].
+ */
+internal fun reportTitle(target: SafetyService.Target, name: String, customTitle: String? = null): String = customTitle ?: when (target) {
+    is SafetyService.Target.Card -> L10n.Safety.Report.titleCard
+    is SafetyService.Target.User -> L10n.Safety.Report.titleUser(name)
+    is SafetyService.Target.Message -> L10n.Safety.Report.titleMessage(name)
 }
 
 /**
