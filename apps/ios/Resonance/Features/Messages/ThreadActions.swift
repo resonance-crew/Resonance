@@ -298,40 +298,63 @@ private struct ClippedFoot: ViewModifier {
 /// The five reactions floating over the scrim (round 16 §3, round 17 §2: no paper of their own — the thread
 /// under them is dimmed and softened already): 5 × 44 cells, the stickers 32, the viewer's own on its opaque
 /// wobbly disc (``PressSheet/chosenDisc``); they pop in one after another (20 ms apart, 0.6 → 1), a fade
-/// under Reduce Motion. For VoiceOver a group named 心情 / Reactions, each sticker a button naming it, the
-/// chosen one selected.
+/// under Reduce Motion. The sticker under the finger grows and rises over its neighbours, Instagram's way
+/// (``PressMetrics/stickerPressScale``): the finger is followed along the tray, so sliding it across presses
+/// each sticker it comes over, lifting it chooses the one under it, and sliding it off the tray chooses none.
+/// For VoiceOver a group named 心情 / Reactions, each sticker a button naming it, the chosen one selected.
 private struct ReactionTray: View {
     let current: ReactionId?
     let shown: Bool
     let reduceMotion: Bool
     let onChoose: (ReactionId) -> Void
+    /// The sticker under the finger while it is down on the tray (nil: up, or slid off it).
+    @GestureState private var pressed: Int?
 
     var body: some View {
         HStack(spacing: 0) {
             ForEach(Array(ReactionId.order.enumerated()), id: \.element) { i, id in
-                Button { onChoose(id) } label: {
-                    ReactionGlyph(id, size: PressMetrics.traySticker)
-                        .scaleEffect(shown || reduceMotion ? 1 : 0.6)
-                        .opacity(shown ? 1 : 0)
-                        .animation(reduceMotion ? .easeOut(duration: 0.15)
-                                   : .spring(response: 0.28, dampingFraction: 0.6).delay(shown ? Double(i) * 0.02 : 0), value: shown)
-                        .frame(width: PressMetrics.trayCell, height: PressMetrics.trayCell)
-                        .background {
-                            if current == id {
-                                WobCircleShape(seed: Double(i) * 7 + 3)
-                                    .fill(PressSheet.chosenDisc)
-                                    .padding(2)
-                                    .transition(.opacity)
-                            }
+                let held = pressed == i
+                ReactionGlyph(id, size: PressMetrics.traySticker)
+                    // Pressed: the sticker alone grows and rises (on its own spring, apart from the pop-in);
+                    // under Reduce Motion it only fades a little.
+                    .animation(reduceMotion ? .easeOut(duration: 0.1)
+                               : .spring(response: PressMetrics.stickerPressResponse, dampingFraction: PressMetrics.stickerPressDamping)) {
+                        $0.scaleEffect(held && !reduceMotion ? PressMetrics.stickerPressScale : 1)
+                            .offset(y: held && !reduceMotion ? -PressMetrics.stickerPressRise : 0)
+                            .opacity(held && reduceMotion ? PressMetrics.stickerPressFade : 1)
+                    }
+                    .scaleEffect(shown || reduceMotion ? 1 : 0.6)
+                    .opacity(shown ? 1 : 0)
+                    .animation(reduceMotion ? .easeOut(duration: 0.15)
+                               : .spring(response: 0.28, dampingFraction: 0.6).delay(shown ? Double(i) * 0.02 : 0), value: shown)
+                    .frame(width: PressMetrics.trayCell, height: PressMetrics.trayCell)
+                    .background {
+                        if current == id {
+                            WobCircleShape(seed: Double(i) * 7 + 3)
+                                .fill(PressSheet.chosenDisc)
+                                .padding(2)
+                                .transition(.opacity)
                         }
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(OrganicPressStyle(inset: 4))
-                .accessibilityLabel(ReactionNames.name(id))
-                .accessibilityAddTraits(current == id ? .isSelected : [])
+                    }
+                    // Grown, it is drawn over the stickers beside it.
+                    .zIndex(held ? 1 : 0)
+                    .accessibilityElement()
+                    .accessibilityLabel(ReactionNames.name(id))
+                    .accessibilityAddTraits(current == id ? [.isButton, .isSelected] : .isButton)
+                    .accessibilityAction { onChoose(id) }
             }
         }
         .frame(width: PressMetrics.trayWidth, height: PressMetrics.trayHeight)
+        .contentShape(Rectangle())
+        // One finger on the whole tray, followed (``PressMetrics/trayIndex(at:)``): no sticker is a button of its
+        // own for touch, so a slide from one to the next hands the press over rather than keeping the first.
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .updating($pressed) { value, state, _ in state = PressMetrics.trayIndex(at: value.location) }
+                .onEnded { value in
+                    if let i = PressMetrics.trayIndex(at: value.location) { onChoose(ReactionId.order[i]) }
+                }
+        )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(L10n.Messages.reactionsLabel)
     }
