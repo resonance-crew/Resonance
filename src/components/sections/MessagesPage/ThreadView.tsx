@@ -26,6 +26,7 @@ import { OLDER_PAGE, useChatThread } from '@/lib/data/thread';
 import { resonanceCardKey, threadCardKeys } from '@/lib/chat/cardLink';
 import { footComposes, threadFoot } from '@/lib/chat/foot';
 import { threadRows } from '@/lib/chat/rows';
+import { fullMessageTime, timeOfDay } from '@/lib/chat/time';
 import { changeShown, withLocalChange, type LocalChange } from '@/lib/chat/message';
 import { ApiError } from '@/lib/db/firestore/client/api';
 import type { TextRange } from '@/lib/chat/search';
@@ -494,11 +495,9 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
 
   // The thread's labels and times, worked out once per message rather than on every draw.
   const dayFmt = useMemo(() => new Intl.DateTimeFormat(locale, { month: 'long', day: 'numeric', weekday: 'short' }), [locale]);
-  const timeFmt = useMemo(() => new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }), [locale]);
-  const fullFmt = useMemo(
-    () => new Intl.DateTimeFormat(locale, { month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
-    [locale],
-  );
+  // Times as the whole chat says them (lib/chat/time): the list, these labels, a message's tooltip and menu.
+  const timeFmt = timeOfDay(locale);
+  const fullFmt = fullMessageTime(locale);
   const laidOut = useMemo(
     () =>
       rows.map((r, i) => {

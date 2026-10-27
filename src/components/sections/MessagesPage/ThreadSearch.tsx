@@ -6,6 +6,7 @@ import { Divider } from '@/components/atoms/Divider/Divider';
 import { SketchLoader } from '@/components/atoms/SketchLoader/SketchLoader';
 import { searchSnippet, type SearchHit } from '@/lib/chat/search';
 import type { ChatMessage } from '@/lib/chat/message';
+import { timeOfDay } from '@/lib/chat/time';
 import { seedFromId } from '@/lib/design/bubble';
 import { RowWash } from './RowWash';
 import styles from './Thread.module.css';
@@ -117,7 +118,7 @@ function marked(text: string, ranges: readonly { start: number; end: number }[])
 
 /** When a result was written: the time today, the day this year, the day and the year before that. */
 function resultTime(locale: string): (d: Date) => string {
-  const time = new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' });
+  const time = timeOfDay(locale);
   const day = new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' });
   const year = new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'short', day: 'numeric' });
   return (d) => {

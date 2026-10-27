@@ -221,6 +221,22 @@ describe('MessagesPage list', () => {
     expect(screen.getByText('bob')).toBeInTheDocument();
   });
 
+  // Review N7: the list's time and a message's menu say it alike — the hour without a leading zero.
+  it('says today’s time as the thread does, the hour without a leading zero', () => {
+    const morning = new Date();
+    morning.setHours(9, 5, 0, 0);
+    mockUseConversations.mockReturnValueOnce({
+      data: {
+        conversations: [conversation({ lastMessage: { text: 'early', senderId: 'alice', sentAt: morning } })],
+        people: { alice, bob },
+        connectedWithoutConversation: [],
+        unreadTotal: 0,
+      },
+    });
+    renderPage(<MessagesPage />);
+    expect(screen.getByText(/^9:05\sAM$/)).toBeInTheDocument();
+  });
+
   it('previews a picture sent without words as one', () => {
     mockUseConversations.mockReturnValueOnce({
       data: {
