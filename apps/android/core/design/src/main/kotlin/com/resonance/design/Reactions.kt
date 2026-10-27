@@ -2,11 +2,18 @@ package com.resonance.design
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.SpringSpec
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,10 +33,12 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +57,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.platform.LocalContext
@@ -61,6 +72,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.LocalResonanceColors
 import com.resonance.design.generated.ReactionColour
@@ -143,7 +155,13 @@ val ReactionTrayHeight: Dp = ReactionTrayCell + ReactionTrayPad * 2
  * accent's light wash, at night the accent at 30 % over the menus' raised paper —
  * [PaletteMixes.reactionChosen]) and is said as selected; tapping it again takes it back
  * ([onChoose] with it). The stickers pop in 20 ms apart (0.6 → 1; a plain fade with animations off).
- * Each cell is named [label] (以 愛心 回應), the chosen one [removeLabel] too.
+ * The tray follows the finger (round 17, as Instagram's): the sticker under it — or under a hovering
+ * pointer — grows to [ReactionPressScale] and [ReactionPressRise] up on a soft spring
+ * ([ReactionPressSpring]), drawn over its neighbours; sliding across hands the growth to the next one,
+ * lifting chooses the one under the finger, and sliding off the tray chooses nothing ([trayCellAt]).
+ * The chosen disc stays as it is. With animations off nothing grows (a press dips it, as before).
+ * Each cell stays a button for TalkBack and a keyboard, named [label] (以 愛心 回應), the chosen one
+ * [removeLabel] too and said as selected.
  */
 @Composable
 fun ReactionTray(
@@ -159,9 +177,37 @@ fun ReactionTray(
     val context = LocalContext.current
     val still = remember(context) { context.prefersReducedMotion() }
     val disc = PaletteMixes.of(palette).reactionChosen
+    val choose by rememberUpdatedState(onChoose)
+    // The sticker under the finger now, while a finger is on the tray.
+    var under by remember { mutableStateOf<ReactionId?>(null) }
     Row(
         modifier
             .size(ReactionTrayWidth, ReactionTrayHeight)
+            // A finger's touches are the tray's (taken before the cells see them): whichever sticker is under it is the
+            // pressed one, and lifting chooses it. A cell's own click stays for TalkBack and a keyboard.
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    down.consume()
+                    val cellAt = { at: Offset -> trayCellAt(at.x / density, at.y / density) }
+                    try {
+                        under = cellAt(down.position)
+                        while (true) {
+                            val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                            change.consume()
+                            val at = cellAt(change.position)
+                            if (!change.pressed) {
+                                under = null
+                                at?.let(choose)
+                                break
+                            }
+                            under = at
+                        }
+                    } finally {
+                        under = null
+                    }
+                }
+            }
             .padding(ReactionTrayPad)
             .selectableGroup()
             .semantics { contentDescription = groupLabel },
@@ -175,9 +221,17 @@ fun ReactionTray(
             }
             val source = remember { MutableInteractionSource() }
             val pressed by source.collectIsPressedAsState()
+            val hovered by source.collectIsHoveredAsState()
+            // Pressed: under the finger, or by a keyboard on the cell's own click.
+            val held = under == id || pressed
+            // How far the sticker has grown (0 at rest, 1 grown — past it for a moment on the spring's swing).
+            val growth = animateFloatAsState(if ((held || hovered) && !still) 1f else 0f, ReactionPressSpring, label = "reactionPress")
+            // Over its neighbours while it is any bigger than they are (recomposed only when that turns).
+            val raised by remember { derivedStateOf { growth.value > 0.001f } }
             Box(
                 Modifier
                     .size(ReactionTrayCell)
+                    .zIndex(if (raised) 1f else 0f)
                     .clickable(source, indication = null, role = Role.Button) { onChoose(id) }
                     .clearAndSetSemantics {
                         contentDescription = if (on) removeLabel else label(id)
@@ -204,15 +258,42 @@ fun ReactionTray(
                     Modifier.graphicsLayer {
                         val v = pop.value
                         alpha = v
-                        val s = (if (still) 1f else 0.6f + 0.4f * v) * (if (pressed) 0.9f else 1f)
+                        val g = growth.value
+                        val s = (if (still) 1f else 0.6f + 0.4f * v) * reactionPressScale(g, dipped = still && held)
                         scaleX = s
                         scaleY = s
+                        translationY = -ReactionPressRise.toPx() * g
                     },
                 )
             }
         }
     }
 }
+
+/**
+ * Which sticker a point on the tray is over (dp from the tray's top start, its padding included): the cell under it,
+ * the nearest one from the tray's padding at either end; none off the tray, above or below it or past its ends.
+ */
+fun trayCellAt(x: Float, y: Float): ReactionId? {
+    val w = ReactionTrayWidth.value
+    if (x < 0f || x > w || y < 0f || y > ReactionTrayHeight.value) return null
+    val i = ((x - ReactionTrayPad.value) / ReactionTrayCell.value).toInt().coerceIn(0, ReactionOrder.size - 1)
+    return ReactionOrder[i]
+}
+
+/** How big a sticker grows under the finger (round 17: Instagram's tray), and how far it rises as it does. */
+const val ReactionPressScale = 1.45f
+val ReactionPressRise: Dp = 6.dp
+
+/** The growth's spring: a soft one that swings a little past and settles (damping 0.6, medium-low stiffness). */
+val ReactionPressSpring: SpringSpec<Float> = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow)
+
+/**
+ * A tray sticker's scale for its [growth] under the finger (0 at rest, 1 grown to [ReactionPressScale]);
+ * [dipped]: pressed with animations off, where it doesn't grow but dips to 0.9 as a press always did.
+ */
+fun reactionPressScale(growth: Float, dipped: Boolean = false): Float =
+    if (dipped) 0.9f else 1f + (ReactionPressScale - 1f) * growth
 
 private const val POP_STAGGER_MILLIS = 20L
 private val PopEasing = CubicBezierEasing(0.2f, 0.9f, 0.3f, 1.2f)
