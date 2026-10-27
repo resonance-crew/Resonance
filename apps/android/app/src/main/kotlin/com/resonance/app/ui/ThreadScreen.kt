@@ -3,7 +3,9 @@ package com.resonance.app.ui
 import com.resonance.design.generated.HueRole
 import com.resonance.design.Mixes
 import com.resonance.design.avatarFill
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.draw.drawWithCache
 import com.resonance.design.ModalScrim
@@ -101,6 +103,7 @@ import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.inlineBarTop
 import com.resonance.design.plainClickable
+import com.resonance.design.BackdropBlurBudget
 import com.resonance.design.softenedUnder
 import com.resonance.geometry.seedFromString
 import com.resonance.kit.api.MessagingApi
@@ -264,7 +267,8 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     val pageWidth = LocalWindowLayout.current.contentWidth
     var listWidth by remember { mutableStateOf(pageWidth) }
     val rowMax = LayoutClass.bubbleMax(listWidth.value).dp
-    val lifted = menu?.row?.message?.key
+    // Read where each message is drawn, never here: a message held (or let go) redraws the thread, never composes it.
+    val lifted = remember { { menu?.row?.message?.key } }
     // Reactions only between two people connected, with no block (a letter not yet answered takes none).
     val reacts = model.foot == ThreadFoot.Composer
     val ctx = remember(model, rowMax, links, highlights, currentHit, open, scroll, lifted, reacts) {
@@ -284,10 +288,14 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     val heldOver = remember { mutableFloatStateOf(0f) }
     // How tall the thread's bar is (px, its wave's band included): where the body a held message dims starts.
     var barHeight by remember { mutableIntStateOf(0) }
-    Box(Modifier.fillMaxSize().cream().onSizeChanged { listWidth = with(density) { it.width.toDp() } }) {
+    // Where this screen lies in the window, known before anything is held: the held message's overlay (laid over
+    // the screen's whole box) places what it lifts from its first frame, without a frame spent finding itself.
+    val screenAt = remember { ScreenSpot() }
+    Box(Modifier.fillMaxSize().cream().onSizeChanged { listWidth = with(density) { it.width.toDp() } }.onGloballyPositioned { screenAt.offset = it.positionInRoot() }) {
         // The thread's body — the messages and the composer — softened under a held message's scrim (round 17 §2.1:
         // the body alone); the bar over it, and the overlay over both, stay sharp.
-        Box(Modifier.fillMaxSize().softenedUnder { heldOver.floatValue }) {
+        // Softened only where this phone draws the blur within its frames (round 17 addendum A4: BackdropBlurBudget).
+        Box(Modifier.fillMaxSize().softenedUnder { BackdropBlurBudget.softening(heldOver.floatValue) }) {
         when (model.phase) {
             // One layout while it is found and once it is: what the thread always has is there from the
             // start (the bar's back and ⋯, the composer), and only what isn't known yet is in the shimmer.
@@ -408,6 +416,7 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                     ) { id -> model.react(held, id.key, sayError) }
                 } else null,
                 onDismiss = { menu = null },
+                origin = screenAt.offset,
                 over = heldOver,
                 regionTop = barHeight.takeIf { it > 0 },
             )
@@ -787,3 +796,8 @@ private val ComposerMax = 720.dp
 
 /** The composer's sides: the page's gutter. */
 private val ComposerGutter = 14.dp
+
+/** Where a screen lies in its window (px), kept as it is laid out and read when needed, never drawn from. */
+internal class ScreenSpot {
+    var offset: androidx.compose.ui.geometry.Offset? = null
+}

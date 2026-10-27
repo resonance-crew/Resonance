@@ -19,6 +19,14 @@ class ToastPlacementTest {
         assertEquals(74.dp, toastClearance(LayoutClass.Compact, tabBarShown = true))
     }
 
+    @Test fun underGestureNavigationItRisesWithTheTabBar() {
+        // Round 17 addendum A2: the bar stands higher than the navigation bar's inset under gesture navigation; the
+        // toast keeps its 12 over the bar's wavy edge.
+        assertEquals(79.dp, toastClearance(LayoutClass.Compact, tabBarShown = true, barLift = 5.dp))
+        // Nothing to rise by once the bar has gone.
+        assertEquals(16.dp, toastClearance(LayoutClass.Compact, tabBarShown = false, barLift = 5.dp))
+    }
+
     @Test fun overAPushedPageItSitsWhereTheWebsDoes() {
         // A card, the writer, a profile: the bar has gone, 16 from the foot as on a phone's web.
         assertEquals(16.dp, toastClearance(LayoutClass.Compact, tabBarShown = false))

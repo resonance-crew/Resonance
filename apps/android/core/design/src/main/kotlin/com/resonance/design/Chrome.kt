@@ -57,7 +57,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.tappableElement
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -122,6 +123,41 @@ data class OrganicTabItem<T>(
 /** The tab bar's height above the navigation bar, without its wavy edge (round 16 §2: 60 → 52, icons only). */
 val TabBarHeight = 52.dp
 
+/**
+ * Under gesture navigation the bar's glyphs stand with their centre this far above the screen's foot (round 17
+ * addendum A2: 50 before on a 24 gesture handle, the row sitting right on its inset): a little room under them, as
+ * the social apps keep, whatever height the system gives its handle. With the three buttons the row stays right over
+ * them.
+ */
+val TabBarGestureCentre = 55.dp
+
+/**
+ * The room under the tab bar's row: the navigation bar's [navigation] inset — or, under gesture navigation
+ * ([gestures]), what stands the row's centre [TabBarGestureCentre] above the screen's foot, never less than the
+ * inset itself.
+ */
+fun tabBarFoot(navigation: Dp, gestures: Boolean): Dp =
+    if (gestures) maxOf(navigation, TabBarGestureCentre - TabBarHeight / 2) else navigation
+
+/**
+ * [tabBarFoot] for this window. Gesture navigation is a navigation bar no one taps: its inset is there, its
+ * tappable element empty (with the three buttons the two are the same).
+ */
+@Composable
+fun currentTabBarFoot(): Dp {
+    val density = LocalDensity.current
+    val navigation = WindowInsets.navigationBars.getBottom(density)
+    val tappable = WindowInsets.tappableElement.getBottom(density)
+    return tabBarFoot(with(density) { navigation.toDp() }, gestures = navigation > 0 && tappable == 0)
+}
+
+/** How much higher than the navigation bar's inset alone the tab bar stands ([currentTabBarFoot]): what lies over it (the toast) rises as much. */
+@Composable
+fun currentTabBarLift(): Dp {
+    val density = LocalDensity.current
+    return currentTabBarFoot() - with(density) { WindowInsets.navigationBars.getBottom(density).toDp() }
+}
+
 /** A tab's glyph in the bar (round 16 §2). */
 val TabIconSize = 26.dp
 
@@ -149,7 +185,8 @@ fun <T> OrganicTabBar(items: List<OrganicTabItem<T>>, selection: T, onSelect: (T
             .blocksTouches()
             .footerEdge()
             .padding(top = HeaderEdgeHeight)
-            .navigationBarsPadding()
+            // Over the navigation bar — under gesture navigation with a little room (round 17 addendum A2).
+            .padding(bottom = currentTabBarFoot())
             .height(TabBarHeight)
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,

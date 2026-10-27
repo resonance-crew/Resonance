@@ -54,6 +54,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.resonance.design.BackdropBlurBudget
 import com.resonance.design.CappedTextScale
 import com.resonance.design.MessageAction
 import com.resonance.design.MessageActionSheet
@@ -231,6 +232,11 @@ internal fun MessageMenuOverlay(
     footer: String,
     tray: TrayOffer?,
     onDismiss: () -> Unit,
+    /**
+     * Where the overlay's box lies in the window, when the screen already knows (its own box, which the overlay
+     * fills): everything is placed in the first frame. Null: found as it is laid out, a frame later.
+     */
+    origin: Offset? = null,
     /** How far the overlay is up (0…1), for the screen to draw its scrim and soften what lies under it (round 16 review F8). */
     over: MutableFloatState? = null,
     /** Where the thread's body starts under its bar (px from this layer's top); null: under the status bar. */
@@ -261,6 +267,8 @@ internal fun MessageMenuOverlay(
     }
     BackHandler(onBack = dismiss)
     LaunchedEffect(Unit) { appear.animateTo(1f, tween(150)) }
+    // Whether the thread under it can be softened within this phone's frames (round 17 addendum A4).
+    if (over != null) LaunchedEffect(Unit) { BackdropBlurBudget.timeOpening() }
     if (over != null) {
         LaunchedEffect(over) { snapshotFlow { appear.value }.collect { over.floatValue = it } }
         DisposableEffect(over) { onDispose { over.floatValue = 0f } }
@@ -270,33 +278,33 @@ internal fun MessageMenuOverlay(
     val density = LocalDensity.current
     val topInset = WindowInsets.statusBars.getTop(density)
     val bottomInset = max(WindowInsets.navigationBars.getBottom(density), WindowInsets.ime.getBottom(density))
-    var origin by remember { mutableStateOf<Offset?>(null) }
+    var at by remember { mutableStateOf(origin) }
     // The message as the thread holds it now (a reaction chosen here shows on the lifted copy too).
     val row = ctx.model.find(message.id)?.let { menu.row.copy(message = it) } ?: menu.row
     // A popup would be a window of its own with the system's whole text scale; this lies in the screen's, which has the capped one.
-    BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
+    BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { coordinates -> coordinates.positionInRoot().let { if (it != at) at = it } }) {
         val screenW = constraints.maxWidth
         val screenH = constraints.maxHeight
         val margin = with(density) { OverlayMargin.roundToPx() }
         val trayH = if (tray != null) with(density) { ReactionTrayHeight.roundToPx() } else 0
         val trayW = with(density) { ReactionTrayWidth.roundToPx() }
         val listH = with(density) { messageActionsHeight(actions.size).roundToPx() }
-        val at = origin ?: Offset.Zero
-        val left = (menu.bounds.left - at.x).toInt()
-        val right = (menu.bounds.right - at.x).toInt()
-        val top = (menu.bounds.top - at.y).toInt()
-        val bottom = (menu.bounds.bottom - at.y).toInt()
+        val from = at ?: Offset.Zero
+        val left = (menu.bounds.left - from.x).toInt()
+        val right = (menu.bounds.right - from.x).toInt()
+        val top = (menu.bounds.top - from.y).toInt()
+        val bottom = (menu.bounds.bottom - from.y).toInt()
         val place = placeHeldMessage(
             top, bottom, trayH, with(density) { TrayGap.roundToPx() }, listH, with(density) { ListGap.roundToPx() },
             safeTop = (regionTop ?: topInset) + margin, safeBottom = screenH - bottomInset - margin, least = with(density) { ClippedLeast.roundToPx() },
         )
-        LaunchedEffect(place.shift, origin != null) {
-            if (origin == null || leaving) return@LaunchedEffect
+        LaunchedEffect(place.shift, at != null) {
+            if (at == null || leaving) return@LaunchedEffect
             if (reduced) glide.snapTo(place.shift.toFloat()) else glide.animateTo(place.shift.toFloat(), tween(GLIDE_MILLIS, easing = FastOutSlowInEasing))
         }
         // A tap beside what is lifted — on the dimmed thread, or on the bar left sharp above it — closes it.
         Box(Modifier.fillMaxSize().plainClickable(onClick = dismiss))
-        if (origin == null) return@BoxWithConstraints
+        if (at == null) return@BoxWithConstraints
         CappedTextScale {
             val fade = with(density) { ClippedFade.toPx() }
             Box(
@@ -334,6 +342,8 @@ internal fun MessageMenuOverlay(
                         .offset { IntOffset(x, place.trayTop + (glide.value - place.shift).roundToInt()) }
                         .graphicsLayer {
                             alpha = appear.value
+                            // Faded per drawing, never through a layer drawn again for each step of the fade.
+                            compositingStrategy = CompositingStrategy.ModulateAlpha
                             transformOrigin = TransformOrigin(if (mine) 1f else 0f, 1f)
                             val s = 0.94f + 0.06f * appear.value
                             scaleX = s
@@ -371,6 +381,9 @@ internal fun MessageMenuOverlay(
                     )
                     .graphicsLayer {
                         alpha = appear.value
+                        // Faded per drawing, not through a layer: a layer is drawn again for each step of the fade (round 17
+                        // addendum A4), and cut at the sheet's box, which its wobble runs past.
+                        compositingStrategy = CompositingStrategy.ModulateAlpha
                         transformOrigin = TransformOrigin(if (mine) 1f else 0f, 0f)
                         val s = 0.94f + 0.06f * appear.value
                         scaleX = s

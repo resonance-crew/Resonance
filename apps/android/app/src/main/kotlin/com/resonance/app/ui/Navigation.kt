@@ -74,6 +74,7 @@ import com.resonance.app.Session
 import com.resonance.design.OrganicTabBar
 import com.resonance.design.OrganicTabItem
 import com.resonance.design.TabBarHeight
+import com.resonance.design.currentTabBarLift
 import com.resonance.design.ToastHost
 import com.resonance.design.Toasts
 import com.resonance.design.cream
@@ -281,11 +282,12 @@ internal fun headerTabsShown(stack: List<Route>, expanded: Boolean): Boolean =
 
 /**
  * How far above the navigation bar (or the keyboard) the shell's toast sits: clear of the tab bar's
- * wavy edge by 12 while the bar shows (a phone, on a tab's root); else the web's 16 on a phone and
- * 24 on a wider window, whose tabs are in the header.
+ * wavy edge by 12 while the bar shows (a phone, on a tab's root) — the bar standing [barLift] higher
+ * than the navigation bar's inset under gesture navigation (round 17 addendum A2) —; else the web's
+ * 16 on a phone and 24 on a wider window, whose tabs are in the header.
  */
-internal fun toastClearance(cls: LayoutClass, tabBarShown: Boolean): Dp = when {
-    tabBarShown -> TabBarHeight + HeaderEdgeHeight + 12.dp
+internal fun toastClearance(cls: LayoutClass, tabBarShown: Boolean, barLift: Dp = 0.dp): Dp = when {
+    tabBarShown -> TabBarHeight + HeaderEdgeHeight + 12.dp + barLift
     cls == LayoutClass.Compact -> 16.dp
     else -> 24.dp
 }
@@ -465,7 +467,7 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
     val reducedMotion = LocalContext.current.prefersReducedMotion()
     // It moves with the tab bar as a page is pushed over a tab's root or popped back to it — and as the bar slides away for reading.
     val toastBottom by animateDpAsState(
-        toastClearance(cls, tabBarShown = !topTabs && stack.size == 1 && !autoHide.hidden),
+        toastClearance(cls, tabBarShown = !topTabs && stack.size == 1 && !autoHide.hidden, barLift = currentTabBarLift()),
         if (autoHide.hidden) tween(TAB_BAR_HIDE_MILLIS, easing = EaseIn) else tween(TAB_BAR_SHOW_MILLIS, easing = EaseOut),
         label = "toastBottom",
     )

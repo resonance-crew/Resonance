@@ -25,6 +25,7 @@ import com.resonance.app.AppearanceStore
 import com.resonance.app.Launch
 import com.resonance.app.MainActivity
 import com.resonance.app.Session
+import com.resonance.design.BackdropBlurBudget
 import com.resonance.design.CappedTextScale
 import com.resonance.design.LocalModalBackdrop
 import com.resonance.design.ModalBackdrop
@@ -35,6 +36,7 @@ import com.resonance.design.SketchLoader
 import com.resonance.design.generated.LocalResonanceColors
 import com.resonance.design.cream
 import com.resonance.design.generated.Tokens
+import kotlinx.coroutines.launch
 
 /**
  * Signed out → sign-in; signed in → the tabs, or first the pen-name step for
@@ -52,12 +54,19 @@ fun ResonanceRoot(session: Session, incomingRoute: MutableState<String?>) {
     // What lies under a modal is softened while it is up (round 16 review F8; Android 12 and later).
     val backdrop = remember { ModalBackdrop() }
     val soft = remember { Animatable(0f) }
-    // Followed outside composition: a dialog opening redraws the screens under it, recomposing none of them.
-    LaunchedEffect(backdrop) { snapshotFlow { backdrop.open > 0 }.collect { soft.animateTo(if (it) 1f else 0f, tween(150)) } }
+    // Followed outside composition: a dialog opening redraws the screens under it, recomposing none of them. Its
+    // opening is timed while the blur is on: a phone that can't draw it within its frames stops softening (round 17
+    // addendum A4, BackdropBlurBudget).
+    LaunchedEffect(backdrop) {
+        snapshotFlow { backdrop.open > 0 }.collect { open ->
+            if (open) launch { BackdropBlurBudget.timeOpening() }
+            soft.animateTo(if (open) 1f else 0f, tween(150))
+        }
+    }
     CompositionLocalProvider(LocalIndication provides OrganicIndication(), LocalModalBackdrop provides backdrop) {
         val phase by session.phase.collectAsStateWithLifecycle()
         // Under the launch's splash the first screen simply is; a crossfade would show the loader leaving as it dissolves.
-        Crossfade(phase, Modifier.fillMaxSize().cream().softenedUnder { soft.value }, animationSpec = if (Launch.covering) snap() else tween(), label = "phase") { p ->
+        Crossfade(phase, Modifier.fillMaxSize().cream().softenedUnder { BackdropBlurBudget.softening(soft.value) }, animationSpec = if (Launch.covering) snap() else tween(), label = "phase") { p ->
             when (p) {
                 Session.Phase.Restoring -> Loading()
                 Session.Phase.SignedOut -> SignInScreen(session)

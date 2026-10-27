@@ -65,6 +65,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.addOutline
+import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
@@ -335,28 +336,62 @@ fun QuoteBubble(text: String, seed: Double, modifier: Modifier = Modifier, onCli
 val REPLY_OVERLAP = 14.dp
 
 /**
- * An unsent message (round 16 §3): one line tall, on its sender's side — the bubble's own outline in a
- * dashed light pen (INK_LIGHT, dash 4/4, the muted ink), no fill, and [text] in the muted ink at 13
- * (你收回了一則訊息 / bob 收回了一則訊息). It offers nothing.
+ * An unsent message (round 16 §3): one line tall, on its sender's side — a bubble's wobble in a dashed light pen
+ * (INK_LIGHT, the muted ink), no fill, and [text] in the muted ink at 13 (你收回了一則訊息 / bob 收回了一則訊息).
+ * It offers nothing. It isn't a bubble of its run: every corner is rounded alike, never tucked toward a neighbour.
+ * The wobble is fitted inside the box with its pen ([unsentOutline]), so nothing of it is cut at the row's edge (the
+ * row clips as it closes over a message being unsent), and its dashes come out even all the way round
+ * ([evenDashes]): no seam.
  */
 @Composable
-fun UnsentBubble(text: String, mine: Boolean, seed: Double, modifier: Modifier = Modifier, run: RunPosition = RunPosition.Single) {
+fun UnsentBubble(text: String, mine: Boolean, seed: Double, modifier: Modifier = Modifier) {
     val pen = Tokens.TextMuted
-    val shape = remember(seed, mine, run) { MessageBubbleShape(seed, mine, run) }
+    val shape = remember(seed, mine) { MessageBubbleShape(seed, mine) }
     Box(
         modifier
             .drawWithCache {
-                val o = shape.createOutline(size, layoutDirection, this)
-                val stroke = Stroke(
-                    Tokens.InkLight.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round,
-                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx())),
-                )
-                onDrawBehind { drawOutline(o, pen, style = stroke) }
+                val width = Tokens.InkLight.toPx()
+                val path = unsentOutline(shape, size, width, layoutDirection, this)
+                val dash = evenDashes(path, UnsentDash.toPx())
+                val stroke = Stroke(width, cap = StrokeCap.Round, join = StrokeJoin.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash, dash)))
+                onDrawBehind { drawPath(path, pen, style = stroke) }
             }
             .padding(horizontal = 14.dp, vertical = 8.dp),
     ) {
         BasicText(text, maxLines = 1, style = AppFonts.body(13f, lineHeight = 1.3f, color = Tokens.TextMuted))
     }
+}
+
+/**
+ * [shape]'s wobble at [size], fitted so that a pen [width] wide drawn along it stays inside the box: its bounds (the
+ * wobble swings a little past the frame) brought half the pen in from every edge.
+ */
+internal fun unsentOutline(shape: Shape, size: Size, width: Float, layoutDirection: LayoutDirection, density: Density): Path {
+    val path = shape.createOutline(size, layoutDirection, density).let { o -> (o as? Outline.Generic)?.path ?: Path().apply { addOutline(o) } }
+    val native = path.asAndroidPath()
+    val bounds = android.graphics.RectF()
+    native.computeBounds(bounds, true)
+    val inside = android.graphics.RectF(width / 2, width / 2, size.width - width / 2, size.height - width / 2)
+    if (bounds.width() > 0f && bounds.height() > 0f && inside.width() > 0f && inside.height() > 0f) {
+        native.transform(android.graphics.Matrix().apply { setRectToRect(bounds, inside, android.graphics.Matrix.ScaleToFit.FILL) })
+    }
+    return path
+}
+
+/** An unsent message's dash and gap (the web's `stroke-dasharray: 4 4`), before they are evened out. */
+private val UnsentDash = 4.dp
+
+/**
+ * The dash (and its equal gap) nearest [dash] that goes round [path] a whole number of times: the last gap ends
+ * where the first dash starts, so no seam shows where the outline closes.
+ */
+internal fun evenDashes(path: Path, dash: Float): Float {
+    val measure = android.graphics.PathMeasure(path.asAndroidPath(), true)
+    var length = 0f
+    do length += measure.length while (measure.nextContour())
+    if (length <= 0f || dash <= 0f) return dash
+    val periods = kotlin.math.max(1, kotlin.math.round(length / (2 * dash)).toInt())
+    return length / periods / 2
 }
 
 // Words
