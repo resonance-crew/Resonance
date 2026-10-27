@@ -46,6 +46,20 @@ public struct OrganicTabBar<ID: Hashable>: View {
 
     /// The bar's height above the home indicator, without its wavy edge (round 16 §2: 60 → 52).
     public static var height: CGFloat { 52 }
+    /// Where the row's middle stands over the screen's foot on a device with a home indicator (round 17 §7):
+    /// 42, so the row reaches down into the indicator's room (18 of an iPhone's 34) rather than standing on it.
+    public static var rowCentreAboveFoot: CGFloat { 42 }
+
+    /// How far the bar sits under the bottom safe area's top edge, given that safe area: the row lowered to
+    /// stand ``rowCentreAboveFoot`` over the screen's foot — never raised, and not at all without a home
+    /// indicator. Its paper still runs to the foot.
+    public static func lowered(bottomInset: CGFloat) -> CGFloat {
+        max(0, bottomInset - (rowCentreAboveFoot - height / 2))
+    }
+
+    /// The outline glyphs' pen in the 24 box (round 17 §7): INK_STRONG, the pen chip's own — one pen for the
+    /// whole bar. The chosen tab's solid twin keeps INK.
+    public static var outlinePen: CGFloat { Tokens.inkStrong }
 
     public init(items: [OrganicTabItem<ID>], selection: ID, onSelect: @escaping (ID) -> Void) {
         self.items = items
@@ -90,7 +104,8 @@ public struct OrganicTabBar<ID: Hashable>: View {
 }
 
 /// A tab as the bar draws it (round 16 §2): its glyph alone at 26, the chosen one its solid twin in the
-/// accent, the others the outline in the muted ink — the change a 120 ms cross-fade with a 0.9 → 1 spring
+/// accent, the others the outline in the muted ink at the strong pen (round 17 §7: INK_STRONG, the pen's
+/// own — one pen for the whole bar) — the change a 120 ms cross-fade with a 0.9 → 1 spring
 /// on the glyph coming in. Under a pointer, the glyph a little darker; its name the pointer's tooltip.
 struct OrganicTabButton<ID: Hashable>: View {
     let item: OrganicTabItem<ID>
@@ -101,6 +116,8 @@ struct OrganicTabButton<ID: Hashable>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     static var glyph: CGFloat { 26 }
+    /// The outline glyphs' pen (``OrganicTabBar/outlinePen``).
+    static var outlinePen: CGFloat { Tokens.inkStrong }
     /// The solid twin's 0.9 → 1 as it comes in: a spring that overshoots a little.
     static var spring: Animation { .spring(response: 0.3, dampingFraction: 0.55) }
 
@@ -110,7 +127,7 @@ struct OrganicTabButton<ID: Hashable>: View {
                 // Both glyphs stay drawn, one shown: the solid twin comes in springing from 0.9, the outline goes.
                 // Each animation is scoped to its own modifier (review F14: one over the other on the stack, the
                 // inner ease won and the scale eased for 120 ms instead of springing).
-                OrganicIcon(item.icon, size: Self.glyph, color: hovered ? Tokens.text : Tokens.textMuted, strokeWidth: Tokens.ink)
+                OrganicIcon(item.icon, size: Self.glyph, color: hovered ? Tokens.text : Tokens.textMuted, strokeWidth: Self.outlinePen)
                     .animation(.easeOut(duration: 0.12)) { $0.opacity(selected ? 0 : 1) }
                 OrganicIcon(item.glyph(selected: true), size: Self.glyph, color: Tokens.terracotta, strokeWidth: Tokens.ink)
                     .animation(reduceMotion ? nil : Self.spring) { $0.scaleEffect(selected || reduceMotion ? 1 : 0.9) }
