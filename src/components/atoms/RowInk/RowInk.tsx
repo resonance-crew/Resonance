@@ -177,7 +177,9 @@ export function RowBrushes({ w, h, outline, bands, ink, fills, rests, duration =
   return (
     <div aria-hidden="true" data-row-brushes="" className={styles.sheetInk} style={{ width: w, height: h, clipPath: `path('${outline}')` }}>
       {rests?.some(Boolean) && (
-        <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className={styles.rests}>
+        // Drawn past the box (the bands overshoot it): the wobble swings out of the box as much as into it, and the
+        // sheet's outline, the layer's clip, is what ends every wash — on the pen line, never short of it.
+        <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className={styles.rests} overflow="visible">
           {bands.map((d, i) => (rests[i] ? <path key={i} d={d} fill={rests[i]!} data-row-rest="" /> : null))}
         </svg>
       )}
@@ -190,10 +192,15 @@ export function RowBrushes({ w, h, outline, bands, ink, fills, rests, duration =
   );
 }
 
+/** How far a row's brush reaches past the box's far corner. */
+const BRUSH_REACH = 12;
+
 /** One row's brush: it keeps the spot it last spread from, so a wash withdrawing never jumps to where the next row's starts. */
 function RowBrush({ w, h, d, color, on, x, y, duration }: { w: number; h: number; d: string; color: string; on: boolean; x: number; y: number; duration: number }) {
   const [at, setAt] = useState({ x, y });
   if (on && (at.x !== x || at.y !== y)) setAt({ x, y });
   const spot = on ? { x, y } : at;
-  return <BrushWash w={w} h={h} d={d} color={color} x={spot.x} y={spot.y} on={on} duration={duration} overshoot={4} />;
+  // It reaches past the box's far corner by more than the wobble can swing out of it (autoMag ≤ 4, and the curve's
+  // handles a little more), so a spread row is inked right to its pen line.
+  return <BrushWash w={w} h={h} d={d} color={color} x={spot.x} y={spot.y} on={on} duration={duration} overshoot={BRUSH_REACH} />;
 }
