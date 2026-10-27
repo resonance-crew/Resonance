@@ -401,6 +401,8 @@ fun TabScreen(
      * people head, round 9 §9) instead of a tab's own [titledBarGap].
      */
     headGap: Dp? = null,
+    /** The phone's tab bar slides away while this list is read down (round 16 §2: the home feed alone). */
+    hidesTabBar: Boolean = false,
     content: LazyListScope.() -> Unit,
 ) {
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + brandBarHeight() + HeaderEdgeHeight
@@ -410,7 +412,15 @@ fun TabScreen(
     // The tab chosen again while its root shows (round 5, part C): back to the list's top.
     val rootTaps = LocalRootTaps.current
     val pageTab = LocalPageTab.current
-    LaunchedEffect(rootTaps, pageTab, list) { rootTaps.collect { if (it == pageTab) list.animateScrollToItem(0) } }
+    val autoHide = LocalTabBarAutoHide.current.takeIf { hidesTabBar }
+    LaunchedEffect(rootTaps, pageTab, list) {
+        rootTaps.collect {
+            if (it != pageTab) return@collect
+            // Back to the top brings the tab bar back at once, not when the top is reached.
+            autoHide?.show()
+            list.animateScrollToItem(0)
+        }
+    }
     val cls = LocalWindowLayout.current.cls
     // A tablet's pull: the gap and the loader half as big again (round 5 E2).
     val pullScale = cls.pullScale()
@@ -419,7 +429,8 @@ fun TabScreen(
     val pulling = Modifier.sketchPull(pull, enabled = onRefresh != null && (refreshEnabled || pull.refreshing))
     // The conversations beside a thread: the list keeps to its pane, the bar is the window's header.
     val pane = LocalListPane.current
-    Box(Modifier.fillMaxSize().cream().then(pulling).then(if (pinned) Modifier else Modifier.nestedScroll(quickReturn.connection))) {
+    val barHiding = if (autoHide != null && !pinned) Modifier.nestedScroll(rememberTabBarHiding(list, autoHide)) else Modifier
+    Box(Modifier.fillMaxSize().cream().then(pulling).then(barHiding).then(if (pinned) Modifier else Modifier.nestedScroll(quickReturn.connection))) {
         // Without the title block, the first row still starts clear of the bar's line.
         // For whoever can't pull, the same refresh is the list's "Refresh" action (in TalkBack's Actions on any of its rows).
         val refreshAction = Modifier.sketchPullAction(pull, L10n.Native.refresh, enabled = onRefresh != null && refreshEnabled) { !list.canScrollBackward }

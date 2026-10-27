@@ -15,7 +15,8 @@ import org.junit.Test
 class ToastPlacementTest {
     @Test fun onAPhonesTabRootItSitsTwelveAboveTheTabBarsWavyEdge() {
         assertEquals(TabBarHeight + HeaderEdgeHeight + 12.dp, toastClearance(LayoutClass.Compact, tabBarShown = true))
-        assertEquals(82.dp, toastClearance(LayoutClass.Compact, tabBarShown = true))
+        // Round 16 §2: the bar is 52 now (icons only).
+        assertEquals(74.dp, toastClearance(LayoutClass.Compact, tabBarShown = true))
     }
 
     @Test fun overAPushedPageItSitsWhereTheWebsDoes() {
