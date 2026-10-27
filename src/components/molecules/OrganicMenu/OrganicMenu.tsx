@@ -32,7 +32,8 @@ export interface OrganicMenuItem {
   ariaLabel?: string;
   /**
    * A row that ends or removes something (刪除, 封鎖, 永久刪除): told by the danger ink alone — its glyph and
-   * words in `--color-danger`, its ink spreading in that hue — and no wash at rest (round 17 review D1).
+   * words in the danger ink (`--danger-fill`, the words' AA one), its ink spreading in the danger hue — and no
+   * wash at rest (round 17 review D1).
    */
   danger?: boolean;
 }
