@@ -145,17 +145,27 @@ describe('ThoughtMapCanvas centring the card the pane shows, once the reader mov
     expect(c.s).toBe(s);
   });
 
-  it('brings another card opened in the pane to the centre, and again once the divider is released', () => {
+  // Round 16 §7: a released divider brings the card back only when it is out of sight — panning after every
+  // release read as the map moving on its own.
+  it('brings another card opened in the pane to the centre, and a released divider only a card out of sight', () => {
     const { world, viewport, rerender } = board({ paneOpen: true, focusCardId: 'a' });
     pan(viewport);
     rerender({ paneOpen: true, focusCardId: 'b' });
     settle();
     expect(centreOf(world, 'b').x).toBeCloseTo(450);
 
-    // The reader pans away; a released divider brings the card back.
+    // The reader pans a little; the card is still in sight, and a released divider leaves the camera be.
     pan(viewport);
-    expect(centreOf(world, 'b').x).not.toBeCloseTo(450);
+    const kept = centreOf(world, 'b');
+    expect(kept.x).not.toBeCloseTo(450);
     rerender({ paneOpen: true, focusCardId: 'b', settleKey: 1 });
+    settle();
+    expect(centreOf(world, 'b').x).toBeCloseTo(kept.x);
+
+    // Panned out of sight, a released divider brings it back.
+    for (let i = 0; i < 4; i++) pan(viewport);
+    expect(centreOf(world, 'b').x).toBeLessThan(0);
+    rerender({ paneOpen: true, focusCardId: 'b', settleKey: 2 });
     settle();
     expect(centreOf(world, 'b').x).toBeCloseTo(450);
     expect(centreOf(world, 'b').y).toBeCloseTo(300);

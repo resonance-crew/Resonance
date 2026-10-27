@@ -3,7 +3,6 @@
 import {
   useEffect,
   useId,
-  useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
@@ -107,16 +106,7 @@ export interface WorkspaceShellProps {
   paneAction?: ReactNode;
   /** The bar's (or the pane header's) title, for a host that moves the focus to it. */
   titleRef?: Ref<HTMLHeadingElement>;
-  /** What the host may ask of the shell (the writer's back from a card it opened full width). */
-  ref?: Ref<WorkspaceShellHandle>;
   children: ReactNode;
-}
-
-export interface WorkspaceShellHandle {
-  /** The writer's pane takes the whole width (dragged there), the map hidden behind it. */
-  isFull(): boolean;
-  /** From the whole width to the map alone: the pane folds away, to come back at 1:1. */
-  foldToMap(): void;
 }
 
 /** Which edge a docked grip sits on: the trailing one (the pane folded away) or the leading one (full width). */
@@ -149,7 +139,6 @@ export function WorkspaceShell({
   paneStatus,
   paneAction,
   titleRef,
-  ref,
   children,
 }: WorkspaceShellProps) {
   const t = useTranslations('write');
@@ -177,8 +166,9 @@ export function WorkspaceShell({
   if (!open && hidden) setHidden(false);
   const folded = hidden && open && split === true;
   // The writer's pane dragged out to the whole width (round 16 §7, the apps' full mode): the map hidden behind
-  // it, the writer's own bar over it as below the split, the grip docked at the leading edge to bring the map
-  // back at 1:1. Only the writer's (it has a bar), only at the split, never remembered.
+  // it, the grip docked at the leading edge to bring the map back at 1:1. No bar comes in: the Leave stays
+  // where it floated over the map and the ✓ where it floated over the pane, so nothing moves under the eye on
+  // release. Only the writer's, only at the split, never remembered.
   const canFull = !!bar;
   const [fullState, setFull] = useState(false);
   if (fullState && (!open || !canFull || split === false)) setFull(false);
@@ -194,6 +184,9 @@ export function WorkspaceShell({
   // Past 1:1 (the writer's pane only), the pane's width as the pointer has it, else null.
   const [beyond, setBeyond] = useState<number | null>(null);
   const inFullZone = beyond != null && beyond >= FULL_EDITOR_FRAC;
+  // How the pane eases to where it was left: a pointer's release settles at once (no swing after the mouse
+  // has let go — round 16 §7), a key's step and the spring back to the narrowest keep their spring.
+  const [ease, setEase] = useState<'release' | 'spring'>('spring');
   // Bumped once the divider has been released (or stepped by a key): the map's width has settled.
   const [settleKey, setSettleKey] = useState(0);
   const settle = () => setSettleKey((k) => k + 1);
@@ -218,8 +211,6 @@ export function WorkspaceShell({
     setEditorFrac(MAX_EDITOR_FRAC);
     settle();
   };
-
-  useImperativeHandle(ref, () => ({ isFull: () => full, foldToMap: hide }));
 
   const fracAt = (clientX: number) => {
     const r = shellRef.current?.getBoundingClientRect();
@@ -291,7 +282,8 @@ export function WorkspaceShell({
     }
     // Released past the hide line: the pane slides away, to come back at the width it had. Between it and the
     // narrowest, the pane springs back to the narrowest. Past 3/4 of the width it takes the whole; between 1:1
-    // and there, it springs back to 1:1.
+    // and there, it eases back to 1:1.
+    setEase(over != null ? 'spring' : 'release');
     if (!cancelled && inHideZone) {
       setEditorFrac(d.from);
       hide();
@@ -318,7 +310,19 @@ export function WorkspaceShell({
   // A separator the keyboard moves too: the arrows resize (toward the map widens the editor; from the docked
   // edge, shows it), Enter and Space hide and show.
   const onRailKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Enter' || e.key === ' ') {
+    setEase('spring');
+    if (e.key === 'Home' && canFull && !folded) {
+      // The separator's far end toward the map: the whole width.
+      e.preventDefault();
+      if (!full) {
+        setFull(true);
+        settle();
+      }
+    } else if (e.key === 'End' && !folded) {
+      // Its other end: folded away.
+      e.preventDefault();
+      hide();
+    } else if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       if (folded) show();
       else if (full) unfill();
@@ -347,7 +351,7 @@ export function WorkspaceShell({
 
   // The writer's bar (below the split) inks its pen line in whole while anything under it has scrolled (the
   // draft, or the original card beside it).
-  const barShown = !!bar && (split !== true || full);
+  const barShown = !!bar && split !== true;
   const scrolledUnder = useRef(new Set<Element>());
   const [scrolled, setScrolled] = useState(false);
   const onScrollCapture = (e: UIEvent<HTMLDivElement>) => {
@@ -497,12 +501,12 @@ export function WorkspaceShell({
         </div>
       )}
       {/* At the split the writer's title is the page's heading still, for a screen reader. */}
-      {bar && split === true && !full && <h1 className={styles.srOnly}>{bar.title}</h1>}
+      {bar && split === true && <h1 className={styles.srOnly}>{bar.title}</h1>}
       <div
         ref={mapRef}
         className={leftOverride ? `${styles.mapPane} ${styles.mapPaneDoc}` : styles.mapPane}
         data-full={full || undefined}
-        inert={mapCovered || full}
+        inert={mapCovered}
       >
         {leftOverride ??
           (mapShown.current && (
@@ -517,8 +521,9 @@ export function WorkspaceShell({
           ))}
         {(!bar || split !== false) && (
           // Floats over the map: the tonal pill, opaque over the board's dots, no pen line of its own. The
-          // writer's only at the split (below it, its bar has the way back).
-          <div className={styles.back} data-split-only={bar ? '' : undefined}>
+          // writer's only at the split (below it, its bar has the way back). At the whole width it stays where
+          // it was, over the pane's edge (the map behind it is hidden, the pill is not).
+          <div className={styles.back} data-split-only={bar ? '' : undefined} data-over-pane={full || undefined}>
             <OrganicButton variant="tonal" size="sm" onClick={onLeave ?? (() => router.back())}>
               <span className={styles.backIcon}>
                 <Icon
@@ -546,6 +551,7 @@ export function WorkspaceShell({
             aria-valuemin={0}
             aria-valuemax={canFull ? 100 : Math.round(MAX_EDITOR_FRAC * 100)}
             aria-valuenow={Math.round(shownFrac * 100)}
+            aria-valuetext={full ? t('fullEditor') : undefined}
             title={folded ? t('openEditor') : full ? t('showMap') : t('resizeDivider')}
             data-docked={dock}
             data-dragging={dragging || undefined}
@@ -580,6 +586,7 @@ export function WorkspaceShell({
             className={styles.editorPane}
             data-folded={folded || undefined}
             data-dragging={dragging || undefined}
+            data-ease={ease}
             data-dim={inHideZone || undefined}
             inert={folded}
           >
@@ -603,7 +610,7 @@ export function WorkspaceShell({
                     titleRef={titleRef}
                   />
                 )}
-                {split === true && !full && paneAction != null && (
+                {split === true && paneAction != null && (
                   <div className={styles.paneAction}>
                     {paneStatus}
                     {paneAction}

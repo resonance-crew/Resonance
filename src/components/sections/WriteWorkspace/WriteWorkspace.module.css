@@ -46,16 +46,6 @@
     display: none;
   }
 
-  /* Dragged out to the whole width (round 16 §7), the writer is its page below the split again: its bar over
-     it, its title under the bar's pen line as there. */
-  .shell[data-full] {
-    --app-header-h: var(--bar-h);
-    --editor-pad-top: calc(var(--story-head-gap) - 9px);
-  }
-
-  .shell[data-full] .barBelowSplit {
-    display: block;
-  }
 }
 
 .srOnly {
@@ -76,9 +66,14 @@
   min-width: 0;
 }
 
-/* Behind the writer at the whole width: nothing of it (the Leave floats over it) shows or takes a click. */
+/* Behind the writer at the whole width: nothing of it shows or takes a click — but the Leave, which stays
+   where it floated (round 16 §7), now over the pane's top-left pad. */
 .mapPane[data-full] {
   visibility: hidden;
+}
+
+.mapPane[data-full] .back[data-over-pane] {
+  visibility: visible;
 }
 
 /* When a document (the resonance original) replaces the map, its subtree
@@ -248,6 +243,14 @@
 
 .editorPane[data-dragging] {
   transition: opacity 120ms ease;
+}
+
+/* A pointer's release settles without a swing (the mouse has let go: nothing should move on its own after). */
+.editorPane[data-ease='release']:not([data-folded]) {
+  transition:
+    width 180ms cubic-bezier(0.2, 0, 0, 1),
+    opacity 200ms ease,
+    visibility 0s;
 }
 
 /* Narrower than the hide line while dragged: released here, it hides. */

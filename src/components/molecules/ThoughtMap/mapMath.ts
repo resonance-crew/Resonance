@@ -106,6 +106,13 @@ export function resolveOverlap(
   return { x, y };
 }
 
+/** Whether the rect, through the camera, lies wholly inside a vw × vh viewport (`margin` in from its edges). */
+export function rectInView(cam: Camera, r: RectLike, vw: number, vh: number, margin = 0): boolean {
+  const x0 = r.x * cam.s + cam.x;
+  const y0 = r.y * cam.s + cam.y;
+  return x0 >= margin && y0 >= margin && x0 + r.w * cam.s <= vw - margin && y0 + r.h * cam.s <= vh - margin;
+}
+
 /** The camera, at its own scale, that puts the rect's centre at the centre of a vw × vh viewport. */
 export function centerOn(cam: Camera, r: RectLike, vw: number, vh: number): Camera {
   return { s: cam.s, x: vw / 2 - (r.x + r.w / 2) * cam.s, y: vh / 2 - (r.y + r.h / 2) * cam.s };

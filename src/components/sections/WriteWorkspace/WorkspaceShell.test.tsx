@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { createRef, useState } from 'react';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { act, fireEvent, renderWithIntl, screen, userEvent, within } from '@/../test/render';
+import { fireEvent, renderWithIntl, screen, userEvent, within } from '@/../test/render';
 import { mockElementSize, penLines } from '@/../test/organic';
 import type { Card } from '@/lib/db/types';
 
@@ -38,7 +38,7 @@ vi.mock('@/components/molecules/ThoughtMap/ThoughtMapBoard', () => ({
   ),
 }));
 
-import { WorkspaceShell, type WorkspaceShellHandle } from './WorkspaceShell';
+import { WorkspaceShell } from './WorkspaceShell';
 
 // The button draws its shapes only once measured; give it a box.
 mockElementSize(120, 40);
@@ -596,12 +596,12 @@ describe('the workspace at the split', () => {
   });
 
   // Round 16 §7 (the apps' rule): the writer's pane dragged on past 1:1 follows the pointer, takes the whole
-  // width released past 3/4 — its own bar over it, the grip docked at the leading edge — and gives the map
-  // back at 1:1 from that grip, the keyboard, or Escape.
+  // width released past 3/4 — the grip docked at the leading edge, no bar coming in (the Leave and the ✓ stay
+  // where they floated) — and gives the map back at 1:1 from that grip, the keyboard, or Escape.
   it('takes the whole width when the writer’s pane is released past 3/4, and gives the map back at 1:1', () => {
-    const shellRef = createRef<WorkspaceShellHandle>();
+    const onLeave = vi.fn();
     renderWithIntl(
-      <WorkspaceShell ref={shellRef} open bar={{ title: 'New card', onBack: vi.fn() }}>
+      <WorkspaceShell open bar={{ title: 'New card', onBack: vi.fn() }} onLeave={onLeave}>
         <p>editor</p>
       </WorkspaceShell>,
     );
@@ -615,15 +615,17 @@ describe('the workspace at the split', () => {
     expect(divider()).toHaveAttribute('aria-valuenow', '100');
     expect(divider()).toHaveAttribute('data-docked', 'start');
     expect(divider()).toHaveAccessibleName('Show the thought map');
-    expect(shellRef.current?.isFull()).toBe(true);
-    // The writer's own bar stands over it, as below the split.
-    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+    expect(divider()).toHaveAttribute('aria-valuetext', 'Write full width');
+    // No bar comes in; the Leave is still the way out, where it was, and the map behind it is out of reach.
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Leave' }));
+    expect(onLeave).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('map').closest('[data-full]')).not.toBeNull();
 
     // A tap on the docked grip.
     drag(5);
     expect(divider()).toHaveAttribute('aria-valuenow', '50');
     expect(divider()).not.toHaveAttribute('data-docked');
-    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
 
     // A drag from it toward the middle.
     drag(500, 150);
@@ -642,12 +644,13 @@ describe('the workspace at the split', () => {
     expect(divider()).toHaveAttribute('aria-valuenow', '100');
     fireEvent.keyDown(divider(), { key: 'ArrowRight' });
     expect(divider()).toHaveAttribute('aria-valuenow', '50');
-
-    // The writer's back from a card opened from the map: the map alone, the pane to come back at 1:1.
-    drag(500, 150);
-    act(() => shellRef.current?.foldToMap());
+    // Home is the separator's end toward the map (the whole width), End its other (folded away); shown again
+    // from there, the pane comes back at 1:1.
+    fireEvent.keyDown(divider(), { key: 'Home' });
+    expect(divider()).toHaveAttribute('aria-valuenow', '100');
+    fireEvent.keyDown(divider(), { key: 'End' });
     expect(pane()).toHaveAttribute('data-folded');
-    drag(995);
+    fireEvent.keyDown(divider(), { key: 'Enter' });
     expect(pane()).not.toHaveAttribute('data-folded');
     expect(divider()).toHaveAttribute('aria-valuenow', '50');
   });

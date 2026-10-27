@@ -48,6 +48,7 @@ import {
 } from '@/lib/db/firestore/client/thoughtMap';
 import {
   centerOn,
+  rectInView,
   fitCameraClear,
   inflateRect,
   majorityGroupId,
@@ -529,6 +530,10 @@ export function ThoughtMapCanvas({
       return;
     }
     if (paneOpen && focusCardId && nodesRef.current[focusCardId]) {
+      // The divider released (the same card, the pane still open): the camera stays unless the card is out of
+      // sight now — panning after every release read as the map moving on its own (round 16 §7).
+      const onlyReleased = !toggled && focusCardId === prevFocus.focusCardId;
+      if (onlyReleased && rectInView(cameraRef.current, nodeRect(nodesRef.current[focusCardId]), w, viewportRef.current?.offsetHeight ?? 0, 16)) return;
       glideToCard(focusCardId);
       return;
     }
