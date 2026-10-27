@@ -311,7 +311,7 @@ describe('applyCardEdit, then the link previews', () => {
       ],
       linkPreviewsFor: ['https://example.com/a', 'https://example.com/b'],
     });
-    await buffer({ story: '換了一段。\n\n[第二篇](https://example.com/b)\n\n> https://example.com/c' });
+    await buffer({ story: '換了一段。\n\n<https://example.com/b>\n\n> https://example.com/c\n\n[有字的連結讀作文字](https://example.com/words)' });
     await applyCardEdit(db, 'alice', 'live');
     const saved = (await db.doc('cards/live').get()).data()!;
 
