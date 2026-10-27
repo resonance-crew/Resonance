@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { useToast } from '@/components/providers/ToastProvider';
@@ -17,17 +17,25 @@ import { useElementSize } from '@/lib/hooks/useElementSize';
 import { useKeyboardInset } from '@/lib/hooks/useKeyboardInset';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { UnsupportedImage, uploadImageFile } from '@/lib/images/upload';
-import type { Card } from '@/lib/db/types';
+import type { Card, LinkPreview } from '@/lib/db/types';
+import { linkTarget } from '@/lib/links/soleLink';
 import { getMarkdown, MarkdownTable, storyExtensions } from '@/lib/markdown/editorSchema';
+import { applyStoryLink, canCard, removeStoryLink, storyLinkState, type LinkDisplay } from '@/lib/markdown/storyLinkEdit';
+import { StoryLinkPreviewsContext } from '@/components/molecules/StoryLinkCard/StoryLinkPreviews';
+import { NodeSelection } from '@tiptap/pm/state';
 import { LatinMarks } from '@/lib/markdown/latinMarks';
 import type { StoryScript } from '@/lib/text/script';
 import '@/styles/story.css';
 import { OrganicImageNode } from './OrganicImageNode';
 import { CardEmbedNode } from './CardEmbedNode';
 import { CurvedBlockquoteNode } from './CurvedBlockquoteNode';
-import { FormatBubble } from './FormatBubble';
+import { bubbleShows, FormatBubble } from './FormatBubble';
 import { InsertHandle } from './InsertHandle';
 import { KeyboardFormatBar } from './KeyboardFormatBar';
+import { HeldSelection, holdSelection } from './heldSelection';
+import { LinkBubble } from './LinkBubble';
+import { LinkCardActionContext, LinkCardNode } from './LinkCardNode';
+import type { LinkSession } from './LinkEditor';
 import { ToolButton } from './ToolButton';
 import {
   activeFormats,
@@ -100,6 +108,11 @@ export interface MarkdownEditorProps {
   onUploadingChange?: (uploading: boolean) => void;
   /** The story took or lost the focus. */
   onFocusChange?: (focused: boolean) => void;
+  /**
+   * The live card's stored previews of its links (`linkPreviews`): a link
+   * card in the story shows its page's title and picture when it has one.
+   */
+  linkPreviews?: readonly LinkPreview[];
 }
 
 /**
@@ -124,6 +137,7 @@ export function MarkdownEditor({
   editorRef,
   onUploadingChange,
   onFocusChange,
+  linkPreviews,
 }: MarkdownEditorProps) {
   const t = useTranslations('write.editor');
   const tCard = useTranslations('card');
@@ -135,6 +149,9 @@ export function MarkdownEditor({
   const cardModalLoaded = useOpenedOnce(cardModalOpen);
   const [uploadingCount, setUploadingCount] = useState(0);
   const [imageError, setImageError] = useState<string | null>(null);
+  // The link editor (round 16 §6): its session while it is open, and a count of its openings.
+  const [linkSession, setLinkSession] = useState<LinkSession | null>(null);
+  const [linkKey, setLinkKey] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // The toolbar's width sets its wave's turn count (ruleSteps).
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -144,7 +161,7 @@ export function MarkdownEditor({
   // The canvas's tools follow the pointer, not the width: null until hydrated (neither is drawn).
   const fine = useMediaQuery(FINE_POINTER);
   const touchBar = canvas && fine === false;
-  const kbInset = useKeyboardInset(touchBar && focus);
+  const kbInset = useKeyboardInset(touchBar && (focus || linkSession != null));
   // The links' pen wave in the page's wave ink (editorProps are re-read on every render).
   const waveInk = useLinkWaveInk();
 
@@ -155,6 +172,8 @@ export function MarkdownEditor({
   const bubbleRef = useRef<HTMLDivElement | null>(null);
   const onFocusChangeRef = useRef(onFocusChange);
   onFocusChangeRef.current = onFocusChange;
+  // ⌘K / Ctrl+K reaches the latest opener through a ref (editorProps are captured once); only the canvas has one.
+  const openLinkRef = useRef<(() => void) | null>(null);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -165,10 +184,12 @@ export function MarkdownEditor({
         blockquote: CurvedBlockquoteNode,
         image: OrganicImageNode,
         cardEmbed: CardEmbedNode,
+        linkCard: LinkCardNode,
         // A table's source wears 表格 / Table, so it reads as a table the reader will draw, not code.
         markdownTable: MarkdownTable.configure({ label: tCard('table') }),
       }),
       LatinMarks,
+      HeldSelection,
       Placeholder.configure({ placeholder: placeholder ?? '' }),
     ],
     content: value,
@@ -205,8 +226,14 @@ export function MarkdownEditor({
         insertImagesRef.current(files, coords?.pos);
         return true;
       },
-      // Option/Alt+F10 moves the focus into the selection bubble (WAI-ARIA's key for a toolbar of the text).
+      // Option/Alt+F10 moves the focus into the selection bubble (WAI-ARIA's key for a toolbar of the text);
+      // ⌘K / Ctrl+K opens the link editor on the selection.
       handleKeyDown: (_view, event) => {
+        if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'k' && openLinkRef.current) {
+          event.preventDefault();
+          openLinkRef.current();
+          return true;
+        }
         if (!(event.altKey && event.key === 'F10')) return false;
         const first = bubbleRef.current?.querySelector<HTMLButtonElement>('[data-tool][tabindex="0"], [data-tool]');
         if (!first || bubbleRef.current?.style.visibility === 'hidden') return false;
@@ -255,6 +282,63 @@ export function MarkdownEditor({
 
   const activeStates =
     useEditorState({ editor, selector: (ctx) => activeFormats(ctx.editor) }) ?? NO_FORMATS;
+  // The selection is in a link (a picked link card too): the link tool shows washed.
+  const linkActive = useEditorState({ editor, selector: (ctx) => (ctx.editor ? storyLinkState(ctx.editor.state) != null : false) }) ?? false;
+
+  /**
+   * Opens the link editor on the selection: the caret's link (or a picked card's) prefilled, never the
+   * clipboard's; 卡片 | 文字 offered where the link is or will be alone in its paragraph, opening as the
+   * link is shown — else 文字 for selected words, 卡片 on an empty line.
+   */
+  const openLink = useCallback(() => {
+    if (!editor || editor.isDestroyed) return;
+    const { state } = editor;
+    const current = storyLinkState(state);
+    const offerCard = canCard(state);
+    const words = !state.selection.empty && !(state.selection instanceof NodeSelection);
+    const display: LinkDisplay = current ? current.display : offerCard && !words ? 'card' : 'text';
+    // The selection bubble (and an empty line's "+") gives way to it, in its place; the words it links stay
+    // marked while its field has the focus.
+    const held = words ? { from: state.selection.from, to: state.selection.to } : null;
+    editor.view.dispatch(holdSelection(state.tr.setMeta('formatBubble', 'hide').setMeta('insertHandle', 'hide'), held));
+    setLinkSession({ href: current?.href ?? '', display: offerCard ? display : 'text', offerCard, editing: current != null });
+    setLinkKey((k) => k + 1);
+  }, [editor]);
+  openLinkRef.current = canvas ? openLink : null;
+
+  /** 完成: false, the editor staying open, when the address isn't one we link to. */
+  /** Lets go of the words the link editor held marked. */
+  const letGo = () => editor && !editor.isDestroyed && editor.view.dispatch(holdSelection(editor.state.tr, null));
+  /** Back in the story: the selection bubble where words are still selected (it hid for the link editor). */
+  const backToWords = () => {
+    if (!editor || editor.isDestroyed) return;
+    editor.view.focus();
+    if (fine !== true || !bubbleShows(editor)) return;
+    editor.view.dispatch(editor.state.tr.setMeta('formatBubble', 'show'));
+    editor.view.dispatch(editor.state.tr.setMeta('formatBubble', 'updatePosition'));
+  };
+  const applyLink = (value: string, display: LinkDisplay): boolean => {
+    if (!editor || !linkTarget(value)) return false;
+    const want = linkSession?.offerCard ? display : 'text';
+    // 卡片 where the selection can no longer hold one links it as words instead.
+    if (!applyStoryLink(editor, value, want) && !(want === 'card' && applyStoryLink(editor, value, 'text'))) return false;
+    letGo();
+    setLinkSession(null);
+    backToWords();
+    return true;
+  };
+  const removeLink = () => {
+    if (!editor) return;
+    letGo();
+    removeStoryLink(editor);
+    setLinkSession(null);
+    backToWords();
+  };
+  const cancelLink = (refocus: boolean) => {
+    letGo();
+    setLinkSession(null);
+    if (refocus) backToWords();
+  };
 
   const { toolbarMaskUrl, toolbarStrokeD } = useMemo(() => {
     const { maskD, strokeD } = buildToolbarPaths(seed + 5, toolbarSteps);
@@ -332,11 +416,24 @@ export function MarkdownEditor({
   if (canvas) {
     return (
       <div className={styles.canvas}>
-        <EditorContent editor={editor} />
+        <StoryLinkPreviewsContext.Provider value={linkPreviews ?? null}>
+          <LinkCardActionContext.Provider value={openLink}>
+            <EditorContent editor={editor} />
+          </LinkCardActionContext.Provider>
+        </StoryLinkPreviewsContext.Provider>
         {fine === true && (
           <>
-            <FormatBubble ref={bubbleRef} editor={editor} seed={seed} />
-            <InsertHandle editor={editor} seed={seed} onInsertImage={pickImages} onInsertCard={pickCard} />
+            <FormatBubble ref={bubbleRef} editor={editor} seed={seed} linkActive={linkActive} onLink={openLink} hidden={linkSession != null} />
+            <LinkBubble
+              editor={editor}
+              seed={seed}
+              session={linkSession}
+              sessionKey={linkKey}
+              onApply={applyLink}
+              onRemove={removeLink}
+              onCancel={cancelLink}
+            />
+            <InsertHandle editor={editor} seed={seed} onInsertImage={pickImages} onInsertCard={pickCard} onInsertLink={openLink} />
           </>
         )}
         {touchBar && (
@@ -348,6 +445,9 @@ export function MarkdownEditor({
             uploading={uploading}
             onInsertImage={pickImages}
             onInsertCard={pickCard}
+            linkActive={linkActive}
+            onLink={openLink}
+            link={linkSession ? { session: linkSession, key: linkKey, onApply: applyLink, onRemove: removeLink, onCancel: cancelLink } : null}
           />
         )}
         {uploading && (
