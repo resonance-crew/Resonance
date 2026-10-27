@@ -53,8 +53,10 @@ struct WriteScreen: View {
     /// The format bar is on the keyboard (the story has the focus, or had it a moment ago).
     @State private var formatBar = false
     @State private var pickingCard = false
-    /// The link sheet (round 16 §6): the format bar's 連結, or a link card tapped in the story.
+    /// The link editor (round 16 §6, a modal since round 17): the format bar's 連結, or a link card tapped in the story.
     @State private var linkRequest: StoryLinkRequest?
+    /// The link editor's request as it was opened, kept through its closing (the modal fades out with it).
+    @State private var linkShown: StoryLinkRequest?
     @State private var coverItem: PhotosPickerItem?
     @State private var pickingCover = false
     @State private var inlineItem: PhotosPickerItem?
@@ -314,19 +316,21 @@ struct WriteScreen: View {
             } onCancel: { pickingCard = false }
             .withSession(session)
         }
-        // The link sheet over the keyboard (round 16 §6): its 完成 and 移除連結 act on the selection the story kept.
-        .sheet(item: $linkRequest) { request in
-            StoryLinkSheet(request: request,
-                           onApply: { href, display in await model.editor.applyLink(href, display: display) },
-                           onRemove: { model.editor.unlink() },
-                           onClose: { linkRequest = nil })
-                .presentationDetents([.height(request.offersCard ? 300 : 240), .medium])
-                .presentationDragIndicator(.visible)
-                .presentationCornerRadius(26)
-                .presentationBackground(Tokens.cream)
+        // The link editor (round 17 §6.2): the app's modal, centred over what the keyboard leaves; its 完成 and
+        // 移除連結 act on the selection the story kept.
+        .organicModal(isPresented: Binding(get: { linkRequest != nil }, set: { if !$0 { linkRequest = nil } }), seed: 37,
+                      maxWidth: StoryLinkModal.Metrics.maxWidth, closeLabel: L10n.Write.Editor.CardModal.cancel) {
+            if let request = linkRequest ?? linkShown {
+                StoryLinkModal(request: request,
+                               onApply: { href, display in await model.editor.applyLink(href, display: display) },
+                               onRemove: { model.editor.unlink() },
+                               onClose: { linkRequest = nil })
+                    .id(request.id)
+            }
         }
         // Closed, done or not, the story takes its focus back with its caret where it was.
         .onChange(of: linkRequest) { _, open in
+            if let open { linkShown = open }
             guard open == nil, storyLentFocus else { return }
             storyLentFocus = false
             Task {
@@ -385,7 +389,7 @@ struct WriteScreen: View {
                         pickingCard = true
                     }, uploadingImage: model.uploadingInline, onLink: {
                         Task {
-                            // Read before the sheet takes the keyboard: a caret on an empty line starts on 卡片.
+                            // Read before the editor takes the keyboard: a caret on an empty line starts on 卡片.
                             let caret = await model.editor.selectionIsCaret()
                             storyLentFocus = true
                             linkRequest = .of(link: model.editor.link, canCard: model.editor.canCard, caret: caret)
@@ -396,7 +400,7 @@ struct WriteScreen: View {
             }
             .onAppear {
                 storyRoom = max(240, outer.size.height - 220)
-                // A link card tapped in the story (it is picked): its sheet, 卡片 chosen.
+                // A link card tapped in the story (it is picked): its editor, 卡片 chosen.
                 model.editor.onLinkTap = { href in
                     storyLentFocus = true
                     linkRequest = .card(href)

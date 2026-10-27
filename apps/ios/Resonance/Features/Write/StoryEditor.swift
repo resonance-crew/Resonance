@@ -467,15 +467,16 @@ struct StoryCanvasField: View {
 
 /// The formatting bar docked on the keyboard while the story has the focus (writer.spec §1.5,
 /// the web's KeyboardFormatBar): the cream paper with the toolbar's wave as its top edge, one row
-/// that never wraps — 插入圖片 · 插入卡片 ┆ 粗體 · 斜體 · 連結 ┆ H2 · H3 ┆ 引言 · 清單 · 編號 — scrolling
-/// sideways, fading where more lies, and 收起鍵盤 pinned at its end. Its buttons never take the
-/// focus from the story (the island keeps it, and each command focuses it again).
+/// that never wraps — 插入圖片 · 插入卡片 ┆ 粗體 · 斜體 ┆ H2 · H3 ┆ 引言 · 清單 · 編號 ┆ 連結 (round 17 §6.1:
+/// the link last, after a rule of its own, keeping its glyph) — scrolling sideways, fading where more
+/// lies, and 收起鍵盤 pinned at its end. Its buttons never take the focus from the story (the island
+/// keeps it, and each command focuses it again).
 struct StoryFormatBar: View {
     let bridge: StoryEditorBridge
     var onInsertImage: () -> Void
     var onInsertCard: () -> Void
     var uploadingImage = false
-    /// 連結 (round 16 §6): the link sheet for the selection or the caret's link.
+    /// 連結 (round 16 §6): the link editor for the selection or the caret's link.
     var onLink: () -> Void = {}
     /// MarkdownEditor's `seed`; the buttons, rules and wave offset from it.
     private let seed = 17.0
@@ -507,7 +508,7 @@ struct StoryFormatBar: View {
     }
 
     /// The row's tools in order, by id.
-    static let toolOrder = ["image", "card", "bold", "italic", "link", "h2", "h3", "quote", "bullets", "numbers"]
+    static let toolOrder = ["image", "card", "bold", "italic", "h2", "h3", "quote", "bullets", "numbers", "link"]
 
     var body: some View {
         HStack(spacing: 0) {
@@ -521,8 +522,6 @@ struct StoryFormatBar: View {
                         rule(3)
                         tool(L10n.Write.Editor.bold, id: "bold", on: bridge.active.bold, seed: 21) { bridge.exec("bold") }
                         tool(L10n.Write.Editor.italic, id: "italic", on: bridge.active.italic, seed: 28) { bridge.exec("italic") }
-                        // On (washed) while the selection is in a link.
-                        tool(L10n.Write.Editor.link, id: "link", on: bridge.link != nil, icon: .link, seed: 31, action: onLink)
                         rule(9)
                         tool("H2", id: "h2", spoken: L10n.Write.Editor.h2, on: bridge.active.h2, seed: 35) { bridge.exec("h2") }
                         tool("H3", id: "h3", spoken: L10n.Write.Editor.h3, on: bridge.active.h3, seed: 42) { bridge.exec("h3") }
@@ -530,6 +529,9 @@ struct StoryFormatBar: View {
                         tool(L10n.Write.Editor.quote, id: "quote", on: bridge.active.blockquote, seed: 63) { bridge.exec("blockquote") }
                         tool(L10n.Write.Editor.bulletList, id: "bullets", on: bridge.active.bulletList, seed: 49) { bridge.exec("bulletList") }
                         tool(L10n.Write.Editor.orderedList, id: "numbers", on: bridge.active.orderedList, seed: 56) { bridge.exec("orderedList") }
+                        // Last, after its own rule (round 17 §6.1); on (washed) while the selection is in a link.
+                        rule(23)
+                        tool(L10n.Write.Editor.link, id: "link", on: bridge.link != nil, icon: .link, seed: 31, action: onLink)
                     }
                     .padding(.horizontal, Self.rowInset)
                 }

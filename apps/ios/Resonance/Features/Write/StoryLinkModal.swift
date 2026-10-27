@@ -2,7 +2,7 @@ import DesignSystem
 import ResonanceKit
 import SwiftUI
 
-/// What the link sheet opens on (round 16 §6): the link the selection is in (or none), whether 卡片 is
+/// What the link editor opens on (round 16 §6): the link the selection is in (or none), whether 卡片 is
 /// offered — the link is, or will be, alone in its paragraph — and which way it starts: the link's own,
 /// else 文字 for selected words and 卡片 on an empty line.
 struct StoryLinkRequest: Identifiable, Equatable {
@@ -18,7 +18,7 @@ struct StoryLinkRequest: Identifiable, Equatable {
         return StoryLinkRequest(link: link, offersCard: offersCard, display: offersCard ? display : .text)
     }
 
-    /// A link card tapped in the story: its sheet, 卡片 chosen.
+    /// A link card tapped in the story: its editor, 卡片 chosen.
     static func card(_ href: String) -> StoryLinkRequest {
         StoryLinkRequest(link: .init(href: href, display: .card, standalone: true, words: href), offersCard: true, display: .card)
     }
@@ -26,11 +26,15 @@ struct StoryLinkRequest: Identifiable, Equatable {
     static func == (a: StoryLinkRequest, b: StoryLinkRequest) -> Bool { a.id == b.id }
 }
 
-/// The writer's link sheet (round 16 §6), a compact sheet over the keyboard: the address (prefilled with the
-/// caret's link only — the clipboard is read on an explicit paste, never on opening), 顯示為 卡片 | 文字 when
-/// the link stands alone in its paragraph, then 移除連結 (an existing link) and 完成. An address the link rules
-/// don't take says so in one muted line under the field and is never stored (no `javascript:`, no `data:`).
-struct StoryLinkSheet: View {
+/// The writer's link editor (round 16 §6, round 17 §6.2): the app's modal dialog — the one its confirms are —
+/// never a bottom sheet. Its title says what it does (插入連結 for a new link, 編輯連結 for the caret's), the
+/// address under it (prefilled with the caret's link only, selected, the clipboard read on an explicit paste
+/// and never on opening), then 顯示為 卡片 | 文字 when the link stands alone in its paragraph — the label on its
+/// line, the publish step's segmented choice under it — and the foot: 移除連結 (an existing link) at its start,
+/// 完成 at its end. Return is 完成. An address the link rules don't take says so in one muted line under the
+/// field and is never stored (no `javascript:`, no `data:`). No ✕: a tap beside it or the escape gesture
+/// closes it; the story then takes its caret back (``WriteScreen``).
+struct StoryLinkModal: View {
     let request: StoryLinkRequest
     /// 完成 with the address as typed and the way to show it: true once the story took it.
     let onApply: (String, StoryEditorBridge.Link.Display) async -> Bool
@@ -53,12 +57,27 @@ struct StoryLinkSheet: View {
         _display = State(initialValue: request.display)
     }
 
+    /// The modal's measures (round 17 §6.2): title → field 16, field → the choice 24, the choice's label →
+    /// its control the publish step's 12, then 28 of air over the foot; at most 400 wide.
+    enum Metrics {
+        static let maxWidth: CGFloat = 400
+        static let titleGap: CGFloat = 16
+        static let choiceGap: CGFloat = 24
+        static let footGap: CGFloat = 28
+    }
+
+    /// The modal's title: 插入連結 for a new link, 編輯連結 for one already there.
+    static func title(_ request: StoryLinkRequest) -> String {
+        request.link == nil ? L10n.Write.Editor.insertLink : L10n.Write.Editor.linkEdit
+    }
+
+    /// Whether the foot offers 移除連結: only for a link already there.
+    static func offersRemove(_ request: StoryLinkRequest) -> Bool { request.link != nil }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(request.link == nil ? L10n.Write.Editor.link : L10n.Write.Editor.linkEdit)
-                .font(AppFonts.heading(19))
-                .foregroundStyle(Tokens.text)
-                .accessibilityAddTraits(.isHeader)
+        VStack(alignment: .leading, spacing: 0) {
+            ModalTitle(Self.title(request))
+                .padding(.bottom, Metrics.titleGap)
             VStack(alignment: .leading, spacing: 6) {
                 TextField(text: $address, prompt: fieldPrompt(L10n.Write.Editor.linkPlaceholder)) { Text(L10n.Write.Editor.linkPlaceholder) }
                     .font(AppFonts.body(15))
@@ -80,40 +99,49 @@ struct StoryLinkSheet: View {
                     Text(L10n.Write.Editor.linkInvalid)
                         .font(AppFonts.body(13))
                         .foregroundStyle(Tokens.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
                         .transition(.opacity)
                         .onAppear { AccessibilityNotification.Announcement(L10n.Write.Editor.linkInvalid).post() }
                 }
             }
             if request.offersCard {
-                HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: Tokens.publishLabelGap) {
                     Text(L10n.Write.Editor.linkShowAs)
-                        .font(AppFonts.body(14))
+                        .font(AppFonts.body(Tokens.labelSize, weight: .semibold))
+                        .tracking(Tokens.labelSize * 0.06)
                         .foregroundStyle(Tokens.textMuted)
-                        .fixedSize()
+                        .accessibilityAddTraits(.isHeader)
                     SegmentedActionBar([option(.card, L10n.Write.Editor.linkAsCard, icon: .frame),
                                         option(.text, L10n.Write.Editor.linkAsText, icon: .link)],
                                        fill: Tokens.creamDark)
                 }
+                .padding(.top, Metrics.choiceGap)
             }
             HStack(spacing: 10) {
-                if request.link != nil {
+                if Self.offersRemove(request) {
                     OrganicButton(L10n.Write.Editor.linkRemove, variant: .text, size: .sm) {
                         onRemove()
                         onClose()
                     }
                 }
                 Spacer(minLength: 0)
-                OrganicButton(L10n.Write.Editor.linkApply, variant: .primary, size: .sm) { Task { await apply() } }
+                OrganicButton(L10n.Write.Editor.linkApply, variant: .solid, size: .sm) { Task { await apply() } }
                     .loading(applying)
                     .disabled(address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+            .environment(\.organicButtonMinHeight, ModalMetrics.minButtonHeight)
+            .padding(.top, Metrics.footGap)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 22)
-        .padding(.bottom, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeOut(duration: 0.15), value: invalid)
-        .onAppear { fieldFocused = true }
+        .onAppear {
+            fieldFocused = true
+            // The address there already, selected: typing replaces it, as a browser's address bar does.
+            guard !address.isEmpty else { return }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(350))
+                if fieldFocused { UIApplication.shared.sendAction(#selector(UIResponder.selectAll(_:)), to: nil, from: nil, for: nil) }
+            }
+        }
     }
 
     private func option(_ value: StoryEditorBridge.Link.Display, _ label: String, icon: IconName) -> SegmentSpec {
@@ -126,15 +154,21 @@ struct StoryLinkSheet: View {
         }
     }
 
-    /// 完成: what the link rules take goes to the story; anything else says so and stays.
+    /// 完成: what the link rules take goes to the story; anything else says so and stays, the field focused.
     private func apply() async {
         guard !applying, let href = StoryLinks.linkTarget(address) else {
             invalid = true
+            fieldFocused = true
             return
         }
         applying = true
         let took = await onApply(href, request.offersCard ? display : .text)
         applying = false
-        if took { onClose() } else { invalid = true }
+        if took {
+            onClose()
+        } else {
+            invalid = true
+            fieldFocused = true
+        }
     }
 }
