@@ -40,6 +40,11 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -117,6 +122,43 @@ import kotlinx.coroutines.launch
 val ModalScrim: Color @Composable @ReadOnlyComposable get() = Tokens.Scrim
 
 /**
+ * How far what lies under a modal, or under a held message's overlay, is softened (round 16 review F8:
+ * the web's Modal backdrop and its message overlay blur 2 px): the thread behind stops competing with
+ * what was lifted, and a dialog reads as over the page rather than beside it.
+ */
+val BackdropBlur = 2.dp
+
+/**
+ * Softens this content [BackdropBlur] while something lies over it — [amount] (0…1, read while drawing,
+ * so easing it in and out recomposes nothing) scales the blur. Android 12 and later only (RenderEffect);
+ * below that the content stays as it is.
+ */
+fun Modifier.softenedUnder(amount: () -> Float): Modifier =
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) this
+    else graphicsLayer {
+        val r = BackdropBlur.toPx() * amount().coerceIn(0f, 1f)
+        if (r >= 0.5f) {
+            renderEffect = BlurEffect(r, r, TileMode.Clamp)
+            clip = true
+        } else {
+            renderEffect = null
+            clip = false
+        }
+    }
+
+/**
+ * How many modals are open over the screens ([OrganicModal] counts itself in and out), for the root to
+ * soften what lies under them ([softenedUnder]). Null where nobody listens (tests, previews).
+ */
+@Stable
+class ModalBackdrop {
+    var open by mutableIntStateOf(0)
+        internal set
+}
+
+val LocalModalBackdrop = staticCompositionLocalOf<ModalBackdrop?> { null }
+
+/**
  * The web's Modal: a wobbly card — radius 26, the wobble 2.5% of its short
  * side, three or four turns across and five or six down, corners drifting 5 —
  * with grain, over the [ModalScrim]. The scrim covers the whole screen, the
@@ -145,6 +187,12 @@ fun OrganicModal(
     atFoot: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // The screens under it are softened while it is up (review F8): the root listens.
+    val backdrop = LocalModalBackdrop.current
+    DisposableEffect(backdrop) {
+        backdrop?.let { it.open++ }
+        onDispose { backdrop?.let { it.open-- } }
+    }
     Dialog(
         onDismissRequest = { onDismiss?.invoke() },
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
