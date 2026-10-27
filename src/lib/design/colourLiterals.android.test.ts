@@ -18,6 +18,7 @@ const android = join(root, 'apps/android');
 /** What is allowed to stay a literal, per file: how many, and why. */
 const ALLOWED: Record<string, { count: number; why: string }> = {
   'app/src/main/kotlin/com/resonance/app/ui/Shared.kt': { count: 2, why: "fadingEdges' alpha mask (DstOut): black means opaque, not a colour" },
+  'app/src/main/kotlin/com/resonance/app/ui/ThreadActions.kt': { count: 1, why: "a held message too tall for the room: its foot's fade, an alpha mask" },
   'core/design/src/main/kotlin/com/resonance/design/Story.kt': { count: 2, why: "a table's sideways fade: an alpha mask" },
   'core/design/src/main/kotlin/com/resonance/design/StoryToc.kt': { count: 2, why: "the contents rail's fade: an alpha mask" },
   'core/design/src/main/kotlin/com/resonance/design/Components.kt': { count: 1, why: "Google's mark on its white disc (the brand's own)" },
