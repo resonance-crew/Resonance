@@ -840,6 +840,20 @@ button.chips::before {
   outline: none;
 }
 
+/* A fine pointer's ☺ or ⋯ (MessagePopover): only that part, by its button —
+   the reactions over the ☺, the actions dropped from the ⋯ — over the page
+   like OrganicMenu's floating panel, no scrim and nothing lifted. Each part
+   brings its own entrance; it fades as it goes. */
+.popover {
+  position: fixed;
+  z-index: 120;
+}
+
+.popover[data-leaving] {
+  opacity: 0;
+  transition: opacity 120ms ease-in;
+}
+
 /* The reactions over the held message (ReactionTray): five 44 cells on a
    borderless paper sheet, 8 above it, on its side. */
 .overlayTray {

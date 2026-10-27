@@ -79,3 +79,49 @@ export function alignToMessage(width: number, left: number, right: number, own: 
   const x = own ? right - width : left;
   return Math.min(Math.max(MENU_MARGIN, x), Math.max(MENU_MARGIN, windowWidth - MENU_MARGIN - width));
 }
+
+/** Between a fine pointer's popover and the button it belongs to (the ☺, the ⋯, a reaction chip). */
+export const POPOVER_GAP = 8;
+
+export interface PopoverInput {
+  /** The button it belongs to, on the screen. */
+  anchor: { top: number; bottom: number; left: number; right: number };
+  /** The popover's own size. */
+  width: number;
+  height: number;
+  /** The side it would rather be on: the reactions over the ☺, the actions under the ⋯. */
+  prefer: 'above' | 'below';
+  /**
+   * Which edges line up — the popover's right on the button's (`end`, the viewer's own message, whose tools
+   * stand left of it) or its left on the button's (`start`, theirs): it reaches toward the thread's middle.
+   */
+  align: 'start' | 'end';
+  /** The window's size. */
+  viewport: { width: number; height: number };
+}
+
+/**
+ * Where a fine pointer's popover goes (round 16 review M3): {@link POPOVER_GAP}
+ * from its button on the side it prefers, on the other when that side has no
+ * room, and on the roomier one when neither has; its `align` edge on the
+ * button's — all kept {@link MENU_MARGIN} from the window's edges.
+ */
+export function placePopover({ anchor, width, height, prefer, align, viewport }: PopoverInput): { top: number; left: number; side: 'above' | 'below' } {
+  const aboveTop = anchor.top - POPOVER_GAP - height;
+  const belowTop = anchor.bottom + POPOVER_GAP;
+  const fitsAbove = aboveTop >= MENU_MARGIN;
+  const fitsBelow = belowTop + height <= viewport.height - MENU_MARGIN;
+  const side: 'above' | 'below' =
+    prefer === 'above'
+      ? fitsAbove || (!fitsBelow && anchor.top >= viewport.height - anchor.bottom)
+        ? 'above'
+        : 'below'
+      : fitsBelow || (!fitsAbove && viewport.height - anchor.bottom >= anchor.top)
+        ? 'below'
+        : 'above';
+  const rawTop = side === 'above' ? aboveTop : belowTop;
+  const top = Math.min(Math.max(MENU_MARGIN, rawTop), Math.max(MENU_MARGIN, viewport.height - MENU_MARGIN - height));
+  const x = align === 'end' ? anchor.right - width : anchor.left;
+  const left = Math.min(Math.max(MENU_MARGIN, x), Math.max(MENU_MARGIN, viewport.width - MENU_MARGIN - width));
+  return { top, left, side };
+}

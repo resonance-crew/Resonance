@@ -29,6 +29,14 @@ import styles from './Thread.module.css';
 const LONG_PRESS_MS = 450;
 /** How far a finger may wander and still be pressing (beyond it, it is scrolling). */
 const PRESS_SLOP = 10;
+/** The hover tools' extra room past a reaction chip. */
+export const TOOLS_AFTER_CHIP = 8;
+
+/** A mouse or a trackpad (hovering, fine): its ☺ and ⋯ open small popovers by the button, not the touch overlay. */
+const FINE_POINTER = '(hover: hover) and (pointer: fine)';
+function finePointer(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(FINE_POINTER).matches;
+}
 
 export interface MessageCoreProps {
   message: ChatMessage;
@@ -70,8 +78,8 @@ export function MessageCore({ message: m, own, position, carried, highlights, hi
       onOpen={interactive && onChips ? onChips : null}
     />
   );
-  // The hover tools stand clear of the chip.
-  const slotStyle = counts.length ? ({ '--chips-w': `${chipWidth(counts) + 4 - CHIP_OVERLAP}px` } as CSSProperties) : undefined;
+  // The hover tools stand clear of the chip, 8 more past it (a sticker and the ☺ side by side read as one row of faces).
+  const slotStyle = counts.length ? ({ '--chips-w': `${chipWidth(counts) + 4 - CHIP_OVERLAP + TOOLS_AFTER_CHIP}px` } as CSSProperties) : undefined;
   // Beside a picture the words are all its own (no card stands in for a link in them).
   const words = m.image ? m.text : carriedWords(m, carried);
   const note = m.noteRef ? t('quotedNote') : undefined;
@@ -173,6 +181,8 @@ export interface MessageRowProps {
   flash?: boolean;
   /** The long-press menu has lifted it out: its place stays empty under the scrim. */
   lifted?: boolean;
+  /** A fine pointer's ☺ or ⋯ popover is open beside it: its tools stay shown. */
+  toolsOpen?: boolean;
   /** Its full time (the tooltip and the menu's footer). */
   fullTime: string;
 }
@@ -197,6 +207,7 @@ export const MessageRow = memo(function MessageRow({
   hitStrong,
   flash,
   lifted,
+  toolsOpen,
   fullTime,
 }: MessageRowProps) {
   const t = useTranslations('messages');
@@ -212,10 +223,24 @@ export const MessageRow = memo(function MessageRow({
     () => (m.preview ? parseLink(m.preview.url) : null) ?? firstLinkOf(m.text),
     [m.preview, m.text],
   );
-  /** Lifts it out with its menu: from a held finger (the link under it), or the ☺ / ⋯ / chip that asked. */
-  const lift = (under: MessageLink | null, opener: HTMLElement | null, byKeyboard = false) => {
+  /**
+   * Lifts it out with its menu: from a held finger (the link under it), or the ☺ / ⋯ / chip that asked — which,
+   * to a fine pointer, opens only its own part beside it (`popover`).
+   */
+  const lift = (under: MessageLink | null, opener: HTMLElement | null, byKeyboard = false, part?: 'react' | 'actions') => {
     const el = messageRef.current;
-    if (el) actions.press({ message: m, position, carried, rect: el.getBoundingClientRect(), link: under ?? link, opener, byKeyboard });
+    if (!el) return;
+    actions.press({
+      message: m,
+      position,
+      carried,
+      rect: el.getBoundingClientRect(),
+      link: under ?? link,
+      onLink: under != null,
+      opener,
+      byKeyboard,
+      popover: part && opener && finePointer() ? part : undefined,
+    });
   };
   const press = useLongPress(messageRef, (under) => lift(under, null));
 
@@ -252,16 +277,19 @@ export const MessageRow = memo(function MessageRow({
   // place, which the scroller still finds it by. (A picture sent alone has no words and no card, and is all there.)
   if (carried.kind === 'nothing' && !m.image) return <div data-message-id={m.id} data-message-key={m.key} aria-hidden />;
 
-  // ☺ · ↩ · ⋯ on the side toward the middle (round 16 §3): ☺ and ⋯ open the same overlay as a held finger.
+  // ☺ · ↩ · ⋯ on the side toward the middle (round 16 §3). To a fine pointer ☺ opens the reactions alone, over
+  // it, and ⋯ the actions alone, a dropdown at it (M3); elsewhere both open the overlay a held finger does.
+  // While a popover is open by them, their tooltips keep quiet (the reactions hang where the ☺'s would).
+  const tip = toolsOpen ? false : 'above';
   const aside = (
-    <span className={styles.actions} data-own={own || undefined} data-open={lifted || undefined}>
+    <span className={styles.actions} data-own={own || undefined} data-open={lifted || toolsOpen || undefined}>
       {actions.canReact && canReact(m) && (
-        <BareIconButton icon="smile" label={t('react')} iconSize={18} seed={seedFromId(m.key, 31)} onClick={(e) => lift(null, e.currentTarget, e.detail === 0)} />
+        <BareIconButton icon="smile" label={t('react')} iconSize={18} tip={tip} seed={seedFromId(m.key, 31)} onClick={(e) => lift(null, e.currentTarget, e.detail === 0, 'react')} />
       )}
       {actions.canWrite && canReply(m) && (
-        <BareIconButton icon="reply" label={t('reply')} iconSize={18} seed={seedFromId(m.key, 29)} onClick={() => actions.reply(m)} />
+        <BareIconButton icon="reply" label={t('reply')} iconSize={18} tip={tip} seed={seedFromId(m.key, 29)} onClick={() => actions.reply(m)} />
       )}
-      <BareIconButton icon="dots" label={tSafety('menuLabel')} iconSize={18} seed={seedFromId(m.key, 23)} onClick={(e) => lift(null, e.currentTarget, e.detail === 0)} />
+      <BareIconButton icon="dots" label={tSafety('menuLabel')} iconSize={18} tip={tip} seed={seedFromId(m.key, 23)} onClick={(e) => lift(null, e.currentTarget, e.detail === 0, 'actions')} />
     </span>
   );
 
@@ -310,7 +338,7 @@ export const MessageRow = memo(function MessageRow({
               interactive
               title={fullTime}
               aside={aside}
-              onChips={(el, byKeyboard) => lift(null, el, byKeyboard)}
+              onChips={(el, byKeyboard) => lift(null, el, byKeyboard, 'react')}
             />
           </div>
           {deliveryLine && <DeliveryLine message={m} />}

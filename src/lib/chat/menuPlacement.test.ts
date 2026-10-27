@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LIFT_SCALE, LIST_GAP, MENU_MARGIN, TRAY_GAP, alignToMessage, placeMessageMenu } from './menuPlacement';
+import { LIFT_SCALE, LIST_GAP, MENU_MARGIN, POPOVER_GAP, TRAY_GAP, alignToMessage, placeMessageMenu, placePopover } from './menuPlacement';
 
 // Round 16 §3: the reactions always directly above the held message, the
 // actions always directly below — and when that doesn't fit where the message
@@ -61,5 +61,38 @@ describe('alignToMessage', () => {
     expect(alignToMessage(232, 300, 340, true, 375)).toBe(340 - 232);
     expect(alignToMessage(232, 260, 300, false, 375)).toBe(375 - 12 - 232);
     expect(alignToMessage(232, 0, 100, true, 375)).toBe(12);
+  });
+});
+
+// Review M3: to a fine pointer the ☺ opens the reactions alone, 8 over it, and the ⋯ the actions alone, under it —
+// beside the button that was clicked, reaching toward the thread's middle.
+describe('placePopover', () => {
+  const view = { width: 1280, height: 800 };
+  const smile = { top: 400, bottom: 436, left: 700, right: 736 };
+
+  it('hangs the reactions 8 over the ☺, its edge on the button’s, toward the middle', () => {
+    const theirs = placePopover({ anchor: smile, width: 232, height: 52, prefer: 'above', align: 'start', viewport: view });
+    expect(theirs).toEqual({ top: 400 - POPOVER_GAP - 52, left: 700, side: 'above' });
+    const own = placePopover({ anchor: smile, width: 232, height: 52, prefer: 'above', align: 'end', viewport: view });
+    expect(own.left).toBe(736 - 232);
+  });
+
+  it('goes under the button only when there is no room over it', () => {
+    const top = { top: 30, bottom: 66, left: 700, right: 736 };
+    expect(placePopover({ anchor: top, width: 232, height: 52, prefer: 'above', align: 'start', viewport: view })).toMatchObject({ top: 66 + POPOVER_GAP, side: 'below' });
+  });
+
+  it('drops the actions under the ⋯, and over it near the window’s foot', () => {
+    const list = 4 + 3 * 44 + 6 + 32;
+    expect(placePopover({ anchor: smile, width: 216, height: list, prefer: 'below', align: 'start', viewport: view }).top).toBe(436 + POPOVER_GAP);
+    const low = { top: 700, bottom: 736, left: 700, right: 736 };
+    expect(placePopover({ anchor: low, width: 216, height: list, prefer: 'below', align: 'start', viewport: view })).toMatchObject({ top: 700 - POPOVER_GAP - list, side: 'above' });
+  });
+
+  it('stays the margin inside the window’s sides', () => {
+    const edge = { top: 400, bottom: 436, left: 4, right: 40 };
+    expect(placePopover({ anchor: edge, width: 232, height: 52, prefer: 'above', align: 'end', viewport: view }).left).toBe(MENU_MARGIN);
+    const far = { top: 400, bottom: 436, left: 1250, right: 1276 };
+    expect(placePopover({ anchor: far, width: 232, height: 52, prefer: 'above', align: 'start', viewport: view }).left).toBe(1280 - MENU_MARGIN - 232);
   });
 });

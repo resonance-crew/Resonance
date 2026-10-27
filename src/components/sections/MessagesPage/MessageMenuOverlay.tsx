@@ -79,7 +79,7 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose }: MessageM
       retry: t('retry'),
       discard: t('discardFailed'),
     },
-    { withReply: actions.canWrite, viewerId: actions.viewerId },
+    { withReply: actions.canWrite, viewerId: actions.viewerId, onLink: pressed.onLink },
   );
   const trayShown = actions.canReact && canReact(message);
   const current = message.reactions?.[actions.viewerId] ?? null;

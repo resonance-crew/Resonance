@@ -415,6 +415,8 @@ export interface OrganicMenuPanelProps {
   sheet?: boolean;
   /** Where the focus goes as it opens (default: nowhere — the host decides). */
   autoFocus?: 'row' | 'panel' | null;
+  /** Tab leaves its rows (a panel floating out of the page's tab order closes on it, as OrganicMenu's `floating`). */
+  onTabOut?: () => void;
   className?: string;
 }
 
@@ -424,11 +426,11 @@ export interface OrganicMenuPanelProps {
  * wobbly card, wavy dividers and spreading row ink as the dropdown's (or,
  * as a `sheet`, the ink alone on bare paper).
  */
-export function OrganicMenuPanel({ items, onChoose, seed, busy = false, footer, hue, origin, sheet = false, autoFocus = null, className }: OrganicMenuPanelProps) {
+export function OrganicMenuPanel({ items, onChoose, seed, busy = false, footer, hue, origin, sheet = false, autoFocus = null, onTabOut, className }: OrganicMenuPanelProps) {
   const uid = useId().replace(/:/g, '');
   return (
     <div className={className} style={{ ...menuColors(hue), ...(origin ? { transformOrigin: origin } : {}) }}>
-      <MenuPanel uid={uid} seed={seed} items={items} busy={busy} footer={footer} placed sheet={sheet} autoFocus={autoFocus} onChoose={onChoose} />
+      <MenuPanel uid={uid} seed={seed} items={items} busy={busy} footer={footer} placed sheet={sheet} autoFocus={autoFocus} onTabOut={onTabOut} onChoose={onChoose} />
     </div>
   );
 }

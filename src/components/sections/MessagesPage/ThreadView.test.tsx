@@ -524,6 +524,18 @@ describe('Messenger’s thread, drawn by hand', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
+  it('leads with the link’s open and copy when the finger held the link itself', async () => {
+    server.messages = [text('m1', 'read https://example.com/a', { sentAt: at(10, 0) })];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    renderWithIntl(thread());
+    const link = await screen.findByRole('link', { name: 'https://example.com/a' });
+
+    fireEvent.pointerDown(link, { pointerType: 'touch', button: 0, clientX: 40, clientY: 40 });
+    const menu = await screen.findByRole('dialog', {}, { timeout: 1500 });
+    fireEvent.pointerUp(link, { pointerType: 'touch', button: 0 });
+    expect(within(menu).getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Open link', 'Copy link', 'Reply', 'Copy', 'Report this message']);
+  });
+
   it('keeps the menu when the finger that held the message lifts over the scrim, and puts it away on a tap there', async () => {
     server.messages = [text('m1', 'hold me', { sentAt: at(10, 0) })];
     vi.mocked(callApi).mockResolvedValue({ cards: [] });
@@ -1450,5 +1462,77 @@ describe('reactions and unsending (round 16)', () => {
     // ⋯ opens the same overlay.
     await user.click(screen.getByRole('button', { name: 'More options' }));
     expect(within(screen.getByRole('dialog')).getByRole('toolbar')).toBeInTheDocument();
+  });
+
+  // Review M3: to a mouse the overlay was heavy and landed far from the pointer.
+  it('to a mouse, opens only the part its button names, beside it — ☺ the reactions, ⋯ the actions — with no scrim and nothing lifted', async () => {
+    const realMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn(
+      (query: string) =>
+        ({
+          matches: /hover: hover/.test(query) && /pointer: fine/.test(query),
+          media: query,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          addListener: () => {},
+          removeListener: () => {},
+        }) as unknown as MediaQueryList,
+    );
+    onTestFinished(() => {
+      window.matchMedia = realMatchMedia;
+    });
+    server.messages = [text('m1', 'hover me', { sentAt: now() })];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    const user = (await import('@testing-library/user-event')).default.setup();
+    const { container } = renderWithIntl(thread());
+    await screen.findByText('hover me');
+
+    const react = screen.getByRole('button', { name: 'React' });
+    await user.click(react);
+    const reactions = screen.getByRole('dialog', { name: 'React' });
+    expect(within(reactions).getByRole('toolbar', { name: 'Reactions' })).toBeInTheDocument();
+    expect(within(reactions).queryByRole('menu')).toBeNull();
+    // Not the overlay: no scrim, the message still in its place, its tools still shown.
+    expect(reactions).not.toHaveAttribute('aria-modal');
+    expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
+    expect(container.querySelector('[data-message-id="m1"]')).not.toHaveAttribute('data-lifted');
+    expect(react.closest('[data-open]')).not.toBeNull();
+    await user.click(within(reactions).getByRole('button', { name: 'Love' }));
+    expect(reactToMessage).toHaveBeenCalledWith('alice_me', 'm1', 'heart');
+    await gone();
+
+    // ⋯: the actions alone; a second click on it puts them away, as a dropdown's trigger does.
+    const more = screen.getByRole('button', { name: 'More options' });
+    await user.click(more);
+    const menu = screen.getByRole('dialog', { name: 'More options' });
+    expect(within(menu).queryByRole('toolbar')).toBeNull();
+    expect(within(menu).getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Reply', 'Copy', 'Report this message']);
+    expect(menu).toHaveTextContent(/\d:\d\d/);
+    await user.click(more);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    // A press outside puts it away too.
+    await user.click(more);
+    expect(screen.getByRole('dialog', { name: 'More options' })).toBeInTheDocument();
+    await user.click(screen.getByText('hover me'));
+    await gone();
+
+    // From the keyboard: on the first row, shown; Escape gives the focus back to the ⋯.
+    more.focus();
+    await user.keyboard('{Enter}');
+    const first = within(screen.getByRole('dialog')).getAllByRole('menuitem')[0];
+    expect(first).toHaveFocus();
+    expect(first).toHaveAttribute('data-active');
+    await user.keyboard('{Escape}');
+    await gone();
+    await waitFor(() => expect(more).toHaveFocus());
+
+    // The reactions are one stop: Tab out of them puts them away, back on the ☺.
+    react.focus();
+    await user.keyboard('{Enter}');
+    expect(within(screen.getByRole('toolbar', { name: 'Reactions' })).getByRole('button', { name: 'Love' })).toHaveFocus();
+    await user.keyboard('{Tab}');
+    await gone();
+    await waitFor(() => expect(react).toHaveFocus());
   });
 });

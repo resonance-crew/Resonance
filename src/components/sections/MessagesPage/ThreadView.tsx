@@ -43,6 +43,7 @@ import { linkify } from '@/lib/links/linkify';
 import { messageLinkProps } from './MessageBubble';
 import { MessageRow } from './MessageRow';
 import { MessageMenuOverlay } from './MessageMenuOverlay';
+import { MessagePopover } from './MessagePopover';
 import { SearchResults } from './ThreadSearch';
 import { FloatingSlip } from './FloatingSlip';
 import { ThreadComposer } from './ThreadComposer';
@@ -581,7 +582,12 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
           () => undefined,
         );
       },
-      press: setPressed,
+      // A fine pointer's ☺ or ⋯ again on the message whose popover it opened closes it (a toggle, as a dropdown's
+      // trigger); anything else opens.
+      press: (next) =>
+        setPressed((cur) =>
+          cur?.popover && next.popover && cur.popover === next.popover && cur.message.key === next.message.key ? null : next,
+        ),
       react: (message, reaction) => {
         const { pairId: pair, toast: toasts, t: words } = live.current;
         if (!pair) return;
@@ -899,7 +905,8 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
                     highlights={hitRanges.get(r.message.id)}
                     hitStrong={currentHit === r.message.id}
                     flash={flashId === r.message.id}
-                    lifted={pressed?.message.key === r.message.key}
+                    lifted={!pressed?.popover && pressed?.message.key === r.message.key}
+                    toolsOpen={!!pressed?.popover && pressed.message.key === r.message.key}
                     fullTime={r.fullTime}
                   />
                 ))}
@@ -964,18 +971,33 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
               )}
             </div>
 
-            {pressed && (
-              <MessageMenuOverlay
-                // The message as it is now (a reaction that came in since it was held shows on the lifted copy too).
-                pressed={{ ...pressed, message: drawn.find((m) => m.key === pressed.message.key) ?? pressed.message }}
-                own={pressed.message.senderId === user?.id}
-                fullTime={fullFmt.format(pressed.message.sentAt)}
-                onClose={(back) => {
-                  focusBack.current = back;
-                  setPressed(null);
-                }}
-              />
-            )}
+            {pressed &&
+              (pressed.popover ? (
+                // A fine pointer's ☺ or ⋯: that part alone, by the button (keyed: another message's is another popover).
+                <MessagePopover
+                  key={`${pressed.message.key}:${pressed.popover}`}
+                  pressed={{ ...pressed, message: drawn.find((m) => m.key === pressed.message.key) ?? pressed.message }}
+                  own={pressed.message.senderId === user?.id}
+                  fullTime={fullFmt.format(pressed.message.sentAt)}
+                  onClose={(back) => {
+                    // Only this one: a press elsewhere may have opened the next already.
+                    const shown = pressed;
+                    focusBack.current = back;
+                    setPressed((cur) => (cur === shown ? null : cur));
+                  }}
+                />
+              ) : (
+                <MessageMenuOverlay
+                  // The message as it is now (a reaction that came in since it was held shows on the lifted copy too).
+                  pressed={{ ...pressed, message: drawn.find((m) => m.key === pressed.message.key) ?? pressed.message }}
+                  own={pressed.message.senderId === user?.id}
+                  fullTime={fullFmt.format(pressed.message.sentAt)}
+                  onClose={(back) => {
+                    focusBack.current = back;
+                    setPressed(null);
+                  }}
+                />
+              ))}
 
             {/* Everything shared in this thread: card embeds and plain links. */}
             <Modal
