@@ -27,7 +27,7 @@
   <a href="docs/media/resonance-intro.zh-TW.mp4">
     <picture>
       <source srcset="docs/media/resonance-intro.zh-TW.avif" type="image/avif">
-      <img src="docs/media/resonance-intro.zh-TW.jpg" width="880" alt="一分鐘認識共振：寫一張故事卡片；決定誰能讀到，公開、只有自己或匿名；用自己寫的卡片共振別人的故事；寄一張小紙條給作者；在思想地圖上攤開卡片，畫出它們的關聯">
+      <img src="docs/media/resonance-intro.zh-TW.jpg" width="880" alt="一分鐘認識共振：寫一張故事卡片；決定誰能讀到：公開、匿名公開或私人卡；用自己寫的卡片共振別人的故事；寄一張小紙條給作者；在思想地圖上攤開卡片，畫出它們的關聯">
     </picture>
   </a>
   <br>

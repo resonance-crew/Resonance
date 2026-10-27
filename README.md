@@ -27,7 +27,7 @@
   <a href="docs/media/resonance-intro.en.mp4">
     <picture>
       <source srcset="docs/media/resonance-intro.en.avif" type="image/avif">
-      <img src="docs/media/resonance-intro.en.jpg" width="880" alt="A one-minute tour of Resonance: writing a story card; choosing who can read it, publicly, privately or anonymously; resonating with someone's card by writing one of your own; leaving its author a note; and laying cards out on the thought map">
+      <img src="docs/media/resonance-intro.en.jpg" width="880" alt="A one-minute tour of Resonance: writing a story card; choosing who can read it — public, anonymous or a private card; resonating with someone's card by writing one of your own; leaving its author a note; and laying cards out on the thought map">
     </picture>
   </a>
   <br>

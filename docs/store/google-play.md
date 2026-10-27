@@ -122,7 +122,7 @@
   > 在這裡，回應不是按讚，而是另一段故事。讀到觸動你的卡片時，你可以寫下自己的經歷來「共振」它；兩張卡片從此連在一起，你們也成為彼此的連結。
   >
   > 【寫卡片】
-  > 用溫暖的手繪紙張寫下一段經歷：標題、故事、照片。每張卡片都能決定給誰看——所有人、你的連結，或只有自己。
+  > 用溫暖的手繪紙張寫下一段經歷：標題、故事、照片。每張卡片都能決定給誰看——公開、匿名公開，或只留給自己的私人卡。
   >
   > 【用故事回應故事】
   > 共振一張卡片，就是寫一張回應它的卡片。也可以給作者留一張紙條，不必公開。
@@ -155,7 +155,7 @@
   > Here a reply isn't a like — it's another story. When a card moves you, write your own experience to resonate with it; the two cards are linked, and so are the two of you.
   >
   > WRITE CARDS
-  > On warm, hand-drawn paper: a title, a story, a photo. Choose who sees each card — everyone, your connections, or only you.
+  > On warm, hand-drawn paper: a title, a story, a photo. Choose who reads each card — everyone, everyone without your name, or only you as a private card.
   >
   > ANSWER STORIES WITH STORIES
   > Resonating with a card means writing a card in response. Or leave the author a private note.
