@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawOutline
@@ -30,9 +31,11 @@ import com.resonance.geometry.WobCircleOptions
  * whether it is filled with the icon's color instead of stroked, and its pen
  * width relative to the icon's.
  */
-class IconStroke(val filled: Boolean, val width: Float, val commands: FloatArray) {
+/** `evenOdd`: a filled path whose inner rings are holes (a selected tab's solid twin, its details knocked out). */
+class IconStroke(val filled: Boolean, val evenOdd: Boolean = false, val width: Float, val commands: FloatArray) {
     fun path(scale: Float): Path {
         val p = Path()
+        if (evenOdd) p.fillType = PathFillType.EvenOdd
         val c = commands
         var i = 0
         while (i < c.size) {

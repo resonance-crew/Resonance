@@ -5,6 +5,8 @@ import SwiftUI
 /// width relative to the icon's.
 public nonisolated struct IconStroke: Sendable {
     let filled: Bool
+    /// A filled path whose inner rings are holes (a selected tab's solid twin, its details knocked out).
+    var evenOdd = false
     let width: Double
     let commands: [Double]
 
@@ -61,7 +63,7 @@ public struct OrganicIcon: View {
             for stroke in glyph.strokes {
                 let path = stroke.path(scale: scale)
                 if stroke.filled {
-                    ctx.fill(path, with: ink)
+                    ctx.fill(path, with: ink, style: FillStyle(eoFill: stroke.evenOdd))
                 } else {
                     if glyph.fillable, let fill { ctx.fill(path, with: .color(fill)) }
                     ctx.stroke(path, with: ink, style: StrokeStyle(lineWidth: pen * stroke.width, lineCap: .round, lineJoin: .round))

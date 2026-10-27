@@ -22,6 +22,10 @@ import { FrameIcon } from './icons/frame';
 import { NoteIcon } from './icons/note';
 import { BookmarkIcon } from './icons/bookmark';
 import { ChatIcon } from './icons/chat';
+import { ChatFillIcon } from './icons/chat-fill';
+import { SparkleFillIcon } from './icons/sparkle-fill';
+import { BellFillIcon } from './icons/bell-fill';
+import { CardsFillIcon } from './icons/cards-fill';
 import { UserCheckIcon } from './icons/user-check';
 import { SearchIcon } from './icons/search';
 import { UserIcon } from './icons/user';
@@ -82,6 +86,11 @@ export const ICONS = {
   note: NoteIcon,
   bookmark: BookmarkIcon,
   chat: ChatIcon,
+  // The selected tabs' solid twins (round 16 §2): the outline filled, its details knocked out.
+  'chat-fill': ChatFillIcon,
+  'sparkle-fill': SparkleFillIcon,
+  'bell-fill': BellFillIcon,
+  'cards-fill': CardsFillIcon,
   'user-check': UserCheckIcon,
   search: SearchIcon,
   user: UserIcon,

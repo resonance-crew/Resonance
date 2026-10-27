@@ -4,7 +4,9 @@
  * Renders every icon in src/components/atoms/Icon/registry.ts (plus the
  * verified checkmark) to SVG markup, checks it only uses what the apps can
  * draw — absolute M/L/C/Z paths, stroked with the icon's color or filled
- * with it — and writes each path as a flat command list:
+ * with it (a filled path may say fill-rule="evenodd": its inner rings are
+ * holes, how a selected tab's solid twin knocks its details out) — and
+ * writes each path as a flat command list:
  * 0 x y = move, 1 x y = line, 2 x1 y1 x2 y2 x y = curve, 3 = close.
  *
  *   npx tsx scripts/apps/icons.ts          (part of `npm run apps:generate`)
@@ -25,6 +27,8 @@ const PEN = 2;
 interface Stroke {
   commands: number[];
   filled: boolean;
+  /** A filled path whose inner rings are holes (fill-rule="evenodd"). */
+  evenOdd: boolean;
   width: number;
 }
 interface Glyph {
@@ -71,7 +75,9 @@ function glyph(name: string, markup: string): Glyph {
     const a = attrs(tag);
     const filled = a.fill === COLOR && a.stroke === 'none';
     if (!filled && a.fill && a.fill !== 'none') throw new Error(`${name}: a path filled with something other than the icon's color`);
-    strokes.push({ commands: commands(a.d, name), filled, width: +(Number(a['stroke-width'] ?? pen) / PEN).toFixed(3) });
+    const evenOdd = a['fill-rule'] === 'evenodd';
+    if (evenOdd && !filled) throw new Error(`${name}: fill-rule="evenodd" on a path that isn't filled`);
+    strokes.push({ commands: commands(a.d, name), filled, evenOdd, width: +(Number(a['stroke-width'] ?? pen) / PEN).toFixed(3) });
   }
   return { name, viewBox, fillable: svg.fill === FILL, strokes };
 }
@@ -111,7 +117,7 @@ ${glyphs
     (g) =>
       `        case .${camel(g.name)}: IconGlyph(viewBox: ${g.viewBox}, fillable: ${g.fillable}, strokes: [\n` +
       g.strokes
-        .map((s) => `            IconStroke(filled: ${s.filled}, width: ${num(s.width)}, commands: [${s.commands.map(num).join(', ')}]),`)
+        .map((s) => `            IconStroke(filled: ${s.filled}, ${s.evenOdd ? 'evenOdd: true, ' : ''}width: ${num(s.width)}, commands: [${s.commands.map(num).join(', ')}]),`)
         .join('\n') +
       `\n        ])`,
   )
@@ -141,7 +147,7 @@ ${glyphs
     (g) =>
       `            ${pascal(g.name)} -> IconGlyph(${g.viewBox}f, fillable = ${g.fillable}, strokes = listOf(\n` +
       g.strokes
-        .map((s) => `                IconStroke(filled = ${s.filled}, width = ${num(s.width)}f, commands = floatArrayOf(${s.commands.map((n) => `${num(n)}f`).join(', ')})),`)
+        .map((s) => `                IconStroke(filled = ${s.filled}, ${s.evenOdd ? 'evenOdd = true, ' : ''}width = ${num(s.width)}f, commands = floatArrayOf(${s.commands.map((n) => `${num(n)}f`).join(', ')})),`)
         .join('\n') +
       `\n            ))`,
   )
