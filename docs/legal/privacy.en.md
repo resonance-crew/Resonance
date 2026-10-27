@@ -1,7 +1,7 @@
 ---
 title: Privacy Policy
 description: What Resonance collects, why, who processes it, and how to download or delete it.
-updated: 2026-10-24
+updated: 2026-10-27
 ---
 
 Resonance is a place to share stories as cards, made up of the website resonance.channel and the iOS and Android apps. It is built and run by the Resonance team ("we"). This policy explains what we collect, why, who processes it for us, and how you can manage or delete it.
@@ -50,6 +50,8 @@ These providers may process data outside Taiwan (for example in the United State
 We keep your data until you delete it or delete your account.
 
 On the website, and in versions of the apps that have a trash, a card you delete first moves to your trash, where only you can see it and can restore it for 30 days; it is deleted for good after 30 days, or as soon as you choose Delete forever or Empty trash. When an anonymous card goes to the trash, the notes other people left on it are deleted at once and don't come back if you restore it. Versions of the apps without a trash delete a card for good straight away, as their confirmation says.
+
+A message you unsend disappears for both of you; what it said (including any picture in it) is kept on our servers for 30 days, read only if the conversation is reported, and then deleted for good.
 
 You can delete your account at any time under Settings → Delete account (on the website and in the apps). You're signed out right away, and signing back in within 7 days cancels it. After 7 days your account, profile, cards and drafts, resonances, notes, every conversation you took part in (including the other person's messages and pictures in it), connections, notifications, notification settings and the record of what we've sent you, thought map, push devices and uploaded images are deleted for good.
 

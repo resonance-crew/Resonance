@@ -16,12 +16,16 @@ const getAdminMessaging = vi.fn(async () => messaging);
 vi.mock('@/lib/db/firestore/admin', () => ({ getAdminMessaging: () => getAdminMessaging() }));
 
 const pushMessage = vi.fn();
-vi.mock('@/lib/push/chat', () => ({ pushMessage: (...args: unknown[]) => pushMessage(...args) }));
+const pushUnsend = vi.fn();
+vi.mock('@/lib/push/chat', () => ({
+  pushMessage: (...args: unknown[]) => pushMessage(...args),
+  pushUnsend: (...args: unknown[]) => pushUnsend(...args),
+}));
 
 const unfurlMessage = vi.fn();
 vi.mock('@/lib/links/preview', () => ({ unfurlMessage: (...args: unknown[]) => unfurlMessage(...args) }));
 
-import { afterMessageSent, afterNoteSent } from './afterMessage';
+import { afterMessageSent, afterMessageUnsent, afterNoteSent } from './afterMessage';
 
 const db = {} as Firestore;
 const push = { conversationId: 'alice_bob', messageId: 'm1', from: 'alice', to: 'bob' };
@@ -40,6 +44,7 @@ let error: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   later.length = 0;
   pushMessage.mockReset().mockResolvedValue({ sent: 1, pruned: 0 });
+  pushUnsend.mockReset().mockResolvedValue({ sent: 1, pruned: 0 });
   unfurlMessage.mockReset().mockResolvedValue(null);
   getAdminMessaging.mockClear();
   error = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -139,5 +144,25 @@ describe('afterNoteSent', () => {
     await settle();
     expect(later).toHaveLength(0);
     expect(pushMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('afterMessageUnsent', () => {
+  it("tells the recipient's phone after the response, and logs a failure without throwing", async () => {
+    afterMessageUnsent(db, push);
+    await settle();
+    expect(pushUnsend).toHaveBeenCalledWith(db, push, messaging);
+
+    pushUnsend.mockRejectedValueOnce(new Error('fcm down'));
+    afterMessageUnsent(db, push);
+    await settle();
+    expect(error).toHaveBeenCalledWith('[push] unsend', 'm1', expect.any(Error));
+  });
+
+  it('does nothing for a message that was unsent already', async () => {
+    afterMessageUnsent(db, null);
+    await settle();
+    expect(later).toHaveLength(0);
+    expect(pushUnsend).not.toHaveBeenCalled();
   });
 });

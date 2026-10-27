@@ -4,7 +4,8 @@ import { getFirestore, Timestamp, type Firestore } from 'firebase-admin/firestor
 import type { BatchResponse, MulticastMessage } from 'firebase-admin/messaging';
 import { sendMessage, sendNote } from '@/lib/api/v1/conversations';
 import { acceptInvite } from '@/lib/api/v1/invites';
-import { PUSH_BODY_CHARS, pushMessage } from '@/lib/push/chat';
+import { PUSH_BODY_CHARS, pushMessage, pushUnsend } from '@/lib/push/chat';
+import { unsendMessage } from '@/lib/api/v1/messageActions';
 import { MAX_DEVICES, registerDevice, unregisterDevice } from '@/lib/push/devices';
 import { MESSAGES_CHANNEL, MULTICAST_MAX, pushNotification, type PushSender } from '@/lib/push/send';
 
@@ -350,7 +351,8 @@ describe('pushMessage', () => {
         notification: { title: '小明', body: '明天一起去散步嗎？' },
         data: { type: 'message', route, fromUserId: 'alice', conversationId: 'alice_bob', messageId: push.messageId },
         android: { priority: 'high', notification: { channelId: MESSAGES_CHANNEL, tag: 'alice_bob' } },
-        apns: { payload: { aps: { sound: 'default', threadId: 'alice_bob' } } },
+        // The message's own collapse id: no two messages merge, and an unsend replaces just this one (pushUnsend).
+        apns: { headers: { 'apns-collapse-id': push.messageId }, payload: { aps: { sound: 'default', threadId: 'alice_bob' } } },
       });
     }
     expect(MESSAGES_CHANNEL).toBe('messages');
@@ -540,7 +542,7 @@ describe('pushMessage', () => {
         notification: { title: '小明', body: '謝謝你寫下這段散步' },
         data: { type: 'message', route, fromUserId: 'alice', conversationId: 'alice_bob', messageId: sent.id, kind: 'note' },
         android: { priority: 'high', notification: { channelId: MESSAGES_CHANNEL, tag: 'alice_bob' } },
-        apns: { payload: { aps: { sound: 'default', threadId: 'alice_bob' } } },
+        apns: { headers: { 'apns-collapse-id': sent.id }, payload: { aps: { sound: 'default', threadId: 'alice_bob' } } },
       });
     });
 
@@ -599,6 +601,84 @@ describe('pushMessage', () => {
     const fcm = fakeFcm();
     expect(await pushMessage(db, { conversationId: 'alice_dave', messageId: 'm1', from: 'alice', to: 'dave' }, fcm.sender)).toEqual({ sent: MULTICAST_MAX + 2, pruned: 0 });
     expect(fcm.sent.map((m) => m.tokens.length)).toEqual([MULTICAST_MAX, 2]);
+  });
+});
+
+describe('pushUnsend (round 16: a message unsent after its push went out)', () => {
+  const deliveries = (sent: MulticastMessage[]) => Object.fromEntries(sent.flatMap((m) => m.tokens.map((t) => [t, m] as const)));
+  const route = `/messages/${encodeURIComponent('小明')}`;
+
+  beforeEach(async () => {
+    await db.doc('connections/alice_bob').set({ userIds: ['alice', 'bob'], establishedAt: Timestamp.now() });
+    await registerDevice(db, 'bob', 'bob-pixel-zh', { token: 'pixel-zh', platform: 'android', locale: 'zh-TW', capabilities: ['chat-push'] });
+    await registerDevice(db, 'bob', 'bob-old-android', { token: 'old-en', platform: 'android', locale: 'en' });
+    await registerDevice(db, 'bob', 'bob-iphone', { token: 'iphone-zh', platform: 'ios', locale: 'zh-TW' });
+  });
+
+  const sendAndUnsend = async (text: string) => {
+    const sent = await sendMessage(db, 'alice', { to: 'bob', text });
+    const { push } = await unsendMessage(db, 'alice', 'alice_bob', sent.id);
+    return push!;
+  };
+
+  it("tells a build that draws its own notification to drop the line, and quietly replaces every other device's while it is the newest", async () => {
+    const push = await sendAndUnsend('不該說的話');
+    const fcm = fakeFcm();
+    expect(await pushUnsend(db, push, fcm.sender)).toEqual({ sent: 3, pruned: 0 });
+    const at = deliveries(fcm.sent);
+    expect(at['pixel-zh']).toEqual({
+      tokens: ['pixel-zh'],
+      data: { type: 'unsend', conversationId: 'alice_bob', messageId: push.messageId, fromUserId: 'alice', toUserId: 'bob' },
+      android: { priority: 'high' },
+    });
+    const { tokens, ...iphone } = at['iphone-zh'];
+    expect(tokens).toEqual(['iphone-zh']);
+    expect(iphone).toEqual({
+      notification: { title: '小明', body: '小明 收回了一則訊息' },
+      data: { type: 'message', route, fromUserId: 'alice', toUserId: 'bob', conversationId: 'alice_bob', messageId: push.messageId },
+      android: { priority: 'normal', notification: { channelId: MESSAGES_CHANNEL, tag: 'alice_bob', priority: 'min', defaultSound: false } },
+      // The chat push's own collapse id and thread: it replaces that notification, without a sound or lighting the screen.
+      apns: { headers: { 'apns-collapse-id': push.messageId, 'apns-priority': '5' }, payload: { aps: { threadId: 'alice_bob', 'interruption-level': 'passive' } } },
+    });
+    expect(at['old-en'].notification).toEqual({ title: '小明', body: '小明 unsent a message' });
+    // Never the words it said.
+    expect(JSON.stringify(fcm.sent)).not.toContain('不該說的話');
+  });
+
+  it("leaves a later message's notification alone: only the build that draws its own is told", async () => {
+    const sent = await sendMessage(db, 'alice', { to: 'bob', text: 'first' });
+    await sendMessage(db, 'alice', { to: 'bob', text: 'a later one' });
+    const { push } = await unsendMessage(db, 'alice', 'alice_bob', sent.id);
+    const fcm = fakeFcm();
+    expect(await pushUnsend(db, push!, fcm.sender)).toEqual({ sent: 1, pruned: 0 });
+    expect(fcm.sent.map((m) => m.tokens)).toEqual([['pixel-zh']]);
+  });
+
+  it('says nothing across a block either way, for a connection the recipient muted, or for a message not unsent', async () => {
+    const push = await sendAndUnsend('hi');
+    const fcm = fakeFcm();
+    for (const [blocker, blocked] of [['bob', 'alice'], ['alice', 'bob']]) {
+      await db.doc(`users/${blocker}/blocks/${blocked}`).set({ blockedUid: blocked });
+      expect(await pushUnsend(db, push, fcm.sender)).toBeNull();
+      await db.doc(`users/${blocker}/blocks/${blocked}`).delete();
+    }
+    await db.doc('connections/alice_bob').update({ muted: [{ by: 'bob' }] });
+    expect(await pushUnsend(db, push, fcm.sender)).toBeNull();
+    await db.doc('connections/alice_bob').update({ muted: [] });
+
+    const kept = await sendMessage(db, 'alice', { to: 'bob', text: 'still here' });
+    expect(await pushUnsend(db, kept.push!, fcm.sender)).toBeNull();
+    expect(await pushUnsend(db, { ...push, from: 'bob', to: 'alice' }, fcm.sender)).toBeNull();
+    expect(await pushUnsend(db, { ...push, messageId: '../x' }, fcm.sender)).toBeNull();
+    expect(fcm.sent).toHaveLength(0);
+  });
+
+  it('keeps a message unsent before its own push went out from ringing at all', async () => {
+    const sent = await sendMessage(db, 'alice', { to: 'bob', text: 'oops' });
+    await unsendMessage(db, 'alice', 'alice_bob', sent.id);
+    const fcm = fakeFcm();
+    expect(await pushMessage(db, sent.push!, fcm.sender)).toBeNull();
+    expect(fcm.sent).toHaveLength(0);
   });
 });
 

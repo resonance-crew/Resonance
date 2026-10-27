@@ -412,6 +412,43 @@ describe("letters/* (how many notes someone has left unanswered) are the server'
   });
 });
 
+// Round 16: reactions and unsending are the server's to write (…/reaction, …/unsend), and what an unsent message
+// said is kept where no client reaches (unsentMessages/*, moderation only).
+describe("a message's reactions and its unsending are the server's", () => {
+  beforeEach(async () => {
+    await seedConnection();
+    await seed(async (db) => {
+      await setDoc(doc(db, 'conversations', PAIR, 'messages', 'm1'), { senderId: 'alice', text: 'hi', sentAt: new Date(), reactions: { bob: 'heart' } });
+      await setDoc(doc(db, 'unsentMessages', `${PAIR}_m0`), {
+        pair: PAIR, messageId: 'm0', senderId: 'alice', to: 'bob', text: 'what it said', sentAt: new Date(), unsentAt: new Date(),
+      });
+    });
+  });
+
+  it('lets a participant read the reactions, never write one — their own included — nor unsend from the client', async () => {
+    for (const uid of ['alice', 'bob']) {
+      const message = doc(as(uid), 'conversations', PAIR, 'messages', 'm1');
+      await assertSucceeds(getDoc(message));
+      await assertFails(updateDoc(message, { [`reactions.${uid}`]: 'laugh' }));
+      await assertFails(updateDoc(message, { 'reactions.bob': deleteField() }));
+      await assertFails(setDoc(message, { senderId: 'alice', sentAt: new Date(), unsentAt: new Date() }));
+      await assertFails(updateDoc(message, { unsentAt: serverTimestamp(), text: deleteField() }));
+    }
+  });
+
+  it('keeps unsent copies from everyone — the sender, the recipient, a stranger — for reading, listing or writing', async () => {
+    for (const uid of ['alice', 'bob', 'carol']) {
+      const db = as(uid);
+      await assertFails(getDoc(doc(db, 'unsentMessages', `${PAIR}_m0`)));
+      await assertFails(getDocs(query(collection(db, 'unsentMessages'), where('pair', '==', PAIR))));
+      await assertFails(getDocs(query(collection(db, 'unsentMessages'), where('senderId', '==', 'alice'))));
+      await assertFails(deleteDoc(doc(db, 'unsentMessages', `${PAIR}_m0`)));
+      await assertFails(setDoc(doc(db, 'unsentMessages', `${PAIR}_m9`), { pair: PAIR, senderId: uid, text: 'forged' }));
+    }
+    await assertFails(getDoc(doc(anonymous(), 'unsentMessages', `${PAIR}_m0`)));
+  });
+});
+
 describe('notifications', () => {
   beforeEach(seedProfiles);
 

@@ -628,8 +628,12 @@ async function writeMessage(db: Firestore, uid: string, input: SendMessageInput,
   });
 }
 
-/** What a reply keeps of the message it answers (a picture only as `image: true`: the quote is words). */
-function replyQuote(original: DocumentSnapshot): { id: string; senderId: string; text: string; cardRef?: string; image?: true } {
+/**
+ * What a reply keeps of the message it answers (a picture only as `image: true`: the quote is words). An unsent
+ * one is quoted as its quotes were emptied (`{ id, senderId, unsent: true }`, ./messageActions).
+ */
+function replyQuote(original: DocumentSnapshot): { id: string; senderId: string; text: string; cardRef?: string; image?: true } | { id: string; senderId: string; unsent: true } {
+  if (original.get('unsentAt') != null) return { id: original.id, senderId: String(original.get('senderId') ?? ''), unsent: true };
   const cardRef = original.get('cardRef');
   return {
     id: original.id,

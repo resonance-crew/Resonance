@@ -2,6 +2,7 @@ import { FieldValue, Timestamp, type DocumentData, type Firestore } from 'fireba
 import type { Card } from '@/lib/db/types';
 import { messageImageOf } from './chatImages';
 import { ApiFailure } from './http';
+import { unsentCopiesFor } from './messageActions';
 import { visibleCard } from './reads';
 import type { CreateReportInput, ReportCardInput } from './schemas';
 
@@ -111,7 +112,9 @@ export async function reportCard(db: Firestore, reporterId: string, key: string,
  * someone else's; its evidence is the message and up to
  * {@link MESSAGE_CONTEXT} before it, as they read then. Reporting the
  * conversation itself (`targetId` = its id) reports the other person, with
- * its latest messages.
+ * its latest messages. Either way the evidence also keeps what the
+ * conversation's unsent messages said, while their copies are kept
+ * (`unsent`, see ./messageActions unsentCopiesFor).
  */
 export async function createReport(db: Firestore, reporterId: string, input: CreateReportInput): Promise<string> {
   const detail = input.detail ?? '';
@@ -159,8 +162,10 @@ export async function createReport(db: Firestore, reporterId: string, input: Cre
     ...(typeof m.kind === 'string' ? { kind: m.kind } : {}),
     // A picture sent with it: its id, which `npm run moderation` opens (chatImages/{id} names its files).
     ...(messageImageOf(m.image) ? { image: messageImageOf(m.image) } : {}),
+    // Unsent: its words are in `unsent` below, while kept (./messageActions).
+    ...(m.unsentAt != null ? { unsent: true } : {}),
   });
-  const sent = await db.doc(`users/${sender}`).get();
+  const [sent, unsent] = await Promise.all([db.doc(`users/${sender}`).get(), unsentCopiesFor(db, conversationId)]);
   return file(
     db,
     reporterId,
@@ -170,6 +175,8 @@ export async function createReport(db: Firestore, reporterId: string, input: Cre
       // Oldest first: the messages just before the reported one, or (the
       // whole conversation reported) its latest.
       context: (before?.docs ?? []).reverse().map((d) => toEvidence(d.id, d.data())),
+      // What the conversation's unsent messages said, kept for 30 days for exactly this (oldest first, each `unsent: true`).
+      unsent,
       senderHandle: str(sent.get('handle')),
     },
   );
