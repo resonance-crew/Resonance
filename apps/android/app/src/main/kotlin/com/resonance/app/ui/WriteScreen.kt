@@ -454,7 +454,10 @@ private fun WriteForm(
                     confirmingLeave = question
                 }
             },
+            stepBack = { model.back() },
         )
+        // Written only when it changes (a state's equal value invalidates nothing): the workspace's back follows the step.
+        pane?.inPublishStep = step == WriterStep.Publish
     }
     DisposableEffect(pane, model) { onDispose { pane?.detach() } }
 
@@ -1126,18 +1129,10 @@ private fun Modifier.onSplitRowLine(): Modifier = layout { measurable, constrain
 @Composable
 private fun StepHeading(model: WriteModel, status: BarStatus?) {
     // Its middle on the Leave's line, the row's 38 (round 11 review): the name with its save state under it is
-    // taller than the row, so the two lines stand out over it evenly rather than pushing the arrow down.
+    // taller than the row, so the two lines stand out over it evenly. No back of its own (round 17 §9): the
+    // workspace's one back — the map's Leave — goes back to writing from here, and the name starts on the column's
+    // edge, as every section under it does.
     Row(Modifier.fillMaxWidth().onSplitRowLine(), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.layout { measurable, constraints ->
-            // The arrow's 48 hit box hangs into the pad and over the row's 38 (its glyph on the column's
-            // edge, level with the Leave's), the row keeping the Leave's height.
-            val p = measurable.measure(constraints)
-            val row = SPLIT_ROW_HEIGHT.roundToPx()
-            layout(p.width - 15.dp.roundToPx(), row) { p.place(-15.dp.roundToPx(), (row - p.height) / 2) }
-        }) {
-            OrganicIconButton(IconName.ArrowRight, L10n.Write.leaveStay, mirrored = true) { model.back() }
-        }
-        Spacer(Modifier.widthIn(min = 4.dp))
         // The writing's save state under the step's name (round 11 §5), as the bar says it below the split.
         TitleWithStatus(
             { m -> BasicText(model.stepTitle, style = AppFonts.heading(22f, 700, lineHeight = 1.2f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = m.semantics { heading() }) },
@@ -1649,19 +1644,38 @@ class WriterHandle {
     private var save: suspend () -> Unit = {}
     private var keyboard: () -> Unit = {}
     private var ask: ((() -> Unit) -> Unit)? = null
+    private var back: () -> Unit = {}
 
     val holdsWork: Boolean get() = hasWork()
     suspend fun saveNow() = save()
     fun releaseKeyboard() = keyboard()
 
+    /**
+     * Whether the pane's writer is at its publish step (round 17 §9): the workspace's one back — the map's
+     * Leave at the split — then goes back to writing ([stepBack]) and is named for it, as the step's own
+     * back did before it went.
+     */
+    var inPublishStep by mutableStateOf(false)
+        internal set
+
+    /** From the publish step back to writing, as the step's back did. */
+    fun stepBack() = back()
+
     /** Asks, as the writer's back does, then [then] on a confirm; with no writer in the pane, [then] at once. */
     fun askToLeave(then: () -> Unit) = ask?.invoke(then) ?: then()
 
-    internal fun attach(hasWork: () -> Boolean, saveNow: suspend () -> Unit, releaseKeyboard: () -> Unit, askToLeave: (() -> Unit) -> Unit) {
+    internal fun attach(
+        hasWork: () -> Boolean,
+        saveNow: suspend () -> Unit,
+        releaseKeyboard: () -> Unit,
+        askToLeave: (() -> Unit) -> Unit,
+        stepBack: () -> Unit = {},
+    ) {
         this.hasWork = hasWork
         save = { saveNow() }
         keyboard = releaseKeyboard
         ask = askToLeave
+        back = stepBack
     }
 
     internal fun detach() {
@@ -1669,5 +1683,7 @@ class WriterHandle {
         save = {}
         keyboard = {}
         ask = null
+        back = {}
+        inPublishStep = false
     }
 }
