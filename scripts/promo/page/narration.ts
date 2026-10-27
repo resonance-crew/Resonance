@@ -10,6 +10,12 @@ import { ease, prog, spring } from './time';
 
 export const NARRATION_X = 132;
 export const NARRATION_W = 600;
+/**
+ * Where every chapter's words begin (the eyebrow pill's top), the same in each
+ * so the block never shifts between chapters: a two-line title and a two-line
+ * body centred about DEMO_CY.
+ */
+export const NARRATION_TOP = 400;
 
 export interface NarrationOpts {
   icon: IconName;
@@ -38,7 +44,7 @@ export function narration(o: NarrationOpts) {
   const title = html('h2', { class: 'narration-title', text: o.title });
   const body = html('p', { class: 'narration-body', text: o.body });
   const pillRow = html('div', {}, [pill]);
-  const el = html('div', { class: 'abs', style: { left: NARRATION_X, top: o.y ?? 0, width: o.width ?? NARRATION_W, display: 'flex', flexDirection: 'column', gap: 26 } }, [pillRow, title, body]);
+  const el = html('div', { class: 'abs', style: { left: NARRATION_X, top: o.y ?? NARRATION_TOP, width: o.width ?? NARRATION_W, display: 'flex', flexDirection: 'column', gap: 26 } }, [pillRow, title, body]);
   const { h } = measure(el);
 
   /**

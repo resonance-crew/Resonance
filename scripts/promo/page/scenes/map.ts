@@ -19,6 +19,7 @@ import { DOT_EDGE, DOT_PERIOD, mapDots } from '@/components/molecules/ThoughtMap
 import { autoCurve, autoMag, autoSegments } from '@/lib/design/wobAuto';
 import { css, drawable, html, place, svg } from '../dom';
 import { button, C, chalk, face, icon, INK, INK_LIGHT, INK_STRONG, makePrng, measure, shapeSvg, tagPill, tapMark, uid, wobRect, type IconName } from '../kit';
+import { DEMO_CY } from '../layout';
 import { narration } from '../narration';
 import type { Scene } from '../scene';
 import { TIMELINE } from '../timeline';
@@ -105,20 +106,31 @@ const ARROWS = [
 /** The last arrow's ripples: two breaths after it lets go, three arcs each (stagger, life, radii, peak opacity). */
 const RIPPLE = { breaths: [0.3, 1.75], stagger: 0.26, life: 1.45, r: [16, 118] as const, alpha: 0.8 };
 
-// ── The camera: a slow push until all of the map is in view, then in on the 回家 pair for the hold ──
-/** The stage point the camera's focus sits on (the demonstration's centre, x 800–1800, y 120–1030). */
-const FOCUS = { x: 1300, y: 575 };
-const CAM0 = { s: 1.12, fx: 385, fy: 345 };
-const CAM_ALL = { s: 1.22, fx: WORLD.w / 2, fy: WORLD.h / 2 };
+// ── The camera: a slow push until all of the map is in view, then closer on the 回家 pair for the hold ──
+// As the app's fit keeps a board clear of its floating tools, the map never runs under 新增分類 · 加入卡片
+// (top right: anything right of x 1490 stays below y 165) nor the zoom cluster (bottom left), and it keeps
+// 90 px of paper under it.
+/** The stage point the camera's focus sits on (the demonstration's centre). */
+const FOCUS = { x: 1300, y: DEMO_CY };
+const CAM0 = { s: 1.1, fx: 385, fy: 360 };
+/** All of the map, its top clear of the toolbar and its foot 120 px over the frame's. */
+const CAM_ALL = { s: 1.06, fx: WORLD.w / 2, fy: WORLD.h / 2 };
 /**
- * In on the 回家 pair: the group centred across the demonstration, the free card above it with its top 190 px
- * down the stage, so 因為 fades into the header's mist and the first group is gone under it.
+ * Closer on the 回家 pair: the group centred across the demonstration, its foot 120 px over the frame's,
+ * the free card above it and, above that, the foot of 辭職那天 — the card 因為 points at — with its
+ * group's lower edge, the rest of the first group under the header's mist.
  */
-const HOME_S = 1.5;
-const CAM_HOME = { s: HOME_S, fx: GROUPS[1].x + GROUP_W / 2, fy: FREE_Y + (FOCUS.y - 190) / HOME_S };
-/** The two pushes overlap, so the camera never stops between them; the second sets off as 呼應 docks. */
+const HOME_S = 1.25;
+const HOME_FOOT = 960;
+const CAM_HOME = { s: HOME_S, fx: GROUPS[1].x + GROUP_W / 2, fy: GROUPS[1].y + GROUP_H - (HOME_FOOT - FOCUS.y) / HOME_S };
+/**
+ * The two pushes overlap, so the camera never stops between them; the second sets off as 呼應 docks. On
+ * the way home the camera pans across first and closes in after, so the first group's top-right corner
+ * has left the toolbar's side before it rises toward the header.
+ */
 const PUSH_ALL = [0, 7.0] as const;
-const PUSH_HOME = [6.5, 10.9] as const;
+const PAN_HOME = [6.3, 8.6] as const;
+const PUSH_HOME = [7.1, 10.9] as const;
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -244,7 +256,6 @@ export const map: Scene = {
 
     // ── The chapter's words ──────────────────────────────────────────
     const words = narration({ icon: 'frame', eyebrow: copy.narration.map.eyebrow, title: copy.narration.map.title, body: copy.narration.map.body });
-    css(words.el, { top: Math.round(96 + (984 - words.h) / 2 - 12) });
 
     // ── The world ────────────────────────────────────────────────────
     const world = html('div', { class: 'abs', style: { left: 0, top: 0, width: WORLD.w, height: WORLD.h, transformOrigin: '0 0' } });
@@ -408,8 +419,9 @@ export const map: Scene = {
 
     const camera = (t: number) => {
       const a = ease.inOutSine(prog(t, PUSH_ALL[0], PUSH_ALL[1]));
+      const pan = ease.inOutSine(prog(t, PAN_HOME[0], PAN_HOME[1]));
       const b = ease.inOutSine(prog(t, PUSH_HOME[0], PUSH_HOME[1]));
-      const at = (k: 's' | 'fx' | 'fy') => CAM0[k] + (CAM_ALL[k] - CAM0[k]) * a + (CAM_HOME[k] - CAM_ALL[k]) * b;
+      const at = (k: 's' | 'fx' | 'fy') => CAM0[k] + (CAM_ALL[k] - CAM0[k]) * a + (CAM_HOME[k] - CAM_ALL[k]) * (k === 'fx' ? pan : b);
       const sc = at('s');
       return { s: sc, x: FOCUS.x - at('fx') * sc, y: FOCUS.y - at('fy') * sc, home: b };
     };

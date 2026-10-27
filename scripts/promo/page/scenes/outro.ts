@@ -7,9 +7,13 @@
  * the wordmark, the hero's line 讓生命影響生命 (its accent carried by a
  * terracotta-light squiggle drawn under it), the tagline, the address on a
  * ctaLight button beside the stores' own badges, and where it runs. A long
- * hold; then the words lift away and the band sinks back down the way it
- * came, its wave and lip descending, until only plain cream paper is left —
- * the intro's first frame, so the film loops without a seam.
+ * hold to the film's last frame. In the looping preview's tail (`loop`) the
+ * words lift away instead and the band sinks back down the way it came, its
+ * wave and lip descending, until only plain cream paper is left — the intro's
+ * first frame, so the preview loops without a seam.
+ *
+ * The first sheet is the cream-dark of the band's lip, so the wipe reads as a
+ * sheet laid over the map, not as the map erased.
  */
 import { pointsToBezier, wavyPoints } from '@/lib/design/wavyPath';
 import { badgeArt, badgeGeometry, type Store } from '@/components/molecules/GetTheApp/badges';
@@ -38,10 +42,14 @@ const REST = -34;
 const FROM = H + 40;
 /** The cream-dark lip riding above the band's wave. */
 const LIP = 84;
-/** The words start lifting away (local seconds); the band then sinks back down over SINK, plain paper before the scene's end at 8.0. */
+/**
+ * In the looping preview's tail, the words start lifting away (local seconds) and the band then sinks back
+ * down over SINK, plain paper before the scene's end at 8.0. LOOP_FROM (global) is where that tail starts.
+ */
 const LIFT_AT = 6.7;
 const SINK_AT = 7.08;
 const SINK = 0.9;
+export const LOOP_FROM = TIMELINE.outro.start + LIFT_AT;
 
 /**
  * SectionEdge's wave (a 1440 × h canvas stretched to the stage's width, as a
@@ -61,16 +69,16 @@ export const outro: Scene = {
   id: 'outro',
   ...TIMELINE.outro,
   fadeIn: 0,
-  build({ copy, locale }) {
+  build({ copy, locale, loop }) {
     // Transparent until the bands cover the map scene under it.
     const root = html('div', { class: 'scene' });
 
     // ── The rising bands ────────────────────────────────────────────
-    // First a sheet of plain paper, its edge a pen wave (the header's rule):
-    // it wipes the map clean before the map scene ends at 0.6 s.
+    // First a sheet of the lip's cream-dark paper, its edge a pen wave (the header's rule):
+    // it covers the map before the map scene ends at 0.6 s.
     const sheetPts = edgePoints(211, 100, 0.16, 12);
     const sheet = svg('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}`, class: 'abs', style: 'left:0;top:0;overflow:visible' }, [
-      svg('path', { d: bandFill(sheetPts), fill: C.cream }),
+      svg('path', { d: bandFill(sheetPts), fill: C.creamDark }),
       svg('path', { d: pointsToBezier(sheetPts), fill: 'none', stroke: 'oklch(55% 0.05 60 / 0.38)', 'stroke-width': INK_LIGHT, 'stroke-linecap': 'round' }),
     ]);
     // Then the band: SectionEdge seed 137 / h 100 / amplitude 0.13 / 14 steps,
@@ -166,7 +174,7 @@ export const outro: Scene = {
     const SUNK = FROM + LIP;
     const sheetTop = (t: number) => lerp(FROM, REST, ease.inOutCubic(prog(t, 0, 0.6)));
     const bandTop = (t: number) =>
-      lerp(SUNK, REST, ease.inOutCubic(prog(t, 0.06, 1.0))) + (SUNK - REST) * ease.inOutCubic(prog(t, SINK_AT, SINK_AT + SINK));
+      lerp(SUNK, REST, ease.inOutCubic(prog(t, 0.06, 1.0))) + (loop ? (SUNK - REST) * ease.inOutCubic(prog(t, SINK_AT, SINK_AT + SINK)) : 0);
 
     const update = (t: number) => {
       place(sheet, { y: sheetTop(t), opacity: t < 1.05 ? 1 : 0 });
@@ -184,7 +192,7 @@ export const outro: Scene = {
       });
 
       // The words lift away one line after another, top first, before the band goes back down.
-      const away = (i: number) => ease.inOutCubic(prog(t, LIFT_AT + i * 0.06, LIFT_AT + i * 0.06 + 0.5));
+      const away = (i: number) => (loop ? ease.inOutCubic(prog(t, LIFT_AT + i * 0.06, LIFT_AT + i * 0.06 + 0.5)) : 0);
       const lift = (i: number) => -40 * away(i);
       const stay = (i: number) => 1 - away(i);
 

@@ -59,16 +59,15 @@ import {
 } from '../kit';
 import { narration } from '../narration';
 import type { Scene } from '../scene';
-import { THEIR_CARD } from '../layout';
+import { centredTop, DEMO_CY, THEIR_CARD } from '../layout';
 import { TIMELINE } from '../timeline';
 import { clamp, drift, ease, lerp, prog, spring } from '../time';
 import { notesCardCover } from './notes-cover';
 
 const DURATION = TIMELINE.notes.end - TIMELINE.notes.start;
 
-/** The middle of the demonstration area (x 800–1800, y 110–1040). */
+/** The middle of the demonstration area across (x 800–1800); its middle down is DEMO_CY. */
 const DEMO_CX = 1300;
-const DEMO_CY = 575;
 
 /** The note composer (NoteComposer in a Modal: maxWidth 520, padding 32/28) at video size. */
 const SHEET_W = 520;
@@ -223,7 +222,7 @@ export const notes: Scene = {
     // ── Narration ───────────────────────────────────────────────────
     const words = copy.narration.notes;
     const nar = narration({ icon: 'note', eyebrow: words.eyebrow, title: words.title, body: words.body });
-    css(nar.el, { top: Math.round(96 + (984 - nar.h) / 2 - 24), zIndex: 6 });
+    css(nar.el, { zIndex: 6 });
 
     // ── 晴天's card on its page, the card page's action bar under it ──
     const Z = THEIR_CARD.zoom;
@@ -255,14 +254,15 @@ export const notes: Scene = {
     const clipped = bar.el.querySelector('g[clip-path]');
     clipped?.insertBefore(wash, clipped.children[1 + 3] ?? null);
     const cardInner = html('div', { style: { position: 'relative', width: card.w, height: barTop + bar.h, zoom: Z } }, [card.el, bar.el]);
-    const cardGroup = html('div', { class: 'abs', style: { left: THEIR_CARD.x, top: THEIR_CARD.y, zIndex: 1 } }, [cardInner]);
-    /** The card and its bar on the stage: their middle, where the composer opens. */
+    /** The card and its bar on the stage, centred on the demonstration's middle: their top, and their middle, where the composer opens. */
     const groupH = (barTop + bar.h) * Z;
-    const groupCY = THEIR_CARD.y + groupH / 2;
+    const groupTop = centredTop(groupH);
+    const groupCY = groupTop + groupH / 2;
+    const cardGroup = html('div', { class: 'abs', style: { left: THEIR_CARD.x, top: groupTop, zIndex: 1 } }, [cardInner]);
     /** Where a fingertip presses 寄小紙條: a little under the label's middle. */
     const noteSegment = {
       x: THEIR_CARD.x + (barLeft + bar.centre(1).x) * Z,
-      y: THEIR_CARD.y + (barTop + bar.centre(1).y) * Z + 9,
+      y: groupTop + (barTop + bar.centre(1).y) * Z + 9,
     };
 
     // ── The note composer ───────────────────────────────────────────
@@ -366,10 +366,8 @@ export const notes: Scene = {
       sheet.style.height = `${boxH}px`;
     };
 
-    // ── The dim: the film's one dialog scrim, centred on the sheet; its flat
-    // middle (70% of the radii) reaches ~80 px past the sheet's sides and
-    // takes in its corners, so the fade happens away from its edges ──
-    const dimmer = scrim(sheetCX, sheetCY, Math.round(((SHEET_W * SHEET_Z) / 2 + 96) / 0.7), Math.round(((H1 * SHEET_Z) / 2 + 120) / 0.7));
+    // ── The dim: the film's dialog backdrop, one even light shade over the demonstration ──
+    const dimmer = scrim();
     css(dimmer.el, { zIndex: 2 });
 
     // ── The thread ─────────────────────────────────────────────────
@@ -547,10 +545,11 @@ export const notes: Scene = {
       replyRow,
       slot,
     ]);
-    const PANE_Z = Math.min(1.3, 900 / PANE_H);
+    // At most 850 tall on the stage: centred on DEMO_CY, it keeps 90 px of paper under it.
+    const PANE_Z = Math.min(1.3, 850 / PANE_H);
     css(pane, { zoom: PANE_Z });
     const paneLeft = DEMO_CX - (PANE_W * PANE_Z) / 2;
-    const paneTop = Math.max(118, DEMO_CY - (PANE_H * PANE_Z) / 2);
+    const paneTop = Math.round(DEMO_CY - (PANE_H * PANE_Z) / 2);
     const paneOuter = html('div', { class: 'abs', style: { left: paneLeft, top: paneTop, zIndex: 4 } }, [pane]);
 
     // Where the envelope comes down: the note's own bubble (its middle, in the note's box and on the stage).

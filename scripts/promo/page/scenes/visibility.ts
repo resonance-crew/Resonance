@@ -1,5 +1,5 @@
 /**
- * 14.4 – 25.0 s. 公開、私人、匿名: the card "write" made stays where it left
+ * 14.4 – 25.0 s. 公開、匿名、私人: the card "write" made stays where it left
  * it, then becomes the publish step's preview (PublishStep, the writer's
  * second step, as it stands at the split): it steps into the step's column
  * and the step comes in around it — its heading row (← 發布這張卡片, the save
@@ -20,7 +20,7 @@ import { autoCurve, autoMag, autoSegments } from '@/lib/design/wobAuto';
 import { fill } from '../copy';
 import { css, drawable, html, place, svg } from '../dom';
 import { avatar, button, C, face, family, icon, INK, measure, segmentedBar, storyCard, tapMark, wavyLine, wobCircle, wobRect, type IconName } from '../kit';
-import { MY_CARD, STAGE } from '../layout';
+import { centredTop, DEMO_CY, MY_CARD, STAGE } from '../layout';
 import { myCardCover } from './write-cover';
 import { narration } from '../narration';
 import type { Scene } from '../scene';
@@ -54,7 +54,7 @@ const STEP_ZOOM = 1.35;
 const STEP_W = 440;
 const STEP_GAP = 22;
 /** The band of the stage the step fills, centred in it; the card's zoom in it is what the band leaves. */
-const STEP_BAND = { top: 122, bottom: 1014 };
+const STEP_BAND = { top: DEMO_CY - 425, bottom: DEMO_CY + 425 };
 
 /**
  * The chapter's words at the tour's width, each sentence of the body on a line
@@ -72,7 +72,7 @@ function bodyBySentence(body: HTMLElement) {
 }
 
 /** The row of three: its span on the stage (the demonstration's own), the gap between cards, its middle. */
-const ROW = { left: STAGE.demo.left, right: 1800, gap: 34, cy: 568 };
+const ROW = { left: STAGE.demo.left, right: 1800, gap: 34, cy: DEMO_CY };
 
 /** A finger's press: down fast, up softer; the ring goes out after it. */
 function tapAt(t: number, t0: number) {
@@ -131,13 +131,14 @@ export const visibility: Scene = {
     // ── The chapter's words ──────────────────────────────────────────
     const nar = narration({ icon: 'eye', eyebrow: words.eyebrow, title: words.title, body: words.body });
     bodyBySentence(nar.body);
-    css(nar.el, { top: Math.round(96 + (984 - measure(nar.el).h) / 2 - 18) });
 
     // ── The card, as "write" leaves it ───────────────────────────────
     // The same call "write" makes, with the same doodle for a cover (write-cover.ts).
     const card = storyCard({ index: 0, width: MY_CARD.width, title: s.myCard.title, excerpt: s.myCard.excerpt, tags: s.myCard.tags, minutes: s.myCard.minutes, author: s.me, cover: myCardCover().cover });
     const cardInner = html('div', { style: { position: 'relative', width: card.w, height: card.h, zoom: MY_CARD.zoom } }, [card.el]);
-    const cardOuter = html('div', { class: 'abs', style: { left: MY_CARD.x, top: MY_CARD.y, width: card.w * MY_CARD.zoom, height: card.h * MY_CARD.zoom } }, [cardInner]);
+    /** Where "write" leaves it: centred on the demonstration's middle. */
+    const myY = centredTop(card.h * MY_CARD.zoom);
+    const cardOuter = html('div', { class: 'abs', style: { left: MY_CARD.x, top: myY, width: card.w * MY_CARD.zoom, height: card.h * MY_CARD.zoom } }, [cardInner]);
     const CW = card.w * MY_CARD.zoom;
     const cardCx = MY_CARD.x + CW / 2;
 
@@ -358,12 +359,12 @@ export const visibility: Scene = {
       const breath = Math.sin(Math.PI * prog(t, T.close + 0.3, T.shrink + 0.85)) * -3;
       const k0 = lerp(lerp(1, inStep.k, enter), 1, forward);
       const restX = lerp(lerp(MY_CARD.x, inStep.x, enter), MY_CARD.x, forward);
-      const restY = lerp(lerp(MY_CARD.y, inStep.y, enter), MY_CARD.y, forward) + breath;
+      const restY = lerp(lerp(myY, inStep.y, enter), myY, forward) + breath;
       const bx = lerp(restX, slotX[1], shrink);
       const by = lerp(restY, rowTop, shrink) + bob(1);
       const k = lerp(k0, ZR / MY_CARD.zoom, shrink);
       const bw = CW * k;
-      place(cardOuter, { x: bx - MY_CARD.x, y: by - MY_CARD.y - leave(1) * 16, s: k, opacity: 1 - leave(1), origin: '0 0' });
+      place(cardOuter, { x: bx - MY_CARD.x, y: by - myY - leave(1) * 16, s: k, opacity: 1 - leave(1), origin: '0 0' });
 
       // The other two slide out from under it, one to each side: each starts exactly
       // where the card is (hidden by it), leans a little on the way, and lands in its slot.

@@ -3,6 +3,12 @@ import type { Copy, Locale } from './copy';
 export interface SceneContext {
   locale: Locale;
   copy: Copy;
+  /**
+   * The looping preview's tail (`?loop=1`): the end card lifts away and the band
+   * sinks back to plain paper, the intro's first frame. The MP4 holds the end
+   * card to its last frame instead.
+   */
+  loop: boolean;
 }
 
 export interface SceneInstance {

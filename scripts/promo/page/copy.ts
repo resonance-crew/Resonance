@@ -66,7 +66,7 @@ function pick(m: Messages) {
 
 const NARRATION = {
   'zh-TW': {
-    chapters: ['故事卡片', '公開、私人、匿名', '共振', '小紙條', '思想地圖'],
+    chapters: ['故事卡片', '公開、匿名、私人', '共振', '小紙條', '思想地圖'],
     /** The intro's line, its accent (squiggled, in terracotta) in the middle. */
     introTagline: ['用故事', '回應', '故事'],
     introSub: '回應不是按讚，而是另一段故事',
@@ -76,7 +76,7 @@ const NARRATION = {
       body: '一個標題、一段故事，也許配一張圖。寫到一半，也會自己存好。',
     },
     visibility: {
-      eyebrow: '公開、私人、匿名',
+      eyebrow: '公開、匿名、私人',
       title: '誰能讀到，\n由你決定',
       body: '公開給每個人，或只留給自己。不敢署名的故事，就匿名發布。',
       publicCaption: '每個人都讀得到',
@@ -104,7 +104,7 @@ const NARRATION = {
     },
   },
   en: {
-    chapters: ['Story cards', 'Public · Private · Anonymous', 'Resonate', 'Notes', 'Thought map'],
+    chapters: ['Story cards', 'Public · Anonymous · Private', 'Resonate', 'Notes', 'Thought map'],
     introTagline: ['', 'Answer', ' stories with stories'],
     introSub: 'A response isn’t a like. It’s another story.',
     write: {
@@ -113,7 +113,7 @@ const NARRATION = {
       body: 'A title, a story, perhaps a picture. Half-written, it saves itself.',
     },
     visibility: {
-      eyebrow: 'Public · Private · Anonymous',
+      eyebrow: 'Public · Anonymous · Private',
       title: 'You decide\nwho reads it',
       body: 'Share it with everyone or keep it to yourself. For a story you can’t sign, publish anonymously.',
       publicCaption: 'Anyone can read it',

@@ -606,16 +606,28 @@ export function segmentedBar(segments: SegmentSpec[], o: { mode?: 'actions' | 'c
 }
 
 /**
- * The page dimmed behind a dialog, kept to the demonstration: a light warm
- * shade fading out from the sheet's centre (cx, cy) in an ellipse rx × ry, so
- * it has no edge against the narration or the header. `set(p)` fades it 0 → 1.
- * The notes scene's dialog dims the page with it.
+ * The page dimmed behind a dialog, kept to the demonstration: one even, light
+ * warm shade over the demonstration's side of the stage, its edges soft where
+ * it meets the narration and the header (it runs on to the frame's right and
+ * foot, as a backdrop runs to the window's). `set(p)` fades it 0 → 1. The
+ * notes scene's composer and the resonate picker dim the page with it.
  */
-export function scrim(cx: number, cy: number, rx = 760, ry = 560) {
-  const mask = `radial-gradient(ellipse ${rx}px ${ry}px at ${cx}px ${cy}px, #000 70%, transparent 100%)`;
+export function scrim() {
+  const mask = 'linear-gradient(90deg, transparent 700px, #000 820px), linear-gradient(180deg, transparent 84px, #000 150px)';
   const el = html('div', {
     class: 'abs',
-    style: { left: 0, top: 0, width: 1920, height: 1080, background: 'oklch(30% 0.02 75 / 0.16)', maskImage: mask, webkitMaskImage: mask, pointerEvents: 'none' },
+    style: {
+      left: 0,
+      top: 0,
+      width: 1920,
+      height: 1080,
+      background: 'oklch(30% 0.02 75 / 0.1)',
+      maskImage: mask,
+      webkitMaskImage: mask,
+      maskComposite: 'intersect',
+      webkitMaskComposite: 'source-in',
+      pointerEvents: 'none',
+    },
   });
   const set = (p: number) => place(el, { opacity: p });
   set(0);

@@ -12,6 +12,8 @@ import { CHAPTERS, TIMELINE } from './timeline';
 import { clamp, ease, prog } from './time';
 
 const PAD_X = 120;
+/** The brand's left edge: the mark's ink (from 3/24 of its box) starts where the narration does (NARRATION_X 132). */
+const BRAND_X = 127;
 
 export function header(copy: Copy) {
   const mark = svg(
@@ -20,7 +22,7 @@ export function header(copy: Copy) {
     ICONS.wave.d.map((d) => svg('path', { d })),
   );
   const word = html('span', { text: 'Resonance', style: { fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 24, letterSpacing: '-0.02em', color: C.text } });
-  const brand = html('div', { class: 'abs', style: { left: PAD_X, top: 20, display: 'flex', alignItems: 'center', gap: 10 } }, [mark, word]);
+  const brand = html('div', { class: 'abs', style: { left: BRAND_X, top: 20, display: 'flex', alignItems: 'center', gap: 10 } }, [mark, word]);
 
   const labels = copy.narration.chapters.map((name, i) => {
     const num = html('span', { text: String(i + 1).padStart(2, '0'), style: { fontSize: 13, fontWeight: 700, letterSpacing: '0.08em', marginRight: 8, fontVariantNumeric: 'tabular-nums' } });
@@ -59,7 +61,7 @@ export function header(copy: Copy) {
     const cy = 470 - 90 * rise;
     const fly = ease.inOutCubic(prog(t, 5.95, 6.85));
     const s = BIG + (1 - BIG) * fly;
-    const x = (960 - (bw * BIG) / 2 - PAD_X) * (1 - fly);
+    const x = (960 - (bw * BIG) / 2 - BRAND_X) * (1 - fly);
     const y = (cy - (bh * BIG) / 2 - 20) * (1 - fly);
     return { x, y, s };
   };

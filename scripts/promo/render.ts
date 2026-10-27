@@ -3,7 +3,7 @@
  *
  *   npx tsx scripts/promo/render.ts [--locale zh-TW|en|all] [--fps 60] [--workers 4]
  *                                   [--out docs/media] [--from 0] [--to <end>]
- *                                   [--stills 1.5,8,20 [--stills-dir <dir>]] [--preview [--poster-at 4.6]]
+ *                                   [--stills 1.5,8,20 [--stills-dir <dir>]] [--preview [--poster-at 22.6]]
  *                                   [--audio <file> | --silent]
  *
  * The page is a pure function of time (`window.__promo.renderAt(t)`), so every
@@ -17,6 +17,11 @@
  *
  * The soundtrack is scripts/promo/score.m4a (66 s, already at -16 LUFS / -1.5 dBTP,
  * so it is copied into the MP4 as it is); --audio takes another file, --silent none.
+ *
+ * The MP4 holds the end card to its last frame. The looping preview (--preview)
+ * swaps in its own tail from `window.__promo.loopFrom`, rendered with `?loop=1`:
+ * the end card lifts away and the band sinks back to plain paper, the intro's
+ * first frame, so it loops without a seam.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
@@ -68,7 +73,7 @@ function parseArgs(argv: string[]): Options {
     stills: stills ? stills.split(',').map(Number) : null,
     stillsDir: resolve(ROOT, get('stills-dir') ?? join(tmpdir(), 'resonance-promo-stills')),
     preview: argv.includes('--preview'),
-    posterAt: Number(get('poster-at') ?? 4.6),
+    posterAt: Number(get('poster-at') ?? 22.6),
     audio: argv.includes('--silent') ? null : resolve(ROOT, get('audio') ?? SCORE),
   };
 }
@@ -371,7 +376,17 @@ async function main() {
       await done(run('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', list, ...audio, '-c', 'copy', '-movflags', '+faststart', mp4]));
       console.log(`${mp4} (${(statSync(mp4).size / 1e6).toFixed(1)} MB)`);
 
-      if (opts.preview) await preview(mp4, join(opts.out, `resonance-intro.${locale}`), opts.posterAt);
+      if (opts.preview) {
+        // The loop's tail: from where the end card starts to lift away, at the preview's 30 fps.
+        const loopPage = await openPage(cdp, `${url}&loop=1`);
+        const loopFrom = await loopPage.eval<number>('window.__promo.loopFrom');
+        const tail = join(tmp, 'loop-tail.mp4');
+        const ff = run('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', '30', '-c:v', 'png', '-i', '-', ...X264, '-r', '30', '-an', tail], 'pipe');
+        for (let f = Math.round(loopFrom * 30); f < Math.round(duration * 30); f++) await write(ff, await loopPage.frame(f / 30));
+        ff.stdin!.end();
+        await done(ff);
+        await preview(mp4, tail, loopFrom, join(opts.out, `resonance-intro.${locale}`), opts.posterAt);
+      }
       rmSync(tmp, { recursive: true, force: true });
     }
   } finally {
@@ -386,13 +401,16 @@ async function main() {
 
 /**
  * For places that can't play an MP4 inline (a GitHub README): a looping animated AVIF at 1280 px and
- * 30 fps (a real video codec, so a fade leaves nothing behind, at a fraction of a GIF's size) and a
- * JPEG still of the moment `posterAt` for anything that shows no AVIF.
+ * 30 fps (a real video codec, so a fade leaves nothing behind, at a fraction of a GIF's size) — the
+ * film up to `loopFrom`, then the loop's own tail back to plain paper — and a JPEG still of the moment
+ * `posterAt` (the three ways one card can be read) for anything that shows no AVIF.
  */
-async function preview(mp4: string, out: string, posterAt: number) {
+async function preview(mp4: string, tail: string, loopFrom: number, out: string, posterAt: number) {
   const avif = `${out}.avif`;
   const jpg = `${out}.jpg`;
-  await done(run('ffmpeg', ['-y', '-loglevel', 'error', '-i', mp4, '-vf', 'fps=30,scale=1280:-2:flags=lanczos,format=yuv420p',
+  const graph = `[0:v]trim=end=${loopFrom},setpts=PTS-STARTPTS,fps=30[a];[1:v]setpts=PTS-STARTPTS,fps=30[b];` +
+    '[a][b]concat=n=2:v=1:a=0,scale=1280:-2:flags=lanczos,format=yuv420p[v]';
+  await done(run('ffmpeg', ['-y', '-loglevel', 'error', '-i', mp4, '-i', tail, '-filter_complex', graph, '-map', '[v]',
     '-c:v', 'libsvtav1', '-crf', '34', '-preset', '5', '-g', '120', '-an', '-loop', '0', '-f', 'avif', avif]));
   await done(run('ffmpeg', ['-y', '-loglevel', 'error', '-ss', String(posterAt), '-i', mp4, '-frames:v', '1', '-vf', 'scale=1280:-2:flags=lanczos', '-q:v', '3', jpg]));
   for (const f of [avif, jpg]) console.log(`${f} (${(statSync(f).size / 1e6).toFixed(1)} MB)`);

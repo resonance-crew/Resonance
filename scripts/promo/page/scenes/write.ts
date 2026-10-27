@@ -19,7 +19,7 @@
 import { blob } from '../decor';
 import { css, html, place, svg } from '../dom';
 import { C, face, icon, INK, makePrng, measure, storyCard, tapMark, wobCircle, wobRect } from '../kit';
-import { MY_CARD } from '../layout';
+import { centredTop, DEMO_CY, MY_CARD } from '../layout';
 import { narration } from '../narration';
 import type { Scene } from '../scene';
 import { TIMELINE } from '../timeline';
@@ -36,9 +36,8 @@ const PAD_T = 40;
 /** Room left under the story, so the pane reads as a page with more to come. */
 const PAD_B = 96;
 const PANE_Z = 1.3;
-/** The pane's right edge on the stage, and the middle of the band it stands in. */
+/** The pane's right edge on the stage. */
 const PANE_RIGHT = 1800;
-const PANE_CY = 574;
 
 /** The ✓ (BareIconButton: a 36 box, its glyph 22) and the save state 6 before it. */
 const CHECK_BOX = 36;
@@ -101,8 +100,6 @@ export const write: Scene = {
     const words = copy.narration.write;
     const n = narration({ icon: 'pen', eyebrow: words.eyebrow, title: words.title, body: words.body });
     bodyBySentence(n.body);
-    const { h: nh } = measure(n.el);
-    css(n.el, { top: Math.round(96 + (984 - nh) / 2 - 18) });
     root.append(n.el);
 
     // ── The writer's page ──────────────────────────────────────────────
@@ -162,7 +159,7 @@ export const write: Scene = {
     page.prepend(paper.el, pen.el);
     css(page, { zoom: PANE_Z });
     const paneX = PANE_RIGHT - PANE_W * PANE_Z;
-    const paneY = Math.round(PANE_CY - (PANE_H * PANE_Z) / 2);
+    const paneY = Math.round(DEMO_CY - (PANE_H * PANE_Z) / 2);
     const paneOuter = html('div', { class: 'abs', style: { left: paneX, top: paneY, width: PANE_W * PANE_Z, height: PANE_H * PANE_Z } }, [page]);
     root.append(paneOuter);
 
@@ -179,7 +176,7 @@ export const write: Scene = {
       cover: doodle.cover,
     });
     const zoom = html('div', { style: { zoom: MY_CARD.zoom, position: 'relative', width: card.w, height: card.h } }, [card.el]);
-    const holder = html('div', { class: 'abs', style: { left: MY_CARD.x, top: MY_CARD.y } }, [zoom]);
+    const holder = html('div', { class: 'abs', style: { left: MY_CARD.x, top: centredTop(card.h * MY_CARD.zoom) } }, [zoom]);
     root.append(holder);
 
     // ── The finger ─────────────────────────────────────────────────────
@@ -232,8 +229,8 @@ export const write: Scene = {
           x: b.x + drift(g, b.period, b.phase) * 22,
           y: b.y + drift(g, b.period * 1.3, b.phase + 0.5) * 16,
           r: drift(g, b.period * 2, b.phase) * 6,
-          // Gone once the page has come, so every chapter sits on the same plain paper.
-          opacity: b.opacity * (1 - ease.inOutCubic(prog(t, 1.0, 2.0))),
+          // Gone as the page comes, so every chapter sits on the same plain paper.
+          opacity: b.opacity * (1 - ease.inOutCubic(prog(t, 0.15, 0.85))),
         }),
       );
       n.update(t, 0.2, duration);

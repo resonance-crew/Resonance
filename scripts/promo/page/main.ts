@@ -4,7 +4,8 @@
  * calls it for each frame and takes a screenshot.
  *
  * Open the page with `?locale=en` for the English cut; `?t=12.5` shows that
- * moment, for looking at a frame in a browser.
+ * moment, for looking at a frame in a browser; `?loop=1` ends on plain paper
+ * (the looping preview's tail) instead of holding the end card.
  */
 import { copyFor, fill, type Locale } from './copy';
 import { html, place } from './dom';
@@ -12,17 +13,19 @@ import { header } from './header';
 import { initDefs, initMeasure, setReadTime } from './kit';
 import type { Scene, SceneInstance } from './scene';
 import { SCENES } from './scenes';
+import { LOOP_FROM } from './scenes/outro';
 import { CROSS_FADE, DURATION } from './timeline';
 import { ease, prog } from './time';
 
 declare global {
   interface Window {
-    __promo: { ready: Promise<void>; duration: number; renderAt: (t: number) => void };
+    __promo: { ready: Promise<void>; duration: number; loopFrom: number; renderAt: (t: number) => void };
   }
 }
 
 const params = new URLSearchParams(location.search);
 const locale: Locale = params.get('locale') === 'en' ? 'en' : 'zh-TW';
+const loop = params.get('loop') === '1';
 document.documentElement.lang = locale;
 const copy = copyFor(locale);
 const stage = document.getElementById('stage')!;
@@ -67,7 +70,7 @@ const ready = (async () => {
   built = SCENES.map((def) => {
     let inst: SceneInstance;
     try {
-      inst = def.build({ locale, copy });
+      inst = def.build({ locale, copy, loop });
     } catch (e) {
       // One scene that fails to build shows as plain paper; the rest still render.
       console.error(`scene ${def.id} failed to build`, e);
@@ -82,4 +85,4 @@ const ready = (async () => {
   renderAt(Number(params.get('t') ?? 0));
 })();
 
-window.__promo = { ready, duration: DURATION, renderAt };
+window.__promo = { ready, duration: DURATION, loopFrom: LOOP_FROM, renderAt };
