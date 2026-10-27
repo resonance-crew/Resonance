@@ -185,9 +185,11 @@ enum class TagSize(val font: Float, val tracking: Float, val padX: Dp, val padY:
  * framed card (the anonymous badge under a card on the shelves, cream-dark on
  * the cream page, vanishes without its rim). `onRemove` adds its hand-drawn ×
  * (the writer's tags), named [removeLabel] (which tag: 移除標籤：日常) or the
- * plain 移除標籤. A [quiet] pill doesn't outshout what is round it (the
- * publish step's chosen tags, beside its one button; round 16 review S2): its
- * rim the soft pen at INK_LIGHT, its words at 500, its × in the muted ink.
+ * plain 移除標籤. A [quiet] pill doesn't outshout what is round it: its
+ * rim (when [outlined]) the soft pen at INK_LIGHT, its words at 500, its × in
+ * the muted ink. [ink] sets the words and the × in another ink, the × at 70 %
+ * (the publish step's chosen tags, round 17 §4: the tonal button's fill and
+ * ink, no rim).
  */
 @Composable
 fun TagPill(
@@ -199,11 +201,17 @@ fun TagPill(
     onRemove: (() -> Unit)? = null,
     removeLabel: String? = null,
     quiet: Boolean = false,
+    ink: Color? = null,
 ) {
     val s = seed ?: autoSeed(text)
     val rim = if (quiet) Tokens.SoftPen else Tokens.TagStroke
     val pen = if (quiet) Tokens.InkLight else Tokens.Ink
-    val cross = if (quiet) Tokens.TextMuted else Tokens.Text
+    val cross = ink ?: if (quiet) Tokens.TextMuted else Tokens.Text
+    val crossAlpha = when {
+        ink != null -> TAG_CROSS_ON_INK
+        quiet -> 1f
+        else -> 0.55f
+    }
     val removeName = removeLabel ?: L10n.Write.removeTag
     Row(
         Modifier
@@ -221,7 +229,7 @@ fun TagPill(
     ) {
         BasicText(
             text.uppercase(),
-            style = AppFonts.body(size.font, if (quiet) 500 else 600, lineHeight = 1.3f).copy(letterSpacing = size.tracking.em),
+            style = AppFonts.body(size.font, if (quiet) 500 else 600, lineHeight = 1.3f, color = ink ?: Tokens.Text).copy(letterSpacing = size.tracking.em),
         )
         // The ✕ takes 10 in the row but a finger's 44 × 44 round it (round 16 §1): its hit box overhangs the
         // pill, unseen, and the pill keeps its size.
@@ -235,8 +243,9 @@ fun TagPill(
                 .semantics { contentDescription = removeName },
             contentAlignment = Alignment.Center,
         ) {
-            // A quiet pill's × is the muted ink itself (the web's: muted, at full strength); the others' the ink faded.
-            Canvas(Modifier.size(10.dp).alpha(if (quiet) 1f else 0.55f)) {
+            // A quiet pill's × is the muted ink itself (the web's: muted, at full strength); one in its own ink that ink at
+            // 70 %; the others' the ink faded.
+            Canvas(Modifier.size(10.dp).alpha(crossAlpha)) {
                 val k = this.size.width / 10f
                 val x = Path().apply {
                     moveTo(1.6f * k, 1.8f * k); cubicTo(3f * k, 3f * k, 5.2f * k, 5.2f * k, 8.2f * k, 8.4f * k)
@@ -250,6 +259,9 @@ fun TagPill(
 
 /** A tag's ✕: the finger's room round its 10 glyph. */
 val TagRemoveTarget = 44.dp
+
+/** How strong a pill's ✕ is in the pill's own [TagPill] `ink` (round 17 §4). */
+const val TAG_CROSS_ON_INK = 0.7f
 
 /** TagPill's automatic seed: a hash of the label, so a tag always wobbles the same. */
 fun autoSeed(s: String): Double {

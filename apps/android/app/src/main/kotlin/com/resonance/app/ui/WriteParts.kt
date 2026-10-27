@@ -261,10 +261,10 @@ internal object TagEntry {
 }
 
 /**
- * The chosen tags (round 16 §1, its review's S1 / S2 / N6), under the section's label — which stands on a
- * line of its own, as 卡片類型's does, so a wrapped row never hangs indented under it: each tag a large
- * outlined pill, quiet ([TagPill] `quiet`: half the accent's light wash on the paper, the soft pen at
- * INK_LIGHT, words at 500, a muted ✕), its ✕ named for its tag (移除標籤：日常) with a 44 hit box round it,
+ * The chosen tags (round 16 §1, its review's S1 / N6; round 17 §4), under the section's label — which stands
+ * on a line of its own, as 卡片類型's does, so a wrapped row never hangs indented under it: each tag a large
+ * pill with no rim, in the field's 「AI 建議」 segment's colours ([TagPill] with `ink`: the tonal button's fill,
+ * its ink for the words at 500 and for the ✕ at 70 %), its ✕ named for its tag (移除標籤：日常) with a 44 hit box round it,
  * 8 apart and 8 between lines, [TagRowTop] under the label. With no tags the row takes no room at all.
  * A tag added after the row was first drawn pops in (160 ms, 0.85 → 1; at once with animations off).
  * [onHeightChange] hears the row's height change as it is measured — before anything under it is placed
@@ -281,7 +281,8 @@ fun TagPillRow(
     // The tags the row opened with stand still; only ones added since pop in.
     val first = remember { tags.toSet() }
     val lastHeight = remember { intArrayOf(-1) }
-    val fill = PaletteMixes.of(LocalResonanceColors.current).quietTag
+    val fill = Tokens.ButtonTonal
+    val ink = Tokens.ButtonOnTonal
     FlowRow(
         Modifier
             .fillMaxWidth()
@@ -304,7 +305,7 @@ fun TagPillRow(
                 LaunchedEffect(Unit) { if (pop.value < 1f) pop.animateTo(1f, tween(TAG_POP_MILLIS, easing = EaseOut)) }
                 Box(Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value }) {
                     TagPill(
-                        tag, fill, size = TagSize.Lg, outlined = true, quiet = true,
+                        tag, fill, size = TagSize.Lg, outlined = false, quiet = true, ink = ink,
                         removeLabel = L10n.Write.tagsRemoveLabel(tag),
                         onRemove = { onRemove(tag) },
                     )
