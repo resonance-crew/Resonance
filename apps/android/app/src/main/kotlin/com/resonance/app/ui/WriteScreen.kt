@@ -62,6 +62,9 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import kotlinx.coroutines.CoroutineScope
+import androidx.compose.ui.composed
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -954,6 +957,7 @@ private fun PublishStep(
     onFinished: (String) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val tagAnchor = remember(scroll, scope) { TagFieldAnchor(scroll, scope) }
     val updating = model.isPublished
     val pending = model.pending
     val reduced = LocalContext.current.prefersReducedMotion()
@@ -1006,9 +1010,10 @@ private fun PublishStep(
         // the controls show it themselves. Never faded as a whole — an alpha layer is cut at this column's
         // box, and the card's pen line (a tablet's bordered card) or band (a phone's, edge to edge) runs past it.
         Column(Modifier.holdWhile(pending)) {
-            Preview(session, model, compact, pad, underBar, pickCover, dismissKeyboard)
+            // The preview gains a row of tags with the first one (and loses it with the last): the field under it stays still.
+            Box(Modifier.heightChanges(tagAnchor::heightChanged)) { Preview(session, model, compact, pad, underBar, pickCover, dismissKeyboard) }
             Spacer(Modifier.height(gap))
-            Tags(model, scroll, dismissKeyboard)
+            Tags(model, tagAnchor, dismissKeyboard)
             Spacer(Modifier.height(gap))
             AudienceChoice(model)
             model.resonanceLine?.let { line ->
@@ -1411,12 +1416,8 @@ private fun StepLabel(text: String) {
  * ([scroll]). A polite announcement says how many tags an add brought in.
  */
 @Composable
-private fun Tags(model: WriteModel, scroll: androidx.compose.foundation.ScrollState, dismissKeyboard: () -> Unit) {
-    val scope = rememberCoroutineScope()
+private fun Tags(model: WriteModel, anchor: TagFieldAnchor, dismissKeyboard: () -> Unit) {
     val view = LocalView.current
-    var fieldFocused by remember { mutableStateOf(false) }
-    // The segment was tapped: the row's next change (the add, or the model's tags) keeps the field still too.
-    var fromSegment by remember { mutableStateOf(false) }
     val tags = model.values.tags
     // An add (by hand, or the model's) is announced: how many came in.
     var lastCount by remember { mutableIntStateOf(tags.size) }
@@ -1425,21 +1426,15 @@ private fun Tags(model: WriteModel, scroll: androidx.compose.foundation.ScrollSt
         lastCount = tags.size
         if (added > 0) view.announce(L10n.Write.tagsAdded(added))
     }
-    LaunchedEffect(model.suggestingTags) { if (!model.suggestingTags) { delay(SEGMENT_HOLD_MILLIS); fromSegment = false } }
+    // The segment was tapped: what changes above the field next (the add, or the model's tags) keeps it still too.
+    LaunchedEffect(model.suggestingTags, tags.size) {
+        if (!model.suggestingTags) {
+            delay(SEGMENT_HOLD_MILLIS)
+            anchor.fromSegment = false
+        }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(PublishLabelGap)) {
-        TagPillRow(
-            tags,
-            onRemove = model::removeTag,
-            onHeightChange = { delta ->
-                if (fieldFocused || fromSegment) {
-                    // In the same pass the step places this frame: the field stays where the eye is.
-                    val consumed = scroll.dispatchRawDelta(delta.toFloat())
-                    val left = delta - consumed
-                    // At the step's end the scroll can't go further until the taller page is measured: the rest next frame.
-                    if (kotlin.math.abs(left) >= 1f) scope.launch { scroll.scrollBy(left) }
-                }
-            },
-        ) { StepLabel(L10n.Write.tagsLabel) }
+        TagPillRow(tags, onRemove = model::removeTag, onHeightChange = anchor::heightChanged) { StepLabel(L10n.Write.tagsLabel) }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             TagField(
                 draft = model.tagDraft,
@@ -1449,15 +1444,15 @@ private fun Tags(model: WriteModel, scroll: androidx.compose.foundation.ScrollSt
                 canRemoveLast = tags.isNotEmpty(),
                 onRemoveLast = model::removeLastTag,
                 onAdd = { word ->
-                    fromSegment = true
+                    anchor.fromSegment = true
                     model.addTag(word)
                 },
                 onSuggest = {
-                    fromSegment = true
+                    anchor.fromSegment = true
                     dismissKeyboard()
                     model.suggestTags()
                 },
-                onFocusChanged = { fieldFocused = it },
+                onFocusChanged = { anchor.focused = it },
             )
             model.tagError?.let { error ->
                 BasicText(
@@ -1472,6 +1467,42 @@ private fun Tags(model: WriteModel, scroll: androidx.compose.foundation.ScrollSt
 
 /** How long after an add (or the model's answer) the field is still kept still as the row settles. */
 private const val SEGMENT_HOLD_MILLIS = 400L
+
+/**
+ * Keeps the tag field where the eye is (round 16 §1): while it is [active] (the field has the focus, or
+ * its segment was just tapped), every change in the height of what stands above it in the step — the
+ * pill row wrapping or unwrapping, the preview card gaining or losing its row of tags — scrolls the step
+ * by as much, in the same layout pass (so the field never jumps a frame). At the step's end the scroll
+ * can't go further until the taller page is measured: the rest a frame later.
+ */
+@Stable
+internal class TagFieldAnchor(private val scroll: androidx.compose.foundation.ScrollState, private val scope: CoroutineScope) {
+    var focused by mutableStateOf(false)
+    var fromSegment by mutableStateOf(false)
+    val active: Boolean get() = focused || fromSegment
+
+    fun heightChanged(delta: Int) {
+        if (!active || delta == 0) return
+        val consumed = scroll.dispatchRawDelta(delta.toFloat())
+        val left = delta - consumed
+        if (kotlin.math.abs(left) >= 1f) scope.launch {
+            withFrameNanos { }
+            scroll.scrollBy(left)
+        }
+    }
+}
+
+/** Hears this layout's height change ([TagFieldAnchor.heightChanged]) as it is measured, before anything is placed. */
+internal fun Modifier.heightChanges(onChange: (Int) -> Unit): Modifier = composed {
+    val last = remember { intArrayOf(-1) }
+    layout { measurable, constraints ->
+        val placeable = measurable.measure(constraints)
+        val before = last[0]
+        last[0] = placeable.height
+        if (before >= 0 && before != placeable.height) onChange(placeable.height - before)
+        layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+    }
+}
 
 /**
  * 卡片類型 (round 8 §2.2): what the card is, as one segmented choice — 公開 · 匿名公開 · 草稿 — with

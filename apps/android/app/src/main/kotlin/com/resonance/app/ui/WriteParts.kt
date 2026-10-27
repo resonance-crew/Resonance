@@ -7,7 +7,7 @@ import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import kotlinx.coroutines.delay
@@ -103,7 +103,6 @@ import com.resonance.kit.l10n.L10n
  * one. The chosen tags are the row above it, not inside it ([TagPillRow]); the error line under it
  * is the caller's.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TagField(
     draft: String,
@@ -137,11 +136,12 @@ fun TagField(
     val segmentWidth = tagSegmentWidth()
     // The whole capsule over the keyboard as it rises, not only its line of text (its segment, its foot with 12 to spare).
     val bring = remember { BringIntoViewRequester() }
-    val imeUp = WindowInsets.isImeVisible
+    // Followed frame by frame as the keyboard rises: once it has stood still a moment, the capsule is brought over it.
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
     val spare = with(LocalDensity.current) { 12.dp.toPx() }
     var capsule by remember { mutableStateOf(IntSize.Zero) }
-    LaunchedEffect(focused, imeUp) {
-        if (focused && imeUp) {
+    LaunchedEffect(focused, imeBottom) {
+        if (focused && imeBottom > 0) {
             delay(IME_SETTLE_MILLIS)
             bring.bringIntoView(Rect(0f, 0f, capsule.width.toFloat(), capsule.height + spare))
         }

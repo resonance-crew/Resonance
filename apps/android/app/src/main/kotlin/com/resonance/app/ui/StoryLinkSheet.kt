@@ -64,7 +64,9 @@ internal fun StoryLinkSheet(
     onRemove: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var address by remember { mutableStateOf(request.link?.href.orEmpty()) }
+    var address by remember {
+        mutableStateOf(request.link?.href ?: (if (com.resonance.app.BuildConfig.DEBUG) com.resonance.app.DebugLaunch.linkDraft else null).orEmpty())
+    }
     var display by remember { mutableStateOf(request.display) }
     var invalid by remember { mutableStateOf(false) }
     // Typing again takes the refusal back until the next 完成.
