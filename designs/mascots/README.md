@@ -1,6 +1,6 @@
 # 共振吉祥物設計紀錄
 
-業主的完整需求在 [brief.md](brief.md)。業主看完第二輪後選定方向 C 摺摺，進入第二階段：以摺摺為準做一個系列，再做首頁的動態。第一輪在 `round1/`，第二輪在 `round2/`，第三輪（系列和首頁動態原型）在 `round3/`。
+業主的完整需求在 [brief.md](brief.md)。業主看完第二輪後選定方向 C 摺摺，進入第二階段：以摺摺為準做一個系列，再做首頁的動態。第一輪在 `round1/`，第二輪在 `round2/`，第三輪（系列和首頁動態原型）在 `round3/`，第四輪（業主回饋後的修改，以及放上真正的首頁）在 `round4/`。上線用的角色在 `cast/`。
 
 ## 第一輪（2026-10-27）
 
@@ -53,3 +53,21 @@
 - [round3/proposal/index.html](round3/proposal/index.html)：提案頁（用的是 `../stage/`，所以也要先執行上面的 sync-cast），線上版本在 https://claude.ai/artifact/6CuSFykF2LXugJTjTCmeQ6 。
 - [round3/review/](round3/review/)：`critic-series.md`（造型）、`critic-stage.md`（首頁動態）、`blind.md`（只看圖）、`lead-notes.md`（評審讀完自己的意見後才讀的主持人筆記）；`checks/`、`blind/` 是他們的檢查圖，`critic/` 是動態評審的量測腳本。
 - `workflow.js`（繪製）、`workflow-review.js`（評審與修改）：這一輪的兩段工作流程腳本。檢查圖都轉成 WebP；由產生器重畫得出來的檢查 SVG 沒有收進來。
+- [round3/feedback.md](round3/feedback.md)：業主看完後的回饋：五隻都上線，悄悄的眼睛要有眼球，點點筆記本的線和字太搶眼，首頁動態放進真正的首頁，桌機、平板、手機各一版。
+
+## 第四輪（2026-10-28）
+
+[round4/](round4/)：照 [round3/feedback.md](round3/feedback.md) 修改悄悄和點點，再把首頁動態做進網站。悄悄、點點各由一位子代理修改，每位都先試幾種做法再挑一種；引擎移植、角色素材和首頁整合各一位；兩位評審（程式碼、真站）之後由一位修改者處理。
+
+| 角色 | 改了什麼 | 資料夾 |
+|---|---|---|
+| 悄悄 Hush | 暖白鉛筆眼不變，裡面放家族的深色豆豆眼（占眼睛八成、稍微往下）加一點反光：有眼球，也還是它自己的眼睛（A 白眼豆瞳；另有 B 月牙眼白、C 細白邊、D 大一號） | [round4/night](round4/night) |
+| 點點 Pip | 紙色不變；一條藍線改成兩條褪色的橫線（上面那條往上移到銅釘下方、下面再一條），「…ry」寫在兩條線中間，像舊的橫線筆記本（C；另有 A 回到第一版的淡、B 業主原本的想法、C′ 線細一點、D 加紅色邊線、E 三條線） | [round4/dot](round4/dot) |
+
+- 兩個角色的資料夾：`rig.svg`、`concept.svg`／`concept.webp`、`proposal.md`（最後一節「第四輪（業主回饋後）」寫了每個做法、選哪個、為什麼和精確數字）、`gen/`（產生器）、`checks/r4-variants.webp`（所有做法並排）和 `checks/r4-before-after.webp`（第三輪對第四輪）、`work/`（試做的腳本，`work/variants/` 是每個做法的 rig，想換成另一個做法時可以直接拿來用）。第三輪的樣子仍在 `round3/` 裡。
+- [round4/landing/](round4/landing/)：首頁整合的兩份評審（`review-code.md`、`review-live.md`）、檢查圖（`checks/`：桌機、平板、手機的首屏、落腳點巡覽、與原型同一時刻並排、修改後的對照），以及量測腳本（`tools/`，對著 `npm run dev` 用無頭 Chrome 跑）。
+- `workflow.js`：這一輪的工作流程腳本。
+
+## 上線用的角色（cast/）
+
+[cast/](cast/) 是網站首頁實際用的五隻角色：每隻一個資料夾（`tuck`、`tag`、`card`、`dot`、`night`），放 `rig.svg` 和匯出的 `parts/`（部件 PNG 和 `manifest.json`）。這是網站的來源：改了角色之後，把新的 `parts/` 放進來，執行 `npm run mascots:cast`，它會產生 `public/mascots/<slug>/*.webp` 和 `src/lib/mascots/cast.generated.ts`（沒重新產生的話測試會失敗）。首頁怎麼放這些角色寫在專案的 CLAUDE.md（Landing stage）。

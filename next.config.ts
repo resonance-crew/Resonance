@@ -59,7 +59,12 @@ const nextConfig: NextConfig = {
     qualities: [75],
   },
   async headers() {
-    return [{ source: '/:path*', headers: securityHeaders(process.env) }];
+    return [
+      { source: '/:path*', headers: securityHeaders(process.env) },
+      // The landing stage's paper puppets: every URL carries its picture's content version (`?v=`, written by
+      // `npm run mascots:cast`), so a browser keeps each one for good instead of asking again on every visit.
+      { source: '/mascots/:path*', headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] },
+    ];
   },
 };
 

@@ -1,0 +1,13 @@
+/* The stage's layer: the whole page in the page's own px (its height is the page's, set as it is measured), under the
+   fixed header (z 100) and over the sections' words (z ≤ 4). It takes no pointer — only the engine's invisible shape
+   over each character's torso does — and clips at the page's sides, so a character walking off never widens it. */
+.layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 0;
+  z-index: 50;
+  pointer-events: none;
+  overflow: clip;
+}

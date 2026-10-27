@@ -58,7 +58,7 @@ export function GetTheApp({ qr = true, size = 'md', tone = 'paper', id, classNam
     >
       {showQr && (
         <figure className={styles.qr}>
-          <div className={styles.qrTile}>
+          <div className={styles.qrTile} data-mascot="qr">
             <HandDrawnBorder
               w={QR_TILE}
               h={QR_TILE}
@@ -111,7 +111,7 @@ function StoreBadge({ store, locale, href, alt }: { store: Store; locale: string
     '--off-y': g.offsetY,
   } as CSSProperties;
   return (
-    <a href={href} className={styles.badge} style={geometry} data-store={store}>
+    <a href={href} className={styles.badge} style={geometry} data-store={store} data-mascot="badge">
       <span className={styles.badgeArt}>
         {/* eslint-disable-next-line @next/next/no-img-element -- the store's official art, served as published */}
         <img src={art.src} alt={alt} width={art.width} height={art.height} decoding="async" />

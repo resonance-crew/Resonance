@@ -279,13 +279,14 @@ export const StoryCard = memo(function StoryCard({
         // Both chromes render; the module CSS (640px) shows one, so the
         // server's paint is already the right one for the screen.
         <>
-          <div className={styles.mobileChrome} aria-hidden>
+          <div className={styles.mobileChrome} aria-hidden data-mascot="card-edge">
             <GrainOverlay opacity={STORY_GRAIN.band} />
             <MobileDividers d={dividerPath} stroke={bc1} isLast={isLast} isFirst={isFirst} />
           </div>
           <div
             className={`${styles.desktopChrome} res-shape-stand-in`}
             aria-hidden
+            data-mascot="card-edge"
             // A plain card of the same paper and pen until measured.
             data-shape-pending={w > 0 && h > 0 ? undefined : ''}
             style={
@@ -387,7 +388,7 @@ export const StoryCard = memo(function StoryCard({
           />
         </svg>
 
-        <div className={styles.authorRow}>
+        <div className={styles.authorRow} data-mascot="card-foot">
           {loading ? (
             <Skeleton width={30} height={30} circle />
           ) : (

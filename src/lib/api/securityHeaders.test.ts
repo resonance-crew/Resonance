@@ -33,9 +33,13 @@ describe('securityHeaders', () => {
   it('are what next.config serves on every path', async () => {
     const { default: config } = await import('../../../next.config');
     const rules = await config.headers!();
-    expect(rules).toHaveLength(1);
     expect(rules[0].source).toBe('/:path*');
     expect(rules[0].headers.map((h) => h.key)).toEqual(securityHeaders(PRODUCTION).map((h) => h.key));
+    // beside them only the landing stage's versioned pictures (`?v=` on every URL), kept for good; Next applies
+    // every rule that matches, so those keep the security headers too
+    expect(rules.slice(1)).toEqual([
+      { source: '/mascots/:path*', headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] },
+    ]);
   });
 
   it('leave no image optimizer for anyone to drive (/_next/image answers 404)', async () => {

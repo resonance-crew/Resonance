@@ -31,7 +31,7 @@ export function CTASection() {
   const t = useTranslations('cta');
   const clauses = titleClauses(t('title'));
   return (
-    <section id="explore" className={styles.section}>
+    <section id="explore" className={styles.section} data-mascot-zone="cta">
       <SectionEdge
         topColor="var(--color-cream-dark)"
         seed={137}
@@ -50,7 +50,7 @@ export function CTASection() {
       </div>
 
       <div className={styles.content}>
-        <h2 className={styles.title}>
+        <h2 className={styles.title} data-mascot="cta-title">
           {clauses.map((clause, i) => (
             <Fragment key={i}>
               {/* Two inline blocks may break between them; a Latin comma also wants its space. */}
@@ -59,8 +59,8 @@ export function CTASection() {
             </Fragment>
           ))}
         </h2>
-        <p className={styles.description}>{t('description')}</p>
-        <div className={styles.ctaRow}>
+        <p className={styles.description} data-mascot="cta-text">{t('description')}</p>
+        <div className={styles.ctaRow} data-mascot="cta-buttons">
           <Link href="/write" style={{ textDecoration: 'none' }}>
             <OrganicButton variant="ctaLight" block>{t('write')}</OrganicButton>
           </Link>

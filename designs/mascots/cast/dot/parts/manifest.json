@@ -1,0 +1,321 @@
+{
+ "name": "點點 Pip",
+ "prefix": "dt-",
+ "ground": [
+  350,
+  700
+ ],
+ "faceCenter": [
+  349,
+  547
+ ],
+ "height": 231,
+ "walk": "hop",
+ "viewBox": [
+  700,
+  760
+ ],
+ "scale": 0.8,
+ "parts": [
+  {
+   "name": "shadow",
+   "parent": "root",
+   "pivot": [
+    350,
+    700
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 0,
+   "x": 273.75,
+   "y": 690,
+   "w": 152.5,
+   "h": 21.25,
+   "img": "shadow.png"
+  },
+  {
+   "name": "leg-l",
+   "parent": "root",
+   "pivot": [
+    324,
+    657
+   ],
+   "angle": null,
+   "len": 43,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 1,
+   "x": 293.75,
+   "y": 652.5,
+   "w": 47.5,
+   "h": 58.75,
+   "img": "leg-l.png"
+  },
+  {
+   "name": "leg-r",
+   "parent": "root",
+   "pivot": [
+    376,
+    657
+   ],
+   "angle": null,
+   "len": 43,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 2,
+   "x": 361.25,
+   "y": 652.5,
+   "w": 51.25,
+   "h": 58.75,
+   "img": "leg-r.png"
+  },
+  {
+   "name": "arm-l",
+   "parent": "body",
+   "pivot": [
+    280,
+    603
+   ],
+   "angle": 135,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 3,
+   "x": 226.25,
+   "y": 590,
+   "w": 71.25,
+   "h": 70,
+   "img": "arm-l.png"
+  },
+  {
+   "name": "arm-r",
+   "parent": "body",
+   "pivot": [
+    420,
+    601
+   ],
+   "angle": 45,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 4,
+   "x": 405,
+   "y": 587.5,
+   "w": 71.25,
+   "h": 70,
+   "img": "arm-r.png"
+  },
+  {
+   "name": "torso",
+   "parent": "body",
+   "pivot": [
+    350,
+    663
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 5,
+   "x": 246.25,
+   "y": 465,
+   "w": 215,
+   "h": 215,
+   "img": "torso.png"
+  },
+  {
+   "name": "deco",
+   "parent": "body",
+   "pivot": [
+    350,
+    486
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 6,
+   "x": 285,
+   "y": 458.75,
+   "w": 98.75,
+   "h": 55,
+   "img": "deco.png"
+  },
+  {
+   "name": "cheeks",
+   "parent": "face",
+   "pivot": [
+    349,
+    558
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 7,
+   "x": 285,
+   "y": 545,
+   "w": 127.5,
+   "h": 22.5,
+   "img": "cheeks.png"
+  },
+  {
+   "name": "eye-l",
+   "parent": "face",
+   "pivot": [
+    317,
+    538
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 8,
+   "x": 306.25,
+   "y": 525,
+   "w": 22.5,
+   "h": 26.25,
+   "img": "eye-l.png"
+  },
+  {
+   "name": "eye-r",
+   "parent": "face",
+   "pivot": [
+    381,
+    536
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 9,
+   "x": 370,
+   "y": 522.5,
+   "w": 22.5,
+   "h": 26.25,
+   "img": "eye-r.png"
+  },
+  {
+   "name": "eye-l-shut",
+   "parent": "face",
+   "pivot": [
+    317,
+    538
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "eye-l",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 10,
+   "x": 303.75,
+   "y": 530,
+   "w": 27.5,
+   "h": 15,
+   "img": "eye-l-shut.png"
+  },
+  {
+   "name": "eye-r-shut",
+   "parent": "face",
+   "pivot": [
+    381,
+    536
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "eye-r",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 11,
+   "x": 367.5,
+   "y": 527.5,
+   "w": 27.5,
+   "h": 16.25,
+   "img": "eye-r-shut.png"
+  },
+  {
+   "name": "mouth",
+   "parent": "face",
+   "pivot": [
+    349,
+    562
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 12,
+   "x": 337.5,
+   "y": 555,
+   "w": 22.5,
+   "h": 12.5,
+   "img": "mouth.png"
+  },
+  {
+   "name": "mouth-o",
+   "parent": "face",
+   "pivot": [
+    349,
+    562
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "mouth",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 13,
+   "x": 342.5,
+   "y": 555,
+   "w": 13.75,
+   "h": 16.25,
+   "img": "mouth-o.png"
+  },
+  {
+   "name": "mouth-open",
+   "parent": "face",
+   "pivot": [
+    349,
+    562
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "mouth",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 14,
+   "x": 338.75,
+   "y": 556.25,
+   "w": 21.25,
+   "h": 16.25,
+   "img": "mouth-open.png"
+  }
+ ]
+}

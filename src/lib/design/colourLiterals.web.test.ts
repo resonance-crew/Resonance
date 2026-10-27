@@ -30,6 +30,8 @@ const ALLOWED: { path: string; why: string }[] = [
   { path: 'src/components/atoms/BrandMark/', why: "other companies' marks, unmodified" },
   { path: 'src/components/atoms/GoogleMark/', why: "Google's own colours" },
   { path: 'src/app/global-error.tsx', why: 'fallbacks for when the stylesheet itself failed' },
+  { path: 'src/lib/mascots/props.ts', why: "the landing puppets' props (a note, a pencil, a book): drawn art in its own colours in both schemes, as the reaction stickers" },
+  { path: 'src/lib/mascots/engine.ts', why: "the landing stage's two pencils (each place says which reads on its background, by scheme) and the puppets' blush" },
 ];
 
 const allowed = (file: string) => ALLOWED.some((a) => (a.path.endsWith('/') ? file.startsWith(a.path) : file === a.path));

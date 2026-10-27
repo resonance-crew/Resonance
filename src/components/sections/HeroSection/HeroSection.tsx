@@ -24,7 +24,7 @@ const STAND_IN_GRAIN = 0.2;
 export function HeroSection() {
   const t = useTranslations('hero');
   return (
-    <section id="about" className={styles.hero}>
+    <section id="about" className={styles.hero} data-mascot-zone="hero">
       {/* Still here as the server draws the page; on the client they come alive and drift away
           (data-drift is each one's heading), new ones drift in, and two that meet melt into one. */}
       <DriftingBlobs palette={BLOB_PAINTS}>
@@ -40,15 +40,15 @@ export function HeroSection() {
       </DriftingBlobs>
 
       <div className={styles.content}>
-        <div className={styles.tagWrap}>
+        <div className={styles.tagWrap} data-mascot="pill">
           <TagPill color="var(--color-terracotta-light)">{t('tag')}</TagPill>
         </div>
 
-        <h1 className={styles.headline}>
+        <h1 className={styles.headline} data-mascot="headline">
           {t('headlinePrefix')}<span className={styles.accentWrap}><span className={styles.accent}>{t('headlineAccent')}</span><svg viewBox="0 0 200 12" className={styles.squiggle}><path d="M2,8 C30,2 60,12 90,6 C120,0 150,10 198,6" stroke="var(--color-terracotta)" strokeWidth={INK_STRONG} fill="none" strokeLinecap="round" opacity="0.6" /></svg></span>{t('headlineSuffix')}
         </h1>
 
-        <p className={styles.description}>{t('description')}</p>
+        <p className={styles.description} data-mascot="hero-text">{t('description')}</p>
 
         <GetTheApp id={DOWNLOAD_ANCHOR} className={styles.download} />
 

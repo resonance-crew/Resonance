@@ -17,7 +17,7 @@ export function StorytellerProof({ className }: { className?: string }) {
   const t = useTranslations('hero');
   return (
     <div className={[styles.proof, className].filter(Boolean).join(' ')}>
-      <div className={styles.avatarStack} aria-hidden>
+      <div className={styles.avatarStack} aria-hidden data-mascot="avatars">
         {/* Overlapping by 6px: each one's initials stay whole beside the next (10px cut into them). */}
         {AVATARS.map((a, i) => (
           <div key={a.ini} style={{ marginLeft: i > 0 ? -6 : 0 }}>
@@ -25,7 +25,7 @@ export function StorytellerProof({ className }: { className?: string }) {
           </div>
         ))}
       </div>
-      <span className={styles.text}>{t('proof')}</span>
+      <span className={styles.text} data-mascot="proof">{t('proof')}</span>
     </div>
   );
 }

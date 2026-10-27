@@ -19,7 +19,7 @@ export interface CardFeedSectionProps {
 export function CardFeedSection({ cards, authors }: CardFeedSectionProps) {
   const t = useTranslations('feed');
   return (
-    <section id="stories" className={styles.section}>
+    <section id="stories" className={styles.section} data-mascot-zone="feed">
       <SectionEdge
         topColor="var(--color-cream)"
         seed={41}
@@ -35,15 +35,15 @@ export function CardFeedSection({ cards, authors }: CardFeedSectionProps) {
       </div>
 
       <div className={styles.container}>
-        <div className={styles.heading}>
+        <div className={styles.heading} data-mascot="feed-heading">
           <TagPill color="var(--color-sage)">{t('tag')}</TagPill>
-          <h2 className={styles.title}>{t('title')}</h2>
-          <p className={styles.subtitle}>{t('subtitle')}</p>
+          <h2 className={styles.title} data-mascot="feed-title">{t('title')}</h2>
+          <p className={styles.subtitle} data-mascot="feed-subtitle">{t('subtitle')}</p>
         </div>
 
         <CardLinkGrid cards={cards} authors={authors} />
 
-        <div className={styles.loadMore}>
+        <div className={styles.loadMore} data-mascot="browse">
           <Link href="/home" style={{ textDecoration: 'none' }}>
             <OrganicButton variant="outline">{t('viewAll')}</OrganicButton>
           </Link>

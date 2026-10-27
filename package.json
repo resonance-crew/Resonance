@@ -18,6 +18,7 @@
     "emulators:at": "node scripts/emulators-at.mjs",
     "moderation": "tsx scripts/moderation/reports.ts",
     "api:openapi": "tsx scripts/api-openapi.ts",
+    "mascots:cast": "tsx scripts/mascots/build-cast.ts",
     "native:editor": "tsc -p native/editor/tsconfig.json && tsx scripts/native/build-editor.mjs",
     "apps:generate": "tsx scripts/native/tokens.ts && tsx scripts/apps/l10n.ts && tsx scripts/apps/icons.ts && tsx scripts/apps/reactions.ts && npm run -s api:openapi && npm run -s native:editor"
   },

@@ -35,7 +35,7 @@ export interface SiteFooterProps {
 export function SiteFooter({ edgeColor = 'var(--cta-band)', download = true }: SiteFooterProps = {}) {
   const t = useTranslations('footer');
   return (
-    <footer className={styles.footer}>
+    <footer className={styles.footer} data-mascot-zone="footer">
       <SectionEdge
         topColor={edgeColor}
         seed={233}
@@ -46,7 +46,7 @@ export function SiteFooter({ edgeColor = 'var(--cta-band)', download = true }: S
         strokeWidth={INK_LIGHT}
       />
       <div className={styles.container}>
-        <div className={styles.brand}>
+        <div className={styles.brand} data-mascot="footer-logo">
           <ResonanceIcon size={26} />
           <span className={styles.brandName}>Resonance</span>
         </div>

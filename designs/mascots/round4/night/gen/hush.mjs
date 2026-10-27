@@ -1,0 +1,600 @@
+// 悄悄 Hush — the night member of the 摺摺 series (round 3, prefix nt-).
+// A softly torn dome of midnight-blue paper: the top of a paper-theatre night sky, cut straight along the
+// horizon, with pin-pricked stars. Every part is built here once; rig.mjs wraps the parts in the rig
+// contract's flat data-part groups at rest, concept.mjs poses the very same parts for the sheet.
+import { rng, spline, poly, tear, path, smoothPath, pencil, ellipse } from './lib.mjs';
+
+export const PFX = 'nt-';
+export const C = {
+  body: 'oklch(43.5% 0.062 260)',    // midnight-blue paper, front (round 3 review: a step lighter than the first pass's 40%,
+                                     // less heavy by day and further from the near-black night paper)
+  shade: 'oklch(25% 0.05 263)',      // a darker blue crayon for the volume hatching
+  arm: 'oklch(70% 0.026 242)',       // the arm strips: the legs' slate paper, so they read against the dark sheet
+  arm2: 'oklch(33% 0.054 263)',      // the sheet's darker offcut (legs, when they are dark)
+  foot: 'oklch(50% 0.045 252)',      // the soles: a deeper slate than the legs (round 3 review: the first pass's dark offcut
+                                     // soles vanished on the night paper)
+  legA: 'oklch(70% 0.026 242)',      // the legs: a slate strip folded lengthwise, light face
+  legB: 'oklch(60% 0.032 248)',      // its other face, turned away from the light
+  glove: 'oklch(93% 0.026 86)',      // the family's cream mitten
+  brass: 'oklch(73% 0.085 82)', brassDeep: 'oklch(50% 0.06 68)', brassHi: 'oklch(94% 0.035 92)',
+  pen: 'oklch(95% 0.02 86)',         // white pencil: the face's light pen — a warm cream, the mittens' and the moon's family
+  penFill: 'oklch(92% 0.03 86)',     // (round 3 review: the cold pale-blue eyes read as a ghost's lamps)
+  glint: 'oklch(99.5% 0.004 95)',
+  pupil: 'oklch(29% 0.018 60)',     // round 4: the family's graphite bean (摺摺's eye ink)
+  mouthIn: 'oklch(24% 0.045 263)',
+  blush: 'oklch(72% 0.095 40)',      // the family's terracotta crayon (opaque wax reads a touch lighter on the dark sheet)
+  moon: 'oklch(91.5% 0.048 95)',     // the crescent: pale moon-yellow card
+  hole: 'oklch(96% 0.02 85)',        // a pin-prick, letting the page's light through
+  glow: 'oklch(93% 0.075 95)',       // starlight through the holes on the night paper
+  graphite: 'oklch(29% 0.018 60)',
+  rim: 'oklch(97.5% 0.012 85)',
+};
+// exploration hook: NT_C='{"foot":"…"}' overrides colours (work/ scripts only; the deliverables never set it)
+if (typeof process !== 'undefined' && process.env.NT_C) Object.assign(C, JSON.parse(process.env.NT_C));
+const fmt = n => (Math.round(n * 10) / 10).toString();
+const fillS = c => `style="fill:${c}"`;
+const strokeS = c => `style="stroke:${c}"`;
+const D2R = Math.PI / 180;
+
+export function defs() {
+  const U = 'filterUnits="userSpaceOnUse" x="-300" y="-300" width="1400" height="1400"';
+  return `<defs>
+  <!-- torn paper (Tuck's recipe under nt-): displaced edge, the white fibres the tear exposes, a glue shadow down-right,
+       mottle and, on this dark sheet, pale fibre flecks instead of dark specks (round 3 review: far fewer flecks and a
+       fainter mottle than the first pass, which read as felt — the pin-prick stars are now the sheet's only sparkle;
+       the white rim a touch wider and less feathered, a cut-paper core rather than fur, and the outline the night
+       paper needs) -->
+  <filter id="nt-paper" ${U} color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.11" numOctaves="2" seed="7" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G" result="torn"/>
+    <feMorphology in="torn" operator="dilate" radius="${G.rimR ?? 2}" result="fat"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="1" seed="3" result="fn"/>
+    <feDisplacementMap in="fat" in2="fn" scale="${G.fibre ?? 2.4}" result="fibre"/>
+    <feFlood flood-color="${C.rim}"/><feComposite in2="fibre" operator="in" result="rim"/>
+    <feGaussianBlur in="fat" stdDeviation="3" result="blur"/><feOffset dx="2.5" dy="4.5" result="off"/>
+    <feFlood flood-color="oklch(28% 0.03 55)" flood-opacity="0.22"/><feComposite in2="off" operator="in" result="shadow"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="11" result="g"/>
+    <feColorMatrix in="g" type="matrix" values="0 0 0 0 0.86  0 0 0 0 0.88  0 0 0 0 0.92  4 0 0 0 ${G.speck ?? -3.1}" result="speck"/>
+    <feComposite in="speck" in2="torn" operator="in" result="specks"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.05 0.09" numOctaves="3" seed="5" result="m"/>
+    <feColorMatrix in="m" type="matrix" values="0 0 0 0 0.9  0 0 0 0 0.93  0 0 0 0 1  ${G.mottle ?? 0.22} 0 0 0 -0.13" result="mottle"/>
+    <feComposite in="mottle" in2="torn" operator="in" result="mottles"/>
+    <feMerge><feMergeNode in="shadow"/><feMergeNode in="rim"/><feMergeNode in="torn"/><feMergeNode in="mottles"/><feMergeNode in="specks"/></feMerge>
+  </filter>
+  <!-- thin paper (the mittens): same tear, a fainter shadow, a narrower rim, no specks -->
+  <filter id="nt-thin" ${U} color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.13" numOctaves="2" seed="9" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="2.6" xChannelSelector="R" yChannelSelector="G" result="torn"/>
+    <feMorphology in="torn" operator="dilate" radius="1.3" result="fat"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="1" seed="4" result="fn"/>
+    <feDisplacementMap in="fat" in2="fn" scale="2.4" result="fibre"/>
+    <feFlood flood-color="${C.rim}"/><feComposite in2="fibre" operator="in" result="rim"/>
+    <feGaussianBlur in="fat" stdDeviation="2" result="blur"/><feOffset dx="1.5" dy="3" result="off"/>
+    <feFlood flood-color="oklch(28% 0.03 55)" flood-opacity="0.18"/><feComposite in2="off" operator="in" result="shadow"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.05 0.09" numOctaves="3" seed="15" result="m"/>
+    <feColorMatrix in="m" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 0.97  0.45 0 0 0 -0.2" result="mottle"/>
+    <feComposite in="mottle" in2="torn" operator="in" result="mottles"/>
+    <feMerge><feMergeNode in="shadow"/><feMergeNode in="rim"/><feMergeNode in="torn"/><feMergeNode in="mottles"/></feMerge>
+  </filter>
+  <!-- cut card (the crescent): scissors, not a tear — a much smaller displacement, the rim and the shadow kept -->
+  <filter id="nt-cut" ${U} color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.2" numOctaves="1" seed="27" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="1.1" xChannelSelector="R" yChannelSelector="G" result="torn"/>
+    <feMorphology in="torn" operator="dilate" radius="1.1" result="fat"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="1" seed="28" result="fn"/>
+    <feDisplacementMap in="fat" in2="fn" scale="1.4" result="fibre"/>
+    <feFlood flood-color="${C.rim}"/><feComposite in2="fibre" operator="in" result="rim"/>
+    <feGaussianBlur in="fat" stdDeviation="2" result="blur"/><feOffset dx="1.8" dy="3.2" result="off"/>
+    <feFlood flood-color="oklch(28% 0.03 55)" flood-opacity="0.26"/><feComposite in2="off" operator="in" result="shadow"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.05 0.09" numOctaves="3" seed="29" result="m"/>
+    <feColorMatrix in="m" type="matrix" values="0 0 0 0 1  0 0 0 0 0.98  0 0 0 0 0.9  0.4 0 0 0 -0.18" result="mottle"/>
+    <feComposite in="mottle" in2="torn" operator="in" result="mottles"/>
+    <feMerge><feMergeNode in="shadow"/><feMergeNode in="rim"/><feMergeNode in="torn"/><feMergeNode in="mottles"/></feMerge>
+  </filter>
+  <!-- pencil: a line that skips over the tooth of the paper (white pencil here: the colour comes from the stroke) -->
+  <filter id="nt-graphite" ${U}>
+    <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="2" result="w"/>
+    <feDisplacementMap in="SourceGraphic" in2="w" scale="1.6" result="d"/>
+    <feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="1" seed="6" result="t"/>
+    <feColorMatrix in="t" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -2.4 0 0 0 2.15" result="tooth"/>
+    <feComposite in="d" in2="tooth" operator="in"/>
+  </filter>
+  <filter id="nt-graphite-fill" ${U}>
+    <feTurbulence type="fractalNoise" baseFrequency="0.08" numOctaves="2" seed="21" result="w"/>
+    <feDisplacementMap in="SourceGraphic" in2="w" scale="1.8" result="d"/>
+    <feTurbulence type="fractalNoise" baseFrequency="1.3" numOctaves="1" seed="22" result="t"/>
+    <feColorMatrix in="t" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -1.6 0 0 0 1.75" result="tooth"/>
+    <feComposite in="d" in2="tooth" operator="in"/>
+  </filter>
+  <!-- the eyes' white pencil laid on harder (round 3 review): the same tooth, far fewer gaps, so the eye reads as one
+       warm bead, not a clouded disc with the dark sheet showing through -->
+  <filter id="nt-pencil-dense" ${U}>
+    <feTurbulence type="fractalNoise" baseFrequency="0.08" numOctaves="2" seed="21" result="w"/>
+    <feDisplacementMap in="SourceGraphic" in2="w" scale="1.4" result="d"/>
+    <feTurbulence type="fractalNoise" baseFrequency="1.3" numOctaves="1" seed="22" result="t"/>
+    <feColorMatrix in="t" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -1.5 0 0 0 ${G.eyeTooth ?? 2.05}" result="tooth"/>
+    <feComposite in="d" in2="tooth" operator="in"/>
+  </filter>
+  <!-- round 4: the bean in the eye — the family's graphite laid on hard enough to read as one dark bean inside the pale
+       eye (with 摺摺's tooth the cream showed through as grit), a little tooth kept so it is still pencil -->
+  <filter id="nt-bean" ${U}>
+    <feTurbulence type="fractalNoise" baseFrequency="0.08" numOctaves="2" seed="25" result="w"/>
+    <feDisplacementMap in="SourceGraphic" in2="w" scale="1.2" result="d"/>
+    <feTurbulence type="fractalNoise" baseFrequency="1.3" numOctaves="1" seed="26" result="t"/>
+    <feColorMatrix in="t" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -1.4 0 0 0 ${G.eye?.tooth ?? 2.3}" result="tooth"/>
+    <feComposite in="d" in2="tooth" operator="in"/>
+  </filter>
+  <filter id="nt-crayon" ${U}>
+    <feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="13" result="w"/>
+    <feDisplacementMap in="SourceGraphic" in2="w" scale="5" result="d"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.55 0.9" numOctaves="2" seed="14" result="t"/>
+    <feColorMatrix in="t" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -2.4 0 0 0 1.6" result="gaps"/>
+    <feComposite in="d" in2="gaps" operator="in"/>
+  </filter>
+  <filter id="nt-crayon-soft" ${U}>
+    <feGaussianBlur stdDeviation="1.2" result="b"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="1" seed="19" result="t"/>
+    <feColorMatrix in="t" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -1.6 0 0 0 1.5" result="gaps"/>
+    <feComposite in="b" in2="gaps" operator="in"/>
+  </filter>
+  <filter id="nt-metal" ${U} color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.2" numOctaves="1" seed="23" result="w"/>
+    <feDisplacementMap in="SourceGraphic" in2="w" scale="1.2" result="d"/>
+    <feTurbulence type="fractalNoise" baseFrequency="1.2" numOctaves="1" seed="24" result="g"/>
+    <feColorMatrix in="g" type="matrix" values="0 0 0 0 0.35  0 0 0 0 0.27  0 0 0 0 0.12  2.2 0 0 0 -1.25" result="grain"/>
+    <feComposite in="grain" in2="d" operator="in" result="gr"/>
+    <feMerge><feMergeNode in="d"/><feMergeNode in="gr"/></feMerge>
+  </filter>
+  <!-- starlight: soft halos through the pin-pricks (night paper only) -->
+  <filter id="nt-glow" ${U}><feGaussianBlur stdDeviation="5"/></filter>
+  <filter id="nt-glow-s" ${U}><feGaussianBlur stdDeviation="1.6"/></filter>
+</defs>`;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Shared geometry (rig units: ground y = 700, centre x = 350; the body top at y = 300, 0.95 × Tuck's 420)
+export const G = {
+  cx: 350, ground: 700, hipY: 592, top: 300,
+  halfW: 180, nx: 2.3, ny: 2.3, rc: 44, t0: 0.2, skew: 0,
+  hipDX: 56, legKind: 'plain',
+  eyeY: 416, eyeDX: 60, eyeRx: 11, eyeRy: 14.2,
+  // round 4 (the owner: the pale eyes without a pupil read as a hollow, ghostly stare): the warm-white pencil eye keeps
+  // its place and size, and the family's dark bean sits in it — 0.8 of the eye, a touch low (0.07 of its height) and
+  // toward the face's middle (0.03 of its width), one glint (摺摺's size) on the bean; variants compared in work/r4/
+  eye: { style: 'pupil', k: [0.8, 0.8], off: [0.03, 0.07], glint: [3.2, 3.4], lid: 0.12, w: 2.6, ring: 0 },
+  mouthDY: 33, cheekDX: 90, cheekDY: 32,
+  shoulderDY: 34, bradR: 8, bradInset: 25.6,
+  armD: 90, armW: [35, 30], mitten: 22,
+  rest: { armL: 116, armR: 64 },
+  // round 3 review: the arms are painted behind the dome (their strips tuck under the torn edge) and the brads moved
+  // ≈ 3 radii in; the mittens keep the place they had (restMitten: the first pass's brads at inset 18, armD 90, 116°/64°),
+  // so armD and the rest angles below are derived from it — only the strip hidden under the sheet grows
+  restMitten: { inset0: 18, armD0: 90, rest0: [116, 64], out: 12 },
+  deco: { angle: 36, inset: 0.85, R: 31, turn: -20, open: 'in', spin: 0, drop: 0, pinTilt: 10, pinL: 24, pin: 'snap' },
+};
+// exploration hook: NT_G='{"halfW":180}' overrides the geometry (work/ scripts only; the deliverables never set it)
+if (typeof process !== 'undefined' && process.env.NT_G) Object.assign(G, JSON.parse(process.env.NT_G));
+// everything placed relative to those numbers
+G.legLen = G.ground - G.hipY;
+G.hips = [G.cx - G.hipDX, G.cx + G.hipDX];
+G.eyes = [[G.cx - G.eyeDX, G.eyeY], [G.cx + G.eyeDX, G.eyeY]];
+G.mouth = [G.cx, G.eyeY + G.mouthDY];
+G.cheeks = [[G.cx - G.cheekDX, G.eyeY + G.cheekDY], [G.cx + G.cheekDX, G.eyeY + G.cheekDY]];
+G.shoulderY = G.mouth[1] + G.shoulderDY;
+G.face = [G.cx, Math.round((G.eyeY + G.mouth[1]) / 2)];
+
+// The dome: a half superellipse, its crown a touch left of centre, softly torn; the bottom a straight scissor cut
+function domeOutline() {
+  const { cx, hipY: yb, halfW: a, nx, ny, skew, rc } = G;
+  const b = yb - G.top;
+  const dense = [];
+  const t0 = G.t0;
+  for (let i = 0; i <= 600; i++) {
+    const t = t0 + (i / 600) * (Math.PI - 2 * t0);
+    const c = Math.cos(t), s = Math.sin(t);
+    const y = yb - b * Math.pow(Math.abs(s), 2 / ny);
+    const x = cx + a * Math.sign(c) * Math.pow(Math.abs(c), 2 / nx) + skew * (yb - y);
+    dense.push([x, y]);
+  }
+  // resample by arc length
+  const step = 6, dome = [dense[0]];
+  let acc = 0;
+  for (let i = 1; i < dense.length; i++) {
+    acc += Math.hypot(dense[i][0] - dense[i - 1][0], dense[i][1] - dense[i - 1][1]);
+    if (acc >= step) { dome.push(dense[i]); acc = 0; }
+  }
+  // rounded bottom corners (quadratic from the bottom cut up into the dome's ends)
+  const R0 = [cx + a - rc, yb + 2], L0 = [cx - a + rc, yb + 2];
+  const q = (p0, c1, p1, m) => Array.from({ length: m }, (_, k) => { const t = (k + 1) / (m + 1); return [(1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * c1[0] + t * t * p1[0], (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * c1[1] + t * t * p1[1]]; });
+  const cornerR = q(R0, [cx + a + 1, yb + 2], dome[0], 5);
+  const cornerL = q(dome[dome.length - 1], [cx - a - 1, yb + 2], L0, 5);
+  const arc = [R0, ...cornerR, ...dome, ...cornerL, L0];
+  const torn = tear(arc, 61, { amp: 3, jag: 1.1, wander: 5, closed: false });
+  // the cut: two straight runs that meet at a slight angle, where the scissors were set down once
+  const mid = [cx - 18, yb + 3.2];
+  const cut = [...poly([L0, mid], 6, false).slice(1, -1), mid, ...poly([mid, R0], 6, false).slice(1, -1)];
+  const r = rng(63);
+  return [...torn, ...cut.map(p => [p[0], p[1] + (r() - 0.5) * 0.5])];
+}
+export const OUTLINE = domeOutline();
+const OUTLINE_D = path(OUTLINE);
+
+const nearest = (p) => Math.min(...OUTLINE.map(q => Math.hypot(q[0] - p[0], q[1] - p[1])));
+// the brads: on the body's face at shoulder height, set the inset in from the torn outline
+function bradAt(sideSign, inset = G.bradInset) {
+  const y = G.shoulderY;
+  let x = G.cx + sideSign * 60;
+  for (let k = 0; k < 400; k++) {
+    const d = nearest([x, y]);
+    if (d <= inset) break;
+    x += sideSign * 0.5;
+  }
+  return [x, y];
+}
+export const BRADS = { l: bradAt(-1), r: bradAt(1) };
+// the mittens at rest stay where the first pass had them (brads at inset 18, 90 from the brad, at 116° / 64°), turned
+// `out` degrees further from the body if asked; the arm length and the rest angles follow from the new brads
+{
+  const { inset0, armD0, rest0, out = 0 } = G.restMitten;
+  const old = { l: bradAt(-1, inset0), r: bradAt(1, inset0) };
+  const m = s => { const a = rest0[s === 'l' ? 0 : 1] * D2R; return [old[s][0] + Math.cos(a) * armD0, old[s][1] + Math.sin(a) * armD0]; };
+  const [ml, mr] = [m('l'), m('r')];
+  const dl = Math.hypot(ml[0] - BRADS.l[0], ml[1] - BRADS.l[1]), dr = Math.hypot(mr[0] - BRADS.r[0], mr[1] - BRADS.r[1]);
+  G.armD = Math.round((dl + dr) / 2 * 10) / 10;
+  G.rest = {
+    armL: Math.round((Math.atan2(ml[1] - BRADS.l[1], ml[0] - BRADS.l[0]) / D2R + out) * 10) / 10,
+    armR: Math.round((Math.atan2(mr[1] - BRADS.r[1], mr[0] - BRADS.r[0]) / D2R - out) * 10) / 10,
+  };
+  G.firstPassMittens = { l: ml, r: mr };
+}
+// the outline's x at a given height on either side
+export const edgeX = (y, sideSign) => {
+  const pts = OUTLINE.filter(p => Math.abs(p[1] - y) < 4 && Math.sign(p[0] - G.cx) === sideSign);
+  return sideSign < 0 ? Math.min(...pts.map(p => p[0])) : Math.max(...pts.map(p => p[0]));
+};
+
+// ---------------------------------------------------------------------------------------------
+// Parts. Each returns inner SVG (no data-part wrapper). I = a per-figure id prefix for clip paths.
+
+export function shadowSvg() {
+  return `<ellipse cx="350" cy="701" rx="150" ry="11" fill="${C.graphite}" opacity="0.1" filter="url(#nt-crayon)"/>`;
+}
+
+// A leg: a slate strip folded lengthwise (light face, a darker face turned from the light), its top tucked up under
+// the dome, ending in a small torn sole of the dark offcut. rot turns it about the hip (the engine's swing).
+export function legSvg(I, side, rot = 0) {
+  const s = side === 'l' ? -1 : 1;
+  const hx = side === 'l' ? G.hips[0] : G.hips[1], hy = G.hipY;
+  const top = hy - 26, ya = hy + G.legLen - 13;
+  const w0 = 22, w1 = 19, seed = side === 'l' ? 5 : 9;
+  const lean = s * 2.5; // the ankles a touch apart: a stance, not a stool
+  const strip = [[hx - w0 / 2, top], [hx + w0 / 2, top], [hx + lean + w1 / 2, ya], [hx + lean - w1 / 2, ya]];
+  const stripPts = tear(poly(strip, 4.5), seed * 11, { jag: 0.7, wander: 2 });
+  const tone = G.legTone === 'dark' ? C.arm2 : C.legA;
+  const fx = hx + lean + s * 9, fy = G.ground - 9.5;
+  const foot = tear(spline([[fx - 25, fy + 3], [fx - 12, fy - 8], [fx + 12, fy - 8.5], [fx + 26, fy + 2], [fx + 14, fy + 9.5], [fx - 14, fy + 9.5]].map(p => [fx + (p[0] - fx) * (s < 0 ? -1 : 1), p[1]]), 5), seed + 50, { jag: 0.9, wander: 2.5 });
+  const t = rot ? ` transform="rotate(${fmt(rot)} ${fmt(hx)} ${fmt(hy)})"` : '';
+  let detail = '';
+  if (G.legKind === 'fold') {
+    const cid = `${I}leg-${side}-clip`;
+    const fold = [[hx + 1, top], [hx + w0 / 2 + 3, top], [hx + lean + w1 / 2 + 3, ya + 3], [hx + lean + 0.5, ya + 3]];
+    const crease = pencil([[hx + 1, top + 18], [hx + 0.8 + lean * 0.5, (top + ya) / 2 + 9], [hx + lean + 0.5, ya - 2]], seed + 3, 2, 0.4);
+    detail = `<clipPath id="${cid}"><path d="${path(stripPts)}"/></clipPath>
+    <path d="${path(fold)}" ${fillS(C.legB)} clip-path="url(#${cid})" opacity="0.9"/>
+    <g ${strokeS(C.graphite)} stroke-width="1" opacity="0.32" fill="none" stroke-linecap="round" filter="url(#nt-graphite)">${crease.map(d => `<path d="${d}"/>`).join('')}</g>`;
+  } else {
+    // a flat strip: one faint pencil line down its shadow side, nothing else
+    const line = pencil([[hx + w0 / 2 - 4, top + 30], [hx + lean * 0.5 + (w0 + w1) / 4 - 4, (top + ya) / 2 + 12], [hx + lean + w1 / 2 - 4, ya - 4]], seed + 3, 1, 0.4);
+    detail = `<g ${strokeS(G.legTone === 'dark' ? C.pen : C.graphite)} stroke-width="1" opacity="${G.legTone === 'dark' ? 0.16 : 0.22}" fill="none" stroke-linecap="round" filter="url(#nt-graphite)">${line.map(d => `<path d="${d}"/>`).join('')}</g>`;
+  }
+  return `<g${t}>
+    <path d="${path(stripPts)}" ${fillS(tone)} filter="url(#nt-paper)"/>
+    ${detail}
+    <path d="${path(foot)}" ${fillS(C.foot)} filter="url(#nt-paper)"/>
+  </g>`;
+}
+
+// The torso: the dome sheet, a darker crayon hatching down its lower right (volume), a faint lighter wash where the
+// lamp would catch its crown, the white-pencil guide line it was cut along, left a little above the bottom, and the
+// heads of the two brads that pin the arm strips from the front (round 3 review: the strips are tucked behind the
+// sheet, as on 摺摺; each arm part still carries its own brad at its pivot, hidden under the sheet until the stage
+// brings the arm to the front).
+export function torsoSvg(I) {
+  const cid = `${I}body-clip`;
+  const hatches = [];
+  // long, sparse strokes just inside the right-hand edge, from the shoulder of the dome down to the cut
+  for (let i = 0; i < 16; i++) {
+    const tt = i / 15, y = 392 + tt * 196;
+    const x = edgeX(y, 1) - 14 - Math.sin(tt * Math.PI) * 6;
+    hatches.push(pencil([[x - 9, y - 22], [x + 3, y + 12]], 300 + i, 1, 0.6)[0]);
+  }
+  const light = [];
+  for (let i = 0; i < 9; i++) {
+    const tt = i / 8, ang = Math.PI + 0.55 + tt * 0.8;
+    const x = 345 + Math.cos(ang) * 132, y = 452 + Math.sin(ang) * 118;
+    light.push(pencil([[x - 6, y + 9], [x + 5, y - 9]], 340 + i, 1, 0.5)[0]);
+  }
+  const gy = G.hipY - 9.5;
+  const guide = pencil([[edgeX(gy, -1) + 18, gy + 0.4], [300, gy - 0.4], [392, gy + 0.2], [edgeX(gy, 1) - 30, gy - 0.6]], 360, 2, 0.35);
+  return `<clipPath id="${cid}"><path d="${OUTLINE_D}"/></clipPath>
+    <path d="${OUTLINE_D}" ${fillS(C.body)} filter="url(#nt-paper)"/>
+    <g clip-path="url(#${cid})">
+      <g ${strokeS(C.shade)} stroke-width="1.5" opacity="0.32" fill="none" stroke-linecap="round" filter="url(#nt-graphite)">${hatches.map(d => `<path d="${d}"/>`).join('')}</g>
+      <g ${strokeS(C.pen)} stroke-width="1.1" opacity="0.13" fill="none" stroke-linecap="round" filter="url(#nt-graphite)">${light.map(d => `<path d="${d}"/>`).join('')}</g>
+      <g ${strokeS(C.pen)} stroke-width="1" opacity="0.3" fill="none" stroke-linecap="round" filter="url(#nt-graphite)">${guide.map(d => `<path d="${d}"/>`).join('')}</g>
+    </g>
+    ${bradSvg(...BRADS.l)}
+    ${bradSvg(...BRADS.r)}`;
+}
+
+// The stars: pin-pricks through the sheet. In daylight each is a speck of the page's light with a little raised
+// burr of pale fibres round it; on the night paper `stars-glow` adds the light coming through.
+export const STARS = [
+  [302, 338, 4.6, true], [340, 322, 2.4], [266, 366, 3.2], [376, 352, 3.2], [238, 406, 2.4],
+  [320, 378, 2.0], [398, 326, 2.2], [222, 448, 2.6], [472, 418, 3.6, true], [302, 528, 1.9], [418, 546, 2.2],
+];
+export function starsSvg() {
+  return STARS.map(([x, y, r, big], i) => {
+    const burr = [];
+    const rr = rng(700 + i);
+    for (let k = 0; k < 7; k++) { const a = rr() * Math.PI * 2, l = r + 1.2 + rr() * 1.8; burr.push(`M${fmt(x + Math.cos(a) * (r + 0.4))},${fmt(y + Math.sin(a) * (r + 0.4))}L${fmt(x + Math.cos(a) * l)},${fmt(y + Math.sin(a) * l)}`); }
+    const spark = big ? `<g ${strokeS(C.hole)} stroke-width="1.5" stroke-linecap="round" opacity="0.75">
+        <path d="M${fmt(x)},${fmt(y - r * 2.5)}L${fmt(x)},${fmt(y + r * 2.5)}M${fmt(x - r * 2.5)},${fmt(y)}L${fmt(x + r * 2.5)},${fmt(y)}"/></g>` : '';
+    return `<g>
+      <circle cx="${fmt(x)}" cy="${fmt(y)}" r="${fmt(r + 1.3)}" fill="none" ${strokeS(C.pen)} stroke-width="1.2" opacity="0.35" filter="url(#nt-graphite)"/>
+      <path d="${burr.join('')}" ${strokeS(C.pen)} stroke-width="0.9" opacity="0.5" fill="none"/>
+      <circle cx="${fmt(x)}" cy="${fmt(y)}" r="${fmt(r)}" ${fillS(C.hole)}/>
+      <path d="M${fmt(x - r * 0.8)},${fmt(y - r * 0.4)}A${fmt(r)},${fmt(r)} 0 0 1 ${fmt(x + r * 0.4)},${fmt(y - r * 0.85)}" fill="none" ${strokeS(C.shade)} stroke-width="${fmt(Math.max(0.8, r * 0.35))}" opacity="0.45"/>
+      ${spark}
+    </g>`;
+  }).join('');
+}
+export function starsGlowSvg() {
+  const halos = STARS.map(([x, y, r]) => `<circle cx="${fmt(x)}" cy="${fmt(y)}" r="${fmt(r * 3.6 + 3)}" ${fillS(C.glow)} opacity="0.42"/>`).join('');
+  const cores = STARS.map(([x, y, r]) => `<circle cx="${fmt(x)}" cy="${fmt(y)}" r="${fmt(r * 1.6)}" ${fillS(C.glint)} opacity="0.9"/>`).join('');
+  const rays = STARS.filter(s => s[3]).map(([x, y, r]) => `<path d="M${fmt(x)},${fmt(y - r * 5)}L${fmt(x)},${fmt(y + r * 5)}M${fmt(x - r * 5)},${fmt(y)}L${fmt(x + r * 5)},${fmt(y)}" ${strokeS(C.glow)} stroke-width="2.2" stroke-linecap="round" opacity="0.9"/>`).join('');
+  return `<g filter="url(#nt-glow)">${halos}</g><g filter="url(#nt-glow-s)">${cores}${rays}</g>`;
+}
+
+// The head decoration: a crescent cut from pale moon-yellow card, held on the crown's right shoulder by a brass bobby
+// pin. It lies along the dome's curve, half over the edge, its horns turned in toward the face: a hair clip it chose,
+// a moon over its own little sky — never an upright prong. (Round 3 review: turned 20° clockwise about the pin and
+// dropped 6 so its upper horn follows the dome and the silhouette stays one clean dome; the first pass's snap clip —
+// a brass loop half under the hollow — read as a halo or Saturn's ring, so a bobby pin now crosses the card.)
+export function crescentPts(cx, cy, R, rotDeg) {
+  const r = R * 0.97, d = R * 0.5; // inner (cut-away) circle: radius r, centre d along the opening's direction
+  const xi = (R * R - r * r + d * d) / (2 * d), yi = Math.sqrt(R * R - xi * xi);
+  const aO = Math.atan2(yi, xi), aI = Math.atan2(yi, xi - d);
+  const pts = [];
+  const m = 40;
+  for (let k = 0; k <= m; k++) { const a = aO + (k / m) * (2 * Math.PI - 2 * aO); pts.push([Math.cos(a) * R, Math.sin(a) * R]); }
+  // the cut-away circle's arc that lies inside the outer one: from the lower tip back round through its far side
+  for (let k = 1; k < m; k++) { const a = (2 * Math.PI - aI) - (k / m) * (2 * Math.PI - 2 * aI); pts.push([d + Math.cos(a) * r, Math.sin(a) * r]); }
+  const ro = rotDeg * D2R, c = Math.cos(ro), s = Math.sin(ro);
+  return pts.map(([x, y]) => [cx + x * c - y * s, cy + x * s + y * c]);
+}
+// where the crescent sits: on the outline at `angle` degrees right of the crown (seen from the torso pivot), pulled
+// `inset`·R inward; its opening faces the face ('in') or the sky ('out'), turned a further `turn` degrees; then turned
+// `spin` degrees (clockwise) about the point the first pass clipped it at, and dropped `drop`
+export function decoPlace() {
+  const { angle, inset, R, turn, open, spin = 0, drop = 0 } = G.deco;
+  const a = (angle - 90) * D2R;
+  let best = OUTLINE[0], bd = 1e9;
+  for (const q of OUTLINE) { const qa = Math.atan2(q[1] - 470, q[0] - G.cx); const d = Math.abs(qa - a); if (d < bd) { bd = d; best = q; } }
+  const inx = G.cx - best[0], iny = 470 - best[1], il = Math.hypot(inx, iny);
+  const cx0 = best[0] + inx / il * R * inset, cy0 = best[1] + iny / il * R * inset;
+  const toFace = Math.atan2(G.face[1] - cy0, G.face[0] - cx0) / D2R;
+  const rot0 = (open === 'in' ? toFace : toFace + 180) + turn;
+  const q = [cx0 + Math.cos(rot0 * D2R) * R * 0.42, cy0 + Math.sin(rot0 * D2R) * R * 0.42];
+  const sp = spin * D2R, dx = cx0 - q[0], dy = cy0 - q[1];
+  const cx = q[0] + dx * Math.cos(sp) - dy * Math.sin(sp), cy = q[1] + dx * Math.sin(sp) + dy * Math.cos(sp) + drop;
+  const rot = rot0 + spin;
+  const pin = pinPlace(cx, cy, R, rot);
+  return { cx, cy, R, rot, edge: best, clip: pin.mid, pin };
+}
+// the bobby pin: two brass legs joined by a round bend, laid across the crescent's thick back so it reaches from the
+// card onto the dome inside the hollow (the pivot is where it crosses the card's inner edge)
+function pinPlace(cx, cy, R, rot) {
+  const { pinAt = 0, pinTilt = -24, pinL = 30 } = G.deco;
+  const back = (rot + 180 + pinAt) * D2R;                     // the crescent's thick middle, seen from its centre
+  const inner = R * 0.97 - R * 0.5;                            // its inner (cut) edge there, from the centre
+  const mid = [cx + Math.cos(back) * inner, cy + Math.sin(back) * inner];
+  const dir = (rot + pinAt + pinTilt) * D2R;                   // from the bend toward the open ends: into the hollow
+  const u = [Math.cos(dir), Math.sin(dir)];
+  const bend = [mid[0] - u[0] * pinL * 0.52, mid[1] - u[1] * pinL * 0.52];
+  return { mid, bend, u, L: pinL };
+}
+export function decoSvg() {
+  const { cx, cy, R, rot, pin } = decoPlace();
+  const moon = tear(crescentPts(cx, cy, R, rot), 81, { jag: 0.25, wander: 0.8 });
+  const ca = (rot + 180 + (G.deco.dentAt ?? 34)) * D2R;
+  const dent = `<circle cx="${fmt(cx + Math.cos(ca) * R * 0.78)}" cy="${fmt(cy + Math.sin(ca) * R * 0.78)}" r="2.2" fill="none" ${strokeS(C.graphite)} stroke-width="1" opacity="0.16" filter="url(#nt-graphite)"/>`;
+  const { bend: B, u, L } = pin, n = [-u[1], u[0]];
+  const at = (t, o) => [B[0] + u[0] * t + n[0] * o, B[1] + u[1] * t + n[1] * o];
+  if ((G.deco.pin ?? 'snap') === 'bobby') {
+    const w = 3.8;
+    const top = [at(0, -w / 2), at(L, -w / 2 - 0.4)];
+    const low = []; for (let k = 0; k <= 12; k++) { const t = (k / 12) * (L - 3); low.push(at(t, w / 2 + (t > 6 ? Math.sin((t - 6) / 4.2 * Math.PI) * 1.1 : 0))); }
+    const d = `M${fmt(top[1][0])},${fmt(top[1][1])}L${fmt(top[0][0])},${fmt(top[0][1])}A${fmt(w / 2)},${fmt(w / 2)} 0 0 0 ${fmt(low[0][0])},${fmt(low[0][1])}` +
+      low.slice(1).map(p => `L${fmt(p[0])},${fmt(p[1])}`).join('');
+    const tips = [top[1], low[low.length - 1]].map(p => `<circle cx="${fmt(p[0])}" cy="${fmt(p[1])}" r="1.5" ${fillS(C.brassDeep)}/>`).join('');
+    return `<path d="${path(moon)}" ${fillS(C.moon)} filter="url(#nt-cut)"/>${dent}
+    <path d="${d}" fill="none" ${strokeS('oklch(20% 0.03 55)')} stroke-width="2.6" stroke-linejoin="round" opacity="0.32" transform="translate(1 1.8)" filter="url(#nt-crayon-soft)"/>
+    <path d="${d}" fill="none" ${strokeS(C.brass)} stroke-width="2.1" stroke-linejoin="round" stroke-linecap="round" filter="url(#nt-metal)"/>${tips}`;
+  }
+  // a snap clip seen from above: one solid brass blade, round at the hinge end and tapering, a dark slot down its middle
+  const r0 = G.deco.clipW ?? 4.2, r1 = r0 * (G.deco.clipTaper ?? 0.55);
+  const blade = [];
+  for (let k = 0; k <= 10; k++) { const a = Math.PI / 2 + (k / 10) * Math.PI; blade.push(at(r0 + Math.cos(a) * r0, Math.sin(a) * r0)); }
+  for (let k = 0; k <= 8; k++) { const a = -Math.PI / 2 + (k / 8) * Math.PI; blade.push(at(L - r1 + Math.cos(a) * r1, Math.sin(a) * r1)); }
+  const bd = smoothPath([...blade, blade[0]], true);
+  const slot = `M${fmt(at(r0 * 1.6, 0)[0])},${fmt(at(r0 * 1.6, 0)[1])}L${fmt(at(L * 0.72, 0)[0])},${fmt(at(L * 0.72, 0)[1])}`;
+  const hi = `M${fmt(at(r0 * 1.2, -r0 * 0.55)[0])},${fmt(at(r0 * 1.2, -r0 * 0.55)[1])}L${fmt(at(L * 0.8, -r1 * 0.5)[0])},${fmt(at(L * 0.8, -r1 * 0.5)[1])}`;
+  return `<path d="${path(moon)}" ${fillS(C.moon)} filter="url(#nt-cut)"/>${dent}
+    <path d="${bd}" fill="oklch(20% 0.03 55)" opacity="0.32" transform="translate(1.2 2)" filter="url(#nt-crayon-soft)"/>
+    <path d="${bd}" ${fillS(C.brass)} filter="url(#nt-metal)"/>
+    <path d="${slot}" ${strokeS(C.brassDeep)} stroke-width="1.3" stroke-linecap="round" opacity="0.85"/>
+    <path d="${hi}" ${strokeS(C.brassHi)} stroke-width="0.9" stroke-linecap="round" opacity="0.8"/>`;
+}
+
+// Cheeks: the family's three short terracotta crayon strokes.
+export function cheeksSvg(op = 0.8) {
+  const hatch = ([cx, cy], seed) => {
+    let d = '';
+    for (let i = 0; i < 3; i++) { const x = cx - 8.5 + i * 8.5; d += pencil([[x - 3, cy + 5.5], [x + 3, cy - 5.5]], seed + i, 2, 0.5).map(q => `<path d="${q}"/>`).join(''); }
+    return `<g ${strokeS(C.blush)} stroke-width="4.6" fill="none" stroke-linecap="round" filter="url(#nt-crayon)">${d}</g>`;
+  };
+  return `<g opacity="${op}">${hatch(G.cheeks[0], 501)}${hatch(G.cheeks[1], 511)}</g>`;
+}
+
+// Eyes. Round 4 (the owner: the pale eyes without a pupil read as a hollow, ghostly stare): the family's dark bean eye
+// is back, set in a pale pencil eye so it still reads on the night paper. G.eye.style:
+//   'cream' — round 3: a warm cream filled oval, no pupil (kept for comparison only)
+//   'pupil' — a warm-white pencil eye with the family's dark bean inside it (G.eye.k: the bean's size as a fraction of the
+//             eye, G.eye.off: where it sits, in eye radii — x toward the face's middle, y down), one glint on the bean
+//   'rim'   — the family's dark bean itself, with only a thin warm-white pencil line drawn round it
+// variants: shut (the happy arc), sleepy (half-lidded: the lid a heavier line, the bean showing under it) and nap (the
+// closed arc sagging the other way) — the closed ones are the same white-pencil arcs as round 3.
+export function eyeSvg(I, side, kind = 'open', look = [0, 0]) {
+  const E = G.eye;
+  const [cx0, cy0] = G.eyes[side === 'l' ? 0 : 1];
+  const sz = side === 'l' ? 1 : 0.97;
+  const rx = G.eyeRx * sz, ry = G.eyeRy * sz;
+  const seed = side === 'l' ? 71 : 72, tilt = side === 'l' ? -0.08 : 0.08;
+  const inward = side === 'l' ? 1 : -1;   // toward the face's middle
+  const cx = cx0 + look[0], cy = cy0 + look[1];
+  const line = (pts, sw, s2, op = 1) => `<g ${strokeS(C.pen)} stroke-width="${sw}" fill="none" stroke-linecap="round" opacity="${op}" filter="url(#nt-graphite)">${pencil(pts, s2, 3, 0.5).map(d => `<path d="${d}"/>`).join('')}</g>`;
+  if (kind === 'shut') return line([[cx - rx * 1.25, cy + 4], [cx - rx * 0.55, cy - ry * 0.45], [cx + rx * 0.55, cy - ry * 0.45], [cx + rx * 1.25, cy + 4]], 3, seed);
+  if (kind === 'nap') return line([[cx - rx * 1.25, cy - 1], [cx - rx * 0.55, cy + ry * 0.42], [cx + rx * 0.55, cy + ry * 0.42], [cx + rx * 1.25, cy - 1]], 3, seed + 5);
+  // the open and half-lidded eyes may be drawn a touch larger (E.scale); the closed arcs above keep round 3's width
+  const es = E.scale ?? 1;
+  const oval = tear(ellipse(cx, cy, rx * es, ry * es, 22, tilt), seed, { amp: 0.4, jag: G.eyeJag ?? 0.12, wander: 0.35 });
+  const lidY = cy - ry * es * (E.lid ?? 0.12);
+  const lidLine = () => line([[cx - rx * es * 1.3, lidY + 1.5], [cx - rx * es * 0.3, lidY - 1.2], [cx + rx * es * 0.6, lidY - 0.6], [cx + rx * es * 1.3, lidY + 2.5]], 3, seed + 9);
+  const clip = inner => {
+    const cid = `${I}lid-${side}`;
+    return `<clipPath id="${cid}"><rect x="${fmt(cx - rx * 2)}" y="${fmt(lidY)}" width="${fmt(rx * 4)}" height="${fmt(ry * 2.4)}"/></clipPath><g clip-path="url(#${cid})">${inner}</g>`;
+  };
+  const sleepy = kind === 'sleepy';
+  if (E.style === 'cream') {
+    const ring = [...oval, oval[0], oval[1]];
+    if (sleepy) return clip(`<path d="${smoothPath(oval, true)}" ${fillS(C.penFill)} filter="url(#nt-pencil-dense)"/>
+      <ellipse cx="${fmt(cx - rx * 0.3)}" cy="${fmt(lidY + ry * 0.32)}" rx="${fmt(rx * 0.26)}" ry="${fmt(ry * 0.18)}" ${fillS(C.glint)}/>`) + lidLine();
+    return `<path d="${smoothPath(oval, true)}" ${fillS(C.penFill)} filter="url(#nt-pencil-dense)"/>
+    <g ${strokeS(C.pen)} stroke-width="1.2" fill="none" opacity="${G.eyeRing ?? 0}" filter="url(#nt-graphite)">${pencil(ring, seed + 3, 2, 0.45).map(d => `<path d="${d}"/>`).join('')}</g>
+    <ellipse cx="${fmt(cx - rx * 0.32)}" cy="${fmt(cy - ry * 0.34)}" rx="${fmt(rx * 0.3)}" ry="${fmt(ry * 0.25)}" ${fillS(C.glint)}/>`;
+  }
+  // the family's bean (摺摺's eye: a graphite oval, a softer pencil ring round it, one glint up and to the left)
+  const bean = (bx, by, brx, bry, s) => {
+    const b = tear(ellipse(bx, by, brx, bry, 20, tilt), s, { jag: 0.2, wander: 0.4 });
+    const ring = [...b, b[0], b[1]];
+    return `<path d="${smoothPath(b, true)}" ${fillS(C.pupil)} filter="url(#${E.beanFilter ?? 'nt-bean'})"/>
+      <g ${strokeS(C.pupil)} stroke-width="1.3" fill="none" opacity="0.7" filter="url(#nt-graphite)">${pencil(ring, s + 3, 2, 0.4).map(d => `<path d="${d}"/>`).join('')}</g>`;
+  };
+  const glint = (gx, gy) => `<ellipse cx="${fmt(gx)}" cy="${fmt(gy)}" rx="${fmt(E.glint[0])}" ry="${fmt(E.glint[1])}" ${fillS(C.glint)}/>`;
+  if (E.style === 'rim') {
+    const [brx, bry] = [rx * es * E.k[0], ry * es * E.k[1]];
+    const bx = cx + inward * rx * es * E.off[0], by = cy + ry * es * E.off[1];
+    const halo = ellipse(bx, by, brx + E.w * 0.5 + (E.gap ?? 0), bry + E.w * 0.5 + (E.gap ?? 0), 24, tilt);
+    const ring = `<g ${strokeS(C.pen)} stroke-width="${fmt(E.w)}" fill="none" stroke-linecap="round" filter="url(#nt-pencil-dense)">${pencil([...halo, halo[0], halo[1]], seed + 7, 2, 0.35).map(d => `<path d="${d}"/>`).join('')}</g>`;
+    const gx = bx - brx * 0.3, gy0 = by - bry * 0.32;
+    const inner = `${ring}${bean(bx, by, brx, bry, seed + 20)}`;
+    if (sleepy) return clip(inner + glint(gx, Math.max(gy0, lidY + E.glint[1] + 1.4))) + lidLine();
+    return inner + glint(gx, gy0);
+  }
+  // 'pupil': a warm-white pencil eye with the bean inside
+  const [prx, pry] = [rx * es * E.k[0], ry * es * E.k[1]];
+  const px = cx + inward * rx * es * E.off[0], py = cy + ry * es * E.off[1];
+  const white = `<path d="${smoothPath(oval, true)}" ${fillS(C.penFill)} filter="url(#nt-pencil-dense)"/>`;
+  const edge = E.ring ? (() => { const ring = [...oval, oval[0], oval[1]]; return `<g ${strokeS(C.pen)} stroke-width="${fmt(E.ring)}" fill="none" filter="url(#nt-graphite)">${pencil(ring, seed + 3, 2, 0.4).map(d => `<path d="${d}"/>`).join('')}</g>`; })() : '';
+  const cid = `${I}eye-${side}`;
+  // the bean stays inside the white (clipped to it), so a large one is a dark eye with a pale rim, never past the edge
+  const inner = `${white}${edge}<clipPath id="${cid}"><path d="${smoothPath(oval, true)}"/></clipPath><g clip-path="url(#${cid})">${bean(px, py, prx, pry, seed + 20)}</g>`;
+  const gx = px - prx * (E.gpos?.[0] ?? 0.3), gy0 = py - pry * (E.gpos?.[1] ?? 0.32);
+  if (sleepy) return clip(inner + glint(gx, Math.max(gy0, lidY + E.glint[1] + 1.4))) + lidLine();
+  return inner + glint(gx, gy0);
+}
+
+// Mouth: a small soft smile in white pencil; mouth-o: a small open o (the pale ring round the dark of an open mouth): a yawn
+export function mouthSvg(kind = 'smile', look = [0, 0]) {
+  const [mx0, my0] = G.mouth;
+  const mx = mx0 + look[0], my = my0 + look[1];
+  if (kind === 'o') return `<ellipse cx="${fmt(mx)}" cy="${fmt(my + 3)}" rx="7" ry="8.8" ${fillS(C.mouthIn)} opacity="0.85"/>
+    <g ${strokeS(C.pen)} stroke-width="2.5" fill="none" filter="url(#nt-graphite)">${pencil(ellipse(mx, my + 3, 7, 8.8, 16).concat([[mx + 7, my + 3]]), 18, 2, 0.4).map(d => `<path d="${d}"/>`).join('')}</g>`;
+  // round 3 review: 1.4 × the stroke and 1.2 × the arc, so the smile still shows at phone size (≈ 86 px)
+  const k = G.smile ?? 1.2;
+  return `<g ${strokeS(C.pen)} stroke-width="${fmt(2.3 * (G.smileW ?? 1.4))}" fill="none" stroke-linecap="round" filter="url(#nt-graphite)">${pencil([[mx - 10 * k, my - 2.5 * k], [mx - 4 * k, my + 2.8 * k], [mx + 4 * k, my + 2.8 * k], [mx + 10 * k, my - 2.5 * k]], 17, 3, 0.5).map(d => `<path d="${d}"/>`).join('')}</g>`;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Arms: a torn strip of slate paper, pinned through its rounded end by a brass brad set ≈ 3 radii inside the dome's
+// edge, the strip tucked under the sheet (the arm parts paint behind the torso), ending in the family's cream mitten
+// (thumb toward the body). Built at the angle it is drawn at, so the glue shadow
+// keeps falling down-right (0° = pointing right, 90° = straight down).
+function stripPts(S, E, w0, w1, bend, step = 4) {
+  const L = Math.hypot(E[0] - S[0], E[1] - S[1]);
+  const ux = (E[0] - S[0]) / L, uy = (E[1] - S[1]) / L, nx = -uy, ny = ux;
+  const m = Math.max(4, Math.round(L / step));
+  const Cc = t => { const b = Math.sin(Math.PI * t) * bend; return [S[0] + ux * L * t + nx * b, S[1] + uy * L * t + ny * b]; };
+  const W = t => (w0 + (w1 - w0) * t) / 2;
+  const pts = [];
+  for (let i = 0; i <= m; i++) { const t = i / m, c = Cc(t), w = W(t); pts.push([c[0] + nx * w, c[1] + ny * w]); }
+  pts.push([E[0] + ux * 3, E[1] + uy * 3]);
+  for (let i = m; i >= 0; i--) { const t = i / m, c = Cc(t), w = W(t); pts.push([c[0] - nx * w, c[1] - ny * w]); }
+  for (let k = 1; k < 9; k++) { const a = -Math.PI / 2 - (k / 9) * Math.PI; pts.push([S[0] + (ux * Math.cos(a) + nx * Math.sin(a)) * w0 / 2, S[1] + (uy * Math.cos(a) + ny * Math.sin(a)) * w0 / 2]); }
+  return pts;
+}
+function bradSvg(x, y, r = G.bradR) {
+  return `<circle cx="${fmt(x + 1.3)}" cy="${fmt(y + 2)}" r="${fmt(r + 0.6)}" fill="oklch(20% 0.03 55)" opacity="0.4" filter="url(#nt-crayon-soft)"/>
+      <circle cx="${fmt(x)}" cy="${fmt(y)}" r="${fmt(r)}" ${fillS(C.brass)} filter="url(#nt-metal)"/>
+      <path d="M${fmt(x + r * 0.95)},${fmt(y - r * 0.2)} A${fmt(r)},${fmt(r)} 0 0 1 ${fmt(x - r * 0.35)},${fmt(y + r * 0.93)}" fill="none" ${strokeS(C.brassDeep)} stroke-width="1.6" stroke-linecap="round" opacity="0.8" filter="url(#nt-graphite)"/>
+      <ellipse cx="${fmt(x - r * 0.32)}" cy="${fmt(y - r * 0.36)}" rx="${fmt(r * 0.34)}" ry="${fmt(r * 0.24)}" transform="rotate(-30 ${fmt(x - r * 0.32)} ${fmt(y - r * 0.36)})" ${fillS(C.brassHi)} opacity="0.9"/>`;
+}
+export function armSvg(I, side, angleDeg) {
+  const [sx, sy] = BRADS[side];
+  const seed = side === 'l' ? 91 : 92;
+  const bend = side === 'l' ? 2.5 : -2.5;
+  const D = G.armD, R = G.mitten, [w0, w1] = G.armW;
+  const a = angleDeg * D2R;
+  const Lr = D - R * 0.5;
+  const S = [sx, sy], W = [sx + Math.cos(a) * Lr, sy + Math.sin(a) * Lr];
+  const strip = tear(stripPts(S, W, w0, w1, bend), seed * 7, { jag: 0.55, wander: 1.8 });
+  const la = a;
+  const Gc = [W[0] + Math.cos(la) * R * 0.5, W[1] + Math.sin(la) * R * 0.5];
+  // flat strip, not a tube: one faint pencil line down its lower edge
+  const L = Math.hypot(W[0] - sx, W[1] - sy), ux = (W[0] - sx) / L, uy = (W[1] - sy) / L, nx = -uy, ny = ux;
+  const sg = ux >= 0 ? 1 : -1;
+  const pp = t => [sx + ux * L * t + nx * sg * (w0 / 2 - 4), sy + uy * L * t + ny * sg * (w0 / 2 - 4)];
+  const sideLine = pencil([pp(0.22), pp(0.55), pp(0.92)], seed * 3, 1, 0.5)[0];
+  // the mitten: a round mitt with a small thumb lobe on the side facing the body, a torn V notch between them
+  const toBody = Math.sign((-Math.sin(la)) * (G.cx - Gc[0]) + Math.cos(la) * (452 - Gc[1])) || 1;
+  const ts = toBody;
+  const mitt = { cx: R * 0.06, cy: -ts * R * 0.04, a: R * 1.0, b: R * 0.9, rot: 0 };
+  const thumb = { cx: -R * 0.08, cy: ts * R * 0.83, a: R * 0.45, b: R * 0.31, rot: ts * 0.75 };
+  const hit = (e, dx, dy) => {
+    const c = Math.cos(e.rot), s = Math.sin(e.rot);
+    const ox = (-e.cx) * c + (-e.cy) * s, oy = -(-e.cx) * s + (-e.cy) * c;
+    const vx = dx * c + dy * s, vy = -dx * s + dy * c;
+    const A2 = vx * vx / (e.a * e.a) + vy * vy / (e.b * e.b), B2 = 2 * (ox * vx / (e.a * e.a) + oy * vy / (e.b * e.b)), C2 = ox * ox / (e.a * e.a) + oy * oy / (e.b * e.b) - 1;
+    const disc = B2 * B2 - 4 * A2 * C2;
+    return disc < 0 ? 0 : Math.max(0, (-B2 + Math.sqrt(disc)) / (2 * A2));
+  };
+  const N = 120, raw = [];
+  for (let i = 0; i < N; i++) { const ph = (i / N) * Math.PI * 2 - Math.PI; const dx = Math.cos(ph), dy = Math.sin(ph); const rm = hit(mitt, dx, dy), rt = hit(thumb, dx, dy); raw.push({ ph, r: Math.max(rm, rt), thumb: rt > rm }); }
+  let phJ = null;
+  for (let i = 0; i < N; i++) { const p = raw[i], q = raw[(i + 1) % N]; const near = ts > 0 ? (!p.thumb && q.thumb) : (p.thumb && !q.thumb); if (near && Math.abs(p.ph) < Math.PI / 1.4) phJ = ts > 0 ? q.ph : p.ph; }
+  const mpts = raw.map(({ ph, r }) => {
+    if (phJ !== null) { const d = Math.abs(Math.atan2(Math.sin(ph - phJ), Math.cos(ph - phJ))); r -= R * 0.2 * Math.max(0, 1 - d / 0.13); }
+    const dx = Math.cos(ph), dy = Math.sin(ph);
+    return [Gc[0] + Math.cos(la) * dx * r - Math.sin(la) * dy * r, Gc[1] + Math.sin(la) * dx * r + Math.cos(la) * dy * r];
+  });
+  const m = tear(mpts, seed + 400, { jag: 0.25, wander: 1 });
+  return `<path d="${path(strip)}" ${fillS(C.arm)} filter="url(#nt-paper)"/>
+    <g ${strokeS(C.pen)} stroke-width="1" opacity="0.16" fill="none" stroke-linecap="round" filter="url(#nt-graphite)"><path d="${sideLine}"/></g>
+    <path d="${path(m)}" ${fillS(C.glove)} filter="url(#nt-thin)"/>
+    ${bradSvg(sx, sy)}`;
+}
+export const mittenCentre = (side, angleDeg) => {
+  const [sx, sy] = BRADS[side], a = angleDeg * D2R;
+  return [sx + Math.cos(a) * G.armD, sy + Math.sin(a) * G.armD];
+};

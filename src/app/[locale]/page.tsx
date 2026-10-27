@@ -5,6 +5,7 @@ import { HeroSection } from '@/components/sections/HeroSection/HeroSection';
 import { CardFeedSection } from '@/components/sections/CardFeedSection/CardFeedSection';
 import { CTASection } from '@/components/sections/CTASection/CTASection';
 import { SiteFooter } from '@/components/sections/SiteFooter/SiteFooter';
+import { LandingStage } from '@/components/sections/LandingStage/LandingStage';
 import { getAdminDb } from '@/lib/db/firestore/admin';
 import { latestForLanding } from '@/lib/db/firestore/landing';
 import { smartAppBanner } from '@/lib/appStores';
@@ -41,6 +42,8 @@ export default async function LandingPage({
         <CTASection />
       </main>
       <SiteFooter />
+      {/* The paper puppets: client-only, loaded once the page is up (none of it is in this HTML). */}
+      <LandingStage />
     </>
   );
 }
