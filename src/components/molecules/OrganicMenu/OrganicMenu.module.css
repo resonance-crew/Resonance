@@ -302,3 +302,29 @@
 .option[data-active] .optionIcon {
   color: var(--menu-glyph-active, var(--menu-border-hover));
 }
+
+/* A borderless paper sheet (OrganicMenuPanel `sheet`, the message menu's
+   actions — round 16 §3): its paper and grain are atoms/PaperSheet's, under
+   the rows; rows 44 tall from a little air at its top, the footer parted by
+   6 more space, never a line. 216 wide at least, growing to its longest row
+   up to 280. */
+.sheet {
+  min-width: 216px;
+  max-width: 280px;
+}
+
+.sheet .list {
+  padding: 4px 8px 0;
+}
+
+.sheet .option {
+  height: 44px;
+  gap: 10px;
+  font-size: 14.5px;
+}
+
+.sheet .footer {
+  height: 32px;
+  margin-top: 6px;
+  padding-bottom: 2px;
+}

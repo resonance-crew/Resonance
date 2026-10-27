@@ -20,6 +20,7 @@ import { callApi, callApiForm } from './api';
 import { isAbsent } from './errors';
 import { listenLazily } from './listen';
 import { linkPreviewOf } from '@/lib/links/previewShape';
+import { isReactionId, type ReactionId } from '@/lib/design/reactions';
 
 /** Hard cap mirrored in the API's SendMessageRequest — keep the two in sync. */
 export const MESSAGE_MAX_LENGTH = 2000;
@@ -65,6 +66,7 @@ function mapConversation(id: string, data: Record<string, unknown>): Conversatio
           senderId: String(last.senderId ?? ''),
           sentAt: tsToDate(last.sentAt) ?? new Date(0),
           ...(last.image === true ? { image: true } : {}),
+          ...(last.unsent === true ? { unsent: true } : {}),
         }
       : null,
     unread: (data.unread as Record<string, number>) ?? {},
@@ -91,6 +93,12 @@ function mapRequest(v: unknown): Conversation['request'] {
 }
 
 function mapMessage(id: string, data: Record<string, unknown>): Message {
+  const unsentAt = data.unsentAt != null ? (tsToDate(data.unsentAt) ?? new Date()) : null;
+  // Unsent: who sent it and when is all there is (the server keeps nothing else on it either).
+  if (unsentAt) {
+    return { id, senderId: String(data.senderId ?? ''), text: '', sentAt: tsToDate(data.sentAt) ?? new Date(), unsentAt };
+  }
+  const reactions = mapReactions(data.reactions);
   return {
     id,
     senderId: String(data.senderId ?? ''),
@@ -105,7 +113,15 @@ function mapMessage(id: string, data: Record<string, unknown>): Message {
     image: mapImage(data.image),
     // A kind this build doesn't know is a plain message.
     ...(data.kind === 'note' ? { kind: 'note' as const } : {}),
+    ...(reactions ? { reactions } : {}),
   };
+}
+
+/** A message's reactions by uid — the five this build knows (one it doesn't is drawn as nothing); none, undefined. */
+function mapReactions(v: unknown): Record<string, ReactionId> | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const known = Object.entries(v as Record<string, unknown>).filter((e): e is [string, ReactionId] => !!e[0] && isReactionId(e[1]));
+  return known.length ? Object.fromEntries(known) : undefined;
 }
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
@@ -115,6 +131,8 @@ function mapReplyQuote(v: unknown): Message['replyTo'] {
   const q = v as Record<string, unknown>;
   const id = str(q.id);
   if (!id) return undefined;
+  // A quote of a message since unsent keeps only who sent it.
+  if (q.unsent === true) return { id, senderId: String(q.senderId ?? ''), text: '', unsent: true };
   return {
     id,
     senderId: String(q.senderId ?? ''),
@@ -219,6 +237,26 @@ export async function uploadChatImage(
   form.append('to', toUserId);
   form.append('clientId', opts.clientId);
   return callApiForm('/api/v1/chat-images', form);
+}
+
+/**
+ * Answer a message with a reaction, or (null) take the viewer's back — through
+ * the server (PUT / DELETE /api/v1/conversations/{pair}/messages/{id}/reaction):
+ * the rules let no client write a message. Quiet: no bell, push or unread.
+ */
+export async function reactToMessage(pairId: string, messageId: string, reaction: ReactionId | null): Promise<void> {
+  requireUid();
+  const path = `/api/v1/conversations/${encodeURIComponent(pairId)}/messages/${encodeURIComponent(messageId)}/reaction`;
+  await (reaction ? callApi(path, { method: 'PUT', body: { reaction } }) : callApi(path, { method: 'DELETE' }));
+}
+
+/**
+ * Unsend a message the viewer sent, within 24 hours (POST …/messages/{id}/unsend):
+ * for both of them it becomes a line saying so. A conflict (409) past 24 hours.
+ */
+export async function unsendMessage(pairId: string, messageId: string): Promise<void> {
+  requireUid();
+  await callApi(`/api/v1/conversations/${encodeURIComponent(pairId)}/messages/${encodeURIComponent(messageId)}/unsend`, { method: 'POST' });
 }
 
 /** Where a picture a message carries is read (the session cookie names the reader): `thumb` the thread's size. */

@@ -17,6 +17,7 @@ import { ConfirmModal } from '@/components/molecules/ConfirmModal/ConfirmModal';
 import { OrganicMenu } from '@/components/molecules/OrganicMenu/OrganicMenu';
 import { CardEmbedSourceContext, useCardEmbed } from '@/components/molecules/EmbedStoryCard/useCardEmbed';
 import { useSafetyActions } from '@/components/molecules/SafetyActions/useSafetyActions';
+import { useToast } from '@/components/providers/ToastProvider';
 import { seedFromString } from '@/lib/design/prng';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/components/providers/AuthProvider';
@@ -25,6 +26,8 @@ import { OLDER_PAGE, useChatThread } from '@/lib/data/thread';
 import { resonanceCardKey, threadCardKeys } from '@/lib/chat/cardLink';
 import { footComposes, threadFoot } from '@/lib/chat/foot';
 import { threadRows } from '@/lib/chat/rows';
+import { changeShown, withLocalChange, type LocalChange } from '@/lib/chat/message';
+import { ApiError } from '@/lib/db/firestore/client/api';
 import type { TextRange } from '@/lib/chat/search';
 import { getUserByHandle, getUsersByIds, isConnected } from '@/lib/db/firestore/client/reads';
 import {
@@ -32,6 +35,8 @@ import {
   deleteConversation,
   getConversation,
   markConversationRead,
+  reactToMessage,
+  unsendMessage,
 } from '@/lib/db/firestore/client/messages';
 import { linkify } from '@/lib/links/linkify';
 import { messageLinkProps } from './MessageBubble';
@@ -88,10 +93,12 @@ export interface ThreadViewProps {
  */
 export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
   const t = useTranslations('messages');
+  const tSafety = useTranslations('safety');
   const locale = useLocale();
   const router = useRouter();
   const { user } = useAuth();
   const { mutate: globalMutate } = useSWRConfig();
+  const toast = useToast();
 
   const { data: holder, isLoading: loadingHolder } = useSWR(
     `user:handle:${handle}`,
@@ -134,6 +141,24 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
       userId: other?.id ?? '',
       handle: other?.handle,
       contextId: pairId,
+    },
+    isBlocked: blockedOther,
+    onBlockedChange: () => {
+      void globalMutate(`connected:${pairId}`);
+      if (user) void globalMutate(`conversations:${user.id}`);
+    },
+  });
+
+  // One of their messages reported from its own menu (round 16 §3): the same report dialog, for that message.
+  const [reportedId, setReportedId] = useState<string | null>(null);
+  const messageSafety = useSafetyActions({
+    report: {
+      type: 'message',
+      id: reportedId ?? pairId ?? '',
+      userId: other?.id ?? '',
+      handle: other?.handle,
+      contextId: pairId,
+      title: tSafety('reportThisMessage'),
     },
     isBlocked: blockedOther,
     onBlockedChange: () => {
@@ -197,10 +222,29 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
     setDrawFrom(null);
     setDrawTo(null);
   }, [pairId]);
-  const drawn = useMemo(
-    () => (drawnFrom === 0 && tail ? thread.messages : thread.messages.slice(drawnFrom, drawnTo + 1)),
-    [thread.messages, drawnFrom, drawnTo, tail],
-  );
+  // What the viewer has done here that the server's copy doesn't say yet (round 16): a reaction picked or taken
+  // back, a message unsent — drawn at once, by message id, until the copy says the same (an older page is never
+  // heard again: there it stays). A failed reaction is put back.
+  const [localChanges, setLocalChanges] = useState<ReadonlyMap<string, LocalChange>>(() => new Map());
+  const viewerId = user?.id ?? '';
+  const drawn = useMemo(() => {
+    const stretch = drawnFrom === 0 && tail ? thread.messages : thread.messages.slice(drawnFrom, drawnTo + 1);
+    return localChanges.size ? stretch.map((m) => withLocalChange(m, viewerId, localChanges.get(m.id))) : stretch;
+  }, [thread.messages, drawnFrom, drawnTo, tail, localChanges, viewerId]);
+  useEffect(() => {
+    if (!localChanges.size) return;
+    const shown = [...localChanges].filter(([id, change]) => {
+      const m = thread.messages.find((x) => x.id === id);
+      return m && changeShown(m, viewerId, change);
+    });
+    if (!shown.length) return;
+    setLocalChanges((cur) => {
+      const next = new Map(cur);
+      for (const [id, change] of shown) if (next.get(id) === change) next.delete(id);
+      return next;
+    });
+  }, [thread.messages, localChanges, viewerId]);
+  useEffect(() => setLocalChanges(new Map()), [pairId]);
   /** Draws from the message at `index` of those held (the start of them all: no limit again). */
   const drawFromIndex = (index: number) => setDrawFrom(index <= 0 ? null : (thread.messages[index]?.key ?? null));
   /** Draws down to the message at `index` of those held (the newest, or past it: down to the newest again). */
@@ -282,6 +326,9 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
   const [jumpTarget, setJumpTarget] = useState<{ id: string; flash: boolean } | null>(null);
   // The message a long-press lifted out, with its menu.
   const [pressed, setPressed] = useState<PressedMessage | null>(null);
+  // One of the viewer's own messages waiting for the yes to unsend it.
+  const [unsending, setUnsending] = useState<{ id: string } | null>(null);
+  const [unsendBusy, setUnsendBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -472,8 +519,10 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
   );
 
   // What every message can ask of the thread — the same functions for as long as the conversation is open.
-  const live = useRef({ thread, router, holdOlder, composes });
-  live.current = { thread, router, holdOlder, composes };
+  const live = useRef({ thread, router, holdOlder, composes, pairId, toast, t, messageSafety });
+  live.current = { thread, router, holdOlder, composes, pairId, toast, t, messageSafety };
+  // Reactions need the two connected (a letter not yet answered takes none) and no block of theirs on this side.
+  const canReact = connected === true && !blockedOther;
   // A reply picked while there was a composer never comes back with the next one: the foot gave way meanwhile.
   useEffect(() => {
     if (!composes) thread.cancelReply();
@@ -485,6 +534,7 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
       viewerId: user?.id ?? '',
       otherHandle: other?.handle ?? '',
       canWrite: composes,
+      canReact,
       openLink: (link, e) => {
         // An address easy to mistake for another asks first, however it was opened.
         if (link.suspicious) {
@@ -533,9 +583,60 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
         );
       },
       press: setPressed,
+      react: (message, reaction) => {
+        const { pairId: pair, toast: toasts, t: words } = live.current;
+        if (!pair) return;
+        const change: LocalChange = { reaction };
+        setLocalChanges((cur) => new Map(cur).set(message.id, change));
+        reactToMessage(pair, message.id, reaction).catch(() => {
+          // The chip goes back, with a word.
+          setLocalChanges((cur) => {
+            if (cur.get(message.id) !== change) return cur;
+            const next = new Map(cur);
+            next.delete(message.id);
+            return next;
+          });
+          toasts.show({ message: words('reactError') });
+        });
+      },
+      unsend: (message) => setUnsending({ id: message.id }),
+      report: (message) => {
+        setReportedId(message.id);
+        live.current.messageSafety.choose('safety:report');
+      },
     }),
-    [user?.id, other?.handle, composes],
+    [user?.id, other?.handle, composes, canReact],
   );
+
+  function confirmUnsend() {
+    if (!unsending || !pairId || unsendBusy) return;
+    const { id } = unsending;
+    setUnsendBusy(true);
+    void unsendMessage(pairId, id)
+      .then(() => setLocalChanges((cur) => new Map(cur).set(id, { unsent: true })))
+      .catch((e: unknown) => toast.show({ message: t(e instanceof ApiError && e.code === 'conflict' ? 'unsendTooLate' : 'unsendError') }))
+      .finally(() => {
+        setUnsendBusy(false);
+        setUnsending(null);
+      });
+  }
+
+  // The overlay gone, the ☺ / ⋯ / chip that opened it takes the focus back — now that the message is drawn again.
+  const focusBack = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (pressed || !focusBack.current) return;
+    focusBack.current.focus({ preventScroll: true });
+    focusBack.current = null;
+  }, [pressed]);
+
+  // A held message unsent meanwhile (by its sender, elsewhere) has no menu: the overlay goes. A reply being written
+  // to one now quotes nothing worth sending.
+  useEffect(() => {
+    if (pressed && drawn.some((m) => m.key === pressed.message.key && m.unsentAt)) setPressed(null);
+    const replying = thread.replyingTo;
+    if (replying && drawn.some((m) => m.id === replying.id && m.unsentAt)) thread.cancelReply();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawn]);
 
   // The note the thread was opened for: once the conversation's first messages are in (older ones read for it
   // if need be), it is gone to, washed and answered; one that isn't in the conversation is an older note.
@@ -866,10 +967,14 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
 
             {pressed && (
               <MessageMenuOverlay
-                pressed={pressed}
+                // The message as it is now (a reaction that came in since it was held shows on the lifted copy too).
+                pressed={{ ...pressed, message: drawn.find((m) => m.key === pressed.message.key) ?? pressed.message }}
                 own={pressed.message.senderId === user?.id}
                 fullTime={fullFmt.format(pressed.message.sentAt)}
-                onClose={() => setPressed(null)}
+                onClose={(back) => {
+                  focusBack.current = back;
+                  setPressed(null);
+                }}
               />
             )}
 
@@ -947,7 +1052,20 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
               destructive
               seed={59}
             />
+            {/* Before one of the viewer's own messages is unsent: plain colour — it takes back, it destroys nothing of theirs. */}
+            <ConfirmModal
+              open={!!unsending}
+              title={t('unsendTitle')}
+              body={t('unsendBody')}
+              cancelLabel={t('unsendCancel')}
+              confirmLabel={t('unsendConfirm')}
+              onCancel={() => setUnsending(null)}
+              onConfirm={confirmUnsend}
+              busy={unsendBusy}
+              seed={67}
+            />
             {safety.modals}
+            {messageSafety.modals}
           </>
         )}
       </ThreadActionsContext.Provider>

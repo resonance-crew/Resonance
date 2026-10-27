@@ -63,9 +63,14 @@ export function MessagesPage({ activeHandle, replyNote, userId }: MessagesPagePr
 
   const rowFor = (person: User, convo?: Conversation) => {
     const unread = convo ? (convo.unread[user.id] ?? 0) : 0;
-    const preview = convo?.lastMessage
-      ? (convo.lastMessage.senderId === user.id ? t('youPrefix') : '') +
-        (convo.lastMessage.text || (convo.lastMessage.image ? t('imageShared') : ''))
+    const last = convo?.lastMessage;
+    // An unsent last message reads as its line in the thread does (round 16 §3).
+    const preview = last?.unsent
+      ? last.senderId === user.id
+        ? t('unsentByYou')
+        : t('unsentByThem', { handle: person.handle })
+      : last
+      ? (last.senderId === user.id ? t('youPrefix') : '') + (last.text || (last.image ? t('imageShared') : ''))
       : t('noMessagesYet');
     return (
       <Link
