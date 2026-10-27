@@ -612,7 +612,7 @@ describe('Messenger’s thread, drawn by hand', () => {
     const tray = within(menu).getByRole('toolbar');
     expect(within(tray).getAllByRole('button')).toHaveLength(5);
     expect(tray.querySelector('path[fill="var(--sheet-paper)"]')).toBeNull();
-    // The actions keep theirs, the time at their end, 216–280 wide.
+    // The actions keep theirs, the time at their end, 216–280 wide (a finger's; a mouse's ⋯ is a dropdown's width).
     expect(within(menu).getByRole('menu').parentElement!.querySelector('[class*="footer"]')).toHaveTextContent(/\d/);
     expect(within(menu).getByRole('menu').parentElement!.className).toMatch(/wide/);
 
@@ -1573,6 +1573,10 @@ describe('reactions and unsending (round 16)', () => {
     expect(within(menu).queryByRole('toolbar')).toBeNull();
     expect(within(menu).getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Reply', 'Copy', 'Report this message']);
     expect(menu).toHaveTextContent(/\d:\d\d/);
+    // As wide as the dropdowns (round 17 addendum A3): its longest line with 20 each side, 168 at least — the
+    // 216–280 is a held finger's.
+    expect(within(menu).getByRole('menu').parentElement!.className).toMatch(/panel/);
+    expect(within(menu).getByRole('menu').parentElement!.className).not.toMatch(/wide/);
     await user.click(more);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 

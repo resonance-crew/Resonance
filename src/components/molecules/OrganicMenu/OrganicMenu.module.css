@@ -193,7 +193,8 @@
   }
 }
 
-/* A message's action list (held, or a fine pointer's ⋯): 216–280 wide, room for its time at the end. */
+/* A held message's action list (a finger's): 216–280 wide, room for its time at the end. A mouse's ⋯ beside a
+   message drops the dropdowns' sheet, its longest line with 20 each side (round 17 addendum A3). */
 .wide {
   min-width: 216px;
   max-width: 280px;

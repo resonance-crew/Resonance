@@ -424,7 +424,10 @@ export interface OrganicMenuPanelProps {
   autoFocus?: 'row' | 'panel' | null;
   /** Tab leaves its rows (a panel floating out of the page's tab order closes on it, as OrganicMenu's `floating`). */
   onTabOut?: () => void;
-  /** A message's action list: 216 wide at least, 280 at most (every other menu: 168 at least). */
+  /**
+   * A held message's action list, under a finger: 216 wide at least, 280 at most. Every other menu — a mouse's ⋯
+   * beside a message too (round 17 addendum A3) — is as wide as its longest line with 20 each side, 168 at least.
+   */
   wide?: boolean;
   /**
    * It opened under a finger still down (a held message): a row acts only on a press that began on it after the
@@ -490,7 +493,7 @@ interface MenuPanelProps {
   autoFocus?: 'row' | 'panel' | null;
   /** Tab leaves its rows (a panel out of the page's tab order closes on it). */
   onTabOut?: () => void;
-  /** A message's action list (216–280 wide). */
+  /** A held message's action list (216–280 wide). */
   wide?: boolean;
   /** A row acts only on a press that began on it (or the keyboard): see OrganicMenuPanel's `freshPress`. */
   freshPress?: boolean;

@@ -194,8 +194,9 @@ describe('the menu sheet', () => {
     expect(menu).toMatch(/\.footer \{[^}]*justify-content: flex-end;[^}]*height: 24px;/);
   });
 
-  // The lead's addendum to round 17 §1: no menu shrinks to a blob; a message's action list keeps its 216–280.
-  it('is 168 wide at least — a message’s action list 216 to 280', () => {
+  // The lead's addendum to round 17 §1: no menu shrinks to a blob; a held message's action list keeps its 216–280
+  // (a mouse's ⋯ beside a message is a dropdown's width — addendum A3, ThreadView.test).
+  it('is 168 wide at least — a held message’s action list 216 to 280', () => {
     const menu = css('src/components/molecules/OrganicMenu/OrganicMenu.module.css');
     expect(menu).toMatch(/\.panel \{[^}]*min-width: 168px;[^}]*max-width: 300px;/);
     expect(menu).toMatch(/\.wide \{\s*min-width: 216px;\s*max-width: 280px;/);
