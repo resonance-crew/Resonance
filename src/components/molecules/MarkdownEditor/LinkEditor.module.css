@@ -52,6 +52,17 @@
   display: flex;
 }
 
+/* The choice runs across the dialog as its field does, the two sides sharing it (the segmented bar's phone
+   layout, at every width here). */
+.choice > * {
+  display: flex;
+  width: 100%;
+}
+
+.choice > * > button {
+  flex: 1;
+}
+
 .actions {
   display: flex;
   align-items: center;

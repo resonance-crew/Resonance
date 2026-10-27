@@ -167,7 +167,7 @@ describe('Subnavbar', () => {
       // The menus' one sheet (round 17 §1): no pen line round it, none between its rows.
       expect(screen.getByRole('menu').parentElement!.querySelector('path[stroke]')).toBeNull();
       const rest = document.querySelector('[data-row-brushes] [data-rest] path')!;
-      expect(rest.getAttribute('fill')).toContain('yellow) 25%');
+      expect(rest.getAttribute('fill')).toContain('yellow) 30%, transparent');
       expect(rest.closest('[data-rest]')).toHaveAttribute('data-rest', '3');
 
       const fills = inkBrushes().map((b) => b.color);

@@ -591,13 +591,14 @@ function MenuPanel({
   }, []);
   const washes: string[] = items.map((_, i) =>
     i === dangerIndex
-      ? 'color-mix(in oklch, var(--color-yellow) 45%, var(--sheet-paper))'
+      ? 'color-mix(in oklch, var(--color-yellow) 55%, transparent)'
       : 'color-mix(in oklch, var(--menu-border-hover) 15%, transparent)',
   );
   // The footer's band takes no ink.
   if (hasFooter) washes.push('transparent');
-  // A destructive row rests on its warning wash before any ink.
-  const rests = washes.map((_, i) => (i === dangerIndex ? 'color-mix(in oklch, var(--color-yellow) 25%, var(--sheet-paper))' : null));
+  // A destructive row rests on its warning wash before any ink. Every wash is see-through: the paper's grain shows
+  // through it, so an inked or warned row is the same paper, never a second layer on it.
+  const rests = washes.map((_, i) => (i === dangerIndex ? 'color-mix(in oklch, var(--color-yellow) 30%, transparent)' : null));
 
   return (
     <div

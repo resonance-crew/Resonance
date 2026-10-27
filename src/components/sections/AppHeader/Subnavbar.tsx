@@ -45,7 +45,7 @@ const INK_WASHES = ITEMS.map((item) =>
     ? 'color-mix(in oklch, var(--color-yellow) 40%, transparent)'
     : 'color-mix(in oklch, var(--color-terracotta) 13%, transparent)',
 );
-const REST_WASHES = ITEMS.map((item) => (item.key === 'signOut' ? 'color-mix(in oklch, var(--color-yellow) 25%, var(--sheet-paper))' : null));
+const REST_WASHES = ITEMS.map((item) => (item.key === 'signOut' ? 'color-mix(in oklch, var(--color-yellow) 30%, transparent)' : null));
 /** The sheet (round 17 §1, OrganicMenu's): 6 of paper over the first row and under the last, rows 44, corners 20. */
 const SHEET_PAD = 6;
 const ROW_H = 44;

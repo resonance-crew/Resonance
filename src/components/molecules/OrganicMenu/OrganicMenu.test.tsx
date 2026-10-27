@@ -98,9 +98,9 @@ describe('OrganicMenu row ink', () => {
 
   it('keeps the destructive row yellow at rest and inks it a deeper yellow', async () => {
     await openMenu();
-    // The resting warning wash is drawn under the ink, before any hover…
+    // The resting warning wash is drawn under the ink, before any hover — see-through, so the paper's grain shows…
     const rest = document.querySelector('[data-row-brushes] [data-rest] path')!;
-    expect(rest.getAttribute('fill')).toContain('yellow) 25%');
+    expect(rest.getAttribute('fill')).toContain('yellow) 30%, transparent');
     expect(rest.closest('[data-rest]')).toHaveAttribute('data-rest', '2');
 
     // …and each row keeps its own ink colour: ordinary rows the menu accent,
@@ -108,7 +108,7 @@ describe('OrganicMenu row ink', () => {
     const fills = inkBrushes().map((b) => b.color);
     expect(fills[0]).toContain('--menu-border-hover) 15%');
     expect(fills[1]).toContain('--menu-border-hover) 15%');
-    expect(fills[2]).toContain('yellow) 45%');
+    expect(fills[2]).toContain('yellow) 55%, transparent');
 
     fireEvent.mouseEnter(screen.getByRole('menuitem', { name: 'Delete' }), {
       clientX: 100,
