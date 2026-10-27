@@ -37,8 +37,8 @@ import styles from './OrganicButton.module.css';
  *  - `quiet`       the other face without a fill (round 17 review D5): a
  *                  dialog's quiet way at the start of its foot that undoes
  *                  something small (the link editor's 移除連結) — its words in
- *                  the muted ink, its wash a whisper of ink; not a danger, so
- *                  never red
+ *                  the text ink, as the apps' quiet word, its wash a whisper of
+ *                  ink; not a danger, so never red
  *  - `ink`         solid in the ink colour, cream label: for a brand that asks
  *                  for a black button (Sign in with Apple)
  *  - `paper`       the cards' paper, ink label: for a control that has to
@@ -106,10 +106,10 @@ const BTN_VARIANTS: Record<OrganicButtonVariant, Face> = {
     hoverOverlay: 'color-mix(in oklch, var(--color-danger) 12%, transparent)',
     bare: true,
   },
-  // The muted ink on the dialog's paper (5:1), its wash the ink at a whisper.
+  // The text ink on the dialog's paper, as the apps' quiet word; its wash the ink at a whisper.
   quiet: {
     fill: 'transparent',
-    text: 'var(--color-text-muted)',
+    text: 'var(--color-text)',
     hoverOverlay: 'color-mix(in oklch, var(--toward-ink) 8%, transparent)',
     bare: true,
   },

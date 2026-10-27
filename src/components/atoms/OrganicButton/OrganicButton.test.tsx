@@ -59,7 +59,7 @@ describe('OrganicButton variants', () => {
     ['danger', 'var(--danger-fill)', 'var(--color-cream)'],
     ['dangerTonal', 'var(--button-danger-tonal)', 'var(--button-on-danger-tonal)'],
     ['dangerText', 'transparent', 'var(--danger-fill)'],
-    ['quiet', 'transparent', 'var(--color-text-muted)'],
+    ['quiet', 'transparent', 'var(--color-text)'],
     ['ink', 'var(--apple-fill)', 'var(--apple-label)'],
     ['paper', 'var(--color-card-bg)', 'var(--color-text)'],
     // On the call-to-action band: its own tokens, light words on a deep band in either scheme.
