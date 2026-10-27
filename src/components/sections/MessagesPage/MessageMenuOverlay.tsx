@@ -1,35 +1,50 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
 import { useDimmedChrome } from '@/components/molecules/Modal/Modal';
 import { OrganicMenuPanel, menuPanelHeight } from '@/components/molecules/OrganicMenu/OrganicMenu';
 import { seedFromId } from '@/lib/design/bubble';
+import { canReact } from '@/lib/chat/message';
+import { MENU_MARGIN, alignToMessage, placeMessageMenu } from '@/lib/chat/menuPlacement';
+import type { ReactionId } from '@/lib/design/reactions';
 import { MessageCore } from './MessageRow';
+import { ReactionTray, TRAY_H, TRAY_W } from './ReactionTray';
 import { chooseMenuItem, messageMenuItems, useThreadActions, type PressedMessage } from './threadActions';
 import styles from './Thread.module.css';
 
-/** The step between the lifted message and its menu, and the room kept from the window's edges. */
-const GAP = 10;
-const MARGIN = 12;
+/** How long the overlay stays after a choice, showing the ink the tap spread. */
+const CHOICE_MS = 150;
+/** Rows whose choice moves the focus somewhere of its own (the composer, a dialog): it isn't given back to the opener. */
+const TAKES_FOCUS = new Set(['reply', 'unsend', 'report']);
 
 export interface MessageMenuOverlayProps {
   pressed: PressedMessage;
   own: boolean;
-  /** The message's full time, the menu's quiet last line. */
+  /** The message's full time, the action list's quiet last line. */
   fullTime: string;
-  onClose: () => void;
+  /**
+   * It went: with what the focus goes back to (the ☺ / ⋯ / chip that opened it), which the host focuses once the
+   * message is drawn in its place again — until then it, and its tools, are hidden there.
+   */
+  onClose: (focusBack: HTMLElement | null) => void;
 }
 
 /**
- * What a press-and-hold on a message opens (the apps' — Messenger's and
- * Instagram's feel): the thread dims under an ink scrim, the message — its
- * quote and its bubble with all it carries — is lifted out where it lies, a
- * little larger, and the menu hangs under it (over it when there is no room
- * below; when there is room for neither, the message gives way): Reply, Copy,
- * the link's Open and Copy, Retry and Delete for one that didn't go, and its
- * full time. A tap on the scrim, Escape or a choice puts it away.
+ * What holding a message opens (round 16 §3; LINE's and Instagram's feel):
+ * the thread dims under the palette's scrim and the message — its quote,
+ * its bubble with all it carries, its reactions — is lifted out where it
+ * lies, a little larger, which is what says it is the one chosen. The five
+ * reactions lie directly above it, on a borderless paper sheet; the actions
+ * directly below it, on the same paper with no rows' lines, its full time
+ * the quiet last line. When that doesn't fit where the message is, the
+ * message glides by the least distance that fits — never the menus flip
+ * (lib/chat/menuPlacement).
+ *
+ * A dialog to the keyboard: the focus lands on the reactions (a toolbar,
+ * ← →), Tab goes on to the actions and round again, Escape — or a tap on the
+ * scrim — puts it away, giving the focus back to the ☺ or ⋯ that opened it.
  */
 export function MessageMenuOverlay({ pressed, own, fullTime, onClose }: MessageMenuOverlayProps) {
   const t = useTranslations('messages');
@@ -39,7 +54,11 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose }: MessageM
   const actions = useThreadActions();
   const { message, link, rect } = pressed;
   const [leaving, setLeaving] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
+  // The message glides to its place once it is drawn where it lay.
+  const [glided, setGlided] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const trayRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const closing = useRef(false);
   // The finger that held the message lifts over the scrim, and a browser may call that a tap on it: only a
   // press that began on the scrim (or the keyboard's Enter on it) puts the menu away.
@@ -53,24 +72,29 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose }: MessageM
       copy: tNative('copy'),
       openLink: t('openLink'),
       copyLink: t('copyLink'),
+      unsend: t('unsend'),
+      report: tSafety('reportThisMessage'),
       retry: t('retry'),
       discard: t('discardFailed'),
     },
-    actions.canWrite,
+    { withReply: actions.canWrite, viewerId: actions.viewerId },
   );
+  const trayShown = actions.canReact && canReact(message);
+  const current = message.reactions?.[actions.viewerId] ?? null;
 
   // The browser's bars dim with the window, as under a modal.
   useDimmedChrome(true);
 
-  const dismiss = () => {
+  /** Puts it away; the focus goes back to what opened it unless the choice took it somewhere of its own. */
+  const dismiss = (giveBack = true) => {
     if (closing.current) return;
     closing.current = true;
     setLeaving(true);
-    window.setTimeout(onClose, 120);
+    window.setTimeout(() => onClose(giveBack ? (pressed.opener ?? null) : null), 120);
   };
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === 'Escape') dismiss();
     };
     document.addEventListener('keydown', onKey);
@@ -78,44 +102,70 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose }: MessageM
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // The menu takes the focus (not its first row, which would wear a ring under a finger), so Tab walks its rows
-  // and a screen reader is in it at once.
+  // The focus lands on the reactions — opened from the keyboard, on their chosen one (else the first); by a finger
+  // or a pointer, on the tray itself, which wears no ring under it — else on the list (not its first row): a
+  // screen reader is in it at once, and ← → or Tab start from there.
   useLayoutEffect(() => {
-    panelRef.current?.focus({ preventScroll: true });
+    const tray = trayRef.current;
+    const cell = tray?.querySelector<HTMLElement>('[tabindex="0"]');
+    if (tray) (pressed.byKeyboard && cell ? cell : tray).focus({ preventScroll: true });
+    else listRef.current?.querySelector<HTMLElement>('[role="menu"]')?.focus({ preventScroll: true });
+    const frame = window.requestAnimationFrame(() => setGlided(true));
+    return () => window.cancelAnimationFrame(frame);
+    // Only as it opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Under the message if the menu fits there, else over it; else the message gives way.
+  // Tab walks the reactions (one stop) and the actions, and round again: nothing behind the scrim takes it.
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Tab') return;
+    const stops = Array.from(rootRef.current?.querySelectorAll<HTMLElement>('[role="toolbar"] [tabindex="0"], [role="menuitem"]') ?? []);
+    if (!stops.length) return;
+    const at = stops.indexOf(document.activeElement as HTMLElement);
+    const next = e.shiftKey ? (at <= 0 ? stops.length - 1 : at - 1) : at < 0 || at === stops.length - 1 ? 0 : at + 1;
+    e.preventDefault();
+    stops[next].focus();
+  };
+
   const vw = window.innerWidth;
   const vh = window.visualViewport?.height ?? window.innerHeight;
-  const menuH = menuPanelHeight(items.length, true);
-  const safeTop = MARGIN;
-  const safeBottom = vh - MARGIN;
-  let below = true;
-  let shift = 0;
-  let menuY = rect.bottom + GAP;
-  if (menuY + menuH > safeBottom) {
-    if (rect.top - GAP - menuH >= safeTop) {
-      below = false;
-      menuY = rect.top - GAP - menuH;
-    } else {
-      menuY = Math.max(safeTop, safeBottom - menuH);
-      shift = -Math.min(Math.max(0, rect.bottom + GAP - menuY), Math.max(0, rect.top - safeTop));
-    }
-  }
-  // A message taller than the window, held by its foot: the menu stays in the window all the same.
-  menuY = Math.max(safeTop, menuY);
+  const listH = items.length ? menuPanelHeight(items.length, true, true) : 0;
+  const place = placeMessageMenu({ top: rect.top, height: rect.height, viewport: vh, trayH: trayShown ? TRAY_H : 0, listH });
   const side = own ? 'right' : 'left';
-  const menuStyle: CSSProperties = {
-    top: menuY,
-    ...(own ? { right: Math.max(MARGIN, vw - rect.right) } : { left: Math.max(MARGIN, rect.left) }),
+  const liftStyle: CSSProperties = {
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    transform: glided ? `translateY(${place.shift}px)` : undefined,
+    ...(place.clipped ? { height: place.shown } : {}),
+  };
+  const trayStyle: CSSProperties = { top: place.trayTop, left: alignToMessage(TRAY_W, rect.left, rect.right, own, vw) };
+  const listStyle: CSSProperties = {
+    top: place.listTop,
+    ...(own ? { right: Math.max(MENU_MARGIN, vw - rect.right) } : { left: Math.max(MENU_MARGIN, rect.left) }),
+  };
+
+  const pick = (reaction: ReactionId | null) => {
+    navigator.vibrate?.(6);
+    actions.react(message, reaction);
+    window.setTimeout(() => dismiss(), CHOICE_MS);
   };
 
   return createPortal(
-    <div className={styles.overlay} data-leaving={leaving || undefined} role="dialog" aria-modal="true" aria-label={tSafety('menuLabel')}>
+    <div
+      ref={rootRef}
+      className={styles.overlay}
+      data-leaving={leaving || undefined}
+      role="dialog"
+      aria-modal="true"
+      aria-label={tSafety('menuLabel')}
+      onKeyDown={onKeyDown}
+    >
       <button
         type="button"
         className={styles.scrim}
         aria-label={tClose('close')}
+        tabIndex={-1}
         onPointerDown={() => {
           pressedScrim.current = true;
         }}
@@ -123,29 +173,34 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose }: MessageM
           if (pressedScrim.current || e.detail === 0) dismiss();
         }}
       />
-      <div
-        className={styles.lifted}
-        data-own={own || undefined}
-        style={{ left: rect.left, top: rect.top + shift, width: rect.width, transformOrigin: `${side} center` }}
-        aria-hidden="true"
-      >
-        <MessageCore message={message} own={own} position={pressed.position} carried={pressed.carried} interactive={false} />
+      <div className={styles.liftedPlace} data-clipped={place.clipped || undefined} style={liftStyle} aria-hidden="true">
+        <div className={styles.lifted} data-own={own || undefined} style={{ transformOrigin: `${side} center` }}>
+          <MessageCore message={message} own={own} position={pressed.position} carried={pressed.carried} interactive={false} />
+        </div>
       </div>
-      <div ref={panelRef} className={styles.overlayMenu} style={menuStyle} tabIndex={-1}>
-        <OrganicMenuPanel
-          items={items}
-          seed={seedFromId(message.key, 23)}
-          footer={fullTime}
-          origin={`${below ? 'top' : 'bottom'} ${side}`}
-          onChoose={(key) => {
-            // Done in the tap itself — a copy, a page opened, the field focused for a reply (iOS raises the
-            // keyboard only for a focus the tap gave) — then the menu goes, staying long enough to show the
-            // ink the tap spread.
-            chooseMenuItem(key, message, link, actions);
-            window.setTimeout(dismiss, 150);
-          }}
-        />
-      </div>
+      {trayShown && (
+        <div className={styles.overlayTray} style={trayStyle}>
+          <ReactionTray ref={trayRef} current={current} onPick={pick} seed={seedFromId(message.key, 31)} />
+        </div>
+      )}
+      {items.length > 0 && (
+        <div ref={listRef} className={styles.overlayMenu} style={listStyle}>
+          <OrganicMenuPanel
+            items={items}
+            seed={seedFromId(message.key, 23)}
+            footer={fullTime}
+            origin={`top ${side}`}
+            sheet
+            onChoose={(key) => {
+              // Done in the tap itself — a copy, a page opened, the field focused for a reply (iOS raises the
+              // keyboard only for a focus the tap gave) — then the menu goes, staying long enough to show the
+              // ink the tap spread.
+              chooseMenuItem(key, message, link, actions);
+              window.setTimeout(() => dismiss(!TAKES_FOCUS.has(key)), CHOICE_MS);
+            }}
+          />
+        </div>
+      )}
     </div>,
     document.body,
   );

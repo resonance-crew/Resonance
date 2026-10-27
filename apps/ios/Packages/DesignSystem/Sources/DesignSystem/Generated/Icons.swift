@@ -50,6 +50,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case collapseRight = "collapse-right"
     case arrowUp = "arrow-up"
     case mask
+    case smile
     case verified
 }
 
@@ -287,6 +288,12 @@ extension IconName {
             IconStroke(filled: false, width: 1, commands: [0, 2.8, 9.6, 2, 5.2, 7.6, 9.2, 7.9, 12, 9.6, 2, 14.9, 7.9, 18.9, 7.6, 21.2, 9.7, 2, 21.7, 12.8, 20.3, 16.1, 17.2, 16.3, 2, 15, 16.4, 13.5, 14.9, 12, 13.6, 2, 10.5, 14.9, 8.9, 16.4, 6.8, 16.2, 2, 3.7, 16, 2.3, 12.7, 2.8, 9.6, 3]),
             IconStroke(filled: false, width: 1, commands: [0, 5.7, 11.9, 2, 6.6, 10.8, 8.6, 10.7, 9.6, 11.9, 2, 8.6, 13.1, 6.7, 13.2, 5.7, 11.9, 3]),
             IconStroke(filled: false, width: 1, commands: [0, 14.4, 11.9, 2, 15.4, 10.7, 17.4, 10.8, 18.3, 11.9, 2, 17.3, 13.2, 15.4, 13.1, 14.4, 11.9, 3]),
+        ])
+        case .smile: IconGlyph(viewBox: 24, fillable: false, strokes: [
+            IconStroke(filled: false, width: 1, commands: [0, 10.9, 4.2, 2, 15.3, 3.6, 19.6, 6.6, 19.8, 11.6, 2, 20, 16.3, 16.6, 19.9, 12.1, 19.9, 2, 7.7, 19.9, 4.1, 16.6, 4.2, 12, 2, 4.3, 7.9, 7.3, 4.6, 11.4, 4.3, 2, 12.6, 4.2, 13.7, 4.4, 14.6, 4.8]),
+            IconStroke(filled: false, width: 1, commands: [0, 9.2, 9.6, 2, 9.2, 10.1, 9.2, 10.6, 9.3, 11.1]),
+            IconStroke(filled: false, width: 1, commands: [0, 14.8, 9.3, 2, 14.8, 9.8, 14.9, 10.3, 14.9, 10.8]),
+            IconStroke(filled: false, width: 1, commands: [0, 8.3, 14, 2, 9.4, 15.8, 11.3, 16.5, 13.2, 16.1, 2, 14.3, 15.8, 15.2, 15.1, 15.9, 13.7]),
         ])
         case .verified: IconGlyph(viewBox: 16, fillable: false, strokes: [
             IconStroke(filled: false, width: 1, commands: [0, 2.2, 8.4, 2, 3.3, 8.8, 4.6, 10.2, 5.9, 12, 2, 7.4, 9.2, 9.6, 5.4, 13.6, 2.9]),

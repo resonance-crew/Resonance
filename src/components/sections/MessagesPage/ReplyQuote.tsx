@@ -37,7 +37,8 @@ export function ReplyQuote({ quote, own, viewerId, otherHandle, onJump }: ReplyQ
     : quotesViewer
       ? t('repliedToYou', { handle: otherHandle })
       : t('repliedToThemselves', { handle: otherHandle });
-  const words = quote.text || (quote.image ? t('replyImage') : t('replyCard'));
+  // A quote of a message since unsent says so, and nothing of what it said.
+  const words = quote.unsent ? t('unsentQuote') : quote.text || (quote.image ? t('replyImage') : t('replyCard'));
   const ref = useRef<HTMLButtonElement>(null);
   const clip = useBubbleClip(ref, seedFromId(quote.id, 19), { maxRadius: QUOTE_RADIUS });
 
@@ -54,7 +55,9 @@ export function ReplyQuote({ quote, own, viewerId, otherHandle, onJump }: ReplyQ
         tabIndex={onJump ? undefined : -1}
         onClick={() => onJump?.(quote.id)}
       >
-        <span className={styles.quoteText}>{words}</span>
+        <span className={styles.quoteText} data-unsent={quote.unsent || undefined}>
+          {words}
+        </span>
       </button>
     </div>
   );

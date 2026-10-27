@@ -17,6 +17,7 @@ import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBor
 import { useElementSize } from '@/lib/hooks/useElementSize';
 import { Icon, type IconName } from '@/components/atoms/Icon';
 import { RowInkWash, useRowInk } from '@/components/atoms/RowInk/RowInk';
+import { PaperSheet, sheetPath } from '@/components/atoms/PaperSheet/PaperSheet';
 import { wobRect } from '@/lib/design/wobRect';
 import { wobCircle } from '@/lib/design/wobCircle';
 import { dividerPath, rowBoundary, rowRegion } from '@/lib/design/rowMenu';
@@ -139,8 +140,9 @@ function menuColors(hue: number | undefined): CSSProperties {
   ) as CSSProperties;
 }
 
-/** A panel's height: its rows, and the footer line under them. */
-export function menuPanelHeight(rows: number, footer: boolean): number {
+/** A panel's height: its rows, and the footer line under them (a `sheet` panel's taller rows, pad and parted footer). */
+export function menuPanelHeight(rows: number, footer: boolean, sheet = false): number {
+  if (sheet) return SHEET_PAD + rows * SHEET_ROW_H + (footer ? SHEET_FOOTER_GAP + SHEET_FOOTER_H : SHEET_PAD);
   return rows * ROW_H + (footer ? FOOTER_H : 0);
 }
 
@@ -404,19 +406,29 @@ export interface OrganicMenuPanelProps {
   hue?: number;
   /** The corner it grows from (CSS `transform-origin`): the edge of what it belongs to. */
   origin?: string;
+  /**
+   * A borderless paper sheet (round 16 §3, the message menu's actions): no
+   * pen line round it and no dividers between its rows — the menu's paper and
+   * grain (atoms/PaperSheet) — rows 44 tall, the footer parted by space
+   * alone; 216 wide at least, growing to its longest row up to 280.
+   */
+  sheet?: boolean;
+  /** Where the focus goes as it opens (default: nowhere — the host decides). */
+  autoFocus?: 'row' | 'panel' | null;
   className?: string;
 }
 
 /**
  * The menu's panel on its own, for a host that places it — the thread's
  * long-press menu, which hangs it under the message it lifted. The same
- * wobbly card, wavy dividers and spreading row ink as the dropdown's.
+ * wobbly card, wavy dividers and spreading row ink as the dropdown's (or,
+ * as a `sheet`, the ink alone on bare paper).
  */
-export function OrganicMenuPanel({ items, onChoose, seed, busy = false, footer, hue, origin, className }: OrganicMenuPanelProps) {
+export function OrganicMenuPanel({ items, onChoose, seed, busy = false, footer, hue, origin, sheet = false, autoFocus = null, className }: OrganicMenuPanelProps) {
   const uid = useId().replace(/:/g, '');
   return (
     <div className={className} style={{ ...menuColors(hue), ...(origin ? { transformOrigin: origin } : {}) }}>
-      <MenuPanel uid={uid} seed={seed} items={items} busy={busy} footer={footer} placed onChoose={onChoose} />
+      <MenuPanel uid={uid} seed={seed} items={items} busy={busy} footer={footer} placed sheet={sheet} autoFocus={autoFocus} onChoose={onChoose} />
     </div>
   );
 }
@@ -438,6 +450,13 @@ function BareWash({ seed }: { seed: number }) {
 const ROW_H = 42;
 /** The footer line is a little shorter than a row. */
 const FOOTER_H = 38;
+/** A sheet panel's rows, the air above its first, its footer and the space that parts the footer from the rows. */
+const SHEET_ROW_H = 44;
+const SHEET_PAD = 4;
+const SHEET_FOOTER_H = 32;
+const SHEET_FOOTER_GAP = 6;
+/** A sheet panel's corners. */
+const SHEET_R = 20;
 
 interface MenuPanelProps {
   uid: string;
@@ -453,6 +472,8 @@ interface MenuPanelProps {
   autoFocus?: 'row' | 'panel' | null;
   /** Tab leaves its rows (a panel out of the page's tab order closes on it). */
   onTabOut?: () => void;
+  /** A borderless paper sheet (OrganicMenuPanel's `sheet`). */
+  sheet?: boolean;
   onChoose: (key: string) => void;
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -467,6 +488,7 @@ function MenuPanel({
   placed = false,
   autoFocus = null,
   onTabOut,
+  sheet = false,
   onChoose,
   ref: outerRef,
 }: MenuPanelProps) {
@@ -483,7 +505,10 @@ function MenuPanel({
   // A footer that wraps is as tall as its lines (never shorter than one line's band).
   const footerRef = useRef<HTMLDivElement>(null);
   const [footerH, setFooterH] = useState(FOOTER_H);
-  const h = items.length * ROW_H + (hasFooter ? footerH : 0);
+  // A sheet's rows are taller, with a little air above the first; its footer is parted by space, not a line.
+  const rowH = sheet ? SHEET_ROW_H : ROW_H;
+  const top = sheet ? SHEET_PAD : 0;
+  const h = sheet ? menuPanelHeight(items.length, hasFooter, true) : items.length * ROW_H + (hasFooter ? footerH : 0);
   const [w, setW] = useState(0);
 
   useLayoutEffect(() => {
@@ -510,17 +535,19 @@ function MenuPanel({
 
   const outerPath = useMemo(() => {
     if (!w || !h) return '';
+    // A sheet's outline is its PaperSheet's (the row ink is clipped to the paper it lies on).
+    if (sheet) return sheetPath(w, h, SHEET_R, seed + 100);
     return wobRect(w, h, 16, seed + 100, autoMag(w, h), {
       segmentsH: autoSegments(w),
       segmentsV: autoSegments(h),
       curve: autoCurve(w, h),
     });
-  }, [w, h, seed]);
+  }, [w, h, seed, sheet]);
 
   const boundaries = useMemo<[number, number][][]>(() => {
     if (!w) return [];
-    return Array.from({ length: bands - 1 }, (_, i) => rowBoundary((i + 1) * ROW_H, w, seed + i * 31 + 7, 2, pad));
-  }, [w, bands, seed, pad]);
+    return Array.from({ length: bands - 1 }, (_, i) => rowBoundary(top + (i + 1) * rowH, w, seed + i * 31 + 7, 2, pad));
+  }, [w, bands, seed, pad, top, rowH]);
 
   const listRef = useRef<HTMLDivElement>(null);
   const rows = () => Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []);
@@ -559,7 +586,7 @@ function MenuPanel({
   // The pointer's row takes the ink, and so does the keyboard's (a row focused from the keyboard: the arrows,
   // Tab), growing from its centre — the same wash, never a box around it.
   const [keyRow, setKeyRow] = useState<number | null>(null);
-  const inkRows = useMemo(() => items.map((_, i) => ({ top: i * ROW_H, height: ROW_H })), [items]);
+  const inkRows = useMemo(() => items.map((_, i) => ({ top: top + i * rowH, height: rowH })), [items, top, rowH]);
   const ink = useRowInk({ panelRef: ref, rows: inkRows, w, h, activeIndex: keyRow });
   // Whether the focus is the keyboard's to show: it opened the menu, or a key moved it since a pointer last did.
   const byKeys = useRef(autoFocus === 'row');
@@ -572,7 +599,12 @@ function MenuPanel({
   if (hasFooter) washes.push('transparent');
 
   return (
-    <div ref={setRef} className={placed ? `${styles.panel} ${styles.placed}` : styles.panel} style={{ height: `${h}px` }}>
+    <div
+      ref={setRef}
+      className={[styles.panel, placed ? styles.placed : '', sheet ? styles.sheet : ''].filter(Boolean).join(' ')}
+      style={{ height: `${h}px` }}
+    >
+      {sheet && w > 0 && <PaperSheet w={w} h={h} R={SHEET_R} seed={seed + 100} />}
       {w > 0 && (
         <svg
           className={`${styles.border} res-shape-fade-in`}
@@ -587,7 +619,8 @@ function MenuPanel({
             </clipPath>
           </defs>
           <g clipPath={`url(#organicmenu-clip-${uid})`}>
-            <path d={outerPath} fill="var(--menu-cream)" />
+            {/* A sheet's paper is its PaperSheet's, under this. */}
+            {!sheet && <path d={outerPath} fill="var(--menu-cream)" />}
             {/* warning wash under the destructive row, before any hover */}
             {ready && dangerIndex >= 0 && (
               <path
@@ -608,7 +641,9 @@ function MenuPanel({
               />
             )}
           </g>
+          {/* A sheet has no pen: no dividers, no outline. */}
           {ready &&
+            !sheet &&
             boundaries.map((pts, i) => (
               <path
                 key={i}
@@ -620,14 +655,16 @@ function MenuPanel({
                 clipPath={`url(#organicmenu-clip-${uid})`}
               />
             ))}
-          <path
-            d={outerPath}
-            fill="none"
-            stroke="var(--menu-outline)"
-            strokeWidth={INK}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          {!sheet && (
+            <path
+              d={outerPath}
+              fill="none"
+              stroke="var(--menu-outline)"
+              strokeWidth={INK}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )}
         </svg>
       )}
       <div
