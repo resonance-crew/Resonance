@@ -59,7 +59,7 @@ const moved = `<g clip-path="url(#c2-clip-moved)">
   <g transform="translate(1439 772) scale(0.4) translate(-404 -461)">${tuck('c2-moved-', { ...POSE, wrap: '', legSquashR: 1, legSquashL: 1, tilt: 2, closed: true, brow: 'worry', browOpacity: 0.85, mouth: 'soft', tear: true, blush: 0.95, armL: 30, armR: 150, armBendL: 6, armBendR: -6, legSquash: 0.86, legLean: [4, -4], tab: 22 })}</g>
 </g>`;
 
-const use = (x, y, h, sil = false) => `<g transform="translate(${x} ${y}) scale(${h / 480}) translate(-414 -461)"><use href="#c2-tuck"${sil ? ' filter="url(#c2-sil)"' : ''}/></g>`;
+const placeCopy = (x, y, h, sil = false) => `<g transform="translate(${x} ${y}) scale(${h / 480}) translate(-414 -461)"><use href="#c2-tuck"${sil ? ' filter="url(#c2-sil)"' : ''}/></g>`;
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000">
 ${defs()}${extraDefs}
@@ -77,16 +77,16 @@ ${label(56, 962, '方向 C′ ｜撕紙紙偶 · 主姿勢「嗨」 · 第二輪
 <!-- ===== right column ===== -->
 <path d="M1006,40 L1006,960" stroke="${INK}" stroke-width="1" opacity="0.12"/>
 ${label(1030, 62, 'a ｜縮小測試', 15, INK)}
-${use(1090, 150, 96)}${label(1072, 222, '96 px', 13)}
-${use(1200, 174, 48)}${label(1182, 222, '48 px', 13)}
-${use(1330, 150, 96, true)}${label(1302, 222, '剪影 96 px', 13)}
-${use(1450, 174, 48, true)}${label(1424, 222, '剪影 48 px', 13)}
-${use(1530, 182, 32)}${label(1514, 222, '32 px', 13)}
+${placeCopy(1090, 150, 96)}${label(1072, 222, '96 px', 13)}
+${placeCopy(1200, 174, 48)}${label(1182, 222, '48 px', 13)}
+${placeCopy(1330, 150, 96, true)}${label(1302, 222, '剪影 96 px', 13)}
+${placeCopy(1450, 174, 48, true)}${label(1424, 222, '剪影 48 px', 13)}
+${placeCopy(1530, 182, 32)}${label(1514, 222, '32 px', 13)}
 ${label(1030, 250, 'b ｜夜紙 oklch(21% 0.012 60)', 15, INK)}
 <g clip-path="url(#c2-clip-night)">
   <rect x="1030" y="262" width="540" height="270" fill="${NIGHT}"/>
   <rect x="1030" y="262" width="540" height="270" fill="#000" filter="url(#c2-bggrain-night)" opacity="0.35"/>
-  ${use(1300, 400, 238)}
+  ${placeCopy(1300, 400, 238)}
 </g>
 ${label(1030, 580, 'c ｜一起看嗎？', 15, INK)}${label(1308, 580, '被故事打動', 15, INK)}
 ${show}${moved}
