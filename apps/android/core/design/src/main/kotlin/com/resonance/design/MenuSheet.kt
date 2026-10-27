@@ -91,18 +91,21 @@ object MenuSheet {
 }
 
 /**
- * The soft shadow a floating sheet casts (round 17 §1, the web's `--sheet-shadow`): by day two, `0 8px 24px
- * oklch(30% 0.04 50 / 0.16)` and `0 1px 3px oklch(30% 0.04 50 / 0.10)`; at night one, `0 10px 28px oklch(0% 0 0 /
- * 0.45)`. Each [blur] is the CSS blur radius (a Gaussian of half its deviation).
+ * The soft shadow a floating sheet casts (round 17 §1, the web's `--sheet-shadow`): the palette's shadow ink, by
+ * day two — `0 8px 24px` at 16 % and `0 1px 3px` at 10 % —, at night one, `0 10px 28px` at 45 %. Each [blur] is
+ * the CSS blur radius (a Gaussian of half its deviation).
  */
 @Immutable
 data class SheetShadow(val dy: Dp, val blur: Dp, val color: Color) {
     companion object {
-        private val dayFar = SheetShadow(8.dp, 24.dp, OklchColor.of(0.30, 0.04, 50.0, 0.16))
-        private val dayNear = SheetShadow(1.dp, 3.dp, OklchColor.of(0.30, 0.04, 50.0, 0.10))
-        private val night = SheetShadow(10.dp, 28.dp, OklchColor.of(0.0, 0.0, 0.0, 0.45))
-
-        fun of(palette: ResonanceColors): List<SheetShadow> = if (palette.dark) listOf(night) else listOf(dayFar, dayNear)
+        fun of(palette: ResonanceColors): List<SheetShadow> {
+            val ink = palette.ShadowInk
+            return if (palette.dark) {
+                listOf(SheetShadow(10.dp, 28.dp, ink.copy(alpha = 0.45f)))
+            } else {
+                listOf(SheetShadow(8.dp, 24.dp, ink.copy(alpha = 0.16f)), SheetShadow(1.dp, 3.dp, ink.copy(alpha = 0.10f)))
+            }
+        }
 
         /**
          * How far past its frame a sheet's shadow reaches (the room a popup window keeps round the sheet, so
