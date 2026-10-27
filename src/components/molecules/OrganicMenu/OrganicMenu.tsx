@@ -415,6 +415,8 @@ export interface OrganicMenuPanelProps {
   sheet?: boolean;
   /** Where the focus goes as it opens (default: nowhere — the host decides). */
   autoFocus?: 'row' | 'panel' | null;
+  /** Tab leaves its rows (a panel floating out of the page's tab order closes on it, as OrganicMenu's `floating`). */
+  onTabOut?: () => void;
   className?: string;
 }
 
@@ -424,11 +426,11 @@ export interface OrganicMenuPanelProps {
  * wobbly card, wavy dividers and spreading row ink as the dropdown's (or,
  * as a `sheet`, the ink alone on bare paper).
  */
-export function OrganicMenuPanel({ items, onChoose, seed, busy = false, footer, hue, origin, sheet = false, autoFocus = null, className }: OrganicMenuPanelProps) {
+export function OrganicMenuPanel({ items, onChoose, seed, busy = false, footer, hue, origin, sheet = false, autoFocus = null, onTabOut, className }: OrganicMenuPanelProps) {
   const uid = useId().replace(/:/g, '');
   return (
     <div className={className} style={{ ...menuColors(hue), ...(origin ? { transformOrigin: origin } : {}) }}>
-      <MenuPanel uid={uid} seed={seed} items={items} busy={busy} footer={footer} placed sheet={sheet} autoFocus={autoFocus} onChoose={onChoose} />
+      <MenuPanel uid={uid} seed={seed} items={items} busy={busy} footer={footer} placed sheet={sheet} autoFocus={autoFocus} onTabOut={onTabOut} onChoose={onChoose} />
     </div>
   );
 }
@@ -588,8 +590,24 @@ function MenuPanel({
   const [keyRow, setKeyRow] = useState<number | null>(null);
   const inkRows = useMemo(() => items.map((_, i) => ({ top: top + i * rowH, height: rowH })), [items, top, rowH]);
   const ink = useRowInk({ panelRef: ref, rows: inkRows, w, h, activeIndex: keyRow });
-  // Whether the focus is the keyboard's to show: it opened the menu, or a key moved it since a pointer last did.
+  // Whether the focus is the keyboard's to show: it opened the menu, or a key moved it since a pointer last did —
+  // anywhere, not only in the rows: a host's own Tab (the message overlay's, from its reactions) lands on a row too
+  // (WCAG 2.4.7), as :focus-visible would judge it.
   const byKeys = useRef(autoFocus === 'row');
+  useEffect(() => {
+    const key = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Tab' || e.key.startsWith('Arrow') || e.key === 'Home' || e.key === 'End') byKeys.current = true;
+    };
+    const pointer = () => {
+      byKeys.current = false;
+    };
+    document.addEventListener('keydown', key, true);
+    document.addEventListener('pointerdown', pointer, true);
+    return () => {
+      document.removeEventListener('keydown', key, true);
+      document.removeEventListener('pointerdown', pointer, true);
+    };
+  }, []);
   const washes: string[] = items.map((_, i) =>
     i === dangerIndex
       ? 'color-mix(in oklch, var(--color-yellow) 45%, var(--menu-cream))'

@@ -300,6 +300,23 @@ describe('the link tool', () => {
     expect(onChange).toHaveBeenLastCalledWith('Before\n\n[example.com/rain](https://www.example.com/rain)\n\nAfter');
   });
 
+  // Round 16 review S4: the picked card's corner ✕ and the editor's 移除連結 both deleted it — one remove at a time.
+  it('hides a picked card’s ✕ while the link editor is open on it, and gives it back after', async () => {
+    pointer(true);
+    renderWithIntl(<MarkdownEditor variant="canvas" value={'Before\n\n<https://www.example.com/rain>\n\nAfter'} onChange={vi.fn()} ariaLabel="Story" />);
+    const story = await screen.findByRole('textbox', { name: 'Story' });
+    await userEvent.click(await screen.findByRole('button', { name: L.linkCardLabel.replace('{host}', 'example.com') }));
+
+    const sheet = await screen.findByRole('group', { name: L.link });
+    // The editor's 移除連結 is the only remove while it is open.
+    expect(screen.getAllByRole('button', { name: L.linkRemove })).toEqual([within(sheet).getByRole('button', { name: L.linkRemove })]);
+    fireEvent.keyDown(within(sheet).getByRole('textbox', { name: L.linkPlaceholder }), { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('group', { name: L.link })).toBeNull());
+    // Still picked, the card wears its ✕ again.
+    expect(editorOf(story).state.selection.constructor.name).toBe('NodeSelection');
+    expect(await screen.findByRole('button', { name: L.linkRemove })).toBeInTheDocument();
+  });
+
   it('shows a live card’s stored preview on its link card', async () => {
     pointer(true);
     renderWithIntl(
@@ -322,7 +339,8 @@ describe('the link tool', () => {
     const story = await screen.findByRole('textbox', { name: 'Story' });
     act(() => void editorOf(story).commands.focus('start'));
     await userEvent.click(await screen.findByRole('button', { name: L.insert }));
-    await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: L.link }));
+    // 插入連結, beside 插入圖片 · 插入卡片 (round 16 review S5).
+    await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: L.insertLink }));
     const sheet = await screen.findByRole('group', { name: L.link });
     expect(within(sheet).getByRole('button', { name: L.linkAsCard })).toHaveAttribute('aria-pressed', 'true');
   });

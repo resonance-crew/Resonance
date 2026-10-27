@@ -253,10 +253,11 @@
   opacity: 0.55;
   cursor: progress;
 }
-.option[data-active] {
+.option[data-active],
+.option:focus-visible {
   color: var(--menu-border-hover);
 }
-/* The keyboard's row wears the ink (see MenuPanel), not a box. */
+/* The keyboard's row wears the ink (see MenuPanel) and the active row's colour, not a box. */
 .option:focus {
   outline: none;
 }
@@ -299,7 +300,8 @@
   color: var(--menu-glyph, var(--menu-border));
   transition: color 120ms ease;
 }
-.option[data-active] .optionIcon {
+.option[data-active] .optionIcon,
+.option:focus-visible .optionIcon {
   color: var(--menu-glyph-active, var(--menu-border-hover));
 }
 

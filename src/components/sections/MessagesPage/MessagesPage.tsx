@@ -10,6 +10,7 @@ import { seedFromString } from '@/lib/design/prng';
 import { INK } from '@/lib/design/strokes';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { timeOfDay } from '@/lib/chat/time';
 import { useConversations } from '@/lib/data/hooks';
 import { useEdgeFades } from '@/lib/hooks/useEdgeFades';
 import type { Conversation, User } from '@/lib/db/types';
@@ -57,7 +58,8 @@ export function MessagesPage({ activeHandle, replyNote, userId }: MessagesPagePr
   const empty = data && conversations.length === 0 && starters.length === 0;
 
   const dayFmt = new Intl.DateTimeFormat(locale, { month: 'numeric', day: 'numeric' });
-  const timeFmt = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' });
+  // Today's in the chat's one time of day (lib/chat/time: 「下午6:29」, as a message's menu says it).
+  const timeFmt = timeOfDay(locale);
   const formatWhen = (d: Date) =>
     d.toDateString() === new Date().toDateString() ? timeFmt.format(d) : dayFmt.format(d);
 

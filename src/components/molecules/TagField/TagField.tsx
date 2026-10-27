@@ -66,10 +66,11 @@ function scrollerOf(el: HTMLElement | null): Element {
 }
 
 /**
- * The writer's tags (round 16 §1). Above, one wrapping row: the section's
- * label 「標籤」 then the chosen tags as removable pills (TagPill lg,
- * outlined, the accent's light fill, a 44 × 44 target round each ✕), a new
- * one popping in. Below, the field in the chat composer's language — one
+ * The writer's tags (round 16 §1, and its review's S1 / S2). The section's
+ * label 「標籤」 on its own line; under it the chosen tags as removable pills
+ * wrapping like words (TagPill lg, outlined and quiet — half the accent's
+ * light wash, the soft pen, words at 500 —, a 44 × 44 target round each ✕,
+ * named for its tag), a new one popping in. Below, the field in the chat composer's language — one
  * capsule (its wobble, cream, its pen darkening while written in), one line
  * exactly 48 tall, ending in a segment behind a wavy seam: with nothing typed
  * (or an input method mid-word) the tonal 「✦ AI 建議」, which asks the model
@@ -99,6 +100,7 @@ export function TagField({ tags, onChange, onSuggest, suggesting, error, id }: T
   draftRef.current = draft;
   const ownId = useId();
   const inputId = id ?? ownId;
+  const labelId = useId();
   const errorId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -244,13 +246,23 @@ export function TagField({ tags, onChange, onSuggest, suggesting, error, id }: T
 
   return (
     <div className={styles.field}>
+      {/* The section's label on its own line, as 卡片類型's below it (round 16 review S1). */}
+      <label id={labelId} className={styles.label} htmlFor={inputId}>
+        {t('tagsLabel')}
+      </label>
+      {/* The chosen tags, quieter than the step's one button (review S2): half the accent's light wash on the
+          paper, the soft pen, words at 500, a muted ✕ named for its tag. Empty, the row takes no room. */}
       <div ref={rowRef} className={styles.row}>
-        <label className={styles.label} htmlFor={inputId}>
-          {t('tagsLabel')}
-        </label>
         {tags.map((tag) => (
           <span key={tag} className={styles.pill} data-standing={standing.has(tag) || undefined}>
-            <TagPill size="lg" outlined color="var(--color-terracotta-light)" onRemove={() => onChange(tags.filter((x) => x !== tag))}>
+            <TagPill
+              size="lg"
+              outlined
+              quiet
+              color="color-mix(in oklch, var(--color-terracotta-light) 50%, var(--color-cream))"
+              removeLabel={t('tagsRemoveLabel', { tag })}
+              onRemove={() => onChange(tags.filter((x) => x !== tag))}
+            >
               {tag}
             </TagPill>
           </span>
@@ -296,6 +308,7 @@ export function TagField({ tags, onChange, onSuggest, suggesting, error, id }: T
           className={styles.input}
           value={draft}
           placeholder={t('tagsPlaceholder')}
+          aria-labelledby={labelId}
           aria-describedby={error ? errorId : undefined}
           enterKeyHint="done"
           autoComplete="off"

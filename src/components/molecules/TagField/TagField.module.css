@@ -1,19 +1,26 @@
-/* The writer's tags (round 16 §1): the label and the chosen tags in one
-   wrapping row, then the field — the chat composer's capsule with its own
-   end segment — then a failed suggestion's line. */
+/* The writer's tags (round 16 §1, review S1): the label on its own line, the
+   chosen tags under it, then the field — the chat composer's capsule with its
+   own end segment — then a failed suggestion's line. */
 .field {
   display: flex;
   flex-direction: column;
   gap: var(--publish-label-gap);
 }
 
-/* 「標籤」 then the pills, wrapping like words: 8 between, 8 between rows. */
+/* The pills, wrapping like words: 8 between, 8 between rows, 8 under the
+   label. No tags, no row: the label stands over the field as 卡片類型's over
+   its choice (the field's scroll compensation keeps it still as the first
+   pill brings the row). */
 .row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  min-height: 32px;
+  margin-top: calc(8px - var(--publish-label-gap));
+}
+
+.row:empty {
+  display: none;
 }
 
 .label {

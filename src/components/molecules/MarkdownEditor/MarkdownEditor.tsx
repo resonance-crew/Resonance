@@ -34,7 +34,7 @@ import { InsertHandle } from './InsertHandle';
 import { KeyboardFormatBar } from './KeyboardFormatBar';
 import { HeldSelection, holdSelection } from './heldSelection';
 import { LinkBubble } from './LinkBubble';
-import { LinkCardActionContext, LinkCardNode } from './LinkCardNode';
+import { LinkCardActionContext, LinkCardNode, LinkEditorOpenContext } from './LinkCardNode';
 import type { LinkSession } from './LinkEditor';
 import { ToolButton } from './ToolButton';
 import {
@@ -418,7 +418,9 @@ export function MarkdownEditor({
       <div className={styles.canvas}>
         <StoryLinkPreviewsContext.Provider value={linkPreviews ?? null}>
           <LinkCardActionContext.Provider value={openLink}>
-            <EditorContent editor={editor} />
+            <LinkEditorOpenContext.Provider value={linkSession != null}>
+              <EditorContent editor={editor} />
+            </LinkEditorOpenContext.Provider>
           </LinkCardActionContext.Provider>
         </StoryLinkPreviewsContext.Provider>
         {fine === true && (

@@ -73,3 +73,17 @@
 .removeBtn:hover {
   opacity: 1;
 }
+/* A quiet pill (TagPill `quiet`, the writer's chosen tags): its words at 500
+   and its × in the muted ink, full ink when pointed at. */
+.pill[data-quiet] {
+  font-weight: 500;
+}
+
+.pill[data-quiet] .removeBtn {
+  color: var(--color-text-muted);
+  opacity: 1;
+}
+
+.pill[data-quiet] .removeBtn:hover {
+  color: var(--color-text);
+}

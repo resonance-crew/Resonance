@@ -23,7 +23,6 @@ import { ShapeGrain } from '@/components/atoms/ShapeGrain/ShapeGrain';
 import { TagPill } from '@/components/atoms/TagPill/TagPill';
 import { Divider } from '@/components/atoms/Divider/Divider';
 import { useElementSize } from '@/lib/hooks/useElementSize';
-import { useIsMobile } from '@/lib/hooks/useIsMobile';
 import { arrowHeadPath, organicEdgePath } from '@/lib/design/edgePath';
 import { seedFromString } from '@/lib/design/prng';
 import { wobRect } from '@/lib/design/wobRect';
@@ -326,7 +325,6 @@ export function ThoughtMapCanvas({
 }: ThoughtMapCanvasProps) {
   const t = useTranslations('me.thoughtMap');
   const router = useRouter();
-  const isMobile = useIsMobile(640);
 
   // The tray's list fades a little at the edge it can still scroll toward.
   const trayEdges = useEdgeFades<HTMLDivElement>();
@@ -1526,16 +1524,20 @@ export function ThoughtMapCanvas({
         </div>
       </div>
 
-      {/* toolbar — phones drop to one-word labels so the pair fits beside the
-          zoom cluster without crowding the board. Two pills of one height, no
-          pen line: the second tool in the tonal peach (opaque, so it reads over
-          the board's dots), the one verb — add a card — the solid terracotta. */}
+      {/* toolbar — a narrow map (a phone, the workspace's map dragged narrow:
+          its own width, a container query) drops to one-word labels so the pair
+          fits beside the zoom cluster without crowding the board; each pill is
+          named in full. Two pills of one height, no pen line: the second tool
+          in the tonal peach (opaque, so it reads over the board's dots), the
+          one verb — add a card — the solid terracotta. */}
       <div ref={toolbarRef} className={styles.toolbar}>
-        <OrganicButton variant="tonal" size="sm" onClick={() => void addGroup()}>
-          <Icon name="frame" size={15} /> {isMobile ? t('addGroupShort') : t('addGroup')}
+        <OrganicButton variant="tonal" size="sm" ariaLabel={t('addGroup')} onClick={() => void addGroup()}>
+          <Icon name="frame" size={15} /> <span className={styles.toolLong}>{t('addGroup')}</span>
+          <span className={styles.toolShort}>{t('addGroupShort')}</span>
         </OrganicButton>
-        <OrganicButton variant="solid" size="sm" onClick={() => setTrayOpen((v) => !v)}>
-          <Icon name="plus" size={15} /> {isMobile ? t('addCardShort') : t('addCard')}
+        <OrganicButton variant="solid" size="sm" ariaLabel={t('addCard')} onClick={() => setTrayOpen((v) => !v)}>
+          <Icon name="plus" size={15} /> <span className={styles.toolLong}>{t('addCard')}</span>
+          <span className={styles.toolShort}>{t('addCardShort')}</span>
         </OrganicButton>
       </div>
 

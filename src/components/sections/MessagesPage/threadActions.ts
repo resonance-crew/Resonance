@@ -21,6 +21,13 @@ export interface PressedMessage {
   opener?: HTMLElement | null;
   /** Opened from the keyboard (Enter or Space on the ☺ / ⋯ / chip): the focus shows on its first reaction. */
   byKeyboard?: boolean;
+  /** The finger was on a link: its Open and Copy lead the actions. */
+  onLink?: boolean;
+  /**
+   * Opened by a fine pointer's ☺ or chip (`react`: the reactions alone, over it) or ⋯ (`actions`: the actions
+   * alone, a dropdown at it) — no scrim, no lift. Unset: the whole overlay a held finger opens.
+   */
+  popover?: 'react' | 'actions';
 }
 
 /**
@@ -85,25 +92,33 @@ export interface MenuViewer {
   viewerId: string;
   /** Now, for whether a message is still young enough to unsend. */
   now?: number;
+  /** The press was on the link: its two rows lead. */
+  onLink?: boolean;
 }
 
 /**
  * What a held message's menu offers (round 16 §3), in this order: Reply (a
  * delivered message, while the thread has a composer), Copy (one with words),
- * the link's Open and Copy (the one under the finger, or the message's own),
- * Unsend (the viewer's own plain message, delivered, within 24 hours — plain
- * colour, it asks first), Report this message (theirs, delivered), and for
- * one that didn't go, Retry and Delete. An unsent message has no menu.
+ * the link's Open (→) and Copy (its link glyph, never Copy's twin) — the one
+ * under the finger, or the message's own; leading the list when the finger
+ * was on it —, Unsend (the viewer's own plain message, delivered, within 24
+ * hours — plain colour, it asks first), Report this message (theirs,
+ * delivered), and for one that didn't go, Retry and Delete. An unsent
+ * message has no menu.
  */
 export function messageMenuItems(message: ChatMessage, link: MessageLink | null, labels: MenuLabels, viewer: MenuViewer): OrganicMenuItem[] {
   if (message.unsentAt) return [];
   const items: OrganicMenuItem[] = [];
+  const linkRows: OrganicMenuItem[] = link
+    ? [
+        { key: 'open', icon: 'arrow-right', label: labels.openLink },
+        { key: 'copyLink', icon: 'link', label: labels.copyLink },
+      ]
+    : [];
+  if (viewer.onLink) items.push(...linkRows);
   if (viewer.withReply && canReply(message)) items.push({ key: 'reply', icon: 'reply', label: labels.reply });
   if (message.text) items.push({ key: 'copy', icon: 'copy', label: labels.copy });
-  if (link) {
-    items.push({ key: 'open', icon: 'link', label: labels.openLink });
-    items.push({ key: 'copyLink', icon: 'copy', label: labels.copyLink });
-  }
+  if (!viewer.onLink) items.push(...linkRows);
   if (canUnsend(message, viewer.viewerId, viewer.now)) items.push({ key: 'unsend', icon: 'restore', label: labels.unsend });
   if (message.senderId !== viewer.viewerId && message.delivery === 'delivered') items.push({ key: 'report', icon: 'flag', label: labels.report });
   if (message.delivery === 'failed') {

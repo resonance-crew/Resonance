@@ -390,9 +390,15 @@
   height: 14px;
 }
 
-/* A quote of a message since unsent: its words gone, it says so. */
+/* A quote of a message since unsent: its words gone, it says so — slanted
+   in a Latin script; Chinese has no italic (a synthetic oblique), and the
+   muted ink already marks it. */
 .quoteText[data-unsent] {
   font-style: italic;
+}
+
+.quoteText[data-unsent]:lang(zh-TW) {
+  font-style: normal;
 }
 
 .quoteText {
@@ -572,6 +578,17 @@
 
 span.chips {
   cursor: default;
+}
+
+/* A finger's 44 × 44 round the chip (30 tall), centred on it, unseen. */
+button.chips::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, 44px);
+  height: 44px;
+  transform: translate(-50%, -50%);
 }
 
 .chips:focus-visible {
@@ -765,13 +782,17 @@ span.chips {
   }
 }
 
-/* The thread dims under the modals' scrim (the whole window: no bright
-   band), whose colour the browser's bars take meanwhile. */
+/* The thread dims and softens under the modals' scrim and blur (the whole
+   window: no bright band; Modal's backdrop, so the unsend confirm a tap later
+   looks the same), whose colour the browser's bars take meanwhile. The blur
+   keeps the neighbours' words from competing with the lifted message. */
 .scrim {
   all: unset;
   position: absolute;
   inset: 0;
   background: var(--scrim);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -817,6 +838,20 @@ span.chips {
 .overlayMenu {
   position: fixed;
   outline: none;
+}
+
+/* A fine pointer's ☺ or ⋯ (MessagePopover): only that part, by its button —
+   the reactions over the ☺, the actions dropped from the ⋯ — over the page
+   like OrganicMenu's floating panel, no scrim and nothing lifted. Each part
+   brings its own entrance; it fades as it goes. */
+.popover {
+  position: fixed;
+  z-index: 120;
+}
+
+.popover[data-leaving] {
+  opacity: 0;
+  transition: opacity 120ms ease-in;
 }
 
 /* The reactions over the held message (ReactionTray): five 44 cells on a
@@ -884,11 +919,23 @@ span.chips {
   outline-offset: -2px;
 }
 
-/* The viewer's own reaction sits on a wobbly disc of the accent's light wash. */
+/* The viewer's own reaction sits on a wobbly disc of the accent's light wash
+   — at night the accent itself at 30 % over the tray's raised paper (the
+   light wash there all but vanished, ≈ 1.2 : 1). */
 .trayWash {
   position: absolute;
   inset: 0;
   fill: var(--color-terracotta-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-scheme='light']) .trayWash {
+    fill: color-mix(in oklch, var(--color-terracotta) 30%, color-mix(in oklch, var(--menu-paper) 94%, var(--toward-ink)));
+  }
+}
+
+:root[data-scheme='dark'] .trayWash {
+  fill: color-mix(in oklch, var(--color-terracotta) 30%, color-mix(in oklch, var(--menu-paper) 94%, var(--toward-ink)));
 }
 
 .traySticker {

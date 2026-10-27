@@ -48,6 +48,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import { wavyVertical } from '../../../src/lib/design/wavyPath';
 import { storyPictureShape } from '../../../src/lib/design/storyPicture';
 import { INK_STRONG } from '../../../src/lib/design/strokes';
+import { LINK_PATHS } from '../../../src/components/atoms/Icon/icons/linkPaths';
 import { seedFromString } from '../../../src/lib/design/prng';
 import { storyLinkWaveVars, waveInk } from '../../../src/lib/design/storyLinkWave';
 import { resolvedAccent, resolvedScheme } from '../../../src/lib/design/appearance';
@@ -291,8 +292,27 @@ const IslandLinkCard = LinkCard.extend({
       picture.addEventListener('error', () => picture.remove());
       const title = document.createElement('span');
       title.className = 'link-card-title';
+      // Its foot: the link glyph (15, the web's pen and gap) before the host — the reader's card's.
       const foot = document.createElement('small');
       foot.className = 'link-card-host';
+      const glyph = document.createElementNS(SVG, 'svg');
+      glyph.setAttribute('width', '15');
+      glyph.setAttribute('height', '15');
+      glyph.setAttribute('viewBox', '0 0 24 24');
+      glyph.setAttribute('fill', 'none');
+      glyph.setAttribute('stroke', 'currentColor');
+      glyph.setAttribute('stroke-width', String(INK_STRONG));
+      glyph.setAttribute('stroke-linecap', 'round');
+      glyph.setAttribute('stroke-linejoin', 'round');
+      glyph.setAttribute('aria-hidden', 'true');
+      for (const d of LINK_PATHS) {
+        const pen = document.createElementNS(SVG, 'path');
+        pen.setAttribute('d', d);
+        glyph.append(pen);
+      }
+      const hostName = document.createElement('span');
+      hostName.className = 'link-card-host-name';
+      foot.append(glyph, hostName);
       let href = String(node.attrs.href ?? '');
       const draw = () => {
         const preview = previewFor(href);
@@ -302,7 +322,7 @@ const IslandLinkCard = LinkCard.extend({
           if (!picture.isConnected) dom.prepend(picture);
         } else picture.remove();
         title.textContent = preview?.title ?? hostOf(href);
-        foot.textContent = preview ? hostOf(href) : href;
+        hostName.textContent = preview ? hostOf(href) : href;
       };
       draw();
       dom.append(title, foot);

@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { HandDrawnBorder } from '../HandDrawnBorder/HandDrawnBorder';
 import { useElementSize } from '@/lib/hooks/useElementSize';
 import styles from './TagPill.module.css';
-import { INK } from '@/lib/design/strokes';
+import { INK, INK_LIGHT } from '@/lib/design/strokes';
 
 export type TagSize = 'sm' | 'md' | 'lg' | 'xl';
 
@@ -22,6 +22,14 @@ export interface TagPillProps {
   outlined?: boolean;
   /** Renders a removal × button on the right and calls back when clicked. */
   onRemove?: () => void;
+  /** The ×'s accessible name, when it can say more than 「移除標籤」 (which tag: 「移除標籤：日常」). */
+  removeLabel?: string;
+  /**
+   * A pill that should not outshout what is around it (the writer's chosen
+   * tags, beside the publish button): its rim in the soft pen at INK_LIGHT,
+   * its words at 500, its × muted.
+   */
+  quiet?: boolean;
   /** Whole pill is clickable (e.g. filter chip). */
   onClick?: () => void;
   ariaLabel?: string;
@@ -57,6 +65,8 @@ export function TagPill({
   size = 'md',
   outlined = OUTLINED.has(size),
   onRemove,
+  removeLabel,
+  quiet = false,
   onClick,
   ariaLabel,
 }: TagPillProps) {
@@ -72,7 +82,8 @@ export function TagPill({
   const R = h > 0 ? h * 0.5 : SIZE_FALLBACK_HEIGHT[size] * 0.5;
   const interactive = Boolean(onClick);
 
-  const rim = outlined ? 'var(--tag-stroke)' : undefined;
+  const rim = outlined ? (quiet ? 'var(--soft-pen)' : 'var(--tag-stroke)') : undefined;
+  const pen = quiet ? INK_LIGHT : INK;
 
   const tag = (
     <span
@@ -83,12 +94,13 @@ export function TagPill({
         {
           '--shape-fill': color,
           '--shape-ink': rim ?? 'transparent',
-          '--shape-ink-width': `${INK}px`,
+          '--shape-ink-width': `${pen}px`,
           '--shape-radius': '999px',
         } as CSSProperties
       }
       data-shape-pending={w > 0 && h > 0 ? undefined : ''}
       data-size={size}
+      data-quiet={quiet || undefined}
       data-interactive={interactive || undefined}
       role={interactive ? 'button' : undefined}
       aria-label={ariaLabel}
@@ -116,9 +128,10 @@ export function TagPill({
         seed={autoSeed}
         fillColor={color}
         strokeColor={rim}
+        strokeWidth={pen}
       />
       <span className={styles.label}>{children}</span>
-      {onRemove && <RemoveTag onRemove={onRemove} />}
+      {onRemove && <RemoveTag onRemove={onRemove} label={removeLabel} />}
     </span>
   );
 
@@ -126,13 +139,13 @@ export function TagPill({
 }
 
 /** The writer's pill's ×: takes the tag off, named in the reader's language (only a removable pill reads a string). */
-function RemoveTag({ onRemove }: { onRemove: () => void }) {
+function RemoveTag({ onRemove, label }: { onRemove: () => void; label?: string }) {
   const t = useTranslations('write');
   return (
     <button
       type="button"
       className={styles.removeBtn}
-      aria-label={t('removeTag')}
+      aria-label={label ?? t('removeTag')}
       onClick={(e) => {
         e.stopPropagation();
         onRemove();

@@ -9,8 +9,8 @@ const SIZE = 26;
 
 /**
  * Small "×" affordance pinned to the top-right corner of a focused editor
- * node (image / embedded card). Fixed-size, so the wobbly chrome draws
- * correctly on first paint without measuring.
+ * node (image / embedded card / link card). Fixed-size, so the wobbly chrome
+ * draws correctly on first paint without measuring; its target is 44 × 44.
  */
 export function NodeRemoveButton({ onClick, label }: { onClick: () => void; label: string }) {
   return (

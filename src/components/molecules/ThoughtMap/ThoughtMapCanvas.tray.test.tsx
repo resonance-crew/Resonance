@@ -73,6 +73,17 @@ describe('ThoughtMapCanvas toolbar', () => {
     // The empty-state CTA is also "Add card"; the toolbar's is the first.
     expect(screen.getAllByRole('button', { name: /Add card/i })[0]).toHaveAttribute('data-variant', 'solid');
   });
+
+  // Round 16 review M1: the labels follow the map's own width (a container query) — the workspace's divider
+  // squeezes the map while the window stays wide — so both are there for CSS to choose, the pill named in full.
+  it('carries a one-word label beside each full one, named in full whatever the map’s width', () => {
+    renderWithIntl(<ThoughtMapCanvas data={mapData()} style={{ height: 480 }} />);
+    const group = screen.getByRole('button', { name: 'New group' });
+    expect(group).toHaveTextContent('New group');
+    expect(group).toHaveTextContent(/Group$/);
+    const card = screen.getAllByRole('button', { name: 'Add card' })[0];
+    expect(card).toHaveTextContent(/Card$/);
+  });
 });
 
 describe('ThoughtMapCanvas zoom cluster', () => {
