@@ -248,3 +248,5 @@ The local environment has the following CLIs installed and authenticated:
 3. **Vercel CLI** (`vercel`)
 
 For any deployment or configuration update needs, use these CLIs directly. Login is already complete. If you are logged out or experience authentication failures, notify the user so they can re-authenticate.
+
+Vercel builds a pushed commit only when something the site is built from changed since the branch's last successful deployment: vercel.json's `ignoreCommand` (`scripts/vercel/ignore-build.sh`, tested in `src/lib/ignoreBuild.test.ts`) skips one whose changes are only in `apps/` or `docs/` — except `docs/legal`, which the policy pages read. Every deployment keeps ~110 MB of functions for its retention period (7 days production and preview, 1 day errored and canceled, set in the dashboard: Build and Deployment → Deployment Retention Policy) against Hobby's 10 GB of Functions Storage. If the site comes to read another file under `docs/` or `apps/`, narrow the script's exclusions with it (the test checks `next.config.ts`'s `outputFileTracingIncludes`).

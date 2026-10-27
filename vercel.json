@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
+  "ignoreCommand": "sh scripts/vercel/ignore-build.sh",
   "regions": ["hkg1"],
   "functions": {
     "src/app/api/cards/insight/route.ts": { "regions": ["hnd1"], "maxDuration": 60 },
