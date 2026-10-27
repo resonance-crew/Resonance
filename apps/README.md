@@ -739,3 +739,23 @@ let go, the iPad turned or its window resized, the map back from under a page pu
 show reports its size) and when a card opens in the pane (`settle`). A pan past the 4px rule, a pinch or the zoom
 buttons take the camera (`takeCamera`): from then on the pane's card glides to the centre as before; 👁 hands it back.
 The web's rule (50d7cf4a, `followFitRef`).
+
+Round 16 (2026-10-27), Android: the publish step's tags are the label and the chosen tags in one wrapping row
+(`TagPillRow`: lg outlined pills, a 44 hit box round each ✕) over the composer's capsule (`CapsuleField`, which
+`ComposerCapsule` now wraps): its end segment is ✦ AI 建議 with nothing committed — an IME's composing range
+(`TextFieldValue.composition`) counts as nothing — and ＋ 新增 once a word is, as wide as its wider face; only a
+hardware keyboard's first Backspace takes a tag back (`TagEntry`), and while the field is in use any change of height
+above it (the row wrapping, the preview's row of tags) scrolls the step by as much in the same layout pass
+(`TagFieldAnchor`). The phone's tab bar is glyphs alone (52 tall, 26 glyphs, the chosen tab its solid twin, the badge
+on a paper ring); the home feed slides it away while read down (`TabBarAutoHide` / `TabBarHideRule`, never under
+TalkBack or Switch Access, a fade with animations off). A held message lifts with the five reactions right above it
+(`ReactionTray`, `ReactionGlyph` from generated/Reactions.kt) and its actions right under it (`MessageActionSheet`:
+回覆 · 複製 · the link's · 收回 · 檢舉這則訊息 · 重試 / 刪除), gliding the least that fits (`placeHeldMessage`);
+reactions are chips in the gutter (`ReactionChips`), drawn at once and put back on a refusal (`ThreadModel.react`),
+and also the bubble's custom accessibility actions; an unsent message is a dashed ghost (`UnsentBubble`), its quotes
+訊息已收回, the list its ghost's words; a chat push `type: 'unsend'` redraws the conversation's notification without
+that line (`PushCenter.removeChatLine`; debug: `--es pushChatUnsend <id> --es pushChatConversation <pair>`). The
+writer's format bar has 連結 after 斜體, opening `StoryLinkSheet` (卡片 | 文字 where the island's `canCard` says, the
+address checked by `StoryLinks.linkTarget`; `--es linkDraft …` fills its field in debug builds), and a tapped link
+card opens it with 卡片 chosen (the island's `linkTap`). A lone link is a card only when its words are its address
+(`StoryLinks.wordsAreTheAddress`).
