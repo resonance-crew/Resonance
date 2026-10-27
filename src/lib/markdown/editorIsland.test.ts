@@ -91,4 +91,52 @@ describe('the editor island', () => {
     island.focus();
     await vi.waitFor(() => expect(last('caret')).toEqual({ type: 'caret', top: 40, bottom: 64 }));
   });
+
+  describe('links (round 16 §6)', () => {
+    it('says which link the selection is in, and whether 卡片 is offered', async () => {
+      const island = await open('layout=canvas');
+      island.setMarkdown('看 [這篇](https://example.com/a) 吧');
+      island.focus();
+      await vi.waitFor(() => expect(last('state')).toMatchObject({ link: null, canCard: false }));
+      island.setMarkdown('');
+      island.focus();
+      await vi.waitFor(() => expect(last('state')).toMatchObject({ link: null, canCard: true }));
+    });
+
+    it('turns an empty line into a link card, words it, and takes it away', async () => {
+      const island = await open('layout=canvas');
+      island.setMarkdown('');
+      island.focus();
+      expect(island.exec('link', { href: 'example.com/rain', display: 'card' })).toBe(true);
+      expect(island.getMarkdown()).toBe('<https://example.com/rain>');
+      // The card drawn: its host over its address, until a preview is handed over.
+      const card = () => root().querySelector<HTMLElement>('.link-card')!;
+      expect(card().querySelector('.link-card-title')).toHaveTextContent('example.com');
+      expect(card().querySelector('.link-card-host')).toHaveTextContent('https://example.com/rain');
+      island.setLinkPreviews([{ url: 'https://example.com/rain', title: '下雨天的散步', image: 'https://evil.example/x.png' }]);
+      expect(card().querySelector('.link-card-title')).toHaveTextContent('下雨天的散步');
+      expect(card().querySelector('img')).toBeNull();
+
+      // A tap picks it and tells the host, which opens its sheet with 卡片 chosen.
+      card().click();
+      expect(last('linkTap')).toEqual({ type: 'linkTap', href: 'https://example.com/rain' });
+      await vi.waitFor(() =>
+        expect(last('state')).toMatchObject({ link: { href: 'https://example.com/rain', display: 'card', standalone: true }, canCard: true }),
+      );
+      expect(island.exec('link', { href: 'https://example.com/rain', display: 'text' })).toBe(true);
+      expect(island.getMarkdown()).toBe('[example.com/rain](https://example.com/rain)');
+      expect(island.exec('unlink')).toBe(true);
+      expect(island.getMarkdown()).toBe('example.com/rain');
+    });
+
+    it('refuses what it doesn’t link to, and 卡片 inside a sentence', async () => {
+      const island = await open('layout=canvas');
+      island.setMarkdown('一句話');
+      island.focus();
+      expect(island.exec('link', { href: 'javascript:alert(1)', display: 'text' })).toBe(false);
+      expect(island.exec('link', { href: 'https://example.com', display: 'card' })).toBe(false);
+      expect(island.exec('link', { href: 'https://example.com' })).toBe(false);
+      expect(island.getMarkdown()).toBe('一句話');
+    });
+  });
 });
