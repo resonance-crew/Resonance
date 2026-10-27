@@ -70,7 +70,7 @@ internal fun RowScope.SearchField(
 ) {
     OrganicIcon(IconName.Search, size = 17.dp, color = Tokens.TextMuted)
     Box(Modifier.weight(1f).height(40.dp).padding(start = 8.dp), contentAlignment = Alignment.CenterStart) {
-        if (query.isEmpty()) BasicText(L10n.Messages.searchPlaceholder, maxLines = 1, style = fieldHintStyle(14f, 1.3f))
+        if (query.isEmpty()) BasicText(L10n.Messages.searchPlaceholder, maxLines = 1, style = fieldHintStyle(L10n.Messages.searchPlaceholder, 14f, 1.3f))
         BasicTextField(
             query, onQuery,
             singleLine = true,

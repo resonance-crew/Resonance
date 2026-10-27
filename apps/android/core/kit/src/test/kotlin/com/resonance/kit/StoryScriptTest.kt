@@ -49,6 +49,16 @@ class StoryScriptTest {
         }
     }
 
+    @Test fun aHintHoldingChineseIsCjkAndALatinOneIsNot() {
+        // Round 16 review F6: what a placeholder's lean is decided by.
+        assertTrue(StoryScripts.hasCjk("輸入標籤⋯"))
+        assertTrue(StoryScripts.hasCjk("Add 標籤"))
+        assertTrue(StoryScripts.hasCjk("ひらがな"))
+        assertTrue(!StoryScripts.hasCjk("Add a tag…"))
+        assertTrue(!StoryScripts.hasCjk("https://example.com"))
+        assertTrue(!StoryScripts.hasCjk(""))
+    }
+
     @Test fun anEmptyDraftStartsInItsWritersLanguage() {
         for (case in fixture.getValue("emptyByLocale").jsonArray.map { it.jsonObject }) {
             val locale = case.text("locale")

@@ -288,7 +288,7 @@ fun MessageBubble(
                 if (quoteLabel != null) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                         OrganicIcon(IconName.Note, size = 13.dp, color = Tokens.TextMuted)
-                        BasicText(quoteLabel, style = AppFonts.oblique(AppFonts.body(12f, lineHeight = 1.3f, color = Tokens.TextMuted)))
+                        BasicText(quoteLabel, style = AppFonts.obliqueUnlessCjk(AppFonts.body(12f, lineHeight = 1.3f, color = Tokens.TextMuted), quoteLabel))
                     }
                 }
                 if (text.isNotEmpty()) ChatText(

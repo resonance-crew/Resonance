@@ -1051,8 +1051,8 @@ fun OrganicTextField(
 ) {
     var focused by remember { mutableStateOf(false) }
     val text = if (display) AppFonts.heading(22f, lineHeight = 1.35f) else AppFonts.body(15f, lineHeight = 1.6f)
-    // globals.css: every placeholder is the body face, italic, at the field's size and weight.
-    val hint = AppFonts.oblique(AppFonts.body(if (display) 22f else 15f, if (display) 700 else 400, lineHeight = if (display) 1.35f else 1.6f, color = Tokens.Placeholder))
+    // globals.css: every placeholder is the body face, italic (upright in Chinese), at the field's size and weight.
+    val hint = AppFonts.obliqueUnlessCjk(AppFonts.body(if (display) 22f else 15f, if (display) 700 else 400, lineHeight = if (display) 1.35f else 1.6f, color = Tokens.Placeholder), placeholder)
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         FieldLabel(label)
         Box(
@@ -1130,9 +1130,13 @@ private data class FieldSurface(
     }
 }
 
-/** globals.css: every placeholder is the body face, italic, at the field's size and weight. */
+/**
+ * globals.css: every placeholder is the body face, italic, at the field's size and weight — but a
+ * Chinese one ([text] holding Han, kana or hangul) upright: a synthetic italic slants it (round 16 review F6).
+ */
 @Composable @ReadOnlyComposable
-fun fieldHintStyle(size: Float = 15f, lineHeight: Float = 1.6f) = AppFonts.oblique(AppFonts.body(size, 400, lineHeight = lineHeight, color = Tokens.Placeholder))
+fun fieldHintStyle(text: String, size: Float = 15f, lineHeight: Float = 1.6f) =
+    AppFonts.obliqueUnlessCjk(AppFonts.body(size, 400, lineHeight = lineHeight, color = Tokens.Placeholder), text)
 
 /** Solid page background: the paper. */
 @Composable

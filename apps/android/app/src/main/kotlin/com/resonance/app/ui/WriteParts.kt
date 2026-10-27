@@ -167,7 +167,7 @@ fun TagField(
         segment = { ink -> TagSegmentFace(ready, suggesting, ink) },
     ) { vertical ->
         Box(Modifier.fillMaxWidth().padding(vertical = vertical)) {
-            if (value.text.isEmpty()) BasicText(placeholder, style = fieldHintStyle(), maxLines = 1)
+            if (value.text.isEmpty()) BasicText(placeholder, style = fieldHintStyle(placeholder), maxLines = 1)
             BasicTextField(
                 value,
                 { next ->

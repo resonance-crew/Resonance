@@ -512,7 +512,7 @@ private fun GroupTitleEditor(store: ThoughtMapStore, g: MapGroup) {
             decorationBox = { inner ->
                 Box {
                     if (value.text.isEmpty()) {
-                        BasicText(L10n.Me.ThoughtMap.groupTitlePlaceholder, style = AppFonts.oblique(AppFonts.heading(16f, 700, lineHeight = 1.333f).copy(color = Tokens.Placeholder)))
+                        BasicText(L10n.Me.ThoughtMap.groupTitlePlaceholder, style = AppFonts.obliqueUnlessCjk(AppFonts.heading(16f, 700, lineHeight = 1.333f).copy(color = Tokens.Placeholder), L10n.Me.ThoughtMap.groupTitlePlaceholder))
                     }
                     inner()
                 }
@@ -575,7 +575,7 @@ private fun EdgeLabelEditor(store: ThoughtMapStore, e: MapEdge) {
                 .onFocusChanged { if (it.isFocused) hadFocus = true else if (hadFocus) store.commitEdgeLabel() },
             decorationBox = { inner ->
                 Box(contentAlignment = Alignment.Center) {
-                    if (value.text.isEmpty()) BasicText(L10n.Me.ThoughtMap.edgeLabelPlaceholder, style = AppFonts.oblique(style.copy(color = Tokens.Placeholder)), maxLines = 1)
+                    if (value.text.isEmpty()) BasicText(L10n.Me.ThoughtMap.edgeLabelPlaceholder, style = AppFonts.obliqueUnlessCjk(style.copy(color = Tokens.Placeholder), L10n.Me.ThoughtMap.edgeLabelPlaceholder), maxLines = 1)
                     inner()
                 }
             },

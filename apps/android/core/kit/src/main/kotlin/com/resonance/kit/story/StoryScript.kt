@@ -185,6 +185,21 @@ object StoryScripts {
         return marks
     }
 
+    /**
+     * Whether [text] holds a Han, kana or hangul character — what a synthetic italic must never lean
+     * (round 16 review F6, the web's `:lang(zh-TW) ::placeholder { font-style: normal }`): a CJK hint
+     * or label stands upright, a Latin one keeps the placeholder's slant.
+     */
+    fun hasCjk(text: String): Boolean {
+        var i = 0
+        while (i < text.length) {
+            val cp = text.codePointAt(i)
+            if (isHanKanaOrHangul(cp)) return true
+            i += Character.charCount(cp)
+        }
+        return false
+    }
+
     /** `[\p{scx=Han}\p{scx=Hira}\p{scx=Kana}\p{scx=Hang}]`: a character CJK text is read by (ReadTime counts these one by one). */
     internal fun isHanKanaOrHangul(cp: Int): Boolean = inRanges(HAN, cp) || inRanges(KANA, cp) || inRanges(HANGUL, cp)
 
