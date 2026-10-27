@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
+import com.resonance.geometry.SegValue
+import com.resonance.geometry.WobRectOptions
 
 /** How big an [OrganicPill] is: the thread's small one, or the shell's toast. */
 enum class PillSize(
@@ -147,15 +149,25 @@ fun OrganicPill(
 }
 
 /**
- * The ink pill around a glyph alone (the web's InkPill with no words): a round face 36 across inside a
- * 44 touch target — the thread's way back to the latest message, an arrow, small over the thread (the
- * owner, 2026-10-28). [contentDescription] is its name for TalkBack.
+ * The ink pill around a glyph alone (the web's InkPill with no words): a face 36 across inside a 44
+ * touch target — the thread's way back to the latest message, an arrow, small over the thread (the
+ * owner, 2026-10-28). Its face is an avatar's hand ([HandDrawnAvatar]'s recipe) a step rounder: its
+ * corners 42 % of its size (an avatar's 40 %, a circle's 50 %), their jitter and shift calmer (2 and
+ * 4 %, an avatar's 3.2 and 6 %) — organic, not a coin. [contentDescription] is its name for TalkBack.
  */
 @Composable
 fun OrganicPillGlyph(icon: IconName, contentDescription: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val source = remember { MutableInteractionSource() }
     val focused by source.collectIsFocusedAsState()
-    val shape = remember { WobRectShape(PillSize.Small.radius, 41.0, mag = 1.2) }
+    val shape = remember {
+        val f = GLYPH_PILL_FACE.value.toDouble()
+        WobRectShape(
+            f * 0.42,
+            41.0,
+            mag = f * 0.022,
+            options = WobRectOptions(curve = 1.3, cornerJitter = 2.0, cornerOffset = f * 0.04, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0)),
+        )
+    }
     val ink = Tokens.TerracottaInk
     val wash = Tokens.TerracottaLight
     val pen = Tokens.Terracotta

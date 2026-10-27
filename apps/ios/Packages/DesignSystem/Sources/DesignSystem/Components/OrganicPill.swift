@@ -109,14 +109,19 @@ public struct OrganicPill: View {
     }
 }
 
-/// The ink pill around a glyph alone (the web's InkPill with no words): a round face 36 across inside
-/// a 44 touch target — the thread's way back to the latest message, an arrow, small over the thread
-/// (the owner, 2026-10-28). `accessibilityLabel` is its name for VoiceOver.
+/// The ink pill around a glyph alone (the web's InkPill with no words): a face 36 across inside a 44
+/// touch target — the thread's way back to the latest message, an arrow, small over the thread (the
+/// owner, 2026-10-28). Its face is an avatar's hand (``HandDrawnAvatar``'s recipe) a step rounder: its
+/// corners 42 % of its size (an avatar's 40 %, a circle's 50 %), their jitter and shift calmer (2 and
+/// 4 %, an avatar's 3.2 and 6 %) — organic, not a coin. `accessibilityLabel` is its name for VoiceOver.
 public struct OrganicPillGlyph: View {
     /// The face's size, its glyph's, and the touch target around it.
     public static let face: CGFloat = 36
     public static let glyph: CGFloat = 18
     public static let target: CGFloat = 44
+    /// Its face's outline (the web's `glyphFace`).
+    public static let shape = WobRectShape(radius: face * 0.42, seed: 41, mag: face * 0.022, options: WobRectOptions(
+        curve: 1.3, cornerJitter: 2, cornerOffset: face * 0.04, segmentsH: .count(1), segmentsV: .count(1)))
 
     let icon: IconName
     let label: String
@@ -133,8 +138,8 @@ public struct OrganicPillGlyph: View {
             OrganicIcon(icon, size: Self.glyph, color: Tokens.terracottaInk)
                 .frame(width: Self.face, height: Self.face)
                 .background {
-                    OrganicPill.shape.fill(OrganicPill.fill)
-                    OrganicPill.shape.stroke(OrganicPill.pen, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
+                    Self.shape.fill(OrganicPill.fill)
+                    Self.shape.stroke(OrganicPill.pen, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
                 }
                 .frame(width: Self.target, height: Self.target)
                 .contentShape(Rectangle())

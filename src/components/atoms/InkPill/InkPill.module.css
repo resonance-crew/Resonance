@@ -26,16 +26,17 @@
   white-space: nowrap;
 }
 
-/* A glyph alone (the thread's way back to the latest message): a round face,
-   36 across — small over the thread, its hit area 44 (the ::before below). */
-.pill[data-round] {
+/* A glyph alone (the thread's way back to the latest message): an avatar-like
+   face, a step rounder, 36 across — small over the thread, its hit area 44
+   (the ::before below). */
+.pill[data-glyph] {
   justify-content: center;
   width: 36px;
   height: 36px;
   padding: 0;
 }
 
-.pill[data-round]::before {
+.pill[data-glyph]::before {
   content: '';
   position: absolute;
   inset: -4px;

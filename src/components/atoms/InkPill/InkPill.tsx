@@ -29,8 +29,18 @@ export interface InkPillProps {
 }
 
 const GLYPH = { sm: 14, md: 16 } as const;
-/** A glyph alone (the thread's way back to the latest message): the arrow a little larger in its round face. */
-const ROUND_GLYPH = 18;
+/** A glyph alone (the thread's way back to the latest message): the arrow a little larger in its face. */
+const GLYPH_ALONE = 18;
+
+/**
+ * The face around a glyph alone (the owner, 2026-10-28): an avatar's hand (HandDrawnAvatar's recipe — one
+ * segment a side, its curve, a jitter and a shift at each corner, a wobble by its size), a step rounder — its
+ * corners 42 % of its size (an avatar's 40 %, a circle's 50 %), its corners' jitter and shift calmer (2 and 4 %,
+ * an avatar's 3.2 and 6 %): organic, not a coin. The apps' OrganicPillGlyph draws the same numbers.
+ */
+function glyphFace(s: number) {
+  return { R: s * 0.42, mag: s * 0.022, segmentsH: 1, segmentsV: 1, curve: 1.3, cornerJitter: 2, cornerOffset: s * 0.04 };
+}
 
 /** Its corners: the thread's pill is round; a toast's are a card's. */
 const RADIUS = { sm: (h: number) => h / 2, md: () => 16 } as const;
@@ -47,36 +57,34 @@ const RADIUS = { sm: (h: number) => h / 2, md: () => 16 } as const;
 export function InkPill({ label, icon, onClick, ariaLabel, size = 'sm', announce = false, className }: InkPillProps) {
   const ref = useRef<HTMLElement>(null);
   const { w, h } = useElementSize(ref);
-  const round = label == null && !!icon;
+  const glyphOnly = label == null && !!icon;
   const body = (
     <>
       <HandDrawnBorder
         w={w}
         h={h}
-        R={RADIUS[size](h)}
+        {...(glyphOnly
+          ? glyphFace(h)
+          : { R: RADIUS[size](h), mag: 1.2, segmentsH: 2, segmentsV: 1, curve: 1.4 })}
         seed={41}
-        mag={1.2}
-        segmentsH={2}
-        segmentsV={1}
-        curve={1.4}
         fillColor="var(--color-terracotta-light)"
         strokeColor="var(--color-terracotta)"
         strokeWidth={INK}
       />
-      {icon && <Icon name={icon} size={round ? ROUND_GLYPH : GLYPH[size]} className={styles.glyph} />}
-      {!round && <span className={styles.label}>{label}</span>}
+      {icon && <Icon name={icon} size={glyphOnly ? GLYPH_ALONE : GLYPH[size]} className={styles.glyph} />}
+      {!glyphOnly && <span className={styles.label}>{label}</span>}
     </>
   );
   const shared = {
     className: [styles.pill, className, 'res-shape-stand-in'].filter(Boolean).join(' '),
     'data-size': size,
-    'data-round': round || undefined,
+    'data-glyph': glyphOnly || undefined,
     'data-shape-pending': w > 0 && h > 0 ? undefined : '',
     style: {
       '--shape-fill': 'var(--color-terracotta-light)',
       '--shape-ink': 'var(--color-terracotta)',
       '--shape-ink-width': `${INK}px`,
-      '--shape-radius': size === 'sm' ? '999px' : '16px',
+      '--shape-radius': glyphOnly ? '42%' : size === 'sm' ? '999px' : '16px',
     } as CSSProperties,
   };
   if (onClick) {
