@@ -253,16 +253,23 @@ export function OrganicMenu({
     ...(glyphs === 'ink' ? { '--menu-glyph': 'var(--color-text)', '--menu-glyph-active': 'var(--color-text)' } : {}),
   } as CSSProperties;
 
-  /** Where a floating panel goes: under the trigger when it fits, else over it; its `align` edge on the trigger's. */
+  /**
+   * Where a floating panel goes: under the trigger when it fits, else over it; its `align` edge on the trigger's —
+   * kept {@link EDGE} inside the window, and inside the part of the page its trigger sits in when that part says
+   * so (`data-dialog-host`: the writer's pane at the desktop split), so a menu opened from the pane's gutter never
+   * meets the divider's grip beside it (round 17 review W7).
+   */
   function place(trigger: HTMLElement): CSSProperties {
     const r = trigger.getBoundingClientRect();
     const h = menuPanelHeight(items.length, footer != null);
     const below = r.bottom + 8 + h <= window.innerHeight - EDGE || r.top - 8 - h < EDGE;
+    const winW = window.innerWidth;
+    const host = trigger.closest<HTMLElement>('[data-dialog-host]')?.getBoundingClientRect();
+    const start = Math.max(0, host && host.width > 0 ? host.left : 0) + EDGE;
+    const end = Math.min(winW, host && host.width > 0 ? host.right : winW) - EDGE;
     return {
       ...(below ? { top: r.bottom + 8 } : { bottom: window.innerHeight - r.top + 8 }),
-      ...(align === 'end'
-        ? { right: Math.max(EDGE, window.innerWidth - r.right) }
-        : { left: Math.max(EDGE, r.left) }),
+      ...(align === 'end' ? { right: Math.max(winW - end, winW - r.right) } : { left: Math.max(start, r.left) }),
       transformOrigin: `${below ? 'top' : 'bottom'} ${align === 'end' ? 'right' : 'left'}`,
     };
   }

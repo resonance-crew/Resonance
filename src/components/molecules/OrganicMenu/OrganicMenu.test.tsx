@@ -331,6 +331,22 @@ describe('floating panel', () => {
     fireEvent.scroll(document.body);
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
+
+  // Round 17 review W7: the writer's ＋ sits in the pane's gutter, 4 from the divider; its sheet kept flush with the
+  // trigger met the grip's mark. Inside a part of the page that says so (the pane: data-dialog-host), a floating
+  // panel keeps 12 inside it — over the grip never, beside it never touching.
+  it('keeps 12 inside the part of the page its trigger sits in (the writer’s pane), never meeting the divider', async () => {
+    render(
+      <section data-dialog-host="">
+        <OrganicMenu items={ITEMS} onChoose={vi.fn()} label="More" bare floating align="start" />
+      </section>,
+    );
+    const pane = screen.getByRole('button', { name: 'More' }).closest('section')!;
+    pane.getBoundingClientRect = () => ({ top: 0, bottom: 900, left: 720, right: 1440, width: 720, height: 900, x: 720, y: 0, toJSON: () => ({}) }) as DOMRect;
+    await userEvent.click(triggerAt({ top: 400, bottom: 436, left: 724, right: 760 }));
+    const panel = screen.getByRole('menu').closest('[style*="top"]') as HTMLElement;
+    expect(panel.style.left).toBe(`${720 + 12}px`);
+  });
 });
 
 describe('rows that say more than an icon and a word (the share menu)', () => {
