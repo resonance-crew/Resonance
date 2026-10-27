@@ -987,6 +987,9 @@ private fun PublishStep(
     Column(
         Modifier
             .fillMaxSize()
+            // A tap on the step's blank — beside the card, the labels, the margins, under the button — puts the keyboard
+            // away (round 17), whichever field held it; the words typed stay. A control under the finger takes its own tap.
+            .onBlankTap(null, dismissKeyboard)
             .verticalScroll(scroll)
             .then(if (compact) Modifier else Modifier.fillMaxWidth().wrapContentWidth().widthIn(max = columnMax))
             // Where a band may tuck under the bar, the column starts at the bar's wave; what sits above the band keeps clear
@@ -1582,9 +1585,10 @@ private val VisibilityInk: Color @Composable @ReadOnlyComposable get() = Tokens.
  * A tap on the page itself — one nothing under it took (a field, a button, the story) and that
  * didn't turn into a scroll — as tapping beside a field does on the web. Nothing is consumed.
  * The story's WebView takes its touches after the page has seen them, so a tap there is told
- * apart by when it went down ([StoryEditorBridge.lastTouchDown]).
+ * apart by when it went down ([StoryEditorBridge.lastTouchDown]); a page without the story
+ * (the publish step) passes no [bridge].
  */
-private fun Modifier.onBlankTap(bridge: StoryEditorBridge, onTap: () -> Unit): Modifier = pointerInput(bridge) {
+internal fun Modifier.onBlankTap(bridge: StoryEditorBridge?, onTap: () -> Unit): Modifier = pointerInput(bridge) {
     awaitEachGesture {
         // The final pass: what lies under the finger has had the touch first, and taken it if it was theirs.
         val down = awaitFirstDown(pass = PointerEventPass.Final)
@@ -1593,7 +1597,7 @@ private fun Modifier.onBlankTap(bridge: StoryEditorBridge, onTap: () -> Unit): M
             if (change.isConsumed || (change.position - down.position).getDistance() > viewConfiguration.touchSlop) return@awaitEachGesture
             if (!change.pressed) break
         }
-        if (bridge.lastTouchDown != down.uptimeMillis) onTap()
+        if (bridge == null || bridge.lastTouchDown != down.uptimeMillis) onTap()
     }
 }
 

@@ -69,12 +69,14 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.resonance.design.AppFonts
 import com.resonance.design.AutoWobRectShape
@@ -160,7 +162,7 @@ fun TagField(
         modifier = modifier.bringIntoViewRequester(bring).onSizeChanged { capsule = it }.onFocusChanged {
             focused = it.hasFocus
             onFocusChanged(it.hasFocus)
-        },
+        }.capsuleTapFocuses(focus, segmentWidth, LocalLayoutDirection.current),
         seed = 53.0,
         // While the model thinks the segment takes no tap (the words typed meanwhile still add by Done).
         segmentEnabled = ready || !suggesting,
@@ -197,6 +199,20 @@ fun TagField(
                     .semantics { contentDescription = placeholder },
             )
         }
+    }
+}
+
+/**
+ * A tap on the capsule's own paper — its margins round the words, which the text field itself doesn't
+ * cover — is a tap on the field (round 17): it takes the focus (the keyboard comes or stays), and the
+ * publish step never reads it as a tap on its blank, which puts the keyboard away. The words and the
+ * segment take their own taps first; one on a segment that takes none (the model thinking) does nothing.
+ */
+private fun Modifier.capsuleTapFocuses(focus: FocusRequester, segmentWidth: Dp, direction: LayoutDirection): Modifier = pointerInput(focus, segmentWidth, direction) {
+    detectTapGestures { at ->
+        val segment = segmentWidth.toPx()
+        val onSegment = if (direction == LayoutDirection.Ltr) at.x >= size.width - segment else at.x <= segment
+        if (!onSegment) focus.requestFocus()
     }
 }
 
