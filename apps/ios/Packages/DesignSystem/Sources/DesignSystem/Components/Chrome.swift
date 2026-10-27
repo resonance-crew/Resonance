@@ -981,8 +981,10 @@ public struct OrganicInlineBar<Leading: View, Trailing: View>: View {
                       tracking: chrome != nil ? 0 : -0.02 * size,
                       lift: chrome != nil ? 0 : barTitleBesideArrow(title, size: size),
                       subtitle: subtitle, alignment: chrome != nil ? .center : .leading)
-                // Centred on the row and never taller than it: two lines must not grow the bar.
-                .frame(maxHeight: chrome != nil ? HeaderChrome.rowHeight : Self.phoneRow)
+                // Centred on the row: two lines never grow the bar at the usual text sizes — and at a large one,
+                // where the two no longer fit a phone's 44, the bar grows round them rather than letting them
+                // run into its pen line (round 17 §8). A tablet's 72 holds them at any size.
+                .frame(minHeight: chrome != nil ? nil : Self.phoneRow, maxHeight: chrome != nil ? HeaderChrome.rowHeight : nil)
                 .layoutPriority(titleLeads ? 1 : 0)
         } else if !title.isEmpty {
             let size = barTitleSize(window)
@@ -1046,13 +1048,22 @@ public struct BarTitles: View {
         self.alignment = alignment
     }
 
-    /// Where the title stands: down on the row's line while the second line is empty.
-    public static func titleOffset(subtitle: String?, lift: CGFloat = 0) -> CGFloat {
-        lift + (subtitle == nil ? aloneDrop : 0)
+    /// Where the title stands: down on the row's line while the second line is empty (its height `line`:
+    /// ``subtitleLine`` at the default text size).
+    public static func titleOffset(subtitle: String?, lift: CGFloat = 0, line: CGFloat = subtitleLine) -> CGFloat {
+        lift + (subtitle == nil ? (line + subtitleGap) / 2 : 0)
+    }
+
+    /// The second line's box at the person's text size (round 17 §8): its 12 grown as the body text grows
+    /// (at most 1.25×), on the same 1.4 line — so at a large size its words never hang past the box into
+    /// the bar's pen line, and the bar grows round both lines instead.
+    @MainActor public static var scaledSubtitleLine: CGFloat {
+        (subtitleSize * TextScale.factor(relativeTo: .body)).rounded() * 1.4
     }
 
     public var body: some View {
         let frameAlignment = Alignment(horizontal: alignment, vertical: .center)
+        let line = Self.scaledSubtitleLine
         VStack(alignment: alignment, spacing: Self.subtitleGap) {
             Text(title)
                 .font(font)
@@ -1060,7 +1071,7 @@ public struct BarTitles: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .foregroundStyle(Tokens.text)
-                .offset(y: Self.titleOffset(subtitle: subtitle.text, lift: lift))
+                .offset(y: Self.titleOffset(subtitle: subtitle.text, lift: lift, line: line))
                 .accessibilityAddTraits(.isHeader)
             ZStack(alignment: frameAlignment) {
                 if let text = subtitle.text {
@@ -1074,7 +1085,7 @@ public struct BarTitles: View {
                         .transition(.opacity)
                 }
             }
-            .frame(height: Self.subtitleLine, alignment: frameAlignment)
+            .frame(height: line, alignment: frameAlignment)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: subtitle.text)
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: subtitle.text == nil)
