@@ -214,12 +214,14 @@ async function main() {
     });
   }
 
-  // The viewer's draft: a title and two paragraphs, not yet published.
+  // The viewer's draft (a 私人卡 never published): a title, two paragraphs, its tags and a cover — the publish step's preview.
+  const draftImage = demoMediaDataUri(draft.id);
   put(`cards/${draft.id}`, {
     authorId: viewer.uid,
     thoughtCore: draft.title,
     story: draft.story.join('\n\n'),
-    tags: [],
+    tags: draft.tags,
+    ...(draftImage ? { media: { type: 'image', url: draftImage, label: draft.title } } : {}),
     originalLocale: world.lang,
     translations: {},
     visibility: 'public',

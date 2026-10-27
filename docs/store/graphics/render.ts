@@ -27,7 +27,7 @@
  * Serif TC / Noto Sans TC); --check requires exactly those fonts for each language.
  *
  * The shapes come from the app's real design utils (same seeds → same shapes),
- * the colours from src/styles/tokens.css, the pen weights from strokes.ts.
+ * the colours from src/styles/palette.css (light, terracotta), the pen weights from strokes.ts.
  */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';

@@ -36,6 +36,7 @@ export interface DemoDraft {
   id: string;
   title: string;
   story: string[];
+  tags: string[];
   /** Minutes ago it was last edited. */
   ago: number;
 }

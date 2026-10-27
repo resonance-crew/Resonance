@@ -54,14 +54,20 @@ export const mkdirp = (p: string) => fs.mkdirSync(p, { recursive: true });
 export const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-/* ── design tokens (read from the real tokens.css) ────────────────────── */
+/* ── design tokens (read from the real palette.css) ───────────────────── */
 
 export type Tokens = Record<string, string>;
 
+/**
+ * The colours, as the site's first `:root` block in src/styles/palette.css sets them: the light
+ * scheme in terracotta, which every image that leaves the app wears (tokens.css holds no colours).
+ */
 export function readTokens(): Tokens {
-  const css = fs.readFileSync(path.join(ROOT, 'src/styles/tokens.css'), 'utf8');
+  const css = fs.readFileSync(path.join(ROOT, 'src/styles/palette.css'), 'utf8');
+  const light = css.match(/^:root \{([^}]*)\}/m)?.[1];
+  if (!light) throw new Error('src/styles/palette.css: no light :root block');
   const out: Tokens = {};
-  for (const m of css.matchAll(/--color-([a-z-]+):\s*(oklch\([^)]*\))/g)) out[m[1]] = m[2];
+  for (const m of light.matchAll(/--color-([a-z-]+):\s*(oklch\([^)]*\))/g)) out[m[1]] = m[2];
   return out;
 }
 

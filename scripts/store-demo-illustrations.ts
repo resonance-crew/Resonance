@@ -1,7 +1,7 @@
 /**
  * Illustrations for the store demo world (scripts/seed-store-demo.ts).
  *
- * For every published card in the demo world it runs the project's own
+ * For every published card in the demo world, and the viewer's draft, it runs the project's own
  * pipeline, generateStoryImage(story) from src/lib/ai/tasks.ts (story ->
  * concept -> the app's doodle STYLE_SUFFIX prompt -> gpt-image, quality low),
  * then saves docs/store/graphics/demo-media/<cardId>.jpg, 768 px wide, JPEG
@@ -23,7 +23,10 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } f
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { generateStoryImage } from '../src/lib/ai/tasks';
-import { CARDS, DEMO_MEDIA_DIR } from './seed-store-demo';
+import { CARDS as PUBLISHED, DEMO_MEDIA_DIR, DRAFT } from './seed-store-demo';
+
+/** Every card that can wear a picture: the published ones and the viewer's draft (the publish step's preview shows its cover). */
+const CARDS = [...PUBLISHED, { id: DRAFT.id, paragraphs: DRAFT.story }];
 
 const CONCURRENCY = 3;
 const MAX_ATTEMPTS = 30;

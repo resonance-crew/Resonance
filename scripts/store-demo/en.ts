@@ -419,6 +419,7 @@ const DRAFT: DemoDraft = {
     'At nine the whole building went quiet. The fridge stopped humming, my screen went dark, even the TV next door fell silent.',
     'I felt my way to the drawer and lit a candle. The flame wavered, stretching the shadows across the wall. My room of three years felt more like home by candlelight than ever.',
   ],
+  tags: ['Home', 'Night', 'Candlelight'],
   ago: 15,
 };
 
