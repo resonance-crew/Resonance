@@ -62,6 +62,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -974,7 +975,7 @@ private fun PublishStep(
         Column(Modifier.holdWhile(pending)) {
             Preview(session, model, compact, pad, underBar, pickCover, dismissKeyboard)
             Spacer(Modifier.height(gap))
-            Tags(model, dismissKeyboard)
+            Tags(model, scroll, dismissKeyboard)
             Spacer(Modifier.height(gap))
             AudienceChoice(model)
             model.resonanceLine?.let { line ->
@@ -1369,28 +1370,61 @@ private fun StepLabel(text: String) {
 }
 
 /**
- * 標籤 (CardEditor's TagField): one field holding the chosen tags, the input and its one action (AI
- * suggestions, or Add once something is typed) — and under it nothing but an error, when there is one
- * (round 8 §2.2: no help line). Tags show in the preview at once.
+ * 標籤 (round 16 §1): the section's label and the chosen tags share one wrapping row ([TagPillRow]);
+ * under it the field ([TagField], the composer's capsule with its AI 建議 / 新增 segment), and under that
+ * nothing but an error, when there is one. The preview card above stays a preview. The field never
+ * moves under the caret: while it has the focus, or after its segment was tapped (an add, the model's
+ * tags arriving), a change of the row's height scrolls the step by as much in the same frame
+ * ([scroll]). A polite announcement says how many tags an add brought in.
  */
 @Composable
-private fun Tags(model: WriteModel, dismissKeyboard: () -> Unit) {
+private fun Tags(model: WriteModel, scroll: androidx.compose.foundation.ScrollState, dismissKeyboard: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val view = LocalView.current
+    var fieldFocused by remember { mutableStateOf(false) }
+    // The segment was tapped: the row's next change (the add, or the model's tags) keeps the field still too.
+    var fromSegment by remember { mutableStateOf(false) }
+    val tags = model.values.tags
+    // An add (by hand, or the model's) is announced: how many came in.
+    var lastCount by remember { mutableIntStateOf(tags.size) }
+    LaunchedEffect(tags.size) {
+        val added = tags.size - lastCount
+        lastCount = tags.size
+        if (added > 0) view.announce(L10n.Write.tagsAdded(added))
+    }
+    LaunchedEffect(model.suggestingTags) { if (!model.suggestingTags) { delay(SEGMENT_HOLD_MILLIS); fromSegment = false } }
     Column(verticalArrangement = Arrangement.spacedBy(PublishLabelGap)) {
-        StepLabel(L10n.Write.tagsLabel)
+        TagPillRow(
+            tags,
+            onRemove = model::removeTag,
+            onHeightChange = { delta ->
+                if (fieldFocused || fromSegment) {
+                    // In the same pass the step places this frame: the field stays where the eye is.
+                    val consumed = scroll.dispatchRawDelta(delta.toFloat())
+                    val left = delta - consumed
+                    // At the step's end the scroll can't go further until the taller page is measured: the rest next frame.
+                    if (kotlin.math.abs(left) >= 1f) scope.launch { scroll.scrollBy(left) }
+                }
+            },
+        ) { StepLabel(L10n.Write.tagsLabel) }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             TagField(
-                tags = model.values.tags,
                 draft = model.tagDraft,
                 onDraftChange = model::typeTag,
                 placeholder = L10n.Write.tagsPlaceholder,
                 suggesting = model.suggestingTags,
-                onRemove = model::removeTag,
+                canRemoveLast = tags.isNotEmpty(),
                 onRemoveLast = model::removeLastTag,
-                onAdd = model::addTag,
+                onAdd = { word ->
+                    fromSegment = true
+                    model.addTag(word)
+                },
                 onSuggest = {
+                    fromSegment = true
                     dismissKeyboard()
                     model.suggestTags()
                 },
+                onFocusChanged = { fieldFocused = it },
             )
             model.tagError?.let { error ->
                 BasicText(
@@ -1402,6 +1436,9 @@ private fun Tags(model: WriteModel, dismissKeyboard: () -> Unit) {
         }
     }
 }
+
+/** How long after an add (or the model's answer) the field is still kept still as the row settles. */
+private const val SEGMENT_HOLD_MILLIS = 400L
 
 /**
  * 卡片類型 (round 8 §2.2): what the card is, as one segmented choice — 公開 · 匿名公開 · 草稿 — with

@@ -1,5 +1,38 @@
 package com.resonance.app.ui
 
+import android.view.KeyCharacterMap
+import android.view.KeyEvent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.EaseOut
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import kotlinx.coroutines.delay
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.em
+import com.resonance.design.ButtonLoader
+import com.resonance.design.CapsuleField
+import com.resonance.design.labelInkDrop
+import com.resonance.design.prefersReducedMotion
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,157 +91,224 @@ import com.resonance.design.generated.Tokens
 import com.resonance.kit.l10n.L10n
 
 /**
- * TagField.tsx: the writer's tags as one control. A single input frame (the
- * field's line; terracotta while anything inside it has focus) holds the chosen
- * tags as bare `md` pills — one frame per layer, so none draws a pen line —
- * then the text input and one trailing action that follows the context: with
- * nothing typed it asks the model for tags (the pen loop draws in the
- * sparkle's place while it thinks), with something typed it adds that tag. Done, a comma (，、 too) or
- * the action adds; Backspace on an empty input takes the last tag back. The
- * pills wrap, and the input with its action goes down together once the line
- * is full ([TagFlow]). The helper line under it is the caller's.
+ * The publish step's tag field (round 16 §1): the chat composer's capsule ([CapsuleField]) — the
+ * field's wobble on cream, its pen darkening while written in, one line exactly 48 tall, no ＋ — and
+ * its end a segment behind a wavy seam that follows what is typed: nothing (or a word an IME is
+ * still composing, [TagEntry.ready]) — the tonal face, ✦ AI 建議, which asks the model (the pen loop
+ * in the sparkle's place while it thinks, the words staying); a word committed — the solid face,
+ * ＋ 新增, which adds it. The segment is as wide as the wider of its two faces, measured once per
+ * language, so the seam never moves as typing starts. Done, a comma (，、 too) or the segment adds;
+ * a tap on the segment mid-composition takes the word as it stands. Backspace in an empty field
+ * takes the last tag back only from a hardware keyboard ([TagEntry.hardwareBackspace]), never a soft
+ * one. The chosen tags are the row above it, not inside it ([TagPillRow]); the error line under it
+ * is the caller's.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TagField(
-    tags: List<String>,
     draft: String,
-    onDraftChange: (String) -> Unit,
+    /** The words as typed, and whether an IME is still composing them (then they are kept whole, never split at a comma). */
+    onDraftChange: (String, Boolean) -> Unit,
     placeholder: String,
     suggesting: Boolean,
-    onRemove: (String) -> Unit,
+    canRemoveLast: Boolean,
     onRemoveLast: () -> Unit,
-    onAdd: () -> Unit,
+    /** Add [String] — the field's word as it stands (a composition's too). */
+    onAdd: (String) -> Unit,
     onSuggest: () -> Unit,
+    onFocusChanged: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
-    val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
-    val canAdd = draft.isNotBlank()
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .onFocusChanged { focused = it.hasFocus }
-            .fieldSurface(53.0, { focused })
-            // The empty parts of the frame are the input's too; the pills' ✕ and the action take their own taps first.
-            .pointerInput(Unit) { detectTapGestures { focus.requestFocus(); keyboard?.show() } }
-            // The action carries its own room, so the right edge pads less.
-            .padding(start = Tokens.FieldPadX.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
-    ) {
-        TagFlow {
-            tags.forEach { tag -> key(tag) { TagPill(tag, Tokens.TerracottaLight, size = TagSize.Md) { onRemove(tag) } } }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f).padding(vertical = 2.dp)) {
-                    val text = AppFonts.body(15f, lineHeight = 1.6f)
-                    if (draft.isEmpty()) BasicText(placeholder, style = fieldHintStyle())
-                    BasicTextField(
-                        draft, onDraftChange,
-                        textStyle = text,
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        // Done adds what is typed and stays for the next; with nothing typed it is done with the field.
-                        keyboardActions = KeyboardActions(onDone = { if (canAdd) onAdd() else focusManager.clearFocus() }),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(focus)
-                            .onPreviewKeyEvent { e ->
-                                // One tag per press: holding the key clears the text, then stops.
-                                val back = e.type == KeyEventType.KeyDown && e.key == Key.Backspace && e.nativeKeyEvent.repeatCount == 0
-                                if (back && draft.isEmpty() && tags.isNotEmpty()) {
-                                    onRemoveLast()
-                                    true
-                                } else false
-                            }
-                            .semantics { contentDescription = placeholder },
-                    )
-                }
-                // Asking the model: the label stays 「AI 建議」 and the pen loop draws in the sparkle's
-                // place at its size, so the button never changes width (TagField's `loading`).
-                OrganicButton(
-                    if (canAdd) L10n.Write.tagsAdd else L10n.Write.tagsSuggest,
-                    variant = ButtonVariant.Tonal,
-                    icon = if (canAdd) IconName.Plus else IconName.Sparkle,
-                    iconSize = if (canAdd) 13.dp else 16.dp,
-                    small = true,
-                    loading = !canAdd && suggesting,
-                ) { if (canAdd) onAdd() else onSuggest() }
-            }
+    // The field's own value, so an IME's composing range is seen: the model holds the words alone.
+    var value by remember { mutableStateOf(TextFieldValue(draft, TextRange(draft.length))) }
+    // The model changed the words (an add emptied them): the field follows, unless an IME is mid-word in them.
+    if (value.text != draft && value.composition == null) value = TextFieldValue(draft, TextRange(draft.length))
+    val ready = TagEntry.ready(value.text, value.composition != null)
+    val text = AppFonts.body(15f, lineHeight = 1.6f)
+    val add = {
+        val word = value.text
+        // Mid-composition the word is taken as it stands; a fresh value ends the IME's composition.
+        value = TextFieldValue("")
+        onAdd(word)
+    }
+    val segmentWidth = tagSegmentWidth()
+    // The whole capsule over the keyboard as it rises, not only its line of text (its segment, its foot with 12 to spare).
+    val bring = remember { BringIntoViewRequester() }
+    val imeUp = WindowInsets.isImeVisible
+    val spare = with(LocalDensity.current) { 12.dp.toPx() }
+    var capsule by remember { mutableStateOf(IntSize.Zero) }
+    LaunchedEffect(focused, imeUp) {
+        if (focused && imeUp) {
+            delay(IME_SETTLE_MILLIS)
+            bring.bringIntoView(Rect(0f, 0f, capsule.width.toFloat(), capsule.height + spare))
+        }
+    }
+    CapsuleField(
+        ready = ready,
+        segmentWidth = segmentWidth,
+        segmentLabel = if (ready) L10n.Write.tagsAddLabel(value.text.trim()) else L10n.Write.tagsSuggestLabel,
+        onSegment = {
+            if (value.text.isNotBlank()) add()
+            else onSuggest()
+        },
+        focused = { focused },
+        textStyle = text,
+        modifier = modifier.bringIntoViewRequester(bring).onSizeChanged { capsule = it }.onFocusChanged {
+            focused = it.hasFocus
+            onFocusChanged(it.hasFocus)
+        },
+        seed = 53.0,
+        // While the model thinks the segment takes no tap (the words typed meanwhile still add by Done).
+        segmentEnabled = ready || !suggesting,
+        segmentState = if (suggesting && !ready) L10n.App.busy else null,
+        segment = { ink -> TagSegmentFace(ready, suggesting, ink) },
+    ) { vertical ->
+        Box(Modifier.fillMaxWidth().padding(vertical = vertical)) {
+            if (value.text.isEmpty()) BasicText(placeholder, style = fieldHintStyle(), maxLines = 1)
+            BasicTextField(
+                value,
+                { next ->
+                    // While an IME is mid-word its separators and its Enter are its own.
+                    value = next
+                    if (next.text != draft || next.composition == null) onDraftChange(next.text, next.composition != null)
+                },
+                textStyle = text,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                // Done adds what is typed and stays for the next; with nothing typed it is done with the field.
+                keyboardActions = KeyboardActions(onDone = { if (value.text.isNotBlank()) add() else focusManager.clearFocus() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focus)
+                    .onPreviewKeyEvent { e ->
+                        val native = e.nativeKeyEvent
+                        // One tag per press, from a hardware keyboard only: a soft keyboard's Backspace never takes a tag.
+                        if (e.type == KeyEventType.KeyDown && e.key == Key.Backspace && value.text.isEmpty() && canRemoveLast &&
+                            TagEntry.hardwareBackspace(native.repeatCount, native.deviceId, native.flags, native.device?.isVirtual)
+                        ) {
+                            onRemoveLast()
+                            true
+                        } else false
+                    }
+                    .semantics { contentDescription = placeholder },
+            )
         }
     }
 }
 
 /**
- * The tag field's flow: the pills in order, wrapping as words do, then the
- * input row (the last child) on whatever is left of the last line — or, when
- * less than [ENTRY_MIN] of it is left, on a line of its own. FlowRow can't say
- * "fill the rest of the line, but not less than this", so the lines are broken
- * by [breakTagLines]. Children sit centred on their line.
+ * The tag segment's face: ✦ AI 建議 at rest (the pen loop in the sparkle's place while the model
+ * thinks), ＋ 新增 once a word is committed — the glyph 6 before the words, 14/600, in [ink].
  */
 @Composable
-private fun TagFlow(content: @Composable () -> Unit) {
-    Layout(content) { measurables, constraints ->
-        val gap = TAG_GAP.roundToPx()
-        val maxWidth = constraints.maxWidth
-        val pills = measurables.dropLast(1).map { it.measure(Constraints(maxWidth = maxWidth)) }
-        val lines = breakTagLines(pills.map { it.width }, ENTRY_MIN.roundToPx(), maxWidth, gap)
-        val placed = mutableListOf<Triple<Placeable, Int, Int>>() // what, x, y
-        var next = 0
-        var y = 0
-        lines.forEachIndexed { i, line ->
-            val items = mutableListOf<Placeable>()
-            repeat(line.pills) { items += pills[next++] }
-            if (line.entry) {
-                val width = (maxWidth - items.sumOf { it.width } - gap * items.size).coerceAtLeast(0)
-                items += measurables.last().measure(Constraints(minWidth = width, maxWidth = width))
-            }
-            val height = items.maxOfOrNull { it.height } ?: 0
-            var x = 0
-            for (item in items) {
-                placed += Triple(item, x, y + (height - item.height) / 2)
-                x += item.width + gap
-            }
-            y += height + if (i < lines.lastIndex) gap else 0
+private fun TagSegmentFace(ready: Boolean, suggesting: Boolean, ink: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TAG_SEGMENT_GAP)) {
+        val drop = Modifier.offset(y = labelInkDrop(TAG_SEGMENT_FONT))
+        when {
+            ready -> OrganicIcon(IconName.Plus, drop, size = 13.dp, color = ink)
+            suggesting -> ButtonLoader(ink, 16.dp, drop)
+            else -> OrganicIcon(IconName.Sparkle, drop, size = 16.dp, color = ink)
         }
-        layout(maxWidth, y) { for ((item, x, top) in placed) item.placeRelative(x, top) }
+        BasicText(if (ready) L10n.Write.tagsAdd else L10n.Write.tagsSuggestShort, style = tagSegmentStyle(ink), maxLines = 1)
     }
 }
 
-private val TAG_GAP = 8.dp
+@Composable @ReadOnlyComposable
+private fun tagSegmentStyle(ink: Color) = AppFonts.body(TAG_SEGMENT_FONT, 600, lineHeight = 1.3f, color = ink).copy(letterSpacing = 0.02.em)
 
-/** The least width the input row takes before it goes down a line. */
-private val ENTRY_MIN = 240.dp
+private const val TAG_SEGMENT_FONT = 14f
 
-/** One line of the tag field: how many pills it holds and whether the input row ends it. */
-internal class TagLine(val pills: Int, val entry: Boolean)
+/** The keyboard's rise settles this long before the field is brought over it. */
+private const val IME_SETTLE_MILLIS = 120L
+private val TAG_SEGMENT_GAP = 6.dp
 
 /**
- * Breaks the tag field into lines: pills fill a line in order (a pill that
- * doesn't fit starts the next; one wider than the field sits alone), and the
- * input row takes the last line if [entryMin] of it is left, else a line of its
- * own. Widths and gap are in pixels.
+ * The tag segment's width (round 16 §1): the wider of its two faces — ✦ + AI 建議, ＋ + 新增 — and
+ * 28 of air, measured once per language (and text size), so the seam stays put as typing starts.
  */
-internal fun breakTagLines(pillWidths: List<Int>, entryMin: Int, maxWidth: Int, gap: Int): List<TagLine> {
-    val lines = mutableListOf<TagLine>()
-    var count = 0
-    var used = 0
-    for (width in pillWidths) {
-        val needs = if (count == 0) width else used + gap + width
-        if (count > 0 && needs > maxWidth) {
-            lines += TagLine(count, entry = false)
-            count = 0
+@Composable
+private fun tagSegmentWidth(): Dp {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val style = tagSegmentStyle(Tokens.Text)
+    val suggest = L10n.Write.tagsSuggestShort
+    val addWord = L10n.Write.tagsAdd
+    return remember(suggest, addWord, style, density) {
+        with(density) {
+            val a = measurer.measure(suggest, style, maxLines = 1, softWrap = false).size.width.toDp() + 16.dp
+            val b = measurer.measure(addWord, style, maxLines = 1, softWrap = false).size.width.toDp() + 13.dp
+            maxOf(a, b) + TAG_SEGMENT_GAP + 28.dp
         }
-        used = if (count == 0) width else used + gap + width
-        count++
     }
-    val needs = if (count == 0) entryMin else used + gap + entryMin
-    if (count > 0 && needs > maxWidth) {
-        lines += TagLine(count, entry = false)
-        lines += TagLine(0, entry = true)
-    } else {
-        lines += TagLine(count, entry = true)
-    }
-    return lines
 }
+
+/** The tag field's rules that need no screen: when its segment adds, and which Backspace takes a tag back. */
+internal object TagEntry {
+    /** Whether the segment adds (`ready`): a word committed — not blank, and no IME mid-composition. */
+    fun ready(text: String, composing: Boolean): Boolean = !composing && text.isNotBlank()
+
+    /**
+     * Whether a Backspace key event came from a hardware keyboard, pressed once (not held): a soft
+     * keyboard's comes from the virtual keyboard device or carries FLAG_SOFT_KEYBOARD, and never
+     * takes a tag back — on a phone a Backspace held to clear the words would eat the tags too.
+     */
+    fun hardwareBackspace(repeatCount: Int, deviceId: Int, flags: Int, virtualDevice: Boolean?): Boolean =
+        repeatCount == 0 && deviceId != KeyCharacterMap.VIRTUAL_KEYBOARD && (flags and KeyEvent.FLAG_SOFT_KEYBOARD) == 0 && virtualDevice != true
+}
+
+/**
+ * The chosen tags as the section's row (round 16 §1): the section's [label] first, then each tag as
+ * a large outlined pill on the light terracotta with its ✕ (a 44 hit box round it), 8 apart and 8
+ * between lines, the row at least 32 tall. A tag added after the row was first drawn pops in (160 ms,
+ * 0.85 → 1; at once with animations off). [onHeightChange] hears the row's height change as it is
+ * measured — before anything under it is placed — so the field under it can be kept still.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun TagPillRow(
+    tags: List<String>,
+    onRemove: (String) -> Unit,
+    onHeightChange: (Int) -> Unit,
+    label: @Composable () -> Unit,
+) {
+    val reduced = LocalContext.current.prefersReducedMotion()
+    // The tags the row opened with stand still; only ones added since pop in.
+    val first = remember { tags.toSet() }
+    val lastHeight = remember { intArrayOf(-1) }
+    FlowRow(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = TagRowMin)
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                val before = lastHeight[0]
+                lastHeight[0] = placeable.height
+                if (before >= 0 && before != placeable.height) onHeightChange(placeable.height - before)
+                layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+            },
+        horizontalArrangement = Arrangement.spacedBy(TagGap),
+        verticalArrangement = Arrangement.spacedBy(TagGap),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.heightIn(min = TagRowMin), contentAlignment = Alignment.CenterStart) { label() }
+        tags.forEach { tag ->
+            key(tag) {
+                val pop = remember { Animatable(if (tag in first || reduced) 1f else 0.85f) }
+                LaunchedEffect(Unit) { if (pop.value < 1f) pop.animateTo(1f, tween(TAG_POP_MILLIS, easing = EaseOut)) }
+                Box(Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value }) {
+                    TagPill(tag, Tokens.TerracottaLight, size = TagSize.Lg, outlined = true) { onRemove(tag) }
+                }
+            }
+        }
+    }
+}
+
+private val TagRowMin = 32.dp
+private val TagGap = 8.dp
+private const val TAG_POP_MILLIS = 160
 
 /** One half of the image surface (upload or illustrate): the terracotta glyph, the muted title and its fainter hint. */
 @Composable

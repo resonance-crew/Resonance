@@ -52,6 +52,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
@@ -129,16 +130,60 @@ fun ComposerCapsule(
     seed: Double = 17.0,
     leading: @Composable () -> Unit,
     field: @Composable BoxScope.(vertical: Dp) -> Unit,
+) = CapsuleField(
+    ready = canSend,
+    segmentWidth = ComposerSendWidth,
+    segmentLabel = sendLabel,
+    onSegment = onSend,
+    focused = focused,
+    textStyle = textStyle,
+    modifier = modifier,
+    seed = seed,
+    leading = leading,
+    segment = { ink -> OrganicIcon(IconName.Send, size = 20.dp, color = ink) },
+    field = field,
+)
+
+/**
+ * The capsule the composer is (round 9 §4), for any one-line-or-more field with a verb at its end
+ * (round 16 §1: the publish step's tags). The field's own wobble (R16) on cream, its pen at INK,
+ * darker while it has the focus ([focused], read while drawing: [composerPen]), never terracotta;
+ * one line exactly [ComposerHeight] tall whatever the text size ([composerPadding] of [textStyle]'s
+ * real line). [leading] (a 48 square at its start, the composer's ＋) or, without one, the field's
+ * own start padding; the [field]; and the end segment behind a wavy seam cut in the paper's colour,
+ * [segmentWidth] wide and as tall as the capsule, its [segment] content on the last line's row in
+ * the ink it is handed. At rest ([ready] false) the tonal face with the deep terracotta ink, so the
+ * seam and the two parts show; [ready], the solid accent with cream ink, in 140 ms. The segment
+ * takes a tap while [segmentEnabled] (the composer's Send only when it can send; the tag field's
+ * at rest too, where it asks the model); not taking one is said to TalkBack as disabled, never
+ * drawn faded. [segmentState] is its state for TalkBack (busy while the model thinks).
+ */
+@Composable
+fun CapsuleField(
+    ready: Boolean,
+    segmentWidth: Dp,
+    segmentLabel: String,
+    onSegment: () -> Unit,
+    focused: () -> Boolean,
+    textStyle: TextStyle,
+    modifier: Modifier = Modifier,
+    seed: Double = 17.0,
+    segmentEnabled: Boolean = ready,
+    segmentState: String? = null,
+    leading: (@Composable () -> Unit)? = null,
+    segment: @Composable (ink: Color) -> Unit,
+    field: @Composable BoxScope.(vertical: Dp) -> Unit,
 ) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val haptic = LocalHapticFeedback.current
-    val face by animateColorAsState(if (canSend) Tokens.ButtonFill else Tokens.ButtonTonal, tween(SEND_FADE_MILLIS), label = "sendFace")
-    val plane by animateColorAsState(if (canSend) Tokens.Cream else Tokens.ButtonOnTonal, tween(SEND_FADE_MILLIS), label = "sendPlane")
+    val face by animateColorAsState(if (ready) Tokens.ButtonFill else Tokens.ButtonTonal, tween(SEND_FADE_MILLIS), label = "segmentFace")
+    val ink by animateColorAsState(if (ready) Tokens.Cream else Tokens.ButtonOnTonal, tween(SEND_FADE_MILLIS), label = "segmentInk")
     val shape = remember(seed) { WobRectShape(Tokens.RadiusMd.toDouble(), seed) }
     val vertical = composerPadding(lineHeightOf(textStyle))
     val palette = LocalResonanceColors.current
-    val press = OrganicIndication.OnFill
+    // A press on the solid face darkens it as the primary button does; on the tonal one, the accent's wash.
+    val press = if (ready) OrganicIndication.OnFill else OrganicIndication.Wash
     val grainInk = GrainInk.current
     Box(
         modifier
@@ -149,7 +194,7 @@ fun ComposerCapsule(
                 val w = size.width / density
                 val h = size.height / density
                 val pad = 12.0
-                val seam = boundaryPoints((w - ComposerSendWidth.value).toDouble(), h.toDouble(), seed + 11, 1.6, pad)
+                val seam = boundaryPoints((w - segmentWidth.value).toDouble(), h.toDouble(), seed + 11, 1.6, pad)
                 val region = Path().apply {
                     op(SegmentedLayout.regionPath(1, 2, listOf(seam), w, h, pad.toFloat(), density), outline, PathOperation.Intersect)
                 }
@@ -159,34 +204,36 @@ fun ComposerCapsule(
                 onDrawBehind {
                     drawOutline(o, palette.Cream)
                     drawPath(region, face)
-                    if (pressed && canSend) drawPath(region, press)
+                    if (pressed && segmentEnabled) drawPath(region, press)
                     grain?.let { drawPath(region, it, alpha = 0.38f) }
                     clipPath(outline) { drawPath(seamPath, palette.Cream, style = pen) }
                     drawOutline(o, composerPen(focused(), palette), style = pen)
                 }
             },
     ) {
-        Row(Modifier.fillMaxWidth().heightIn(min = ComposerHeight).padding(end = ComposerSendWidth), verticalAlignment = Alignment.Bottom) {
-            Box(Modifier.width(ComposerHeight).height(ComposerHeight), contentAlignment = Alignment.Center) { leading() }
-            Box(Modifier.weight(1f).padding(end = 10.dp)) { field(vertical) }
+        Row(Modifier.fillMaxWidth().heightIn(min = ComposerHeight).padding(end = segmentWidth), verticalAlignment = Alignment.Bottom) {
+            if (leading != null) Box(Modifier.width(ComposerHeight).height(ComposerHeight), contentAlignment = Alignment.Center) { leading() }
+            Box(Modifier.weight(1f).padding(start = if (leading != null) 0.dp else Tokens.FieldPadX.dp, end = 10.dp)) { field(vertical) }
         }
         Box(Modifier.matchParentSize()) {
             Box(
                 Modifier
                     .align(Alignment.CenterEnd)
-                    .width(ComposerSendWidth)
+                    .width(segmentWidth)
                     .fillMaxHeight()
-                    .clickable(source, indication = null, enabled = canSend, role = Role.Button, onClickLabel = sendLabel) {
+                    .clickable(source, indication = null, enabled = segmentEnabled, role = Role.Button, onClickLabel = segmentLabel) {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onSend()
+                        onSegment()
                     }
-                    .semantics { contentDescription = sendLabel },
+                    // The clickable's role, action and enabled state stay; the glyph and words inside are said as one name.
+                    .clearAndSetSemantics {
+                        contentDescription = segmentLabel
+                        if (segmentState != null) stateDescription = segmentState
+                    },
                 contentAlignment = Alignment.BottomCenter,
             ) {
-                // The plane on the last line's row, level with ＋, however many lines the field has.
-                Box(Modifier.fillMaxWidth().height(ComposerHeight), contentAlignment = Alignment.Center) {
-                    OrganicIcon(IconName.Send, size = 20.dp, color = plane)
-                }
+                // The segment's content on the last line's row, level with ＋, however many lines the field has.
+                Box(Modifier.fillMaxWidth().height(ComposerHeight), contentAlignment = Alignment.Center) { segment(ink) }
             }
         }
     }
