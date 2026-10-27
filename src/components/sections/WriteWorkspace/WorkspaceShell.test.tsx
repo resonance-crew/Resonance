@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { useState } from 'react';
+import { createRef, useState } from 'react';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { fireEvent, renderWithIntl, screen, userEvent, within } from '@/../test/render';
+import { act, fireEvent, renderWithIntl, screen, userEvent, within } from '@/../test/render';
 import { mockElementSize, penLines } from '@/../test/organic';
 import type { Card } from '@/lib/db/types';
 
@@ -38,7 +38,7 @@ vi.mock('@/components/molecules/ThoughtMap/ThoughtMapBoard', () => ({
   ),
 }));
 
-import { WorkspaceShell } from './WorkspaceShell';
+import { WorkspaceShell, type WorkspaceShellHandle } from './WorkspaceShell';
 
 // The button draws its shapes only once measured; give it a box.
 mockElementSize(120, 40);
@@ -593,6 +593,109 @@ describe('the workspace at the split', () => {
     drag(600, 950);
     drag(990, 1000, 1030);
     expect(pane()).toHaveAttribute('data-folded');
+  });
+
+  // Round 16 §7 (the apps' rule): the writer's pane dragged on past 1:1 follows the pointer, takes the whole
+  // width released past 3/4 — its own bar over it, the grip docked at the leading edge — and gives the map
+  // back at 1:1 from that grip, the keyboard, or Escape.
+  it('takes the whole width when the writer’s pane is released past 3/4, and gives the map back at 1:1', () => {
+    const shellRef = createRef<WorkspaceShellHandle>();
+    renderWithIntl(
+      <WorkspaceShell ref={shellRef} open bar={{ title: 'New card', onBack: vi.fn() }}>
+        <p>editor</p>
+      </WorkspaceShell>,
+    );
+    fireEvent.pointerDown(divider(), { button: 0, pointerId: 1, clientX: 500 });
+    fireEvent.pointerMove(divider(), { pointerId: 1, clientX: 300 });
+    expect(divider()).toHaveAttribute('aria-valuenow', '70');
+    expect(screen.queryByText('Release to write full width')).toBeNull();
+    fireEvent.pointerMove(divider(), { pointerId: 1, clientX: 200 });
+    expect(screen.getByText('Release to write full width')).toBeInTheDocument();
+    fireEvent.pointerUp(divider(), { pointerId: 1, clientX: 200 });
+    expect(divider()).toHaveAttribute('aria-valuenow', '100');
+    expect(divider()).toHaveAttribute('data-docked', 'start');
+    expect(divider()).toHaveAccessibleName('Show the thought map');
+    expect(shellRef.current?.isFull()).toBe(true);
+    // The writer's own bar stands over it, as below the split.
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
+
+    // A tap on the docked grip.
+    drag(5);
+    expect(divider()).toHaveAttribute('aria-valuenow', '50');
+    expect(divider()).not.toHaveAttribute('data-docked');
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+
+    // A drag from it toward the middle.
+    drag(500, 150);
+    drag(5, 40);
+    expect(divider()).toHaveAttribute('aria-valuenow', '50');
+
+    // Escape, from anywhere but a field.
+    drag(500, 150);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(divider()).toHaveAttribute('aria-valuenow', '50');
+    expect(pane()).not.toHaveAttribute('data-folded');
+
+    // The keyboard: one step past 1:1 is the whole width, one back is 1:1.
+    divider().focus();
+    fireEvent.keyDown(divider(), { key: 'ArrowLeft' });
+    expect(divider()).toHaveAttribute('aria-valuenow', '100');
+    fireEvent.keyDown(divider(), { key: 'ArrowRight' });
+    expect(divider()).toHaveAttribute('aria-valuenow', '50');
+
+    // The writer's back from a card opened from the map: the map alone, the pane to come back at 1:1.
+    drag(500, 150);
+    act(() => shellRef.current?.foldToMap());
+    expect(pane()).toHaveAttribute('data-folded');
+    drag(995);
+    expect(pane()).not.toHaveAttribute('data-folded');
+    expect(divider()).toHaveAttribute('aria-valuenow', '50');
+  });
+
+  it('springs back to 1:1 released short of 3/4, and a pane without the writer’s bar never passes 1:1', () => {
+    const { unmount } = renderWithIntl(
+      <WorkspaceShell open bar={{ title: 'New card', onBack: vi.fn() }}>
+        <p>editor</p>
+      </WorkspaceShell>,
+    );
+    drag(500, 320);
+    expect(divider()).toHaveAttribute('aria-valuenow', '50');
+    expect(divider()).not.toHaveAttribute('data-docked');
+    unmount();
+
+    renderWithIntl(
+      <WorkspaceShell open onClose={vi.fn()}>
+        <p>editor</p>
+      </WorkspaceShell>,
+    );
+    fireEvent.pointerDown(divider(), { button: 0, pointerId: 1, clientX: 500 });
+    fireEvent.pointerMove(divider(), { pointerId: 1, clientX: 150 });
+    expect(divider()).toHaveAttribute('aria-valuenow', '50');
+    expect(screen.queryByText('Release to write full width')).toBeNull();
+    fireEvent.pointerUp(divider(), { pointerId: 1, clientX: 150 });
+    expect(divider()).toHaveAttribute('aria-valuenow', '50');
+  });
+
+  // The owner saw the divider move under a passing mouse: a drag whose release the rail never heard (let go
+  // outside the window, its capture lost) was still running, and a mouse's pointerId is always the same.
+  it('never moves the divider under a hover once its release went unheard', () => {
+    renderWithIntl(
+      <WorkspaceShell open onClose={vi.fn()}>
+        <p>editor</p>
+      </WorkspaceShell>,
+    );
+    fireEvent.pointerDown(divider(), { button: 0, pointerId: 1, clientX: 500, pointerType: 'mouse', buttons: 1 });
+    fireEvent.pointerMove(divider(), { pointerId: 1, clientX: 600, pointerType: 'mouse', buttons: 1 });
+    expect(divider()).toHaveAttribute('aria-valuenow', '40');
+    fireEvent.pointerMove(divider(), { pointerId: 1, clientX: 550, pointerType: 'mouse', buttons: 0 });
+    fireEvent.pointerMove(divider(), { pointerId: 1, clientX: 520, pointerType: 'mouse', buttons: 1 });
+    expect(divider()).toHaveAttribute('aria-valuenow', '40');
+
+    // A capture taken away mid-drag ends it too.
+    fireEvent.pointerDown(divider(), { button: 0, pointerId: 1, clientX: 600 });
+    fireEvent.lostPointerCapture(divider(), { pointerId: 1 });
+    fireEvent.pointerMove(divider(), { pointerId: 1, clientX: 650 });
+    expect(divider()).toHaveAttribute('aria-valuenow', '40');
   });
 
   it('shows the folded pane again when a card is opened from the map', async () => {

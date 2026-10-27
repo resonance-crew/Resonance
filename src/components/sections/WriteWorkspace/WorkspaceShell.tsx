@@ -3,6 +3,7 @@
 import {
   useEffect,
   useId,
+  useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
@@ -33,6 +34,12 @@ export const MIN_EDITOR_FRAC = 0.32;
 export const MAX_EDITOR_FRAC = 0.5;
 /** Dragged on past the narrowest, a pane narrower than this hides on release. */
 export const HIDE_EDITOR_FRAC = 0.18;
+/**
+ * The writer's pane dragged on past 1:1 follows the pointer; released at
+ * least this wide it takes the whole width (the apps' EditorSplit / PaneDrag
+ * rule), released short of it it springs back to 1:1.
+ */
+export const FULL_EDITOR_FRAC = 0.75;
 /** One arrow key's step of the divider. */
 const KEY_STEP = 0.02;
 /** How far the docked grip is dragged toward the map before it shows the pane. */
@@ -100,8 +107,20 @@ export interface WorkspaceShellProps {
   paneAction?: ReactNode;
   /** The bar's (or the pane header's) title, for a host that moves the focus to it. */
   titleRef?: Ref<HTMLHeadingElement>;
+  /** What the host may ask of the shell (the writer's back from a card it opened full width). */
+  ref?: Ref<WorkspaceShellHandle>;
   children: ReactNode;
 }
+
+export interface WorkspaceShellHandle {
+  /** The writer's pane takes the whole width (dragged there), the map hidden behind it. */
+  isFull(): boolean;
+  /** From the whole width to the map alone: the pane folds away, to come back at 1:1. */
+  foldToMap(): void;
+}
+
+/** Which edge a docked grip sits on: the trailing one (the pane folded away) or the leading one (full width). */
+type Dock = 'end' | 'start';
 
 /**
  * The unified full-viewport workspace: thought map fixed on the left, the
@@ -130,6 +149,7 @@ export function WorkspaceShell({
   paneStatus,
   paneAction,
   titleRef,
+  ref,
   children,
 }: WorkspaceShellProps) {
   const t = useTranslations('write');
@@ -156,13 +176,24 @@ export function WorkspaceShell({
   const [hidden, setHidden] = useState(false);
   if (!open && hidden) setHidden(false);
   const folded = hidden && open && split === true;
+  // The writer's pane dragged out to the whole width (round 16 §7, the apps' full mode): the map hidden behind
+  // it, the writer's own bar over it as below the split, the grip docked at the leading edge to bring the map
+  // back at 1:1. Only the writer's (it has a bar), only at the split, never remembered.
+  const canFull = !!bar;
+  const [fullState, setFull] = useState(false);
+  if (fullState && (!open || !canFull || split === false)) setFull(false);
+  const full = fullState && open && split === true && !folded;
+  const dock: Dock | undefined = folded ? 'end' : full ? 'start' : undefined;
 
   // A drag of the divider: `over` is the pane's width while dragged on past the narrowest (it follows the
   // pointer there), null within 32–50 %; `from` the width it had when the drag began, which it shows again
   // at if this drag hides it.
-  const drag = useRef<{ id: number; from: number; x: number; docked: boolean; shown: boolean } | null>(null);
+  const drag = useRef<{ id: number; from: number; x: number; docked: Dock | undefined; shown: boolean } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [over, setOver] = useState<number | null>(null);
+  // Past 1:1 (the writer's pane only), the pane's width as the pointer has it, else null.
+  const [beyond, setBeyond] = useState<number | null>(null);
+  const inFullZone = beyond != null && beyond >= FULL_EDITOR_FRAC;
   // Bumped once the divider has been released (or stepped by a key): the map's width has settled.
   const [settleKey, setSettleKey] = useState(0);
   const settle = () => setSettleKey((k) => k + 1);
@@ -173,9 +204,22 @@ export function WorkspaceShell({
     const active = document.activeElement;
     if (active instanceof HTMLElement && paneRef.current?.contains(active)) railRef.current?.focus();
     setHidden(true);
+    // Shown again, it comes back at 1:1, not over the whole width.
+    if (full) {
+      setFull(false);
+      setEditorFrac(MAX_EDITOR_FRAC);
+    }
     onHide?.();
   };
   const show = () => setHidden(false);
+  // From the whole width back to the map beside the pane, 1:1.
+  const unfill = () => {
+    setFull(false);
+    setEditorFrac(MAX_EDITOR_FRAC);
+    settle();
+  };
+
+  useImperativeHandle(ref, () => ({ isFull: () => full, foldToMap: hide }));
 
   const fracAt = (clientX: number) => {
     const r = shellRef.current?.getBoundingClientRect();
@@ -186,49 +230,90 @@ export function WorkspaceShell({
   const onRailPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
-    drag.current = { id: e.pointerId, from: editorFrac, x: e.clientX, docked: folded, shown: false };
+    drag.current = { id: e.pointerId, from: editorFrac, x: e.clientX, docked: dock, shown: false };
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    if (!folded) setDragging(true);
+    if (!dock) setDragging(true);
   };
   const onRailPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     const d = drag.current;
     if (!d || d.id !== e.pointerId) return;
-    if (d.docked) {
-      // Docked at the edge: drawn toward the map, the pane comes back as it was.
+    // A mouse moving with no button held is not dragging: its release went somewhere the rail never heard of
+    // (out of the window, a lost capture). It ends here — a hover never moves the divider.
+    if (e.pointerType === 'mouse' && e.buttons === 0) {
+      finishDrag(e.clientX, true);
+      return;
+    }
+    if (d.docked === 'end') {
+      // Docked at the trailing edge: drawn toward the map, the pane comes back as it was.
       if (!d.shown && d.x - e.clientX > SHOW_DRAG_PX) {
         d.shown = true;
         show();
       }
       return;
     }
+    if (d.docked === 'start') {
+      // Docked at the leading edge (full width): drawn toward the middle, the map comes back at 1:1.
+      if (!d.shown && e.clientX - d.x > SHOW_DRAG_PX) {
+        d.shown = true;
+        unfill();
+      }
+      return;
+    }
     const f = fracAt(e.clientX);
     if (f == null) return;
-    if (f >= MIN_EDITOR_FRAC) {
+    if (f > MAX_EDITOR_FRAC && canFull) {
+      setEditorFrac(MAX_EDITOR_FRAC);
+      setOver(null);
+      setBeyond(Math.min(1, f));
+    } else if (f >= MIN_EDITOR_FRAC) {
       setEditorFrac(Math.min(MAX_EDITOR_FRAC, f));
       setOver(null);
+      setBeyond(null);
     } else {
       setEditorFrac(MIN_EDITOR_FRAC);
       setOver(Math.max(0, f));
+      setBeyond(null);
     }
   };
-  const endDrag = (e: ReactPointerEvent<HTMLDivElement>, cancelled: boolean) => {
+  /** The drag is over — released (or `cancelled`: lost, left the window) at `clientX`. */
+  const finishDrag = (clientX: number, cancelled: boolean) => {
     const d = drag.current;
-    if (!d || d.id !== e.pointerId) return;
+    if (!d) return;
     drag.current = null;
     setDragging(false);
     if (d.docked) {
-      // A tap on the docked grip shows the pane again.
-      if (!cancelled && !d.shown && Math.abs(e.clientX - d.x) <= SHOW_DRAG_PX) show();
+      // A tap on a docked grip: at the trailing edge it shows the pane again, at the leading one the map.
+      if (!cancelled && !d.shown && Math.abs(clientX - d.x) <= SHOW_DRAG_PX) {
+        if (d.docked === 'end') show();
+        else unfill();
+      }
       return;
     }
     // Released past the hide line: the pane slides away, to come back at the width it had. Between it and the
-    // narrowest, the pane springs back to the narrowest.
+    // narrowest, the pane springs back to the narrowest. Past 3/4 of the width it takes the whole; between 1:1
+    // and there, it springs back to 1:1.
     if (!cancelled && inHideZone) {
       setEditorFrac(d.from);
       hide();
+    } else if (!cancelled && inFullZone) {
+      setFull(true);
+      settle();
     } else settle();
     setOver(null);
+    setBeyond(null);
   };
+  const endDrag = (e: ReactPointerEvent<HTMLDivElement>, cancelled: boolean) => {
+    if (drag.current?.id !== e.pointerId) return;
+    finishDrag(e.clientX, cancelled);
+  };
+  // The window losing the focus mid-drag (another app, a dialog) ends the drag where it was, as a cancel.
+  useEffect(() => {
+    if (!dragging) return;
+    const onBlur = () => finishDrag(0, true);
+    window.addEventListener('blur', onBlur);
+    return () => window.removeEventListener('blur', onBlur);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragging]);
 
   // A separator the keyboard moves too: the arrows resize (toward the map widens the editor; from the docked
   // edge, shows it), Enter and Space hide and show.
@@ -236,17 +321,24 @@ export function WorkspaceShell({
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       if (folded) show();
+      else if (full) unfill();
       else hide();
     } else if (e.key === 'ArrowLeft') {
       e.preventDefault();
       if (folded) show();
-      else {
+      else if (full) return;
+      else if (canFull && editorFrac >= MAX_EDITOR_FRAC) {
+        // From 1:1, one more step toward the map is the whole width.
+        setFull(true);
+        settle();
+      } else {
         setEditorFrac((f) => Math.min(MAX_EDITOR_FRAC, +(f + KEY_STEP).toFixed(2)));
         settle();
       }
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
-      if (!folded) {
+      if (full) unfill();
+      else if (!folded) {
         setEditorFrac((f) => Math.max(MIN_EDITOR_FRAC, +(f - KEY_STEP).toFixed(2)));
         settle();
       }
@@ -255,7 +347,7 @@ export function WorkspaceShell({
 
   // The writer's bar (below the split) inks its pen line in whole while anything under it has scrolled (the
   // draft, or the original card beside it).
-  const barShown = !!bar && split !== true;
+  const barShown = !!bar && (split !== true || full);
   const scrolledUnder = useRef(new Set<Element>());
   const [scrolled, setScrolled] = useState(false);
   const onScrollCapture = (e: UIEvent<HTMLDivElement>) => {
@@ -359,22 +451,26 @@ export function WorkspaceShell({
         else paneRef.current?.querySelector<HTMLButtonElement>('header button')?.focus();
         return;
       }
-      if (split === true) hide();
-      else onClose?.();
+      // Full width, Escape brings the map back beside the pane (1:1) rather than folding the card away.
+      if (split === true) {
+        if (full) unfill();
+        else hide();
+      } else onClose?.();
     };
     document.addEventListener('keydown', onKey, true);
     return () => document.removeEventListener('keydown', onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [escapes, split, onClose, onHide]);
+  }, [escapes, split, onClose, onHide, full]);
 
   const leaveLabel = tMap('leave');
-  const shownFrac = folded ? 0 : (over ?? editorFrac);
+  const shownFrac = folded ? 0 : full ? 1 : (over ?? beyond ?? editorFrac);
 
   return (
     <div
       ref={shellRef}
       className={styles.shell}
       data-bar={bar ? '' : undefined}
+      data-full={full || undefined}
       onScrollCapture={barShown ? onScrollCapture : undefined}
       style={
         {
@@ -401,11 +497,12 @@ export function WorkspaceShell({
         </div>
       )}
       {/* At the split the writer's title is the page's heading still, for a screen reader. */}
-      {bar && split === true && <h1 className={styles.srOnly}>{bar.title}</h1>}
+      {bar && split === true && !full && <h1 className={styles.srOnly}>{bar.title}</h1>}
       <div
         ref={mapRef}
         className={leftOverride ? `${styles.mapPane} ${styles.mapPaneDoc}` : styles.mapPane}
-        inert={mapCovered}
+        data-full={full || undefined}
+        inert={mapCovered || full}
       >
         {leftOverride ??
           (mapShown.current && (
@@ -444,18 +541,21 @@ export function WorkspaceShell({
             role="separator"
             tabIndex={0}
             aria-orientation="vertical"
-            aria-label={folded ? t('openEditor') : t('resizeDivider')}
+            aria-label={folded ? t('openEditor') : full ? t('showMap') : t('resizeDivider')}
             aria-controls={paneId}
             aria-valuemin={0}
-            aria-valuemax={Math.round(MAX_EDITOR_FRAC * 100)}
+            aria-valuemax={canFull ? 100 : Math.round(MAX_EDITOR_FRAC * 100)}
             aria-valuenow={Math.round(shownFrac * 100)}
-            title={folded ? t('openEditor') : t('resizeDivider')}
-            data-docked={folded || undefined}
+            title={folded ? t('openEditor') : full ? t('showMap') : t('resizeDivider')}
+            data-docked={dock}
             data-dragging={dragging || undefined}
             onPointerDown={onRailPointerDown}
             onPointerMove={onRailPointerMove}
             onPointerUp={(e) => endDrag(e, false)}
             onPointerCancel={(e) => endDrag(e, true)}
+            // The capture taken from it mid-drag (a re-render, the browser): the drag ends there, never left
+            // waiting for a release it will not hear.
+            onLostPointerCapture={(e) => endDrag(e, true)}
             onKeyDown={onRailKeyDown}
           >
             <div className={styles.railGrip} aria-hidden="true">
@@ -466,6 +566,11 @@ export function WorkspaceShell({
             {inHideZone && (
               <span className={styles.releasePill} aria-hidden="true">
                 {t('releaseToClose')}
+              </span>
+            )}
+            {inFullZone && (
+              <span className={styles.releasePill} data-side="pane" aria-hidden="true">
+                {t('releaseToFull')}
               </span>
             )}
           </div>
@@ -498,7 +603,7 @@ export function WorkspaceShell({
                     titleRef={titleRef}
                   />
                 )}
-                {split === true && paneAction != null && (
+                {split === true && !full && paneAction != null && (
                   <div className={styles.paneAction}>
                     {paneStatus}
                     {paneAction}

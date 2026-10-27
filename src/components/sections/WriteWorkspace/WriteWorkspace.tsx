@@ -15,7 +15,7 @@ import { editTitleKey } from '@/components/molecules/CardEditor/writerTitle';
 import { OpenedCardPane } from './OpenedCardPane';
 import { PaneActionButton } from './PaneActionButton';
 import { OriginalCardPanel } from './LazyOriginalCardPanel';
-import { WorkspaceShell } from './WorkspaceShell';
+import { WorkspaceShell, type WorkspaceShellHandle } from './WorkspaceShell';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { useLeaveWriter } from '@/lib/hooks/useLeaveWriter';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
@@ -87,6 +87,7 @@ export function WriteWorkspace({
   const editor = useRef<CardEditorHandle>(null);
   // The editor of a card opened from the map (the viewer's own).
   const opened = useRef<CardEditorHandle>(null);
+  const shell = useRef<WorkspaceShellHandle>(null);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   // The arrow and the dialog can both land before the page has gone: it leaves once.
   const leaving = useRef(false);
@@ -242,6 +243,12 @@ export function WriteWorkspace({
     // From the publish step, back to writing — never a question.
     if (showOpened) {
       if (opened.current?.stepBack()) return;
+      // Written full width, a card opened from the map goes back to the map (the pane folds away, to come back
+      // at 1:1 with it), as the apps' writer does; beside the map, back to the draft under it.
+      if (shell.current?.isFull()) {
+        shell.current.foldToMap();
+        return;
+      }
       setOpenedCard(null);
       return;
     }
@@ -254,6 +261,7 @@ export function WriteWorkspace({
   return (
     <>
       <WorkspaceShell
+        ref={shell}
         open
         bar={{
           title: barTitle,
