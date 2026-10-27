@@ -439,8 +439,8 @@ describe('PublishStep', () => {
     await echoSettled();
   });
 
-  // Round 17 §5.3: one back — the shell's Leave over the map returns to writing; the step draws none of its own.
-  it('names itself in its own row at the split, with the save state, and no back of its own', async () => {
+  // At the whole width the shell's Leave is the one back (round 17 §5.3): the step draws none of its own.
+  it('names itself in its own row at the split, with the save state, and no back of its own at the whole width', async () => {
     renderWithIntl(<Step inlineHeading saveStatus={{ label: en.write.status.saved, title: 'Saved · 14:32' }} />);
     const heading = screen.getByRole('heading', { level: 2, name: en.write.publishPanel.title });
     const state = screen.getAllByRole('status').find((el) => el.textContent === en.write.status.saved);
@@ -448,6 +448,21 @@ describe('PublishStep', () => {
     expect(screen.queryByRole('button', { name: en.write.leaveStay })).toBeNull();
     // The heading leads its row: nothing stands before it.
     expect(heading.closest('[class*="headingRow"]')!.firstElementChild).toContainElement(heading);
+    await echoSettled();
+  });
+
+  // The owner (2026-10-28): beside the map, whose Leave leaves the page, the step has its own back to writing,
+  // before its name — waiting while a publish is on its way.
+  it('puts its own back to writing before its name beside the map', async () => {
+    const onBack = vi.fn();
+    const { rerender } = renderWithIntl(<Step inlineHeading onBack={onBack} />);
+    const heading = screen.getByRole('heading', { level: 2, name: en.write.publishPanel.title });
+    const back = screen.getByRole('button', { name: en.write.leaveStay });
+    expect(heading.closest('[class*="headingRow"]')!.firstElementChild).toContainElement(back);
+    await userEvent.click(back);
+    expect(onBack).toHaveBeenCalledTimes(1);
+    rerender(<Step inlineHeading onBack={onBack} pending />);
+    expect(screen.getByRole('button', { name: en.write.leaveStay })).toBeDisabled();
     await echoSettled();
   });
 });

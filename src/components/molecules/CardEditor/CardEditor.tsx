@@ -127,6 +127,11 @@ export interface CardEditorProps {
   inlineStepHeading?: boolean;
   focusStepHeading?: () => void;
   /**
+   * The inline heading has a back of its own to writing (beside the map, whose Leave leaves the page); at the
+   * whole width the Leave is the one back and it has none (round 17 §5.3).
+   */
+  inlineStepBack?: boolean;
+  /**
    * Shows the card's page once it is kept as a 私人卡 (round 9 §1: 儲存 / 轉為私人卡 land on it, as 發布 does).
    * The host's way, which replaces the writer's entry (back from the card goes where the writer came from);
    * by default the card's page replaces this one.
@@ -245,6 +250,7 @@ export function CardEditor({
   onPrimaryActionChange,
   inlineStepHeading = false,
   focusStepHeading,
+  inlineStepBack = false,
   onShowCard,
   onPendingChange,
   startPublic = false,
@@ -886,7 +892,7 @@ export function CardEditor({
   const showCount = thoughtCore.length >= TITLE_COUNT_FROM && !titleError;
 
   return (
-    <div ref={rootRef} className={styles.grid}>
+    <div ref={rootRef} className={styles.grid} data-writer-step={step}>
       <div className={styles.column}>
         <div className={styles.write} hidden={step !== 'write'} data-returned={publishLoaded || undefined}>
           {trashed && (
@@ -971,6 +977,7 @@ export function CardEditor({
               active={step === 'publish'}
               inlineHeading={inlineStepHeading}
               headingRef={setHeading}
+              onBack={inlineStepBack ? () => changeStep('write') : undefined}
               values={values}
               onTagsChange={setTags}
               onAudienceChange={(next) => {

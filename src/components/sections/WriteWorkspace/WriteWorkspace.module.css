@@ -52,6 +52,12 @@
   .shell .editorCol {
     --column-pad-top: max(calc(var(--bar-h, 82px) + var(--story-head-gap) - 9px), clamp(96px, 14vh, 160px));
   }
+
+  /* The publish step names itself in its first row on that line, its name and save state centred on the
+     Leave's and the ✓'s (PublishStep's heading row): the column starts there. */
+  .shell .editorCol:has([data-writer-step='publish']) {
+    --column-pad-top: var(--editor-pad-top);
+  }
 }
 
 .srOnly {

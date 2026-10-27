@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type Dispatch, type Ref, type SetStateAction } from 'react';
 import { useTranslations } from 'next-intl';
+import { BareIconButton } from '@/components/atoms/BareIconButton/BareIconButton';
 import { Divider } from '@/components/atoms/Divider/Divider';
 import { Icon, type IconName } from '@/components/atoms/Icon';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
@@ -125,12 +126,17 @@ export interface PublishStepProps {
   active: boolean;
   /**
    * At the split the pane has no bar: the step names itself in its own first
-   * row, at the column's start — its way back to writing is the shell's Leave
-   * over the map (round 17 §5.3: one back). Below it the host's bar does.
+   * row, at the column's start, on the line of the Leave over the map. Below
+   * it the host's bar does.
    */
   inlineHeading: boolean;
   /** The inline heading, for the host that moves the focus to it. */
   headingRef?: Ref<HTMLHeadingElement>;
+  /**
+   * The inline heading's own back to writing (繼續寫), before its name: beside the map, whose Leave leaves the
+   * page. At the whole width the Leave is the one back (round 17 §5.3) and the heading has none.
+   */
+  onBack?: () => void;
   values: PublishStepValues;
   onTagsChange: Dispatch<SetStateAction<string[]>>;
   /** Who can see it, and under whose name (audienceFields): one change, so no write is ever anonymous and for connections only. */
@@ -188,6 +194,7 @@ export function PublishStep({
   active,
   inlineHeading,
   headingRef,
+  onBack,
   values,
   onTagsChange,
   onAudienceChange,
@@ -333,10 +340,26 @@ export function PublishStep({
       aria-labelledby={inlineHeading ? headingId : undefined}
       data-step-pending={pending || undefined}
     >
-      {/* At the split the step names itself at the column's start — no back of its own (round 17 §5.3): the
-          Leave over the map is the page's one back, and returns to writing from here. */}
+      {/* At the split the step names itself at the column's start, on the line of the Leave over the map: beside
+          the map with a back of its own to writing (the Leave leaves the page); at the whole width without one,
+          the Leave being the one back there (round 17 §5.3). */}
       {inlineHeading && (
         <div className={styles.headingRow}>
+          {onBack && (
+            <BareIconButton
+              icon="arrow-right"
+              mirror
+              tone="ink"
+              iconSize={22}
+              label={t('leaveStay')}
+              tip="below"
+              tipAlign="start"
+              seed={13}
+              className={styles.headingBack}
+              disabled={pending}
+              onClick={onBack}
+            />
+          )}
           <div className={styles.headingTitles}>
             <h2 id={headingId} ref={headingRef} tabIndex={-1} className={styles.heading}>
               {title}

@@ -24,6 +24,7 @@ vi.mock('@/components/molecules/CardEditor/CardEditor', () => ({
     onPrimaryActionChange,
     onShowCard,
     startPublic,
+    inlineStepBack,
   }: {
     ref?: React.Ref<unknown>;
     step?: 'write' | 'publish';
@@ -31,6 +32,7 @@ vi.mock('@/components/molecules/CardEditor/CardEditor', () => ({
     onPrimaryActionChange?: (a: unknown) => void;
     onShowCard?: (href: string) => void;
     startPublic?: boolean;
+    inlineStepBack?: boolean;
   }) => {
     React.useImperativeHandle(ref, () => ({
       ...editor,
@@ -51,6 +53,7 @@ vi.mock('@/components/molecules/CardEditor/CardEditor', () => ({
         <textarea aria-label="Draft" />
         <p>step: {step}</p>
         {startPublic && <p>starts public</p>}
+        {step === 'publish' && inlineStepBack && <p>the step’s own back</p>}
         {step === 'publish' && <button onClick={() => onShowCard?.('/card/draft')}>Keep as a private card</button>}
       </>
     );
@@ -193,6 +196,33 @@ describe('the writer at the split', () => {
   });
 
   // Folding the pane away by its divider saves the draft at once and keeps it as it was.
+  // The owner (2026-10-28): beside the map the Leave is the map's own way out — from the publish step too — and the
+  // step has its own back to writing; only at the whole width is the Leave both (round 17 §5.3).
+  it('leaves from the publish step beside the map, and is the step’s back only at the whole width', async () => {
+    renderWithIntl(<WriteWorkspace title={en.write.title} locale="en" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.getByText('step: publish')).toBeInTheDocument();
+    expect(screen.getByText('the step’s own back')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: en.write.leaveStay })).toBeNull();
+
+    // The whole width: the step's own back goes, and the Leave (its glyph) returns to writing.
+    const divider = screen.getByRole('separator');
+    divider.focus();
+    fireEvent.keyDown(divider, { key: 'Home' });
+    expect(screen.queryByText('the step’s own back')).toBeNull();
+    const glyph = screen.getAllByRole('button', { name: en.write.leaveStay }).find((b) => !b.closest('[inert]'))!;
+    await userEvent.click(glyph);
+    expect(screen.getByText('step: write')).toBeInTheDocument();
+    expect(back).not.toHaveBeenCalled();
+
+    // Back beside the map, the step's Leave leaves the page.
+    fireEvent.keyDown(divider, { key: 'ArrowRight' });
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(screen.getByText('the step’s own back')).toBeInTheDocument();
+    await userEvent.click(leaveButton());
+    await waitFor(() => expect(back).toHaveBeenCalled());
+  });
+
   it('saves the draft at once when its pane is folded away, and keeps it', async () => {
     renderWithIntl(<WriteWorkspace title={en.write.title} locale="en" />);
     await userEvent.type(screen.getByRole('textbox', { name: 'Draft' }), 'kept');

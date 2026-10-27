@@ -692,6 +692,26 @@ describe('the workspace at the split', () => {
     expect(divider()).toHaveAttribute('aria-valuenow', '50');
   });
 
+  // The owner's report (2026-10-28): one of their cards opened from the thought-map page wouldn't drag out to the
+  // whole width, as the same card in the writer did. A pane that holds a writer is fillable, bar or not, and its
+  // host hears when it takes the whole width (beside the map its publish step keeps a back of its own).
+  it('lets the thought-map page’s pane take the whole width while it holds a writer, telling its host', () => {
+    const onFullChange = vi.fn();
+    renderWithIntl(
+      <WorkspaceShell open onClose={vi.fn()} fillable onFullChange={onFullChange}>
+        <p>editor</p>
+      </WorkspaceShell>,
+    );
+    expect(onFullChange).toHaveBeenLastCalledWith(false);
+    drag(500, 150);
+    expect(divider()).toHaveAttribute('aria-valuenow', '100');
+    expect(divider()).toHaveAttribute('data-docked', 'start');
+    expect(onFullChange).toHaveBeenLastCalledWith(true);
+    drag(5);
+    expect(divider()).toHaveAttribute('aria-valuenow', '50');
+    expect(onFullChange).toHaveBeenLastCalledWith(false);
+  });
+
   // The owner saw the divider move under a passing mouse: a drag whose release the rail never heard (let go
   // outside the window, its capture lost) was still running, and a mouse's pointerId is always the same.
   it('never moves the divider under a hover once its release went unheard', () => {

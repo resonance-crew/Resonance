@@ -16,11 +16,33 @@
 }
 
 /* At the split (no bar over the pane): the step's name at the column's start,
-   no back of its own (round 17 §5.3: the Leave over the map is the one back). */
+   on the Leave's line — the row is the Leave's height, at its top (the column
+   starts there in this step: WriteWorkspace.module.css), and the name with its
+   save state centres on it, overflowing it evenly. Beside the map its own back
+   comes first. */
 .headingRow {
   display: flex;
   align-items: center;
-  min-height: 38px;
+  gap: 6px;
+  height: 36px;
+}
+
+@media (pointer: coarse) {
+  .headingRow {
+    height: 44px;
+  }
+}
+
+/* The glyph's ink on the column's start, as the title's below it. */
+.headingBack {
+  flex: none;
+  margin-left: -7px;
+}
+
+@media (pointer: coarse) {
+  .headingBack {
+    margin-left: -11px;
+  }
 }
 
 /* The step's name and, under it, its save state — where the bar says them

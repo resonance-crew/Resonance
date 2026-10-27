@@ -76,6 +76,8 @@ export function WriteWorkspace({
   const { user } = useAuth();
   const router = useRouter();
   const split = useMediaQuery('(min-width: 1200px)');
+  // The pane dragged out to the whole width (at the split): only there is the Leave the pane's back too.
+  const [full, setFull] = useState(false);
   // A card opened from the map takes over the pane (in-memory Card → no
   // loading); never the draft's own card, which keeps the live editor.
   const [openedCard, setOpenedCard] = useState<Card | null>(null);
@@ -248,11 +250,13 @@ export function WriteWorkspace({
     if (editor.current?.stepBack()) return;
     leaveAsking();
   };
-  // The Leave over the map (at the split) is the page's one back (round 17 §5.3): in the publish step it returns
-  // to writing — the draft's or a card opened over it — as the step's own back did; from writing it leaves.
+  // The Leave over the map (at the split) leaves the page: beside the map the publish step has its own back to
+  // writing. At the whole width it is the pane's one back too (round 17 §5.3): in the publish step it returns to
+  // writing — the draft's or a card opened over it; from writing it leaves.
+  const fullStep = full && shownStep === 'publish';
   const leaveFromSplit = () => {
     if (leaving.current) return;
-    if (shownStep === 'publish' && (showOpened ? opened.current : editor.current)?.stepBack()) return;
+    if (fullStep && (showOpened ? opened.current : editor.current)?.stepBack()) return;
     leaveAsking();
   };
   // A live card's revision is kept but not applied: said of the card the pane shows.
@@ -269,8 +273,9 @@ export function WriteWorkspace({
           backLabel: shownStep === 'publish' ? t('leaveStay') : undefined,
         }}
         onLeave={leaveFromSplit}
-        leaveLabel={shownStep === 'publish' ? t('leaveStay') : undefined}
-        leaveDisabled={shownStep === 'publish' && shownPending}
+        leaveLabel={fullStep ? t('leaveStay') : undefined}
+        leaveDisabled={fullStep && shownPending}
+        onFullChange={setFull}
         onHide={() => void saveAll()}
         leftOverride={referenceCardId ? <OriginalCardPanel cardId={referenceCardId} /> : undefined}
         onOpenCard={openCard}
@@ -299,6 +304,7 @@ export function WriteWorkspace({
               onStepTitleChange={setDraftStepTitle}
               startPublic={startPublic}
               inlineStepHeading={split === true}
+              inlineStepBack={split === true && !full}
               focusStepHeading={focusBarTitle}
               // A 私人卡 kept opens its page in the writer's own entry: from the step, its entry is popped first.
               onShowCard={(href) => outOfStep(() => router.replace(href))}
@@ -318,6 +324,7 @@ export function WriteWorkspace({
                 onStepTitleChange: setOpenedStepTitle,
                 onSaveStatusChange: setOpenedStatus,
                 inlineStepHeading: split === true,
+                inlineStepBack: split === true && !full,
                 focusStepHeading: focusBarTitle,
               }}
             />

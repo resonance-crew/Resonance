@@ -53,6 +53,7 @@ export function OpenedCardPane({
     | 'onStepTitleChange'
     | 'onSaveStatusChange'
     | 'inlineStepHeading'
+    | 'inlineStepBack'
     | 'focusStepHeading'
   >;
 }) {

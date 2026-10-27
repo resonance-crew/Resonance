@@ -170,6 +170,16 @@ export interface WorkspaceShellProps {
   paneAction?: ReactNode;
   /** The bar's (or the pane header's) title, for a host that moves the focus to it. */
   titleRef?: Ref<HTMLHeadingElement>;
+  /**
+   * Whether the pane may be dragged out to the whole width: it holds a writer (the writer's page always; the
+   * thought-map page while one of the viewer's cards is open in it). Defaults to the writer's page.
+   */
+  fillable?: boolean;
+  /**
+   * The pane took the whole width, or gave it back. Only there is the Leave the pane's back too (one back,
+   * round 17 §5.3); beside the map the pane keeps a back of its own (the publish step's, back to writing).
+   */
+  onFullChange?: (full: boolean) => void;
   children: ReactNode;
 }
 
@@ -205,6 +215,8 @@ export function WorkspaceShell({
   paneStatus,
   paneAction,
   titleRef,
+  fillable,
+  onFullChange,
   children,
 }: WorkspaceShellProps) {
   const t = useTranslations('write');
@@ -234,11 +246,13 @@ export function WorkspaceShell({
   // The writer's pane dragged out to the whole width (round 16 §7, the apps' full mode): the map hidden behind
   // it, the grip docked at the leading edge to bring the map back at 1:1. No bar comes in: the Leave stays
   // where it floated over the map and the ✓ where it floated over the pane, so nothing moves under the eye on
-  // release. Only the writer's, only at the split, never remembered.
-  const canFull = !!bar;
+  // release. Only a writer's (the writer's page, or one of the viewer's cards opened from the map), only at the
+  // split, never remembered.
+  const canFull = fillable ?? !!bar;
   const [fullState, setFull] = useState(false);
   if (fullState && (!open || !canFull || split === false)) setFull(false);
   const full = fullState && open && split === true && !folded;
+  useEffect(() => onFullChange?.(full), [full, onFullChange]);
   const dock: Dock | undefined = folded ? 'end' : full ? 'start' : undefined;
 
   // A drag of the divider: `over` is the pane's width while dragged on past the narrowest (it follows the
