@@ -471,12 +471,9 @@ internal fun rowGap(labelled: Boolean, joinsAbove: Boolean, quoted: Boolean): Dp
     else -> BETWEEN_RUNS
 }
 
-/** Their face beside their messages: the column every one of their bubbles is indented by. */
-/** Their face beside their run's last bubble, and the gap between (the held message's lifted copy carries it too). */
-internal val THREAD_FACE = 28.dp
-internal val THREAD_FACE_GAP = 8.dp
-private val FACE = THREAD_FACE
-private val FACE_GAP = THREAD_FACE_GAP
+/** Their face beside their run's last bubble — the column every one of their bubbles is indented by — and the gap between. */
+private val FACE = 28.dp
+private val FACE_GAP = 8.dp
 
 /** A day or time label between messages. */
 @Composable
@@ -554,7 +551,7 @@ private fun MessageItem(row: ThreadRow, ctx: ThreadContext, deliveryLine: Boolea
             horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
             verticalAlignment = Alignment.Bottom,
         ) {
-            if (!mine) TheirFace(shown = !row.position.joinsBelow, ctx, lifted = ctx.lifted == message.key)
+            if (!mine) TheirFace(shown = !row.position.joinsBelow, ctx)
             Column(Modifier.widthIn(max = ctx.rowMax), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
                 if (message.isUnsent) {
                     UnsentBubble(unsentWords(mine, model.other?.handle.orEmpty()), mine, seedFromId(message.key), run = row.position)
@@ -578,9 +575,9 @@ private const val UNSENT_RESIZE_MILLIS = 150
  * tap goes to their page; a screen reader names whose it is (the face itself says nothing).
  */
 @Composable
-private fun TheirFace(shown: Boolean, ctx: ThreadContext, lifted: Boolean = false) {
-    // Lifted with its message into the menu's layer (review F9), it isn't left behind under the scrim.
-    Box(Modifier.padding(end = FACE_GAP).size(FACE).then(if (lifted) Modifier.graphicsLayer { alpha = 0f } else Modifier)) {
+private fun TheirFace(shown: Boolean, ctx: ThreadContext) {
+    // A held message's face stays here under the scrim: only the bubble is lifted (round 17 review D3).
+    Box(Modifier.padding(end = FACE_GAP).size(FACE)) {
         val other = ctx.model.other
         if (shown && other != null) {
             Box(
