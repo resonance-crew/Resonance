@@ -135,7 +135,7 @@ export function MessagePopover({ pressed, own, fullTime, onClose }: MessagePopov
     if (!root || !opener) return;
     const anchor = opener.getBoundingClientRect();
     const width = part === 'react' ? TRAY_W : root.offsetWidth || 216;
-    const height = part === 'react' ? TRAY_H : menuPanelHeight(items.length, true, true);
+    const height = part === 'react' ? TRAY_H : menuPanelHeight(items.length, true);
     setPlace(
       placePopover({
         anchor,
@@ -199,7 +199,6 @@ export function MessagePopover({ pressed, own, fullTime, onClose }: MessagePopov
           seed={seedFromId(message.key, 23)}
           footer={fullTime}
           origin={`${place?.side === 'above' ? 'bottom' : 'top'} ${side}`}
-          sheet
           autoFocus={pressed.byKeyboard ? 'row' : 'panel'}
           onTabOut={() => dismiss(true)}
           onChoose={(key) => {

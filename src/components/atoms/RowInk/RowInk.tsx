@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type MouseEvent, type RefObject } from 'react';
+import { BrushWash } from '@/components/atoms/BrushWash/BrushWash';
 import { rowRegion } from '@/lib/design/rowMenu';
 import styles from './RowInk.module.css';
 
@@ -52,6 +53,7 @@ export interface RowInk {
     onMouseEnter: (e: MouseEvent<HTMLElement>) => void;
     onMouseMove: (e: MouseEvent<HTMLElement>) => void;
     onMouseLeave: () => void;
+    onPointerDown: (e: MouseEvent<HTMLElement> & { pointerType?: string }) => void;
   };
 }
 
@@ -105,6 +107,14 @@ export function useRowInk({ panelRef, rows, w, h, activeIndex = null }: UseRowIn
       }
     },
     onMouseLeave: () => setHovered((cur) => (cur === i ? null : cur)),
+    // A finger (or a pen) presses: the ink spreads from where it landed at once — a touch screen's compatibility
+    // mouse events come only after the finger lifts, too late to show the press.
+    onPointerDown: (e) => {
+      if (e.pointerType === 'mouse') return;
+      record(e);
+      setHovered(i);
+      onEnter?.();
+    },
   });
 
   return { index, cx: origin.x, cy: origin.y, maxR, rowProps };
@@ -161,4 +171,56 @@ export function RowInkWash({ uid, ink, boundaries, w, h, pad, fills }: RowInkWas
       ))}
     </>
   );
+}
+
+export interface RowBrushesProps {
+  w: number;
+  h: number;
+  /** The sheet's wobbly outline (atoms/PaperSheet's `sheetPath`): no ink ever leaves it. */
+  outline: string;
+  /** Each row's band within the sheet (`rowRegion`): the ink of a row stays in it. */
+  bands: string[];
+  ink: RowInk;
+  /** Each row's ink, as long as `bands` ('transparent' for a band that takes none). */
+  fills: string[];
+  /** A row's resting wash under any ink (a destructive row's warning), else null. */
+  rests?: (string | null)[];
+  /** How long a full spread takes. */
+  duration?: number;
+}
+
+/**
+ * The row ink of a borderless paper sheet (round 17 §1, every menu): each
+ * row's wash is a BrushWash — a disc grown by `transform` from where the
+ * pointer came in (or a finger pressed, or the keyboard's row's centre) —
+ * clipped to the row's band, inside a layer clipped to the sheet's own
+ * wobble, so the ink fills the curved region and never a rectangle. Drawn
+ * over the sheet's paper and grain, under the rows.
+ */
+export function RowBrushes({ w, h, outline, bands, ink, fills, rests, duration = 340 }: RowBrushesProps) {
+  if (!w || !h || !outline) return null;
+  return (
+    <div aria-hidden="true" data-row-brushes="" className={styles.sheetInk} style={{ width: w, height: h, clipPath: `path('${outline}')` }}>
+      {rests?.map((fill, i) =>
+        fill ? (
+          <svg key={`rest-${i}`} data-rest={i} className={styles.rest} width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
+            <path d={bands[i]} fill={fill} />
+          </svg>
+        ) : null,
+      )}
+      {bands.map((d, i) =>
+        fills[i] === 'transparent' ? null : (
+          <RowBrush key={i} w={w} h={h} d={d} color={fills[i]} on={ink.index === i} x={ink.cx} y={ink.cy} duration={duration} />
+        ),
+      )}
+    </div>
+  );
+}
+
+/** One row's brush: it keeps the spot it last spread from, so a wash withdrawing never jumps to where the next row's starts. */
+function RowBrush({ w, h, d, color, on, x, y, duration }: { w: number; h: number; d: string; color: string; on: boolean; x: number; y: number; duration: number }) {
+  const [at, setAt] = useState({ x, y });
+  if (on && (at.x !== x || at.y !== y)) setAt({ x, y });
+  const spot = on ? { x, y } : at;
+  return <BrushWash w={w} h={h} d={d} color={color} x={spot.x} y={spot.y} on={on} duration={duration} overshoot={4} />;
 }

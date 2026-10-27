@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, userEvent, fireEvent } from '@/../test/render';
-import { inkCircles, inkFills, stubRowLayout, type RowLayout } from '@/../test/layout';
+import { inkBrushes, stubRowLayout, type RowLayout } from '@/../test/layout';
 import { OrganicMenu, type OrganicMenuItem } from './OrganicMenu';
 
 const ITEMS: OrganicMenuItem[] = [
@@ -12,11 +12,13 @@ const ITEMS: OrganicMenuItem[] = [
   { key: 'delete', icon: 'trash', label: 'Delete', danger: true },
 ];
 
+const css = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
+
 describe('OrganicMenu row ink', () => {
   let layout: RowLayout;
 
   beforeEach(() => {
-    layout = stubRowLayout({ width: 200, rowHeight: 42 });
+    layout = stubRowLayout({ width: 200, rowHeight: 44 });
   });
   afterEach(() => layout.restore());
 
@@ -28,9 +30,9 @@ describe('OrganicMenu row ink', () => {
 
   it('starts with no ink on any row', async () => {
     await openMenu();
-    const ink = inkCircles();
+    const ink = inkBrushes();
     expect(ink).toHaveLength(3);
-    expect(ink.map((c) => c.r)).toEqual([0, 0, 0]);
+    expect(ink.map((b) => b.on)).toEqual([false, false, false]);
   });
 
   it('spreads the ink of the hovered row from where the pointer entered', async () => {
@@ -40,61 +42,70 @@ describe('OrganicMenu row ink', () => {
       clientY: 60,
     });
 
-    const ink = inkCircles();
-    expect(ink[0].r).toBe(0);
-    expect(ink[2].r).toBe(0);
-    // Reaches the panel's farthest corner (200 wide, 126 tall) from the pointer, plus 4.
-    expect(ink[1].r).toBeCloseTo(Math.hypot(170, 66) + 4, 5);
+    const ink = inkBrushes();
+    expect(ink.map((b) => b.on)).toEqual([false, true, false]);
     expect(ink[1]).toMatchObject({ cx: 30, cy: 60 });
     expect(screen.getByRole('menuitem', { name: 'Share' })).toHaveAttribute('data-active');
     expect(screen.getByRole('menuitem', { name: 'Edit' })).not.toHaveAttribute('data-active');
+  });
+
+  // Round 17 §1: a press shows the ink too — a finger's spreads from where it landed, at once (a touch screen's
+  // mouse events come only after the finger lifts).
+  it('spreads the ink from where a finger presses a row', async () => {
+    await openMenu();
+    fireEvent.pointerDown(screen.getByRole('menuitem', { name: 'Edit' }), { clientX: 50, clientY: 20, pointerType: 'touch' });
+    expect(inkBrushes().map((b) => b.on)).toEqual([true, false, false]);
+    expect(inkBrushes()[0]).toMatchObject({ cx: 50, cy: 20 });
   });
 
   it('keeps spreading from where the pointer came in while it wanders along the row', async () => {
     await openMenu();
     const edit = screen.getByRole('menuitem', { name: 'Edit' });
     fireEvent.mouseEnter(edit, { clientX: 10, clientY: 10 });
-    const entered = inkCircles()[0];
     fireEvent.mouseMove(edit, { clientX: 120, clientY: 30 });
 
     // A moving centre would restart the 340ms spread on every move.
-    expect(inkCircles()[0]).toMatchObject({ cx: 10, cy: 10, r: entered.r });
+    expect(inkBrushes()[0]).toMatchObject({ on: true, cx: 10, cy: 10 });
   });
 
-  it('moves the ink to the next row and withdraws it when the pointer leaves', async () => {
+  it('moves the ink to the next row and withdraws it when the pointer leaves, toward where it left that row', async () => {
     await openMenu();
     const edit = screen.getByRole('menuitem', { name: 'Edit' });
     const share = screen.getByRole('menuitem', { name: 'Share' });
 
     fireEvent.mouseEnter(edit, { clientX: 20, clientY: 20 });
-    expect(inkCircles().map((c) => c.r > 0)).toEqual([true, false, false]);
+    expect(inkBrushes().map((b) => b.on)).toEqual([true, false, false]);
 
     fireEvent.mouseLeave(edit);
-    fireEvent.mouseEnter(share, { clientX: 20, clientY: 60 });
-    expect(inkCircles().map((c) => c.r > 0)).toEqual([false, true, false]);
+    fireEvent.mouseEnter(share, { clientX: 80, clientY: 60 });
+    expect(inkBrushes().map((b) => b.on)).toEqual([false, true, false]);
+    // The withdrawing wash shrinks where it spread from: it never jumps to the next row's spot.
+    expect(inkBrushes()[0]).toMatchObject({ cx: 20, cy: 20 });
 
     fireEvent.mouseLeave(share);
-    expect(inkCircles().map((c) => c.r)).toEqual([0, 0, 0]);
+    expect(inkBrushes().map((b) => b.on)).toEqual([false, false, false]);
     expect(share).not.toHaveAttribute('data-active');
+  });
+
+  it("cuts each row's ink to its band, inside the sheet's own wobble — never a rectangle", async () => {
+    await openMenu();
+    const layer = document.querySelector<HTMLElement>('[data-row-brushes]')!;
+    expect(layer.style.clipPath).toMatch(/^path\('M /);
+    const bands = inkBrushes().map((b) => b.band);
+    expect(new Set(bands).size).toBe(3);
+    for (const band of bands) expect(band).toMatch(/^path\('M .* C .* Z'\)$/);
   });
 
   it('keeps the destructive row yellow at rest and inks it a deeper yellow', async () => {
     await openMenu();
-    const svg = screen.getByRole('menu').parentElement!.querySelector('svg') as SVGElement;
-
     // The resting warning wash is drawn under the ink, before any hover…
-    const rest = Array.from(svg.querySelectorAll('path')).find((p) =>
-      p.getAttribute('fill')?.includes('yellow) 25%'),
-    );
-    expect(rest).toBeDefined();
-    const inkGroup = svg.querySelector('g[mask^="url(#rowink-"]') as SVGGElement;
-    expect(
-      rest!.compareDocumentPosition(inkGroup) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    const rest = document.querySelector('[data-row-brushes] [data-rest] path')!;
+    expect(rest.getAttribute('fill')).toContain('yellow) 25%');
+    expect(rest.closest('[data-rest]')).toHaveAttribute('data-rest', '2');
 
     // …and each row keeps its own ink colour: ordinary rows the menu accent,
     // the delete row a stronger yellow.
-    const fills = inkFills();
+    const fills = inkBrushes().map((b) => b.color);
     expect(fills[0]).toContain('--menu-border-hover) 15%');
     expect(fills[1]).toContain('--menu-border-hover) 15%');
     expect(fills[2]).toContain('yellow) 45%');
@@ -103,8 +114,8 @@ describe('OrganicMenu row ink', () => {
       clientX: 100,
       clientY: 100,
     });
-    expect(inkCircles().map((c) => c.r > 0)).toEqual([false, false, true]);
-    expect(rest!.isConnected).toBe(true);
+    expect(inkBrushes().map((b) => b.on)).toEqual([false, false, true]);
+    expect(rest.isConnected).toBe(true);
   });
 
   it('still chooses the row that was inked', async () => {
@@ -117,16 +128,38 @@ describe('OrganicMenu row ink', () => {
   });
 });
 
-describe('row ink motion', () => {
+// Round 17 §1: every menu is the one sheet — paper and grain, no pen line round it and no lines between its rows,
+// lifted by a soft shadow that follows its wobble; rows 44 tall, their content 20 in from either side.
+describe('the menu sheet', () => {
+  it('draws paper and grain with no pen line and no dividers', async () => {
+    const layout = stubRowLayout({ width: 200, rowHeight: 44 });
+    render(<OrganicMenu items={ITEMS} onChoose={vi.fn()} label="Manage" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Manage' }));
+    const panel = screen.getByRole('menu').parentElement!;
+    // The paper's fill and its grain, nothing stroked anywhere in it.
+    expect(panel.querySelector('path[fill="var(--sheet-paper)"]')).not.toBeNull();
+    expect(panel.querySelector('path[stroke]')).toBeNull();
+    expect(panel.querySelectorAll('filter feTurbulence')).toHaveLength(1);
+    layout.restore();
+  });
+
+  it('casts the sheet shadow, which follows the wobble, deeper at night', () => {
+    expect(css('src/components/atoms/PaperSheet/PaperSheet.module.css')).toMatch(/\.sheet\s*\{[^}]*filter: var\(--sheet-shadow\)/);
+    const tokens = css('src/styles/tokens.css');
+    expect(tokens).toMatch(/--sheet-shadow:\s*drop-shadow\(0 8px 24px [^;]*\)\s*drop-shadow\(0 1px 3px [^;]*\);/);
+    expect(tokens.match(/--sheet-shadow: drop-shadow\(0 10px 28px color-mix\(in oklch, var\(--shadow-ink\) 45%, transparent\)\);/g)).toHaveLength(2);
+  });
+
+  it('sets its rows 44 tall, 20 in from either side, the glyph 12 before the words, the time at the end', () => {
+    const menu = css('src/components/molecules/OrganicMenu/OrganicMenu.module.css');
+    expect(menu).toMatch(/\.option \{[^}]*gap: 12px;[^}]*height: 44px;[^}]*padding: 0 20px;/);
+    expect(menu).toMatch(/\.footer \{[^}]*justify-content: flex-end;[^}]*height: 24px;/);
+  });
+
   it('turns the spread off for people who prefer reduced motion', () => {
-    // jsdom cannot evaluate media queries, so pin the stylesheet contract.
-    const css = readFileSync(
-      join(process.cwd(), 'src/components/atoms/RowInk/RowInk.module.css'),
-      'utf8',
-    );
-    expect(css).toMatch(/\.circle\s*\{[^}]*transition:\s*r 340ms linear/);
-    expect(css).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.circle\s*\{\s*transition:\s*none/,
+    // jsdom cannot evaluate media queries, so pin the stylesheet contract (the rows' brushes).
+    expect(css('src/components/atoms/RowInk/RowInk.module.css')).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.sheetInk \[data-brush-wash\] > div\s*\{\s*transition:\s*none/,
     );
   });
 });
@@ -248,8 +281,8 @@ describe('floating panel', () => {
     expect(panel.style.top).toBe('144px');
     expect(panel.style.left).toBe('300px');
     expect(screen.getByText('March 1, 10:00 AM')).toBeInTheDocument();
-    // Three rows of 42 and the footer's 38.
-    expect(screen.getByRole('menu').parentElement).toHaveStyle({ height: `${3 * 42 + 38}px` });
+    // 6 of paper, three rows of 44, the footer's 24 line directly under them, 10 of paper (round 17 §2.3).
+    expect(screen.getByRole('menu').parentElement).toHaveStyle({ height: `${6 + 3 * 44 + 24 + 10}px` });
 
     // A click inside the floating panel is a choice, not an outside click.
     await userEvent.click(screen.getByRole('menuitem', { name: 'Share' }));
@@ -323,14 +356,14 @@ describe('rows that say more than an icon and a word (the share menu)', () => {
   });
 
   it('lets a hint under the rows wrap, the panel as tall as its lines', async () => {
-    const layout = stubRowLayout({ width: 220, rowHeight: 42 });
+    const layout = stubRowLayout({ width: 220, rowHeight: 44 });
     const footerHeight = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
       if (this.textContent === 'A hint long enough to take two lines') return 52;
-      return this.querySelectorAll('[role="menuitem"]').length * 42;
+      return this.querySelectorAll('[role="menuitem"]').length * 44;
     });
     render(<OrganicMenu items={ITEMS} onChoose={vi.fn()} label="Share" bare footer="A hint long enough to take two lines" footerWrap />);
     await userEvent.click(screen.getByRole('button', { name: 'Share' }));
-    expect(screen.getByRole('menu').parentElement).toHaveStyle({ height: `${3 * 42 + 52}px` });
+    expect(screen.getByRole('menu').parentElement).toHaveStyle({ height: `${6 + 3 * 44 + 52 + 10}px` });
     footerHeight.mockRestore();
     layout.restore();
     const css = readFileSync(join(process.cwd(), 'src/components/molecules/OrganicMenu/OrganicMenu.module.css'), 'utf8');

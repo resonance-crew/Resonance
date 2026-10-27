@@ -25,11 +25,13 @@ export interface PaperSheetProps {
 }
 
 /**
- * A borderless sheet of paper — what the message menu's reactions and actions
- * lie on (round 16 §3): a wobble with no pen line, filled with the menu's
- * paper (at night raised a step, ≈ L 28 %, so it parts from the scrim), and
- * the thought map's zoom-cluster grain over it. Drawn behind its host's
- * contents, the host's size; nothing until measured.
+ * A borderless sheet of paper — what every menu lies on (round 17 §1; the
+ * message menu's since round 16 §3): a wobble with no pen line, filled with
+ * the sheet's paper (the menu's, at night raised a step, ≈ L 28 %, so it
+ * parts from the scrim), the thought map's zoom-cluster grain over the whole
+ * filled path (the same path: the wobble swings past the box, and so does the
+ * grain), and a soft shadow that follows the wobble (--sheet-shadow). Drawn
+ * behind its host's contents, the host's size; nothing until measured.
  */
 export function PaperSheet({ w, h, R = 20, seed }: PaperSheetProps) {
   const d = useMemo(() => sheetPath(w, h, R, seed), [w, h, R, seed]);

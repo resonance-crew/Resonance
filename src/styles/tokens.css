@@ -187,3 +187,27 @@
   --label-tracking: 0.06em;
   --hint-size: 12px;
 }
+
+/* Every menu's sheet (round 17 §1): borderless paper and grain (atoms/PaperSheet),
+   lifted off the page by a soft shadow that follows its wobble instead of a pen
+   line — `filter: var(--sheet-shadow)` on the sheet's drawing. The paper is the
+   menu's, raised a step at night (≈ L 28 % over the 0.65 scrim) so a sheet parts
+   from what it lies on; the shadow is the ink's, deeper and wider at night. */
+:root {
+  --sheet-paper: var(--menu-paper);
+  --sheet-shadow:
+    drop-shadow(0 8px 24px color-mix(in oklch, var(--shadow-ink) 16%, transparent))
+    drop-shadow(0 1px 3px color-mix(in oklch, var(--shadow-ink) 10%, transparent));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-scheme='light']) {
+    --sheet-paper: color-mix(in oklch, var(--menu-paper) 94%, var(--toward-ink));
+    --sheet-shadow: drop-shadow(0 10px 28px color-mix(in oklch, var(--shadow-ink) 45%, transparent));
+  }
+}
+
+:root[data-scheme='dark'] {
+  --sheet-paper: color-mix(in oklch, var(--menu-paper) 94%, var(--toward-ink));
+  --sheet-shadow: drop-shadow(0 10px 28px color-mix(in oklch, var(--shadow-ink) 45%, transparent));
+}

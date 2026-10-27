@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderWithIntl, screen, userEvent, fireEvent } from '@/../test/render';
-import { inkCircles, inkFills, stubRowLayout, type RowLayout } from '@/../test/layout';
+import { inkBrushes, stubRowLayout, type RowLayout } from '@/../test/layout';
 import { Subnavbar } from './Subnavbar';
 
 const mockPush = vi.fn();
@@ -116,12 +116,13 @@ describe('Subnavbar', () => {
       await userEvent.click(trigger);
       return trigger;
     };
-    const inked = () => inkCircles().map((c) => c.r > 0);
+    const inked = () => inkBrushes().map((b) => b.on);
 
     it('rests the ink on the first row, from its centre, when opened', async () => {
       await open();
       expect(inked()).toEqual([true, false, false, false]);
-      expect(inkCircles()[0]).toMatchObject({ cx: 100, cy: 22 });
+      // The sheet's 6 of paper over its first row (round 17 §1), then the row's 44.
+      expect(inkBrushes()[0]).toMatchObject({ cx: 100, cy: 6 + 22 });
     });
 
     it('spreads the ink from the pointer onto the hovered row, and withdraws it on leave', async () => {
@@ -130,13 +131,11 @@ describe('Subnavbar', () => {
       fireEvent.mouseEnter(settings, { clientX: 150, clientY: 100 });
 
       expect(inked()).toEqual([false, false, true, false]);
-      expect(inkCircles()[2]).toMatchObject({ cx: 150, cy: 100 });
-      // Far corner of the 200 × 176 panel from (150, 100), plus 4.
-      expect(inkCircles()[2].r).toBeCloseTo(Math.hypot(150, 100) + 4, 5);
+      expect(inkBrushes()[2]).toMatchObject({ cx: 150, cy: 100 });
       expect(settings).toHaveAttribute('data-active');
 
       fireEvent.mouseLeave(settings);
-      expect(inkCircles().map((c) => c.r)).toEqual([0, 0, 0, 0]);
+      expect(inked()).toEqual([false, false, false, false]);
       expect(settings).not.toHaveAttribute('data-active');
     });
 
@@ -145,7 +144,7 @@ describe('Subnavbar', () => {
       await userEvent.keyboard('{ArrowDown}{ArrowDown}');
 
       expect(inked()).toEqual([false, false, true, false]);
-      expect(inkCircles()[2]).toMatchObject({ cx: 100, cy: 2 * 44 + 22 });
+      expect(inkBrushes()[2]).toMatchObject({ cx: 100, cy: 6 + 2 * 44 + 22 });
       expect(trigger.getAttribute('aria-activedescendant')).toBe(
         screen.getByRole('menuitem', { name: 'Settings' }).id,
       );
@@ -165,16 +164,13 @@ describe('Subnavbar', () => {
 
     it('keeps the sign-out row yellow — resting under the ink, and as the ink itself', async () => {
       await open();
-      const panelSvg = screen.getByRole('menu').parentElement!.querySelector('svg') as SVGElement;
+      // The menus' one sheet (round 17 §1): no pen line round it, none between its rows.
+      expect(screen.getByRole('menu').parentElement!.querySelector('path[stroke]')).toBeNull();
+      const rest = document.querySelector('[data-row-brushes] [data-rest] path')!;
+      expect(rest.getAttribute('fill')).toContain('yellow) 25%');
+      expect(rest.closest('[data-rest]')).toHaveAttribute('data-rest', '3');
 
-      const rest = Array.from(panelSvg.querySelectorAll('path')).find((p) =>
-        p.getAttribute('fill')?.includes('yellow) 25%'),
-      );
-      expect(rest).toBeDefined();
-      const firstInk = panelSvg.querySelector('g[mask^="url(#rowink-"]') as SVGGElement;
-      expect(rest!.compareDocumentPosition(firstInk) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-      const fills = inkFills();
+      const fills = inkBrushes().map((b) => b.color);
       expect(fills.slice(0, 3).every((f) => f.includes('--color-terracotta) 13%'))).toBe(true);
       expect(fills[3]).toContain('yellow) 40%');
 

@@ -131,7 +131,7 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose }: MessageM
 
   const vw = window.innerWidth;
   const vh = window.visualViewport?.height ?? window.innerHeight;
-  const listH = items.length ? menuPanelHeight(items.length, true, true) : 0;
+  const listH = items.length ? menuPanelHeight(items.length, true) : 0;
   const place = placeMessageMenu({ top: rect.top, height: rect.height, viewport: vh, trayH: trayShown ? TRAY_H : 0, listH });
   const side = own ? 'right' : 'left';
   const liftStyle: CSSProperties = {
@@ -193,7 +193,6 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose }: MessageM
             seed={seedFromId(message.key, 23)}
             footer={fullTime}
             origin={`top ${side}`}
-            sheet
             onChoose={(key) => {
               // Done in the tap itself — a copy, a page opened, the field focused for a reply (iOS raises the
               // keyboard only for a focus the tap gave) — then the menu goes, staying long enough to show the
