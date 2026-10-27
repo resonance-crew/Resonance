@@ -24,8 +24,8 @@ struct CardScreen: View {
     @State private var linkToConfirm: ChatLinks.Parsed?
     /// How far through the story the reader is, for the bar's terracotta line (only the bar reads it).
     @State private var meter = ReadingMeter()
-    /// The owner moved the card to the trash on this page a moment ago: the banner takes the focus.
-    @State private var justTrashed = false
+    /// The owner moved the card to the trash on this page: the page goes up to its banner, which takes the focus.
+    @State private var trashedHere = TrashedHere()
     /// 查看全部: every resonance shown, not the first three (C1).
     @State private var allResonances = false
     @Environment(\.window) private var window
@@ -35,6 +35,8 @@ struct CardScreen: View {
     /// What the page has across.
     @State private var width: CGFloat?
     private static let pageSpace = "card.page"
+    /// The page's head, where the trash banner stands.
+    private static let pageHead = "card.head"
 
     /// A tablet's card page sets its lists' headings apart (round 5 E2): 64 above each, 56 down to its
     /// cards — the same for every list.
@@ -61,7 +63,7 @@ struct CardScreen: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                column
+                column.id(Self.pageHead)
             }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             // The page's own scroll (the bar's line and progress): on the page's scroll view alone, not
@@ -74,6 +76,16 @@ struct CardScreen: View {
             // A story with a table of contents slides over from the centre to make room for its rail.
             .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: layout)
             .modifier(CardChrome(screen: self))
+            // 刪除 here: once the banner shows (the card read again), the page goes up to it.
+            .onChange(of: model?.detail.map(TrashedCardBanner.shows) == true) { _, banner in bringBanner(banner, proxy: proxy) }
+            .onChange(of: trashedHere) { bringBanner(model?.detail.map(TrashedCardBanner.shows) == true, proxy: proxy) }
+        }
+    }
+
+    private func bringBanner(_ banner: Bool, proxy: ScrollViewProxy) {
+        guard trashedHere.bringIntoView(banner: banner) else { return }
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) {
+            proxy.scrollTo(Self.pageHead, anchor: .top)
         }
     }
 
@@ -222,14 +234,14 @@ struct CardScreen: View {
                 .help(L10n.Me.Actions.edit)
         }
         if detail.isOwner {
-            // 刪除 leaves the page here, its trash banner in place of the share and the ⋯.
+            // 刪除 leaves the page here, its trash banner in place of the share and the ⋯ (the page goes up to it: TrashedHere).
             CardActionsMenu(cardId: card.id, visibility: card.visibility.rawValue, seed: seed,
                             answering: card.referenceCardId, answeringTitle: detail.referenceCard?.value1.title,
                             answeringAnonymous: detail.referenceCard?.value1.anonymous,
                             isPublished: card.publishedAt != nil, anonymous: detail.anonymous, title: card.title,
                             trashFeedback: .page, showsCardAfterEdit: false,
                             // A 私人卡's pen stands beside it: its ⋯ leads with 公開發表 instead of a second 編輯 (round 12 §3).
-                            editShown: Self.isPrivateCard(detail), onTrashed: { justTrashed = true },
+                            editShown: Self.isPrivateCard(detail), onTrashed: { trashedHere.trashed() },
                             trigger: .bare)
         } else {
             let author = detail.anonymous ? nil : card.author?.value1
@@ -258,7 +270,7 @@ struct CardScreen: View {
         return VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 if trashed {
-                    TrashedCardBanner(card: card, focusTitle: justTrashed) { openRoute.dismissToRoot() }
+                    TrashedCardBanner(card: card, focusTitle: trashedHere.focusTitle) { openRoute.dismissToRoot() }
                         .padding(.bottom, 24)
                 }
                 // A tablet's byline ends in the card's share and ⋯ — not the owner's card in the trash, whose banner is

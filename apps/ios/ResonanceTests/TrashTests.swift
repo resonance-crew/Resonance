@@ -107,6 +107,28 @@ import Testing
         #expect(TrashedCardBanner.caption(trashed("a"), now: now)
                 == "\(L10n.Me.trashDaysLeft(count: 23)) · \(L10n.Card.Trashed.onlyYou)")
     }
+
+    /// 刪除 from the page's own ⋯ with the reader far down the story: the banner stands at the page's head,
+    /// out of sight, and the pen and ⋯ just vanish — unless the page goes up to it, as the web's focus and
+    /// Android's focusable title do. Once the card, read again, shows it; once for each move made here.
+    @Test func thePageGoesUpToTheBannerOnceForEachMoveMadeHere() {
+        var here = TrashedHere()
+        func goesUp(banner: Bool) -> Bool { here.bringIntoView(banner: banner) }
+        // Opened on a card already in the trash: the page stays where the reader is.
+        #expect(!goesUp(banner: true))
+        #expect(!here.focusTitle)
+        here.trashed()
+        #expect(here.focusTitle)
+        // Moved, the card not read again yet: no banner to go up to.
+        #expect(!goesUp(banner: false))
+        // Read again, in the trash: up to the banner — once, not at every later read.
+        #expect(goesUp(banner: true))
+        #expect(!goesUp(banner: true))
+        // Restored from the banner, then moved again from the ⋯: up to it again once it shows.
+        #expect(!goesUp(banner: false))
+        here.trashed()
+        #expect(goesUp(banner: true))
+    }
 }
 
 /// The thought map leaves a card in the trash out (its node and arrows stay stored, so a restore
