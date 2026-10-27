@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.BasicText
@@ -37,13 +38,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import com.resonance.design.AppFonts
-import com.resonance.design.ButtonVariant
-import com.resonance.design.ModalActionMinHeight
 import com.resonance.design.ModalActionMinWidth
 import com.resonance.design.ModalActionsTop
 import com.resonance.design.ModalTitle
 import com.resonance.design.OrganicButton
 import com.resonance.design.OrganicModal
+import com.resonance.design.QuietButton
+import com.resonance.design.QuietButtonPadX
 import com.resonance.design.Segment
 import com.resonance.design.SegmentedActionBar
 import com.resonance.design.fieldSurface
@@ -73,7 +74,8 @@ internal fun linkSheetDisplay(link: IslandLink?, canCard: Boolean, wordsSelected
  * address across the width, focused with its text selected as it opens (the clipboard is never read on opening,
  * only on an explicit paste); then, only where the link is, or will be, alone in its paragraph
  * ([LinkSheetRequest.canCard]), 顯示為 on a line of its own over 卡片 | 文字 (the publish step's 卡片類型 control);
- * and at its foot 移除連結 at the start (editing a link) · 完成 at the end. 完成 — or the keyboard's Done — takes
+ * and at its foot 移除連結 at the start (editing a link; a quiet word, round 17 review D5 — it takes only the link
+ * away) · 完成 at the end. The field, the choice and 完成 share one height, [LinkDialogControl]. 完成 — or the keyboard's Done — takes
  * only what the link rules take ([StoryLinks.linkTarget]: http(s); a bare `www.…` or `example.com/x` gets
  * `https://`); anything else says 這不是可以連結的網址 under the field and links nothing. [onApply] hands the
  * address and the choice to the island; [onRemove] unlinks; [onDismiss] closes without a change. Whichever way it
@@ -118,8 +120,10 @@ internal fun StoryLinkDialog(
             Box(
                 Modifier
                     .fillMaxWidth()
+                    .heightIn(min = LinkDialogControl)
                     .fieldSurface(41.0, { focused })
-                    .padding(horizontal = Tokens.FieldPadX.dp, vertical = Tokens.FieldPadY.dp),
+                    .padding(horizontal = Tokens.FieldPadX.dp, vertical = LinkFieldPadY),
+                contentAlignment = Alignment.CenterStart,
             ) {
                 if (address.isEmpty()) BasicText(placeholder, style = AppFonts.obliqueUnlessCjk(AppFonts.body(15f, lineHeight = 1.6f, color = Tokens.Placeholder), placeholder), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 BasicTextField(
@@ -163,19 +167,20 @@ internal fun StoryLinkDialog(
                     },
                     Modifier.fillMaxWidth(),
                     fill = Tokens.CreamDark,
+                    minHeight = LinkDialogControl,
                 )
             }
         }
-        // The foot: 移除連結 at the start (a link to take away), 完成 at the end — each a finger's height.
+        // The foot: 移除連結 at the start (a link to take away: a quiet word, its words on the column's edge), 完成 at
+        // the end — both the controls' one height.
         Row(Modifier.fillMaxWidth().padding(top = ModalActionsTop), verticalAlignment = Alignment.CenterVertically) {
-            if (linkDialogRemoves(request)) OrganicButton(
-                L10n.Write.Editor.linkRemove, Modifier.heightIn(min = ModalActionMinHeight),
-                variant = ButtonVariant.DangerTonal, small = true, onClick = onRemove,
+            if (linkDialogRemoves(request)) QuietButton(
+                L10n.Write.Editor.linkRemove, Modifier.offset(x = -QuietButtonPadX), minHeight = LinkDialogControl, onClick = onRemove,
             )
             Spacer(Modifier.weight(1f))
             // Nothing typed, nothing to link: 完成 waits for an address (as iOS's).
             OrganicButton(
-                L10n.Write.Editor.linkApply, Modifier.heightIn(min = ModalActionMinHeight).widthIn(min = ModalActionMinWidth),
+                L10n.Write.Editor.linkApply, Modifier.heightIn(min = LinkDialogControl).widthIn(min = ModalActionMinWidth),
                 enabled = address.isNotBlank(), small = true, onClick = apply,
             )
         }
@@ -191,6 +196,12 @@ internal fun linkDialogRemoves(request: LinkSheetRequest): Boolean = request.lin
 
 /** The link editor's card: 400 wide at most (min(400, the window − 32): the modal keeps 16 from each side). */
 internal val LinkDialogWidth = 400.dp
+
+/** The link editor's one control height (round 17 review D5): the field, 卡片 | 文字 and 完成 alike. */
+internal val LinkDialogControl = 44.dp
+
+/** The field's air over and under its one line (15 at 1.6: 24), so it stands [LinkDialogControl] tall. */
+private val LinkFieldPadY = 10.dp
 
 /** The air the display choice keeps over itself, past the modal's own gap: it parts from the field it is about. */
 private val LinkDialogChoiceLead = 6.dp
