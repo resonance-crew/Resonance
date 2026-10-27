@@ -7,18 +7,20 @@
  * under the note composer, centred on it — its label, its wobbly field, the
  * note typed in, the counter following — then 寄出, and the same sheet says
  * the note is on its way. The sheet folds into an envelope that arcs into the
- * thread as it slides in; the card it was left on builds in the thread as the
- * envelope travels (quote, head, cover, title), and the envelope comes down on
- * the note's own place and opens out into its bubble. Right under it, a short
- * pen rule where the composer will be and, alone, the letter's rule:
- * 「對方會收到你的紙條，回覆後就能繼續聊」. Their reply arrives in its place,
- * the foot easing down to the pane's bottom; 已連結 and the composer.
+ * thread (ThreadView: back, their face and pen name, ⋯) as it slides in; the
+ * card it was left on builds in the thread as the envelope travels (quote,
+ * head, cover, title), and the envelope comes down on the note's own place
+ * and opens out into its bubble. Right under it, in the composer's place, the
+ * letter's notice on its slip (FloatingSlip): 「對方會收到你的紙條，回覆後就能
+ * 繼續聊」. Their reply arrives in its place, the foot easing down to the
+ * pane's bottom; 已連結 over the composer — one capsule (ComposerCapsule): the
+ * ghost ＋, the placeholder, Send as its end segment behind a wavy seam.
  *
  * Local moments, zh-TW (en, whose ~100-character note types in 3.1 s, in
  * brackets): card in 0.05–1.0, tap 1.2 (1.06), sheet 1.5 (1.36), typing
  * 1.9–4.4 (1.66–4.76), 寄出 4.7 (5.06), sent 4.84 (5.2), fold 5.52 (5.8) as the
  * thread slides in, envelope flies 5.96–6.5 (6.24–6.78) while the quote
- * builds, the note opens out 6.47 (6.75), the letter's line alone 6.57–8.91
+ * builds, the note opens out 6.47 (6.75), the letter's slip alone 6.57–8.91
  * (6.85–9.19), reply 9.17 (9.45), 已連結 9.57 (9.85) and the composer whole by
  * 10.07 (10.35), held to the cross-fade at 12.2.
  */
@@ -51,7 +53,7 @@ import {
   shapeSvg,
   storyCard,
   tapMark,
-  wavyRule,
+  uid,
   wobCircle,
   wobRect,
 } from '../kit';
@@ -383,8 +385,8 @@ export const notes: Scene = {
     const headName = html('span', { text: s.writer.name, style: { fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 700, lineHeight: 1.2, color: C.text } });
     const headRow = html('div', {
       class: 'abs',
-      style: { left: 0, top: 0, width: PANE_W, height: 58, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 18px 10px 20px', zIndex: 2 },
-    }, [back.el, headFace.el, headName]);
+      style: { left: 0, top: 0, width: PANE_W, height: 58, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px 10px 20px', zIndex: 2 },
+    }, [back.el, headFace.el, headName, html('span', { style: { flex: 1 } }), icon('dots', 22, C.text, INK).el]);
     const ruleW = PANE_W - 28;
     const headRule = svg('svg', { width: ruleW, height: 20, viewBox: `0 52 ${ruleW} 20`, class: 'abs', style: `left:14px;top:52px;overflow:visible;z-index:2` }, [
       svg('path', { d: pointsToBezier(wavyPoints(ruleW, 58 + 14 * 0.35, 1.4, 41, 12)), fill: 'none', stroke: 'var(--field-border-hover)', 'stroke-width': INK, 'stroke-linecap': 'round', opacity: 0.55 }),
@@ -444,61 +446,71 @@ export const notes: Scene = {
     ]);
     const replyBox = measure(replyRow);
 
-    // The foot: the letter's line where the composer will be; then 已連結 above the composer.
-    const INPUT_H = 24 + 28;
-    const SEND_W = 48;
-    const SEND_H = 40;
-    const inputW = PANE_W - PANE_PAD * 2 - 36 - SEND_W - 16;
-    const cardsBtn = html('div', { style: { width: 36, height: 36, display: 'grid', placeItems: 'center', flexShrink: 0, marginBottom: 8 } }, [icon('cards', 19, C.muted).el]);
-    const input = html('div', { style: { position: 'relative', width: inputW, height: INPUT_H, background: C.cream, borderRadius: 16, flexShrink: 0 } }, [
-      shapeSvg(inputW, INPUT_H, [svg('path', { d: autoRect(inputW, INPUT_H, 16, 17), fill: 'none', stroke: 'var(--field-border)', 'stroke-width': INK, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })]),
-      html('div', {
-        text: msgs.messages.placeholder,
-        style: { position: 'relative', zIndex: 1, padding: '14px 18px', fontSize: 15, lineHeight: 1.6, fontStyle: 'italic', color: 'var(--placeholder)', whiteSpace: 'nowrap' },
-      }),
+    // The foot (the thread's dock, 14 in from the pane's sides): while the note waits as a letter, the
+    // notice in the composer's place — a cream slip in the field's wobble and pen, the letter's line on it
+    // (FloatingSlip) — then, once they have answered, 已連結 over the composer: one capsule (ComposerCapsule),
+    // the field's wobble and pen, a ghost ＋ at its start, the placeholder, and Send as its end segment behind
+    // a wavy seam, the tonal peach with its terracotta plane while there is nothing to send.
+    const DOCK_PAD = 14;
+    const dockW = PANE_W - DOCK_PAD * 2;
+    const CAP_H = 48;
+    const SEND_SEG = 52;
+    const capOutline = wobRect(dockW, CAP_H, 16, 23, autoMag(dockW, CAP_H), { segmentsH: autoSegments(dockW), segmentsV: autoSegments(CAP_H), curve: autoCurve(dockW, CAP_H) });
+    const seamPad = Math.max(12, CAP_H * 0.3);
+    const seamPts = (() => {
+      const rnd = makePrng(23 + 11);
+      const x = dockW - SEND_SEG;
+      const pts: [number, number][] = [[x, -seamPad]];
+      for (let k = 0; k <= 3; k++) pts.push([x + (k === 0 || k === 3 ? 0 : (rnd() - 0.5) * 2 * 1.6), (k / 3) * CAP_H]);
+      pts.push([x, CAP_H + seamPad]);
+      return pts;
+    })();
+    const seamD = `M ${seamPts[0][0]},${seamPts[0][1]} ` + seamPts.slice(1).map(([x, y]) => `L ${x.toFixed(2)},${y.toFixed(2)}`).join(' ');
+    const segD = `${seamD} L ${dockW + seamPad},${CAP_H + seamPad} L ${dockW + seamPad},${-seamPad} Z`;
+    const capClip = uid('capsule');
+    const capSvg = shapeSvg(dockW, CAP_H, [
+      svg('defs', {}, [svg('clipPath', { id: capClip }, [svg('path', { d: capOutline })])]),
+      svg('path', { d: capOutline, fill: C.cream }),
+      svg('g', { 'clip-path': `url(#${capClip})` }, [
+        svg('path', { d: segD, fill: C.buttonTonal }),
+        svg('path', { d: segD, fill: 'black', filter: shapeGrain(0.38, 1.1, 23) }),
+        svg('path', { d: seamD, fill: 'none', stroke: C.cream, 'stroke-width': INK, 'stroke-linecap': 'round' }),
+      ]),
+      svg('path', { d: capOutline, fill: 'none', stroke: 'var(--field-border)', 'stroke-width': INK, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }),
     ]);
-    const sendD = wobRect(SEND_W, SEND_H, 12, 23, 1.0, { segmentsH: 1, segmentsV: 1, curve: 1.3, cornerJitter: 2.4, cornerOffset: 2 });
-    const sendGlyph = icon('send', 20, C.cream, INK);
-    css(sendGlyph.el, { position: 'relative', zIndex: 1 });
-    const threadSend = html('div', { style: { position: 'relative', width: SEND_W, height: SEND_H, marginBottom: 6, flexShrink: 0, display: 'grid', placeItems: 'center', opacity: 0.45 } }, [
-      face(sendD, SEND_W, SEND_H, { fill: C.terracotta, grain: { opacity: 0.38, frequency: 1.1, seed: 23 } }).el,
-      sendGlyph.el,
-    ]);
+    const plus = icon('plus', 22, C.muted, INK);
+    const plusSlot = html('div', { style: { position: 'relative', zIndex: 1, width: 44, height: CAP_H, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 } }, [plus.el]);
+    const capField = html('div', {
+      text: ui.messagePlaceholder,
+      style: { position: 'relative', zIndex: 1, flex: 1, minWidth: 0, padding: '12px 10px 12px 0', fontSize: 16, lineHeight: 1.5, fontStyle: 'italic', color: 'var(--placeholder)', whiteSpace: 'nowrap', overflow: 'hidden' },
+    });
+    const sendGlyph = icon('send', 20, C.onTonal, INK);
+    const sendSlot = html('div', { style: { position: 'relative', zIndex: 1, width: SEND_SEG, height: CAP_H, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 } }, [sendGlyph.el]);
     const composerRow = html('div', {
       class: 'abs',
-      style: { left: PANE_PAD, top: 0, width: PANE_W - PANE_PAD * 2, display: 'flex', alignItems: 'flex-end', gap: 8, paddingTop: 12 },
-    }, [cardsBtn, input, threadSend]);
-    const composerH = measure(composerRow).h;
+      style: { left: DOCK_PAD, top: 0, width: dockW, height: CAP_H, display: 'flex', alignItems: 'flex-end' },
+    }, [capSvg, plusSlot, capField, sendSlot]);
+    const composerH = CAP_H;
     const pill = statePill(ui.connected);
-    const PILL_GAP = 6;
-    // The letter's rule, with the weight of the composer it stands in for: body
-    // size, near-full ink; en's two sentences a line each.
-    const awaiting = html('div', {
-      class: 'abs',
-      text: isEn ? ui.awaitingReply.replace(/\. /g, '.\n') : ui.awaitingReply,
-      style: {
-        left: 0,
-        top: 0,
-        width: PANE_W,
-        padding: '0 32px',
-        textAlign: 'center',
-        fontSize: 15,
-        lineHeight: 1.55,
-        color: `color-mix(in oklch, ${C.text} 80%, transparent)`,
-        whiteSpace: 'pre-line',
-        textWrap: 'balance',
-      },
-    });
+    const PILL_GAP = 8;
     const slotH = pill.h + PILL_GAP + composerH;
     const composerTop = pill.h + PILL_GAP;
     css(composerRow, { top: composerTop });
     css(pill.el, { position: 'absolute', left: (PANE_W - pill.w) / 2, top: 0 });
-    // A short pen rule where the composer's top will be, the line under it.
-    const LETTER_RULE_W = 132;
-    const letterRuleY = composerTop + 12;
-    const letterRule = wavyRule(LETTER_RULE_W, 52, 'var(--field-border-hover)', { amp: 1.5, steps: 6, width: INK_LIGHT });
-    css(letterRule.el, { position: 'absolute', left: (PANE_W - LETTER_RULE_W) / 2, top: letterRuleY - 4 });
-    css(awaiting, { top: letterRuleY + 14 });
+
+    // The letter's line, on its slip in the composer's place.
+    const awaitingLine = html('p', {
+      text: ui.awaitingReply,
+      style: { position: 'relative', zIndex: 1, padding: '10px 16px', textAlign: 'center', fontSize: 13.5, lineHeight: 1.6, color: C.muted, textWrap: 'balance' },
+    });
+    const awaiting = html('div', { class: 'abs', style: { left: DOCK_PAD, top: composerTop, width: dockW } }, [awaitingLine]);
+    const slipH = Math.ceil(measure(awaiting).h);
+    const slipD = wobRect(dockW, slipH, 14, 37, autoMag(dockW, slipH), { segmentsH: autoSegments(dockW), segmentsV: autoSegments(slipH), curve: autoCurve(dockW, slipH) });
+    awaiting.prepend(shapeSvg(dockW, slipH, [
+      svg('path', { d: slipD, fill: C.cream }),
+      svg('path', { d: slipD, fill: 'none', stroke: 'var(--field-border)', 'stroke-width': INK, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }),
+    ]));
+    css(awaiting, { height: slipH });
 
     // The column, reading from the top as the app's does: the history's start
     // (its 64px row), the note, their answer; the foot holds the letter's line,
@@ -517,12 +529,12 @@ export const notes: Scene = {
     const noteX = PANE_W - PANE_PAD - noteBox.w;
     css(noteMsg, { left: noteX, top: NOTE_TOP, width: noteBox.w });
     css(replyRow, { left: PANE_PAD, top: replyY });
-    const slot = html('div', { class: 'abs', style: { left: 0, top: slotTop, width: PANE_W, height: slotH } }, [letterRule.el, awaiting, pill.el, composerRow]);
-    // While the note waits as a letter, the foot rides up under it (its rule
+    const slot = html('div', { class: 'abs', style: { left: 0, top: slotTop, width: PANE_W, height: slotH } }, [awaiting, pill.el, composerRow]);
+    // While the note waits as a letter, the foot rides up under it (its slip
     // LETTER_GAP under the bubble), where the reply will come; it eases back
     // down to the pane's bottom as the reply arrives.
-    const LETTER_GAP = 30;
-    const letterLift = NOTE_TOP + noteBox.h + LETTER_GAP - (slotTop + letterRuleY);
+    const LETTER_GAP = 22;
+    const letterLift = NOTE_TOP + noteBox.h + LETTER_GAP - (slotTop + composerTop);
 
     const paneD = wobRect(PANE_W, PANE_H, 26, 37, Math.min(PANE_W, PANE_H) * 0.02, { segmentsH: [3, 4], segmentsV: [5, 6], curve: 0.6, cornerJitter: 0.9, cornerOffset: 5 });
     const paneFace = face(paneD, PANE_W, PANE_H, { fill: C.cardBg, chalkSeed: 38, grain: { opacity: 0.22, frequency: 0.88, seed: 37 }, stroke: 'oklch(40% 0.06 60 / 0.6)', strokeWidth: INK });
@@ -721,12 +733,10 @@ export const notes: Scene = {
       // The foot: under the note while it waits as a letter, easing down to the pane's bottom as the reply comes.
       const down = ease.inOutCubic(prog(t, T.reply - 0.3, T.reply + 0.34));
       place(slot, { y: letterLift * (1 - down) });
-      // The letter's rule (a pen line where the composer will be, the line under it), alone until it gives way for the reply.
+      // The letter's slip (the notice in the composer's place), alone until it gives way for the reply.
       const awaitP = ease.outCubic(prog(t, T.awaitIn, T.awaitIn + 0.45));
       const awaitOut = ease.inOutCubic(prog(t, T.reply - 0.26, T.reply + 0.02));
-      letterRule.draw(ease.inOutCubic(prog(t, T.awaitIn - 0.04, T.awaitIn + 0.4)));
-      place(letterRule.el, { opacity: 1 - awaitOut });
-      place(awaiting, { y: (1 - awaitP) * 6, opacity: awaitP * (1 - awaitOut) });
+      place(awaiting, { y: (1 - awaitP) * 8, opacity: awaitP * (1 - awaitOut) });
       // Then 已連結 and the composer.
       const pillP = spring(t, T.connect, 0.7, 0.25);
       place(pill.el, { s: 1.4 - 0.4 * pillP, opacity: ease.outCubic(prog(t, T.connect, T.connect + 0.2)) });

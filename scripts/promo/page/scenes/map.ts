@@ -9,13 +9,16 @@
  * resonance, drawn on the map. Its label pops warm, terracotta ripples breathe
  * from my card toward 小夏's (the resonate chapter's arcs), and the camera,
  * after a slow push that shows the whole map, settles in on the 回家 pair for
- * the chapter's hold. The dot grid rides the camera throughout.
+ * the chapter's hold. The dotted paper (mapDots, at the camera's zoom) rides
+ * the camera throughout; the app's tools float over it — 新增分類 · 加入卡片
+ * at the top right, the zoom cluster at the bottom left.
  */
 import { arrowHeadPath, organicEdgePath, type RectLike } from '@/lib/design/edgePath';
 import { seedFromString } from '@/lib/design/prng';
+import { DOT_EDGE, DOT_PERIOD, mapDots } from '@/components/molecules/ThoughtMap/mapDots';
 import { autoCurve, autoMag, autoSegments } from '@/lib/design/wobAuto';
 import { css, drawable, html, place, svg } from '../dom';
-import { C, chalk, face, icon, INK, INK_LIGHT, INK_STRONG, makePrng, measure, shapeSvg, tagPill, tapMark, uid, wobRect, type IconName } from '../kit';
+import { button, C, chalk, face, icon, INK, INK_LIGHT, INK_STRONG, makePrng, measure, shapeSvg, tagPill, tapMark, uid, wobRect, type IconName } from '../kit';
 import { narration } from '../narration';
 import type { Scene } from '../scene';
 import { TIMELINE } from '../timeline';
@@ -26,10 +29,8 @@ const DUR = TIMELINE.map.end - TIMELINE.map.start;
 // ── The map's own measures (ThoughtMapNode, ThoughtMapCanvas) ───────────
 const NODE_W = 232;
 const NODE_H = 178;
-const GRID = 26;
 const WARM_INK = 'oklch(46% 0.045 60)';
 const LABEL_FILL = 'oklch(94% 0.02 75)';
-const DOT = 'oklch(82% 0.025 75)';
 /**
  * The arrows' labels (TagPill sm: 10px at the map's 1×) drawn at film size:
  * 14 here is about 17 px on the stage at the camera's 1.22.
@@ -73,13 +74,13 @@ const FREE_Y = G.title + NODE_H + 88;
 /**
  * Cards on the map, by copy.stories.map.cards index: where, their hue
  * (NODE_HUES; 小夏's keeps her card's lavender, my answer its terracotta),
- * the meta row's icon (ThoughtMapNode: visibility, or the pen for a draft),
+ * the meta row's icon (ThoughtMapNode: visibility, or the lock for a 私人卡 — a draft too),
  * and the tilt they are set down with.
  */
 const NODES: { x: number; y: number; hue: number; vis: IconName; tilt: number }[] = [
   { x: G.pad, y: G.title, hue: 18, vis: 'globe', tilt: -1.4 },
   { x: G.pad + NODE_W + G.gap, y: G.title, hue: 140, vis: 'lock', tilt: 1.1 },
-  { x: 350, y: FREE_Y, hue: 88, vis: 'pen', tilt: -1.0 },
+  { x: 350, y: FREE_Y, hue: 88, vis: 'lock', tilt: -1.0 },
   { x: GROUPS[1].x + G.pad + NODE_W + G.gap, y: GROUPS[1].y + G.title, hue: 290, vis: 'globe', tilt: 0.9 },
   { x: GROUPS[1].x + G.pad, y: GROUPS[1].y + G.title, hue: 55, vis: 'globe', tilt: 1.3 },
 ];
@@ -185,13 +186,6 @@ function draftTo(src: RectLike, p: Pt, seed: number): Cubic {
   return lerpCubic(edgeOnAxis(src, box, seed, 'x'), edgeOnAxis(src, box, seed, 'y'), w);
 }
 
-/** A glyph the kit doesn't carry (Icon's `minus`), drawn the same way. */
-function minusIcon(size: number, color: string) {
-  return svg('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color, 'stroke-width': INK_STRONG, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', style: 'display:block;flex-shrink:0;overflow:visible' }, [
-    svg('path', { d: 'M4.4,11.9 C8.8,13.2 15.1,10.8 19.6,12.1' }),
-  ]);
-}
-
 /** ThoughtMapNode: the card at rest and as a link target, plus its link handle. */
 function mapNode(o: { id: string; x: number; y: number; hue: number; title: string; excerpt: string; tags: readonly string[]; vis: IconName }) {
   const seed = seedFromString(o.id);
@@ -231,7 +225,7 @@ export const map: Scene = {
     const root = html('div', { class: 'scene', style: { background: C.cardBg } });
 
     // ── Paper: the dot grid riding the camera, a cream fade under the words ──
-    const dots = html('div', { class: 'abs', style: { left: 0, top: 0, width: 1920, height: 1080, backgroundImage: `radial-gradient(${DOT} 1.2px, transparent 1.5px)` } });
+    const dots = html('div', { class: 'abs', style: { left: 0, top: 0, width: 1920, height: 1080 } });
     const wash = html('div', {
       class: 'abs',
       style: {
@@ -383,7 +377,7 @@ export const map: Scene = {
     const pct = html('span', { text: '100%', style: { position: 'relative', zIndex: 1, fontFamily: 'var(--font-body)', fontSize: 12, color: C.muted, minWidth: 38, textAlign: 'center', fontVariantNumeric: 'tabular-nums' } });
     const zbtn = (child: Element) => html('span', { style: { position: 'relative', zIndex: 1, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted } }, [child]);
     const cluster = html('div', { style: { position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 10px' } }, [
-      zbtn(minusIcon(16, 'currentColor')),
+      zbtn(icon('minus', 16, 'currentColor').el),
       pct,
       zbtn(icon('plus', 16, 'currentColor').el),
       zbtn(icon('eye', 16, 'currentColor').el),
@@ -400,7 +394,17 @@ export const map: Scene = {
     ]);
 
     const finger = tapMark();
-    root.append(view, words.el, zoomBox, finger.el);
+    // ── The toolbar, top right as in the app: 新增分類 tonal, 加入卡片 the one verb, solid ──
+    const tools = html('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 10 } }, [
+      button(copy.ui.mapAddGroup, 'tonal', { icon: 'frame', iconSize: 15 }).el,
+      button(copy.ui.mapAddCard, 'solid', { icon: 'plus', iconSize: 15 }).el,
+    ]);
+    const { w: tw, h: th } = measure(tools);
+    const toolbar = html('div', { class: 'abs', style: { left: 1800 - tw * ZOOM_UI, top: 112, width: tw * ZOOM_UI, height: th * ZOOM_UI } }, [
+      html('div', { style: { zoom: ZOOM_UI } }, [tools]),
+    ]);
+
+    root.append(view, words.el, zoomBox, toolbar, finger.el);
 
     const camera = (t: number) => {
       const a = ease.inOutSine(prog(t, PUSH_ALL[0], PUSH_ALL[1]));
@@ -408,6 +412,31 @@ export const map: Scene = {
       const at = (k: 's' | 'fx' | 'fy') => CAM0[k] + (CAM_ALL[k] - CAM0[k]) * a + (CAM_HOME[k] - CAM_ALL[k]) * b;
       const sc = at('s');
       return { s: sc, x: FOCUS.x - at('fx') * sc, y: FOCUS.y - at('fy') * sc, home: b };
+    };
+
+    /**
+     * The dotted paper at the camera's zoom, as ThoughtMapCanvas paints it (mapDots: the finest lattice
+     * still shown, on a tile twice its pitch while it fades; the dots in the field's pen, a constant size
+     * on screen), riding the camera within one period of the coarsest lattice.
+     */
+    const paintDots = (cam: { s: number; x: number; y: number }) => {
+      const { tile, levels, radius, alpha } = mapDots(cam.s);
+      const period = tile * DOT_PERIOD;
+      const k = levels.findIndex((v) => v > 0);
+      const pitch = tile * 2 ** k;
+      const fading = levels[k] < 1;
+      const dot = (x: number, y: number, ink: string) => `radial-gradient(circle at ${x}px ${y}px, ${ink} ${radius}px, transparent ${radius + DOT_EDGE}px)`;
+      const whole = 'var(--field-border)';
+      const part = `color-mix(in srgb, var(--field-border) ${+(levels[k] * 100).toFixed(2)}%, transparent)`;
+      const [a, b] = [pitch / 2, pitch * 1.5];
+      const size = fading ? pitch * 2 : pitch;
+      const within = (v: number) => ((v % period) + period) % period;
+      css(dots, {
+        backgroundImage: fading ? [dot(a, a, whole), dot(b, a, part), dot(a, b, part), dot(b, b, part)].join(', ') : dot(a, a, whole),
+        backgroundSize: `${size.toFixed(3)}px ${size.toFixed(3)}px`,
+        backgroundPosition: `${within(cam.x).toFixed(2)}px ${within(cam.y).toFixed(2)}px`,
+        opacity: alpha.toFixed(4),
+      });
     };
 
     /** Where the finger is (map coordinates), how pressed, its ring, and how visible. */
@@ -440,10 +469,7 @@ export const map: Scene = {
       const cam = camera(t);
       world.style.transform = `translate(${cam.x.toFixed(2)}px, ${cam.y.toFixed(2)}px) scale(${cam.s.toFixed(4)})`;
       mist(cam.home);
-      const tile = GRID * cam.s;
-      const ox = ((cam.x % tile) + tile) % tile;
-      const oy = ((cam.y % tile) + tile) % tile;
-      css(dots, { backgroundSize: `${tile.toFixed(3)}px ${tile.toFixed(3)}px`, backgroundPosition: `${ox.toFixed(2)}px ${oy.toFixed(2)}px` });
+      paintDots(cam);
       pct.textContent = `${Math.round(cam.s * 100)}%`;
       const toStage = (p: Pt) => ({ x: cam.x + p.x * cam.s, y: cam.y + p.y * cam.s });
 

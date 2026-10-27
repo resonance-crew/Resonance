@@ -1,23 +1,25 @@
 /**
- * 14.4 – 25.0 s. 公開、私人、匿名: the card just written stays where "write"
- * left it, then becomes the publish step's preview (PublishStep): it steps
- * into the step's column, the mirror moment's echo above it (the step comes
- * in finished) and below it 誰可以看見 — 公開 · 匿名公開 · 只有自己 — with
- * the line saying what the choice means, then the foot. 公開 is chosen, the
- * line signed with the pen name. A finger comes in and picks 匿名公開: the
- * card's own byline turns to 「·」 匿名, the line and the verb follow (發布 →
- * 匿名發布), and the finger is gone; after a hold it comes back and taps
- * 匿名發布. The step clears away, the card comes forward published, holds,
- * steps into the middle of a row, and the same card slides out from under it
- * on either side: one card three ways in the choice's own order — 公開,
- * 匿名公開, 只有自己 — its colour its own, each named above in the step's own
- * words and explained below. The row has left by 24.4 s, so the next chapter
- * fades in over plain paper.
+ * 14.4 – 25.0 s. 公開、私人、匿名: the card "write" made stays where it left
+ * it, then becomes the publish step's preview (PublishStep, the writer's
+ * second step, as it stands at the split): it steps into the step's column
+ * and the step comes in around it — its heading row (← 發布這張卡片, the save
+ * state under it), the mirror moment's echo, the card with its cover's chip
+ * (更換封面), 卡片類型 — 公開 · 匿名公開 · 私人卡, no line under it: the
+ * preview's byline says whose name is on it — then the rule and the one
+ * button, whose verb follows the choice. 公開 is chosen. A finger comes in and
+ * picks 匿名公開: the card's own byline turns to 「·」 匿名 and the verb with
+ * it (發布 → 匿名發布), and the finger is gone; after a hold it comes back and
+ * taps 匿名發布. The step clears away, the card comes forward published,
+ * holds, steps into the middle of a row, and the same card slides out from
+ * under it on either side: one card three ways in the choice's own order —
+ * 公開, 匿名公開, 私人卡 — its colour its own, each named above in the step's
+ * own words and explained below. The row has left by 24.4 s, so the next
+ * chapter fades in over plain paper.
  */
 import { autoCurve, autoMag, autoSegments } from '@/lib/design/wobAuto';
 import { fill } from '../copy';
 import { css, drawable, html, place, svg } from '../dom';
-import { avatar, button, C, face, family, icon, measure, segmentedBar, storyCard, tapMark, wavyLine, wobRect, type IconName } from '../kit';
+import { avatar, button, C, face, family, icon, INK, measure, segmentedBar, storyCard, tapMark, wavyLine, wobCircle, wobRect, type IconName } from '../kit';
 import { MY_CARD, STAGE } from '../layout';
 import { myCardCover } from './write-cover';
 import { narration } from '../narration';
@@ -31,7 +33,7 @@ const DUR = TIMELINE.visibility.end - TIMELINE.visibility.start;
 const T = {
   /** The card steps into the publish step (after the chapter's cross-fade); the step comes in around it. */
   open: 0.6,
-  /** The finger picks 匿名公開; the byline, the line and the verb follow; the finger is gone by 2.6. */
+  /** The finger picks 匿名公開; the byline and the verb follow; the finger is gone by 2.6. */
   tapAnon: 2.1,
   /** …held on the anonymous byline with nothing else moving, then the finger comes back for 匿名發布. */
   tapPublish: 4.4,
@@ -149,13 +151,21 @@ export const visibility: Scene = {
     card.name.append(html('span', { style: { display: 'grid' } }, [named, nameless]));
 
     // ── The publish step ─────────────────────────────────────────────
+    // Its heading row, as the step names itself at the split: ← (back to writing), its name, the save state under it.
+    const back = icon('arrow-right', 18, C.text);
+    css(back.el, { transform: 'scaleX(-1) translateY(1px)' });
+    const backBox = html('span', { style: { width: 36, height: 36, marginLeft: -9, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 } }, [back.el]);
+    const heading = html('div', { text: ui.stepTitle, style: { fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 700, lineHeight: 1.2, color: C.text, whiteSpace: 'nowrap' } });
+    const headState = html('div', { text: ui.saved, style: { marginTop: 1, fontFamily: 'var(--font-body)', fontSize: 12, lineHeight: 1.4, color: C.muted, whiteSpace: 'nowrap' } });
+    const headRow = html('div', { style: { display: 'flex', alignItems: 'center', gap: 8, minHeight: 38 } }, [backBox, html('div', { style: { display: 'flex', flexDirection: 'column' } }, [heading, headState])]);
+
     // The mirror moment, already read: the sparkle and the echo.
     const sparkle = icon('sparkle', 16, C.terracotta);
     const glyph = html('span', { style: { flexShrink: 0, marginTop: 2, display: 'inline-block' } }, [sparkle.el]);
     const insightText = html('span', { text: fill(ui.insight, { coreInsight: s.myCard.insight }) });
     const insightRow = html('div', { style: { display: 'flex', gap: 10, alignItems: 'flex-start', fontFamily: 'var(--font-body)', fontSize: 14, lineHeight: 1.7, color: C.text } }, [glyph, insightText]);
 
-    // Who can see it, and under whose name: one choice of three (公開 chosen), and the line saying what it means.
+    // What the card is: one choice of three (公開 chosen), with no line under it — the preview's byline says it.
     const label = html('span', { text: ui.visibilityLabel, style: { fontFamily: 'var(--font-body)', fontSize: 12, letterSpacing: '0.06em', color: C.muted } });
     const bar = segmentedBar(
       [
@@ -166,33 +176,27 @@ export const visibility: Scene = {
       { mode: 'choice' },
     );
     const barRow = html('div', { style: { display: 'flex' } }, [bar.el]);
-    const lineStyle = { gridArea: '1 / 1', fontFamily: 'var(--font-body)', fontSize: 13, lineHeight: 1.5, color: C.muted };
-    const signedLine = html('span', { text: fill(ui.publicLine, { handle: s.me.name }), style: lineStyle });
-    const anonymousLine = html('span', { text: ui.anonymousLine, style: lineStyle });
-    const lineCell = html('p', { style: { display: 'grid' } }, [signedLine, anonymousLine]);
-    const group = html('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } }, [label, barRow, lineCell]);
+    const group = html('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } }, [label, barRow]);
 
     const rule = divider(STEP_W, 47);
 
-    // The foot, right-aligned: the way out tonal, the verb solid and rightmost. The verb follows the
-    // choice: 匿名發布's face is the one drawn, narrowed to 發布's width until it is chosen, and 發布's
-    // own words ride over it (its face hidden), so the button reads as one that widens.
-    const leaveBtn = button(ui.saveDraftAndLeave, 'tonal');
+    // The foot, right-aligned: the one button, whose verb follows the choice. 匿名發布's face is the one
+    // drawn, narrowed to 發布's width until it is chosen, and 發布's own words ride over it (its face
+    // hidden), so the button reads as one that widens.
     const verbs = [button(ui.publish, 'solid'), button(ui.publishAnonymously, 'solid')];
     const [wPub, wAnon] = verbs.map((v) => v.w);
     verbs[0].face.el.style.display = 'none';
-    const footH = Math.max(leaveBtn.h, ...verbs.map((v) => v.h));
+    const footH = Math.max(...verbs.map((v) => v.h));
     verbs.forEach((v) => css(v.el, { position: 'absolute', left: STEP_W - v.w, top: (footH - v.h) / 2 }));
-    css(leaveBtn.el, { position: 'absolute', left: STEP_W - wPub - 10 - leaveBtn.w, top: (footH - leaveBtn.h) / 2 });
-    const foot = html('div', { style: { position: 'relative', width: STEP_W, height: footH } }, [leaveBtn.el, verbs[1].el, verbs[0].el]);
+    const foot = html('div', { style: { position: 'relative', width: STEP_W, height: footH } }, [verbs[1].el, verbs[0].el]);
 
-    // The column, top to bottom as the step stands: the echo, the card (its place kept; the card itself
-    // moves on its own), the choice, the rule, the foot. The card takes the height the band leaves.
+    // The column, top to bottom as the step stands: the heading row, the echo, the card (its place kept;
+    // the card itself moves on its own), the choice, the rule, the foot. The card takes the height the band leaves.
     const cardSpace = html('div');
-    const stepInner = html('div', { style: { width: STEP_W, display: 'flex', flexDirection: 'column', gap: STEP_GAP } }, [insightRow, cardSpace, group, rule.el, foot]);
+    const stepInner = html('div', { style: { width: STEP_W, display: 'flex', flexDirection: 'column', gap: STEP_GAP } }, [headRow, insightRow, cardSpace, group, rule.el, foot]);
     const bandH = STEP_BAND.bottom - STEP_BAND.top;
     const bare = measure(stepInner).h;
-    const echoH = measure(insightRow).h;
+    const aboveCard = measure(headRow).h + STEP_GAP + measure(insightRow).h + STEP_GAP;
     const CARD_ZOOM = clamp((bandH - bare * STEP_ZOOM) / card.h, 1, MY_CARD.zoom);
     css(cardSpace, { height: (card.h * CARD_ZOOM) / STEP_ZOOM });
     css(stepInner, { zoom: STEP_ZOOM });
@@ -200,7 +204,22 @@ export const visibility: Scene = {
     const stepY = Math.round(STEP_BAND.top + (bandH - bare * STEP_ZOOM - card.h * CARD_ZOOM) / 2);
     const stepOuter = html('div', { class: 'abs', style: { left: stepX, top: stepY, width: STEP_W * STEP_ZOOM } }, [stepInner]);
     /** Where the card stands as the step's preview: top-left on the stage, and its scale against MY_CARD's. */
-    const inStep = { x: stepX, y: stepY + (echoH + STEP_GAP) * STEP_ZOOM, k: CARD_ZOOM / MY_CARD.zoom };
+    const inStep = { x: stepX, y: stepY + aboveCard * STEP_ZOOM, k: CARD_ZOOM / MY_CARD.zoom };
+
+    // The cover's one chip (更換封面) on the preview's picture, at its bottom-right: the family's fill, pen and deep ink.
+    const CHIP = 34;
+    const chipFace = svg('svg', { width: CHIP, height: CHIP, viewBox: `0 0 ${CHIP} ${CHIP}`, class: 'abs', style: 'left:0;top:0;overflow:visible' }, [
+      svg('path', { d: wobCircle(CHIP / 2, CHIP / 2, CHIP / 2, 41, { segments: 8, mag: 0.7, cpJitter: 0.5 }), fill: card.fam.fill, stroke: card.fam.border, 'stroke-width': INK }),
+    ]);
+    const chipIcon = icon('image', 17, card.fam.border);
+    css(chipIcon.el, { position: 'relative', zIndex: 1 });
+    const coverW = card.w - 44;
+    const coverH = Number(card.cover.getAttribute('height'));
+    const chip = html('div', {
+      class: 'abs',
+      style: { left: 22 + coverW - 18 - CHIP, top: 22 + coverH - 16 - CHIP, width: CHIP, height: CHIP, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3 },
+    }, [chipFace, chipIcon.el]);
+    card.el.append(chip);
 
     // ── The row of three ─────────────────────────────────────────────
     const cw = (ROW.right - ROW.left - ROW.gap * 2) / 3;
@@ -288,18 +307,13 @@ export const visibility: Scene = {
       bar.setFilled(0, 1 - pick);
       bar.setFilled(1, pick);
       bar.setFilled(2, 0);
-      // One line leaves before the other comes, so the two never sit over each other.
-      const lineP = ease.inOutCubic(prog(t, T.tapAnon + 0.1, T.tapAnon + 0.45));
-      place(signedLine, { y: -6 * lineP, opacity: 1 - prog(lineP, 0, 0.5) });
-      place(anonymousLine, { y: 6 * (1 - lineP), opacity: prog(lineP, 0.5, 1) });
-      // The verb widens from 發布 to 匿名發布, its words changing as it goes; the way out moves over with it.
+      // The verb widens from 發布 to 匿名發布, its words changing as it goes.
       const verbP = ease.inOutCubic(prog(t, T.tapAnon + 0.14, T.tapAnon + 0.5));
       const wVerb = lerp(wPub, wAnon, verbP);
       verbs[1].face.el.style.transformOrigin = '100% 50%';
       verbs[1].face.el.style.transform = `scaleX(${(wVerb / wAnon).toFixed(4)})`;
       place(verbs[1].label, { x: (wAnon - wVerb) / 2, opacity: prog(verbP, 0.5, 1) });
       place(verbs[0].el, { x: -(wVerb - wPub) / 2, opacity: 1 - prog(verbP, 0, 0.5) });
-      place(leaveBtn.el, { x: -(wVerb - wPub) });
       place(verbs[1].el, { s: 1 - 0.06 * tapAt(t, T.tapPublish).press });
 
       // The card's byline turns over with the choice: the avatar flips, the name changes.
@@ -316,7 +330,10 @@ export const visibility: Scene = {
       // pressed, the echo lifting away and the rest dropping, eased all the way ──
       const into = (at: number) => ease.outCubic(prog(t, T.open + at, T.open + at + 0.5));
       const away = (at: number) => ease.inOutQuad(prog(t, T.close + at, T.close + at + 0.28));
+      place(headRow, { y: (1 - into(0.1)) * 10 - away(0) * 8, opacity: into(0.1) * (1 - away(0)) });
       place(insightRow, { y: (1 - into(0.2)) * 10 - away(0) * 8, opacity: into(0.2) * (1 - away(0)) });
+      // The cover's chip, while the card is the step's preview.
+      place(chip, { s: 0.7 + 0.3 * into(0.3), opacity: into(0.3) * (1 - away(0)), origin: '50% 50%' });
       sparkle.paths.forEach((path, j) => {
         path.setAttribute('pathLength', '1');
         path.style.strokeDasharray = '1 1';
@@ -330,6 +347,8 @@ export const visibility: Scene = {
       // ── The card: into the step, forward again once published, then into the middle of the row ──
       const enter = ease.inOutCubic(prog(t, T.open, T.open + 0.7));
       const forward = ease.inOutCubic(prog(t, T.close + 0.1, T.close + 0.75));
+      // As the step's preview the card has no arrow (StoryCard's preview); published, a list's card has it again.
+      place(card.arrow, { opacity: 0.28 * (1 - enter * (1 - forward)) });
       const shrink = ease.inOutCubic(prog(t, T.shrink, T.shrink + 0.85));
       const settled = ease.outCubic(prog(t, T.shrink + 0.85, T.shrink + 1.6));
       const bob = (i: number) => drift(t, 7.2, i * 0.22) * 2.2 * settled;

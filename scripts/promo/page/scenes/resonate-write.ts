@@ -1,6 +1,6 @@
 /**
- * Text that writes itself on without moving a glyph — the same hand as the
- * "write" chapter's (write.ts keeps its own copy private): a block's lines and
+ * Text that writes itself on without moving a glyph — the hand both the
+ * "write" chapter (the writer's title and story) and this one use: a block's lines and
  * the place after each character are measured once (1×, before any zoom), and
  * a mask per line shows the text up to a distance along the lines — a hard
  * edge for typing, a soft one for a quick hand. The caret's place for any

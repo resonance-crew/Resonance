@@ -1,6 +1,9 @@
 /**
  * 24.4 – 36.0 s. 共振: 小夏's card on its page, the card page's bar under it.
- * A tap on 共振; the card makes room, and beside it the reader's answer is
+ * A tap on 共振 opens the picker (ResonatePicker): 與這張卡片共振 — write a
+ * new card, or pick one of your public cards (here the one card "write"
+ * made, published anonymously) — and the finger takes 寫一張新卡片. The
+ * picker goes, the card makes room, and beside it the reader's answer is
  * written — an empty card whose pen line draws round, its cover doodled, its
  * title typed, its tags, its story, its byline — a card answering a card,
  * never a like. Only then a pen thread runs from it back to the card it
@@ -11,7 +14,7 @@
 import { penWave } from '@/lib/design/wavyPath';
 import { autoCurve, autoMag, autoSegments } from '@/lib/design/wobAuto';
 import { css, drawable, html, place, svg } from '../dom';
-import { avatar, C, face, family, icon, INK_LIGHT, INK_STRONG, makePrng, measure, segmentedBar, storyCard, tapMark, uid, wobRect } from '../kit';
+import { avatar, button, C, face, family, icon, INK, INK_LIGHT, INK_STRONG, makePrng, measure, scrim, segmentedBar, storyCard, tapMark, uid, wavyRule, wobRect } from '../kit';
 import { THEIR_CARD } from '../layout';
 import { narration } from '../narration';
 import type { Scene } from '../scene';
@@ -19,6 +22,7 @@ import { TIMELINE } from '../timeline';
 import { clamp, drift, ease, lerp, prog, spring } from '../time';
 import { resonanceCardCover, theirCardCover } from './resonate-covers';
 import { writeOn } from './resonate-write';
+import { myCardCover } from './write-cover';
 
 const DUR = TIMELINE.resonate.end - TIMELINE.resonate.start;
 
@@ -32,7 +36,7 @@ const PAIR_ZOOM = 1.45;
 const BAR_OVERHANG = 15;
 
 /** How fast the answer's title is typed (characters a second): a hand's pace, Chinese slower than Latin letters. */
-const TITLE_CPS = { 'zh-TW': 12, en: 29 } as const;
+const TITLE_CPS = { 'zh-TW': 12, en: 32 } as const;
 /** How long the story takes to be written on. */
 const STORY_S = 0.8;
 
@@ -42,7 +46,9 @@ const STORY_S = 0.8;
  * follows the byline, and the end of the hold stays where it is.
  */
 function schedule(titleGraphemes: number, cps: number) {
-  const titleAt = 3.05;
+  /** The picker's beat: everything from the card making room on waits this long for it. */
+  const P = 0.75;
+  const titleAt = 3.05 + P;
   const titleEnd = titleAt + 0.06 + titleGraphemes / cps;
   const tags = titleEnd - 0.05;
   const storyAt = tags + 0.15;
@@ -50,12 +56,15 @@ function schedule(titleGraphemes: number, cps: number) {
   return {
     tapIn: [1.2, 1.7],
     press: [1.75, 1.88, 1.95, 2.1],
-    room: [2.1, 3.0],
+    // 共振 opens the picker; a second finger takes 寫一張新卡片 and the picker goes.
+    picker: [1.98, 2.86],
+    tap2: 2.7,
+    room: [2.1 + P, 3.0 + P],
     // The answer, written: the empty card, its cover doodled, its title typed, its tags, its story, its byline.
-    outline: [2.55, 3.1],
-    paper: [2.6, 3.05],
-    cover: [2.8, 3.6],
-    caretIn: 2.95,
+    outline: [2.55 + P, 3.1 + P],
+    paper: [2.6 + P, 3.05 + P],
+    cover: [2.8 + P, 3.6 + P],
+    caretIn: 2.95 + P,
     title: [titleAt, titleEnd],
     tags,
     story: [storyAt, by],
@@ -75,6 +84,13 @@ function schedule(titleGraphemes: number, cps: number) {
     // Everything steps away, the people first, the card answered last.
     leave: 10.3,
   } as const;
+}
+
+/** A finger's press: down fast, up softer; the ring goes out after it. */
+function pressAt(t: number, t0: number) {
+  const down = ease.outQuad(prog(t, t0, t0 + 0.09));
+  const up = ease.inOutQuad(prog(t, t0 + 0.12, t0 + 0.32));
+  return { press: down * (1 - up), ring: ease.outCubic(prog(t, t0 + 0.03, t0 + 0.62)) };
 }
 
 type Pt = { x: number; y: number };
@@ -253,11 +269,73 @@ export const resonate: Scene = {
     const pillEl = zoomed(pill, pw, ph);
     const pillPos = { x: pairC.x - (pw * PAIR_ZOOM) / 2, y: pairC.y + AV / 2 + 18 };
 
+    // ── 共振 opens the picker (ResonatePicker in its Modal, 480 wide) ──
+    // Its title; 寫一張新卡片, the pen and the words in terracotta; one wavy rule; the viewer's public
+    // cards that may answer this one — the card "write" made, anonymous (匿名 · its date) with its cover
+    // for a thumb; then 取消 · 〰 共振, the verb resting until a card is marked.
+    const ui = copy.ui;
+    const PK_W = 480;
+    const PK_Z = 1.3;
+    const pkTitle = html('div', { text: ui.pickerTitle, style: { fontFamily: 'var(--font-heading)', fontSize: 20, fontWeight: 700, lineHeight: 1.3, color: C.text, marginBottom: 12 } });
+    const pkPen = icon('pen', 18, C.terracotta);
+    const writeNewLabel = html('span', { text: ui.pickerWriteNew, style: { fontFamily: 'var(--font-body)', fontSize: 15, fontWeight: 600, color: C.onTonal } });
+    const writeNew = html('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 6px', minHeight: 44 } }, [pkPen.el, writeNewLabel]);
+    const pkRule = wavyRule(PK_W - 48, 59, 'color-mix(in oklch, var(--field-border-hover) 35%, transparent)', { amp: 1.4, steps: 7, width: 1.2 });
+    const THUMB = 40;
+    const thumbD = wobRect(THUMB, THUMB, THUMB * 0.25, 3, THUMB * 0.022, { segmentsH: 1, segmentsV: 1, curve: 1.3, cornerJitter: 3.2, cornerOffset: THUMB * 0.06 });
+    const thumbClip = uid('thumb');
+    const thumbArtW = (THUMB * 296) / 184;
+    const thumb = svg('svg', { width: THUMB, height: THUMB, viewBox: `0 0 ${THUMB} ${THUMB}`, style: 'display:block;flex-shrink:0;overflow:visible' }, [
+      svg('defs', {}, [svg('clipPath', { id: thumbClip }, [svg('path', { d: thumbD })])]),
+      svg('g', { 'clip-path': `url(#${thumbClip})` }, [svg('g', { transform: `translate(${(-(thumbArtW - THUMB) / 2).toFixed(2)},0)` }, myCardCover().cover(thumbArtW, THUMB, family(0)))]),
+      svg('path', { d: thumbD, fill: 'none', stroke: 'var(--avatar-stroke)', 'stroke-width': INK, 'stroke-linejoin': 'round' }),
+    ]);
+    const published = new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(new Date(2026, 9, 16));
+    const pkRow = html('div', { style: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 6px' } }, [
+      thumb,
+      html('div', { style: { display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 } }, [
+        html('span', { text: s.myCard.title, style: { fontFamily: 'var(--font-body)', fontSize: 15, fontWeight: 600, lineHeight: 1.35, color: C.text, whiteSpace: 'nowrap' } }),
+        html('span', { text: `${ui.pickerAnonymous} · ${published}`, style: { fontFamily: 'var(--font-body)', fontSize: 13, lineHeight: 1.35, color: C.muted, whiteSpace: 'nowrap' } }),
+      ]),
+    ]);
+    const pkCancel = button(ui.pickerCancel, 'tonal');
+    const pkConfirm = button(ui.pickerConfirm, 'solid', { icon: 'wave', iconSize: 16 });
+    css(pkConfirm.el, { opacity: 0.45 });
+    const pkFoot = html('div', { style: { display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 18 } }, [pkCancel.el, pkConfirm.el]);
+    const pkBody = html('div', { style: { position: 'relative', zIndex: 2, padding: '26px 24px 22px' } }, [
+      pkTitle,
+      writeNew,
+      html('div', { style: { margin: '6px 0' } }, [pkRule.el]),
+      pkRow,
+      pkFoot,
+    ]);
+    const pk = html('div', { style: { position: 'relative', width: PK_W } }, [pkBody]);
+    const pkH = Math.ceil(measure(pk).h);
+    const pkBox = pk.getBoundingClientRect();
+    const wnBox = writeNewLabel.getBoundingClientRect();
+    const pkD = wobRect(PK_W, pkH, 26, 53, Math.min(PK_W, pkH) * 0.025, { segmentsH: [3, 4], segmentsV: [5, 6], curve: 0.6, cornerJitter: 0.9, cornerOffset: 5 });
+    pk.prepend(face(pkD, PK_W, pkH, { fill: C.cardBg, chalkSeed: 18, grain: { opacity: 0.3, frequency: 0.88, seed: 53 }, stroke: C.sheetPen, strokeWidth: INK }).el);
+    css(pk, { height: pkH, zoom: PK_Z });
+    const pkCX = aHome.x;
+    const pkCY = Math.round(THEIR_CARD.y + (aH1 * Z) / 2);
+    const pkLeft = pkCX - (PK_W * PK_Z) / 2;
+    const pkTop = Math.round(pkCY - (pkH * PK_Z) / 2);
+    // Over the page and its bar, whatever their own layers (a card's paper, pen and words stack 0–2).
+    const pkOuter = html('div', { class: 'abs', style: { left: pkLeft, top: pkTop, width: PK_W * PK_Z, height: pkH * PK_Z, zIndex: 6, isolation: 'isolate' } }, [pk]);
+    const pkDim = scrim(pkCX, pkCY, Math.round(((PK_W * PK_Z) / 2 + 96) / 0.7), Math.round(((pkH * PK_Z) / 2 + 120) / 0.7));
+    css(pkDim.el, { zIndex: 5 });
+    /** Where the second finger takes 寫一張新卡片: at the end of its words, under them, so they stay readable. */
+    const writeNewAt = {
+      x: pkLeft + (wnBox.left - pkBox.left + wnBox.width * 0.86) * PK_Z,
+      y: pkTop + (wnBox.top - pkBox.top + wnBox.height * 0.78) * PK_Z + 10,
+    };
+
     const tap = tapMark();
+    const tapTwo = tapMark();
     const seg0 = bar.centre(0);
     const tapAt = { x: THEIR_CARD.x + Z * (barLeft + seg0.x * barK), y: THEIR_CARD.y + Z * (barTop + seg0.y * barK) };
 
-    root.append(words.el, rippleSvg, aOuter, threadSvg, bOuter, linkSvg, themEl, meEl, pillEl, tap.el);
+    root.append(words.el, rippleSvg, aOuter, threadSvg, bOuter, linkSvg, themEl, meEl, pillEl, pkDim.el, pkOuter, tap.el, tapTwo.el);
 
     /** A spring that has come to rest reads exactly 1, so nothing keeps a transform once it is still. */
     const rest = (t: number, start: number, settle: number, bounce: number) => (t >= start + settle * 1.8 ? 1 : spring(t, start, settle, bounce));
@@ -304,6 +382,29 @@ export const resonate: Scene = {
         ring: ease.outCubic(prog(t, T.press[0] + 0.07, T.press[0] + 0.67)),
       });
       place(bar.el, { opacity: 1 - 0.18 * ease.outCubic(clamp(press)) });
+
+      // The picker: pops in over the dimmed page, 寫一張新卡片 is taken, and it goes as the card makes room.
+      const pkPop = spring(t, T.picker[0], 0.5, 0.14);
+      const pkOut = ease.inOutQuad(prog(t, T.picker[1], T.picker[1] + 0.2));
+      place(pkOuter, {
+        y: (1 - pkPop) * 12 + pkOut * 10,
+        s: (0.96 + 0.04 * pkPop) * (1 - 0.03 * pkOut),
+        opacity: ease.outQuad(prog(t, T.picker[0], T.picker[0] + 0.14)) * (1 - pkOut),
+        origin: '50% 50%',
+      });
+      pkDim.set(ease.inOutCubic(prog(t, T.picker[0] - 0.05, T.picker[0] + 0.3)) * (1 - pkOut));
+      const second = pressAt(t, T.tap2);
+      writeNewLabel.style.color = `color-mix(in oklch, var(--terracotta-ink, ${C.onTonal}) ${Math.round(100 * ease.outCubic(prog(t, T.tap2 - 0.2, T.tap2)))}%, ${C.onTonal})`;
+      place(writeNew, { s: 1 - 0.03 * second.press, origin: '20% 50%' });
+      const come2 = ease.outCubic(prog(t, T.tap2 - 0.42, T.tap2 - 0.06));
+      const gone2 = ease.inOutCubic(prog(t, T.tap2 + 0.22, T.tap2 + 0.42));
+      tapTwo.set({
+        x: writeNewAt.x + (1 - come2) * 56 + gone2 * 12,
+        y: writeNewAt.y + (1 - come2) * 70 + gone2 * 18,
+        opacity: come2 * (1 - gone2),
+        press: second.press,
+        ring: t >= T.tap2 ? second.ring : 0,
+      });
 
       // 共振 → 已共振 once the answer has reached the card, and so it stays: the old word rolls up
       // and out, then the new one rolls in from below, never the two over each other.
