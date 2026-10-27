@@ -1,7 +1,10 @@
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { storyTooComplex } from '@/lib/markdown/storyLimits';
 import { siteUrl } from '@/lib/site';
+import { isIpHost, SITE_HOSTS, wordsAreTheAddress } from './soleLink';
 import { findLinks, normalizeLink } from './url';
+
+export { SITE_HOSTS, wordsAreTheAddress };
 
 /**
  * Which links in a story get a preview card: the paragraph-level twin of the
@@ -34,12 +37,6 @@ import { findLinks, normalizeLink } from './url';
 /** At most this many links in one story get a preview (the first ones, in reading order). */
 export const STORY_PREVIEW_LIMIT = 10;
 
-/**
- * Our own hosts. A link to one of our pages is never unfurled — the server
- * would be asking itself, and a card already has its own embed (`/card/…`).
- */
-export const SITE_HOSTS: readonly string[] = ['resonance.channel', 'www.resonance.channel', 'resonance-world.vercel.app'];
-
 interface MdNode {
   type: string;
   children?: MdNode[];
@@ -50,25 +47,11 @@ interface MdNode {
 }
 
 const HTTP = /^https?:\/\//i;
-const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
 /** The words a node shows (a link's text, however it is emphasized inside). */
 function wordsOf(node: MdNode): string {
   if (node.type === 'text' || node.type === 'inlineCode') return String(node.value ?? '');
   return (node.children ?? []).map(wordsOf).join('');
-}
-
-/** An address with its scheme and one trailing slash set aside — how a link's words are matched to its href. */
-const bareAddress = (url: string) => url.replace(/^https?:\/\//i, '').replace(/\/$/, '');
-
-/**
- * Whether a link's words are its own address — the writer's way of saying "show the page" rather than "read
- * my words": the words, trimmed, are one address the link rules take, naming the same page as the href.
- */
-export function wordsAreTheAddress(words: string, href: string): boolean {
-  const said = normalizeLink(words.trim());
-  const target = normalizeLink(href);
-  return !!said && !!target && bareAddress(said) === bareAddress(target);
 }
 
 /** Whether the subtree holds a picture (`[![img](…)](url)` is a linked picture, not a link). */
@@ -77,7 +60,7 @@ function holdsImage(node: MdNode): boolean {
 }
 
 /** The standalone link a paragraph is (see the rules above), as its normalized URL — or null. */
-function soleLinkOf(paragraph: MdNode, definitions: Map<string, string>): string | null {
+function soleLinkOf(paragraph: MdNode, definitions: Map<string, string>, anyWords: boolean): string | null {
   const meaningful = (paragraph.children ?? []).filter((c) => !(c.type === 'text' && !String(c.value ?? '').trim()));
   if (meaningful.length !== 1) return null;
   const only = meaningful[0];
@@ -85,7 +68,7 @@ function soleLinkOf(paragraph: MdNode, definitions: Map<string, string>): string
     const href = only.type === 'link' ? only.url : definitions.get(only.identifier ?? '');
     if (!href || !HTTP.test(href) || holdsImage(only)) return null;
     // A link with words of its own reads as those words, alone on its line or not.
-    if (!wordsAreTheAddress(wordsOf(only), href)) return null;
+    if (!anyWords && !wordsAreTheAddress(wordsOf(only), href)) return null;
     return normalizeLink(href);
   }
   if (only.type === 'text') {
@@ -96,12 +79,21 @@ function soleLinkOf(paragraph: MdNode, definitions: Map<string, string>): string
   return null;
 }
 
+export interface SoleLinkOptions {
+  /**
+   * The rule before round 16: a lone link is a standalone link whatever its
+   * words. Only `backfill.ts link-previews` asks for it, to list the
+   * paragraphs whose card-ness the words rule changed.
+   */
+  anyWords?: boolean;
+}
+
 /**
  * Every paragraph of the story that is a standalone link: where it starts in
  * the source (a UTF-16 offset, as the web's Markdown tree reports it) → its
  * key. Before the limits below: our own hosts and duplicates are still here.
  */
-export function soleLinkParagraphs(story: string): Map<number, string> {
+export function soleLinkParagraphs(story: string, options: SoleLinkOptions = {}): Map<number, string> {
   const found = new Map<number, string>();
   // A story too costly to read as a tree is drawn as its words: no paragraph of it is a link card.
   if (!/https?:\/\/|www\./i.test(story) || storyTooComplex(story)) return found;
@@ -117,7 +109,7 @@ export function soleLinkParagraphs(story: string): Map<number, string> {
   collect(root);
   const walk = (node: MdNode) => {
     if (node.type === 'paragraph') {
-      const key = soleLinkOf(node, definitions);
+      const key = soleLinkOf(node, definitions, options.anyWords === true);
       const offset = node.position?.start.offset;
       if (key && offset != null) found.set(offset, key);
       return;
@@ -137,7 +129,7 @@ export function unfurlable(url: string, siteHost: string | null = null): boolean
     return false;
   }
   if (SITE_HOSTS.includes(host) || (siteHost && host === siteHost)) return false;
-  return !IPV4.test(host) && !host.startsWith('[');
+  return !isIpHost(host);
 }
 
 /** The host `siteUrl()` names (localhost outside a deployment, which no link can name). */
