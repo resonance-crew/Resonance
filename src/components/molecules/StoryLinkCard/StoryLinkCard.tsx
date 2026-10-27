@@ -9,9 +9,15 @@ import { parseLink } from '@/lib/links/linkify';
 import { useStoryBlock } from './useStoryBlock';
 import styles from './StoryLinkCard.module.css';
 
-export interface StoryLinkCardProps {
-  preview: LinkPreview;
-}
+export type StoryLinkCardProps =
+  | { preview: LinkPreview; url?: undefined }
+  /**
+   * A link the writer set as 卡片 that has no stored preview (a private or
+   * never-published card, an older build's story, a page that gave none):
+   * the writer's quiet card — its host over its address, no picture, nothing
+   * fetched (round 16 review S3).
+   */
+  | { preview?: undefined; url: string };
 
 /**
  * A link standing alone in a story, drawn as what its page says about itself
@@ -36,12 +42,13 @@ export interface StoryLinkCardProps {
  * server fetched it, never this browser), and a picture that fails to load
  * leaves no empty frame behind.
  */
-export function StoryLinkCard({ preview }: StoryLinkCardProps) {
+export function StoryLinkCard({ preview, url }: StoryLinkCardProps) {
   const t = useTranslations('card.linkPreview');
   const titleId = useId();
   const imageRef = useRef<HTMLImageElement>(null);
-  const image = useImageRetry(preview.image);
-  const block = useStoryBlock<HTMLAnchorElement>(preview.url);
+  const address = preview?.url ?? url ?? '';
+  const image = useImageRetry(preview?.image);
+  const block = useStoryBlock<HTMLAnchorElement>(address);
 
   // The server's HTML starts loading the picture before the page comes alive,
   // and an error then reaches no handler: ask the picture itself once it is
@@ -51,13 +58,13 @@ export function StoryLinkCard({ preview }: StoryLinkCardProps) {
     const img = imageRef.current;
     if (img?.complete && img.naturalWidth === 0) image.onError();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preview.image]);
+  }, [preview?.image]);
 
-  const link = parseLink(preview.url);
+  const link = parseLink(address);
   if (!link) return null;
   const host = link.host.replace(/^www\./, '');
   // One that fails is hidden and asked for once more a little later (`useImageRetry`).
-  const picture = preview.image && !image.hidden ? preview.image : null;
+  const picture = preview?.image && !image.hidden ? preview.image : null;
 
   return (
     <a
@@ -92,13 +99,14 @@ export function StoryLinkCard({ preview }: StoryLinkCardProps) {
         </span>
       )}
       <span className={styles.text}>
+        {/* With no preview: its host as the title, its address under it (the writer's card). */}
         <span id={titleId} className={styles.title}>
-          {preview.title}
+          {preview ? preview.title : host}
         </span>
-        {preview.description && <span className={styles.description}>{preview.description}</span>}
+        {preview?.description && <span className={styles.description}>{preview.description}</span>}
         <span className={styles.host}>
           <Icon name="link" size={15} />
-          <span className={styles.hostName}>{host}</span>
+          <span className={styles.hostName}>{preview ? host : link.url}</span>
         </span>
       </span>
     </a>

@@ -7,6 +7,7 @@ import { act, fireEvent, renderWithIntl, screen } from '@/../test/render';
 import fixture from '../../../../native/fixtures/story-link-cards.json';
 import { StoryLinkPreviewsContext } from '@/components/molecules/StoryLinkCard/StoryLinkPreviews';
 import type { LinkPreview } from '@/lib/db/types';
+import { unfurlable } from '@/lib/links/storyLinks';
 import { BLANK_PARAGRAPH } from '@/lib/markdown/blankLines';
 import { StoryMarkdown } from './StoryMarkdown';
 
@@ -232,16 +233,20 @@ describe('StoryMarkdown link cards', () => {
     id: string;
     markdown: string;
     links: string[];
+    soleLinks: string[];
     inline?: string[];
     webDrawsNone?: boolean;
   }
 
   // The rule shared with the server and the apps: given a preview for every
   // link the server stores and for every link that must stay inline, the
-  // reader draws exactly the stored ones as cards.
+  // reader draws the stored ones as cards — and every other standalone
+  // address the server would ever fetch as the writer's quiet card (review
+  // S3: past the server's ten, say), never one inline, our own or an IP.
   it.each((fixture.cases as Case[]).map((c) => [c.id, c] as const))('%s (native/fixtures/story-link-cards.json)', (_id, c) => {
     renderStory(c.markdown, [...c.links, ...(c.inline ?? [])].map((url) => previewOf(url)));
-    expect(cardLinks()).toEqual(c.webDrawsNone ? [] : c.links);
+    const cards = [...new Set([...c.links, ...c.soleLinks.filter((url) => unfurlable(url))])];
+    expect(cardLinks()).toEqual(c.webDrawsNone ? [] : cards);
   });
 
   it("draws the page's card in place of the link: picture, title, description and host, opening in a new tab", () => {
@@ -275,14 +280,26 @@ describe('StoryMarkdown link cards', () => {
     expect(card).toHaveTextContent('Title of https://example.com/a');
   });
 
-  it('draws the link as it always was when it has no preview', () => {
-    renderStory('https://example.com/a\n\n[named](https://example.com/b)', [previewOf('https://example.com/other')]);
-    expect(cardLinks()).toEqual([]);
-    expect(screen.getByRole('link', { name: 'named' })).toHaveAttribute('href', 'https://example.com/b');
-    expect(screen.getByRole('link', { name: 'https://example.com/a' }).closest('p')).not.toBeNull();
-    // Without any previews at all, too (another page's StoryMarkdown).
-    renderWithIntl(<StoryMarkdown source="https://example.com/c" />);
-    expect(screen.getByRole('link', { name: 'https://example.com/c' })).toBeInTheDocument();
+  // Round 16 review S3: a link set to 卡片 on a card with no stored previews (private, never published) read as a
+  // bare address on its own page. 卡片 always looks like a card.
+  it('draws a standalone address with no preview as the writer’s quiet card — its host over its address, nothing fetched', () => {
+    renderStory('Before.\n\nhttps://www.example.com/a\n\n[named](https://example.com/b)', [previewOf('https://example.com/other')]);
+    const card = screen.getByRole('link', { name: 'Open link: example.com' });
+    expect(card).toHaveAttribute('href', 'https://www.example.com/a');
+    expect(card).toHaveAttribute('target', '_blank');
+    expect(document.getElementById(card.getAttribute('aria-describedby')!)).toHaveTextContent(/^example\.com$/);
+    expect(card).toHaveTextContent('https://www.example.com/a');
+    expect(card.querySelector('img')).toBeNull();
+    expect(card.closest('p')).toBeNull();
+    // A link with words of its own stays those words, inline.
+    expect(screen.getByRole('link', { name: 'named' }).closest('p')).not.toBeNull();
+  });
+
+  it('draws it so without any previews at all (another page’s StoryMarkdown), and leaves our own pages and IPs links', () => {
+    renderWithIntl(<StoryMarkdown source={'<https://example.com/c>\n\nhttps://resonance.channel/u/alice\n\nhttp://127.0.0.1/x'} />);
+    expect(cardLinks()).toEqual(['https://example.com/c']);
+    expect(screen.getByRole('link', { name: 'https://resonance.channel/u/alice' }).closest('p')).not.toBeNull();
+    expect(screen.getByRole('link', { name: 'http://127.0.0.1/x' }).closest('p')).not.toBeNull();
   });
 
   it('keeps a card link an embedded card, whatever previews the page has', () => {

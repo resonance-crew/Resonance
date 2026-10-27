@@ -14,7 +14,7 @@ import { StoryTable } from './StoryTable';
 import type { LinkPreview } from '@/lib/db/types';
 import { isBlankParagraph } from '@/lib/markdown/blankLines';
 import { storyTooComplex } from '@/lib/markdown/storyLimits';
-import { SITE_HOSTS, soleLinkParagraphs } from '@/lib/links/storyLinks';
+import { SITE_HOSTS, soleLinkParagraphs, unfurlable } from '@/lib/links/storyLinks';
 import { seedFromString } from '@/lib/design/prng';
 import { storyLinkWaveVars } from '@/lib/design/storyLinkWave';
 import { useLinkWaveInk } from '@/lib/design/useAppearance';
@@ -196,7 +196,8 @@ function withinEmbedMax(embeds: { order: Map<number, number> } | null, offset: n
 /**
  * Paragraphs that hold a single card link become that card as a block (the
  * shared card a thread draws, in a link card's container); a paragraph that
- * is a single web link the server previewed becomes that page's link card; a paragraph holding a single photo becomes an image block
+ * is a single web link becomes that page's link card (the server's preview,
+ * else its host over its address); a paragraph holding a single photo becomes an image block
  * with its own breathing room (a photo should never touch the sentence above
  * it, and nobody should have to type blank lines to get that). A paragraph
  * the writer deliberately left blank renders as extra space. Everything else
@@ -226,6 +227,16 @@ function StoryParagraph({ node, children }: { children?: ReactNode } & ExtraProp
     return (
       <div className={`${styles.embedBlock} story-embed`}>
         <StoryLinkCard preview={preview} />
+      </div>
+    );
+  }
+  // A standalone address with no stored preview (a private or never-published card, an older build's story, a
+  // page that gave none) is still the card its writer chose — the writer's quiet card, nothing fetched (round 16
+  // review S3); our own pages and bare IP addresses stay links, as the writer keeps them.
+  if (key && unfurlable(key)) {
+    return (
+      <div className={`${styles.embedBlock} story-embed`}>
+        <StoryLinkCard url={key} />
       </div>
     );
   }
@@ -281,7 +292,8 @@ export interface StoryMarkdownProps {
  * story with the same rules). `rehype-slug` adds `id`s to headings so the
  * Table of Contents can anchor-scroll to them. The page may provide its
  * card's link previews (StoryLinkPreviewsContext); a standalone link with one
- * is drawn as its link card.
+ * is drawn as its link card, and one without as the writer's quiet card (its
+ * host over its address).
  *
  * Parsing a story is the costliest thing a card page does in the browser, so
  * it happens only when the story, how it is set, or its previews change —
@@ -292,13 +304,12 @@ export interface StoryMarkdownProps {
  */
 export const StoryMarkdown = memo(function StoryMarkdown({ source, script, lang, density }: StoryMarkdownProps) {
   const previews = useContext(StoryLinkPreviewsContext);
-  // Parsed again (as CommonMark, like the server) only when there is a preview to place.
+  // Parsed again (as CommonMark, like the server) only when the story holds an address at all (soleLinkParagraphs
+  // looks before it parses): a standalone one is a card, with its preview or without.
+  const keys = useMemo(() => soleLinkParagraphs(source), [source]);
   const cards = useMemo<StoryLinkCards | null>(
-    () =>
-      previews?.length
-        ? { keys: soleLinkParagraphs(source), previews: new Map(previews.map((p) => [p.url, p])) }
-        : null,
-    [source, previews],
+    () => (keys.size ? { keys, previews: new Map((previews ?? []).map((p) => [p.url, p])) } : null),
+    [keys, previews],
   );
   // The same in the server's render and the browser's: a pure reading of the source.
   const read = useMemo(() => (script ? null : storyType('', source)), [script, source]);
