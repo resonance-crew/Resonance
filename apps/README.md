@@ -534,6 +534,15 @@ adb shell am start -n com.resonance.stories/com.resonance.app.MainActivity \
   --es password <SEED_PASSWORD from scripts/seed-emulator.ts> --es route /card/rich-story
 ```
 
+A phone on USB reaches the same stack through its own loopback: `adb -s <serial> reverse tcp:9099 tcp:9099`
+(and 8080, 3100), then launch with `--es emulatorHost localhost` (only `10.0.2.2`, `localhost` and
+`127.0.0.1` are taken). To judge speed there, install `./gradlew :app:assembleBench` — the `bench` build type
+is a release's R8 and non-debuggable build, debug-signed and never uploaded, that still takes
+`--ez emulator true` (a debug build does about six times the UI-thread work). It replaces a Play install
+only after `adb uninstall com.resonance.stories` (the signatures differ). Start AVDs with `-gpu host`: ours
+have `hw.gpu.enabled=no`, which draws every frame in software (50–800 ms a frame); a held message's
+backdrop blur turns itself off for the session when an opening frame runs past 64 ms (`Backdrop.kt`).
+
 A cover or story picture stored against the emulators is served by the dev server at
 `http://localhost:<dev port>/api/emulator-storage/…` — on the device, the device itself. Reverse that port once
 per boot (`adb -s <serial> reverse tcp:3100 tcp:3100`, or the port the dev server runs on) and debug builds reach
