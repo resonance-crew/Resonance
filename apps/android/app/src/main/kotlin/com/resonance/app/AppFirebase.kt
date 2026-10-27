@@ -35,7 +35,7 @@ object AppFirebase {
         get() = current ?: synchronized(this) {
             current ?: FirebaseFirestore.getInstance(app).also { db ->
                 emulator?.let { config ->
-                    db.useEmulator(AppConfig.EMULATOR_HOST, config.emulatorFirestorePort)
+                    db.useEmulator(config.emulatorHost, config.emulatorFirestorePort)
                     db.firestoreSettings = FirebaseFirestoreSettings.Builder().setLocalCacheSettings(memoryCacheSettings {}).build()
                 }
                 current = db
@@ -55,7 +55,7 @@ object AppFirebase {
             .setApiKey("demo-key")
             .build()
         app = FirebaseApp.initializeApp(context, options, "emulator")
-        FirebaseAuth.getInstance(app).useEmulator(AppConfig.EMULATOR_HOST, config.emulatorAuthPort)
+        FirebaseAuth.getInstance(app).useEmulator(config.emulatorHost, config.emulatorAuthPort)
         emulator = config
         db
     }

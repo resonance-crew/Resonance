@@ -24,4 +24,12 @@ class AppConfigTest {
         assertTrue(config.usesEmulator)
         assertEquals("http://10.0.2.2:3101", AppConfig(usesEmulator = true, emulatorApiPort = 3101).origin)
     }
+
+    @Test fun aPhoneOnUsbReachesTheStackOnItsOwnLoopbackAndNowhereElse() {
+        assertEquals("http://localhost:3100", AppConfig(usesEmulator = true, emulatorHost = AppConfig.emulatorHostOf("localhost")).origin)
+        assertEquals("127.0.0.1", AppConfig.emulatorHostOf("127.0.0.1"))
+        // Only the hosts the debug network config lets plain HTTP reach: anything else is the emulator's alias.
+        assertEquals("10.0.2.2", AppConfig.emulatorHostOf("evil.example.com"))
+        assertEquals("10.0.2.2", AppConfig.emulatorHostOf(null))
+    }
 }

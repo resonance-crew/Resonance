@@ -58,17 +58,18 @@ class MainActivity : ComponentActivity() {
         // Under the first frame, the chosen theme's paper (the manifest's theme knows only terracotta's).
         window.setBackgroundDrawable(ColorDrawable(AppearanceStore.shared.palette(this).Cream.toArgb()))
         super.onCreate(savedInstanceState)
-        val emulator = BuildConfig.DEBUG && intent.getBooleanExtra("emulator", false)
+        val emulator = BuildConfig.LOCAL_STACK && intent.getBooleanExtra("emulator", false)
         val config = if (!emulator) AppConfig(usesEmulator = false) else {
             fun port(name: String, default: Int) = intent.getIntExtra(name, default).takeIf { it in 1..65535 } ?: default
             AppConfig(
                 usesEmulator = true,
+                emulatorHost = AppConfig.emulatorHostOf(intent.getStringExtra("emulatorHost")),
                 emulatorAuthPort = port("emulatorAuthPort", 9099),
                 emulatorFirestorePort = port("emulatorFirestorePort", 8080),
                 emulatorApiPort = port("emulatorApiPort", 3100),
             )
         }
-        if (BuildConfig.DEBUG && intent.getBooleanExtra("firestoreLog", false)) FirebaseFirestore.setLoggingEnabled(true)
+        if (BuildConfig.LOCAL_STACK && intent.getBooleanExtra("firestoreLog", false)) FirebaseFirestore.setLoggingEnabled(true)
         AppFirebase.configure(this, config)
         val session = (application as ResonanceApp).session(config)
         this.session = session

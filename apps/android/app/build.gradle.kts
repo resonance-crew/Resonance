@@ -43,11 +43,25 @@ android {
     }
 
     buildTypes {
+        debug {
+            // May point at the local stack (`--ez emulator true`, MainActivity).
+            buildConfigField("boolean", "LOCAL_STACK", "true")
+        }
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Without the upload key (CI, another machine) a release still builds, debug-signed.
             signingConfig = signingConfigs.findByName("upload") ?: signingConfigs.getByName("debug")
+            buildConfigField("boolean", "LOCAL_STACK", "false")
+        }
+        // A release's speed against the local stack, to time the app on a phone: minified and not
+        // debuggable as a release is, debug-signed, and let `--ez emulator true` (its own network config:
+        // plain HTTP to the Mac's loopback). Never uploaded.
+        create("bench") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            buildConfigField("boolean", "LOCAL_STACK", "true")
         }
     }
 
@@ -63,6 +77,8 @@ android {
                 "../../../native/editor/dist",
             )
         }
+        // A bench build's App Check is a release's (it never starts one: it runs on the local stack).
+        getByName("bench") { kotlin.srcDir("src/release/kotlin") }
     }
 
     // The fonts are stored, not deflated, so AppFonts maps each file once (shared, clean pages)
