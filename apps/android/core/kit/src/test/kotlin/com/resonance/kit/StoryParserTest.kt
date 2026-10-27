@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
 /** The reader's block rules against native/fixtures/markdown-corpus.json (same cases as iOS). */
 class StoryParserTest {
     // The fixtures' pictures are on example hosts: read as before any API is configured (another test may have set one).
-    @org.junit.Before fun noSiteYet() {
+    @kotlin.test.BeforeTest fun noSiteYet() {
         com.resonance.kit.story.StoryPictures.siteHost = null
     }
 
