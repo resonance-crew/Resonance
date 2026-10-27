@@ -15,10 +15,10 @@ import UIKit
 /// pending edit.
 struct PublishStep: View {
     let model: WriteModel
-    /// At the split the pane has no bar: the step names itself in its own first row (← 繼續寫 and
-    /// the heading), level with the Leave over the map. Below it the bar does.
+    /// At the split the pane has no bar: the step names itself in its own first row (its heading, at the
+    /// column's start, level with the Leave over the map — which is its way back, round 17 §9). Below it the
+    /// bar does.
     let inlineHeading: Bool
-    var onBack: () -> Void
     var onPickCover: () -> Void
     var onSubmit: () -> Void
     var onSecondary: () -> Void
@@ -130,13 +130,11 @@ struct PublishStep: View {
 
     // MARK: The heading at the split
 
-    /// ← 繼續寫, the step's name, and under it its save state — as the bar says them below the split
-    /// (round 11 §5: the name's second line, its height kept, the name alone on the arrow's line meanwhile).
+    /// The step's name, and under it its save state — as the bar says them below the split (round 11 §5:
+    /// the name's second line, its height kept, the name alone on the row's line meanwhile). No ← of its own
+    /// (round 17 §9): the Leave over the map takes the step back to writing, the workspace's one back.
     private var headingRow: some View {
         HStack(spacing: 8) {
-            OrganicIconButton(.arrowRight, label: L10n.Write.leaveStay, size: 18, mirrored: true, action: onBack)
-                .disabled(model.pending)
-                .padding(.leading, -13)
             BarTitles(model.stepTitle, font: AppFonts.heading(22), tracking: -0.02 * 22,
                       subtitle: WriteModel.SaveState.subtitle(model.saveState, help: model.saveStateHelp))
                 // Centred on the row, never growing it: the arrow stays level with the Leave over the map.
