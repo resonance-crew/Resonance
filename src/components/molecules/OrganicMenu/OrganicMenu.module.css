@@ -1,7 +1,8 @@
 /* ── OrganicMenu ────────────────────────────────────────────────────
    Generic organic dropdown: wobbly chip trigger + the one menu sheet (round
-   17 §1: paper and grain, no pen, no dividers, a shadow that follows its
-   wobble). Colors ride the --menu-* variables set inline by the component. */
+   17 §1: paper and grain, no pen, no dividers, the paper-cut shadow that
+   follows its wobble). Colors ride the --menu-* variables set inline by the
+   component. */
 .root {
   position: relative;
   display: inline-block;
@@ -41,13 +42,11 @@
 .pill[data-open] {
   color: var(--color-text);
 }
-/* It sits on a picture, light or dark: a soft shadow keeps the paper from melting into a pale one. */
-.pill > svg {
-  filter: drop-shadow(0 1px 3px color-mix(in oklch, var(--shadow-ink) 22%, transparent));
-}
-/* A chip in colours of its own (triggerColors): opaque, and its pen line parts it from the picture — no shadow. */
-.pill[data-colored] > svg {
-  filter: none;
+/* A chip — the card box's ⋯ at a card's corner, 更換封面 on a cover — lies on the card like a piece of cut paper:
+   the paper-cut shadow under its drawing, following its wobble (round 17 addendum A1). A bare glyph is drawn on
+   the page itself, one layer: no shadow. */
+.trigger:not(.bare) > svg {
+  filter: var(--cutout-shadow);
 }
 .triggerLabel {
   position: relative;
@@ -194,7 +193,8 @@
   }
 }
 
-/* A message's action list (held, or a fine pointer's ⋯): 216–280 wide, room for its time at the end. */
+/* A held message's action list (a finger's): 216–280 wide, room for its time at the end. A mouse's ⋯ beside a
+   message drops the dropdowns' sheet, its longest line with 20 each side (round 17 addendum A3). */
 .wide {
   min-width: 216px;
   max-width: 280px;

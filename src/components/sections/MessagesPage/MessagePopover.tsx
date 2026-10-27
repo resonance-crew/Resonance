@@ -14,6 +14,8 @@ import styles from './Thread.module.css';
 
 /** How long it stays after a choice, showing the ink the click spread. */
 const CHOICE_MS = 150;
+/** The dropdowns' narrowest sheet (OrganicMenu's `.panel`): the action list's width until it has measured its own. */
+const DROPDOWN_MIN_W = 168;
 /** Rows whose choice moves the focus somewhere of its own (the composer, a dialog): it isn't given back to the button. */
 const TAKES_FOCUS = new Set(['reply', 'unsend', 'report']);
 
@@ -32,8 +34,9 @@ export interface MessagePopoverProps {
  * the part it names, beside it — the ☺ (or a reaction chip) the five
  * reactions on their borderless paper (ReactionTray), 8 over it; the ⋯ the
  * actions as a floating dropdown at it, the message menu's sheet (no pen,
- * no dividers, its time the quiet last line), as every other ⋯ on the web
- * drops its OrganicMenu. No scrim, nothing lifted, nothing gliding: the
+ * no dividers, its time the quiet last line) as wide as every other ⋯'s on
+ * the web — its longest line with 20 each side, 168 at least (round 17
+ * addendum A3) —, as every other ⋯ on the web drops its OrganicMenu. No scrim, nothing lifted, nothing gliding: the
  * pointer stays where it was, and so does the thread. A held finger keeps
  * the whole overlay (MessageMenuOverlay).
  *
@@ -134,7 +137,7 @@ export function MessagePopover({ pressed, own, fullTime, onClose }: MessagePopov
     const root = rootRef.current;
     if (!root || !opener) return;
     const anchor = opener.getBoundingClientRect();
-    const width = part === 'react' ? TRAY_W : root.offsetWidth || 216;
+    const width = part === 'react' ? TRAY_W : root.offsetWidth || DROPDOWN_MIN_W;
     const height = part === 'react' ? TRAY_H : menuPanelHeight(items.length, true);
     setPlace(
       placePopover({
@@ -198,7 +201,8 @@ export function MessagePopover({ pressed, own, fullTime, onClose }: MessagePopov
           items={items}
           seed={seedFromId(message.key, 23)}
           footer={fullTime}
-          wide
+          // The dropdowns' width (round 17 addendum A3): its longest line with 20 each side, 168 at least — the
+          // 216–280 of a held message's list is a finger's.
           origin={`${place?.side === 'above' ? 'bottom' : 'top'} ${side}`}
           autoFocus={pressed.byKeyboard ? 'row' : 'panel'}
           onTabOut={() => dismiss(true)}

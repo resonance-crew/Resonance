@@ -142,7 +142,7 @@ describe('OrganicMenu row ink', () => {
 });
 
 // Round 17 §1: every menu is the one sheet — paper and grain, no pen line round it and no lines between its rows,
-// lifted by a soft shadow that follows its wobble; rows 44 tall, their content 20 in from either side.
+// lifted by the paper-cut shadow that follows its wobble (addendum A1); rows 44 tall, their content 20 in from either side.
 describe('the menu sheet', () => {
   it('draws paper and grain with no pen line and no dividers', async () => {
     const layout = stubRowLayout({ width: 200, rowHeight: 44 });
@@ -156,11 +156,36 @@ describe('the menu sheet', () => {
     layout.restore();
   });
 
-  it('casts the sheet shadow, which follows the wobble, deeper at night', () => {
-    expect(css('src/components/atoms/PaperSheet/PaperSheet.module.css')).toMatch(/\.sheet\s*\{[^}]*filter: var\(--sheet-shadow\)/);
+  // Addendum A1: one sheet lifted a millimetre, not floating — tight and a little deep, never a soft halo.
+  it('casts the paper-cut shadow, which follows the wobble: two tight layers by day, one deeper at night', () => {
+    expect(css('src/components/atoms/PaperSheet/PaperSheet.module.css')).toMatch(/\.sheet\s*\{[^}]*filter: var\(--cutout-shadow\)/);
     const tokens = css('src/styles/tokens.css');
-    expect(tokens).toMatch(/--sheet-shadow:\s*drop-shadow\(0 8px 24px [^;]*\)\s*drop-shadow\(0 1px 3px [^;]*\);/);
-    expect(tokens.match(/--sheet-shadow: drop-shadow\(0 10px 28px color-mix\(in oklch, var\(--shadow-ink\) 45%, transparent\)\);/g)).toHaveLength(2);
+    expect(tokens).toMatch(
+      /--cutout-shadow:\s*drop-shadow\(0 2px 3px color-mix\(in oklch, var\(--shadow-ink\) 22%, transparent\)\)\s*drop-shadow\(0 0\.5px 1px color-mix\(in oklch, var\(--shadow-ink\) 14%, transparent\)\);/,
+    );
+    expect(tokens.match(/--cutout-shadow: drop-shadow\(0 2px 4px color-mix\(in oklch, var\(--shadow-ink\) 60%, transparent\)\);/g)).toHaveLength(2);
+    // The soft 24 px one is gone everywhere.
+    expect(tokens).not.toMatch(/--sheet-shadow/);
+  });
+
+  // Addendum A1: a chip on a card (the card box's ⋯, 更換封面 on a cover) is cut paper on it; a bare glyph is the page's.
+  it('lifts a chip trigger by the paper-cut shadow, never a bare glyph', () => {
+    const menu = css('src/components/molecules/OrganicMenu/OrganicMenu.module.css');
+    expect(menu).toMatch(/\.trigger:not\(\.bare\) > svg \{\s*filter: var\(--cutout-shadow\);\s*\}/);
+    // No other shadow of its own on any trigger.
+    expect(menu.match(/drop-shadow|box-shadow/g)).toBeNull();
+    render(
+      <>
+        <OrganicMenu items={ITEMS} onChoose={vi.fn()} label="Chip" />
+        <OrganicMenu items={ITEMS} onChoose={vi.fn()} label="Bare" bare />
+      </>,
+    );
+    const chip = screen.getByRole('button', { name: 'Chip' });
+    const bare = screen.getByRole('button', { name: 'Bare' });
+    // The chip's drawing is its button's own svg (what the rule lifts); the bare glyph's button is marked bare.
+    expect(chip.querySelector(':scope > svg')).not.toBeNull();
+    expect(chip.className).not.toMatch(/bare/);
+    expect(bare.className).toMatch(/bare/);
   });
 
   it('sets its rows 44 tall, 20 in from either side, the glyph 12 before the words, the time at the end', () => {
@@ -169,8 +194,9 @@ describe('the menu sheet', () => {
     expect(menu).toMatch(/\.footer \{[^}]*justify-content: flex-end;[^}]*height: 24px;/);
   });
 
-  // The lead's addendum to round 17 §1: no menu shrinks to a blob; a message's action list keeps its 216–280.
-  it('is 168 wide at least — a message’s action list 216 to 280', () => {
+  // The lead's addendum to round 17 §1: no menu shrinks to a blob; a held message's action list keeps its 216–280
+  // (a mouse's ⋯ beside a message is a dropdown's width — addendum A3, ThreadView.test).
+  it('is 168 wide at least — a held message’s action list 216 to 280', () => {
     const menu = css('src/components/molecules/OrganicMenu/OrganicMenu.module.css');
     expect(menu).toMatch(/\.panel \{[^}]*min-width: 168px;[^}]*max-width: 300px;/);
     expect(menu).toMatch(/\.wide \{\s*min-width: 216px;\s*max-width: 280px;/);

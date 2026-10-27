@@ -251,7 +251,7 @@ export interface SelectProps {
  * Organic dropdown. Closed, it's the same wobbly hand-drawn box as `<Input>`
  * (a form field keeps its outline). Clicking it lays the one menu sheet over
  * the box (round 17 review D6 — every menu's: paper and grain, no pen, no
- * dividers, the soft shadow that follows its wobble, rows 44 with their
+ * dividers, the paper-cut shadow that follows its wobble, rows 44 with their
  * content 20 in, the spreading ink clipped to each row's band), listing the
  * options, the chosen one's words in terracotta with a ✓ at its end. A
  * pointer's opening inks no row; the keyboard's starts on the chosen one.

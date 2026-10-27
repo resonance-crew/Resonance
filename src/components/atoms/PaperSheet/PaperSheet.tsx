@@ -30,7 +30,7 @@ export interface PaperSheetProps {
  * the sheet's paper (the menu's, at night raised a step, ≈ L 28 %, so it
  * parts from the scrim), the thought map's zoom-cluster grain over the whole
  * filled path (the same path: the wobble swings past the box, and so does the
- * grain), and a soft shadow that follows the wobble (--sheet-shadow). Drawn
+ * grain), and the paper-cut shadow that follows the wobble (--cutout-shadow). Drawn
  * behind its host's contents, the host's size; nothing until measured.
  */
 export function PaperSheet({ w, h, R = 20, seed }: PaperSheetProps) {

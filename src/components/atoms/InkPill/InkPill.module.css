@@ -63,6 +63,12 @@ button.pill:focus-visible {
   outline-offset: 2px;
 }
 
+/* It floats over the page — a toast over the window's foot, the thread's pill over its messages — like a
+   piece of cut paper: the paper-cut shadow under its wash, following the wobble (round 17 addendum A1). */
+.pill > svg {
+  filter: var(--cutout-shadow);
+}
+
 .glyph,
 .label {
   position: relative;
