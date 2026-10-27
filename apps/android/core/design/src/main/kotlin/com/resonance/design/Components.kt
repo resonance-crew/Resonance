@@ -46,6 +46,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.alpha
@@ -1056,6 +1058,8 @@ fun OrganicTextField(
     curve: Double? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
+    /** Where the caller puts the focus (the writer's link sheet: its field on opening). */
+    focusRequester: FocusRequester? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     val text = if (display) AppFonts.heading(22f, lineHeight = 1.35f) else AppFonts.body(15f, lineHeight = 1.6f)
@@ -1080,7 +1084,10 @@ fun OrganicTextField(
                 keyboardOptions = keyboardOptions,
                 keyboardActions = keyboardActions,
                 visualTransformation = if (isSecure) PasswordVisualTransformation() else VisualTransformation.None,
-                modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                    .onFocusChanged { focused = it.isFocused },
             )
         }
         if (maxLength != null) BasicText(

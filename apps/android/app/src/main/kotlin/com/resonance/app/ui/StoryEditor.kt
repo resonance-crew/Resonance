@@ -37,6 +37,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -720,7 +726,7 @@ fun StoryFormatBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
-            Modifier.weight(1f).fadingEdges(scroll, 16.dp).horizontalScroll(scroll).padding(horizontal = 8.dp),
+            Modifier.weight(1f).fadingEdges(scroll, DOCK_FADE).horizontalScroll(scroll).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val a = bridge.active
@@ -752,6 +758,9 @@ fun StoryFormatBar(
 /** MarkdownEditor's `seed`; the buttons, rules and wave offset from it. */
 private const val EDITOR_SEED = 17.0
 
+/** How far the tools fade at the row's scrolling edges. */
+private val DOCK_FADE = 16.dp
+
 /** The docked bar's row: a finger's 44. */
 internal val DOCK_ROW_HEIGHT = 44.dp
 
@@ -779,8 +788,19 @@ private fun DockTool(
 ) {
     val color = if (on) Tokens.Terracotta else Tokens.Text
     val wash = Tokens.TerracottaLight.copy(alpha = 0.7f)
+    // A tool that turns on out of sight (a 360 dp phone: 連結, the lists past the edge) is scrolled into the
+    // row the least that shows it — clear of the edges' 16 fade too (round 16 review F3).
+    val bring = remember { BringIntoViewRequester() }
+    val fade = with(LocalDensity.current) { DOCK_FADE.toPx() }
+    var toolSize by remember { mutableStateOf(IntSize.Zero) }
+    // Asked again when it is measured anew too (a narrower row may hide a tool that was on all along).
+    LaunchedEffect(on, toolSize) {
+        if (on && toolSize != IntSize.Zero) bring.bringIntoView(ComposeRect(-fade, 0f, toolSize.width + fade, toolSize.height.toFloat()))
+    }
     Box(
         Modifier
+            .bringIntoViewRequester(bring)
+            .onSizeChanged { toolSize = it }
             .heightIn(min = DOCK_ROW_HEIGHT)
             .widthIn(min = DOCK_ROW_HEIGHT)
             .plainClickable(role = Role.Button) { if (enabled) onClick() }
