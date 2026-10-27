@@ -48,6 +48,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -161,8 +163,9 @@ val ReactionTrayHeight: Dp = ReactionTrayCell + ReactionTrayPad * 2
 
 /**
  * The five reactions over a held message (round 16 §3): one borderless sheet ([reactionSheet], R 26),
- * a 44 cell each, the stickers at 32. The viewer's own reaction ([chosen]) sits on a light terracotta
- * wobbly disc (2 in from its cell) and is said as selected; tapping it again takes it back
+ * a 44 cell each, the stickers at 32. The viewer's own reaction ([chosen]) sits on a wobbly disc (2 in
+ * from its cell; the accent's light wash, at night the accent at 30 % over the sheet —
+ * [PaletteMixes.reactionChosen]) and is said as selected; tapping it again takes it back
  * ([onChoose] with it). The stickers pop in 20 ms apart (0.6 → 1; a plain fade with animations off).
  * Each cell is named [label] (以 愛心 回應), the chosen one [removeLabel] too.
  */
@@ -180,7 +183,7 @@ fun ReactionTray(
     val grain = GrainInk.current
     val context = LocalContext.current
     val still = remember(context) { context.prefersReducedMotion() }
-    val disc = Tokens.TerracottaLight
+    val disc = PaletteMixes.of(palette).reactionChosen
     Row(
         modifier
             .size(ReactionTrayWidth, ReactionTrayHeight)
@@ -259,7 +262,8 @@ fun messageActionsHeight(rows: Int): Dp = MessageActionRow * rows + MessageActio
 /**
  * What a held message offers (round 16 §3): a vertical list on the tray's sheet — no pen line, no
  * rules between the rows — at least 216 wide, growing to its longest row (280 at most). Rows of 44,
- * glyph and words; a press spreads the accent's ink inside its row. Under them, 6 further on, the
+ * the glyph in the accent (17; the danger ink for a loss) and the words; a press spreads the accent's
+ * ink inside its row. Under them, 6 further on, the
  * quiet last line [footer] (the full send time, 32). A row taps once ([onChoose]).
  */
 @Composable
@@ -309,9 +313,9 @@ fun MessageActionSheet(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                val ink = if (action.destructive) Tokens.Danger else Tokens.Text
-                OrganicIcon(action.icon, size = 18.dp, color = ink, strokeWidth = Tokens.Ink.value)
-                BasicText(action.title, maxLines = 1, style = AppFonts.body(15f, lineHeight = 1.3f, color = ink))
+                // The glyph in the accent (the danger ink for a loss), 17 as iOS and the web draw it; the words in the ink.
+                OrganicIcon(action.icon, size = MessageActionGlyph, color = if (action.destructive) Tokens.Danger else Tokens.Terracotta, strokeWidth = Tokens.Ink.value)
+                BasicText(action.title, maxLines = 1, style = AppFonts.body(15f, lineHeight = 1.3f, color = if (action.destructive) Tokens.Danger else Tokens.Text))
             }
         }
         Spacer(Modifier.height(MessageActionFooterGap))
@@ -322,6 +326,9 @@ fun MessageActionSheet(
 }
 
 private const val SHEET_RADIUS = 22.0
+
+/** An action row's glyph (round 16 review F7: the web's and iOS's 17). */
+private val MessageActionGlyph = 17.dp
 
 /** The pressed row's ink, inside its own band of the sheet (no rules drawn). */
 private class SheetPress(
@@ -365,10 +372,19 @@ val ReactionChipOverlap = 6.dp
  * [outward] says which way is out (−1: to the start, own messages; +1: to the end, theirs). Pops in.
  */
 @Composable
-fun ReactionChips(items: List<ReactionChipItem>, outward: Int, ring: Color, modifier: Modifier = Modifier) {
+fun ReactionChips(
+    items: List<ReactionChipItem>,
+    outward: Int,
+    ring: Color,
+    modifier: Modifier = Modifier,
+    /** What the chips say (who reacted how). */
+    label: String? = null,
+    /** A tap (the held message's overlay): taken in a finger's 44 × 44 round the nearest chip, unseen. */
+    onTap: (() -> Unit)? = null,
+) {
     val context = LocalContext.current
     val still = remember(context) { context.prefersReducedMotion() }
-    Box(modifier) {
+    Box(if (onTap == null && label != null) modifier.semantics { contentDescription = label } else modifier) {
         // The farthest drawn first, so the nearest lies over it.
         items.withIndex().reversed().forEach { (i, item) ->
             androidx.compose.runtime.key(item.id) {
@@ -385,7 +401,33 @@ fun ReactionChips(items: List<ReactionChipItem>, outward: Int, ring: Color, modi
                 )
             }
         }
+        // The chip is 24 tall: its tap takes a finger's 44 × 44, centred on it and overhanging it unseen
+        // (round 16 review S7, the web's ::before) — the chips keep their size, the row its height.
+        if (onTap != null) Box(
+            Modifier
+                .matchParentSize()
+                .overhang(ReactionChipTarget)
+                .clickable(interactionSource = null, indication = null, role = Role.Button, onClick = onTap)
+                .semantics { label?.let { contentDescription = it } },
+        )
     }
+}
+
+/** A chip's tap target: a finger's 44 round it. */
+val ReactionChipTarget = 44.dp
+
+/**
+ * Lays its content out at least [least] × [least], centred on this node and overhanging it where it is
+ * larger, while this node keeps the size it was given — a hit box round something small.
+ */
+internal fun Modifier.overhang(least: Dp): Modifier = layout { measurable, constraints ->
+    val w = constraints.maxWidth
+    val h = constraints.maxHeight
+    val box = least.roundToPx()
+    val tw = maxOf(w, box)
+    val th = maxOf(h, box)
+    val placeable = measurable.measure(Constraints.fixed(tw, th))
+    layout(w, h) { placeable.place((w - tw) / 2, (h - th) / 2) }
 }
 
 @Composable

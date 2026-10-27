@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -97,6 +98,7 @@ import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.inlineBarTop
 import com.resonance.design.plainClickable
+import com.resonance.design.softenedUnder
 import com.resonance.geometry.seedFromString
 import com.resonance.kit.api.MessagingApi
 import com.resonance.kit.chat.Carried
@@ -275,7 +277,11 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
         )
     }
 
+    // How far a held message's overlay is up (0…1): what lies under its scrim is softened as much (round 16 review F8).
+    val heldOver = remember { mutableFloatStateOf(0f) }
     Box(Modifier.fillMaxSize().cream().onSizeChanged { listWidth = with(density) { it.width.toDp() } }) {
+        // The thread and its bar, softened under a held message's scrim; the overlay itself lies above, sharp.
+        Box(Modifier.fillMaxSize().softenedUnder { heldOver.floatValue }) {
         when (model.phase) {
             // One layout while it is found and once it is: what the thread always has is there from the
             // start (the bar's back and ⋯, the composer), and only what isn't known yet is in the shimmer.
@@ -355,6 +361,7 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
             ),
             open = open, back = back,
         )
+        }
 
         menu?.let { m ->
             val held = m.row.message
@@ -375,6 +382,7 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                     ) { id -> model.react(held, id.key, sayError) }
                 } else null,
                 onDismiss = { menu = null },
+                over = heldOver,
             )
         }
     }
