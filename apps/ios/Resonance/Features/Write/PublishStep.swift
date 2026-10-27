@@ -25,6 +25,8 @@ struct PublishStep: View {
     /// The tags' row changed height while the tag field was in use: the step's scroll moves by as much,
     /// so the field stays under the caret (round 16 §1).
     var onShift: (CGFloat) -> Void = { _ in }
+    /// Where the tag field's capsule lies in the step's content (``space``), for the page's tap-away.
+    var onTagFieldPlaced: (CGRect) -> Void = { _ in }
     @Environment(SessionStore.self) private var session
     @Environment(\.window) private var window
 
@@ -128,6 +130,15 @@ struct PublishStep: View {
     /// so a change above it — not a scroll — is what moves it (``TagField``).
     static let space = "publishStepContent"
 
+    /// Whether a tap at `point` in the step's content (``space``) puts the keyboard away (round 17, the owner's
+    /// 「點擊畫面空白處，應該可以把鍵盤收起來」): anywhere the step's controls don't take the tap themselves — between
+    /// and beside the sections, on their words, below the foot — but never on the tag field's capsule (`field`,
+    /// its text and its segment), which keeps its keyboard while it is used: a tap there moves the caret or adds
+    /// the word typed. Pure, so it is pinned.
+    nonisolated static func tapPutsKeyboardAway(at point: CGPoint, field: CGRect) -> Bool {
+        !field.contains(point)
+    }
+
     // MARK: The heading at the split
 
     /// The step's name, and under it its save state — as the bar says them below the split (round 11 §5:
@@ -217,7 +228,7 @@ struct PublishStep: View {
         // The label on its own line, the chosen tags under it, then the field (round 16 §1, review S1).
         return TagField(tags: model.values.tags, draft: $model.tagDraft, placeholder: L10n.Write.tagsPlaceholder,
                         suggesting: model.suggestingTags, error: model.tagError, onRemove: model.removeTag, onAdd: model.addTag,
-                        onSuggest: { Task { await model.suggestTags() } }, onShift: onShift) {
+                        onSuggest: { Task { await model.suggestTags() } }, onShift: onShift, onPlaced: onTagFieldPlaced) {
             label(L10n.Write.tagsLabel)
         }
         .onChange(of: model.tagDraft) { _, text in model.typedTag(text) }
