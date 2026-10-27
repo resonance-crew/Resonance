@@ -102,6 +102,31 @@ describe('MessageHistory', () => {
     expect(history.get('m004')).toBe(held);
   });
 
+  // Round 16: a reaction from the other side, or the message unsent, arrives as an update of the same document —
+  // the thread must take it, or the chip never shows until the page is opened again.
+  it('replaces a message a reaction came in on, or that was unsent, and only once for the same reactions in another order', () => {
+    const history = new MessageHistory<string>(3);
+    history.mergeWindow(entries(5, 3));
+    const reacted = [
+      { message: message(5), cursor: 'cursor-5' },
+      { message: message(4, { reactions: { bob: 'heart', alice: 'laugh' } }), cursor: 'cursor-4' },
+      { message: message(3), cursor: 'cursor-3' },
+    ];
+    expect(history.mergeWindow(reacted)).toBe('changed');
+    expect(history.get('m004')!.reactions).toEqual({ bob: 'heart', alice: 'laugh' });
+    // The same reactions, keys in another order: nothing new.
+    const held = history.get('m004');
+    expect(history.mergeWindow([{ message: message(4, { reactions: { alice: 'laugh', bob: 'heart' } }), cursor: 'cursor-4' }])).toBe('unchanged');
+    expect(history.get('m004')).toBe(held);
+    // One taken back.
+    expect(history.mergeWindow([{ message: message(4, { reactions: { alice: 'laugh' } }), cursor: 'cursor-4' }])).toBe('changed');
+    expect(history.get('m004')!.reactions).toEqual({ alice: 'laugh' });
+
+    const unsentAt = new Date(9_000);
+    expect(history.mergeWindow([{ message: { ...message(5), text: '', unsentAt }, cursor: 'cursor-5' }])).toBe('changed');
+    expect(history.get('m005')!.unsentAt).toEqual(unsentAt);
+  });
+
   it("refreshes the cursor when the oldest message's document comes again", () => {
     const history = new MessageHistory<string>(3);
     history.mergeWindow(entries(5, 3));
