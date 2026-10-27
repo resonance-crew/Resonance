@@ -68,22 +68,23 @@ public struct ReactionGlyph: View {
 // MARK: - The press layer's paper
 
 /// The press-and-hold layer's paper (round 16 §3, round 17 §1): every menu's sheet now
-/// (``OrganicMenuPanel``) — the menus' paper, a step toward the ink at night (L ≈ 28 %) so it stands off the
-/// dimmed thread. The reactions float over the scrim with no paper of their own (round 17 §2).
+/// (``OrganicMenuPanel``) — the menus' paper inside its grey pen line, flat (round 18: no longer raised a step
+/// at night; the line parts it from the dimmed thread). The reactions float over the scrim with no paper of
+/// their own (round 17 §2).
 public enum PressSheet {
-    /// The sheet's paper: `--menu-paper`, at night 94 % of it toward the ink.
-    public static var paper: Color { MenuColors.raisedPaper }
+    /// The sheet's paper: `--menu-paper` (`--sheet-paper`).
+    public static var paper: Color { Tokens.menuPaper }
 
     /// The disc under the viewer's own reaction in the tray: the accent's light wash by day; at night the
-    /// accent itself at 30 % over the raised paper (review F4: the light wash there, ≈ 1.2 : 1 against
-    /// the paper, all but vanished — this lands near L 38 %), opaque, so it reads as chosen on the scrim.
+    /// accent itself at 30 % over the menu paper (review F4: the light wash there, ≈ 1.2 : 1 against
+    /// the paper, all but vanished), opaque, so it reads as chosen on the scrim.
     /// The web's `.trayWash`.
     public static let chosenDisc: Color = Palette.made { accent, scheme in
         func token(_ t: PaletteToken) -> (L: Double, C: Double, H: Double, alpha: Double) {
             OKLCHColor.components(Palette.oklch(t, accent: accent, scheme: scheme)) ?? (0, 0, 0, 1)
         }
         guard scheme == .dark else { return token(.terracottaLight) }
-        return Palette.mixOKLCH(token(.terracotta), 0.3, MenuColors.paperOKLCH(hue: nil, scheme, accent: accent))
+        return Palette.mixOKLCH(token(.terracotta), 0.3, MenuColors.paperOKLCH(scheme, accent: accent))
     }
 }
 

@@ -39,37 +39,6 @@ import Testing
         #expect(MenuSheetMetrics.maxWidth == 300)
         #expect(MenuSheetMetrics.padX == 20 && MenuSheetMetrics.gap == 12 && MenuSheetMetrics.glyph == 17)
     }
-
-    @Test func theGrainIsLaidPastTheWobble() {
-        // The wobble swings past the box: the grain covers it all (the strip at the top edge, round 17 §1).
-        #expect(MenuSheetMetrics.grainOverflow >= 6)
-    }
-
-    @Test func theSheetsShadowIsThePaperCutOneTightAndALittleDeep() {
-        func rgba(_ color: Color, _ style: UIUserInterfaceStyle) -> (r: CGFloat, g: CGFloat, b: CGFloat, a: CGFloat) {
-            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-            UIColor(color).resolvedColor(with: UITraitCollection(userInterfaceStyle: style)).getRed(&r, green: &g, blue: &b, alpha: &a)
-            return (r, g, b, a)
-        }
-        // Round 17 addendum A1: by day `0 2 3` at 22 % and `0 0.5 1` at 14 %; at night one layer, `0 2 4` at 60 % —
-        // a layer's radius is half the CSS blur.
-        #expect(CutoutShadow.layers(dark: false) == [CutoutShadow.Layer(alpha: 0.22, radius: 1.5, y: 2),
-                                                     CutoutShadow.Layer(alpha: 0.14, radius: 0.5, y: 0.5)])
-        #expect(CutoutShadow.layers(dark: true) == [CutoutShadow.Layer(alpha: 0.60, radius: 2, y: 2)])
-        #expect(abs(rgba(CutoutShadow.dropInk, .light).a - 0.22) < 0.005)
-        #expect(abs(rgba(CutoutShadow.edgeInk, .light).a - 0.14) < 0.005)
-        #expect(abs(rgba(CutoutShadow.dropInk, .dark).a - 0.60) < 0.005)
-        #expect(rgba(CutoutShadow.edgeInk, .dark).a < 0.005)
-        // On the palette's shadow ink, in either scheme.
-        for style in [UIUserInterfaceStyle.light, .dark] {
-            let ink = rgba(Tokens.shadowInk, style), drop = rgba(CutoutShadow.dropInk, style)
-            #expect(abs(ink.r - drop.r) < 0.01 && abs(ink.g - drop.g) < 0.01 && abs(ink.b - drop.b) < 0.01)
-        }
-        // Never the soft, far shadow it replaced: nothing reaches past 4 of blur and 2 of drop.
-        for layer in CutoutShadow.layers(dark: false) + CutoutShadow.layers(dark: true) {
-            #expect(layer.radius * 2 <= 4 && layer.y <= 2)
-        }
-    }
 }
 
 @MainActor @Suite struct RoundSeventeenPressTests {

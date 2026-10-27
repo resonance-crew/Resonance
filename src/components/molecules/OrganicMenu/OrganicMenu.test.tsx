@@ -115,6 +115,10 @@ describe('OrganicMenu row ink', () => {
       'color-mix(in oklch, var(--color-danger) 11%, transparent)',
     ]);
     expect(inkBrushes().map((b) => b.on)).toEqual([false, false, false, false]);
+    // The washes are ended by the sheet's outline alone, which swings out of the box as much as into it: the rests are
+    // drawn past the box (never cut short of the pen line by it), and a brush reaches further than the wobble swings.
+    expect(document.querySelector('[data-row-brushes] svg')).toHaveAttribute('overflow', 'visible');
+    expect(css('src/components/atoms/RowInk/RowInk.module.css')).toMatch(/\.rests \{[^}]*overflow: visible;/);
 
     const block = screen.getByRole('menuitem', { name: 'Block' });
     const del = screen.getByRole('menuitem', { name: 'Delete' });
