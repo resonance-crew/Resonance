@@ -30,6 +30,12 @@ export interface TagPillProps {
    * its words at 500, its × muted.
    */
   quiet?: boolean;
+  /**
+   * The words' (and the ×'s, at 70 %) ink, when the fill is a button's face
+   * rather than a wash on the paper (the writer's chosen tags wear the
+   * 「AI 建議」 segment's tonal face and its ink — round 17 §4).
+   */
+  ink?: string;
   /** Whole pill is clickable (e.g. filter chip). */
   onClick?: () => void;
   ariaLabel?: string;
@@ -67,6 +73,7 @@ export function TagPill({
   onRemove,
   removeLabel,
   quiet = false,
+  ink,
   onClick,
   ariaLabel,
 }: TagPillProps) {
@@ -96,11 +103,13 @@ export function TagPill({
           '--shape-ink': rim ?? 'transparent',
           '--shape-ink-width': `${pen}px`,
           '--shape-radius': '999px',
+          ...(ink ? { color: ink } : {}),
         } as CSSProperties
       }
       data-shape-pending={w > 0 && h > 0 ? undefined : ''}
       data-size={size}
       data-quiet={quiet || undefined}
+      data-ink={ink ? '' : undefined}
       data-interactive={interactive || undefined}
       role={interactive ? 'button' : undefined}
       aria-label={ariaLabel}

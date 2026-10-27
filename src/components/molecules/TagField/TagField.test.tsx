@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { useState } from 'react';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { act, renderWithIntl, screen, fireEvent, userEvent } from '@/../test/render';
@@ -85,12 +87,24 @@ describe('TagField', () => {
     expect(screen.getByRole('button', { name: W.tagsRemoveLabel.replace('{tag}', 'b') })).toBeInTheDocument();
   });
 
-  it('draws the chosen tags quieter than the step’s button: half the light wash, the soft pen, words at 500', () => {
+  // Round 17 §4: the pills wear the 「AI 建議」 segment's own colours, with no outline.
+  it('draws the chosen tags in the suggest segment’s tonal face and ink, with no outline, words at 500', () => {
     renderWithIntl(<Harness initial={['a']} />);
     const pill = screen.getByText('a').closest('[data-size]') as HTMLElement;
     expect(pill).toHaveAttribute('data-quiet');
-    expect(pill.style.getPropertyValue('--shape-fill')).toBe('color-mix(in oklch, var(--color-terracotta-light) 50%, var(--color-cream))');
-    expect(pill.style.getPropertyValue('--shape-ink')).toBe('var(--soft-pen)');
+    expect(pill.style.getPropertyValue('--shape-fill')).toBe('var(--button-tonal)');
+    expect(pill.style.getPropertyValue('--shape-ink')).toBe('transparent');
+    expect(pill.style.color).toBe('var(--button-on-tonal)');
+    // Its drawn shape is a fill alone: the only pen marks in it are the ✕'s.
+    const pens = Array.from(pill.querySelectorAll('path[stroke]')).filter((p) => !['none', 'transparent'].includes(p.getAttribute('stroke')!));
+    expect(pens.length).toBeGreaterThan(0);
+    for (const pen of pens) expect(pen.closest('button')).not.toBeNull();
+    // The segment the pills match.
+    const css = readFileSync(join(process.cwd(), 'src/components/molecules/TagField/TagField.module.css'), 'utf8');
+    expect(css).toMatch(/\.segmentFace \{\s*fill: var\(--button-tonal\);/);
+    expect(css).toMatch(/\.segment \{[^}]*color: var\(--button-on-tonal\);/);
+    const pillCss = readFileSync(join(process.cwd(), 'src/components/atoms/TagPill/TagPill.module.css'), 'utf8');
+    expect(pillCss).toMatch(/\.pill\[data-ink\] \.removeBtn \{\s*color: currentColor;\s*opacity: 0\.7;/);
   });
 
   it('adds on Enter, trimmed, and ignores an empty or repeated tag', () => {
@@ -105,6 +119,26 @@ describe('TagField', () => {
     fireEvent.keyDown(input(), { key: 'Enter' });
     expect(list()).toEqual(['travel', 'home']);
     expect(input()).toHaveValue('');
+  });
+
+  // Round 17 §4: committing a tag moves neither the field nor its segment — the segment is the same element, both
+  // its faces held in one cell (its width the wider's), only their opacity changing; the step's compensating scroll
+  // (below) is the only movement.
+  it('keeps its segment as it is when a tag is committed, with Enter or from the segment', async () => {
+    renderWithIntl(<Harness />);
+    const segment = () => input().nextElementSibling as HTMLElement;
+    const before = segment();
+    const faces = () => Array.from(segment().querySelectorAll('[data-face]')).map((f) => f.getAttribute('data-face'));
+    expect(faces()).toEqual(['suggest', 'add']);
+    fireEvent.change(input(), { target: { value: 'rain' } });
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    expect(segment()).toBe(before);
+    expect(faces()).toEqual(['suggest', 'add']);
+    fireEvent.change(input(), { target: { value: 'walk' } });
+    await userEvent.click(segment());
+    expect(list()).toEqual(['rain', 'walk']);
+    expect(segment()).toBe(before);
+    expect(faces()).toEqual(['suggest', 'add']);
   });
 
   it.each([
