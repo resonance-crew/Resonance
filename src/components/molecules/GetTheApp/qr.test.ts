@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { QR_FINDERS, QR_LINK, QR_MODULES, QR_SIDE } from './qrCode';
 
 // public/download-qr.svg, made once by scripts/web/download-qr.swift (macOS
 // Core Image's QR encoder). Its content can't be read back without a decoder;
@@ -66,5 +67,12 @@ describe('the download QR code', () => {
       expect(sq.radius).toBeGreaterThan(0);
       expect(sq.radius).toBeLessThan(sq.side / 2);
     }
+  });
+
+  it('is the very code GetTheApp draws inline (qrCode.ts, written beside it by the same script)', () => {
+    expect(svg).toContain(`data-content="${QR_LINK}"`);
+    expect(svg).toContain(`viewBox="0 0 ${QR_SIDE} ${QR_SIDE}"`);
+    expect(svg.match(/<path fill="[^"]+" d="([^"]+)"/)![1]).toBe(QR_MODULES);
+    expect(svg.match(/data-finders="" d="([^"]+)"/)![1]).toBe(QR_FINDERS);
   });
 });

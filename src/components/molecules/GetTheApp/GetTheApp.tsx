@@ -7,6 +7,7 @@ import { APP_STORE_URL, PLAY_STORE_URL } from '@/lib/appStores';
 import { INK_LIGHT } from '@/lib/design/strokes';
 import { useDevicePlatform } from '@/lib/hooks/useDevicePlatform';
 import { badgeArt, badgeGeometry, type Store } from './badges';
+import { QR_FINDERS, QR_MODULES, QR_SIDE } from './qrCode';
 import styles from './GetTheApp.module.css';
 
 /** The QR code's paper tile (the code itself is QR_SIZE inside it). */
@@ -15,7 +16,7 @@ const QR_SIZE = 96;
 
 export interface GetTheAppProps {
   /**
-   * Show computers the QR code (public/download-qr.svg → /download) beside
+   * Show computers the QR code (qrCode.ts, as public/download-qr.svg → /download) beside
    * the badges. Leave it on for the page's one download block; a second
    * place on the same page (the footer, a closing section) shows badges only.
    */
@@ -67,8 +68,19 @@ export function GetTheApp({ qr = true, size = 'md', tone = 'paper', id, classNam
               strokeColor={tone === 'paper' ? 'var(--field-border)' : 'transparent'}
               strokeWidth={INK_LIGHT}
             />
-            {/* eslint-disable-next-line @next/next/no-img-element -- a static SVG, drawn crisp at its own size */}
-            <img src="/download-qr.svg" alt={t('qr')} width={QR_SIZE} height={QR_SIZE} className={styles.qrImage} />
+            {/* Inline, so its paper and ink follow the theme (always dark on light: never inverted). */}
+            <svg
+              role="img"
+              aria-label={t('qr')}
+              viewBox={`0 0 ${QR_SIDE} ${QR_SIDE}`}
+              width={QR_SIZE}
+              height={QR_SIZE}
+              className={styles.qrImage}
+            >
+              <rect width={QR_SIDE} height={QR_SIDE} fill="var(--qr-paper)" />
+              <path fill="var(--qr-ink)" d={QR_MODULES} />
+              <path fill="var(--qr-ink)" fillRule="evenodd" d={QR_FINDERS} />
+            </svg>
           </div>
           <figcaption className={styles.caption}>{t('scan')}</figcaption>
         </figure>

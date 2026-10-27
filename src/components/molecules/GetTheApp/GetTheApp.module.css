@@ -85,12 +85,13 @@
   gap: 10px;
 }
 
-/* The tile is the QR code's paper. At night the code keeps its own cream
-   (dark on light, what every scanner reads — never inverted), so the whole
-   tile turns cream with it rather than framing a light square in a dark one,
-   and the tile and code are dimmed together so the cream doesn't glare. */
+/* The tile is the QR code's paper, in the theme's own colours and always
+   dark on light (what every scanner reads — never inverted): by day the card
+   paper under the text's ink, at night the text's own soft light under the
+   page's dark, so each theme tints its code. */
 .qrTile {
   --qr-paper: var(--color-card-bg);
+  --qr-ink: var(--color-text);
   position: relative;
   width: var(--qr-tile);
   height: var(--qr-tile);
@@ -100,15 +101,13 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-scheme='light']) .qrTile {
-    /* colour-fixed: the paper baked into public/download-qr.svg, so tile and code stay one sheet */
-    --qr-paper: #faf6ef;
-    filter: brightness(0.9);
+    --qr-paper: var(--color-text);
+    --qr-ink: var(--color-cream);
   }
 }
 :root[data-scheme='dark'] .qrTile {
-  /* colour-fixed: the paper baked into public/download-qr.svg */
-  --qr-paper: #faf6ef;
-  filter: brightness(0.9);
+  --qr-paper: var(--color-text);
+  --qr-ink: var(--color-cream);
 }
 
 .qrImage {

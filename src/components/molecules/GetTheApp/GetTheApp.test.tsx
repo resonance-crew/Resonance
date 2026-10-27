@@ -36,7 +36,10 @@ describe('GetTheApp', () => {
     expect(links.map((a) => a.getAttribute('href'))).toEqual([APP_STORE_URL, PLAY_STORE_URL]);
     expect(within(links[0]).getByRole('img')).toHaveAttribute('src', '/badges/appstore-en-us.svg');
     expect(within(links[1]).getByRole('img')).toHaveAttribute('src', '/badges/googleplay-en.png');
-    expect(qr()).toHaveAttribute('src', '/download-qr.svg');
+    // Drawn inline in the theme's paper and ink, never as the file's own fixed colours.
+    expect(qr()!.tagName.toLowerCase()).toBe('svg');
+    expect(qr()!.querySelector('rect')).toHaveAttribute('fill', 'var(--qr-paper)');
+    expect([...qr()!.querySelectorAll('path')].map((p) => p.getAttribute('fill'))).toEqual(['var(--qr-ink)', 'var(--qr-ink)']);
     expect(screen.getByText(en.download.scan)).toBeInTheDocument();
   });
 

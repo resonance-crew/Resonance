@@ -1,5 +1,7 @@
 // Writes public/download-qr.svg, the QR code the website shows desktop
-// visitors beside the store badges (GetTheApp). It encodes the /download link,
+// visitors beside the store badges, and its paths as
+// src/components/molecules/GetTheApp/qrCode.ts, which GetTheApp draws inline
+// in the theme's own paper and ink. It encodes the /download link,
 // which sends a phone to its own store (src/app/download/route.ts).
 //
 // Made once and committed: the picture only changes if the link does. Uses
@@ -16,7 +18,7 @@
 // squares are drawn whole as their own path: a ring with round corners round a
 // round-cornered centre, their 1 : 1 : 3 : 1 : 1 proportions as the standard
 // has them. src/components/molecules/GetTheApp/qr.test.ts
-// checks the file's shape.
+// checks the file's shape, and that the module draws the same code.
 import CoreImage
 import Foundation
 
@@ -102,3 +104,17 @@ let svg = """
 let out = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("public/download-qr.svg")
 try! svg.write(to: out, atomically: true, encoding: .utf8)
 print("\(out.path): \(size) × \(size) modules + \(quiet) quiet")
+
+let module = """
+// Made by scripts/web/download-qr.swift beside public/download-qr.svg: the same
+// QR code (\(link)), its colours left to GetTheApp's theme.
+export const QR_LINK = '\(link)';
+export const QR_SIDE = \(side);
+export const QR_MODULES = '\(path)';
+export const QR_FINDERS = '\(finderPath)';
+
+"""
+let tsOut = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+  .appendingPathComponent("src/components/molecules/GetTheApp/qrCode.ts")
+try! module.write(to: tsOut, atomically: true, encoding: .utf8)
+print(tsOut.path)
