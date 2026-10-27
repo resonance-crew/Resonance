@@ -128,6 +128,13 @@ button.linkCardFace:focus-visible {
   place-items: center;
 }
 
+/* A finger's 44 × 44 round the 26 mark, unseen. */
+.nodeRemoveBtn::before {
+  content: '';
+  position: absolute;
+  inset: -9px;
+}
+
 .nodeRemoveIcon {
   position: relative;
   display: grid;

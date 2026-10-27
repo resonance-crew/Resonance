@@ -15,6 +15,8 @@ import styles from './MarkdownEditor.module.css';
 
 /** What a link card in the writer does when it is pressed: opens the link editor on it (卡片 chosen). */
 export const LinkCardActionContext = createContext<(() => void) | null>(null);
+/** The link editor is open: a picked card wears no ✕ of its own meanwhile (the editor has 移除連結). */
+export const LinkEditorOpenContext = createContext(false);
 
 /** The stored preview of an address (the server keyed it normalized), or undefined. */
 export function previewOf(previews: readonly LinkPreview[] | null, href: string): LinkPreview | undefined {
@@ -38,6 +40,7 @@ function LinkCardView({ node, selected, deleteNode, editor, getPos }: NodeViewPr
   const href = String(node.attrs.href ?? '');
   const preview = previewOf(useContext(StoryLinkPreviewsContext), href);
   const openEditor = useContext(LinkCardActionContext);
+  const editing = useContext(LinkEditorOpenContext);
   const block = useStoryBlock<HTMLButtonElement>(href);
   const host = hostOf(href);
 
@@ -77,7 +80,8 @@ function LinkCardView({ node, selected, deleteNode, editor, getPos }: NodeViewPr
           </span>
         </span>
       </button>
-      {selected && <NodeRemoveButton onClick={() => deleteNode()} label={t('linkRemove')} />}
+      {/* Picked, its ✕ — but not while the link editor is open on it: two removes at once, both deleting it. */}
+      {selected && !editing && <NodeRemoveButton onClick={() => deleteNode()} label={t('linkRemove')} />}
     </NodeViewWrapper>
   );
 }
@@ -89,7 +93,8 @@ function LinkCardView({ node, selected, deleteNode, editor, getPos }: NodeViewPr
  * when the live card has one for it (StoryLinkPreviewsContext, provided by
  * the editor from the card being edited), else the address's host over the
  * address. Pressing it picks it and opens the link editor with 卡片 chosen
- * (LinkCardActionContext); picked, it wears the ✕ that takes it away, and
+ * (LinkCardActionContext); picked, it wears the ✕ that takes it away (not
+ * while the link editor is open: its 移除連結 is the one remove then), and
  * Backspace deletes it as any block.
  */
 export const LinkCardNode = LinkCard.extend({
