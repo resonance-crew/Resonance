@@ -62,7 +62,8 @@ public struct TagPill: View {
                         .opacity(0.55)
                         .padding(.leading, 2)
                         .offset(y: font * 0.02)
-                        .contentShape(Rectangle().inset(by: -8))
+                        // The writer's lg pill: an invisible 44 × 44 target round the 10pt glyph (round 16 §1).
+                        .contentShape(Rectangle().inset(by: size == .lg ? -17 : -8))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Remove tag")
