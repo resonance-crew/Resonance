@@ -1,3 +1,4 @@
+import type { ReactionId } from '@/lib/design/reactions';
 import type { TrashedFrom } from '@/lib/cards/trash';
 
 export type Locale = 'zh-TW' | 'en' | 'ja' | 'ko' | 'es';
@@ -263,6 +264,8 @@ export interface Conversation {
     sentAt: Date;
     /** It carried a picture (its words, if any, are `text`). */
     image?: boolean;
+    /** Its sender unsent it (round 16): `text` is empty, and the list says who unsent a message. */
+    unsent?: boolean;
   } | null;
   /** Per-participant unread counters; sender increments the other side's. */
   unread: Record<string, number>;
@@ -311,6 +314,16 @@ export interface Message {
    * thread. A kind this build doesn't know reads as a plain message.
    */
   kind?: 'note';
+  /**
+   * The two people's reactions (round 16 §4), by uid — one each. Only the
+   * five this build knows are kept: a reaction it doesn't know is drawn as nothing.
+   */
+  reactions?: Record<string, ReactionId>;
+  /**
+   * Its sender unsent it (round 16 §3): it then carries nothing else but
+   * `senderId` and `sentAt` (its words empty), and is drawn as a line saying so.
+   */
+  unsentAt?: Date;
 }
 
 export interface MessageReplyQuote {
@@ -321,6 +334,8 @@ export interface MessageReplyQuote {
   cardRef?: string;
   /** The quoted message carried a picture. */
   image?: boolean;
+  /** The quoted message was unsent: the quote keeps only who sent it (its words empty). */
+  unsent?: boolean;
 }
 
 /** A picture a message carries: its id, and its size as kept (for drawing its place before it loads). */

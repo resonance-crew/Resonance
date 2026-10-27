@@ -178,12 +178,13 @@ describe('a YouTube video (backlog 15: its page head is over 512 KB of script, w
   });
 });
 
-/** A Firestore with only the two calls the unfurl makes, over a map of paths. */
+/** A Firestore with only the calls the unfurl makes (a read, then a transaction reading it again and updating it), over a map of paths. */
 function stubDb(docs: Record<string, Record<string, unknown>>, updateError?: unknown) {
   const reads: string[] = [];
   const updates: { path: string; data: Record<string, unknown> }[] = [];
+  type Ref = { get: () => Promise<unknown>; update: (data: Record<string, unknown>) => Promise<void> };
   const db = {
-    doc: (path: string) => ({
+    doc: (path: string): Ref => ({
       get: async () => {
         reads.push(path);
         const data = docs[path];
@@ -195,6 +196,13 @@ function stubDb(docs: Record<string, Record<string, unknown>>, updateError?: unk
         docs[path] = { ...docs[path], ...data };
       },
     }),
+    // A transaction's writes land at its commit, which fails as the update would.
+    runTransaction: async <T,>(fn: (tx: unknown) => Promise<T>): Promise<T> => {
+      const writes: (() => Promise<void>)[] = [];
+      const result = await fn({ get: (ref: Ref) => ref.get(), update: (ref: Ref, data: Record<string, unknown>) => void writes.push(() => ref.update(data)) });
+      for (const write of writes) await write();
+      return result;
+    },
   } as unknown as Firestore;
   return { db, docs, reads, updates };
 }
@@ -279,12 +287,29 @@ describe('unfurlMessage', () => {
   });
 
   it('lets a message deleted meanwhile go without a preview, but not hide other failures', async () => {
-    const notFound = Object.assign(new Error('NOT_FOUND'), { code: 5 });
-    const deleted = stubDb({ [MESSAGE]: { text: 'https://example.com/' } }, notFound);
-    expect(await unfurl(deleted.db, 'alice_bob', 'm1', { fetch: async () => pageOf(GOOD) })).toBeNull();
+    const deleted = stubDb({ [MESSAGE]: { text: 'https://example.com/' } });
+    const deleting = async () => {
+      delete deleted.docs[MESSAGE];
+      return pageOf(GOOD);
+    };
+    expect(await unfurl(deleted.db, 'alice_bob', 'm1', { fetch: deleting })).toBeNull();
+    expect(deleted.updates).toHaveLength(0);
 
     const broken = stubDb({ [MESSAGE]: { text: 'https://example.com/' } }, Object.assign(new Error('UNAVAILABLE'), { code: 14 }));
     await expect(unfurl(broken.db, 'alice_bob', 'm1', { fetch: async () => pageOf(GOOD) })).rejects.toThrow('UNAVAILABLE');
+  });
+
+  // An unsent message carries nothing but its sender and times (lib/api/v1/messageActions): the link it no longer
+  // holds must not come back as its preview, however long the page took to answer.
+  it('writes no preview onto a message unsent while its page was fetched', async () => {
+    const { db, docs, updates } = stubDb({ [MESSAGE]: { senderId: 'alice', text: 'https://example.com/post' } });
+    const unsending = async () => {
+      docs[MESSAGE] = { senderId: 'alice', sentAt: 1, unsentAt: 2 };
+      return pageOf(GOOD);
+    };
+    expect(await unfurl(db, 'alice_bob', 'm1', { fetch: unsending })).toBeNull();
+    expect(updates).toHaveLength(0);
+    expect(docs[MESSAGE]).toEqual({ senderId: 'alice', sentAt: 1, unsentAt: 2 });
   });
 
   it(`gives the fetch a deadline of ${UNFURL_DEADLINE_MS} ms at most, and stops when the caller does`, async () => {

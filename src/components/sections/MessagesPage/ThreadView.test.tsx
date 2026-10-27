@@ -55,6 +55,8 @@ vi.mock('@/lib/db/firestore/client/messages', () => ({
   markConversationRead: vi.fn(async () => {}),
   sendMessage: vi.fn(),
   deleteConversation: vi.fn(),
+  reactToMessage: vi.fn(async () => {}),
+  unsendMessage: vi.fn(async () => {}),
   listenThread: vi.fn((_pairId: string, onWindow: (window: unknown) => void) => {
     server.emit = onWindow;
     onWindow(server.windowOf(server.messages));
@@ -70,7 +72,9 @@ vi.mock('@/components/molecules/MarkdownEditor/InsertCardModal', () => ({ Insert
 
 import { callApi } from '@/lib/db/firestore/client/api';
 import { getCardById, getCardBySlugOrId, getUserByHandle, getUserById, getUsersByIds, isConnected } from '@/lib/db/firestore/client/reads';
-import { getConversation, getOlderMessages, sendMessage } from '@/lib/db/firestore/client/messages';
+import { getConversation, getOlderMessages, reactToMessage, sendMessage, unsendMessage } from '@/lib/db/firestore/client/messages';
+import { ApiError } from '@/lib/db/firestore/client/api';
+import { ToastProvider } from '@/components/providers/ToastProvider';
 import { blockUser, getMyBlockedIds, unblockUser } from '@/lib/db/firestore/client/blocks';
 import { forgetOutboxes } from '@/lib/data/thread';
 import { useConnectionRefresh } from '@/lib/data/resonate';
@@ -464,11 +468,14 @@ describe('Messenger’s thread, drawn by hand', () => {
     renderWithIntl(thread());
     await screen.findByRole('link', { name: 'https://example.com/a' });
 
+    // 「⋯」opens the same overlay a held finger does (round 16 §3).
     await user.click(screen.getByRole('button', { name: 'More options' }));
-    expect(screen.getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Copy', 'Open link', 'Copy link']);
-    await user.click(screen.getByRole('menuitem', { name: 'Copy link' }));
+    const menu = screen.getByRole('dialog');
+    expect(within(menu).getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Reply', 'Copy', 'Open link', 'Copy link', 'Report this message']);
+    await user.click(within(menu).getByRole('menuitem', { name: 'Copy link' }));
     expect(writeText).toHaveBeenCalledWith('https://example.com/a');
     expect(await screen.findByRole('status')).toHaveTextContent('Copied');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: 'Reply' }));
     expect(screen.getByText('Replying to alice')).toBeInTheDocument();
@@ -488,7 +495,7 @@ describe('Messenger’s thread, drawn by hand', () => {
     expect(screen.queryByRole('status')).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'More options' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Copy' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('menuitem', { name: 'Copy' }));
     const status = await screen.findByRole('status');
     expect(status).toHaveTextContent('Copied');
     expect(status).not.toHaveAttribute('aria-hidden');
@@ -508,7 +515,7 @@ describe('Messenger’s thread, drawn by hand', () => {
     fireEvent.pointerUp(message, { pointerType: 'touch', button: 0 });
     // Its place in the thread stays empty under the scrim while a copy is lifted.
     expect(container.querySelector('[data-message-id="m1"]')).toHaveAttribute('data-lifted');
-    expect(within(menu).getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Reply', 'Copy']);
+    expect(within(menu).getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Reply', 'Copy', 'Report this message']);
 
     await user.click(within(menu).getByRole('menuitem', { name: 'Reply' }));
     // Done in the tap itself (iOS raises the keyboard only for a focus a tap gave), then the menu goes.
@@ -639,9 +646,11 @@ describe('Messenger’s thread, drawn by hand', () => {
     const own = screen.getByText('are you there').closest('[data-message-key]')!;
     expect(own).toHaveAttribute('data-delivery', 'failed');
     await user.click(within(own as HTMLElement).getByRole('button', { name: 'More options' }));
+    // No reactions for a message the conversation doesn't hold.
+    expect(screen.queryByRole('toolbar')).not.toBeInTheDocument();
     expect(screen.getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Copy', 'Retry', 'Delete']);
     await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
-    expect(screen.queryByText('are you there')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('are you there')).not.toBeInTheDocument());
   });
 });
 
@@ -957,7 +966,9 @@ describe('a letter: notes between two people who aren’t connected', () => {
     fireEvent.pointerDown(held, { pointerType: 'touch', button: 0, clientX: 40, clientY: 40 });
     const menu = await screen.findByRole('dialog', {}, { timeout: 1500 });
     fireEvent.pointerUp(held, { pointerType: 'touch', button: 0 });
-    expect(within(menu).getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Copy']);
+    expect(within(menu).getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Copy', 'Report this message']);
+    // Not connected: a letter not yet answered takes no reactions.
+    expect(within(menu).queryByRole('toolbar')).not.toBeInTheDocument();
   });
 
   // A reply picked while connected doesn't wait for the composer to come back: the connection ending put it away.
@@ -1232,3 +1243,211 @@ describe('a long conversation searched', () => {
   });
 });
 
+
+describe('reactions and unsending (round 16)', () => {
+  const now = () => new Date(Date.now() - 60_000);
+  const hold = async (container: HTMLElement, id: string) => {
+    const message = container.querySelector<HTMLElement>(`[data-message-id="${id}"] div[class*="message"]`)!;
+    fireEvent.pointerDown(message, { pointerType: 'touch', button: 0, clientX: 40, clientY: 40 });
+    const overlay = await screen.findByRole('dialog', {}, { timeout: 1500 });
+    fireEvent.pointerUp(message, { pointerType: 'touch', button: 0 });
+    return overlay;
+  };
+  const gone = () => waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  const withToasts = () => (
+    <ToastProvider>
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <ThreadView handle="alice" />
+      </SWRConfig>
+    </ToastProvider>
+  );
+
+  it('holds the five reactions directly over a held message and its actions under it, and puts the one chosen on the bubble at once', async () => {
+    server.messages = [text('m1', 'hold me', { sentAt: now() })];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    const user = (await import('@testing-library/user-event')).default.setup();
+    const { container } = renderWithIntl(thread());
+    await screen.findByText('hold me');
+
+    const overlay = await hold(container, 'm1');
+    const tray = within(overlay).getByRole('toolbar', { name: 'Reactions' });
+    expect(within(tray).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Love', 'Moved', 'Haha', 'Hug', 'Like']);
+    expect(within(tray).getAllByRole('button').every((b) => b.getAttribute('aria-pressed') === 'false')).toBe(true);
+    // The tray comes before the actions (above the message, they below it), and the actions end with its time.
+    expect(tray.compareDocumentPosition(within(overlay).getByRole('menu')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await user.click(within(tray).getByRole('button', { name: 'Love' }));
+    expect(reactToMessage).toHaveBeenCalledWith('alice_me', 'm1', 'heart');
+    // The chip is on the bubble at once, before the server's copy says so; the overlay goes.
+    expect(screen.getByRole('button', { name: 'You reacted Love' })).toBeInTheDocument();
+    await gone();
+
+    // The server's copy, with theirs beside it: one chip, both stickers.
+    deliver([text('m1', 'hold me', { sentAt: server.messages[0].sentAt, reactions: { me: 'heart', alice: 'laugh' } })]);
+    const chip = await screen.findByRole('button', { name: 'You reacted Love, alice reacted Haha' });
+    // The chip lies beside the bubble in its slot — never in the row's flow under it.
+    expect(chip.closest('[class*="slot"]')).not.toBeNull();
+
+    // A tap on the chip opens the overlay; the chosen one is pressed, and choosing it again takes it back.
+    await user.click(chip);
+    const again = within(screen.getByRole('dialog')).getByRole('toolbar');
+    expect(within(again).getByRole('button', { name: 'Love' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(within(again).getByRole('button', { name: 'Love' }));
+    expect(reactToMessage).toHaveBeenLastCalledWith('alice_me', 'm1', null);
+    expect(await screen.findByRole('button', { name: 'alice reacted Haha' })).toBeInTheDocument();
+  });
+
+  it('draws a reaction from the other side as it arrives, and one this build doesn’t know as nothing', async () => {
+    server.messages = [text('m1', 'mine', { sentAt: now() }, 'me'), text('m2', 'theirs', { sentAt: now() })];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    renderWithIntl(thread());
+    await screen.findByText('theirs');
+    expect(screen.queryByRole('button', { name: /reacted/ })).not.toBeInTheDocument();
+
+    deliver([
+      text('m1', 'mine', { sentAt: server.messages[0].sentAt, reactions: { alice: 'hug' } }, 'me'),
+      { ...text('m2', 'theirs', { sentAt: server.messages[1].sentAt }), reactions: { alice: 'angry' } as unknown as Message['reactions'] },
+    ]);
+    expect(await screen.findByRole('button', { name: 'alice reacted Hug' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /reacted/ })).toHaveLength(1);
+  });
+
+  it('puts the chip back with a word when the reaction didn’t go', async () => {
+    server.messages = [text('m1', 'hold me', { sentAt: now() })];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    vi.mocked(reactToMessage).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    const user = (await import('@testing-library/user-event')).default.setup();
+    const { container } = renderWithIntl(withToasts());
+    await screen.findByText('hold me');
+    const overlay = await hold(container, 'm1');
+    await user.click(within(overlay).getByRole('button', { name: 'Hug' }));
+    expect((await screen.findAllByText('Couldn’t send your reaction — please try again')).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'You reacted Hug' })).not.toBeInTheDocument();
+  });
+
+  it('offers no reactions where none can be taken: a letter not yet answered', async () => {
+    vi.mocked(isConnected).mockResolvedValue(false);
+    vi.mocked(getConversation).mockResolvedValue({ ...conversation, request: { from: 'alice', cardId: 'c1', count: 1 } });
+    server.messages = [text('m1', 'a letter', { sentAt: now(), kind: 'note', cardRef: 'c1' })];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    renderWithIntl(thread());
+    await screen.findByText('a letter');
+    expect(screen.queryByRole('button', { name: 'React' })).not.toBeInTheDocument();
+  });
+
+  it('unsends one of the viewer’s own after a plain-coloured yes: a dashed line where it was, its quote emptied', async () => {
+    server.messages = [
+      text('m1', 'oops, wrong chat', { sentAt: now() }, 'me'),
+      text('m2', 'what?', { sentAt: now(), replyTo: { id: 'm1', senderId: 'me', text: 'oops, wrong chat' } }),
+    ];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    const user = (await import('@testing-library/user-event')).default.setup();
+    const { container } = renderWithIntl(thread());
+    await screen.findByText('what?');
+
+    const overlay = await hold(container, 'm1');
+    expect(within(overlay).getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Reply', 'Copy', 'Unsend']);
+    await user.click(within(overlay).getByRole('menuitem', { name: 'Unsend' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Unsend this message?' });
+    expect(within(confirm).getByText('They’ll no longer see it.')).toBeInTheDocument();
+    await user.click(within(confirm).getByRole('button', { name: 'Unsend' }));
+    expect(unsendMessage).toHaveBeenCalledWith('alice_me', 'm1');
+
+    // Drawn at once, before the server's copy: one line saying so, nothing in it answering.
+    const row = await waitFor(() => {
+      const r = container.querySelector<HTMLElement>('[data-message-id="m1"]')!;
+      expect(r).toHaveAttribute('data-unsent');
+      return r;
+    });
+    expect(row).toHaveTextContent('You unsent a message');
+    expect(row).not.toHaveTextContent('oops');
+    expect(within(row).queryAllByRole('button')).toHaveLength(0);
+
+    // The server's copy: the reply's quote of it says only that it was unsent.
+    deliver([
+      { id: 'm1', senderId: 'me', text: '', sentAt: server.messages[0].sentAt, unsentAt: new Date() },
+      text('m2', 'what?', { sentAt: server.messages[1].sentAt, replyTo: { id: 'm1', senderId: 'me', text: '', unsent: true } }),
+    ]);
+    expect(await screen.findByRole('button', { name: 'Message unsent' })).toBeInTheDocument();
+    expect(screen.queryByText('oops, wrong chat')).not.toBeInTheDocument();
+  });
+
+  it('says so when a message is too old to unsend, or the unsend failed, leaving it as it was', async () => {
+    server.messages = [text('m1', 'keep me', { sentAt: now() }, 'me')];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    vi.mocked(unsendMessage).mockRejectedValueOnce(Object.assign(new ApiError(409, 'conflict', 'This message can no longer be unsent.'), { code: 'conflict' }));
+    const user = (await import('@testing-library/user-event')).default.setup();
+    const { container } = renderWithIntl(withToasts());
+    await screen.findByText('keep me');
+    await user.click(within(await hold(container, 'm1')).getByRole('menuitem', { name: 'Unsend' }));
+    await user.click(within(await screen.findByRole('dialog', { name: 'Unsend this message?' })).getByRole('button', { name: 'Unsend' }));
+    expect((await screen.findAllByText('Messages older than a day can’t be unsent')).length).toBeGreaterThan(0);
+    await gone();
+    expect(container.querySelector('[data-message-id="m1"]')).not.toHaveAttribute('data-unsent');
+    expect(screen.getByText('keep me')).toBeInTheDocument();
+  });
+
+  it('draws their unsent message as their line, and offers no unsend on theirs, a note or a message a day old', async () => {
+    server.messages = [
+      text('m0', 'yesterday', { sentAt: new Date(Date.now() - 25 * 60 * 60 * 1000) }, 'me'),
+      text('m1', 'a reply of mine', { sentAt: now() }, 'me'),
+      { id: 'm2', senderId: 'alice', text: '', sentAt: now(), unsentAt: new Date() },
+    ];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    const { container } = renderWithIntl(thread());
+    await screen.findByText('a reply of mine');
+    expect(container.querySelector('[data-message-id="m2"]')).toHaveTextContent('alice unsent a message');
+    // A held unsent line opens nothing.
+    const ghost = container.querySelector<HTMLElement>('[data-message-id="m2"] [class*="unsent"]')!;
+    fireEvent.pointerDown(ghost, { pointerType: 'touch', button: 0 });
+    await new Promise((r) => setTimeout(r, 600));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    const overlay = await hold(container, 'm0');
+    expect(within(overlay).queryByRole('menuitem', { name: 'Unsend' })).not.toBeInTheDocument();
+  });
+
+  it('reports one of their messages from its own menu: the report dialog, for that message alone', async () => {
+    server.messages = [text('m1', 'something unkind', { sentAt: now() })];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    const user = (await import('@testing-library/user-event')).default.setup();
+    const { container } = renderWithIntl(thread());
+    await screen.findByText('something unkind');
+    await user.click(within(await hold(container, 'm1')).getByRole('menuitem', { name: 'Report this message' }));
+    const report = await screen.findByRole('dialog', { name: 'Report this message' }, { timeout: 3000 });
+    vi.mocked(callApi).mockClear();
+    await user.click(within(report).getByRole('button', { name: 'Send report' }));
+    await waitFor(() =>
+      expect(callApi).toHaveBeenCalledWith('/api/v1/reports', {
+        method: 'POST',
+        body: expect.objectContaining({ targetType: 'message', targetId: 'm1', conversationId: 'alice_me' }),
+      }),
+    );
+  });
+
+  it('offers ☺ · ↩ · ⋯ beside a message to a pointer; the keyboard lands on the reactions, walks them, and Escape gives the focus back', async () => {
+    server.messages = [text('m1', 'hover me', { sentAt: now() })];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    const user = (await import('@testing-library/user-event')).default.setup();
+    renderWithIntl(thread());
+    await screen.findByText('hover me');
+
+    const react = screen.getByRole('button', { name: 'React' });
+    react.focus();
+    await user.keyboard('{Enter}');
+    const tray = within(screen.getByRole('dialog')).getByRole('toolbar');
+    expect(within(tray).getByRole('button', { name: 'Love' })).toHaveFocus();
+    await user.keyboard('{ArrowRight}');
+    expect(within(tray).getByRole('button', { name: 'Moved' })).toHaveFocus();
+    // One stop in the Tab order: Tab goes on to the actions.
+    await user.keyboard('{Tab}');
+    expect(screen.getByRole('menuitem', { name: 'Reply' })).toHaveFocus();
+    await user.keyboard('{Escape}');
+    await gone();
+    await waitFor(() => expect(react).toHaveFocus());
+
+    // ⋯ opens the same overlay.
+    await user.click(screen.getByRole('button', { name: 'More options' }));
+    expect(within(screen.getByRole('dialog')).getByRole('toolbar')).toBeInTheDocument();
+  });
+});

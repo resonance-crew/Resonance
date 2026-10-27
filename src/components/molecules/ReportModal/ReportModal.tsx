@@ -30,6 +30,8 @@ export interface ReportTarget {
   /** Shown in the title and the "also block" row; omit for anonymous authors. */
   handle?: string;
   contextId?: string;
+  /** The dialog's title in place of the type's own (one message of a conversation: 「檢舉這則訊息」). */
+  title?: string;
 }
 
 export interface ReportModalProps {
@@ -69,11 +71,12 @@ export function ReportModal({ open, target, offerBlock = true, onClose, onReport
 
   const handle = target.handle ?? tSafety('anonymousAuthor');
   const title =
-    target.type === 'card'
+    target.title ??
+    (target.type === 'card'
       ? t('titleCard')
       : target.type === 'user'
         ? t('titleUser', { handle })
-        : t('titleMessage', { handle });
+        : t('titleMessage', { handle }));
 
   async function send() {
     if (busy) return;
