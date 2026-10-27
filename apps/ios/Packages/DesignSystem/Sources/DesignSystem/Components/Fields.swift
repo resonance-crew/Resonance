@@ -39,10 +39,28 @@ public struct FieldSurface: ViewModifier {
     }
 }
 
-/// The web's placeholder: warm grey, italic.
-/// (globals.css: every placeholder is the body face, italic, at the field's size and weight.)
+/// The web's placeholder: warm grey, italic — in a Latin script only.
+/// (globals.css: every placeholder is the body face, italic, at the field's size and weight; a Chinese page's
+/// stand upright, round 16 review S6 / F6: Han and kana have no italic, only a synthetic slant.)
 public func fieldPrompt(_ text: String, size: CGFloat = 15, weight: UIFont.Weight = .regular) -> Text {
-    Text(text).font(AppFonts.body(size, weight: weight, oblique: true)).foregroundStyle(Tokens.placeholder)
+    Text(text).font(AppFonts.body(size, weight: weight, oblique: Slant.takes(text))).foregroundStyle(Tokens.placeholder)
+}
+
+/// Whether words may be set in the body face's oblique: never words with Han, kana or Hangul in them, which
+/// have no italic of their own (a slant would be drawn by shearing the glyphs).
+public nonisolated enum Slant {
+    public static func takes(_ text: String) -> Bool {
+        !text.unicodeScalars.contains { isCJK($0.value) }
+    }
+
+    /// Han (its extensions and compatibility forms), kana, Hangul and bopomofo — letters, not punctuation, so a
+    /// Latin hint ending in 「…」 still slants.
+    static func isCJK(_ c: UInt32) -> Bool {
+        (0x3040...0x30FF).contains(c) || (0x3100...0x312F).contains(c) || (0x3130...0x318F).contains(c)
+            || (0x31A0...0x31FF).contains(c) || (0x3400...0x4DBF).contains(c) || (0x4E00...0x9FFF).contains(c)
+            || (0xAC00...0xD7A3).contains(c) || (0x1100...0x11FF).contains(c) || (0xF900...0xFAFF).contains(c)
+            || (0xFF66...0xFF9F).contains(c) || (0x20000...0x3FFFF).contains(c)
+    }
 }
 
 /// OrganicInput: a labelled text field in a wobbly frame.
