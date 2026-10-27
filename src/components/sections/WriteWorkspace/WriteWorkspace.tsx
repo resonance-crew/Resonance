@@ -248,6 +248,13 @@ export function WriteWorkspace({
     if (editor.current?.stepBack()) return;
     leaveAsking();
   };
+  // The Leave over the map (at the split) is the page's one back (round 17 §5.3): in the publish step it returns
+  // to writing — the draft's or a card opened over it — as the step's own back did; from writing it leaves.
+  const leaveFromSplit = () => {
+    if (leaving.current) return;
+    if (shownStep === 'publish' && (showOpened ? opened.current : editor.current)?.stepBack()) return;
+    leaveAsking();
+  };
   // A live card's revision is kept but not applied: said of the card the pane shows.
   const leavingPublished = showOpened ? openedCard.publishedAt != null : isPublished;
 
@@ -261,7 +268,9 @@ export function WriteWorkspace({
           backDisabled: shownPending,
           backLabel: shownStep === 'publish' ? t('leaveStay') : undefined,
         }}
-        onLeave={leaveAsking}
+        onLeave={leaveFromSplit}
+        leaveLabel={shownStep === 'publish' ? t('leaveStay') : undefined}
+        leaveDisabled={shownStep === 'publish' && shownPending}
         onHide={() => void saveAll()}
         leftOverride={referenceCardId ? <OriginalCardPanel cardId={referenceCardId} /> : undefined}
         onOpenCard={openCard}

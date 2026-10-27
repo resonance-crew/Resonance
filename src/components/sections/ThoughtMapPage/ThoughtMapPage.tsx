@@ -85,6 +85,14 @@ export function ThoughtMapPage() {
       onHide={() => void editor.current?.saveNow().catch((err) => console.error('Save failed:', err))}
       paneTitle={paneTitle}
       paneBack={{ label: step === 'publish' ? t('leaveStay') : undefined, disabled: pending }}
+      // At the split the Leave over the map is the one back (round 17 §5.3): from the publish step to writing,
+      // else off the page.
+      onLeave={() => {
+        if (split === true && openedCard && step === 'publish' && editor.current?.stepBack()) return;
+        router.back();
+      }}
+      leaveLabel={split === true && openedCard && step === 'publish' ? t('leaveStay') : undefined}
+      leaveDisabled={split === true && openedCard != null && step === 'publish' && pending}
       paneKey={openedCard?.id}
       focusCardId={openedCard?.id}
       onOpenCard={openCard}

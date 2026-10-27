@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { fireEvent, renderWithIntl, screen, userEvent, within } from '@/../test/render';
+import { act, fireEvent, renderWithIntl, screen, userEvent, within } from '@/../test/render';
 import { mockElementSize, penLines } from '@/../test/organic';
 import type { Card } from '@/lib/db/types';
 
@@ -434,10 +434,14 @@ describe('the workspace at the split', () => {
     screenWidth(1440);
     mockBack.mockClear();
     restoreBox = shellBox();
+    // The clock the pointer's events are stamped with stands still unless a test moves it: a drag here is no
+    // throw (round 17 §5.1) unless a test says how fast it went.
+    vi.useFakeTimers({ toFake: ['Date'] });
   });
   afterEach(() => {
     window.matchMedia = realMatchMedia;
     restoreBox();
+    vi.useRealTimers();
   });
 
   const divider = () => screen.getByRole('separator');
@@ -699,6 +703,180 @@ describe('the workspace at the split', () => {
     fireEvent.lostPointerCapture(divider(), { pointerId: 1 });
     fireEvent.pointerMove(divider(), { pointerId: 1, clientX: 650 });
     expect(divider()).toHaveAttribute('aria-valuenow', '40');
+  });
+
+  // Round 17 §5.1: a quick drag sometimes did nothing, or sprang back to the middle — its release came before
+  // the last move's render, and the release judged the drag by that render's state.
+  it('judges a release that comes before the last move is drawn by where the pointer was', () => {
+    renderWithIntl(
+      <WorkspaceShell open bar={{ title: 'New card', onBack: vi.fn() }}>
+        <p>editor</p>
+      </WorkspaceShell>,
+    );
+    fireEvent.pointerDown(divider(), { button: 0, pointerId: 1, clientX: 500 });
+    act(() => {
+      fireEvent.pointerMove(divider(), { pointerId: 1, clientX: 200 });
+      fireEvent.pointerUp(divider(), { pointerId: 1, clientX: 200 });
+    });
+    expect(divider()).toHaveAttribute('aria-valuenow', '100');
+    expect(divider()).toHaveAttribute('data-docked', 'start');
+
+    act(() => void fireEvent.keyDown(divider(), { key: 'ArrowRight' }));
+    expect(divider()).toHaveAttribute('aria-valuenow', '50');
+    fireEvent.pointerDown(divider(), { button: 0, pointerId: 1, clientX: 500 });
+    act(() => {
+      fireEvent.pointerMove(divider(), { pointerId: 1, clientX: 900 });
+      fireEvent.pointerUp(divider(), { pointerId: 1, clientX: 900 });
+    });
+    expect(pane()).toHaveAttribute('data-folded');
+  });
+
+  // A fast trackpad drag can report no button on a move: while the rail holds the pointer's capture its release is
+  // still to come, so the move is the drag's.
+  it('keeps a drag whose move reports no button while the rail still holds the pointer', () => {
+    renderWithIntl(
+      <WorkspaceShell open onClose={vi.fn()}>
+        <p>editor</p>
+      </WorkspaceShell>,
+    );
+    const rail = divider() as HTMLElement & { hasPointerCapture: (id: number) => boolean };
+    rail.hasPointerCapture = () => true;
+    fireEvent.pointerDown(rail, { button: 0, pointerId: 1, clientX: 500, pointerType: 'mouse', buttons: 1 });
+    fireEvent.pointerMove(rail, { pointerId: 1, clientX: 560, pointerType: 'mouse', buttons: 0 });
+    fireEvent.pointerMove(rail, { pointerId: 1, clientX: 600, pointerType: 'mouse', buttons: 0 });
+    fireEvent.pointerUp(rail, { pointerId: 1, clientX: 600, pointerType: 'mouse' });
+    expect(divider()).toHaveAttribute('aria-valuenow', '40');
+  });
+
+  // Round 17 §5.1: released moving fast (≥ 0.5 px/ms over the last 80 ms, after ≥ 24 px), the divider goes on to
+  // the next stop in its direction — toward the map the whole width from any split, back folded away.
+  describe('a throw', () => {
+    /** A drag through `xs`, `ms` apart, released at the last one `ms` later. */
+    const throwThrough = (ms: number, ...xs: number[]) => {
+      const [from, ...rest] = xs;
+      fireEvent.pointerDown(divider(), { button: 0, pointerId: 1, clientX: from });
+      for (const x of rest) {
+        vi.advanceTimersByTime(ms);
+        fireEvent.pointerMove(divider(), { pointerId: 1, clientX: x });
+      }
+      vi.advanceTimersByTime(ms);
+      fireEvent.pointerUp(divider(), { pointerId: 1, clientX: rest.at(-1) ?? from });
+    };
+    const writer = () =>
+      renderWithIntl(
+        <WorkspaceShell open bar={{ title: 'New card', onBack: vi.fn() }}>
+          <p>editor</p>
+        </WorkspaceShell>,
+      );
+
+    it('takes the whole width thrown toward the map, from 1:1 or the narrowest, short of 3/4', () => {
+      writer();
+      // 80 px in 48 ms: 1.7 px/ms, released at 58 % — a drag would have eased back to 1:1.
+      throwThrough(16, 500, 460, 440, 420);
+      expect(divider()).toHaveAttribute('aria-valuenow', '100');
+      expect(divider()).toHaveAttribute('data-docked', 'start');
+
+      fireEvent.keyDown(divider(), { key: 'ArrowRight' });
+      drag(500, 680);
+      expect(divider()).toHaveAttribute('aria-valuenow', '32');
+      throwThrough(16, 680, 650, 620);
+      expect(divider()).toHaveAttribute('aria-valuenow', '100');
+    });
+
+    it('folds the pane thrown back toward its side, to come back at the width it had', () => {
+      const onHide = vi.fn();
+      renderWithIntl(
+        <WorkspaceShell open onClose={vi.fn()} onHide={onHide}>
+          <p>editor</p>
+        </WorkspaceShell>,
+      );
+      drag(500, 600);
+      throwThrough(16, 600, 630, 660);
+      expect(pane()).toHaveAttribute('data-folded');
+      expect(onHide).toHaveBeenCalledTimes(1);
+      drag(995);
+      expect(divider()).toHaveAttribute('aria-valuenow', '40');
+    });
+
+    it('stops a pane without the writer’s bar at 1:1 when thrown toward the map', () => {
+      renderWithIntl(
+        <WorkspaceShell open onClose={vi.fn()}>
+          <p>editor</p>
+        </WorkspaceShell>,
+      );
+      drag(500, 680);
+      throwThrough(16, 680, 640, 600);
+      expect(divider()).toHaveAttribute('aria-valuenow', '50');
+      expect(divider()).not.toHaveAttribute('data-docked');
+    });
+
+    it('is no throw slow, or short, or once it came to rest before the release', () => {
+      writer();
+      // 60 px over 400 ms: 0.15 px/ms.
+      throwThrough(100, 500, 485, 470, 455, 440);
+      expect(divider()).toHaveAttribute('aria-valuenow', '50');
+      // 20 px, however fast.
+      throwThrough(8, 500, 490, 480);
+      expect(divider()).toHaveAttribute('aria-valuenow', '50');
+      // Fast, then held still 120 ms before letting go.
+      fireEvent.pointerDown(divider(), { button: 0, pointerId: 1, clientX: 500 });
+      vi.advanceTimersByTime(16);
+      fireEvent.pointerMove(divider(), { pointerId: 1, clientX: 440 });
+      vi.advanceTimersByTime(120);
+      fireEvent.pointerUp(divider(), { pointerId: 1, clientX: 440 });
+      expect(divider()).toHaveAttribute('aria-valuenow', '50');
+      expect(divider()).not.toHaveAttribute('data-docked');
+    });
+  });
+
+  // Round 17 §5.2, §5.3: at the whole width the Leave is its glyph alone, named as the pill was; its words — and
+  // its glyph's name — follow the step (the host's way back: 繼續寫 in the publish step).
+  it('turns the Leave into its glyph at the whole width, its words and name following the host', () => {
+    const onLeave = vi.fn();
+    const { rerender } = renderWithIntl(
+      <WorkspaceShell open bar={{ title: 'New card', onBack: vi.fn() }} onLeave={onLeave}>
+        <p>editor</p>
+      </WorkspaceShell>,
+    );
+    const back = () => document.querySelector('[class*="back"][data-split-only]')!;
+    expect(back()).not.toHaveAttribute('data-glyph');
+    expect(screen.getByRole('button', { name: 'Leave' })).toHaveTextContent('Leave');
+    drag(500, 200);
+    expect(back()).toHaveAttribute('data-glyph');
+    // One Leave: the glyph (no words), the pill hidden and out of reach.
+    const glyph = screen.getByRole('button', { name: 'Leave' });
+    expect(glyph).not.toHaveTextContent('Leave');
+    fireEvent.click(glyph);
+    expect(onLeave).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <WorkspaceShell open bar={{ title: 'Publish', onBack: vi.fn() }} onLeave={onLeave} leaveLabel="Keep writing" leaveDisabled>
+        <p>editor</p>
+      </WorkspaceShell>,
+    );
+    expect(screen.getByRole('button', { name: 'Keep writing' })).toBeDisabled();
+    fireEvent.keyDown(divider(), { key: 'ArrowRight' });
+    expect(back()).not.toHaveAttribute('data-glyph');
+    expect(screen.getByRole('button', { name: 'Keep writing' })).toHaveTextContent('Keep writing');
+  });
+
+  // Round 17 §5.4: one hand-drawn mark for the grip, between the panes and docked at either edge.
+  it('draws the grip as one wavy pen stroke wherever it is', () => {
+    renderWithIntl(
+      <WorkspaceShell open bar={{ title: 'New card', onBack: vi.fn() }}>
+        <p>editor</p>
+      </WorkspaceShell>,
+    );
+    const mark = () => divider().querySelector('svg path[stroke="currentColor"]')!;
+    const between = mark().getAttribute('d');
+    expect(between).toMatch(/^M [\d.]+,[\d.]+( C [\d., ]+){6}$/);
+    expect(mark()).toHaveAttribute('stroke-width', '2.2');
+    drag(500, 200);
+    expect(divider()).toHaveAttribute('data-docked', 'start');
+    expect(mark().getAttribute('d')).toBe(between);
+    fireEvent.keyDown(divider(), { key: 'End' });
+    expect(divider()).toHaveAttribute('data-docked', 'end');
+    expect(mark().getAttribute('d')).toBe(between);
   });
 
   it('shows the folded pane again when a card is opened from the map', async () => {

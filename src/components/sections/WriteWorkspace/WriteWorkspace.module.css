@@ -46,6 +46,12 @@
     display: none;
   }
 
+  /* More air over the title at the split and the whole width (round 17 §5.5): at least where it stands on a
+     tablet (under the bar's 82, the reading head's gap from its pen line), at least clamp(96px, 14vh, 160px)
+     from the pane's top. The floating Leave and ✓ stay on --editor-pad-top. */
+  .shell .editorCol {
+    --column-pad-top: max(calc(var(--bar-h, 82px) + var(--story-head-gap) - 9px), clamp(96px, 14vh, 160px));
+  }
 }
 
 .srOnly {
@@ -103,6 +109,105 @@
 .backIcon {
   display: inline-flex;
   transform: scaleX(-1);
+  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1) 80ms;
+}
+
+/* Its words, new ones fading in as the step changes them (離開 ↔ 繼續寫, round 17 §5.3). */
+.backLabel {
+  animation: backLabelIn 160ms ease-out;
+}
+
+@keyframes backLabelIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* At the whole width the pill becomes its glyph alone (round 17 §5.2): the words fade (80 ms), the paper draws
+   in to the glyph (180 ms, the release's ease), then the paper and pen fade (120 ms) as the bare glyph — the
+   ✓'s size and line, BareIconButton's look — comes in where the pill's glyph stood; the glyph never moves.
+   Back again in the reverse order. The pill's glyph sits 18 in (its padding), 15 wide: the bare one's 36 box
+   is centred on it. */
+.backPill {
+  display: inline-flex;
+  transition: opacity 120ms ease 0ms;
+}
+
+.backPill > button {
+  clip-path: inset(-8px -8px -8px -8px round 22px);
+  transition: clip-path 180ms cubic-bezier(0.2, 0, 0, 1) 120ms;
+}
+
+.backPill .backLabel {
+  transition: opacity 80ms ease 300ms;
+}
+
+.back[data-glyph] .backPill {
+  opacity: 0;
+  transition: opacity 120ms ease 260ms;
+}
+
+.back[data-glyph] .backPill > button {
+  clip-path: inset(-2px calc(100% - 43.5px) -2px 7.5px round 18px);
+  transition: clip-path 180ms cubic-bezier(0.2, 0, 0, 1) 80ms;
+}
+
+.back[data-glyph] .backPill .backLabel {
+  opacity: 0;
+  transition: opacity 80ms ease 0ms;
+}
+
+/* The pill's glyph grows to the bare one's — the ✓'s size (15 → 22) — as the paper draws in, so the crossfade
+   is seamless. */
+.back[data-glyph] .backPill .backIcon {
+  transform: scaleX(-1) scale(1.467);
+}
+
+.backGlyph {
+  position: absolute;
+  top: 50%;
+  left: 25.5px;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease 0ms;
+}
+
+.back[data-glyph] .backGlyph {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 120ms ease 260ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* A crossfade: nothing draws in, nothing grows. */
+  .backPill > button,
+  .back[data-glyph] .backPill > button {
+    clip-path: none;
+    transition: none;
+  }
+
+  .backIcon,
+  .back[data-glyph] .backPill .backIcon {
+    transform: scaleX(-1);
+    transition: none;
+  }
+
+  .backPill,
+  .back[data-glyph] .backPill,
+  .backGlyph,
+  .back[data-glyph] .backGlyph,
+  .backPill .backLabel,
+  .back[data-glyph] .backPill .backLabel {
+    transition: opacity 150ms ease;
+  }
+
+  .backLabel {
+    animation: none;
+  }
 }
 
 /* The boundary is the editor pane's own straight edge (so line and background
@@ -155,58 +260,62 @@
   width: 44px;
 }
 
-/* Grab affordance floating on the line: a small hand-inked chip whose fill
-   interrupts the stroke behind it; darkens under the hand. */
+/* The grip (round 17 §5.4): one mark wherever it is — a short wavy pen stroke
+   standing on the line, in the muted ink, terracotta under the hand, the
+   keyboard and a drag, with a disc of ink spreading behind it on hover. Its
+   box is the pill-shaped disc's (28 × 52). */
 .railGrip {
   position: absolute;
   top: 50%;
   left: 0;
   transform: translate(-50%, -50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: 28px;
-  height: 34px;
-  border: 1px solid var(--field-border);
-  border-radius: 11px 13px 12px 14px;
-  background: var(--color-cream);
+  height: 52px;
   color: var(--color-text-muted);
-  transition: border-color 120ms ease, color 120ms ease;
+  transition: color 120ms ease;
 }
 
-.railGripIcon {
-  display: inline-flex;
+.railMark {
+  position: relative;
+  z-index: 1;
+  display: block;
+  overflow: visible;
+}
+
+/* Where the mark stands, the boundary's hairline gives way to it: the line turns to the hand's wave there. */
+.railGrip::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 50%;
+  width: 8px;
+  transform: translateX(-50%);
+  border-radius: 4px;
+  background: var(--color-cream);
 }
 
 .rail:hover .railGrip,
 .rail:active .railGrip,
-.rail[data-dragging] .railGrip {
-  border-color: var(--field-border-hover);
-  color: var(--color-text);
+.rail[data-dragging] .railGrip,
+.rail:focus-visible .railGrip {
+  color: var(--color-terracotta);
 }
 
+/* The keyboard's focus rings the disc's place in the focus colour. */
 .rail:focus-visible .railGrip {
-  border-color: var(--field-border-focus);
-  color: var(--color-text);
   outline: 2px solid var(--field-border-focus);
   outline-offset: 2px;
+  border-radius: 14px;
 }
 
-/* Docked: a tab on the edge, its open side against the window's. */
+/* Docked: the same mark just inside the window's edge, on the side it was folded to. */
 .rail[data-docked='end'] .railGrip {
-  transform: translate(-100%, -50%);
-  width: 30px;
-  height: 44px;
-  border-right-width: 0;
-  border-radius: 12px 0 0 14px;
+  transform: translate(calc(-100% - 4px), -50%);
 }
 
 .rail[data-docked='start'] .railGrip {
-  transform: translate(0, -50%);
-  width: 30px;
-  height: 44px;
-  border-left-width: 0;
-  border-radius: 0 12px 14px 0;
+  transform: translate(4px, -50%);
 }
 
 /* In the hide zone, by the grip on the map's side: releasing here hides the pane. */

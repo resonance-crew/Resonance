@@ -336,15 +336,18 @@ describe('CardEditor — the publish step', () => {
   // The data-layer rule: what is chosen in the step is the draft's, saved like its words.
   it('autosaves the audience chosen in the step, and keeps it going back to writing', async () => {
     const onStepChange = vi.fn();
-    // At the split, where the step has its own way back to writing.
-    renderWithIntl(<Writer locale="en" onStepChange={onStepChange} inlineStepHeading />);
+    const handle = createRef<CardEditorHandle>();
+    // At the split, where the host's one back (the Leave over the map) returns to writing (round 17 §5.3).
+    renderWithIntl(<Writer locale="en" onStepChange={onStepChange} inlineStepHeading editorRef={handle} />);
     await toPublishStep();
     await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
     await waitFor(() => expect(updateCardDraft).toHaveBeenCalledWith('draft-1', expect.objectContaining({ visibility: 'private' })), {
       timeout: 4000,
     });
 
-    await userEvent.click(screen.getByRole('button', { name: en.write.leaveStay }));
+    // The step draws no back of its own there.
+    expect(screen.queryByRole('button', { name: en.write.leaveStay })).toBeNull();
+    act(() => void handle.current!.stepBack());
     expect(onStepChange).toHaveBeenLastCalledWith('write');
     await waitFor(() => expect(inStep()).toBe(false));
     await userEvent.click(next());

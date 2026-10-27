@@ -15,27 +15,12 @@
   }
 }
 
-/* At the split (no bar over the pane): ← 繼續寫 and the step's name, level
-   with the Leave over the map — the writer's bar's row in small. */
+/* At the split (no bar over the pane): the step's name at the column's start,
+   no back of its own (round 17 §5.3: the Leave over the map is the one back). */
 .headingRow {
   display: flex;
   align-items: center;
-  gap: 8px;
   min-height: 38px;
-}
-
-.back {
-  margin-left: -9px;
-  transform: translateY(1px);
-}
-
-@media (pointer: coarse) {
-  .back {
-    margin-left: -13px;
-  }
-  .headingRow {
-    gap: 4px;
-  }
 }
 
 /* The step's name and, under it, its save state — where the bar says them
