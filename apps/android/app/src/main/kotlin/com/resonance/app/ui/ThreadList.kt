@@ -68,6 +68,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -175,8 +176,11 @@ internal class ThreadContext(
     val onReply: (ChatMessage) -> Unit,
     /** The quote of a reply was tapped: the id of the message it quotes. */
     val onQuote: (String) -> Unit,
-    /** The key of the message the long-press menu has lifted out of the thread: its place stays empty under the scrim. */
-    val lifted: String? = null,
+    /**
+     * The key of the message the long-press menu has lifted out of the thread (its place stays empty under the
+     * scrim), read only where a message is drawn: holding one never composes the thread again.
+     */
+    val lifted: () -> String? = { null },
     /** A picture in a message was tapped: opened whole. */
     val onPicture: (ChatPictureSource) -> Unit = {},
     /** A reaction chosen without the overlay (a screen reader's action on the bubble): the reaction's id, or the viewer's own again to take it back. */
@@ -554,7 +558,7 @@ private fun MessageItem(row: ThreadRow, ctx: ThreadContext, deliveryLine: Boolea
             if (!mine) TheirFace(shown = !row.position.joinsBelow, ctx)
             Column(Modifier.widthIn(max = ctx.rowMax), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
                 if (message.isUnsent) {
-                    UnsentBubble(unsentWords(mine, model.other?.handle.orEmpty()), mine, seedFromId(message.key), run = row.position)
+                    UnsentBubble(unsentWords(mine, model.other?.handle.orEmpty()), mine, seedFromId(message.key))
                 } else {
                     MessageCore(row, ctx, interactive = true)
                     if (deliveryLine) DeliveryLine(message, model)
@@ -697,6 +701,9 @@ internal fun MessageCore(row: ThreadRow, ctx: ThreadContext, interactive: Boolea
         ctx.scroll.register(message) { coords }
         onDispose { ctx.scroll.forget(message) }
     }
+    // Whether this message is the one held up out of the thread, read while drawing: holding one (or letting it go)
+    // redraws that one message alone — never composes the thread, nor draws every other message again.
+    val isLifted = remember(message.key, ctx.lifted) { derivedStateOf { ctx.lifted() == message.key } }
     val press: (String?) -> Unit = { link ->
         coords?.takeIf { it.isAttached }?.let {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -707,7 +714,7 @@ internal fun MessageCore(row: ThreadRow, ctx: ThreadContext, interactive: Boolea
         modifier
             .then(if (message.delivery == Delivery.Failed) Modifier.fade(0.6f) else Modifier)
             // Lifted into the menu's layer, it isn't left behind under the scrim (a ghost a step off the copy).
-            .then(if (interactive && ctx.lifted == message.key) Modifier.graphicsLayer { alpha = 0f } else Modifier)
+            .then(if (interactive) Modifier.drawWithContent { if (!isLifted.value) drawContent() } else Modifier)
             .onGloballyPositioned { coords = it },
         horizontalAlignment = if (mine) Alignment.End else Alignment.Start,
     ) {
