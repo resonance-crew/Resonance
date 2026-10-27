@@ -1,16 +1,15 @@
 'use client';
 
-import { memo, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { BareIconButton } from '@/components/atoms/BareIconButton/BareIconButton';
 import { HandDrawnAvatar } from '@/components/atoms/HandDrawnAvatar/HandDrawnAvatar';
-import { OrganicMenu } from '@/components/molecules/OrganicMenu/OrganicMenu';
 import { useCardEmbed } from '@/components/molecules/EmbedStoryCard/useCardEmbed';
 import { SharedCardPart, SharedCardSkeleton } from '@/components/molecules/SharedCard/SharedCard';
 import { Link } from '@/i18n/navigation';
 import { carriedOf, carriedWords, type Carried } from '@/lib/chat/carried';
 import { messageCard } from '@/lib/chat/cardLink';
-import { canReply, type ChatMessage } from '@/lib/chat/message';
+import { canReact, canReply, isUnsent, reactionCounts, type ChatMessage } from '@/lib/chat/message';
 import type { RunPosition } from '@/lib/chat/rows';
 import type { TextRange } from '@/lib/chat/search';
 import { seedFromId } from '@/lib/design/bubble';
@@ -21,7 +20,9 @@ import { LinkPreviewPart } from './BubbleParts';
 import { PicturePart, pictureBox } from './PicturePart';
 import { NoteQuote } from './NoteQuote';
 import { ReplyQuote } from './ReplyQuote';
-import { chooseMenuItem, messageMenuItems, useThreadActions } from './threadActions';
+import { CHIP_OVERLAP, ReactionChips, chipWidth } from './ReactionChips';
+import { UnsentBubble } from './UnsentBubble';
+import { useThreadActions } from './threadActions';
 import styles from './Thread.module.css';
 
 /** How long a finger rests on a message before its menu lifts it out. */
@@ -44,6 +45,8 @@ export interface MessageCoreProps {
   title?: string;
   /** Beside the bubble (the hover actions), centred on it. */
   aside?: ReactNode;
+  /** A tap on its reactions' chip (the row's: it opens the overlay; the lifted copy's chip answers nothing). */
+  onChips?: (el: HTMLElement, byKeyboard: boolean) => void;
 }
 
 /**
@@ -52,10 +55,23 @@ export interface MessageCoreProps {
  * long-press lifts out of the thread and draws again, without anything in it
  * answering.
  */
-export function MessageCore({ message: m, own, position, carried, highlights, hitStrong = false, flash = false, interactive, title, aside }: MessageCoreProps) {
+export function MessageCore({ message: m, own, position, carried, highlights, hitStrong = false, flash = false, interactive, title, aside, onChips }: MessageCoreProps) {
   const t = useTranslations('messages');
   const actions = useThreadActions();
   const onLink = interactive ? actions.openLink : null;
+  // Its reactions, in the gutter beside the bubble's foot (never under it: the row's height never changes for them).
+  const counts = useMemo(() => reactionCounts(m.reactions, actions.viewerId), [m.reactions, actions.viewerId]);
+  const chips = counts.length > 0 && (
+    <ReactionChips
+      counts={counts}
+      own={own}
+      otherHandle={actions.otherHandle}
+      seed={seedFromId(m.key, 37)}
+      onOpen={interactive && onChips ? onChips : null}
+    />
+  );
+  // The hover tools stand clear of the chip.
+  const slotStyle = counts.length ? ({ '--chips-w': `${chipWidth(counts) + 4 - CHIP_OVERLAP}px` } as CSSProperties) : undefined;
   // Beside a picture the words are all its own (no card stands in for a link in them).
   const words = m.image ? m.text : carriedWords(m, carried);
   const note = m.noteRef ? t('quotedNote') : undefined;
@@ -69,10 +85,11 @@ export function MessageCore({ message: m, own, position, carried, highlights, hi
     return (
       <>
         <NoteQuote seedKey={m.key} own={own} otherHandle={actions.otherHandle} carried={carried} interactive={interactive} />
-        <div className={styles.slot} data-over-quote="">
+        <div className={styles.slot} data-over-quote="" style={slotStyle}>
           <MessageBubble seedKey={m.key} own={own} position={position} flash={flash} overQuote title={title}>
             <BubbleWords text={m.text} ranges={highlights} strong={hitStrong} onLink={onLink} />
           </MessageBubble>
+          {chips}
           {aside}
         </div>
       </>
@@ -90,7 +107,7 @@ export function MessageCore({ message: m, own, position, carried, highlights, hi
           onJump={interactive ? actions.jumpTo : null}
         />
       )}
-      <div className={styles.slot} data-over-quote={m.replyTo ? '' : undefined}>
+      <div className={styles.slot} data-over-quote={m.replyTo ? '' : undefined} style={slotStyle}>
         <MessageBubble
           seedKey={m.key}
           own={own}
@@ -125,6 +142,7 @@ export function MessageCore({ message: m, own, position, carried, highlights, hi
           )}
           {carried.kind === 'cardLoading' && !m.image && <SharedCardSkeleton />}
         </MessageBubble>
+        {chips}
         {aside}
       </div>
     </>
@@ -182,66 +200,74 @@ export const MessageRow = memo(function MessageRow({
   fullTime,
 }: MessageRowProps) {
   const t = useTranslations('messages');
-  const tNative = useTranslations('native');
   const tSafety = useTranslations('safety');
   const actions = useThreadActions();
   const carried = useCarried(m);
-  const [menuOpen, setMenuOpen] = useState(false);
   const messageRef = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const unsent = isUnsent(m);
+  useHeightTween(rowRef, unsent);
   // The link the menus offer: the one under the finger, else the message's own — its preview's, or the first in its words.
   const link = useMemo<MessageLink | null>(
     () => (m.preview ? parseLink(m.preview.url) : null) ?? firstLinkOf(m.text),
     [m.preview, m.text],
   );
-  const press = useLongPress(messageRef, (under) => {
+  /** Lifts it out with its menu: from a held finger (the link under it), or the ☺ / ⋯ / chip that asked. */
+  const lift = (under: MessageLink | null, opener: HTMLElement | null, byKeyboard = false) => {
     const el = messageRef.current;
-    if (el) actions.press({ message: m, position, carried, rect: el.getBoundingClientRect(), link: under ?? link });
-  });
-  const items = useMemo(
-    () =>
-      messageMenuItems(
-        m,
-        link,
-        {
-          reply: t('reply'),
-          copy: tNative('copy'),
-          openLink: t('openLink'),
-          copyLink: t('copyLink'),
-          retry: t('retry'),
-          discard: t('discardFailed'),
-        },
-        false,
-      ),
-    [m, link, t, tNative],
-  );
+    if (el) actions.press({ message: m, position, carried, rect: el.getBoundingClientRect(), link: under ?? link, opener, byKeyboard });
+  };
+  const press = useLongPress(messageRef, (under) => lift(under, null));
+
+  // Unsent: a line saying so where it was, on its sender's side — no menu, no tools, nothing in it answers.
+  if (unsent) {
+    return (
+      <div
+        ref={rowRef}
+        className={styles.row}
+        data-own={own || undefined}
+        data-message-id={m.id}
+        data-message-key={m.key}
+        data-run={position}
+        data-gap={label ? 'label' : joinsAbove ? 'run' : 'runs'}
+        data-unsent=""
+      >
+        {label && <div className={styles.label}>{label}</div>}
+        <div className={styles.line}>
+          {!own && <span className={styles.face} />}
+          <div className={styles.core}>
+            <UnsentBubble
+              seedKey={m.key}
+              own={own}
+              position={position}
+              label={own ? t('unsentByYou') : t('unsentByThem', { handle: actions.otherHandle })}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // A card the viewer can't see, shared alone: nothing to draw (not even their face beside it) — only its
   // place, which the scroller still finds it by. (A picture sent alone has no words and no card, and is all there.)
   if (carried.kind === 'nothing' && !m.image) return <div data-message-id={m.id} data-message-key={m.key} aria-hidden />;
 
+  // ☺ · ↩ · ⋯ on the side toward the middle (round 16 §3): ☺ and ⋯ open the same overlay as a held finger.
   const aside = (
-    <span className={styles.actions} data-own={own || undefined} data-open={menuOpen || undefined}>
+    <span className={styles.actions} data-own={own || undefined} data-open={lifted || undefined}>
+      {actions.canReact && canReact(m) && (
+        <BareIconButton icon="smile" label={t('react')} iconSize={18} seed={seedFromId(m.key, 31)} onClick={(e) => lift(null, e.currentTarget, e.detail === 0)} />
+      )}
       {actions.canWrite && canReply(m) && (
         <BareIconButton icon="reply" label={t('reply')} iconSize={18} seed={seedFromId(m.key, 29)} onClick={() => actions.reply(m)} />
       )}
-      {items.length > 0 && (
-        <OrganicMenu
-          bare
-          floating
-          align={own ? 'end' : 'start'}
-          label={tSafety('menuLabel')}
-          seed={seedFromId(m.key, 23)}
-          items={items}
-          footer={fullTime}
-          onOpenChange={setMenuOpen}
-          onChoose={(key) => chooseMenuItem(key, m, link, actions)}
-        />
-      )}
+      <BareIconButton icon="dots" label={tSafety('menuLabel')} iconSize={18} seed={seedFromId(m.key, 23)} onClick={(e) => lift(null, e.currentTarget, e.detail === 0)} />
     </span>
   );
 
   return (
     <div
+      ref={rowRef}
       className={styles.row}
       data-own={own || undefined}
       data-message-id={m.id}
@@ -284,6 +310,7 @@ export const MessageRow = memo(function MessageRow({
               interactive
               title={fullTime}
               aside={aside}
+              onChips={(el, byKeyboard) => lift(null, el, byKeyboard)}
             />
           </div>
           {deliveryLine && <DeliveryLine message={m} />}
@@ -315,6 +342,41 @@ function DeliveryLine({ message }: { message: ChatMessage }) {
 }
 
 /**
+ * A row whose height changes because its message was unsent (a picture, a
+ * card, many lines become one line): the change takes 150 ms instead of
+ * jumping — from the height it had to the one it has (none under reduced
+ * motion).
+ */
+function useHeightTween(ref: React.RefObject<HTMLElement | null>, unsent: boolean) {
+  const last = useRef<number | null>(null);
+  const was = useRef(unsent);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const before = last.current;
+    const flipped = unsent && !was.current;
+    was.current = unsent;
+    const after = el.getBoundingClientRect().height;
+    last.current = after;
+    if (!flipped || before == null || Math.abs(before - after) < 1) return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    el.style.height = `${before}px`;
+    el.style.overflow = 'hidden';
+    void el.offsetHeight;
+    el.style.transition = 'height 150ms ease-out';
+    el.style.height = `${after}px`;
+    const done = () => {
+      el.style.height = '';
+      el.style.overflow = '';
+      el.style.transition = '';
+    };
+    el.addEventListener('transitionend', done, { once: true });
+    const id = window.setTimeout(done, 220);
+    return () => window.clearTimeout(id);
+  });
+}
+
+/**
  * Press-and-hold on a touch screen (a mouse never long-presses: it has the
  * hover tools): after {@link LONG_PRESS_MS} without wandering off, `onPress`
  * with the link under the finger, if any. The click that ends the press is
@@ -336,8 +398,9 @@ function useLongPress(ref: React.RefObject<HTMLElement | null>, onPress: (link: 
 
   return {
     onPointerDown: (e: ReactPointerEvent<HTMLElement>) => {
-      if (e.pointerType === 'mouse' || e.button !== 0) return;
+      // A new press: whatever ended the last one (a browser sends no click after a long press) is over.
       fired.current = false;
+      if (e.pointerType === 'mouse' || e.button !== 0) return;
       start.current = { x: e.clientX, y: e.clientY };
       const anchor = (e.target as HTMLElement).closest<HTMLElement>('[data-link-url]');
       const url = anchor?.dataset.linkUrl;

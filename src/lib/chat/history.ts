@@ -143,6 +143,19 @@ function sameMessage(held: Message | undefined, next: Message): boolean {
     held.kind === next.kind &&
     JSON.stringify(held.noteRef ?? null) === JSON.stringify(next.noteRef ?? null) &&
     JSON.stringify(held.replyTo ?? null) === JSON.stringify(next.replyTo ?? null) &&
-    JSON.stringify(held.preview ?? null) === JSON.stringify(next.preview ?? null)
+    JSON.stringify(held.preview ?? null) === JSON.stringify(next.preview ?? null) &&
+    JSON.stringify(held.image ?? null) === JSON.stringify(next.image ?? null) &&
+    // A reaction coming in, or the message unsent, is news to the thread (round 16).
+    reactionsKey(held.reactions) === reactionsKey(next.reactions) &&
+    (held.unsentAt?.getTime() ?? null) === (next.unsentAt?.getTime() ?? null)
   );
+}
+
+/** A message's reactions as one string, whatever order the snapshot gave their keys in. */
+function reactionsKey(reactions: Message['reactions']): string {
+  if (!reactions) return '';
+  return Object.keys(reactions)
+    .sort()
+    .map((uid) => `${uid}:${reactions[uid]}`)
+    .join(',');
 }

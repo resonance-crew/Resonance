@@ -58,7 +58,9 @@ import {
   listenConversations,
   listenThread,
   otherParticipant,
+  reactToMessage,
   sendMessage,
+  unsendMessage,
   uploadChatImage,
   type ThreadWindow,
 } from './messages';
@@ -298,6 +300,34 @@ describe('the listeners (thread, conversations)', () => {
     expect(lists.mock.calls[0][0][0].lastMessage).toMatchObject({ text: '', image: true });
   });
 
+  // Round 16: a message's reactions (the five this build knows), and one unsent — nothing of it but who and
+  // when, whatever the document still held; a quote of it and the list's preview say so too.
+  it('hears reactions it knows, an unsent message as nothing but its sender and time, and quotes and previews of one', async () => {
+    const heard = vi.fn();
+    listenThread('aaa_bbb', heard);
+    await vi.waitFor(() => expect(listener.listenNewest).toHaveBeenCalled());
+    const sentAt = fullSdkTimestamp('2026-09-01T08:00:00Z');
+    const unsentAt = fullSdkTimestamp('2026-09-01T08:05:00Z');
+    listener.onDocs!([
+      { id: 'r1', data: { senderId: 'bbb', text: 'what?', sentAt, replyTo: { id: 'u1', senderId: 'aaa', unsent: true, text: 'leaked' } } },
+      { id: 'u1', data: { senderId: 'aaa', sentAt, unsentAt, text: 'should not show', cardRef: 'walk', reactions: { bbb: 'heart' } } },
+      { id: 'm1', data: { senderId: 'aaa', text: 'hi', sentAt, reactions: { bbb: 'heart', aaa: 'angry', ccc: 7, ddd: 'thumbs' } } },
+      { id: 'm0', data: { senderId: 'aaa', text: 'plain', sentAt, reactions: { bbb: 'nope' } } },
+    ]);
+    const [reply, unsent, reacted, plain] = heardMessages(heard);
+    expect(reacted.reactions).toEqual({ bbb: 'heart', ddd: 'thumbs' });
+    expect(plain.reactions).toBeUndefined();
+    expect(unsent).toEqual({ id: 'u1', senderId: 'aaa', text: '', sentAt: unsent.sentAt, unsentAt: unsent.unsentAt });
+    expect(unsent.unsentAt!.toISOString()).toBe('2026-09-01T08:05:00.000Z');
+    expect(reply.replyTo).toEqual({ id: 'u1', senderId: 'aaa', text: '', unsent: true });
+
+    const lists = vi.fn();
+    listenConversations('bbb', lists);
+    await vi.waitFor(() => expect(listener.listenNewest).toHaveBeenCalledTimes(2));
+    listener.onDocs!([{ id: 'aaa_bbb', data: { participants: ['aaa', 'bbb'], lastMessage: { senderId: 'aaa', sentAt, unsent: true }, unread: {} } }]);
+    expect(lists.mock.calls[0][0][0].lastMessage).toMatchObject({ text: '', senderId: 'aaa', unsent: true });
+  });
+
   // The header's unread badge and the messages list: one listener on the
   // viewer's own conversations (what the rules let them list), newest 50.
   it("hears the viewer's newest conversations, most recently active first", async () => {
@@ -388,6 +418,25 @@ describe('a conversation read once', () => {
 // Deleting from the browser went message by message through the rules — which
 // is what let either person delete single messages. The server deletes it whole.
 describe('deleteConversation', () => {
+  it('reacts, takes a reaction back and unsends through the server, writing nothing itself', async () => {
+    fetchMock.mockImplementation(async () => new Response(null, { status: 204 }));
+    await reactToMessage('aaa_bbb', 'm1', 'hug');
+    await reactToMessage('aaa_bbb', 'm1', null);
+    await unsendMessage('aaa_bbb', 'm1');
+    const calls = fetchMock.mock.calls.map(([url, init]) => [url, init?.method, init?.body ?? null]);
+    expect(calls).toEqual([
+      ['/api/v1/conversations/aaa_bbb/messages/m1/reaction', 'PUT', JSON.stringify({ reaction: 'hug' })],
+      ['/api/v1/conversations/aaa_bbb/messages/m1/reaction', 'DELETE', null],
+      ['/api/v1/conversations/aaa_bbb/messages/m1/unsend', 'POST', null],
+    ]);
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get('authorization')).toBe('Bearer id-token');
+    expect(writeBatch).not.toHaveBeenCalled();
+
+    // A refusal (past 24 hours) comes back as the server's code.
+    fetchMock.mockImplementationOnce(async () => new Response(JSON.stringify({ error: { code: 'conflict', message: 'This message can no longer be unsent.' } }), { status: 409 }));
+    await expect(unsendMessage('aaa_bbb', 'm1')).rejects.toMatchObject({ status: 409, code: 'conflict' });
+  });
+
   it('asks the server to delete the whole conversation, and writes nothing itself', async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
     await deleteConversation('aaa_bbb');

@@ -45,6 +45,7 @@ import { LinkIcon } from './icons/link';
 import { CollapseRightIcon } from './icons/collapse-right';
 import { ArrowUpIcon } from './icons/arrow-up';
 import { MaskIcon } from './icons/mask';
+import { SmileIcon } from './icons/smile';
 import type { IconRenderer } from './types';
 
 /**
@@ -110,6 +111,8 @@ export const ICONS = {
   'collapse-right': CollapseRightIcon,
   'arrow-up': ArrowUpIcon,
   mask: MaskIcon,
+  // A message's hover tool that opens its reactions (round 16 §3).
+  smile: SmileIcon,
 } satisfies Record<string, IconRenderer>;
 
 export type IconName = keyof typeof ICONS;

@@ -234,6 +234,25 @@ describe('MessagesPage list', () => {
     expect(screen.getByText('You: Sent a photo')).toBeInTheDocument();
   });
 
+  // Round 16: an unsent last message reads as its line in the thread does — never what it said.
+  it('previews an unsent last message as who unsent it', () => {
+    const page = (senderId: string) => ({
+      data: {
+        conversations: [conversation({ lastMessage: { text: '', senderId, sentAt: new Date(), unsent: true } })],
+        people: { alice, bob },
+        connectedWithoutConversation: [],
+        unreadTotal: 0,
+      },
+    });
+    mockUseConversations.mockReturnValueOnce(page('alice'));
+    const { unmount } = renderPage(<MessagesPage />);
+    expect(screen.getByText('alice unsent a message')).toBeInTheDocument();
+    unmount();
+    mockUseConversations.mockReturnValueOnce(page('me'));
+    renderPage(<MessagesPage />);
+    expect(screen.getByText('You unsent a message')).toBeInTheDocument();
+  });
+
   it('says "no conversations yet" with the shared empty state, and asks to pick one once there are some', () => {
     mockUseConversations.mockReturnValueOnce({ data: { conversations: [], people: {}, connectedWithoutConversation: [] } });
     const { unmount } = renderPage(<MessagesPage />);

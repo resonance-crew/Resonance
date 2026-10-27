@@ -597,7 +597,7 @@ describe('link-previews', () => {
   beforeEach(async () => {
     asked.length = 0;
     await Promise.all([
-      db.doc('cards/old').set(published('一段。\n\nhttps://example.com/old\n\n[第二篇](https://example.com/two)')),
+      db.doc('cards/old').set(published('一段。\n\nhttps://example.com/old\n\n<https://example.com/two>')),
       // Done already: same links as its previews were made for (one of them said nothing).
       db.doc('cards/done').set(
         published('https://example.com/done\n\nhttps://example.com/quiet', {

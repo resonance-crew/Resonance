@@ -1,0 +1,21 @@
+/* A borderless paper sheet (round 16 §3): the menu's paper, raised a step at
+   night (≈ L 28 % over the 0.65 scrim) so a sheet parts from what it lies on
+   without a pen line. --sheet-paper is also what OrganicMenu's sheet panel
+   fills with (it inherits it from here or sets its own). */
+.sheet {
+  --sheet-paper: var(--menu-paper);
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-scheme='light']) .sheet {
+    --sheet-paper: color-mix(in oklch, var(--menu-paper) 94%, var(--toward-ink));
+  }
+}
+
+:root[data-scheme='dark'] .sheet {
+  --sheet-paper: color-mix(in oklch, var(--menu-paper) 94%, var(--toward-ink));
+}

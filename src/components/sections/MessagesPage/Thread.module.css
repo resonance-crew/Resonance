@@ -390,6 +390,11 @@
   height: 14px;
 }
 
+/* A quote of a message since unsent: its words gone, it says so. */
+.quoteText[data-unsent] {
+  font-style: italic;
+}
+
 .quoteText {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -514,7 +519,8 @@
 .actions {
   position: absolute;
   top: 50%;
-  left: calc(100% + 4px);
+  /* Clear of the reactions' chip, when the bubble has one (--chips-w, set on the slot). */
+  left: calc(100% + 4px + var(--chips-w, 0px));
   display: flex;
   align-items: center;
   opacity: 0;
@@ -524,7 +530,7 @@
 }
 
 .actions[data-own] {
-  right: calc(100% + 4px);
+  right: calc(100% + 4px + var(--chips-w, 0px));
   left: auto;
   flex-direction: row-reverse;
 }
@@ -540,6 +546,123 @@
   .actions {
     display: none;
   }
+}
+
+/* ── A message's reactions: a chip in the gutter by the bubble's foot ─
+   Toward the middle of the thread (own: left of the bubble, theirs: right),
+   its foot on the bubble's, lying 6 over its edge (ReactionChips; the 2 of
+   ring outside its face reach past both). Never under the bubble: a reaction
+   never changes the row's height. */
+.chips {
+  all: unset;
+  position: absolute;
+  bottom: -2px;
+  left: calc(100% - 8px);
+  z-index: 2;
+  display: block;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  animation: chipPop 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.chips[data-own] {
+  right: calc(100% - 8px);
+  left: auto;
+}
+
+span.chips {
+  cursor: default;
+}
+
+.chips:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: 1px;
+  border-radius: 999px;
+}
+
+@keyframes chipPop {
+  from {
+    transform: scale(0.6);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chips {
+    animation: none;
+  }
+}
+
+/* The chip's face, inside its ring of the thread's paper. */
+.chipFace {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(100% - 4px);
+  height: calc(100% - 4px);
+}
+
+/* Its stickers, 20 apart, the first nearest the bubble. */
+.chipStickers {
+  position: absolute;
+  inset: 2px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.chipStickers[data-own] {
+  flex-direction: row-reverse;
+}
+
+.chipSticker {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.chipCount {
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--color-text-muted);
+}
+
+/* ── An unsent message: one line, the bubble's outline in a dashed light
+   pen, no fill, who unsent it in muted words ─────────────────────────── */
+.unsent {
+  position: relative;
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+.unsentPen {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* Before it is measured: the same outline as a plain dashed box. */
+.unsent:not([data-shaped]) {
+  outline: 1px dashed var(--soft-pen);
+  outline-offset: -1px;
+}
+
+.unsentWords {
+  position: relative;
+  padding: 8px 14px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Under a message of the viewer's own still on its way, or one that didn't go. */
@@ -652,9 +775,25 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-/* The pressed message drawn again where it lay, a little larger. */
-.lifted {
+/* The pressed message drawn again where it lay, a little larger — then
+   gliding (220 ms) by the least distance that fits its reactions above and
+   its actions below (lib/chat/menuPlacement). One too tall for the room is
+   shown from its top, its foot fading out over 24. */
+.liftedPlace {
   position: fixed;
+  box-sizing: border-box;
+  pointer-events: none;
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.liftedPlace[data-clipped] {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to bottom, black calc(100% - 24px), transparent);
+}
+
+.lifted {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -680,10 +819,124 @@
   outline: none;
 }
 
+/* The reactions over the held message (ReactionTray): five 44 cells on a
+   borderless paper sheet, 8 above it, on its side. */
+.overlayTray {
+  position: fixed;
+  z-index: 1;
+}
+
+/* Focused itself when a finger opened it: no ring (its cells show the keyboard's). */
+.tray:focus {
+  outline: none;
+}
+
+.tray {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 232px;
+  height: 52px;
+  box-sizing: border-box;
+  padding: 0 6px;
+  animation: trayIn 160ms ease-out both;
+}
+
+@keyframes trayIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.trayCell {
+  all: unset;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  /* One after another, 20 ms apart (its delay is set per cell). */
+  animation: stickerPop 220ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes stickerPop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.trayCell:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: -2px;
+}
+
+/* The viewer's own reaction sits on a wobbly disc of the accent's light wash. */
+.trayWash {
+  position: absolute;
+  inset: 0;
+  fill: var(--color-terracotta-light);
+}
+
+.traySticker {
+  position: relative;
+  display: flex;
+  transition: transform 120ms ease-out;
+}
+
+@media (hover: hover) {
+  .trayCell:hover .traySticker {
+    transform: scale(1.12);
+  }
+}
+
+.trayCell:active .traySticker {
+  transform: scale(0.92);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .overlay,
   .lifted {
     animation: none;
+  }
+
+  .liftedPlace {
+    transition: none;
+  }
+
+  .tray {
+    animation: none;
+  }
+
+  /* Reduced motion: the stickers fade in, nothing grows. */
+  .trayCell {
+    animation-name: stickerFade;
+  }
+
+  .traySticker {
+    transition: none;
+  }
+}
+
+@keyframes stickerFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
