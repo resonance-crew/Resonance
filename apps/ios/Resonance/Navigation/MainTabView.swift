@@ -189,7 +189,7 @@ struct MainTabView: View {
     @State private var barHiding = TabBarHiding()
     /// The window's bottom safe area: how far the bar travels to be out of sight.
     @State private var bottomInset: CGFloat = 0
-    /// The home indicator's room (the bottom safe area without a keyboard): the bar sits 18 into an iPhone's.
+    /// The home indicator's room (the bottom safe area without a keyboard): the bar sits 10 into an iPhone's.
     @State private var homeInset: CGFloat = 0
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
@@ -335,7 +335,7 @@ struct MainTabView: View {
                     .ignoresSafeArea(.keyboard, edges: .bottom)
                     // Scrolled away by the feed (round 16 §2): down out of sight with its wavy edge, over the
                     // list (which keeps its room at the foot, so nothing reflows) — or, under Reduce Motion, a fade.
-                    // Lowered into the home indicator's room (round 17 §7): the row's middle 42 over the screen's foot.
+                    // Lowered into the home indicator's room (round 17 §7, addendum A2): the row's middle 50 over the screen's foot.
                     .offset(y: barLowered + (barAway && !reduceMotion ? barTravel : 0))
                     .opacity(barAway && reduceMotion ? 0 : 1)
                     .allowsHitTesting(!barAway)

@@ -417,8 +417,9 @@ held message's time at the trailing end right under its rows. Holding a message 
 reactions and the list 12 inside it), and the five stickers float on it with no paper. A chosen tag is the 「AI 建議」
 segment's face (`TagField.pillFill` / `pillInk`), and Return in the tag field is a line break taken out at once
 (`TagInput.returned`), so the field keeps the keyboard and nothing moves. 連結 is the format bar's last tool, after its
-own rule, and opens `StoryLinkModal` in the app's modal. The phone's tab bar stands 18 into the home indicator's room
-(`OrganicTabBar.lowered(bottomInset:)`: the row's middle 42 over the screen's foot) with its outline glyphs at INK_STRONG;
+own rule, and opens `StoryLinkModal` in the app's modal. The phone's tab bar stands 10 into the home indicator's room
+(`OrganicTabBar.lowered(bottomInset:)`: the row's middle 50 over the screen's foot — the addendum's A2; §7 had 42) with
+its outline glyphs at INK_STRONG;
 the writer's bar grows round its title and save line at a large text size (`BarTitles.scaledSubtitleLine`); and at the
 split the map's Leave is the workspace's one back — from the publish step back to writing, named 繼續寫 (`WritePane.publishing`).
 

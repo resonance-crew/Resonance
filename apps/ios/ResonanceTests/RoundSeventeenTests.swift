@@ -127,16 +127,20 @@ import Testing
 }
 
 @MainActor @Suite struct RoundSeventeenTabBarTests {
-    @Test func theBarSitsSoItsRowsMiddleIsFortyTwoOverTheFoot() {
-        // An iPhone's 34 of home indicator: the 52 row lowered 18 into it, its middle 42 over the screen's foot.
+    @Test func theBarSitsSoItsRowsMiddleIsFiftyOverTheFoot() {
+        // Round 17 addendum A2: an iPhone's 34 of home indicator — the 52 row lowered 10 into it, its middle 50 over
+        // the screen's foot (round 17 §7 had 42, lowered 18; round 16 stood it on the indicator's room, 60).
+        #expect(OrganicTabBar<AppTab>.rowCentreAboveFoot == 50)
         let lowered = OrganicTabBar<AppTab>.lowered(bottomInset: 34)
-        #expect(lowered == 18)
-        #expect(34 - lowered + OrganicTabBar<AppTab>.height / 2 == 42)
+        #expect(lowered == 10)
+        #expect(34 - lowered + OrganicTabBar<AppTab>.height / 2 == 50)
+        // An iPad's 20 (a compact window): already under 50, never raised.
+        #expect(OrganicTabBar<AppTab>.lowered(bottomInset: 20) == 0)
         // No home indicator (a Home button): where it was.
         #expect(OrganicTabBar<AppTab>.lowered(bottomInset: 0) == 0)
         // The toast keeps its 12 over the bar, wherever the bar stands.
-        #expect(ToastPlacement.bottom(.compact, tabBar: true, lowered: 18)
-                == OrganicTabBar<AppTab>.height + HeaderEdge.height + 12 - 18)
+        #expect(ToastPlacement.bottom(.compact, tabBar: true, lowered: 10)
+                == OrganicTabBar<AppTab>.height + HeaderEdge.height + 12 - 10)
     }
 
     @Test func oneStrongPenForTheWholeBar() {
