@@ -228,6 +228,10 @@ class MainActivity : ComponentActivity() {
                 // Off the main thread, as the push service draws it: the sender's photo may be fetched first.
                 lifecycleScope.launch(Dispatchers.IO) { PushCenter.showChatMessage(applicationContext, push) }
             }
+            // An unsent message's push (round 16 §3): `pushChatUnsend` is its id, in `pushChatConversation`.
+            intent.getStringExtra("pushChatUnsend")?.let { id ->
+                PushCenter.removeChatLine(applicationContext, intent.getStringExtra("pushChatConversation").orEmpty(), id)
+            }
         }
     }
 }

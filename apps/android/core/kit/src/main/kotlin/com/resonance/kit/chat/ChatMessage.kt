@@ -21,7 +21,15 @@ enum class Delivery {
  * or gone. [text] is at most [MAX_TEXT] code points; empty when the original was a card or a
  * picture alone ([image]: it carried one — the quote is words, so it says 「一張圖片」 then).
  */
-data class ReplyQuote(val id: String, val senderId: String, val text: String, val cardRef: String? = null, val image: Boolean = false) {
+data class ReplyQuote(
+    val id: String,
+    val senderId: String,
+    val text: String,
+    val cardRef: String? = null,
+    val image: Boolean = false,
+    /** The message it quotes was unsent (round 16 §3: the server scrubs the quote to `{ id, senderId, unsent: true }`): it reads 訊息已收回. */
+    val unsent: Boolean = false,
+) {
     companion object {
         const val MAX_TEXT = 140
 
@@ -74,11 +82,20 @@ data class ChatMessage(
      * ordinary message.
      */
     val isNote: Boolean = false,
+    /**
+     * Who reacted how (round 16 §3–§4: `reactions: { [uid]: id }`, one reaction per person): ids as
+     * stored, unknown ones too — a client draws an id it doesn't know as nothing ([MessageReactions]).
+     */
+    val reactions: Map<String, String> = emptyMap(),
+    /** When its sender unsent it (round 16 §3): the document then holds nothing else but who sent it and when. */
+    val unsentAt: Date? = null,
 ) {
     /** Still on its way, or failed: nothing is known of it by the server (yet). */
     val isPending: Boolean get() = delivery != Delivery.Delivered
-    /** A reply names a document of the conversation, so only delivered messages can be replied to. */
-    val canReply: Boolean get() = delivery == Delivery.Delivered
+    /** Unsent by its sender: drawn as a one-line ghost, offering nothing. */
+    val isUnsent: Boolean get() = unsentAt != null
+    /** A reply names a document of the conversation, so only delivered messages can be replied to (never an unsent one). */
+    val canReply: Boolean get() = delivery == Delivery.Delivered && !isUnsent
 
     companion object {
         /**
@@ -91,6 +108,10 @@ data class ChatMessage(
             val note = fields["noteRef"] as? Map<*, *>
             val noteCard = note?.get("cardId") as? String
             val noteId = note?.get("noteId") as? String
+            // Unsent: its sender and its time are all that is left (anything else is ignored, should it linger).
+            unsentDate(fields["unsentAt"])?.let { unsent ->
+                return ChatMessage(id = id, senderId = fields["senderId"] as? String ?: "", text = "", sentAt = sentAt, unsentAt = unsent)
+            }
             return ChatMessage(
                 id = id,
                 senderId = fields["senderId"] as? String ?: "",
@@ -102,11 +123,37 @@ data class ChatMessage(
                 preview = preview(fields["preview"] as? Map<*, *>, origin),
                 image = ChatImage.from(fields["image"] as? Map<*, *>),
                 isNote = fields["kind"] == "note",
+                reactions = reactions(fields["reactions"] as? Map<*, *>),
             )
+        }
+
+        /** `reactions` as stored: uid → id, both strings and not blank (anything else is left out). */
+        private fun reactions(map: Map<*, *>?): Map<String, String> {
+            if (map.isNullOrEmpty()) return emptyMap()
+            val out = LinkedHashMap<String, String>()
+            for ((k, v) in map) {
+                val uid = (k as? String)?.takeIf { it.isNotBlank() } ?: continue
+                val reaction = (v as? String)?.takeIf { it.isNotBlank() } ?: continue
+                out[uid] = reaction
+            }
+            return out
+        }
+
+        /**
+         * `unsentAt` as Firestore hands it over — a Timestamp (read by its `toDate()`, the SDK's class
+         * being out of this module's reach), a Date, or epoch milliseconds; a pending server time reads
+         * as now.
+         */
+        internal fun unsentDate(value: Any?): Date? = when (value) {
+            null -> null
+            is Date -> value
+            is Number -> Date(value.toLong())
+            else -> runCatching { value.javaClass.getMethod("toDate").invoke(value) as? Date }.getOrNull()
         }
 
         private fun quote(map: Map<*, *>?): ReplyQuote? {
             val id = (map?.get("id") as? String)?.takeIf { it.isNotEmpty() } ?: return null
+            if (map["unsent"] == true) return ReplyQuote(id = id, senderId = map["senderId"] as? String ?: "", text = "", unsent = true)
             return ReplyQuote(
                 id = id,
                 senderId = map["senderId"] as? String ?: "",

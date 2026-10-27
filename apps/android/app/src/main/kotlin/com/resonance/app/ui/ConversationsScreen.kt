@@ -116,13 +116,16 @@ fun ConversationsScreen(session: Session, open: (Route) -> Unit) {
     }
 }
 
-private fun preview(convo: ConversationsStore.Conversation): String = conversationPreview(convo.lastText, convo.lastImage, convo.lastFromMe)
+private fun preview(convo: ConversationsStore.Conversation): String =
+    conversationPreview(convo.lastText, convo.lastImage, convo.lastFromMe, unsent = convo.lastUnsent, handle = convo.other.handle)
 
 /**
  * A conversation row's line: its last message's words (a card shared alone: its title, as the
  * server writes it) — a picture sent without words says 傳送了一張圖片 — after 你： when it was yours.
  */
-internal fun conversationPreview(text: String?, image: Boolean, fromMe: Boolean): String {
+internal fun conversationPreview(text: String?, image: Boolean, fromMe: Boolean, unsent: Boolean = false, handle: String = ""): String {
+    // Unsent: the same words as its ghost row (你收回了一則訊息 / bob 收回了一則訊息), no 「你：」 before them.
+    if (unsent) return unsentWords(fromMe, handle)
     val said = text?.takeIf { it.isNotEmpty() || !image } ?: if (image) L10n.Messages.imageShared else return L10n.Messages.noMessagesYet
     return (if (fromMe) L10n.Messages.youPrefix else "") + said
 }

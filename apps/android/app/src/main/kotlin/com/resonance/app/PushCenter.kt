@@ -389,6 +389,35 @@ object PushCenter {
         manager.notify(MESSAGES_GROUP, SUMMARY_NOTIFICATION_ID, summary)
     }
 
+    /**
+     * A message its sender unsent (round 16 §3, `type: 'unsend'`): the conversation's notification is
+     * drawn again without that line, silently (no sound, no heads-up: it says nothing new), its other
+     * lines as they were — or taken out of the shade when that line was the last. Nothing when the
+     * line isn't in the shade.
+     */
+    fun removeChatLine(context: Context, conversationId: String, messageId: String) {
+        val manager = NotificationManagerCompat.from(context)
+        val shown = manager.activeNotifications.firstOrNull { it.tag == conversationId && it.id == CHAT_NOTIFICATION_ID } ?: return
+        val style = NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(shown.notification) ?: return
+        val lines = style.messages
+        val left = lines.filterNot { it.extras.getString(EXTRA_MESSAGE_ID) == messageId }
+        if (left.size == lines.size) return
+        if (left.isEmpty()) {
+            manager.cancel(conversationId, CHAT_NOTIFICATION_ID)
+            return
+        }
+        val again = NotificationCompat.MessagingStyle(style.user)
+        left.forEach { again.addMessage(it) }
+        val builder = NotificationCompat.Builder(context, shown.notification)
+            .setStyle(again)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setWhen(left.last().timestamp)
+        if (!canNotify) return
+        @Suppress("MissingPermission")
+        manager.notify(conversationId, CHAT_NOTIFICATION_ID, builder.build())
+    }
+
     /** Signed out: the account's pushes still in the shade go (their words are its messages and notes). */
     fun clearDelivered() {
         if (::context.isInitialized) NotificationManagerCompat.from(context).cancelAll()

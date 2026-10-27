@@ -65,3 +65,29 @@ data class ChatPush(
         }
     }
 }
+
+/**
+ * A message unsent after its push was shown (round 16 §3, `type: "unsend"`, data-only to builds that
+ * draw their conversations' notifications themselves): the conversation's notification is drawn again
+ * without that line — or taken away when no line is left.
+ */
+data class ChatUnsend(val conversationId: String, val messageId: String, val toUserId: String? = null) {
+    /** Only for the account it was sent to, as [ChatPush.isFor] (the pair stands in when the server names no one). */
+    fun isFor(signedIn: String?): Boolean {
+        if (signedIn.isNullOrEmpty()) return false
+        toUserId?.let { return it == signedIn }
+        return conversationId.split("_").let { it.size == 2 && signedIn in it }
+    }
+
+    companion object {
+        const val TYPE = "unsend"
+
+        /** The unsend [data] describes, or null when it isn't one or lacks the conversation or the message. */
+        fun from(data: Map<String, String>): ChatUnsend? {
+            if (data["type"] != TYPE) return null
+            val conversationId = data["conversationId"]?.takeIf { it.isNotBlank() } ?: return null
+            val messageId = data["messageId"]?.takeIf { it.isNotBlank() } ?: return null
+            return ChatUnsend(conversationId, messageId, data["toUserId"]?.takeIf { it.isNotBlank() })
+        }
+    }
+}
