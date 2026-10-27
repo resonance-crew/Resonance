@@ -919,11 +919,23 @@ button.chips::before {
   outline-offset: -2px;
 }
 
-/* The viewer's own reaction sits on a wobbly disc of the accent's light wash. */
+/* The viewer's own reaction sits on a wobbly disc of the accent's light wash
+   — at night the accent itself at 30 % over the tray's raised paper (the
+   light wash there all but vanished, ≈ 1.2 : 1). */
 .trayWash {
   position: absolute;
   inset: 0;
   fill: var(--color-terracotta-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-scheme='light']) .trayWash {
+    fill: color-mix(in oklch, var(--color-terracotta) 30%, color-mix(in oklch, var(--menu-paper) 94%, var(--toward-ink)));
+  }
+}
+
+:root[data-scheme='dark'] .trayWash {
+  fill: color-mix(in oklch, var(--color-terracotta) 30%, color-mix(in oklch, var(--menu-paper) 94%, var(--toward-ink)));
 }
 
 .traySticker {
