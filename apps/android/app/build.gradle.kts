@@ -152,6 +152,9 @@ dependencies {
     implementation("com.google.android.libraries.identity.googleid:googleid:1.2.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.17")
+    // Screens composed under Robolectric (the publish step's blank tap), as :core:design's tests are.
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.compose.ui:ui-test-manifest")
     // The trash's and the writer's calls through the app's own adapters, against a local server.
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }
