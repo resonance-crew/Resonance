@@ -538,14 +538,35 @@ internal fun titleLayout(title: String, style: ProseStyle, widthPx: Int, density
  * The cards a story's standalone links are drawn as: the previews the card page brought, by the
  * key a paragraph names them by ([StoryBlock.SoleLink]); [host] names a link's real host as the
  * card shows it, [label] what a screen reader says a card does, and [open] takes a pressed card
- * to its link.
+ * to its link. A link with no preview stored (a private or unpublished card's, an older build's
+ * story) is still a card when [unfurlable] says the server would fetch its page (round 16 review S3:
+ * 卡片 always looks like a card) — the writer's quiet fallback: its host over its address, no picture,
+ * nothing fetched ([faceOf]).
  */
 class StoryLinkCards(
     val previews: Map<String, LinkPreview>,
     val host: (LinkPreview) -> String,
     val label: (host: String) -> String,
     val open: (LinkPreview) -> Unit,
-)
+    val unfurlable: (key: String) -> Boolean = { false },
+) {
+    /** What the card for the link [key] shows: its page's preview, else its host over its address; null: no card. */
+    fun faceOf(key: String): LinkCardFace? {
+        previews[key]?.let { return LinkCardFace(it, host(it)) }
+        if (!unfurlable(key)) return null
+        // The address as the title's place holds the host, the foot the address itself (the writer's card).
+        val bare = LinkPreview(url = key, title = "", description = null, siteName = null, imageUrl = null)
+        val name = host(bare)
+        return LinkCardFace(bare.copy(title = name), key, spoken = name)
+    }
+}
+
+/**
+ * A standalone link's card as drawn: the [preview] it shows (title, picture, description), the words
+ * in its foot ([foot]: the host, or the address when there is no preview) and the host a screen reader
+ * names ([spoken]).
+ */
+class LinkCardFace(val preview: LinkPreview, val foot: String, val spoken: String = foot)
 
 /**
  * A story, laid out like the web reader's `.story-prose` (src/styles/story.css) in its [type] —
@@ -591,8 +612,8 @@ private class Story(
 ) {
     val spacing = type.spacing()
 
-    /** Whether a standalone link is drawn as its page's card (a preview came with the page), for the room around it. */
-    fun drawnAsCard(link: StoryBlock.SoleLink): Boolean = links?.previews?.containsKey(link.key) == true
+    /** Whether a standalone link is drawn as a card (its preview, or its host over its address), for the room around it. */
+    fun drawnAsCard(link: StoryBlock.SoleLink): Boolean = links?.let { it.previews.containsKey(link.key) || it.unfurlable(link.key) } == true
 }
 
 /**
@@ -632,13 +653,15 @@ private fun Block(block: StoryBlock, style: ProseStyle, story: Story) {
         is StoryBlock.Image -> StoryImage(block.url, block.alt, atStart = style.inQuote)
         // A card sets its own type: the interface's text size, not the story's.
         is StoryBlock.CardEmbed -> Centred(style.inQuote) { story.embed(block.href, block.title, style) }
-        // The page's card when the server made one for this link; otherwise the paragraph as written.
+        // The page's card when the server made one for this link, its quiet host-over-address card when it
+        // would but hasn't yet (review S3); otherwise (the site's own pages, an IP address) the paragraph as written.
         is StoryBlock.SoleLink -> {
             val links = story.links
-            val preview = links?.previews?.get(block.key)
-            if (links != null && preview != null) {
-                val host = links.host(preview)
-                Centred(style.inQuote) { CappedTextScale { StoryLinkCard(preview, host, links.label(host), onOpen = { links.open(preview) }) } }
+            val face = links?.faceOf(block.key)
+            if (links != null && face != null) {
+                Centred(style.inQuote) {
+                    CappedTextScale { StoryLinkCard(face.preview, face.foot, links.label(face.spoken), onOpen = { links.open(face.preview) }) }
+                }
             } else {
                 RichCssText(block.runs, style, onOpenUrl)
             }
