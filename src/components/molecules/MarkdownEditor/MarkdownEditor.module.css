@@ -61,9 +61,43 @@
   margin-right: auto;
 }
 
+/* A link standing alone, as its page's card (LinkCardNode): the reader's link card, at its width and
+   place in the column (story.css spaces it, .story-embed). The face is a button — pressing it opens the
+   link editor — wearing the card's own look, not a button's. */
+.linkCardNode {
+  position: relative;
+  max-width: 520px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+button.linkCardFace {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+button.linkCardFace:focus-visible {
+  outline: 2px solid var(--color-terracotta-light);
+  outline-offset: 3px;
+}
+
+/* Picked as a whole: ringed along nothing square — its fill deepens to the hover wash's colour. */
+.linkCardNode[data-selected] button.linkCardFace {
+  --shape-fill: var(--bubble-quote);
+}
+
+.linkCardNode[data-selected] button.linkCardFace > svg:first-child path {
+  fill: var(--bubble-quote);
+}
+
 /* Inside a quote, a picture or an embedded card keeps to the quote's edge (as the article). */
 .content blockquote .imageNode,
-.content blockquote .cardEmbedNode {
+.content blockquote .cardEmbedNode,
+.content blockquote .linkCardNode {
   margin-left: 0;
   margin-right: 0;
 }
@@ -261,6 +295,12 @@
   gap: 2px;
 }
 
+/* The link editor where a fine pointer writes (LinkBubble): the bubble's paper sheet, roomier. */
+.linkPanel {
+  position: relative;
+  padding: 14px 14px 12px;
+}
+
 /* The "+" left of an empty line (Tiptap's FloatingMenu). */
 .insertHandle {
   z-index: 6;
@@ -297,4 +337,9 @@
 
 .fileInputHidden {
   display: none;
+}
+/* The words the link editor links, still marked while its field has the focus (heldSelection): the
+   story's own selection colour (globals.css ::selection). */
+.content :global(.story-held-selection) {
+  background: color-mix(in oklch, var(--color-terracotta) 30%, transparent);
 }

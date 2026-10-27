@@ -4,34 +4,25 @@ import { useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent, 
 import { BrushWash } from '@/components/atoms/BrushWash/BrushWash';
 import { Icon } from '@/components/atoms/Icon';
 import { ShapeGrain } from '@/components/atoms/ShapeGrain/ShapeGrain';
-import { boundaryPoints, polyline } from '@/components/molecules/SegmentedActionBar/SegmentedActionBar';
+import { CAPSULE_H, CAPSULE_R, segmentCapsuleShape } from '@/components/molecules/SegmentedActionBar/segmentCapsule';
 import { INK } from '@/lib/design/strokes';
 import { useElementSize } from '@/lib/hooks/useElementSize';
-import { floatingPath } from './FloatingSlip';
 import styles from './Thread.module.css';
 
-/** The capsule's one-line height on every platform: one line sits centred in it at any text size (round 9 §4). */
-export const CAPSULE_H = 48;
+export { CAPSULE_H };
 /** The send segment's width — the capsule's end, cut off by a wavy seam. */
 export const SEND_SEGMENT_W = 52;
-/** The field's corner (Field's R). */
-const CAPSULE_R = 16;
 const SEED = 23;
 
 /**
  * The capsule's drawing at `w` × `h`: its outline (the field's wobble), the
  * send segment's region past the seam (reaching out past the outline, which
  * clips it), and the seam itself — one point list for both, as the segmented
- * bar's, so the face's edge lies exactly under the seam.
+ * bar's, so the face's edge lies exactly under the seam. The publish step's
+ * tag field is the same shape with its own end (segmentCapsuleShape).
  */
 export function capsuleShape(w: number, h: number) {
-  if (!w || !h) return null;
-  const outline = floatingPath(w, h, CAPSULE_R, SEED);
-  const pad = Math.max(12, h * 0.3);
-  const seamPts = boundaryPoints(w - SEND_SEGMENT_W, h, SEED + 11, 1.6, pad);
-  const seam = polyline(seamPts);
-  const segment = `${seam} L ${w + pad},${h + pad} L ${w + pad},${-pad} Z`;
-  return { outline, seam, segment };
+  return segmentCapsuleShape(w, h, SEND_SEGMENT_W, SEED);
 }
 
 export interface ComposerCapsuleProps {

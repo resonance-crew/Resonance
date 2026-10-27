@@ -406,11 +406,8 @@ export function PublishStep({
           </p>
         </div>
 
-        {/* 3 — tags */}
+        {/* 3 — tags: the label and the chosen tags in one row over the field (TagField) */}
         <div className={styles.group}>
-          <label className={styles.label} htmlFor={tagsId}>
-            {t('tagsLabel')}
-          </label>
           <TagField
             id={tagsId}
             tags={tags}

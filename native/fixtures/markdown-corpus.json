@@ -140,6 +140,61 @@
       "id": "table-then-text",
       "markdown": "| a | b |\n| --- | --- |\n| 1 | 2 |\n\n表格之後的一段話。",
       "canonical": "| a | b |\n| --- | --- |\n| 1 | 2 |\n\n表格之後的一段話。"
+    },
+    {
+      "id": "link-card-autolink",
+      "markdown": "前言\n\n<https://example.com/rain>\n\n結尾",
+      "canonical": "前言\n\n<https://example.com/rain>\n\n結尾"
+    },
+    {
+      "id": "link-card-words-are-the-address",
+      "markdown": "[https://example.com/rain](https://example.com/rain)",
+      "canonical": "<https://example.com/rain>"
+    },
+    {
+      "id": "link-card-www-words",
+      "markdown": "[www.example.com](http://www.example.com)",
+      "canonical": "<http://www.example.com>"
+    },
+    {
+      "id": "link-card-bare-address",
+      "markdown": "雨停了。\n\nhttps://example.com/a?b=1&c=2",
+      "canonical": "雨停了。\n\n<https://example.com/a?b=1&c=2>"
+    },
+    {
+      "id": "link-card-chinese-path",
+      "markdown": "<https://zh.wikipedia.org/wiki/雨>",
+      "canonical": "<https://zh.wikipedia.org/wiki/雨>"
+    },
+    {
+      "id": "link-card-in-quote",
+      "markdown": "> 她傳來一個連結：\n>\n> <https://example.com/rain>",
+      "canonical": "> 她傳來一個連結：\n>\n> <https://example.com/rain>"
+    },
+    {
+      "id": "link-own-words-stays-a-link",
+      "markdown": "[這篇文章](https://example.com/rain)",
+      "canonical": "[這篇文章](https://example.com/rain)"
+    },
+    {
+      "id": "link-own-site-stays-a-link",
+      "markdown": "<https://resonance.channel/en/card/a-walk>",
+      "canonical": "<https://resonance.channel/en/card/a-walk>"
+    },
+    {
+      "id": "link-ip-stays-a-link",
+      "markdown": "<https://203.0.113.9/rain>",
+      "canonical": "<https://203.0.113.9/rain>"
+    },
+    {
+      "id": "link-address-in-a-sentence",
+      "markdown": "看 <https://example.com/rain> 這篇。",
+      "canonical": "看 <https://example.com/rain> 這篇。"
+    },
+    {
+      "id": "link-address-in-a-list",
+      "markdown": "- <https://example.com/rain>\n- 第二項",
+      "canonical": "- <https://example.com/rain>\n- 第二項"
     }
   ]
 }

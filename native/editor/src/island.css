@@ -47,3 +47,14 @@ html.embed .ProseMirror { min-height: 168px; }
 html.canvas, html.canvas body { background: transparent; }
 html.canvas #editor { padding: 0; }
 html.canvas .ProseMirror { min-height: 0; }
+
+/* A link standing alone, as its page's card (island.ts IslandLinkCard): the reader's link card, quiet —
+   a light fill cut to its wobbly outline once measured (a rounded block until then), no pen line; its
+   picture across the top when the host handed one over, its title (else its host), then its host (else
+   its address). story.css spaces it (.story-embed). */
+.link-card { display: flex; flex-direction: column; gap: 4px; max-width: 520px; padding: 14px 18px; border-radius: 16px; background: var(--bubble-theirs); font-style: normal; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.link-card-picture { display: block; width: calc(100% + 36px); margin: -14px -18px 8px; aspect-ratio: 1.91; object-fit: cover; }
+.link-card-title { font-family: var(--font-body); font-size: 16px; font-weight: 600; line-height: 1.4; color: var(--color-text); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.link-card-host { font-family: var(--font-body); font-size: 13px; line-height: 1.3; color: var(--link-card-muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* Picked: its fill deepens (a clip-path cuts any ring drawn outside it). */
+.link-card.picked { background: var(--bubble-quote); outline: none; }

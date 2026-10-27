@@ -110,6 +110,8 @@ export function OpenedCardPane({
           media: values.media,
           accentHue: values.accentHue ?? undefined,
           anonymous: values.anonymous,
+          // The live card's previews of its links (server-made at publish and apply): its link cards' titles.
+          linkPreviews: card.linkPreviews,
         }}
       />
     </div>

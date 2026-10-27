@@ -1,57 +1,238 @@
-/* One input frame (the dashed surface draws the pen line in the field's idle /
-   hover / focus colours); the paper and radius are the other fields'. */
-.surface {
-  background: var(--color-cream);
-  border-radius: var(--field-radius);
-  cursor: text;
+/* The writer's tags (round 16 §1): the label and the chosen tags in one
+   wrapping row, then the field — the chat composer's capsule with its own
+   end segment — then a failed suggestion's line. */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--publish-label-gap);
 }
 
-/* Chosen tags, then the input with its action. The row wraps: pills flow like
-   words, and the input + action go down together once the line is full. */
-.field {
+/* 「標籤」 then the pills, wrapping like words: 8 between, 8 between rows. */
+.row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  align-content: center;
   gap: 8px;
-  min-height: 52px;
-  /* The action carries its own breathing room, so the right edge pads less. */
-  padding: 8px 8px 8px var(--field-pad-x);
+  min-height: 32px;
 }
 
-.entry {
-  flex: 1 1 240px;
+.label {
+  font-family: var(--font-body);
+  font-size: var(--label-size);
+  letter-spacing: var(--label-tracking);
+  color: var(--color-text-muted);
+}
+
+/* A new pill pops in; the ones already there when the step opened stand still. */
+.pill {
+  display: inline-flex;
+  animation: pop 160ms cubic-bezier(0.2, 0.8, 0.3, 1.2);
+}
+
+.pill[data-standing] {
+  animation: none;
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.85);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+/* Each ✕ is a 44 × 44 target round its 10 px mark (the pill's own button, reached through its parts). */
+.pill button {
+  position: relative;
+}
+
+.pill button::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
+/* The capsule: one line exactly 48 tall, the field's cream and wobble, its pen darkening while written in. */
+.capsule {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
+  align-items: stretch;
+  height: 48px;
+  --shape-fill: var(--color-cream);
+  --shape-ink: var(--field-border);
 }
 
+.capsuleShape {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.segmentLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* What is in it sits over its drawing. */
+.input,
+.segment {
+  position: relative;
+  z-index: 1;
+}
+
+.paper {
+  fill: var(--color-cream);
+}
+
+.pen {
+  fill: none;
+  stroke: var(--field-border);
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  transition: stroke 140ms ease;
+}
+
+.capsule:hover .pen,
+.capsule[data-focus] .pen {
+  stroke: var(--field-border-hover);
+}
+
+/* The text: no frame of its own, 16 (iOS Safari doesn't zoom into it), one line centred in the 48. */
 .input {
-  flex: 1 1 60px;
+  flex: 1;
   min-width: 0;
-  padding: 2px 0;
+  height: 100%;
+  margin: 0;
+  padding: 0 12px 0 var(--field-pad-x);
   border: none;
   background: transparent;
   font-family: var(--font-body);
-  font-size: 15px;
-  line-height: 1.6;
+  font-size: 16px;
+  line-height: 1.5;
   color: var(--color-text);
   outline: none;
 }
 
-/* The trailing action is frameless (one frame per layer) and sized for a row
-   of the field, not for a page: OrganicButton's small padding is for dense
-   chrome, this is tighter. The element selector outranks its own class. */
-button.action {
-  flex: none;
-  padding: 5px 12px;
-  font-size: 13px;
-  white-space: nowrap;
+.input::placeholder {
+  color: var(--placeholder);
 }
 
-@media (max-width: 640px) {
-  .field {
-    padding-left: 14px;
+/* The end segment: the tonal peach with a terracotta glyph and word while nothing is typed, the verb's
+   solid terracotta with cream ones once a word is (a 140 ms change). Its width is the wider face's + 28. */
+.segment {
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 0 14px;
+  border: none;
+  background: none;
+  color: var(--button-on-tonal);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 140ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.capsule[data-ready] .segment {
+  color: var(--color-cream);
+}
+
+/* Tab-focused, it is ringed inside, in its face's own ink (as a segment of the bar). */
+.segment:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -6px;
+  border-radius: 14px;
+}
+
+.segmentFace {
+  fill: var(--button-tonal);
+  transition: fill 140ms ease;
+}
+
+.capsule[data-ready] .segmentFace {
+  fill: var(--button-fill);
+}
+
+.seam {
+  fill: none;
+  stroke: var(--color-cream);
+  stroke-linecap: round;
+}
+
+/* Both faces in the one grid cell; the one not shown is see-through, still holding its width. */
+.face {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: opacity 140ms ease;
+}
+
+.glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+}
+
+.face[data-face='add'],
+.capsule[data-ready] .face[data-face='suggest'] {
+  opacity: 0;
+}
+
+.capsule[data-ready] .face[data-face='add'] {
+  opacity: 1;
+}
+
+.segment:active .face {
+  transform: scale(0.96);
+}
+
+/* A failed suggestion's line, close under the field (its own 6 above it, not the row's gap too). */
+.error {
+  margin-top: calc(-1 * var(--publish-label-gap));
+}
+
+.error:empty {
+  display: none;
+}
+
+/* Said to a screen reader only: tags added. */
+.said {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill {
+    animation: none;
+  }
+
+  .pen,
+  .segment,
+  .segmentFace,
+  .face {
+    transition: none;
   }
 }

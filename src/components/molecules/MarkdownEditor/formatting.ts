@@ -41,6 +41,9 @@ export const FORMAT_SEED: Record<FormatCommand, number> = {
   blockquote: 63,
 };
 
+/** The link tool's seed (連結 in the bubble, the link glyph on the keyboard bar). */
+export const LINK_TOOL_SEED = 31;
+
 export type FormatStates = Record<FormatCommand, boolean>;
 
 export const NO_FORMATS: FormatStates = {
