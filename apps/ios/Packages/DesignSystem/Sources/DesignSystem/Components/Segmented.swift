@@ -70,12 +70,17 @@ public struct SegmentedActionBar: View {
     var seed: Double
     var fill: Color
     var seam: Color
+    /// The bar's height when it stands beside other controls of one height (the link modal's 44, round 17
+    /// review D5); nil, its words' own (14 of air above and below).
+    var height: CGFloat?
 
-    public init(_ segments: [SegmentSpec], seed: Double = 71, fill: Color = Tokens.buttonTonal, seam: Color = Tokens.cream) {
+    public init(_ segments: [SegmentSpec], seed: Double = 71, fill: Color = Tokens.buttonTonal, seam: Color = Tokens.cream,
+                height: CGFloat? = nil) {
         self.segments = segments
         self.seed = seed
         self.fill = fill
         self.seam = seam
+        self.height = height
     }
 
     public var body: some View {
@@ -111,7 +116,7 @@ public struct SegmentedActionBar: View {
         SegmentRowLayout(flexible: segments.map { !Self.iconOnly($0, through: step) }) {
             ForEach(Array(segments.enumerated()), id: \.element.id) { i, spec in
                 SegmentButton(spec: spec, iconOnly: Self.iconOnly(spec, through: step), tight: tight, squeezes: squeezes,
-                              index: i, count: segments.count, barSeed: seed, barFill: fill, seam: seam)
+                              index: i, count: segments.count, barSeed: seed, barFill: fill, seam: seam, height: height)
             }
         }
         .clipShape(SegmentedBarShape(seed: seed))
@@ -217,6 +222,8 @@ private struct SegmentButton: View {
     let barSeed: Double
     let barFill: Color
     let seam: Color
+    /// The bar's set height, else nil: its words' own.
+    var height: CGFloat? = nil
 
     @Environment(\.organicBusyLabel) private var busyLabel
 
@@ -250,7 +257,8 @@ private struct SegmentButton: View {
             }
             .animation(.easeOut(duration: 0.12), value: spec.working)
             .padding(.horizontal, iconOnly ? 16 : tight ? 8 : 12)
-            .padding(.vertical, 14)
+            .padding(.vertical, height == nil ? 14 : 0)
+            .frame(minHeight: height)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
         }
