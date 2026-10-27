@@ -83,6 +83,12 @@ nonisolated struct PressPlacement: Equatable {
                               trayY: y - above, listY: y + shown + PressMetrics.listGap)
     }
 
+    /// How much the message is lifted: 1.03, but never more than 4 at its top and foot.
+    static func lift(height: CGFloat) -> CGFloat {
+        guard height > 0 else { return 1.03 }
+        return min(1.03, 1 + 8 / height)
+    }
+
     /// Where a sheet `width` wide starts across the window: its side's edge flush with the message's (your
     /// own: the right edges; theirs: the left), kept `margin` from the window's sides.
     static func x(width: CGFloat, frame: CGRect, mine: Bool, windowWidth: CGFloat) -> CGFloat {
@@ -135,20 +141,11 @@ struct MessageMenuOverlay: View {
                     .accessibilityHidden(true)
                 MessageCore(row: menu.row, ctx: ctx, interactive: false)
                     .frame(width: frame.width, alignment: mine ? .trailing : .leading)
-                    .frame(height: place.clipped ? place.shownHeight : nil, alignment: .top)
-                    .clipped()
-                    // Too tall for the room: its top part, the foot fading out over 24.
-                    .mask {
-                        if place.clipped {
-                            VStack(spacing: 0) {
-                                Color.black
-                                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 24)
-                            }
-                        } else {
-                            Color.black
-                        }
-                    }
-                    .scaleEffect(lifted ? 1.03 : 1, anchor: mine ? .trailing : .leading)
+                    // Too tall for the room: its top part, the foot fading out over 24 (whole otherwise, its
+                    // reactions out in the gutter included).
+                    .modifier(ClippedFoot(height: place.clipped ? place.shownHeight : nil))
+                    // Lifted 1.03 — a tall message no more than 4 at each end, so the tray's 8 and the list's 10 stay.
+                    .scaleEffect(lifted ? PressPlacement.lift(height: place.shownHeight) : 1, anchor: mine ? .trailing : .leading)
                     .offset(x: frame.minX, y: frame.minY + shift)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
@@ -209,6 +206,26 @@ struct MessageMenuOverlay: View {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(120))
             onDismiss()
+        }
+    }
+}
+
+/// A lifted message taller than the room: its top `height`, the last 24 fading out.
+private struct ClippedFoot: ViewModifier {
+    let height: CGFloat?
+
+    func body(content: Content) -> some View {
+        if let height {
+            content
+                .frame(height: height, alignment: .top)
+                .mask {
+                    VStack(spacing: 0) {
+                        Color.black
+                        LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 24)
+                    }
+                }
+        } else {
+            content
         }
     }
 }

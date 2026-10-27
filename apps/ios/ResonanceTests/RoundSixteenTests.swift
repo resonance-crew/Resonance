@@ -77,3 +77,88 @@ import Testing
         #expect(!hiding.hidden)
     }
 }
+
+/// Round 16 §3: the press layer keeps its reactions directly over the message and its actions directly
+/// under it, moving the message, never the menus.
+@MainActor @Suite struct RoundSixteenPressTests {
+    /// An iPhone's window: 874 tall, 62 of status bar, 34 of home indicator (no keyboard).
+    let height: CGFloat = 874, top: CGFloat = 62, bottom: CGFloat = 34
+    let list = PressMetrics.listHeight(rows: 3, footer: true)
+
+    @Test func theTrayIs232By52AndTheListGrowsByItsRows() {
+        #expect(PressMetrics.trayWidth == 232 && PressMetrics.trayHeight == 52)
+        #expect(PressMetrics.listHeight(rows: 3, footer: true) == 3 * 44 + 6 + 32 + 12)
+    }
+
+    @Test func aMessageWithRoomRoundItStaysWhereItIs() {
+        let frame = CGRect(x: 60, y: 300, width: 200, height: 44)
+        let place = PressPlacement.of(frame: frame, windowHeight: height, safeTop: top, safeBottom: bottom, tray: true, listHeight: list)
+        #expect(place.shift == 0 && !place.clipped)
+        #expect(place.trayY == 300 - 8 - 52)
+        #expect(place.listY == 300 + 44 + 10)
+    }
+
+    @Test func nearTheFootItGlidesUpJustEnoughForTheList() {
+        let frame = CGRect(x: 60, y: 700, width: 200, height: 44)
+        let place = PressPlacement.of(frame: frame, windowHeight: height, safeTop: top, safeBottom: bottom, tray: true, listHeight: list)
+        // The list's foot rests 12 over the home indicator.
+        #expect(place.listY + list == height - bottom - 12)
+        #expect(place.shift < 0)
+    }
+
+    @Test func nearTheTopItGlidesDownJustEnoughForTheTray() {
+        let frame = CGRect(x: 60, y: 90, width: 200, height: 44)
+        let place = PressPlacement.of(frame: frame, windowHeight: height, safeTop: top, safeBottom: bottom, tray: true, listHeight: list)
+        #expect(place.trayY == top + 12)
+        #expect(place.shift == top + 12 + 52 + 8 - 90)
+        // Without reactions (a letter, a message still sending) there is no tray to make room for.
+        let bare = PressPlacement.of(frame: frame, windowHeight: height, safeTop: top, safeBottom: bottom, tray: false, listHeight: list)
+        #expect(bare.shift == 0)
+    }
+
+    @Test func aMessageTallerThanTheRoomShowsItsTopPart() {
+        let frame = CGRect(x: 60, y: 100, width: 300, height: 2000)
+        let place = PressPlacement.of(frame: frame, windowHeight: height, safeTop: top, safeBottom: bottom, tray: true, listHeight: list)
+        #expect(place.clipped)
+        #expect(place.trayY == top + 12)
+        #expect(place.listY + list == height - bottom - 12)
+        #expect(place.shownHeight == height - bottom - 12 - list - 10 - (top + 12) - 52 - 8)
+        // Lifted no more than 4 at either end.
+        #expect(PressPlacement.lift(height: 44) == 1.03)
+        #expect(abs(PressPlacement.lift(height: 400) - 1.02) < 0.0001)
+    }
+
+    @Test func theSheetsLineUpWithTheMessagesSideInsideTheWindow() {
+        let mine = CGRect(x: 180, y: 300, width: 200, height: 44)
+        #expect(PressPlacement.x(width: 232, frame: mine, mine: true, windowWidth: 402) == 380 - 232)
+        let theirs = CGRect(x: 50, y: 300, width: 120, height: 44)
+        #expect(PressPlacement.x(width: 232, frame: theirs, mine: false, windowWidth: 402) == 50)
+        // Never closer than 12 to a side.
+        let wide = CGRect(x: 4, y: 300, width: 396, height: 44)
+        #expect(PressPlacement.x(width: 232, frame: wide, mine: false, windowWidth: 402) == 12)
+        #expect(PressPlacement.x(width: 232, frame: wide, mine: true, windowWidth: 402) == 402 - 12 - 232)
+    }
+
+    @Test func reactionsAreSummedInTheStickersOrderAndUnknownOnesAreLeftOut() {
+        let at = Date()
+        let message = ChatMessage(id: "m1", senderId: "bob", text: "hi", sentAt: at,
+                                  reactions: ["alice": "heart", "bob": "heart", "carol": "wave"])
+        let summary = ReactionSummary.of(message, me: "alice")
+        #expect(summary.entries == [ReactionChips.Entry(id: .heart, count: 2)])
+        #expect(summary.mine == .heart)
+        let two = ReactionSummary.of(ChatMessage(id: "m2", senderId: "bob", text: "x", sentAt: at,
+                                                 reactions: ["alice": "thumbs", "bob": "moved"]), me: "alice")
+        #expect(two.entries.map(\.id) == [.moved, .thumbs])
+        #expect(two.mine == .thumbs && two.theirs == .moved)
+    }
+
+    @Test func theMessagesListSaysWhoUnsentTheLastOne() {
+        let unsentPreview = ConversationsStore.unsent(["senderId": "bob", "sentAt": 1, "unsent": true])
+        #expect(unsentPreview)
+        // A preview written over an older unsent one keeps new words: they win.
+        #expect(!ConversationsStore.unsent(["senderId": "bob", "text": "hi", "unsent": true]))
+        #expect(ConversationsScreen.preview(text: nil, image: false, fromMe: true, unsent: true) == L10n.Messages.unsentByYou)
+        #expect(ConversationsScreen.preview(text: nil, image: false, fromMe: false, unsent: true, handle: "bob")
+                == L10n.Messages.unsentByThem(handle: "bob"))
+    }
+}

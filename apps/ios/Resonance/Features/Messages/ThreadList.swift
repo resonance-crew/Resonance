@@ -420,30 +420,34 @@ private struct MessageItem: View {
         let message = row.message
         let model = ctx.model
         let mine = model.isMine(message)
-        if message.isUnsent {
-            // Unsent (round 16 §3): one quiet line on its sender's side, nothing to press, swipe or answer.
-            HStack(alignment: .bottom, spacing: 0) {
-                if mine { Spacer(minLength: 0) } else { TheirFace(shown: !row.position.joinsBelow, ctx: ctx) }
-                UnsentBubble(text: mine ? L10n.Messages.unsentByYou : L10n.Messages.unsentByThem(handle: model.displayHandle),
-                             mine: mine, seed: seedFromId(message.key), tuckTop: row.position.joinsAbove, tuckBottom: row.position.joinsBelow)
-                    .frame(maxWidth: ctx.rowMax, alignment: mine ? .trailing : .leading)
-                if !mine { Spacer(minLength: 0) }
-            }
-            .transition(.opacity)
-        } else if model.carried(message) != .nothing {
-            // (A card the viewer can't see, sent alone: nothing to draw — not even a face beside it.)
-            SwipeToReply(enabled: model.canReply(message), mine: mine, onReply: { ctx.onReply(message) }) {
+        Group {
+            if message.isUnsent {
+                // Unsent (round 16 §3): one quiet line on its sender's side, nothing to press, swipe or answer.
                 HStack(alignment: .bottom, spacing: 0) {
                     if mine { Spacer(minLength: 0) } else { TheirFace(shown: !row.position.joinsBelow, ctx: ctx) }
-                    VStack(alignment: mine ? .trailing : .leading, spacing: 0) {
-                        MessageCore(row: row, ctx: ctx, interactive: true)
-                        if deliveryLine { DeliveryLine(message: message, model: model) }
-                    }
-                    .frame(maxWidth: ctx.rowMax, alignment: mine ? .trailing : .leading)
+                    UnsentBubble(text: mine ? L10n.Messages.unsentByYou : L10n.Messages.unsentByThem(handle: model.displayHandle),
+                                 mine: mine, seed: seedFromId(message.key), tuckTop: row.position.joinsAbove, tuckBottom: row.position.joinsBelow)
+                        .frame(maxWidth: ctx.rowMax, alignment: mine ? .trailing : .leading)
                     if !mine { Spacer(minLength: 0) }
+                }
+                .transition(.opacity)
+            } else if model.carried(message) != .nothing {
+                // (A card the viewer can't see, sent alone: nothing to draw — not even a face beside it.)
+                SwipeToReply(enabled: model.canReply(message), mine: mine, onReply: { ctx.onReply(message) }) {
+                    HStack(alignment: .bottom, spacing: 0) {
+                        if mine { Spacer(minLength: 0) } else { TheirFace(shown: !row.position.joinsBelow, ctx: ctx) }
+                        VStack(alignment: mine ? .trailing : .leading, spacing: 0) {
+                            MessageCore(row: row, ctx: ctx, interactive: true)
+                            if deliveryLine { DeliveryLine(message: message, model: model) }
+                        }
+                        .frame(maxWidth: ctx.rowMax, alignment: mine ? .trailing : .leading)
+                        if !mine { Spacer(minLength: 0) }
+                    }
                 }
             }
         }
+        // Unsent while on screen: its row shrinks to the line (an unsent picture shrinks the thread), 150 ms.
+        .animation(.easeOut(duration: 0.15), value: message.isUnsent)
     }
 }
 
@@ -527,8 +531,6 @@ private struct MessageReactions: View {
         let drawn = ReactionSummary.of(message, me: model.me)
         if !drawn.entries.isEmpty {
             let chips = ReactionChips(drawn.entries, outward: mine ? .leading : .trailing, seed: seedFromId(message.key, start: 41))
-                .alignmentGuide(mine ? .leading : .trailing) { d in mine ? d.width - ReactionChipMetrics.overlap : ReactionChipMetrics.overlap }
-                .transition(.scale(scale: 0.6).combined(with: .opacity))
             Group {
                 if let onTap {
                     Button(action: onTap) { chips.contentShape(Rectangle()) }.buttonStyle(.plain)
@@ -538,6 +540,11 @@ private struct MessageReactions: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(drawn.label(handle: model.displayHandle))
+            .fixedSize()
+            // Out in the gutter: hung from the bubble's edge (a box of no width there), only its inner 6 over it.
+            .frame(width: 0, alignment: mine ? .trailing : .leading)
+            .offset(x: mine ? ReactionChipMetrics.overlap : -ReactionChipMetrics.overlap)
+            .transition(.scale(scale: 0.6).combined(with: .opacity))
         }
     }
 }
