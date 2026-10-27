@@ -45,7 +45,10 @@ describe('placeMessageMenu', () => {
     const p = placeMessageMenu({ top: 100, height: 900, viewport: VIEW, trayH: TRAY, listH: LIST });
     expect(p.clipped).toBe(true);
     expect(p.trayTop).toBeCloseTo(MENU_MARGIN);
-    expect(p.listTop + LIST).toBeCloseTo(VIEW - MENU_MARGIN, 0);
+    // Lifted from its top, it grows nothing past the clip: the tray 8 over it, the list 10 under it, exactly.
+    expect(100 + p.shift).toBeCloseTo(MENU_MARGIN + TRAY + TRAY_GAP);
+    expect(p.listTop).toBeCloseTo(100 + p.shift + p.shown + LIST_GAP);
+    expect(p.listTop + LIST).toBeCloseTo(VIEW - MENU_MARGIN);
     expect(p.shown).toBeLessThan(900);
   });
 });

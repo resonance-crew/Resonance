@@ -16,6 +16,8 @@ import styles from './Thread.module.css';
 
 /** How long the overlay stays after a choice, showing the ink the tap spread. */
 const CHOICE_MS = 150;
+/** A clipped message's room at either side, past which it is cut (it grows from its side, and wobbles). */
+const CLIP_SIDE = 16;
 /** Rows whose choice moves the focus somewhere of its own (the composer, a dialog): it isn't given back to the opener. */
 const TAKES_FOCUS = new Set(['reply', 'unsend', 'report']);
 
@@ -137,7 +139,8 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose }: MessageM
     top: rect.top,
     width: rect.width,
     transform: glided ? `translateY(${place.shift}px)` : undefined,
-    ...(place.clipped ? { height: place.shown } : {}),
+    // Clipped (its foot fading out), with room at its sides for the 3 % it grows by and its wobble.
+    ...(place.clipped ? { height: place.shown, left: rect.left - CLIP_SIDE, width: rect.width + 2 * CLIP_SIDE, paddingInline: CLIP_SIDE } : {}),
   };
   const trayStyle: CSSProperties = { top: place.trayTop, left: alignToMessage(TRAY_W, rect.left, rect.right, own, vw) };
   const listStyle: CSSProperties = {
@@ -174,7 +177,7 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose }: MessageM
         }}
       />
       <div className={styles.liftedPlace} data-clipped={place.clipped || undefined} style={liftStyle} aria-hidden="true">
-        <div className={styles.lifted} data-own={own || undefined} style={{ transformOrigin: `${side} center` }}>
+        <div className={styles.lifted} data-own={own || undefined} style={{ transformOrigin: `${side} ${place.clipped ? 'top' : 'center'}` }}>
           <MessageCore message={message} own={own} position={pressed.position} carried={pressed.carried} interactive={false} />
         </div>
       </div>

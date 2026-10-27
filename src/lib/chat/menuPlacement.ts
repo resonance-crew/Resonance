@@ -11,7 +11,10 @@ export const MENU_MARGIN = 12;
 export const TRAY_GAP = 8;
 /** Between the message's foot and the action list. */
 export const LIST_GAP = 10;
-/** The lifted message is drawn this much larger (from its side's centre): it grows by half of it above and below. */
+/**
+ * The lifted message is drawn this much larger — from its side's centre, so it grows by half of it above and
+ * below; a clipped one from its top.
+ */
 export const LIFT_SCALE = 1.03;
 /** A message too tall for the room is shown clipped to at least this much of its top. */
 const MIN_SHOWN = 44;
@@ -46,30 +49,25 @@ export interface MenuPlacement {
  * left between them is shown clipped to that room, from its top.
  */
 export function placeMessageMenu({ top, height, viewport, trayH, listH }: MenuPlacementInput): MenuPlacement {
+  const first = MENU_MARGIN;
+  const last = viewport - MENU_MARGIN;
+  // Lifted from its side's centre, it grows by `grow` above and below.
   const grow = (height * (LIFT_SCALE - 1)) / 2;
   const above = trayH ? trayH + TRAY_GAP + grow : 0;
   const below = listH ? LIST_GAP + listH + grow : 0;
-  const first = MENU_MARGIN;
-  const last = viewport - MENU_MARGIN;
-  const room = last - first - above - below;
-  let at = top;
-  let shown = height;
-  let clipped = false;
-  if (height > room) {
-    shown = Math.max(MIN_SHOWN, room);
-    clipped = true;
-    at = first + above;
-  } else {
+  if (height <= last - first - above - below) {
+    let at = top;
     if (at + height + below > last) at = last - below - height;
     if (at - above < first) at = first + above;
+    return { shift: at - top, shown: height, clipped: false, trayTop: at - above, listTop: at + height + (listH ? LIST_GAP + grow : 0) };
   }
-  return {
-    shift: at - top,
-    shown,
-    clipped,
-    trayTop: at - above,
-    listTop: at + shown + (listH ? LIST_GAP + grow : 0),
-  };
+  // Too tall for the room: shown from its top (lifted from there, so nothing grows past the clip), in all the
+  // room the two leave.
+  const aboveClipped = trayH ? trayH + TRAY_GAP : 0;
+  const belowClipped = listH ? LIST_GAP + listH : 0;
+  const shown = Math.max(MIN_SHOWN, last - first - aboveClipped - belowClipped);
+  const at = first + aboveClipped;
+  return { shift: at - top, shown, clipped: true, trayTop: first, listTop: at + shown + (listH ? LIST_GAP : 0) };
 }
 
 /**
