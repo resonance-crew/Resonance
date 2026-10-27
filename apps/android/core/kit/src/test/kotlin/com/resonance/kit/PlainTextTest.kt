@@ -57,6 +57,20 @@ class PlainTextTest {
         assertEquals("bold and snake_case_name, light", PlainText.plainText("__bold__ and snake_case_name, _light_"))
     }
 
+    @Test fun joinsALineBreakAfterCjkPunctuationWithNothingAndKeepsASpaceAfterABareWordOrBesideLatinOrHangulText() {
+        assertEquals("晚上九點。我摸黑找到。", PlainText.plainText("晚上九點。\n\n我摸黑找到。"))
+        assertEquals("標題 內文", PlainText.plainText("標題\n\n內文"))
+        assertEquals("名稱 · 數量 蘋果 · 3", PlainText.plainText("名稱 · 數量\n蘋果 · 3"))
+        assertEquals("第一段。第二段。", PlainText.plainText("　　第一段。\n\n　　第二段。"))
+        assertEquals("他說：“好。”下一段", PlainText.plainText("他說：“好。”\n\n下一段"))
+        assertEquals("日本語です。これは", PlainText.plainText("日本語です。\n\nこれは"))
+        assertEquals("中文。 English", PlainText.plainText("中文。\n\nEnglish"))
+        assertEquals("English. Next", PlainText.plainText("English.\n\nNext"))
+        assertEquals("He said “hi.” “Next”", PlainText.plainText("He said “hi.”\n\n“Next”"))
+        assertEquals("한국어 문장", PlainText.plainText("한국어\n\n문장"))
+        assertEquals("中文 中文", PlainText.plainText("中文 中文"))
+    }
+
     @Test fun readsCharacterReferencesAndBackslashEscapesAsTheTextTheyStandForNeverAsSyntax() {
         // What the editor stores for text typed with <, >, & and Markdown's marks (native/fixtures/markdown-corpus.json).
         assertEquals("A -> B & C <3", PlainText.plainText("A -&gt; B &amp; C &lt;3"))
@@ -181,7 +195,7 @@ class PlainTextTest {
             "I [walked slowly](https://example.com/walk) — see https://example.com/x, then home (or www.example.org).",
         ).joinToString("\n")
         assertEquals(
-            "收藏了很久的幾個網頁，終於回到熟悉的地方。 這篇寫的是九份： 還有。 I walked slowly — see, then home (or).",
+            "收藏了很久的幾個網頁，終於回到熟悉的地方。這篇寫的是九份： 還有。 I walked slowly — see, then home (or).",
             summary(story),
         )
     }

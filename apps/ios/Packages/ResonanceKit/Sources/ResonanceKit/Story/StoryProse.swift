@@ -201,6 +201,15 @@ public nonisolated enum StoryProse {
     /// A story's prose without Markdown syntax (links keep their words), as a reader sees it:
     /// character references decoded (`-&gt;` reads `->`) and backslash escapes gone (`\*` reads `*`),
     /// without either ever making syntax; its bare addresses left out.
+    /// A line break after a sentence's CJK punctuation reads as nothing when CJK text follows (the web's
+    /// CJK_BREAK): Chinese and Japanese set no space after 。！？」, so a paragraph break there must not leave
+    /// one. A break after a word (a heading, a table row) stays a space; so does one beside Latin or Hangul text.
+    private static let cjkBreakPattern: String = {
+        let stop = "\\u3001-\\u303F\\uFF01-\\uFF0F\\uFF1A-\\uFF20\\uFF3B-\\uFF40\\uFF5B-\\uFF65\\u2019\\u201D\\u2014\\u2026"
+        let text = "\\p{Han}\\p{Hiragana}\\p{Katakana}\\p{Bopomofo}\\u3001-\\u303F\\uFF01-\\uFF65"
+        return "(?<=[\(stop)])\\s*[\\n\\r\\u2028\\u2029]\\s*(?=[\(text)])"
+    }()
+
     public static func plainText(_ markdown: String) -> String {
         func replace(_ text: String, _ pattern: String, _ template: String, lines: Bool = false) -> String {
             let re = try! NSRegularExpression(pattern: pattern, options: lines ? [.anchorsMatchLines] : [])
@@ -222,6 +231,8 @@ public nonisolated enum StoryProse {
         t = replace(t, "[*~`]+", "")
         // An underscore inside a word is the word's (snake_case, a_b_c): only one at a word's edge can be emphasis.
         t = replace(t, "(?<![\\p{L}\\p{N}])_+|_+(?![\\p{L}\\p{N}])", "")
+        // A line break after CJK punctuation, before CJK text, reads as nothing (the web's CJK_BREAK).
+        t = replace(t, cjkBreakPattern, "")
         t = replace(t, "\\s+", " ")
         return restore(t.trimmingCharacters(in: .whitespacesAndNewlines))
     }

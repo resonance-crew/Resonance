@@ -96,6 +96,18 @@ export function firstPicture(markdown: string): string | null {
   return WEB_PICTURE.exec(markdown)?.[1] ?? null;
 }
 
+/**
+ * A line break after a sentence's CJK punctuation reads as nothing when CJK
+ * text follows: Chinese and Japanese set no space after 。！？」, so a
+ * paragraph break there must not leave one — 「。 下一段」 — when the prose
+ * becomes one line. A break after a word (a heading, a table row, a line
+ * without its stop) stays a space, which is all that keeps the two apart; so
+ * does one beside Latin or Hangul text. Each run starts only after such a mark.
+ */
+const CJK_STOP = '\\u3001-\\u303F\\uFF01-\\uFF0F\\uFF1A-\\uFF20\\uFF3B-\\uFF40\\uFF5B-\\uFF65\\u2019\\u201D\\u2014\\u2026';
+const CJK_TEXT = '\\p{sc=Han}\\p{sc=Hiragana}\\p{sc=Katakana}\\p{sc=Bopomofo}\\u3001-\\u303F\\uFF01-\\uFF65';
+const CJK_BREAK = new RegExp(`(?<=[${CJK_STOP}])\\s*[\\n\\r\\u2028\\u2029]\\s*(?=[${CJK_TEXT}])`, 'gu');
+
 /** A GFM table's delimiter row (`| --- | :-: |`): one line, each cell one dash run, so no line is read twice. */
 const TABLE_DELIMITER = /^[ \t]*\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/;
 
@@ -156,6 +168,7 @@ export function plainText(markdown: string): string {
       .replace(/[*~`]+/g, '')
       // An underscore inside a word is the word's (snake_case, a_b_c): only one at a word's edge can be emphasis.
       .replace(/(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])/gu, '')
+      .replace(CJK_BREAK, '')
       .replace(/\s+/g, ' ')
       .trim(),
   );

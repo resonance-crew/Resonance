@@ -40,6 +40,21 @@ import Testing
         #expect(StoryProse.plainText("__bold__ and snake_case_name, _light_") == "bold and snake_case_name, light")
     }
 
+    /// plainText.test.ts, case for case: a paragraph break after CJK punctuation leaves no space.
+    @Test func aLineBreakAfterCJKPunctuationReadsAsNothing() {
+        #expect(StoryProse.plainText("晚上九點。\n\n我摸黑找到。") == "晚上九點。我摸黑找到。")
+        #expect(StoryProse.plainText("標題\n\n內文") == "標題 內文")
+        #expect(StoryProse.plainText("名稱 · 數量\n蘋果 · 3") == "名稱 · 數量 蘋果 · 3")
+        #expect(StoryProse.plainText("　　第一段。\n\n　　第二段。") == "第一段。第二段。")
+        #expect(StoryProse.plainText("他說：“好。”\n\n下一段") == "他說：“好。”下一段")
+        #expect(StoryProse.plainText("日本語です。\n\nこれは") == "日本語です。これは")
+        #expect(StoryProse.plainText("中文。\n\nEnglish") == "中文。 English")
+        #expect(StoryProse.plainText("English.\n\nNext") == "English. Next")
+        #expect(StoryProse.plainText("He said “hi.”\n\n“Next”") == "He said “hi.” “Next”")
+        #expect(StoryProse.plainText("한국어\n\n문장") == "한국어 문장")
+        #expect(StoryProse.plainText("中文 中文") == "中文 中文")
+    }
+
     /// plainText.test.ts, case for case: what the editor stores for text typed with <, > and &
     /// and Markdown's own marks reads as that text, never as syntax.
     @Test func referencesAndEscapesReadAsTheTextTheyStandFor() {

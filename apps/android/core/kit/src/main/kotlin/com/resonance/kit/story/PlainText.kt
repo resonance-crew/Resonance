@@ -227,6 +227,17 @@ object PlainText {
     private val Spaces = Regex("$S+")
 
     /**
+     * A line break after a sentence's CJK punctuation reads as nothing when CJK text follows (the web's
+     * CJK_BREAK): Chinese and Japanese set no space after 。！？」, so a paragraph break there must not leave
+     * one. A break after a word (a heading, a table row) stays a space; so does one beside Latin or Hangul text.
+     */
+    private const val CJK_STOP =
+        "\\u3001-\\u303F\\uFF01-\\uFF0F\\uFF1A-\\uFF20\\uFF3B-\\uFF40\\uFF5B-\\uFF65\\u2019\\u201D\\u2014\\u2026"
+    private const val CJK_TEXT =
+        "\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsBopomofo}\\u3001-\\u303F\\uFF01-\\uFF65"
+    private val CjkBreak = Regex("(?<=[$CJK_STOP])$S*[\\n\\r\\u2028\\u2029]$S*(?=[$CJK_TEXT])")
+
+    /**
      * An underscore inside a word is the word's (snake_case, a_b_c): only one at a word's edge can be
      * emphasis. plainText.ts's `(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])` comes to this: a lone underscore
      * between two letters or digits stays, every other run of underscores goes (`a__b` reads `ab`). A
@@ -277,6 +288,7 @@ object PlainText {
             .replace(Marks, "")
         return restore(
             withoutEdgeUnderscores(prose)
+                .replace(CjkBreak, "")
                 .replace(Spaces, " ")
                 // Every space left is a single " ": JavaScript's trim, which Kotlin's (U+001C–U+001F too) is not.
                 .trim(' '),

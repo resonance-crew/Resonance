@@ -45,6 +45,20 @@ describe('plainText', () => {
     expect(plainText(md)).toBe('Title a quote Some bold and light text with a link and .');
     expect(plainText('__bold__ and snake_case_name, _light_')).toBe('bold and snake_case_name, light');
   });
+  it('joins a line break after CJK punctuation with nothing, and keeps a space after a bare word or beside Latin or Hangul text', () => {
+    expect(plainText('晚上九點。\n\n我摸黑找到。')).toBe('晚上九點。我摸黑找到。');
+    expect(plainText('標題\n\n內文')).toBe('標題 內文');
+    expect(plainText('名稱 · 數量\n蘋果 · 3')).toBe('名稱 · 數量 蘋果 · 3');
+    expect(plainText('　　第一段。\n\n　　第二段。')).toBe('第一段。第二段。');
+    expect(plainText('他說：“好。”\n\n下一段')).toBe('他說：“好。”下一段');
+    expect(plainText('日本語です。\n\nこれは')).toBe('日本語です。これは');
+    expect(plainText('中文。\n\nEnglish')).toBe('中文。 English');
+    expect(plainText('English.\n\nNext')).toBe('English. Next');
+    expect(plainText('He said “hi.”\n\n“Next”')).toBe('He said “hi.” “Next”');
+    expect(plainText('한국어\n\n문장')).toBe('한국어 문장');
+    expect(plainText('中文 中文')).toBe('中文 中文');
+  });
+
   it('reads character references and backslash escapes as the text they stand for, never as syntax', () => {
     // What the editor stores for text typed with <, >, & and Markdown's marks (native/fixtures/markdown-corpus.json).
     expect(plainText('A -&gt; B &amp; C &lt;3')).toBe('A -> B & C <3');

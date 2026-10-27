@@ -49,7 +49,7 @@ describe('summarize', () => {
       'I [walked slowly](https://example.com/walk) — see https://example.com/x, then home (or www.example.org).',
     ].join('\n');
     expect(summarize(story).excerpt).toBe(
-      '收藏了很久的幾個網頁，終於回到熟悉的地方。 這篇寫的是九份： 還有。 I walked slowly — see, then home (or).',
+      '收藏了很久的幾個網頁，終於回到熟悉的地方。這篇寫的是九份： 還有。 I walked slowly — see, then home (or).',
     );
   });
 
