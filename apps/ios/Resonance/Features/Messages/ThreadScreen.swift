@@ -641,7 +641,8 @@ struct ThreadScreen: View {
                     // One message (檢舉這則訊息: its id) or the conversation (the bar's 檢舉: the pair's).
                     ReportForm(target: .message(id: reportedMessage ?? pair, senderId: other.id, conversationId: pair), handle: other.handle,
                                offerBlock: !model.isBlocked, sending: $sendingReport, onClose: { reporting = false },
-                               onBlocked: { Task { await model.refreshConnection() } })
+                               onBlocked: { Task { await model.refreshConnection() } },
+                               customTitle: reportedMessage == nil ? nil : L10n.Safety.reportThisMessage)
                     .withSession(session)
                 }
             }

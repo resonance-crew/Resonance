@@ -13,6 +13,8 @@ struct ReportForm: View {
     @Binding var sending: Bool
     var onClose: () -> Void
     var onBlocked: () -> Void = {}
+    /// The dialog's title in place of the target's own (one message of a conversation: 檢舉這則訊息, round 16 §3).
+    var customTitle: String? = nil
     @Environment(SessionStore.self) private var session
     // ReportModal opens on the first reason, as the web does.
     @State private var reason: SafetyService.Reason? = .spam
@@ -82,10 +84,11 @@ struct ReportForm: View {
     }
 
     private var title: String {
+        if let customTitle { return customTitle }
         switch target {
-        case .card: L10n.Safety.Report.titleCard
-        case .user: L10n.Safety.Report.titleUser(handle: name)
-        case .message: L10n.Safety.Report.titleMessage(handle: name)
+        case .card: return L10n.Safety.Report.titleCard
+        case .user: return L10n.Safety.Report.titleUser(handle: name)
+        case .message: return L10n.Safety.Report.titleMessage(handle: name)
         }
     }
 
