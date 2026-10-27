@@ -314,3 +314,25 @@ describe('TagField', () => {
     });
   });
 });
+
+// Round 17 review W9: the segment's hover brush answers a mouse alone. A tap's compatibility mouseenter came with no
+// mouseleave, so after 新增 on a phone the segment kept the brush — a shade darker than the pills — until the next tap.
+describe('the segment’s hover brush', () => {
+  it('spreads for a mouse and withdraws as it leaves, and never for a finger', () => {
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(120);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(48);
+    renderWithIntl(<Harness />);
+    const brushOn = () => document.querySelector('[data-brush-wash] > [data-on]') != null;
+    const segment = suggest();
+    expect(document.querySelector('[data-brush-wash]')).not.toBeNull();
+
+    fireEvent.pointerEnter(segment, { pointerType: 'touch', clientX: 100, clientY: 20 });
+    fireEvent.mouseEnter(segment, { clientX: 100, clientY: 20 });
+    expect(brushOn()).toBe(false);
+
+    fireEvent.pointerEnter(segment, { pointerType: 'mouse', clientX: 100, clientY: 20 });
+    expect(brushOn()).toBe(true);
+    fireEvent.pointerLeave(segment, { pointerType: 'mouse', clientX: 130, clientY: 20 });
+    expect(brushOn()).toBe(false);
+  });
+});

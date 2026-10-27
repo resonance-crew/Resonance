@@ -88,6 +88,16 @@
   display: none;
 }
 
+/* Scrolled to its end, its last tool (連結, and its wash) stands as far from the scroller's end as its first does
+   from the bar's start (round 17 review W11): a spacer, since a flex scroller's own end padding isn't scrolled to
+   everywhere. Less the row's gap, which comes before it. */
+.row::after {
+  content: '';
+  flex: none;
+  width: calc(var(--page-pad-x) - 6px - 2px);
+  height: 1px;
+}
+
 .row > * {
   flex: none;
 }
