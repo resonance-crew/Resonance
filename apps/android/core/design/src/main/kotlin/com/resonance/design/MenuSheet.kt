@@ -1,6 +1,5 @@
 package com.resonance.design
 
-import android.graphics.BlurMaskFilter
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
@@ -32,30 +31,29 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.addOutline
-import androidx.compose.ui.graphics.asAndroidPath
-import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.resonance.design.generated.IconName
-import com.resonance.design.generated.LocalResonanceColors
 import com.resonance.design.generated.ResonanceColors
 import com.resonance.design.generated.Tokens
 import com.resonance.geometry.rowBoundary
 import com.resonance.geometry.rowRegion
 import kotlin.math.max
 
-// Round 17 §1: every menu is the press menu's sheet — the menus' paper and the sheet grain, no pen line round it
-// and no rules between its rows, a soft shadow following its wobble instead of the outline, and a row's ink
-// spreading from the finger inside that row's own band of the wobble. A row that ends or removes something is
-// told by the danger ink alone, its glyph and words — no wash under it at rest (round 17 review D1).
+// Round 18 (the owner's, reversing round 17's borderless grain sheet and its paper-cut shadow): every menu is one
+// flat sheet — the theme's menu paper inside one hand-drawn pen line, the header's quiet grey (a card's own menu its
+// card's paper and pen), no grain, no rules between its rows and no shadow: what floats is told by its line, as a
+// card is. A row's ink spreads from the finger inside that row's own band of the wobble. 封鎖 (a warning) rests on
+// the warning yellow, a row that removes something (刪除, 永久刪除, 刪除對話, 捨棄) on a red wash in the danger ink;
+// every wash is cut by the sheet's outline alone, so it fills its band right to the pen line, which is drawn over it.
 
 /**
  * A menu sheet's measures (round 17 §1, §2.3): rows 44 tall, the glyph 17, 12 to the words, 20 of air at the
@@ -79,155 +77,159 @@ object MenuSheet {
     val PressMinWidth: Dp = 216.dp
     /** The wobble's corners (the press menu's sheet since round 16). */
     const val RADIUS = 22.0
-    /** The sheet's grain: PaperSheet's (the thought map's cluster recipe), over the whole filled wobble. */
-    const val GRAIN = 0.3f
     /** The words' size. */
     const val TEXT = 15f
     /** The foot's words' size. */
     const val FOOTER_TEXT = 12f
+    /**
+     * The room a popup keeps round its sheet (round 18: no shadow to hold any more): the wobble swings up to ~4
+     * past the box and the pen line's half-width past that, so nothing of either is cut straight.
+     */
+    val Room: Dp = 8.dp
 
     /** How tall a sheet of [rows] rows is, with its quiet foot or without. */
     fun height(rows: Int, footer: Boolean): Dp =
         PadTop + Row * rows + if (footer) Footer + FooterBottom else PadBottom
 }
 
-/**
- * The soft shadow a floating sheet casts (round 17 §1, the web's `--sheet-shadow`): the palette's shadow ink, by
- * day two — `0 8px 24px` at 16 % and `0 1px 3px` at 10 % —, at night one, `0 10px 28px` at 45 %. Each [blur] is
- * the CSS blur radius (a Gaussian of half its deviation).
- */
-@Immutable
-data class SheetShadow(val dy: Dp, val blur: Dp, val color: Color) {
-    companion object {
-        fun of(palette: ResonanceColors): List<SheetShadow> {
-            val ink = palette.ShadowInk
-            return if (palette.dark) {
-                listOf(SheetShadow(10.dp, 28.dp, ink.copy(alpha = 0.45f)))
-            } else {
-                listOf(SheetShadow(8.dp, 24.dp, ink.copy(alpha = 0.16f)), SheetShadow(1.dp, 3.dp, ink.copy(alpha = 0.10f)))
-            }
-        }
-
-        /**
-         * How far past its frame a sheet's shadow reaches (the room a popup window keeps round the sheet, so
-         * nothing of it is cut straight): two of the deepest shadow's deviations past its offset — the rest is
-         * under 3 % of its ink.
-         */
-        val Room: Dp = 40.dp
-
-        /** Skia's blur radius for a CSS [blur] at [density] (its deviation is half the CSS radius; Skia's is 0.57735 × r + 0.5). */
-        internal fun skiaRadius(blur: Dp, density: Float): Float = max(0.1f, (blur.value * density / 2f - 0.5f) / 0.57735f)
-    }
-}
-
-/** The paints that draw [shadows] blurred (a blur mask: the canvas is hardware drawn, API 28+). */
-internal fun shadowPaints(shadows: List<SheetShadow>, density: Float): List<Pair<Float, android.graphics.Paint>> = shadows.map { s ->
-    s.dy.value * density to android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        color = s.color.toArgb()
-        maskFilter = BlurMaskFilter(SheetShadow.skiaRadius(s.blur, density), BlurMaskFilter.Blur.NORMAL)
-    }
-}
-
-/** [outline] filled with each shadow's paint, offset down by its dy and blurred: the shadow follows the wobble. */
-internal fun DrawScope.drawSheetShadows(outline: Path, paints: List<Pair<Float, android.graphics.Paint>>) {
-    val native = outline.asAndroidPath()
-    drawIntoCanvas { canvas ->
-        paints.forEach { (dy, paint) ->
-            canvas.nativeCanvas.save()
-            canvas.nativeCanvas.translate(0f, dy)
-            canvas.nativeCanvas.drawPath(native, paint)
-            canvas.nativeCanvas.restore()
-        }
-    }
-}
-
-/** A sheet's wobble at this size: what it is filled to, its grain covers, its shadow follows and its rows' ink is cut to. */
+/** A sheet's wobble at this size: what it is filled to, inked round and its rows' washes are cut to. */
 private fun CacheDrawScope.sheetOutline(seed: Double): Path {
     val o = WobRectShape(MenuSheet.RADIUS, seed).createOutline(size, layoutDirection, this)
     return (o as? Outline.Generic)?.path ?: Path().apply { addOutline(o) }
 }
 
-/** The shadow under a sheet ([MenuSheet]), drawn into the layer round the sheet's own, so a row's ink redraws only the sheet. */
-private data class SheetShadowDrawing(val seed: Double, val shadows: List<SheetShadow>) : (CacheDrawScope) -> DrawResult {
-    override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
-        val outline = sheetOutline(seed)
-        val paints = shadowPaints(shadows, density)
-        onDrawBehind { drawSheetShadows(outline, paints) }
-    }
+/**
+ * Each row's band of a [w]×[h] (dp) sheet of [rows] rows (and its foot's, which takes no ink): the wavy boundaries
+ * the web's rowRegion draws between rows (never drawn themselves). They run [bandOvershoot] past the box on every
+ * outer side — further than the wobble ever swings out of it —, so the sheet's outline, which every wash is
+ * clipped to, is what ends them: on the pen line, never short of it nor past it.
+ */
+internal fun sheetBands(w: Double, h: Double, rows: Int, footer: Boolean, seed: Double, density: Float): List<Path> {
+    val pad = bandOvershoot(h)
+    val top = MenuSheet.PadTop.value.toDouble()
+    val rowH = MenuSheet.Row.value.toDouble()
+    val bands = rows + if (footer) 1 else 0
+    val boundaries = (0 until bands - 1).map { i -> rowBoundary(top + (i + 1) * rowH, w, seed + i * 31 + 7, 2.0, pad) }
+    return (0 until rows).map { rowRegion(it, bands, boundaries, w, h, pad).toPath(density) }
 }
 
+/** How far the outer bands reach past the box (the web's `max(10, h × 4 %)`). */
+internal fun bandOvershoot(h: Double): Double = max(10.0, h * 0.04)
+
 /**
- * The sheet itself: its paper and grain on the one wobble, then — inside it — the pressed row's ink spreading
- * from the finger in its row's band: the wavy boundaries the web's rowRegion draws between rows (never drawn
- * themselves), the first band reaching past the top, the last past the foot. Nothing lies under a row at rest,
- * a danger row's either (round 17 review D1): its ink, pressed, is the danger hue at the others' strength.
+ * The sheet itself, in order: its paper on the one wobble; inside it the rows' resting washes (封鎖's yellow,
+ * 刪除's red) and the pressed row's ink spreading from the finger in its band; then the pen line over all of it
+ * (a row's ink never covers the line); the rows' glyphs and words come after, over everything.
  */
 private class SheetPaperDrawing(
     val seed: Double,
     val paper: Color,
-    val grain: GrainInk,
-    val rows: Int,
+    val pen: Color,
     val footer: Boolean,
-    /** Which rows end or remove something: their ink is [dangerPress], every other row's [press]. */
-    val danger: List<Boolean>,
-    val press: Color,
-    val dangerPress: Color,
+    /** What each row rests on (null: the bare paper). */
+    val rests: List<Color?>,
+    /** Each row's ink when pressed. */
+    val presses: List<Color>,
     val state: () -> Pair<Int?, InkSpread>,
 ) : (CacheDrawScope) -> DrawResult {
     override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
         val outline = sheetOutline(seed)
-        val brush = Grain.brush(GrainMode.Tile, "grain-card", size, density, MenuSheet.GRAIN, grain)
         val w = (size.width / density).toDouble()
         val h = (size.height / density).toDouble()
-        val pad = max(10.0, h * 0.04)
-        val top = MenuSheet.PadTop.value.toDouble()
-        val rowH = MenuSheet.Row.value.toDouble()
-        val bands = rows + if (footer) 1 else 0
-        val boundaries = (0 until bands - 1).map { i -> rowBoundary(top + (i + 1) * rowH, w, seed + i * 31 + 7, 2.0, pad) }
-        val regions = (0 until rows).map { rowRegion(it, bands, boundaries, w, h, pad).toPath(density) }
+        val regions = sheetBands(w, h, presses.size, footer, seed, density)
+        val line = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
         onDrawBehind {
             drawPath(outline, paper)
-            brush?.let { drawPath(outline, it, alpha = MenuSheet.GRAIN) }
             clipPath(outline) {
+                rests.forEachIndexed { i, rest -> if (rest != null && i in regions.indices) drawPath(regions[i], rest) }
                 val (i, spread) = state()
-                if (i != null && i in regions.indices) with(spread) { draw(regions[i], if (danger.getOrElse(i) { false }) dangerPress else press) }
+                if (i != null && i in regions.indices) with(spread) { draw(regions[i], presses[i]) }
             }
+            drawPath(outline, pen, style = line)
         }
     }
 
-    override fun equals(other: Any?) = other is SheetPaperDrawing && other.seed == seed && other.paper == paper && other.grain == grain &&
-        other.rows == rows && other.footer == footer && other.danger == danger && other.press == press && other.dangerPress == dangerPress
-    override fun hashCode() = ((((seed.hashCode() * 31 + paper.hashCode()) * 31 + rows) * 31 + danger.hashCode()) * 31 + footer.hashCode())
+    override fun equals(other: Any?) = other is SheetPaperDrawing && other.seed == seed && other.paper == paper && other.pen == pen &&
+        other.footer == footer && other.rests == rests && other.presses == presses
+    override fun hashCode() = ((((seed.hashCode() * 31 + paper.hashCode()) * 31 + pen.hashCode()) * 31 + rests.hashCode()) * 31 + presses.hashCode()) * 31 + footer.hashCode()
 }
 
-/** One row of a [PaperMenuSheet]: its words and glyph; [danger]: it ends or removes something — words and glyph in the danger ink, no wash. */
-@Immutable
-internal class SheetRow(val title: String, val icon: IconName, val enabled: Boolean = true, val danger: Boolean = false)
+/** What a menu row does: an ordinary row, one that warns (封鎖: a step back from someone), or one that removes something. */
+enum class RowTone { Plain, Warn, Danger }
 
 /**
- * A sheet's inks: its paper; the glyphs' pen, and the pen a pressed row's glyph and words take; a row's spreading
- * ink; and the danger ink a row that ends or removes something wears, with its spreading ink at the same strength.
+ * One row of a [PaperMenuSheet]: its words and glyph, and its [tone] — a warning rests on the yellow (its words in
+ * the text ink, its glyph the others'), a loss on a red wash with its words and glyph in the danger ink.
  */
 @Immutable
-internal data class SheetInks(val paper: Color, val glyph: Color, val glyphPressed: Color, val press: Color, val danger: Color, val dangerPress: Color)
+internal class SheetRow(val title: String, val icon: IconName, val enabled: Boolean = true, val tone: RowTone = RowTone.Plain)
 
-/** How strong a pressed row's ink is, in its hue (the web's `color-mix(… 15%, transparent)`), a danger row's too. */
+/**
+ * A sheet's inks: its paper and its pen line; the glyphs' pen, and the pen a pressed row's glyph and words take;
+ * a row's spreading ink; the danger ink a loss wears, what it rests on and its ink; what a warning rests on and its ink.
+ */
+@Immutable
+internal data class SheetInks(
+    val paper: Color,
+    val pen: Color,
+    val glyph: Color,
+    val glyphPressed: Color,
+    val press: Color,
+    val danger: Color,
+    val dangerRest: Color,
+    val dangerPress: Color,
+    val warnRest: Color,
+    val warnPress: Color,
+) {
+    /** What a row of [tone] rests on before any ink (the web's `menuRowRest`): null for the bare paper. */
+    fun rest(tone: RowTone): Color? = when (tone) {
+        RowTone.Plain -> null
+        RowTone.Warn -> warnRest
+        RowTone.Danger -> dangerRest
+    }
+
+    /** A row of [tone]'s ink under the finger (the web's `menuRowWash`). */
+    fun pressOf(tone: RowTone): Color = when (tone) {
+        RowTone.Plain -> press
+        RowTone.Warn -> warnPress
+        RowTone.Danger -> dangerPress
+    }
+}
+
+/** How strong a pressed row's ink is, in its hue (the web's `color-mix(… 15%, transparent)`), a loss's too. */
 internal const val SheetPressAlpha = 0.15f
 
-/** The sheet's inks for a menu of the theme's (or a card's hue): [MenuColors] on the raised paper. */
-internal fun MenuColors.sheetInks(): SheetInks =
-    SheetInks(sheet, border, borderHover, borderHover.copy(alpha = SheetPressAlpha), danger, dangerInk.copy(alpha = SheetPressAlpha))
+/** What a loss rests on: the danger hue at 11 % (the web's `menuRowRest('danger')`). */
+internal const val SheetDangerRestAlpha = 0.11f
+
+/**
+ * The sheet's inks for a menu of the theme's (or a card's hue): [MenuColors] on its paper, inside its pen. 封鎖's
+ * yellow is laid on at 32 % by day and nearly whole at night, where the yellow is a deep olive; its ink is more of
+ * the yellow by day and the text ink at 8 % at night (the web's `--menu-warn-rest` / `--menu-warn-ink`).
+ */
+internal fun MenuColors.sheetInks(palette: ResonanceColors): SheetInks = SheetInks(
+    paper = sheet,
+    pen = pen,
+    glyph = border,
+    glyphPressed = borderHover,
+    press = borderHover.copy(alpha = SheetPressAlpha),
+    danger = danger,
+    dangerRest = dangerInk.copy(alpha = SheetDangerRestAlpha),
+    dangerPress = dangerInk.copy(alpha = SheetPressAlpha),
+    warnRest = palette.Yellow.copy(alpha = if (palette.dark) 0.90f else 0.32f),
+    warnPress = if (palette.dark) palette.Text.copy(alpha = 0.08f) else palette.Yellow.copy(alpha = 0.30f),
+)
 
 /** What a [SheetRow]'s glyph and words are drawn in: the danger ink for a loss, pressed or not; else the pen pressed, or the glyph's pen and the text ink at rest. */
 internal fun SheetInks.rowInks(row: SheetRow, down: Boolean, text: Color): Pair<Color, Color> = when {
-    row.danger -> danger to danger
+    row.tone == RowTone.Danger -> danger to danger
     down -> glyphPressed to glyphPressed
     else -> glyph to text
 }
 
 /**
- * The one menu surface (round 17 §1): the rows ([SheetRow]) on a [MenuSheet] of borderless paper with its grain
- * and its shadow, and an optional quiet [footer] line at its end (the full time under a held message's actions).
+ * The one menu surface (round 17 §1, round 18): the rows ([SheetRow]) on a flat [MenuSheet] — its paper inside its
+ * pen line, no grain, no shadow —, and an optional quiet [footer] line at its end (the full time under a held message's actions).
  * A row's press spreads the ink from the finger inside its band; [onChoose] gets the row's index. A row not
  * enabled keeps its place, faded to the web's 0.55, and takes no tap.
  */
@@ -241,24 +243,22 @@ internal fun PaperMenuSheet(
     modifier: Modifier = Modifier,
     minWidth: Dp = MenuSheet.MinWidth,
 ) {
-    val palette = LocalResonanceColors.current
-    val grain = GrainInk.current
     var pressed by remember { mutableStateOf<Int?>(null) }
     val spread = remember { InkSpread() }
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val rowPx = with(density) { MenuSheet.Row.toPx() }
     val topPx = with(density) { MenuSheet.PadTop.toPx() }
-    val danger = remember(rows) { rows.map { it.danger } }
-    val shadows = remember(palette) { SheetShadow.of(palette) }
+    val rests = remember(rows, inks) { rows.map { inks.rest(it.tone) } }
+    val presses = remember(rows, inks) { rows.map { inks.pressOf(it.tone) } }
     Column(
         modifier
             .widthIn(min = minWidth, max = MenuSheet.MaxWidth)
             .width(IntrinsicSize.Max)
-            .drawWithCacheOf(SheetShadowDrawing(seed, shadows))
-            // The sheet in a layer of its own: a row's spreading ink redraws it, never the blurred shadow under it.
+            // The sheet in a layer of its own (not clipped to its box: the wobble, its washes and its pen run past it),
+            // so a row's spreading ink redraws the sheet alone.
             .graphicsLayer()
-            .drawWithCacheOf(SheetPaperDrawing(seed, inks.paper, grain, rows.size, footer != null, danger, inks.press, inks.dangerPress) { pressed to spread })
+            .drawWithCacheOf(SheetPaperDrawing(seed, inks.paper, inks.pen, footer != null, rests, presses) { pressed to spread })
             .padding(top = MenuSheet.PadTop, bottom = if (footer != null) MenuSheet.FooterBottom else MenuSheet.PadBottom),
     ) {
         rows.forEachIndexed { i, row ->

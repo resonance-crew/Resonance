@@ -15,6 +15,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
@@ -44,18 +46,19 @@ enum class PillSize(
     internal val glyph: Dp,
     internal val maxLines: Int,
 ) {
-    /** The thread's jump-to-latest pill, as it always was: 12.5 semibold, 16 × 9, no press wash. */
+    /** The thread's jump-to-latest pill: 12.5 semibold, 16 × 9, no press wash, round. */
     Small(18.0, 16.dp, 9.dp, 0.dp, 12.5f, 1.3f, 6.dp, 14.dp, Int.MAX_VALUE),
 
-    /** A toast (the web's InkPill `md`): 14 semibold over a 44 touch height, at most two lines. */
-    Toast(22.0, 20.dp, 11.dp, 44.dp, 14f, 1.35f, 8.dp, 16.dp, 2),
+    /** A toast (the web's InkPill `md`): 14 semibold over a 44 touch height, at most two lines, a card's corners (16). */
+    Toast(16.0, 20.dp, 11.dp, 44.dp, 14f, 1.35f, 8.dp, 16.dp, 2),
 }
 
 /**
- * The ink pill (the web's atoms/InkPill, iOS's OrganicPill): cream under terracotta-light at 0.9 in
- * a calm wobble (WobRectShape seed 41, mag 1.2), no pen line, its words and glyph in the deep
- * terracotta ink. Lifted from the thread's jump-to-latest pill — whose recipe it keeps — for the
- * shell's toasts ([ToastHost]).
+ * The ink pill (the web's atoms/InkPill, iOS's OrganicPill), made as a card is (round 18, the owner's):
+ * the accent's light wash (terracotta-light) inside one pen line of the accent at INK, on a calm
+ * wobble (WobRectShape seed 41, mag 1.2) — round for the thread's jump-to-latest pill, a card's
+ * corners for the shell's toasts ([ToastHost]) — its words and glyph in the deep terracotta ink. Flat,
+ * as the whole page is: what floats is told by its line, never a shadow.
  *
  * With [onClick] the whole pill is the button (rule 14: one fill on one layer, no button nested in
  * the wash, no bare text action), named by [onClickLabel] for TalkBack; [verb] is the action's word,
@@ -80,9 +83,9 @@ fun OrganicPill(
     val focused by source.collectIsFocusedAsState()
     val shape = remember(size) { WobRectShape(size.radius, 41.0, mag = 1.2) }
     val ink = Tokens.TerracottaInk
-    val paper = Tokens.Cream
     val wash = Tokens.TerracottaLight
-    val focusPen = Tokens.Terracotta
+    val pen = Tokens.Terracotta
+    val focusPen = Tokens.TerracottaDeep
     val text: AnnotatedString = remember(label, verb) {
         buildAnnotatedString {
             append(label)
@@ -98,12 +101,12 @@ fun OrganicPill(
             .heightIn(min = size.minHeight)
             .drawWithCache {
                 val o = shape.createOutline(this.size, layoutDirection, this)
-                val ring = Stroke(Tokens.Ink.toPx())
+                val line = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                val ring = Stroke(Tokens.InkStrong.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                 onDrawBehind {
-                    drawOutline(o, paper)
-                    drawOutline(o, wash, alpha = 0.9f)
-                    // A keyboard's focus: the pen goes round it in terracotta, as a field's does.
-                    if (focused) drawOutline(o, focusPen, style = ring)
+                    drawOutline(o, wash)
+                    // A keyboard's focus deepens and thickens its own line (it already has one).
+                    drawOutline(o, if (focused) focusPen else pen, style = if (focused) ring else line)
                 }
             }
             .then(

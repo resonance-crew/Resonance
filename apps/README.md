@@ -809,12 +809,11 @@ writer's quiet card — its host over its address — wherever the server would 
 site's hosts, not an IP address).
 
 Round 17 (2026-10-27), Android: every menu is the press menu's sheet (`PaperMenuSheet` / `MenuSheet` in `core/design`:
-OrganicMenu, OrganicMenuFrom, OrganicMenuPanel and `MessageActionSheet` alike) — the menus' paper raised at night and the
-sheet grain over the whole wobble, no pen line, no rules between rows, a blurred shadow following the wobble
-(`SheetShadow`: by day 0 8 24 and 0 1 3, at night 0 10 28), rows 44 with the glyph 17, 12 to the words and 20 in from
+OrganicMenu, OrganicMenuFrom, OrganicMenuPanel and `MessageActionSheet` alike) — no rules between rows (its paper, pen
+line and the shadow it cast then are round 18's now, below), rows 44 with the glyph 17, 12 to the words and 20 in from
 either side, the sheet as wide as its longest row (280 at most); a row's ink spreads from the finger inside its own
-wavy band (`rowRegion`), the warning row keeps its wash; a popup keeps `SheetShadow.Room` (40) round its sheet so
-neither is cut by its window, a tap there closing it. A held message: the tray floats over the scrim with no paper, the
+wavy band (`rowRegion`); a popup keeps room round its sheet (`MenuSheet.Room`) so the wobble is not cut by its window,
+a tap there closing it. A held message: the tray floats over the scrim with no paper, the
 chosen disc popping in with its sticker; the list's time at the end of a 24 line right under the last row; the scrim
 and the softening cover the thread's body only — drawn under the thread's bar, which stays sharp, as do the
 conversations and the rule beside a tablet's pane — and the glide keeps 12 under that bar (`regionTop`). The chosen
@@ -826,8 +825,8 @@ the writer's split the publish step has no back of its own: the map's Leave is s
 / `stepBack`), back to writing and named 繼續寫 from the step.
 
 Round 17 review (2026-10-27), Android: a row that ends or removes something — every such row, a card's own menu's too —
-wears the danger ink alone, glyph and words, with nothing under it at rest, and pressed spreads the danger hue at the
-other rows' 15 % (`SheetRow.danger`, `SheetInks.rowInks`; the yellow wash and `PaletteMixes.menuDangerWash` are gone); a
+wears the danger ink, glyph and words, and pressed spreads the danger hue at the other rows' 15 % (`SheetInks.rowInks`;
+what it rests on is round 18's, below); a
 pressed row's words take the pressed pen with its glyph. A held message lifts its bubble alone: their face stays in the
 thread under the scrim. In a tablet's pane the scrim reaches back to the rule between the panes, its edge the rule's own
 wave from the pane bar's line down (`PaneScrimEdge` through `LocalPaneScrimEdge`), so no strip is left undimmed. The lift
@@ -835,3 +834,17 @@ of the hold that brought the list up under the finger chooses nothing (a gesture
 pinned in `RoundSeventeenTest`). The composer's ＋, open, takes the full ink over a soft disc, as the web's bare trigger
 (`bareMenuOpen`). The link editor's 移除連結 is a quiet word (`QuietButton`) and its field, its 卡片 | 文字 and 完成 share one
 height, 44 (`LinkDialogControl`; `SegmentedActionBar` `minHeight`).
+
+Round 18 (2026-10-28), Android: the page is flat, so is every menu — the owner's review reverses round 17's borderless
+grain sheet and its shadow (`SheetShadow` and the blurred drawing are gone). Every sheet (`PaperMenuSheet`) is the menu
+paper itself (no raise at night) inside one hand-drawn pen line at INK on its wobble, the header's grey
+(`field-border-hover`, `MenuColors.pen`), never the accent; a card's own menu (a `hue`: the card box's ⋯, the trash's,
+更換封面) keeps its card's paper and wears its card's pen. No grain, no rules. It draws the paper, then the rows' washes,
+then the pen over them, then the rows. 封鎖 is a warning (`RowTone.Warn`; an `OrganicMenuItem` with the ban glyph and
+`destructive` is one by default): it rests on the yellow at 32 % by day and 90 % at night, its ink the yellow at 30 % /
+the text ink at 8 %, its words in the text ink; a loss (刪除, 永久刪除, 刪除對話, 捨棄) rests on the danger hue at 11 % in the
+danger ink, its ink at 15 %; 登出 and every other row rest on the bare paper (`SheetInks.rest` / `pressOf`). Each wash is
+cut by the sheet's outline alone — its band runs at least 10 past the box on every outer side (`sheetBands`), so it ends
+on the pen line, never short of it. The toast and the thread's way-back pill (`OrganicPill`) are made as a card is: the
+accent's light wash inside a pen line of the accent at INK, the toast with a card's corners (16), the pill round, no
+shadow. Pinned in `RoundEighteenTest`.

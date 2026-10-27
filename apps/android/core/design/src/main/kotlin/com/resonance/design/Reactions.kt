@@ -310,15 +310,15 @@ private data class TrayDisc(val on: Boolean, val fill: Color, val seed: Double) 
     }
 }
 
-/** A row of a held message's action list ([destructive]: a permanent loss, its words in the danger ink). */
+/** A row of a held message's action list ([destructive]: a permanent loss, resting on a red wash, its words in the danger ink). */
 class MessageAction(val title: String, val icon: IconName, val destructive: Boolean = false, val onClick: () -> Unit)
 
 /** How tall the action list is for [rows] rows and its foot (round 17 §2.3: [MenuSheet.height]). */
 fun messageActionsHeight(rows: Int): Dp = MenuSheet.height(rows, footer = true)
 
 /**
- * What a held message offers (round 16 §3, round 17 §1–§2): the one menu sheet ([MenuSheet]) — paper and
- * grain, no pen, no rules between the rows, its shadow under it over the scrim — as wide as its longest
+ * What a held message offers (round 16 §3, round 17 §1–§2, round 18): the one menu sheet ([MenuSheet]) — its
+ * paper inside one grey pen line, flat, no rules between the rows — as wide as its longest
  * row. Rows of 44, the glyph in the accent (17; the danger ink, words too, for a loss) 12 before the
  * words, 20 in from either side; a press spreads the accent's ink inside its row's band. The quiet
  * last line [footer] (the full send time) at the end of a 24-tall line right under the rows. A row taps
@@ -333,8 +333,8 @@ fun MessageActionSheet(
     seed: Double = 67.0,
 ) {
     val palette = LocalResonanceColors.current
-    val rows = remember(actions) { actions.map { SheetRow(it.title, it.icon, danger = it.destructive) } }
-    val inks = remember(palette) { MenuColors(null, palette).sheetInks() }
+    val rows = remember(actions) { actions.map { SheetRow(it.title, it.icon, tone = if (it.destructive) RowTone.Danger else RowTone.Plain) } }
+    val inks = remember(palette) { MenuColors(null, palette).sheetInks(palette) }
     PaperMenuSheet(rows, seed, inks, footer, onChoose = { onChoose(actions[it]) }, modifier = modifier, minWidth = MenuSheet.PressMinWidth)
 }
 

@@ -477,27 +477,45 @@ object ModalActionsLayout {
 }
 
 /**
- * One row of an [OrganicMenu]. [destructive]: it ends or removes something (封鎖, 刪除, 永久刪除…) — its glyph
- * and words in the danger ink, with nothing under it at rest (round 17 review D1). Not [enabled] (生成圖片 with
- * no story to draw from), it stays in its place faded to the web's 0.55 and takes no tap.
+ * One row of an [OrganicMenu]. [destructive]: it removes something (刪除, 永久刪除, 刪除對話…) — it rests on a red
+ * wash, its glyph and words in the danger ink (round 18). [warn]: it is a step back from someone (封鎖) — it rests on
+ * the warning yellow, its words in the text ink; a destructive row with the ban glyph is one by default, so every
+ * 封鎖 says so without its caller asking. Not [enabled] (生成圖片 with no story to draw from), it stays in its place
+ * faded to the web's 0.55 and takes no tap.
  */
-class OrganicMenuItem(val title: String, val icon: IconName, val destructive: Boolean = false, val enabled: Boolean = true, val onClick: () -> Unit)
+class OrganicMenuItem(
+    val title: String,
+    val icon: IconName,
+    val destructive: Boolean = false,
+    val enabled: Boolean = true,
+    val warn: Boolean = destructive && icon == IconName.Ban,
+    val onClick: () -> Unit,
+) {
+    /** How its row is drawn: a warning before a loss (封鎖 is no loss). */
+    internal val tone: RowTone get() = when {
+        warn -> RowTone.Warn
+        destructive -> RowTone.Danger
+        else -> RowTone.Plain
+    }
+}
 
 /**
  * OrganicMenu's colors (the web's `--menu-*`): the theme terracotta, or — for
  * a card's own menu — its hue: the pen `oklch(52% 0.11 h)`, deeper `oklch(38%
- * 0.09 h)` when pressed, paper `oklch(98% 0.01 h)`; and a row that ends or removes something in
- * the palette's [danger] ink, whatever the hue (round 17 review D1: no wash under it). The sheet's
- * paper ([sheet], round 17 §1) is that paper raised a step toward the ink at night, as PaperSheet
- * raises the menus' (94 % paper).
+ * 0.09 h)` when pressed, paper `oklch(98% 0.01 h)`; and a row that removes something in the
+ * palette's [danger] ink, whatever the hue. The sheet (round 18) is that paper, flat — no raise at
+ * night — inside one pen line ([pen]): the header's quiet grey (`--sheet-pen` = `--field-border-hover`)
+ * for the theme's menu, never the accent; a card's own menu its card's pen.
  */
 internal class MenuColors(hue: Double?, palette: ResonanceColors) {
     /** The glyphs' pen (the trigger's, each row's icon). */
     val border: Color
     val borderHover: Color
     val cream: Color
-    /** What the menu's sheet is filled with: [cream], raised at night. */
+    /** What the menu's sheet is filled with: the menu paper, or a card's (the same as [cream]). */
     val sheet: Color
+    /** The sheet's pen line: the header's grey, or a card's own pen. */
+    val pen: Color
     /**
      * A destructive row's glyph and words: the deeper danger fill, as the web's (`--danger-fill`, ≈ 5 : 1 on the
      * menu paper by day; `--color-danger` is ≈ 4.2 : 1, under the 4.5 words need).
@@ -507,21 +525,20 @@ internal class MenuColors(hue: Double?, palette: ResonanceColors) {
     val dangerInk: Color = palette.Danger
 
     init {
-        val mixes = PaletteMixes.of(palette)
         if (hue == null) {
             border = palette.Terracotta
             borderHover = palette.TerracottaDeep
             // The menus' paper: the page's in light, raised onto the card's at night.
             cream = palette.MenuPaper
-            sheet = mixes.reactionSheet
+            sheet = cream
+            pen = palette.FieldBorderHover
         } else {
             // A card's own menu (the web's --menu-* from the card's hue): its pen, deeper pointed at, its paper.
             border = palette.hue(HueRole.Pen, hue)
             borderHover = palette.hue(HueRole.PenDeep, hue)
             cream = palette.hue(HueRole.Menu, hue)
-            val (l, c) = if (palette.dark) HueRole.Menu.dark else HueRole.Menu.light
-            val paper = doubleArrayOf(l, c, hue, 1.0)
-            sheet = if (palette.dark) PaletteMixes.mixed(paper, palette.oklchOf("toward-ink"), 0.94) else cream
+            sheet = cream
+            pen = border
         }
     }
 }
@@ -644,8 +661,8 @@ private const val BareOpenAlpha = 0.08f
 private const val BareOpenMillis = 160
 
 /**
- * The web's OrganicMenu: the ⋯ chip, dropping the menu sheet 8 under its trailing edge (round 17 §1:
- * [MenuSheet] — paper and grain, no pen, no rules, a shadow following its wobble; no scrim) — not
+ * The web's OrganicMenu: the ⋯ chip, dropping the menu sheet 8 under its trailing edge (round 18:
+ * [MenuSheet] — its paper inside one pen line, no grain, no rules, no shadow; no scrim) — not
  * Material's menu. Not [enabled], the trigger is in its place and takes no tap.
  */
 @Composable
@@ -704,11 +721,11 @@ private fun MenuHost(
         if (open) {
             val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
             val insetPx = with(LocalDensity.current) { inset.roundToPx() }
-            val roomPx = with(LocalDensity.current) { SheetShadow.Room.roundToPx() }
+            val roomPx = with(LocalDensity.current) { MenuSheet.Room.roundToPx() }
             Popup(
                 popupPositionProvider = remember(gap, insetPx, roomPx, above, alignStart) { MenuPlacement(gap, insetPx, above, alignStart, roomPx) },
                 onDismissRequest = { open = false },
-                // The window keeps room round the sheet for its shadow and its wobble (nothing of either cut straight), and
+                // The window keeps room round the sheet for its wobble and pen line (nothing of either cut straight), and
                 // that room may run past the screen's edge: the sheet itself is kept inside it ([MenuPlacement]).
                 properties = PopupProperties(focusable = true, clippingEnabled = false),
             ) {
@@ -718,7 +735,7 @@ private fun MenuHost(
                     Box(
                         Modifier
                             .pointerInput(Unit) { detectTapGestures { open = false } }
-                            .padding(SheetShadow.Room),
+                            .padding(MenuSheet.Room),
                     ) {
                         MenuPanel(items, seed, colors, null, TransformOrigin(if (alignStart) 0f else 1f, if (above) 1f else 0f), { item ->
                             if (choosing) return@MenuPanel
@@ -743,7 +760,7 @@ private fun MenuHost(
  * when [above] — on the other side when that side has no room and this one has, and kept in the
  * window across; the trailing edges lined up (`right: 0`), or the leading ones when [alignStart].
  * [inset]: how far in from the anchor's box the trigger itself is drawn. [room]: how far the popup's
- * content reaches past the sheet on every side (its shadow's room): the sheet is placed, the room
+ * content reaches past the sheet on every side (its wobble's room): the sheet is placed, the room
  * hangs round it.
  */
 internal class MenuPlacement(
@@ -802,15 +819,16 @@ private fun MenuPanel(
 ) {
     val appear = remember { Animatable(0f) }
     LaunchedEffect(Unit) { appear.animateTo(1f, tween(180, easing = CubicBezierEasing(0.2f, 0.8f, 0.3f, 1f))) }
-    val rows = remember(items) { items.map { SheetRow(it.title, it.icon, enabled = it.enabled, danger = it.destructive) } }
-    val inks = remember(colors) { colors.sheetInks() }
+    val rows = remember(items) { items.map { SheetRow(it.title, it.icon, enabled = it.enabled, tone = it.tone) } }
+    val palette = LocalResonanceColors.current
+    val inks = remember(colors, palette) { colors.sheetInks(palette) }
     PaperMenuSheet(
         rows, seed + 100, inks, footer,
         onChoose = { onChoose(items[it]) },
         modifier = modifier.graphicsLayer {
             val v = appear.value
             // Faded per drawing, not through an offscreen layer: a layer is cut at the panel's box, and the
-            // wobble and its shadow run past it — they would show clipped straight until opaque.
+            // wobble and its pen line run past it — they would show clipped straight until opaque.
             compositingStrategy = CompositingStrategy.ModulateAlpha
             alpha = v
             scaleX = 0.94f + 0.06f * v
