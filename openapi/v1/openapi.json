@@ -2030,6 +2030,239 @@
         }
       }
     },
+    "/conversations/{pair}/messages/{messageId}/reaction": {
+      "put": {
+        "operationId": "setReaction",
+        "summary": "Answer a message in your conversation with a reaction (one per person per message: a second replaces the first). Quiet: no bell, no push, no unread, the conversation list unchanged",
+        "description": "Checked in this order: the contract (`400`); your reaction budget (`429`); the conversation and the message (`404` for one you are not in, or a message not in it, or unsent); your pen name (`403 forbidden`); a block either way (`403 blocked`); the connection (`403 forbidden` — a letter not yet answered takes no reactions). Your own messages take reactions too.",
+        "parameters": [
+          {
+            "name": "pair",
+            "in": "path",
+            "required": true,
+            "description": "The conversation's id: its two participants' uids, sorted, joined by `_`",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "description": "The message's id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetReactionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Reacted"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "removeReaction",
+        "summary": "Take your reaction to a message back. One already gone answers `204`",
+        "parameters": [
+          {
+            "name": "pair",
+            "in": "path",
+            "required": true,
+            "description": "The conversation's id: its two participants' uids, sorted, joined by `_`",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "description": "The message's id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed (or already gone)"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conversations/{pair}/messages/{messageId}/unsend": {
+      "post": {
+        "operationId": "unsendMessage",
+        "summary": "Unsend a message you sent, within 24 hours: for both of you it becomes a line saying it was unsent — its words, card, picture and link preview gone, quotes of it emptied. One already unsent answers `204`",
+        "description": "Checked in this order: the contract (`400`); your unsend budget (`429`); the message (`404` unless it is yours, in this conversation); a note (`400`, \"A note can't be unsent.\"); its age (`409 conflict`, \"This message can no longer be unsent.\" past 24 hours). The server keeps what it said for 30 days, read only by moderation when the conversation is reported.",
+        "parameters": [
+          {
+            "name": "pair",
+            "in": "path",
+            "required": true,
+            "description": "The conversation's id: its two participants' uids, sorted, joined by `_`",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "description": "The message's id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Unsent (or already unsent)"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/chat-images": {
       "post": {
         "operationId": "uploadChatImage",
@@ -3395,6 +3628,29 @@
         "required": [
           "id"
         ]
+      },
+      "Reaction": {
+        "type": "string",
+        "enum": [
+          "heart",
+          "moved",
+          "laugh",
+          "hug",
+          "thumbs"
+        ],
+        "description": "A reaction to a message."
+      },
+      "SetReactionRequest": {
+        "type": "object",
+        "properties": {
+          "reaction": {
+            "$ref": "#/components/schemas/Reaction"
+          }
+        },
+        "required": [
+          "reaction"
+        ],
+        "description": "Answer a message with a reaction (it replaces your own earlier one on that message)."
       },
       "HandleAvailability": {
         "type": "object",

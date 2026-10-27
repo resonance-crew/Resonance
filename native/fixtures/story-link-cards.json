@@ -1,89 +1,127 @@
 {
-  "note": "Which links in a story get a preview card (src/lib/links/storyLinks.ts; read by storyLinks.test.ts and StoryMarkdown.test.tsx on the web, and by the apps' story parsers). A paragraph whose only meaningful child is an http(s) link ([t](url), <url>, a reference link; no picture inside) or a run of plain text that is exactly one link is a standalone link, keyed by its normalized URL. `soleLinks`: every such paragraph's key, in reading order (duplicates and our own hosts included) — what a parser must find. `links`: what the server unfurls and stores — soleLinks without our own hosts and bare IP addresses, each once, at most 10. `inline`: links in the story that must stay inline, even if a preview for them existed. `webDrawsNone`: the web renders no paragraph there (a tight list), so it draws no card, as with card embeds.",
+  "note": "Which links in a story get a preview card (src/lib/links/storyLinks.ts; read by storyLinks.test.ts and StoryMarkdown.test.tsx on the web, and by the apps' story parsers). A paragraph whose only meaningful child is an http(s) link ([t](url), <url>, a reference link; no picture inside) whose words are its own address (once http/https and one trailing slash are set aside: <url>, [url](url), [www.x.com](http://www.x.com) — a link with words of its own reads as words, round 16) or a run of plain text that is exactly one link is a standalone link, keyed by its normalized URL. `soleLinks`: every such paragraph's key, in reading order (duplicates and our own hosts included) — what a parser must find. `links`: what the server unfurls and stores — soleLinks without our own hosts and bare IP addresses, each once, at most 10. `inline`: links in the story that must stay inline, even if a preview for them existed. `webDrawsNone`: the web renders no paragraph there (a tight list), so it draws no card, as with card embeds.",
   "cases": [
     {
       "id": "bare-https",
       "markdown": "雨停了。\n\nhttps://example.com/rain\n\n我出門散步。",
-      "soleLinks": ["https://example.com/rain"],
-      "links": ["https://example.com/rain"]
+      "soleLinks": [
+        "https://example.com/rain"
+      ],
+      "links": [
+        "https://example.com/rain"
+      ]
     },
     {
       "id": "bare-www",
       "markdown": "www.example.org/notes",
-      "soleLinks": ["https://www.example.org/notes"],
-      "links": ["https://www.example.org/notes"]
+      "soleLinks": [
+        "https://www.example.org/notes"
+      ],
+      "links": [
+        "https://www.example.org/notes"
+      ]
     },
     {
       "id": "angle-autolink",
       "markdown": "<https://example.com/a?b=1>",
-      "soleLinks": ["https://example.com/a?b=1"],
-      "links": ["https://example.com/a?b=1"]
+      "soleLinks": [
+        "https://example.com/a?b=1"
+      ],
+      "links": [
+        "https://example.com/a?b=1"
+      ]
     },
     {
       "id": "markdown-link",
       "markdown": "前一段。\n\n[一篇好文章](https://blog.example.com/post/42)\n\n後一段。",
-      "soleLinks": ["https://blog.example.com/post/42"],
-      "links": ["https://blog.example.com/post/42"]
+      "soleLinks": [],
+      "links": []
     },
     {
       "id": "link-text-is-another-address",
       "markdown": "[https://elsewhere.example.com](https://example.com/real)",
-      "soleLinks": ["https://example.com/real"],
-      "links": ["https://example.com/real"]
+      "soleLinks": [],
+      "links": []
     },
     {
       "id": "reference-links",
-      "markdown": "[那篇文章][ref]\n\n[ref][]\n\n[other]\n\n[ref]: https://example.net/article\n[other]: https://example.net/other",
-      "soleLinks": ["https://example.net/article", "https://example.net/article", "https://example.net/other"],
-      "links": ["https://example.net/article", "https://example.net/other"]
+      "markdown": "[https://example.net/article][ref]\n\n[那篇文章][ref]\n\n[https://example.net/other]\n\n[ref]: https://example.net/article\n[https://example.net/other]: https://example.net/other",
+      "soleLinks": [
+        "https://example.net/article",
+        "https://example.net/other"
+      ],
+      "links": [
+        "https://example.net/article",
+        "https://example.net/other"
+      ]
     },
     {
       "id": "uppercase-scheme-and-host",
       "markdown": "HTTPS://Example.COM/Path",
-      "soleLinks": ["https://example.com/Path"],
-      "links": ["https://example.com/Path"]
+      "soleLinks": [
+        "https://example.com/Path"
+      ],
+      "links": [
+        "https://example.com/Path"
+      ]
     },
     {
       "id": "inline-links-stay-inline",
       "markdown": "我讀了 [這篇](https://example.com/inline) 之後想了很久。\n\n參考 https://example.com/inline-bare 這篇。",
       "soleLinks": [],
       "links": [],
-      "inline": ["https://example.com/inline", "https://example.com/inline-bare"]
+      "inline": [
+        "https://example.com/inline",
+        "https://example.com/inline-bare"
+      ]
     },
     {
       "id": "text-before-on-the-next-line",
       "markdown": "看這個：\nhttps://example.com/softbreak",
       "soleLinks": [],
       "links": [],
-      "inline": ["https://example.com/softbreak"]
+      "inline": [
+        "https://example.com/softbreak"
+      ]
     },
     {
       "id": "two-links-in-one-paragraph",
       "markdown": "https://a.example.com/one https://b.example.com/two",
       "soleLinks": [],
       "links": [],
-      "inline": ["https://a.example.com/one", "https://b.example.com/two"]
+      "inline": [
+        "https://a.example.com/one",
+        "https://b.example.com/two"
+      ]
     },
     {
       "id": "strikethrough",
       "markdown": "~~https://example.com/struck~~\n\n~~[刪掉的](https://example.com/struck-link)~~",
       "soleLinks": [],
       "links": [],
-      "inline": ["https://example.com/struck", "https://example.com/struck-link"]
+      "inline": [
+        "https://example.com/struck",
+        "https://example.com/struck-link"
+      ]
     },
     {
       "id": "emphasis",
       "markdown": "**https://example.com/bold**\n\n*[斜體](https://example.com/italic)*",
       "soleLinks": [],
       "links": [],
-      "inline": ["https://example.com/bold", "https://example.com/italic"]
+      "inline": [
+        "https://example.com/bold",
+        "https://example.com/italic"
+      ]
     },
     {
       "id": "linked-picture",
       "markdown": "[![封面](https://img.example.com/c.webp)](https://example.com/gallery)",
       "soleLinks": [],
       "links": [],
-      "inline": ["https://example.com/gallery"]
+      "inline": [
+        "https://example.com/gallery"
+      ]
     },
     {
       "id": "card-link-stays-an-embed",
@@ -96,7 +134,6 @@
       "markdown": "https://resonance.channel/zh-TW/card/a-quiet-night\n\n[我的頁面](https://www.resonance.channel/en/u/alice)\n\n<https://resonance-world.vercel.app/en>",
       "soleLinks": [
         "https://resonance.channel/zh-TW/card/a-quiet-night",
-        "https://www.resonance.channel/en/u/alice",
         "https://resonance-world.vercel.app/en"
       ],
       "links": []
@@ -104,7 +141,10 @@
     {
       "id": "ip-addresses",
       "markdown": "http://127.0.0.1/admin\n\n<https://8.8.8.8/>\n\n[短寫](https://127.1/x)",
-      "soleLinks": ["http://127.0.0.1/admin", "https://8.8.8.8/", "https://127.0.0.1/x"],
+      "soleLinks": [
+        "http://127.0.0.1/admin",
+        "https://8.8.8.8/"
+      ],
       "links": []
     },
     {
@@ -118,39 +158,66 @@
       "markdown": "https://example.com很棒",
       "soleLinks": [],
       "links": [],
-      "inline": ["https://example.com/"]
+      "inline": [
+        "https://example.com/"
+      ]
     },
     {
       "id": "sentence-punctuation",
       "markdown": "https://example.com/end。\n\nhttps://example.com/dot.\n\n(https://example.com/paren)",
       "soleLinks": [],
       "links": [],
-      "inline": ["https://example.com/end", "https://example.com/dot", "https://example.com/paren"]
+      "inline": [
+        "https://example.com/end",
+        "https://example.com/dot",
+        "https://example.com/paren"
+      ]
     },
     {
       "id": "balanced-parenthesis-and-cjk-path",
       "markdown": "https://example.com/f_(x)\n\nhttps://zh.wikipedia.org/wiki/中文",
-      "soleLinks": ["https://example.com/f_(x)", "https://zh.wikipedia.org/wiki/%E4%B8%AD%E6%96%87"],
-      "links": ["https://example.com/f_(x)", "https://zh.wikipedia.org/wiki/%E4%B8%AD%E6%96%87"]
+      "soleLinks": [
+        "https://example.com/f_(x)",
+        "https://zh.wikipedia.org/wiki/%E4%B8%AD%E6%96%87"
+      ],
+      "links": [
+        "https://example.com/f_(x)",
+        "https://zh.wikipedia.org/wiki/%E4%B8%AD%E6%96%87"
+      ]
     },
     {
       "id": "quote-and-loose-list",
       "markdown": "> https://example.com/quoted\n\n- 清單裡的連結：\n\n  https://example.com/listed\n\n- 第二項",
-      "soleLinks": ["https://example.com/quoted", "https://example.com/listed"],
-      "links": ["https://example.com/quoted", "https://example.com/listed"]
+      "soleLinks": [
+        "https://example.com/quoted",
+        "https://example.com/listed"
+      ],
+      "links": [
+        "https://example.com/quoted",
+        "https://example.com/listed"
+      ]
     },
     {
       "id": "tight-list",
       "markdown": "- https://example.com/tight-a\n- [b](https://example.com/tight-b)",
-      "soleLinks": ["https://example.com/tight-a", "https://example.com/tight-b"],
-      "links": ["https://example.com/tight-a", "https://example.com/tight-b"],
+      "soleLinks": [
+        "https://example.com/tight-a"
+      ],
+      "links": [
+        "https://example.com/tight-a"
+      ],
       "webDrawsNone": true
     },
     {
       "id": "duplicates",
       "markdown": "https://example.com/same\n\n中間\n\n[同一篇](https://example.com/same)\n\n<https://EXAMPLE.com/same>",
-      "soleLinks": ["https://example.com/same", "https://example.com/same", "https://example.com/same"],
-      "links": ["https://example.com/same"]
+      "soleLinks": [
+        "https://example.com/same",
+        "https://example.com/same"
+      ],
+      "links": [
+        "https://example.com/same"
+      ]
     },
     {
       "id": "at-most-ten",
@@ -185,26 +252,56 @@
     {
       "id": "whatwg-apostrophe-in-query",
       "markdown": "https://example.com/search?q=what's+up",
-      "soleLinks": ["https://example.com/search?q=what%27s+up"],
-      "links": ["https://example.com/search?q=what%27s+up"]
+      "soleLinks": [
+        "https://example.com/search?q=what%27s+up"
+      ],
+      "links": [
+        "https://example.com/search?q=what%27s+up"
+      ]
     },
     {
       "id": "whatwg-braces-in-query-and-fragment",
       "markdown": "https://example.com/?a={b}#c{d}",
-      "soleLinks": ["https://example.com/?a={b}#c{d}"],
-      "links": ["https://example.com/?a={b}#c{d}"]
+      "soleLinks": [
+        "https://example.com/?a={b}#c{d}"
+      ],
+      "links": [
+        "https://example.com/?a={b}#c{d}"
+      ]
     },
     {
       "id": "whatwg-dot-segments",
       "markdown": "https://example.com/a/./b/../c",
-      "soleLinks": ["https://example.com/a/c"],
-      "links": ["https://example.com/a/c"]
+      "soleLinks": [
+        "https://example.com/a/c"
+      ],
+      "links": [
+        "https://example.com/a/c"
+      ]
     },
     {
       "id": "whatwg-idn-explicit-link",
-      "markdown": "[t](https://例子.tw/x)",
-      "soleLinks": ["https://xn--fsqu00a.tw/x"],
-      "links": ["https://xn--fsqu00a.tw/x"]
+      "markdown": "<https://例子.tw/x>\n\n[t](https://例子.tw/x)",
+      "soleLinks": [
+        "https://xn--fsqu00a.tw/x"
+      ],
+      "links": [
+        "https://xn--fsqu00a.tw/x"
+      ]
+    },
+    {
+      "id": "words-that-are-the-address",
+      "markdown": "[www.example.com](http://www.example.com)\n\n[https://example.com/a/](https://example.com/a)\n\n[看這篇](https://example.com/b)\n\n[example.com/c](https://example.com/c)\n\n[**https://example.com/d**](https://example.com/d)",
+      "soleLinks": [
+        "http://www.example.com/",
+        "https://example.com/a",
+        "https://example.com/d"
+      ],
+      "links": [
+        "http://www.example.com/",
+        "https://example.com/a",
+        "https://example.com/d"
+      ]
     }
   ]
 }

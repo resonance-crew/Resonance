@@ -399,6 +399,8 @@ public enum L10n {
             public static var pickBody: String { Strings.shared.string("app.notifications.pickBody") }
             /// {handle} wrote a new card
             public static func newCard(handle: String) -> String { Strings.shared.format("app.notifications.newCard", ["handle": handle]) }
+            /// {handle} unsent a message
+            public static func messageUnsent(handle: String) -> String { Strings.shared.format("app.notifications.messageUnsent", ["handle": handle]) }
         }
         public enum SignOutConfirm {
             /// Sign out?
@@ -828,6 +830,52 @@ public enum L10n {
         public static var you: String { Strings.shared.string("messages.you") }
         /// Resonance
         public static var cardSource: String { Strings.shared.string("messages.cardSource") }
+        /// React
+        public static var react: String { Strings.shared.string("messages.react") }
+        public enum Reactions {
+            /// Love
+            public static var heart: String { Strings.shared.string("messages.reactions.heart") }
+            /// Moved
+            public static var moved: String { Strings.shared.string("messages.reactions.moved") }
+            /// Haha
+            public static var laugh: String { Strings.shared.string("messages.reactions.laugh") }
+            /// Hug
+            public static var hug: String { Strings.shared.string("messages.reactions.hug") }
+            /// Like
+            public static var thumbs: String { Strings.shared.string("messages.reactions.thumbs") }
+        }
+        /// Reactions
+        public static var reactionsLabel: String { Strings.shared.string("messages.reactionsLabel") }
+        /// React with {reaction}
+        public static func reactWith(reaction: String) -> String { Strings.shared.format("messages.reactWith", ["reaction": reaction]) }
+        /// Remove reaction
+        public static var removeReaction: String { Strings.shared.string("messages.removeReaction") }
+        /// You reacted {reaction}
+        public static func reactedYou(reaction: String) -> String { Strings.shared.format("messages.reactedYou", ["reaction": reaction]) }
+        /// {handle} reacted {reaction}
+        public static func reactedThem(handle: String, reaction: String) -> String { Strings.shared.format("messages.reactedThem", ["handle": handle, "reaction": reaction]) }
+        /// Couldn’t send your reaction — please try again
+        public static var reactError: String { Strings.shared.string("messages.reactError") }
+        /// Unsend
+        public static var unsend: String { Strings.shared.string("messages.unsend") }
+        /// Unsend this message?
+        public static var unsendTitle: String { Strings.shared.string("messages.unsendTitle") }
+        /// They’ll no longer see it.
+        public static var unsendBody: String { Strings.shared.string("messages.unsendBody") }
+        /// Unsend
+        public static var unsendConfirm: String { Strings.shared.string("messages.unsendConfirm") }
+        /// Cancel
+        public static var unsendCancel: String { Strings.shared.string("messages.unsendCancel") }
+        /// Messages older than a day can’t be unsent
+        public static var unsendTooLate: String { Strings.shared.string("messages.unsendTooLate") }
+        /// Couldn’t unsend — please try again
+        public static var unsendError: String { Strings.shared.string("messages.unsendError") }
+        /// You unsent a message
+        public static var unsentByYou: String { Strings.shared.string("messages.unsentByYou") }
+        /// {handle} unsent a message
+        public static func unsentByThem(handle: String) -> String { Strings.shared.format("messages.unsentByThem", ["handle": handle]) }
+        /// Message unsent
+        public static var unsentQuote: String { Strings.shared.string("messages.unsentQuote") }
     }
     public enum Write {
         /// Give it a one-line title first
@@ -925,6 +973,26 @@ public enum L10n {
                 /// Try again
                 public static var retry: String { Strings.shared.string("write.editor.cardModal.retry") }
             }
+            /// Link
+            public static var link: String { Strings.shared.string("write.editor.link") }
+            /// Paste or type an address
+            public static var linkPlaceholder: String { Strings.shared.string("write.editor.linkPlaceholder") }
+            /// Show as
+            public static var linkShowAs: String { Strings.shared.string("write.editor.linkShowAs") }
+            /// Card
+            public static var linkAsCard: String { Strings.shared.string("write.editor.linkAsCard") }
+            /// Text
+            public static var linkAsText: String { Strings.shared.string("write.editor.linkAsText") }
+            /// Remove link
+            public static var linkRemove: String { Strings.shared.string("write.editor.linkRemove") }
+            /// Done
+            public static var linkApply: String { Strings.shared.string("write.editor.linkApply") }
+            /// That isn’t an address that can be linked
+            public static var linkInvalid: String { Strings.shared.string("write.editor.linkInvalid") }
+            /// Link card: {host}
+            public static func linkCardLabel(host: String) -> String { Strings.shared.format("write.editor.linkCardLabel", ["host": host]) }
+            /// Edit link
+            public static var linkEdit: String { Strings.shared.string("write.editor.linkEdit") }
         }
         /// Tags
         public static var tagsLabel: String { Strings.shared.string("write.tagsLabel") }
@@ -1096,6 +1164,14 @@ public enum L10n {
             /// This card is in the trash — restore it to save
             public static var status: String { Strings.shared.string("write.trashed.status") }
         }
+        /// Suggest
+        public static var tagsSuggestShort: String { Strings.shared.string("write.tagsSuggestShort") }
+        /// Suggest tags with AI
+        public static var tagsSuggestLabel: String { Strings.shared.string("write.tagsSuggestLabel") }
+        /// Add tag: {tag}
+        public static func tagsAddLabel(tag: String) -> String { Strings.shared.format("write.tagsAddLabel", ["tag": tag]) }
+        /// {count, plural, one {# tag added} other {# tags added}}
+        public static func tagsAdded(count: Int) -> String { Strings.shared.format("write.tagsAdded", ["count": count]) }
     }
     public enum Me {
         /// Joined {date}
@@ -1704,6 +1780,8 @@ public enum L10n {
             /// Close
             public static var close: String { Strings.shared.string("safety.blockedList.close") }
         }
+        /// Report this message
+        public static var reportThisMessage: String { Strings.shared.string("safety.reportThisMessage") }
     }
     public enum AccountDeletion {
         /// Your account is scheduled for deletion

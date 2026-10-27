@@ -230,7 +230,8 @@
       "inviteExpired": "An invite expired",
       "pickTitle": "A card for tonight",
       "pickBody": "A card that might resonate with you",
-      "newCard": "{handle} wrote a new card"
+      "newCard": "{handle} wrote a new card",
+      "messageUnsent": "{handle} unsent a message"
     },
     "signOutConfirm": {
       "title": "Sign out?",
@@ -465,7 +466,31 @@
     "searchShowList": "Show all matches",
     "searchHint": "Search the words in your messages",
     "you": "You",
-    "cardSource": "Resonance"
+    "cardSource": "Resonance",
+    "react": "React",
+    "reactions": {
+      "heart": "Love",
+      "moved": "Moved",
+      "laugh": "Haha",
+      "hug": "Hug",
+      "thumbs": "Like"
+    },
+    "reactionsLabel": "Reactions",
+    "reactWith": "React with {reaction}",
+    "removeReaction": "Remove reaction",
+    "reactedYou": "You reacted {reaction}",
+    "reactedThem": "{handle} reacted {reaction}",
+    "reactError": "Couldn’t send your reaction — please try again",
+    "unsend": "Unsend",
+    "unsendTitle": "Unsend this message?",
+    "unsendBody": "They’ll no longer see it.",
+    "unsendConfirm": "Unsend",
+    "unsendCancel": "Cancel",
+    "unsendTooLate": "Messages older than a day can’t be unsent",
+    "unsendError": "Couldn’t unsend — please try again",
+    "unsentByYou": "You unsent a message",
+    "unsentByThem": "{handle} unsent a message",
+    "unsentQuote": "Message unsent"
   },
   "write": {
     "titleRequired": "Give it a one-line title first",
@@ -516,7 +541,17 @@
         "cancel": "Cancel",
         "failed": "Couldn't load your cards",
         "retry": "Try again"
-      }
+      },
+      "link": "Link",
+      "linkPlaceholder": "Paste or type an address",
+      "linkShowAs": "Show as",
+      "linkAsCard": "Card",
+      "linkAsText": "Text",
+      "linkRemove": "Remove link",
+      "linkApply": "Done",
+      "linkInvalid": "That isn’t an address that can be linked",
+      "linkCardLabel": "Link card: {host}",
+      "linkEdit": "Edit link"
     },
     "tagsLabel": "Tags",
     "tagsSuggest": "Suggest with AI",
@@ -607,7 +642,11 @@
       "line": "Restore it to keep writing",
       "restore": "Restore and keep writing",
       "status": "This card is in the trash — restore it to save"
-    }
+    },
+    "tagsSuggestShort": "Suggest",
+    "tagsSuggestLabel": "Suggest tags with AI",
+    "tagsAddLabel": "Add tag: {tag}",
+    "tagsAdded": "{count, plural, one {# tag added} other {# tags added}}"
   },
   "me": {
     "joined": "Joined {date}",
@@ -933,7 +972,8 @@
       "since": "Blocked {date}",
       "unknownUser": "Deleted account",
       "close": "Close"
-    }
+    },
+    "reportThisMessage": "Report this message"
   },
   "accountDeletion": {
     "title": "Your account is scheduled for deletion",

@@ -48,6 +48,7 @@ const EN_DIALOG_BODIES: Record<string, string> = {
   'me.actions.deleteConfirmBody': 'the delete-card confirm dialog',
   'me.actions.restoredAloneBody': "the notice when a restored resonance comes back on its own",
   'safety.report.doneBlocked': "the report dialog's thanks, under its two-sentence body",
+  'messages.unsendBody': 'the unsend confirm dialog',
 };
 
 const zhStrings = flatten(zh as Tree);

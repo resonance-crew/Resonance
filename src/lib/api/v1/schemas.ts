@@ -608,6 +608,19 @@ export const CreateReportRequest = named(
 
 export const CreateReportResponse = named(z.object({ id: z.string() }), 'CreateReportResponse');
 
+/**
+ * A message's reaction (round 16 §4): the five stickers, by meaning. Clients draw an id they don't know as
+ * nothing, so a sixth later is additive.
+ */
+export const Reaction = named(z.enum(['heart', 'moved', 'laugh', 'hug', 'thumbs']), 'Reaction', 'A reaction to a message.');
+
+export const SetReactionRequest = named(
+  z.object({ reaction: Reaction }),
+  'SetReactionRequest',
+  'Answer a message with a reaction (it replaces your own earlier one on that message).',
+);
+
+
 export const HandleAvailability = named(
   z.object({ handle: z.string(), available: z.boolean() }),
   'HandleAvailability',
@@ -679,6 +692,8 @@ export const NotificationIdParam = DocId;
 export const InstallationIdParam = z.string().regex(/^[A-Za-z0-9_.:-]{8,128}$/, 'Not a valid installation id.');
 /** A conversation's id: its two participants' uids, sorted, joined by `_` (as the connection's). */
 export const ConversationIdParam = z.string().min(3).max(257).regex(/^[^/]+_[^/]+$/, 'Not a valid conversation id.');
+/** A message of a conversation (its document id; a `clientId` became one). */
+export const MessageIdParam = DocId;
 /** Pen names may be any script (2–20 characters); never a path. */
 export const HandleParam = z.string().trim().min(1).max(40).regex(/^[^/?#]+$/, 'Not a valid handle.');
 
@@ -699,6 +714,7 @@ export type NotificationSettingsBody = z.infer<typeof NotificationSettings>;
 export type UpdateNotificationSettingsInput = z.infer<typeof UpdateNotificationSettingsRequest>;
 export type ReportCardInput = z.infer<typeof ReportCardRequest>;
 export type CreateReportInput = z.infer<typeof CreateReportRequest>;
+export type SetReactionInput = z.infer<typeof SetReactionRequest>;
 export type UpdateCardInput = z.infer<typeof UpdateCardRequest>;
 export type ResonateResponseBody = z.infer<typeof ResonateResponse>;
 export type TrashedCardBody = z.infer<typeof TrashedCard>;

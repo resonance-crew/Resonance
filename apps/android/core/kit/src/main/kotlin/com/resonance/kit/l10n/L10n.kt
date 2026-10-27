@@ -401,6 +401,8 @@ object L10n {
             val pickBody: String get() = Strings.string("app.notifications.pickBody")
             /** {handle} wrote a new card */
             fun newCard(handle: String): String = Strings.format("app.notifications.newCard", mapOf("handle" to handle))
+            /** {handle} unsent a message */
+            fun messageUnsent(handle: String): String = Strings.format("app.notifications.messageUnsent", mapOf("handle" to handle))
         }
         object SignOutConfirm {
             /** Sign out? */
@@ -830,6 +832,52 @@ object L10n {
         val you: String get() = Strings.string("messages.you")
         /** Resonance */
         val cardSource: String get() = Strings.string("messages.cardSource")
+        /** React */
+        val react: String get() = Strings.string("messages.react")
+        object Reactions {
+            /** Love */
+            val heart: String get() = Strings.string("messages.reactions.heart")
+            /** Moved */
+            val moved: String get() = Strings.string("messages.reactions.moved")
+            /** Haha */
+            val laugh: String get() = Strings.string("messages.reactions.laugh")
+            /** Hug */
+            val hug: String get() = Strings.string("messages.reactions.hug")
+            /** Like */
+            val thumbs: String get() = Strings.string("messages.reactions.thumbs")
+        }
+        /** Reactions */
+        val reactionsLabel: String get() = Strings.string("messages.reactionsLabel")
+        /** React with {reaction} */
+        fun reactWith(reaction: String): String = Strings.format("messages.reactWith", mapOf("reaction" to reaction))
+        /** Remove reaction */
+        val removeReaction: String get() = Strings.string("messages.removeReaction")
+        /** You reacted {reaction} */
+        fun reactedYou(reaction: String): String = Strings.format("messages.reactedYou", mapOf("reaction" to reaction))
+        /** {handle} reacted {reaction} */
+        fun reactedThem(handle: String, reaction: String): String = Strings.format("messages.reactedThem", mapOf("handle" to handle, "reaction" to reaction))
+        /** Couldn’t send your reaction — please try again */
+        val reactError: String get() = Strings.string("messages.reactError")
+        /** Unsend */
+        val unsend: String get() = Strings.string("messages.unsend")
+        /** Unsend this message? */
+        val unsendTitle: String get() = Strings.string("messages.unsendTitle")
+        /** They’ll no longer see it. */
+        val unsendBody: String get() = Strings.string("messages.unsendBody")
+        /** Unsend */
+        val unsendConfirm: String get() = Strings.string("messages.unsendConfirm")
+        /** Cancel */
+        val unsendCancel: String get() = Strings.string("messages.unsendCancel")
+        /** Messages older than a day can’t be unsent */
+        val unsendTooLate: String get() = Strings.string("messages.unsendTooLate")
+        /** Couldn’t unsend — please try again */
+        val unsendError: String get() = Strings.string("messages.unsendError")
+        /** You unsent a message */
+        val unsentByYou: String get() = Strings.string("messages.unsentByYou")
+        /** {handle} unsent a message */
+        fun unsentByThem(handle: String): String = Strings.format("messages.unsentByThem", mapOf("handle" to handle))
+        /** Message unsent */
+        val unsentQuote: String get() = Strings.string("messages.unsentQuote")
     }
     object Write {
         /** Give it a one-line title first */
@@ -927,6 +975,26 @@ object L10n {
                 /** Try again */
                 val retry: String get() = Strings.string("write.editor.cardModal.retry")
             }
+            /** Link */
+            val link: String get() = Strings.string("write.editor.link")
+            /** Paste or type an address */
+            val linkPlaceholder: String get() = Strings.string("write.editor.linkPlaceholder")
+            /** Show as */
+            val linkShowAs: String get() = Strings.string("write.editor.linkShowAs")
+            /** Card */
+            val linkAsCard: String get() = Strings.string("write.editor.linkAsCard")
+            /** Text */
+            val linkAsText: String get() = Strings.string("write.editor.linkAsText")
+            /** Remove link */
+            val linkRemove: String get() = Strings.string("write.editor.linkRemove")
+            /** Done */
+            val linkApply: String get() = Strings.string("write.editor.linkApply")
+            /** That isn’t an address that can be linked */
+            val linkInvalid: String get() = Strings.string("write.editor.linkInvalid")
+            /** Link card: {host} */
+            fun linkCardLabel(host: String): String = Strings.format("write.editor.linkCardLabel", mapOf("host" to host))
+            /** Edit link */
+            val linkEdit: String get() = Strings.string("write.editor.linkEdit")
         }
         /** Tags */
         val tagsLabel: String get() = Strings.string("write.tagsLabel")
@@ -1098,6 +1166,14 @@ object L10n {
             /** This card is in the trash — restore it to save */
             val status: String get() = Strings.string("write.trashed.status")
         }
+        /** Suggest */
+        val tagsSuggestShort: String get() = Strings.string("write.tagsSuggestShort")
+        /** Suggest tags with AI */
+        val tagsSuggestLabel: String get() = Strings.string("write.tagsSuggestLabel")
+        /** Add tag: {tag} */
+        fun tagsAddLabel(tag: String): String = Strings.format("write.tagsAddLabel", mapOf("tag" to tag))
+        /** {count, plural, one {# tag added} other {# tags added}} */
+        fun tagsAdded(count: Int): String = Strings.format("write.tagsAdded", mapOf("count" to count))
     }
     object Me {
         /** Joined {date} */
@@ -1706,6 +1782,8 @@ object L10n {
             /** Close */
             val close: String get() = Strings.string("safety.blockedList.close")
         }
+        /** Report this message */
+        val reportThisMessage: String get() = Strings.string("safety.reportThisMessage")
     }
     object AccountDeletion {
         /** Your account is scheduled for deletion */

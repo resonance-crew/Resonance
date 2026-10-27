@@ -62,7 +62,7 @@ afterEach(() => vi.restoreAllMocks());
 describe('unfurlCardLinks', () => {
   it("stores each standalone link's preview in reading order, and never the card's dates", async () => {
     store = fakeAdminDb({
-      'cards/c1': published('開頭。\n\nhttps://example.com/b\n\n中間有 [一個行內連結](https://example.com/inline)。\n\n[第二篇](https://example.com/a)\n\n> <https://example.com/c>'),
+      'cards/c1': published('開頭。\n\nhttps://example.com/b\n\n中間有 [一個行內連結](https://example.com/inline)。\n\n<https://example.com/a>\n\n> <https://example.com/c>\n\n[有字的連結讀作文字](https://example.com/words)'),
     });
     const { fetch, asked } = sites();
     const result = await unfurl({ fetch });
@@ -87,7 +87,7 @@ describe('unfurlCardLinks', () => {
   });
 
   it("gives a story's YouTube links their cards from YouTube's oEmbed answer (backlog 15)", async () => {
-    store = fakeAdminDb({ 'cards/c1': published('一首歌。\n\nhttps://youtu.be/dQw4w9WgXcQ\n\n[另一首](https://www.youtube.com/watch?v=abcdefghijk)') });
+    store = fakeAdminDb({ 'cards/c1': published('一首歌。\n\nhttps://youtu.be/dQw4w9WgXcQ\n\n<https://www.youtube.com/watch?v=abcdefghijk>') });
     const fetch = vi.fn<PreviewFetch>(async (url, options) => {
       expect(options.mode).toBe('json');
       const id = new URL(new URL(url).searchParams.get('url')!).searchParams.get('v');

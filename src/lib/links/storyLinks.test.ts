@@ -30,11 +30,11 @@ describe('story link cards (native/fixtures/story-link-cards.json, shared with t
 
 describe('soleLinkParagraphs', () => {
   it('keys each standalone paragraph by where it starts in the source, as the web reader looks it up', () => {
-    const story = '開頭。\n\nhttps://example.com/a\n\n> [引用](https://example.com/b)\n';
+    const story = '開頭。\n\nhttps://example.com/a\n\n> [https://example.com/b](https://example.com/b)\n\n[有字的連結](https://example.com/c)\n';
     const found = soleLinkParagraphs(story);
     expect([...found]).toEqual([
       [story.indexOf('https://example.com/a'), 'https://example.com/a'],
-      [story.indexOf('[引用]'), 'https://example.com/b'],
+      [story.indexOf('[https://example.com/b]'), 'https://example.com/b'],
     ]);
   });
 
@@ -43,7 +43,7 @@ describe('soleLinkParagraphs', () => {
   });
 
   it('takes the first definition of a label, as CommonMark does', () => {
-    expect(standaloneLinks('[r]\n\n[r]: https://example.com/first\n[r]: https://example.com/second')).toEqual(['https://example.com/first']);
+    expect(standaloneLinks('[https://example.com/first][r]\n\n[r]: https://example.com/first\n[r]: https://example.com/second')).toEqual(['https://example.com/first']);
   });
 });
 

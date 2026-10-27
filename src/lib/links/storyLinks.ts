@@ -10,7 +10,10 @@ import { findLinks, normalizeLink } from './url';
  *
  *  (a) a link — `[text](url)`, `<url>` or a reference link whose definition
  *      exists — to an http(s) address the link rules take (`normalizeLink`),
- *      with no picture inside it; or
+ *      with no picture inside it, whose words are that address itself (round
+ *      16 §6: `<url>`, `[url](url)`, `[www.x.com](http://www.x.com)` — the
+ *      same address once http/https and a trailing slash are set aside); a
+ *      link the writer gave words of its own reads as those words; or
  *  (b) a run of plain text that is, once trimmed, exactly one link
  *      (`findLinks`) from its first character to its last,
  *
@@ -49,6 +52,25 @@ interface MdNode {
 const HTTP = /^https?:\/\//i;
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
+/** The words a node shows (a link's text, however it is emphasized inside). */
+function wordsOf(node: MdNode): string {
+  if (node.type === 'text' || node.type === 'inlineCode') return String(node.value ?? '');
+  return (node.children ?? []).map(wordsOf).join('');
+}
+
+/** An address with its scheme and one trailing slash set aside — how a link's words are matched to its href. */
+const bareAddress = (url: string) => url.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+
+/**
+ * Whether a link's words are its own address — the writer's way of saying "show the page" rather than "read
+ * my words": the words, trimmed, are one address the link rules take, naming the same page as the href.
+ */
+export function wordsAreTheAddress(words: string, href: string): boolean {
+  const said = normalizeLink(words.trim());
+  const target = normalizeLink(href);
+  return !!said && !!target && bareAddress(said) === bareAddress(target);
+}
+
 /** Whether the subtree holds a picture (`[![img](…)](url)` is a linked picture, not a link). */
 function holdsImage(node: MdNode): boolean {
   return node.type === 'image' || node.type === 'imageReference' || (node.children ?? []).some(holdsImage);
@@ -62,6 +84,8 @@ function soleLinkOf(paragraph: MdNode, definitions: Map<string, string>): string
   if (only.type === 'link' || only.type === 'linkReference') {
     const href = only.type === 'link' ? only.url : definitions.get(only.identifier ?? '');
     if (!href || !HTTP.test(href) || holdsImage(only)) return null;
+    // A link with words of its own reads as those words, alone on its line or not.
+    if (!wordsAreTheAddress(wordsOf(only), href)) return null;
     return normalizeLink(href);
   }
   if (only.type === 'text') {

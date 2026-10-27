@@ -230,7 +230,8 @@
       "inviteExpired": "一則邀請已過期",
       "pickTitle": "今晚的一張卡片",
       "pickBody": "一張可能與你共振的卡片",
-      "newCard": "{handle} 寫了一張新卡片"
+      "newCard": "{handle} 寫了一張新卡片",
+      "messageUnsent": "{handle} 收回了一則訊息"
     },
     "signOutConfirm": {
       "title": "確定要登出嗎？",
@@ -465,7 +466,31 @@
     "searchShowList": "顯示所有結果",
     "searchHint": "輸入關鍵字，搜尋你們的訊息",
     "you": "你",
-    "cardSource": "共振"
+    "cardSource": "共振",
+    "react": "回應",
+    "reactions": {
+      "heart": "愛心",
+      "moved": "感動",
+      "laugh": "大笑",
+      "hug": "抱抱",
+      "thumbs": "讚"
+    },
+    "reactionsLabel": "選一個回應",
+    "reactWith": "以{reaction}回應",
+    "removeReaction": "移除回應",
+    "reactedYou": "你回應了{reaction}",
+    "reactedThem": "{handle} 回應了{reaction}",
+    "reactError": "回應沒有送出，請再試一次",
+    "unsend": "收回",
+    "unsendTitle": "收回這則訊息？",
+    "unsendBody": "對方將看不到這則訊息",
+    "unsendConfirm": "收回",
+    "unsendCancel": "取消",
+    "unsendTooLate": "超過 24 小時的訊息無法收回",
+    "unsendError": "訊息沒有收回，請再試一次",
+    "unsentByYou": "你收回了一則訊息",
+    "unsentByThem": "{handle} 收回了一則訊息",
+    "unsentQuote": "訊息已收回"
   },
   "write": {
     "titleRequired": "先寫下一句話標題",
@@ -516,7 +541,17 @@
         "cancel": "取消",
         "failed": "沒能讀到你的卡片",
         "retry": "再試一次"
-      }
+      },
+      "link": "連結",
+      "linkPlaceholder": "貼上或輸入網址",
+      "linkShowAs": "顯示為",
+      "linkAsCard": "卡片",
+      "linkAsText": "文字",
+      "linkRemove": "移除連結",
+      "linkApply": "完成",
+      "linkInvalid": "這不是可以連結的網址",
+      "linkCardLabel": "連結卡片：{host}",
+      "linkEdit": "編輯連結"
     },
     "tagsLabel": "標籤",
     "tagsSuggest": "AI 建議",
@@ -607,7 +642,11 @@
       "line": "還原之後就能繼續寫",
       "restore": "還原並繼續寫",
       "status": "這張卡片在垃圾桶裡，還原後才會儲存"
-    }
+    },
+    "tagsSuggestShort": "AI 建議",
+    "tagsSuggestLabel": "AI 建議標籤",
+    "tagsAddLabel": "新增標籤：{tag}",
+    "tagsAdded": "已加入 {count} 個標籤"
   },
   "me": {
     "joined": "{date} 加入",
@@ -933,7 +972,8 @@
       "since": "{date} 封鎖",
       "unknownUser": "已刪除的帳號",
       "close": "關閉"
-    }
+    },
+    "reportThisMessage": "檢舉這則訊息"
   },
   "accountDeletion": {
     "title": "帳號已排定刪除",
