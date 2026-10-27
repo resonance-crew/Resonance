@@ -15,7 +15,6 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ReadOnlyComposable
@@ -88,6 +87,8 @@ import com.resonance.design.fieldHintStyle
 import com.resonance.design.fieldSurface
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
+import com.resonance.design.generated.LocalResonanceColors
+import com.resonance.design.PaletteMixes
 import com.resonance.kit.l10n.L10n
 
 /**
@@ -260,11 +261,14 @@ internal object TagEntry {
 }
 
 /**
- * The chosen tags as the section's row (round 16 §1): the section's [label] first, then each tag as
- * a large outlined pill on the light terracotta with its ✕ (a 44 hit box round it), 8 apart and 8
- * between lines, the row at least 32 tall. A tag added after the row was first drawn pops in (160 ms,
- * 0.85 → 1; at once with animations off). [onHeightChange] hears the row's height change as it is
- * measured — before anything under it is placed — so the field under it can be kept still.
+ * The chosen tags (round 16 §1, its review's S1 / S2 / N6), under the section's label — which stands on a
+ * line of its own, as 卡片類型's does, so a wrapped row never hangs indented under it: each tag a large
+ * outlined pill, quiet ([TagPill] `quiet`: half the accent's light wash on the paper, the soft pen at
+ * INK_LIGHT, words at 500, a muted ✕), its ✕ named for its tag (移除標籤：日常) with a 44 hit box round it,
+ * 8 apart and 8 between lines, [TagRowTop] under the label. With no tags the row takes no room at all.
+ * A tag added after the row was first drawn pops in (160 ms, 0.85 → 1; at once with animations off).
+ * [onHeightChange] hears the row's height change as it is measured — before anything under it is placed
+ * — so the field under it can be kept still (the first pill bringing the row along too).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -272,41 +276,46 @@ fun TagPillRow(
     tags: List<String>,
     onRemove: (String) -> Unit,
     onHeightChange: (Int) -> Unit,
-    label: @Composable () -> Unit,
 ) {
     val reduced = LocalContext.current.prefersReducedMotion()
     // The tags the row opened with stand still; only ones added since pop in.
     val first = remember { tags.toSet() }
     val lastHeight = remember { intArrayOf(-1) }
+    val fill = PaletteMixes.of(LocalResonanceColors.current).quietTag
     FlowRow(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = TagRowMin)
             .layout { measurable, constraints ->
                 val placeable = measurable.measure(constraints)
                 val before = lastHeight[0]
                 lastHeight[0] = placeable.height
                 if (before >= 0 && before != placeable.height) onHeightChange(placeable.height - before)
                 layout(placeable.width, placeable.height) { placeable.place(0, 0) }
-            },
+            }
+            // Measured inside the hook above, so the row's coming and going counts its air too.
+            .then(if (tags.isEmpty()) Modifier else Modifier.padding(top = TagRowTop)),
         horizontalArrangement = Arrangement.spacedBy(TagGap),
         verticalArrangement = Arrangement.spacedBy(TagGap),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.heightIn(min = TagRowMin), contentAlignment = Alignment.CenterStart) { label() }
         tags.forEach { tag ->
             key(tag) {
                 val pop = remember { Animatable(if (tag in first || reduced) 1f else 0.85f) }
                 LaunchedEffect(Unit) { if (pop.value < 1f) pop.animateTo(1f, tween(TAG_POP_MILLIS, easing = EaseOut)) }
                 Box(Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value }) {
-                    TagPill(tag, Tokens.TerracottaLight, size = TagSize.Lg, outlined = true) { onRemove(tag) }
+                    TagPill(
+                        tag, fill, size = TagSize.Lg, outlined = true, quiet = true,
+                        removeLabel = L10n.Write.tagsRemoveLabel(tag),
+                        onRemove = { onRemove(tag) },
+                    )
                 }
             }
         }
     }
 }
 
-private val TagRowMin = 32.dp
+/** How far the pills stand under the section's label (the web's 8). */
+private val TagRowTop = 8.dp
 private val TagGap = 8.dp
 private const val TAG_POP_MILLIS = 160
 
