@@ -2,12 +2,14 @@ import DesignSystem
 import ResonanceKit
 import SwiftUI
 
-/// The publish step's tags (round 16 §1, and its review's S1 / S2 / N6): the section's label on its own line,
-/// as 卡片類型's below it; under it the chosen tags wrapping like words — lg outlined pills, quiet (half the
-/// accent's light wash on the paper, the soft pen, words at 500, a muted ✕), each ✕ a 44 × 44 target named for
-/// its tag — and under them the field, the chat composer's capsule (``TagEntryCapsule``): the text, then one end segment
-/// behind a wavy seam that asks the model for tags (✦ 「AI 建議」) with nothing typed, or adds the word
-/// typed (＋ 「新增」). Return, a comma (，、 too) or the segment adds; on a hardware keyboard Backspace in
+/// The publish step's tags (round 16 §1, its review's S1 / N6, round 17 §4): the section's label on its own line,
+/// as 卡片類型's below it; under it the chosen tags wrapping like words — lg pills with no outline, the 「AI 建議」
+/// segment's own face (its tonal fill, its ink for the words at 500 and the ✕ at 70 %), each ✕ a 44 × 44 target
+/// named for its tag — and under them the field, the chat composer's capsule (``TagEntryCapsule``): the text, then
+/// one end segment behind a wavy seam that asks the model for tags (✦ 「AI 建議」) with nothing typed, or adds the
+/// word typed (＋ 「新增」). Return, a comma (，、 too) or the segment adds — Return keeping the keyboard up, so
+/// committing a tag moves nothing (round 17 §4: the field let go of the keyboard and took it back, and the page
+/// jumped with it); on a hardware keyboard Backspace in
 /// the empty field takes the last tag back (never on the soft keyboard, where it is too easy to hit). An
 /// input method still composing (zhuyin's underlined candidate) is not a word yet: the segment keeps its
 /// suggest face until it ends, and a tap on it then ends it first and adds the word. The field never moves
@@ -48,7 +50,7 @@ struct TagField<Label: View>: View {
                 label
                 FlowRow(spacing: 8, lineSpacing: 8) {
                     ForEach(tags, id: \.self) { tag in
-                        TagPill(tag, fill: Self.pillFill, size: .lg, outlined: true, quiet: true,
+                        TagPill(tag, fill: Self.pillFill, size: .lg, outlined: false, quiet: true, ink: Self.pillInk,
                                 removeLabel: L10n.Write.tagsRemoveLabel(tag: tag)) { onRemove(tag) }
                             .transition(.asymmetric(insertion: reduceMotion ? .identity : .scale(scale: 0.85).combined(with: .opacity),
                                                     removal: .opacity))
@@ -104,20 +106,27 @@ struct TagField<Label: View>: View {
         #endif
     }
 
-    /// The text as the composer draws its own: its size, and the padding that sits one line in the 48.
+    /// The text as the composer draws its own: its size, and the padding that sits one line in the 48. A field
+    /// of one line that grows no further (the composer's kind, `axis: .vertical`), so Return is a line break the
+    /// field keeps — taken out at once, and the word added (``TagInput/returned(_:before:)``) — rather than a
+    /// submit, after which SwiftUI lets go of the keyboard: taking it back moved the page under the field.
     private var entry: some View {
         let metrics = ComposerText.current()
         // Named by the section's label, as the web's input is (review N6), not by its placeholder.
-        return TextField(text: $draft, prompt: fieldPrompt(placeholder, size: ComposerMetrics.textSize)) { Text(L10n.Write.tagsLabel) }
+        return TextField(text: Binding(get: { draft }, set: typed), prompt: fieldPrompt(placeholder, size: ComposerMetrics.textSize),
+                         axis: .vertical) { Text(L10n.Write.tagsLabel) }
+            .lineLimit(1)
             .font(Font(metrics.font))
             .foregroundStyle(Tokens.text)
             .tint(Tokens.terracotta)
             .focused($focused)
             .submitLabel(.done)
-            .onSubmit(commit)
             .padding(.vertical, metrics.padding)
             .onChange(of: draft) { composing = FirstResponder.hasMarkedText() }
             // Marked text set, chosen or ended without the words changing still says so to the field.
+            .onReceive(NotificationCenter.default.publisher(for: UITextView.textDidChangeNotification)) { _ in
+                if focused { composing = FirstResponder.hasMarkedText() }
+            }
             .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidChangeNotification)) { _ in
                 if focused { composing = FirstResponder.hasMarkedText() }
             }
@@ -132,12 +141,25 @@ struct TagField<Label: View>: View {
             }
     }
 
+    /// The words as typed: a Return in them adds the word and keeps the field (and its keyboard); lines
+    /// pasted in are tags each, as commas are.
+    private func typed(_ text: String) {
+        guard let returned = TagInput.returned(text, before: draft) else {
+            draft = text
+            return
+        }
+        draft = returned.text
+        // Once the field has finished its own edit: a change made while it is still applying the keystroke
+        // never reaches it (the word was added, and stayed in the field).
+        if returned.submit { Task { @MainActor in commit() } }
+    }
+
     /// The segment: a composition still open is ended first (its word committed, then added); a word
     /// typed is added; nothing typed asks the model.
     private func tapSegment() {
-        if composing || FirstResponder.hasMarkedText(), let input = FirstResponder.current() as? UITextField {
+        if composing || FirstResponder.hasMarkedText(), let input = FirstResponder.current() as? UITextInput & UIResponder {
             input.unmarkText()
-            draft = input.text ?? draft
+            draft = (input as? UITextView)?.text ?? (input as? UITextField)?.text ?? draft
             composing = false
         }
         if TagInput.ready(draft: draft, composing: false) {
@@ -148,18 +170,18 @@ struct TagField<Label: View>: View {
         }
     }
 
-    /// Add what is typed and stay for the next one (Return would otherwise put the keyboard away).
+    /// Add what is typed and stay for the next one: the field keeps the focus (nothing lets go of it).
     private func commit() {
         guard TagInput.ready(draft: draft, composing: false) else { return }
         onAdd()
-        Task { @MainActor in focused = true }
     }
 
     /// Between the label and the tags under it (the web's 8).
     static var pillsGap: CGFloat { 8 }
-    /// A chosen tag's paper (review S2): `color-mix(in oklch, var(--color-terracotta-light) 50%, var(--color-cream))`,
-    /// quieter than the step's one button and the AI 建議 segment's peach beside it.
-    static var pillFill: Color { Palette.mix(.terracottaLight, 0.5, .cream) }
+    /// A chosen tag's face (round 17 §4, over review S2's quieter wash): the 「AI 建議」 segment's own — the
+    /// tonal button's fill, and its ink for the words and the ✕.
+    static var pillFill: Color { Tokens.buttonTonal }
+    static var pillInk: Color { Tokens.buttonOnTonal }
 }
 
 /// The writer's save state as its bar says it (round 8 §2.1): one quiet word after the title —

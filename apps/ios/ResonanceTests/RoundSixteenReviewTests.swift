@@ -102,20 +102,7 @@ import Testing
         #expect(en.format("write.tagsRemoveLabel", ["tag": "rain"]) == "Remove tag: rain")
     }
 
-    @Test func aChosenTagsPaperIsHalfTheWashOnTheCream() throws {
-        // color-mix(in oklch, var(--color-terracotta-light) 50%, var(--color-cream)), light and night alike.
-        for scheme in PaletteScheme.allCases {
-            let wash = try #require(OKLCHColor.components(Palette.oklch(.terracottaLight, accent: .terracotta, scheme: scheme)))
-            let cream = try #require(OKLCHColor.components(Palette.oklch(.cream, accent: .terracotta, scheme: scheme)))
-            let want = Palette.mixOKLCH(wash, 0.5, cream)
-            #expect(abs(want.L - (wash.L + cream.L) / 2) < 0.0001)
-        }
-        let style = UITraitCollection(userInterfaceStyle: .light)
-        let pill = UIColor(TagField<EmptyView>.pillFill).resolvedColor(with: style)
-        let wash = UIColor(Tokens.terracottaLight).resolvedColor(with: style)
-        let cream = UIColor(Tokens.cream).resolvedColor(with: style)
-        #expect(pill != wash && pill != cream)
-    }
+    // (S2's half wash on the cream gave way to the AI 建議 segment's own face in round 17 §4: RoundSeventeenTests.)
 
     // MARK: F6 — upright Chinese placeholders
 
