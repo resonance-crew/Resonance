@@ -85,12 +85,28 @@
   gap: 10px;
 }
 
+/* The tile is the QR code's paper. At night the code keeps its own cream
+   (dark on light, what every scanner reads — never inverted), so the whole
+   tile turns cream with it rather than framing a light square in a dark one,
+   and the tile and code are dimmed together so the cream doesn't glare. */
 .qrTile {
+  --qr-paper: var(--color-card-bg);
   position: relative;
   width: var(--qr-tile);
   height: var(--qr-tile);
   display: grid;
   place-items: center;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-scheme='light']) .qrTile {
+    --qr-paper: #faf6ef;
+    filter: brightness(0.9);
+  }
+}
+:root[data-scheme='dark'] .qrTile {
+  --qr-paper: #faf6ef;
+  filter: brightness(0.9);
 }
 
 .qrImage {

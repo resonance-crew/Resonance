@@ -63,7 +63,7 @@ export function GetTheApp({ qr = true, size = 'md', tone = 'paper', id, classNam
               h={QR_TILE}
               R={14}
               seed={61}
-              fillColor="var(--color-card-bg)"
+              fillColor="var(--qr-paper)"
               strokeColor={tone === 'paper' ? 'var(--field-border)' : 'transparent'}
               strokeWidth={INK_LIGHT}
             />
