@@ -397,8 +397,14 @@ async function leaveNote(
       kind: NOTE_MESSAGE_KIND,
     });
     tx.set(conversation, {
-      // `image` goes: the preview is merged into the one before, which may have been a picture.
-      lastMessage: { text: cut(input.text, LAST_MESSAGE_PREVIEW), senderId: uid, sentAt: FieldValue.serverTimestamp(), image: FieldValue.delete() },
+      // `image` and `unsent` go: the preview is merged into the one before, which may have been a picture or unsent.
+      lastMessage: {
+        text: cut(input.text, LAST_MESSAGE_PREVIEW),
+        senderId: uid,
+        sentAt: FieldValue.serverTimestamp(),
+        image: FieldValue.delete(),
+        unsent: FieldValue.delete(),
+      },
       updatedAt: FieldValue.serverTimestamp(),
       unread: { [author]: FieldValue.increment(1) },
       // A letter waits for its answer; the answer leaves none waiting. Anything else leaves it as it is.
@@ -593,7 +599,8 @@ async function writeMessage(db: Firestore, uid: string, input: SendMessageInput,
     // Sent: the picture is this message's from now on (and no longer one the unsent purge looks at).
     if (picture) tx.update(chatImageRef(db, picture.id), { messageId: message.id, unsentAt: FieldValue.delete() });
     // The list's preview: the text, or the attached card's title when there is none; a picture says so
-    // (`image`, written or taken away every time — the preview is merged into the one before).
+    // (`image`, written or taken away every time — the preview is merged into the one before, and so is the
+    // `unsent` an unsent last message left there).
     tx.set(conversation, {
       lastMessage: {
         // A card's title only when anyone may read the card: the list is the recipient's even when the card isn't.
@@ -601,6 +608,7 @@ async function writeMessage(db: Firestore, uid: string, input: SendMessageInput,
         senderId: uid,
         sentAt: FieldValue.serverTimestamp(),
         image: picture ? true : FieldValue.delete(),
+        unsent: FieldValue.delete(),
       },
       updatedAt: FieldValue.serverTimestamp(),
       unread: { [other]: FieldValue.increment(1) },

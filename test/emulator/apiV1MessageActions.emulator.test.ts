@@ -182,6 +182,17 @@ describe('unsendMessage', () => {
     expect(after.unread).toEqual(before.unread);
   });
 
+  // Found by the iOS lane: the next message's preview is merged into the unsent one, and kept its `unsent`.
+  it('lets the next message — or note in the thread — write a whole preview again, with no unsent left in it', async () => {
+    const id = await send('alice', 'bob', 'gone soon');
+    await unsendMessage(db, 'alice', PAIR, id);
+    expect((await convo()).lastMessage).toMatchObject({ unsent: true });
+    await send('bob', 'alice', 'still here?');
+    const last = (await convo()).lastMessage;
+    expect(last).toMatchObject({ text: 'still here?', senderId: 'bob' });
+    expect(last).not.toHaveProperty('unsent');
+  });
+
   it("leaves the preview alone when a later message is the newest", async () => {
     const id = await send('alice', 'bob', 'first');
     await send('bob', 'alice', 'a later one');
