@@ -558,6 +558,7 @@ fun OrganicMenuChip(
         Box(
             Modifier
                 .size(BareHitBox)
+                .bareMenuOpen(expanded, seed, inset = BareWashInset)
                 .clickable(interactionSource = null, indication = OrganicIndication(inset = BareWashInset), enabled = enabled && !busy, role = Role.Button, onClickLabel = label, onClick = onClick)
                 .semantics {
                     contentDescription = label
@@ -566,8 +567,9 @@ fun OrganicMenuChip(
             contentAlignment = Alignment.Center,
         ) {
             if (busy) ButtonLoader(Tokens.Text, 20.dp)
-            // The one pen at rest, as every bare glyph in a bar (the web's BareIconButton).
-            else OrganicIcon(icon, size = 20.dp, color = if (expanded) Tokens.Terracotta else Tokens.Text, strokeWidth = Tokens.Ink.value)
+            // The one pen at rest, as every bare glyph in a bar (the web's BareIconButton); open, the same ink over
+            // the soft disc ([bareMenuOpen]), never the accent (round 17 A10).
+            else OrganicIcon(icon, size = 20.dp, color = Tokens.Text, strokeWidth = Tokens.Ink.value)
         }
         return
     }
