@@ -216,7 +216,7 @@ internal const val SheetPressAlpha = 0.15f
 
 /** The sheet's inks for a menu of the theme's (or a card's hue): [MenuColors] on the raised paper. */
 internal fun MenuColors.sheetInks(): SheetInks =
-    SheetInks(sheet, border, borderHover, borderHover.copy(alpha = SheetPressAlpha), danger, danger.copy(alpha = SheetPressAlpha))
+    SheetInks(sheet, border, borderHover, borderHover.copy(alpha = SheetPressAlpha), danger, dangerInk.copy(alpha = SheetPressAlpha))
 
 /** What a [SheetRow]'s glyph and words are drawn in: the danger ink for a loss, pressed or not; else the pen pressed, or the glyph's pen and the text ink at rest. */
 internal fun SheetInks.rowInks(row: SheetRow, down: Boolean, text: Color): Pair<Color, Color> = when {

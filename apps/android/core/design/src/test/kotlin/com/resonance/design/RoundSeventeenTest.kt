@@ -262,10 +262,11 @@ class RoundSeventeenTest {
 
     @Test fun aLossWearsTheDangerInkPressedOrNotAndItsInkSpreadsAtTheRowsStrength() {
         for (palette in listOf(ResonanceColors.LightTerracotta, ResonanceColors.of(com.resonance.design.generated.PaletteTheme.Terracotta, true))) {
-            // The theme's menu and a card's own (its hue): a loss is the palette's danger ink either way.
+            // The theme's menu and a card's own (its hue): a loss's words and glyph are the palette's deeper danger
+            // fill either way (the web's --danger-fill, readable on the paper), its spreading ink the danger hue.
             for (hue in listOf(null, 210.0)) {
                 val inks = MenuColors(hue, palette).sheetInks()
-                assertEquals(palette.Danger, inks.danger)
+                assertEquals(palette.DangerFill, inks.danger)
                 assertEquals(palette.Danger.copy(alpha = SheetPressAlpha), inks.dangerPress)
                 assertEquals(inks.press.alpha, inks.dangerPress.alpha, 0f)
                 val loss = SheetRow("封鎖", IconName.Ban, danger = true)

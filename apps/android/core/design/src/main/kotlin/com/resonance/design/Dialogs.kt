@@ -498,8 +498,13 @@ internal class MenuColors(hue: Double?, palette: ResonanceColors) {
     val cream: Color
     /** What the menu's sheet is filled with: [cream], raised at night. */
     val sheet: Color
-    /** A destructive row's glyph and words (its pressed ink this at the rows' strength). */
-    val danger: Color = palette.Danger
+    /**
+     * A destructive row's glyph and words: the deeper danger fill, as the web's (`--danger-fill`, ≈ 5 : 1 on the
+     * menu paper by day; `--color-danger` is ≈ 4.2 : 1, under the 4.5 words need).
+     */
+    val danger: Color = palette.DangerFill
+    /** Its pressed ink, at the rows' strength: the danger hue itself (the web's `--color-danger`). */
+    val dangerInk: Color = palette.Danger
 
     init {
         val mixes = PaletteMixes.of(palette)
