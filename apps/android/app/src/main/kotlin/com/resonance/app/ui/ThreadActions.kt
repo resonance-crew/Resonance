@@ -24,9 +24,6 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.runtime.Composable
-import com.resonance.design.avatarFill
-import com.resonance.design.HandDrawnAvatar
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.MutableFloatState
@@ -212,7 +209,8 @@ internal class TrayOffer(val chosen: ReactionId?, val choose: (ReactionId) -> Un
 
 /**
  * A message pressed and held (round 16 §3): the thread dims under the scrim and the message is lifted
- * where it lies — drawn again, all it carries, at 1.03 on a spring (the "selected" signal) — with the
+ * where it lies — its bubble drawn again, all it carries, at 1.03 on a spring (the "selected" signal; their
+ * face beside it stays in the thread under the scrim, round 17 review D3) — with the
  * five reactions floating right above it, no paper under them ([ReactionTray], when [tray] offers them)
  * and the actions on the menu sheet right under it ([MessageActionSheet]), both flush with its side.
  * When they don't fit round it the message glides (220 ms) the least that fits ([placeHeldMessage]);
@@ -326,20 +324,8 @@ internal fun MessageMenuOverlay(
             ) {
                 Box(Modifier.wrapContentHeight(Alignment.Top, unbounded = true)) { MessageCore(row, ctx, interactive = false) }
             }
-            // Their face goes with their message (round 16 review F9): left behind, beside the list, it read as the list's.
-            val other = ctx.model.other
-            if (!mine && !menu.row.position.joinsBelow && other != null) {
-                val face = with(density) { THREAD_FACE.roundToPx() }
-                val gap = with(density) { THREAD_FACE_GAP.roundToPx() }
-                val foot = top + (place.shown ?: (bottom - top))
-                Box(
-                    Modifier
-                        .offset { IntOffset(left - gap - face, foot - face + glide.value.roundToInt()) }
-                        .clearAndSetSemantics { },
-                ) {
-                    HandDrawnAvatar(other.initials, other.avatarUrl, avatarFill(other.accentColor), THREAD_FACE, seedOr(other.avatarSeed, 3.0))
-                }
-            }
+            // The bubble alone is lifted (round 17 review D3): their face stays in the thread, under the scrim, as on
+            // iOS and the web.
 
             if (tray != null) {
                 val x = trayLeft(mine, left, right, trayW, screenW, margin)

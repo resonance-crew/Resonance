@@ -55,6 +55,7 @@ import com.resonance.design.OrganicMenuFrom
 import com.resonance.design.OrganicMenuItem
 import com.resonance.design.ReplyRule
 import com.resonance.design.SketchLoader
+import com.resonance.design.bareMenuOpen
 import com.resonance.design.blocksTouches
 import com.resonance.design.fieldHintStyle
 import com.resonance.design.generated.IconName
@@ -200,7 +201,8 @@ private fun ComposerRows(model: ThreadModel, modifier: Modifier = Modifier) {
 /**
  * 「＋」 (附上圖片或卡片), the capsule's ghost button (48 × 48, the glyph 22 in the muted ink): the
  * organic menu, over it and lined up with its start — 圖片 (the system's photo picker) · 卡片 (the
- * card picker). The glyph takes the terracotta while the menu is open.
+ * card picker). While the menu is open the glyph takes the full ink over a soft disc, as the web's bare
+ * trigger does (round 17 review A10: never the accent).
  */
 @Composable
 private fun AttachMenu(onPickImage: () -> Unit, onPickCard: () -> Unit) {
@@ -212,12 +214,17 @@ private fun AttachMenu(onPickImage: () -> Unit, onPickCard: () -> Unit) {
         Box(
             Modifier
                 .size(ComposerHeight)
+                // The web's ＋ is 44 wide in its 48 row: its disc is that box's.
+                .bareMenuOpen(open, seed = AttachSeed, inset = 2.dp)
                 .clickable(interactionSource = null, indication = OrganicIndication(inset = 6.dp), role = Role.Button, onClickLabel = L10n.Messages.attach, onClick = toggle)
                 .semantics { contentDescription = L10n.Messages.attach },
             contentAlignment = Alignment.Center,
-        ) { OrganicIcon(IconName.Plus, size = 22.dp, color = if (open) Tokens.Terracotta else Tokens.TextMuted, strokeWidth = Tokens.Ink.value) }
+        ) { OrganicIcon(IconName.Plus, size = 22.dp, color = if (open) Tokens.Text else Tokens.TextMuted, strokeWidth = Tokens.Ink.value) }
     }
 }
+
+/** The ＋'s open disc's seed: the web's composer gives its menu, and so its bare trigger's disc, 17. */
+private const val AttachSeed = 17.0
 
 /**
  * Whether a key is a hardware keyboard's plain Return (no Shift, Alt, Ctrl or Meta) going down —

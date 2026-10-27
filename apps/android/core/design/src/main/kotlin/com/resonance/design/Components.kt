@@ -706,9 +706,40 @@ fun Modifier.holdWhile(held: Boolean): Modifier = if (!held) this else pointerIn
  *    account), whose dialog then asks with [Danger].
  *  - [Ink] solid in the ink colour, for a brand that asks for a black button (Sign in with Apple).
  *  - [Paper] the cards' paper with their grain, for a control that has to match a paper surface.
- * Bare text is left to a link in running text and to icon-only header and toolbar glyphs.
+ * Bare text is left to a link in running text, to icon-only header and toolbar glyphs, to the feed's Load more
+ * ([FeedMoreButton]) and to the one quiet way on a dialog's foot that isn't its way out ([QuietButton]).
  */
 enum class ButtonVariant { Primary, Ghost, Outline, Solid, Ink, Danger, Paper, Text, TextAccent, Tonal, DangerTonal }
+
+/**
+ * A quiet action (round 17 review D5): its words alone — no face, no pen — 14/600 in [color] (the text ink), a
+ * press washing a wobbly pill round them as a bare glyph's does. For a dialog's lesser action beside its verb that
+ * neither leaves nor destroys: the link editor's 移除連結, which takes only the link away. [QuietButtonPadX] of air
+ * either side of the words, inside its target; [minHeight] its height.
+ */
+@Composable
+fun QuietButton(
+    title: String,
+    modifier: Modifier = Modifier,
+    color: Color = Tokens.Text,
+    minHeight: Dp = 44.dp,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier
+            .heightIn(min = minHeight)
+            .clickable(interactionSource = null, indication = OrganicIndication(), enabled = enabled, role = Role.Button, onClick = onClick)
+            .fade(if (enabled) 1f else ButtonFace.DISABLED_ALPHA)
+            .padding(horizontal = QuietButtonPadX),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BasicText(title, maxLines = 1, style = AppFonts.body(14f, 600, lineHeight = 1.3f, color = color))
+    }
+}
+
+/** The air either side of a [QuietButton]'s words: a caller lines the words up with its column by pulling it out this much. */
+val QuietButtonPadX: Dp = 12.dp
 
 /**
  * How a [ButtonVariant] is drawn (OrganicButton.tsx's BTN_VARIANTS): its [fill], its [label]

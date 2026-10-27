@@ -54,7 +54,8 @@ import kotlin.math.max
 
 // Round 17 §1: every menu is the press menu's sheet — the menus' paper and the sheet grain, no pen line round it
 // and no rules between its rows, a soft shadow following its wobble instead of the outline, and a row's ink
-// spreading from the finger inside that row's own band of the wobble.
+// spreading from the finger inside that row's own band of the wobble. A row that ends or removes something is
+// told by the danger ink alone, its glyph and words — no wash under it at rest (round 17 review D1).
 
 /**
  * A menu sheet's measures (round 17 §1, §2.3): rows 44 tall, the glyph 17, 12 to the words, 20 of air at the
@@ -156,9 +157,10 @@ private data class SheetShadowDrawing(val seed: Double, val shadows: List<SheetS
 }
 
 /**
- * The sheet itself: its paper and grain on the one wobble, then — inside it — the warning row's wash and the
- * pressed row's ink spreading from the finger, each in its row's band: the wavy boundaries the web's rowRegion
- * draws between rows (never drawn themselves), the first band reaching past the top, the last past the foot.
+ * The sheet itself: its paper and grain on the one wobble, then — inside it — the pressed row's ink spreading
+ * from the finger in its row's band: the wavy boundaries the web's rowRegion draws between rows (never drawn
+ * themselves), the first band reaching past the top, the last past the foot. Nothing lies under a row at rest,
+ * a danger row's either (round 17 review D1): its ink, pressed, is the danger hue at the others' strength.
  */
 private class SheetPaperDrawing(
     val seed: Double,
@@ -166,10 +168,11 @@ private class SheetPaperDrawing(
     val grain: GrainInk,
     val rows: Int,
     val footer: Boolean,
-    val warning: Int,
-    val warningWash: Color,
+    /** Which rows end or remove something: their ink is [dangerPress], every other row's [press]. */
+    val danger: List<Boolean>,
+    val press: Color,
+    val dangerPress: Color,
     val state: () -> Pair<Int?, InkSpread>,
-    val inkFor: (Int) -> Color,
 ) : (CacheDrawScope) -> DrawResult {
     override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
         val outline = sheetOutline(seed)
@@ -186,28 +189,41 @@ private class SheetPaperDrawing(
             drawPath(outline, paper)
             brush?.let { drawPath(outline, it, alpha = MenuSheet.GRAIN) }
             clipPath(outline) {
-                if (warning in regions.indices) drawPath(regions[warning], warningWash)
                 val (i, spread) = state()
-                if (i != null && i in regions.indices) with(spread) { draw(regions[i], inkFor(i)) }
+                if (i != null && i in regions.indices) with(spread) { draw(regions[i], if (danger.getOrElse(i) { false }) dangerPress else press) }
             }
         }
     }
 
     override fun equals(other: Any?) = other is SheetPaperDrawing && other.seed == seed && other.paper == paper && other.grain == grain &&
-        other.rows == rows && other.footer == footer && other.warning == warning && other.warningWash == warningWash
-    override fun hashCode() = ((((seed.hashCode() * 31 + paper.hashCode()) * 31 + rows) * 31 + warning) * 31 + footer.hashCode())
+        other.rows == rows && other.footer == footer && other.danger == danger && other.press == press && other.dangerPress == dangerPress
+    override fun hashCode() = ((((seed.hashCode() * 31 + paper.hashCode()) * 31 + rows) * 31 + danger.hashCode()) * 31 + footer.hashCode())
 }
 
-/** One row of a [PaperMenuSheet]: its words and glyph; [warning]: the menus' loss (a yellow wash under it); [danger]: words and glyph in the danger ink. */
+/** One row of a [PaperMenuSheet]: its words and glyph; [danger]: it ends or removes something — words and glyph in the danger ink, no wash. */
 @Immutable
-internal class SheetRow(val title: String, val icon: IconName, val enabled: Boolean = true, val warning: Boolean = false, val danger: Boolean = false)
+internal class SheetRow(val title: String, val icon: IconName, val enabled: Boolean = true, val danger: Boolean = false)
 
-/** A sheet's inks: its paper, the glyphs' pen and their pen pressed, a row's spreading ink, and the warning row's wash at rest and pressed. */
+/**
+ * A sheet's inks: its paper; the glyphs' pen, and the pen a pressed row's glyph and words take; a row's spreading
+ * ink; and the danger ink a row that ends or removes something wears, with its spreading ink at the same strength.
+ */
 @Immutable
-internal data class SheetInks(val paper: Color, val glyph: Color, val glyphPressed: Color, val press: Color, val warning: Color, val warningPressed: Color)
+internal data class SheetInks(val paper: Color, val glyph: Color, val glyphPressed: Color, val press: Color, val danger: Color, val dangerPress: Color)
+
+/** How strong a pressed row's ink is, in its hue (the web's `color-mix(… 15%, transparent)`), a danger row's too. */
+internal const val SheetPressAlpha = 0.15f
 
 /** The sheet's inks for a menu of the theme's (or a card's hue): [MenuColors] on the raised paper. */
-internal fun MenuColors.sheetInks(): SheetInks = SheetInks(sheet, border, borderHover, borderHover.copy(alpha = 0.15f), dangerWash, dangerWashPressed)
+internal fun MenuColors.sheetInks(): SheetInks =
+    SheetInks(sheet, border, borderHover, borderHover.copy(alpha = SheetPressAlpha), danger, danger.copy(alpha = SheetPressAlpha))
+
+/** What a [SheetRow]'s glyph and words are drawn in: the danger ink for a loss, pressed or not; else the pen pressed, or the glyph's pen and the text ink at rest. */
+internal fun SheetInks.rowInks(row: SheetRow, down: Boolean, text: Color): Pair<Color, Color> = when {
+    row.danger -> danger to danger
+    down -> glyphPressed to glyphPressed
+    else -> glyph to text
+}
 
 /**
  * The one menu surface (round 17 §1): the rows ([SheetRow]) on a [MenuSheet] of borderless paper with its grain
@@ -233,7 +249,7 @@ internal fun PaperMenuSheet(
     val density = LocalDensity.current
     val rowPx = with(density) { MenuSheet.Row.toPx() }
     val topPx = with(density) { MenuSheet.PadTop.toPx() }
-    val warning = rows.indexOfFirst { it.warning }
+    val danger = remember(rows) { rows.map { it.danger } }
     val shadows = remember(palette) { SheetShadow.of(palette) }
     Column(
         modifier
@@ -242,11 +258,7 @@ internal fun PaperMenuSheet(
             .drawWithCacheOf(SheetShadowDrawing(seed, shadows))
             // The sheet in a layer of its own: a row's spreading ink redraws it, never the blurred shadow under it.
             .graphicsLayer()
-            .drawWithCacheOf(
-                SheetPaperDrawing(seed, inks.paper, grain, rows.size, footer != null, warning, inks.warning, { pressed to spread }) { i ->
-                    if (i == warning) inks.warningPressed else inks.press
-                },
-            )
+            .drawWithCacheOf(SheetPaperDrawing(seed, inks.paper, grain, rows.size, footer != null, danger, inks.press, inks.dangerPress) { pressed to spread })
             .padding(top = MenuSheet.PadTop, bottom = if (footer != null) MenuSheet.FooterBottom else MenuSheet.PadBottom),
     ) {
         rows.forEachIndexed { i, row ->
@@ -264,11 +276,8 @@ internal fun PaperMenuSheet(
                     }
                 }
             }
-            val glyph = when {
-                row.danger -> Tokens.Danger
-                down -> inks.glyphPressed
-                else -> inks.glyph
-            }
+            // A pressed row's words take the pressed pen with its glyph (the web's `.option[data-active]`); a loss keeps its danger ink.
+            val (glyph, words) = inks.rowInks(row, down, Tokens.Text)
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -281,7 +290,7 @@ internal fun PaperMenuSheet(
             ) {
                 OrganicIcon(row.icon, size = MenuSheet.Glyph, color = glyph, strokeWidth = Tokens.Ink.value)
                 Spacer(Modifier.width(MenuSheet.GlyphGap))
-                BasicText(row.title, maxLines = 1, style = AppFonts.body(MenuSheet.TEXT, lineHeight = 1.3f, color = if (row.danger) Tokens.Danger else Tokens.Text))
+                BasicText(row.title, maxLines = 1, style = AppFonts.body(MenuSheet.TEXT, lineHeight = 1.3f, color = words))
             }
         }
         if (footer != null) {

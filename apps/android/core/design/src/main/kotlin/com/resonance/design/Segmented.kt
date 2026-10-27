@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
@@ -82,6 +83,15 @@ class Segment(
 )
 
 /**
+ * A segment's air over and under its words: 13, or less in a bar asked to be lower than 48 (a dialog whose
+ * controls share one height, 44), so the words' line (14 at its font's own height, 20) and the air come to it.
+ */
+internal fun segmentPadY(minHeight: Dp): Dp = ((minHeight - SegmentLine) / 2).coerceIn(0.dp, 13.dp)
+
+/** A segment's words' line: 14 at its font's own height. */
+private val SegmentLine = 20.dp
+
+/**
  * SegmentedActionBar.tsx: actions fused into one organic bar, split by hand-drawn wavy seams. Its
  * segments are buttons, so like every button it is a filled shape with no pen line: the bar wears
  * the tonal face ([fill]), a segment may bring its own (the verb's `--button-fill`), and the
@@ -92,7 +102,8 @@ class Segment(
  * it stands at its own width. When every label no longer fits, the segments give up their words a
  * step at a time ([Segment.collapse]: the first step's, then the second's) and take only their own
  * room; past the last step the rest share what is left, their words cut with an ellipsis — the bar
- * never runs past the width it has ([SegmentedLayout]). Each segment is at least 48 tall. Not [enabled] (the viewer's own answer still being read), it fades to 0.6 and
+ * never runs past the width it has ([SegmentedLayout]). Each segment is at least [minHeight] tall (48; a dialog whose
+ * controls share one height asks its own). Not [enabled] (the viewer's own answer still being read), it fades to 0.6 and
  * takes no tap.
  */
 @Composable
@@ -103,6 +114,7 @@ fun SegmentedActionBar(
     fill: Color = Tokens.ButtonTonal,
     divider: Color = Tokens.Cream,
     enabled: Boolean = true,
+    minHeight: Dp = 48.dp,
 ) {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -175,14 +187,14 @@ fun SegmentedActionBar(
                     Modifier
                         .width(widths[i].dp)
                         .fillMaxHeight()
-                        .heightIn(min = 48.dp)
+                        .heightIn(min = minHeight)
                         .clickable(source, indication = null, enabled = enabled && !seg.loading, role = if (seg.selected != null) Role.RadioButton else Role.Button, onClick = seg.onClick)
                         .semantics {
                             (seg.contentDescription ?: seg.label.takeIf { collapsed })?.let { contentDescription = it }
                             seg.selected?.let { selected = it }
                             if (seg.loading) stateDescription = L10n.App.busy
                         }
-                        .padding(horizontal = if (collapsed) 16.dp else SegmentedLayout.PAD.dp, vertical = 13.dp),
+                        .padding(horizontal = if (collapsed) 16.dp else SegmentedLayout.PAD.dp, vertical = segmentPadY(minHeight)),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(SegmentedLayout.GAP.dp, Alignment.CenterHorizontally),
                 ) {

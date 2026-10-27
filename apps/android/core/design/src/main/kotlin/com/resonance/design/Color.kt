@@ -208,9 +208,6 @@ class CardFamily(palette: ResonanceColors, index: Int) {
  * does. Each is worked out once per palette ([PaletteMixes]).
  */
 object Mixes {
-    /** OrganicMenu's destructive-row wash: color-mix(yellow 25%, the menu's paper); 45% while pressed. */
-    val MenuDangerWash: Color @Composable @ReadOnlyComposable get() = PaletteMixes.of(LocalResonanceColors.current).menuDangerWash
-    val MenuDangerWashPressed: Color @Composable @ReadOnlyComposable get() = PaletteMixes.of(LocalResonanceColors.current).menuDangerWashPressed
     /** A loading block (`skeleton-base`: the well with a touch of ink in light, lifted off the night paper in dark). */
     val SkeletonBase: Color @Composable @ReadOnlyComposable get() = Tokens.SkeletonBase
 
@@ -256,8 +253,6 @@ object OverPicture {
 class PaletteMixes private constructor(private val palette: ResonanceColors) {
     private fun lch(token: String) = palette.oklchOf(token)
 
-    val menuDangerWash: Color = mixed(lch("color-yellow"), lch("menu-paper"), 0.25)
-    val menuDangerWashPressed: Color = mixed(lch("color-yellow"), lch("menu-paper"), 0.45)
     /**
      * The sheet a held message's tray and actions are cut from (round 16 §3): the menus' paper, raised at
      * night a step toward the ink (`color-mix(in oklch, var(--menu-paper) 94%, var(--toward-ink))`).

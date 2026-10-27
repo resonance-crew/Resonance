@@ -5,7 +5,7 @@ import com.resonance.design.Mixes
 import com.resonance.design.avatarFill
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import com.resonance.design.ModalScrim
 import com.resonance.design.LayoutClass
 import com.resonance.design.LocalWindowLayout
@@ -354,8 +354,20 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
 
         // The held message's scrim, under the bar: dimming the body from the bar's wavy line down, the bar's own
         // paper keeping the rest — the bar, the conversations beside the pane and the rule between stay as they are.
+        // Beside the conversations it reaches back to the rule itself (round 17 review D2): no undimmed strip between.
         val scrim = ModalScrim
-        Box(Modifier.fillMaxSize().drawBehind { heldOver.floatValue.takeIf { it > 0f }?.let { drawRect(scrim, alpha = it) } })
+        val paneEdge = LocalPaneScrimEdge.current
+        Box(
+            Modifier.fillMaxSize().drawWithCache {
+                val region = paneEdge?.region(size, this.density)
+                onDrawBehind {
+                    val over = heldOver.floatValue
+                    if (over > 0f) {
+                        if (region != null) drawPath(region, scrim, alpha = over) else drawRect(scrim, alpha = over)
+                    }
+                }
+            },
+        )
 
         val conversations by session.conversations.state.collectAsStateWithLifecycle()
         val conversationIds by session.conversations.ids.collectAsStateWithLifecycle()

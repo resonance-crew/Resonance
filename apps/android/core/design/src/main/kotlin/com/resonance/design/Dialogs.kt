@@ -9,6 +9,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -65,6 +66,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
@@ -475,17 +477,19 @@ object ModalActionsLayout {
 }
 
 /**
- * One row of an [OrganicMenu]. Not [enabled] (生成圖片 with no story to draw from), it stays in its
- * place faded to the web's 0.55 and takes no tap.
+ * One row of an [OrganicMenu]. [destructive]: it ends or removes something (封鎖, 刪除, 永久刪除…) — its glyph
+ * and words in the danger ink, with nothing under it at rest (round 17 review D1). Not [enabled] (生成圖片 with
+ * no story to draw from), it stays in its place faded to the web's 0.55 and takes no tap.
  */
 class OrganicMenuItem(val title: String, val icon: IconName, val destructive: Boolean = false, val enabled: Boolean = true, val onClick: () -> Unit)
 
 /**
  * OrganicMenu's colors (the web's `--menu-*`): the theme terracotta, or — for
  * a card's own menu — its hue: the pen `oklch(52% 0.11 h)`, deeper `oklch(38%
- * 0.09 h)` when pressed, paper `oklch(98% 0.01 h)`, and the destructive row's wash
- * `color-mix(yellow 25%, paper)` (45% pressed). The sheet's paper ([sheet], round 17 §1) is that
- * paper raised a step toward the ink at night, as PaperSheet raises the menus' (94 % paper).
+ * 0.09 h)` when pressed, paper `oklch(98% 0.01 h)`; and a row that ends or removes something in
+ * the palette's [danger] ink, whatever the hue (round 17 review D1: no wash under it). The sheet's
+ * paper ([sheet], round 17 §1) is that paper raised a step toward the ink at night, as PaperSheet
+ * raises the menus' (94 % paper).
  */
 internal class MenuColors(hue: Double?, palette: ResonanceColors) {
     /** The glyphs' pen (the trigger's, each row's icon). */
@@ -494,8 +498,8 @@ internal class MenuColors(hue: Double?, palette: ResonanceColors) {
     val cream: Color
     /** What the menu's sheet is filled with: [cream], raised at night. */
     val sheet: Color
-    val dangerWash: Color
-    val dangerWashPressed: Color
+    /** A destructive row's glyph and words (its pressed ink this at the rows' strength). */
+    val danger: Color = palette.Danger
 
     init {
         val mixes = PaletteMixes.of(palette)
@@ -505,8 +509,6 @@ internal class MenuColors(hue: Double?, palette: ResonanceColors) {
             // The menus' paper: the page's in light, raised onto the card's at night.
             cream = palette.MenuPaper
             sheet = mixes.reactionSheet
-            dangerWash = mixes.menuDangerWash
-            dangerWashPressed = mixes.menuDangerWashPressed
         } else {
             // A card's own menu (the web's --menu-* from the card's hue): its pen, deeper pointed at, its paper.
             border = palette.hue(HueRole.Pen, hue)
@@ -515,8 +517,6 @@ internal class MenuColors(hue: Double?, palette: ResonanceColors) {
             val (l, c) = if (palette.dark) HueRole.Menu.dark else HueRole.Menu.light
             val paper = doubleArrayOf(l, c, hue, 1.0)
             sheet = if (palette.dark) PaletteMixes.mixed(paper, palette.oklchOf("toward-ink"), 0.94) else cream
-            dangerWash = PaletteMixes.mixed(palette.oklchOf("color-yellow"), paper, 0.25)
-            dangerWashPressed = PaletteMixes.mixed(palette.oklchOf("color-yellow"), paper, 0.45)
         }
     }
 }
@@ -607,6 +607,34 @@ private const val ChooseLingerMillis = 150L
 /** A bare trigger's touch target (OrganicIconButton's), and how far in its wash sits. */
 private val BareHitBox = 48.dp
 private val BareWashInset = 4.dp
+
+/**
+ * A bare menu trigger's open state (the web's `.bare[data-open]` and its BareWash): while its menu is [open], a soft
+ * disc of the text ink at 8 % — a wobbly circle 92 % of the box's short side less [inset] each side, [seed]'s — lies
+ * under the glyph, growing from 0.4 and fading in over 160 ms (snapped with animations off); the glyph itself takes
+ * the full ink.
+ */
+@Composable
+fun Modifier.bareMenuOpen(open: Boolean, seed: Double, inset: Dp = 0.dp): Modifier {
+    val still = LocalContext.current.prefersReducedMotion()
+    val shown by animateFloatAsState(
+        if (open) 1f else 0f, if (still) snap() else tween(BareOpenMillis, easing = CubicBezierEasing(0.2f, 0.8f, 0.3f, 1f)), label = "bareOpen",
+    )
+    val ink = Tokens.Text.copy(alpha = BareOpenAlpha)
+    return drawWithCache {
+        val r = (minOf(size.width, size.height) / density - 2 * inset.value) / 2 * 0.92
+        val disc = wobCircle(size.width / density / 2.0, size.height / density / 2.0, r, seed, BareOpenDisc).toPath(density)
+        onDrawBehind {
+            val v = shown
+            if (v > 0f) scale(0.4f + 0.6f * v) { drawPath(disc, ink, alpha = v) }
+        }
+    }
+}
+
+/** The open disc's shape (BareWash's `wobCircle(…, { segments: 8, mag: 2.2, cpJitter: 0.4 })` in its 100 box, at a 44 one), ink and timing. */
+private val BareOpenDisc = WobCircleOptions(segments = 8, mag = 1.0, cpJitter = 0.4)
+private const val BareOpenAlpha = 0.08f
+private const val BareOpenMillis = 160
 
 /**
  * The web's OrganicMenu: the ⋯ chip, dropping the menu sheet 8 under its trailing edge (round 17 §1:
@@ -767,7 +795,7 @@ private fun MenuPanel(
 ) {
     val appear = remember { Animatable(0f) }
     LaunchedEffect(Unit) { appear.animateTo(1f, tween(180, easing = CubicBezierEasing(0.2f, 0.8f, 0.3f, 1f))) }
-    val rows = remember(items) { items.map { SheetRow(it.title, it.icon, enabled = it.enabled, warning = it.destructive) } }
+    val rows = remember(items) { items.map { SheetRow(it.title, it.icon, enabled = it.enabled, danger = it.destructive) } }
     val inks = remember(colors) { colors.sheetInks() }
     PaperMenuSheet(
         rows, seed + 100, inks, footer,
