@@ -464,7 +464,7 @@ const SCHEME_VALUES: Record<Scheme, Record<SchemeToken, Oklch>> = {
     'color-sky': o('oklch(30% 0.045 220)'),
     'avatar-stroke': o('oklch(85% 0.02 70 / 0.35)'),
     'tag-stroke': o('oklch(84% 0.03 70 / 0.34)'),
-    scrim: o('oklch(8% 0.01 60 / 0.6)'),
+    scrim: o('oklch(8% 0.01 60 / 0.65)'),
     'shadow-ink': o('oklch(5% 0.01 60)'),
     'grain-ink': o('oklch(96% 0.01 75)'),
     'toward-ink': o('oklch(100% 0 0)'),

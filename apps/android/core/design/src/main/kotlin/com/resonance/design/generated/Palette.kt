@@ -785,7 +785,7 @@ internal object PaletteTables {
         0.3, 0.045, 220.0, 1.0, // color-sky
         0.85, 0.02, 70.0, 0.35, // avatar-stroke
         0.84, 0.03, 70.0, 0.34, // tag-stroke
-        0.08, 0.01, 60.0, 0.6, // scrim
+        0.08, 0.01, 60.0, 0.65, // scrim
         0.05, 0.01, 60.0, 1.0, // shadow-ink
         0.96, 0.01, 75.0, 1.0, // grain-ink
         1.0, 0.0, 0.0, 1.0, // toward-ink
@@ -1081,7 +1081,7 @@ internal object PaletteTables {
         0.3, 0.045, 220.0, 1.0, // color-sky
         0.85, 0.02, 70.0, 0.35, // avatar-stroke
         0.84, 0.03, 70.0, 0.34, // tag-stroke
-        0.08, 0.01, 60.0, 0.6, // scrim
+        0.08, 0.01, 60.0, 0.65, // scrim
         0.05, 0.01, 60.0, 1.0, // shadow-ink
         0.96, 0.01, 75.0, 1.0, // grain-ink
         1.0, 0.0, 0.0, 1.0, // toward-ink
@@ -1377,7 +1377,7 @@ internal object PaletteTables {
         0.3, 0.045, 220.0, 1.0, // color-sky
         0.85, 0.02, 70.0, 0.35, // avatar-stroke
         0.84, 0.03, 70.0, 0.34, // tag-stroke
-        0.08, 0.01, 60.0, 0.6, // scrim
+        0.08, 0.01, 60.0, 0.65, // scrim
         0.05, 0.01, 60.0, 1.0, // shadow-ink
         0.96, 0.01, 75.0, 1.0, // grain-ink
         1.0, 0.0, 0.0, 1.0, // toward-ink
@@ -1673,7 +1673,7 @@ internal object PaletteTables {
         0.3, 0.045, 220.0, 1.0, // color-sky
         0.85, 0.02, 70.0, 0.35, // avatar-stroke
         0.84, 0.03, 70.0, 0.34, // tag-stroke
-        0.08, 0.01, 60.0, 0.6, // scrim
+        0.08, 0.01, 60.0, 0.65, // scrim
         0.05, 0.01, 60.0, 1.0, // shadow-ink
         0.96, 0.01, 75.0, 1.0, // grain-ink
         1.0, 0.0, 0.0, 1.0, // toward-ink
