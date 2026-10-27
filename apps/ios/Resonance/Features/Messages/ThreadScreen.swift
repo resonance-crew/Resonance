@@ -57,6 +57,10 @@ struct ThreadScreen: View {
     @State private var blockError: String?
     /// The message pressed and held, lifted with its menu.
     @State private var menu: MessageMenu?
+    /// The thread's body dimmed and softened under the press layer (it says when, as it comes and goes).
+    @State private var pressDimmed = false
+    /// The thread header's frame on the screen: the press layer's scrim starts at its foot.
+    @State private var barFrame: CGRect = .zero
     @State private var flash = ThreadFlash()
     @State private var frames = FrameBook()
     /// How tall the bar is (the list's room under it), how wide the list, and the screen's safe area.
@@ -199,13 +203,22 @@ struct ThreadScreen: View {
             .padding(.bottom, keyboardHold.padding ?? 0)
             .ignoresSafeArea(keyboardHold.padding == nil ? [] : .keyboard, edges: .bottom)
             .accessibilityHidden(menu != nil)
-            // Under the press layer the thread softens 2 pt beside dimming (review F8: its neighbours' words
-            // competed with the lifted message), as under a modal.
-            .softened(menu != nil)
+            // Under the press layer the thread's body softens 2 pt beside dimming (review F8: its neighbours'
+            // words competed with the lifted message), as under a modal.
+            .softened(pressDimmed)
+            // The press layer's scrim (round 17 §2): over the thread's body alone, composer included — under the
+            // header (whose paper hides it above its wave) and short of the rule beside the list in two panes,
+            // so neither dims nor blurs.
+            Tokens.scrim
+                .padding(.leading, inPane ? PaneLines.gutter : 0)
+                .ignoresSafeArea()
+                .opacity(pressDimmed ? 1 : 0)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
             bar
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { barHeight = $0 }
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { barFrame = $0 }
                 .accessibilityHidden(menu != nil)
-                .softened(menu != nil)
             // Beside the list: the rule between the panes and the bar's foot from it, over the bar's paper.
             if inPane { PaneLines(barHeight: barHeight) }
             if let menu, let model {
@@ -218,10 +231,10 @@ struct ThreadScreen: View {
                                                          reportedMessage = message.id
                                                          reporting = true
                                                      }),
-                                   footer: Self.full(message.sentAt), safe: safe,
+                                   footer: Self.full(message.sentAt), safe: safe, region: pressRegion,
                                    reactions: model.canReact(message)
                                        ? .init(current: model.myReaction(to: message)) { model.react(message, with: $0) }
-                                       : nil) { self.menu = nil }
+                                       : nil, dimmed: $pressDimmed) { self.menu = nil }
             }
             if let attachMenu {
                 AttachMenuOverlay(anchor: attachMenu, items: attachItems) { self.attachMenu = nil }
@@ -234,6 +247,13 @@ struct ThreadScreen: View {
             guard let released = keyboardHold.release(bottom: bottom) else { return }
             withTransaction(\.disablesAnimations, true) { keyboardHold = released }
         }
+    }
+
+    /// What the press layer's scrim covers, on the screen: from the header's foot down, from the rule beside
+    /// the list across (round 17 §2); the tray and the list stay 12 inside it.
+    private var pressRegion: CGRect {
+        let leading = barFrame.minX + (inPane ? PaneLines.gutter : 0)
+        return CGRect(x: leading, y: barFrame.maxY, width: max(0, barFrame.maxX - leading), height: .greatestFiniteMagnitude / 4)
     }
 
     /// On show: the top of its stack, on the tab chosen.

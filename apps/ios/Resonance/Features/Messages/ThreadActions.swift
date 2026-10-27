@@ -92,11 +92,13 @@ extension MessageMenu {
 private let menuGap: CGFloat = 10
 private let menuMargin: CGFloat = 12
 
-/// Where the press layer puts things (round 16 §3), in the window's space: the tray 8 over the lifted
-/// message, the list 10 under it, all 12 inside the safe area (and the keyboard). When both fit round the
-/// message where it lies nothing moves; else the message glides by the least distance that fits both —
-/// up when the list would run off the foot, down when the tray would run off the top. A message taller
-/// than the room left shows its top part only (`shownHeight`, its foot fading). Pure, so it is pinned.
+/// Where the press layer puts things (round 16 §3, round 17 §2), in the window's space: the tray 8 over the
+/// lifted message, the list 10 under it, all 12 inside the region the scrim covers — the thread's body under
+/// its header, beside the list's rule in two panes — and inside the safe area (and the keyboard) at the foot.
+/// When both fit round the message where it lies nothing moves; else the message glides by the least
+/// distance that fits both — up when the list would run off the foot, down when the tray would run under
+/// the header. A message taller than the room left shows its top part only (`shownHeight`, its foot
+/// fading). Pure, so it is pinned.
 nonisolated struct PressPlacement: Equatable {
     /// How far the message moves (negative: up).
     var shift: CGFloat
@@ -108,10 +110,13 @@ nonisolated struct PressPlacement: Equatable {
     var trayY: CGFloat
     var listY: CGFloat
 
-    static func of(frame: CGRect, windowHeight: CGFloat, safeTop: CGFloat, safeBottom: CGFloat, tray: Bool,
+    /// - Parameters:
+    ///   - top: where the scrim's region starts (the thread header's foot).
+    ///   - bottom: where the room ends at the foot (the window's foot less the safe area or the keyboard).
+    static func of(frame: CGRect, top regionTop: CGFloat, bottom regionBottom: CGFloat, tray: Bool,
                    listHeight: CGFloat) -> PressPlacement {
-        let top = safeTop + PressMetrics.margin
-        let bottom = windowHeight - safeBottom - PressMetrics.margin
+        let top = regionTop + PressMetrics.margin
+        let bottom = regionBottom - PressMetrics.margin
         let above = tray ? PressMetrics.trayHeight + PressMetrics.trayGap : 0
         let below = PressMetrics.listGap + listHeight
         let room = max(0, bottom - top - above - below)
@@ -130,17 +135,20 @@ nonisolated struct PressPlacement: Equatable {
     }
 
     /// Where a sheet `width` wide starts across the window: its side's edge flush with the message's (your
-    /// own: the right edges; theirs: the left), kept `margin` from the window's sides.
-    static func x(width: CGFloat, frame: CGRect, mine: Bool, windowWidth: CGFloat) -> CGFloat {
+    /// own: the right edges; theirs: the left), kept `margin` inside the region's sides (`leading` … `trailing`).
+    static func x(width: CGFloat, frame: CGRect, mine: Bool, leading: CGFloat = 0, trailing: CGFloat) -> CGFloat {
         let wanted = mine ? frame.maxX - width : frame.minX
-        return min(max(wanted, PressMetrics.margin), max(PressMetrics.margin, windowWidth - PressMetrics.margin - width))
+        let low = leading + PressMetrics.margin
+        return min(max(wanted, low), max(low, trailing - PressMetrics.margin - width))
     }
 }
 
-/// The long-press layer over the whole screen: the scrim, the message drawn again where it lies (lifted
-/// 1.03 on a spring, moved only if the tray and the list don't fit round it), the reactions' tray over it
-/// (when it takes reactions) and the actions' list under it, both on the borderless paper sheet. A tap on
-/// the scrim (or the escape gesture) puts it back.
+/// The long-press layer: the message drawn again where it lies (lifted 1.03 on a spring, moved only if the
+/// tray and the list don't fit round it), the reactions over it (when it takes reactions) floating on the
+/// scrim, and the actions' sheet under it. The scrim itself is the thread's (round 17 §2: it dims and
+/// softens the thread's body alone — never its header, the list beside it or the rule between them), told
+/// through `dimmed`; this layer only takes the taps beside the menus. A tap there (or the escape gesture)
+/// puts it back.
 struct MessageMenuOverlay: View {
     let menu: MessageMenu
     let ctx: ThreadContext
@@ -148,8 +156,13 @@ struct MessageMenuOverlay: View {
     let footer: String
     /// The screen's safe area (with the keyboard, when it is up): everything stays inside it.
     let safe: EdgeInsets
+    /// The region the scrim covers, in the window's space: from the thread header's foot down, from the
+    /// pane's rule across. The tray and the list stay 12 inside it.
+    let region: CGRect
     /// The reactions it offers (nil: none — a letter, an unsent or undelivered message), and the viewer's.
     let reactions: ReactionChoice?
+    /// The thread's scrim and softening, which come and go with this layer.
+    @Binding var dimmed: Bool
     let onDismiss: () -> Void
     @State private var shown = false
     @State private var lifted = false
@@ -170,12 +183,17 @@ struct MessageMenuOverlay: View {
             let screen = geo.frame(in: .global)
             let mine = ctx.model.isMine(menu.row.message)
             let frame = menu.frame.offsetBy(dx: -screen.minX, dy: -screen.minY)
-            let listWidth = PressActionList.width(items)
-            let place = PressPlacement.of(frame: frame, windowHeight: geo.size.height, safeTop: safe.top, safeBottom: safe.bottom,
+            let area = region.offsetBy(dx: -screen.minX, dy: -screen.minY)
+            let listWidth = OrganicMenuPanel.width(items, footer: footer)
+            let place = PressPlacement.of(frame: frame, top: area.minY, bottom: geo.size.height - safe.bottom,
                                           tray: reactions != nil, listHeight: PressMetrics.listHeight(rows: items.count, footer: true))
             let shift = placed ? place.shift : 0
+            let x = { (width: CGFloat) in
+                PressPlacement.x(width: width, frame: frame, mine: mine, leading: max(0, area.minX), trailing: geo.size.width)
+            }
             ZStack(alignment: .topLeading) {
-                Tokens.scrim.opacity(shown ? 1 : 0)
+                // Over the whole screen, unseen: a tap beside the menus — the header's too — puts it back.
+                Color.clear
                     .contentShape(Rectangle())
                     .onTapGesture(perform: dismiss)
                     .accessibilityHidden(true)
@@ -194,25 +212,26 @@ struct MessageMenuOverlay: View {
                         choose(id, reactions: reactions)
                     }
                     .accessibilityFocused($trayFocused)
-                    .offset(x: PressPlacement.x(width: PressMetrics.trayWidth, frame: frame, mine: mine, windowWidth: geo.size.width),
-                            y: place.trayY + (placed ? 0 : -place.shift))
+                    .offset(x: x(PressMetrics.trayWidth), y: place.trayY + (placed ? 0 : -place.shift))
                     .opacity(shown ? 1 : 0)
                 }
-                PressActionList(items: items, footer: footer, width: listWidth, seed: seedFromId(menu.row.message.key, start: 23)) { item in
+                OrganicMenuPanel(items: items, seed: seedFromId(menu.row.message.key, start: 23), footer: footer) { item in
                     dismiss()
                     item.action()
                 }
                 .scaleEffect(shown ? 1 : 0.96, anchor: UnitPoint(x: mine ? 1 : 0, y: 0))
                 .opacity(shown ? 1 : 0)
-                .offset(x: PressPlacement.x(width: listWidth, frame: frame, mine: mine, windowWidth: geo.size.width),
-                        y: place.listY + (placed ? 0 : -place.shift))
+                .offset(x: x(listWidth), y: place.listY + (placed ? 0 : -place.shift))
             }
         }
         .ignoresSafeArea()
         .accessibilityAction(.escape, dismiss)
         .onEscapeKey(dismiss)
         .onAppear {
-            withAnimation(.easeOut(duration: 0.15)) { shown = true }
+            withAnimation(.easeOut(duration: Soften.duration)) {
+                shown = true
+                dimmed = true
+            }
             withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.32, dampingFraction: 0.55)) { lifted = true }
             // The message glides to where both fit (220 ms, a spring): the tray and the list come with it.
             withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(duration: 0.22, bounce: 0.12)) { placed = true }
@@ -242,6 +261,7 @@ struct MessageMenuOverlay: View {
             shown = false
             lifted = false
             placed = false
+            dimmed = false
         }
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(120))
@@ -274,10 +294,11 @@ private struct ClippedFoot: ViewModifier {
     }
 }
 
-/// The five reactions on the paper sheet (round 16 §3): 5 × 44 cells, the stickers 32, the viewer's own on
-/// a terracotta-light wobbly disc; they pop in one after another (20 ms apart, 0.6 → 1), a fade under
-/// Reduce Motion. For VoiceOver a group named 心情 / Reactions, each sticker a button naming it, the chosen
-/// one selected.
+/// The five reactions floating over the scrim (round 16 §3, round 17 §2: no paper of their own — the thread
+/// under them is dimmed and softened already): 5 × 44 cells, the stickers 32, the viewer's own on its opaque
+/// wobbly disc (``PressSheet/chosenDisc``); they pop in one after another (20 ms apart, 0.6 → 1), a fade
+/// under Reduce Motion. For VoiceOver a group named 心情 / Reactions, each sticker a button naming it, the
+/// chosen one selected.
 private struct ReactionTray: View {
     let current: ReactionId?
     let shown: Bool
@@ -309,91 +330,13 @@ private struct ReactionTray: View {
                 .accessibilityAddTraits(current == id ? .isSelected : [])
             }
         }
-        .padding(.horizontal, PressMetrics.trayPad)
-        .padding(.vertical, PressMetrics.trayPadY)
         .frame(width: PressMetrics.trayWidth, height: PressMetrics.trayHeight)
-        .background { PressSheetBackground(seed: 61) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(L10n.Messages.reactionsLabel)
     }
 }
 
-/// The message's actions on the paper sheet (round 16 §3): no pen line, no rule between the rows — rows of
-/// 44, the glyph then the words, as wide as the longest (216 to 280) — and the full send time as its quiet
-/// last line (32, 6 more air above it). A destructive row (delete what didn't go) keeps its warning wash.
-struct PressActionList: View {
-    let items: [OrganicMenuItem]
-    let footer: String
-    let width: CGFloat
-    let seed: Double
-    let onChoose: (OrganicMenuItem) -> Void
-    @State private var choosing = false
-
-    /// The list's width: its longest row (glyph 17, 10, words at 15) and its sides, held between 216 and 280.
-    @MainActor static func width(_ items: [OrganicMenuItem]) -> CGFloat {
-        let font = AppFonts.uiFont(.body, size: 15)
-        let words = items.map { ceil(($0.title as NSString).size(withAttributes: [.font: font]).width) }.max() ?? 0
-        return min(PressMetrics.listMaxWidth, max(PressMetrics.listMinWidth, PressMetrics.listPadX * 2 + 17 + 10 + words))
-    }
-
-    var body: some View {
-        let shape = PressSheet(seed: seed)
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(items) { item in
-                Button { choose(item) } label: {
-                    HStack(spacing: 10) {
-                        OrganicIcon(item.icon, size: 17, color: Tokens.terracotta, strokeWidth: Tokens.ink)
-                        Text(item.title)
-                            .font(AppFonts.body(15))
-                            .foregroundStyle(Tokens.text)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
-                    }
-                    .opacity(item.disabled ? 0.45 : 1)
-                    .padding(.horizontal, PressMetrics.listPadX)
-                    .frame(maxWidth: .infinity, minHeight: PressMetrics.listRow, maxHeight: PressMetrics.listRow, alignment: .leading)
-                    .background { if item.danger { Palette.mix(.yellow, 0.25, .menuPaper) } }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(PressRowStyle())
-                .disabled(item.disabled)
-            }
-            Text(footer)
-                .font(AppFonts.body(12))
-                .foregroundStyle(Tokens.textMuted)
-                .lineLimit(1)
-                .padding(.horizontal, PressMetrics.listPadX)
-                .frame(maxWidth: .infinity, minHeight: PressMetrics.listFooter, maxHeight: PressMetrics.listFooter, alignment: .leading)
-                .padding(.top, PressMetrics.listFooterGap)
-        }
-        .padding(.vertical, PressMetrics.listPadY)
-        .frame(width: width)
-        .background { PressSheetBackground(seed: seed) }
-        .clipShape(shape)
-        .accessibilityElement(children: .contain)
-    }
-
-    /// A tap shows its wash first: the choice is told once it has.
-    private func choose(_ item: OrganicMenuItem) {
-        guard !choosing else { return }
-        choosing = true
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(120))
-            onChoose(item)
-        }
-    }
-}
-
-/// A row's press: the ink's wash across the row, inside the sheet.
-private struct PressRowStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background { Tokens.terracotta.opacity(configuration.isPressed ? 0.12 : 0) }
-            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
-    }
-}
-
-/// The composer's ＋, open (round 7 §4.2): 圖片 · 卡片 on the organic menu's panel, hanging over the ＋
+/// The composer's ＋, open (round 7 §4.2): 圖片 · 卡片 on the menus' sheet (round 17 §1), hanging over the ＋
 /// from its leading edge. It is the screen's own layer, never a presented one, so the field keeps its
 /// keyboard. A tap beside it, or the escape gesture, closes it; a row closes it and does its part.
 struct AttachMenuOverlay: View {

@@ -290,7 +290,7 @@ struct MenuStage: View {
     var body: some View {
         GeometryReader { geo in
             let screen = geo.frame(in: .global)
-            let place = MenuDrop.place(face: face, screen: screen, panelHeight: MenuPanelShape.height(rows: items.count))
+            let place = MenuDrop.place(face: face, screen: screen, panelHeight: MenuSheetMetrics.height(rows: items.count))
             let above = place.above
             ZStack(alignment: above ? .bottomTrailing : .topTrailing) {
                 Color.clear
@@ -345,12 +345,18 @@ public nonisolated enum MenuDrop {
     }
 }
 
-/// The rows of an organic menu on their hand-drawn panel (rowMenu.ts): wavy pen lines between the
-/// rows, ink spreading from the finger under the one being pressed, the warning wash under a
-/// destructive row — and, with a `footer`, one quieter line under the rows (a message's time, under
-/// its long-press menu). ``OrganicMenu`` drops it from its trigger; a screen can hang it anywhere
-/// (the thread's long-press). `onChoose` comes a moment after the tap, once the ink has been seen;
-/// the panel takes one choice.
+/// The menus' one surface (round 17 §1): every menu — a ⋯ dropped from its trigger, the composer's ＋,
+/// a message held — is this paper sheet. Borderless paper (``MenuColors/paper``: the menus' paper, a
+/// step toward the ink at night) under the paper's grain (0.3) over the whole wobbly outline, no pen
+/// and no rule between the rows, lifted off the page by a soft shadow that follows the wobble
+/// (``SheetShadow``) instead of an outline. Rows 44: the glyph 17, 12, the words at 15, 20 in from
+/// either side, the sheet as wide as its longest row (``MenuSheetMetrics/width(titles:footer:)``, 200 to 300).
+/// A press spreads the ink from the finger, clipped to its row's band inside the outline (the bands
+/// part on unseen wavy lines, rowMenu.ts); a destructive row keeps its warning wash. With a `footer`,
+/// one quiet line closes it, at the trailing end (a message's time, under its long-press menu).
+/// ``OrganicMenu`` drops it from its trigger; a screen can hang it anywhere (the thread's long-press,
+/// the composer's ＋). `onChoose` comes a moment after the tap, once the ink has been seen; the
+/// sheet takes one choice.
 public struct OrganicMenuPanel: View {
     let items: [OrganicMenuItem]
     let seed: Double
@@ -374,50 +380,58 @@ public struct OrganicMenuPanel: View {
         self.onChoose = onChoose
     }
 
+    /// The sheet's width for these rows (and footer): its longest line and its sides.
+    @MainActor public static func width(_ items: [OrganicMenuItem], footer: String? = nil) -> CGFloat {
+        MenuSheetMetrics.width(titles: items.map(\.title), footer: footer)
+    }
+
     public var body: some View {
+        let width = Self.width(items, footer: footer)
+        let height = MenuSheetMetrics.height(rows: items.count, footer: footer != nil)
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
                 Button { choose(item) } label: {
-                    HStack(spacing: 8) {
-                        OrganicIcon(item.icon, size: 17, color: pressed == i ? colors.borderHover : colors.border, strokeWidth: Tokens.ink)
+                    HStack(spacing: MenuSheetMetrics.gap) {
+                        OrganicIcon(item.icon, size: MenuSheetMetrics.glyph, color: pressed == i ? colors.borderHover : colors.border,
+                                    strokeWidth: Tokens.ink)
                         Text(item.title)
-                            .font(AppFonts.body(14))
+                            .font(AppFonts.body(MenuSheetMetrics.textSize))
                             .foregroundStyle(pressed == i ? colors.borderHover : Tokens.text)
                             .lineLimit(1)
+                            .truncationMode(.tail)
                     }
                     // A row not possible yet keeps its place, dimmed as a button that isn't is.
                     .opacity(item.disabled ? 0.45 : 1)
-                    .padding(.horizontal, 8)
-                    .frame(maxWidth: .infinity, minHeight: MenuPanelShape.rowHeight, maxHeight: MenuPanelShape.rowHeight, alignment: .leading)
+                    .padding(.horizontal, MenuSheetMetrics.padX)
+                    .frame(maxWidth: .infinity, minHeight: MenuSheetMetrics.row, maxHeight: MenuSheetMetrics.row, alignment: .leading)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(MenuRowStyle(index: i, pressed: $pressed, ink: $ink))
                 .disabled(item.disabled)
-                // Where the finger landed, in the panel's space: the ink spreads from there.
-                .simultaneousGesture(DragGesture(minimumDistance: 0, coordinateSpace: .named(MenuPanelShape.space)).onChanged { g in
+                // Where the finger landed, in the sheet's space: the ink spreads from there.
+                .simultaneousGesture(DragGesture(minimumDistance: 0, coordinateSpace: .named(MenuSheetMetrics.space)).onChanged { g in
                     if g.translation == .zero { ink.origin = g.startLocation }
                 })
             }
             if let footer {
+                // Information, not a fifth action: quiet, at the trailing end, right under the last row.
                 Text(footer)
-                    .font(AppFonts.body(12))
+                    .font(AppFonts.body(MenuSheetMetrics.footerSize))
                     .foregroundStyle(Tokens.textMuted)
                     .lineLimit(1)
-                    .padding(.horizontal, 8)
-                    .frame(maxWidth: .infinity, minHeight: MenuPanelShape.footerHeight, maxHeight: MenuPanelShape.footerHeight, alignment: .leading)
+                    .padding(.horizontal, MenuSheetMetrics.padX)
+                    .frame(maxWidth: .infinity, minHeight: MenuSheetMetrics.footer, maxHeight: MenuSheetMetrics.footer, alignment: .trailing)
             }
         }
-        .frame(minWidth: 180 - 16, alignment: .leading)
-        .padding(.horizontal, 8)
-        .fixedSize()
+        .padding(.top, MenuSheetMetrics.padTop)
+        .padding(.bottom, footer == nil ? MenuSheetMetrics.padBottom : MenuSheetMetrics.footerPadBottom)
+        .frame(width: width, height: height, alignment: .top)
         .background {
-            GeometryReader { geo in
-                MenuPanelBackground(size: geo.size, seed: seed, colors: colors,
-                                    dangerIndex: items.firstIndex(where: \.danger), ink: ink, count: items.count,
-                                    bands: items.count + (footer == nil ? 0 : 1))
-            }
+            MenuSheetBackground(size: CGSize(width: width, height: height), seed: seed, colors: colors,
+                                dangerIndex: items.firstIndex(where: \.danger), ink: ink, rows: items.count,
+                                bands: items.count + (footer == nil ? 0 : 1))
         }
-        .coordinateSpace(.named(MenuPanelShape.space))
+        .coordinateSpace(.named(MenuSheetMetrics.space))
         .accessibilityElement(children: .contain)
     }
 
@@ -470,104 +484,159 @@ struct MenuRowStyle: ButtonStyle {
     }
 }
 
-/// The panel's paper, washes, pen dividers and rim (rowMenu.ts), every wash
-/// stopping exactly at the wobbly outline. The pen line wobbles a little past
-/// the panel's box, so the drawing has `bleed` of room on every side — a
-/// canvas cut at the box would show the outline clipped straight.
-struct MenuPanelBackground: View {
+/// The sheet's paper, its shadow, the washes and its grain, all of them one outline: the paper's fill
+/// casts the shadow; the warning wash and the pressed row's ink are cut to their band inside it; the
+/// grain covers exactly the paper — laid wider than the box by ``MenuSheetMetrics/grainOverflow`` and
+/// clipped to the same outline, since the wobble swings past the box (round 17 §1: a strip at the top
+/// edge had paper and no grain, and the sheet read as two layers).
+struct MenuSheetBackground: View {
     let size: CGSize
     let seed: Double
     let colors: MenuColors
     let dangerIndex: Int?
     let ink: MenuInk
-    /// The rows; `bands` counts a footer under them too (a divider above it, no ink in it).
-    let count: Int
-    var bands: Int? = nil
-    private let bleed: CGFloat = 6
+    /// The rows, and the bands they and a footer make (the footer's takes no ink).
+    let rows: Int
+    let bands: Int
 
     var body: some View {
-        let geometry = MenuPanelShape(seed: seed, count: bands ?? count)
+        let shape = MenuSheetShape(seed: seed)
         let rect = CGRect(origin: .zero, size: size)
+        let outer = shape.path(in: rect)
         let w = Double(size.width), h = Double(size.height)
-        let boundaries = geometry.boundaries(width: w)
-        let pad = geometry.pad(height: h)
-        let outer = geometry.outline(in: rect)
+        let boundaries = MenuSheetMetrics.boundaries(bands: bands, width: w, height: h, seed: seed)
+        let pad = MenuSheetMetrics.pad(height: h)
         ZStack(alignment: .topLeading) {
-            Canvas { ctx, _ in
-                ctx.translateBy(x: bleed, y: bleed)
-                var inside = ctx
-                inside.clip(to: outer)
-                inside.fill(outer, with: .color(colors.cream))
-                if let dangerIndex {
-                    let region = rowRegion(dangerIndex, count: bands ?? count, boundaries: boundaries, w: w, h: h, pad: pad).path()
-                    inside.fill(region, with: .color(colors.dangerWash(pressed: false)))
-                }
+            shape.fill(colors.paper).sheetShadow()
+            if let dangerIndex, dangerIndex < rows {
+                let region = rowRegion(dangerIndex, count: bands, boundaries: boundaries, w: w, h: h, pad: pad).path()
+                MenuPathShape(path: region.intersection(outer)).fill(colors.dangerWash(pressed: false))
             }
-            if let row = ink.row, row < count {
-                let origin = ink.origin ?? CGPoint(x: size.width / 2, y: (CGFloat(row) + 0.5) * MenuPanelShape.rowHeight)
+            if let row = ink.row, row < rows {
+                let origin = ink.origin ?? CGPoint(x: size.width / 2, y: MenuSheetMetrics.padTop + (CGFloat(row) + 0.5) * MenuSheetMetrics.row)
                 let far = hypot(max(origin.x, size.width - origin.x), max(origin.y, size.height - origin.y)) + 4
-                let region = rowRegion(row, count: bands ?? count, boundaries: boundaries, w: w, h: h, pad: pad).path()
+                let region = rowRegion(row, count: bands, boundaries: boundaries, w: w, h: h, pad: pad).path()
                 Circle()
                     .fill(row == dangerIndex ? colors.dangerWash(pressed: true) : colors.borderHover.opacity(0.15))
                     .frame(width: far * 2 * ink.reach, height: far * 2 * ink.reach)
                     .position(origin)
                     .frame(width: size.width, height: size.height)
-                    .clipShape(PathShape(path: region.intersection(outer)))
+                    .clipShape(MenuPathShape(path: region.intersection(outer)))
                     .opacity(ink.opacity)
-                    .offset(x: bleed, y: bleed)
             }
-            Canvas { ctx, _ in
-                ctx.translateBy(x: bleed, y: bleed)
-                var inside = ctx
-                inside.clip(to: outer)
-                for pts in boundaries {
-                    inside.stroke(dividerPath(pts).path(), with: .color(colors.divider),
-                                  style: StrokeStyle(lineWidth: Tokens.inkLight, lineCap: .round))
-                }
-                ctx.stroke(outer, with: .color(colors.frame), style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
-            }
+            GrainLayer(shape: shape, mode: .tile, opacity: 0.3, tile: "grain-card", overflow: MenuSheetMetrics.grainOverflow)
         }
-        .frame(width: size.width + 2 * bleed, height: size.height + 2 * bleed)
-        .offset(x: -bleed, y: -bleed)
         .frame(width: size.width, height: size.height, alignment: .topLeading)
         .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
 /// A fixed path as a shape (a row's region, for clipping its ink).
-private nonisolated struct PathShape: Shape {
+private nonisolated struct MenuPathShape: Shape {
     let path: Path
     func path(in rect: CGRect) -> Path { path }
 }
 
-/// OrganicMenu's geometry: 42pt rows, a radius-16 outline with the auto
-/// wobble, and a wavy boundary (amplitude 2) between each pair of rows (and
-/// above a footer: `count` is the bands, the footer one of them).
-nonisolated struct MenuPanelShape {
-    static let rowHeight: CGFloat = 42
-    /// A footer line under the rows is a little shorter than a row.
-    static let footerHeight: CGFloat = 38
+/// The sheet's outline: the wobble at radius 26 (no more than half its height), as the press layer's
+/// paper has always been.
+public nonisolated struct MenuSheetShape: Shape {
+    public var seed: Double
 
-    /// A panel's height: its rows (and a footer under them).
-    static func height(rows: Int, footer: Bool = false) -> CGFloat {
-        CGFloat(rows) * rowHeight + (footer ? footerHeight : 0)
-    }
-    /// The panel's coordinate space, where a row's press is placed.
-    static let space = "organicMenuPanel"
-    let seed: Double
-    let count: Int
-
-    func outline(in rect: CGRect) -> Path {
-        WobRectShape(radius: 16, seed: seed + 100).path(in: rect)
+    public init(seed: Double) {
+        self.seed = seed
     }
 
-    func pad(height: Double) -> Double { max(10, height * 0.04) }
+    public func path(in rect: CGRect) -> Path {
+        WobRectShape(radius: min(MenuSheetMetrics.radius, Double(rect.height) / 2), seed: seed + 100).path(in: rect)
+    }
+}
 
-    func boundaries(width: Double) -> [[Point]] {
-        let h = Double(count) * Double(Self.rowHeight)
-        return (0..<max(0, count - 1)).map { i in
-            rowBoundary(y: Double(i + 1) * Double(Self.rowHeight), w: width, seed: seed + Double(i) * 31 + 7, amp: 2, pad: pad(height: h))
+/// The sheet's measures (round 17 §1–§2), the same on the web and Android: rows 44; the glyph 17, 12, the
+/// words at 15, 20 in from either side; 6 of paper over the first row and under the last — or, with a
+/// footer, its 24 line right under the last row and 10 under it.
+public nonisolated enum MenuSheetMetrics {
+    public static let row: CGFloat = 44
+    public static let glyph: CGFloat = 17
+    public static let gap: CGFloat = 12
+    public static let textSize: CGFloat = 15
+    public static let padX: CGFloat = 20
+    public static let padTop: CGFloat = 6
+    public static let padBottom: CGFloat = 6
+    public static let footer: CGFloat = 24
+    public static let footerSize: CGFloat = 12
+    public static let footerPadBottom: CGFloat = 10
+    public static let radius: Double = 26
+    /// How far the grain is laid past the box: past the furthest the wobble swings out.
+    public static let grainOverflow: CGFloat = 10
+    /// At least this wide, so a menu of two short rows still reads as a sheet rather than a blob; never
+    /// wider than the most (a longer row's words end in an ellipsis). The web's 200 and 300.
+    public static let minWidth: CGFloat = 200
+    public static let maxWidth: CGFloat = 300
+    /// The sheet's coordinate space, where a row's press is placed.
+    static let space = "organicMenuSheet"
+
+    /// The sheet's height: its rows, and the footer's line under them.
+    public static func height(rows: Int, footer: Bool = false) -> CGFloat {
+        padTop + CGFloat(rows) * row + (footer ? Self.footer + footerPadBottom : padBottom)
+    }
+
+    /// Its width: the longest row (glyph, gap, words) — or the footer, if longer — and 20 either side, held
+    /// between ``minWidth`` and ``maxWidth``.
+    @MainActor public static func width(titles: [String], footer: String?) -> CGFloat {
+        let scale = TextScale.factor(relativeTo: .body)
+        func measure(_ text: String, size: CGFloat) -> CGFloat {
+            let font = AppFonts.uiFont(.body, size: (size * scale).rounded())
+            return ceil((text as NSString).size(withAttributes: [.font: font]).width) + 1
         }
+        let rows = titles.map { glyph + gap + measure($0, size: textSize) }.max() ?? 0
+        let foot = footer.map { measure($0, size: footerSize) } ?? 0
+        return min(maxWidth, max(minWidth, max(rows, foot) + 2 * padX))
+    }
+
+    /// The paper reaching past the bands' ends (rowMenu.ts' pad).
+    static func pad(height: Double) -> Double { max(10, height * 0.04) }
+
+    /// The unseen wavy lines the bands part on (amplitude 2): between the rows, and over the footer.
+    static func boundaries(bands: Int, width: Double, height: Double, seed: Double) -> [[Point]] {
+        (0..<max(0, bands - 1)).map { i in
+            rowBoundary(y: Double(padTop) + Double(i + 1) * Double(row), w: width, seed: seed + Double(i) * 31 + 7, amp: 2,
+                        pad: pad(height: height))
+        }
+    }
+}
+
+/// The floating sheets' elevation (round 17 §1), in place of an outline: by day two shadows of a warm
+/// ink — `0 8 24` at 16 % and `0 1 3` at 10 % (oklch 30 % 0.04 50) — at night one deep one, `0 10 28` black
+/// at 45 %. A CSS blur is twice a layer's shadow radius.
+public nonisolated enum SheetShadow {
+    public static let far: Color = Palette.made { _, scheme in scheme == .dark ? (0, 0, 0, 0.45) : (0.30, 0.04, 50, 0.16) }
+    public static let near: Color = Palette.made { _, scheme in scheme == .dark ? (0, 0, 0, 0) : (0.30, 0.04, 50, 0.10) }
+
+    /// The far shadow's radius and drop, by scheme.
+    public static func far(dark: Bool) -> (radius: CGFloat, y: CGFloat) { dark ? (14, 10) : (12, 8) }
+    public static let nearRadius: CGFloat = 1.5
+    public static let nearY: CGFloat = 1
+}
+
+private struct SheetShadowModifier: ViewModifier {
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        let far = SheetShadow.far(dark: scheme == .dark)
+        content
+            .shadow(color: SheetShadow.near, radius: SheetShadow.nearRadius, x: 0, y: SheetShadow.nearY)
+            .background {
+                // The far one on a copy under it, so neither shadows the other.
+                content.shadow(color: SheetShadow.far, radius: far.radius, x: 0, y: far.y)
+            }
+    }
+}
+
+extension View {
+    /// A floating sheet's shadow (``SheetShadow``), following the outline of what it is given — a filled shape.
+    public func sheetShadow() -> some View {
+        modifier(SheetShadowModifier())
     }
 }
 
@@ -576,10 +645,8 @@ struct MenuColors {
     /// The glyphs' pen (the trigger's, each row's icon).
     let border: Color
     let borderHover: Color
-    /// The panel's outline: the menus' frame (the accent, quieter at night), or the card's pen.
-    let frame: Color
+    /// The trigger chip's paper: the menus' (the page's in light, the card's at night), or the card's.
     let cream: Color
-    let divider: Color
     let hue: Double?
 
     init(hue: Double?) {
@@ -587,29 +654,58 @@ struct MenuColors {
         if let hue {
             border = Palette.hue(.pen, hue)
             borderHover = Palette.hue(.penDeep, hue)
-            frame = border
             cream = Palette.hue(.menu, hue)
-            divider = Palette.hue(.separator, hue, alpha: 0.4)
         } else {
             border = Tokens.terracotta
             borderHover = Tokens.terracottaDeep
-            frame = Tokens.menuFrame
-            // The menus' paper: the page's in light, raised onto the card's at night.
             cream = Tokens.menuPaper
-            divider = Tokens.menuFrame.opacity(0.4)
         }
     }
 
-    /// color-mix(in oklch, yellow 25% — 45% while pressed —, menu-cream).
-    func dangerWash(pressed: Bool) -> Color {
-        let t = pressed ? 0.45 : 0.25
-        guard let hue else { return Palette.mix(.yellow, t, .menuPaper) }
-        func wash(_ scheme: PaletteScheme) -> Color {
-            let paper = Palette.hueOKLCH(.menu, hue, scheme)
-            let yellow = OKLCHColor.components(Palette.oklch(.yellow, accent: .terracotta, scheme: scheme)) ?? (0.88, 0.1, 90, 1)
-            let m = Palette.mixOKLCH(yellow, t, (paper.L, paper.C, paper.H, 1))
-            return OKLCHColor.color(m.L, m.C, m.H)
+    /// The sheet's paper (round 17 §1, the press layer's): the menus' cream — or the card's — by day; at
+    /// night 94 % of it toward the ink, so the sheet stands off the page it floats over.
+    var paper: Color {
+        guard let hue else { return MenuColors.raisedPaper }
+        return Palette.made { _, scheme in
+            let c = Self.paperOKLCH(hue: hue, scheme)
+            return (c.L, c.C, c.H, 1)
         }
-        return Palette.schemed(light: wash(.light), dark: wash(.dark))
+    }
+
+    /// The menus' own paper, raised at night (``PressSheet/paper``).
+    static let raisedPaper: Color = Palette.made { accent, scheme in paperOKLCH(hue: nil, scheme, accent: accent) }
+
+    /// The paper as oklch: the card's hue's menu cream or the theme's, raised 94 % toward the ink at night.
+    static func paperOKLCH(hue: Double?, _ scheme: PaletteScheme, accent: Accent = .terracotta)
+        -> (L: Double, C: Double, H: Double, alpha: Double) {
+        func token(_ t: PaletteToken) -> (L: Double, C: Double, H: Double, alpha: Double) {
+            OKLCHColor.components(Palette.oklch(t, accent: accent, scheme: scheme)) ?? (0.95, 0.01, 80, 1)
+        }
+        let base: (L: Double, C: Double, H: Double, alpha: Double)
+        if let hue {
+            let c = Palette.hueOKLCH(.menu, hue, scheme)
+            base = (c.L, c.C, c.H, 1)
+        } else {
+            base = token(.menuPaper)
+        }
+        guard scheme == .dark else { return base }
+        return Palette.mixOKLCH(base, 0.94, token(.towardInk))
+    }
+
+    /// color-mix(in oklch, yellow 25% — 45% while pressed —, the sheet's paper).
+    func dangerWash(pressed: Bool) -> Color {
+        guard let hue else { return pressed ? Self.dangerPressed : Self.dangerRest }
+        return Self.wash(hue: hue, share: pressed ? 0.45 : 0.25)
+    }
+
+    private static let dangerRest = wash(hue: nil, share: 0.25)
+    private static let dangerPressed = wash(hue: nil, share: 0.45)
+
+    private static func wash(hue: Double?, share: Double) -> Color {
+        Palette.made { accent, scheme in
+            let paper = paperOKLCH(hue: hue, scheme, accent: accent)
+            let yellow = OKLCHColor.components(Palette.oklch(.yellow, accent: accent, scheme: scheme)) ?? (0.88, 0.1, 90, 1)
+            return Palette.mixOKLCH(yellow, share, paper)
+        }
     }
 }

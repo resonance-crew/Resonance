@@ -67,86 +67,41 @@ public struct ReactionGlyph: View {
 
 // MARK: - The press layer's paper
 
-/// The press-and-hold layer's sheet (round 16 §3): borderless paper — the menus' paper, a step toward
-/// the ink at night (L ≈ 28 %) so it stands off the dimmed thread — under the thought map's grain (0.3),
-/// its outline the wobble at radius 26, no pen line. The reactions' tray and the actions' list are both
-/// made of it.
-public nonisolated struct PressSheet: Shape {
-    public var seed: Double
-
-    public init(seed: Double) {
-        self.seed = seed
-    }
-
-    public func path(in rect: CGRect) -> Path {
-        WobRectShape(radius: min(PressMetrics.sheetRadius, Double(rect.height) / 2), seed: seed).path(in: rect)
-    }
-}
-
-extension PressSheet {
+/// The press-and-hold layer's paper (round 16 §3, round 17 §1): every menu's sheet now
+/// (``OrganicMenuPanel``) — the menus' paper, a step toward the ink at night (L ≈ 28 %) so it stands off the
+/// dimmed thread. The reactions float over the scrim with no paper of their own (round 17 §2).
+public enum PressSheet {
     /// The sheet's paper: `--menu-paper`, at night 94 % of it toward the ink.
-    public static var paper: Color {
-        Palette.schemed(light: Tokens.menuPaper, dark: Palette.mix(.menuPaper, 0.94, .towardInk))
-    }
+    public static var paper: Color { MenuColors.raisedPaper }
 
-    /// The disc under the viewer's own reaction in the tray: the accent's light wash on paper; at night the
-    /// accent itself at 30 % over the tray's raised paper (review F4: the light wash there, ≈ 1.2 : 1 against
-    /// the paper, all but vanished — this lands near L 38 % on the paper's 28 %). The web's `.trayWash`.
+    /// The disc under the viewer's own reaction in the tray: the accent's light wash by day; at night the
+    /// accent itself at 30 % over the raised paper (review F4: the light wash there, ≈ 1.2 : 1 against
+    /// the paper, all but vanished — this lands near L 38 %), opaque, so it reads as chosen on the scrim.
+    /// The web's `.trayWash`.
     public static let chosenDisc: Color = Palette.made { accent, scheme in
         func token(_ t: PaletteToken) -> (L: Double, C: Double, H: Double, alpha: Double) {
             OKLCHColor.components(Palette.oklch(t, accent: accent, scheme: scheme)) ?? (0, 0, 0, 1)
         }
         guard scheme == .dark else { return token(.terracottaLight) }
-        let nightPaper = Palette.mixOKLCH(token(.menuPaper), 0.94, token(.towardInk))
-        return Palette.mixOKLCH(token(.terracotta), 0.3, nightPaper)
+        return Palette.mixOKLCH(token(.terracotta), 0.3, MenuColors.paperOKLCH(hue: nil, scheme, accent: accent))
     }
 }
 
-/// The sheet's paper and grain behind its content.
-public struct PressSheetBackground: View {
-    let seed: Double
-
-    public init(seed: Double) {
-        self.seed = seed
-    }
-
-    public var body: some View {
-        let shape = PressSheet(seed: seed)
-        ZStack {
-            shape.fill(PressSheet.paper)
-            GrainLayer(shape: shape, mode: .tile, opacity: 0.3, tile: "grain-card")
-        }
-        .accessibilityHidden(true)
-    }
-}
-
-/// The press layer's measures (round 16 §3), the same on the web and Android.
+/// The press layer's measures (round 16 §3, round 17 §2), the same on the web and Android.
 public nonisolated enum PressMetrics {
-    public static let sheetRadius: Double = 26
-    /// The tray: five 44 cells on the paper, 6 of it at the ends and 4 above and below — 232 × 52; its stickers 32.
-    public static let trayPad: CGFloat = 6
-    public static let trayPadY: CGFloat = 4
+    /// The tray: five 44 cells floating over the scrim, no paper round them — 220 × 44; its stickers 32.
     public static let trayCell: CGFloat = 44
     public static let traySticker: CGFloat = 32
-    public static var trayWidth: CGFloat { trayCell * 5 + trayPad * 2 }
-    public static var trayHeight: CGFloat { trayCell + trayPadY * 2 }
-    /// The tray 8 over the lifted message, the list 10 under it, both 12 from the window's edges.
+    public static var trayWidth: CGFloat { trayCell * 5 }
+    public static var trayHeight: CGFloat { trayCell }
+    /// The tray 8 over the lifted message, the list 10 under it, both 12 inside the region the scrim covers.
     public static let trayGap: CGFloat = 8
     public static let listGap: CGFloat = 10
     public static let margin: CGFloat = 12
-    /// The list: rows 44, at least 216 wide and at most 280, the send time's footer 32 parted by 6 more.
-    public static let listRow: CGFloat = 44
-    public static let listMinWidth: CGFloat = 216
-    public static let listMaxWidth: CGFloat = 280
-    public static let listFooter: CGFloat = 32
-    public static let listFooterGap: CGFloat = 6
-    /// The list's paper round its rows (top and bottom), and at its sides.
-    public static let listPadY: CGFloat = 6
-    public static let listPadX: CGFloat = 14
 
-    /// The list's height for `rows` and a footer.
+    /// The list's height for `rows` and a footer (the menus' one sheet, ``MenuSheetMetrics``).
     public static func listHeight(rows: Int, footer: Bool) -> CGFloat {
-        CGFloat(rows) * listRow + (footer ? listFooterGap + listFooter : 0) + listPadY * 2
+        MenuSheetMetrics.height(rows: rows, footer: footer)
     }
 }
 
