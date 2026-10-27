@@ -33,6 +33,10 @@ struct ThoughtMapScreen: View {
     /// On screen now — not covered by a page pushed over it — so its size is the map's (a covered map
     /// shares the store with the one over it, and must not report a size of its own).
     @State private var shown = false
+    /// How far the row of controls reaches down from the map's top, and the zoom sheet up from its foot:
+    /// the store frames the cards clear of them (``ThoughtMapStore/setChromeClear(top:bottom:)``).
+    @State private var chromeTop: CGFloat = 0
+    @State private var chromeBottom: CGFloat = 0
     /// Kept by the session between visits (see ThoughtMapStore.open).
     private var store: ThoughtMapStore { session.thoughtMap }
 
@@ -52,6 +56,7 @@ struct ThoughtMapScreen: View {
                     chrome(insets: insets, size: geo.size)
                     if store.trayOpen { MapTray(store: store, size: geo.size) }
                 }
+                .coordinateSpace(.named(Self.mapSpace))
                 .onAppear {
                     shown = true
                     // A map shown opens framing everything, as 顯示全部 leaves it (round 13).
@@ -59,9 +64,13 @@ struct ThoughtMapScreen: View {
                         visited = true
                         store.beginVisit()
                     }
+                    store.setChromeClear(top: Double(chromeTop), bottom: Double(chromeBottom))
                     store.setViewport(geo.size)
                 }
                 .onDisappear { shown = false }
+                .onChange(of: [chromeTop, chromeBottom]) { _, clear in
+                    if shown { store.setChromeClear(top: Double(clear[0]), bottom: Double(clear[1])) }
+                }
                 .onChange(of: geo.size) { _, size in if shown { store.setViewport(size) } }
             }
             .ignoresSafeArea()
@@ -154,7 +163,13 @@ struct ThoughtMapScreen: View {
             // 8 under the status bar, where its bar's arrow is.
             .frame(height: tablet ? 2 * HeaderChrome.rowLine : nil)
             .padding(.top, insets.top + (tablet ? 0 : 8))
+            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.mapSpace)).maxY } action: {
+                chromeTop = $0
+            }
             zoomCluster
+                .onGeometryChange(for: CGFloat.self) { size.height - $0.frame(in: .named(Self.mapSpace)).minY } action: {
+                    chromeBottom = $0
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 .padding(.leading, tablet ? edge : 16)
                 .padding(.bottom, (tablet ? edge : 16) + insets.bottom)
@@ -175,6 +190,9 @@ struct ThoughtMapScreen: View {
     }
 
     /// Back's room either side of its 15pt arrow: 43 across beside the labelled pills' 36 of height.
+    /// The map's own coordinates, which its controls are measured in.
+    static let mapSpace = "thoughtMap"
+
     static let backPadding: CGFloat = 14
     static let backWidth: CGFloat = 15 + 2 * backPadding
 

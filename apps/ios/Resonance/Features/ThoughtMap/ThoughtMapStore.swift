@@ -45,6 +45,9 @@ final class ThoughtMapStore {
 
     var camera = MapCamera(x: 0, y: 0, s: 1)
     private(set) var viewport: CGSize = .zero
+    /// How far the controls floating over the map reach in from its top (Leave and the tools) and its foot
+    /// (the zoom sheet), as the screen shown measures them: framing everything keeps the cards clear of them.
+    @ObservationIgnored private(set) var chromeClear: (top: Double, bottom: Double) = (0, 0)
     var selection: Selection?
     private(set) var dragNodeId: String?
     private(set) var linkDraft: LinkDraft?
@@ -351,6 +354,13 @@ final class ThoughtMapStore {
         if framing { frameIfReady() } else { applyFocus() }
     }
 
+    /// The controls over the map were laid out (or moved): framing everything still, it frames clear of them.
+    func setChromeClear(top: Double, bottom: Double) {
+        guard top != chromeClear.top || bottom != chromeClear.bottom else { return }
+        chromeClear = (top, bottom)
+        if framing { frameIfReady() }
+    }
+
     /// A map shown (the thought-map page, or the writer's beside its pane): it opens as 顯示全部 leaves it —
     /// everything framed, and kept framed until the reader takes the camera — whatever the camera was on
     /// the last visit, in whatever size.
@@ -431,7 +441,7 @@ final class ThoughtMapStore {
 
     private var fittedCamera: MapCamera {
         let rects = nodeOrder.compactMap(nodeRect) + groupOrder.compactMap { groups[$0] }.map { Rect(x: $0.x, y: $0.y, w: $0.w, h: $0.h) }
-        return fitCamera(rects, viewport.width, viewport.height)
+        return fitCameraClear(rects, viewport.width, viewport.height, top: chromeClear.top, bottom: chromeClear.bottom)
     }
 
     /// The split workspace's map, once its visible width settles beside the editor pane (the pane opens

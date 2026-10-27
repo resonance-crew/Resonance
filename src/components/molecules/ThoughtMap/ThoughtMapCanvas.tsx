@@ -9,6 +9,7 @@ import {
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  type MutableRefObject,
   type Ref,
   type RefObject,
 } from 'react';
@@ -47,7 +48,7 @@ import {
 } from '@/lib/db/firestore/client/thoughtMap';
 import {
   centerOn,
-  fitCamera,
+  fitCameraClear,
   inflateRect,
   majorityGroupId,
   nodeRect,
@@ -243,6 +244,22 @@ function keyForMap(e: KeyboardEvent, board: HTMLElement | null): boolean {
   return !!board?.contains(at);
 }
 
+/**
+ * How far the controls floating over the board reach in from its top (Leave
+ * and the tools, on one line) and its foot (the zoom sheet): the cards are
+ * framed clear of them, not under them.
+ */
+function chromeClear(viewport: Element | null, toolbar: Element | null, zoomSheet: Element | null) {
+  const box = viewport?.getBoundingClientRect();
+  if (!box) return { top: 0, bottom: 0 };
+  const tools = toolbar?.getBoundingClientRect();
+  const sheet = zoomSheet?.getBoundingClientRect();
+  return {
+    top: tools ? Math.max(0, tools.bottom - box.top) : 0,
+    bottom: sheet ? Math.max(0, box.bottom - sheet.top) : 0,
+  };
+}
+
 export interface ThoughtMapCanvasProps {
   data: MyThoughtMap;
   style?: CSSProperties;
@@ -367,6 +384,8 @@ export function ThoughtMapCanvas({
   const worldRef = useRef<HTMLDivElement>(null);
   const dotsRef = useRef<HTMLDivElement>(null);
   const percentRef = useRef<HTMLSpanElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const zoomRef = useRef<HTMLDivElement>(null);
   const cam = useRef<CameraPainter | null>(null);
   cam.current ??= cameraPainter(cameraRef, worldRef, dotsRef, percentRef, setCamera);
   useEffect(() => () => cam.current!.dispose(), []);
@@ -424,7 +443,8 @@ export function ThoughtMapCanvas({
     ];
     if (glideRef.current != null) cancelAnimationFrame(glideRef.current);
     glideRef.current = null;
-    cam.current!.commit(fitCamera(rects, w, h));
+    const clear = chromeClear(viewportRef.current, toolbarRef.current, zoomRef.current);
+    cam.current!.commit(fitCameraClear(rects, w, h, clear));
   };
   useEffect(() => {
     if (!vw || !vh) return;
@@ -1505,7 +1525,7 @@ export function ThoughtMapCanvas({
           zoom cluster without crowding the board. Two pills of one height, no
           pen line: the second tool in the tonal peach (opaque, so it reads over
           the board's dots), the one verb — add a card — the solid terracotta. */}
-      <div className={styles.toolbar}>
+      <div ref={toolbarRef} className={styles.toolbar}>
         <OrganicButton variant="tonal" size="sm" onClick={() => void addGroup()}>
           <Icon name="frame" size={15} /> {isMobile ? t('addGroupShort') : t('addGroup')}
         </OrganicButton>
@@ -1517,6 +1537,7 @@ export function ThoughtMapCanvas({
       <ZoomCluster
         percent={Math.round(camera.s * 100)}
         percentRef={percentRef}
+        sheetRef={zoomRef}
         onZoomOut={() => zoom(1 / 1.25)}
         onZoomIn={() => zoom(1.25)}
         onFit={fit}
@@ -1582,6 +1603,8 @@ interface ZoomClusterProps {
   percent: number;
   /** The percent's own element, for a gesture to paint between renders. */
   percentRef?: Ref<HTMLSpanElement>;
+  /** The sheet itself, for the map to frame its cards clear of it. */
+  sheetRef?: MutableRefObject<HTMLDivElement | null>;
   onZoomOut: () => void;
   onZoomIn: () => void;
   onFit: () => void;
@@ -1599,7 +1622,7 @@ const ZOOM_SEED = 41;
  * itself. The sheet takes the cluster's measured size and is drawn behind the
  * controls.
  */
-function ZoomCluster({ percent, percentRef, onZoomOut, onZoomIn, onFit }: ZoomClusterProps) {
+function ZoomCluster({ percent, percentRef, sheetRef, onZoomOut, onZoomIn, onFit }: ZoomClusterProps) {
   const t = useTranslations('me.thoughtMap');
   const ref = useRef<HTMLDivElement>(null);
   const { w, h } = useElementSize(ref);
@@ -1613,7 +1636,13 @@ function ZoomCluster({ percent, percentRef, onZoomOut, onZoomIn, onFit }: ZoomCl
   }, [w, h]);
 
   return (
-    <div ref={ref} className={styles.zoomCluster}>
+    <div
+      ref={(el) => {
+        ref.current = el;
+        if (sheetRef) sheetRef.current = el;
+      }}
+      className={styles.zoomCluster}
+    >
       <HandDrawnBorder w={w} h={h} R={ZOOM_R} seed={ZOOM_SEED} fillColor="var(--color-card-bg)" />
       <ShapeGrain w={w} h={h} d={paper} seed={ZOOM_SEED} opacity={0.3} frequency={0.88} />
       <button type="button" className={styles.iconButton} aria-label={t('zoomOut')} onClick={onZoomOut}>

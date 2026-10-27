@@ -92,3 +92,20 @@ fun fitCamera(rects: List<Rect>, vw: Double, vh: Double, pad: Double = 70.0): Ma
     val s = clamp(min(min((vw - 2 * pad) / bw, (vh - 2 * pad) / bh), 1.0), mapMinScale, mapMaxScale)
     return MapCamera((vw - bw * s) / 2 - x0 * s, (vh - bh * s) / 2 - y0 * s, s)
 }
+
+/** How far the cards keep from a floating control when the map frames them. */
+const val MAP_CHROME_GAP = 16.0
+
+/**
+ * [fitCamera], clear of the controls floating over the map's top and foot (Leave and the tools, the zoom
+ * sheet): [top] / [bottom] are how far they reach into the viewport from its edge, and the cards keep
+ * [MAP_CHROME_GAP] from them, or [pad] from the edge where that is more. A viewport too short for that
+ * frames as fitCamera does (the web's fitCameraClear).
+ */
+fun fitCameraClear(rects: List<Rect>, vw: Double, vh: Double, top: Double, bottom: Double, pad: Double = 70.0): MapCamera {
+    val t = max(0.0, top + MAP_CHROME_GAP - pad)
+    val b = max(0.0, bottom + MAP_CHROME_GAP - pad)
+    if (vh - t - b <= pad * 2) return fitCamera(rects, vw, vh, pad)
+    val cam = fitCamera(rects, vw, vh - t - b, pad)
+    return MapCamera(cam.x, cam.y + t, cam.s)
+}

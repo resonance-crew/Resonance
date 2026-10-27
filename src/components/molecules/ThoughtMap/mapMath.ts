@@ -136,3 +136,27 @@ export function fitCamera(rects: RectLike[], vw: number, vh: number, pad = 70): 
     y: (vh - bh * s) / 2 - y0 * s,
   };
 }
+
+/** How far the cards keep from a floating control when the map frames them. */
+export const CHROME_GAP = 16;
+
+/**
+ * fitCamera, clear of the controls floating over the map's top and foot (Leave
+ * and the tools, the zoom sheet): `top` / `bottom` are how far they reach into
+ * the viewport from its edge, and the cards keep CHROME_GAP from them, or the
+ * pad from the edge where that is more. A viewport too short for that frames
+ * as fitCamera does.
+ */
+export function fitCameraClear(
+  rects: RectLike[],
+  vw: number,
+  vh: number,
+  clear: { top: number; bottom: number },
+  pad = 70,
+): Camera {
+  const top = Math.max(0, clear.top + CHROME_GAP - pad);
+  const bottom = Math.max(0, clear.bottom + CHROME_GAP - pad);
+  if (vh - top - bottom <= pad * 2) return fitCamera(rects, vw, vh, pad);
+  const cam = fitCamera(rects, vw, vh - top - bottom, pad);
+  return { ...cam, y: cam.y + top };
+}

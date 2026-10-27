@@ -26,7 +26,7 @@ import com.resonance.geometry.WobRectOptions
 import com.resonance.geometry.arrowHeadPath
 import com.resonance.geometry.autoMag
 import com.resonance.geometry.autoSegments
-import com.resonance.geometry.fitCamera
+import com.resonance.geometry.fitCameraClear
 import com.resonance.geometry.majorityGroupId
 import com.resonance.geometry.mapNodeH
 import com.resonance.geometry.mapNodeRect
@@ -137,6 +137,10 @@ class ThoughtMapStore(private val reading: ReadingApi) {
         private set
     var viewportH = 0.0
         private set
+
+    /** How far the controls floating over the map reach in from its top (Leave and the tools) and its foot (the zoom sheet), in dp as the screen measures them: framing everything keeps the cards clear of them. */
+    private var chromeTop = 0.0
+    private var chromeBottom = 0.0
     var selection by mutableStateOf<Selection?>(null)
     var dragNodeId by mutableStateOf<String?>(null)
         private set
@@ -511,10 +515,18 @@ class ThoughtMapStore(private val reading: ReadingApi) {
         frameIfFraming()
     }
 
+    /** The controls over the map were laid out (or moved): still [framing], everything framed clear of them. */
+    fun setChromeClear(top: Double, bottom: Double) {
+        if (top == chromeTop && bottom == chromeBottom) return
+        chromeTop = top
+        chromeBottom = bottom
+        frameIfFraming()
+    }
+
     private fun frameIfFraming() {
         if (!framing || !loaded || viewportW <= 0 || viewportH <= 0) return
         val rects = nodeOrder.mapNotNull { nodeRect(it) } + groupOrder.mapNotNull { groups[it]?.rect }
-        camera = fitCamera(rects, viewportW, viewportH)
+        camera = fitCameraClear(rects, viewportW, viewportH, chromeTop, chromeBottom)
     }
 
     /** The reader moved the camera themself (a pan, a pinch, a zoom button): it stays where they put it. */

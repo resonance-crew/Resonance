@@ -32,6 +32,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,7 +68,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.unit.em
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.resonance.app.Session
@@ -250,6 +253,9 @@ private fun BoxScope.Chrome(store: ThoughtMapStore, session: Session, leave: () 
     // the top (measured: their label's line box decides it), and only a little wider than tall.
     val density = LocalDensity.current
     var toolsHeight by remember { mutableIntStateOf(0) }
+    // How far the controls reach in from the map's top and foot (dp): the store frames the cards clear of them.
+    var chromeTop by remember { mutableFloatStateOf(0f) }
+    var chromeBottom by remember { mutableFloatStateOf(0f) }
     val leaveHeight = if (toolsHeight > 0) with(density) { toolsHeight.toDp() } else with(density) { (14 * 1.3f).sp.toDp() } + 18.dp
     // A phone's row 8 under the status bar, where its bar's arrow is. A tablet's stands where a pushed page's bar puts
     // its own (round 15): its middle on the bar's row line, Leave's arrow on the header's ←, and every control as far
@@ -266,7 +272,9 @@ private fun BoxScope.Chrome(store: ThoughtMapStore, session: Session, leave: () 
     }
 
     Row(
-        Modifier.align(Alignment.TopEnd).padding(end = edge, top = top).onSizeChanged { toolsHeight = it.height },
+        Modifier.align(Alignment.TopEnd).padding(end = edge, top = top).onSizeChanged { toolsHeight = it.height }
+            // Leave stands on the same line, as tall: the row's foot is how far the controls reach down.
+            .onGloballyPositioned { c -> chromeTop = (c.positionInParent().y + c.size.height) / density.density },
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         OrganicButton(L10n.Me.ThoughtMap.addGroupShort, variant = ButtonVariant.Tonal, icon = IconName.Frame, small = true, iconSize = 15.dp) {
@@ -281,7 +289,14 @@ private fun BoxScope.Chrome(store: ThoughtMapStore, session: Session, leave: () 
     }
 
     val zoomEdge = if (tablet) edge else 16.dp
-    ZoomCluster(store, Modifier.align(Alignment.BottomStart).padding(start = zoomEdge, bottom = zoomEdge + bottom))
+    ZoomCluster(
+        store,
+        Modifier.align(Alignment.BottomStart).padding(start = zoomEdge, bottom = zoomEdge + bottom).onGloballyPositioned { c ->
+            val height = c.parentLayoutCoordinates?.size?.height ?: return@onGloballyPositioned
+            chromeBottom = (height - c.positionInParent().y) / density.density
+        },
+    )
+    LaunchedEffect(store, chromeTop, chromeBottom) { store.setChromeClear(chromeTop.toDouble(), chromeBottom.toDouble()) }
 
     if (store.loaded && store.isEmpty && !store.trayOpen) {
         Column(

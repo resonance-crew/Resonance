@@ -86,6 +86,14 @@ struct MapMathTests {
         #expect(near(fitCamera([Rect(x: 0, y: 0, w: 460, h: 340)], 390, 844), 70, 329.60869565217394, 0.5434782608695652))
     }
 
+    /// mapMath.test.ts's fitCameraClear, case for case.
+    @Test func fitCameraClearKeepsTheCardsClearOfTheControls() {
+        let tall = [Rect(x: 0, y: 0, w: 440, h: 1200)]
+        #expect(near(fitCameraClear(tall, 700, 1032, top: 96, bottom: 74), 197.83333333333334, 112, 0.6916666666666667))
+        #expect(fitCameraClear(tall, 700, 1032, top: 20, bottom: 20) == fitCamera(tall, 700, 1032))
+        #expect(fitCameraClear(tall, 700, 200, top: 96, bottom: 74) == fitCamera(tall, 700, 200))
+    }
+
     @Test func seedsMatchTheWeb() {
         #expect(seedFromString("c1") == 3119)
         #expect(seedFromString("mine") == 708)

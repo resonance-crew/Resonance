@@ -103,3 +103,18 @@ public func fitCamera(_ rects: [Rect], _ vw: Double, _ vh: Double, pad: Double =
     let s = clamp(min((vw - 2 * pad) / bw, (vh - 2 * pad) / bh, 1), mapMinScale, mapMaxScale)
     return MapCamera(x: (vw - bw * s) / 2 - x0 * s, y: (vh - bh * s) / 2 - y0 * s, s: s)
 }
+
+/// How far the cards keep from a floating control when the map frames them.
+public let mapChromeGap: Double = 16
+
+/// ``fitCamera(_:_:_:pad:)``, clear of the controls floating over the map's top and foot (Leave and the
+/// tools, the zoom sheet): `top` / `bottom` are how far they reach into the viewport from its edge, and the
+/// cards keep ``mapChromeGap`` from them, or `pad` from the edge where that is more. A viewport too short
+/// for that frames as fitCamera does (the web's fitCameraClear).
+public func fitCameraClear(_ rects: [Rect], _ vw: Double, _ vh: Double, top: Double, bottom: Double,
+                           pad: Double = 70) -> MapCamera {
+    let t = max(0, top + mapChromeGap - pad), b = max(0, bottom + mapChromeGap - pad)
+    guard vh - t - b > pad * 2 else { return fitCamera(rects, vw, vh, pad: pad) }
+    let cam = fitCamera(rects, vw, vh - t - b, pad: pad)
+    return MapCamera(x: cam.x, y: cam.y + t, s: cam.s)
+}

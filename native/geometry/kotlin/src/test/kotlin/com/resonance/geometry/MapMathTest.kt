@@ -85,6 +85,15 @@ class MapMathTest {
         assertTrue(two.all { !rectsIntersect(small(q.x, q.y), it) })
     }
 
+    /** mapMath.test.ts's fitCameraClear, case for case. */
+    @Test
+    fun fitCameraClearKeepsTheCardsClearOfTheControls() {
+        val tall = listOf(Rect(0.0, 0.0, 440.0, 1200.0))
+        assertTrue(near(fitCameraClear(tall, 700.0, 1032.0, 96.0, 74.0), 197.83333333333334, 112.0, 0.6916666666666667))
+        assertEquals(fitCamera(tall, 700.0, 1032.0), fitCameraClear(tall, 700.0, 1032.0, 20.0, 20.0))
+        assertEquals(fitCamera(tall, 700.0, 200.0), fitCameraClear(tall, 700.0, 200.0, 96.0, 74.0))
+    }
+
     @Test
     fun fitCameraFramesEverything() {
         assertEquals(MapCamera(280.0, 160.0, 1.0), fitCamera(emptyList(), 800.0, 500.0))

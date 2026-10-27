@@ -3,6 +3,7 @@ import {
   centerOn,
   coverage,
   fitCamera,
+  fitCameraClear,
   majorityGroupId,
   MAX_SCALE,
   MIN_SCALE,
@@ -132,6 +133,22 @@ describe('fitCamera', () => {
   it('handles an empty map without exploding', () => {
     const cam = fitCamera([], 800, 500);
     expect(cam.s).toBe(1);
+  });
+});
+
+describe('fitCameraClear', () => {
+  const tall = [{ x: 0, y: 0, w: 440, h: 1200 }];
+  it('keeps the cards CHROME_GAP clear of the controls over the top and foot (natives: MapMathTests)', () => {
+    // fitCamera alone puts the top of the cards 70 down, under a row of controls 96 deep.
+    expect(fitCamera(tall, 700, 1032).y).toBe(70);
+    const cam = fitCameraClear(tall, 700, 1032, { top: 96, bottom: 74 });
+    expect(cam).toEqual({ s: 0.6916666666666667, x: 197.83333333333334, y: 112 });
+    expect(1032 - (cam.y + 1200 * cam.s)).toBeCloseTo(90);
+  });
+
+  it('is fitCamera where the controls sit inside its pad, or the viewport is too short to clear them', () => {
+    expect(fitCameraClear(tall, 700, 1032, { top: 20, bottom: 20 })).toEqual(fitCamera(tall, 700, 1032));
+    expect(fitCameraClear(tall, 700, 200, { top: 96, bottom: 74 })).toEqual(fitCamera(tall, 700, 200));
   });
 });
 
