@@ -162,3 +162,43 @@ import Testing
                 == L10n.Messages.unsentByThem(handle: "bob"))
     }
 }
+
+/// Round 16 §6: the writer's link sheet and what the island says of the selection's link.
+@MainActor @Suite struct RoundSixteenLinkTests {
+    @Test func theIslandsStateNamesTheSelectionsLinkAndWhetherACardCanStand() {
+        let editor = StoryEditorBridge(placeholder: "Write", layout: .canvas, locale: "zh-TW")
+        editor.handle("state", ["active": [:], "canUndo": false,
+                                "link": ["href": "https://example.com/rain", "display": "card", "standalone": true, "words": "https://example.com/rain"],
+                                "canCard": true])
+        #expect(editor.link == .init(href: "https://example.com/rain", display: .card, standalone: true, words: "https://example.com/rain"))
+        #expect(editor.canCard)
+        editor.handle("state", ["active": [:], "canUndo": false, "link": NSNull(), "canCard": false])
+        #expect(editor.link == nil && !editor.canCard)
+        // A link card tapped: the host opens its sheet.
+        var tapped: String?
+        editor.onLinkTap = { tapped = $0 }
+        editor.handle("linkTap", ["href": "https://example.com/rain"])
+        #expect(tapped == "https://example.com/rain")
+    }
+
+    @Test func theSheetStartsOnTheLinksOwnWayElseCardOnAnEmptyLineElseWords() {
+        // An empty line (a caret, 卡片 offered): 卡片.
+        let empty = StoryLinkRequest.of(link: nil, canCard: true, caret: true)
+        #expect(empty.offersCard && empty.display == .card)
+        // A whole paragraph selected: offered, starting on 文字.
+        let selected = StoryLinkRequest.of(link: nil, canCard: true, caret: false)
+        #expect(selected.offersCard && selected.display == .text)
+        // Words in a sentence: no choice, words.
+        let inline = StoryLinkRequest.of(link: .init(href: "https://example.com/b", display: .text, standalone: false, words: "看這篇"),
+                                         canCard: false, caret: true)
+        #expect(!inline.offersCard && inline.display == .text)
+        // A card tapped: its own way.
+        #expect(StoryLinkRequest.card("https://example.com/rain").display == .card)
+    }
+
+    @Test func aLiveCardsStoredPreviewsReachTheWriter() {
+        let previews = DraftService.linkPreviews([["url": "https://example.com/rain", "title": "Rain", "image": "/api/link-image?u=x&s=y"],
+                                                  ["url": "https://example.com/none"], "odd"])
+        #expect(previews == [.init(url: "https://example.com/rain", title: "Rain", image: "/api/link-image?u=x&s=y")])
+    }
+}

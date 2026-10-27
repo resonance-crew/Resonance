@@ -53,6 +53,8 @@ struct WriteScreen: View {
     /// The format bar is on the keyboard (the story has the focus, or had it a moment ago).
     @State private var formatBar = false
     @State private var pickingCard = false
+    /// The link sheet (round 16 §6): the format bar's 連結, or a link card tapped in the story.
+    @State private var linkRequest: StoryLinkRequest?
     @State private var coverItem: PhotosPickerItem?
     @State private var pickingCover = false
     @State private var inlineItem: PhotosPickerItem?
@@ -129,6 +131,8 @@ struct WriteScreen: View {
         }
         let model = WriteModel(drafts: session.drafts, writing: session.writing, referenceCardId: request.referenceCardId,
                                opened: opened, locale: locale, editor: editor)
+        // A live card's link cards show the pages the server read for them (round 16 §6).
+        if let previews = opened?.linkPreviews, !previews.isEmpty { editor.setLinkPreviews(previews, origin: session.config.origin) }
         #if DEBUG
         // `-writeTitle "…" -writeStory "…" -writeCover <url>` fill a new card (screen checks; the simulator can't type into it).
         let defaults = UserDefaults.standard
@@ -310,6 +314,26 @@ struct WriteScreen: View {
             } onCancel: { pickingCard = false }
             .withSession(session)
         }
+        // The link sheet over the keyboard (round 16 §6): its 完成 and 移除連結 act on the selection the story kept.
+        .sheet(item: $linkRequest) { request in
+            StoryLinkSheet(request: request,
+                           onApply: { href, display in await model.editor.applyLink(href, display: display) },
+                           onRemove: { model.editor.unlink() },
+                           onClose: { linkRequest = nil })
+                .presentationDetents([.height(request.offersCard ? 300 : 240), .medium])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(26)
+                .presentationBackground(Tokens.cream)
+        }
+        // Closed, done or not, the story takes its focus back with its caret where it was.
+        .onChange(of: linkRequest) { _, open in
+            guard open == nil, storyLentFocus else { return }
+            storyLentFocus = false
+            Task {
+                try? await Task.sleep(for: Self.pickerSettle)
+                model.editor.refocus()
+            }
+        }
         // 插入卡片 alike: closed without a card, the story takes its focus back where it was.
         .onChange(of: pickingCard) { _, open in
             guard !open, storyLentFocus else { return }
@@ -359,11 +383,25 @@ struct WriteScreen: View {
                     }, onInsertCard: {
                         storyLentFocus = true
                         pickingCard = true
-                    }, uploadingImage: model.uploadingInline)
+                    }, uploadingImage: model.uploadingInline, onLink: {
+                        Task {
+                            // Read before the sheet takes the keyboard: a caret on an empty line starts on 卡片.
+                            let caret = await model.editor.selectionIsCaret()
+                            storyLentFocus = true
+                            linkRequest = .of(link: model.editor.link, canCard: model.editor.canCard, caret: caret)
+                        }
+                    })
                         .transition(.opacity.animation(.easeOut(duration: 0.12)))
                 }
             }
-            .onAppear { storyRoom = max(240, outer.size.height - 220) }
+            .onAppear {
+                storyRoom = max(240, outer.size.height - 220)
+                // A link card tapped in the story (it is picked): its sheet, 卡片 chosen.
+                model.editor.onLinkTap = { href in
+                    storyLentFocus = true
+                    linkRequest = .card(href)
+                }
+            }
             .onChange(of: outer.size.height) { _, height in storyRoom = max(240, height - 220) }
         }
         // The bar rides the keyboard while the story has the focus, and a moment after it lets go.

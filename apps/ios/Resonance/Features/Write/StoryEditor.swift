@@ -17,6 +17,16 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
         var bulletList = false, orderedList = false, blockquote = false
     }
 
+    /// The link the selection is in (round 16 §6, the island's `state.link`): its address, how the reader
+    /// shows it (its page's card, or words), whether it stands alone in its paragraph, and its words.
+    struct Link: Equatable {
+        enum Display: String { case card, text }
+        var href: String
+        var display: Display
+        var standalone: Bool
+        var words: String
+    }
+
     /// The caret's line in the page, in its points as laid out (the text scale's zoom included).
     struct Caret: Equatable {
         var top: CGFloat
@@ -27,6 +37,9 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
     private(set) var height: CGFloat
     private(set) var active = Active()
     private(set) var canUndo = false
+    /// The link the selection is in (a picked link card too), and whether 卡片 is offered for it now.
+    private(set) var link: Link?
+    private(set) var canCard = false
     private(set) var focused = false
     /// How the island sets the story now (writerScript: an empty story in the interface language's
     /// type, changing only once it clearly leans the other way): the title is set the same way.
@@ -40,11 +53,14 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
     private(set) var contentHeight: CGFloat?
     /// The story as the editor serializes it (the web's Markdown).
     var onChange: (String) -> Void = { _ in }
+    /// A link card in the story was tapped (it is picked now): the host opens its link sheet, 卡片 chosen.
+    var onLinkTap: (String) -> Void = { _ in }
 
     @ObservationIgnored let webView: WKWebView
     @ObservationIgnored let layout: EditorPage.Layout
     @ObservationIgnored private var pendingMarkdown: String?
     @ObservationIgnored private var pendingTitle: String?
+    @ObservationIgnored private var pendingPreviews: (previews: [HostLinkPreview], origin: URL)?
     @ObservationIgnored private var textScale: CGFloat = 1
     /// Holds the island's own scroll view at its top (its delegate; the scroll view keeps it weakly).
     @ObservationIgnored private let pin = PinnedScroll()
@@ -168,6 +184,53 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
         Task { _ = try? await webView.callAsyncJavaScript("ResonanceEditor.focus()", arguments: [:], contentWorld: .page) }
     }
 
+    // MARK: - Links (round 16 §6)
+
+    /// The link sheet's 完成: links the selection the story kept (or changes the caret's link, or a picked card)
+    /// to `href`, shown as `display`. False when the island refused it (an address it doesn't link to, or 卡片
+    /// where no card can stand) — nothing changed then.
+    func applyLink(_ href: String, display: Link.Display) async -> Bool {
+        let result = try? await webView.callAsyncJavaScript("return ResonanceEditor.exec('link', { href: h, display: d })",
+                                                            arguments: ["h": href, "d": display.rawValue], contentWorld: .page)
+        return result as? Bool ?? false
+    }
+
+    /// The link sheet's 移除連結: a picked card goes, a link's words stay.
+    func unlink() {
+        exec("unlink")
+    }
+
+    /// Whether the story's selection is a caret (nothing selected) — asked as the link tool opens its sheet, so an
+    /// empty line starts on 卡片 and selected words on 文字.
+    func selectionIsCaret() async -> Bool {
+        let script = "const s = document.getSelection(); return !s || s.isCollapsed;"
+        let result = try? await webView.callAsyncJavaScript(script, arguments: [:], contentWorld: .page)
+        return result as? Bool ?? true
+    }
+
+    /// One stored preview of a story link, as the island takes it.
+    struct HostLinkPreview: Equatable {
+        let url: String
+        let title: String
+        /// The server's site-relative `/api/link-image?…` path (the island shows only our own route's picture).
+        let image: String?
+    }
+
+    /// A live card's stored link previews (its `linkPreviews`), for the link cards the story shows: their
+    /// titles, and pictures from our own link-image route only (made absolute against `origin`).
+    func setLinkPreviews(_ previews: [HostLinkPreview], origin: URL) {
+        guard ready else {
+            pendingPreviews = (previews, origin)
+            return
+        }
+        let list: [[String: String]] = previews.map { p in
+            var entry = ["url": p.url, "title": p.title]
+            if let image = p.image, let absolute = URL(string: image, relativeTo: origin)?.absoluteString { entry["image"] = absolute }
+            return entry
+        }
+        Task { _ = try? await webView.callAsyncJavaScript("ResonanceEditor.setLinkPreviews?.(p)", arguments: ["p": list], contentWorld: .page) }
+    }
+
     /// The story's focus again with its caret (or selection) where it was — the photo picker borrowed
     /// the keyboard (round 8 §6.5). Not `focus()`, which puts the caret at the story's end: the story's
     /// editable root takes the focus itself, and ProseMirror, which keeps its selection while it is
@@ -212,6 +275,13 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
         Task { _ = try? await webView.callAsyncJavaScript("document.body.style.zoom = z", arguments: ["z": factor], contentWorld: .page) }
     }
 
+    /// The state message's `link`: `{ href, display, standalone, words }`, or null for none.
+    static func link(_ value: Any?) -> Link? {
+        guard let map = value as? [String: Any], let href = map["href"] as? String, !href.isEmpty else { return nil }
+        return Link(href: href, display: Link.Display(rawValue: map["display"] as? String ?? "") ?? .text,
+                    standalone: map["standalone"] as? Bool ?? false, words: map["words"] as? String ?? "")
+    }
+
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
         handle(type, body)
@@ -233,6 +303,8 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
             pendingTitle = nil
             if let pendingMarkdown { setMarkdown(pendingMarkdown) }
             pendingMarkdown = nil
+            if let pendingPreviews { setLinkPreviews(pendingPreviews.previews, origin: pendingPreviews.origin) }
+            pendingPreviews = nil
         case "change":
             onChange(body["markdown"] as? String ?? "")
         case "height":
@@ -243,6 +315,10 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
             active = Active(bold: a["bold"] ?? false, italic: a["italic"] ?? false, h2: a["h2"] ?? false, h3: a["h3"] ?? false,
                             bulletList: a["bulletList"] ?? false, orderedList: a["orderedList"] ?? false, blockquote: a["blockquote"] ?? false)
             canUndo = body["canUndo"] as? Bool ?? false
+            link = Self.link(body["link"])
+            canCard = body["canCard"] as? Bool ?? false
+        case "linkTap":
+            if let href = body["href"] as? String, !href.isEmpty { onLinkTap(href) }
         case "focus":
             focused = body["focused"] as? Bool ?? false
             if !focused { caret = nil }
@@ -391,7 +467,7 @@ struct StoryCanvasField: View {
 
 /// The formatting bar docked on the keyboard while the story has the focus (writer.spec §1.5,
 /// the web's KeyboardFormatBar): the cream paper with the toolbar's wave as its top edge, one row
-/// that never wraps — 插入圖片 · 插入卡片 ┆ 粗體 · 斜體 ┆ H2 · H3 ┆ 引言 · 清單 · 編號 — scrolling
+/// that never wraps — 插入圖片 · 插入卡片 ┆ 粗體 · 斜體 · 連結 ┆ H2 · H3 ┆ 引言 · 清單 · 編號 — scrolling
 /// sideways, fading where more lies, and 收起鍵盤 pinned at its end. Its buttons never take the
 /// focus from the story (the island keeps it, and each command focuses it again).
 struct StoryFormatBar: View {
@@ -399,6 +475,8 @@ struct StoryFormatBar: View {
     var onInsertImage: () -> Void
     var onInsertCard: () -> Void
     var uploadingImage = false
+    /// 連結 (round 16 §6): the link sheet for the selection or the caret's link.
+    var onLink: () -> Void = {}
     /// MarkdownEditor's `seed`; the buttons, rules and wave offset from it.
     private let seed = 17.0
     /// The row's height (each button a 44 target).
@@ -417,6 +495,8 @@ struct StoryFormatBar: View {
                     rule(3)
                     tool(L10n.Write.Editor.bold, on: bridge.active.bold, seed: 21) { bridge.exec("bold") }
                     tool(L10n.Write.Editor.italic, on: bridge.active.italic, seed: 28) { bridge.exec("italic") }
+                    // On (washed) while the selection is in a link.
+                    tool(L10n.Write.Editor.link, on: bridge.link != nil, icon: .link, seed: 31, action: onLink)
                     rule(9)
                     tool("H2", spoken: L10n.Write.Editor.h2, on: bridge.active.h2, seed: 35) { bridge.exec("h2") }
                     tool("H3", spoken: L10n.Write.Editor.h3, on: bridge.active.h3, seed: 42) { bridge.exec("h3") }

@@ -125,6 +125,9 @@ struct DraftService: DraftStore {
         /// In the trash: the audience a restore gives it back (`trashedFrom.visibility`; the trash
         /// keeps it private meanwhile).
         var restoresTo: String? = nil
+        /// The story's link previews the server keeps on a live card (`linkPreviews`): the writer's link cards
+        /// show their titles and pictures (round 16 §6).
+        var linkPreviews: [StoryEditorBridge.HostLinkPreview] = []
         /// Where it lives once published: the slug, or the id.
         var routeKey: String { slug ?? id }
 
@@ -157,7 +160,16 @@ struct DraftService: DraftStore {
                           referenceCardId: data["referenceCardId"] as? String, hasPendingEdit: pending != nil,
                           trashedAt: trashedAt, liveVisibility: data["visibility"] as? String ?? "public",
                           liveAnonymous: data["anonymous"] as? Bool ?? false,
-                          restoresTo: (data["trashedFrom"] as? [String: Any])?["visibility"] as? String)
+                          restoresTo: (data["trashedFrom"] as? [String: Any])?["visibility"] as? String,
+                          linkPreviews: linkPreviews(data["linkPreviews"]))
+    }
+
+    /// A card's stored `linkPreviews` (`[{ url, title, image? }]`), each with an address and a title.
+    static func linkPreviews(_ value: Any?) -> [StoryEditorBridge.HostLinkPreview] {
+        (value as? [[String: Any]] ?? []).compactMap { entry in
+            guard let url = entry["url"] as? String, let title = entry["title"] as? String, !url.isEmpty, !title.isEmpty else { return nil }
+            return StoryEditorBridge.HostLinkPreview(url: url, title: title, image: entry["image"] as? String)
+        }
     }
 
     /// Whether your card is in the trash now (`trashedAt`, written by the server alone).

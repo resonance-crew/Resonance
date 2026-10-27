@@ -75,4 +75,16 @@ import Testing
         #expect(!StoryLinks.wordsAreTheAddress("https://elsewhere.example.com", href: "https://example.com/real"))
         #expect(!StoryLinks.wordsAreTheAddress("https://example.com/a", href: "javascript:alert(1)"))
     }
+
+    /// Round 16 §6: what the writer's link sheet takes (`linkTarget` in src/lib/links/soleLink.ts).
+    @Test func theLinkSheetTakesWebAddressesOnly() {
+        #expect(StoryLinks.linkTarget(" https://example.com/rain ") == "https://example.com/rain")
+        #expect(StoryLinks.linkTarget("www.example.com") == "https://www.example.com")
+        #expect(StoryLinks.linkTarget("example.com/x") == "https://example.com/x")
+        #expect(StoryLinks.linkTarget("//example.com/x") == "https://example.com/x")
+        for refused in ["javascript:alert(1)", "data:text/html,hi", "mailto:a@example.com", "https://user@example.com/",
+                        "localhost", "", "   ", "ftp://example.com/"] {
+            #expect(StoryLinks.linkTarget(refused) == nil, "\(refused)")
+        }
+    }
 }

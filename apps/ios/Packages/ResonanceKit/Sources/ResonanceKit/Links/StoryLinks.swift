@@ -38,6 +38,27 @@ public enum StoryLinks {
         return bare(said) == bare(target)
     }
 
+    /// The address the writer's link sheet links to, from what was typed or pasted into its field — or nil
+    /// when it isn't one we link to (the sheet then says `linkInvalid`): `linkTarget` in src/lib/links/soleLink.ts.
+    /// http(s) only, as the link rules take it; a bare `www.…` or `example.com/x` gets `https://`; another
+    /// scheme (`javascript:`, `data:`, `mailto:` …) or a user name is refused. The island checks it again.
+    public static func linkTarget(_ input: String) -> String? {
+        let value = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        let written: String
+        if value.range(of: "^https?://", options: [.regularExpression, .caseInsensitive]) != nil {
+            written = value
+        } else if value.range(of: "^[a-z][a-z0-9+.-]*:(?![0-9])", options: [.regularExpression, .caseInsensitive]) != nil {
+            // A scheme of its own (a colon before any slash, not a port's): never ours to link.
+            return nil
+        } else if value.hasPrefix("//") {
+            written = "https:" + value
+        } else {
+            written = "https://" + value
+        }
+        return serverKey(written) == nil ? nil : written
+    }
+
     /// An address with its scheme and one trailing slash set aside.
     static func bare(_ url: String) -> String {
         var rest = Substring(url)
