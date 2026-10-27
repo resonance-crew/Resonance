@@ -8,7 +8,9 @@ public struct OrganicMenuItem: Identifiable {
     public let id: String
     public let title: String
     public let icon: IconName
-    /// Destructive rows sit on the warning wash.
+    /// A row that ends or removes something (封鎖, 刪除…): told by the danger ink alone — its glyph and words
+    /// in the deeper danger red (``Tokens/dangerFill``), its press ink the danger hue — never a wash at rest
+    /// (round 17 review D1).
     public var danger: Bool
     /// Not possible yet (生成圖片 with no story to draw from): dimmed, and it takes no tap.
     public var disabled: Bool
@@ -37,10 +39,9 @@ public enum MenuTrigger: Sendable, Equatable {
     case pill(String, IconName)
 }
 
-/// The web's organic「⋯」dropdown: a trigger that drops a hand-drawn panel —
-/// wavy pen lines between the rows, ink spreading from the finger under the
-/// one being pressed (every control's press), and the warning wash under a
-/// destructive row. Rides the theme terracotta, or a card's hue.
+/// The web's organic「⋯」dropdown: a trigger that drops the menus' one sheet (``OrganicMenuPanel``) —
+/// ink spreading from the finger under the row being pressed (every control's press), a destructive row
+/// in the danger ink. Rides the theme terracotta, or a card's hue.
 public struct OrganicMenu: View {
     let items: [OrganicMenuItem]
     let label: String
@@ -123,12 +124,15 @@ public struct OrganicMenu: View {
             Button(action: show) {
                 Group {
                     if trigger == .bare {
-                        OrganicIcon(icon, size: 20, color: open ? Tokens.terracotta : Tokens.text, strokeWidth: OrganicIconButton.restingStroke)
+                        // Open, the web's bare trigger (round 17 review A10, the lead's addendum): the full ink on
+                        // a soft wobbly disc of it at 8 % — never terracotta.
+                        OrganicIcon(icon, size: 20, color: Tokens.text, strokeWidth: OrganicIconButton.restingStroke)
                     } else {
                         OrganicMenuChip(size: triggerSize, seed: seed, icon: icon, colors: colors, active: open)
                     }
                 }
                 .frame(minWidth: 44, minHeight: 44)
+                .background { if trigger == .bare { BareTriggerDisc(open: open, seed: seed) } }
                 .contentShape(Rectangle())
             }
             .buttonStyle(OrganicPressStyle(inset: trigger == .bare ? 4 : max(0, (44 - triggerSize) / 2)))
@@ -353,7 +357,10 @@ public nonisolated enum MenuDrop {
 /// either side, the sheet as wide as its longest row (``MenuSheetMetrics/width(titles:footer:widths:)``, 168 to 300;
 /// a held message's list 216 to 280).
 /// A press spreads the ink from the finger, clipped to its row's band inside the outline (the bands
-/// part on unseen wavy lines, rowMenu.ts); a destructive row keeps its warning wash. With a `footer`,
+/// part on unseen wavy lines, rowMenu.ts). A destructive row is told by the danger ink alone — its glyph and
+/// words in the deeper danger red at rest and pressed (``Tokens/dangerFill``: 5 : 1 on the menu paper, where the
+/// plain danger red is 4.2), and its press ink the danger hue at the same strength — never a wash under it at rest
+/// (round 17 review D1: the platforms' own destructive rows; the yellow band read as a second layer). With a `footer`,
 /// one quiet line closes it, at the trailing end (a message's time, under its long-press menu).
 /// ``OrganicMenu`` drops it from its trigger; a screen can hang it anywhere (the thread's long-press,
 /// the composer's ＋). `onChoose` comes a moment after the tap, once the ink has been seen; the
@@ -397,12 +404,12 @@ public struct OrganicMenuPanel: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
                 Button { choose(item) } label: {
+                    let inks = MenuRowInks.of(item, pressed: pressed == i, colors: colors)
                     HStack(spacing: MenuSheetMetrics.gap) {
-                        OrganicIcon(item.icon, size: MenuSheetMetrics.glyph, color: pressed == i ? colors.borderHover : colors.border,
-                                    strokeWidth: Tokens.ink)
+                        OrganicIcon(item.icon, size: MenuSheetMetrics.glyph, color: inks.glyph, strokeWidth: Tokens.ink)
                         Text(item.title)
                             .font(AppFonts.body(MenuSheetMetrics.textSize))
-                            .foregroundStyle(pressed == i ? colors.borderHover : Tokens.text)
+                            .foregroundStyle(inks.label)
                             .lineLimit(1)
                             .truncationMode(.tail)
                     }
@@ -434,7 +441,7 @@ public struct OrganicMenuPanel: View {
         .frame(width: width, height: height, alignment: .top)
         .background {
             MenuSheetBackground(size: CGSize(width: width, height: height), seed: seed, colors: colors,
-                                dangerIndex: items.firstIndex(where: \.danger), ink: ink, rows: items.count,
+                                dangerRows: MenuRowInks.dangerRows(items), ink: ink, rows: items.count,
                                 bands: items.count + (footer == nil ? 0 : 1))
         }
         .coordinateSpace(.named(MenuSheetMetrics.space))
@@ -491,7 +498,7 @@ struct MenuRowStyle: ButtonStyle {
 }
 
 /// The sheet's paper, its shadow, the washes and its grain, all of them one outline: the paper's fill
-/// casts the shadow; the warning wash and the pressed row's ink are cut to their band inside it; the
+/// casts the shadow; the pressed row's ink (red on a destructive row) is cut to its band inside it; the
 /// grain covers exactly the paper — laid wider than the box by ``MenuSheetMetrics/grainOverflow`` and
 /// clipped to the same outline, since the wobble swings past the box (round 17 §1: a strip at the top
 /// edge had paper and no grain, and the sheet read as two layers).
@@ -499,7 +506,8 @@ struct MenuSheetBackground: View {
     let size: CGSize
     let seed: Double
     let colors: MenuColors
-    let dangerIndex: Int?
+    /// The destructive rows: their press ink is the danger red.
+    let dangerRows: Set<Int>
     let ink: MenuInk
     /// The rows, and the bands they and a footer make (the footer's takes no ink).
     let rows: Int
@@ -514,16 +522,12 @@ struct MenuSheetBackground: View {
         let pad = MenuSheetMetrics.pad(height: h)
         ZStack(alignment: .topLeading) {
             shape.fill(colors.paper).sheetShadow()
-            if let dangerIndex, dangerIndex < rows {
-                let region = rowRegion(dangerIndex, count: bands, boundaries: boundaries, w: w, h: h, pad: pad).path()
-                MenuPathShape(path: region.intersection(outer)).fill(colors.dangerWash(pressed: false))
-            }
             if let row = ink.row, row < rows {
                 let origin = ink.origin ?? CGPoint(x: size.width / 2, y: MenuSheetMetrics.padTop + (CGFloat(row) + 0.5) * MenuSheetMetrics.row)
                 let far = hypot(max(origin.x, size.width - origin.x), max(origin.y, size.height - origin.y)) + 4
                 let region = rowRegion(row, count: bands, boundaries: boundaries, w: w, h: h, pad: pad).path()
                 Circle()
-                    .fill(row == dangerIndex ? colors.dangerWash(pressed: true) : colors.borderHover.opacity(0.15))
+                    .fill(MenuRowInks.press(danger: dangerRows.contains(row), colors: colors))
                     .frame(width: far * 2 * ink.reach, height: far * 2 * ink.reach)
                     .position(origin)
                     .frame(width: size.width, height: size.height)
@@ -700,21 +704,39 @@ struct MenuColors {
         guard scheme == .dark else { return base }
         return Palette.mixOKLCH(base, 0.94, token(.towardInk))
     }
+}
 
-    /// color-mix(in oklch, yellow 25% — 45% while pressed —, the sheet's paper).
-    func dangerWash(pressed: Bool) -> Color {
-        guard let hue else { return pressed ? Self.dangerPressed : Self.dangerRest }
-        return Self.wash(hue: hue, share: pressed ? 0.45 : 0.25)
+/// A row's inks (round 17 review D1): the glyph in the menu's pen and the words in the text ink, both the
+/// deeper pen while pressed; a destructive row's both in the deeper danger red (`--danger-fill`, which words
+/// can be read in: ≈ 5 : 1 on the menu paper by day), pressed or not. Its press ink is the same strength as
+/// every row's, in its own hue (`--color-danger` for a destructive row).
+public struct MenuRowInks: Equatable {
+    public let glyph: Color
+    public let label: Color
+
+    /// A row's inks in a menu of the theme's colours, or a card's `hue`.
+    public static func of(_ item: OrganicMenuItem, pressed: Bool, hue: Double? = nil) -> MenuRowInks {
+        of(item, pressed: pressed, colors: MenuColors(hue: hue))
     }
 
-    private static let dangerRest = wash(hue: nil, share: 0.25)
-    private static let dangerPressed = wash(hue: nil, share: 0.45)
+    static func of(_ item: OrganicMenuItem, pressed: Bool, colors: MenuColors) -> MenuRowInks {
+        if item.danger { return MenuRowInks(glyph: Tokens.dangerFill, label: Tokens.dangerFill) }
+        return MenuRowInks(glyph: pressed ? colors.borderHover : colors.border, label: pressed ? colors.borderHover : Tokens.text)
+    }
 
-    private static func wash(hue: Double?, share: Double) -> Color {
-        Palette.made { accent, scheme in
-            let paper = paperOKLCH(hue: hue, scheme, accent: accent)
-            let yellow = OKLCHColor.components(Palette.oklch(.yellow, accent: accent, scheme: scheme)) ?? (0.88, 0.1, 90, 1)
-            return Palette.mixOKLCH(yellow, share, paper)
-        }
+    /// The ink a press spreads under a row: the deeper pen at 15 %, or the danger hue at 15 %.
+    public static func press(danger: Bool, hue: Double? = nil) -> Color {
+        press(danger: danger, colors: MenuColors(hue: hue))
+    }
+
+    static func press(danger: Bool, colors: MenuColors) -> Color {
+        (danger ? Tokens.danger : colors.borderHover).opacity(pressStrength)
+    }
+
+    public static let pressStrength: Double = 0.15
+
+    /// Every destructive row, not only the first.
+    public static func dangerRows(_ items: [OrganicMenuItem]) -> Set<Int> {
+        Set(items.indices.filter { items[$0].danger })
     }
 }

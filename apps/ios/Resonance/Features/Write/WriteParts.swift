@@ -58,7 +58,11 @@ struct TagField<Label: View>: View {
                 }
                 .padding(.top, tags.isEmpty ? 0 : Self.pillsGap)
             }
+            // The pills pop in and reflow inside; where the label and the row stand is the page's, at once
+            // (review A2: a tag added moved them in the same update as the step's still scroll, and the
+            // label slid in from where it had been).
             .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: tags)
+            .geometryGroup()
             VStack(alignment: .leading, spacing: 6) {
                 TagEntryCapsule(focused: focused, ready: ready, thinking: suggesting && !ready,
                                 suggestLabel: L10n.Write.tagsSuggestShort, suggestAccessibility: L10n.Write.tagsSuggestLabel,

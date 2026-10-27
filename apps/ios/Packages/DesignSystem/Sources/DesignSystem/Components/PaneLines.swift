@@ -55,6 +55,44 @@ public struct PaneLines: View {
     }
 }
 
+/// A press layer's scrim in the detail pane (round 17 review D2): from the rule's own line across to the
+/// pane's trailing edge, laid in exactly ``PaneLines``' box so its leading edge follows the rule's wave —
+/// the dimmed pane meets the divider with no undimmed strip beside it (it began 12 past the line, a crisp
+/// band the thread's height). Drawn under ``PaneLines``, so the rule over its edge stays crisp.
+public struct PaneScrim<Fill: ShapeStyle>: View {
+    let fill: Fill
+
+    public init(_ fill: Fill) {
+        self.fill = fill
+    }
+
+    public var body: some View {
+        GeometryReader { geo in
+            PaneScrimShape().fill(fill)
+                .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .padding(.top, -PaneLines.tuck)
+        .ignoresSafeArea(edges: .bottom)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// What a pane's scrim covers in ``PaneLines``' box: everything trailing the rule's centre line — the rule's
+/// own curve down its leading side, the box's trailing edge up the other.
+public nonisolated struct PaneScrimShape: Shape {
+    public init() {}
+
+    public func path(in rect: CGRect) -> Path {
+        let rule = PaneRuleGeometry(height: Double(rect.height))
+        var path = rule.path.offsetBy(dx: rect.minX, dy: rect.minY)
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + rect.height + 40))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.closeSubpath()
+        return path
+    }
+}
+
 /// The vertical rule's curve in a box `height` tall: a turn every 34 or so, 2 to either side of the
 /// gutter's middle, run 40 past the box's foot.
 public nonisolated struct PaneRuleGeometry {

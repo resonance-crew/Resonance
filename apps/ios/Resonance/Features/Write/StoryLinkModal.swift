@@ -45,6 +45,10 @@ struct StoryLinkModal: View {
     @State private var display: StoryEditorBridge.Link.Display
     @State private var invalid = false
     @State private var applying = false
+    /// The field's own selection: the address there already is selected through it once the field has the
+    /// focus (review A6) — never a select-all sent to whatever is first responder, which could be the story.
+    @State private var selection: TextSelection?
+    @State private var selectedOnce = false
     @FocusState private var fieldFocused: Bool
 
     init(request: StoryLinkRequest, onApply: @escaping (String, StoryEditorBridge.Link.Display) async -> Bool,
@@ -58,12 +62,19 @@ struct StoryLinkModal: View {
     }
 
     /// The modal's measures (round 17 §6.2): title → field 16, field → the choice 24, the choice's label →
-    /// its control the publish step's 12, then 28 of air over the foot; at most 400 wide.
+    /// its control the publish step's 12, then 28 of air over the foot; at most 400 wide. Its controls — the
+    /// field, 卡片 | 文字, 移除連結 and 完成 — are one height, 44 (review D5).
     enum Metrics {
         static let maxWidth: CGFloat = 400
         static let titleGap: CGFloat = 16
         static let choiceGap: CGFloat = 24
         static let footGap: CGFloat = 28
+        static let control: CGFloat = ModalMetrics.minButtonHeight
+        /// The field's words: 15 on a line of 1.6.
+        static let fieldText: CGFloat = 15
+        static var fieldLine: CGFloat { fieldText * 1.6 }
+        /// Above and below the field's line, so the field is `control` tall.
+        static var fieldPadY: CGFloat { (control - fieldLine) / 2 }
     }
 
     /// The modal's title: 插入連結 for a new link, 編輯連結 for one already there.
@@ -79,8 +90,10 @@ struct StoryLinkModal: View {
             ModalTitle(Self.title(request))
                 .padding(.bottom, Metrics.titleGap)
             VStack(alignment: .leading, spacing: 6) {
-                TextField(text: $address, prompt: fieldPrompt(L10n.Write.Editor.linkPlaceholder)) { Text(L10n.Write.Editor.linkPlaceholder) }
-                    .font(AppFonts.body(15))
+                TextField(text: $address, selection: $selection, prompt: fieldPrompt(L10n.Write.Editor.linkPlaceholder)) {
+                    Text(L10n.Write.Editor.linkPlaceholder)
+                }
+                    .font(AppFonts.body(Metrics.fieldText))
                     .foregroundStyle(Tokens.text)
                     .tint(Tokens.terracotta)
                     .keyboardType(.URL)
@@ -91,9 +104,10 @@ struct StoryLinkModal: View {
                     .focused($fieldFocused)
                     .onSubmit { Task { await apply() } }
                     .onChange(of: address) { invalid = false }
-                    .frame(minHeight: 15 * 1.6)
+                    .onChange(of: fieldFocused) { _, focused in if focused { selectAddress() } }
+                    .frame(minHeight: Metrics.fieldLine)
                     .padding(.horizontal, Tokens.fieldPadX)
-                    .padding(.vertical, Tokens.fieldPadY)
+                    .padding(.vertical, Metrics.fieldPadY)
                     .modifier(FieldSurface(seed: 71, focused: fieldFocused))
                 if invalid {
                     Text(L10n.Write.Editor.linkInvalid)
@@ -113,13 +127,14 @@ struct StoryLinkModal: View {
                         .accessibilityAddTraits(.isHeader)
                     SegmentedActionBar([option(.card, L10n.Write.Editor.linkAsCard, icon: .frame),
                                         option(.text, L10n.Write.Editor.linkAsText, icon: .link)],
-                                       fill: Tokens.creamDark)
+                                       fill: Tokens.creamDark, height: Metrics.control)
                 }
                 .padding(.top, Metrics.choiceGap)
             }
             HStack(spacing: 10) {
                 if Self.offersRemove(request) {
-                    OrganicButton(L10n.Write.Editor.linkRemove, variant: .text, size: .sm) {
+                    // Quiet (review D5): words alone, no fill — it takes the link off, nothing more, so not red.
+                    QuietTextButton(L10n.Write.Editor.linkRemove) {
                         onRemove()
                         onClose()
                     }
@@ -133,15 +148,27 @@ struct StoryLinkModal: View {
             .padding(.top, Metrics.footGap)
         }
         .animation(.easeOut(duration: 0.15), value: invalid)
-        .onAppear {
-            fieldFocused = true
-            // The address there already, selected: typing replaces it, as a browser's address bar does.
-            guard !address.isEmpty else { return }
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(350))
-                if fieldFocused { UIApplication.shared.sendAction(#selector(UIResponder.selectAll(_:)), to: nil, from: nil, for: nil) }
+        .onAppear { fieldFocused = true }
+    }
+
+    /// The address there already, selected through the field's own selection once it has the focus: typing
+    /// replaces it, as a browser's address bar does. Once, on opening; a moment later again, in case the field
+    /// took the focus before its text view did (the selection then lands on nothing).
+    private func selectAddress() {
+        guard !selectedOnce, !address.isEmpty else { return }
+        selectedOnce = true
+        selection = Self.wholeAddress(address)
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+            if fieldFocused, selection == nil || selection == TextSelection(insertionPoint: address.endIndex) {
+                selection = Self.wholeAddress(address)
             }
         }
+    }
+
+    /// The whole of the address, as the field's selection.
+    static func wholeAddress(_ address: String) -> TextSelection {
+        TextSelection(range: address.startIndex..<address.endIndex)
     }
 
     private func option(_ value: StoryEditorBridge.Link.Display, _ label: String, icon: IconName) -> SegmentSpec {
@@ -170,5 +197,34 @@ struct StoryLinkModal: View {
             invalid = true
             fieldFocused = true
         }
+    }
+}
+
+/// A quiet button of words alone (review D5): the text ink, semibold 14 as a small button's label, no fill — a
+/// press washes faintly round it — 44 tall, its words on the content's edge (its padding hangs in the margin).
+struct QuietTextButton: View {
+    let title: String
+    let action: () -> Void
+
+    init(_ title: String, action: @escaping () -> Void) {
+        self.title = title
+        self.action = action
+    }
+
+    static let padX: CGFloat = 12
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(AppFonts.body(14, weight: .semibold))
+                .tracking(14 * 0.02)
+                .foregroundStyle(Tokens.text)
+                .lineLimit(1)
+                .padding(.horizontal, Self.padX)
+                .frame(minHeight: StoryLinkModal.Metrics.control)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(OrganicPressStyle(inset: 2, color: Tokens.text.opacity(0.08)))
+        .padding(.leading, -Self.padX)
     }
 }

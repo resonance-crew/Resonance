@@ -48,17 +48,21 @@ public struct TagEntryCapsule<Field: View>: View {
                 .padding(.leading, TagEntryMetrics.textStart)
                 .padding(.trailing, ComposerMetrics.textTrailing)
             Button(action: onSegment) {
+                // The two faces crossfade by their opacity alone, never by a frame (round 17 review A2: an
+                // animation over the whole segment slid it in from where the field had been as 新增 committed).
                 ZStack {
                     face(icon: .sparkle, label: suggestLabel, ink: Tokens.buttonOnTonal, loading: thinking)
-                        .opacity(ready ? 0 : 1)
+                        .animation(ComposerCapsuleFace.faceChange) { $0.opacity(ready ? 0 : 1) }
                     face(icon: .plus, label: addLabel, ink: Tokens.cream, loading: false)
-                        .opacity(ready ? 1 : 0)
+                        .animation(ComposerCapsuleFace.faceChange) { $0.opacity(ready ? 1 : 0) }
                 }
                 .frame(width: width, height: ComposerMetrics.height)
                 .contentShape(Rectangle())
-                .animation(.easeOut(duration: 0.14), value: ready)
             }
             .buttonStyle(TagSegmentPress(pressed: $pressed))
+            // Placed by the capsule at once, whatever the press's own transaction carries: its faces never
+            // glide in from where the field stood before the pills above it moved it.
+            .geometryGroup()
             .accessibilityLabel(ready ? addAccessibility : suggestAccessibility)
         }
         .frame(height: ComposerMetrics.height)
@@ -78,6 +82,9 @@ public struct TagEntryCapsule<Field: View>: View {
                 }
             }
             .frame(width: TagEntryMetrics.glyph, height: TagEntryMetrics.glyph)
+            // The pen loop comes and goes in 150 ms; the glyph's box is placed by the segment at once.
+            .animation(.easeOut(duration: 0.15), value: loading)
+            .geometryGroup()
             Text(label)
                 .font(AppFonts.body(TagEntryMetrics.labelSize, weight: .semibold))
                 .tracking(TagEntryMetrics.labelSize * 0.02)
@@ -85,7 +92,6 @@ public struct TagEntryCapsule<Field: View>: View {
                 .lineLimit(1)
                 .fixedSize()
         }
-        .animation(.easeOut(duration: 0.15), value: loading)
         .accessibilityHidden(true)
     }
 
