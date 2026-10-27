@@ -39,7 +39,12 @@
     },
     {
       "id": "standalone-link-skipped",
-      "story": "雨停了，我出門散步。\n\nhttps://example.com/rain\n\n[一篇關於雨的文章](https://example.com/essay)\n\n回家的路上，鞋子都濕了。",
+      "story": "雨停了，我出門散步。\n\nhttps://example.com/rain\n\n<https://example.com/essay>\n\n回家的路上，鞋子都濕了。",
+      "opening": "雨停了，我出門散步。\n回家的路上，鞋子都濕了。"
+    },
+    {
+      "id": "link-with-words-of-its-own-quoted",
+      "story": "雨停了，我出門散步。\n\n[一篇關於雨的文章](https://example.com/essay)\n\n回家的路上，鞋子都濕了。",
       "opening": "雨停了，我出門散步。\n一篇關於雨的文章\n回家的路上，鞋子都濕了。"
     },
     {

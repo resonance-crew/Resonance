@@ -3,11 +3,13 @@ import Blockquote from '@tiptap/extension-blockquote';
 import Image from '@tiptap/extension-image';
 import Paragraph from '@tiptap/extension-paragraph';
 import { closeHistory } from '@tiptap/pm/history';
-import { DOMParser as PMDOMParser, Slice, type Node as PMNode, type NodeType, type ResolvedPos } from '@tiptap/pm/model';
-import { Plugin, PluginKey, Selection, TextSelection, type EditorState } from '@tiptap/pm/state';
+import { DOMParser as PMDOMParser, Fragment, Slice, type Node as PMNode, type NodeType, type ResolvedPos } from '@tiptap/pm/model';
+import { Plugin, PluginKey, Selection, TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import StarterKit from '@tiptap/starter-kit';
 import { Markdown } from 'tiptap-markdown';
+import { cardableLink, wordsAreTheAddress } from '../links/soleLink';
+import { findLinks, normalizeLink } from '../links/url';
 import { BLANK_PARAGRAPH } from './blankLines';
 
 /**
@@ -152,6 +154,264 @@ export const CardEmbed = Node.create({
                 a.setAttribute('data-card-embed', '');
                 p.replaceWith(a);
               }
+            }
+          },
+        },
+      },
+    };
+  },
+});
+
+/** What an address may not hold to be written as an autolink (`<url>`): CommonMark ends one there. */
+const NOT_IN_AUTOLINK = /[\s<>]/;
+
+/**
+ * The address a link card keeps, from a link whose words are its address: the
+ * writer's own spelling when it names exactly the same address as the href
+ * (a path in Chinese stays Chinese, not percent-escaped as markdown-it hands
+ * it over), else the href.
+ */
+function cardAddress(words: string, href: string): string {
+  const said = words.trim();
+  return /^https?:\/\//i.test(said) && !NOT_IN_AUTOLINK.test(said) && normalizeLink(said) === normalizeLink(href) ? said : href;
+}
+
+/**
+ * The address a run of words is when it is nothing but one link (`findLinks`,
+ * from its first character to its last) — a `www.` one with its `https://` —
+ * or null.
+ */
+function bareAddress(text: string): string | null {
+  const words = text.trim();
+  const found = findLinks(words);
+  if (found.length !== 1 || found[0].start !== 0 || found[0].end !== words.length) return null;
+  return /^www\./i.test(words) ? `https://${words}` : words;
+}
+
+/**
+ * The address a parsed paragraph stands for when the reader draws it as a
+ * link card (lib/links/storyLinks' rule): its only child a link whose words
+ * are its address (`<url>`, `[url](url)`, `[www.x.com](http://www.x.com)`),
+ * with no picture in it, or words that are exactly one bare address — and an
+ * address that may be a card at all (`cardableLink`: not our own pages, not
+ * an IP address). Null for anything else.
+ */
+function soleCardAddress(p: Element): string | null {
+  const kids = Array.from(p.childNodes).filter((n) => !(n.nodeType === 3 && !n.textContent?.trim()));
+  if (kids.length !== 1) return null;
+  const only = kids[0];
+  if (only.nodeName === 'A') {
+    const a = only as Element;
+    const href = a.getAttribute('href') ?? '';
+    if (!/^https?:\/\//i.test(href) || a.querySelector('img')) return null;
+    const words = a.textContent ?? '';
+    return wordsAreTheAddress(words, href) && cardableLink(href) ? cardAddress(words, href) : null;
+  }
+  if (only.nodeType !== 3) return null;
+  const address = bareAddress(only.textContent ?? '');
+  return address && cardableLink(address) ? address : null;
+}
+
+/**
+ * The address a paragraph of the editor is, as `soleCardAddress` reads a
+ * parsed one: its words nothing but one link — carried by one link mark whose
+ * words are its address, or plain words that are one bare address — and an
+ * address that may be a card. Null for anything else (a line break, a
+ * picture, words of the writer's own).
+ */
+export function paragraphCardAddress(paragraph: PMNode): string | null {
+  if (paragraph.type.name !== 'paragraph' || paragraph.childCount === 0) return null;
+  let href: string | null = null;
+  let plain = false;
+  let other = false;
+  paragraph.forEach((child) => {
+    if (!child.isText) {
+      other = true;
+      return;
+    }
+    const link = child.marks.find((m) => m.type.name === 'link');
+    if (!link) {
+      if ((child.text ?? '').trim()) plain = true;
+      return;
+    }
+    const target = String(link.attrs.href ?? '');
+    if (href != null && href !== target) other = true;
+    href = target;
+  });
+  if (other) return null;
+  const words = paragraph.textContent;
+  if (href == null) {
+    const address = bareAddress(words);
+    return address && cardableLink(address) ? address : null;
+  }
+  if (plain || !/^https?:\/\//i.test(href)) return null;
+  return wordsAreTheAddress(words, href) && cardableLink(href) ? cardAddress(words, href) : null;
+}
+
+/** Parsed Markdown going into a line of words: a link card in it is the plain link it was written as. */
+function asWords(element: HTMLElement): HTMLElement {
+  for (const a of Array.from(element.querySelectorAll('a[data-link-card]'))) a.removeAttribute('data-link-card');
+  return element;
+}
+
+/** A link card as the story keeps it: `<url>` on its own line — the address the reader draws as a card. */
+function linkCardMarkdown(href: string): string {
+  const address = NOT_IN_AUTOLINK.test(href) ? (normalizeLink(href) ?? href) : href;
+  return `<${address}>`;
+}
+
+/**
+ * Where the caret goes once a link card has taken a line (from `from`, the
+ * card `size` long): the start of the paragraph after it, an empty one made
+ * there when the next block is no paragraph — or, `newLine`, an empty one
+ * made there unless the next is empty already (Enter asked for a new line).
+ */
+function caretAfterCard(tr: Transaction, from: number, size: number, newLine: boolean) {
+  const after = from + size;
+  const next = tr.doc.nodeAt(after);
+  const paragraph = tr.doc.type.schema.nodes.paragraph;
+  const fits = next?.type === paragraph && (!newLine || next.content.size === 0);
+  if (!fits) tr.insert(after, paragraph.create());
+  tr.setSelection(TextSelection.create(tr.doc, after + 1));
+  return tr;
+}
+
+/**
+ * Puts a link card for `href` in place of the block from `from` to `to` (a
+ * paragraph, or a card being changed), the caret on the line after it.
+ */
+export function placeLinkCard(state: EditorState, from: number, to: number, href: string, newLine = false) {
+  const card = state.schema.nodes.linkCard.create({ href });
+  const tr = state.tr.replaceWith(from, to, card);
+  return caretAfterCard(tr, from, card.nodeSize, newLine).scrollIntoView();
+}
+
+/** Whether a paragraph is an empty line: no words but white space (a kept blank line's no-break space), nothing else. */
+export function emptyLine(paragraph: PMNode): boolean {
+  return paragraph.type.name === 'paragraph' && paragraph.textContent.trim() === '' && paragraph.childCount === (paragraph.textContent ? 1 : 0);
+}
+
+/** Whether the paragraph holding `$pos` could stand as a link card where it is (not as a list item's first line, not in a table's source). */
+export function holdsLinkCard($pos: ResolvedPos): boolean {
+  const type = $pos.doc.type.schema.nodes.linkCard;
+  if (!type || $pos.parent.type.name !== 'paragraph' || $pos.depth < 1) return false;
+  const index = $pos.index($pos.depth - 1);
+  return $pos.node($pos.depth - 1).canReplaceWith(index, index + 1, type);
+}
+
+/**
+ * A link standing alone on its line, shown as its page's card (round 16 §6):
+ * the reader draws it so (lib/links/storyLinks), and here the writer sees the
+ * same — a block like CardEmbed (draggable, its own ✕ in the web's view),
+ * written back as `<url>` on its own line. It comes from a paragraph whose
+ * only child is a link whose words are its address, or a bare address alone
+ * (not one of our own pages — `/card/…` is CardEmbed's — nor an IP address,
+ * which stay plain links); from an address pasted onto an empty line; from
+ * Enter at the end of a line that is one; and from the link editor's 卡片.
+ * A link the writer gave words of its own stays a link in their sentence.
+ */
+export const LinkCard = Node.create({
+  name: 'linkCard',
+  group: 'block',
+  atom: true,
+  draggable: true,
+  selectable: true,
+
+  addAttributes() {
+    return {
+      href: { default: '' },
+    };
+  },
+
+  parseHTML() {
+    return [
+      {
+        // Marked by `updateDOM` below (Markdown) or by renderHTML (copy and paste inside the editor) —
+        // and only an address that may be a card: a pasted page's markup can say anything.
+        tag: 'a[data-link-card]',
+        priority: 100,
+        getAttrs: (el) => {
+          const href = (el as HTMLElement).getAttribute('href') ?? '';
+          return cardableLink(href) ? { href } : false;
+        },
+      },
+    ];
+  },
+
+  renderHTML({ node }) {
+    return ['a', { href: node.attrs.href, 'data-link-card': '' }, node.attrs.href];
+  },
+
+  addKeyboardShortcuts() {
+    return {
+      // Enter at the end of a line that is one address, alone: the line becomes its card, as the reader
+      // will draw it, and the caret goes on to a new line.
+      Enter: ({ editor }) => {
+        const { state, view } = editor;
+        const { $from, empty } = state.selection;
+        if (!empty || $from.parentOffset !== $from.parent.content.size || !holdsLinkCard($from)) return false;
+        const href = paragraphCardAddress($from.parent);
+        if (!href) return false;
+        view.dispatch(placeLinkCard(state, $from.before(), $from.after(), href, true));
+        return true;
+      },
+    };
+  },
+
+  addProseMirrorPlugins() {
+    const type = this.type;
+    return [
+      new Plugin({
+        key: new PluginKey('linkCardPaste'),
+        props: {
+          // An address pasted into words is a link among them — never a card cutting the line in three
+          // (tiptap-markdown reads a pasted text as Markdown, where a lone address is its card; a card
+          // copied in the story pastes the same).
+          transformPasted(slice, view) {
+            const only = slice.content.childCount === 1 ? slice.content.firstChild : null;
+            const link = view.state.schema.marks.link;
+            if (only?.type !== type || !link || emptyLine(view.state.selection.$from.parent)) return slice;
+            const href = String(only.attrs.href);
+            return new Slice(Fragment.from(view.state.schema.text(href, [link.create({ href })])), 0, 0);
+          },
+          // An address pasted onto an empty line is its card (the link editor's default there); pasted
+          // over words it links them (the Link mark's own paste), and into a sentence it stays inline.
+          handlePaste(view, event) {
+            const { state } = view;
+            const { $from, empty } = state.selection;
+            if (!empty || !emptyLine($from.parent) || !holdsLinkCard($from) || !state.schema.nodes[type.name]) return false;
+            const address = bareAddress(event.clipboardData?.getData('text/plain') ?? '');
+            if (!address || !cardableLink(address)) return false;
+            view.dispatch(placeLinkCard(state, $from.before(), $from.after(), address).setMeta('paste', true).setMeta('uiEvent', 'paste'));
+            return true;
+          },
+        },
+      }),
+    ];
+  },
+
+  addStorage() {
+    return {
+      markdown: {
+        serialize(state: Pick<MarkdownSerializerState, 'write' | 'closeBlock'>, node: PMNode) {
+          state.write(linkCardMarkdown(String(node.attrs.href)));
+          state.closeBlock(node);
+        },
+        parse: {
+          // markdown-it renders a lone link as `<p><a href="…">`, and a bare address as `<p>words</p>`
+          // (the story's Markdown is read without linkify); lift each one the reader draws as a card out of
+          // its paragraph and mark it, so it parses as this block. Not a list item's line: an item opens
+          // with a paragraph.
+          updateDOM(element: HTMLElement) {
+            for (const p of Array.from(element.querySelectorAll('p'))) {
+              if (p.parentElement?.tagName === 'LI') continue;
+              const href = soleCardAddress(p);
+              if (!href) continue;
+              const a = p.ownerDocument.createElement('a');
+              a.setAttribute('href', href);
+              a.setAttribute('data-link-card', '');
+              a.textContent = href;
+              p.replaceWith(a);
             }
           },
         },
@@ -517,9 +777,11 @@ function insertMarkdown(view: EditorView, parser: MarkdownParserLike, text: stri
   const { $from } = view.state.selection;
   const schema = PMDOMParser.fromSchema(view.state.schema);
   const blocks = elementFromString(parser.parse(text));
-  const words = blocks.children.length === 1 && blocks.firstElementChild?.tagName === 'P';
+  const only = blocks.children.length === 1 ? blocks.firstElementChild : null;
+  // A lone address is its card on a line of its own; into words already there it is a link among them.
+  const words = only?.tagName === 'P' || (only?.matches('a[data-link-card]') === true && !emptyLine($from.parent));
   const slice = words
-    ? schema.parseSlice(elementFromString(parser.parse(text, { inline: true })), { preserveWhitespace: true, context: $from })
+    ? schema.parseSlice(asWords(elementFromString(parser.parse(text, { inline: true }))), { preserveWhitespace: true, context: $from })
     : new Slice(schema.parse(blocks, { preserveWhitespace: true }).content, 0, 0);
   view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView().setMeta('paste', uiEvent === 'paste').setMeta('uiEvent', uiEvent));
 }
@@ -582,6 +844,7 @@ export interface StorySchemaNodes {
   blockquote?: AnyExtension;
   image?: AnyExtension;
   cardEmbed?: AnyExtension;
+  linkCard?: AnyExtension;
   markdownTable?: AnyExtension;
 }
 
@@ -596,6 +859,7 @@ export function storyExtensions(nodes: StorySchemaNodes = {}): AnyExtension[] {
     nodes.blockquote ?? Blockquote,
     nodes.image ?? BlockImage,
     nodes.cardEmbed ?? CardEmbed,
+    nodes.linkCard ?? LinkCard,
     nodes.markdownTable ?? MarkdownTable,
     MarkdownPaste,
     Markdown.configure({ html: false, transformPastedText: true, transformCopiedText: true }),

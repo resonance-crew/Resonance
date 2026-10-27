@@ -7,7 +7,8 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { describe, expect, it } from 'vitest';
 import { Editor } from '@tiptap/core';
-import { Slice } from '@tiptap/pm/model';
+import { elementFromString } from '@tiptap/core';
+import { DOMParser as PMDOMParser, Slice } from '@tiptap/pm/model';
 import { getMarkdown, htmlAddsNothing, MarkdownTable, opensTable, readsAsMarkdown, storyExtensions } from './editorSchema';
 
 // The story editor's storage format, pinned. Every case in the corpus is
@@ -58,6 +59,7 @@ describe('story Markdown round trip', () => {
       editor.state.doc.descendants((n) => {
         if (n.isText) parts.push(n.text ?? '');
         else if (n.type.name === 'cardEmbed') parts.push(String(n.attrs.title));
+        else if (n.type.name === 'linkCard') parts.push(String(n.attrs.href));
         else if (n.type.name === 'image') parts.push(String(n.attrs.alt));
       });
       editor.destroy();
@@ -80,6 +82,129 @@ describe('story Markdown round trip', () => {
     expect(blocks('前言\n\n  [一場雨後的散步](/card/a-walk)  \n\n結尾')).toEqual(['paragraph', 'cardEmbed', 'paragraph']);
     expect(blocks('[一場雨後的散步](/card/a-walk) 是我最喜歡的一張')).toEqual(['paragraph>link']);
     expect(blocks('[一篇文章](https://example.com)')).toEqual(['paragraph>link']);
+  });
+});
+
+describe('a link standing alone, shown as its card', () => {
+  /** Presses Enter through the editor's own keymaps, as a keyboard does. */
+  const enter = (editor: Editor) =>
+    !!editor.view.someProp('handleKeyDown', (f) => f(editor.view, new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })));
+
+  /** The story's blocks, with what a quote holds, and its Markdown. */
+  function read(md: string) {
+    const editor = new Editor({ extensions: storyExtensions(), content: md });
+    const blocks: string[] = [];
+    editor.state.doc.descendants((n) => {
+      if (n.type.name === 'linkCard') blocks.push(`card ${n.attrs.href}`);
+      else if (n.type.name === 'paragraph') blocks.push(n.firstChild?.marks.some((m) => m.type.name === 'link') ? 'paragraph>link' : 'paragraph');
+      return n.type.name !== 'paragraph';
+    });
+    const out = { blocks, markdown: getMarkdown(editor) };
+    editor.destroy();
+    return out;
+  }
+
+  it('is a card only when its words are its address, as the reader draws it', () => {
+    expect(read('<https://example.com/rain>').blocks).toEqual(['card https://example.com/rain']);
+    expect(read('[https://example.com/rain/](https://example.com/rain)').blocks).toEqual(['card https://example.com/rain']);
+    expect(read('[www.example.com](https://www.example.com)').blocks).toEqual(['card https://www.example.com']);
+    expect(read('https://example.com/rain').blocks).toEqual(['card https://example.com/rain']);
+    expect(read('www.example.com/rain')).toEqual({ blocks: ['card https://www.example.com/rain'], markdown: '<https://www.example.com/rain>' });
+    expect(read('> <https://example.com/rain>').blocks).toEqual(['card https://example.com/rain']);
+    // Words of the writer's own, a sentence, our own pages, an IP address, a picture: a link as before.
+    expect(read('[下雨天](https://example.com/rain)').blocks).toEqual(['paragraph>link']);
+    expect(read('看 <https://example.com/rain> 這篇').blocks).toEqual(['paragraph']);
+    expect(read('<https://resonance.channel/en/u/alice>').blocks).toEqual(['paragraph>link']);
+    expect(read('<https://203.0.113.9/rain>').blocks).toEqual(['paragraph>link']);
+    expect(read('[![雨](https://img.example.com/rain.png)](https://example.com/rain)').blocks.join()).not.toContain('card');
+    expect(read('<mailto:a@example.com>').blocks).toEqual(['paragraph>link']);
+  });
+
+  it('takes no address a pasted page’s markup names that may not be a card', () => {
+    const editor = new Editor({ extensions: storyExtensions(), content: '' });
+    const html = '<a data-link-card href="javascript:alert(1)">x</a><a data-link-card href="https://203.0.113.9/">y</a><a data-link-card href="https://example.com/ok">z</a>';
+    const doc = PMDOMParser.fromSchema(editor.schema).parse(elementFromString(html));
+    const cards: string[] = [];
+    doc.descendants((n) => void (n.type.name === 'linkCard' && cards.push(String(n.attrs.href))));
+    expect(cards).toEqual(['https://example.com/ok']);
+    editor.destroy();
+  });
+
+  it('comes from Enter at the end of a line that is one address — typed bare or already linked — the caret on a new line', () => {
+    const address = 'https://example.com/rain';
+    for (const marks of [[], [{ type: 'link', attrs: { href: address } }]]) {
+      const editor = new Editor({ extensions: storyExtensions(), content: '前言\n\n結尾' });
+      // A new line after 前言, the address typed on it.
+      editor.commands.setTextSelection(editor.state.doc.child(0).nodeSize - 1);
+      editor.commands.splitBlock();
+      editor.commands.insertContent({ type: 'text', text: address, marks });
+      expect(enter(editor)).toBe(true);
+      const blocks: string[] = [];
+      editor.state.doc.forEach((n) => blocks.push(n.type.name));
+      expect(blocks).toEqual(['paragraph', 'linkCard', 'paragraph', 'paragraph']);
+      expect(editor.state.selection.$from.index(0)).toBe(2);
+      expect(getMarkdown(editor)).toBe(`前言\n\n<${address}>\n\n\u00a0\n\n結尾`);
+      editor.destroy();
+    }
+  });
+
+  it('leaves Enter after words that are not one address alone to the editor', () => {
+    const editor = new Editor({ extensions: storyExtensions(), content: '看 https://example.com/rain' });
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+    editor.commands.keyboardShortcut('Enter');
+    expect(editor.state.doc.childCount).toBe(2);
+    editor.destroy();
+  });
+
+  it('leaves Enter after a link of the writer’s words, or mid-address, to the editor', () => {
+    const cards = (editor: Editor) => {
+      let n = 0;
+      editor.state.doc.descendants((node) => void (node.type.name === 'linkCard' && n++));
+      return n;
+    };
+    const editor = new Editor({ extensions: storyExtensions(), content: '[下雨天](https://example.com/rain)' });
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+    enter(editor);
+    expect(cards(editor)).toBe(0);
+    editor.commands.setContent('前言');
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+    editor.commands.splitBlock();
+    editor.commands.insertContent({ type: 'text', text: 'https://example.com/rain' });
+    editor.commands.setTextSelection(editor.state.doc.content.size - 4);
+    enter(editor);
+    expect(cards(editor)).toBe(0);
+    editor.destroy();
+  });
+
+  it('comes from an address pasted onto an empty line; pasted into a sentence it is a link there', () => {
+    const paste = (content: string, text: string) => {
+      const editor = new Editor({ extensions: storyExtensions(), content });
+      editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+      const event = { clipboardData: { getData: (type: string) => (type === 'text/plain' ? text : '') } } as unknown as ClipboardEvent;
+      const handled = !!editor.view.someProp('handlePaste', (f) => f(editor.view, event, Slice.empty));
+      const out = { handled, markdown: getMarkdown(editor) };
+      editor.destroy();
+      return out;
+    };
+    expect(paste('前言\n\n\u00a0', ' https://example.com/rain ')).toEqual({ handled: true, markdown: '前言\n\n<https://example.com/rain>' });
+    expect(paste('', 'www.example.com')).toEqual({ handled: true, markdown: '<https://www.example.com>' });
+    expect(paste('看', 'https://example.com/rain').handled).toBe(false);
+    // Into words, the clipboard's text is read as a link there, never as a card cutting the line.
+    const editor = new Editor({ extensions: storyExtensions(), content: '看這篇' });
+    editor.commands.setTextSelection(2);
+    const pasted = Object.assign(new Event('paste', { bubbles: true, cancelable: true }), {
+      clipboardData: { getData: (type: string) => (type === 'text/plain' ? 'https://example.com/rain' : ''), files: [], types: ['text/plain'] },
+    });
+    editor.view.dom.dispatchEvent(pasted);
+    expect(getMarkdown(editor)).toBe('看<https://example.com/rain>這篇');
+    // Markdown of one lone address pasted into words: the same.
+    editor.commands.setTextSelection(2);
+    const event = { clipboardData: { getData: (type: string) => (type === 'text/plain' ? '[https://example.com/a](https://example.com/a)' : '') } } as unknown as ClipboardEvent;
+    expect(editor.view.someProp('handlePaste', (f) => f(editor.view, event, Slice.empty))).toBe(true);
+    expect(getMarkdown(editor)).toBe('看<https://example.com/a><https://example.com/rain>這篇');
+    editor.destroy();
+    expect(paste('', 'https://resonance.channel/en').handled).toBe(false);
+    expect(paste('', '兩個 https://a.example https://b.example').handled).toBe(false);
   });
 });
 
