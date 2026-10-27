@@ -407,6 +407,21 @@ couldn't be read keeps its fill with the picture glyph, and a tap asks again.
 A reply to a picture quotes 一張圖片 (`ReplyQuote.summary`), and the Messages
 list says 傳送了一張圖片 for one sent without words.
 
+Round 17 (2026-10-27), iOS: every menu is one sheet (`OrganicMenuPanel`, DesignSystem `OrganicMenu.swift`) — the ⋯
+dropped from its trigger (no scrim), the composer's ＋ and a held message's actions alike: borderless paper
+(`MenuColors.paper`, raised at night) under the grain laid past the wobble (`MenuSheetMetrics.grainOverflow`), no pen and
+no rules, a shadow that follows the wobble (`SheetShadow`), rows 44 with the glyph 17 and the words 12 apart and 20 in
+from either side, 168 to 300 wide (a held message's list 216 to 280; `MenuSheetMetrics`), the ink spreading from the finger inside its row's band, and a
+held message's time at the trailing end right under its rows. Holding a message dims and softens the thread's body alone
+(the scrim is the thread's, under its header and short of the rule beside the list; `PressPlacement` keeps the
+reactions and the list 12 inside it), and the five stickers float on it with no paper. A chosen tag is the 「AI 建議」
+segment's face (`TagField.pillFill` / `pillInk`), and Return in the tag field is a line break taken out at once
+(`TagInput.returned`), so the field keeps the keyboard and nothing moves. 連結 is the format bar's last tool, after its
+own rule, and opens `StoryLinkModal` in the app's modal. The phone's tab bar stands 18 into the home indicator's room
+(`OrganicTabBar.lowered(bottomInset:)`: the row's middle 42 over the screen's foot) with its outline glyphs at INK_STRONG;
+the writer's bar grows round its title and save line at a large text size (`BarTitles.scaledSubtitleLine`); and at the
+split the map's Leave is the workspace's one back — from the publish step back to writing, named 繼續寫 (`WritePane.publishing`).
+
 The app hosts its unit tests; run them with `xcodebuild test … -destination
 'id=<udid>'`. Under XCTest the app points at a local stack that isn't there
 (no backend, not even a simulator's saved account on production) unless the

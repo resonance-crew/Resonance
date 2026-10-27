@@ -105,6 +105,9 @@ extension EnvironmentValues {
     /// Counts the taps on a tab that is already chosen and at its root: each one takes the root's
     /// list back to its top.
     @Entry var scrollToTop = 0
+    /// How far the phone's tab bar sits under the bottom safe area's top edge (round 17 §7): what a tab's
+    /// root takes less at its foot for it.
+    @Entry var tabBarLowered: CGFloat = 0
 }
 
 /// Which navigation chrome a tab shows over its stack (round 5 C1), from the window and the pages
@@ -127,8 +130,9 @@ enum TabChrome {
 /// above the home indicator on a page pushed over it (the web's phone), 24 from the foot of the
 /// window when the tabs are in the header (a tablet).
 enum ToastPlacement {
-    static func bottom(_ layout: LayoutClass, tabBar: Bool) -> CGFloat {
-        if tabBar { return OrganicTabBar<AppTab>.height + HeaderEdge.height + 12 }
+    /// `lowered`: how far the bar sits into the home indicator's room (``OrganicTabBar/lowered(bottomInset:)``).
+    static func bottom(_ layout: LayoutClass, tabBar: Bool, lowered: CGFloat = 0) -> CGFloat {
+        if tabBar { return OrganicTabBar<AppTab>.height + HeaderEdge.height + 12 - lowered }
         return layout.topTabs ? 24 : 16
     }
 }
@@ -185,6 +189,8 @@ struct MainTabView: View {
     @State private var barHiding = TabBarHiding()
     /// The window's bottom safe area: how far the bar travels to be out of sight.
     @State private var bottomInset: CGFloat = 0
+    /// The home indicator's room (the bottom safe area without a keyboard): the bar sits 18 into an iPhone's.
+    @State private var homeInset: CGFloat = 0
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     @Environment(\.accessibilitySwitchControlEnabled) private var switchControl
@@ -234,7 +240,7 @@ struct MainTabView: View {
             .overlay(alignment: .bottom) {
                 // A toast rides with the bar: down with it when the feed has scrolled it away.
                 ToastHost(session.toasts)
-                    .padding(.bottom, ToastPlacement.bottom(window.layoutClass, tabBar: bottomBar && !barAway))
+                    .padding(.bottom, ToastPlacement.bottom(window.layoutClass, tabBar: bottomBar && !barAway, lowered: barLowered))
                     .animation(.easeOut(duration: 0.12), value: bottomBar)
                     .animation(barMotion, value: barAway)
             }
@@ -244,7 +250,14 @@ struct MainTabView: View {
                          height: geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom)
         } action: { window = $0 }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { bottomInset = $0 }
+        // The home indicator's room alone (never the keyboard's): what the bar is lowered into.
+        .background {
+            Color.clear
+                .ignoresSafeArea(.keyboard)
+                .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { homeInset = $0 }
+        }
         .environment(\.window, window)
+        .environment(\.tabBarLowered, barLowered)
         .environment(barHiding)
         // Another tab, the app back in front, a page over the root and back: the bar is there again.
         .onChange(of: tab) { barHiding.show() }
@@ -322,7 +335,8 @@ struct MainTabView: View {
                     .ignoresSafeArea(.keyboard, edges: .bottom)
                     // Scrolled away by the feed (round 16 §2): down out of sight with its wavy edge, over the
                     // list (which keeps its room at the foot, so nothing reflows) — or, under Reduce Motion, a fade.
-                    .offset(y: barAway && !reduceMotion ? barTravel : 0)
+                    // Lowered into the home indicator's room (round 17 §7): the row's middle 42 over the screen's foot.
+                    .offset(y: barLowered + (barAway && !reduceMotion ? barTravel : 0))
                     .opacity(barAway && reduceMotion ? 0 : 1)
                     .allowsHitTesting(!barAway)
                     .accessibilityHidden(barAway)
@@ -334,8 +348,12 @@ struct MainTabView: View {
         }
     }
 
-    /// How far the bar goes to be out of sight: itself, its wavy edge and the home indicator's room.
-    private var barTravel: CGFloat { OrganicTabBar<AppTab>.height + HeaderEdge.height + bottomInset + 8 }
+    /// How far the bar goes to be out of sight: itself, its wavy edge and the home indicator's room it
+    /// doesn't already stand in.
+    private var barTravel: CGFloat { OrganicTabBar<AppTab>.height + HeaderEdge.height + bottomInset - barLowered + 8 }
+
+    /// How far the phone's bar sits into the home indicator's room (none on a tablet: its tabs are in the header).
+    private var barLowered: CGFloat { window.topTabs ? 0 : OrganicTabBar<AppTab>.lowered(bottomInset: homeInset) }
 
     /// Going: 200 ms easing in; coming back: 220 ms easing out; under Reduce Motion a 150 ms fade.
     private var barMotion: Animation {
@@ -562,6 +580,8 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
     @Environment(\.refresh) private var refresh
     /// With the tabs in the header there is no tab bar to keep room for, and the bar stays.
     @Environment(\.window) private var window
+    /// How far the tab bar sits into the home indicator's room (round 17 §7).
+    @Environment(\.tabBarLowered) private var lowered
     /// The Messages list beside a conversation: the window's header is drawn above it, full width.
     @Environment(\.headerAbove) private var headerAbove
     /// A tap on this tab while it is chosen and here: back to the top.
@@ -589,8 +609,9 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
         guard titleInBar else { return title.isEmpty ? 0 : 40 }
         return window.topTabs && tabletGap ? tabletTop ?? HeaderChrome.contentTop(width: window.width) : phoneTop
     }
-    /// What the tab bar takes at the foot (nothing when the tabs are in the header).
-    private var bottomRoom: CGFloat { window.topTabs ? 0 : OrganicTabBar<AppTab>.height + HeaderEdge.height }
+    /// What the tab bar takes at the foot (nothing when the tabs are in the header), less what of it stands
+    /// in the home indicator's room (round 17 §7).
+    private var bottomRoom: CGFloat { window.topTabs ? 0 : OrganicTabBar<AppTab>.height + HeaderEdge.height - lowered }
 
     init(_ title: String, headerSpacing: CGFloat = 20, titleInBar: Bool = false, phoneTop: CGFloat = 16, tabletGap: Bool = true,
          tabletTop: CGFloat? = nil, head: String? = nil, toTopRequests: Int = 0, onAtTop: @escaping (Bool) -> Void = { _ in },
@@ -627,7 +648,7 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
             // --page-pad-top on a phone; with the title in the bar, 16 of air under its line; none
             // without a title (home: the first card is the bar's edge).
             .padding(.top, topPadding)
-            .padding(.bottom, window.topTabs ? 40 : 110)
+            .padding(.bottom, window.topTabs ? 40 : 110 - lowered)
             // For whoever can't pull, the same refresh is the list's "Refresh" action (among VoiceOver's actions on any of its rows).
             .sketchRefreshAction(named: L10n.Native.refresh)
         }

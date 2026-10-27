@@ -19,6 +19,9 @@ public struct TagPill: View {
     var size: Size
     var outlined: Bool
     var quiet: Bool
+    /// The words' and the ×'s ink, when not the page's text (the writer's chosen tags wear the tonal
+    /// button's: round 17 §4).
+    var ink: Color?
     var removeLabel: String?
     var onRemove: (() -> Void)?
 
@@ -32,15 +35,17 @@ public struct TagPill: View {
     /// which VoiceOver names `removeLabel` (which tag: 「移除標籤：日常」).
     /// `quiet` (TagPill's `quiet`, the writer's chosen tags beside the publish
     /// button, round 16 review S2): its rim the soft pen at INK_LIGHT, its words
-    /// at 500, its × in the muted ink.
+    /// at 500, its × in the muted ink. `ink` sets the words in a colour of their own, and the × in it at
+    /// 70 % (the writer's chosen tags: the tonal button's face, round 17 §4).
     public init(_ text: String, fill: Color = Tokens.yellow, seed: Double? = nil, size: Size = .md, outlined: Bool? = nil,
-                quiet: Bool = false, removeLabel: String? = nil, onRemove: (() -> Void)? = nil) {
+                quiet: Bool = false, ink: Color? = nil, removeLabel: String? = nil, onRemove: (() -> Void)? = nil) {
         self.text = text
         self.fill = fill
         self.seed = seed
         self.size = size
         self.outlined = outlined ?? (size == .lg)
         self.quiet = quiet
+        self.ink = ink
         self.removeLabel = removeLabel
         self.onRemove = onRemove
     }
@@ -60,15 +65,15 @@ public struct TagPill: View {
             Text(text.uppercased())
                 .font(AppFonts.body(font, weight: quiet ? .medium : .semibold))
                 .tracking(font * size.tracking)
-                .foregroundStyle(Tokens.text)
+                .foregroundStyle(ink ?? Tokens.text)
                 // CJK ink rides high in DM Sans' line box; the web nudges it 0.04em.
                 .offset(y: font * 0.04)
             if let onRemove {
                 Button(action: onRemove) {
                     TagRemoveGlyph()
-                        .stroke(quiet ? Tokens.textMuted : Tokens.text, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round))
+                        .stroke(ink ?? (quiet ? Tokens.textMuted : Tokens.text), style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round))
                         .frame(width: 10, height: 10)
-                        .opacity(quiet ? 1 : 0.55)
+                        .opacity(ink != nil ? 0.7 : quiet ? 1 : 0.55)
                         .padding(.leading, 2)
                         .offset(y: font * 0.02)
                         // The writer's lg pill: an invisible 44 × 44 target round the 10pt glyph (round 16 §1).

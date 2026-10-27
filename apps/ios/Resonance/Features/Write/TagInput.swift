@@ -28,6 +28,16 @@ nonisolated enum TagInput {
         return next
     }
 
+    /// The field's text once it holds a line break (nil: none): one typed — Return, the rest of the text as
+    /// it was (`before`) — is taken out and asks for the word to be added (`submit`); lines pasted in are
+    /// parted as a comma parts them, the last one left to type on.
+    static func returned(_ text: String, before: String) -> (text: String, submit: Bool)? {
+        guard text.contains(where: \.isNewline) else { return nil }
+        let joined = text.filter { !$0.isNewline }
+        if joined == before { return (joined, true) }
+        return (text.split(whereSeparator: \.isNewline).joined(separator: ","), false)
+    }
+
     /// What is typed, trimmed: the tag it would add.
     static func trimmed(_ draft: String) -> String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
 

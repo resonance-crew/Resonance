@@ -97,22 +97,23 @@ import Testing
     let height: CGFloat = 874, top: CGFloat = 62, bottom: CGFloat = 34
     let list = PressMetrics.listHeight(rows: 3, footer: true)
 
-    @Test func theTrayIs232By52AndTheListGrowsByItsRows() {
-        #expect(PressMetrics.trayWidth == 232 && PressMetrics.trayHeight == 52)
-        #expect(PressMetrics.listHeight(rows: 3, footer: true) == CGFloat(182))
+    @Test func theTrayIsFiveCellsAndTheListGrowsByItsRows() {
+        // Round 17 §2: no paper round the stickers — five 44 cells; the list 6 + 3 × 44 + the time's 24 + 10.
+        #expect(PressMetrics.trayWidth == 220 && PressMetrics.trayHeight == 44)
+        #expect(PressMetrics.listHeight(rows: 3, footer: true) == CGFloat(172))
     }
 
     @Test func aMessageWithRoomRoundItStaysWhereItIs() {
         let frame = CGRect(x: 60, y: 300, width: 200, height: 44)
-        let place = PressPlacement.of(frame: frame, windowHeight: height, safeTop: top, safeBottom: bottom, tray: true, listHeight: list)
+        let place = PressPlacement.of(frame: frame, top: top, bottom: height - bottom, tray: true, listHeight: list)
         #expect(place.shift == 0 && !place.clipped)
-        #expect(place.trayY == CGFloat(240))
+        #expect(place.trayY == CGFloat(248))
         #expect(place.listY == CGFloat(354))
     }
 
     @Test func nearTheFootItGlidesUpJustEnoughForTheList() {
         let frame = CGRect(x: 60, y: 700, width: 200, height: 44)
-        let place = PressPlacement.of(frame: frame, windowHeight: height, safeTop: top, safeBottom: bottom, tray: true, listHeight: list)
+        let place = PressPlacement.of(frame: frame, top: top, bottom: height - bottom, tray: true, listHeight: list)
         // The list's foot rests 12 over the home indicator.
         #expect(place.listY + list == height - bottom - 12)
         #expect(place.shift < 0)
@@ -120,21 +121,21 @@ import Testing
 
     @Test func nearTheTopItGlidesDownJustEnoughForTheTray() {
         let frame = CGRect(x: 60, y: 90, width: 200, height: 44)
-        let place = PressPlacement.of(frame: frame, windowHeight: height, safeTop: top, safeBottom: bottom, tray: true, listHeight: list)
+        let place = PressPlacement.of(frame: frame, top: top, bottom: height - bottom, tray: true, listHeight: list)
         #expect(place.trayY == top + 12)
-        #expect(place.shift == top + 12 + 52 + 8 - 90)
+        #expect(place.shift == top + 12 + 44 + 8 - 90)
         // Without reactions (a letter, a message still sending) there is no tray to make room for.
-        let bare = PressPlacement.of(frame: frame, windowHeight: height, safeTop: top, safeBottom: bottom, tray: false, listHeight: list)
+        let bare = PressPlacement.of(frame: frame, top: top, bottom: height - bottom, tray: false, listHeight: list)
         #expect(bare.shift == 0)
     }
 
     @Test func aMessageTallerThanTheRoomShowsItsTopPart() {
         let frame = CGRect(x: 60, y: 100, width: 300, height: 2000)
-        let place = PressPlacement.of(frame: frame, windowHeight: height, safeTop: top, safeBottom: bottom, tray: true, listHeight: list)
+        let place = PressPlacement.of(frame: frame, top: top, bottom: height - bottom, tray: true, listHeight: list)
         #expect(place.clipped)
         #expect(place.trayY == top + 12)
         #expect(place.listY + list == height - bottom - 12)
-        #expect(place.shownHeight == height - bottom - 12 - list - 10 - (top + 12) - 52 - 8)
+        #expect(place.shownHeight == height - bottom - 12 - list - 10 - (top + 12) - 44 - 8)
         // Lifted no more than 4 at either end.
         #expect(PressPlacement.lift(height: 44) == 1.03)
         #expect(abs(PressPlacement.lift(height: 400) - 1.02) < 0.0001)
@@ -142,13 +143,13 @@ import Testing
 
     @Test func theSheetsLineUpWithTheMessagesSideInsideTheWindow() {
         let mine = CGRect(x: 180, y: 300, width: 200, height: 44)
-        #expect(PressPlacement.x(width: 232, frame: mine, mine: true, windowWidth: 402) == CGFloat(148))
+        #expect(PressPlacement.x(width: 232, frame: mine, mine: true, trailing: 402) == CGFloat(148))
         let theirs = CGRect(x: 50, y: 300, width: 120, height: 44)
-        #expect(PressPlacement.x(width: 232, frame: theirs, mine: false, windowWidth: 402) == 50)
+        #expect(PressPlacement.x(width: 232, frame: theirs, mine: false, trailing: 402) == 50)
         // Never closer than 12 to a side.
         let wide = CGRect(x: 4, y: 300, width: 396, height: 44)
-        #expect(PressPlacement.x(width: 232, frame: wide, mine: false, windowWidth: 402) == 12)
-        #expect(PressPlacement.x(width: 232, frame: wide, mine: true, windowWidth: 402) == CGFloat(158))
+        #expect(PressPlacement.x(width: 232, frame: wide, mine: false, trailing: 402) == 12)
+        #expect(PressPlacement.x(width: 232, frame: wide, mine: true, trailing: 402) == CGFloat(158))
     }
 
     @Test func reactionsAreSummedInTheStickersOrderAndUnknownOnesAreLeftOut() {

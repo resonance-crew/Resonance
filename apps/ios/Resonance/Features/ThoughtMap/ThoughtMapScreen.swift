@@ -13,6 +13,9 @@ struct ThoughtMapScreen: View {
     /// The Back on the canvas (the workspace's way out, which asks the writer's question first while
     /// its pane holds writing). Nil: the page goes back.
     var back: (() -> Void)? = nil
+    /// What the Back on the canvas is called when it isn't 離開 (the workspace's pane at its publish step:
+    /// 繼續寫, back to writing — round 17 §9).
+    var backLabel: String? = nil
     /// In the split workspace: the card its pane shows (nil while it shows none, or a new draft not saved yet)…
     var focus: () -> String? = { nil }
     /// …and a count it bumps each time the map's visible width settles beside the pane: the camera then
@@ -138,7 +141,7 @@ struct ThoughtMapScreen: View {
             // One row: Back at the leading end, the two tools at the trailing — all three one height
             // (the row's, the labelled pills'), Back a short rectangle round its arrow.
             HStack(spacing: 10) {
-                OrganicButton(icon: .arrowRight, label: L10n.Me.ThoughtMap.leave, iconSize: 15, variant: .tonal, size: .sm) {
+                OrganicButton(icon: .arrowRight, label: backLabel ?? L10n.Me.ThoughtMap.leave, iconSize: 15, variant: .tonal, size: .sm) {
                     if let back { back() } else { dismiss() }
                 }
                 .mirroringIcon()
