@@ -537,6 +537,8 @@ async function slideHtml(
  * - the search result, 16:9 (5244×2950 opaque PNG), shown almost whole: the brand line and its subline at the
  *   top, three landscape iPads (the feed in the middle, the writer beside its map and Messages either side)
  *   below them with clear air between.
+ * The site's share image (`og`, below) grew out of this one and is the better layout: before either asset is
+ * uploaded again, redraw it in that layout (README: 頁首、搜尋結果與主題圖片用在哪裡).
  */
 const HEADER = { w: 3840, h: 1646 };
 /** Where the iPhone's header crop and the iPads' visible band both keep the line (preview-measured). */

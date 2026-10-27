@@ -62,3 +62,10 @@ npx tsx docs/store/graphics/contact-sheet.ts --lang=en   # 只做英文那張；
 - 截圖底部要裁掉一點（例如手勢列、被切一半的最後一行）：`CROP_BOTTOM`：iOS 約 1.4%、Android 約 1.9%（再多就會切到底部的分頁列）；它也決定手機外框的比例，所以同一平台每張的手機一樣大。某一張要多裁一點（避免切在文字中間），寫在 `SLIDES` 那張的 `cropBottom`，兩側會等比例修掉一點，外框大小不變。換新截圖後要重新對一次。
 - 螢幕圓角：`SCREEN_RADIUS`。
 - `out/` 被專案根目錄 `.gitignore` 的 `out` 規則忽略；`raw/`（含 `raw/*-en/`）被這個資料夾的 `.gitignore` 忽略，截圖原檔需要時重拍。
+
+## 頁首、搜尋結果與主題圖片用在哪裡（2026-10-27 備註）
+
+- `header` 目標做的 `out/appstore/header[.en].png`（3840×1646）與 `search[.en].png`（5244×2950）是 App Store Connect「標題和搜尋結果」的兩張素材（iOS 27 產品頁的頁首與搜尋結果大圖），2.1.1 送審時上傳過。它們只在 iOS 27 的 App Store 出現，何時顯示由 Apple 決定；2026-10-27 擁有者在 App Store 上沒看到。
+- `play` 目標的 `feature-graphic[.en].jpg`（1024×500）是 Play 商店資訊必填的主題圖片。手機的商店頁平常不顯示它，有宣傳影片時才當影片封面，被精選時也可能用到；目前沒有宣傳影片。
+- 網站的分享圖 `og`（`public/og-cover[.en].jpg`）是從 `header` 的做法改出來的新版：品牌照 AppHeader 的樣子（波紋與 Resonance 字標），下面一行副標，左右各兩張完整的卡片（`OG_CARDS`，不切邊）。它比 `header` 好看。
+- 所以這三張之後若要再用（重新上傳、App Store 開始顯示、Play 加了宣傳影片），先照 `og` 的版面重畫：品牌與副標照 `ogHtml`，卡片完整不切邊，只依各自的尺寸與安全區（`HEADER_SAFE`、`SEARCH_SAFE`、`FEATURE`）調整位置與張數。
