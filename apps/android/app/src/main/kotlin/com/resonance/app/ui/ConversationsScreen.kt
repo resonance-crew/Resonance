@@ -130,15 +130,11 @@ internal fun conversationPreview(text: String?, image: Boolean, fromMe: Boolean,
     return (if (fromMe) L10n.Messages.youPrefix else "") + said
 }
 
-/** Today: the time, two-digit hour as the web's Intl (下午03:04); earlier: the date (9/29). */
+/** Today: the time, as the thread says it (下午3:04, [chatTimePattern]); earlier: the date (9/29). */
 internal fun rowTime(date: Date, today: LocalDate = LocalDate.now()): String {
     val zoned = date.toInstant().atZone(ZoneId.systemDefault())
     val locale = Strings.language.locale
-    val pattern = if (zoned.toLocalDate() == today) {
-        if (Strings.language == Strings.Language.ZhTW) "ahh:mm" else "hh:mm a"
-    } else {
-        "M/d"
-    }
+    val pattern = if (zoned.toLocalDate() == today) chatTimePattern() else "M/d"
     return zoned.format(DateTimeFormatter.ofPattern(pattern, locale))
 }
 

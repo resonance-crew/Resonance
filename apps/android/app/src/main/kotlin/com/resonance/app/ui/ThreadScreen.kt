@@ -655,15 +655,20 @@ internal fun dayLabel(date: Date): String {
     return date.toInstant().atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern(pattern, Strings.language.locale))
 }
 
-/** The time label inside a day: 下午 3:04 / 3:04 PM. */
-internal fun timeLabel(date: Date): String {
-    val pattern = if (Strings.language == Strings.Language.ZhTW) "a h:mm" else "h:mm a"
-    return date.toInstant().atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern(pattern, Strings.language.locale))
-}
+/**
+ * The chat's time of day, one way wherever it shows (round 16 review F5, the web's lib/chat/time) — the
+ * conversation list, the thread's labels, a message's menu, a search's results: the hour without a
+ * leading zero, as the language writes it — 下午3:04 / 3:04 PM.
+ */
+internal fun chatTimePattern(): String = if (Strings.language == Strings.Language.ZhTW) "ah:mm" else "h:mm a"
 
-/** The full time a long-press shows (the web's hover title): 9月29日 下午03:04 / September 29 at 03:04 PM. */
+/** The time label inside a day: 下午3:04 / 3:04 PM ([chatTimePattern]). */
+internal fun timeLabel(date: Date): String =
+    date.toInstant().atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern(chatTimePattern(), Strings.language.locale))
+
+/** The full time a long-press shows (the web's hover title): 9月29日 下午3:04 / September 29 at 3:04 PM. */
 internal fun fullTime(date: Date): String {
-    val pattern = if (Strings.language == Strings.Language.ZhTW) "M月d日 ahh:mm" else "MMMM d 'at' hh:mm a"
+    val pattern = if (Strings.language == Strings.Language.ZhTW) "M月d日 ${chatTimePattern()}" else "MMMM d 'at' ${chatTimePattern()}"
     return date.toInstant().atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern(pattern, Strings.language.locale))
 }
 
