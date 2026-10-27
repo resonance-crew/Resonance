@@ -240,7 +240,7 @@ struct WriteScreen: View {
                 .offset(x: writing ? 0 : -shift)
                 .allowsHitTesting(writing)
                 .accessibilityHidden(!writing)
-            if publishLoaded {
+            if Self.mountsPublishStep(loaded: publishLoaded, step: model.step) {
                 publishStep(model)
                     .opacity(writing ? 0 : 1)
                     .offset(x: writing ? shift : 0)
@@ -544,6 +544,13 @@ struct WriteScreen: View {
         // as the feed's does, never the page's cream over it.
         .overscrollPaper(PublishStep.bandUnderBar(model, showsBar: showsBar, compact: compact)
                          ? PublishStep.bandPalette(model) : nil)
+    }
+
+    /// Whether the publish step is in the page: once shown it stays (a cover on its way, the mirror's
+    /// answer), and it is there whenever the step is — a step already at publish when the page first draws
+    /// too (an opened card's ✓ never waits for a save: `-writeStep publish`), which no change of step announces.
+    static func mountsPublishStep(loaded: Bool, step: WriterStep) -> Bool {
+        loaded || step == .publish
     }
 
     // MARK: Moving between the steps, and leaving

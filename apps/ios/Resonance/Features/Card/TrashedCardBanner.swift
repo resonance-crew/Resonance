@@ -123,3 +123,27 @@ struct TrashedCardBanner: View {
         }
     }
 }
+
+/// 刪除 from the card's own ⋯ leaves the reader on its page (trash.spec §5.4), whose banner then stands at
+/// its head — far above the line they were reading, maybe. Once the banner shows, the page goes up to
+/// it, as the web's focus on its title and Android's focusable title bring it into view: once for each
+/// move to the trash made on the page (not again for a later read of the same card, nor for a card
+/// that was in the trash when the page opened).
+struct TrashedHere: Equatable {
+    /// Moves to the trash made from this page's ⋯, and how many of them the page has gone up for.
+    private var moved = 0
+    private var shown = 0
+
+    /// The card went to the trash from this page.
+    mutating func trashed() { moved += 1 }
+
+    /// VoiceOver's focus goes to the banner's title.
+    var focusTitle: Bool { moved > 0 }
+
+    /// Whether the page goes up to the banner now: it shows (`banner`), after a move not gone up for yet.
+    mutating func bringIntoView(banner: Bool) -> Bool {
+        guard banner, shown < moved else { return false }
+        shown = moved
+        return true
+    }
+}
