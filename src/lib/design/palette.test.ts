@@ -59,6 +59,10 @@ const PAIRS: [PaletteToken, PaletteToken, number][] = [
   ['color-terracotta', 'color-cream', 3],
   // The pane lines (the header's pen line, dividers): light 3.6, night 2.7.
   ['field-border-hover', 'color-cream', 2.5],
+  // A menu (or a select's list): words on its paper, its frame beside the page and its own paper.
+  ['color-text', 'menu-paper', 7],
+  ['menu-frame', 'menu-paper', 2.8],
+  ['menu-frame', 'color-cream', 2.8],
   ['cta-ink', 'cta-band', 4.5],
   ['reading-progress', 'color-cream', 2.2],
   ['placeholder', 'color-cream', 2.4],
@@ -96,6 +100,7 @@ const CALM: [PaletteToken, PaletteToken][] = [
   ['modal-border', 'color-card-bg'],
   ['ghost-stroke', 'color-cream'],
   ['soft-pen', 'color-cream'],
+  ['menu-frame', 'menu-paper'],
   ...[0, 1, 2, 3, 4, 5].flatMap((i): [PaletteToken, PaletteToken][] => [
     [`card-border-${i}` as PaletteToken, `card-fill-${i}` as PaletteToken],
     [`card-border-${i}` as PaletteToken, 'color-cream'],
@@ -213,12 +218,12 @@ describe('palette', () => {
     for (const a of ACCENTS) for (const t of PALETTE_TOKENS) expect(inP3(paletteFor(a, 'dark')[t]), `${a} dark ${t}`).toBe(true);
   });
 
-  it('light terracotta is the site as it was', () => {
+  it('light terracotta is the site as it was, its papers a shade less tinted (2026-10-27)', () => {
     const p = paletteFor('terracotta', 'light');
     const was: Partial<Record<PaletteToken, string>> = {
-      'color-cream': 'oklch(96.5% 0.015 75)',
-      'color-cream-dark': 'oklch(93% 0.018 75)',
-      'color-card-bg': 'oklch(97.5% 0.01 80)',
+      'color-cream': 'oklch(96.5% 0.0127 75)',
+      'color-cream-dark': 'oklch(93% 0.0153 75)',
+      'color-card-bg': 'oklch(97.5% 0.0085 80)',
       'color-terracotta': 'oklch(62% 0.14 45)',
       'color-terracotta-light': 'oklch(88% 0.08 55)',
       'color-text': 'oklch(26% 0.03 60)',
@@ -227,8 +232,8 @@ describe('palette', () => {
       'field-border-hover': 'oklch(60% 0.04 60)',
       placeholder: 'oklch(64% 0.03 70)',
       'bubble-mine': 'oklch(91.2% 0.055 62.6)',
-      'bubble-theirs': 'oklch(91.5% 0.017 74)',
-      'bubble-quote': 'oklch(88.5% 0.013 72)',
+      'bubble-theirs': 'oklch(91.56% 0.014 74)',
+      'bubble-quote': 'oklch(88.75% 0.0146 73.4)',
       'link-card-muted': 'oklch(45% 0.04 70)',
       'reading-progress': 'oklch(70% 0.17 50)',
       'button-fill': 'oklch(54.56% 0.1232 45)',
@@ -236,7 +241,7 @@ describe('palette', () => {
       'button-on-tonal': 'oklch(48.36% 0.1092 45)',
       'danger-fill': 'oklch(53.36% 0.1472 25)',
       'button-on-danger-tonal': 'oklch(45.24% 0.1248 25)',
-      'toggle-off': 'oklch(86% 0.02 75)',
+      'toggle-off': 'oklch(86% 0.0169 75)',
       'toggle-off-stroke': 'oklch(70% 0.03 70)',
       'ghost-stroke': 'oklch(44% 0.04 70)',
       'modal-border': 'oklch(40% 0.06 60)',

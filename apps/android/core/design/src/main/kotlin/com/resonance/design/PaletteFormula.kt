@@ -40,6 +40,9 @@ object PaletteFormula {
         val darkNeutralHue: Double,
         val darkNeutralChroma: Double,
         val darkAccent: Lch,
+        /** palette.ts ThemeSpec.paperTint: the share of their tint the papers keep, light and dark. */
+        val paperTintLight: Double,
+        val paperTintDark: Double,
     )
 
     /** palette.ts `specForHue`. */
@@ -53,6 +56,8 @@ object PaletteFormula {
             darkNeutralHue = hue + 10,
             darkNeutralChroma = 0.012,
             darkAccent = Lch(0.73, min(0.13, accentChroma), hue + 2),
+            paperTintLight = 0.75,
+            paperTintDark = 0.7,
         )
     }
 
@@ -63,7 +68,7 @@ object PaletteFormula {
     /** palette.ts `paletteForHue`. */
     fun paletteForHue(hue: Double, chroma: Double, dark: Boolean): ResonanceColors {
         val spec = specForHue(hue, chroma)
-        val base = if (dark) darkBase(spec) else lightBase(spec)
+        val base = tintPapers(if (dark) darkBase(spec) else lightBase(spec), if (dark) spec.paperTintDark else spec.paperTintLight)
         val own = base + if (dark) darkRecipes(base) else lightRecipes(base)
         // The scheme's own tokens and the families': the same in every theme of a scheme.
         val shared = ResonanceColors.of(PaletteTheme.Terracotta, dark).oklch
@@ -81,6 +86,12 @@ object PaletteFormula {
         }
         return ResonanceColors(dark, out)
     }
+
+    /** palette.ts `tintPapers`: the paper, its well and the raised card at [share] of their tint. */
+    private fun tintPapers(b: Map<String, Lch>, share: Double): Map<String, Lch> =
+        b.mapValues { (token, c) -> if (token in PAPERS) c.copy(c = c.c * share) else c }
+
+    private val PAPERS = setOf("color-cream", "color-cream-dark", "color-card-bg")
 
     /** palette.ts `darkBase`: night paper at 20.5%, the raised card at 24%, the well at 17%, chalk ink at 88%. */
     private fun darkBase(s: Spec): Map<String, Lch> {
@@ -160,6 +171,8 @@ object PaletteFormula {
             "toggle-off-stroke" to lch(0.7, muted.c * 0.75, muted.h),
             "ghost-stroke" to lch(0.44, muted.c, muted.h),
             "modal-border" to lch(0.4, text.c * 2, text.h),
+            "menu-paper" to cream,
+            "menu-frame" to accent,
             "segment-idle-ink" to mixWithBlack(muted, 0.1),
             "link-wave" to lch(accent.l + 0.03, accent.c * 0.6, accent.h),
             "story-code-tint" to text.copy(alpha = 0.06),
@@ -203,6 +216,8 @@ object PaletteFormula {
             "toggle-off-stroke" to lch(0.52, muted.c * 0.75, muted.h),
             "ghost-stroke" to lch(0.62, muted.c, muted.h),
             "modal-border" to lch(0.6, text.c * 2, text.h),
+            "menu-paper" to b.getValue("color-card-bg"),
+            "menu-frame" to fitGamut(lch(0.52, accent.c * 0.5, accent.h)),
             "segment-idle-ink" to over(text, 0.1, muted),
             "link-wave" to lch(accent.l - 0.06, accent.c * 0.6, accent.h),
             "story-code-tint" to text.copy(alpha = 0.08),

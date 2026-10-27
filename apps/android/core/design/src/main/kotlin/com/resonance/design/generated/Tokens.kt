@@ -93,6 +93,12 @@ object Tokens {
     /** --modal-border */
     val ModalBorder: Color
         @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.ModalBorder
+    /** --menu-paper */
+    val MenuPaper: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.MenuPaper
+    /** --menu-frame */
+    val MenuFrame: Color
+        @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.MenuFrame
     /** --segment-idle-ink */
     val SegmentIdleInk: Color
         @Composable @ReadOnlyComposable get() = LocalResonanceColors.current.SegmentIdleInk

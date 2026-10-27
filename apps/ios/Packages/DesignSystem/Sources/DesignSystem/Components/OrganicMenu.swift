@@ -524,7 +524,7 @@ struct MenuPanelBackground: View {
                     inside.stroke(dividerPath(pts).path(), with: .color(colors.divider),
                                   style: StrokeStyle(lineWidth: Tokens.inkLight, lineCap: .round))
                 }
-                ctx.stroke(outer, with: .color(colors.border), style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
+                ctx.stroke(outer, with: .color(colors.frame), style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
             }
         }
         .frame(width: size.width + 2 * bleed, height: size.height + 2 * bleed)
@@ -573,8 +573,11 @@ nonisolated struct MenuPanelShape {
 
 /// The --menu-* colors: theme terracotta, or a card's hue (palette HUE_INKS, by scheme).
 struct MenuColors {
+    /// The glyphs' pen (the trigger's, each row's icon).
     let border: Color
     let borderHover: Color
+    /// The panel's outline: the menus' frame (the accent, quieter at night), or the card's pen.
+    let frame: Color
     let cream: Color
     let divider: Color
     let hue: Double?
@@ -584,20 +587,23 @@ struct MenuColors {
         if let hue {
             border = Palette.hue(.pen, hue)
             borderHover = Palette.hue(.penDeep, hue)
+            frame = border
             cream = Palette.hue(.menu, hue)
             divider = Palette.hue(.separator, hue, alpha: 0.4)
         } else {
             border = Tokens.terracotta
             borderHover = Tokens.terracottaDeep
-            cream = Tokens.cream
-            divider = Tokens.terracotta.opacity(0.4)
+            frame = Tokens.menuFrame
+            // The menus' paper: the page's in light, raised onto the card's at night.
+            cream = Tokens.menuPaper
+            divider = Tokens.menuFrame.opacity(0.4)
         }
     }
 
     /// color-mix(in oklch, yellow 25% — 45% while pressed —, menu-cream).
     func dangerWash(pressed: Bool) -> Color {
         let t = pressed ? 0.45 : 0.25
-        guard let hue else { return Palette.mix(.yellow, t, .cream) }
+        guard let hue else { return Palette.mix(.yellow, t, .menuPaper) }
         func wash(_ scheme: PaletteScheme) -> Color {
             let paper = Palette.hueOKLCH(.menu, hue, scheme)
             let yellow = OKLCHColor.components(Palette.oklch(.yellow, accent: .terracotta, scheme: scheme)) ?? (0.88, 0.1, 90, 1)

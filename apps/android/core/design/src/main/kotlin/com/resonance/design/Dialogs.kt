@@ -444,8 +444,11 @@ class OrganicMenuItem(val title: String, val icon: IconName, val destructive: Bo
  * / 0.4)`, and the destructive row's wash `color-mix(yellow 25%, paper)` (45% pressed).
  */
 internal class MenuColors(hue: Double?, palette: ResonanceColors) {
+    /** The glyphs' pen (the trigger's, each row's icon). */
     val border: Color
     val borderHover: Color
+    /** The panel's outline: the menus' frame (the accent, quieter at night), or the card's pen. */
+    val frame: Color
     val cream: Color
     val divider: Color
     val dangerWash: Color
@@ -456,14 +459,17 @@ internal class MenuColors(hue: Double?, palette: ResonanceColors) {
         if (hue == null) {
             border = palette.Terracotta
             borderHover = palette.TerracottaDeep
-            cream = palette.Cream
-            divider = palette.Terracotta.copy(alpha = 0.4f)
+            frame = palette.MenuFrame
+            // The menus' paper: the page's in light, raised onto the card's at night.
+            cream = palette.MenuPaper
+            divider = palette.MenuFrame.copy(alpha = 0.4f)
             dangerWash = mixes.menuDangerWash
             dangerWashPressed = mixes.menuDangerWashPressed
         } else {
             // A card's own menu (the web's --menu-* from the card's hue): its pen, deeper pointed at, its paper, its rule.
             border = palette.hue(HueRole.Pen, hue)
             borderHover = palette.hue(HueRole.PenDeep, hue)
+            frame = border
             cream = palette.hue(HueRole.Menu, hue)
             divider = palette.hue(HueRole.Separator, hue, 0.4)
             val (l, c) = if (palette.dark) HueRole.Menu.dark else HueRole.Menu.light
@@ -755,7 +761,7 @@ private fun MenuPanel(
                         pressed?.let { with(spread) { draw(regions[it], if (it == danger) colors.dangerWashPressed else colors.borderHover.copy(alpha = 0.15f)) } }
                         dividers.forEach { drawPath(it, colors.divider, style = light) }
                     }
-                    drawPath(outline, colors.border, style = pen)
+                    drawPath(outline, colors.frame, style = pen)
                 }
             }
             .padding(horizontal = 8.dp),

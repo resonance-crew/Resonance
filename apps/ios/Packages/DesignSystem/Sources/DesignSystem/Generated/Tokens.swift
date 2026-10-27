@@ -5,11 +5,11 @@ public nonisolated enum Tokens {
     // The palette (src/lib/design/palette.ts, scripts/native/palette-swift.ts): every colour follows the
     // interface style and the theme (`AccentTrait`) wherever it is drawn — a SwiftUI view, a UIKit view's
     // dynamic colour, an attributed string. `Tokens.UI.<colour>` is the same colour as a UIColor.
-    /// --color-cream · terracotta: light #faf2e9, dark #1c1611
+    /// --color-cream · terracotta: light #f9f2ea, dark #1b1612
     public static let cream = Color(uiColor: UI.cream)
-    /// --color-cream-dark · terracotta: light #efe6db, dark #130e0b
+    /// --color-cream-dark · terracotta: light #eee7dd, dark #120f0c
     public static let creamDark = Color(uiColor: UI.creamDark)
-    /// --color-card-bg · terracotta: light #faf6ef, dark #241e18
+    /// --color-card-bg · terracotta: light #faf6f1, dark #231e1a
     public static let cardBg = Color(uiColor: UI.cardBg)
     /// --color-terracotta · terracotta: light #c96736, dark #e58553
     public static let terracotta = Color(uiColor: UI.terracotta)
@@ -25,11 +25,11 @@ public nonisolated enum Tokens {
     public static let fieldBorderHover = Color(uiColor: UI.fieldBorderHover)
     /// --placeholder · terracotta: light #988979, dark #867867
     public static let placeholder = Color(uiColor: UI.placeholder)
-    /// --bubble-mine · terracotta: light #fddbbd, dark #4b2d17
+    /// --bubble-mine · terracotta: light #fddbbd, dark #4b2d18
     public static let bubbleMine = Color(uiColor: UI.bubbleMine)
-    /// --bubble-theirs · terracotta: light #eae2d7, dark #2c2620
+    /// --bubble-theirs · terracotta: light #e9e2d9, dark #2b2621
     public static let bubbleTheirs = Color(uiColor: UI.bubbleTheirs)
-    /// --bubble-quote · terracotta: light #dfd8d0, dark #231e1a
+    /// --bubble-quote · terracotta: light #e0d9d0, dark #221e1b
     public static let bubbleQuote = Color(uiColor: UI.bubbleQuote)
     /// --link-card-muted · terracotta: light #64523d, dark #b9ac9c
     public static let linkCardMuted = Color(uiColor: UI.linkCardMuted)
@@ -37,7 +37,7 @@ public nonisolated enum Tokens {
     public static let readingProgress = Color(uiColor: UI.readingProgress)
     /// --button-fill · terracotta: light #a9552c, dark #e58553
     public static let buttonFill = Color(uiColor: UI.buttonFill)
-    /// --button-tonal · terracotta: light #fcd2b1, dark #462915
+    /// --button-tonal · terracotta: light #fcd2b2, dark #462915
     public static let buttonTonal = Color(uiColor: UI.buttonTonal)
     /// --button-on-tonal · terracotta: light #904724, dark #f5af82
     public static let buttonOnTonal = Color(uiColor: UI.buttonOnTonal)
@@ -47,11 +47,11 @@ public nonisolated enum Tokens {
     public static let terracottaDeep = Color(uiColor: UI.terracottaDeep)
     /// --terracotta-outline · terracotta: light #a2512a, dark #e49362
     public static let terracottaOutline = Color(uiColor: UI.terracottaOutline)
-    /// --auth-interior · terracotta: light #faf1e4, dark #2b2119
+    /// --auth-interior · terracotta: light #faf1e5, dark #2a211a
     public static let authInterior = Color(uiColor: UI.authInterior)
     /// --auth-border · terracotta: light #9a4d27, dark #a87156
     public static let authBorder = Color(uiColor: UI.authBorder)
-    /// --toggle-off · terracotta: light #d9cfc3, dark #393129
+    /// --toggle-off · terracotta: light #d8d0c5, dark #38322b
     public static let toggleOff = Color(uiColor: UI.toggleOff)
     /// --toggle-off-stroke · terracotta: light #ab9c8b, dark #72675b
     public static let toggleOffStroke = Color(uiColor: UI.toggleOffStroke)
@@ -59,33 +59,37 @@ public nonisolated enum Tokens {
     public static let ghostStroke = Color(uiColor: UI.ghostStroke)
     /// --modal-border · terracotta: light #5f4025, dark #8e7d66
     public static let modalBorder = Color(uiColor: UI.modalBorder)
+    /// --menu-paper · terracotta: light #f9f2ea, dark #231e1a
+    public static let menuPaper = Color(uiColor: UI.menuPaper)
+    /// --menu-frame · terracotta: light #c96736, dark #895d47
+    public static let menuFrame = Color(uiColor: UI.menuFrame)
     /// --segment-idle-ink · terracotta: light #685744, dark #aa9c8b
     public static let segmentIdleInk = Color(uiColor: UI.segmentIdleInk)
     /// --link-wave · terracotta: light #ba7f64, dark #b98064
     public static let linkWave = Color(uiColor: UI.linkWave)
     /// --story-code-tint · terracotta: light #2f2115, dark #dfd6c9
     public static let storyCodeTint = Color(uiColor: UI.storyCodeTint)
-    /// --footer-bg · terracotta: light #2f2115, dark #0e0a07
+    /// --footer-bg · terracotta: light #2f2115, dark #0e0a08
     public static let footerBg = Color(uiColor: UI.footerBg)
-    /// --footer-ink · terracotta: light #faf2e9, dark #dfd6c9
+    /// --footer-ink · terracotta: light #f9f2ea, dark #dfd6c9
     public static let footerInk = Color(uiColor: UI.footerInk)
     /// --cta-band · terracotta: light #9c4e28, dark #6b3820
     public static let ctaBand = Color(uiColor: UI.ctaBand)
-    /// --cta-ink · terracotta: light #faf2e9, dark #f0e6da
+    /// --cta-ink · terracotta: light #f9f2ea, dark #f0e6da
     public static let ctaInk = Color(uiColor: UI.ctaInk)
     /// --cta-ghost · terracotta: light #612e15, dark #4b2514
     public static let ctaGhost = Color(uiColor: UI.ctaGhost)
     /// --cta-verb-ink · terracotta: light #904724, dark #6b3820
     public static let ctaVerbInk = Color(uiColor: UI.ctaVerbInk)
-    /// --skeleton-base · terracotta: light #e2d9cd, dark #312a24
+    /// --skeleton-base · terracotta: light #e1d9cf, dark #302b26
     public static let skeletonBase = Color(uiColor: UI.skeletonBase)
-    /// --skeleton-glow · terracotta: light #faf2e9, dark #332c27
+    /// --skeleton-glow · terracotta: light #f9f2ea, dark #322d29
     public static let skeletonGlow = Color(uiColor: UI.skeletonGlow)
-    /// --avatar-wait · terracotta: light #efe6db, dark #241e18
+    /// --avatar-wait · terracotta: light #eee7dd, dark #231e1a
     public static let avatarWait = Color(uiColor: UI.avatarWait)
     /// --apple-fill · terracotta: light #2f2115, dark #ffffff
     public static let appleFill = Color(uiColor: UI.appleFill)
-    /// --apple-label · terracotta: light #faf2e9, dark #000000
+    /// --apple-label · terracotta: light #f9f2ea, dark #000000
     public static let appleLabel = Color(uiColor: UI.appleLabel)
     /// --color-danger · terracotta: light #c74b47, dark #ed756e
     public static let danger = Color(uiColor: UI.danger)
@@ -499,6 +503,8 @@ extension Tokens {
         public static let toggleOffStroke = Palette.uiColor(.toggleOffStroke)
         public static let ghostStroke = Palette.uiColor(.ghostStroke)
         public static let modalBorder = Palette.uiColor(.modalBorder)
+        public static let menuPaper = Palette.uiColor(.menuPaper)
+        public static let menuFrame = Palette.uiColor(.menuFrame)
         public static let segmentIdleInk = Palette.uiColor(.segmentIdleInk)
         public static let linkWave = Palette.uiColor(.linkWave)
         public static let storyCodeTint = Palette.uiColor(.storyCodeTint)

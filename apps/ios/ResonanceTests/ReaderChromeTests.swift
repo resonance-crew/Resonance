@@ -151,12 +151,12 @@ import Testing
         // A lavender card's light stays lavender (it swung through red to pink by hue), a blue
         // one's blue (it went green), on the line between the card's shade and the cream.
         let lavender = SkeletonBlock.highlightOKLCH(290)
-        #expect(abs(lavender.H - 297.3) < 0.5)
+        #expect(abs(lavender.H - 296.0) < 0.5)
         let blue = SkeletonBlock.highlightOKLCH(215)
         #expect(blue.H > 200 && blue.H < 230)
         #expect(abs(lavender.L - (0.88 + 0.965) / 2) < 0.0001)
         // Mixing pulls the chroma in: under the average of the two, as a straight line in OKLab does.
-        #expect(lavender.C < (0.08 + 0.015) / 2)
+        #expect(lavender.C < (0.08 + 0.0127) / 2)
         // No hue: the theme's terracotta-light, oklch(88% .08 55), with the cream.
         let theme = SkeletonBlock.highlightOKLCH(nil)
         #expect(theme.H == SkeletonBlock.highlightOKLCH(55).H)

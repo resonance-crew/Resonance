@@ -516,7 +516,7 @@ function DropdownPanel({
   const ink = useRowInk({ panelRef: ref, rows, w, h, activeIndex });
   const washes = useMemo(
     () =>
-      options.map(() => 'color-mix(in oklch, var(--color-terracotta) 15%, var(--color-cream))'),
+      options.map(() => 'color-mix(in oklch, var(--color-terracotta) 15%, var(--menu-paper))'),
     [options],
   );
 
@@ -547,8 +547,8 @@ function DropdownPanel({
             </clipPath>
           </defs>
           <g clipPath={`url(#sel-clip-${uid})`}>
-            {/* opaque card fill */}
-            <path d={outerPath} fill="var(--color-cream)" />
+            {/* opaque fill: the menus' paper (raised at night) */}
+            <path d={outerPath} fill="var(--menu-paper)" />
             {/* active row ink, clipped to the curved region */}
             {ready && (
               <RowInkWash
@@ -575,11 +575,11 @@ function DropdownPanel({
                 clipPath={`url(#sel-clip-${uid})`}
               />
             ))}
-          {/* outer stroke */}
+          {/* outer stroke: the menus' frame (the accent, quieter at night) */}
           <path
             d={outerPath}
             fill="none"
-            stroke="var(--field-border-focus)"
+            stroke="var(--menu-frame)"
             strokeWidth={INK}
             strokeLinecap="round"
             strokeLinejoin="round"

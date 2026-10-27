@@ -62,7 +62,8 @@ struct AppearanceSettings: View {
 
 /// One theme as a choice: a wobbly disc of its paper, edged in the field pen, holding a smaller disc
 /// of its accent — both as the theme draws them in the scheme now worn (its own `accent` in the
-/// environment) — ringed in its accent and checked when chosen.
+/// environment). Chosen, its own edge takes the accent at the strong pen (no ring round it, as the
+/// web's and Android's) and it is checked.
 private struct ThemeSwatch: View {
     let accent: Accent
     let name: String
@@ -76,14 +77,11 @@ private struct ThemeSwatch: View {
         Button(action: action) {
             VStack(spacing: 8) {
                 ZStack {
-                    WobCircleShape(seed: seed, options: WobCircleOptions(segments: 8, mag: 0.8, cpJitter: 0.4))
-                        .stroke(chosen ? Tokens.terracotta : .clear, lineWidth: Tokens.inkStrong)
-                        .frame(width: Self.side + 10, height: Self.side + 10)
                     WobCircleShape(seed: seed + 3, options: WobCircleOptions(segments: 8, mag: 0.8, cpJitter: 0.4))
                         .fill(Tokens.cream)
                         .overlay {
                             WobCircleShape(seed: seed + 3, options: WobCircleOptions(segments: 8, mag: 0.8, cpJitter: 0.4))
-                                .stroke(Tokens.fieldBorder, lineWidth: Tokens.ink)
+                                .stroke(chosen ? Tokens.terracotta : Tokens.fieldBorder, lineWidth: chosen ? Tokens.inkStrong : Tokens.ink)
                         }
                         .frame(width: Self.side, height: Self.side)
                     WobCircleShape(seed: seed + 5, options: WobCircleOptions(segments: 7, mag: 0.6, cpJitter: 0.3))
@@ -94,7 +92,7 @@ private struct ThemeSwatch: View {
                             .transition(.scale(scale: 0.4).combined(with: .opacity))
                     }
                 }
-                .frame(width: Self.side + 12, height: Self.side + 12)
+                .frame(width: Self.side + 4, height: Self.side + 4)
                 // The theme's own colours, in whichever scheme the window wears.
                 .environment(\.accent, accent)
                 Text(name)

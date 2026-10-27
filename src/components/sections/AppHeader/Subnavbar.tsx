@@ -306,7 +306,7 @@ function SubnavPanel({
           </defs>
           <g clipPath={`url(#subnav-clip-${uid})`}>
             {/* opaque card fill */}
-            <path d={outerPath} fill="var(--color-cream)" />
+            <path d={outerPath} fill="var(--menu-paper)" />
             {/* base fill for specific rows (e.g., warning yellow for sign out before hover) */}
             {ready &&
               ITEMS.map((item, i) =>
@@ -314,7 +314,7 @@ function SubnavPanel({
                   <path
                     key={`base-${item.key}`}
                     d={rowRegion(i, ITEMS.length, boundaries, w, h, pad)}
-                    fill="color-mix(in oklch, var(--color-yellow) 25%, var(--color-cream))"
+                    fill="color-mix(in oklch, var(--color-yellow) 25%, var(--menu-paper))"
                   />
                 ) : null
               )

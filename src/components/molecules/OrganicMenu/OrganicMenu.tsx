@@ -114,8 +114,10 @@ export interface OrganicMenuProps {
 }
 
 /**
- * The `--menu-*` colours a panel draws with: the theme's terracotta, or the
- * accent `hue` at the scheme's lightness (palette.ts HUE_ROLES).
+ * The `--menu-*` colours a panel draws with: the theme's terracotta (the
+ * glyphs; the panel's frame and paper are palette.ts's menu-frame and
+ * menu-paper, quieter and raised at night), or the accent `hue` at the
+ * scheme's lightness (palette.ts HUE_ROLES).
  */
 function menuColors(hue: number | undefined): CSSProperties {
   return (
@@ -123,12 +125,14 @@ function menuColors(hue: number | undefined): CSSProperties {
       ? {
           '--menu-border': 'var(--color-terracotta)',
           '--menu-border-hover': 'var(--terracotta-deep)',
-          '--menu-cream': 'var(--color-cream)',
-          '--menu-divider': 'color-mix(in oklch, var(--color-terracotta) 40%, transparent)',
+          '--menu-outline': 'var(--menu-frame)',
+          '--menu-cream': 'var(--menu-paper)',
+          '--menu-divider': 'color-mix(in oklch, var(--menu-frame) 40%, transparent)',
         }
       : {
           '--menu-border': `oklch(var(--hue-pen) ${hue})`,
           '--menu-border-hover': `oklch(var(--hue-pen-deep) ${hue})`,
+          '--menu-outline': `oklch(var(--hue-pen) ${hue})`,
           '--menu-cream': `oklch(var(--hue-menu) ${hue})`,
           '--menu-divider': `oklch(var(--hue-separator) ${hue} / 0.4)`,
         }
@@ -619,7 +623,7 @@ function MenuPanel({
           <path
             d={outerPath}
             fill="none"
-            stroke="var(--menu-border)"
+            stroke="var(--menu-outline)"
             strokeWidth={INK}
             strokeLinecap="round"
             strokeLinejoin="round"

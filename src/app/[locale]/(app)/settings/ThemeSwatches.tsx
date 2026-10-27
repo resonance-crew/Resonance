@@ -8,8 +8,8 @@ import { ACCENTS, cssOklch, paletteFor, type Accent } from '@/lib/design/palette
 import { useAppearance } from '@/lib/design/useAppearance';
 import styles from './ThemeSwatches.module.css';
 
-/** A swatch's box: its paper disc, and room around it for the chosen ring's wobble. */
-const BOX = 64;
+/** A swatch's box: its paper disc, and room for its edge's wobble at the strong pen. */
+const BOX = 56;
 const C = BOX / 2;
 
 export interface ThemeSwatchesProps {
@@ -25,7 +25,8 @@ export interface ThemeSwatchesProps {
  * Settings → 外觀's 主題色: one hand-drawn disc per theme — the theme's paper
  * with its accent laid on it, as the scheme the page wears now draws them
  * (a dark page shows each theme's night paper) — its name under it. A radio
- * group: the chosen one is ringed in the focus pen and ticked; the arrow keys
+ * group: the chosen one's own edge takes the focus pen, strong, and it is
+ * ticked (no ring drawn round it — the apps' swatch too); the arrow keys
  * move the choice, as radios do, and Tab reaches the chosen one.
  */
 export function ThemeSwatches({ value, onChange, names, label }: ThemeSwatchesProps) {
@@ -34,9 +35,8 @@ export function ThemeSwatches({ value, onChange, names, label }: ThemeSwatchesPr
   const shapes = useMemo(
     () =>
       ACCENTS.map((_, i) => ({
-        paper: wobCircle(C, C, 23, 401 + i * 17, { segments: 7, mag: 0.9 }),
-        accent: wobCircle(C, C, 11.5, 433 + i * 13, { segments: 6, mag: 0.7 }),
-        ring: wobCircle(C, C, 29, 467 + i * 11, { segments: 8, mag: 1.1 }),
+        paper: wobCircle(C, C, 24, 401 + i * 17, { segments: 7, mag: 0.9 }),
+        accent: wobCircle(C, C, 12, 433 + i * 13, { segments: 6, mag: 0.7 }),
       })),
     [],
   );
@@ -79,11 +79,14 @@ export function ThemeSwatches({ value, onChange, names, label }: ThemeSwatchesPr
           >
             <span className={styles.disc}>
               <svg width={BOX} height={BOX} viewBox={`0 0 ${BOX} ${BOX}`} aria-hidden="true">
-                <path d={shapes[i].paper} fill={colours[i].paper} stroke="var(--field-border-hover)" strokeWidth={INK} strokeLinejoin="round" />
+                <path
+                  d={shapes[i].paper}
+                  fill={colours[i].paper}
+                  stroke={chosen ? 'var(--field-border-focus)' : 'var(--field-border)'}
+                  strokeWidth={chosen ? INK_STRONG : INK}
+                  strokeLinejoin="round"
+                />
                 <path d={shapes[i].accent} fill={colours[i].accent} />
-                {chosen && (
-                  <path d={shapes[i].ring} fill="none" stroke="var(--field-border-focus)" strokeWidth={INK_STRONG} strokeLinecap="round" />
-                )}
               </svg>
               {chosen && (
                 <span className={styles.tick}>

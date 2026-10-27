@@ -68,14 +68,14 @@ describe('applying a choice', () => {
     expect(dark.content).toBe(THEME_COLORS.terracotta.dark);
   });
 
-  it('keeps the light bars the site always had', () => {
-    expect(THEME_COLORS.terracotta.light).toBe('#faf2e9');
+  it("colours the light bars light terracotta's paper (a shade less tinted since 2026-10-27)", () => {
+    expect(THEME_COLORS.terracotta.light).toBe('#f9f2ea');
   });
 });
 
 describe('the bars under a dialog', () => {
-  it('dim to the scrim over the paper: light terracotta as it always was, every theme darker than its paper', () => {
-    expect(DIMMED_THEME_COLORS.terracotta.light).toBe('#c9c0b6');
+  it('dim to the scrim over the paper, every theme darker than its paper', () => {
+    expect(DIMMED_THEME_COLORS.terracotta.light).toBe('#c8c0b7');
     const L = (hex: string) => parseInt(hex.slice(1, 3), 16) + parseInt(hex.slice(3, 5), 16) + parseInt(hex.slice(5, 7), 16);
     for (const a of ACCENTS) for (const s of ['light', 'dark'] as const) expect(L(DIMMED_THEME_COLORS[a][s])).toBeLessThan(L(THEME_COLORS[a][s]));
   });

@@ -53,7 +53,7 @@ const o = (s: string) => parseOklch(s);
 const base = (t: Record<BaseToken, string>): Base =>
   Object.fromEntries(Object.entries(t).map(([k, v]) => [k, o(v)])) as Base;
 
-/** Each theme's light table, verbatim from the site as it was (TweaksPanel ACCENT_MAP). */
+/** Each theme's light table, verbatim from the site as it was (TweaksPanel ACCENT_MAP); the papers are worn at ThemeSpec.paperTint of it. */
 const LIGHT_BASES: Record<Accent, Base> = {
   terracotta: base({
     'color-terracotta': 'oklch(62% 0.14 45)',
@@ -116,20 +116,34 @@ export interface ThemeSpec {
   accentHue: number;
   accentChroma: number;
   neutralHue: number;
-  /** The paper's chroma in light (terracotta 0.015); the light ladder scales from it. */
+  /** The neutrals' chroma in light (terracotta 0.015); the light ladder scales from it (the papers then wear paperTint of it). */
   neutralChroma: number;
   darkNeutralHue: number;
   /** The night paper's chroma; the dark ladder scales from it. */
   darkNeutralChroma: number;
   darkAccent: { L: number; C: number; H: number };
+  /**
+   * The share of its table's tint the papers keep (the paper, its well, the raised card), per
+   * scheme: a tinted sheet reads as a colour of its own, more so at night and in a cool hue.
+   */
+  paperTint: Record<Scheme, number>;
 }
 
 export const THEME_SPECS: Record<Accent, ThemeSpec> = {
-  terracotta: { accentHue: 45, accentChroma: 0.14, neutralHue: 75, neutralChroma: 0.015, darkNeutralHue: 62, darkNeutralChroma: 0.013, darkAccent: { L: 0.71, C: 0.135, H: 47 } },
-  sage: { accentHue: 140, accentChroma: 0.13, neutralHue: 142, neutralChroma: 0.013, darkNeutralHue: 140, darkNeutralChroma: 0.013, darkAccent: { L: 0.73, C: 0.12, H: 145 } },
-  lavender: { accentHue: 290, accentChroma: 0.14, neutralHue: 298, neutralChroma: 0.012, darkNeutralHue: 298, darkNeutralChroma: 0.011, darkAccent: { L: 0.73, C: 0.115, H: 292 } },
-  yellow: { accentHue: 78, accentChroma: 0.13, neutralHue: 92, neutralChroma: 0.02, darkNeutralHue: 88, darkNeutralChroma: 0.015, darkAccent: { L: 0.79, C: 0.125, H: 80 } },
+  terracotta: { accentHue: 45, accentChroma: 0.14, neutralHue: 75, neutralChroma: 0.015, darkNeutralHue: 62, darkNeutralChroma: 0.013, darkAccent: { L: 0.71, C: 0.135, H: 47 }, paperTint: { light: 0.85, dark: 0.8 } },
+  sage: { accentHue: 140, accentChroma: 0.13, neutralHue: 142, neutralChroma: 0.013, darkNeutralHue: 140, darkNeutralChroma: 0.013, darkAccent: { L: 0.73, C: 0.12, H: 145 }, paperTint: { light: 0.75, dark: 0.7 } },
+  lavender: { accentHue: 290, accentChroma: 0.14, neutralHue: 298, neutralChroma: 0.012, darkNeutralHue: 298, darkNeutralChroma: 0.011, darkAccent: { L: 0.73, C: 0.115, H: 292 }, paperTint: { light: 0.75, dark: 0.7 } },
+  yellow: { accentHue: 78, accentChroma: 0.13, neutralHue: 92, neutralChroma: 0.02, darkNeutralHue: 88, darkNeutralChroma: 0.015, darkAccent: { L: 0.79, C: 0.125, H: 80 }, paperTint: { light: 0.75, dark: 0.7 } },
 };
+
+const PAPERS = ['color-cream', 'color-cream-dark', 'color-card-bg'] as const;
+
+/** The base with its papers at `share` of their tint (ThemeSpec.paperTint); everything drawn on or from them follows. */
+function tintPapers(b: Base, share: number): Base {
+  const out = { ...b };
+  for (const t of PAPERS) out[t] = { ...b[t], C: b[t].C * share };
+  return out;
+}
 
 const lch = (L: number, C: number, H: number, alpha = 1): Oklch => ({ L, C, H: ((H % 360) + 360) % 360, alpha });
 
@@ -205,6 +219,8 @@ const DERIVED_TOKENS = [
   'toggle-off-stroke',
   'ghost-stroke',
   'modal-border',
+  'menu-paper',
+  'menu-frame',
   'segment-idle-ink',
   'link-wave',
   'story-code-tint',
@@ -314,6 +330,9 @@ const RECIPES: Record<Scheme, (b: Base) => Record<DerivedToken, Oklch>> = {
     'toggle-off-stroke': lch(0.7, b['color-text-muted'].C * 0.75, b['color-text-muted'].H),
     'ghost-stroke': lch(0.44, b['color-text-muted'].C, b['color-text-muted'].H),
     'modal-border': lch(0.4, b['color-text'].C * 2, b['color-text'].H),
+    // A menu or a select's list: on the paper, framed in the accent.
+    'menu-paper': b['color-cream'],
+    'menu-frame': b['color-terracotta'],
     'segment-idle-ink': mixWithBlack(b['color-text-muted'], 0.1),
     // A link's pen wave under its words: the accent quieter (0.6× its chroma) and a touch lighter.
     'link-wave': lch(b['color-terracotta'].L + 0.03, b['color-terracotta'].C * 0.6, b['color-terracotta'].H),
@@ -362,6 +381,9 @@ const RECIPES: Record<Scheme, (b: Base) => Record<DerivedToken, Oklch>> = {
       'ghost-stroke': lch(0.62, b['color-text-muted'].C, b['color-text-muted'].H),
       // Decorative pens sit under light's own ratios on night paper (see palette.test's calm check).
       'modal-border': lch(0.6, b['color-text'].C * 2, b['color-text'].H),
+      // Raised onto the card's paper (a card's own menu sits there already), its frame the accent at half its chroma (~3:1).
+      'menu-paper': b['color-card-bg'],
+      'menu-frame': fitGamut(lch(0.52, accent.C * 0.5, accent.H)),
       'segment-idle-ink': over(b['color-text'], 0.1, b['color-text-muted']),
       'link-wave': lch(accent.L - 0.06, accent.C * 0.6, accent.H),
       'story-code-tint': { ...b['color-text'], alpha: 0.08 },
@@ -523,19 +545,19 @@ function assemble(b: Base, scheme: Scheme): Palette {
 }
 
 /**
- * Light terracotta is the site as it always was, to the digit: where a recipe
- * lands a hair off a value the site and the apps' fixtures pin, the value wins.
+ * Light terracotta's own bubble and its link card's muted words, to the digit:
+ * where a recipe lands a hair off a value the site and the apps pin, the value
+ * wins. (Its papers and the bubbles mixed from them follow paperTint.)
  */
 const LIGHT_TERRACOTTA_EXACT: Partial<Record<PaletteToken, Oklch>> = {
   'bubble-mine': o('oklch(91.2% 0.055 62.6)'),
-  'bubble-theirs': o('oklch(91.5% 0.017 74)'),
-  'bubble-quote': o('oklch(88.5% 0.013 72)'),
   'link-card-muted': o('oklch(45% 0.04 70)'),
 };
 
 /** The palette a theme wears in a scheme. */
 export function paletteFor(accent: Accent, scheme: Scheme): Palette {
-  const p = assemble(scheme === 'light' ? LIGHT_BASES[accent] : darkBase(THEME_SPECS[accent]), scheme);
+  const spec = THEME_SPECS[accent];
+  const p = assemble(tintPapers(scheme === 'light' ? LIGHT_BASES[accent] : darkBase(spec), spec.paperTint[scheme]), scheme);
   return accent === DEFAULT_ACCENT && scheme === 'light' ? ({ ...p, ...LIGHT_TERRACOTTA_EXACT } as Palette) : p;
 }
 
@@ -548,7 +570,7 @@ export function paletteFor(accent: Accent, scheme: Scheme): Palette {
  */
 export function paletteForHue(hue: number, chroma: number, scheme: Scheme): Palette {
   const spec = specForHue(hue, chroma);
-  return assemble(scheme === 'light' ? lightBase(spec) : darkBase(spec), scheme);
+  return assemble(tintPapers(scheme === 'light' ? lightBase(spec) : darkBase(spec), spec.paperTint[scheme]), scheme);
 }
 
 /**
@@ -566,6 +588,7 @@ export function specForHue(hue: number, chroma: number): ThemeSpec {
     darkNeutralHue: hue + 10,
     darkNeutralChroma: 0.012,
     darkAccent: { L: 0.73, C: Math.min(0.13, accentChroma), H: hue + 2 },
+    paperTint: { light: 0.75, dark: 0.7 },
   };
 }
 

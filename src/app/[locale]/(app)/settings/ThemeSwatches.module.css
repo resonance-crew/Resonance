@@ -27,8 +27,8 @@
 .disc {
   position: relative;
   display: block;
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
   transition: transform 160ms ease;
 }
 

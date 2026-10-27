@@ -144,7 +144,7 @@ describe('Select row ink', () => {
   it('washes the option in terracotta and leaves the selected option styling alone', async () => {
     await openSelect('jp');
     expect(new Set(inkFills()).size).toBe(1);
-    expect(inkFills()[0]).toBe('color-mix(in oklch, var(--color-terracotta) 15%, var(--color-cream))');
+    expect(inkFills()[0]).toBe('color-mix(in oklch, var(--color-terracotta) 15%, var(--menu-paper))');
 
     fireEvent.mouseEnter(screen.getByRole('option', { name: 'Korea' }), { clientX: 10, clientY: 190 });
     const japan = screen.getByRole('option', { name: 'Japan' });
