@@ -61,27 +61,6 @@
 
 /* Turned into the link editor: the wave stays the bar's top edge at its own height, and the paper runs
    on under it, plain, as tall as the editor. */
-.bar[data-link] {
-  background: linear-gradient(to bottom, transparent 24px, var(--color-cream) 24px);
-}
-
-.bar[data-link] .paper,
-.bar[data-link] .wave {
-  bottom: auto;
-  height: 54px;
-}
-
-.linkInner {
-  position: relative;
-  padding: 6px var(--page-pad-x) 14px;
-}
-
-.linkInner > * {
-  width: 100%;
-  max-width: 520px;
-  margin: 0 auto;
-}
-
 .inner {
   position: relative;
   display: flex;

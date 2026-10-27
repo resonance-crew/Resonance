@@ -5,10 +5,9 @@ import { useTranslations } from 'next-intl';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { useEditorState, type Editor } from '@tiptap/react';
 import { NodeSelection } from '@tiptap/pm/state';
-import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import { Divider } from '@/components/atoms/Divider/Divider';
+import { PaperSheet } from '@/components/atoms/PaperSheet/PaperSheet';
 import { useElementSize } from '@/lib/hooks/useElementSize';
-import { INK } from '@/lib/design/strokes';
 import {
   activeFormats,
   FORMAT_FACE,
@@ -64,9 +63,10 @@ function useBubbleOptions(editor: Editor) {
  * The canvas's formatting, where a fine pointer selects: a small toolbar
  * floating over the selected words (Tiptap's BubbleMenu, placed by
  * floating-ui: above, flipped under it near the top, kept on screen) — 粗體 ·
- * 斜體 · 連結 ┆ H2 · H3 ┆ 引言 · 清單 · 編號 — in the OrganicMenu panel's chrome (a
- * hand-drawn card on the card paper, its pen line in ink, drawn once
- * measured). Option/Alt+F10 in the story moves the focus into it (the
+ * 斜體 ┆ H2 · H3 ┆ 引言 · 清單 · 編號 ┆ 連結 (round 17 §6: the link last, after
+ * a separator of its own) — on the menus' sheet (round 17 §1: paper and
+ * grain, no pen, lifted by the sheet's shadow; drawn once measured).
+ * Option/Alt+F10 in the story moves the focus into it (the
  * editor's own key, MarkdownEditor), ← and → walk it, Escape gives the focus
  * back to the words with the selection kept; the shortcuts (⌘B, ⌘I, ⌘⌥2…)
  * and the Markdown input rules stay the editor's. Never on a picture or a
@@ -109,17 +109,7 @@ export function FormatBubble({
       options={options}
     >
       <div ref={panelRef} className={styles.bubblePanel}>
-        {w > 0 && h > 0 && (
-          <HandDrawnBorder
-            w={w}
-            h={h}
-            R={14}
-            seed={seed + 101}
-            fillColor="var(--color-card-bg)"
-            strokeColor="var(--modal-border)"
-            strokeWidth={INK}
-          />
-        )}
+        {w > 0 && h > 0 && <PaperSheet w={w} h={h} R={14} seed={seed + 101} />}
         <div
           role="toolbar"
           aria-label={t('toolbarLabel')}
@@ -147,19 +137,18 @@ export function FormatBubble({
                   onClick={() => runFormat(editor, command)}
                 />
               ))}
-              {/* 連結 after 粗體 · 斜體: the marks' group (round 16 §6). */}
-              {g === 0 && (
-                <ToolButton
-                  label={t('link')}
-                  aria={t('link')}
-                  active={linkActive}
-                  seed={seed + LINK_TOOL_SEED}
-                  tabIndex={-1}
-                  onClick={onLink}
-                />
-              )}
             </Fragment>
           ))}
+          {/* 連結 last, after a separator of its own (round 17 §6). */}
+          <Divider orientation="vertical" seed={seed + 3 + FORMAT_GROUPS.length * 6} amplitude={1.2} spacing={4} />
+          <ToolButton
+            label={t('link')}
+            aria={t('link')}
+            active={linkActive}
+            seed={seed + LINK_TOOL_SEED}
+            tabIndex={-1}
+            onClick={onLink}
+          />
         </div>
       </div>
     </BubbleMenu>

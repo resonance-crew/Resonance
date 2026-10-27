@@ -239,23 +239,48 @@ describe('the canvas', () => {
 describe('the link tool', () => {
   const L = en.write.editor;
 
-  it('links selected words from the bubble’s 連結, as those words — no 卡片 inside a sentence', async () => {
+  // Round 17 §6: 連結 is the bubble's last tool, after a separator of its own; the link editor is the house dialog.
+  it('links selected words from the bubble’s 連結 (its last tool), in the dialog, as those words — no 卡片 inside a sentence', async () => {
     pointer(true);
     const onChange = vi.fn();
     renderWithIntl(<MarkdownEditor variant="canvas" value="A quiet morning" onChange={onChange} ariaLabel="Story" />);
     const story = await screen.findByRole('textbox', { name: 'Story' });
     act(() => void editorOf(story).chain().focus().setTextSelection({ from: 3, to: 8 }).run());
     const bubble = await screen.findByRole('toolbar', { name: L.toolbarLabel });
+    const tools = within(bubble).getAllByRole('button');
+    expect(tools[tools.length - 1]).toHaveAccessibleName(L.link);
+    // A separator (the bubble's wavy rule) stands right before it.
+    expect(tools[tools.length - 1].previousElementSibling).toHaveAttribute('aria-hidden');
     await userEvent.click(within(bubble).getByRole('button', { name: L.link }));
 
-    const sheet = await screen.findByRole('group', { name: L.link });
+    const sheet = await screen.findByRole('dialog', { name: L.insertLink });
+    expect(within(sheet).getByRole('heading', { name: L.insertLink })).toBeInTheDocument();
     const field = within(sheet).getByRole('textbox', { name: L.linkPlaceholder });
     await waitFor(() => expect(field).toHaveFocus());
     expect(within(sheet).queryByText(L.linkShowAs)).toBeNull();
     expect(within(sheet).queryByRole('button', { name: L.linkRemove })).toBeNull();
     await userEvent.type(field, 'example.com/rain{Enter}');
     expect(onChange).toHaveBeenLastCalledWith('A [quiet](https://example.com/rain) morning');
-    await waitFor(() => expect(screen.queryByRole('group', { name: L.link })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // The story has its focus back.
+    await waitFor(() => expect(story).toHaveFocus());
+  });
+
+  it('closes the dialog on its backdrop, changing nothing, the story focused again with the words still selected', async () => {
+    pointer(true);
+    const onChange = vi.fn();
+    renderWithIntl(<MarkdownEditor variant="canvas" value="A quiet morning" onChange={onChange} ariaLabel="Story" />);
+    const story = await screen.findByRole('textbox', { name: 'Story' });
+    act(() => void editorOf(story).chain().focus().setTextSelection({ from: 3, to: 8 }).run());
+    await userEvent.click(within(await screen.findByRole('toolbar', { name: L.toolbarLabel })).getByRole('button', { name: L.link }));
+    const dialog = await screen.findByRole('dialog', { name: L.insertLink });
+    // No ✕ drawn: the backdrop (and Escape) close it.
+    await userEvent.click(dialog.parentElement!);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(onChange).not.toHaveBeenCalled();
+    await waitFor(() => expect(story).toHaveFocus());
+    const { from, to } = editorOf(story).state.selection;
+    expect([from, to]).toEqual([3, 8]);
   });
 
   // A link in the writer is something to edit: a click selects it (the bubble's 連結 then edits it), never opens
@@ -282,7 +307,7 @@ describe('the link tool', () => {
     act(() => void editorOf(story).commands.focus('start'));
     fireEvent.keyDown(story, { key: 'k', ctrlKey: true });
 
-    const sheet = await screen.findByRole('group', { name: L.link });
+    const sheet = await screen.findByRole('dialog', { name: L.insertLink });
     expect(within(sheet).getByText(L.linkShowAs)).toBeInTheDocument();
     expect(within(sheet).getByRole('button', { name: L.linkAsCard })).toHaveAttribute('aria-pressed', 'true');
     const field = within(sheet).getByRole('textbox', { name: L.linkPlaceholder });
@@ -307,7 +332,8 @@ describe('the link tool', () => {
     await screen.findByRole('textbox', { name: 'Story' });
     await userEvent.click(await screen.findByRole('button', { name: L.linkCardLabel.replace('{host}', 'example.com') }));
 
-    const sheet = await screen.findByRole('group', { name: L.link });
+    // A link already there: 「編輯連結」, its 移除連結 at the foot's start.
+    const sheet = await screen.findByRole('dialog', { name: L.linkEdit });
     expect(within(sheet).getByRole('textbox', { name: L.linkPlaceholder })).toHaveValue('https://www.example.com/rain');
     expect(within(sheet).getByRole('button', { name: L.linkAsCard })).toHaveAttribute('aria-pressed', 'true');
     expect(within(sheet).getByRole('button', { name: L.linkRemove })).toBeInTheDocument();
@@ -323,11 +349,11 @@ describe('the link tool', () => {
     const story = await screen.findByRole('textbox', { name: 'Story' });
     await userEvent.click(await screen.findByRole('button', { name: L.linkCardLabel.replace('{host}', 'example.com') }));
 
-    const sheet = await screen.findByRole('group', { name: L.link });
+    const sheet = await screen.findByRole('dialog', { name: L.linkEdit });
     // The editor's 移除連結 is the only remove while it is open.
     expect(screen.getAllByRole('button', { name: L.linkRemove })).toEqual([within(sheet).getByRole('button', { name: L.linkRemove })]);
     fireEvent.keyDown(within(sheet).getByRole('textbox', { name: L.linkPlaceholder }), { key: 'Escape' });
-    await waitFor(() => expect(screen.queryByRole('group', { name: L.link })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     // Still picked, the card wears its ✕ again.
     expect(editorOf(story).state.selection.constructor.name).toBe('NodeSelection');
     expect(await screen.findByRole('button', { name: L.linkRemove })).toBeInTheDocument();
@@ -357,26 +383,29 @@ describe('the link tool', () => {
     await userEvent.click(await screen.findByRole('button', { name: L.insert }));
     // 插入連結, beside 插入圖片 · 插入卡片 (round 16 review S5).
     await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: L.insertLink }));
-    const sheet = await screen.findByRole('group', { name: L.link });
+    const sheet = await screen.findByRole('dialog', { name: L.insertLink });
     expect(within(sheet).getByRole('button', { name: L.linkAsCard })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('turns the keyboard bar into the link editor from its link glyph, and back on Escape', async () => {
+  it('opens the same dialog from the keyboard bar’s link glyph — its last tool, after its divider — and gives the story back on Escape', async () => {
     pointer(false);
     const onChange = vi.fn();
     renderWithIntl(<MarkdownEditor variant="canvas" value="A quiet morning" onChange={onChange} ariaLabel="Story" />);
     const story = await screen.findByRole('textbox', { name: 'Story' });
     act(() => void editorOf(story).chain().focus().setTextSelection({ from: 3, to: 8 }).run());
     const bar = await screen.findByRole('toolbar', { name: L.toolbarLabel });
+    const tools = within(bar).getAllByRole('button');
+    expect(tools[tools.length - 1]).toHaveAccessibleName(L.link);
+    expect(tools[tools.length - 1].previousElementSibling).toHaveAttribute('aria-hidden');
     await userEvent.click(within(bar).getByRole('button', { name: L.link }));
 
-    const sheet = await screen.findByRole('group', { name: L.link });
-    expect(screen.queryByRole('toolbar')).toBeNull();
+    const sheet = await screen.findByRole('dialog', { name: L.insertLink });
     const field = within(sheet).getByRole('textbox', { name: L.linkPlaceholder });
     await waitFor(() => expect(field).toHaveFocus());
     fireEvent.keyDown(field, { key: 'Escape' });
-    await waitFor(() => expect(screen.queryByRole('group', { name: L.link })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(onChange).not.toHaveBeenCalled();
+    await waitFor(() => expect(story).toHaveFocus());
     expect(await screen.findByRole('toolbar', { name: L.toolbarLabel })).toBeInTheDocument();
   });
 });

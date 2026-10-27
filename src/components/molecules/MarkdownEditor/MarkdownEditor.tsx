@@ -33,9 +33,8 @@ import { bubbleShows, FormatBubble } from './FormatBubble';
 import { InsertHandle } from './InsertHandle';
 import { KeyboardFormatBar } from './KeyboardFormatBar';
 import { HeldSelection, holdSelection } from './heldSelection';
-import { LinkBubble } from './LinkBubble';
 import { LinkCardActionContext, LinkCardNode, LinkEditorOpenContext } from './LinkCardNode';
-import type { LinkSession } from './LinkEditor';
+import { LinkEditor, type LinkSession } from './LinkEditor';
 import { ToolButton } from './ToolButton';
 import {
   activeFormats,
@@ -149,7 +148,7 @@ export function MarkdownEditor({
   const cardModalLoaded = useOpenedOnce(cardModalOpen);
   const [uploadingCount, setUploadingCount] = useState(0);
   const [imageError, setImageError] = useState<string | null>(null);
-  // The link editor (round 16 §6): its session while it is open, and a count of its openings.
+  // The link editor (round 17 §6.2: the house dialog): its session while it is open, and a count of its openings.
   const [linkSession, setLinkSession] = useState<LinkSession | null>(null);
   const [linkKey, setLinkKey] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -161,7 +160,7 @@ export function MarkdownEditor({
   // The canvas's tools follow the pointer, not the width: null until hydrated (neither is drawn).
   const fine = useMediaQuery(FINE_POINTER);
   const touchBar = canvas && fine === false;
-  const kbInset = useKeyboardInset(touchBar && (focus || linkSession != null));
+  const kbInset = useKeyboardInset(touchBar && focus);
   // The links' pen wave in the page's wave ink (editorProps are re-read on every render).
   const waveInk = useLinkWaveInk();
 
@@ -297,8 +296,8 @@ export function MarkdownEditor({
     const offerCard = canCard(state);
     const words = !state.selection.empty && !(state.selection instanceof NodeSelection);
     const display: LinkDisplay = current ? current.display : offerCard && !words ? 'card' : 'text';
-    // The selection bubble (and an empty line's "+") gives way to it, in its place; the words it links stay
-    // marked while its field has the focus.
+    // The selection bubble (and an empty line's "+") gives way to the dialog; the words it links stay marked
+    // while its field has the focus.
     const held = words ? { from: state.selection.from, to: state.selection.to } : null;
     editor.view.dispatch(holdSelection(state.tr.setMeta('formatBubble', 'hide').setMeta('insertHandle', 'hide'), held));
     setLinkSession({ href: current?.href ?? '', display: offerCard ? display : 'text', offerCard, editing: current != null });
@@ -426,15 +425,6 @@ export function MarkdownEditor({
         {fine === true && (
           <>
             <FormatBubble ref={bubbleRef} editor={editor} seed={seed} linkActive={linkActive} onLink={openLink} hidden={linkSession != null} />
-            <LinkBubble
-              editor={editor}
-              seed={seed}
-              session={linkSession}
-              sessionKey={linkKey}
-              onApply={applyLink}
-              onRemove={removeLink}
-              onCancel={cancelLink}
-            />
             <InsertHandle editor={editor} seed={seed} onInsertImage={pickImages} onInsertCard={pickCard} onInsertLink={openLink} />
           </>
         )}
@@ -449,9 +439,17 @@ export function MarkdownEditor({
             onInsertCard={pickCard}
             linkActive={linkActive}
             onLink={openLink}
-            link={linkSession ? { session: linkSession, key: linkKey, onApply: applyLink, onRemove: removeLink, onCancel: cancelLink } : null}
           />
         )}
+        {/* The link editor: the house dialog, for a fine pointer and a finger alike (round 17 §6.2). */}
+        <LinkEditor
+          session={linkSession}
+          sessionKey={linkKey}
+          seed={seed}
+          onApply={applyLink}
+          onRemove={removeLink}
+          onCancel={() => cancelLink(true)}
+        />
         {uploading && (
           <p className={styles.uploadingLine} role="status">
             <SketchLoader size={15} seed={seed} ariaLabel={t('imageUploading')} />
