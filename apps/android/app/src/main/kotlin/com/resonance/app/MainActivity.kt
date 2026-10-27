@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.toArgb
 import android.os.Build
 import android.graphics.drawable.ColorDrawable
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
@@ -140,6 +141,8 @@ class MainActivity : ComponentActivity() {
     }
 
     // Ctrl-N / Cmd-N on a hardware keyboard opens the writer, whatever has focus (a text field doesn't use the chord).
+    // Activity.dispatchKeyEvent is public; lint sees androidx.core's ComponentActivity override, marked @RestrictTo.
+    @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val chord = event.isCtrlPressed || event.isMetaPressed
         if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_N && chord && !event.isAltPressed && !event.isShiftPressed) {

@@ -236,6 +236,9 @@ object GrainShader {
         val t = TurbulenceLattice(seed)
         val w = TurbulenceLattice.N
         val halves = ShortArray(w * 5 * 4)
+        // Each short is a half's own bits, as RGBA_F16 reads them: lint types Kotlin's `halves[o] = …` as Unit
+        // and so reads the half as widened, which it never is.
+        @Suppress("HalfFloat")
         fun put(x: Int, y: Int, r: Float, g: Float) {
             val o = (y * w + x) * 4
             halves[o] = Half.toHalf(r)
