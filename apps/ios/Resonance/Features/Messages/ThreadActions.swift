@@ -265,7 +265,8 @@ private struct ReactionTray: View {
                 .accessibilityAddTraits(current == id ? .isSelected : [])
             }
         }
-        .padding(PressMetrics.trayPad)
+        .padding(.horizontal, PressMetrics.trayPad)
+        .padding(.vertical, PressMetrics.trayPadY)
         .frame(width: PressMetrics.trayWidth, height: PressMetrics.trayHeight)
         .background { PressSheetBackground(seed: 61) }
         .accessibilityElement(children: .contain)

@@ -166,8 +166,8 @@ struct DraftService: DraftStore {
 
     /// A card's stored `linkPreviews` (`[{ url, title, image? }]`), each with an address and a title.
     static func linkPreviews(_ value: Any?) -> [StoryEditorBridge.HostLinkPreview] {
-        (value as? [[String: Any]] ?? []).compactMap { entry in
-            guard let url = entry["url"] as? String, let title = entry["title"] as? String, !url.isEmpty, !title.isEmpty else { return nil }
+        (value as? [Any] ?? []).compactMap { item in
+            guard let entry = item as? [String: Any], let url = entry["url"] as? String, let title = entry["title"] as? String, !url.isEmpty, !title.isEmpty else { return nil }
             return StoryEditorBridge.HostLinkPreview(url: url, title: title, image: entry["image"] as? String)
         }
     }

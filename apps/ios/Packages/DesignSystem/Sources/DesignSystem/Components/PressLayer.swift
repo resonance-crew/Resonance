@@ -111,12 +111,13 @@ public struct PressSheetBackground: View {
 /// The press layer's measures (round 16 §3), the same on the web and Android.
 public nonisolated enum PressMetrics {
     public static let sheetRadius: Double = 26
-    /// The tray: 6 of paper round five 44 cells — 232 × 52; its stickers 32.
+    /// The tray: five 44 cells on the paper, 6 of it at the ends and 4 above and below — 232 × 52; its stickers 32.
     public static let trayPad: CGFloat = 6
+    public static let trayPadY: CGFloat = 4
     public static let trayCell: CGFloat = 44
     public static let traySticker: CGFloat = 32
     public static var trayWidth: CGFloat { trayCell * 5 + trayPad * 2 }
-    public static var trayHeight: CGFloat { trayCell + trayPad * 2 }
+    public static var trayHeight: CGFloat { trayCell + trayPadY * 2 }
     /// The tray 8 over the lifted message, the list 10 under it, both 12 from the window's edges.
     public static let trayGap: CGFloat = 8
     public static let listGap: CGFloat = 10

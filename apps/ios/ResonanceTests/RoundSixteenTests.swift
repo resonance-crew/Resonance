@@ -14,7 +14,7 @@ import Testing
         #expect(items.map { $0.glyph(selected: false) } == [.sparkle, .chat, .pen, .bell, .cards])
         // A 52 bar (it was 60), and a toast still 12 over it.
         #expect(OrganicTabBar<AppTab>.height == 52)
-        #expect(ToastPlacement.bottom(.compact, tabBar: true) == 52 + HeaderEdge.height + 12)
+        #expect(ToastPlacement.bottom(.compact, tabBar: true) == CGFloat(64) + HeaderEdge.height)
     }
 
     /// Steps the list down (or up) by `steps`, from where it is, and answers whether the bar is hidden after.
@@ -32,38 +32,50 @@ import Testing
         var rule = TabBarScroll()
         rule.scrolled(to: 0, limit: 5000)
         // 70 of scroll, all of it within the first 80: still shown.
-        #expect(!scroll(&rule, from: 0, by: [10, 10, 10, 10, 10, 10, 10]))
+        let r1 = scroll(&rule, from: 0, by: [10, 10, 10, 10, 10, 10, 10])
+        #expect(!r1)
         // Past 80, 23 more is not yet 24…
         var past = TabBarScroll()
         past.scrolled(to: 200, limit: 5000)
-        #expect(!scroll(&past, from: 200, by: [10, 10, 3]))
+        let r2 = scroll(&past, from: 200, by: [10, 10, 3])
+        #expect(!r2)
         // …one more is.
-        #expect(scroll(&past, from: 223, by: [1]))
+        let r3 = scroll(&past, from: 223, by: [1])
+        #expect(r3)
     }
 
     @Test func twelveBackUpBringsItBackAndAFlickerDoesNot() {
         var rule = TabBarScroll()
         rule.scrolled(to: 300, limit: 5000)
-        #expect(scroll(&rule, from: 300, by: [30]))
+        let r4 = scroll(&rule, from: 300, by: [30])
+        #expect(r4)
         // 11 up: still away; a step down again starts the count afresh.
-        #expect(scroll(&rule, from: 330, by: [-5, -6]))
-        #expect(scroll(&rule, from: 319, by: [2, -11]))
-        #expect(!scroll(&rule, from: 310, by: [-1]))
+        let r5 = scroll(&rule, from: 330, by: [-5, -6])
+        #expect(r5)
+        let r6 = scroll(&rule, from: 319, by: [2, -11])
+        #expect(r6)
+        let r7 = scroll(&rule, from: 310, by: [-1])
+        #expect(!r7)
     }
 
     @Test func theTopAndTheEndBringItBack() {
         var rule = TabBarScroll()
         rule.scrolled(to: 300, limit: 1000)
-        #expect(scroll(&rule, from: 300, by: [40], limit: 1000))
+        let r8 = scroll(&rule, from: 300, by: [40], limit: 1000)
+        #expect(r8)
         // The end of the list (nothing more to read): back.
-        #expect(!scroll(&rule, from: 340, by: [660], limit: 1000))
-        #expect(scroll(&rule, from: 1000, by: [-500, 40], limit: 1000))
+        let r9 = scroll(&rule, from: 340, by: [660], limit: 1000)
+        #expect(!r9)
+        let r10 = scroll(&rule, from: 1000, by: [-500, 40], limit: 1000)
+        #expect(r10)
         // The top (a status-bar tap's glide ends there): back.
-        #expect(!scroll(&rule, from: 540, by: [-540], limit: 1000))
+        let r11 = scroll(&rule, from: 540, by: [-540], limit: 1000)
+        #expect(!r11)
         // A list shorter than its screen never hides it.
         var short = TabBarScroll()
         short.scrolled(to: 0, limit: 0)
-        #expect(!short.scrolled(to: 0, limit: 0))
+        let stillShown = short.scrolled(to: 0, limit: 0)
+        #expect(!stillShown)
     }
 
     @Test func showingItAgainForgetsTheRun() {
@@ -87,15 +99,15 @@ import Testing
 
     @Test func theTrayIs232By52AndTheListGrowsByItsRows() {
         #expect(PressMetrics.trayWidth == 232 && PressMetrics.trayHeight == 52)
-        #expect(PressMetrics.listHeight(rows: 3, footer: true) == 3 * 44 + 6 + 32 + 12)
+        #expect(PressMetrics.listHeight(rows: 3, footer: true) == CGFloat(182))
     }
 
     @Test func aMessageWithRoomRoundItStaysWhereItIs() {
         let frame = CGRect(x: 60, y: 300, width: 200, height: 44)
         let place = PressPlacement.of(frame: frame, windowHeight: height, safeTop: top, safeBottom: bottom, tray: true, listHeight: list)
         #expect(place.shift == 0 && !place.clipped)
-        #expect(place.trayY == 300 - 8 - 52)
-        #expect(place.listY == 300 + 44 + 10)
+        #expect(place.trayY == CGFloat(240))
+        #expect(place.listY == CGFloat(354))
     }
 
     @Test func nearTheFootItGlidesUpJustEnoughForTheList() {
@@ -130,13 +142,13 @@ import Testing
 
     @Test func theSheetsLineUpWithTheMessagesSideInsideTheWindow() {
         let mine = CGRect(x: 180, y: 300, width: 200, height: 44)
-        #expect(PressPlacement.x(width: 232, frame: mine, mine: true, windowWidth: 402) == 380 - 232)
+        #expect(PressPlacement.x(width: 232, frame: mine, mine: true, windowWidth: 402) == CGFloat(148))
         let theirs = CGRect(x: 50, y: 300, width: 120, height: 44)
         #expect(PressPlacement.x(width: 232, frame: theirs, mine: false, windowWidth: 402) == 50)
         // Never closer than 12 to a side.
         let wide = CGRect(x: 4, y: 300, width: 396, height: 44)
         #expect(PressPlacement.x(width: 232, frame: wide, mine: false, windowWidth: 402) == 12)
-        #expect(PressPlacement.x(width: 232, frame: wide, mine: true, windowWidth: 402) == 402 - 12 - 232)
+        #expect(PressPlacement.x(width: 232, frame: wide, mine: true, windowWidth: 402) == CGFloat(158))
     }
 
     @Test func reactionsAreSummedInTheStickersOrderAndUnknownOnesAreLeftOut() {
@@ -200,5 +212,18 @@ import Testing
         let previews = DraftService.linkPreviews([["url": "https://example.com/rain", "title": "Rain", "image": "/api/link-image?u=x&s=y"],
                                                   ["url": "https://example.com/none"], "odd"])
         #expect(previews == [.init(url: "https://example.com/rain", title: "Rain", image: "/api/link-image?u=x&s=y")])
+    }
+}
+
+/// Round 16 §5's lock screen, in the app: an unsend's quiet replacement of its message's push (passive, the same
+/// collapse id) takes that push's place in Notification Center with no banner or sound while the app is open.
+@MainActor @Suite struct RoundSixteenUnsendPushTests {
+    @Test func aQuietReplacementOnlyTakesItsPlaceInTheList() {
+        let center = PushCenter()
+        center.signedIn = "alice"
+        let push: [AnyHashable: Any] = ["type": "message", "route": "/messages/bob", "fromUserId": "bob",
+                                        "conversationId": "alice_bob", "messageId": "m1"]
+        #expect(center.presentation(for: push, passive: true) == [.list])
+        #expect(center.presentation(for: push) == [.banner, .list, .sound])
     }
 }

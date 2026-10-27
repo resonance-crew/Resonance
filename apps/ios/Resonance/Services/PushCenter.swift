@@ -193,9 +193,12 @@ final class PushCenter {
     /// How a push that arrives while the app is open shows: a chat message of the conversation on
     /// screen (it is in the thread already), or one sent to another account, not at all; anything
     /// else as a banner, as it would with the app closed (the bell's row arrives at the same moment anyway).
-    func presentation(for info: [AnyHashable: Any]) -> UNNotificationPresentationOptions {
+    /// A quiet one (`passive`: an unsend's replacement of its message's push, round 16 §5, under the same
+    /// collapse id) only takes that push's place in Notification Center — no banner, no sound.
+    func presentation(for info: [AnyHashable: Any], passive: Bool = false) -> UNNotificationPresentationOptions {
         guard let chat = ChatPush(userInfo: info) else { return [.banner, .list, .sound] }
-        return chat.showsWhileOpen(viewing: viewingConversation, signedIn: signedIn) ? [.banner, .list, .sound] : []
+        guard chat.showsWhileOpen(viewing: viewingConversation, signedIn: signedIn) else { return [] }
+        return passive ? [.list] : [.banner, .list, .sound]
     }
 
     /// Takes a conversation's pushes out of Notification Center (grouped under its pair id; an
@@ -244,7 +247,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     /// In the foreground a push still shows (`PushCenter.presentation`), except a message of the conversation on screen.
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        PushCenter.shared.presentation(for: notification.request.content.userInfo)
+        PushCenter.shared.presentation(for: notification.request.content.userInfo,
+                                       passive: notification.request.content.interruptionLevel == .passive)
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
