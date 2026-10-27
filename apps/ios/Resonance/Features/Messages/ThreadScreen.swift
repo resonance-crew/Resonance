@@ -721,14 +721,18 @@ struct ThreadScreen: View {
         date.formatted(Date.FormatStyle(locale: locale(language)).month(.wide).day())
     }
 
-    /// The time label inside a day: 下午 3:04 / 3:04 PM.
+    /// A time of day, one way wherever the chat shows one (review F5 / N7: the list, the labels between
+    /// messages, a search's results and a held message's foot once said 下午05:51, 下午 5:51 and
+    /// 下午05:51 in one conversation): the hour without a leading zero — 下午3:04 / 3:04 PM — as the web's
+    /// `timeOfDay` (lib/chat/time) and Android write it.
     static func time(_ date: Date, language: Strings.Language = Strings.shared.language) -> String {
-        formatted(date, language == .zhTW ? "a h:mm" : "h:mm a", language)
+        formatted(date, language == .zhTW ? "ah:mm" : "h:mm a", language)
     }
 
-    /// The full time a long-press shows (the web's hover title): 9月29日 下午03:04 / September 29 at 03:04 PM.
+    /// The full time a long-press shows (the web's hover title), its time of day as ``time(_:language:)``:
+    /// 9月29日 下午3:04 / September 29 at 3:04 PM.
     static func full(_ date: Date, language: Strings.Language = Strings.shared.language) -> String {
-        formatted(date, language == .zhTW ? "M月d日 ahh:mm" : "MMMM d 'at' hh:mm a", language)
+        formatted(date, language == .zhTW ? "M月d日 ah:mm" : "MMMM d 'at' h:mm a", language)
     }
 
     /// When a search result was written: the time today, the day this year, the day and year before.
