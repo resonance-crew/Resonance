@@ -75,6 +75,22 @@ final class ThoughtMapStore {
     /// then (the session keeps this store between visits: see `open`).
     @ObservationIgnored private var readAt: Date?
     @ObservationIgnored private var seenChanges = 0
+    /// Every read begun, numbered; the latest of the whole board (`load`) and of all my cards (`load`,
+    /// `refreshCards()`); and of each card read on its own (`refreshCards(_:)`). The cards change under
+    /// reads on their way — a card moved to the trash and restored a moment later is read twice — and an
+    /// answer a newer read of the same cards took over never puts back what was before it (the card
+    /// box's ShelfReads).
+    @ObservationIgnored private var reads = 0
+    @ObservationIgnored private var boardRead = 0
+    @ObservationIgnored private var allCardsRead = 0
+    @ObservationIgnored private var cardRead: [String: Int] = [:]
+    /// How long the map's first read may keep it on its loader: past it, the map says it couldn't read and
+    /// offers 再試一次 (a read Firestore never answers — a stream stuck reconnecting — has no end of its
+    /// own). The read still shows the map should it answer, unless 再試一次 started a newer one.
+    @ObservationIgnored var firstReadPatience: Duration = .seconds(10)
+    /// The whole board as a read finds it, and one card as it is now (the map's reads, apart for tests).
+    @ObservationIgnored var readBoard: (ThoughtMapService) async throws -> Board = { try await ThoughtMapStore.read($0) }
+    @ObservationIgnored var readCard: (ThoughtMapService, String) async throws -> MapCard? = { try await $0.card($1) }
 
     init(api: ReadingAPI) {
         summaries = { try await api.cards(keys: $0) }
@@ -145,23 +161,73 @@ final class ThoughtMapStore {
 
     // MARK: - Loading
 
+    /// What a read of the whole board found: the map, my cards and the originals I resonated with.
+    struct Board {
+        var map: ThoughtMapService.Loaded
+        var cards: [String: MapCard]
+        var resonated: Set<String>
+    }
+
+    static func read(_ service: ThoughtMapService) async throws -> Board {
+        async let map = service.load()
+        async let cardSet = service.cards()
+        let (m, c) = try await (map, cardSet)
+        var byId = c.cards
+        // A placed card older than the newest 40 is still on the map: read it by id.
+        let missing = m.nodes.map(\.cardId).filter { byId[$0] == nil }
+        for card in await service.cards(ids: missing) { byId[card.id] = card }
+        return Board(map: m, cards: byId, resonated: c.resonated)
+    }
+
+    /// Reads the whole board (再試一次 too, which shows the loader again). Only the latest read's answer
+    /// is shown; a first read with no answer past `firstReadPatience` says so (再試一次).
     func load(uid: String) async {
         let service = ThoughtMapService(uid: uid, summaries: summaries)
         self.service = service
+        let earlier = (board: boardRead, all: allCardsRead)
+        let read = begin()
+        boardRead = read
+        allCardsRead = read
+        failed = false
         let started = Date.now
+        let patience = Task { [weak self, wait = firstReadPatience] in
+            try? await Task.sleep(for: wait)
+            guard !Task.isCancelled, let self, !self.loaded, self.boardRead == read else { return }
+            self.failed = true
+        }
+        defer { patience.cancel() }
         do {
-            async let map = service.load()
-            async let cardSet = service.cards()
-            let (m, c) = try await (map, cardSet)
-            var byId = c.cards
-            // A placed card older than the newest 40 is still on the map: read it by id.
-            let missing = m.nodes.map(\.cardId).filter { byId[$0] == nil }
-            for card in await service.cards(ids: missing) { byId[card.id] = card }
-            show(m, cards: byId, resonated: c.resonated)
+            let board = try await readBoard(service)
+            guard boardRead == read else { return }
+            let (byId, resonated) = merged(board.cards, resonated: board.resonated, read: read, ids: nil)
+            show(board.map, cards: byId, resonated: resonated)
             readAt = started
         } catch {
+            // Failed: an earlier read still on its way may answer in its place.
+            if allCardsRead == read { allCardsRead = earlier.all }
+            guard boardRead == read else { return }
+            boardRead = earlier.board
             failed = !loaded
         }
+    }
+
+    private func begin() -> Int {
+        reads += 1
+        return reads
+    }
+
+    /// The cards shown with read `read`'s `answer` laid over them — every card (`ids` nil: absent from the
+    /// answer, gone) or just `ids` — except a card a newer read has begun for since, which stays as it is
+    /// until that read's answer.
+    private func merged(_ answer: [String: MapCard], resonated others: Set<String>, read: Int,
+                        ids: [String]?) -> ([String: MapCard], Set<String>) {
+        var byId = cards
+        var resonated = resonated
+        for id in ids ?? Array(Set(cards.keys).union(answer.keys)) where max(allCardsRead, cardRead[id] ?? 0) <= read {
+            byId[id] = answer[id]
+            if others.contains(id) { resonated.insert(id) } else { resonated.remove(id) }
+        }
+        return (byId, resonated)
     }
 
     /// The board as a read found it, shown — framed while the camera still frames everything, so a read
@@ -194,11 +260,19 @@ final class ThoughtMapStore {
     /// Titles and tags may have changed in the writer: refresh the cards, keep the map — a card that
     /// went (the trash) out of view, one that came back (a restore) where it was.
     func refreshCards() async {
-        guard let service, let c = try? await service.cards() else { return }
+        guard let service else { return }
+        let earlier = allCardsRead
+        let read = begin()
+        allCardsRead = read
+        guard let c = try? await service.cards() else {
+            if allCardsRead == read { allCardsRead = earlier }
+            return
+        }
         var byId = c.cards
         let missing = (nodeOrder + parked.keys.sorted()).filter { byId[$0] == nil }
         for card in await service.cards(ids: missing) { byId[card.id] = card }
-        applyCards(byId, resonated: c.resonated)
+        let (shown, resonated) = merged(byId, resonated: c.resonated, read: read, ids: nil)
+        applyCards(shown, resonated: resonated)
         parkGoneNodes()
     }
 
@@ -219,23 +293,30 @@ final class ThoughtMapStore {
     /// Just these cards, as they are now: one that's gone (deleted, in the trash, or an original I
     /// can no longer read) drops out of view, as a fresh load would leave it, its place kept; one that
     /// came back takes its place again; one that couldn't be read for now stays as it was.
+    /// Laid over the cards as they are when it answers, not as they were when it began: the trash's read of
+    /// a card landing after its restore's leaves the card back on the map.
     func refreshCards(_ ids: [String]) async {
         guard let service else { return }
-        var byId = cards
-        var resonated = resonated
+        let read = begin()
+        let earlier = Dictionary(ids.map { ($0, cardRead[$0]) }, uniquingKeysWith: { first, _ in first })
+        for id in ids { cardRead[id] = read }
+        var answer: [String: MapCard] = [:]
+        var others: Set<String> = []
+        var answered: [String] = []
         for id in ids {
-            let read: MapCard?
-            do { read = try await service.card(id) } catch { continue }
-            if let card = read {
-                byId[id] = card
+            let found: MapCard?
+            do { found = try await readCard(service, id) } catch { continue }
+            answered.append(id)
+            if let card = found {
+                answer[id] = card
                 // Someone else's: the original of my resonance.
-                if card.authorId != service.uid { resonated.insert(id) }
-            } else {
-                byId[id] = nil
-                resonated.remove(id)
+                if card.authorId != service.uid { others.insert(id) }
             }
         }
-        applyCards(byId, resonated: resonated)
+        // One that couldn't be read for now stays as it was, and an earlier read of it may still answer for it.
+        for id in Set(ids).subtracting(answered) where cardRead[id] == read { cardRead[id] = earlier[id] ?? nil }
+        let (shown, resonated) = merged(answer, resonated: others, read: read, ids: answered)
+        applyCards(shown, resonated: resonated)
         parkGoneNodes()
     }
 
