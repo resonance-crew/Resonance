@@ -16,6 +16,7 @@ import java.io.File
 import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -319,9 +320,18 @@ class StoryParserTest {
     }
 
     @Test fun aStandaloneLinkKeepsItsWordsForWhenThereIsNoPreview() {
-        val block = StoryParser.parse("前一段。\n\n[一篇好文章](https://blog.example.com/post/42)\n\n後一段。")[1]
+        // Round 16 §6: alone on its line, a link is a card only when its words are its address — written as the
+        // address with a trailing slash too — and keeps those words for when there is no preview.
+        val block = StoryParser.parse("前一段。\n\n[https://blog.example.com/post/42/](https://blog.example.com/post/42)\n\n後一段。")[1]
         assertIs<StoryBlock.SoleLink>(block)
-        assertEquals(listOf(InlineRun("一篇好文章", link = "https://blog.example.com/post/42")), runsOf(block))
+        assertEquals(listOf(InlineRun("https://blog.example.com/post/42/", link = "https://blog.example.com/post/42")), runsOf(block))
+        // A link the writer gave words of its own reads as those words: a paragraph with its link, no card.
+        val worded = StoryParser.parse("前一段。\n\n[一篇好文章](https://blog.example.com/post/42)\n\n後一段。")[1]
+        assertEquals(StoryBlock.Paragraph(listOf(InlineRun("一篇好文章", link = "https://blog.example.com/post/42"))), worded)
+        assertTrue(StoryLinks.wordsAreTheAddress("www.example.com", "http://www.example.com"))
+        assertTrue(StoryLinks.wordsAreTheAddress(" https://example.com/a/ ", "https://example.com/a"))
+        assertFalse(StoryLinks.wordsAreTheAddress("example.com/c", "https://example.com/c"))
+        assertFalse(StoryLinks.wordsAreTheAddress("https://elsewhere.example.com", "https://example.com/real"))
         // A bare one, with no preview, is still a link to tap (and to TalkBack), as on the web.
         val bare = StoryParser.parse("https://no-such-host.invalid/page").single()
         assertEquals(

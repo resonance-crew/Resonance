@@ -12,7 +12,9 @@ import com.resonance.api.models.LinkPreview as ApiLinkPreview
  * story-link rule; native/fixtures/story-link-cards.json is the agreement between them.
  *
  * A paragraph is a standalone link when its only meaningful child is
- *  - an http(s) link (`[text](url)`, `<url>`, a resolved reference link) with no picture inside, or
+ *  - an http(s) link (`[text](url)`, `<url>`, a resolved reference link) with no picture inside, whose
+ *    words are its own address ([wordsAreTheAddress], round 16 §6: a link with words of its own reads
+ *    as those words), or
  *  - a run of plain text that is, trimmed, exactly one link ([Linkify.find]) from end to end.
  *
  * Its key is the URL as the server writes it — `new URL(link).href`, the WHATWG URL serializer —
@@ -27,6 +29,22 @@ object StoryLinks {
         if (!HTTP.containsMatchIn(href)) return null
         return key(href)
     }
+
+    /**
+     * Whether a link's words are its own address (round 16 §6, the web's `wordsAreTheAddress`): the
+     * writer's way of saying "show the page" rather than "read my words" — the words, trimmed, are one
+     * address the link rules take ([Linkify.normalize]) naming the same page as [href], once `http(s)://`
+     * and one trailing `/` are set aside on both (`<url>`, `[url](url)`, `[www.x.com](http://www.x.com)`).
+     * A link with words of its own reads as those words, alone on its line or not.
+     */
+    fun wordsAreTheAddress(words: String, href: String): Boolean {
+        val said = Linkify.normalize(words.trim()) ?: return false
+        val target = Linkify.normalize(href) ?: return false
+        return bareAddress(said) == bareAddress(target)
+    }
+
+    /** An address with its scheme and one trailing slash set aside (how a link's words are matched to its href). */
+    private fun bareAddress(url: String): String = url.replaceFirst(Regex("^https?://", RegexOption.IGNORE_CASE), "").removeSuffix("/")
 
     /** The key of a run of plain text that is one link and nothing else (trimmed), or null. */
     fun bareKey(text: String): String? {
