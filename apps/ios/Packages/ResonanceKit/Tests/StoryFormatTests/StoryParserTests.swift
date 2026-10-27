@@ -182,6 +182,16 @@ import Testing
         #expect(!StoryNesting.tooDeep("- a\n  - b\n    - c"))
     }
 
+    @Test func onlyTheSitesPicturesAreDrawnAnyOtherIsALink() {
+        StoryPictures.$scopedSite.withValue("resonance.channel") {
+        #expect(StoryParser.parse("![ours](https://img.resonance.channel/a.webp)") == [.image(url: "https://img.resonance.channel/a.webp", alt: "ours")])
+        #expect(StoryParser.parse("![](/api/emulator-storage/x.webp)") == [.image(url: "/api/emulator-storage/x.webp", alt: "")])
+        for elsewhere in ["https://pictures.example.invalid/p.png", "https://img.resonance.channel.example.invalid/p.png", "https://img.resonance.channel@pictures.example.invalid/p.png"] {
+            #expect(StoryParser.parse("![那裡](\(elsewhere))") == [.paragraph([InlineRun("那裡", link: elsewhere)])])
+        }
+        }
+    }
+
     @Test func aParagraphOfDelimitersThatNeverPairIsReadAsItsWords() {
         // `**` opened hundreds deep nests the parser as deep (a background thread's stack ran out at
         // 250 levels): past the paragraph's delimiter limit the story is its words, unparsed.
@@ -216,6 +226,13 @@ import Testing
         #expect(!StoryNesting.tooComplex(Array(repeating: few, count: 6).joined(separator: "\n")))
         #expect(!StoryNesting.tooComplex(String(repeating: "> 一\r\n> > 二\r\n\r\n**粗體** 與 *斜體*\r\n\r\n", count: 2_000)))
         #expect(!StoryNesting.tooComplex(String(repeating: String(repeating: "一行詩\n", count: 400) + "---\n", count: 6)))
+        // Only what CommonMark reads as a fence hides its inside, and a fence ends with its container.
+        let big = "|" + String(repeating: "a|", count: 1_000) + "\n|" + String(repeating: "-|", count: 1_000) + "\n" + String(repeating: "a\n", count: 1_000)
+        for before in ["    ```\n\n", "```a`\n\n", "> ```\n\n", "- ```\n  code\nx\n\n"] { #expect(StoryNesting.tooComplex(before + big)) }
+        #expect(StoryNesting.tooComplex("    ```\n\n" + Array(repeating: String(repeating: "*a ", count: 2_000), count: 30).joined(separator: "\n\n")))
+        #expect(!StoryNesting.tooComplex("- 步驟\n\n  ```js\n" + String(repeating: "  const snake_case = a_b * c_d;\n", count: 200) + "  ```\n\n- 下一步"))
+        #expect(!StoryNesting.tooComplex("> ```\n" + String(repeating: "> snake_case_name = __dunder__\n", count: 200) + "> ```"))
+        #expect(!StoryNesting.tooComplex("~~~\n" + String(repeating: "a_b_c * d\n", count: 200) + "~~~\n\n````md\n```\n" + String(repeating: "x_y * z\n", count: 200) + "````"))
         // Many paragraphs near the limit add up.
         let many = Array(repeating: String(repeating: "*a ", count: StoryNesting.paragraphDelimiters - 10), count: 40).joined(separator: "\n\n")
         #expect(StoryNesting.tooComplex(many))

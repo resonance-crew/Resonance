@@ -28,7 +28,15 @@ export function onAnonymousCard(n: Bell): boolean {
 export function bellHref(n: Bell): BellHref | null {
   const handle = str(n.payload.fromHandle);
   const cardId = str(n.payload.cardId);
+  // The pen name the row was written with, and whose it was: a name released (a rename, a deleted account) can be
+  // taken by someone else, and the thread then finds its sender by id (ThreadView), as the apps' do.
+  const from = str(n.payload.fromUserId);
   const thread = handle ? (`/messages/${handle}` as const) : null;
+  const withFrom = (params: Record<string, string>): BellHref | null => {
+    if (!thread) return null;
+    const q = new URLSearchParams({ ...params, ...(from ? { u: from } : {}) }).toString();
+    return q ? `${thread}?${q}` : thread;
+  };
   if (onAnonymousCard(n)) return cardId ? `/card/${cardId}` : null;
   switch (n.type) {
     case 'invite':
@@ -36,11 +44,10 @@ export function bellHref(n: Bell): BellHref | null {
     case 'invite_accepted':
     case 'message':
     case 'resonance':
-      return thread;
+      return withFrom({});
     case 'note': {
       const noteId = str(n.payload.noteId);
-      if (!thread || !noteId || !cardId) return thread;
-      return `${thread}?${new URLSearchParams({ note: noteId, card: cardId }).toString()}`;
+      return withFrom(noteId && cardId ? { note: noteId, card: cardId } : {});
     }
     case 'translation_done':
     case 'card_link':

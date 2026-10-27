@@ -669,7 +669,7 @@ describe('its pictures', () => {
           card: {
             ...s.view!.card,
             media: { type: 'image', url: 'https://img.test/cover.avif', label: 'The kettle' },
-            story: `${STORY}\n\n![A street at dawn](https://img.test/street.avif)`,
+            story: `${STORY}\n\n![A street at dawn](https://img.resonance.channel/street.avif)`,
           },
           author: { ...s.view!.author!, avatarUrl: 'https://img.test/author.avif' },
         },

@@ -696,6 +696,20 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // --- pen-name holds (server-only) ---
+    // A released pen name, held for HANDLE_HOLD_DAYS (lib/db/firestore/handles):
+    // for its former holder after a rename, for no one after the purge.
+    match /handleHolds/{name} {
+      allow read, write: if false;
+    }
+
+    // --- retired slugs (server-only) ---
+    // The slugs of cards deleted for good, written beside their tombstones:
+    // assignSlug gives none of them to a new card. Never whose card it was.
+    match /retiredSlugs/{slug} {
+      allow read, write: if false;
+    }
+
     // --- uploads (server-only) ---
     // Whose each stored picture is (keyed by its storage key's file name):
     // the keys themselves name no one, so an anonymous card's cover can't

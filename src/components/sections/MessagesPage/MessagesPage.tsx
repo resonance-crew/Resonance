@@ -23,6 +23,8 @@ export interface MessagesPageProps {
   activeHandle?: string;
   /** A note being replied to (from the note notification's「回覆」exit). */
   replyNote?: { noteId: string; cardId: string };
+  /** Whose thread the link meant, by id (a bell row's): see ThreadView. */
+  userId?: string;
 }
 
 /**
@@ -34,7 +36,7 @@ export interface MessagesPageProps {
  * bar is drawn and shows only while wanted (pointed at, scrolling); at rest its
  * edges fade where more is.
  */
-export function MessagesPage({ activeHandle, replyNote }: MessagesPageProps) {
+export function MessagesPage({ activeHandle, replyNote, userId }: MessagesPageProps) {
   const t = useTranslations('messages');
   const locale = useLocale();
   const router = useRouter();
@@ -68,7 +70,7 @@ export function MessagesPage({ activeHandle, replyNote }: MessagesPageProps) {
     return (
       <Link
         key={person.id}
-        href={`/messages/${person.handle}`}
+        href={`/messages/${person.handle}?u=${encodeURIComponent(person.id)}`}
         className={styles.row}
         data-active={person.handle === activeHandle || undefined}
       >
@@ -133,7 +135,7 @@ export function MessagesPage({ activeHandle, replyNote }: MessagesPageProps) {
 
       <section className={styles.threadPane}>
         {activeHandle ? (
-          <ThreadView key={activeHandle} handle={activeHandle} replyNote={replyNote} />
+          <ThreadView key={activeHandle} handle={activeHandle} replyNote={replyNote} userId={userId} />
         ) : empty ? (
           <EmptyState fills icon="chat" seed={23} title={t('emptyTitle')} line={t('empty')} />
         ) : data ? (

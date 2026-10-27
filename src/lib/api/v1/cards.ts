@@ -1,7 +1,7 @@
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { ANONYMOUS_VISIBILITY_MESSAGE, anonymousForConnections, editedAudience } from '@/lib/db/firestore/cardContent';
 import { mapCard } from '@/lib/db/firestore/mapper';
-import { TOMBSTONE, tombstoneRef } from '@/lib/db/firestore/tombstones';
+import { RETIRED_SLUG, TOMBSTONE, retirable, retiredSlugRef, tombstoneRef } from '@/lib/db/firestore/tombstones';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
 import { getVectorStore, type IVectorStore } from '@/lib/recommend/vectorStore';
 import { cardPagePaths, landingPagePaths } from '@/lib/api/revalidate';
@@ -189,6 +189,8 @@ export async function deleteCard(db: Firestore, uid: string, id: string, opts: D
     // one is nothing; once the card is gone the rules take no new one.
     tx.delete(db.doc(`cards/${id}/edits/current`));
     tx.set(tombstoneRef(db, id), TOMBSTONE);
+    const slug = snap.get('slug');
+    if (retirable(slug)) tx.set(retiredSlugRef(db, slug), RETIRED_SLUG);
     return snap.data()!;
   });
   if (!data) return { stale: [], deleted: false };

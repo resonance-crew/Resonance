@@ -32,7 +32,7 @@ vi.mock('react-markdown', async (importOriginal) => {
 describe('StoryMarkdown', () => {
   it('gives a photo its own block, so it never runs into the sentence above', () => {
     renderWithIntl(
-      <StoryMarkdown source={'On the last day it rained.\n\n![postbox](https://cdn/x.webp)\n\nI ran.'} />
+      <StoryMarkdown source={'On the last day it rained.\n\n![postbox](https://img.resonance.channel/x.webp)\n\nI ran.'} />
     );
     const img = screen.getByAltText('postbox');
     // Out of the paragraph flow entirely: the block owns the spacing, so the
@@ -110,6 +110,33 @@ describe('StoryMarkdown', () => {
 // A story is set by src/styles/story.css, which the writer and the apps' editor share:
 // the root says how (its script, its density) and in which language its words are,
 // and its blocks carry the hooks the shared rules space and set.
+describe('StoryMarkdown pictures', () => {
+  it("draws only our own pictures: one elsewhere is a link the reader opens, never a fetch on opening the story", () => {
+    renderWithIntl(
+      <StoryMarkdown
+        source={[
+          '![ours](https://img.resonance.channel/covers/a.webp)',
+          '![written in](data:image/png;base64,iVBORw0KGgo=)',
+          '![a path](/api/emulator-storage/x.webp)',
+          '![elsewhere](https://pictures.example.invalid/p.png)',
+          '![](https://img.resonance.channel.example.invalid/p.png)',
+          '![dressed up](https://img.resonance.channel@pictures.example.invalid/p.png)',
+        ].join('\n\n')}
+      />,
+    );
+    expect(screen.getByAltText('ours')).toHaveAttribute('src', 'https://img.resonance.channel/covers/a.webp');
+    expect(screen.getByAltText('written in')).toBeInTheDocument();
+    expect(screen.getByAltText('a path')).toBeInTheDocument();
+    for (const name of ['elsewhere', 'https://img.resonance.channel.example.invalid/p.png', 'dressed up']) {
+      expect(screen.queryByAltText(name)).toBeNull();
+      const link = screen.getByRole('link', { name });
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link.getAttribute('rel')).toContain('noreferrer');
+    }
+    expect(document.querySelectorAll('img')).toHaveLength(3);
+  });
+});
+
 describe('StoryMarkdown type', () => {
   const root = (container: HTMLElement) => container.querySelector('.story-prose')!;
 
@@ -137,7 +164,7 @@ describe('StoryMarkdown type', () => {
   it('marks its links, pictures and cards for the shared rules', () => {
     const { container } = renderWithIntl(
       <StoryLinkPreviewsContext.Provider value={[previewOf('https://example.com/rain')]}>
-        <StoryMarkdown source={'see [here](https://example.com/a)\n\n![postbox](https://cdn/x.webp)\n\n[A card](/card/a-quiet-night)\n\nhttps://example.com/rain'} />
+        <StoryMarkdown source={'see [here](https://example.com/a)\n\n![postbox](https://img.resonance.channel/x.webp)\n\n[A card](/card/a-quiet-night)\n\nhttps://example.com/rain'} />
       </StoryLinkPreviewsContext.Provider>,
     );
     expect(screen.getByRole('link', { name: 'here' })).toHaveClass('story-link');

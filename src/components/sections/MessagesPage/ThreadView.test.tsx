@@ -15,17 +15,19 @@ vi.mock('@/components/providers/AuthProvider', () => ({
   useSessionReady: () => mockUseAuth().sessionReady ?? false,
 }));
 const mockPush = vi.fn();
+const mockReplace = vi.fn();
 vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
     <a href={href} {...rest}>
       {children}
     </a>
   ),
-  useRouter: () => ({ push: mockPush, replace: vi.fn() }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
 }));
 vi.mock('@/lib/db/firestore/client/api', () => ({ callApi: vi.fn(), ApiError: class extends Error {} }));
 vi.mock('@/lib/db/firestore/client/reads', () => ({
   getUserByHandle: vi.fn(),
+  getUsersByIds: vi.fn(async () => ({})),
   isConnected: vi.fn(async () => true),
   getCardById: vi.fn(),
   getCardBySlugOrId: vi.fn(),
@@ -67,7 +69,7 @@ const settle = (ms: number) => act(() => new Promise<void>((resolve) => setTimeo
 vi.mock('@/components/molecules/MarkdownEditor/InsertCardModal', () => ({ InsertCardModal: () => null }));
 
 import { callApi } from '@/lib/db/firestore/client/api';
-import { getCardById, getCardBySlugOrId, getUserByHandle, getUserById, isConnected } from '@/lib/db/firestore/client/reads';
+import { getCardById, getCardBySlugOrId, getUserByHandle, getUserById, getUsersByIds, isConnected } from '@/lib/db/firestore/client/reads';
 import { getConversation, getOlderMessages, sendMessage } from '@/lib/db/firestore/client/messages';
 import { blockUser, getMyBlockedIds, unblockUser } from '@/lib/db/firestore/client/blocks';
 import { forgetOutboxes } from '@/lib/data/thread';
@@ -144,6 +146,44 @@ afterEach(() => {
   vi.clearAllMocks();
   forgetOutboxes();
   server.messages = [];
+});
+
+describe('a pen name that has passed to someone else', () => {
+  const render = (userId: string) =>
+    renderWithIntl(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <ThreadView handle="alice" userId={userId} replyNote={{ noteId: 'n1', cardId: 'c1' }} />
+      </SWRConfig>,
+    );
+
+  it("goes to the one the bell meant, under the pen name they hold now, never opening the new holder's thread", async () => {
+    vi.mocked(getUsersByIds).mockResolvedValue({ formerAlice: { ...alice, id: 'formerAlice', handle: 'alice2' } });
+    render('formerAlice');
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/messages/alice2?note=n1&card=c1&u=formerAlice'));
+    expect(getConversation).not.toHaveBeenCalled();
+    expect(screen.queryByRole('textbox')).toBeNull();
+  });
+
+  it('says they are gone when the one meant no longer exists', async () => {
+    vi.mocked(getUsersByIds).mockResolvedValue({});
+    render('goneUser');
+    expect(await screen.findByText("This person doesn't exist")).toBeInTheDocument();
+    expect(getConversation).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('follows them to their pen name now when nobody holds the old one', async () => {
+    vi.mocked(getUserByHandle).mockResolvedValue(null);
+    vi.mocked(getUsersByIds).mockResolvedValue({ formerAlice: { ...alice, id: 'formerAlice', handle: 'alice2' } });
+    render('formerAlice');
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/messages/alice2?note=n1&card=c1&u=formerAlice'));
+  });
+
+  it('opens the thread as ever when the pen name is still theirs', async () => {
+    render(alice.id);
+    await waitFor(() => expect(getConversation).toHaveBeenCalled());
+    expect(getUsersByIds).not.toHaveBeenCalled();
+  });
 });
 
 describe('cards shared in a thread', () => {

@@ -41,6 +41,9 @@ describe('securityHeaders', () => {
   it('leave no image optimizer for anyone to drive (/_next/image answers 404)', async () => {
     const { default: config } = await import('../../../next.config');
     expect(config.images?.unoptimized).toBe(true);
+    expect(config.images?.localPatterns).toEqual([{ pathname: '/_next/static/media/**', search: '' }]);
+    expect(config.images?.remotePatterns).toEqual([]);
+    expect(config.images?.qualities).toEqual([75]);
   });
 });
 

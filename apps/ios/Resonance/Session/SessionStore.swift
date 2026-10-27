@@ -117,6 +117,8 @@ final class SessionStore {
     init(config: AppConfig) {
         self.config = config
         let configuration = APIConfiguration(origin: config.origin, idToken: { force in try await Self.idToken(forceRefresh: force) })
+        // Story pictures are drawn from this site's hosts only; any other is a link (StoryPictures).
+        StoryPictures.siteHost = config.origin.host(percentEncoded: false)?.lowercased()
         let client = ResonanceClient.make(configuration, cache: httpCache)
         api = client
         outboxes = ChatOutboxes(messaging: { MessagingAPI(client: client) }, sent: { PushCenter.shared.reachedOut() })

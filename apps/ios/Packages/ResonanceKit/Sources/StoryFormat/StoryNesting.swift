@@ -30,7 +30,8 @@ public nonisolated enum StoryNesting {
     }
 
     /// Counts each paragraph's inline delimiters after its lines' quote and list markers, skipping
-    /// fenced code (one pass over the bytes).
+    /// fenced code (opened as CommonMark opens one, and closed early when its container ends), and
+    /// every line's table cells, fenced or not (one pass over the bytes).
     public static func tooManyDelimiters(_ story: String) -> Bool {
         let bytes = Array(story.utf8)
         let n = bytes.count
@@ -40,13 +41,24 @@ public nonisolated enum StoryNesting {
         func isDelimiter(_ c: UInt8) -> Bool { c == 0x2A || c == 0x5F || c == 0x7E || c == 0x60 || c == 0x5B || c == 0x5D }
         // | : - > space tab
         func isDelimiterRowChar(_ c: UInt8) -> Bool { c == 0x7C || c == 0x3A || c == 0x2D || c == 0x3E || c == 0x20 || c == 0x09 }
+        func run(_ from: Int, _ to: Int, _ c: UInt8) -> Int {
+            var k = from
+            while k < to, bytes[k] == c { k += 1 }
+            return k - from
+        }
+        func holds(_ from: Int, _ to: Int, _ c: UInt8) -> Bool { from < to && bytes[from..<to].contains(c) }
+        func onlySpace(_ from: Int, _ to: Int) -> Bool { from >= to || bytes[from..<to].allSatisfy(isSpace) }
         var paragraph = 0
         var load = 0
         var columns = 0
         var rows = 0
         var table = false
         var cells = 0
+        // While inside a fenced code block: its byte, run length, quotes and column.
         var fence: UInt8 = 0
+        var fenceLength = 0
+        var fenceQuotes = 0
+        var fenceColumn = 0
         func endParagraph() -> Bool {
             load += paragraph * paragraph
             if table { cells += (columns + 1) * rows }
@@ -59,19 +71,32 @@ public nonisolated enum StoryNesting {
         var i = 0
         while i < n {
             var depth = 0
+            var quotes = 0
+            var lead = 0
+            var column = 0
             prefix: while true {
-                while i < n, isSpace(bytes[i]) { i += 1 }
+                lead = 0
+                while i < n, isSpace(bytes[i]) {
+                    let w = bytes[i] == 0x09 ? 4 : 1
+                    lead += w
+                    column += w
+                    i += 1
+                }
                 guard i < n else { break }
                 switch bytes[i] {
                 case UInt8(ascii: ">"):
                     i += 1
+                    column += 1
+                    quotes += 1
                 case UInt8(ascii: "-"), UInt8(ascii: "*"), UInt8(ascii: "+"):
                     guard i + 1 < n, isSpace(bytes[i + 1]) else { break prefix }
                     i += 2
+                    column += 2
                 case UInt8(ascii: "0")...UInt8(ascii: "9"):
                     var j = i
                     while j < n, j - i < 9, isDigit(bytes[j]) { j += 1 }
                     guard j + 1 < n, bytes[j] == UInt8(ascii: ".") || bytes[j] == UInt8(ascii: ")"), isSpace(bytes[j + 1]) else { break prefix }
+                    column += j + 2 - i
                     i = j + 2
                 default:
                     break prefix
@@ -82,32 +107,52 @@ public nonisolated enum StoryNesting {
             while i < n, !isLineEnd(bytes[i]) { i += 1 }
             let end = i
             i += i + 1 < n && bytes[i] == 0x0D && bytes[i + 1] == 0x0A ? 2 : 1
-            if start == end {
+            if start == end, depth == 0 {
                 // A blank line ends the paragraph.
-                if depth == 0, endParagraph() { return true }
-                continue
-            }
-            let first = bytes[start]
-            if first == UInt8(ascii: "`") || first == UInt8(ascii: "~"), start + 2 < n, bytes[start + 1] == first, bytes[start + 2] == first {
-                // A code fence opens or closes: what is inside is never read inline.
-                if fence == 0 { fence = first } else if fence == first { fence = 0 }
                 if endParagraph() { return true }
                 continue
             }
-            if fence != 0 { continue }
+            // Tables are counted on every line, inside what looks like a code fence too: a fence
+            // misread must never hide one.
             var pipes = 0
             var delimiterRow = true
             var dash = false
             for k in start..<end {
                 let c = bytes[k]
-                if isDelimiter(c) { paragraph += 1 } else if c == UInt8(ascii: "|") { pipes += 1 }
+                if c == UInt8(ascii: "|") { pipes += 1 }
                 if c == UInt8(ascii: "-") { dash = true } else if !isDelimiterRowChar(c) { delimiterRow = false }
             }
-            if paragraph > paragraphDelimiters { return true }
             columns = max(columns, pipes)
             rows += 1
             if delimiterRow, dash { table = true }
             if table, cells + (columns + 1) * rows > tableCells { return true }
+            if fence != 0 {
+                // A fence ends with its container: closing early only counts more.
+                if quotes < fenceQuotes || column < fenceColumn {
+                    fence = 0
+                } else {
+                    let r = run(start, end, fence)
+                    if lead <= 3, r >= fenceLength, onlySpace(start + r, end) {
+                        fence = 0
+                        if endParagraph() { return true }
+                    }
+                    continue // what is inside is never read inline
+                }
+            }
+            // A fence opens as CommonMark reads one: three or more ` or ~, indented at most three
+            // columns, and a backtick fence's info string holds no backtick.
+            let first: UInt8 = start < end ? bytes[start] : 0x20
+            let r = first == UInt8(ascii: "`") || first == UInt8(ascii: "~") ? run(start, end, first) : 0
+            if r >= 3, lead <= 3, first == UInt8(ascii: "~") || !holds(start + r, end, UInt8(ascii: "`")) {
+                fence = first
+                fenceLength = r
+                fenceQuotes = quotes
+                fenceColumn = column
+                if endParagraph() { return true }
+                continue
+            }
+            for k in start..<end where isDelimiter(bytes[k]) { paragraph += 1 }
+            if paragraph > paragraphDelimiters { return true }
         }
         return endParagraph()
     }

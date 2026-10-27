@@ -84,7 +84,11 @@ export function storyTooComplex(story: string): boolean {
   let rows = 0; // the paragraph's lines (every line after a table's header is a row)
   let table = false; // the paragraph holds a line that could be a table's delimiter row
   let cells = 0; // the cells of the story's tables before this paragraph
-  let fence = 0; // the fence character while inside a fenced code block (` or ~), else 0
+  // While inside a fenced code block: its character (` or ~), run length, quotes and column, else fence = 0.
+  let fence = 0;
+  let fenceLength = 0;
+  let fenceQuotes = 0;
+  let fenceColumn = 0;
   const endParagraph = (): boolean => {
     load += paragraph * paragraph;
     if (table) cells += (columns + 1) * rows;
@@ -94,13 +98,36 @@ export function storyTooComplex(story: string): boolean {
     table = false;
     return load > STORY_DELIMITER_BUDGET || cells > TABLE_CELL_LIMIT;
   };
+  /** How many of `c` start the text from `from` (before `to`). */
+  const run = (from: number, to: number, c: number): number => {
+    let k = from;
+    while (k < to && story.charCodeAt(k) === c) k++;
+    return k - from;
+  };
+  /** Whether `c` appears between `from` and `to`. */
+  const holds = (from: number, to: number, c: number): boolean => {
+    for (let k = from; k < to; k++) if (story.charCodeAt(k) === c) return true;
+    return false;
+  };
+  /** Whether nothing but space lies between `from` and `to`. */
+  const onlySpace = (from: number, to: number): boolean => {
+    for (let k = from; k < to; k++) if (!isSpace(story.charCodeAt(k))) return false;
+    return true;
+  };
   while (i < n) {
     // The line's container prefix: indentation (all of it, also between markers) and quote/list markers.
     let depth = 0;
     let indent = 0;
+    let quotes = 0; // its `>` markers
+    let lead = 0; // the columns of space right before its content
+    let column = 0; // the column its content starts in
     for (;;) {
+      lead = 0;
       while (i < n && isSpace(story.charCodeAt(i))) {
-        indent += story.charCodeAt(i) === TAB ? 4 : 1;
+        const w = story.charCodeAt(i) === TAB ? 4 : 1;
+        indent += w;
+        lead += w;
+        column += w;
         i++;
       }
       if (indent > STORY_NESTING_LIMIT * 4) return true;
@@ -109,15 +136,20 @@ export function storyTooComplex(story: string): boolean {
       if (c === 0x3e) {
         // >
         i++;
+        column++;
+        quotes++;
       } else if ((c === 0x2d || c === 0x2a || c === 0x2b) && i + 1 < n && isSpace(story.charCodeAt(i + 1))) {
         // - * + and a space
         i += 2;
+        column += 2;
       } else if (isDigit(c)) {
         let j = i;
         while (j < n && j - i < 9 && isDigit(story.charCodeAt(j))) j++;
         const after = story.charCodeAt(j);
-        if (j + 1 < n && (after === 0x2e || after === 0x29) && isSpace(story.charCodeAt(j + 1))) i = j + 2;
-        else break;
+        if (j + 1 < n && (after === 0x2e || after === 0x29) && isSpace(story.charCodeAt(j + 1))) {
+          column += j + 2 - i;
+          i = j + 2;
+        } else break;
       } else {
         break;
       }
@@ -133,30 +165,50 @@ export function storyTooComplex(story: string): boolean {
       if (endParagraph()) return true;
       continue;
     }
-    const first = story.charCodeAt(start);
-    if ((first === 0x60 || first === 0x7e) && story.charCodeAt(start + 1) === first && story.charCodeAt(start + 2) === first) {
-      // A code fence opens or closes: what is inside is never read inline.
-      if (!fence) fence = first;
-      else if (fence === first) fence = 0;
-      if (endParagraph()) return true;
-      continue;
-    }
-    if (fence) continue;
+    // Tables are counted on every line, inside what looks like a code fence too: a fence misread
+    // must never hide one.
     let pipes = 0;
     let delimiterRow = true;
     let dash = false;
     for (let k = start; k < end; k++) {
       const c = story.charCodeAt(k);
-      if (isDelimiter(c)) paragraph++;
-      else if (c === 0x7c) pipes++; // |
+      if (c === 0x7c) pipes++; // |
       if (c === 0x2d) dash = true; // -
       else if (!isDelimiterRowChar(c)) delimiterRow = false;
     }
-    if (paragraph > PARAGRAPH_DELIMITER_LIMIT) return true;
     if (pipes > columns) columns = pipes;
     rows++;
     if (delimiterRow && dash) table = true;
     if (table && cells + (columns + 1) * rows > TABLE_CELL_LIMIT) return true;
+    if (fence) {
+      // A fence ends with its container: on a line with fewer quotes, or starting left of the fence
+      // (a list item's). Closing early only counts more; staying open would hide what is parsed.
+      if (quotes < fenceQuotes || column < fenceColumn) {
+        fence = 0;
+      } else {
+        // Its closer: the same character, at least as many, nothing after but space.
+        const r = run(start, end, fence);
+        if (lead <= 3 && r >= fenceLength && onlySpace(start + r, end)) {
+          fence = 0;
+          if (endParagraph()) return true;
+        }
+        continue; // what is inside is never read inline
+      }
+    }
+    // A fence opens as CommonMark reads one: three or more ` or ~, indented at most three columns,
+    // and a backtick fence's info string holds no backtick (else it is a paragraph, read inline).
+    const first = story.charCodeAt(start);
+    const r = first === 0x60 || first === 0x7e ? run(start, end, first) : 0;
+    if (r >= 3 && lead <= 3 && (first === 0x7e || !holds(start + r, end, 0x60))) {
+      fence = first;
+      fenceLength = r;
+      fenceQuotes = quotes;
+      fenceColumn = column;
+      if (endParagraph()) return true;
+      continue;
+    }
+    for (let k = start; k < end; k++) if (isDelimiter(story.charCodeAt(k))) paragraph++;
+    if (paragraph > PARAGRAPH_DELIMITER_LIMIT) return true;
   }
   return endParagraph();
 }

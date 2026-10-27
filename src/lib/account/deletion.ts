@@ -2,8 +2,8 @@ import { Timestamp, type BulkWriter, type DocumentReference, type Firestore, typ
 import { cardPagePaths, landingPagePaths, profilePagePaths } from '@/lib/api/revalidate';
 import { CHAT_IMAGES, chatImageFiles } from '@/lib/api/v1/chatImages';
 import { restoreCard, trashCard } from '@/lib/api/v1/trash';
-import { HANDLES } from '@/lib/db/firestore/handles';
-import { TOMBSTONE, tombstoneRef } from '@/lib/db/firestore/tombstones';
+import { HANDLE_HOLDS, HANDLES, holdHandle, reservable, handleKey } from '@/lib/db/firestore/handles';
+import { RETIRED_SLUG, TOMBSTONE, retirable, retiredSlugRef, tombstoneRef } from '@/lib/db/firestore/tombstones';
 import { UPLOADS, uploadedKeys } from '@/lib/storage/uploads';
 import { DELETION_GRACE_DAYS } from './constants';
 
@@ -222,6 +222,7 @@ async function collectAccountData(db: Firestore, uid: string) {
     db.collection('devices').where('userId', '==', uid), // push tokens
     db.collection('rateLimits').where('userId', '==', uid), // API budgets (lib/api/rateLimit)
     db.collection(HANDLES).where('uid', '==', uid), // the pen name's reservation (lib/db/firestore/handles)
+    db.collection(HANDLE_HOLDS).where('heldFor', '==', uid), // names it released lately, held for it
     db.collection(UPLOADS).where('ownerId', '==', uid), // whose each stored picture is (lib/storage/uploads)
     // Pictures sent in chat, by them and to them (lib/api/v1/chatImages): purgeAccount takes them with their files
     // first; any left (a purge without the chat store) go here.
@@ -265,7 +266,8 @@ async function collectAccountData(db: Firestore, uid: string) {
       if (!inTree(d.ref.path) && !first.has(d.ref.path)) singles.set(d.ref.path, d.ref);
     }
   }
-  return { trees, roots, singles: [...singles.values()], byCard, pages };
+  const handle = profile.get('handle');
+  return { trees, roots, singles: [...singles.values()], byCard, pages, handle: typeof handle === 'string' ? handle : '' };
 }
 
 /** A batch's limit on writes. */
@@ -318,7 +320,7 @@ export interface PurgeOptions {
 export async function purgeAccountData(db: Firestore, uid: string, opts: PurgeOptions = {}): Promise<PurgeReport> {
   const clock = opts.clock ?? Date.now;
   const late = () => opts.deadline !== undefined && clock() >= opts.deadline;
-  const { trees, roots, singles, byCard, pages } = await collectAccountData(db, uid);
+  const { trees, roots, singles, byCard, pages, handle } = await collectAccountData(db, uid);
   const writer = opts.writer ?? db.bulkWriter();
   let failed = 0;
   let complete = false;
@@ -326,14 +328,21 @@ export async function purgeAccountData(db: Firestore, uid: string, opts: PurgeOp
   const deleteTree = async (ref: DocumentReference) => {
     const records = byCard.get(ref.path);
     if (records?.length) await deleteAll(db, records);
-    // A card's id stays dead (tombstoneRef): written, on its own, before the card goes, so no moment lets another take it.
-    if (ref.parent.id === 'cards') await tombstoneRef(db, ref.id).set(TOMBSTONE);
+    // A card's id stays dead (tombstoneRef) and its slug retired: written, on their own, before the card goes, so no
+    // moment lets another take either.
+    if (ref.parent.id === 'cards') {
+      const slug = (await ref.get()).get('slug');
+      await Promise.all([tombstoneRef(db, ref.id).set(TOMBSTONE), retirable(slug) ? retiredSlugRef(db, slug).set(RETIRED_SLUG) : null]);
+    }
     await db.recursiveDelete(ref, writer);
   };
   try {
     const first = await pool(trees, TREE_CONCURRENCY, deleteTree, late);
     failed += first.errors.length;
     if (!first.notStarted.length && !late()) {
+      // The pen name is held — for no one, saying nothing of whose it was — before its reservation goes, so no
+      // moment lets another take it and the links that named this account by it (handles.ts).
+      if (handle && reservable(handleKey(handle))) await holdHandle(db, handle, null);
       const writes = singles.map((ref) => writer.delete(ref).catch(() => void failed++));
       await writer.flush();
       await Promise.all(writes);

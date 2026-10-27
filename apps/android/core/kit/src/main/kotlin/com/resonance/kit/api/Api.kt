@@ -42,6 +42,7 @@ class ApiConfiguration(
     init {
         // The one host the shared client hands the App Check token to (AppHttp).
         AppCheckHeader.apiOrigin = origin.toHttpUrlOrNull()
+        com.resonance.kit.story.StoryPictures.siteHost = origin.toHttpUrlOrNull()?.host
     }
 }
 
