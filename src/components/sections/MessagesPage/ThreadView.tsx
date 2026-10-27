@@ -916,14 +916,16 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
                     with it — floating words over moving bubbles would be read on no paper. */}
                 {foot === 'answer' && tail && <p className={styles.letterHint}>{t('replyToConnect', { handle: other.handle })}</p>}
               </div>
-              {/* The small pill over the foot of the thread: the way back to the latest message, or a word that something was copied. */}
+              {/* The small pill over the foot of the thread: the way back to the latest message — an arrow alone, or the
+                  word 新訊息 when something came in below —, or a word that something was copied. */}
               {showPill && (
                 <InkPill
                   size="sm"
                   className={styles.pill}
                   onClick={toLatest}
                   icon="chevron-down"
-                  label={newBelow ? t('newMessages') : t('jumpToLatest')}
+                  label={newBelow ? t('newMessages') : undefined}
+                  ariaLabel={newBelow ? undefined : t('jumpToLatest')}
                 />
               )}
               {copied && <InkPill size="sm" announce className={styles.pill} label={t('copied')} />}

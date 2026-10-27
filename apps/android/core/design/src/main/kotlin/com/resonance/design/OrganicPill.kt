@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -144,3 +145,47 @@ fun OrganicPill(
         }
     }
 }
+
+/**
+ * The ink pill around a glyph alone (the web's InkPill with no words): a round face 36 across inside a
+ * 44 touch target — the thread's way back to the latest message, an arrow, small over the thread (the
+ * owner, 2026-10-28). [contentDescription] is its name for TalkBack.
+ */
+@Composable
+fun OrganicPillGlyph(icon: IconName, contentDescription: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val source = remember { MutableInteractionSource() }
+    val focused by source.collectIsFocusedAsState()
+    val shape = remember { WobRectShape(PillSize.Small.radius, 41.0, mag = 1.2) }
+    val ink = Tokens.TerracottaInk
+    val wash = Tokens.TerracottaLight
+    val pen = Tokens.Terracotta
+    val focusPen = Tokens.TerracottaDeep
+    Box(
+        modifier
+            .size(GLYPH_PILL_TARGET)
+            .clickable(source, null, role = Role.Button, onClick = onClick)
+            .semantics { this.contentDescription = contentDescription },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .size(GLYPH_PILL_FACE)
+                .drawWithCache {
+                    val o = shape.createOutline(this.size, layoutDirection, this)
+                    val line = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                    val ring = Stroke(Tokens.InkStrong.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                    onDrawBehind {
+                        drawOutline(o, wash)
+                        drawOutline(o, if (focused) focusPen else pen, style = if (focused) ring else line)
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            OrganicIcon(icon, size = GLYPH_PILL_ICON, color = ink)
+        }
+    }
+}
+
+private val GLYPH_PILL_FACE = 36.dp
+private val GLYPH_PILL_TARGET = 44.dp
+private val GLYPH_PILL_ICON = 18.dp

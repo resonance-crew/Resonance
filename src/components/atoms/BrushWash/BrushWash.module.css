@@ -1,10 +1,17 @@
+/* Where the disc may lie at all: the shape's box and the overshoot around it,
+   so the grown disc never widens the page (a clip-path hides, it doesn't cut
+   the box that scrolls). */
+.frame {
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  overflow: clip;
+}
+
 /* The shape's outline, as a clip: the wash never paints outside it. */
 .region {
   position: absolute;
-  top: 0;
-  left: 0;
-  pointer-events: none;
-  z-index: 0;
 }
 
 /* The disc that spreads. A transform transition runs on the compositor, so the

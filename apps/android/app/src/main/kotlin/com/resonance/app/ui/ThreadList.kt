@@ -102,6 +102,7 @@ import com.resonance.design.OklchColor
 import com.resonance.design.OrganicButton
 import com.resonance.design.OrganicIcon
 import com.resonance.design.OrganicPill
+import com.resonance.design.OrganicPillGlyph
 import com.resonance.design.PillSize
 import com.resonance.design.QuoteBubble
 import com.resonance.design.REPLY_OVERLAP
@@ -388,7 +389,7 @@ internal fun MessageList(
             enter = fadeIn(tween(160)) + scaleIn(tween(160), initialScale = 0.9f),
             exit = fadeOut(tween(120)) + scaleOut(tween(120), targetScale = 0.9f),
         ) {
-            JumpPill(if (unseen > 0) L10n.Messages.newMessages else L10n.Messages.jumpToLatest) {
+            JumpPill(unseen > 0) {
                 unseen = 0
                 scope.launch { list.animateScrollToItem(0) }
             }
@@ -526,10 +527,18 @@ private fun OlderRow(model: ThreadModel) {
     }
 }
 
-/** The small pill over the composer: the way back to the latest message (the design system's ink pill, as it always looked). */
+/**
+ * The small pill over the composer, the way back to the latest message: an arrow alone in the ink pill's round
+ * face (the owner, 2026-10-28; the web's and iOS's alike), or 新訊息 beside it when something came in below.
+ */
 @Composable
-private fun JumpPill(text: String, onClick: () -> Unit) {
-    OrganicPill(text, icon = IconName.ChevronDown, size = PillSize.Small, onClickLabel = text, onClick = onClick)
+private fun JumpPill(newBelow: Boolean, onClick: () -> Unit) {
+    if (newBelow) {
+        OrganicPill(L10n.Messages.newMessages, icon = IconName.ChevronDown, size = PillSize.Small, onClickLabel = L10n.Messages.newMessages, onClick = onClick)
+    } else {
+        // The 44 target around the 36 face: its foot 4 lower, so the face rests where the pill's did.
+        OrganicPillGlyph(IconName.ChevronDown, L10n.Messages.jumpToLatest, Modifier.offset(y = 4.dp), onClick = onClick)
+    }
 }
 
 // One message

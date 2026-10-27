@@ -68,4 +68,22 @@ describe('BrushWash', () => {
     expect(rule).toMatch(/transition-timing-function:\s*linear;/);
     expect(rule).toMatch(/border-radius:\s*50%/);
   });
+
+  // The clip-path hides the grown disc, but its box still counted as the page's overflow: a Select near the page's
+  // edge put a scrollbar in and out as the pointer went from row to row, and the page jumped.
+  it('never widens the page: a frame cuts the disc off just past the shape', () => {
+    const { region } = wash({ on: true, overshoot: 4 });
+    const frame = region.parentElement as HTMLElement;
+    expect(frame.style.left).toBe('-4px');
+    expect(frame.style.top).toBe('-4px');
+    expect(frame.style.width).toBe('128px');
+    expect(frame.style.height).toBe('48px');
+    expect(region.style.left).toBe('4px');
+    expect(region.style.top).toBe('4px');
+
+    const css = readFileSync(join(process.cwd(), 'src/components/atoms/BrushWash/BrushWash.module.css'), 'utf8');
+    const [, rule] = css.match(/\.frame\s*\{([^}]*)\}/) ?? [];
+    expect(rule).toMatch(/overflow:\s*clip;/);
+    expect(rule).toMatch(/position:\s*absolute;/);
+  });
 });

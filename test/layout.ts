@@ -89,7 +89,7 @@ export function stubRowLayout({
  * it spreads (or withdrew) from, its colour, and the band it is cut to.
  */
 export function inkBrushes(root: ParentNode = document) {
-  return Array.from(root.querySelectorAll<HTMLElement>('[data-row-brushes] > [data-brush-wash]')).map((region) => {
+  return Array.from(root.querySelectorAll<HTMLElement>('[data-row-brushes] > * > [data-brush-wash]')).map((region) => {
     const disc = region.firstElementChild as HTMLElement;
     const full = parseFloat(disc.style.width) / 2;
     return {

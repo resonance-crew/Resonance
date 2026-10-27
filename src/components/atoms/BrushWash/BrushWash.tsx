@@ -33,33 +33,36 @@ export interface BrushWashProps {
  * the whole card, its chalk and grain filters with it.) The disc's full size
  * is the farthest any spread can reach, so a withdrawal that starts somewhere
  * new simply keeps shrinking from where it is.
+ *
+ * The clip-path hides the disc but not its box: grown, it still counted as the
+ * page's overflow — a menu near the page's edge put a scrollbar in and out as
+ * the pointer moved from row to row. So it lies in a frame that cuts it off
+ * just past the shape (by the overshoot, more than the wobble swings out).
  */
 export function BrushWash({ w, h, d, color, x, y, on, duration, overshoot = 6 }: BrushWashProps) {
   if (!w || !h || !d) return null;
   const full = Math.hypot(w, h) + overshoot;
   const reach = Math.hypot(Math.max(x, w - x), Math.max(y, h - y)) + overshoot;
+  const m = Math.ceil(overshoot);
   return (
-    <div
-      aria-hidden="true"
-      data-brush-wash=""
-      className={styles.region}
-      style={{ width: w, height: h, clipPath: `path('${d}')` }}
-    >
-      <div
-        className={styles.ink}
-        data-on={on || undefined}
-        style={
-          {
-            left: x - full,
-            top: y - full,
-            width: full * 2,
-            height: full * 2,
-            background: color,
-            transform: `scale(${on ? reach / full : 0})`,
-            transitionDuration: `${duration}ms`,
-          } as CSSProperties
-        }
-      />
+    <div aria-hidden="true" className={styles.frame} style={{ left: -m, top: -m, width: w + m * 2, height: h + m * 2 }}>
+      <div data-brush-wash="" className={styles.region} style={{ left: m, top: m, width: w, height: h, clipPath: `path('${d}')` }}>
+        <div
+          className={styles.ink}
+          data-on={on || undefined}
+          style={
+            {
+              left: x - full,
+              top: y - full,
+              width: full * 2,
+              height: full * 2,
+              background: color,
+              transform: `scale(${on ? reach / full : 0})`,
+              transitionDuration: `${duration}ms`,
+            } as CSSProperties
+          }
+        />
+      </div>
     </div>
   );
 }

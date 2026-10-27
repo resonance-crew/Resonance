@@ -18,6 +18,21 @@ describe('InkPill', () => {
     expect(onClick).toHaveBeenCalledOnce();
   });
 
+  // The thread's way back to the latest message (the owner, 2026-10-28): an arrow alone, round and small over the
+  // thread, its words only its name.
+  it('is a round face around its glyph alone when it has no words', () => {
+    render(<InkPill size="sm" icon="chevron-down" ariaLabel="Latest messages" onClick={() => {}} />);
+    const button = screen.getByRole('button', { name: 'Latest messages' });
+    expect(button).toHaveAttribute('data-round');
+    expect(button).toHaveTextContent('');
+    expect(button.querySelector('svg')).not.toBeNull();
+
+    const css = readFileSync(join(process.cwd(), 'src/components/atoms/InkPill/InkPill.module.css'), 'utf8');
+    const [, rule] = css.match(/\.pill\[data-round\]\s*\{([^}]*)\}/) ?? [];
+    expect(rule).toMatch(/width:\s*36px/);
+    expect(rule).toMatch(/height:\s*36px/);
+  });
+
   it('takes the name it is given, with its words leading it', () => {
     render(<InkPill size="md" label={<>Moved to trash · <strong>Undo</strong></>} ariaLabel="Moved to trash · Undo Rain" onClick={() => {}} />);
     expect(screen.getByRole('button', { name: 'Moved to trash · Undo Rain' })).toHaveAttribute('data-size', 'md');

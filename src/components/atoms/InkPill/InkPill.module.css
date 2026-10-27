@@ -26,6 +26,21 @@
   white-space: nowrap;
 }
 
+/* A glyph alone (the thread's way back to the latest message): a round face,
+   36 across — small over the thread, its hit area 44 (the ::before below). */
+.pill[data-round] {
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
+.pill[data-round]::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+
 /* A toast's: a full touch target, up to two lines. */
 .pill[data-size='md'] {
   gap: 8px;

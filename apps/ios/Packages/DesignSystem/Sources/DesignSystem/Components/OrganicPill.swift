@@ -108,3 +108,38 @@ public struct OrganicPill: View {
         }
     }
 }
+
+/// The ink pill around a glyph alone (the web's InkPill with no words): a round face 36 across inside
+/// a 44 touch target — the thread's way back to the latest message, an arrow, small over the thread
+/// (the owner, 2026-10-28). `accessibilityLabel` is its name for VoiceOver.
+public struct OrganicPillGlyph: View {
+    /// The face's size, its glyph's, and the touch target around it.
+    public static let face: CGFloat = 36
+    public static let glyph: CGFloat = 18
+    public static let target: CGFloat = 44
+
+    let icon: IconName
+    let label: String
+    let action: () -> Void
+
+    public init(icon: IconName, accessibilityLabel: String, action: @escaping () -> Void) {
+        self.icon = icon
+        label = accessibilityLabel
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            OrganicIcon(icon, size: Self.glyph, color: Tokens.terracottaInk)
+                .frame(width: Self.face, height: Self.face)
+                .background {
+                    OrganicPill.shape.fill(OrganicPill.fill)
+                    OrganicPill.shape.stroke(OrganicPill.pen, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
+                }
+                .frame(width: Self.target, height: Self.target)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+}

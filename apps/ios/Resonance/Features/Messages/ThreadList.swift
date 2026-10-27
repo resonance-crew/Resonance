@@ -222,10 +222,19 @@ struct MessageList: View {
                 }
             }
             if pillVisible && (unseen > 0 || farUp) && !atBottom {
-                // The small pill 12 over the composer (or its slip): the way back to the latest message.
-                OrganicPill(icon: .chevronDown, text: unseen > 0 ? L10n.Messages.newMessages : L10n.Messages.jumpToLatest) {
-                    unseen = 0
-                    toLatest()
+                // The small pill 12 over the composer (or its slip): the way back to the latest message — an arrow
+                // alone (the owner, 2026-10-28), or 新訊息 beside it when something came in below.
+                Group {
+                    if unseen > 0 {
+                        OrganicPill(icon: .chevronDown, text: L10n.Messages.newMessages) {
+                            unseen = 0
+                            toLatest()
+                        }
+                    } else {
+                        // The 44 target around the 36 face: its foot 4 lower, so the face rests where the pill's did.
+                        OrganicPillGlyph(icon: .chevronDown, accessibilityLabel: L10n.Messages.jumpToLatest) { toLatest() }
+                            .padding(.bottom, -(OrganicPillGlyph.target - OrganicPillGlyph.face) / 2)
+                    }
                 }
                 .padding(.bottom, bottomRoom)
                 .transition(.opacity.combined(with: .scale(scale: 0.9)))

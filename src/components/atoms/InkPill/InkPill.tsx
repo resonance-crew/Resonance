@@ -8,8 +8,8 @@ import { INK } from '@/lib/design/strokes';
 import styles from './InkPill.module.css';
 
 export interface InkPillProps {
-  /** The words (a node, so a toast can set its action's word in bold). */
-  label: ReactNode;
+  /** The words (a node, so a toast can set its action's word in bold); none for a glyph alone in a round face (`ariaLabel` names it). */
+  label?: ReactNode;
   icon?: IconName;
   /** Makes the whole pill a button. */
   onClick?: () => void;
@@ -29,6 +29,8 @@ export interface InkPillProps {
 }
 
 const GLYPH = { sm: 14, md: 16 } as const;
+/** A glyph alone (the thread's way back to the latest message): the arrow a little larger in its round face. */
+const ROUND_GLYPH = 18;
 
 /** Its corners: the thread's pill is round; a toast's are a card's. */
 const RADIUS = { sm: (h: number) => h / 2, md: () => 16 } as const;
@@ -45,6 +47,7 @@ const RADIUS = { sm: (h: number) => h / 2, md: () => 16 } as const;
 export function InkPill({ label, icon, onClick, ariaLabel, size = 'sm', announce = false, className }: InkPillProps) {
   const ref = useRef<HTMLElement>(null);
   const { w, h } = useElementSize(ref);
+  const round = label == null && !!icon;
   const body = (
     <>
       <HandDrawnBorder
@@ -60,13 +63,14 @@ export function InkPill({ label, icon, onClick, ariaLabel, size = 'sm', announce
         strokeColor="var(--color-terracotta)"
         strokeWidth={INK}
       />
-      {icon && <Icon name={icon} size={GLYPH[size]} className={styles.glyph} />}
-      <span className={styles.label}>{label}</span>
+      {icon && <Icon name={icon} size={round ? ROUND_GLYPH : GLYPH[size]} className={styles.glyph} />}
+      {!round && <span className={styles.label}>{label}</span>}
     </>
   );
   const shared = {
     className: [styles.pill, className, 'res-shape-stand-in'].filter(Boolean).join(' '),
     'data-size': size,
+    'data-round': round || undefined,
     'data-shape-pending': w > 0 && h > 0 ? undefined : '',
     style: {
       '--shape-fill': 'var(--color-terracotta-light)',
