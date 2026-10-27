@@ -66,15 +66,31 @@ describe('TagField', () => {
     expect(input()).toHaveFocus();
   });
 
-  it('shows the chosen tags above the field, beside its label, each with its ✕', async () => {
+  // Round 16 review S1 / N6: 「標籤」 on its own line, as 卡片類型 is; the pills wrap under it, never under a
+  // hanging indent; each ✕ says which tag it takes off; the field is named by the label, not its placeholder.
+  it('shows the chosen tags under their label on its own line, each ✕ named for its tag', async () => {
     renderWithIntl(<Harness initial={['a', 'b']} />);
     const label = screen.getByText(W.tagsLabel);
-    // One row: the label, then the pills — none of them inside the field.
-    expect(label.parentElement).toHaveTextContent(/^Tagsab$/);
-    expect(label.parentElement!.contains(input())).toBe(false);
+    const pills = screen.getByText('a').closest('[class*="row"]') as HTMLElement;
+    // The label stands alone; the pills' row holds the pills alone — none of them inside the field.
+    expect(label).toHaveTextContent(/^Tags$/);
+    expect(pills.contains(label)).toBe(false);
+    expect(pills).toHaveTextContent(/^ab$/);
+    expect(pills.contains(input())).toBe(false);
+    expect(label.compareDocumentPosition(pills) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: W.tagsLabel })).toHaveAttribute('aria-labelledby', label.id);
 
-    await userEvent.click(screen.getAllByRole('button', { name: W.removeTag })[0]);
+    await userEvent.click(screen.getByRole('button', { name: W.tagsRemoveLabel.replace('{tag}', 'a') }));
     expect(list()).toEqual(['b']);
+    expect(screen.getByRole('button', { name: W.tagsRemoveLabel.replace('{tag}', 'b') })).toBeInTheDocument();
+  });
+
+  it('draws the chosen tags quieter than the step’s button: half the light wash, the soft pen, words at 500', () => {
+    renderWithIntl(<Harness initial={['a']} />);
+    const pill = screen.getByText('a').closest('[data-size]') as HTMLElement;
+    expect(pill).toHaveAttribute('data-quiet');
+    expect(pill.style.getPropertyValue('--shape-fill')).toBe('color-mix(in oklch, var(--color-terracotta-light) 50%, var(--color-cream))');
+    expect(pill.style.getPropertyValue('--shape-ink')).toBe('var(--soft-pen)');
   });
 
   it('adds on Enter, trimmed, and ignores an empty or repeated tag', () => {
@@ -229,7 +245,7 @@ describe('TagField', () => {
       vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
         // The field (the text input's capsule) sits under the row: one line for up to two pills, two past that.
         if (this.querySelector(':scope > input')) {
-          const pills = document.querySelectorAll('[aria-label="Remove tag"]').length;
+          const pills = document.querySelectorAll('[aria-label^="Remove tag: "]').length;
           return new DOMRect(0, pills > 2 ? 140 : 100, 300, 48);
         }
         return rect.call(this);
@@ -258,7 +274,7 @@ describe('TagField', () => {
     it('leaves the page alone when the field isn’t in use (a ✕ pressed)', async () => {
       const scrollBy = measured();
       renderWithIntl(<Harness initial={['a', 'b', 'c']} />);
-      await userEvent.click(screen.getAllByRole('button', { name: W.removeTag })[0]);
+      await userEvent.click(screen.getAllByRole('button', { name: /^Remove tag: / })[0]);
       expect(list()).toEqual(['b', 'c']);
       expect(scrollBy).not.toHaveBeenCalled();
     });
