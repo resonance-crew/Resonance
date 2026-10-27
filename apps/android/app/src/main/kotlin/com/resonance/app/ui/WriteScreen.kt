@@ -658,9 +658,9 @@ private fun WriteForm(
         bridge.onLinkTap = { href -> linkSheet = LinkSheetRequest(IslandLink(href, LinkDisplay.Card, standalone = true, words = href), canCard = true, LinkDisplay.Card) }
         onDispose { bridge.onLinkTap = {} }
     }
-    // The link sheet over the keyboard; whatever it ends with, the story has its caret, keyboard and bar back.
+    // The link editor, the app's modal (round 17 §6.2); whatever it ends with, the story has its caret, keyboard and bar back.
     linkSheet?.let { request ->
-        StoryLinkSheet(
+        StoryLinkDialog(
             request,
             onApply = { href, display ->
                 linkSheet = null
