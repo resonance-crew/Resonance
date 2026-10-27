@@ -281,12 +281,17 @@ struct CardScreen: View {
                 StoryMarkdownView(blocks: model.blocks, typography: story, language: type.lang, onOpenURL: open) { href, _ in
                     model.embed(for: href).map { CardEmbedView(href: href, card: $0) }
                 } linkCard: { href, text in
-                    model.linkPreview(href: href, text: text).map { preview in
+                    if let preview = model.linkPreview(href: href, text: text) {
                         // The host as the card shows it is also what VoiceOver says the card opens (as on the web).
                         let host = preview.link.host.replacingOccurrences(of: "www.", with: "", options: .anchored)
                         return StoryLinkCard(title: preview.title, description: preview.description, host: host,
                                              imageURL: preview.imageURL, seed: Double(seedFromString(preview.url.absoluteString)),
                                              openLabel: L10n.Card.LinkPreview.open(host: host)) { openPreview(preview) }
+                    }
+                    // An address the writer made a card with no page read for it (a private card's): still a card.
+                    return model.linkFallback(href: href, text: text).map { bare in
+                        StoryLinkCard.address(host: bare.host, address: bare.address, seed: Double(seedFromString(bare.link.url.absoluteString)),
+                                              openLabel: L10n.Card.LinkPreview.open(host: bare.host)) { openLink(bare.link) }
                     }
                 }
                 // Its headings are where the rail's table of contents takes the page, and where they
@@ -459,7 +464,12 @@ struct CardScreen: View {
     /// A link's card opens the page as a link in a message does: in the in-app browser — after
     /// asking, when it is an IP address or a punycode name.
     private func openPreview(_ preview: LinkPreview) {
-        if preview.link.suspicious { linkToConfirm = preview.link } else { InAppBrowser.open(preview.url) }
+        openLink(preview.link)
+    }
+
+    /// A page a link card leads to: asked first when its host is one a reader can't vouch for (punycode).
+    private func openLink(_ link: ChatLinks.Parsed) {
+        if link.suspicious { linkToConfirm = link } else { InAppBrowser.open(link.url) }
     }
 
     /// Links in the story lead where their scheme says (`StoryLink`): a page

@@ -28,6 +28,32 @@ public enum StoryLinks {
         return serverKey(only.text)
     }
 
+    /// Our own hosts (`SITE_HOSTS` in src/lib/links/soleLink.ts): a page of ours never stands as a link card
+    /// (a card of ours is an embed, `/card/…`), nor is it ever unfurled.
+    public static let siteHosts: Set<String> = ["resonance.channel", "www.resonance.channel", "resonance-world.vercel.app"]
+
+    /// The page a paragraph standing alone as its own address leads to, when the reader draws it as a card
+    /// even without a stored preview (round 16 review S3: the writer's 卡片 always looks like a card — on a
+    /// private or unpublished card, which the server never unfurls, or a story an older build wrote):
+    /// ``key(href:text:)``'s address, parsed by the link rules, unless it is one of our own pages
+    /// (``siteHosts``, or `siteHost`, the API origin's) or a bare IP address (`cardableLink` in
+    /// src/lib/links/soleLink.ts) — those stay the words they are.
+    public static func cardable(href: String?, text: String, siteHost: String? = nil) -> ChatLinks.Parsed? {
+        guard let key = key(href: href, text: text), let parsed = ChatLinks.parse(key) else { return nil }
+        var host = parsed.host.lowercased()
+        while host.hasSuffix(".") { host.removeLast() }
+        if siteHosts.contains(host) || host == siteHost?.lowercased() { return nil }
+        if isIPHost(host) { return nil }
+        return parsed
+    }
+
+    /// A host written as numbers: a dotted quad, or an IPv6 literal in brackets (`isIpHost`).
+    static func isIPHost(_ host: String) -> Bool {
+        if host.hasPrefix("[") { return true }
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+        return labels.count == 4 && labels.allSatisfy { (1...3).contains($0.count) && $0.allSatisfy { $0.isASCII && $0.isNumber } }
+    }
+
     /// Whether a link's words are its own address (`wordsAreTheAddress` in src/lib/links/storyLinks.ts): the
     /// words, trimmed, are one address the link rules take, naming the same page as `href` once each is
     /// written as the server keys it and `http(s)://` and one trailing `/` are set aside — the writer's

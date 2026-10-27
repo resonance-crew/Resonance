@@ -81,6 +81,18 @@ final class CardModel {
         StoryLinks.key(href: href, text: text).flatMap { linkPreviews[$0] }
     }
 
+    /// A link standing alone as its own address with no page read for it — the server reads none for a
+    /// private or unpublished card — drawn all the same as a card (round 16 review S3), the writer's: its
+    /// host over the address as written, no picture, nothing fetched. Nil for our own pages and bare IP
+    /// addresses, which stay the words they are.
+    func linkFallback(href: String?, text: String) -> StoryLinkFallback? {
+        guard linkPreview(href: href, text: text) == nil,
+              let link = StoryLinks.cardable(href: href, text: text, siteHost: origin.host(percentEncoded: false)) else { return nil }
+        let written = (href ?? text).trimmingCharacters(in: .whitespacesAndNewlines)
+        return StoryLinkFallback(link: link, host: link.host.replacingOccurrences(of: "www.", with: "", options: .anchored),
+                                 address: written)
+    }
+
     func load() async {
         guard !isLoading else { return }
         isLoading = true
@@ -137,4 +149,15 @@ final class CardModel {
         guard let detail, !detail.isOwner, detail.card.visibility == .connections else { return nil }
         return detail.card.author?.value1.id
     }
+}
+
+/// A story's standalone address with no preview read for it, as its card shows it: the host over the address
+/// as the story wrote it (``CardModel/linkFallback(href:text:)``).
+struct StoryLinkFallback: Equatable {
+    /// The address as the link rules took it: what a tap opens, and whether to ask first.
+    let link: ChatLinks.Parsed
+    /// Its host without `www.`, the card's title.
+    let host: String
+    /// The address as written, under it.
+    let address: String
 }
