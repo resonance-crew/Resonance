@@ -34,6 +34,8 @@ final class ConversationsStore {
         let lastFromMe: Bool
         /// The last message was a picture (`lastMessage.image`).
         var lastImage = false
+        /// The last message was unsent (`lastMessage.unsent`, round 16 §3): the row says so, as the thread does.
+        var lastUnsent = false
         let sentAt: Date?
         let unread: Int
     }
@@ -188,6 +190,7 @@ final class ConversationsStore {
             let unread = ((doc.get("unread") as? [String: Any])?[uid] as? NSNumber)?.intValue ?? 0
             return Conversation(id: doc.documentID, other: other, lastText: last?["text"] as? String,
                                 lastFromMe: last?["senderId"] as? String == uid, lastImage: last?["image"] as? Bool == true,
+                                lastUnsent: last?["unsent"] as? Bool == true,
                                 sentAt: (last?["sentAt"] as? Timestamp)?.dateValue(), unread: unread)
         })
         let talking = Set(conversations.map(\.other.id))

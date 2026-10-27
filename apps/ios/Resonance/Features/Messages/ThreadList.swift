@@ -420,8 +420,18 @@ private struct MessageItem: View {
         let message = row.message
         let model = ctx.model
         let mine = model.isMine(message)
-        // A card the viewer can't see, sent alone: nothing to draw (not even a face beside it).
-        if model.carried(message) != .nothing {
+        if message.isUnsent {
+            // Unsent (round 16 §3): one quiet line on its sender's side, nothing to press, swipe or answer.
+            HStack(alignment: .bottom, spacing: 0) {
+                if mine { Spacer(minLength: 0) } else { TheirFace(shown: !row.position.joinsBelow, ctx: ctx) }
+                UnsentBubble(text: mine ? L10n.Messages.unsentByYou : L10n.Messages.unsentByThem(handle: model.displayHandle),
+                             mine: mine, seed: seedFromId(message.key), tuckTop: row.position.joinsAbove, tuckBottom: row.position.joinsBelow)
+                    .frame(maxWidth: ctx.rowMax, alignment: mine ? .trailing : .leading)
+                if !mine { Spacer(minLength: 0) }
+            }
+            .transition(.opacity)
+        } else if model.carried(message) != .nothing {
+            // (A card the viewer can't see, sent alone: nothing to draw — not even a face beside it.)
             SwipeToReply(enabled: model.canReply(message), mine: mine, onReply: { ctx.onReply(message) }) {
                 HStack(alignment: .bottom, spacing: 0) {
                     if mine { Spacer(minLength: 0) } else { TheirFace(shown: !row.position.joinsBelow, ctx: ctx) }
@@ -467,6 +477,8 @@ private struct TheirFace: View {
 struct MessageActions: ViewModifier {
     let reply: (() -> Void)?
     let links: [(label: String, open: () -> Void)]
+    var reactions: [(label: String, react: () -> Void)] = []
+    var removeReaction: (() -> Void)? = nil
     let more: () -> Void
 
     func body(content: Content) -> some View {
@@ -475,11 +487,82 @@ struct MessageActions: ViewModifier {
                 if let reply { Button(L10n.Messages.reply, action: reply) }
             }
             .accessibilityActions {
+                ForEach(Array(reactions.enumerated()), id: \.offset) { _, reaction in
+                    Button(reaction.label, action: reaction.react)
+                }
+                if let removeReaction { Button(L10n.Messages.removeReaction, action: removeReaction) }
+            }
+            .accessibilityActions {
                 ForEach(Array(links.enumerated()), id: \.offset) { _, link in
                     Button(link.label, action: link.open)
                 }
             }
             .accessibilityAction(named: L10n.Messages.moreMenu, more)
+    }
+}
+
+/// What each reaction is called (`messages.reactions.<id>`).
+enum ReactionNames {
+    static func name(_ id: ReactionId) -> String {
+        switch id {
+        case .heart: L10n.Messages.Reactions.heart
+        case .moved: L10n.Messages.Reactions.moved
+        case .laugh: L10n.Messages.Reactions.laugh
+        case .hug: L10n.Messages.Reactions.hug
+        case .thumbs: L10n.Messages.Reactions.thumbs
+        }
+    }
+}
+
+/// A message's reactions in its gutter (round 16 §3): the chip, its inner edge 6 over the bubble's outer
+/// side edge (your own: its left; theirs: its right), level with the bubble's foot; a reaction this
+/// build doesn't know is drawn as nothing. One label for VoiceOver: who reacted with what.
+private struct MessageReactions: View {
+    let message: ChatMessage
+    let mine: Bool
+    let model: ThreadModel
+    let onTap: (() -> Void)?
+
+    var body: some View {
+        let drawn = ReactionSummary.of(message, me: model.me)
+        if !drawn.entries.isEmpty {
+            let chips = ReactionChips(drawn.entries, outward: mine ? .leading : .trailing, seed: seedFromId(message.key, start: 41))
+                .alignmentGuide(mine ? .leading : .trailing) { d in mine ? d.width - ReactionChipMetrics.overlap : ReactionChipMetrics.overlap }
+                .transition(.scale(scale: 0.6).combined(with: .opacity))
+            Group {
+                if let onTap {
+                    Button(action: onTap) { chips.contentShape(Rectangle()) }.buttonStyle(.plain)
+                } else {
+                    chips
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(drawn.label(handle: model.displayHandle))
+        }
+    }
+}
+
+/// The reactions a message shows (round 16 §3), in the stickers' order: each reaction this build knows once,
+/// with how many gave it, and what VoiceOver says of them.
+nonisolated struct ReactionSummary: Equatable {
+    var entries: [ReactionChips.Entry]
+    /// Who gave which: the viewer's, then theirs (ids this build knows only).
+    var mine: ReactionId?
+    var theirs: ReactionId?
+
+    static func of(_ message: ChatMessage, me: String?) -> ReactionSummary {
+        let known = message.knownReactions(ReactionId.order.map(\.rawValue))
+        let entries = known.compactMap { r in ReactionId(rawValue: r.id).map { ReactionChips.Entry(id: $0, count: r.by.count) } }
+        let mine = me.flatMap { message.reaction(of: $0) }.flatMap(ReactionId.init(rawValue:))
+        let theirs = message.reactions.first { $0.key != me }.flatMap { ReactionId(rawValue: $0.value) }
+        return ReactionSummary(entries: entries, mine: mine, theirs: theirs)
+    }
+
+    @MainActor func label(handle: String) -> String {
+        var said: [String] = []
+        if let mine { said.append(L10n.Messages.reactedYou(reaction: ReactionNames.name(mine))) }
+        if let theirs { said.append(L10n.Messages.reactedThem(handle: handle, reaction: ReactionNames.name(theirs))) }
+        return said.joined(separator: ", ")
     }
 }
 
@@ -528,6 +611,11 @@ struct MessageCore: View {
                     CarriedPart(carried: carried, afterWords: !words.isEmpty || message.noteRef != nil, ctx: ctx, interactive: interactive)
                 }
             }
+            // Its reactions in the gutter beside the bubble's foot (round 16 §3): never under it, so the row
+            // never grows; a tap opens the press layer for it.
+            .overlay(alignment: mine ? .bottomLeading : .bottomTrailing) {
+                MessageReactions(message: message, mine: mine, model: model, onTap: interactive ? { press(nil, carried: carried) } : nil)
+            }
             // A reply lies over the foot of what it quotes, a note over the foot of its card.
             .padding(.top, message.replyTo == nil && !note ? 0 : -BubbleMetrics.replyOverlap)
         }
@@ -541,6 +629,12 @@ struct MessageCore: View {
                 .modifier(MessageActions(
                     reply: ctx.model.canReply(message) ? { ctx.onReply(message) } : nil,
                     links: zip(found, Self.linkActionLabels(found)).map { link, label in (label, { ctx.openLink(link.url) }) },
+                    // Reacting without a long-press (round 16 §3): one action per sticker, and taking one's back.
+                    reactions: ctx.model.canReact(message) ? ReactionId.order.map { id in
+                        (L10n.Messages.reactWith(reaction: ReactionNames.name(id)), { ctx.model.react(message, with: id) })
+                    } : [],
+                    removeReaction: ctx.model.canReact(message) && ctx.model.myReaction(to: message) != nil
+                        ? { ctx.model.react(message, with: nil) } : nil,
                     more: { press(nil, carried: carried) }))
         } else {
             core
@@ -762,7 +856,8 @@ private struct QuotedReply: View {
         let model = ctx.model
         VStack(alignment: mine ? .trailing : .leading, spacing: 0) {
             SpokenCaption(ThreadCaptions.reply(mine: mine, quotedMine: quote.senderId == model.me, handle: model.displayHandle))
-            QuoteBubble(text: quote.summary(picture: L10n.Messages.replyImage, card: L10n.Messages.replyCard),
+            QuoteBubble(text: quote.summary(picture: L10n.Messages.replyImage, card: L10n.Messages.replyCard,
+                                            unsentQuote: L10n.Messages.unsentQuote),
                         seed: seedFromId(quote.id, start: 19), onTap: interactive ? { ctx.onQuote(quote.id) } : nil)
         }
     }

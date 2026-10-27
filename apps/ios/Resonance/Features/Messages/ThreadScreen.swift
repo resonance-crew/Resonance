@@ -44,6 +44,10 @@ struct ThreadScreen: View {
     /// back after it (round 11 §1).
     @State private var keyboardHold = KeyboardHold()
     @State private var reporting = false
+    /// The message 檢舉這則訊息 was chosen on (round 16 §3); nil when the whole conversation is reported.
+    @State private var reportedMessage: String?
+    /// The message 收回 was chosen on, waiting for the confirm's yes.
+    @State private var unsending: ChatMessage?
     @State private var sendingReport = false
     @State private var confirmingBlock = false
     @State private var confirmingDelete = false
@@ -201,10 +205,19 @@ struct ThreadScreen: View {
             // Beside the list: the rule between the panes and the bar's foot from it, over the bar's paper.
             if inPane { PaneLines(barHeight: barHeight) }
             if let menu, let model {
+                let message = menu.row.message
                 MessageMenuOverlay(menu: menu, ctx: context(model),
-                                   items: menu.items(model: model, reply: { reply(menu.row.message) }, openLink: openLink,
-                                                     copied: { say(L10n.Messages.copied) }),
-                                   footer: Self.full(menu.row.message.sentAt), safe: safe) { self.menu = nil }
+                                   items: menu.items(model: model, reply: { reply(message) }, openLink: openLink,
+                                                     copied: { say(L10n.Messages.copied) },
+                                                     unsend: { unsending = message },
+                                                     report: {
+                                                         reportedMessage = message.id
+                                                         reporting = true
+                                                     }),
+                                   footer: Self.full(message.sentAt), safe: safe,
+                                   reactions: model.canReact(message)
+                                       ? .init(current: model.myReaction(to: message)) { model.react(message, with: $0) }
+                                       : nil) { self.menu = nil }
             }
             if let attachMenu {
                 AttachMenuOverlay(anchor: attachMenu, items: attachItems) { self.attachMenu = nil }
@@ -569,7 +582,10 @@ struct ThreadScreen: View {
                 searchFocused = true
             },
             OrganicMenuItem(id: "media", title: L10n.Messages.menuMedia, icon: .cards) { showingMedia = true },
-            OrganicMenuItem(id: "report", title: L10n.Safety.reportMessage, icon: .flag) { reporting = true },
+            OrganicMenuItem(id: "report", title: L10n.Safety.reportMessage, icon: .flag) {
+                reportedMessage = nil
+                reporting = true
+            },
             model.isBlocked
                 ? OrganicMenuItem(id: "unblock", title: L10n.Safety.unblock, icon: .ban) { Task { await unblock(model) } }
                 : OrganicMenuItem(id: "block", title: L10n.Safety.block, icon: .ban, danger: true) {
@@ -622,10 +638,29 @@ struct ThreadScreen: View {
             }
             .organicModal(isPresented: $reporting, seed: 83, maxWidth: 460, closeLabel: L10n.Safety.Report.close, dismissible: !sendingReport) {
                 if let model, let other = model.other, let pair = model.pairId {
-                    ReportForm(target: .message(id: pair, senderId: other.id, conversationId: pair), handle: other.handle,
+                    // One message (檢舉這則訊息: its id) or the conversation (the bar's 檢舉: the pair's).
+                    ReportForm(target: .message(id: reportedMessage ?? pair, senderId: other.id, conversationId: pair), handle: other.handle,
                                offerBlock: !model.isBlocked, sending: $sendingReport, onClose: { reporting = false },
                                onBlocked: { Task { await model.refreshConnection() } })
                     .withSession(session)
+                }
+            }
+            // 收回 (round 16 §3): asked first, in plain colour — taking one's own words back is no danger.
+            .organicConfirm(isPresented: Binding(get: { unsending != nil }, set: { if !$0 { unsending = nil } }),
+                            title: L10n.Messages.unsendTitle, message: L10n.Messages.unsendBody,
+                            cancelLabel: L10n.Messages.unsendCancel, confirmLabel: L10n.Messages.unsendConfirm,
+                            closeLabel: L10n.Messages.unsendCancel, busy: busy, seed: 67) {
+                guard let model, let message = unsending else { return }
+                Task {
+                    busy = true
+                    let result = await model.unsend(message)
+                    busy = false
+                    unsending = nil
+                    switch result {
+                    case .done: break
+                    case .tooLate: session.toasts.show(L10n.Messages.unsendTooLate)
+                    case .failed: session.toasts.show(L10n.Messages.unsendError)
+                    }
                 }
             }
             .organicConfirm(isPresented: $confirmingBlock, title: L10n.Safety.blockTitle(handle: model?.other?.handle ?? ""),
