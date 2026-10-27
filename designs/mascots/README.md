@@ -1,6 +1,6 @@
 # 共振吉祥物設計紀錄
 
-業主的完整需求在 [brief.md](brief.md)。目前還在第一階段（提出角色方向，等業主選定），還沒有進入系列設計或動畫。第一輪在 `round1/`，第二輪在 `round2/`。
+業主的完整需求在 [brief.md](brief.md)。業主看完第二輪後選定方向 C 摺摺，進入第二階段：以摺摺為準做一個系列，再做首頁的動態。第一輪在 `round1/`，第二輪在 `round2/`。
 
 ## 第一輪（2026-10-27）
 
@@ -34,5 +34,4 @@
 - [round2/review/](round2/review/)：`critic-form.md`、`critic-production.md`（兩位評審，評的是初版）、`drafts.md`（畫者的初版自評）、`revisions.md`（修訂者的修改紀錄）、`verify.md`（修訂後的核對與只看圖的第一印象）；`checks/` 是他們的檢查圖。
 - 每個方向的資料夾都有 `character.svg`、`concept.svg`、`proposal.md`、`explore.svg`、產生器和 `-v1` 初版。檢查圖轉成 WebP；由產生器重畫得出來的大型檢查 SVG 沒有收進來。
 - `workflow.js`、`workflow-verify.js`：這一輪的兩段工作流程腳本。
-
-還沒有選定方向。業主選定之前，不做完整系列、其他角色或動畫。
+- [round2/feedback.md](round2/feedback.md)：業主看完後的回饋：選定摺摺，並請我們把肩膀放低、銅釘往內移、手臂縮短，頭上那一根改成頭髮或頭飾，再做一個大約五隻的系列和首頁動態。
