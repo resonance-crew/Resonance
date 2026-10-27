@@ -338,15 +338,15 @@ val REPLY_OVERLAP = 14.dp
 /**
  * An unsent message (round 16 §3): one line tall, on its sender's side — a bubble's wobble in a dashed light pen
  * (INK_LIGHT, the muted ink), no fill, and [text] in the muted ink at 13 (你收回了一則訊息 / bob 收回了一則訊息).
- * It offers nothing. It isn't a bubble of its run: every corner is rounded alike, never tucked toward a neighbour.
+ * It offers nothing. It is a bubble of its run like any other: a corner toward a neighbour of the run is tucked.
  * The wobble is fitted inside the box with its pen ([unsentOutline]), so nothing of it is cut at the row's edge (the
  * row clips as it closes over a message being unsent), and its dashes come out even all the way round
  * ([evenDashes]): no seam.
  */
 @Composable
-fun UnsentBubble(text: String, mine: Boolean, seed: Double, modifier: Modifier = Modifier) {
+fun UnsentBubble(text: String, mine: Boolean, seed: Double, modifier: Modifier = Modifier, run: RunPosition = RunPosition.Single) {
     val pen = Tokens.TextMuted
-    val shape = remember(seed, mine) { MessageBubbleShape(seed, mine) }
+    val shape = remember(seed, mine, run) { MessageBubbleShape(seed, mine, run) }
     Box(
         modifier
             .drawWithCache {

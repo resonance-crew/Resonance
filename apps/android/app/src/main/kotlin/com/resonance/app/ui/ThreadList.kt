@@ -558,7 +558,7 @@ private fun MessageItem(row: ThreadRow, ctx: ThreadContext, deliveryLine: Boolea
             if (!mine) TheirFace(shown = !row.position.joinsBelow, ctx)
             Column(Modifier.widthIn(max = ctx.rowMax), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
                 if (message.isUnsent) {
-                    UnsentBubble(unsentWords(mine, model.other?.handle.orEmpty()), mine, seedFromId(message.key))
+                    UnsentBubble(unsentWords(mine, model.other?.handle.orEmpty()), mine, seedFromId(message.key), run = row.position)
                 } else {
                     MessageCore(row, ctx, interactive = true)
                     if (deliveryLine) DeliveryLine(message, model)

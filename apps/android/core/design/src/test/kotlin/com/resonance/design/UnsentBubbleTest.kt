@@ -36,9 +36,9 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * An unsent message's dashed outline (the owner's review on a Pixel 10 Pro, round 17): every corner round alike, never
- * tucked as a bubble of its run; nothing of its pen cut at its box (the row clips as it closes over a message being
- * unsent); its dashes even all the way round, no seam.
+ * An unsent message's dashed outline (the owner's review on a Pixel 10 Pro, round 17): a bubble of its run like any
+ * other (alone, every corner round alike); nothing of its pen cut at its box (the row clips as it closes over a message
+ * being unsent); its dashes even all the way round, no seam.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
