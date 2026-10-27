@@ -101,19 +101,21 @@ struct OrganicTabButton<ID: Hashable>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     static var glyph: CGFloat { 26 }
+    /// The solid twin's 0.9 → 1 as it comes in: a spring that overshoots a little.
+    static var spring: Animation { .spring(response: 0.3, dampingFraction: 0.55) }
 
     var body: some View {
         Button(action: action) {
             ZStack {
                 // Both glyphs stay drawn, one shown: the solid twin comes in springing from 0.9, the outline goes.
+                // Each animation is scoped to its own modifier (review F14: one over the other on the stack, the
+                // inner ease won and the scale eased for 120 ms instead of springing).
                 OrganicIcon(item.icon, size: Self.glyph, color: hovered ? Tokens.text : Tokens.textMuted, strokeWidth: Tokens.ink)
-                    .opacity(selected ? 0 : 1)
+                    .animation(.easeOut(duration: 0.12)) { $0.opacity(selected ? 0 : 1) }
                 OrganicIcon(item.glyph(selected: true), size: Self.glyph, color: Tokens.terracotta, strokeWidth: Tokens.ink)
-                    .opacity(selected ? 1 : 0)
-                    .scaleEffect(selected || reduceMotion ? 1 : 0.9)
+                    .animation(reduceMotion ? nil : Self.spring) { $0.scaleEffect(selected || reduceMotion ? 1 : 0.9) }
+                    .animation(.easeOut(duration: 0.12)) { $0.opacity(selected ? 1 : 0) }
             }
-            .animation(.easeOut(duration: 0.12), value: selected)
-            .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.55), value: selected)
             .overlay(alignment: .topTrailing) {
                 // Where the web's chip hangs off its icon; a ring of the bar's paper parts it from a solid glyph.
                 if item.badge > 0 { UnreadBadge(count: item.badge, ring: Tokens.cream).offset(x: 10, y: -8) }
