@@ -8,23 +8,34 @@ public struct OrganicMenuItem: Identifiable {
     public let id: String
     public let title: String
     public let icon: IconName
-    /// A row that ends or removes something (封鎖, 刪除…): told by the danger ink alone — its glyph and words
-    /// in the deeper danger red (``Tokens/dangerFill``), its press ink the danger hue — never a wash at rest
-    /// (round 17 review D1).
+    /// A row that removes something (刪除, 永久刪除, 刪除對話, a failed message's discard): it rests on a red wash,
+    /// its glyph and words in the deeper danger red (``Tokens/dangerFill``), its press ink the danger hue (round 18).
     public var danger: Bool
+    /// A row that warns (封鎖: a step back from someone): it rests on the warning yellow, its ink spreading in it;
+    /// its glyph and words as any row's (round 18).
+    public var warn: Bool
     /// Not possible yet (生成圖片 with no story to draw from): dimmed, and it takes no tap.
     public var disabled: Bool
     public let action: () -> Void
 
-    public init(id: String, title: String, icon: IconName, danger: Bool = false, disabled: Bool = false,
+    public init(id: String, title: String, icon: IconName, danger: Bool = false, warn: Bool = false, disabled: Bool = false,
                 action: @escaping () -> Void) {
         self.id = id
         self.title = title
         self.icon = icon
         self.danger = danger
+        self.warn = warn
         self.disabled = disabled
         self.action = action
     }
+
+    /// What the row does, as its wash tells it: a destructive row before a warning one.
+    public var tone: MenuRowTone { danger ? .danger : warn ? .warn : .plain }
+}
+
+/// What a menu row does (round 18): an ordinary row, one that warns (封鎖), or one that removes something (刪除).
+public enum MenuRowTone: Sendable, Equatable {
+    case plain, warn, danger
 }
 
 /// How a menu's trigger is drawn. In a bar (the card page's header) it is a
@@ -33,8 +44,8 @@ public struct OrganicMenuItem: Identifiable {
 /// `chip`: a wobbly cream squircle with no rim, so it stays legible over a
 /// picture without adding a pen line. A `pill` says what it opens in words
 /// beside its glyph, on the paper button's face (the writer's 更換封面 on the
-/// cover it changes): solid paper reads on any picture. A chip and a pill lie
-/// on what they're drawn over and cast the paper-cut shadow (``CutoutShadow``).
+/// cover it changes): solid paper reads on any picture. Flat, as the whole
+/// page is (round 18): nothing casts a shadow.
 public enum MenuTrigger: Sendable, Equatable {
     case chip, bare
     case pill(String, IconName)
@@ -119,10 +130,6 @@ public struct OrganicMenu: View {
                     OrganicButton(title, icon: glyph, variant: .paper, size: .sm, action: show)
                 }
             }
-            // A chip on the picture it changes: a second paper, with the paper-cut shadow (round 17 addendum A1),
-            // cast by the face as one piece — never by its words over its own paper.
-            .compositingGroup()
-            .cutoutShadow()
             .fixedSize()
             .frame(minHeight: 44)
         case .chip, .bare:
@@ -269,8 +276,7 @@ public struct OrganicChipFace: View {
 
 /// The trigger: a squircle chip (radius 0.42 of its side, one turn a side)
 /// in the menu's cream, no rim, the glyph at 0.53 of the side in the pen. It lies over a card or its
-/// cover, a second paper on the first, and casts the paper-cut shadow (``CutoutShadow``; round 17
-/// addendum A1) — a bare glyph in a bar never does.
+/// cover, a second paper on the first — flat (round 18: no shadow anywhere).
 struct OrganicMenuChip: View {
     let size: CGFloat
     let seed: Double
@@ -283,7 +289,7 @@ struct OrganicMenuChip: View {
             curve: 1.4, cornerJitter: 2.4, segmentsH: .count(1), segmentsV: .count(1)))
         OrganicIcon(icon, size: (size * 0.53).rounded(), color: active ? colors.borderHover : colors.border, strokeWidth: Tokens.ink)
             .frame(width: size, height: size)
-            .background { shape.fill(colors.cream.opacity(0.94)).cutoutShadow() }
+            .background { shape.fill(colors.cream.opacity(0.94)) }
     }
 }
 
@@ -356,18 +362,18 @@ public nonisolated enum MenuDrop {
     }
 }
 
-/// The menus' one surface (round 17 §1): every menu — a ⋯ dropped from its trigger, the composer's ＋,
-/// a message held — is this paper sheet. Borderless paper (``MenuColors/paper``: the menus' paper, a
-/// step toward the ink at night) under the paper's grain (0.3) over the whole wobbly outline, no pen
-/// and no rule between the rows, lifted off the page by the paper-cut shadow that follows the wobble
-/// (``CutoutShadow``) instead of an outline. Rows 44: the glyph 17, 12, the words at 15, 20 in from
+/// The menus' one surface (round 17 §1, flat since round 18): every menu — a ⋯ dropped from its trigger, the
+/// composer's ＋, a message held — is this sheet. The theme's menu paper (``MenuColors/paper``; a card's own
+/// menu its card's) inside one hand-drawn pen line at ``Tokens/ink`` along its own wobble — the header's quiet
+/// grey (``MenuColors/pen``: `--sheet-pen`), a card's own menu its card's pen — with no grain, no rule between
+/// the rows and no shadow. Rows 44: the glyph 17, 12, the words at 15, 20 in from
 /// either side, the sheet as wide as its longest row (``MenuSheetMetrics/width(titles:footer:widths:)``, 168 to 300;
 /// a held message's list 216 to 280).
 /// A press spreads the ink from the finger, clipped to its row's band inside the outline (the bands
-/// part on unseen wavy lines, rowMenu.ts). A destructive row is told by the danger ink alone — its glyph and
-/// words in the deeper danger red at rest and pressed (``Tokens/dangerFill``: 5 : 1 on the menu paper, where the
-/// plain danger red is 4.2), and its press ink the danger hue at the same strength — never a wash under it at rest
-/// (round 17 review D1: the platforms' own destructive rows; the yellow band read as a second layer). With a `footer`,
+/// part on unseen wavy lines, rowMenu.ts). 封鎖 (``OrganicMenuItem/warn``) rests on the warning yellow, a destructive
+/// row on a red wash with its glyph and words in the deeper danger red (``Tokens/dangerFill``: 5 : 1 on the menu
+/// paper, where the plain danger red is 4.2) — each wash filling its band right to the pen line, which is drawn
+/// over every ink (``MenuRowInks``). With a `footer`,
 /// one quiet line closes it, at the trailing end (a message's time, under its long-press menu).
 /// ``OrganicMenu`` drops it from its trigger; a screen can hang it anywhere (the thread's long-press,
 /// the composer's ＋). `onChoose` comes a moment after the tap, once the ink has been seen; the
@@ -448,7 +454,7 @@ public struct OrganicMenuPanel: View {
         .frame(width: width, height: height, alignment: .top)
         .background {
             MenuSheetBackground(size: CGSize(width: width, height: height), seed: seed, colors: colors,
-                                dangerRows: MenuRowInks.dangerRows(items), ink: ink, rows: items.count,
+                                tones: items.map(\.tone), ink: ink, rows: items.count,
                                 bands: items.count + (footer == nil ? 0 : 1))
         }
         .coordinateSpace(.named(MenuSheetMetrics.space))
@@ -504,17 +510,16 @@ struct MenuRowStyle: ButtonStyle {
     }
 }
 
-/// The sheet's paper, its shadow, the washes and its grain, all of them one outline: the paper's fill
-/// casts the paper-cut shadow (``CutoutShadow``); the pressed row's ink (red on a destructive row) is cut to its band inside it; the
-/// grain covers exactly the paper — laid wider than the box by ``MenuSheetMetrics/grainOverflow`` and
-/// clipped to the same outline, since the wobble swings past the box (round 17 §1: a strip at the top
-/// edge had paper and no grain, and the sheet read as two layers).
+/// The sheet's paper, the rows' washes and its pen line, all of them one outline (round 18): the paper; then each
+/// warning or destructive row's resting wash and the pressed row's ink (in that row's colour), each cut to its row's
+/// band inside the outline — the bands reach past the box, as the wobble swings past it, so a wash ends on the pen
+/// line and never short of it; then the pen line over every ink. No grain, no shadow.
 struct MenuSheetBackground: View {
     let size: CGSize
     let seed: Double
     let colors: MenuColors
-    /// The destructive rows: their press ink is the danger red.
-    let dangerRows: Set<Int>
+    /// Each row's tone: its resting wash and the colour of its press ink.
+    let tones: [MenuRowTone]
     let ink: MenuInk
     /// The rows, and the bands they and a footer make (the footer's takes no ink).
     let rows: Int
@@ -527,21 +532,28 @@ struct MenuSheetBackground: View {
         let w = Double(size.width), h = Double(size.height)
         let boundaries = MenuSheetMetrics.boundaries(bands: bands, width: w, height: h, seed: seed)
         let pad = MenuSheetMetrics.pad(height: h)
+        let band = { (row: Int) in rowRegion(row, count: bands, boundaries: boundaries, w: w, h: h, pad: pad).path().intersection(outer) }
         ZStack(alignment: .topLeading) {
-            shape.fill(colors.paper).cutoutShadow()
+            shape.fill(colors.paper)
+            ForEach(Array(tones.prefix(rows).enumerated()), id: \.offset) { row, tone in
+                if let rest = MenuRowInks.rest(tone) {
+                    MenuPathShape(path: band(row)).fill(rest)
+                }
+            }
             if let row = ink.row, row < rows {
                 let origin = ink.origin ?? CGPoint(x: size.width / 2, y: MenuSheetMetrics.padTop + (CGFloat(row) + 0.5) * MenuSheetMetrics.row)
-                let far = hypot(max(origin.x, size.width - origin.x), max(origin.y, size.height - origin.y)) + 4
-                let region = rowRegion(row, count: bands, boundaries: boundaries, w: w, h: h, pad: pad).path()
+                // Past the far corner by more than the wobble swings out of the box, so a spread row is inked
+                // right to its pen line.
+                let far = hypot(max(origin.x, size.width - origin.x), max(origin.y, size.height - origin.y)) + MenuSheetMetrics.brushReach
                 Circle()
-                    .fill(MenuRowInks.press(danger: dangerRows.contains(row), colors: colors))
+                    .fill(MenuRowInks.press(row < tones.count ? tones[row] : .plain, colors: colors))
                     .frame(width: far * 2 * ink.reach, height: far * 2 * ink.reach)
                     .position(origin)
                     .frame(width: size.width, height: size.height)
-                    .clipShape(MenuPathShape(path: region.intersection(outer)))
+                    .clipShape(MenuPathShape(path: band(row)))
                     .opacity(ink.opacity)
             }
-            GrainLayer(shape: shape, mode: .tile, opacity: 0.3, tile: "grain-card", overflow: MenuSheetMetrics.grainOverflow)
+            shape.stroke(colors.pen, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
         }
         .frame(width: size.width, height: size.height, alignment: .topLeading)
         .allowsHitTesting(false)
@@ -584,8 +596,9 @@ public nonisolated enum MenuSheetMetrics {
     public static let footerSize: CGFloat = 12
     public static let footerPadBottom: CGFloat = 10
     public static let radius: Double = 26
-    /// How far the grain is laid past the box: past the furthest the wobble swings out.
-    public static let grainOverflow: CGFloat = 10
+    /// How far a row's press ink reaches past the sheet's far corner: further than the wobble swings out of the
+    /// box (round 18: a wash ends on the pen line, never short of it — the web's BRUSH_REACH).
+    public static let brushReach: CGFloat = 12
     /// At least this wide, so a menu of two short rows (the composer's ＋: 圖片 · 卡片) still reads as a sheet
     /// rather than a blob; never wider than the most (a longer row's words end in an ellipsis).
     public static let minWidth: CGFloat = 168
@@ -626,68 +639,20 @@ public nonisolated enum MenuSheetMetrics {
     }
 }
 
-/// The paper-cut shadow (round 17 addendum A1): the one shadow of anything lying on the page like a piece
-/// of cut paper — every menu sheet, the toast (``OrganicPill``), a menu chip over a card or its cover. Tight
-/// and a little deep, one sheet lifted a millimetre rather than floating (it replaced round 17 §1's soft
-/// `0 8 24`). By day two layers of the palette's shadow ink — `0 2 3` at 22 % and `0 0.5 1` at 14 % — at
-/// night one, `0 2 4` at 60 % (the web's `--cutout-shadow`). A CSS blur is twice a layer's shadow radius.
-/// Bare glyph buttons, the tray's stickers and anything flat wear none.
-public nonisolated enum CutoutShadow {
-    /// One layer: its ink's strength, its blur as a layer's radius (half the CSS blur), its drop.
-    public struct Layer: Equatable, Sendable {
-        public var alpha: Double
-        public var radius: CGFloat
-        public var y: CGFloat
-
-        public init(alpha: Double, radius: CGFloat, y: CGFloat) {
-            self.alpha = alpha
-            self.radius = radius
-            self.y = y
-        }
+/// A menu sheet's paper and pen line (round 18): the theme's menu paper inside the header's grey, or a card's
+/// own menu paper inside its card's pen.
+public nonisolated enum MenuSheetColors {
+    /// `--sheet-paper`: the menu paper, never raised at night; a card's own menu its hue's menu paper.
+    public static func paper(hue: Double?) -> Color {
+        guard let hue else { return Tokens.menuPaper }
+        return Palette.hue(.menu, hue)
     }
 
-    /// The layers of a scheme: by day the drop and the hairline under the paper's edge; at night the drop alone.
-    public static func layers(dark: Bool) -> [Layer] {
-        dark ? [Layer(alpha: 0.60, radius: 2, y: 2)]
-            : [Layer(alpha: 0.22, radius: 1.5, y: 2), edge]
-    }
-
-    /// The drop: `0 2 3` by day, `0 2 4` at night.
-    public static func drop(dark: Bool) -> Layer { layers(dark: dark)[0] }
-    /// The hairline: `0 0.5 1` by day; none at night.
-    public static let edge = Layer(alpha: 0.14, radius: 0.5, y: 0.5)
-
-    /// The layers' inks: the palette's shadow ink (`--shadow-ink`) at each layer's strength, by scheme — the
-    /// hairline clear at night.
-    public static let dropInk = ink { $0 == .dark ? drop(dark: true).alpha : drop(dark: false).alpha }
-    public static let edgeInk = ink { $0 == .dark ? 0 : edge.alpha }
-
-    private static func ink(_ alpha: (PaletteScheme) -> Double) -> Color {
-        Palette.made { accent, scheme in
-            let c = OKLCHColor.components(Palette.oklch(.shadowInk, accent: accent, scheme: scheme)) ?? (0, 0, 0, 1)
-            return (c.L, c.C, c.H, c.alpha * alpha(scheme))
-        }
-    }
-}
-
-private struct CutoutShadowModifier: ViewModifier {
-    @Environment(\.colorScheme) private var scheme
-
-    func body(content: Content) -> some View {
-        let drop = CutoutShadow.drop(dark: scheme == .dark)
-        // Nothing drawn twice (a chip's 94 % cream keeps what shows through it): the drop, then the hairline —
-        // cast by the paper and the drop's own fringe together, a hundredth of ink or so more, unseen.
-        content
-            .shadow(color: CutoutShadow.dropInk, radius: drop.radius, x: 0, y: drop.y)
-            .shadow(color: CutoutShadow.edgeInk, radius: CutoutShadow.edge.radius, x: 0, y: CutoutShadow.edge.y)
-    }
-}
-
-extension View {
-    /// The paper-cut shadow (``CutoutShadow``), following the outline of what it is given — a filled shape, or a
-    /// face composited into one (`.compositingGroup()` first, or its words would cast their own).
-    public func cutoutShadow() -> some View {
-        modifier(CutoutShadowModifier())
+    /// `--sheet-pen`: the header's quiet grey (`--field-border-hover`), never the accent; a card's own menu its
+    /// card's pen.
+    public static func pen(hue: Double?) -> Color {
+        guard let hue else { return Tokens.fieldBorderHover }
+        return Palette.hue(.pen, hue)
     }
 }
 
@@ -713,41 +678,25 @@ struct MenuColors {
         }
     }
 
-    /// The sheet's paper (round 17 §1, the press layer's): the menus' cream — or the card's — by day; at
-    /// night 94 % of it toward the ink, so the sheet stands off the page it floats over.
-    var paper: Color {
-        guard let hue else { return MenuColors.raisedPaper }
-        return Palette.made { _, scheme in
-            let c = Self.paperOKLCH(hue: hue, scheme)
-            return (c.L, c.C, c.H, 1)
-        }
-    }
+    /// The sheet's paper (round 18: the theme's menu paper, never raised at night — `--sheet-paper`), or a card's
+    /// own menu paper for a card's own menu (`--sheet-base`).
+    var paper: Color { MenuSheetColors.paper(hue: hue) }
 
-    /// The menus' own paper, raised at night (``PressSheet/paper``).
-    static let raisedPaper: Color = Palette.made { accent, scheme in paperOKLCH(hue: nil, scheme, accent: accent) }
+    /// The sheet's pen line (round 18): the header's quiet grey (`--sheet-pen` = `--field-border-hover`), never the
+    /// accent — a dropped menu is a quick aside, not something to look at; a card's own menu its card's pen.
+    var pen: Color { MenuSheetColors.pen(hue: hue) }
 
-    /// The paper as oklch: the card's hue's menu cream or the theme's, raised 94 % toward the ink at night.
-    static func paperOKLCH(hue: Double?, _ scheme: PaletteScheme, accent: Accent = .terracotta)
+    /// The menus' own paper as oklch (the press layer's tray disc mixes over it at night).
+    static func paperOKLCH(_ scheme: PaletteScheme, accent: Accent = .terracotta)
         -> (L: Double, C: Double, H: Double, alpha: Double) {
-        func token(_ t: PaletteToken) -> (L: Double, C: Double, H: Double, alpha: Double) {
-            OKLCHColor.components(Palette.oklch(t, accent: accent, scheme: scheme)) ?? (0.95, 0.01, 80, 1)
-        }
-        let base: (L: Double, C: Double, H: Double, alpha: Double)
-        if let hue {
-            let c = Palette.hueOKLCH(.menu, hue, scheme)
-            base = (c.L, c.C, c.H, 1)
-        } else {
-            base = token(.menuPaper)
-        }
-        guard scheme == .dark else { return base }
-        return Palette.mixOKLCH(base, 0.94, token(.towardInk))
+        OKLCHColor.components(Palette.oklch(.menuPaper, accent: accent, scheme: scheme)) ?? (0.95, 0.01, 80, 1)
     }
 }
 
-/// A row's inks (round 17 review D1): the glyph in the menu's pen and the words in the text ink, both the
-/// deeper pen while pressed; a destructive row's both in the deeper danger red (`--danger-fill`, which words
-/// can be read in: ≈ 5 : 1 on the menu paper by day), pressed or not. Its press ink is the same strength as
-/// every row's, in its own hue (`--color-danger` for a destructive row).
+/// A row's inks: the glyph in the menu's pen and the words in the text ink, both the deeper pen while pressed (a
+/// warning row's too); a destructive row's both in the deeper danger red (`--danger-fill`, which words can be read
+/// in: ≈ 5 : 1 on the menu paper by day), pressed or not. What a row rests on and the ink a press spreads follow its
+/// tone (round 18, the web's RowInk `menuRowRest` / `menuRowWash`): 封鎖 the warning yellow, a destructive row red.
 public struct MenuRowInks: Equatable {
     public let glyph: Color
     public let label: Color
@@ -762,19 +711,47 @@ public struct MenuRowInks: Equatable {
         return MenuRowInks(glyph: pressed ? colors.borderHover : colors.border, label: pressed ? colors.borderHover : Tokens.text)
     }
 
-    /// The ink a press spreads under a row: the deeper pen at 15 %, or the danger hue at 15 %.
-    public static func press(danger: Bool, hue: Double? = nil) -> Color {
-        press(danger: danger, colors: MenuColors(hue: hue))
+    /// The ink a press spreads under a row: the deeper pen at 15 %, the danger hue at 15 %, or over 封鎖's yellow
+    /// more of it (by day the yellow at 30 %; at night the text ink at 8 %, which lightens the deep olive).
+    public static func press(_ tone: MenuRowTone, hue: Double? = nil) -> Color {
+        press(tone, colors: MenuColors(hue: hue))
     }
 
-    static func press(danger: Bool, colors: MenuColors) -> Color {
-        (danger ? Tokens.danger : colors.borderHover).opacity(pressStrength)
+    static func press(_ tone: MenuRowTone, colors: MenuColors) -> Color {
+        switch tone {
+        case .plain: colors.borderHover.opacity(pressStrength)
+        case .danger: Tokens.danger.opacity(pressStrength)
+        case .warn: warnInk
+        }
+    }
+
+    /// What a row rests on before any ink: 封鎖 the warning yellow, a destructive row a red wash, every other row
+    /// the bare paper (nil). See-through, so the row is the same paper.
+    public static func rest(_ tone: MenuRowTone) -> Color? {
+        switch tone {
+        case .plain: nil
+        case .danger: Tokens.danger.opacity(dangerRestStrength)
+        case .warn: warnRest
+        }
     }
 
     public static let pressStrength: Double = 0.15
+    /// The red a destructive row rests on: the danger hue at 11 %, by day and night.
+    public static let dangerRestStrength: Double = 0.11
+    /// The warning yellow a row rests on (`--menu-warn-rest`): 32 % by day; the night yellow is a deep olive, so
+    /// at night it is laid on nearly whole, 90 %.
+    public static func warnRestStrength(dark: Bool) -> Double { dark ? 0.90 : 0.32 }
 
-    /// Every destructive row, not only the first.
-    public static func dangerRows(_ items: [OrganicMenuItem]) -> Set<Int> {
-        Set(items.indices.filter { items[$0].danger })
+    /// `--menu-warn-rest`.
+    public static let warnRest: Color = Palette.made { accent, scheme in
+        let c = OKLCHColor.components(Palette.oklch(.yellow, accent: accent, scheme: scheme)) ?? (0.9, 0.1, 90, 1)
+        return (c.L, c.C, c.H, c.alpha * warnRestStrength(dark: scheme == .dark))
+    }
+
+    /// `--menu-warn-ink`: the yellow at 30 % by day, the text ink at 8 % at night.
+    public static let warnInk: Color = Palette.made { accent, scheme in
+        let dark = scheme == .dark
+        let c = OKLCHColor.components(Palette.oklch(dark ? .text : .yellow, accent: accent, scheme: scheme)) ?? (0.5, 0, 0, 1)
+        return (c.L, c.C, c.H, c.alpha * (dark ? 0.08 : 0.30))
     }
 }

@@ -408,9 +408,8 @@ A reply to a picture quotes 一張圖片 (`ReplyQuote.summary`), and the Message
 list says 傳送了一張圖片 for one sent without words.
 
 Round 17 (2026-10-27), iOS: every menu is one sheet (`OrganicMenuPanel`, DesignSystem `OrganicMenu.swift`) — the ⋯
-dropped from its trigger (no scrim), the composer's ＋ and a held message's actions alike: borderless paper
-(`MenuColors.paper`, raised at night) under the grain laid past the wobble (`MenuSheetMetrics.grainOverflow`), no pen and
-no rules, the paper-cut shadow following the wobble (`CutoutShadow`, below), rows 44 with the glyph 17 and the words 12 apart and 20 in
+dropped from its trigger (no scrim), the composer's ＋ and a held message's actions alike (its paper, pen and washes as
+round 18 has them, below), no rules between the rows, rows 44 with the glyph 17 and the words 12 apart and 20 in
 from either side, 168 to 300 wide (a held message's list 216 to 280; `MenuSheetMetrics`), the ink spreading from the finger inside its row's band, and a
 held message's time at the trailing end right under its rows. Holding a message dims and softens the thread's body alone
 (the scrim is the thread's, under its header and short of the rule beside the list; `PressPlacement` keeps the
@@ -422,25 +421,34 @@ own rule, and opens `StoryLinkModal` in the app's modal. The phone's tab bar sta
 its outline glyphs at INK_STRONG;
 the writer's bar grows round its title and save line at a large text size (`BarTitles.scaledSubtitleLine`); and at the
 split the map's Leave is the workspace's one back — from the publish step back to writing, named 繼續寫 (`WritePane.publishing`).
-Its addendum, iOS: whatever lies on the page like a piece of cut paper casts one shadow, tight and a little deep
-(`CutoutShadow`, `.cutoutShadow()`: by day `0 2 3` at 22 % and `0 0.5 1` at 14 % of the palette's shadow ink, at night
-`0 2 4` at 60 % — the web's `--cutout-shadow`) — every menu sheet, the toast's and the thread's pill (`OrganicPill`), and a
-chip over a card or its cover (the card box's ⋯ chip, `OrganicMenuChip`; the writer's 更換封面 pill and its error chip);
-a bare glyph in a bar, the press tray's stickers and anything flat cast none.
+Its addendum's paper-cut shadow (`CutoutShadow`) is gone again since round 18: nothing in the app casts a shadow.
 
 Round 17's review, iOS: an animation tied to a value that flips in the same update as a layout change carries that
 change too, so the composer's and the tag field's faces animate their colour or opacity alone (`.animation(_:body:)`),
 and what must keep its place behind a press or a value's animation is a `.geometryGroup()` outside it — committing a tag
 moved the field down under the new pills while its end segment glided in from where it had been (the owner's 「跳動」;
-`RoundSeventeenTagJumpTests` reads the screen frame by frame). A destructive row is told by the danger ink alone, its
-glyph and words in the deeper danger red (`Tokens.dangerFill`, ≈ 5 : 1 on the menu paper by day) at rest and pressed,
-its press ink the danger hue at the row's usual 15 %, never a wash at rest (`MenuRowInks`).
+`RoundSeventeenTagJumpTests` reads the screen frame by frame). A destructive row's glyph and words are in the deeper
+danger red (`Tokens.dangerFill`, ≈ 5 : 1 on the menu paper by day) at rest and pressed, its press ink the danger hue at
+the row's usual 15 % (`MenuRowInks`; what it rests on is round 18's).
 In two panes the press scrim starts on the rule's own line and follows its wave (`PaneScrim`), the rule drawn over it.
 The link dialog's controls are one height, 44 (`StoryLinkModal.Metrics.control`, `SegmentedActionBar(height:)`),
 移除連結 a quiet word in the text ink (`QuietTextButton`), and the address is selected through the field's own
 `TextSelection` once it has the focus — never a select-all sent to whatever is first responder, which could be the
 story. A bare menu trigger wears the web's open state while its menu is open — the composer's ＋ (圖片 · 卡片) and every
 bar's ⋯ (`OrganicMenu` `.bare`): the full text ink on a wobbly disc of it at 8 % (`BareTriggerDisc`), never terracotta.
+
+Round 18 (2026-10-28, the owner's review), iOS: flat, as the web is. Every menu sheet (`OrganicMenuPanel`) is the
+theme's menu paper (`MenuColors.paper`, never raised at night) inside one hand-drawn pen line at INK along its wobble —
+the header's grey (`MenuColors.pen` = `Tokens.fieldBorderHover`, the web's `--sheet-pen`), never the accent; a card's own
+menu (the card box's and the trash's ⋯, 更換封面) its card's menu paper and pen — with no grain, no rules and no shadow.
+The paper, then the rows' washes, then the pen line over them (`MenuSheetBackground`). 封鎖 (`OrganicMenuItem.warn`) rests
+on the warning yellow (`MenuRowInks.warnRest`: 32 % by day, 90 % at night; its press ink the yellow at 30 % by day, the
+text ink at 8 % at night), a destructive row on the danger red at 11 % (`MenuRowInks.rest`), 登出 and every other row on
+the bare paper; each wash is cut to its row's band inside the sheet's outline only — the bands reach past the box, and a
+press reaches 12 past the far corner (`MenuSheetMetrics.brushReach`) — so it ends on the pen line where the wobble swings
+out. The toast and the thread's way-back pill (`OrganicPill`) are made as a card is: the accent's light wash inside a pen
+line of the accent, the toast with a card's corners (16), the pill round. `CutoutShadow` is gone: no sheet, chip, pill
+or toast casts a shadow. The app has no Select-style list of its own, so the web's focus-pen Select has no twin here.
 
 The app hosts its unit tests; run them with `xcodebuild test … -destination
 'id=<udid>'`. Under XCTest the app points at a local stack that isn't there
