@@ -64,7 +64,7 @@ class RoundSeventeenTest {
                     OrganicMenuPanel(
                         listOf(
                             OrganicMenuItem("回覆", IconName.Reply) {},
-                            OrganicMenuItem("檢舉這則訊息", IconName.Flag) {},
+                            OrganicMenuItem("檢舉這則訊息並且封鎖", IconName.Flag) {},
                         ),
                         seed = 7.0,
                     ) {}
@@ -77,12 +77,31 @@ class RoundSeventeenTest {
         near(MenuSheet.height(2, footer = false).value, (sheet.bottom - sheet.top).value, "height")
         assertEquals(100f, MenuSheet.height(2, footer = false).value, 0.01f)
         // The longest row's words end 20 short of the sheet's end: the sheet hugs them.
-        val long = compose.onNodeWithText("檢舉這則訊息", useUnmergedTree = true).getBoundsInRoot()
+        val long = compose.onNodeWithText("檢舉這則訊息並且封鎖", useUnmergedTree = true).getBoundsInRoot()
         near(sheet.right.value - 20f, long.right.value, "the longest words' end")
         // Every row's words start 20 + the 17 glyph + 12 in.
         val short = compose.onNodeWithText("回覆", useUnmergedTree = true).getBoundsInRoot()
         near(sheet.left.value + 49f, short.left.value, "the words' start")
         near(sheet.left.value + 49f, long.left.value, "the words' start")
+    }
+
+    @Test fun twoShortRowsStillMakeASheetNotABlob() {
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides one) {
+                Box(Modifier.testTag("sheet")) {
+                    OrganicMenuPanel(
+                        listOf(
+                            OrganicMenuItem("圖片", IconName.Reply) {},
+                            OrganicMenuItem("卡片", IconName.Flag) {},
+                        ),
+                        seed = 7.0,
+                    ) {}
+                }
+            }
+        }
+        compose.mainClock.advanceTimeBy(400)
+        val sheet = compose.onNodeWithTag("sheet").getBoundsInRoot()
+        near(MenuSheet.MinWidth.value, (sheet.right - sheet.left).value, "the narrowest sheet")
     }
 
     @Test fun theQuietFootIsAtTheEndRightUnderTheLastRow() {

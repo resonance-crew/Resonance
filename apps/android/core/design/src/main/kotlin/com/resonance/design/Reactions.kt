@@ -254,7 +254,7 @@ fun MessageActionSheet(
     val palette = LocalResonanceColors.current
     val rows = remember(actions) { actions.map { SheetRow(it.title, it.icon, danger = it.destructive) } }
     val inks = remember(palette) { MenuColors(null, palette).sheetInks() }
-    PaperMenuSheet(rows, seed, inks, footer, onChoose = { onChoose(actions[it]) }, modifier = modifier)
+    PaperMenuSheet(rows, seed, inks, footer, onChoose = { onChoose(actions[it]) }, modifier = modifier, minWidth = MenuSheet.PressMinWidth)
 }
 
 /**

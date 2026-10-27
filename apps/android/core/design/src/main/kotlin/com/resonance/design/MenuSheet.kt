@@ -58,7 +58,8 @@ import kotlin.math.max
 
 /**
  * A menu sheet's measures (round 17 §1, §2.3): rows 44 tall, the glyph 17, 12 to the words, 20 of air at the
- * row's start and end — the sheet as wide as its longest row with them, [MaxWidth] at most — 6 above the first
+ * row's start and end — the sheet as wide as its longest row with them, [MinWidth] at least (a held message's
+ * list [PressMinWidth]) and [MaxWidth] at most — 6 above the first
  * row; under the last, 6 more, or the quiet foot's 24-tall line (its words at the end) and 10 under that.
  */
 object MenuSheet {
@@ -71,6 +72,10 @@ object MenuSheet {
     val Footer: Dp = 24.dp
     val FooterBottom: Dp = 10.dp
     val MaxWidth: Dp = 280.dp
+    /** Two short rows (the composer's 圖片 · 卡片) would otherwise make a blob of it. */
+    val MinWidth: Dp = 168.dp
+    /** A held message's list, as since round 16. */
+    val PressMinWidth: Dp = 216.dp
     /** The wobble's corners (the press menu's sheet since round 16). */
     const val RADIUS = 22.0
     /** The sheet's grain: PaperSheet's (the thought map's cluster recipe), over the whole filled wobble. */
@@ -215,6 +220,7 @@ internal fun PaperMenuSheet(
     footer: String?,
     onChoose: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    minWidth: Dp = MenuSheet.MinWidth,
 ) {
     val palette = LocalResonanceColors.current
     val grain = GrainInk.current
@@ -228,7 +234,7 @@ internal fun PaperMenuSheet(
     val shadows = remember(palette) { SheetShadow.of(palette) }
     Column(
         modifier
-            .widthIn(max = MenuSheet.MaxWidth)
+            .widthIn(min = minWidth, max = MenuSheet.MaxWidth)
             .width(IntrinsicSize.Max)
             .drawWithCacheOf(SheetShadowDrawing(seed, shadows))
             // The sheet in a layer of its own: a row's spreading ink redraws it, never the blurred shadow under it.
