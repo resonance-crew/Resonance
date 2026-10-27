@@ -162,6 +162,21 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(!model.nextLoading)
     }
 
+    /// An opened card's ✓ never waits for a save: the step is at publish before the page draws it (the
+    /// `-writeStep publish` launch), with no change of step for the page to hear — the step must still
+    /// be there, not the writing page faded out over nothing.
+    @Test func aStepAlreadyAtPublishWhenThePageFirstDrawsIsShown() async {
+        let model = WriteModel(drafts: RecordingDraftStore(), writing: writing(), calls: ServerCalls().calls,
+                               opened: card(published: false, title: "A walk", story: "Rain."))
+        #expect(!WriteScreen.mountsPublishStep(loaded: false, step: model.step))
+        #expect(await model.goNext())
+        #expect(model.step == .publish)
+        #expect(WriteScreen.mountsPublishStep(loaded: false, step: model.step))
+        // Back to writing, the step once shown stays mounted.
+        model.stepBack()
+        #expect(WriteScreen.mountsPublishStep(loaded: true, step: model.step))
+    }
+
     @Test func aRefusedFirstSaveKeepsTheWriterWritingAndSaysSo() async {
         let store = RecordingDraftStore()
         store.answers = [.failure(refusedByRules)]
