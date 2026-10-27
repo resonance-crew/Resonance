@@ -305,12 +305,15 @@ describe('the link tool', () => {
     renderWithIntl(<MarkdownEditor variant="canvas" value="" onChange={onChange} ariaLabel="Story" />);
     const story = await screen.findByRole('textbox', { name: 'Story' });
     act(() => void editorOf(story).commands.focus('start'));
+    // Tiptap's focus lands a frame later: let it, or it would take the focus back from the dialog's field.
+    await waitFor(() => expect(story).toHaveFocus());
     fireEvent.keyDown(story, { key: 'k', ctrlKey: true });
 
     const sheet = await screen.findByRole('dialog', { name: L.insertLink });
     expect(within(sheet).getByText(L.linkShowAs)).toBeInTheDocument();
     expect(within(sheet).getByRole('button', { name: L.linkAsCard })).toHaveAttribute('aria-pressed', 'true');
     const field = within(sheet).getByRole('textbox', { name: L.linkPlaceholder });
+    await waitFor(() => expect(field).toHaveFocus());
     // Not an address we link to: it stays open and says so, the story untouched.
     await userEvent.type(field, 'javascript:alert(1)');
     await userEvent.click(within(sheet).getByRole('button', { name: L.linkApply }));
@@ -380,6 +383,8 @@ describe('the link tool', () => {
     renderWithIntl(<MarkdownEditor variant="canvas" value="" onChange={vi.fn()} ariaLabel="Story" />);
     const story = await screen.findByRole('textbox', { name: 'Story' });
     act(() => void editorOf(story).commands.focus('start'));
+    // Tiptap's focus lands a frame later: let it, or it would take the focus back from the dialog's field.
+    await waitFor(() => expect(story).toHaveFocus());
     await userEvent.click(await screen.findByRole('button', { name: L.insert }));
     // 插入連結, beside 插入圖片 · 插入卡片 (round 16 review S5).
     await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: L.insertLink }));
