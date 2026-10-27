@@ -854,7 +854,10 @@ export interface StorySchemaNodes {
  */
 export function storyExtensions(nodes: StorySchemaNodes = {}): AnyExtension[] {
   return [
-    StarterKit.configure({ blockquote: false, paragraph: false }),
+    // A link in the writer is something to edit, not to follow (round 16): a click or tap selects the whole
+    // link, so the selection bubble's 連結 (the apps' format-bar link tool) lights up on it, instead of
+    // opening the page and leaving no way to put the caret in it.
+    StarterKit.configure({ blockquote: false, paragraph: false, link: { openOnClick: false, enableClickSelection: true } }),
     nodes.paragraph ?? SpacedParagraph,
     nodes.blockquote ?? Blockquote,
     nodes.image ?? BlockImage,

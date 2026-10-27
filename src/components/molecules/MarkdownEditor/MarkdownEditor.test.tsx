@@ -258,6 +258,22 @@ describe('the link tool', () => {
     await waitFor(() => expect(screen.queryByRole('group', { name: L.link })).toBeNull());
   });
 
+  // A link in the writer is something to edit: a click selects it (the bubble's 連結 then edits it), never opens
+  // the page — on the apps' island the same tap was opening it, with no way to put the caret in the link.
+  it('never opens a link clicked in the story — the click is for editing it', async () => {
+    pointer(true);
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    renderWithIntl(<MarkdownEditor variant="canvas" value="A [quiet](https://example.com/rain) morning" onChange={vi.fn()} ariaLabel="Story" />);
+    const story = await screen.findByRole('textbox', { name: 'Story' });
+    const link = within(story).getByText('quiet');
+    act(() => void editorOf(story).commands.focus());
+    fireEvent.mouseDown(link);
+    fireEvent.mouseUp(link);
+    fireEvent.click(link);
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
   it('opens on ⌘K / Ctrl+K on an empty line with 卡片 chosen, and makes the line the address’s card', async () => {
     pointer(true);
     const onChange = vi.fn();
