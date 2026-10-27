@@ -467,7 +467,7 @@
     "searchHint": "輸入關鍵字，搜尋你們的訊息",
     "you": "你",
     "cardSource": "共振",
-    "react": "回應",
+    "react": "表情回應",
     "reactions": {
       "heart": "愛心",
       "moved": "感動",
@@ -551,7 +551,8 @@
       "linkApply": "完成",
       "linkInvalid": "這不是可以連結的網址",
       "linkCardLabel": "連結卡片：{host}",
-      "linkEdit": "編輯連結"
+      "linkEdit": "編輯連結",
+      "insertLink": "插入連結"
     },
     "tagsLabel": "標籤",
     "tagsSuggest": "AI 建議",
@@ -646,7 +647,8 @@
     "tagsSuggestShort": "AI 建議",
     "tagsSuggestLabel": "AI 建議標籤",
     "tagsAddLabel": "新增標籤：{tag}",
-    "tagsAdded": "已加入 {count} 個標籤"
+    "tagsAdded": "已加入 {count} 個標籤",
+    "tagsRemoveLabel": "移除標籤：{tag}"
   },
   "me": {
     "joined": "{date} 加入",

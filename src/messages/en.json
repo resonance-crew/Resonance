@@ -551,7 +551,8 @@
       "linkApply": "Done",
       "linkInvalid": "That isn’t an address that can be linked",
       "linkCardLabel": "Link card: {host}",
-      "linkEdit": "Edit link"
+      "linkEdit": "Edit link",
+      "insertLink": "Insert link"
     },
     "tagsLabel": "Tags",
     "tagsSuggest": "Suggest with AI",
@@ -646,7 +647,8 @@
     "tagsSuggestShort": "Suggest",
     "tagsSuggestLabel": "Suggest tags with AI",
     "tagsAddLabel": "Add tag: {tag}",
-    "tagsAdded": "{count, plural, one {# tag added} other {# tags added}}"
+    "tagsAdded": "{count, plural, one {# tag added} other {# tags added}}",
+    "tagsRemoveLabel": "Remove tag: {tag}"
   },
   "me": {
     "joined": "Joined {date}",

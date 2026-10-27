@@ -993,6 +993,8 @@ public enum L10n {
             public static func linkCardLabel(host: String) -> String { Strings.shared.format("write.editor.linkCardLabel", ["host": host]) }
             /// Edit link
             public static var linkEdit: String { Strings.shared.string("write.editor.linkEdit") }
+            /// Insert link
+            public static var insertLink: String { Strings.shared.string("write.editor.insertLink") }
         }
         /// Tags
         public static var tagsLabel: String { Strings.shared.string("write.tagsLabel") }
@@ -1172,6 +1174,8 @@ public enum L10n {
         public static func tagsAddLabel(tag: String) -> String { Strings.shared.format("write.tagsAddLabel", ["tag": tag]) }
         /// {count, plural, one {# tag added} other {# tags added}}
         public static func tagsAdded(count: Int) -> String { Strings.shared.format("write.tagsAdded", ["count": count]) }
+        /// Remove tag: {tag}
+        public static func tagsRemoveLabel(tag: String) -> String { Strings.shared.format("write.tagsRemoveLabel", ["tag": tag]) }
     }
     public enum Me {
         /// Joined {date}

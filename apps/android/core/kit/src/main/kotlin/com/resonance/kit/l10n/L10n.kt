@@ -995,6 +995,8 @@ object L10n {
             fun linkCardLabel(host: String): String = Strings.format("write.editor.linkCardLabel", mapOf("host" to host))
             /** Edit link */
             val linkEdit: String get() = Strings.string("write.editor.linkEdit")
+            /** Insert link */
+            val insertLink: String get() = Strings.string("write.editor.insertLink")
         }
         /** Tags */
         val tagsLabel: String get() = Strings.string("write.tagsLabel")
@@ -1174,6 +1176,8 @@ object L10n {
         fun tagsAddLabel(tag: String): String = Strings.format("write.tagsAddLabel", mapOf("tag" to tag))
         /** {count, plural, one {# tag added} other {# tags added}} */
         fun tagsAdded(count: Int): String = Strings.format("write.tagsAdded", mapOf("count" to count))
+        /** Remove tag: {tag} */
+        fun tagsRemoveLabel(tag: String): String = Strings.format("write.tagsRemoveLabel", mapOf("tag" to tag))
     }
     object Me {
         /** Joined {date} */
