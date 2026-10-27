@@ -879,15 +879,24 @@ class WriteModel(
 
     // Tags
 
-    /** Add what is in the field as a tag (Done, or the field's Add): trimmed, and not twice. */
-    fun addTag() {
-        val word = tagDraft
+    /**
+     * Add what is in the field as a tag (Done, or the field's 新增): trimmed, and not twice. [word] is the
+     * field's word as it stands — a composition the segment's tap ended too — else the draft.
+     */
+    fun addTag(word: String = tagDraft) {
         tagDraft = ""
         addTags(listOf(word))
     }
 
-    /** The field's text as typed or pasted: a comma ends a tag (see [TagInput]), the rest stays to be typed on. */
-    fun typeTag(text: String) {
+    /**
+     * The field's text as typed or pasted: a comma ends a tag (see [TagInput]), the rest stays to be
+     * typed on — unless an IME is still [composing] it, whose separators are its own until it commits.
+     */
+    fun typeTag(text: String, composing: Boolean = false) {
+        if (composing) {
+            tagDraft = text
+            return
+        }
         val (words, rest) = TagInput.split(text)
         tagDraft = rest
         if (words.isNotEmpty()) addTags(words)

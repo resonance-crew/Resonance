@@ -4,6 +4,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.resonance.kit.chat.ChatPush
+import com.resonance.kit.chat.ChatUnsend
 import com.resonance.kit.push.PushPlacement
 
 /**
@@ -29,6 +30,12 @@ class ResonancePushService : FirebaseMessagingService() {
             ChatPush.from(message.data, message.notification?.title, message.notification?.body)
                 ?.takeIf { it.isFor(me) }
                 ?.let { PushCenter.showChatMessage(this, it) }
+            return
+        }
+        if (message.data["type"] == ChatUnsend.TYPE) {
+            // A message taken back: its line leaves the conversation's notification (round 16 §3).
+            val me = runCatching { FirebaseAuth.getInstance().currentUser?.uid }.getOrNull()
+            ChatUnsend.from(message.data)?.takeIf { it.isFor(me) }?.let { PushCenter.removeChatLine(this, it.conversationId, it.messageId) }
             return
         }
         val title = message.notification?.title ?: return

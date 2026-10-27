@@ -457,8 +457,88 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
     /** History and what is on its way, as one list; a message on its way whose document has arrived is dropped from the outbox. */
     private fun rebuild() {
         val box = outbox
-        messages = thread.build(history, box?.entries?.value.orEmpty())
+        messages = thread.build(history, box?.entries?.value.orEmpty()).map(::withLocal)
         box?.reconcile { it.isIn(history) }
+    }
+
+    // Reactions and unsending (round 16 §3–§4)
+
+    /**
+     * Reactions chosen here and not yet seen back from the conversation, by message id: drawn at once
+     * (the chip pops onto the bubble as the overlay goes), dropped once the message carries the same
+     * (or a few seconds after the server took it), or put back when the server refused.
+     */
+    private val localReactions = HashMap<String, Map<String, String>>()
+    /** Messages unsent here, drawn as ghosts at once until the conversation says so too (or the server refuses). */
+    private val localUnsent = HashMap<String, Date>()
+
+    /** [message] with what this screen did to it and the conversation hasn't shown yet. */
+    private fun withLocal(message: ChatMessage): ChatMessage {
+        if (message.isUnsent) {
+            localUnsent.remove(message.id)
+            localReactions.remove(message.id)
+            return message
+        }
+        localUnsent[message.id]?.let { at -> return ChatMessage(message.id, message.senderId, "", message.sentAt, unsentAt = at, key = message.key) }
+        val local = localReactions[message.id] ?: return message
+        if (local == message.reactions) localReactions.remove(message.id)
+        return message.copy(reactions = local)
+    }
+
+    /**
+     * Reacts to [message] with [id] — or, the same as the viewer's own, takes it back (round 16 §4): drawn
+     * at once, sent after; a refusal or a network failure puts the chip back and says so ([onError]).
+     */
+    fun react(message: ChatMessage, id: String, onError: (String) -> Unit) {
+        val pair = pairId ?: return
+        val me = me ?: return
+        if (!com.resonance.kit.chat.MessageReactions.canReact(message)) return
+        val current = find(message.id)?.reactions ?: message.reactions
+        val (next, send) = com.resonance.kit.chat.MessageReactions.choose(current, me, id)
+        localReactions[message.id] = next
+        rebuild()
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    if (send != null) session.messaging.setReaction(pair, message.id, send) else session.messaging.removeReaction(pair, message.id)
+                }
+                // Taken: the conversation shows it in a moment; should it not, what it says wins after a while.
+                kotlinx.coroutines.delay(LOCAL_HOLD_MILLIS)
+                if (localReactions[message.id] == next) {
+                    localReactions.remove(message.id)
+                    rebuild()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (localReactions[message.id] == next) localReactions.remove(message.id)
+                rebuild()
+                onError(L10n.Messages.reactError)
+            }
+        }
+    }
+
+    /**
+     * Unsends one of the viewer's own messages (round 16 §3): a ghost at once; a 409 (past the 24 h) or
+     * any other failure brings it back and says why ([onError]: 超過 24 小時… / 訊息沒有收回…).
+     */
+    fun unsend(message: ChatMessage, onError: (String) -> Unit) {
+        val pair = pairId ?: return
+        if (!com.resonance.kit.chat.MessageReactions.canUnsend(message, me)) return
+        localUnsent[message.id] = Date()
+        if (replyingTo?.id == message.id) replyingTo = null
+        rebuild()
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) { session.messaging.unsendMessage(pair, message.id) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                localUnsent.remove(message.id)
+                rebuild()
+                onError(if ((e as? ApiFailure)?.status == 409) L10n.Messages.unsendTooLate else L10n.Messages.unsendError)
+            }
+        }
     }
 
     /** Everything held is forgotten (the conversation is gone, or the listener lost track of it). */
@@ -881,13 +961,16 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
 
     private fun toMessage(doc: DocumentSnapshot): ChatMessage = ChatMessage.from(
         id = doc.id,
-        fields = doc.data ?: emptyMap(),
+        // An unsent message's time as a Date (the kit reads no Firestore types).
+        fields = (doc.data ?: emptyMap()).let { f -> (f["unsentAt"] as? com.google.firebase.Timestamp)?.let { f + ("unsentAt" to it.toDate()) } ?: f },
         // A pending server time (a document just written) reads as an estimate, so it sorts last.
         sentAt = doc.getTimestamp("sentAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)?.toDate() ?: Date(),
         origin = session.config.origin,
     )
 
     private companion object {
+        /** How long a reaction drawn here waits for the conversation to show it before what the conversation says wins. */
+        const val LOCAL_HOLD_MILLIS = 6000L
         /** The page [loadOlder] reads. */
         const val OLDER_PAGE = 50
         /** The page [ensureLoaded] reads while it looks for a message. */

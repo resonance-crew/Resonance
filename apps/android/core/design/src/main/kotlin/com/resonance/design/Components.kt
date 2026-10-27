@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.layout.Layout
 import androidx.compose.foundation.layout.widthIn
@@ -213,22 +214,32 @@ fun TagPill(
             text.uppercase(),
             style = AppFonts.body(size.font, 600, lineHeight = 1.3f).copy(letterSpacing = size.tracking.em),
         )
-        if (onRemove != null) Canvas(
+        // The ✕ takes 10 in the row but a finger's 44 × 44 round it (round 16 §1): its hit box overhangs the
+        // pill, unseen, and the pill keeps its size.
+        if (onRemove != null) Box(
             Modifier
                 .padding(start = 2.dp)
                 .size(10.dp)
-                .alpha(0.55f)
-                .plainClickable(role = Role.Button, onClickLabel = L10n.Write.removeTag, onClick = onRemove),
+                .wrapContentSize(unbounded = true)
+                .size(TagRemoveTarget)
+                .plainClickable(role = Role.Button, onClickLabel = L10n.Write.removeTag, onClick = onRemove)
+                .semantics { contentDescription = L10n.Write.removeTag },
+            contentAlignment = Alignment.Center,
         ) {
-            val k = this.size.width / 10f
-            val x = Path().apply {
-                moveTo(1.6f * k, 1.8f * k); cubicTo(3f * k, 3f * k, 5.2f * k, 5.2f * k, 8.2f * k, 8.4f * k)
-                moveTo(8.2f * k, 1.8f * k); cubicTo(7f * k, 3f * k, 4.8f * k, 5.2f * k, 1.6f * k, 8.4f * k)
+            Canvas(Modifier.size(10.dp).alpha(0.55f)) {
+                val k = this.size.width / 10f
+                val x = Path().apply {
+                    moveTo(1.6f * k, 1.8f * k); cubicTo(3f * k, 3f * k, 5.2f * k, 5.2f * k, 8.2f * k, 8.4f * k)
+                    moveTo(8.2f * k, 1.8f * k); cubicTo(7f * k, 3f * k, 4.8f * k, 5.2f * k, 1.6f * k, 8.4f * k)
+                }
+                drawPath(x, cross, style = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round))
             }
-            drawPath(x, cross, style = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round))
         }
     }
 }
+
+/** A tag's ✕: the finger's room round its 10 glyph. */
+val TagRemoveTarget = 44.dp
 
 /** TagPill's automatic seed: a hash of the label, so a tag always wobbles the same. */
 fun autoSeed(s: String): Double {

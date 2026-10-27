@@ -62,6 +62,10 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import kotlinx.coroutines.CoroutineScope
+import androidx.compose.ui.composed
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -387,6 +391,8 @@ private fun WriteForm(
     // Leaving the app saves what is written now, not 1.5s later.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { model.flush() }
     var pickingCard by remember { mutableStateOf(false) }
+    // 連結 (round 16 §6): the link sheet, for the selection or the caret's link, or a link card tapped.
+    var linkSheet by remember { mutableStateOf<LinkSheetRequest?>(null) }
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { model.setCover(context, it) } }
     // Back from the picker, picked or not, the story has its caret, keyboard and format bar where they were — before the upload ends.
     val inlinePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -593,6 +599,11 @@ private fun WriteForm(
                 onInsertImage = { inlinePicker.launch(images) },
                 onInsertCard = { pickingCard = true },
                 uploadingImage = model.uploadingInline,
+                onLink = {
+                    bridge.selectionHasWords { words ->
+                        linkSheet = LinkSheetRequest(bridge.link, bridge.canCard, linkSheetDisplay(bridge.link, bridge.canCard, words))
+                    }
+                },
             )
         }
         // The pane given the whole width at the split, or the split again (round 15): the bar fades in (out)
@@ -641,6 +652,32 @@ private fun WriteForm(
             if (then != null) then() else leave()
         },
     ) }
+
+    // A link card in the story tapped: the sheet with 卡片 chosen (the island picked the card; its state may still be on its way).
+    DisposableEffect(bridge) {
+        bridge.onLinkTap = { href -> linkSheet = LinkSheetRequest(IslandLink(href, LinkDisplay.Card, standalone = true, words = href), canCard = true, LinkDisplay.Card) }
+        onDispose { bridge.onLinkTap = {} }
+    }
+    // The link sheet over the keyboard; whatever it ends with, the story has its caret, keyboard and bar back.
+    linkSheet?.let { request ->
+        StoryLinkSheet(
+            request,
+            onApply = { href, display ->
+                linkSheet = null
+                bridge.applyLink(href, display)
+                bridge.refocusWhenBack()
+            },
+            onRemove = {
+                linkSheet = null
+                bridge.removeLink()
+                bridge.refocusWhenBack()
+            },
+            onDismiss = {
+                linkSheet = null
+                bridge.refocusWhenBack()
+            },
+        )
+    }
 
     // 插入卡片: the modal takes the window a moment; picked or not, the story has its caret, keyboard and bar back.
     if (pickingCard) OrganicModal(
@@ -920,6 +957,7 @@ private fun PublishStep(
     onFinished: (String) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val tagAnchor = remember(scroll, scope) { TagFieldAnchor(scroll, scope) }
     val updating = model.isPublished
     val pending = model.pending
     val reduced = LocalContext.current.prefersReducedMotion()
@@ -972,9 +1010,10 @@ private fun PublishStep(
         // the controls show it themselves. Never faded as a whole — an alpha layer is cut at this column's
         // box, and the card's pen line (a tablet's bordered card) or band (a phone's, edge to edge) runs past it.
         Column(Modifier.holdWhile(pending)) {
-            Preview(session, model, compact, pad, underBar, pickCover, dismissKeyboard)
+            // The preview gains a row of tags with the first one (and loses it with the last): the field under it stays still.
+            Box(Modifier.heightChanges(tagAnchor::heightChanged)) { Preview(session, model, compact, pad, underBar, pickCover, dismissKeyboard) }
             Spacer(Modifier.height(gap))
-            Tags(model, dismissKeyboard)
+            Tags(model, tagAnchor, dismissKeyboard)
             Spacer(Modifier.height(gap))
             AudienceChoice(model)
             model.resonanceLine?.let { line ->
@@ -1369,28 +1408,51 @@ private fun StepLabel(text: String) {
 }
 
 /**
- * 標籤 (CardEditor's TagField): one field holding the chosen tags, the input and its one action (AI
- * suggestions, or Add once something is typed) — and under it nothing but an error, when there is one
- * (round 8 §2.2: no help line). Tags show in the preview at once.
+ * 標籤 (round 16 §1): the section's label and the chosen tags share one wrapping row ([TagPillRow]);
+ * under it the field ([TagField], the composer's capsule with its AI 建議 / 新增 segment), and under that
+ * nothing but an error, when there is one. The preview card above stays a preview. The field never
+ * moves under the caret: while it has the focus, or after its segment was tapped (an add, the model's
+ * tags arriving), a change of the row's height scrolls the step by as much in the same frame
+ * ([scroll]). A polite announcement says how many tags an add brought in.
  */
 @Composable
-private fun Tags(model: WriteModel, dismissKeyboard: () -> Unit) {
+private fun Tags(model: WriteModel, anchor: TagFieldAnchor, dismissKeyboard: () -> Unit) {
+    val view = LocalView.current
+    val tags = model.values.tags
+    // An add (by hand, or the model's) is announced: how many came in.
+    var lastCount by remember { mutableIntStateOf(tags.size) }
+    LaunchedEffect(tags.size) {
+        val added = tags.size - lastCount
+        lastCount = tags.size
+        if (added > 0) view.announce(L10n.Write.tagsAdded(added))
+    }
+    // The segment was tapped: what changes above the field next (the add, or the model's tags) keeps it still too.
+    LaunchedEffect(model.suggestingTags, tags.size) {
+        if (!model.suggestingTags) {
+            delay(SEGMENT_HOLD_MILLIS)
+            anchor.fromSegment = false
+        }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(PublishLabelGap)) {
-        StepLabel(L10n.Write.tagsLabel)
+        TagPillRow(tags, onRemove = model::removeTag, onHeightChange = anchor::heightChanged) { StepLabel(L10n.Write.tagsLabel) }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             TagField(
-                tags = model.values.tags,
                 draft = model.tagDraft,
                 onDraftChange = model::typeTag,
                 placeholder = L10n.Write.tagsPlaceholder,
                 suggesting = model.suggestingTags,
-                onRemove = model::removeTag,
+                canRemoveLast = tags.isNotEmpty(),
                 onRemoveLast = model::removeLastTag,
-                onAdd = model::addTag,
+                onAdd = { word ->
+                    anchor.fromSegment = true
+                    model.addTag(word)
+                },
                 onSuggest = {
+                    anchor.fromSegment = true
                     dismissKeyboard()
                     model.suggestTags()
                 },
+                onFocusChanged = { anchor.focused = it },
             )
             model.tagError?.let { error ->
                 BasicText(
@@ -1400,6 +1462,45 @@ private fun Tags(model: WriteModel, dismissKeyboard: () -> Unit) {
                 )
             }
         }
+    }
+}
+
+/** How long after an add (or the model's answer) the field is still kept still as the row settles. */
+private const val SEGMENT_HOLD_MILLIS = 400L
+
+/**
+ * Keeps the tag field where the eye is (round 16 §1): while it is [active] (the field has the focus, or
+ * its segment was just tapped), every change in the height of what stands above it in the step — the
+ * pill row wrapping or unwrapping, the preview card gaining or losing its row of tags — scrolls the step
+ * by as much, in the same layout pass (so the field never jumps a frame). At the step's end the scroll
+ * can't go further until the taller page is measured: the rest a frame later.
+ */
+@Stable
+internal class TagFieldAnchor(private val scroll: androidx.compose.foundation.ScrollState, private val scope: CoroutineScope) {
+    var focused by mutableStateOf(false)
+    var fromSegment by mutableStateOf(false)
+    val active: Boolean get() = focused || fromSegment
+
+    fun heightChanged(delta: Int) {
+        if (!active || delta == 0) return
+        val consumed = scroll.dispatchRawDelta(delta.toFloat())
+        val left = delta - consumed
+        if (kotlin.math.abs(left) >= 1f) scope.launch {
+            withFrameNanos { }
+            scroll.scrollBy(left)
+        }
+    }
+}
+
+/** Hears this layout's height change ([TagFieldAnchor.heightChanged]) as it is measured, before anything is placed. */
+internal fun Modifier.heightChanges(onChange: (Int) -> Unit): Modifier = composed {
+    val last = remember { intArrayOf(-1) }
+    layout { measurable, constraints ->
+        val placeable = measurable.measure(constraints)
+        val before = last[0]
+        last[0] = placeable.height
+        if (before >= 0 && before != placeable.height) onChange(placeable.height - before)
+        layout(placeable.width, placeable.height) { placeable.place(0, 0) }
     }
 }
 

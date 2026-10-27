@@ -134,4 +134,18 @@ class MessageHistoryTest {
         assertEquals(50, history.size)
         assertTrue(history.hasOlder)
     }
+
+    @Test fun aReactionOrAnUnsendFromTheOtherSideIsNews() {
+        // Round 16 §3: an open thread must see the other person's reaction, and their unsend, as they land.
+        val history = MessageHistory<String>(liveLimit = 3)
+        history.mergeWindow(entries(3 downTo 1))
+        val reacted = message(2).copy(reactions = mapOf("bob" to "heart"))
+        assertEquals(Merged.Changed, history.mergeWindow(listOf(Entry(message(3), "cursor-3"), Entry(reacted, "cursor-2"), Entry(message(1), "cursor-1"))))
+        assertEquals(mapOf("bob" to "heart"), history["m002"]!!.reactions)
+        val unsent = ChatMessage("m003", "alice", "", Date(3_000L), unsentAt = Date(4_000L))
+        assertEquals(Merged.Changed, history.mergeWindow(listOf(Entry(unsent, "cursor-3"), Entry(reacted, "cursor-2"), Entry(message(1), "cursor-1"))))
+        assertTrue(history["m003"]!!.isUnsent)
+        // The same again is nothing.
+        assertEquals(Merged.Unchanged, history.mergeWindow(listOf(Entry(unsent, "cursor-3"), Entry(reacted, "cursor-2"), Entry(message(1), "cursor-1"))))
+    }
 }

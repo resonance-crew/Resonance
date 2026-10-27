@@ -52,6 +52,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.animation.core.EaseIn
+import androidx.compose.animation.core.EaseOut
+import androidx.compose.runtime.SideEffect
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.resonance.design.prefersReducedMotion
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -421,11 +426,11 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
     val motion = remember { PageMotion() }
     val tabItems = listOf(
         // The web's glyphs for the same places (Subnavbar, NotificationBell, the header's pen).
-        OrganicTabItem(Tab.Feed, L10n.Native.tabFeed, IconName.Sparkle),
-        OrganicTabItem(Tab.Messages, L10n.App.Nav.messages, IconName.Chat, badge = conversations.unreadTotal),
+        OrganicTabItem(Tab.Feed, L10n.Native.tabFeed, IconName.Sparkle, selectedIcon = IconName.SparkleFill),
+        OrganicTabItem(Tab.Messages, L10n.App.Nav.messages, IconName.Chat, badge = conversations.unreadTotal, selectedIcon = IconName.ChatFill),
         OrganicTabItem(Tab.Write, L10n.App.Nav.write, IconName.Pen, isAction = true),
-        OrganicTabItem(Tab.Notifications, L10n.App.Nav.notifications, IconName.Bell, badge = unread),
-        OrganicTabItem(Tab.CardBox, L10n.App.Nav.me, IconName.Cards),
+        OrganicTabItem(Tab.Notifications, L10n.App.Nav.notifications, IconName.Bell, badge = unread, selectedIcon = IconName.BellFill),
+        OrganicTabItem(Tab.CardBox, L10n.App.Nav.me, IconName.Cards, selectedIcon = IconName.CardsFill),
     )
     val select: (Tab) -> Unit = { picked ->
         // The pen opens the writer over the current tab, like the web header's pen.
@@ -447,10 +452,28 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
     // The trash's moves, which outlive the control that asked (a toast's 復原 after its card left the shelf).
     val shellScope = rememberCoroutineScope()
     val trash = remember(session) { TrashCenter(session.writing.trashCalls(session.reading), session::noteCardChange, toasts, shellScope) }
-    // It moves with the tab bar as a page is pushed over a tab's root or popped back to it.
-    val toastBottom by animateDpAsState(toastClearance(cls, tabBarShown = !topTabs && stack.size == 1), label = "toastBottom")
+    // The phone's bar slides away while the feed is read down (round 16 §2): never under TalkBack or Switch Access.
+    val autoHide = remember(session) { TabBarAutoHide() }
+    val assistive by rememberAssistiveNavigation()
+    SideEffect { autoHide.allowed = !assistive && !topTabs }
+    // Another tab, a page pushed or popped, the bar's rule turned off, the app back from the background: the bar is back.
+    LaunchedEffect(tab, stack.size, assistive, topTabs) { autoHide.show() }
+    LifecycleResumeEffect(autoHide) {
+        autoHide.show()
+        onPauseOrDispose { }
+    }
+    val reducedMotion = LocalContext.current.prefersReducedMotion()
+    // It moves with the tab bar as a page is pushed over a tab's root or popped back to it — and as the bar slides away for reading.
+    val toastBottom by animateDpAsState(
+        toastClearance(cls, tabBarShown = !topTabs && stack.size == 1 && !autoHide.hidden),
+        if (autoHide.hidden) tween(TAB_BAR_HIDE_MILLIS, easing = EaseIn) else tween(TAB_BAR_SHOW_MILLIS, easing = EaseOut),
+        label = "toastBottom",
+    )
 
-    CompositionLocalProvider(LocalWindowLayout provides WindowLayout(windowWidth), LocalRootTaps provides rootTaps, LocalToasts provides toasts, LocalTrash provides trash) {
+    CompositionLocalProvider(
+        LocalWindowLayout provides WindowLayout(windowWidth), LocalRootTaps provides rootTaps, LocalToasts provides toasts, LocalTrash provides trash,
+        LocalTabBarAutoHide provides autoHide.takeIf { !topTabs },
+    ) {
         Box(Modifier.fillMaxSize().cream()) {
             key(languageEpoch) {
                 val entries: Map<Tab, List<NavEntry<Route>>> = Tab.entries.associateWith { t ->
@@ -477,7 +500,7 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
             }
             // The deletion's undo: a modal over every screen.
             deletionDate?.let { date -> AccountDeletionNotice(session, date) }
-            if (!topTabs) TabBarSlot(stack.size == 1, Modifier.align(Alignment.BottomCenter)) {
+            if (!topTabs) TabBarSlot(stack.size == 1, Modifier.align(Alignment.BottomCenter), readingHides = autoHide.hidden, reduced = reducedMotion) {
                 OrganicTabBar(tabItems, selection = tab, onSelect = select)
             }
             // Over every page and the bars, under any dialog (a window of its own).
@@ -559,10 +582,22 @@ object KeyShortcuts {
  * building it.
  */
 @Composable
-private fun TabBarSlot(shown: Boolean, modifier: Modifier, bar: @Composable () -> Unit) {
+private fun TabBarSlot(shown: Boolean, modifier: Modifier, readingHides: Boolean = false, reduced: Boolean = false, bar: @Composable () -> Unit) {
     // How visible it is, and how far below its place (of its height).
     val alpha = remember { Animatable(if (shown) 1f else 0f) }
     val drop = remember { Animatable(if (shown) 0f else 1f) }
+    // Slid away for reading (round 16 §2): 0 in place … 1 below the screen's edge, its wavy top with it (200 ms
+    // ease-in away, 220 ms ease-out back); with animations reduced, a 150 ms fade instead. It overlays the list,
+    // which keeps its room for it, so nothing in the feed moves.
+    val away = remember { Animatable(0f) }
+    LaunchedEffect(readingHides, reduced) {
+        val spec = when {
+            reduced -> tween(TAB_BAR_FADE_AWAY_MILLIS, easing = LinearEasing)
+            readingHides -> tween<Float>(TAB_BAR_HIDE_MILLIS, easing = EaseIn)
+            else -> tween(TAB_BAR_SHOW_MILLIS, easing = EaseOut)
+        }
+        away.animateTo(if (readingHides) 1f else 0f, spec)
+    }
     LaunchedEffect(shown) {
         if (shown) {
             // From hidden it rises from a third of its height; caught half-way down, from where it is.
@@ -578,16 +613,23 @@ private fun TabBarSlot(shown: Boolean, modifier: Modifier, bar: @Composable () -
         modifier.layout { measurable, constraints ->
             val placeable = measurable.measure(constraints)
             layout(placeable.width, placeable.height) {
-                if (shown || alpha.value > 0f) {
+                val gone = away.value
+                // Fully away it is left unplaced, as when a page covers the root: no touch, nothing read out.
+                if ((shown || alpha.value > 0f) && gone < 1f) {
                     placeable.placeWithLayer(0, 0) {
-                        this.alpha = alpha.value
-                        translationY = drop.value * size.height
+                        this.alpha = alpha.value * (if (reduced) 1f - gone else 1f)
+                        translationY = (drop.value + if (reduced) 0f else gone) * size.height
                     }
                 }
             }
         },
     ) { bar() }
 }
+
+/** The bar sliding away for reading and back (round 16 §2), and its fade instead with animations reduced. */
+internal const val TAB_BAR_HIDE_MILLIS = 200
+internal const val TAB_BAR_SHOW_MILLIS = 220
+private const val TAB_BAR_FADE_AWAY_MILLIS = 150
 
 /** The tab bar coming back: its fade, and its rise from [TAB_BAR_RISE_FROM] of its height. */
 private const val TAB_BAR_FADE_MILLIS = 90

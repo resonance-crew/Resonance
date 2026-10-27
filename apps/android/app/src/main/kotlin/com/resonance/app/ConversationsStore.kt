@@ -62,6 +62,8 @@ class ConversationsStore {
         val unread: Int,
         /** The last message sent a picture (`lastMessage.image`): without words, it previews as 傳送了一張圖片. */
         val lastImage: Boolean = false,
+        /** The last message was unsent (`lastMessage.unsent`, round 16 §3): it previews as its ghost row says. */
+        val lastUnsent: Boolean = false,
     )
 
     data class State(
@@ -235,6 +237,7 @@ class ConversationsStore {
                 sentAt = (last?.get("sentAt") as? Timestamp)?.toDate(),
                 unread = unread,
                 lastImage = last?.get("image") == true,
+                lastUnsent = last?.get("unsent") == true,
             )
         }
         val talking = conversations.map { it.other.id }.toSet()

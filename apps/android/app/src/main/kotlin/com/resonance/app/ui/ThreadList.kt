@@ -1,5 +1,14 @@
 package com.resonance.app.ui
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import com.resonance.design.ReactionChipItem
+import com.resonance.design.ReactionChips
+import com.resonance.design.ReactionChipOverlap
+import com.resonance.design.ReactionOrder
+import com.resonance.design.UnsentBubble
+import com.resonance.design.generated.ReactionId
+import com.resonance.kit.chat.MessageReactions
 import com.resonance.design.avatarFill
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
@@ -140,6 +149,7 @@ import kotlinx.coroutines.launch
 internal fun rowContentType(row: ThreadRow): Int {
     val m = row.message
     return when {
+        m.isUnsent -> 5
         m.image != null -> 1
         m.isNote -> 2
         m.cardRef != null -> 3
@@ -169,6 +179,10 @@ internal class ThreadContext(
     val lifted: String? = null,
     /** A picture in a message was tapped: opened whole. */
     val onPicture: (ChatPictureSource) -> Unit = {},
+    /** A reaction chosen without the overlay (a screen reader's action on the bubble): the reaction's id, or the viewer's own again to take it back. */
+    val onReact: (ChatMessage, String) -> Unit = { _, _ -> },
+    /** Whether reactions can be given here now (connected, no block: a letter not yet answered takes none). */
+    val reacts: Boolean = false,
 ) {
     /** A link in a message was tapped ([openLink]). */
     fun tapLink(url: String) = model.openLink(url, opener, open)
@@ -532,18 +546,29 @@ private fun MessageItem(row: ThreadRow, ctx: ThreadContext, deliveryLine: Boolea
     val mine = model.isMine(message)
     SwipeToReply(enabled = message.canReply && model.foot.composes, mine = mine, onReply = { ctx.onReply(message) }) {
         Row(
-            Modifier.fillMaxWidth(),
+            // An unsent message's row shrinks (or grows) to its ghost in 150 ms, the thread closing over it (round 16 §3).
+            Modifier.fillMaxWidth().animateContentSize(tween(UNSENT_RESIZE_MILLIS)),
             horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
             verticalAlignment = Alignment.Bottom,
         ) {
             if (!mine) TheirFace(shown = !row.position.joinsBelow, ctx)
             Column(Modifier.widthIn(max = ctx.rowMax), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
-                MessageCore(row, ctx, interactive = true)
-                if (deliveryLine) DeliveryLine(message, model)
+                if (message.isUnsent) {
+                    UnsentBubble(unsentWords(mine, model.other?.handle.orEmpty()), mine, seedFromId(message.key), run = row.position)
+                } else {
+                    MessageCore(row, ctx, interactive = true)
+                    if (deliveryLine) DeliveryLine(message, model)
+                }
             }
         }
     }
 }
+
+/** An unsent message's words, as its ghost row and the conversation list say them (round 16 §3). */
+internal fun unsentWords(mine: Boolean, handle: String): String =
+    if (mine) L10n.Messages.unsentByYou else L10n.Messages.unsentByThem(handle)
+
+private const val UNSENT_RESIZE_MILLIS = 150
 
 /**
  * Their face, bottom-aligned beside the last bubble of their run ([shown]); else the empty column. A
@@ -566,7 +591,9 @@ private fun TheirFace(shown: Boolean, ctx: ThreadContext) {
 }
 
 /** What [message]'s bubble carries besides its words ([Carried.of], with what this thread has read of shared cards). */
-internal fun ThreadModel.carried(message: ChatMessage): Carried = Carried.of(message, sharedCard(message), cards, cardsLoading)
+internal fun ThreadModel.carried(message: ChatMessage): Carried =
+    // An unsent message is still a row (its ghost), though it carries nothing.
+    if (message.isUnsent) Carried.Words else Carried.of(message, sharedCard(message), cards, cardsLoading)
 
 /** A bubble carrying a link's preview is this wide (or the row's widest); one carrying a card, [CARD_WIDTH]. */
 private val PREVIEW_WIDTH = 280.dp
@@ -596,7 +623,8 @@ private fun ReplyQuoteView(message: ChatMessage, mine: Boolean, ctx: ThreadConte
     val spoken = replySpoken(mine, quote.senderId == model.me, model.other?.handle.orEmpty())
     Column(Modifier.semantics { contentDescription = spoken }, horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
         QuoteBubble(
-            quote.text.ifEmpty { quoteStandIn(quote) },
+            // A quote of a message unsent since reads 訊息已收回 (the server scrubbed its words).
+            if (quote.unsent) L10n.Messages.unsentQuote else quote.text.ifEmpty { quoteStandIn(quote) },
             seed = seedFromId(quote.id, 19),
             onClick = if (interactive) { { ctx.onQuote(quote.id) } } else null,
         )
@@ -684,10 +712,15 @@ internal fun MessageCore(row: ThreadRow, ctx: ThreadContext, interactive: Boolea
     ) {
         if (message.isNote) NoteQuoteView(message, mine, carried, ctx, interactive, press)
         else if (message.replyTo != null) ReplyQuoteView(message, mine, ctx, interactive)
+        // The reactions it carries hang in the gutter beside the bubble's foot, never under it (round 16 §3).
+        val chips = remember(message.reactions, model.me) { reactionChips(message.reactions, model.me) }
+        val reactionWords = remember(message.reactions, model.me, model.other?.handle) { reactionsSpoken(message.reactions, model.me, model.other?.handle.orEmpty()) }
+        val actions = if (interactive && ctx.reacts && MessageReactions.canReact(message)) reactionActions(message, model.me, ctx) else emptyList()
+        // The reply lies over the foot of what it quotes, a note over the card it was left on.
+        Box(if (message.replyTo != null || message.isNote) Modifier.overlapAbove(REPLY_OVERLAP) else Modifier) {
         MessageBubble(
             words, mine, seedFromId(message.key),
-            // The reply lies over the foot of what it quotes, a note over the card it was left on.
-            modifier = if (message.replyTo != null || message.isNote) Modifier.overlapAbove(REPLY_OVERLAP) else Modifier,
+            actions = actions,
             quoteLabel = if (message.noteRef == null) null else L10n.Messages.quotedNote,
             run = row.position,
             links = ranges,
@@ -721,7 +754,60 @@ internal fun MessageCore(row: ThreadRow, ctx: ThreadContext, interactive: Boolea
                 else -> null
             },
         )
+        if (chips.isNotEmpty()) ReactionChips(
+            chips, outward = if (mine) -1 else 1, ring = Tokens.Cream,
+            modifier = Modifier
+                .align(if (mine) Alignment.BottomStart else Alignment.BottomEnd)
+                .inGutter(mine)
+                .then(if (interactive) Modifier.plainClickable(role = Role.Button) { press(null) } else Modifier)
+                .semantics { contentDescription = reactionWords },
+        )
+        }
     }
+}
+
+/** The chips [reactions] make for [me]: the known reactions in their order, how many gave each. */
+internal fun reactionChips(reactions: Map<String, String>, me: String?): List<ReactionChipItem> =
+    MessageReactions.chips(reactions, me).mapNotNull { chip -> ReactionId.of(chip.id)?.let { ReactionChipItem(it, chip.count) } }
+
+/** A reaction's name (愛心 · 感動 · 大笑 · 抱抱 · 讚). */
+internal fun reactionName(id: ReactionId): String = when (id) {
+    ReactionId.Heart -> L10n.Messages.Reactions.heart
+    ReactionId.Moved -> L10n.Messages.Reactions.moved
+    ReactionId.Laugh -> L10n.Messages.Reactions.laugh
+    ReactionId.Hug -> L10n.Messages.Reactions.hug
+    ReactionId.Thumbs -> L10n.Messages.Reactions.thumbs
+}
+
+/** What a screen reader hears of a message's chips: who reacted how (你回應了愛心，bob 回應了大笑). */
+internal fun reactionsSpoken(reactions: Map<String, String>, me: String?, handle: String): String =
+    reactions.entries
+        .mapNotNull { (uid, key) -> ReactionId.of(key)?.let { uid to it } }
+        .sortedBy { (uid, _) -> if (uid == me) 0 else 1 }
+        .joinToString("，") { (uid, id) -> if (uid == me) L10n.Messages.reactedYou(reactionName(id)) else L10n.Messages.reactedThem(handle, reactionName(id)) }
+
+/**
+ * A reaction per sticker as the bubble's custom accessibility actions (round 16 §3: 以愛心回應 …),
+ * and 移除回應 when the viewer has one — so nobody needs to press and hold to react.
+ */
+private fun reactionActions(message: ChatMessage, me: String?, ctx: ThreadContext): List<CustomAccessibilityAction> {
+    val mine = MessageReactions.mine(message.reactions, me)
+    val give = ReactionOrder.filter { it.key != mine }.map { id ->
+        CustomAccessibilityAction(L10n.Messages.reactWith(reactionName(id))) { ctx.onReact(message, id.key); true }
+    }
+    val remove = mine?.let { key -> CustomAccessibilityAction(L10n.Messages.removeReaction) { ctx.onReact(message, key); true } }
+    return give + listOfNotNull(remove)
+}
+
+/**
+ * Lays a bubble's chips in its gutter: it takes no room in the row (its width is none), and stands
+ * outside the bubble's outer side edge — [mine]: past its start, theirs: past its end — overlapping
+ * the edge by [ReactionChipOverlap].
+ */
+private fun Modifier.inGutter(mine: Boolean): Modifier = layout { measurable, _ ->
+    val placeable = measurable.measure(androidx.compose.ui.unit.Constraints())
+    val overlap = ReactionChipOverlap.roundToPx()
+    layout(0, placeable.height) { placeable.place(if (mine) -(placeable.width - overlap) else -overlap, 0) }
 }
 
 /** A link's preview inside its bubble: a tap opens the link (by the link rules), a hold is the menu with the link's own rows. */

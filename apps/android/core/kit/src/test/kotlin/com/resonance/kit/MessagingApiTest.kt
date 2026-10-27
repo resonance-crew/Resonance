@@ -111,4 +111,34 @@ class MessagingApiTest {
         val failure = assertFailsWith<ApiFailure> { api().deleteConversation("bob_carol") }
         assertEquals(404, failure.status)
     }
+
+    // Round 16 §3–§4: reacting, taking it back, unsending.
+
+    @Test fun reactsTakesItBackAndUnsendsThroughTheContract() = runBlocking {
+        repeat(3) { server.enqueue(MockResponse().setResponseCode(204)) }
+        api().setReaction("alice_bob", "m1", "moved")
+        val put = server.takeRequest()
+        assertEquals("PUT", put.method)
+        assertEquals("/api/v1/conversations/alice_bob/messages/m1/reaction", put.path)
+        assertEquals("moved", Json.parseToJsonElement(put.body.readUtf8()).jsonObject["reaction"]!!.jsonPrimitive.content)
+        api().removeReaction("alice_bob", "m1")
+        val delete = server.takeRequest()
+        assertEquals("DELETE", delete.method)
+        assertEquals("/api/v1/conversations/alice_bob/messages/m1/reaction", delete.path)
+        api().unsendMessage("alice_bob", "m1")
+        val unsend = server.takeRequest()
+        assertEquals("POST", unsend.method)
+        assertEquals("/api/v1/conversations/alice_bob/messages/m1/unsend", unsend.path)
+    }
+
+    @Test fun anUnknownReactionIsNeverSentAndTooLateIsA409() = runBlocking {
+        assertFailsWith<IllegalArgumentException> { api().setReaction("alice_bob", "m1", "sparkler") }
+        assertEquals(0, server.requestCount)
+        server.enqueue(
+            MockResponse().setResponseCode(409).setHeader("Content-Type", "application/json")
+                .setBody("""{"error":{"code":"conflict","message":"This message can no longer be unsent."}}"""),
+        )
+        val failure = assertFailsWith<ApiFailure> { api().unsendMessage("alice_bob", "m1") }
+        assertEquals(409, failure.status)
+    }
 }

@@ -11,6 +11,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -105,19 +106,32 @@ import com.resonance.geometry.wavyPoints
 // platform's (Navigation 3 back stacks, predictive back); only the look is
 // the brand's. Verified in spike S3.
 
-data class OrganicTabItem<T>(val id: T, val title: String, val icon: IconName, val isAction: Boolean = false, val badge: Int = 0)
+/**
+ * A tab: its [icon] (the outline glyph) and, chosen, its solid twin [selectedIcon] (round 16 §2:
+ * `sparkle-fill`, `chat-fill`, `bell-fill`, `cards-fill`; none keeps the outline in the accent).
+ */
+data class OrganicTabItem<T>(
+    val id: T,
+    val title: String,
+    val icon: IconName,
+    val isAction: Boolean = false,
+    val badge: Int = 0,
+    val selectedIcon: IconName? = null,
+)
 
-/** The tab bar's height above the navigation bar, without its wavy edge. */
-val TabBarHeight = 60.dp
+/** The tab bar's height above the navigation bar, without its wavy edge (round 16 §2: 60 → 52, icons only). */
+val TabBarHeight = 52.dp
+
+/** A tab's glyph in the bar (round 16 §2). */
+val TabIconSize = 26.dp
 
 /**
- * The tab bar, docked like the header and edged the same way: cream paper
- * that begins on a wavy pen line, so the top and bottom chrome are one pair
- * and nothing floats or draws a frame. Tabs are the glyph over its label; the
- * selected one inks terracotta on a wash behind the glyph cut like torn paper
- * (wavy edges, lopsided corners, no rim). The pen sits among them as a solid
- * terracotta squircle the tabs' height — the one filled thing in the bar,
- * without a rim.
+ * The tab bar, docked like the header and edged the same way: cream paper that begins on a wavy pen
+ * line, so the top and bottom chrome are one pair and nothing floats or draws a frame. Round 16 §2:
+ * the tabs are their glyphs alone (each named for TalkBack and a pointer's tooltip by its title); the
+ * chosen one draws its solid twin in the accent — no wash behind it — and the others their outline in
+ * the muted ink; a change cross-fades in 120 ms as the new one springs from 0.9. The pen sits among
+ * them as a solid terracotta squircle (48 × 36) — the one filled shape in the bar, without a rim.
  */
 @Composable
 fun <T> OrganicTabBar(items: List<OrganicTabItem<T>>, selection: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
@@ -146,19 +160,23 @@ fun <T> OrganicTabBar(items: List<OrganicTabItem<T>>, selection: T, onSelect: (T
                     Modifier
                         .weight(1f)
                         .fillMaxHeight()
+                        .hoverable(source)
                         .clickable(source, indication = null, role = Role.Button, onClickLabel = item.title, onClick = select)
                         .semantics { contentDescription = item.title },
                     contentAlignment = Alignment.Center,
-                ) { PenChip(pressed, item.icon) }
+                ) { PenChip(pressed, item.icon, PenChipBarSize) }
             } else {
-                val wash by animateFloatAsState(if (selected) 1f else if (pressed) 0.5f else 0f, tween(160), label = "tabWash")
                 TabFace(
-                    item, index, selected, { wash },
+                    item, selected, pressed,
                     Modifier
                         .weight(1f)
                         .fillMaxHeight()
+                        .hoverable(source)
                         .clickable(source, indication = null, role = Role.Tab, onClickLabel = item.title, onClick = select)
-                        .semantics { this.selected = selected },
+                        .semantics {
+                            this.selected = selected
+                            contentDescription = item.title
+                        },
                 )
             }
         }
@@ -166,37 +184,82 @@ fun <T> OrganicTabBar(items: List<OrganicTabItem<T>>, selection: T, onSelect: (T
 }
 
 /**
- * A tab as the bar and the rail draw it: the glyph over its label, the selected one inked
- * terracotta on a scrap of torn paper (`wash` 0…1, read while drawing), its unread count hung
- * off the glyph's corner.
+ * A tab as the bar draws it (round 16 §2): its glyph alone at 26 — chosen, its solid twin in the
+ * accent; else the outline in the muted ink — crossing over in 120 ms as the chosen one springs up
+ * from 0.9 (at once with animations off); a press settles it to 0.94. Its unread count hangs off the
+ * glyph's corner on a ring of the bar's paper, so it parts from a solid glyph.
  */
 @Composable
-private fun <T> TabFace(item: OrganicTabItem<T>, index: Int, selected: Boolean, wash: () -> Float, modifier: Modifier) {
-    val scrap = Tokens.TerracottaLight
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Box(
-            Modifier.size(56.dp, 32.dp).drawWithCache {
-                // A scrap of torn paper, not a pill: a radius well under half
-                // the height, wavy long edges and lopsided corners, each tab
-                // its own seed.
-                val o = WobRectShape(12.0, index * 29.0 + 7, mag = 3.2, options = WobRectOptions(
-                    curve = 1.2, cornerJitter = 3.6, cornerOffset = 3.0, segmentsH = SegValue.Count(2.0), segmentsV = SegValue.Count(1.0),
-                )).createOutline(size, layoutDirection, this)
-                onDrawBehind { val w = wash(); if (w > 0f) drawOutline(o, scrap.copy(alpha = 0.55f * w)) }
-            },
-            contentAlignment = Alignment.Center,
-        ) {
-            Box {
-                OrganicIcon(item.icon, size = 24.dp, color = if (selected) Tokens.Terracotta else Tokens.TextMuted)
-                // NotificationBell's chip hangs off the glyph's top-right corner.
-                if (item.badge > 0) CountBadge(item.badge, Modifier.align(Alignment.TopEnd).offset(x = 9.dp, y = (-8).dp))
-            }
+private fun <T> TabFace(item: OrganicTabItem<T>, selected: Boolean, pressed: Boolean, modifier: Modifier) {
+    val context = LocalContext.current
+    val still = remember(context) { context.prefersReducedMotion() }
+    val solid by animateFloatAsState(if (selected) 1f else 0f, if (still) snap() else tween(TAB_SWAP_MILLIS), label = "tabSolid")
+    val pop = remember { androidx.compose.animation.core.Animatable(1f) }
+    LaunchedEffect(selected) {
+        if (selected && !still) {
+            pop.snapTo(0.9f)
+            pop.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.5f, stiffness = 600f))
         }
-        Spacer(Modifier.height(3.dp))
-        BasicText(
-            item.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            style = AppFonts.body(10.5f, if (selected) 600 else 400, lineHeight = 1.3f, color = if (selected) Tokens.Terracotta else Tokens.TextMuted),
-        )
+    }
+    val press by animateFloatAsState(if (pressed) 0.94f else 1f, tween(90), label = "tabPress")
+    val accent = Tokens.Terracotta
+    val muted = Tokens.TextMuted
+    Box(modifier.tabTooltip(item.title), contentAlignment = Alignment.Center) {
+        Box(Modifier.graphicsLayer { val k = pop.value * press; scaleX = k; scaleY = k }) {
+            // The outline fades out under the solid twin as it fades in: one glyph to the eye.
+            if (solid < 1f) OrganicIcon(item.icon, Modifier.graphicsLayer { alpha = 1f - solid }, size = TabIconSize, color = if (selected) accent else muted)
+            if (solid > 0f) OrganicIcon(item.selectedIcon ?: item.icon, Modifier.graphicsLayer { alpha = solid }, size = TabIconSize, color = accent)
+            if (item.badge > 0) CountBadge(item.badge, Modifier.align(Alignment.TopEnd).offset(x = 10.dp, y = (-8).dp), ring = Tokens.Cream)
+        }
+    }
+}
+
+/** A tab's glyph trades for its twin this fast (round 16 §2). */
+private const val TAB_SWAP_MILLIS = 120
+
+/**
+ * A pointer resting on a tab (a mouse, a stylus hovering) names it, after a moment, in a small ink
+ * pill above it — the label the bar no longer shows (round 16 §2). A touch never shows it; TalkBack
+ * reads the tab's own name.
+ */
+@Composable
+private fun Modifier.tabTooltip(title: String): Modifier {
+    val source = remember { MutableInteractionSource() }
+    val hovered by source.collectIsHoveredAsState()
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(hovered) {
+        if (!hovered) {
+            shown = false
+            return@LaunchedEffect
+        }
+        kotlinx.coroutines.delay(TOOLTIP_DELAY_MILLIS)
+        shown = true
+    }
+    if (shown) {
+        val lift = with(LocalDensity.current) { 8.dp.roundToPx() }
+        androidx.compose.ui.window.Popup(
+            popupPositionProvider = remember(lift) { TooltipAbove(lift) },
+            properties = androidx.compose.ui.window.PopupProperties(focusable = false),
+        ) {
+            CappedTextScale { OrganicPill(title, size = PillSize.Small, hiddenFromAccessibility = true) }
+        }
+    }
+    return this.hoverable(source)
+}
+
+private const val TOOLTIP_DELAY_MILLIS = 500L
+
+/** A tooltip's place: centred over its anchor, [lift] above it, kept inside the window. */
+private class TooltipAbove(private val lift: Int) : androidx.compose.ui.window.PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: androidx.compose.ui.unit.IntRect,
+        windowSize: androidx.compose.ui.unit.IntSize,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+        popupContentSize: androidx.compose.ui.unit.IntSize,
+    ): IntOffset {
+        val x = (anchorBounds.center.x - popupContentSize.width / 2).coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0))
+        val y = (anchorBounds.top - lift - popupContentSize.height).coerceAtLeast(0)
+        return IntOffset(x, y)
     }
 }
 
@@ -408,7 +471,8 @@ fun <T> TopTabs(
                     // Beside words, the glyph and its chip step into the leading padding so the chip
                     // ends clear of the label; nothing else moves (an offset takes no room).
                     Box(Modifier.offset(x = -TopTabBadge.glyphShift(labels, item.badge).dp)) {
-                        OrganicIcon(item.icon, size = if (labels) 20.dp else 22.dp, color = face)
+                        // The chosen segment wears its glyph's solid twin, in the segment's ink (round 16 §2).
+                        OrganicIcon(if (selected) item.selectedIcon ?: item.icon else item.icon, size = if (labels) 20.dp else 22.dp, color = face)
                         if (item.badge > 0) {
                             CountBadge(item.badge, Modifier.align(Alignment.TopEnd).offset(x = TopTabBadge.OFFSET_X.dp, y = TopTabBadge.OFFSET_Y.dp))
                         }
@@ -449,15 +513,19 @@ fun TopPen(label: String, icon: IconName, onClick: () -> Unit, modifier: Modifie
     ) { PenChip(pressed, icon) }
 }
 
+/** The pen chip in the 52 bar (round 16 §2); the header's keeps its 56 × 40. */
+private val PenChipBarSize = androidx.compose.ui.unit.DpSize(48.dp, 36.dp)
+private val PenChipHeaderSize = androidx.compose.ui.unit.DpSize(56.dp, 40.dp)
+
 /** The pen in the tab bar: a solid terracotta squircle as tall as a tab, the nib in cream; it darkens while pressed. */
 @Composable
-private fun PenChip(pressed: Boolean, icon: IconName) {
+private fun PenChip(pressed: Boolean, icon: IconName, chip: androidx.compose.ui.unit.DpSize = PenChipHeaderSize) {
     val face = Tokens.ButtonFill
     val press = OrganicIndication.OnFill
     val grainInk = GrainInk.current
     Box(
         Modifier
-            .size(56.dp, 40.dp)
+            .size(chip)
             .scale(if (pressed) 0.96f else 1f)
             .drawWithCache {
                 val o = WobRectShape(17.0, 3.0, mag = 1.1, options = WobRectOptions(
@@ -472,7 +540,7 @@ private fun PenChip(pressed: Boolean, icon: IconName) {
                 }
             },
         contentAlignment = Alignment.Center,
-    ) { OrganicIcon(icon, size = 22.dp, color = Tokens.Cream) }
+    ) { OrganicIcon(icon, size = if (chip.height < 40.dp) 20.dp else 22.dp, color = Tokens.Cream) }
 }
 
 /**
@@ -480,7 +548,7 @@ private fun PenChip(pressed: Boolean, icon: IconName) {
  * past 9) in the avatar's lopsided language, the number in cream 10/700.
  */
 @Composable
-fun CountBadge(count: Int, modifier: Modifier = Modifier) {
+fun CountBadge(count: Int, modifier: Modifier = Modifier, ring: Color? = null) {
     val w = if (count > 9) 26.dp else 19.dp
     val chip = Tokens.Terracotta
     Box(
@@ -488,14 +556,25 @@ fun CountBadge(count: Int, modifier: Modifier = Modifier) {
             .size(w, 18.dp)
             .clearAndSetSemantics { }
             .drawWithCache {
-                val o = WobRectShape(18 * 0.4, 9.0, mag = 1.3, options = WobRectOptions(
-                    curve = 1.5, cornerJitter = 3.0, cornerOffset = 18 * 0.06, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0),
-                )).createOutline(size, layoutDirection, this)
-                onDrawBehind { drawOutline(o, chip) }
+                val options = WobRectOptions(curve = 1.5, cornerJitter = 3.0, cornerOffset = 18 * 0.06, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0))
+                val o = WobRectShape(18 * 0.4, 9.0, mag = 1.3, options = options).createOutline(size, layoutDirection, this)
+                // Round 16 §2: a second, larger wob of the bar's paper behind the chip — a 2 pt ring parting it from a solid glyph.
+                val grow = BadgeRing.toPx()
+                val halo = ring?.let {
+                    WobRectShape(18 * 0.4 + BadgeRing.value, 9.0, mag = 1.3, options = options)
+                        .createOutline(androidx.compose.ui.geometry.Size(size.width + 2 * grow, size.height + 2 * grow), layoutDirection, this)
+                }
+                onDrawBehind {
+                    if (halo != null && ring != null) withTransform({ translate(-grow, -grow) }) { drawOutline(halo, ring) }
+                    drawOutline(o, chip)
+                }
             },
         contentAlignment = Alignment.Center,
     ) { BasicText("$count", style = AppFonts.body(10f, 700, lineHeight = 1f, color = Tokens.Cream)) }
 }
+
+/** The paper ring round a tab's unread chip (round 16 §2). */
+private val BadgeRing = 2.dp
 
 /** CSS `ease`, the header's opacity transition. */
 private val Ease = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1f)

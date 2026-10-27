@@ -2,6 +2,8 @@ package com.resonance.kit.api
 
 import com.resonance.api.apis.DefaultApi
 import com.resonance.api.models.NoteRef
+import com.resonance.api.models.Reaction
+import com.resonance.api.models.SetReactionRequest
 import com.resonance.api.models.SendMessageRequest
 import com.resonance.api.models.SendNoteRequest
 import okhttp3.OkHttpClient
@@ -63,4 +65,25 @@ class MessagingApi(private val api: DefaultApi) {
      * conversation, on the server. One already gone is nothing; one the viewer isn't in is `not_found`.
      */
     suspend fun deleteConversation(pair: String) = call { api.deleteConversation(pair) }
+
+    /**
+     * Reacts to a message of [pair] with [reaction] (round 16 §4: `heart`, `moved`, `laugh`, `hug`, `thumbs`),
+     * replacing the viewer's own (PUT …/messages/{id}/reaction). No bell, no push. Refused across a block,
+     * before a letter is answered, or on an unsent message ([ApiFailure]); an id this contract doesn't know
+     * is [IllegalArgumentException] before anything is sent.
+     */
+    suspend fun setReaction(pair: String, messageId: String, reaction: String) {
+        val value = Reaction.entries.firstOrNull { it.value == reaction } ?: throw IllegalArgumentException("unknown reaction $reaction")
+        call { api.setReaction(pair, messageId, SetReactionRequest(reaction = value)) }
+    }
+
+    /** Takes the viewer's reaction back (DELETE …/reaction); none there is nothing. */
+    suspend fun removeReaction(pair: String, messageId: String) = call { api.removeReaction(pair, messageId) }
+
+    /**
+     * Unsends one of the viewer's own messages (POST …/messages/{id}/unsend): within 24 h of sending, never a
+     * note. Too late is [ApiFailure] with status 409 ('This message can no longer be unsent.'); one already
+     * unsent is nothing.
+     */
+    suspend fun unsendMessage(pair: String, messageId: String) = call { api.unsendMessage(pair, messageId) }
 }

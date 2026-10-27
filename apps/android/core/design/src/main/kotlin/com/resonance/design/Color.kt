@@ -258,6 +258,11 @@ class PaletteMixes private constructor(private val palette: ResonanceColors) {
 
     val menuDangerWash: Color = mixed(lch("color-yellow"), lch("menu-paper"), 0.25)
     val menuDangerWashPressed: Color = mixed(lch("color-yellow"), lch("menu-paper"), 0.45)
+    /**
+     * The sheet a held message's tray and actions are cut from (round 16 §3): the menus' paper, raised at
+     * night a step toward the ink (`color-mix(in oklch, var(--menu-paper) 94%, var(--toward-ink))`).
+     */
+    val reactionSheet: Color = if (palette.dark) mixed(lch("menu-paper"), lch("toward-ink"), 0.94) else palette.MenuPaper
     private val highlights = HashMap<Double?, Color>()
 
     /**

@@ -94,6 +94,7 @@ class MainActivity : ComponentActivity() {
             DebugLaunch.writeStory = intent.getStringExtra("writeStory")
             DebugLaunch.writeCover = intent.getStringExtra("writeCover")
             DebugLaunch.threadDraft = intent.getStringExtra("threadDraft")
+            DebugLaunch.linkDraft = intent.getStringExtra("linkDraft")
             DebugLaunch.avifDecoder = intent.getBooleanExtra("avifDecoder", false)
             DebugLaunch.feedPicksDelay = intent.getIntExtra("feedPicksDelay", 0)
             DebugLaunch.feedPicksIds = intent.getStringExtra("feedPicks")?.split(',')?.map(String::trim)?.filter(String::isNotEmpty)
@@ -228,6 +229,10 @@ class MainActivity : ComponentActivity() {
                 // Off the main thread, as the push service draws it: the sender's photo may be fetched first.
                 lifecycleScope.launch(Dispatchers.IO) { PushCenter.showChatMessage(applicationContext, push) }
             }
+            // An unsent message's push (round 16 §3): `pushChatUnsend` is its id, in `pushChatConversation`.
+            intent.getStringExtra("pushChatUnsend")?.let { id ->
+                PushCenter.removeChatLine(applicationContext, intent.getStringExtra("pushChatConversation").orEmpty(), id)
+            }
         }
     }
 }
@@ -239,6 +244,8 @@ object DebugLaunch {
     var writeCover: String? = null
     /** A conversation's composer starts with this text. */
     var threadDraft: String? = null
+    /** What the writer's link sheet's field starts with when it opens on no link (screen checks: an IME's keys are slow to drive). */
+    var linkDraft: String? = null
     /** Pictures in AVIF go through [AvifDecoder] whatever the Android version (its check on a recent emulator). */
     var avifDecoder = false
     /** Today's picks held back this many seconds (screen checks of picks put on top of the latest cards). */

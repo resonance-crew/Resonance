@@ -123,6 +123,8 @@ fun FeedScreen(session: Session, open: (Route) -> Unit) {
     TabScreen(
         null,
         list = list,
+        // Reading down the feed, the phone's tab bar slides away (round 16 §2).
+        hidesTabBar = true,
         // Pulled down: read again now, from the server rather than the HTTP cache. Nothing back: the feed stays, and says why.
         onRefresh = {
             session.readAfresh()

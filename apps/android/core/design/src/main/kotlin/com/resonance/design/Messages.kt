@@ -1,5 +1,6 @@
 package com.resonance.design
 
+import androidx.compose.ui.graphics.PathEffect
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
@@ -79,6 +80,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
@@ -250,6 +253,8 @@ fun MessageBubble(
     onLinkTap: ((Int) -> Unit)? = null,
     onLongPress: ((Int?) -> Unit)? = null,
     /** What leads the bubble, over its words (a picture sent: [ChatPictureSection]). */
+    /** What a screen reader offers on the bubble besides its menu (round 16 §3: a reaction per sticker, taking one back). */
+    actions: List<CustomAccessibilityAction> = emptyList(),
     header: (@Composable ColumnScope.() -> Unit)? = null,
     attachment: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
@@ -266,7 +271,10 @@ fun MessageBubble(
                 if (onLongPress != null) Modifier
                     .pointerInput(Unit) { detectTapGestures(onLongPress = { longPress?.invoke(null) }) }
                     // The press-and-hold is the message's whole menu: assistive tech reaches it as the long click.
-                    .semantics { onLongClick { longPress?.invoke(null); true } }
+                    .semantics {
+                        onLongClick { longPress?.invoke(null); true }
+                        if (actions.isNotEmpty()) customActions = actions
+                    }
                 else Modifier,
             ),
     ) {
@@ -325,6 +333,31 @@ fun QuoteBubble(text: String, seed: Double, modifier: Modifier = Modifier, onCli
 
 /** How far a reply's bubble lies over the foot of the message it quotes. */
 val REPLY_OVERLAP = 14.dp
+
+/**
+ * An unsent message (round 16 §3): one line tall, on its sender's side — the bubble's own outline in a
+ * dashed light pen (INK_LIGHT, dash 4/4, the muted ink), no fill, and [text] in the muted ink at 13
+ * (你收回了一則訊息 / bob 收回了一則訊息). It offers nothing.
+ */
+@Composable
+fun UnsentBubble(text: String, mine: Boolean, seed: Double, modifier: Modifier = Modifier, run: RunPosition = RunPosition.Single) {
+    val pen = Tokens.TextMuted
+    val shape = remember(seed, mine, run) { MessageBubbleShape(seed, mine, run) }
+    Box(
+        modifier
+            .drawWithCache {
+                val o = shape.createOutline(size, layoutDirection, this)
+                val stroke = Stroke(
+                    Tokens.InkLight.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx())),
+                )
+                onDrawBehind { drawOutline(o, pen, style = stroke) }
+            }
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        BasicText(text, maxLines = 1, style = AppFonts.body(13f, lineHeight = 1.3f, color = Tokens.TextMuted))
+    }
+}
 
 // Words
 

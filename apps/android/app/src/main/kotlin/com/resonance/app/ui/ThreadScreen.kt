@@ -101,6 +101,9 @@ import com.resonance.geometry.seedFromString
 import com.resonance.kit.api.MessagingApi
 import com.resonance.kit.chat.Carried
 import com.resonance.kit.chat.ChatMessage
+import com.resonance.kit.chat.MessageReactions
+import com.resonance.design.generated.ReactionId
+import com.resonance.design.LocalToasts
 import com.resonance.kit.chat.SearchHit
 import com.resonance.kit.chat.ThreadRows
 import com.resonance.kit.l10n.L10n
@@ -159,6 +162,11 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     var busy by remember { mutableStateOf(false) }
     var blockError by remember { mutableStateOf<String?>(null) }
     var menu by remember { mutableStateOf<MessageMenu?>(null) }
+    // Round 16 §3: a message of yours to unsend (asked first), one of theirs being reported.
+    var unsending by remember { mutableStateOf<ChatMessage?>(null) }
+    var reportingMessage by remember { mutableStateOf<ChatMessage?>(null) }
+    val toasts = LocalToasts.current
+    val sayError: (String) -> Unit = { toasts.show(it) }
     val links = rememberLinkOpener()
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -252,7 +260,9 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     var listWidth by remember { mutableStateOf(pageWidth) }
     val rowMax = LayoutClass.bubbleMax(listWidth.value).dp
     val lifted = menu?.row?.message?.key
-    val ctx = remember(model, rowMax, links, highlights, currentHit, open, scroll, lifted) {
+    // Reactions only between two people connected, with no block (a letter not yet answered takes none).
+    val reacts = model.foot == ThreadFoot.Composer
+    val ctx = remember(model, rowMax, links, highlights, currentHit, open, scroll, lifted, reacts) {
         ThreadContext(
             model, rowMax, links, open, highlights, currentHit, flash, scroll,
             onMenu = { menu = it },
@@ -260,6 +270,8 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
             onQuote = { id -> jump(id, true) },
             lifted = lifted,
             onPicture = { viewing = it },
+            onReact = { message, id -> model.react(message, id, sayError) },
+            reacts = reacts,
         )
     }
 
@@ -345,10 +357,23 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
         )
 
         menu?.let { m ->
+            val held = m.row.message
             MessageMenuOverlay(
                 m, ctx,
-                items = remember(m) { messageMenuItems(m, model, links, context, open, reply = { reply(m.row.message) }) },
-                footer = fullTime(m.row.message.sentAt),
+                actions = remember(m) {
+                    messageActions(
+                        m, model, links, context, open,
+                        reply = { reply(held) },
+                        unsend = { unsending = held },
+                        report = { reportingMessage = held },
+                    )
+                },
+                footer = fullTime(held.sentAt),
+                tray = if (reacts && MessageReactions.canReact(held)) {
+                    TrayOffer(
+                        MessageReactions.mine(model.find(held.id)?.reactions ?: held.reactions, model.me)?.let(ReactionId::of),
+                    ) { id -> model.react(held, id.key, sayError) }
+                } else null,
                 onDismiss = { menu = null },
             )
         }
@@ -370,6 +395,29 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
         onBlocked = { scope.launch { model.refreshConnection() } },
         offerBlock = !model.isBlocked,
     ) { reporting = false }
+    // 檢舉這則訊息 (round 16 §3): the report flow, for that one message.
+    reportingMessage?.let { message ->
+        if (other != null && pair != null) ReportDialog(
+            session, SafetyService.Target.Message(message.id, message.senderId, pair), other.handle,
+            onBlocked = { scope.launch { model.refreshConnection() } },
+            offerBlock = !model.isBlocked,
+        ) { reportingMessage = null }
+    }
+    // 收回 asks first, in the plain colour (it takes the words back, it doesn't destroy them for good).
+    unsending?.let { message ->
+        OrganicConfirmDialog(
+            title = L10n.Messages.unsendTitle,
+            body = L10n.Messages.unsendBody,
+            cancelLabel = L10n.Messages.unsendCancel,
+            confirmLabel = L10n.Messages.unsendConfirm,
+            onCancel = { unsending = null },
+            onConfirm = {
+                unsending = null
+                model.unsend(message, sayError)
+            },
+            seed = 73.0,
+        )
+    }
     if (confirmingBlock) OrganicConfirmDialog(
         title = L10n.Safety.blockTitle(other?.handle ?: ""),
         body = L10n.Safety.blockBody,

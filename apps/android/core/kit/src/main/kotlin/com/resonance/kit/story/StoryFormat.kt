@@ -155,7 +155,8 @@ object StoryParser {
         val runs = inlines(p)
         val linkKey = when (only) {
             // A linked picture is a picture, not a link of its own.
-            is Link -> only.destination.takeIf { !holdsImage(only) }?.let(StoryLinks::keyOf)
+            // A link the writer gave words reads as those words (round 16 §6): a card only when its words are its address.
+            is Link -> only.destination.takeIf { !holdsImage(only) && StoryLinks.wordsAreTheAddress(plain(only), it) }?.let(StoryLinks::keyOf)
             is Text -> StoryLinks.bareKey(only.literal)
             else -> null
         }
