@@ -49,6 +49,13 @@ textarea::placeholder {
   font-style: italic;
 }
 
+/* Chinese has no italic — a slanted 「輸入標籤⋯」 is a synthetic oblique —
+   so a Chinese page's hints stand upright; the colour marks them. */
+input:lang(zh-TW)::placeholder,
+textarea:lang(zh-TW)::placeholder {
+  font-style: normal;
+}
+
 /* ── Scrollbars ──────────────────────────────────────────────────
    One family: a 6px ink capsule at rest (10px pointed at, terracotta while
    dragged) in a 14px column the pointer can hit, on no track, never shorter
