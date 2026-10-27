@@ -1,5 +1,6 @@
-/* The pill's face: a terracotta-light wash (HandDrawnBorder, its stand-in
-   until measured), no pen line, the deep terracotta ink. Where it sits is
+/* The pill's face, made as a card is: a terracotta-light fill inside a pen
+   line of the accent (HandDrawnBorder, its stand-in until measured), flat,
+   the deep terracotta ink. Where it sits is
    the caller's (className); the drawn wash needs a positioned box, which the
    caller's own `position` overrides (:where keeps this one weakest). */
 :where(.pill) {
@@ -52,8 +53,8 @@ span.pill {
   cursor: default;
 }
 
-/* No pen line tells a Tab-focused pill from the page, so keyboard focus
-   rings it, as OrganicButton's does (round with the pill's stand-in radius). */
+/* Keyboard focus rings it, as OrganicButton's does (round with the face's
+   stand-in radius), outside its own pen line. */
 button.pill:focus {
   outline: none;
 }
@@ -61,12 +62,6 @@ button.pill:focus {
 button.pill:focus-visible {
   outline: 2px solid var(--field-border-focus);
   outline-offset: 2px;
-}
-
-/* It floats over the page — a toast over the window's foot, the thread's pill over its messages — like a
-   piece of cut paper: the paper-cut shadow under its wash, following the wobble (round 17 addendum A1). */
-.pill > svg {
-  filter: var(--cutout-shadow);
 }
 
 .glyph,

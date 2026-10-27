@@ -64,8 +64,8 @@ function useBubbleOptions(editor: Editor) {
  * floating over the selected words (Tiptap's BubbleMenu, placed by
  * floating-ui: above, flipped under it near the top, kept on screen) — 粗體 ·
  * 斜體 ┆ H2 · H3 ┆ 引言 · 清單 · 編號 ┆ 連結 (round 17 §6: the link last, after
- * a separator of its own) — on the menus' sheet (round 17 §1: paper and
- * grain, no pen, lifted by the sheet's shadow; drawn once measured).
+ * a separator of its own) — on the menus' sheet (atoms/PaperSheet: the menu
+ * paper inside one grey pen line, flat; drawn once measured).
  * Option/Alt+F10 in the story moves the focus into it (the
  * editor's own key, MarkdownEditor), ← and → walk it, Escape gives the focus
  * back to the words with the selection kept; the shortcuts (⌘B, ⌘I, ⌘⌥2…)

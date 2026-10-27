@@ -79,7 +79,7 @@ type ActionKey = 'edit' | 'publish' | 'visibility' | 'unresonate' | 'delete';
  * where its pen is 編輯) / 轉為私人卡 (a card readers have)
  * / 取消共振 (a card that resonates with another) / 刪除. The trigger and
  * dropped panel come from {@link OrganicMenu} (the one menu sheet — paper
- * and grain, no pen, no dividers, per-row ink, 刪除 in the danger ink); this
+ * inside the card's pen line, no dividers, per-row ink, 刪除 on its red wash); this
  * component owns only the card business logic. Changes go
  * through the server (PATCH /api/v1/cards/{id}, POST …/trash), which also
  * drops the cached pages that showed the card as it was and keeps the

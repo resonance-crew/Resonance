@@ -382,11 +382,6 @@
   max-width: 70%;
   padding: 7px 12px;
 }
-/* A chip on the cover, as 更換封面 is: the paper-cut shadow under its drawing (round 17 addendum A1). */
-.coverErrorChip > svg {
-  filter: var(--cutout-shadow);
-}
-
 .coverErrorText {
   position: relative;
   z-index: 1;

@@ -61,8 +61,8 @@ export interface SubnavbarProps {
 /**
  * Account menu hanging off the header avatar. Closed, it's just the avatar;
  * clicking it drops the one menu sheet (round 17 §1, OrganicMenu's exact twin —
- * review W3): paper and grain, no pen, no dividers, the glyphs in the menu's
- * terracotta, the row ink under the pointer or the keyboard alone (a pointer's
+ * review W3): the menu paper inside one grey pen line (round 18), no
+ * dividers, flat, the glyphs in the menu's terracotta, the row ink under the pointer or the keyboard alone (a pointer's
  * opening inks no row; the keyboard's starts on the first), listing 我的卡片盒 /
  * 私訊 / 設定 / 登出 — 登出 a plain row.
  */

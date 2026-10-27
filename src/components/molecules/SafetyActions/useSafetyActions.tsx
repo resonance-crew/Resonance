@@ -71,7 +71,7 @@ export function useSafetyActions({ report, isBlocked = false, onBlockedChange }:
       ? []
       : isBlocked
         ? [{ key: 'safety:unblock', icon: 'ban' as const, label: t('unblock') }]
-        : [{ key: 'safety:block', icon: 'ban' as const, label: t('block'), danger: true }]),
+        : [{ key: 'safety:block', icon: 'ban' as const, label: t('block'), warn: true }]),
   ];
 
   async function unblock() {

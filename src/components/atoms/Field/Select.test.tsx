@@ -93,11 +93,14 @@ describe('Select row ink', () => {
   };
   const inked = () => inkBrushes().map((b) => b.on);
 
-  it('lies on the menu sheet: paper and grain, no pen line, no dividers, rows 44', async () => {
+  // Round 18: the menus' sheet, but its pen the focus colour — an open Select is the one thing to look at.
+  it('lies on the menu sheet inside the focus pen, no dividers, rows 44', async () => {
     await openSelect('jp');
     const panel = screen.getByRole('listbox').parentElement!;
     expect(panel.querySelector('path[fill="var(--sheet-paper)"]')).not.toBeNull();
-    expect(panel.querySelector('path[stroke]')).toBeNull();
+    const pens = panel.querySelectorAll('path[stroke]');
+    expect(pens).toHaveLength(1);
+    expect(pens[0]).toHaveAttribute('stroke', 'var(--field-border-focus)');
     // 6 of paper over the first row and under the last, 44 a row.
     expect(panel.style.height).toBe(`${6 + 4 * 44 + 6}px`);
     const css = readFileSync(join(process.cwd(), 'src/components/atoms/Field/Field.module.css'), 'utf8');

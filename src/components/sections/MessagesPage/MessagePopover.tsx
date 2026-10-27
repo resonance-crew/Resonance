@@ -32,9 +32,9 @@ export interface MessagePopoverProps {
 /**
  * What a mouse's ☺ or ⋯ beside a message opens (round 16 review M3): only
  * the part it names, beside it — the ☺ (or a reaction chip) the five
- * reactions on their borderless paper (ReactionTray), 8 over it; the ⋯ the
- * actions as a floating dropdown at it, the message menu's sheet (no pen,
- * no dividers, its time the quiet last line) as wide as every other ⋯'s on
+ * reactions on the menus' sheet (ReactionTray), 8 over it; the ⋯ the
+ * actions as a floating dropdown at it, the message menu's sheet (its grey
+ * pen line, no dividers, its time the quiet last line) as wide as every other ⋯'s on
  * the web — its longest line with 20 each side, 168 at least (round 17
  * addendum A3) —, as every other ⋯ on the web drops its OrganicMenu. No scrim, nothing lifted, nothing gliding: the
  * pointer stays where it was, and so does the thread. A held finger keeps

@@ -175,8 +175,11 @@ describe('Subnavbar', () => {
     it('draws 登出 as a plain row: no wash at rest, the same ink as every row, the glyphs in the menu pen', async () => {
       await open();
       // The menus' one sheet (round 17 §1): no pen line round it, none between its rows.
-      expect(screen.getByRole('menu').parentElement!.querySelector('path[stroke]')).toBeNull();
-      expect(document.querySelector('[data-row-brushes] [data-rest]')).toBeNull();
+      // The sheet's one grey pen line round it (round 18), no dividers; nothing rests on a row.
+      const pens = screen.getByRole('menu').parentElement!.querySelectorAll('path[stroke]');
+      expect(pens).toHaveLength(1);
+      expect(pens[0]).toHaveAttribute('stroke', 'var(--sheet-pen)');
+      expect(document.querySelector('[data-row-brushes] [data-row-rest]')).toBeNull();
       const fills = inkBrushes().map((b) => b.color);
       expect(new Set(fills).size).toBe(1);
       expect(fills[0]).toContain('15%');

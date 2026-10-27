@@ -1,8 +1,7 @@
 /* ── OrganicMenu ────────────────────────────────────────────────────
    Generic organic dropdown: wobbly chip trigger + the one menu sheet (round
-   17 §1: paper and grain, no pen, no dividers, the paper-cut shadow that
-   follows its wobble). Colors ride the --menu-* variables set inline by the
-   component. */
+   18: the menu paper inside one pen line, no dividers, flat — atoms/PaperSheet).
+   Colors ride the --menu-* variables set inline by the component. */
 .root {
   position: relative;
   display: inline-block;
@@ -41,12 +40,6 @@
 .pill:hover,
 .pill[data-open] {
   color: var(--color-text);
-}
-/* A chip — the card box's ⋯ at a card's corner, 更換封面 on a cover — lies on the card like a piece of cut paper:
-   the paper-cut shadow under its drawing, following its wobble (round 17 addendum A1). A bare glyph is drawn on
-   the page itself, one layer: no shadow. */
-.trigger:not(.bare) > svg {
-  filter: var(--cutout-shadow);
 }
 .triggerLabel {
   position: relative;
@@ -315,10 +308,10 @@
   color: var(--menu-glyph-active, var(--menu-border-hover));
 }
 
-/* A row that ends or removes something (刪除, 封鎖, 永久刪除 — round 17 review D1): its glyph and words in the
-   danger ink, at rest and under its ink alike (which spreads in the same hue); no wash of its own at rest. The
-   words' danger ink is the deepened one (--danger-fill, the dangerText button's): --color-danger is 4.2:1 on the
-   menu paper by day, this 5.1:1 (5.1:1 at night too). */
+/* A row that removes something (刪除, 永久刪除, 刪除對話): it rests on a red wash (MenuPanel, round 18) and its
+   glyph and words wear the danger ink, at rest and under its ink alike (which spreads in the same hue). The words'
+   danger ink is the deepened one (--danger-fill, the dangerText button's): --color-danger is 4.2:1 on the menu
+   paper by day. 封鎖 (`warn`) rests on the warning yellow in the text ink. */
 .option[data-tone='danger'],
 .option[data-tone='danger'][data-active],
 .option[data-tone='danger']:focus-visible,

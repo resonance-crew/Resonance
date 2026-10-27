@@ -13,3 +13,11 @@
     transition: none;
   }
 }
+
+/* A warning or destructive row's resting wash, under its brush. */
+.rests {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+}

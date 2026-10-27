@@ -16,7 +16,7 @@ import { createPortal } from 'react-dom';
 import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import { useElementSize } from '@/lib/hooks/useElementSize';
 import { Icon, type IconName } from '@/components/atoms/Icon';
-import { RowBrushes, menuRowWash, useRowInk } from '@/components/atoms/RowInk/RowInk';
+import { RowBrushes, menuRowRest, menuRowWash, useRowInk, type MenuRowTone } from '@/components/atoms/RowInk/RowInk';
 import { PaperSheet, sheetPath } from '@/components/atoms/PaperSheet/PaperSheet';
 import { wobCircle } from '@/lib/design/wobCircle';
 import { rowBoundary, rowRegion } from '@/lib/design/rowMenu';
@@ -31,11 +31,12 @@ export interface OrganicMenuItem {
   /** The row's accessible name, when it says more than its label (「分享到 LINE」 for a row reading LINE). */
   ariaLabel?: string;
   /**
-   * A row that ends or removes something (刪除, 封鎖, 永久刪除): told by the danger ink alone — its glyph and
-   * words in the danger ink (`--danger-fill`, the words' AA one), its ink spreading in the danger hue — and no
-   * wash at rest (round 17 review D1).
+   * A row that removes something (刪除, 永久刪除, 刪除對話): it rests on a red wash, its glyph and words in the
+   * danger ink (`--danger-fill`, the words' AA one), its ink spreading in the danger hue (round 18).
    */
   danger?: boolean;
+  /** A row that warns (封鎖): it rests on the warning yellow, its ink spreading in it; its words in the text ink. */
+  warn?: boolean;
 }
 
 export interface OrganicMenuProps {
@@ -60,8 +61,8 @@ export interface OrganicMenuProps {
   /**
    * For a labelled chip: its own colours instead of the paper (round 9 §8 — the
    * 更換封面 chip wears its card's family): an opaque `fill`, a `pen` line at
-   * INK round it (it floats over a picture: the line parts it from one, the
-   * paper-cut shadow every chip casts lifts it), and the `ink` of its glyph and
+   * INK round it (it floats over a picture: the line parts it from one), and
+   * the `ink` of its glyph and
    * words.
    */
   triggerColors?: { fill: string; pen: string; ink: string };
@@ -121,8 +122,8 @@ export interface OrganicMenuProps {
  * The `--menu-*` colours a menu draws with: the theme's terracotta (the
  * glyphs and the row ink), or the accent `hue` at the scheme's lightness
  * (palette.ts HUE_ROLES) — and the chip trigger's paper. A card's own menu
- * (a `hue`) keeps the card's menu paper as its sheet's (`--sheet-base`,
- * raised at night as every sheet is); every other menu is the menu paper.
+ * (a `hue`) lies on the card's menu paper inside the card's pen (`--sheet-base`,
+ * `--sheet-pen`); every other menu is the menu paper inside the quiet grey.
  */
 function menuColors(hue: number | undefined): CSSProperties {
   const colors: Record<string, string> =
@@ -137,6 +138,7 @@ function menuColors(hue: number | undefined): CSSProperties {
           '--menu-border-hover': `oklch(var(--hue-pen-deep) ${hue})`,
           '--menu-cream': `oklch(var(--hue-menu) ${hue})`,
           '--sheet-base': `oklch(var(--hue-menu) ${hue})`,
+          '--sheet-pen': `oklch(var(--hue-pen) ${hue})`,
         };
   return colors as CSSProperties;
 }
@@ -154,14 +156,12 @@ const EDGE = 12;
 
 /**
  * The organic「⋯」dropdown: a wobbly chip trigger (or a bare glyph) dropping
- * the one menu sheet (round 17 §1) — borderless paper and grain lifted by the
- * paper-cut shadow, no dividers, rows 44 tall, a spreading ink wash on the hovered
- * (or pressed) row clipped to its band within the sheet's wobble. Closes on
+ * the one menu sheet (atoms/PaperSheet: the menu paper inside one pen line,
+ * flat) — no dividers, rows 44 tall, a spreading ink wash on the hovered (or
+ * pressed) row clipped to its band within the sheet's wobble. Closes on
  * outside pointer-down or Escape. The chip is paper with no rim — it sits on
  * a card or its cover, already framed, like the apps' (their bars draw the
- * glyph bare) — lifted off it by the paper-cut shadow (--cutout-shadow, round
- * 17 addendum A1); a bare glyph casts none. No scrim: a menu opened from a
- * button is quick.
+ * glyph bare). No scrim: a menu opened from a button is quick.
  */
 export function OrganicMenu({
   items,
@@ -638,12 +638,16 @@ function MenuPanel({
       document.removeEventListener('pointerdown', pointer, true);
     };
   }, []);
-  // Every row's ink at one strength, a destructive row's in the danger hue (round 17 review D1: no warning wash at
-  // rest — the danger ink of its glyph and words says it). See-through: the paper's grain shows through it, so an
-  // inked row is the same paper, never a second layer on it.
-  const washes: string[] = items.map((it) => menuRowWash(it.danger));
+  // Every row's ink at one strength; 封鎖 rests on the warning yellow and 刪除 on a red wash, their ink in the same
+  // colour (round 18). See-through: an inked row is the same paper, never a second layer on it.
+  const tones: MenuRowTone[] = items.map((it) => (it.danger ? 'danger' : it.warn ? 'warn' : undefined));
+  const washes: string[] = tones.map((tone) => menuRowWash(tone));
+  const rests = tones.map((tone) => menuRowRest(tone));
   // The footer's band takes no ink.
-  if (hasFooter) washes.push('transparent');
+  if (hasFooter) {
+    washes.push('transparent');
+    rests.push(null);
+  }
 
   return (
     <div
@@ -652,7 +656,7 @@ function MenuPanel({
       style={{ height: `${h}px` }}
     >
       {w > 0 && <PaperSheet w={w} h={h} R={SHEET_R} seed={seed + 100} />}
-      {ready && <RowBrushes w={w} h={h} outline={outline} bands={regions} ink={ink} fills={washes} />}
+      {ready && <RowBrushes w={w} h={h} outline={outline} bands={regions} ink={ink} fills={washes} rests={rests} />}
       <div
         id={`${uid}-menu`}
         ref={listRef}
@@ -671,7 +675,7 @@ function MenuPanel({
               role="menuitem"
               className={styles.option}
               data-active={ink.index === i || undefined}
-              data-tone={it.danger ? 'danger' : undefined}
+              data-tone={tones[i]}
               disabled={busy}
               {...row}
               onMouseEnter={(e) => (!freshPress || lastPointer.current === 'mouse') && row.onMouseEnter(e)}

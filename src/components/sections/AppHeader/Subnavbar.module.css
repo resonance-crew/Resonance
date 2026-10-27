@@ -1,8 +1,8 @@
 /* ── Subnavbar (account menu) ───────────────────────────────────────
    The avatar is the trigger; clicking it drops the one menu sheet — the
-   exact twin of OrganicMenu's (round 17 §1, review W3): paper and grain, no
-   pen, no dividers, the glyphs in the menu's terracotta, the row ink under
-   the pointer or the keyboard. */
+   exact twin of OrganicMenu's (round 17 review W3, round 18): the menu paper
+   inside one grey pen line, no dividers, flat, the glyphs in the menu's
+   terracotta, the row ink under the pointer or the keyboard. */
 .root {
   position: relative;
 }

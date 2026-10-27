@@ -188,32 +188,32 @@
   --hint-size: 12px;
 }
 
-/* Every menu's sheet (round 17 §1): borderless paper and grain (atoms/PaperSheet),
-   raised a step at night (≈ L 28 % over the 0.65 scrim) so a sheet parts from
-   what it lies on.
-
-   The paper-cut shadow (round 17 addendum A1): the one shadow for anything that
-   lies on the page like a piece of cut paper — every menu sheet and popover, the
-   Select list, the toast (atoms/InkPill), a menu chip on a card or its cover —
-   tight and a little deep, one sheet lifted a millimetre, never a halo. Always a
-   `filter: var(--cutout-shadow)` on the shape's drawing, so it follows the
-   wobble; never on a bare glyph button, nor on anything flat. The shadow ink's:
-   two layers by day, one deeper at night. */
+/* Every menu's sheet (round 18, the owner's: the page is flat, so is every
+   menu): the theme's menu paper (atoms/PaperSheet) inside one hand-drawn pen
+   line — the header's quiet grey (--sheet-pen), never the accent: a menu a
+   button drops is a quick aside, not something to look at. A card's own menu
+   wears its card's pen instead, and a Select's open list the focus pen (it is
+   the one thing to look at while it is open). No grain, no dividers, and no
+   shadow anywhere: what floats is told by its line, as a card is. */
 :root {
   --sheet-paper: var(--menu-paper);
-  --cutout-shadow:
-    drop-shadow(0 2px 3px color-mix(in oklch, var(--shadow-ink) 22%, transparent))
-    drop-shadow(0 0.5px 1px color-mix(in oklch, var(--shadow-ink) 14%, transparent));
+  --sheet-pen: var(--field-border-hover);
+  /* What a menu row that warns (封鎖) rests on, and its ink over that: the
+     warning yellow, see-through. The night yellow is a deep olive, so at night
+     it is laid on nearly whole and its ink lightens it. 刪除's red is the same
+     strength in both (RowInk menuRowRest). */
+  --menu-warn-rest: color-mix(in oklch, var(--color-yellow) 32%, transparent);
+  --menu-warn-ink: color-mix(in oklch, var(--color-yellow) 30%, transparent);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-scheme='light']) {
-    --sheet-paper: color-mix(in oklch, var(--menu-paper) 94%, var(--toward-ink));
-    --cutout-shadow: drop-shadow(0 2px 4px color-mix(in oklch, var(--shadow-ink) 60%, transparent));
+    --menu-warn-rest: color-mix(in oklch, var(--color-yellow) 90%, transparent);
+    --menu-warn-ink: color-mix(in oklch, var(--color-text) 8%, transparent);
   }
 }
 
 :root[data-scheme='dark'] {
-  --sheet-paper: color-mix(in oklch, var(--menu-paper) 94%, var(--toward-ink));
-  --cutout-shadow: drop-shadow(0 2px 4px color-mix(in oklch, var(--shadow-ink) 60%, transparent));
+  --menu-warn-rest: color-mix(in oklch, var(--color-yellow) 90%, transparent);
+  --menu-warn-ink: color-mix(in oklch, var(--color-text) 8%, transparent);
 }

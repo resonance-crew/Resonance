@@ -250,8 +250,8 @@ export interface SelectProps {
 /**
  * Organic dropdown. Closed, it's the same wobbly hand-drawn box as `<Input>`
  * (a form field keeps its outline). Clicking it lays the one menu sheet over
- * the box (round 17 review D6 — every menu's: paper and grain, no pen, no
- * dividers, the paper-cut shadow that follows its wobble, rows 44 with their
+ * the box (round 17 review D6 — every menu's sheet, flat, no dividers, its
+ * pen the focus colour since it is what to look at (round 18), rows 44 with their
  * content 20 in, the spreading ink clipped to each row's band), listing the
  * options, the chosen one's words in terracotta with a ✓ at its end. A
  * pointer's opening inks no row; the keyboard's starts on the chosen one.
@@ -467,8 +467,9 @@ interface DropdownPanelProps {
 }
 
 /**
- * The open list: the one menu sheet (atoms/PaperSheet — the menus' paper and
- * grain, no pen, its shadow following the wobble) laid **over the closed
+ * The open list: the one menu sheet (atoms/PaperSheet — the menus' paper
+ * inside one pen line, flat), its pen the focus colour rather than the menus'
+ * grey: an open Select is the one thing to look at (round 18) — laid **over the closed
  * box** (anchored at its top, or its foot when it opens upward), the options
  * in 44 rows with no lines between them, the inked row's wash spreading from
  * where the pointer came in (or the keyboard's row's centre), cut to its band
@@ -533,7 +534,7 @@ function DropdownPanel({
           : null),
       }}
     >
-      {w > 0 && <PaperSheet w={w} h={h} R={SELECT_SHEET_R} seed={seed + 100} />}
+      {w > 0 && <PaperSheet w={w} h={h} R={SELECT_SHEET_R} seed={seed + 100} pen="var(--field-border-focus)" />}
       {regions.length === n && <RowBrushes w={w} h={h} outline={outline} bands={regions} ink={ink} fills={washes} />}
       <div id={`${uid}-listbox`} className={styles.dropdownList} role="listbox" aria-label="options">
         {options.map((opt, i) => (

@@ -35,8 +35,8 @@ export interface ReactionTrayProps {
 /**
  * The five reactions (round 16 §3, §4): ❤️ 🥹 😆 🫂 👍 in that order, each a
  * 44 cell with its sticker at 32, popping in one after another — floating on
- * the held message's scrim (round 17 §2.2), or on a borderless paper sheet
- * (atoms/PaperSheet, with its shadow) where a fine pointer's ☺ opens them
+ * the held message's scrim (round 17 §2.2), or on the menus' sheet
+ * (atoms/PaperSheet: paper inside a pen line) where a fine pointer's ☺ opens them
  * over the bare thread. The viewer's own sits on an opaque wobbly disc (the
  * accent's light wash; at night the accent over the raised paper) and is
  * pressed: choosing it again takes it back. A toolbar to the keyboard — one stop in the Tab order,

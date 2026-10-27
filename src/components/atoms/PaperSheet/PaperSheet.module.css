@@ -1,24 +1,20 @@
-/* A borderless paper sheet (round 16 §3, every menu since round 17 §1): the
-   sheet's paper — the menu's, or a card's own (--sheet-base, a card's ⋯
-   menu: its hue's menu paper) — raised a step at night, and its grain,
-   lifted off what it lies on by the paper-cut shadow (--cutout-shadow, round
-   17 addendum A1), which follows the wobble (a drop-shadow of the drawing,
-   never a box's). */
-.sheet {
-  --sheet-paper: var(--sheet-base, var(--menu-paper));
+/* The menu sheet (round 18): the sheet's paper — the menu's, or a card's own
+   (--sheet-base, a card's ⋯ menu: its hue's menu paper) — under the row ink,
+   and its pen line over it, so a row's ink never covers the line. Flat: no
+   grain, no shadow. */
+.sheet,
+.pen {
   position: absolute;
   inset: 0;
-  z-index: 0;
   pointer-events: none;
-  filter: var(--cutout-shadow);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-scheme='light']) .sheet {
-    --sheet-paper: color-mix(in oklch, var(--sheet-base, var(--menu-paper)) 94%, var(--toward-ink));
-  }
+.sheet {
+  --sheet-paper: var(--sheet-base, var(--menu-paper));
+  z-index: 0;
 }
 
-:root[data-scheme='dark'] .sheet {
-  --sheet-paper: color-mix(in oklch, var(--sheet-base, var(--menu-paper)) 94%, var(--toward-ink));
+/* Over the row ink (z 0, after the paper), under the rows (z 1, after the pen). */
+.pen {
+  z-index: 1;
 }

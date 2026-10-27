@@ -11,15 +11,32 @@ import styles from './RowInk.module.css';
 // wobble. The native apps do the same on press. `useRowInk` holds the state,
 // `<RowBrushes>` draws it over the sheet's paper.
 
+/** What a menu row does: an ordinary row, one that warns (封鎖: a step back from someone), or one that removes something (刪除). */
+export type MenuRowTone = 'warn' | 'danger' | undefined;
+
 /**
  * A menu row's ink under the pointer, a finger or the keyboard — the one strength every sheet uses (OrganicMenu,
- * the avatar menu, `Select`): the menu's deep pen at 15 %, or the danger hue for a row that ends or removes
- * something (round 17 review D1).
+ * the avatar menu, `Select`): the menu's deep pen at 15 %, or, over a warning or destructive row's own wash (see
+ * `menuRowRest`), more of that row's colour.
  */
-export function menuRowWash(danger = false): string {
-  return danger
+export function menuRowWash(tone: MenuRowTone = undefined): string {
+  return tone === 'danger'
     ? 'color-mix(in oklch, var(--color-danger) 15%, transparent)'
-    : 'color-mix(in oklch, var(--menu-border-hover, var(--terracotta-deep)) 15%, transparent)';
+    : tone === 'warn'
+      ? 'var(--menu-warn-ink)'
+      : 'color-mix(in oklch, var(--menu-border-hover, var(--terracotta-deep)) 15%, transparent)';
+}
+
+/**
+ * The wash a row rests on before any ink (round 18, the owner's): 封鎖 on the warning yellow, 刪除 on a red one;
+ * every other row on the bare paper (null). See-through, so the row is the same paper.
+ */
+export function menuRowRest(tone: MenuRowTone = undefined): string | null {
+  return tone === 'danger'
+    ? 'color-mix(in oklch, var(--color-danger) 11%, transparent)'
+    : tone === 'warn'
+      ? 'var(--menu-warn-rest)'
+      : null;
 }
 
 export interface RowInkRow {
@@ -138,24 +155,32 @@ export interface RowBrushesProps {
   /** Each row's band within the sheet (`rowRegion`): the ink of a row stays in it. */
   bands: string[];
   ink: RowInk;
-  /** Each row's ink, as long as `bands` ('transparent' for a band that takes none). No row rests on a wash. */
+  /** Each row's ink, as long as `bands` ('transparent' for a band that takes none). */
   fills: string[];
+  /** The wash a row rests on before any ink (`menuRowRest`: 封鎖's yellow, 刪除's red), null for the bare paper. */
+  rests?: (string | null)[];
   /** How long a full spread takes. */
   duration?: number;
 }
 
 /**
- * The row ink of a borderless paper sheet (round 17 §1, every menu): each
+ * The row ink of a menu sheet (round 17 §1, every menu): each
  * row's wash is a BrushWash — a disc grown by `transform` from where the
  * pointer came in (or a finger pressed, or the keyboard's row's centre) —
  * clipped to the row's band, inside a layer clipped to the sheet's own
- * wobble, so the ink fills the curved region and never a rectangle. Drawn
- * over the sheet's paper and grain, under the rows.
+ * wobble, so the ink fills the curved region and never a rectangle — over a
+ * warning or destructive row's resting wash. Drawn over the sheet's paper,
+ * under its pen line and the rows.
  */
-export function RowBrushes({ w, h, outline, bands, ink, fills, duration = 340 }: RowBrushesProps) {
+export function RowBrushes({ w, h, outline, bands, ink, fills, rests, duration = 340 }: RowBrushesProps) {
   if (!w || !h || !outline) return null;
   return (
     <div aria-hidden="true" data-row-brushes="" className={styles.sheetInk} style={{ width: w, height: h, clipPath: `path('${outline}')` }}>
+      {rests?.some(Boolean) && (
+        <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className={styles.rests}>
+          {bands.map((d, i) => (rests[i] ? <path key={i} d={d} fill={rests[i]!} data-row-rest="" /> : null))}
+        </svg>
+      )}
       {bands.map((d, i) =>
         fills[i] === 'transparent' ? null : (
           <RowBrush key={i} w={w} h={h} d={d} color={fills[i]} on={ink.index === i} x={ink.cx} y={ink.cy} duration={duration} />

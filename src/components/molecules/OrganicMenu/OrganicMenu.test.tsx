@@ -96,39 +96,47 @@ describe('OrganicMenu row ink', () => {
     for (const band of bands) expect(band).toMatch(/^path\('M .* C .* Z'\)$/);
   });
 
-  // Round 17 review D1: a row that ends or removes something is told by the danger ink alone — every such row,
-  // not only the first — its ink spreading in the danger hue at the others' strength, and no wash at rest.
-  it('draws every destructive row in the danger ink, with no wash at rest and its ink in the danger hue', async () => {
+  // Round 18 (the owner's): 封鎖 rests on the warning yellow, 刪除 on a red wash — every such row, not only the
+  // first — each one's ink spreading in its own colour at the others' strength.
+  it('rests 封鎖 on the warning yellow and 刪除 on a red wash, each inked in its own colour', async () => {
     const items: OrganicMenuItem[] = [
       { key: 'search', icon: 'search', label: 'Search' },
-      { key: 'block', icon: 'ban', label: 'Block', danger: true },
+      { key: 'block', icon: 'ban', label: 'Block', warn: true },
       { key: 'delete', icon: 'trash', label: 'Delete', danger: true },
+      { key: 'empty', icon: 'trash', label: 'Empty', danger: true },
     ];
     render(<OrganicMenu items={items} onChoose={vi.fn()} label="Manage" />);
     await userEvent.click(screen.getByRole('button', { name: 'Manage' }));
-    // Nothing rests on any row before a pointer, a finger or the keyboard comes.
-    expect(document.querySelector('[data-row-brushes] [data-rest]')).toBeNull();
-    expect(inkBrushes().map((b) => b.on)).toEqual([false, false, false]);
+    // The two kinds of row rest on their washes before a pointer, a finger or the keyboard comes; Search on none.
+    const rests = Array.from(document.querySelectorAll('[data-row-brushes] [data-row-rest]')).map((p) => p.getAttribute('fill'));
+    expect(rests).toEqual([
+      'var(--menu-warn-rest)',
+      'color-mix(in oklch, var(--color-danger) 11%, transparent)',
+      'color-mix(in oklch, var(--color-danger) 11%, transparent)',
+    ]);
+    expect(inkBrushes().map((b) => b.on)).toEqual([false, false, false, false]);
 
     const block = screen.getByRole('menuitem', { name: 'Block' });
     const del = screen.getByRole('menuitem', { name: 'Delete' });
-    expect(block).toHaveAttribute('data-tone', 'danger');
+    expect(block).toHaveAttribute('data-tone', 'warn');
     expect(del).toHaveAttribute('data-tone', 'danger');
     expect(screen.getByRole('menuitem', { name: 'Search' })).not.toHaveAttribute('data-tone');
-    // Their glyphs and words wear the danger ink (the deepened one words need on the paper), at rest and inked.
+    // 刪除's glyph and words wear the danger ink (the deepened one words need on the paper), at rest and inked;
+    // 封鎖's the text ink.
     const sheet = css('src/components/molecules/OrganicMenu/OrganicMenu.module.css');
     expect(sheet).toMatch(/\.option\[data-tone='danger'\][^{]*\.option\[data-tone='danger'\] \.optionIcon[^{]*\{\s*color: var\(--danger-fill\);/s);
+    expect(sheet).not.toMatch(/data-tone='warn'/);
 
-    // Each row's ink at one strength: the menu's pen, or the danger hue.
+    // Each row's ink at one strength: the menu's pen, the yellow, or the danger hue.
     const fills = inkBrushes().map((b) => b.color);
     expect(fills[0]).toContain('--menu-border-hover');
     expect(fills[0]).toContain('15%');
-    expect(fills[1]).toBe('color-mix(in oklch, var(--color-danger) 15%, transparent)');
-    expect(fills[2]).toBe(fills[1]);
-    expect(fills.some((f) => f.includes('yellow'))).toBe(false);
+    expect(fills[1]).toBe('var(--menu-warn-ink)');
+    expect(fills[2]).toBe('color-mix(in oklch, var(--color-danger) 15%, transparent)');
+    expect(fills[3]).toBe(fills[2]);
 
     fireEvent.mouseEnter(del, { clientX: 100, clientY: 100 });
-    expect(inkBrushes().map((b) => b.on)).toEqual([false, false, true]);
+    expect(inkBrushes().map((b) => b.on)).toEqual([false, false, true, false]);
   });
 
   it('still chooses the row that was inked', async () => {
@@ -141,51 +149,40 @@ describe('OrganicMenu row ink', () => {
   });
 });
 
-// Round 17 §1: every menu is the one sheet — paper and grain, no pen line round it and no lines between its rows,
-// lifted by the paper-cut shadow that follows its wobble (addendum A1); rows 44 tall, their content 20 in from either side.
+// Round 18 (the owner's): every menu is the one sheet — the menu paper inside one hand-drawn pen line, the quiet
+// grey unless it is a card's own menu, no lines between its rows, no grain and no shadow (the page is flat); rows 44
+// tall, their content 20 in from either side.
 describe('the menu sheet', () => {
-  it('draws paper and grain with no pen line and no dividers', async () => {
+  it('draws the menu paper inside one grey pen line, with no dividers and no grain', async () => {
     const layout = stubRowLayout({ width: 200, rowHeight: 44 });
     render(<OrganicMenu items={ITEMS} onChoose={vi.fn()} label="Manage" />);
     await userEvent.click(screen.getByRole('button', { name: 'Manage' }));
     const panel = screen.getByRole('menu').parentElement!;
-    // The paper's fill and its grain, nothing stroked anywhere in it.
     expect(panel.querySelector('path[fill="var(--sheet-paper)"]')).not.toBeNull();
-    expect(panel.querySelector('path[stroke]')).toBeNull();
-    expect(panel.querySelectorAll('filter feTurbulence')).toHaveLength(1);
+    // One line, the sheet's own outline: nothing else is stroked (no dividers).
+    const pens = panel.querySelectorAll('path[stroke]');
+    expect(pens).toHaveLength(1);
+    expect(pens[0]).toHaveAttribute('stroke', 'var(--sheet-pen)');
+    expect(pens[0].getAttribute('d')).toBe(panel.querySelector('path[fill="var(--sheet-paper)"]')!.getAttribute('d'));
+    expect(panel.querySelectorAll('filter feTurbulence')).toHaveLength(0);
+    // The pen over the row ink (z 1 over its 0), the rows over the pen (z 1, after it).
+    const pen = panel.querySelector('[data-sheet-pen]')!;
+    expect(pen.compareDocumentPosition(screen.getByRole('menu')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(css('src/components/atoms/PaperSheet/PaperSheet.module.css')).toMatch(/\.pen \{\s*z-index: 1;/);
+    expect(css('src/components/atoms/RowInk/RowInk.module.css')).toMatch(/\.sheetInk \{[^}]*z-index: 0;/);
     layout.restore();
   });
 
-  // Addendum A1: one sheet lifted a millimetre, not floating — tight and a little deep, never a soft halo.
-  it('casts the paper-cut shadow, which follows the wobble: two tight layers by day, one deeper at night', () => {
-    expect(css('src/components/atoms/PaperSheet/PaperSheet.module.css')).toMatch(/\.sheet\s*\{[^}]*filter: var\(--cutout-shadow\)/);
-    const tokens = css('src/styles/tokens.css');
-    expect(tokens).toMatch(
-      /--cutout-shadow:\s*drop-shadow\(0 2px 3px color-mix\(in oklch, var\(--shadow-ink\) 22%, transparent\)\)\s*drop-shadow\(0 0\.5px 1px color-mix\(in oklch, var\(--shadow-ink\) 14%, transparent\)\);/,
-    );
-    expect(tokens.match(/--cutout-shadow: drop-shadow\(0 2px 4px color-mix\(in oklch, var\(--shadow-ink\) 60%, transparent\)\);/g)).toHaveLength(2);
-    // The soft 24 px one is gone everywhere.
-    expect(tokens).not.toMatch(/--sheet-shadow/);
+  it("is the header's quiet grey, never the accent", () => {
+    expect(css('src/styles/tokens.css')).toMatch(/--sheet-paper: var\(--menu-paper\);\s*--sheet-pen: var\(--field-border-hover\);/);
   });
 
-  // Addendum A1: a chip on a card (the card box's ⋯, 更換封面 on a cover) is cut paper on it; a bare glyph is the page's.
-  it('lifts a chip trigger by the paper-cut shadow, never a bare glyph', () => {
-    const menu = css('src/components/molecules/OrganicMenu/OrganicMenu.module.css');
-    expect(menu).toMatch(/\.trigger:not\(\.bare\) > svg \{\s*filter: var\(--cutout-shadow\);\s*\}/);
-    // No other shadow of its own on any trigger.
-    expect(menu.match(/drop-shadow|box-shadow/g)).toBeNull();
-    render(
-      <>
-        <OrganicMenu items={ITEMS} onChoose={vi.fn()} label="Chip" />
-        <OrganicMenu items={ITEMS} onChoose={vi.fn()} label="Bare" bare />
-      </>,
-    );
-    const chip = screen.getByRole('button', { name: 'Chip' });
-    const bare = screen.getByRole('button', { name: 'Bare' });
-    // The chip's drawing is its button's own svg (what the rule lifts); the bare glyph's button is marked bare.
-    expect(chip.querySelector(':scope > svg')).not.toBeNull();
-    expect(chip.className).not.toMatch(/bare/);
-    expect(bare.className).toMatch(/bare/);
+  // Flat, as the whole page is: no sheet, chip or trigger casts a shadow.
+  it('casts no shadow, nor does its chip', () => {
+    const tokens = css('src/styles/tokens.css');
+    expect(tokens).not.toMatch(/--cutout-shadow|--sheet-shadow/);
+    expect(css('src/components/atoms/PaperSheet/PaperSheet.module.css')).not.toMatch(/filter|shadow:/);
+    expect(css('src/components/molecules/OrganicMenu/OrganicMenu.module.css').match(/drop-shadow|box-shadow|--cutout-shadow/g)).toBeNull();
   });
 
   it('sets its rows 44 tall, 20 in from either side, the glyph 12 before the words, the time at the end', () => {
@@ -202,15 +199,16 @@ describe('the menu sheet', () => {
     expect(menu).toMatch(/\.wide \{\s*min-width: 216px;\s*max-width: 280px;/);
   });
 
-  // A card's own ⋯ keeps its card's menu paper (raised at night as every sheet is).
-  it("lies on a card's own menu paper when it has the card's hue", async () => {
+  // A card's own ⋯ (the card box's) keeps its card's menu paper and wears its card's pen.
+  it("lies on a card's own menu paper inside its card's pen when it has the card's hue", async () => {
     const layout = stubRowLayout({ width: 200, rowHeight: 44 });
     const { container } = render(<OrganicMenu items={ITEMS} onChoose={vi.fn()} label="Manage" hue={140} />);
     await userEvent.click(screen.getByRole('button', { name: 'Manage' }));
-    expect((container.firstElementChild as HTMLElement).style.getPropertyValue('--sheet-base')).toBe('oklch(var(--hue-menu) 140)');
+    const root = container.firstElementChild as HTMLElement;
+    expect(root.style.getPropertyValue('--sheet-base')).toBe('oklch(var(--hue-menu) 140)');
+    expect(root.style.getPropertyValue('--sheet-pen')).toBe('oklch(var(--hue-pen) 140)');
     const sheet = css('src/components/atoms/PaperSheet/PaperSheet.module.css');
     expect(sheet).toMatch(/\.sheet \{\s*--sheet-paper: var\(--sheet-base, var\(--menu-paper\)\);/);
-    expect(sheet.match(/--sheet-paper: color-mix\(in oklch, var\(--sheet-base, var\(--menu-paper\)\) 94%, var\(--toward-ink\)\);/g)).toHaveLength(2);
     layout.restore();
   });
 

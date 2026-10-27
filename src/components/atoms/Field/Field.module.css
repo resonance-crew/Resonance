@@ -143,7 +143,7 @@ textarea.field.autoGrow {
 
 /* The open list: the one menu sheet (round 17 review D6) laid over the closed
    box (anchored at its top), above the fields after it. No CSS background or
-   radius: PaperSheet draws the paper, its grain and its shadow to the
+   radius: PaperSheet draws the paper and its pen (the focus colour) to the
    wobble's own outline. As tall as its rows (DropdownPanel sets it). */
 .dropdownPanel {
   position: absolute;
