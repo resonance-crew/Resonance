@@ -166,7 +166,7 @@ struct SafetyMenu: View {
         guard target.userId != nil else { return [report] }
         let block = isBlocked
             ? OrganicMenuItem(id: "unblock", title: L10n.Safety.unblock, icon: .ban) { Task { await unblock() } }
-            : OrganicMenuItem(id: "block", title: L10n.Safety.block, icon: .ban, danger: true) {
+            : OrganicMenuItem(id: "block", title: L10n.Safety.block, icon: .ban, warn: true) {
                 blockError = nil
                 confirmingBlock = true
             }

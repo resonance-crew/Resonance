@@ -1,11 +1,11 @@
 import SwiftUI
 
 /// A small word over the page that something happened, or the way to act on it — the web's
-/// atoms/InkPill: a wobbly terracotta-light wash with no pen line (a fill marks a button: the whole
-/// pill is one when it has an action), lying on the page like cut paper with its shadow
-/// (``CutoutShadow``). The face of the thread's way back to the latest message and
-/// its 已複製 (`.small`), and of every toast (`.toast`, `ToastHost`). Its numbers are the thread
-/// pill's tuned recipe, moved here as they were.
+/// atoms/InkPill, made as a card is (round 18, the owner's): a fill of its own colour — the accent's light
+/// wash — inside one hand-drawn pen line of the accent at ``Tokens/ink``, and flat, as the whole page is:
+/// what floats is told by its line, never a shadow. The whole pill is a button when it has an action. The
+/// face of the thread's way back to the latest message and its 已複製 (`.small`, round), and of every
+/// toast (`.toast`, `ToastHost`: a card's corners, 16). Its numbers are the thread pill's tuned recipe.
 public struct OrganicPill: View {
     /// The thread's pill over its foot, or a toast.
     public enum Size: Sendable, Hashable, CaseIterable {
@@ -31,8 +31,19 @@ public struct OrganicPill: View {
         }
     }
 
-    /// The wash: one shape, cream under terracotta-light (seed 41, the thread pill's).
+    /// The thread pill's shape (seed 41): round — its radius never more than half its height.
     public static let shape = WobRectShape(radius: 18, seed: 41, mag: 1.2)
+
+    /// A toast's shape: a card's corners (16), the same seed.
+    public static let toastShape = WobRectShape(radius: toastRadius, seed: 41, mag: 1.2)
+    public static let toastRadius: Double = 16
+
+    /// Its shape at `size`.
+    public static func shape(_ size: Size) -> WobRectShape { size == .toast ? toastShape : shape }
+
+    /// Its fill and pen line (round 18): the accent's light wash inside a line of the accent.
+    public static let fill = Tokens.terracottaLight
+    public static let pen = Tokens.terracotta
 
     let icon: IconName?
     let text: String
@@ -81,9 +92,9 @@ public struct OrganicPill: View {
         .padding(.horizontal, m.horizontalPadding).padding(.vertical, m.verticalPadding)
         .frame(minHeight: m.minHeight)
         .background {
-            // A piece of cut paper on the page (round 17 addendum A1): the cream casts the paper-cut shadow.
-            Self.shape.fill(Tokens.cream).cutoutShadow()
-            Self.shape.fill(Tokens.terracottaLight.opacity(0.9))
+            // Made as a card is: the wash, then its pen line over it. No shadow.
+            Self.shape(size).fill(Self.fill)
+            Self.shape(size).stroke(Self.pen, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
         }
         .contentShape(Rectangle())
         if let action {

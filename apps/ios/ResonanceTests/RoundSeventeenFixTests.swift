@@ -116,8 +116,8 @@ private struct TagShiftHarness: View {
 
     // MARK: D1
 
-    @Test func aDestructiveRowIsToldByTheDangerInkAlone() {
-        let block = OrganicMenuItem(id: "block", title: "封鎖", icon: .ban, danger: true) {}
+    @Test func aDestructiveRowWearsTheDangerInk() {
+        let block = OrganicMenuItem(id: "delete", title: "刪除", icon: .trash, danger: true) {}
         let search = OrganicMenuItem(id: "search", title: "搜尋訊息", icon: .search) {}
         for pressed in [false, true] {
             let inks = MenuRowInks.of(block, pressed: pressed)
@@ -132,11 +132,11 @@ private struct TagShiftHarness: View {
         #expect(same(MenuRowInks.of(search, pressed: false).label, Tokens.text))
         #expect(same(MenuRowInks.of(search, pressed: true).label, Tokens.terracottaDeep))
         // Its press is the same strength as every row's, in the danger hue (the plain red, as the web's ink).
-        #expect(same(MenuRowInks.press(danger: true), Tokens.danger.opacity(MenuRowInks.pressStrength)))
-        #expect(same(MenuRowInks.press(danger: false), Tokens.terracottaDeep.opacity(MenuRowInks.pressStrength)))
-        // Every destructive row, not only the first (the thread's 封鎖 and 刪除對話).
+        #expect(same(MenuRowInks.press(.danger), Tokens.danger.opacity(MenuRowInks.pressStrength)))
+        #expect(same(MenuRowInks.press(.plain), Tokens.terracottaDeep.opacity(MenuRowInks.pressStrength)))
+        // Every destructive row, not only the first.
         let delete = OrganicMenuItem(id: "delete", title: "刪除對話", icon: .trash, danger: true) {}
-        #expect(MenuRowInks.dangerRows([search, block, delete]) == [1, 2])
+        #expect([search, block, delete].map(\.tone) == [.plain, .danger, .danger])
     }
 
     // MARK: D2
