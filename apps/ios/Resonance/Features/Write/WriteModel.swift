@@ -728,6 +728,7 @@ final class WriteModel {
             authorInitials: anonymous ? "·" : me?.initials ?? "?",
             authorImageURL: anonymous ? nil : me?.avatarUrl.flatMap(URL.init(string:)),
             avatarSeed: anonymous ? 217 : Double(seedFromString(me?.id ?? "")),
+            authorAccent: anonymous ? nil : me.flatMap { OKLCHColor.avatar($0.accentColor) },
             readTime: L10n.App.readMinutes(count: ReadTime.minutes(values.story)),
             tags: Array(values.tags.prefix(4)),
             imageURL: values.imageURL,

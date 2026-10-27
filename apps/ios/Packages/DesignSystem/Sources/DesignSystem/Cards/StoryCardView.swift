@@ -11,6 +11,8 @@ public struct StoryCardContent: Sendable, Identifiable {
     public var authorInitials: String
     public var authorImageURL: URL?
     public var avatarSeed: Double
+    /// The author's own avatar colour (their profile's `accentColor`); nil — an anonymous card — wears the card's family.
+    public var authorAccent: Color?
     public var readTime: String
     public var tags: [String]
     public var imageURL: URL?
@@ -20,7 +22,7 @@ public struct StoryCardContent: Sendable, Identifiable {
     public var reason: String?
 
     public init(id: String, title: String, excerpt: String, authorName: String, authorInitials: String,
-                authorImageURL: URL?, avatarSeed: Double, readTime: String, tags: [String],
+                authorImageURL: URL?, avatarSeed: Double, authorAccent: Color? = nil, readTime: String, tags: [String],
                 imageURL: URL?, imageLabel: String, accentHue: Double?, reason: String?) {
         self.id = id
         self.title = title
@@ -29,6 +31,7 @@ public struct StoryCardContent: Sendable, Identifiable {
         self.authorInitials = authorInitials
         self.authorImageURL = authorImageURL
         self.avatarSeed = avatarSeed
+        self.authorAccent = authorAccent
         self.readTime = readTime
         self.tags = tags
         self.imageURL = imageURL
@@ -128,7 +131,7 @@ public struct StoryCardView: View {
 
             HStack(spacing: 10) {
                 HandDrawnAvatar(initials: content.authorInitials, imageURL: content.authorImageURL,
-                                color: palette.fill, size: 30, seed: content.avatarSeed)
+                                color: content.authorAccent ?? palette.fill, size: 30, seed: content.avatarSeed)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(content.authorName).font(AppFonts.body(13, weight: .semibold)).foregroundStyle(Tokens.text)
                     Text(content.readTime).font(AppFonts.body(12)).foregroundStyle(Tokens.textMuted)

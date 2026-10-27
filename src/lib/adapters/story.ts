@@ -47,7 +47,7 @@ export function anonymousByline(card: Card, label: string) {
  */
 export function cardToStory(
   card: Card,
-  author: Pick<User, 'handle' | 'initials' | 'avatarUrl' | 'avatarSeed'> | null | undefined,
+  author: (Pick<User, 'handle' | 'initials' | 'avatarUrl' | 'avatarSeed'> & { accentColor?: string }) | null | undefined,
   opts?: CardToStoryOptions,
 ): Story {
   // A summary's story is only its excerpt: it brings the whole story's read time along.
@@ -62,6 +62,7 @@ export function cardToStory(
         authorInitials: author.initials,
         avatarUrl: author.avatarUrl,
         avatarSeed: author.avatarSeed,
+        avatarColor: author.accentColor || undefined,
       };
   return {
     title: card.thoughtCore,

@@ -241,8 +241,7 @@ data class StoryCardContent(
     val accentHue: Double?,
     /** Why the feed picked it — Resonance's handwritten margin note. */
     val reason: String? = null,
-    /** The author's own color (MiniStoryCard paints their avatar with it). */
-    /** The author's stored avatar colour (an oklch() string), drawn per scheme by [avatarFill]. */
+    /** The author's stored avatar colour (an oklch() string), drawn per scheme by [avatarFill]; null (anonymous): the card's family. */
     val authorAccent: String? = null,
 )
 
@@ -389,7 +388,7 @@ private fun ColumnScope.StoryCardBody(
     CssText(content.excerpt, AppFonts.Family.Body, 14f, 400, lineHeight = 1.65f, color = Tokens.TextMuted, modifier = Modifier.fillMaxWidth())
     BylineRule(seed, palette.separator)
     Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        HandDrawnAvatar(content.authorInitials, content.authorImageUrl, palette.fill, 30.dp, content.avatarSeed)
+        HandDrawnAvatar(content.authorInitials, content.authorImageUrl, avatarFill(content.authorAccent, palette.fill), 30.dp, content.avatarSeed)
         Column(Modifier.weight(1f)) {
             BasicText(content.authorName, style = AppFonts.body(13f, 600, lineHeight = 1.4f))
             BasicText(content.readTime, style = AppFonts.body(12f, lineHeight = 1.4f, color = Tokens.TextMuted))

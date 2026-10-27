@@ -1196,6 +1196,7 @@ internal fun previewContent(model: WriteModel, me: com.resonance.api.models.Me?)
         imageUrl = v.imageUrl,
         imageLabel = v.imageLabel ?: v.title.take(24),
         accentHue = v.accentHue,
+        authorAccent = if (anonymous) null else me?.accentColor,
     )
 }
 

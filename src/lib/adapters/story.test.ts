@@ -40,6 +40,13 @@ describe('cardToStory', () => {
     expect(story.tags).toEqual(['life', 'kindness']);
   });
 
+  it("gives the avatar its author's own colour, as their profile wears it, and an anonymous card none", () => {
+    const own = { ...author, accentColor: 'oklch(90% 0.05 215)' };
+    expect(cardToStory(makeCard(), own).avatarColor).toBe('oklch(90% 0.05 215)');
+    expect(cardToStory(makeCard(), author).avatarColor).toBeUndefined();
+    expect(cardToStory(makeCard({ anonymous: true }), own).avatarColor).toBeUndefined();
+  });
+
   it('counts the read time as the stored summaries do (lib/readTime): CJK by the character, the rest by the word', () => {
     // Short story → clamps up to the 1-minute floor.
     expect(cardToStory(makeCard({ story: 'tiny' }), author).readTime).toBe('1 min');
@@ -70,7 +77,7 @@ describe('cardToStory', () => {
     const card = makeCard({
       story: '## 雨後\n\n我很喜歡 https://example.com，因為它很**好**。\n\nhttps://en.wikipedia.org/wiki/Jiufen_(town)\n\n寫信到 foo@www.example.com',
     });
-    expect(cardToStory(card, author).excerpt).toBe('雨後 我很喜歡，因為它很好。 寫信到 foo@www.example.com');
+    expect(cardToStory(card, author).excerpt).toBe('雨後 我很喜歡，因為它很好。寫信到 foo@www.example.com');
   });
 
   it("shows a summary's excerpt as the server made it", () => {
