@@ -184,7 +184,7 @@ struct MessageMenuOverlay: View {
             let mine = ctx.model.isMine(menu.row.message)
             let frame = menu.frame.offsetBy(dx: -screen.minX, dy: -screen.minY)
             let area = region.offsetBy(dx: -screen.minX, dy: -screen.minY)
-            let listWidth = OrganicMenuPanel.width(items, footer: footer)
+            let listWidth = OrganicMenuPanel.width(items, footer: footer, widths: MenuSheetMetrics.pressWidths)
             let place = PressPlacement.of(frame: frame, top: area.minY, bottom: geo.size.height - safe.bottom,
                                           tray: reactions != nil, listHeight: PressMetrics.listHeight(rows: items.count, footer: true))
             let shift = placed ? place.shift : 0
@@ -215,7 +215,8 @@ struct MessageMenuOverlay: View {
                     .offset(x: x(PressMetrics.trayWidth), y: place.trayY + (placed ? 0 : -place.shift))
                     .opacity(shown ? 1 : 0)
                 }
-                OrganicMenuPanel(items: items, seed: seedFromId(menu.row.message.key, start: 23), footer: footer) { item in
+                OrganicMenuPanel(items: items, seed: seedFromId(menu.row.message.key, start: 23), footer: footer,
+                                 widths: MenuSheetMetrics.pressWidths) { item in
                     dismiss()
                     item.action()
                 }

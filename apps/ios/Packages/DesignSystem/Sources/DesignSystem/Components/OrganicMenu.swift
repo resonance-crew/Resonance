@@ -350,7 +350,8 @@ public nonisolated enum MenuDrop {
 /// step toward the ink at night) under the paper's grain (0.3) over the whole wobbly outline, no pen
 /// and no rule between the rows, lifted off the page by a soft shadow that follows the wobble
 /// (``SheetShadow``) instead of an outline. Rows 44: the glyph 17, 12, the words at 15, 20 in from
-/// either side, the sheet as wide as its longest row (``MenuSheetMetrics/width(titles:footer:)``, 200 to 300).
+/// either side, the sheet as wide as its longest row (``MenuSheetMetrics/width(titles:footer:widths:)``, 168 to 300;
+/// a held message's list 216 to 280).
 /// A press spreads the ink from the finger, clipped to its row's band inside the outline (the bands
 /// part on unseen wavy lines, rowMenu.ts); a destructive row keeps its warning wash. With a `footer`,
 /// one quiet line closes it, at the trailing end (a message's time, under its long-press menu).
@@ -362,14 +363,18 @@ public struct OrganicMenuPanel: View {
     let seed: Double
     let footer: String?
     let colors: MenuColors
+    /// How wide it may be (``MenuSheetMetrics``: 168 to 300, a held message's list 216 to 280).
+    var widths: ClosedRange<CGFloat> = MenuSheetMetrics.minWidth...MenuSheetMetrics.maxWidth
     let onChoose: (OrganicMenuItem) -> Void
     @State private var pressed: Int?
     @State private var ink = MenuInk()
     @State private var choosing = false
 
     public init(items: [OrganicMenuItem], seed: Double, footer: String? = nil, hue: Double? = nil,
+                widths: ClosedRange<CGFloat> = MenuSheetMetrics.minWidth...MenuSheetMetrics.maxWidth,
                 onChoose: @escaping (OrganicMenuItem) -> Void) {
         self.init(items: items, seed: seed, footer: footer, colors: MenuColors(hue: hue), onChoose: onChoose)
+        self.widths = widths
     }
 
     init(items: [OrganicMenuItem], seed: Double, footer: String? = nil, colors: MenuColors, onChoose: @escaping (OrganicMenuItem) -> Void) {
@@ -380,13 +385,14 @@ public struct OrganicMenuPanel: View {
         self.onChoose = onChoose
     }
 
-    /// The sheet's width for these rows (and footer): its longest line and its sides.
-    @MainActor public static func width(_ items: [OrganicMenuItem], footer: String? = nil) -> CGFloat {
-        MenuSheetMetrics.width(titles: items.map(\.title), footer: footer)
+    /// The sheet's width for these rows (and footer): its longest line and its sides, within `widths`.
+    @MainActor public static func width(_ items: [OrganicMenuItem], footer: String? = nil,
+                                        widths: ClosedRange<CGFloat> = MenuSheetMetrics.minWidth...MenuSheetMetrics.maxWidth) -> CGFloat {
+        MenuSheetMetrics.width(titles: items.map(\.title), footer: footer, widths: widths)
     }
 
     public var body: some View {
-        let width = Self.width(items, footer: footer)
+        let width = Self.width(items, footer: footer, widths: widths)
         let height = MenuSheetMetrics.height(rows: items.count, footer: footer != nil)
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
@@ -569,10 +575,12 @@ public nonisolated enum MenuSheetMetrics {
     public static let radius: Double = 26
     /// How far the grain is laid past the box: past the furthest the wobble swings out.
     public static let grainOverflow: CGFloat = 10
-    /// At least this wide, so a menu of two short rows still reads as a sheet rather than a blob; never
-    /// wider than the most (a longer row's words end in an ellipsis). The web's 200 and 300.
-    public static let minWidth: CGFloat = 200
+    /// At least this wide, so a menu of two short rows (the composer's ＋: 圖片 · 卡片) still reads as a sheet
+    /// rather than a blob; never wider than the most (a longer row's words end in an ellipsis).
+    public static let minWidth: CGFloat = 168
     public static let maxWidth: CGFloat = 300
+    /// A held message's actions keep the press layer's own 216 to 280 (round 17 §1, the lead's addendum).
+    public static let pressWidths: ClosedRange<CGFloat> = 216...280
     /// The sheet's coordinate space, where a row's press is placed.
     static let space = "organicMenuSheet"
 
@@ -582,8 +590,9 @@ public nonisolated enum MenuSheetMetrics {
     }
 
     /// Its width: the longest row (glyph, gap, words) — or the footer, if longer — and 20 either side, held
-    /// between ``minWidth`` and ``maxWidth``.
-    @MainActor public static func width(titles: [String], footer: String?) -> CGFloat {
+    /// within `widths` (``minWidth`` to ``maxWidth``; a held message's list ``pressWidths``).
+    @MainActor public static func width(titles: [String], footer: String?,
+                                        widths: ClosedRange<CGFloat> = minWidth...maxWidth) -> CGFloat {
         let scale = TextScale.factor(relativeTo: .body)
         func measure(_ text: String, size: CGFloat) -> CGFloat {
             let font = AppFonts.uiFont(.body, size: (size * scale).rounded())
@@ -591,7 +600,7 @@ public nonisolated enum MenuSheetMetrics {
         }
         let rows = titles.map { glyph + gap + measure($0, size: textSize) }.max() ?? 0
         let foot = footer.map { measure($0, size: footerSize) } ?? 0
-        return min(maxWidth, max(minWidth, max(rows, foot) + 2 * padX))
+        return min(widths.upperBound, max(widths.lowerBound, max(rows, foot) + 2 * padX))
     }
 
     /// The paper reaching past the bands' ends (rowMenu.ts' pad).
