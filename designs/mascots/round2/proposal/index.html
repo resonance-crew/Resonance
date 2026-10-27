@@ -1,0 +1,489 @@
+<title>共振角色第二輪</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&family=Playfair+Display:ital,wght@0,600;1,500&display=swap">
+<style>
+/* Layout: the round-1 page's reading column on the site's cream paper, kept so the two rounds sit side by side;
+   the rules come first, then each direction (concept → before/after → hands and silhouettes → six answers), then the call. */
+:root {
+  --paper: oklch(96.5% 0.015 75);
+  --card: oklch(98.5% 0.008 80);
+  --ink: oklch(26% 0.03 60);
+  --muted: oklch(50% 0.04 70);
+  --rule: oklch(84% 0.02 75);
+  --accent: oklch(58% 0.14 45);
+  --wash: oklch(91% 0.05 60);
+  --sheet: oklch(96.5% 0.015 75);
+  --dir-b2: oklch(62% 0.08 255);
+  --dir-c2: oklch(60% 0.08 140);
+  --dir-bc: oklch(58% 0.09 305);
+  --font-display: 'Playfair Display', 'Noto Serif TC', Georgia, serif;
+  --font-heading: 'Noto Serif TC', 'Songti TC', Georgia, serif;
+  --font-body: 'Noto Sans TC', 'PingFang TC', system-ui, sans-serif;
+  --measure: 46rem;
+  --wide: 68rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: oklch(21% 0.012 60); --card: oklch(25% 0.014 60); --ink: oklch(88% 0.02 76);
+    --muted: oklch(70% 0.03 70); --rule: oklch(38% 0.02 70); --accent: oklch(74% 0.12 52);
+    --wash: oklch(32% 0.05 55); --dir-b2: oklch(74% 0.07 255); --dir-c2: oklch(74% 0.07 140);
+    --dir-bc: oklch(72% 0.08 305); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: oklch(21% 0.012 60); --card: oklch(25% 0.014 60); --ink: oklch(88% 0.02 76);
+  --muted: oklch(70% 0.03 70); --rule: oklch(38% 0.02 70); --accent: oklch(74% 0.12 52);
+  --wash: oklch(32% 0.05 55); --dir-b2: oklch(74% 0.07 255); --dir-c2: oklch(74% 0.07 140);
+  --dir-bc: oklch(72% 0.08 305); color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.75;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 96px;
+}
+.wrap { max-width: var(--wide); margin: 0 auto; }
+.read { max-width: var(--measure); }
+h1, h2, h3 { font-family: var(--font-heading); font-weight: 700; text-wrap: balance; margin: 0; line-height: 1.3; }
+p { margin: 0; }
+a { color: var(--accent); }
+.latin { font-family: var(--font-display); font-weight: 600; }
+
+/* Masthead */
+.mast { padding-block: 56px 32px; display: grid; gap: 18px; }
+.eyebrow { font-size: 13px; letter-spacing: 0.08em; color: var(--muted); }
+.mast h1 { font-size: clamp(30px, 5vw, 46px); }
+.mast h1 .wave { position: relative; white-space: nowrap; }
+.mast h1 .wave svg { position: absolute; left: 0; right: 0; bottom: -10px; width: 100%; height: 12px; }
+.lede { font-size: 17px; }
+.lede + .lede { color: var(--muted); font-size: 15px; }
+
+.index { list-style: none; padding: 0; margin: 8px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.index a { display: grid; gap: 4px; padding: 14px 16px; border-radius: 14px; background: var(--card); border: 1px solid var(--rule); color: var(--ink); text-decoration: none; height: 100%; }
+.index a:hover, .index a:focus-visible { border-color: var(--accent); }
+.index .k { font-size: 12px; letter-spacing: 0.06em; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.index .n { font-family: var(--font-heading); font-size: 20px; font-weight: 700; }
+.index .o { font-size: 14px; color: var(--muted); line-height: 1.6; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.dot.b2 { background: var(--dir-b2); } .dot.c2 { background: var(--dir-c2); } .dot.bc { background: var(--dir-bc); }
+
+.pen { display: block; width: 100%; height: 14px; color: var(--rule); margin-block: 56px 40px; }
+
+/* Section heads */
+.sec-head { display: grid; gap: 8px; margin-bottom: 20px; }
+.sec-head h2 { font-size: clamp(24px, 3.4vw, 30px); }
+.sec-head p { color: var(--muted); font-size: 15px; }
+
+/* The rules */
+.why { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 32px; }
+.why section { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.why h3 { font-size: 17px; }
+.why p, .why li { font-size: 15px; }
+.why ul, .why ol { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+.why .wide { grid-column: 1 / -1; }
+.split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.split div { background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 12px 14px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.split .t { font-size: 12px; letter-spacing: 0.06em; color: var(--muted); }
+.split p { font-size: 14px; line-height: 1.65; }
+.refs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
+.refs figure { margin: 0; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.refs img { width: 100%; height: auto; aspect-ratio: 988 / 900; border-radius: 10px; border: 1px solid var(--rule); display: block; background: var(--sheet); }
+.refs figcaption { font-size: 13px; color: var(--muted); line-height: 1.65; display: block; }
+.refs figcaption b { color: var(--ink); font-weight: 700; }
+
+/* A direction */
+.dir { display: grid; gap: 24px; scroll-margin-top: 24px; }
+.dir-head { display: grid; gap: 8px; }
+.dir-head .k { display: flex; align-items: center; gap: 8px; font-size: 13px; letter-spacing: 0.06em; color: var(--muted); }
+.dir-head h2 { font-size: clamp(26px, 4vw, 36px); }
+.dir-head h2 .latin { font-size: 0.8em; color: var(--muted); margin-left: 6px; }
+.dir-head .one { font-size: 17px; }
+
+figure { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.mast, .dir, .verdict, .tests { grid-template-columns: minmax(0, 1fr); }
+.sheet { border-radius: 12px; overflow: hidden; border: 1px solid var(--rule); background: var(--sheet); }
+.sheet img { display: block; width: 100%; height: auto; }
+.sheet img.concept { aspect-ratio: 16 / 10; }
+figcaption { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.toggle { display: inline-flex; border: 1px solid var(--rule); border-radius: 999px; padding: 2px; gap: 2px; background: var(--card); }
+.toggle button { font: inherit; font-size: 13px; color: var(--muted); background: none; border: 0; border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.toggle button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.toggle button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.scroll-x { overflow-x: auto; border-radius: 12px; border: 1px solid var(--rule); background: var(--sheet); }
+.scroll-x img { display: block; width: 100%; min-width: 640px; height: auto; }
+
+.tests { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+
+.six { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 32px; }
+.six section { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.six h3 { font-size: 16px; display: flex; gap: 8px; align-items: baseline; }
+.six h3 .num { font-family: var(--font-display); font-style: italic; font-weight: 500; color: var(--muted); font-size: 15px; }
+.six p, .six li { font-size: 15px; }
+.six ul { margin: 0; padding-left: 1.2em; display: grid; gap: 2px; }
+.six .wide { grid-column: 1 / -1; }
+.landing { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.landing img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--rule); display: block; aspect-ratio: 1440 / 650; background: var(--sheet); }
+.landing .cap { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.fact { background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 12px 14px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.fact .t { font-size: 12px; letter-spacing: 0.06em; color: var(--muted); }
+.fact p { font-size: 14px; line-height: 1.65; }
+.fact .big { font-family: var(--font-heading); font-size: 20px; font-weight: 700; }
+
+/* Comparison */
+.table-scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 12px; background: var(--card); }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 14px; line-height: 1.65; }
+th, td { text-align: left; vertical-align: top; padding: 12px 14px; border-bottom: 1px solid var(--rule); }
+tr:last-child th, tr:last-child td { border-bottom: 0; }
+thead th { font-family: var(--font-heading); font-size: 15px; background: var(--wash); }
+thead th .dot { margin-right: 6px; }
+tbody th { font-weight: 700; white-space: nowrap; width: 8.5em; }
+.note { font-size: 13px; color: var(--muted); margin-top: 10px; }
+
+/* Verdict */
+.verdict { display: grid; gap: 16px; }
+.critique { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.critique section { display: grid; gap: 6px; align-content: start; min-width: 0; padding-top: 12px; border-top: 3px solid var(--rule); }
+.critique section.b2 { border-top-color: var(--dir-b2); }
+.critique section.c2 { border-top-color: var(--dir-c2); }
+.critique section.bc { border-top-color: var(--dir-bc); }
+.critique h3 { font-size: 17px; }
+.critique p { font-size: 15px; }
+.pick { border-radius: 14px; padding: 20px 22px; background: var(--wash); display: grid; gap: 10px; }
+.pick h3 { font-size: 20px; }
+.pick p { font-size: 16px; }
+.checks { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.checks li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; font-size: 15px; }
+.checks .tag { font-size: 12px; letter-spacing: 0.04em; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--rule); color: var(--muted); align-self: start; white-space: nowrap; margin-top: 3px; }
+
+.ask { display: grid; gap: 10px; }
+.ask ol { margin: 0; padding-left: 1.3em; display: grid; gap: 8px; font-size: 16px; }
+.ask ol ul { margin: 4px 0 0; padding-left: 1.2em; display: grid; gap: 2px; font-size: 15px; }
+.small { font-size: 13px; color: var(--muted); }
+code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.88em; background: var(--wash); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+
+@media (max-width: 760px) {
+  .six, .landing, .facts, .critique, .why, .split, .refs { grid-template-columns: minmax(0, 1fr); }
+  .mast { padding-block: 32px 24px; }
+  .pen { margin-block: 40px 28px; }
+  .checks li { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">共振 Resonance　第一階段　第二輪</p>
+  <h1>留下你喜歡的，把<span class="wave">形體<svg viewBox="0 0 200 12" preserveAspectRatio="none" aria-hidden="true"><path d="M2 7 C 20 2, 30 11, 50 6 S 80 2, 100 7 S 130 11, 150 6 S 180 2, 198 6" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg></span>修好</h1>
+  <p class="lede read">你喜歡 B 的色鉛筆筆觸和第一版的漸層，也喜歡 C 第二版的撕紙貼紙；不喜歡 A、B 的形體和膚色，覺得 C 的手太短、舉起來看不出、末端也沒有東西。這一輪照這些話做了三個方向：B 換一副新形體，C 只修手，再加一個把 B 的畫法和 C 的材質合在一起的新角色。</p>
+  <p class="lede read">流程和第一輪一樣：三位子代理各畫一個方向，兩位評審（形體、落地與製作）點評後各修訂一次，最後再請四位子代理分別核對修訂結果，其中一位不看任何評審意見、只看圖。每張概念圖都可以切回修訂前的初版。第一輪的頁面維持原樣。</p>
+  <ul class="index" aria-label="三個方向">
+    <li><a href="#c2"><span class="k"><span class="dot c2"></span>C′　撕紙紙偶（只修手）</span><span class="n">摺摺 <span class="latin">Tuck</span></span><span class="o">銅釘釘在撕邊上的紙手臂，末端撕出拇指的連指手套</span></a></li>
+    <li><a href="#b2"><span class="k"><span class="dot b2"></span>B′　色鉛筆小生物（新形體）</span><span class="n">漾漾 <span class="latin">Tint</span></span><span class="o">頭頂一片鉛筆木屑，胸口一滴等著被故事塗色的空白</span></a></li>
+    <li><a href="#bc"><span class="k"><span class="dot bc"></span>B×C　色鉛筆剪紙貼紙（新角色）</span><span class="n">片片 <span class="latin">Flick</span></span><span class="o">腦後用一顆銅釘別著三張故事卡，聽故事時扇開</span></a></li>
+  </ul>
+</header>
+
+<svg class="pen" viewBox="0 0 1000 14" preserveAspectRatio="none" aria-hidden="true"><path d="M2 8 C 120 3, 220 12, 360 7 S 600 3, 740 8 S 920 11, 998 6" fill="none" stroke="currentColor" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>
+
+<!-- ───────── The rules ───────── -->
+<section aria-labelledby="why-title">
+  <div class="sec-head read">
+    <h2 id="why-title">為什麼 ChatGPT 的圖都有點像史迪奇或皮卡丘</h2>
+    <p>你問關鍵是不是大頭。我們的判斷和這一輪所有方向共用的形體守則如下。</p>
+  </div>
+  <div class="why">
+    <section>
+      <h3>大頭不是原因</h3>
+      <p>大頭小身會觸發「可愛」的反應，幾乎所有討喜的角色都這樣，我們也保留。讓它們彼此相像、又像名角色的，是三件事同時出現：</p>
+      <ol>
+        <li><b>剪影全靠哺乳類的耳朵。</b>尖長耳被拉向皮卡丘，招風大耳加藍紫色被拉向史迪奇，長垂耳被拉向大耳狗。</li>
+        <li><b>同一張臉。</b>分得很開、位置偏低的黑橢圓眼，小小的 ω 嘴，兩團圓紅腮紅。</li>
+        <li><b>同一種身體。</b>絨毛、奶油色肚子、肉球圓掌，正面站好、雙手垂下。</li>
+      </ol>
+    </section>
+    <section>
+      <h3>結構照用，詞彙自己發明</h3>
+      <div class="split">
+        <div><span class="t">結構（讓角色不怪）</span><p>頭身分明但沒有脖子，手腳有清楚的末端，正面看得出方向，剪影上有一個突出的標誌。第一輪 A、B 會怪，就是缺了這些。</p></div>
+        <div><span class="t">詞彙（讓角色原創）</span><p>標誌、臉、材質從紙、筆、故事卡的世界來：折角、撕邊、銅釘、鉛筆木屑、打孔、故事卡。摺摺原創又不怪，就是因為它的形體全來自紙。</p></div>
+      </div>
+      <p><b>兩個測試：</b>遮住臉，要能用一句不含動物名稱的話說出它是什麼（答「兔子、貓」太通用，答「一團東西」太怪）；和皮卡丘、史迪奇、大耳狗的剪影擺在一起，不會被認錯。三個方向都通過了第二個測試。</p>
+    </section>
+    <section class="wide">
+      <h3>這一輪的八條形體守則</h3>
+      <ol>
+        <li>剪影就讀得出頭、身體、手、腳；頭身之間收窄，但不能有脖子。</li>
+        <li>不要長脖子、柄、莖，不要「長條加圓球」，不要底部成對的圓球或光滑沒有特徵的鼓起。</li>
+        <li>身體不用膚色、桃色、粉米色、粉紅；腮紅可以，但要小、和身體不同色系。</li>
+        <li>每一案都轉成純黑剪影，看 48px 與 200px，再上下顛倒、左右翻轉，任何角度聯想到人體部位就改。</li>
+        <li>手臂舉起要到頭頂，末端是顏色或材質不同的手，肩膀有明確的關節。</li>
+        <li>一個標誌性特徵，不能是任何形狀的動物耳朵，最好就是「會被故事打開的部位」。</li>
+        <li>正面看得出方向。</li>
+        <li>避開三麗鷗、Sonny Angel、Kirby 式的球形身、Molang 的胖兔身，以及第一輪列過的角色。</li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="refs">
+    <figure>
+      <img src="img/ref-1.webp" width="800" height="729" alt="ChatGPT 生成的八種色鉛筆小動物剪影，每一隻頭頂都有耳朵或冠" loading="lazy">
+      <figcaption><span><b>參考圖 1・色鉛筆小動物。</b>質感正是你喜歡的方向：顆粒、沙沙的筆觸、同色系較深的外框。但每一隻的辨識度都靠頭頂的耳朵；唯一沒有耳朵的那隻，剪影就成了一團。</span></figcaption>
+    </figure>
+    <figure>
+      <img src="img/ref-2.webp" width="800" height="729" alt="ChatGPT 生成的剪紙角色，紙條手臂用銅釘固定在肩上，末端是奶油色圓手套" loading="lazy">
+      <figcaption><span><b>參考圖 2・剪紙的手。</b>手臂是獨立的紙條，肩上一顆銅釘，末端一顆奶油色手套，舉起來高過頭頂。銅釘剛好就是動畫的關節，直接回答了摺摺的手。</span></figcaption>
+    </figure>
+    <figure>
+      <img src="img/ref-3.webp" width="800" height="729" alt="ChatGPT 生成的剪紙貼紙角色，白色撕邊加上色鉛筆質感，淡紫色長垂耳" loading="lazy">
+      <figcaption><span><b>參考圖 3・剪紙加色鉛筆。</b>B 的畫法配上 C 的白撕邊，也就是片片的起點。但淡紫色的長垂耳很接近大耳狗，這正是要避開的。</span></figcaption>
+    </figure>
+  </div>
+  <p class="note read">三張都是你請我們用 ChatGPT 生成的，只拿來看原則，沒有描、沒有拼貼進任何一張稿。</p>
+</section>
+
+<svg class="pen" viewBox="0 0 1000 14" preserveAspectRatio="none" aria-hidden="true"><path d="M2 6 C 140 11, 260 2, 400 7 S 620 12, 760 6 S 930 3, 998 8" fill="none" stroke="currentColor" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>
+
+<!-- ───────── C′ ───────── -->
+<article class="dir" id="c2" aria-labelledby="c2-title">
+  <div class="dir-head">
+    <p class="k"><span class="dot c2"></span>方向 C′　撕紙紙偶　只修手</p>
+    <h2 id="c2-title">摺摺 <span class="latin">Tuck</span></h2>
+    <p class="one read">一張被撕下來的色紙，一直折著一個角，因為折角底下藏著幾行字。這一輪它多了兩條用銅釘釘在撕邊上的寬紙條手臂，末端是撕出拇指的奶油色連指手套，舉起手來就到頭頂。</p>
+  </div>
+
+  <figure>
+    <div class="sheet"><img class="concept" id="c2-img" src="img/c2-concept.webp" width="1600" height="1000" alt="摺摺第二輪概念圖：鼠尾草綠撕紙圓身、右上白色折角，左手的深綠紙條高舉過頭、末端奶油色連指手套，麥黃風琴腿；右側有縮小測試、剪影、夜紙、一起看嗎與被故事打動"></div>
+    <figcaption><span>左：主姿勢「嗨」。右：縮小測試與剪影、夜紙、「一起看嗎？」、「被故事打動」。</span>
+      <span class="toggle" role="group" aria-label="切換版本"><button type="button" aria-pressed="true" data-for="c2-img" data-src="img/c2-concept.webp">修訂版</button><button type="button" aria-pressed="false" data-for="c2-img" data-src="img/c2-concept-v1.webp">初版</button></span>
+    </figcaption>
+  </figure>
+
+  <div class="tests">
+    <figure>
+      <div class="scroll-x"><img src="img/c2-ba.webp" width="1800" height="645" alt="摺摺三版並排：第一輪第二版的短玫瑰色碎紙手；第二輪初版細長紙條加圓球手；本版短而寬的綠紙條加連指手套" loading="lazy"></div>
+      <figcaption><span>第一輪第二版 → 第二輪初版（手臂太長太細，像棒棒糖）→ 本版（縮短加寬、銅釘移到撕邊上、手套撕出拇指、紙舌改斜切、腿改麥黃）。</span></figcaption>
+    </figure>
+    <figure>
+      <div class="scroll-x"><img src="img/c2-rig.webp" width="1500" height="640" alt="摺摺五個姿勢與它們的剪影：兩手垂下、左手舉起、雙手舉起、抱住自己、身體搖擺，全部只轉手臂群組" loading="lazy"></div>
+      <figcaption><span>手的測試：從同一張圖只轉手臂，就做得出垂手、舉手、雙手舉起、抱住自己。下排是剪影，舉手在每一張都讀得出來。</span></figcaption>
+    </figure>
+  </div>
+
+  <div class="six">
+    <section><h3><span class="num">1</span>角色概念</h3><p>人在書頁上折一個角，是在標記「這裡我還想再回來看」。摺摺把最在意的字折起來保護著，信任你才掀開。新的手也有來歷：手臂是撕下身體時剩下的兩條綠色邊角料，用小銅釘釘在撕邊上；手套是從折角背面那種奶油色紙撕下來的，撕的時候順手撕出一個拇指。所以它的手和藏著字的折角是同一種紙。</p></section>
+    <section><h3><span class="num">2</span>外型設計</h3><p>身體、折角、臉、風琴腿的結構、撕邊和配色都和第一輪第二版相同，身體也沒有縮小。手臂寬 50、往手腕收窄，肩上的銅釘到手套中心約是身體高的一半。主姿勢舉左手，因為右肩正上方就是折角，右手舉高會蓋住它。左上紙舌從圓頭改成窄短的斜切撕口（圓頭在剪影裡像一隻耳朵）。風琴腿從玫瑰色改成麥黃，全身不再有粉色。</p></section>
+    <section><h3><span class="num">3</span>個性與情感</h3><p>有點害羞、很認真。臉很安靜，情緒交給紙的物理；有了手以後能做的事多了：</p>
+      <ul><li>打招呼：左手繞銅釘舉高，手套在手腕上搖</li><li>好奇：折角掀開一半，伸手邀你一起看底下的字</li><li>害羞：用手套按住折角，腿縮短</li><li>感動：瞇眼、眉毛才出現，雙手在肚子前抱住自己</li><li>陪伴：坐下、折角整個掀開，和對方的手套碰一下</li></ul></section>
+    <section><h3><span class="num">4</span>手繪風格</h3><p>和第一輪相同：撕邊的白纖維、膠水貼上去的一點陰影、鉛筆直接畫在紙上的五官。新增的銅釘是全身唯一的金屬，霧面、帶顆粒，看起來也是手作材料。所有紙色都是可替換的變數，例如想把腿換回玫瑰色，只要改兩個變數，不必重畫。</p></section>
+    <section class="wide"><h3><span class="num">5</span>Landing Page 的應用想像</h3>
+      <div class="landing">
+        <div><img src="img/c2-landing.webp" width="1200" height="542" alt="摺摺修訂版放在共振首頁下載區左側，左手高舉" loading="lazy"><p class="cap">示意：修訂版放在首頁截圖上，約 215px 高。</p></div>
+        <p>出場仍是「紙活過來」：頁面上平躺的一片紙先掀起折角，風琴腿一節一節把它撐起來，最後左手繞著銅釘甩上來揮兩下。停留時呼吸、眨眼，手臂像鐘擺一樣慢半拍跟著身體晃。游標停在附近時它會揮手。兩隻相遇時舉手，手套在半空碰一下。離場時揮手再見，或腿收起、躺平，變回一片普通的紙。</p>
+      </div>
+    </section>
+    <section class="wide"><h3><span class="num">6</span>未來系列化的潛力</h3><p>每個角色都是一張不一樣的紙，被不一樣地撕下、折過、保存下來。這一輪多了第三條軸：<b>接合方式決定動作的個性。</b>摺摺用銅釘，手臂能整圈甩，所以很愛揮手；用紙膠帶黏手的角色動作有點僵，每動一下膠帶就皺一下，很容易害羞；用縫線結接手的角色手軟軟垂著，擁抱時會整個繞上去；用迴紋針夾手的角色可以把手拆下來遞給你，那是它表達信任的方式。</p></section>
+  </div>
+
+  <div class="facts">
+    <div class="fact"><span class="t">仿作檢查</span><p>「銅釘加奶油色圓手」這一組最接近 ChatGPT 參考圖 2；圓身細腿的骨架仍接近 Mr. Men。如果你覺得太像參考圖，可以把銅釘換成紙膠帶或縫線結，其他都不動。</p></div>
+    <div class="fact"><span class="t">這一輪修了什麼</span><p>初版手臂又長又細，剪影像棒棒糖，改成短而寬、往手腕收窄；銅釘從臉旁移到撕邊上；手套撕出拇指、拿掉字跡；紙舌改斜切；腿改麥黃；改舉左手，讓折角獨占右上角。</p></div>
+    <div class="fact"><span class="t">實作成本（單一角色）</span><p class="big">約 7.5–10 人日</p><p>全是剛體紙片，每隻手只有一個關節，日夜共用一組圖，不需要動畫函式庫。三案中最低。</p></div>
+  </div>
+</article>
+
+<svg class="pen" viewBox="0 0 1000 14" preserveAspectRatio="none" aria-hidden="true"><path d="M2 8 C 110 4, 250 11, 380 6 S 640 2, 780 8 S 940 10, 998 5" fill="none" stroke="currentColor" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>
+
+<!-- ───────── B′ ───────── -->
+<article class="dir" id="b2" aria-labelledby="b2-title">
+  <div class="dir-head">
+    <p class="k"><span class="dot b2"></span>方向 B′　色鉛筆小生物　新形體</p>
+    <h2 id="b2-title">漾漾 <span class="latin">Tint</span></h2>
+    <p class="one read">一隻用色鉛筆畫出來的小傢伙。頭頂斜插一片削鉛筆刨下來的木屑，胸口留著一滴沒塗到的空白；讀到故事，那張卡片的顏色就從底部把它塗滿。</p>
+  </div>
+
+  <figure>
+    <div class="sheet"><img class="concept" id="b2-img" src="img/b2-concept.webp" width="1600" height="1000" alt="漾漾第二輪概念圖：色鉛筆畫的薰衣草色大頭、霧藍身體，頭頂斜插一片木屑，右手舉起戴奶油色連指手套；右側有縮小測試、剪影、夜紙、被故事打動與讀故事"></div>
+    <figcaption><span>左：主姿勢，腳邊是那支薰衣草色鉛筆。右：縮小測試與剪影、夜紙、「被故事打動」、「讀故事」。</span>
+      <span class="toggle" role="group" aria-label="切換版本"><button type="button" aria-pressed="true" data-for="b2-img" data-src="img/b2-concept.webp">修訂版</button><button type="button" aria-pressed="false" data-for="b2-img" data-src="img/b2-concept-v1.webp">初版</button></span>
+    </figcaption>
+  </figure>
+
+  <div class="tests">
+    <figure>
+      <div class="scroll-x"><img src="img/b2-ba.webp" width="1800" height="585" alt="漾漾三版並排：第一輪 B 第一版的杏桃色頭從池子上的細頸升起；第二輪初版紫色大頭、細長軟管手；本版兩節手臂、木屑斜插、薰衣草到霧藍的漸層" loading="lazy"></div>
+      <figcaption><span>第一輪 B 第一版（只保留它的畫法）→ 第二輪初版（手是細長軟管，木屑從一個尖點長出）→ 本版（兩節固定長度的手臂、寬底斜插的木屑、找回長漸層）。</span></figcaption>
+    </figure>
+    <figure>
+      <div class="scroll-x"><img src="img/b2-rig.webp" width="1360" height="520" alt="漾漾四個手臂姿勢：垂手休息、雙手舉起、左手揮、右手揮，只轉肩肘腕" loading="lazy"></div>
+      <figcaption><span>手的測試：四格用同一組上臂、前臂、手套，只轉肩、肘、腕，沒有拉長。休息時手套放在肚子上，不會垂到腿邊。</span></figcaption>
+    </figure>
+  </div>
+
+  <div class="six">
+    <section><h3><span class="num">1</span>角色概念</h3><p>共振每張故事卡都有自己的色系。漾漾身上大多已經塗好，只留胸口一滴空白。讀到一個故事，那個故事的顏色就從底部把空白塗滿；被深深打動時顏色滿出來，在全身漾開，頭頂的木屑也整片張開。「被打動時顏色會暈開」是第一輪漾漾的核心，這一輪保留下來，所以中文名不變，英文從 Plip（水滴聲）改成 Tint（一抹顏色）。</p></section>
+    <section><h3><span class="num">2</span>外型設計</h3><p>寬寬的軟方圓頭，約占全高一半，壓在蛋形身體上，中間收窄但沒有脖子。頭頂的木屑底部沿頭頂一段長弧插進去，外緣是六角筆桿攤平後的五段直邊與硬折角，一端捲起。手臂分上臂、前臂兩節，長度固定，末端是奶油色、有大拇指的連指手套；腳又扁又長。顏色從頭頂的薰衣草一路漸變到腳尖的鼠尾草，沒有任何膚色。兩眼靠得很近，平常的嘴是一條歪歪的線，腮紅是三筆斜線。</p></section>
+    <section><h3><span class="num">3</span>個性與情感</h3><p>安靜、好奇、很會聽故事，會主動打招呼但不吵。它有兩個可以連續調整的情緒刻度：</p>
+      <ul><li>木屑的開合：收攏是害羞、專心；半開是平常；全開、外緣染上故事的顏色，是被打動</li><li>胸口的水位：空 → 讀到一半 → 滿 → 溢出、在全身漾開</li><li>其他表情靠眼皮線的高低與傾斜、嘴形和手的位置</li></ul></section>
+    <section><h3><span class="num">4</span>手繪風格</h3><p>沿用第一輪 B 第一版的畫法：紙紋留下的小點、兩端尖的斜排線疊兩三層、同色系較深的鉛筆描邊，背光側壓得重、受光側斷斷續續。這一版每個部位底下多了一層不透明的底色，飄過首頁的桃色或鼠尾草色塊時，不會透出色塊的顏色。</p></section>
+    <section class="wide"><h3><span class="num">5</span>Landing Page 的應用想像</h3>
+      <div class="landing">
+        <div><img src="img/b2-landing.webp" width="1200" height="542" alt="漾漾修訂版放在共振首頁下載區左側，右手舉起" loading="lazy"><p class="cap">示意：修訂版放在首頁截圖上，約 215px 高。</p></div>
+        <p>木屑先從某團色塊後面冒出來晃兩下，接著探頭，再用扁扁的腳小步走進來。游標移到某張故事卡上時，它轉過去讀，木屑收攏、眼皮壓低；卡片被打開時，胸口的水位用那張卡的色系升起來。兩隻相遇時互相招手，靠得夠近時胸口的顏色會漾到對方身上，像首頁那些色塊碰到時融在一起。</p>
+      </div>
+    </section>
+    <section class="wide"><h3><span class="num">6</span>未來系列化的潛力</h3><p>不換顏色，換的是畫它的那支筆。蠟筆畫的角色筆觸粗厚，標誌是一圈剝下來的包裝紙；水彩色鉛筆畫的邊緣會暈開，標誌是被水化開的筆尖；炭筆畫的霧霧的，屬於深夜。筆的長短決定體型：剛削好的瘦高，用到只剩一小截的矮胖、聽過很多故事。胸口空白的形狀決定它收集哪一種故事：一滴是情緒，一個摺角是回憶，一個圓是日常。</p></section>
+  </div>
+
+  <div class="facts">
+    <div class="fact"><span class="t">仿作檢查</span><p>最近的是天線寶寶 Tinky Winky（紫色、頭頂一個東西、胸前一個記號）。這版身體改成霧藍、頭頂是斜插的木屑，相似度降低了，但仍是遠親。木屑單看，有人會讀成王冠或扇貝。</p></div>
+    <div class="fact"><span class="t">這一輪修了什麼</span><p>細長軟管手改成兩節、長度固定、只轉不拉；木屑拿掉尖點，改成寬底斜插（初版剪影像束口袋或蕪菁）；找回第一版的長漸層；材質改成不透明；拿掉睫毛式的眼尾勾線和吐舌。</p></div>
+    <div class="fact"><span class="t">實作成本（單一角色）</span><p class="big">約 12–14 人日</p><p>手臂有三段要轉，木屑要拆成幾片扇骨，胸口水位要遮罩加顏色參數。三案中最貴。</p></div>
+  </div>
+</article>
+
+<svg class="pen" viewBox="0 0 1000 14" preserveAspectRatio="none" aria-hidden="true"><path d="M2 7 C 130 2, 270 12, 420 7 S 650 3, 800 8 S 950 9, 998 6" fill="none" stroke="currentColor" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>
+
+<!-- ───────── B×C ───────── -->
+<article class="dir" id="bc" aria-labelledby="bc-title">
+  <div class="dir-head">
+    <p class="k"><span class="dot bc"></span>方向 B×C　色鉛筆剪紙貼紙　新角色</p>
+    <h2 id="bc-title">片片 <span class="latin">Flick</span></h2>
+    <p class="one read">一個用色鉛筆上色的剪紙小傢伙。腦後用一顆銅釘別著三張故事卡，聽到故事時，卡片會繞著那顆銅釘一張張扇開。</p>
+  </div>
+
+  <figure>
+    <div class="sheet"><img class="concept" id="bc-img" src="img/bc-concept.webp" width="1600" height="1000" alt="片片第二輪概念圖：色鉛筆塗色的薰衣草剪紙小人，腦後扇開三張方角故事卡，左手舉起戴奶油色手套，胸前切口插著一張小卡；右側有縮小測試、剪影、夜紙、被故事打動與害羞"></div>
+    <figcaption><span>左：主姿勢「嗨！」，故事卡半開。右：縮小測試與剪影、夜紙、「被故事打動」、「害羞」。</span>
+      <span class="toggle" role="group" aria-label="切換版本"><button type="button" aria-pressed="true" data-for="bc-img" data-src="img/bc-concept.webp">修訂版</button><button type="button" aria-pressed="false" data-for="bc-img" data-src="img/bc-concept-v1.webp">初版</button></span>
+    </figcaption>
+  </figure>
+
+  <div class="tests">
+    <figure>
+      <div class="scroll-x"><img src="img/bc-ba.webp" width="1800" height="450" alt="片片的來源與兩版：第一輪 B 第一版、第一輪 C 第二版、片片初版（亮黑大眼、胸前口袋、寬卡）、片片修訂版（打孔眼、切口插卡、窄長方角卡）" loading="lazy"></div>
+      <figcaption><span>取 B 第一版的畫法、C 第二版的材質 → 片片初版（大亮眼加吐舌、胸前口袋、卡片像冰棒）→ 本版（霧面打孔眼、胸前切口插卡、窄長方角的卡）。</span></figcaption>
+    </figure>
+    <figure>
+      <div class="scroll-x"><img src="img/bc-rig.webp" width="1540" height="410" alt="片片四個手臂姿勢：垂手、雙手舉起、左手揮、右手揮，前臂從袖套滑出" loading="lazy"></div>
+      <figcaption><span>手的測試：肩上一截紙袖套用銅釘別住，前臂從袖套底下滑出來，舉手時變長、放下時收回，只有旋轉和平移。</span></figcaption>
+    </figure>
+  </div>
+
+  <div class="six">
+    <section><h3><span class="num">1</span>角色概念</h3><p>頭、身體、手腳都是畫紙剪下、塗上色鉛筆，再用銅釘別在一起。腦後的三張卡像一把色票扇：平常轉到頭後只露一角，有人說故事就扇開，聽得越投入扇得越開。胸前切口裡插著一張它準備送人的卡。兩個角色相遇時可以交換一張卡，卡扇裡就留下對方的顏色。</p></section>
+    <section><h3><span class="num">2</span>外型設計</h3><p>大頭、比頭窄的梨形身體，中間收窄，沒有脖子。卡片窄長、方角，像寫了字的索引卡，從頭頂右側扇開。眼睛是打孔機打出的霧面圓洞，看得到紙的厚度；平常的嘴是一條鉛筆弧線，沒有腮紅，害羞時臉頰才出現三道鉛筆短線。身體只有偏紫的薰衣草一個色系，暖色只在故事卡上。</p></section>
+    <section><h3><span class="num">3</span>個性與情感</h3><p>安靜、願意聽。它不搶話，可是你一開口，它腦後的卡就先動了。</p>
+      <ul><li>害羞：三張卡疊在一起轉進頭後，只露一角</li><li>好奇、打招呼：卡片半開，前臂滑出來揮手</li><li>被故事打動：卡片全開、往外冒鉛筆亮光，眼睛彎成切縫</li><li>想分享：從胸前切口抽出一張卡遞給你</li></ul></section>
+    <section><h3><span class="num">4</span>手繪風格</h3><p>每片紙先用色鉛筆畫在奶油色畫紙上（柔和漸層、斜排線、內側一圈同色系鉛筆線），再撕下來，外圍是白色撕紙纖維邊和淡淡的貼紙投影。也就是 B 的畫法加上 C 的材質。夜紙上靠每一片的白邊撐住輪廓。</p></section>
+    <section class="wide"><h3><span class="num">5</span>Landing Page 的應用想像</h3>
+      <div class="landing">
+        <div><img src="img/bc-landing.webp" width="1200" height="542" alt="片片修訂版放在共振首頁下載區左側，左手舉起，腦後扇開三張故事卡" loading="lazy"><p class="cap">示意：修訂版放在首頁截圖上，約 215px 高。</p></div>
+        <p>出場時先只露出三張卡尖，像有人在牆後偷看，接著頭探出來、眨一次眼，再走進來。往下捲到卡片牆時，每有一張卡進入畫面，它腦後同色系的那張就轉高一點。點它一下，卡片全開，從胸前抽出一張卡遞出來，可以當「讀一則故事」的入口。兩隻相遇時各抽一張卡交換，身上就有了對方的顏色。</p>
+      </div>
+    </section>
+    <section class="wide"><h3><span class="num">6</span>未來系列化的潛力</h3><p>每一位頭上都有一樣「會被故事打開的紙」，打開的方式不同：線圈裝訂的明信片會一張張翻過去，折了四折的信會一折一折攤開。紙和筆也不同：蠟筆塗在牛皮紙上、水彩色鉛筆畫在半透明的描圖紙上、夜晚出現的角色是粉彩畫在黑卡紙上。關節的固定方式決定動作的個性：紙膠帶軟而晃，棉線一頓一頓，卡榫能把手腳拔下來換位置。</p></section>
+  </div>
+
+  <div class="facts">
+    <div class="fact"><span class="t">仿作檢查</span><p>初版的「胸前口袋、白圓手、大頭」是哆啦 A 夢的結構，已改成切口插卡，身體也往紫色移；白圓手還在。臉改成打孔之後，不再是通用的 Q 版臉。遮住卡扇時，身體本身比較普通。</p></div>
+    <div class="fact"><span class="t">這一輪修了什麼</span><p>卡片改成窄長方角、張得更開（初版縮到 48px 時糊成兩個像熊耳朵的圓凸）；眼睛改成霧面打孔、拿掉吐舌；口袋改成切口；手臂改成袖套加滑出的前臂，兩手都在頭的前面；鉛筆白點減半，讓漸層露出來。</p></div>
+    <div class="fact"><span class="t">實作成本（單一角色）</span><p class="big">約 9–11 人日</p><p>全是剛體的旋轉和滑動，但濾鏡最重，上線前一定要先烤成圖。日夜共用一組圖。</p></div>
+  </div>
+</article>
+
+<svg class="pen" viewBox="0 0 1000 14" preserveAspectRatio="none" aria-hidden="true"><path d="M2 6 C 150 10, 280 3, 430 8 S 660 11, 800 6 S 940 4, 998 7" fill="none" stroke="currentColor" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>
+
+<!-- ───────── Comparison ───────── -->
+<section aria-labelledby="cmp-title">
+  <div class="sec-head read">
+    <h2 id="cmp-title">三個方向的差異</h2>
+    <p>以修訂版為準。第一列對照你的回饋，其餘沿用第一輪的六個面向。</p>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th scope="col">面向</th><th scope="col"><span class="dot c2"></span>C′　摺摺</th><th scope="col"><span class="dot b2"></span>B′　漾漾</th><th scope="col"><span class="dot bc"></span>B×C　片片</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">你的回饋</th><td>只修手，三個手的問題都解決，舉手 32px 還看得出來。你喜歡的身體、折角、貼紙感全部保留。</td><td>色鉛筆的筆觸和長漸層保留最多；形體補齊了結構，沒有膚色。手是兩節的同色軟手，近看仍偏布偶。</td><td>形體最「正常」、最不怪，B 的畫法和 C 的材質都在；但 C 被你稱讚的那種原創形體沒有帶過來。</td></tr>
+        <tr><th scope="row">品牌契合度</th><td>折角底下的字，是把在意的故事好好收著；手讓「連結」能用身體做出來。</td><td>胸口被那張卡的色系塗滿，最直接把「讀故事、被打動」畫出來。</td><td>標誌就是故事卡本身；兩隻交換一張卡，是最直接的「共振」畫面。</td></tr>
+        <tr><th scope="row">情感感染力</th><td>臉安靜，溫度來自紙的動作：揮手、掀角、抱住自己。</td><td>表情最多，兩個情緒刻度都能連續調整。</td><td>卡扇三段很好讀；打孔眼讓臉安靜，靠眉毛和卡片表達。</td></tr>
+        <tr><th scope="row">視覺辨識度</th><td>最強。折角斜切、舉起的手、風琴腿，32px 仍可辨。</td><td>斜插的鋸齒木屑很清楚，但有人會讀成王冠。</td><td>48px 剪影頂端是三個方角；遮住卡扇時身體普通。</td></tr>
+        <tr><th scope="row">原創性</th><td>最高，形體邏輯全來自紙；手的做法來自參考圖 2。</td><td>中，遠親是 Tinky Winky。</td><td>中，臉已改掉通用感；白圓手加大頭仍帶一點哆啦 A 夢的結構。</td></tr>
+        <tr><th scope="row">動態與成本</th><td>剛體紙片，每隻手一個關節；約 7.5–10 人日。</td><td>手臂三段、木屑扇骨、胸口水位；約 12–14 人日。</td><td>剛體旋轉加滑動，濾鏡最重；約 9–11 人日。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">三個方向共同的前提和第一輪一樣：紙紋、毛邊這些質感濾鏡只用來「烤」出圖層，首頁上只動位置、旋轉、縮放與透明度；<code>prefers-reduced-motion</code> 時只留靜態姿勢。</p>
+</section>
+
+<svg class="pen" viewBox="0 0 1000 14" preserveAspectRatio="none" aria-hidden="true"><path d="M2 8 C 120 4, 240 11, 390 6 S 610 3, 770 8 S 930 11, 998 6" fill="none" stroke="currentColor" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>
+
+<!-- ───────── Verdict ───────── -->
+<section class="verdict" aria-labelledby="v-title">
+  <div class="sec-head read">
+    <h2 id="v-title">評審、核對與我的推薦</h2>
+    <p>兩位評審看的是初版。修訂後，三位子代理逐條核對必修有沒有真的做到，另一位不讀任何評審意見、只看圖。兩位評審和只看圖的那位，都把摺摺排第一。最後的選擇在你。</p>
+  </div>
+
+  <div class="critique">
+    <section class="c2"><h3>C′ 摺摺　最好的修法</h3><p>六項必修四項做到、兩項部分做到：右手舉不高（右肩正上方是折角），所以改用左手打招呼；手套的拇指要放大才看得見。它最不怪、最原創，舉手在 32px 都讀得出，你喜歡的身體、折角、貼紙感都沒動。核對時新發現的小問題：「被故事打動」時兩顆手套交在下腹正中；主姿勢垂下的那隻手偏長，手套到膝蓋；紙舌的 V 形缺口讓頂端像一個分叉的小角。</p></section>
+    <section class="b2"><h3>B′ 漾漾　最好的筆觸</h3><p>六項必修五項做到、一項部分做到。色鉛筆保留最多，材質也已經不透明。但新的手臂帶出新的怪：肩頭的圓塊疊在下巴兩側，乍看像雙手捧臉，休息姿勢肚子前又有兩隻手套，像有四隻手；手臂伸直會垂到腳邊，所以每個姿勢都得彎肘。頭紫身藍、中間一道接縫，看起來像穿人偶裝。沒有那支鉛筆提示時，木屑多半被看成王冠。</p></section>
+    <section class="bc"><h3>B×C 片片　最不怪的形體</h3><p>必修大致都做到了，只有「卡片加大」算部分完成。通用的亮眼大臉、哆啦 A 夢的口袋、48px 像熊耳朵，三個大問題都修掉了，是三案中最「正常」的角色。但它的辨識度幾乎全靠卡扇：卡一收起，就是一個普通的紫色紙玩偶；害羞時露出的桃色卡角像一隻耳朵；舉右手會撞進卡扇；細長的卡縮小後像頭上冒芽。</p></section>
+  </div>
+
+  <div class="pick">
+    <h3>推薦：以修好手的摺摺當第一個角色</h3>
+    <p>你說 C 沒有太大的問題，只是手有點怪；這一版正是只修手，而且三位獨立看過的人都選它。如果選它，下一步先修四個小地方，都不動身體：「被故事打動」的雙手抱在胸口或一上一下錯開；垂下的手往外張一點，手套停在臀部高度；紙舌只留一刀斜切；拇指撕得更明顯，讓手套在 200px 也看得出是手。</p>
+    <p>如果你也想要 B 的色鉛筆，比較穩的路不是改選片片，而是把摺摺的紙面換成色鉛筆塗過的紙（參考圖 3 的做法）：只換材質、不換形體，拆件和動態都不用重做。片片的故事卡扇與交換卡片、漾漾的「胸口被故事塗上顏色」，都很適合留給第二、第三隻角色當標誌。</p>
+  </div>
+
+  <ul class="checks">
+    <li><span class="tag">核對時發現</span><p>兩顆奶油色圓手套併在下腹正中，在兩個方向都出現了（漾漾的休息姿勢、摺摺的「被故事打動」）。這正是守則 2 禁止的「底部成對的圓球」，也是你最在意的那種聯想。之後不論選哪一個，所有姿勢都會避開這個位置。</p></li>
+    <li><span class="tag">三案都通過</span><p>純黑剪影在 48px 和 200px、上下顛倒、左右翻轉，都沒有讓人聯想到人體部位；和皮卡丘、史迪奇、大耳狗的剪影並排也不會認錯；身上都沒有膚色。</p></li>
+  </ul>
+</section>
+
+<svg class="pen" viewBox="0 0 1000 14" preserveAspectRatio="none" aria-hidden="true"><path d="M2 7 C 140 3, 260 12, 410 7 S 630 2, 780 8 S 940 10, 998 6" fill="none" stroke="currentColor" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>
+
+<section class="ask" aria-labelledby="ask-title">
+  <div class="sec-head read">
+    <h2 id="ask-title">需要你決定的事</h2>
+  </div>
+  <ol class="read">
+    <li>選一個方向（C′ 摺摺、B′ 漾漾、B×C 片片），或告訴我想混合哪些部分。</li>
+    <li>如果選摺摺，有三個小選擇，看你喜歡哪個：
+      <ul>
+        <li>腮紅：維持三道赤陶斜線、平常不畫只在害羞時出現，或回到第一輪的柔和圓形但改成赤陶色。</li>
+        <li>風琴腿：維持麥黃，或換回第一輪的玫瑰色（只改兩個顏色變數）。</li>
+        <li>紙面要不要換成 B 的色鉛筆質感。</li>
+      </ul>
+    </li>
+    <li>摺摺的手（肩上銅釘、奶油色圓手套）和 ChatGPT 參考圖 2 很像。這樣可以，還是想換成紙膠帶、縫線結這類別的接法？</li>
+  </ol>
+  <p class="read">確認方向前，我不會開始做完整系列或動畫，也不會再畫新的角色。</p>
+  <p class="small read">原始檔（可拆件的 <code>character.svg</code>、概念圖、提案全文、可重畫的產生器、評審與核對報告和檢查圖）放在專案的 <code>designs/mascots/round2/</code>，第一輪在旁邊的 <code>round1/</code>。</p>
+</section>
+
+</div>
+
+<script>
+document.querySelectorAll('.toggle button').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var img = document.getElementById(btn.dataset.for);
+    if (!img) return;
+    img.src = btn.dataset.src;
+    btn.parentElement.querySelectorAll('button').forEach(function (b) {
+      b.setAttribute('aria-pressed', b === btn ? 'true' : 'false');
+    });
+  });
+});
+</script>

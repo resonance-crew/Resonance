@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 220" width="660" height="220">
+<!-- crude geometric stand-ins (not drawings of the characters): only the ear/head/body massing each is known by -->
+<g fill="#000">
+ <!-- P: round head, two long pointed ears tilted out, pear body, zigzag tail -->
+ <g transform="translate(110 0)">
+  <ellipse cx="0" cy="105" rx="52" ry="44"/>
+  <path d="M-30 78 L-78 8 L-12 70Z"/><path d="M30 78 L78 8 L12 70Z"/>
+  <ellipse cx="0" cy="160" rx="46" ry="44"/>
+  <path d="M40 160 L80 140 L70 120 L100 100 L92 130 L112 125 L58 178Z"/>
+  <ellipse cx="-22" cy="203" rx="16" ry="8"/><ellipse cx="22" cy="203" rx="16" ry="8"/>
+ </g>
+ <!-- S: wide head, two huge wide ears to the sides, small body -->
+ <g transform="translate(330 0)">
+  <ellipse cx="0" cy="100" rx="64" ry="48"/>
+  <path d="M-50 80 Q-120 40 -112 110 Q-90 100 -56 104Z"/><path d="M50 80 Q120 40 112 110 Q90 100 56 104Z"/>
+  <ellipse cx="0" cy="165" rx="38" ry="40"/>
+  <ellipse cx="-20" cy="203" rx="15" ry="8"/><ellipse cx="20" cy="203" rx="15" ry="8"/>
+ </g>
+ <!-- C: round head, two long droopy ears hanging out to the sides, small body -->
+ <g transform="translate(550 0)">
+  <ellipse cx="0" cy="95" rx="55" ry="48"/>
+  <path d="M-40 70 Q-100 70 -104 120 Q-100 140 -84 128 Q-70 100 -36 96Z"/><path d="M40 70 Q100 70 104 120 Q100 140 84 128 Q70 100 36 96Z"/>
+  <ellipse cx="0" cy="165" rx="36" ry="40"/>
+  <ellipse cx="-18" cy="203" rx="14" ry="8"/><ellipse cx="18" cy="203" rx="14" ry="8"/>
+ </g>
+</g></svg>
