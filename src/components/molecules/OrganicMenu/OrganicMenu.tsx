@@ -60,8 +60,9 @@ export interface OrganicMenuProps {
   /**
    * For a labelled chip: its own colours instead of the paper (round 9 §8 — the
    * 更換封面 chip wears its card's family): an opaque `fill`, a `pen` line at
-   * INK round it (it floats over a picture: the line, not a shadow, parts it
-   * from one), and the `ink` of its glyph and words.
+   * INK round it (it floats over a picture: the line parts it from one, the
+   * paper-cut shadow every chip casts lifts it), and the `ink` of its glyph and
+   * words.
    */
   triggerColors?: { fill: string; pen: string; ink: string };
   /**
@@ -153,12 +154,14 @@ const EDGE = 12;
 
 /**
  * The organic「⋯」dropdown: a wobbly chip trigger (or a bare glyph) dropping
- * the one menu sheet (round 17 §1) — borderless paper and grain lifted by a
- * soft shadow, no dividers, rows 44 tall, a spreading ink wash on the hovered
+ * the one menu sheet (round 17 §1) — borderless paper and grain lifted by the
+ * paper-cut shadow, no dividers, rows 44 tall, a spreading ink wash on the hovered
  * (or pressed) row clipped to its band within the sheet's wobble. Closes on
  * outside pointer-down or Escape. The chip is paper with no rim — it sits on
- * a card's cover or beside a title, already framed, like the apps' (their
- * bars draw the glyph bare). No scrim: a menu opened from a button is quick.
+ * a card or its cover, already framed, like the apps' (their bars draw the
+ * glyph bare) — lifted off it by the paper-cut shadow (--cutout-shadow, round
+ * 17 addendum A1); a bare glyph casts none. No scrim: a menu opened from a
+ * button is quick.
  */
 export function OrganicMenu({
   items,

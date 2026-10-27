@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { InkPill } from './InkPill';
@@ -38,5 +40,17 @@ describe('InkPill', () => {
     expect(pill).toHaveClass('res-shape-stand-in');
     // jsdom measures nothing: the CSS stand-in stays.
     expect(pill).toHaveAttribute('data-shape-pending', '');
+  });
+
+  // Round 17 addendum A1: a toast lies over the page like a piece of cut paper — the paper-cut shadow under its
+  // wash, following the wobble (a drop-shadow of the drawing: never under the words or the glyph).
+  it('is lifted off the page by the paper-cut shadow under its wash', () => {
+    const css = readFileSync(join(process.cwd(), 'src/components/atoms/InkPill/InkPill.module.css'), 'utf8');
+    expect(css).toMatch(/\.pill > svg \{\s*filter: var\(--cutout-shadow\);\s*\}/);
+    // The glyph is drawn in a box of its own (atoms/Icon), so only the wash is the pill's own svg.
+    const { container } = render(<InkPill size="md" icon="trash" label="Moved to trash" />);
+    const pill = container.firstElementChild as HTMLElement;
+    expect(pill.querySelectorAll(':scope > svg')).toHaveLength(0); // jsdom measures nothing: no wash drawn yet
+    expect(pill.querySelector(':scope > span svg')).not.toBeNull();
   });
 });

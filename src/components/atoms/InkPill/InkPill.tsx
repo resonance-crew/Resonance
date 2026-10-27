@@ -32,7 +32,8 @@ const GLYPH = { sm: 14, md: 16 } as const;
 /**
  * A small word over the page that something happened, or the way to act on
  * it: a wobbly terracotta-light wash with no pen line (a fill marks a button —
- * the whole pill is one when it has `onClick`). The face of the thread's way
+ * the whole pill is one when it has `onClick`), lifted off the page by the
+ * paper-cut shadow (--cutout-shadow). The face of the thread's way
  * back to the latest message and of every toast (molecules/Toast); its
  * numbers are the thread pill's tuned legacy recipe.
  */

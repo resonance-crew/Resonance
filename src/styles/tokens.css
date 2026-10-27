@@ -189,25 +189,31 @@
 }
 
 /* Every menu's sheet (round 17 §1): borderless paper and grain (atoms/PaperSheet),
-   lifted off the page by a soft shadow that follows its wobble instead of a pen
-   line — `filter: var(--sheet-shadow)` on the sheet's drawing. The paper is the
-   menu's, raised a step at night (≈ L 28 % over the 0.65 scrim) so a sheet parts
-   from what it lies on; the shadow is the ink's, deeper and wider at night. */
+   raised a step at night (≈ L 28 % over the 0.65 scrim) so a sheet parts from
+   what it lies on.
+
+   The paper-cut shadow (round 17 addendum A1): the one shadow for anything that
+   lies on the page like a piece of cut paper — every menu sheet and popover, the
+   Select list, the toast (atoms/InkPill), a menu chip on a card or its cover —
+   tight and a little deep, one sheet lifted a millimetre, never a halo. Always a
+   `filter: var(--cutout-shadow)` on the shape's drawing, so it follows the
+   wobble; never on a bare glyph button, nor on anything flat. The shadow ink's:
+   two layers by day, one deeper at night. */
 :root {
   --sheet-paper: var(--menu-paper);
-  --sheet-shadow:
-    drop-shadow(0 8px 24px color-mix(in oklch, var(--shadow-ink) 16%, transparent))
-    drop-shadow(0 1px 3px color-mix(in oklch, var(--shadow-ink) 10%, transparent));
+  --cutout-shadow:
+    drop-shadow(0 2px 3px color-mix(in oklch, var(--shadow-ink) 22%, transparent))
+    drop-shadow(0 0.5px 1px color-mix(in oklch, var(--shadow-ink) 14%, transparent));
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-scheme='light']) {
     --sheet-paper: color-mix(in oklch, var(--menu-paper) 94%, var(--toward-ink));
-    --sheet-shadow: drop-shadow(0 10px 28px color-mix(in oklch, var(--shadow-ink) 45%, transparent));
+    --cutout-shadow: drop-shadow(0 2px 4px color-mix(in oklch, var(--shadow-ink) 60%, transparent));
   }
 }
 
 :root[data-scheme='dark'] {
   --sheet-paper: color-mix(in oklch, var(--menu-paper) 94%, var(--toward-ink));
-  --sheet-shadow: drop-shadow(0 10px 28px color-mix(in oklch, var(--shadow-ink) 45%, transparent));
+  --cutout-shadow: drop-shadow(0 2px 4px color-mix(in oklch, var(--shadow-ink) 60%, transparent));
 }
