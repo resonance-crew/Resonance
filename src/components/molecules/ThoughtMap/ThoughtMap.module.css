@@ -1,6 +1,9 @@
 .board {
   position: relative;
   width: 100%;
+  /* Its tools fit its own width, not the window's (the workspace's divider
+     squeezes the map while the window stays wide). */
+  container-type: inline-size;
 }
 
 .viewport {
@@ -421,6 +424,29 @@
   composes: overlay;
   top: 16px;
   right: 16px;
+  transition: opacity 120ms ease;
+}
+
+/* Its pills keep their words on one line: squeezed, they would be measured
+   tall and narrow and drawn so for a moment as the map comes back. */
+.toolbar > * {
+  white-space: nowrap;
+}
+
+/* One-word labels on a narrow map (a phone, or the workspace's map dragged
+   narrow): 分類 · 卡片 beside the zoom cluster instead of 新增分類 · 加入卡片. */
+.toolShort {
+  display: none;
+}
+
+@container (max-width: 519.98px) {
+  .toolLong {
+    display: none;
+  }
+
+  .toolShort {
+    display: inline;
+  }
 }
 
 /* No background or radius here: the cluster's ground (card paper, grain, a
@@ -431,6 +457,20 @@
   bottom: 16px;
   gap: 4px;
   padding: 6px 10px;
+  transition: opacity 120ms ease;
+}
+
+/* At the workspace (≥ 1200, where only the divider makes a map this narrow)
+   the tools fade out of a map squeezed under 360 instead of crowding under
+   the Leave; a phone's map keeps them at any width. */
+@media (min-width: 1200px) {
+  @container (max-width: 359.98px) {
+    .toolbar,
+    .zoomCluster {
+      opacity: 0;
+      pointer-events: none;
+    }
+  }
 }
 
 .zoomPct {
