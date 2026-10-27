@@ -207,11 +207,11 @@ struct ThreadScreen: View {
             // words competed with the lifted message), as under a modal.
             .softened(pressDimmed)
             // The press layer's scrim (round 17 §2): over the thread's body alone, composer included — under the
-            // header (whose paper hides it above its wave) and short of the rule beside the list in two panes,
-            // so neither dims nor blurs.
-            Tokens.scrim
-                .padding(.leading, inPane ? PaneLines.gutter : 0)
-                .ignoresSafeArea()
+            // header (whose paper hides it above its wave). In two panes it starts on the rule's own line (review
+            // D2: it began 12 past it, a crisp strip the thread's height), and the rule, drawn over it, stays crisp.
+            Group {
+                if inPane { PaneScrim(Tokens.scrim) } else { Tokens.scrim.ignoresSafeArea() }
+            }
                 .opacity(pressDimmed ? 1 : 0)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
