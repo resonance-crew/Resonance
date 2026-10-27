@@ -740,8 +740,9 @@ show reports its size) and when a card opens in the pane (`settle`). A pan past 
 buttons take the camera (`takeCamera`): from then on the pane's card glides to the centre as before; 👁 hands it back.
 The web's rule (50d7cf4a, `followFitRef`).
 
-Round 16 (2026-10-27), Android: the publish step's tags are the label and the chosen tags in one wrapping row
-(`TagPillRow`: lg outlined pills, a 44 hit box round each ✕) over the composer's capsule (`CapsuleField`, which
+Round 16 (2026-10-27), Android: the publish step's tags are the label on its own line, the chosen tags wrapping under it
+(`TagPillRow`: lg outlined quiet pills — half the accent's light wash, the soft pen at INK_LIGHT, words at 500, a muted ✕
+named for its tag, `write.tagsRemoveLabel`, in a 44 hit box; no room at all with no tags) over the composer's capsule (`CapsuleField`, which
 `ComposerCapsule` now wraps): its end segment is ✦ AI 建議 with nothing committed — an IME's composing range
 (`TextFieldValue.composition`) counts as nothing — and ＋ 新增 once a word is, as wide as its wider face; only a
 hardware keyboard's first Backspace takes a tag back (`TagEntry`), and while the field is in use any change of height
@@ -759,3 +760,15 @@ writer's format bar has 連結 after 斜體, opening `StoryLinkSheet` (卡片 | 
 address checked by `StoryLinks.linkTarget`; `--es linkDraft …` fills its field in debug builds), and a tapped link
 card opens it with 卡片 chosen (the island's `linkTap`). A lone link is a card only when its words are its address
 (`StoryLinks.wordsAreTheAddress`).
+
+Round 16 review (2026-10-27), Android: a held message's list leads with the link's rows when the press was on one
+(開啟連結 `arrow-right` · 複製連結 `link`, `messageActionKinds`), its glyphs in the accent at 17; the chosen reaction's disc
+at night is the accent at 30 % over the tray (`PaletteMixes.reactionChosen`); a chip is tapped in 44 × 44
+(`ReactionChips` `onTap`); a gliding message of theirs carries their face; what lies under the press layer or any
+`OrganicModal` is softened 2 dp on Android 12 and later (`softenedUnder`, `ModalBackdrop` at the root); one time of day
+across the chat (`chatTimePattern`: 下午3:04 / 3:04 PM, the list, the thread and the menu's foot); 檢舉這則訊息 is titled
+for that message (`ReportDialog` `customTitle`); a Chinese placeholder stands upright (`AppFonts.obliqueUnlessCjk`); the
+link sheet opens with its field focused, 完成 waiting for an address, 顯示為 inline before its choice; a format tool that
+turns on out of sight scrolls into the row; and the reader draws a standalone link with no stored preview as the
+writer's quiet card — its host over its address — wherever the server would fetch it (`StoryLinks.unfurlable`: not the
+site's hosts, not an IP address).

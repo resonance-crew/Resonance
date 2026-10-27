@@ -268,12 +268,15 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     val context = LocalContext.current
     // A link card leaves by the same door as a link in a conversation: the in-app browser, asking first where the address isn't what it seems.
     val links = rememberLinkOpener()
-    val linkCards = remember(model.linkPreviews, links) {
+    val origin = session.config.origin
+    val linkCards = remember(model.linkPreviews, links, origin) {
         StoryLinkCards(
             model.linkPreviews,
             host = { (Linkify.displayHost(it.url) ?: it.url).removePrefix("www.") },
             label = L10n.Card.LinkPreview::open,
             open = { links.tap(it.url) },
+            // A link the server would fetch but hasn't (a private card's, an older build's story) is still a card (review S3).
+            unfurlable = { key -> StoryLinks.unfurlable(key, origin) },
         )
     }
     val list = rememberLazyListState()

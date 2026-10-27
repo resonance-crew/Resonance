@@ -44,6 +44,32 @@ object StoryLinks {
     }
 
     /**
+     * The site's hosts, which the server never fetches for a story (src/lib/links/soleLink.ts `SITE_HOSTS`):
+     * a standalone link to one of its pages stays a link, never a page's card.
+     */
+    val SITE_HOSTS: Set<String> = setOf("resonance.channel", "www.resonance.channel", "resonance-world.vercel.app")
+
+    private val IPV4 = Regex("^\\d{1,3}(?:\\.\\d{1,3}){3}$")
+
+    /**
+     * Whether the server would ever fetch a standalone link's page for a story (the web's `unfurlable`):
+     * not one of the site's own pages ([SITE_HOSTS], or [origin]'s host — the one this build talks to),
+     * not an address written as numbers (IPv4, or an IPv6 literal in brackets). Such a link is a page's
+     * card — its preview, or with none stored yet its host over its address (round 16 review S3) — and
+     * the others stay the paragraph as written, as the writer keeps them plain links. [key] is a
+     * standalone link's key ([StoryBlock.SoleLink.key]).
+     */
+    fun unfurlable(key: String, origin: String): Boolean {
+        val start = key.indexOf("://").takeIf { it >= 0 }?.plus(3) ?: return false
+        val authority = key.substring(start).takeWhile { it != '/' && it != '?' && it != '#' }.substringAfterLast('@')
+        val host = (if (authority.startsWith("[")) authority.substringBefore(']') + "]" else authority.substringBefore(':'))
+            .lowercase().trimEnd('.')
+        if (host.isEmpty()) return false
+        if (host in SITE_HOSTS || StoryLink.isSiteHost(host, origin)) return false
+        return !(IPV4.matches(host) || host.startsWith("[") || dottedQuad(host) != null)
+    }
+
+    /**
      * The address the writer's link sheet links to, from what was typed or pasted into its field (round 16
      * §6, the web's `linkTarget`) — or null when it isn't one we link to (the sheet then says
      * `linkInvalid`): http(s) only, as the link rules take it ([Linkify.normalize]); a bare `www.…` or

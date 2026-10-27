@@ -102,7 +102,7 @@ internal fun Composer(
         ) { vertical ->
             Box(Modifier.fillMaxWidth().padding(vertical = vertical)) {
                 if (model.draft.isEmpty()) {
-                    BasicText(L10n.Messages.placeholder, style = fieldHintStyle(ComposerText.fontSize.value, COMPOSER_LEADING), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    BasicText(L10n.Messages.placeholder, style = fieldHintStyle(L10n.Messages.placeholder, ComposerText.fontSize.value, COMPOSER_LEADING), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 BasicTextField(
                     model.draft, { model.draft = capped(it, NOTE_MAX_LENGTH) },

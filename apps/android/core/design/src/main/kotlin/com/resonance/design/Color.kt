@@ -263,6 +263,19 @@ class PaletteMixes private constructor(private val palette: ResonanceColors) {
      * night a step toward the ink (`color-mix(in oklch, var(--menu-paper) 94%, var(--toward-ink))`).
      */
     val reactionSheet: Color = if (palette.dark) mixed(lch("menu-paper"), lch("toward-ink"), 0.94) else palette.MenuPaper
+    /**
+     * The disc under the viewer's own reaction in the tray: the accent's light wash by day; at night the
+     * accent itself at 30 % over the tray's raised paper (round 16 review F4: the light wash there all but
+     * vanished, ≈ 1.2 : 1) — `color-mix(in oklch, var(--color-terracotta) 30%, <the sheet>)`.
+     */
+    val reactionChosen: Color =
+        if (palette.dark) mixed(lch("color-terracotta"), mix(lch("menu-paper"), lch("toward-ink"), 0.94), 0.3) else palette.TerracottaLight
+    /**
+     * A chosen tag's quiet pill in the publish step (round 16 review S2): half the accent's light wash on
+     * the paper, `color-mix(in oklch, var(--color-terracotta-light) 50%, var(--color-cream))` — at night too,
+     * where it lands toward the night paper.
+     */
+    val quietTag: Color = mixed(lch("color-terracotta-light"), lch("color-cream"), 0.5)
     private val highlights = HashMap<Double?, Color>()
 
     /**

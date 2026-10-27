@@ -159,6 +159,29 @@ class RoundSixteenTest {
         assertEquals(1080 - 12 - 232, trayLeft(mine = false, left = 1000, right = 1070, tray = 232, width = 1080, margin = 12))
     }
 
+    @Test fun aPressOnALinkPutsTheLinksRowsFirst() {
+        // Review S8: 開啟連結 · 複製連結 lead when the press was on a link, then 回覆 · 複製 · 收回.
+        assertEquals(
+            listOf(MessageActionKind.OpenLink, MessageActionKind.CopyLink, MessageActionKind.Reply, MessageActionKind.Copy, MessageActionKind.Unsend),
+            messageActionKinds(canReply = true, hasText = true, onLink = true, canUnsend = true, canReport = false, failed = false),
+        )
+        // Theirs, held on a link: the link's two, then 回覆 · 複製 · 檢舉這則訊息.
+        assertEquals(
+            listOf(MessageActionKind.OpenLink, MessageActionKind.CopyLink, MessageActionKind.Reply, MessageActionKind.Copy, MessageActionKind.Report),
+            messageActionKinds(canReply = true, hasText = true, onLink = true, canUnsend = false, canReport = true, failed = false),
+        )
+        // Held off a link: no link rows at all.
+        assertEquals(
+            listOf(MessageActionKind.Reply, MessageActionKind.Copy, MessageActionKind.Report),
+            messageActionKinds(canReply = true, hasText = true, onLink = false, canUnsend = false, canReport = true, failed = false),
+        )
+        // One that didn't go: 重試 · 刪除 last.
+        assertEquals(
+            listOf(MessageActionKind.Copy, MessageActionKind.Retry, MessageActionKind.Discard),
+            messageActionKinds(canReply = false, hasText = true, onLink = false, canUnsend = false, canReport = false, failed = true),
+        )
+    }
+
     // §3–§4 chips, their words, an unsent message
 
     @Test fun chipsAreKnownStickersAndAScreenReaderHearsWhoReactedHow() {

@@ -159,6 +159,14 @@ object AppFonts {
      */
     fun oblique(style: TextStyle): TextStyle = style.copy(textGeometricTransform = TextGeometricTransform(skewX = -0.25f))
 
+    /**
+     * A placeholder's (or a quiet label's) lean for [text]: [oblique] for Latin words, upright for any
+     * holding Han, kana or hangul — a synthetic italic slants Chinese (round 16 review F6, the web's
+     * `:lang(zh-TW) ::placeholder { font-style: normal }`).
+     */
+    fun obliqueUnlessCjk(style: TextStyle, text: String): TextStyle =
+        if (com.resonance.kit.story.StoryScripts.hasCjk(text)) style else oblique(style)
+
     @androidx.compose.runtime.Composable @androidx.compose.runtime.ReadOnlyComposable
     fun heading(size: Float, weight: Int = 700, lineHeight: Float = 1.25f) = style(Family.Heading, size, weight, lineHeight)
     @androidx.compose.runtime.Composable @androidx.compose.runtime.ReadOnlyComposable

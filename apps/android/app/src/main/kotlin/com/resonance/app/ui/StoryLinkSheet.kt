@@ -14,6 +14,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -76,6 +78,13 @@ internal fun StoryLinkSheet(
         if (target == null) invalid = true
         else onApply(target, if (request.canCard) display else LinkDisplay.Text)
     }
+    // The field has the focus as the sheet opens, the keyboard with it — no tap to start typing (round 16 review F10).
+    val field = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        // The dialog's window is attached a frame after it is composed.
+        withFrameNanos { }
+        runCatching { field.requestFocus() }
+    }
     OrganicModal(
         onDismiss, L10n.Write.Editor.link, seed = 37.0, closeLabel = L10n.Write.Editor.CardModal.cancel, maxWidth = 560.dp, atFoot = true,
     ) {
@@ -86,7 +95,8 @@ internal fun StoryLinkSheet(
                 placeholder = L10n.Write.Editor.linkPlaceholder,
                 seed = 41.0,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done, autoCorrectEnabled = false),
-                keyboardActions = KeyboardActions(onDone = { apply() }),
+                keyboardActions = KeyboardActions(onDone = { if (address.isNotBlank()) apply() }),
+                focusRequester = field,
             )
             if (invalid) BasicText(
                 L10n.Write.Editor.linkInvalid,
@@ -95,8 +105,9 @@ internal fun StoryLinkSheet(
             )
         }
         if (request.canCard) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                BasicText(L10n.Write.Editor.linkShowAs, style = AppFonts.body(Tokens.LabelSize, 600, lineHeight = 1.3f, color = Tokens.TextMuted))
+            // 顯示為 inline before its choice, as iOS and the web set it (round 16 review F11): field → 顯示為 [卡片|文字] → … 完成.
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                BasicText(L10n.Write.Editor.linkShowAs, style = AppFonts.body(14f, lineHeight = 1.3f, color = Tokens.TextMuted), maxLines = 1)
                 SegmentedActionBar(
                     listOf(LinkDisplay.Card to L10n.Write.Editor.linkAsCard, LinkDisplay.Text to L10n.Write.Editor.linkAsText).map { (choice, label) ->
                         val on = display == choice
@@ -108,6 +119,7 @@ internal fun StoryLinkSheet(
                             selected = on,
                         ) { display = choice }
                     },
+                    Modifier.weight(1f),
                     fill = Tokens.CreamDark,
                 )
             }
@@ -115,7 +127,8 @@ internal fun StoryLinkSheet(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             if (request.link != null) OrganicButton(L10n.Write.Editor.linkRemove, variant = ButtonVariant.Text, small = true, onClick = onRemove)
             Spacer(Modifier.weight(1f))
-            OrganicButton(L10n.Write.Editor.linkApply, small = true, onClick = apply)
+            // Nothing typed, nothing to link: 完成 waits for an address (as iOS's).
+            OrganicButton(L10n.Write.Editor.linkApply, enabled = address.isNotBlank(), small = true, onClick = apply)
         }
     }
 }

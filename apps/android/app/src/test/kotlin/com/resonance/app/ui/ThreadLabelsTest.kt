@@ -3,6 +3,7 @@ package com.resonance.app.ui
 import com.resonance.kit.l10n.Strings
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.time.ZoneId
@@ -27,8 +28,9 @@ class ThreadLabelsTest {
 
     @Test fun theTimeOfDayInChinese() {
         Strings.language = Strings.Language.ZhTW
-        assertEquals("下午 3:04", timeLabel(at(2026, 9, 29, 15, 4)))
-        assertEquals("上午 9:30", timeLabel(at(2026, 9, 29, 9, 30)))
+        // One time of day across the chat (round 16 review F5): no space, no leading zero.
+        assertEquals("下午3:04", timeLabel(at(2026, 9, 29, 15, 4)))
+        assertEquals("上午9:30", timeLabel(at(2026, 9, 29, 9, 30)))
     }
 
     @Test fun theTimeOfDayInEnglish() {
@@ -46,7 +48,24 @@ class ThreadLabelsTest {
 
     @Test fun aLongPressShowsTheFullTime() {
         Strings.language = Strings.Language.En
-        assertEquals("September 29 at 03:04 PM", fullTime(at(2026, 9, 29, 15, 4)))
+        assertEquals("September 29 at 3:04 PM", fullTime(at(2026, 9, 29, 15, 4)))
+        Strings.language = Strings.Language.ZhTW
+        assertEquals("9月29日 下午3:04", fullTime(at(2026, 9, 29, 15, 4)))
+    }
+
+    @Test fun theListTheThreadAndTheMenuSayATimeOfDayAlike() {
+        // Today's row in the conversation list, the label between messages and the menu's foot: one formatter.
+        val today = at(2026, 9, 29, 9, 5)
+        val day = java.time.LocalDate.of(2026, 9, 29)
+        Strings.language = Strings.Language.ZhTW
+        assertEquals("上午9:05", rowTime(today, day))
+        assertEquals(timeLabel(today), rowTime(today, day))
+        assertTrue(fullTime(today).endsWith(timeLabel(today)))
+        Strings.language = Strings.Language.En
+        assertEquals("9:05 AM", rowTime(today, day))
+        assertTrue(fullTime(today).endsWith(timeLabel(today)))
+        // Another day: the date.
+        assertEquals("9/28", rowTime(at(2026, 9, 28, 21, 0), day))
     }
 
     @Test fun aSearchResultSaysWhenItWasWrittenAsBrieflyAsItCan() {

@@ -24,6 +24,12 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.runtime.Composable
+import com.resonance.design.avatarFill
+import com.resonance.design.HandDrawnAvatar
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,10 +78,11 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
- * What a press and hold on a message offers (round 16 §3), in this order: 回覆 · 複製 · the link under
- * the finger (開啟連結, 複製連結) · 收回 (your own, delivered, not a note, within 24 h; asked first) ·
- * 檢舉這則訊息 (theirs, delivered: the report flow for that one message) · and for one that didn't go,
- * 重試 and 刪除. The full time is the list's quiet foot.
+ * What a press and hold on a message offers (round 16 §3), in this order: when the press was on a link,
+ * its two rows first (round 16 review S8: 開啟連結 with the arrow, 複製連結 with the link — no longer the
+ * copy glyph twice two rows apart) · 回覆 · 複製 · 收回 (your own, delivered, not a note, within 24 h;
+ * asked first) · 檢舉這則訊息 (theirs, delivered: the report flow for that one message) · and for one that
+ * didn't go, 重試 and 刪除. The full time is the list's quiet foot.
  */
 internal fun messageActions(
     menu: MessageMenu,
@@ -89,21 +96,56 @@ internal fun messageActions(
 ): List<MessageAction> {
     val message = menu.row.message
     val mine = model.isMine(message)
-    return buildList {
+    val kinds = messageActionKinds(
         // A reply needs a composer to go in: not while you can't write here.
-        if (message.canReply && model.foot.composes) add(MessageAction(L10n.Messages.reply, IconName.Reply) { reply() })
-        if (message.text.isNotEmpty()) add(MessageAction(L10n.Native.copy, IconName.Copy) { copyText(context, message.text) })
-        menu.link?.let { url ->
+        canReply = message.canReply && model.foot.composes,
+        hasText = message.text.isNotEmpty(),
+        onLink = menu.link != null,
+        canUnsend = MessageReactions.canUnsend(message, model.me),
+        canReport = !mine && message.delivery == Delivery.Delivered && !message.isUnsent,
+        failed = message.delivery == Delivery.Failed,
+    )
+    return kinds.map { kind ->
+        when (kind) {
             // A card of the site opens in the app, as a tap on the bubble does.
-            add(MessageAction(L10n.Messages.openLink, IconName.Link) { model.openLink(url, opener, open) })
-            add(MessageAction(L10n.Messages.copyLink, IconName.Copy) { copyText(context, url) })
+            MessageActionKind.OpenLink -> MessageAction(L10n.Messages.openLink, IconName.ArrowRight) { menu.link?.let { model.openLink(it, opener, open) } }
+            MessageActionKind.CopyLink -> MessageAction(L10n.Messages.copyLink, IconName.Link) { menu.link?.let { copyText(context, it) } }
+            MessageActionKind.Reply -> MessageAction(L10n.Messages.reply, IconName.Reply) { reply() }
+            MessageActionKind.Copy -> MessageAction(L10n.Native.copy, IconName.Copy) { copyText(context, message.text) }
+            MessageActionKind.Unsend -> MessageAction(L10n.Messages.unsend, IconName.Restore) { unsend() }
+            MessageActionKind.Report -> MessageAction(L10n.Safety.reportThisMessage, IconName.Flag) { report() }
+            MessageActionKind.Retry -> MessageAction(L10n.Messages.retry, IconName.Send) { model.retry(message.key) }
+            MessageActionKind.Discard -> MessageAction(L10n.Messages.discardFailed, IconName.Trash, destructive = true) { model.discard(message.key) }
         }
-        if (MessageReactions.canUnsend(message, model.me)) add(MessageAction(L10n.Messages.unsend, IconName.Restore) { unsend() })
-        if (!mine && message.delivery == Delivery.Delivered && !message.isUnsent) add(MessageAction(L10n.Safety.reportThisMessage, IconName.Flag) { report() })
-        if (message.delivery == Delivery.Failed) {
-            add(MessageAction(L10n.Messages.retry, IconName.Send) { model.retry(message.key) })
-            add(MessageAction(L10n.Messages.discardFailed, IconName.Trash, destructive = true) { model.discard(message.key) })
-        }
+    }
+}
+
+/** The rows a held message's action list can have ([messageActionKinds] orders them). */
+internal enum class MessageActionKind { OpenLink, CopyLink, Reply, Copy, Unsend, Report, Retry, Discard }
+
+/**
+ * The held message's rows, in order: the link's two first when the press was on one ([onLink]), then
+ * 回覆 · 複製 · 收回 · 檢舉這則訊息 · 重試 · 刪除 as each applies.
+ */
+internal fun messageActionKinds(
+    canReply: Boolean,
+    hasText: Boolean,
+    onLink: Boolean,
+    canUnsend: Boolean,
+    canReport: Boolean,
+    failed: Boolean,
+): List<MessageActionKind> = buildList {
+    if (onLink) {
+        add(MessageActionKind.OpenLink)
+        add(MessageActionKind.CopyLink)
+    }
+    if (canReply) add(MessageActionKind.Reply)
+    if (hasText) add(MessageActionKind.Copy)
+    if (canUnsend) add(MessageActionKind.Unsend)
+    if (canReport) add(MessageActionKind.Report)
+    if (failed) {
+        add(MessageActionKind.Retry)
+        add(MessageActionKind.Discard)
     }
 }
 
@@ -185,6 +227,8 @@ internal fun MessageMenuOverlay(
     footer: String,
     tray: TrayOffer?,
     onDismiss: () -> Unit,
+    /** How far the overlay is up (0…1), for the screen to soften what lies under its scrim (round 16 review F8). */
+    over: MutableFloatState? = null,
 ) {
     val message = menu.row.message
     val mine = ctx.model.isMine(message)
@@ -211,6 +255,10 @@ internal fun MessageMenuOverlay(
     }
     BackHandler(onBack = dismiss)
     LaunchedEffect(Unit) { appear.animateTo(1f, tween(150)) }
+    if (over != null) {
+        LaunchedEffect(over) { snapshotFlow { appear.value }.collect { over.floatValue = it } }
+        DisposableEffect(over) { onDispose { over.floatValue = 0f } }
+    }
     LaunchedEffect(Unit) { lift.animateTo(1.03f, spring(dampingRatio = 0.55f, stiffness = 520f)) }
 
     val density = LocalDensity.current
@@ -275,6 +323,20 @@ internal fun MessageMenuOverlay(
                     ),
             ) {
                 Box(Modifier.wrapContentHeight(Alignment.Top, unbounded = true)) { MessageCore(row, ctx, interactive = false) }
+            }
+            // Their face goes with their message (round 16 review F9): left behind, beside the list, it read as the list's.
+            val other = ctx.model.other
+            if (!mine && !menu.row.position.joinsBelow && other != null) {
+                val face = with(density) { THREAD_FACE.roundToPx() }
+                val gap = with(density) { THREAD_FACE_GAP.roundToPx() }
+                val foot = top + (place.shown ?: (bottom - top))
+                Box(
+                    Modifier
+                        .offset { IntOffset(left - gap - face, foot - face + glide.value.roundToInt()) }
+                        .clearAndSetSemantics { },
+                ) {
+                    HandDrawnAvatar(other.initials, other.avatarUrl, avatarFill(other.accentColor), THREAD_FACE, seedOr(other.avatarSeed, 3.0))
+                }
             }
 
             if (tray != null) {

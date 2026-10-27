@@ -247,14 +247,14 @@ class StoryParserTest {
 
     // Standalone links (native/fixtures/story-link-cards.json, the server's and the web's own cases)
 
-    private class LinkCase(val id: String, val markdown: String, val soleLinks: List<String>, val inline: List<String>)
+    private class LinkCase(val id: String, val markdown: String, val soleLinks: List<String>, val inline: List<String>, val links: List<String>)
 
     private val linkCases: List<LinkCase> = Json.parseToJsonElement(
         File(System.getProperty("repoRoot"), "native/fixtures/story-link-cards.json").readText(),
     ).jsonObject["cases"]!!.jsonArray.map { c ->
         val o = c.jsonObject
         fun list(name: String) = o[name]?.jsonArray?.map { it.jsonPrimitive.content }.orEmpty()
-        LinkCase(o["id"]!!.jsonPrimitive.content, o["markdown"]!!.jsonPrimitive.content, list("soleLinks"), list("inline"))
+        LinkCase(o["id"]!!.jsonPrimitive.content, o["markdown"]!!.jsonPrimitive.content, list("soleLinks"), list("inline"), list("links"))
     }
 
     /** Every block of the story, in reading order: inside quotes and list items too. */
@@ -278,6 +278,21 @@ class StoryParserTest {
             val found = flatten(StoryParser.parse(case.markdown)).filterIsInstance<StoryBlock.SoleLink>().map { it.key }
             assertEquals(case.soleLinks, found, case.id)
         }
+    }
+
+    @Test fun theLinksDrawnAsCardsWithoutAPreviewAreTheOnesTheServerWouldFetch() {
+        // Round 16 review S3: a standalone link with no preview stored is still a card (host over address)
+        // exactly when the server would unfurl it — never the site's own pages, never a bare IP address.
+        for (case in linkCases) {
+            val cards = case.soleLinks.filter { StoryLinks.unfurlable(it, "https://resonance.channel") }.distinct().take(10)
+            assertEquals(case.links, cards, case.id)
+        }
+        // The origin this build talks to counts as the site's too (a debug build's dev server).
+        assertFalse(StoryLinks.unfurlable("http://10.0.2.2:3100/u/alice", "http://10.0.2.2:3100"))
+        assertFalse(StoryLinks.unfurlable("https://[2001:db8::1]/x", "https://resonance.channel"))
+        assertTrue(StoryLinks.unfurlable("https://example.com/rain-walk", "https://resonance.channel"))
+        // A look-alike of the site's name is someone else's.
+        assertTrue(StoryLinks.unfurlable("https://resonance.channel.example.com/", "https://resonance.channel"))
     }
 
     @Test fun aLinkInsideASentenceStaysALinkInTheLine() {

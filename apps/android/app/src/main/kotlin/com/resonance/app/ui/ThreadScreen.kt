@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -97,6 +98,7 @@ import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.inlineBarTop
 import com.resonance.design.plainClickable
+import com.resonance.design.softenedUnder
 import com.resonance.geometry.seedFromString
 import com.resonance.kit.api.MessagingApi
 import com.resonance.kit.chat.Carried
@@ -275,7 +277,11 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
         )
     }
 
+    // How far a held message's overlay is up (0…1): what lies under its scrim is softened as much (round 16 review F8).
+    val heldOver = remember { mutableFloatStateOf(0f) }
     Box(Modifier.fillMaxSize().cream().onSizeChanged { listWidth = with(density) { it.width.toDp() } }) {
+        // The thread and its bar, softened under a held message's scrim; the overlay itself lies above, sharp.
+        Box(Modifier.fillMaxSize().softenedUnder { heldOver.floatValue }) {
         when (model.phase) {
             // One layout while it is found and once it is: what the thread always has is there from the
             // start (the bar's back and ⋯, the composer), and only what isn't known yet is in the shimmer.
@@ -355,6 +361,7 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
             ),
             open = open, back = back,
         )
+        }
 
         menu?.let { m ->
             val held = m.row.message
@@ -375,6 +382,7 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                     ) { id -> model.react(held, id.key, sayError) }
                 } else null,
                 onDismiss = { menu = null },
+                over = heldOver,
             )
         }
     }
@@ -401,6 +409,8 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
             session, SafetyService.Target.Message(message.id, message.senderId, pair), other.handle,
             onBlocked = { scope.launch { model.refreshConnection() } },
             offerBlock = !model.isBlocked,
+            // Titled for that one message, not the conversation (the bar's 檢舉 keeps 檢舉與 bob 的對話).
+            customTitle = L10n.Safety.reportThisMessage,
         ) { reportingMessage = null }
     }
     // 收回 asks first, in the plain colour (it takes the words back, it doesn't destroy them for good).
@@ -653,15 +663,20 @@ internal fun dayLabel(date: Date): String {
     return date.toInstant().atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern(pattern, Strings.language.locale))
 }
 
-/** The time label inside a day: 下午 3:04 / 3:04 PM. */
-internal fun timeLabel(date: Date): String {
-    val pattern = if (Strings.language == Strings.Language.ZhTW) "a h:mm" else "h:mm a"
-    return date.toInstant().atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern(pattern, Strings.language.locale))
-}
+/**
+ * The chat's time of day, one way wherever it shows (round 16 review F5, the web's lib/chat/time) — the
+ * conversation list, the thread's labels, a message's menu, a search's results: the hour without a
+ * leading zero, as the language writes it — 下午3:04 / 3:04 PM.
+ */
+internal fun chatTimePattern(): String = if (Strings.language == Strings.Language.ZhTW) "ah:mm" else "h:mm a"
 
-/** The full time a long-press shows (the web's hover title): 9月29日 下午03:04 / September 29 at 03:04 PM. */
+/** The time label inside a day: 下午3:04 / 3:04 PM ([chatTimePattern]). */
+internal fun timeLabel(date: Date): String =
+    date.toInstant().atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern(chatTimePattern(), Strings.language.locale))
+
+/** The full time a long-press shows (the web's hover title): 9月29日 下午3:04 / September 29 at 3:04 PM. */
 internal fun fullTime(date: Date): String {
-    val pattern = if (Strings.language == Strings.Language.ZhTW) "M月d日 ahh:mm" else "MMMM d 'at' hh:mm a"
+    val pattern = if (Strings.language == Strings.Language.ZhTW) "M月d日 ${chatTimePattern()}" else "MMMM d 'at' ${chatTimePattern()}"
     return date.toInstant().atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern(pattern, Strings.language.locale))
 }
 

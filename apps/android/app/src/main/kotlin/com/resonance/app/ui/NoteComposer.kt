@@ -118,7 +118,7 @@ fun NoteComposer(session: Session, cardId: String, onClose: () -> Unit, onUpgrad
                 .fieldSurface(17.0, { focused })
                 .padding(horizontal = Tokens.FieldPadX.dp, vertical = Tokens.FieldPadY.dp),
         ) {
-            if (text.isEmpty()) BasicText(L10n.Card.Note.placeholder, style = fieldHintStyle())
+            if (text.isEmpty()) BasicText(L10n.Card.Note.placeholder, style = fieldHintStyle(L10n.Card.Note.placeholder))
             BasicTextField(
                 text, { text = capped(it, NOTE_MAX_LENGTH) },
                 textStyle = AppFonts.body(15f, lineHeight = 1.6f),

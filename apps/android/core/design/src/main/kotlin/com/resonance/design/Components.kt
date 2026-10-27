@@ -46,6 +46,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.alpha
@@ -182,7 +184,10 @@ enum class TagSize(val font: Float, val tracking: Float, val padX: Dp, val padY:
  * `outlined` overrides that for a pill on bare page paper rather than inside a
  * framed card (the anonymous badge under a card on the shelves, cream-dark on
  * the cream page, vanishes without its rim). `onRemove` adds its hand-drawn ×
- * (the writer's tags).
+ * (the writer's tags), named [removeLabel] (which tag: 移除標籤：日常) or the
+ * plain 移除標籤. A [quiet] pill doesn't outshout what is round it (the
+ * publish step's chosen tags, beside its one button; round 16 review S2): its
+ * rim the soft pen at INK_LIGHT, its words at 500, its × in the muted ink.
  */
 @Composable
 fun TagPill(
@@ -192,15 +197,19 @@ fun TagPill(
     size: TagSize = TagSize.Md,
     outlined: Boolean = size == TagSize.Lg,
     onRemove: (() -> Unit)? = null,
+    removeLabel: String? = null,
+    quiet: Boolean = false,
 ) {
     val s = seed ?: autoSeed(text)
-    val rim = Tokens.TagStroke
-    val cross = Tokens.Text
+    val rim = if (quiet) Tokens.SoftPen else Tokens.TagStroke
+    val pen = if (quiet) Tokens.InkLight else Tokens.Ink
+    val cross = if (quiet) Tokens.TextMuted else Tokens.Text
+    val removeName = removeLabel ?: L10n.Write.removeTag
     Row(
         Modifier
             .drawWithCache {
                 val o = WobRectShape(this.size.height / density / 2.0, s).createOutline(this.size, layoutDirection, this)
-                val stroke = Stroke(Tokens.Ink.toPx())
+                val stroke = Stroke(pen.toPx())
                 onDrawBehind {
                     drawOutline(o, fill)
                     if (outlined) drawOutline(o, rim, style = stroke)
@@ -212,7 +221,7 @@ fun TagPill(
     ) {
         BasicText(
             text.uppercase(),
-            style = AppFonts.body(size.font, 600, lineHeight = 1.3f).copy(letterSpacing = size.tracking.em),
+            style = AppFonts.body(size.font, if (quiet) 500 else 600, lineHeight = 1.3f).copy(letterSpacing = size.tracking.em),
         )
         // The ✕ takes 10 in the row but a finger's 44 × 44 round it (round 16 §1): its hit box overhangs the
         // pill, unseen, and the pill keeps its size.
@@ -222,11 +231,12 @@ fun TagPill(
                 .size(10.dp)
                 .wrapContentSize(unbounded = true)
                 .size(TagRemoveTarget)
-                .plainClickable(role = Role.Button, onClickLabel = L10n.Write.removeTag, onClick = onRemove)
-                .semantics { contentDescription = L10n.Write.removeTag },
+                .plainClickable(role = Role.Button, onClickLabel = removeName, onClick = onRemove)
+                .semantics { contentDescription = removeName },
             contentAlignment = Alignment.Center,
         ) {
-            Canvas(Modifier.size(10.dp).alpha(0.55f)) {
+            // A quiet pill's × is the muted ink itself (the web's: muted, at full strength); the others' the ink faded.
+            Canvas(Modifier.size(10.dp).alpha(if (quiet) 1f else 0.55f)) {
                 val k = this.size.width / 10f
                 val x = Path().apply {
                     moveTo(1.6f * k, 1.8f * k); cubicTo(3f * k, 3f * k, 5.2f * k, 5.2f * k, 8.2f * k, 8.4f * k)
@@ -1048,11 +1058,13 @@ fun OrganicTextField(
     curve: Double? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
+    /** Where the caller puts the focus (the writer's link sheet: its field on opening). */
+    focusRequester: FocusRequester? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     val text = if (display) AppFonts.heading(22f, lineHeight = 1.35f) else AppFonts.body(15f, lineHeight = 1.6f)
-    // globals.css: every placeholder is the body face, italic, at the field's size and weight.
-    val hint = AppFonts.oblique(AppFonts.body(if (display) 22f else 15f, if (display) 700 else 400, lineHeight = if (display) 1.35f else 1.6f, color = Tokens.Placeholder))
+    // globals.css: every placeholder is the body face, italic (upright in Chinese), at the field's size and weight.
+    val hint = AppFonts.obliqueUnlessCjk(AppFonts.body(if (display) 22f else 15f, if (display) 700 else 400, lineHeight = if (display) 1.35f else 1.6f, color = Tokens.Placeholder), placeholder)
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         FieldLabel(label)
         Box(
@@ -1072,7 +1084,10 @@ fun OrganicTextField(
                 keyboardOptions = keyboardOptions,
                 keyboardActions = keyboardActions,
                 visualTransformation = if (isSecure) PasswordVisualTransformation() else VisualTransformation.None,
-                modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                    .onFocusChanged { focused = it.isFocused },
             )
         }
         if (maxLength != null) BasicText(
@@ -1130,9 +1145,13 @@ private data class FieldSurface(
     }
 }
 
-/** globals.css: every placeholder is the body face, italic, at the field's size and weight. */
+/**
+ * globals.css: every placeholder is the body face, italic, at the field's size and weight — but a
+ * Chinese one ([text] holding Han, kana or hangul) upright: a synthetic italic slants it (round 16 review F6).
+ */
 @Composable @ReadOnlyComposable
-fun fieldHintStyle(size: Float = 15f, lineHeight: Float = 1.6f) = AppFonts.oblique(AppFonts.body(size, 400, lineHeight = lineHeight, color = Tokens.Placeholder))
+fun fieldHintStyle(text: String, size: Float = 15f, lineHeight: Float = 1.6f) =
+    AppFonts.obliqueUnlessCjk(AppFonts.body(size, 400, lineHeight = lineHeight, color = Tokens.Placeholder), text)
 
 /** Solid page background: the paper. */
 @Composable

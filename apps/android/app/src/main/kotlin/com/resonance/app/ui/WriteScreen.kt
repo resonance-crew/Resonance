@@ -1408,9 +1408,9 @@ private fun StepLabel(text: String) {
 }
 
 /**
- * 標籤 (round 16 §1): the section's label and the chosen tags share one wrapping row ([TagPillRow]);
- * under it the field ([TagField], the composer's capsule with its AI 建議 / 新增 segment), and under that
- * nothing but an error, when there is one. The preview card above stays a preview. The field never
+ * 標籤 (round 16 §1, review S1): the section's label on its own line, as 卡片類型's; the chosen tags under it
+ * ([TagPillRow], no room when there are none); under them the field ([TagField], the composer's capsule
+ * with its AI 建議 / 新增 segment), and under that nothing but an error, when there is one. The preview card above stays a preview. The field never
  * moves under the caret: while it has the focus, or after its segment was tapped (an add, the model's
  * tags arriving), a change of the row's height scrolls the step by as much in the same frame
  * ([scroll]). A polite announcement says how many tags an add brought in.
@@ -1433,8 +1433,10 @@ private fun Tags(model: WriteModel, anchor: TagFieldAnchor, dismissKeyboard: () 
             anchor.fromSegment = false
         }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(PublishLabelGap)) {
-        TagPillRow(tags, onRemove = model::removeTag, onHeightChange = anchor::heightChanged) { StepLabel(L10n.Write.tagsLabel) }
+    Column {
+        StepLabel(L10n.Write.tagsLabel)
+        TagPillRow(tags, onRemove = model::removeTag, onHeightChange = anchor::heightChanged)
+        Spacer(Modifier.height(PublishLabelGap))
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             TagField(
                 draft = model.tagDraft,

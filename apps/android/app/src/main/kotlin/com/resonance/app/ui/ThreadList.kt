@@ -472,8 +472,11 @@ internal fun rowGap(labelled: Boolean, joinsAbove: Boolean, quoted: Boolean): Dp
 }
 
 /** Their face beside their messages: the column every one of their bubbles is indented by. */
-private val FACE = 28.dp
-private val FACE_GAP = 8.dp
+/** Their face beside their run's last bubble, and the gap between (the held message's lifted copy carries it too). */
+internal val THREAD_FACE = 28.dp
+internal val THREAD_FACE_GAP = 8.dp
+private val FACE = THREAD_FACE
+private val FACE_GAP = THREAD_FACE_GAP
 
 /** A day or time label between messages. */
 @Composable
@@ -551,7 +554,7 @@ private fun MessageItem(row: ThreadRow, ctx: ThreadContext, deliveryLine: Boolea
             horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
             verticalAlignment = Alignment.Bottom,
         ) {
-            if (!mine) TheirFace(shown = !row.position.joinsBelow, ctx)
+            if (!mine) TheirFace(shown = !row.position.joinsBelow, ctx, lifted = ctx.lifted == message.key)
             Column(Modifier.widthIn(max = ctx.rowMax), horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
                 if (message.isUnsent) {
                     UnsentBubble(unsentWords(mine, model.other?.handle.orEmpty()), mine, seedFromId(message.key), run = row.position)
@@ -575,8 +578,9 @@ private const val UNSENT_RESIZE_MILLIS = 150
  * tap goes to their page; a screen reader names whose it is (the face itself says nothing).
  */
 @Composable
-private fun TheirFace(shown: Boolean, ctx: ThreadContext) {
-    Box(Modifier.padding(end = FACE_GAP).size(FACE)) {
+private fun TheirFace(shown: Boolean, ctx: ThreadContext, lifted: Boolean = false) {
+    // Lifted with its message into the menu's layer (review F9), it isn't left behind under the scrim.
+    Box(Modifier.padding(end = FACE_GAP).size(FACE).then(if (lifted) Modifier.graphicsLayer { alpha = 0f } else Modifier)) {
         val other = ctx.model.other
         if (shown && other != null) {
             Box(
@@ -758,9 +762,10 @@ internal fun MessageCore(row: ThreadRow, ctx: ThreadContext, interactive: Boolea
             chips, outward = if (mine) -1 else 1, ring = Tokens.Cream,
             modifier = Modifier
                 .align(if (mine) Alignment.BottomStart else Alignment.BottomEnd)
-                .inGutter(mine)
-                .then(if (interactive) Modifier.plainClickable(role = Role.Button) { press(null) } else Modifier)
-                .semantics { contentDescription = reactionWords },
+                .inGutter(mine),
+            label = reactionWords,
+            // A tap opens the held message's overlay, in a finger's 44 × 44 round the chip (round 16 review S7).
+            onTap = if (interactive) { { press(null) } } else null,
         )
         }
     }
