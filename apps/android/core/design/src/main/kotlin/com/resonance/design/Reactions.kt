@@ -178,7 +178,6 @@ fun ReactionTray(
             Box(
                 Modifier
                     .size(ReactionTrayCell)
-                    .drawWithCacheOf(TrayDisc(on, disc, seed + i * 13))
                     .clickable(source, indication = null, role = Role.Button) { onChoose(id) }
                     .clearAndSetSemantics {
                         contentDescription = if (on) removeLabel else label(id)
@@ -188,6 +187,18 @@ fun ReactionTray(
                     },
                 contentAlignment = Alignment.Center,
             ) {
+                // The chosen disc comes with its sticker: with no paper under the tray, a disc ahead of it read as a stain.
+                if (on) Box(
+                    Modifier
+                        .matchParentSize()
+                        .graphicsLayer {
+                            alpha = pop.value
+                            val s = if (still) 1f else 0.6f + 0.4f * pop.value
+                            scaleX = s
+                            scaleY = s
+                        }
+                        .drawWithCacheOf(TrayDisc(true, disc, seed + i * 13)),
+                )
                 ReactionGlyph(
                     id, 32.dp,
                     Modifier.graphicsLayer {
