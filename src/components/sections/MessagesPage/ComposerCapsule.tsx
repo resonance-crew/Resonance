@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { useId, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
 import { BrushWash } from '@/components/atoms/BrushWash/BrushWash';
 import { Icon } from '@/components/atoms/Icon';
 import { ShapeGrain } from '@/components/atoms/ShapeGrain/ShapeGrain';
@@ -56,7 +56,10 @@ export function ComposerCapsule({ children, focused, ready, sendLabel, onSend }:
   const clipId = `composer-clip-${useId().replace(/:/g, '')}`;
   // The send segment's hover brush, from where the pointer came in (as a button's).
   const [hover, setHover] = useState({ x: w - SEND_SEGMENT_W / 2, y: h / 2, on: false });
-  const at = (e: MouseEvent<HTMLButtonElement>, on: boolean) => {
+  // The hover brush is a mouse's alone: a tap's compatibility mouseenter comes with no mouseleave, and the
+  // segment would keep the brush after the send (round 17 review W9, as the tag field's).
+  const at = (e: PointerEvent<HTMLButtonElement>, on: boolean) => {
+    if (e.pointerType !== 'mouse') return;
     const r = ref.current?.getBoundingClientRect();
     if (!r) return;
     setHover({ x: e.clientX - r.left, y: e.clientY - r.top, on });
@@ -103,8 +106,8 @@ export function ComposerCapsule({ children, focused, ready, sendLabel, onSend }:
         title={sendLabel}
         aria-disabled={!ready || undefined}
         onClick={() => ready && onSend()}
-        onMouseEnter={(e) => at(e, true)}
-        onMouseLeave={(e) => at(e, false)}
+        onPointerEnter={(e) => at(e, true)}
+        onPointerLeave={(e) => at(e, false)}
       >
         {/* On the last line's row, beside the ＋ — not in the middle of a tall field. */}
         <span className={styles.sendGlyph}>

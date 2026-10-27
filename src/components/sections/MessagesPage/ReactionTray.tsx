@@ -25,6 +25,11 @@ export interface ReactionTrayProps {
    * on their own (round 17 §2.2: over the held message's scrim, which already sets them apart).
    */
   paper?: boolean;
+  /**
+   * It opened under a finger still down (a held message): a sticker is chosen only by a press that began on it
+   * after the tray came, or by the keyboard — never by the lift of the hold (round 17 review D4).
+   */
+  freshPress?: boolean;
 }
 
 /**
@@ -37,10 +42,12 @@ export interface ReactionTrayProps {
  * pressed: choosing it again takes it back. A toolbar to the keyboard — one stop in the Tab order,
  * ← → (and Home / End) walking it, starting on the chosen one.
  */
-export const ReactionTray = forwardRef<HTMLDivElement, ReactionTrayProps>(function ReactionTray({ current, onPick, seed, paper = true }, ref) {
+export const ReactionTray = forwardRef<HTMLDivElement, ReactionTrayProps>(function ReactionTray({ current, onPick, seed, paper = true, freshPress = false }, ref) {
   const t = useTranslations('messages');
   const [focus, setFocus] = useState(() => Math.max(0, current ? REACTION_IDS.indexOf(current) : 0));
   const cells = useRef<(HTMLButtonElement | null)[]>([]);
+  // The sticker a press began on since the tray came (`freshPress`).
+  const pressed = useRef<number | null>(null);
   // The chosen one's wash: a wobbly disc inset 2 in its 44 cell.
   const disc = useMemo(() => wobCircle(22, 22, 20, seed + 3, { segments: 7, mag: 1.4, cpJitter: 0.5 }), [seed]);
 
@@ -88,7 +95,14 @@ export const ReactionTray = forwardRef<HTMLDivElement, ReactionTrayProps>(functi
             aria-pressed={chosen}
             tabIndex={i === focus ? 0 : -1}
             onFocus={() => setFocus(i)}
-            onClick={() => onPick(chosen ? null : id)}
+            onPointerDown={() => {
+              pressed.current = i;
+            }}
+            onClick={(e) => {
+              // The keyboard's click (Enter, Space) has no pointer behind it (`detail` 0).
+              if (freshPress && e.detail !== 0 && pressed.current !== i) return;
+              onPick(chosen ? null : id);
+            }}
           >
             {chosen && (
               <svg className={styles.trayWash} width={44} height={44} viewBox="0 0 44 44" aria-hidden="true">

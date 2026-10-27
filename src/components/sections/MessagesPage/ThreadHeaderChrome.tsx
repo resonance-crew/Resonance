@@ -72,8 +72,10 @@ export function ThreadHeaderChrome({ under }: { under: boolean }) {
 /**
  * The thread's body on the screen (round 17 §2.1): what holding a message dims
  * — from just under the header's pen line to the window's foot, the composer
- * with it; on two panes from the rule between the list and the thread (the
- * list, the rule and the header stay crisp), on a phone the window's width.
+ * with it; on two panes from the rule between the list and the thread, its
+ * leading edge following the rule's own pen line (review D2: no undimmed seam
+ * beside it, the line itself left crisp), the list, the rule and the header
+ * crisp; on a phone the window's width.
  */
 export interface ThreadBodyArea {
   /** The scrim's box on the screen. */
@@ -81,10 +83,49 @@ export interface ThreadBodyArea {
   top: number;
   width: number;
   height: number;
-  /** Its outline in its own box: its top edge follows the header's wave, just under the pen line. */
+  /** Its outline in its own box: its top edge follows the header's wave, just under the pen line; on two panes its
+   * leading edge the rule's pen line. */
   clip: string;
   /** Where the body starts under the wave's lowest point: the menu and the reactions keep below it. */
   bodyTop: number;
+}
+
+/** How far the scrim reaches under the rule's pen from its trailing edge (its anti-aliased rim), so no paper shows. */
+const RULE_TUCK = 0.4;
+/** One sample of the rule's line per this many px of its length on the screen. */
+const RULE_STEP = 6;
+
+/**
+ * The rule's pen line on the screen, top to bottom: points along its drawn path (the Divider's wave, through
+ * its viewBox and transform), or null where the browser can't say (no layout).
+ */
+export function rulePenLine(rule: HTMLElement): [number, number][] | null {
+  const path = rule.querySelector('path') as SVGPathElement | null;
+  if (!path || typeof path.getTotalLength !== 'function' || typeof path.getScreenCTM !== 'function') return null;
+  const m = path.getScreenCTM();
+  const len = path.getTotalLength();
+  if (!m || !(len > 0)) return null;
+  const n = Math.min(400, Math.max(8, Math.ceil((len * Math.hypot(m.c, m.d)) / RULE_STEP)));
+  const pts: [number, number][] = [];
+  for (let i = 0; i <= n; i++) {
+    const q = path.getPointAtLength((len * i) / n);
+    pts.push([m.a * q.x + m.c * q.y + m.e, m.b * q.x + m.d * q.y + m.f]);
+  }
+  pts.sort((a, b) => a[1] - b[1]);
+  return pts;
+}
+
+/** The line's x at `y`, between the samples either side (its ends held beyond them). */
+function xAt(line: [number, number][], y: number): number {
+  if (y <= line[0][1]) return line[0][0];
+  for (let i = 1; i < line.length; i++) {
+    const [x1, y1] = line[i];
+    if (y <= y1) {
+      const [x0, y0] = line[i - 1];
+      return y1 === y0 ? x1 : x0 + ((x1 - x0) * (y - y0)) / (y1 - y0);
+    }
+  }
+  return line[line.length - 1][0];
 }
 
 /**
@@ -97,7 +138,15 @@ export function threadBodyArea(header: HTMLElement, rule: HTMLElement | null, wi
   const chromeEl = header.querySelector<HTMLElement>(`.${pageStyles.threadChrome}`);
   const chrome = chromeEl?.getBoundingClientRect() ?? head;
   const ruleBox = rule?.getBoundingClientRect();
-  const left = ruleBox && ruleBox.width > 0 ? ruleBox.right : 0;
+  const twoPanes = !!rule && !!ruleBox && ruleBox.width > 0;
+  // The rule's pen, its trailing rim: where the scrim starts on two panes (the line's own wave, else its middle).
+  const pen = twoPanes ? rulePenLine(rule!) : null;
+  const rim = (x: number) => x + INK / 2 - RULE_TUCK;
+  const left = !twoPanes
+    ? 0
+    : pen
+      ? Math.floor(Math.min(...pen.map(([x]) => rim(x))))
+      : rim(ruleBox!.left + ruleBox!.width / 2);
   // The box starts above the wave's highest crest; its outline starts on the pen line's lower edge.
   const top = head.top + LINE_Y - WAVE_AMP - INK;
   const width = Math.max(0, winW - left);
@@ -106,7 +155,22 @@ export function threadBodyArea(header: HTMLElement, rule: HTMLElement | null, wi
   const pts = headerWave(chrome.width).map(([x, y]): [number, number] => [f(x + chrome.left - left), f(y + head.top - top + INK / 2)]);
   const first = pts[0];
   const last = pts[pts.length - 1];
-  const edge: [number, number][] = [[Math.min(first[0], 0) - 2, first[1]], ...pts, [Math.max(last[0], width) + 2, last[1]]];
-  const clip = `${pointsToBezier(edge)} L ${f(Math.max(last[0], width) + 2)},${f(height + 2)} L ${f(Math.min(first[0], 0) - 2)},${f(height + 2)} Z`;
-  return { left, top, width, height, clip, bodyTop: head.top + LINE_Y + WAVE_AMP + INK };
+  const right = Math.max(last[0], width) + 2;
+  const bottom = height + 2;
+  if (!pen) {
+    const edge: [number, number][] = [[Math.min(first[0], 0) - 2, first[1]], ...pts, [right, last[1]]];
+    const clip = `${pointsToBezier(edge)} L ${f(right)},${f(bottom)} L ${f(Math.min(first[0], 0) - 2)},${f(bottom)} Z`;
+    return { left, top, width, height, clip, bodyTop: head.top + LINE_Y + WAVE_AMP + INK };
+  }
+  // Two panes: the top edge from the rule's line along the header's wave, down the window's end, along its foot back
+  // to the line, and up the line's trailing rim to where it began.
+  const line = pen.map(([x, y]): [number, number] => [rim(x) - left, y - top]);
+  const startX = xAt(line, first[1]);
+  const edge: [number, number][] = [[startX, first[1]], ...pts.filter(([x]) => x > startX + 1), [right, last[1]]];
+  let clip = `${pointsToBezier(edge)} L ${f(right)},${f(bottom)} L ${f(xAt(line, bottom))},${f(bottom)}`;
+  for (let i = line.length - 1; i >= 0; i--) {
+    const [x, y] = line[i];
+    if (y > first[1] && y < bottom) clip += ` L ${f(x)},${f(y)}`;
+  }
+  return { left, top, width, height, clip: `${clip} Z`, bodyTop: head.top + LINE_Y + WAVE_AMP + INK };
 }

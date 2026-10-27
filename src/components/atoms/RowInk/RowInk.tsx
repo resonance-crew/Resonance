@@ -2,15 +2,25 @@
 
 import { useState, type MouseEvent, type RefObject } from 'react';
 import { BrushWash } from '@/components/atoms/BrushWash/BrushWash';
-import { rowRegion } from '@/lib/design/rowMenu';
 import styles from './RowInk.module.css';
 
-// The wash under a dropdown's active row. Every organic dropdown (the avatar
-// menu, the card「⋯」menu, `<Select>`) washes its row the way OrganicButton
-// does on hover: an ink circle that spreads from where the pointer landed out
-// to the panel's far corner, clipped to the row's wavy region. The native apps
-// do the same on press. `useRowInk` holds the state, `<RowInkWash>` draws it
-// inside the panel's clipped SVG group.
+// The wash under a dropdown's active row. Every menu sheet (OrganicMenu, the
+// avatar menu, `<Select>`) washes its row the way OrganicButton does on hover:
+// ink that spreads from where the pointer landed (a finger pressed, or the
+// keyboard's row's centre), clipped to the row's band within the sheet's
+// wobble. The native apps do the same on press. `useRowInk` holds the state,
+// `<RowBrushes>` draws it over the sheet's paper.
+
+/**
+ * A menu row's ink under the pointer, a finger or the keyboard — the one strength every sheet uses (OrganicMenu,
+ * the avatar menu, `Select`): the menu's deep pen at 15 %, or the danger hue for a row that ends or removes
+ * something (round 17 review D1).
+ */
+export function menuRowWash(danger = false): string {
+  return danger
+    ? 'color-mix(in oklch, var(--color-danger) 15%, transparent)'
+    : 'color-mix(in oklch, var(--menu-border-hover, var(--terracotta-deep)) 15%, transparent)';
+}
 
 export interface RowInkRow {
   top: number;
@@ -120,59 +130,6 @@ export function useRowInk({ panelRef, rows, w, h, activeIndex = null }: UseRowIn
   return { index, cx: origin.x, cy: origin.y, maxR, rowProps };
 }
 
-export interface RowInkWashProps {
-  /** Unique per panel (the `useId` the menu already keeps), to namespace mask ids. */
-  uid: string;
-  ink: RowInk;
-  /** The wavy dividers between rows, exactly as the panel draws them. */
-  boundaries: [number, number][][];
-  w: number;
-  h: number;
-  pad: number;
-  /** The ink colour of each row; its length is the row count. */
-  fills: string[];
-}
-
-/**
- * One masked wash per row: each row's region is revealed through its own
- * circle, which is 0 until the row is inked. Render it inside the panel's
- * clipped group, after the card fill (and any resting wash, e.g. a
- * destructive row's warning yellow) so the ink lands on top.
- */
-export function RowInkWash({ uid, ink, boundaries, w, h, pad, fills }: RowInkWashProps) {
-  return (
-    <>
-      <defs>
-        {fills.map((_, i) => (
-          <mask
-            key={i}
-            id={`rowink-${uid}-${i}`}
-            maskUnits="userSpaceOnUse"
-            x={-w}
-            y={-h}
-            width={w * 3}
-            height={h * 3}
-          >
-            <circle
-              className={styles.circle}
-              cx={ink.cx}
-              cy={ink.cy}
-              r={ink.index === i ? ink.maxR : 0}
-              // colour-fixed: a mask's luminance, not a colour anyone sees
-              fill="white"
-            />
-          </mask>
-        ))}
-      </defs>
-      {fills.map((fill, i) => (
-        <g key={i} mask={`url(#rowink-${uid}-${i})`}>
-          <path d={rowRegion(i, fills.length, boundaries, w, h, pad)} fill={fill} />
-        </g>
-      ))}
-    </>
-  );
-}
-
 export interface RowBrushesProps {
   w: number;
   h: number;
@@ -181,10 +138,8 @@ export interface RowBrushesProps {
   /** Each row's band within the sheet (`rowRegion`): the ink of a row stays in it. */
   bands: string[];
   ink: RowInk;
-  /** Each row's ink, as long as `bands` ('transparent' for a band that takes none). */
+  /** Each row's ink, as long as `bands` ('transparent' for a band that takes none). No row rests on a wash. */
   fills: string[];
-  /** A row's resting wash under any ink (a destructive row's warning), else null. */
-  rests?: (string | null)[];
   /** How long a full spread takes. */
   duration?: number;
 }
@@ -197,17 +152,10 @@ export interface RowBrushesProps {
  * wobble, so the ink fills the curved region and never a rectangle. Drawn
  * over the sheet's paper and grain, under the rows.
  */
-export function RowBrushes({ w, h, outline, bands, ink, fills, rests, duration = 340 }: RowBrushesProps) {
+export function RowBrushes({ w, h, outline, bands, ink, fills, duration = 340 }: RowBrushesProps) {
   if (!w || !h || !outline) return null;
   return (
     <div aria-hidden="true" data-row-brushes="" className={styles.sheetInk} style={{ width: w, height: h, clipPath: `path('${outline}')` }}>
-      {rests?.map((fill, i) =>
-        fill ? (
-          <svg key={`rest-${i}`} data-rest={i} className={styles.rest} width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
-            <path d={bands[i]} fill={fill} />
-          </svg>
-        ) : null,
-      )}
       {bands.map((d, i) =>
         fills[i] === 'transparent' ? null : (
           <RowBrush key={i} w={w} h={h} d={d} color={fills[i]} on={ink.index === i} x={ink.cx} y={ink.cy} duration={duration} />

@@ -199,7 +199,7 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose, areaOf }: 
       </div>
       {trayShown && (
         <div className={styles.overlayTray} style={trayStyle}>
-          <ReactionTray ref={trayRef} current={current} onPick={pick} seed={seedFromId(message.key, 31)} paper={false} />
+          <ReactionTray ref={trayRef} current={current} onPick={pick} seed={seedFromId(message.key, 31)} paper={false} freshPress />
         </div>
       )}
       {items.length > 0 && (
@@ -208,7 +208,10 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose, areaOf }: 
             items={items}
             seed={seedFromId(message.key, 23)}
             footer={fullTime}
-          wide
+            wide
+            // The finger that held the message lifts over whatever row glided under it: that is no choice
+            // (round 17 review D4) — a row answers only a press of its own, as the scrim does.
+            freshPress
             origin={`top ${side}`}
             onChoose={(key) => {
               // Done in the tap itself — a copy, a page opened, the field focused for a reply (iOS raises the

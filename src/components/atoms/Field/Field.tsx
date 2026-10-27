@@ -19,11 +19,10 @@ import {
 } from 'react';
 import { HandDrawnDashedSurface } from '@/components/atoms/HandDrawnDashedBorder/HandDrawnDashedBorder';
 import { Icon } from '@/components/atoms/Icon';
-import { RowInkWash, useRowInk } from '@/components/atoms/RowInk/RowInk';
-import { wobRect } from '@/lib/design/wobRect';
-import { dividerPath, rowBoundary } from '@/lib/design/rowMenu';
-import { autoCurve, autoMag, autoSegments } from '@/lib/design/wobAuto';
-import { INK, INK_LIGHT, INK_STRONG } from '@/lib/design/strokes';
+import { RowBrushes, menuRowWash, useRowInk } from '@/components/atoms/RowInk/RowInk';
+import { PaperSheet, sheetPath } from '@/components/atoms/PaperSheet/PaperSheet';
+import { rowBoundary, rowRegion } from '@/lib/design/rowMenu';
+import { INK, INK_STRONG } from '@/lib/design/strokes';
 import styles from './Field.module.css';
 
 /**
@@ -242,19 +241,21 @@ export interface SelectProps {
   /**
    * Strip the closed trigger down to a plain icon button: no hand-drawn frame,
    * no chevron — reads like any other icon control in a header (e.g. the mobile
-   * language picker sitting beside the hamburger). The open panel still draws
-   * its own border. Pair with `renderValue` returning a single icon.
+   * language picker sitting beside the hamburger). The open list is the same
+   * sheet. Pair with `renderValue` returning a single icon.
    */
   bare?: boolean;
 }
 
 /**
- * Organic dropdown. Closed, it's the same wobbly hand-drawn box as `<Input>`.
- * Clicking it expands a large curved card that **covers the box** and lists the
- * options — a fully closed wobbly border (so the left/right edges always meet),
- * a wavy hand-drawn divider between each option (N options → N−1 dividers) that
- * reaches both edges, and the active option washed in along the curved divider
- * regions. Pass `<option>`s as children; `onChange` receives the value.
+ * Organic dropdown. Closed, it's the same wobbly hand-drawn box as `<Input>`
+ * (a form field keeps its outline). Clicking it lays the one menu sheet over
+ * the box (round 17 review D6 — every menu's: paper and grain, no pen, no
+ * dividers, the soft shadow that follows its wobble, rows 44 with their
+ * content 20 in, the spreading ink clipped to each row's band), listing the
+ * options, the chosen one's words in terracotta with a ✓ at its end. A
+ * pointer's opening inks no row; the keyboard's starts on the chosen one.
+ * Pass `<option>`s as children; `onChange` receives the value.
  */
 export function Select({
   value,
@@ -282,6 +283,9 @@ export function Select({
   const [openUp, setOpenUp] = useState(false);
   const [hover, setHover] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  // Whether the keyboard is the one walking the rows (its row wears the ink): it opened the list, or a key moved
+  // since the pointer last did. A pointer's opening inks nothing until a row is under it (the one sheet's rule).
+  const [byKeys, setByKeys] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const uid = useId().replace(/:/g, '');
@@ -289,14 +293,15 @@ export function Select({
   const selectedIndex = options.findIndex((o) => o.value === value);
   const selectedLabel = selectedIndex >= 0 ? options[selectedIndex].label : '';
 
-  function openPanel() {
+  function openPanel(fromKeys: boolean) {
     if (disabled) return;
     setActiveIndex(selectedIndex >= 0 ? selectedIndex : 0);
+    setByKeys(fromKeys);
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
       const spaceAbove = rect.top;
-      const estimatedHeight = options.length * 54 + 20;
+      const estimatedHeight = selectSheetHeight(options.length);
       if (spaceBelow < estimatedHeight && spaceAbove > spaceBelow) {
         setOpenUp(true);
       } else {
@@ -325,18 +330,24 @@ export function Select({
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        if (!open) openPanel();
-        else setActiveIndex((i) => Math.min(options.length - 1, i + 1));
+        if (!open) openPanel(true);
+        else {
+          setByKeys(true);
+          setActiveIndex((i) => Math.min(options.length - 1, i + 1));
+        }
         break;
       case 'ArrowUp':
         e.preventDefault();
-        if (!open) openPanel();
-        else setActiveIndex((i) => Math.max(0, i - 1));
+        if (!open) openPanel(true);
+        else {
+          setByKeys(true);
+          setActiveIndex((i) => Math.max(0, i - 1));
+        }
         break;
       case 'Enter':
       case ' ':
         e.preventDefault();
-        if (!open) openPanel();
+        if (!open) openPanel(true);
         else if (options[activeIndex]) choose(options[activeIndex].value);
         break;
       case 'Escape':
@@ -365,7 +376,8 @@ export function Select({
       aria-controls={`${uid}-listbox`}
       aria-label={ariaLabel}
       aria-activedescendant={open ? `${uid}-opt-${activeIndex}` : undefined}
-      onClick={() => (open ? setOpen(false) : openPanel())}
+      // Enter and Space open it in onKeyDown; a click with no pointer behind it (`detail` 0) is the keyboard's too.
+      onClick={(e) => (open ? setOpen(false) : openPanel(e.detail === 0))}
       onKeyDown={onKeyDown}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -400,8 +412,8 @@ export function Select({
           minSegmentsH={4}
           curve={1.15}
           state={open ? 'focus' : hover ? 'hover' : 'idle'}
-          // When open, the covering panel draws its own border — hide this one so
-          // the two wobbly outlines don't stack on top of each other.
+          // When open, the sheet lies over the box — its pen line goes with it,
+          // so none peeks out past the sheet's wobble.
           strokeColor={open ? 'transparent' : undefined}
           className={styles.surface}
         >
@@ -415,8 +427,11 @@ export function Select({
           uid={uid}
           options={options}
           value={value}
-          activeIndex={activeIndex}
-          onActivate={setActiveIndex}
+          activeIndex={byKeys ? activeIndex : null}
+          onActivate={(i) => {
+            setByKeys(false);
+            setActiveIndex(i);
+          }}
           onChoose={choose}
           openUp={openUp}
           menuMinWidth={menuMinWidth}
@@ -426,12 +441,25 @@ export function Select({
   );
 }
 
+/** The sheet's rows (round 17 §1: 44 everywhere), the paper over the first and under the last, its corners. */
+const SELECT_ROW_H = 44;
+const SELECT_SHEET_PAD = 6;
+const SELECT_SHEET_R = 20;
+/** How far a row's band (the ink's) may lean off its line — the bands keep the hand's waver with no line drawn. */
+const SELECT_BAND_WAVER = 2;
+
+/** The open list's height for `n` options. */
+export function selectSheetHeight(n: number): number {
+  return SELECT_SHEET_PAD * 2 + n * SELECT_ROW_H;
+}
+
 interface DropdownPanelProps {
   seed: number;
   uid: string;
   options: SelectOption[];
   value: string;
-  activeIndex: number;
+  /** The keyboard's row (it wears the ink), or null while the pointer leads. */
+  activeIndex: number | null;
   onActivate: (i: number) => void;
   onChoose: (value: string) => void;
   openUp?: boolean;
@@ -439,12 +467,12 @@ interface DropdownPanelProps {
 }
 
 /**
- * The expanded panel. It **covers the closed box** (anchored at `top: 0`) and
- * reads as a self-contained card: a full closed wobbly border (no open top, so
- * left/right edges always meet), an opaque cream fill, the N options listed
- * inside separated by wavy hand-drawn dividers that reach both edges, and the
- * active option washed by a spreading ink along the *curved* divider regions
- * (not a rectangle).
+ * The open list: the one menu sheet (atoms/PaperSheet — the menus' paper and
+ * grain, no pen, its shadow following the wobble) laid **over the closed
+ * box** (anchored at its top, or its foot when it opens upward), the options
+ * in 44 rows with no lines between them, the inked row's wash spreading from
+ * where the pointer came in (or the keyboard's row's centre), cut to its band
+ * inside the sheet's wobble (RowBrushes) — the dropdown menus' ink, never a box.
  */
 function DropdownPanel({
   seed,
@@ -458,73 +486,45 @@ function DropdownPanel({
   menuMinWidth,
 }: DropdownPanelProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const optRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const [{ w, h }, setDims] = useState({ w: 0, h: 0 });
-  // offsetTop + height of each option row, used to place the wavy boundaries.
-  const [rows, setRows] = useState<{ top: number; height: number }[]>([]);
-
-  const recompute = useCallback(() => {
-    const el = ref.current;
-    if (!el) return;
-    const pr = el.getBoundingClientRect();
-    setDims({ w: el.offsetWidth, h: el.offsetHeight });
-    // Row offsets relative to the panel (the list is a positioned offsetParent,
-    // so plain offsetTop would be relative to the list, not the panel).
-    setRows(
-      optRefs.current.map((o) => {
-        if (!o) return { top: 0, height: 0 };
-        const r = o.getBoundingClientRect();
-        return { top: r.top - pr.top, height: r.height };
-      }),
-    );
-  }, []);
+  const n = options.length;
+  const h = selectSheetHeight(n);
+  const [w, setW] = useState(0);
 
   useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const recompute = () => setW(el.offsetWidth);
     recompute();
     const ro = new ResizeObserver(recompute);
-    if (ref.current) ro.observe(ref.current);
-    optRefs.current.forEach((o) => o && ro.observe(o));
+    ro.observe(el);
     return () => ro.disconnect();
-  }, [recompute, options.length]);
+  }, []);
 
-  const pad = h > 0 ? Math.max(10, h * 0.04) : 0;
-
-  const outerPath = useMemo(() => {
-    if (!w || !h) return '';
-    return wobRect(w, h, 16, seed + 100, autoMag(w, h), {
-      segmentsH: autoSegments(w),
-      segmentsV: autoSegments(h),
-      curve: autoCurve(w, h),
-    });
-  }, [w, h, seed]);
-
-  // One wavy boundary between each adjacent pair of rows.
-  const boundaries = useMemo<[number, number][][]>(() => {
-    if (!w || rows.length !== options.length) return [];
-    return rows.slice(1).map((r, i) => {
-      const prev = rows[i];
-      const y = (prev.top + prev.height + r.top) / 2;
-      return rowBoundary(y, w, seed + i * 31 + 7, 3, pad);
-    });
-  }, [w, rows, options.length, seed, pad]);
-
-  const ready = w > 0 && h > 0 && boundaries.length === options.length - 1;
-
-  // The pointer inks the row it is on; otherwise the keyboard's active row
-  // keeps it (hovering sets the active row too, so it also stays where the
-  // pointer last was). The selected option's own styling is separate.
-  const ink = useRowInk({ panelRef: ref, rows, w, h, activeIndex });
-  const washes = useMemo(
-    () =>
-      options.map(() => 'color-mix(in oklch, var(--color-terracotta) 15%, var(--menu-paper))'),
+  const rows = useMemo(
+    () => options.map((_, i) => ({ top: SELECT_SHEET_PAD + i * SELECT_ROW_H, height: SELECT_ROW_H })),
     [options],
   );
+  const pad = Math.max(10, h * 0.04);
+  const outline = useMemo(() => sheetPath(w, h, SELECT_SHEET_R, seed + 100), [w, h, seed]);
+  // Where one row's band meets the next's: no line is drawn there, but the ink keeps to its band.
+  const regions = useMemo(() => {
+    if (!w) return [];
+    const boundaries = rows
+      .slice(1)
+      .map((r, i) => rowBoundary(r.top, w, seed + i * 31 + 7, SELECT_BAND_WAVER, pad));
+    return rows.map((_, i) => rowRegion(i, n, boundaries, w, h, pad));
+  }, [w, h, n, rows, seed, pad]);
+
+  const ink = useRowInk({ panelRef: ref, rows, w, h, activeIndex });
+  // The menus' one ink (no `--menu-*` here: the menu's deep pen is the theme's).
+  const washes = useMemo(() => options.map(() => menuRowWash()), [options]);
 
   return (
     <div
       ref={ref}
       className={styles.dropdownPanel}
       style={{
+        height: `${h}px`,
         ...(openUp ? { top: 'auto', bottom: 0 } : null),
         // Right-anchor and grow to fit the labels when the closed trigger is
         // narrower than the menu needs to be (e.g. an icon-only trigger).
@@ -533,72 +533,19 @@ function DropdownPanel({
           : null),
       }}
     >
-      {w > 0 && h > 0 && (
-        <svg
-          className={`${styles.dropdownBorder} res-shape-fade-in`}
-          width={w}
-          height={h}
-          viewBox={`0 0 ${w} ${h}`}
-          aria-hidden
-        >
-          <defs>
-            <clipPath id={`sel-clip-${uid}`}>
-              <path d={outerPath} />
-            </clipPath>
-          </defs>
-          <g clipPath={`url(#sel-clip-${uid})`}>
-            {/* opaque fill: the menus' paper (raised at night) */}
-            <path d={outerPath} fill="var(--menu-paper)" />
-            {/* active row ink, clipped to the curved region */}
-            {ready && (
-              <RowInkWash
-                uid={`sel-${uid}`}
-                ink={ink}
-                boundaries={boundaries}
-                w={w}
-                h={h}
-                pad={pad}
-                fills={washes}
-              />
-            )}
-          </g>
-          {/* wavy dividers — drawn past the edges, clipped flush to the border */}
-          {ready &&
-            boundaries.map((pts, i) => (
-              <path
-                key={i}
-                d={dividerPath(pts)}
-                fill="none"
-                stroke="color-mix(in oklch, var(--field-border-hover) 45%, transparent)"
-                strokeWidth={INK_LIGHT}
-                strokeLinecap="round"
-                clipPath={`url(#sel-clip-${uid})`}
-              />
-            ))}
-          {/* outer stroke: the menus' frame (the accent, quieter at night) */}
-          <path
-            d={outerPath}
-            fill="none"
-            stroke="var(--menu-frame)"
-            strokeWidth={INK}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      )}
+      {w > 0 && <PaperSheet w={w} h={h} R={SELECT_SHEET_R} seed={seed + 100} />}
+      {regions.length === n && <RowBrushes w={w} h={h} outline={outline} bands={regions} ink={ink} fills={washes} />}
       <div id={`${uid}-listbox`} className={styles.dropdownList} role="listbox" aria-label="options">
         {options.map((opt, i) => (
           <button
             key={opt.value}
-            ref={(el) => {
-              optRefs.current[i] = el;
-            }}
             type="button"
             role="option"
             id={`${uid}-opt-${i}`}
             aria-selected={opt.value === value}
             className={styles.dropdownOption}
             data-selected={opt.value === value || undefined}
+            data-active={ink.index === i || undefined}
             onClick={() => onChoose(opt.value)}
             {...ink.rowProps(i, () => onActivate(i))}
           >

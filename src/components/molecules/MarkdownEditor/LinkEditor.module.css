@@ -25,8 +25,13 @@
   flex-direction: column;
 }
 
-/* The field is a story field's: 16 (iOS Safari doesn't zoom into it). */
+/* The field is a story field's: 16 (iOS Safari doesn't zoom into it). One height with the choice and the
+   buttons, 44 (round 17 review W10): its line centred in it. */
 .field input {
+  box-sizing: border-box;
+  height: 44px;
+  padding-top: 0;
+  padding-bottom: 0;
   font-size: 16px;
 }
 
@@ -61,6 +66,9 @@
 
 .choice > * > button {
   flex: 1;
+  box-sizing: border-box;
+  height: 44px;
+  padding-block: 0;
 }
 
 .actions {
@@ -74,9 +82,7 @@
   flex: 1;
 }
 
-/* A finger needs 44px to land on (the small pills are about 38px). */
-@media (pointer: coarse) {
-  .actions > button {
-    min-height: 44px;
-  }
+/* The foot's buttons are the field's and the choice's height, 44, at every pointer (a finger's target too). */
+.actions > button {
+  min-height: 44px;
 }

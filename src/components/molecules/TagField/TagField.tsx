@@ -10,7 +10,6 @@ import {
   type ChangeEvent,
   type CSSProperties,
   type KeyboardEvent,
-  type MouseEvent,
   type PointerEvent,
 } from 'react';
 import { useTranslations } from 'next-intl';
@@ -116,7 +115,10 @@ export function TagField({ tags, onChange, onSuggest, suggesting, error, id }: T
   const shape = useMemo(() => (segmentW ? segmentCapsuleShape(w, h, segmentW, SEED) : null), [w, h, segmentW]);
   const clipId = `tag-field-clip-${useId().replace(/:/g, '')}`;
   const [hover, setHover] = useState({ x: 0, y: 0, on: false });
-  const brush = (e: MouseEvent<HTMLButtonElement>, on: boolean) => {
+  // The segment's hover brush, for a mouse alone (round 17 review W9): a tap's compatibility mouseenter came with no
+  // mouseleave, and after 新增 the segment kept the brush, a shade darker than the pills, until the next tap.
+  const brush = (e: PointerEvent<HTMLButtonElement>, on: boolean) => {
+    if (e.pointerType !== 'mouse') return;
     const r = capsuleRef.current?.getBoundingClientRect();
     if (r) setHover({ x: e.clientX - r.left, y: e.clientY - r.top, on });
   };
@@ -337,8 +339,8 @@ export function TagField({ tags, onChange, onSuggest, suggesting, error, id }: T
           aria-busy={busy || undefined}
           onPointerDown={onSegmentDown}
           onClick={onSegment}
-          onMouseEnter={(e) => brush(e, true)}
-          onMouseLeave={(e) => brush(e, false)}
+          onPointerEnter={(e) => brush(e, true)}
+          onPointerLeave={(e) => brush(e, false)}
         >
           {/* Both faces in one cell: the wider sets the segment's width, so the seam never moves. */}
           <span className={styles.face} data-face="suggest" aria-hidden="true">

@@ -30,10 +30,15 @@ import styles from './OrganicButton.module.css';
  *  - `dangerTonal` the peach's red twin: a button that opens a destructive
  *                  flow (Settings' Delete account), whose dialog then asks
  *                  with `danger`
- *  - `dangerText`  the one face without a fill (round 9 §5): the trash's 清空,
+ *  - `dangerText`  a face without a fill (round 9 §5): the trash's 清空,
  *                  a word in the danger ink at the end of the shelf's hint
  *                  line, where a filled shape under the shelf picker would read
  *                  as a field — its wash, in the danger ink, says it presses
+ *  - `quiet`       the other face without a fill (round 17 review D5): a
+ *                  dialog's quiet way at the start of its foot that undoes
+ *                  something small (the link editor's 移除連結) — its words in
+ *                  the muted ink, its wash a whisper of ink; not a danger, so
+ *                  never red
  *  - `ink`         solid in the ink colour, cream label: for a brand that asks
  *                  for a black button (Sign in with Apple)
  *  - `paper`       the cards' paper, ink label: for a control that has to
@@ -53,7 +58,7 @@ import styles from './OrganicButton.module.css';
  */
 export type OrganicButtonVariant =
   | 'primary' | 'secondary' | 'ghost' | 'outline' | 'ctaLight' | 'ctaGhost' | 'secondaryOutline'
-  | 'solid' | 'tonal' | 'danger' | 'dangerTonal' | 'dangerText' | 'ink' | 'text' | 'textAccent' | 'paper';
+  | 'solid' | 'tonal' | 'danger' | 'dangerTonal' | 'dangerText' | 'quiet' | 'ink' | 'text' | 'textAccent' | 'paper';
 
 // The red every error line and danger row uses, deepened like the terracotta
 // fill so its cream label clears 4.5:1 (5.1:1) — the palette's --danger-fill
@@ -101,6 +106,13 @@ const BTN_VARIANTS: Record<OrganicButtonVariant, Face> = {
     hoverOverlay: 'color-mix(in oklch, var(--color-danger) 12%, transparent)',
     bare: true,
   },
+  // The muted ink on the dialog's paper (5:1), its wash the ink at a whisper.
+  quiet: {
+    fill: 'transparent',
+    text: 'var(--color-text-muted)',
+    hoverOverlay: 'color-mix(in oklch, var(--toward-ink) 8%, transparent)',
+    bare: true,
+  },
   // Sign in with Apple: Apple's black button on light paper, its white one (pure white, black words) on dark.
   ink:        { fill: 'var(--apple-fill)', text: 'var(--apple-label)', hoverOverlay: DARKEN },
   paper:      { fill: 'var(--color-card-bg)', text: 'var(--color-text)', hoverOverlay: WASH },
@@ -111,7 +123,7 @@ const BTN_VARIANTS: Record<OrganicButtonVariant, Face> = {
 // renamed call site wobbles exactly as before — and like its native twin.
 const BTN_SEEDS: Record<OrganicButtonVariant, number> = {
   primary: 3, secondary: 201, ghost: 401, outline: 601, ctaLight: 801, ctaGhost: 1001, secondaryOutline: 1201,
-  solid: 3, tonal: 601, danger: 3, dangerTonal: 601, dangerText: 401, ink: 3, text: 401, textAccent: 601, paper: 401,
+  solid: 3, tonal: 601, danger: 3, dangerTonal: 601, dangerText: 401, quiet: 401, ink: 3, text: 401, textAccent: 601, paper: 401,
 };
 
 // Buttons are small — keep the wobble gentle (few turns, low bow) so the

@@ -78,9 +78,9 @@ type ActionKey = 'edit' | 'publish' | 'visibility' | 'unresonate' | 'delete';
  * The owner-side「⋯」menu on a card: 編輯 (公開發表 on a 私人卡's own page,
  * where its pen is 編輯) / 轉為私人卡 (a card readers have)
  * / 取消共振 (a card that resonates with another) / 刪除. The trigger and
- * dropped panel come from {@link OrganicMenu} (the shared organic dropdown
- * language — wobbly chip, wavy pen dividers, per-row wash, danger wash on the
- * delete row); this component owns only the card business logic. Changes go
+ * dropped panel come from {@link OrganicMenu} (the one menu sheet — paper
+ * and grain, no pen, no dividers, per-row ink, 刪除 in the danger ink); this
+ * component owns only the card business logic. Changes go
  * through the server (PATCH /api/v1/cards/{id}, POST …/trash), which also
  * drops the cached pages that showed the card as it was and keeps the
  * recommender's copy in step; then the viewer's card box and profile lists

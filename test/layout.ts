@@ -84,26 +84,6 @@ export function stubRowLayout({
 }
 
 /**
- * The spreading ink of an open panel, one entry per row in order: the mask
- * circle's radius (0 = no ink) and its centre. Read from the DOM because the
- * panel's SVG is decorative (`aria-hidden`) and has no accessible surface.
- */
-export function inkCircles(root: ParentNode = document) {
-  return Array.from(root.querySelectorAll<SVGCircleElement>('mask[id^="rowink-"] circle')).map((c) => ({
-    r: Number(c.getAttribute('r')),
-    cx: Number(c.getAttribute('cx')),
-    cy: Number(c.getAttribute('cy')),
-  }));
-}
-
-/** The fill of each row's ink wash (what the circle reveals), in row order. */
-export function inkFills(root: ParentNode = document) {
-  return Array.from(root.querySelectorAll<SVGGElement>('g[mask^="url(#rowink-"]')).map(
-    (g) => g.querySelector('path')?.getAttribute('fill') ?? '',
-  );
-}
-
-/**
  * The row ink of an open menu sheet (RowBrushes, round 17 §1), one entry per
  * row that takes ink, in order: whether its brush is spread (`on`), the spot
  * it spreads (or withdrew) from, its colour, and the band it is cut to.

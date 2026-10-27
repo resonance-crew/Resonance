@@ -1,15 +1,3 @@
-/* The spread of the row ink: the same 340ms linear brush OrganicButton uses on
-   hover. It lives here rather than inline so the reduced-motion query can turn
-   it off — the wash then simply appears on the row. */
-.circle {
-  transition: r 340ms linear;
-}
-@media (prefers-reduced-motion: reduce) {
-  .circle {
-    transition: none;
-  }
-}
-
 /* A paper sheet's row ink (RowBrushes): one layer the sheet's size, cut to its wobble; each row's brush inside it. */
 .sheetInk {
   position: absolute;
@@ -19,14 +7,7 @@
   pointer-events: none;
 }
 
-.rest {
-  position: absolute;
-  top: 0;
-  left: 0;
-  overflow: visible;
-}
-
-/* Reduced motion: a row's wash simply appears, as the mask circle's did. */
+/* Reduced motion: a row's wash simply appears. */
 @media (prefers-reduced-motion: reduce) {
   .sheetInk [data-brush-wash] > div {
     transition: none;

@@ -295,3 +295,56 @@ describe('Modal', () => {
     expect(screen.getByRole('dialog').style.maxWidth).toBe('min(400px, calc(100vw - 32px))');
   });
 });
+
+// Round 17 review W10: a dialog that belongs to part of the page (the link editor in the writer's pane at the desktop
+// split) centres over it, not across the map beside it — moved in as far as it must to stay in the window; over a
+// part as wide as the window (the whole width, or below the split) it centres over the window as ever.
+describe('Modal centred over part of the page', () => {
+  const innerWidth = window.innerWidth;
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: innerWidth });
+  });
+
+  const host = (left: number, width: number) => {
+    const el = document.createElement('section');
+    el.getBoundingClientRect = () => ({ left, right: left + width, width, top: 0, bottom: 900, height: 900, x: left, y: 0, toJSON: () => ({}) }) as DOMRect;
+    return el;
+  };
+
+  it('centres over the pane at the split, and over the window where the pane is the window', () => {
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(400);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(300);
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
+    const pane = host(720, 720);
+    const { rerender } = render(
+      <Modal open ariaLabel="Insert link" centerOver={() => pane}>
+        <p>Body</p>
+      </Modal>,
+    );
+    // A content box the dialog's width (+2), its middle the pane's (1080).
+    expect(backdrop().style.paddingLeft).toBe(`${1080 - 201}px`);
+    expect(backdrop().style.paddingRight).toBe(`${1440 - 1080 - 201}px`);
+
+    // A pane narrower than the dialog by the window's end: moved in to keep 16 from the edge.
+    const narrow = host(1100, 340);
+    rerender(
+      <Modal open ariaLabel="Insert link" centerOver={() => narrow}>
+        <p>Body</p>
+      </Modal>,
+    );
+    fireEvent(window, new Event('resize'));
+    expect(backdrop().style.paddingRight).toBe('16px');
+
+    // The pane as wide as the window: no side padding of its own.
+    const whole = host(0, 1440);
+    rerender(
+      <Modal open ariaLabel="Insert link" centerOver={() => whole}>
+        <p>Body</p>
+      </Modal>,
+    );
+    fireEvent(window, new Event('resize'));
+    expect(backdrop().style.paddingLeft).toBe('');
+    expect(backdrop().style.paddingRight).toBe('');
+  });
+});

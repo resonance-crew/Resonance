@@ -85,8 +85,8 @@ textarea.field.autoGrow {
 }
 
 /* ── Organic dropdown (Select) ──────────────────────────────────────
-   Closed box reuses .surface; clicking expands .dropdownPanel directly
-   beneath, drawn with an open-top wobbly border (no top edge). */
+   Closed box reuses .surface (a form field: its outline); clicking lays the
+   one menu sheet (.dropdownPanel) over it. */
 .dropdownRoot {
   position: relative;
 }
@@ -141,57 +141,75 @@ textarea.field.autoGrow {
   transform: rotate(180deg);
 }
 
-/* The panel *covers* the closed box (anchored at top:0) and reads as its own
-   card — full wobbly border, opaque fill. Sits above following fields. */
+/* The open list: the one menu sheet (round 17 review D6) laid over the closed
+   box (anchored at its top), above the fields after it. No CSS background or
+   radius: PaperSheet draws the paper, its grain and its shadow to the
+   wobble's own outline. As tall as its rows (DropdownPanel sets it). */
 .dropdownPanel {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   z-index: 40;
-  /* No CSS background or border-radius here: the SVG below paints an opaque
-     cream fill clipped to the *exact* wobbly border path. A CSS rounded-rect
-     background would poke out past the organic stroke wherever the wobble
-     curves inward, so the border looked detached from the panel edge. Letting
-     the SVG own the fill keeps edge + fill perfectly aligned. */
+  min-width: 168px;
   background: transparent;
-  /* No vertical padding: the first/last rows then match the interior rows
-     exactly (each row's own padding is the only spacing), so every option
-     reads as evenly centred rather than the ends having extra whitespace. */
   padding: 0;
+  animation: dropdownIn 180ms cubic-bezier(0.2, 0.8, 0.3, 1);
 }
-.dropdownBorder {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  pointer-events: none;
+@keyframes dropdownIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
+@media (prefers-reduced-motion: reduce) {
+  .dropdownPanel {
+    animation: none;
+  }
+}
+/* The rows, 6 of paper over the first and under the last. */
 .dropdownList {
   position: relative;
   z-index: 1;
   display: flex;
   flex-direction: column;
-  padding: 0 10px;
+  padding: 6px 0;
 }
+/* A row: 44 tall, its content 20 in from either side (the menus' rows), one line. */
 .dropdownOption {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
   width: 100%;
-  /* Taller rows give the wavy dividers room to breathe. */
-  padding: 16px 8px;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 0 20px;
+  margin: 0;
   border: none;
   background: transparent;
   font-family: var(--font-body);
   font-size: 15px;
+  line-height: 1;
   color: var(--color-text);
   text-align: left;
+  white-space: nowrap;
   cursor: pointer;
   transition: color 120ms ease;
+  -webkit-tap-highlight-color: transparent;
 }
+.dropdownOption:focus {
+  outline: none;
+}
+/* The inked row's words in the menu's deep pen, as every menu's. */
+.dropdownOption[data-active] {
+  color: var(--terracotta-deep);
+}
+/* The chosen option: its words in terracotta (with the ✓ at its end), inked or not. */
 .dropdownOption[data-selected] {
   color: var(--color-terracotta);
   font-weight: 600;
@@ -202,6 +220,8 @@ textarea.field.autoGrow {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Variant: subtle — borderless underline-only inputs */

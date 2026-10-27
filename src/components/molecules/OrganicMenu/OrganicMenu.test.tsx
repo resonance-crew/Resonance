@@ -96,26 +96,39 @@ describe('OrganicMenu row ink', () => {
     for (const band of bands) expect(band).toMatch(/^path\('M .* C .* Z'\)$/);
   });
 
-  it('keeps the destructive row yellow at rest and inks it a deeper yellow', async () => {
-    await openMenu();
-    // The resting warning wash is drawn under the ink, before any hover — see-through, so the paper's grain shows…
-    const rest = document.querySelector('[data-row-brushes] [data-rest] path')!;
-    expect(rest.getAttribute('fill')).toContain('yellow) 30%, transparent');
-    expect(rest.closest('[data-rest]')).toHaveAttribute('data-rest', '2');
+  // Round 17 review D1: a row that ends or removes something is told by the danger ink alone — every such row,
+  // not only the first — its ink spreading in the danger hue at the others' strength, and no wash at rest.
+  it('draws every destructive row in the danger ink, with no wash at rest and its ink in the danger hue', async () => {
+    const items: OrganicMenuItem[] = [
+      { key: 'search', icon: 'search', label: 'Search' },
+      { key: 'block', icon: 'ban', label: 'Block', danger: true },
+      { key: 'delete', icon: 'trash', label: 'Delete', danger: true },
+    ];
+    render(<OrganicMenu items={items} onChoose={vi.fn()} label="Manage" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Manage' }));
+    // Nothing rests on any row before a pointer, a finger or the keyboard comes.
+    expect(document.querySelector('[data-row-brushes] [data-rest]')).toBeNull();
+    expect(inkBrushes().map((b) => b.on)).toEqual([false, false, false]);
 
-    // …and each row keeps its own ink colour: ordinary rows the menu accent,
-    // the delete row a stronger yellow.
+    const block = screen.getByRole('menuitem', { name: 'Block' });
+    const del = screen.getByRole('menuitem', { name: 'Delete' });
+    expect(block).toHaveAttribute('data-tone', 'danger');
+    expect(del).toHaveAttribute('data-tone', 'danger');
+    expect(screen.getByRole('menuitem', { name: 'Search' })).not.toHaveAttribute('data-tone');
+    // Their glyphs and words wear the danger ink (the deepened one words need on the paper), at rest and inked.
+    const sheet = css('src/components/molecules/OrganicMenu/OrganicMenu.module.css');
+    expect(sheet).toMatch(/\.option\[data-tone='danger'\][^{]*\.option\[data-tone='danger'\] \.optionIcon[^{]*\{\s*color: var\(--danger-fill\);/s);
+
+    // Each row's ink at one strength: the menu's pen, or the danger hue.
     const fills = inkBrushes().map((b) => b.color);
-    expect(fills[0]).toContain('--menu-border-hover) 15%');
-    expect(fills[1]).toContain('--menu-border-hover) 15%');
-    expect(fills[2]).toContain('yellow) 55%, transparent');
+    expect(fills[0]).toContain('--menu-border-hover');
+    expect(fills[0]).toContain('15%');
+    expect(fills[1]).toBe('color-mix(in oklch, var(--color-danger) 15%, transparent)');
+    expect(fills[2]).toBe(fills[1]);
+    expect(fills.some((f) => f.includes('yellow'))).toBe(false);
 
-    fireEvent.mouseEnter(screen.getByRole('menuitem', { name: 'Delete' }), {
-      clientX: 100,
-      clientY: 100,
-    });
+    fireEvent.mouseEnter(del, { clientX: 100, clientY: 100 });
     expect(inkBrushes().map((b) => b.on)).toEqual([false, false, true]);
-    expect(rest.isConnected).toBe(true);
   });
 
   it('still chooses the row that was inked', async () => {
@@ -317,6 +330,22 @@ describe('floating panel', () => {
 
     fireEvent.scroll(document.body);
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  // Round 17 review W7: the writer's ＋ sits in the pane's gutter, 4 from the divider; its sheet kept flush with the
+  // trigger met the grip's mark. Inside a part of the page that says so (the pane: data-dialog-host), a floating
+  // panel keeps 12 inside it — over the grip never, beside it never touching.
+  it('keeps 12 inside the part of the page its trigger sits in (the writer’s pane), never meeting the divider', async () => {
+    render(
+      <section data-dialog-host="">
+        <OrganicMenu items={ITEMS} onChoose={vi.fn()} label="More" bare floating align="start" />
+      </section>,
+    );
+    const pane = screen.getByRole('button', { name: 'More' }).closest('section')!;
+    pane.getBoundingClientRect = () => ({ top: 0, bottom: 900, left: 720, right: 1440, width: 720, height: 900, x: 720, y: 0, toJSON: () => ({}) }) as DOMRect;
+    await userEvent.click(triggerAt({ top: 400, bottom: 436, left: 724, right: 760 }));
+    const panel = screen.getByRole('menu').closest('[style*="top"]') as HTMLElement;
+    expect(panel.style.left).toBe(`${720 + 12}px`);
   });
 });
 

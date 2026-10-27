@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, userEvent, fireEvent } from '@/../test/render';
-import { inkCircles, inkFills, stubRowLayout, type RowLayout } from '@/../test/layout';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { inkBrushes, stubRowLayout, type RowLayout } from '@/../test/layout';
 import { Select } from './Field';
 
 // Passed directly as children, the way a native <select> takes <option>s.
@@ -34,8 +36,7 @@ describe('Select (organic dropdown)', () => {
 
     expect(screen.getByRole('listbox')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Region' })).toHaveAttribute('aria-expanded', 'true');
-    // All N options are listed in the open card (the wavy dividers between them
-    // are SVG paths drawn once the panel is measured).
+    // All N options are listed on the open sheet.
     expect(screen.getAllByRole('option')).toHaveLength(4);
   });
 
@@ -66,61 +67,91 @@ describe('Select (organic dropdown)', () => {
   });
 });
 
+// Round 17 review D6: the open list is the one menu sheet — paper and grain, no pen round it and none between its
+// rows, rows 44, the spreading ink cut to each row's band; a pointer's opening inks no row.
 describe('Select row ink', () => {
   let layout: RowLayout;
 
   beforeEach(() => {
-    layout = stubRowLayout({ width: 240, rowHeight: 54 });
+    layout = stubRowLayout({ width: 240, rowHeight: 44 });
   });
   afterEach(() => layout.restore());
 
-  const openSelect = async (value = 'jp') => {
+  const openSelect = async (value = 'jp', how: 'pointer' | 'keyboard' = 'pointer') => {
     render(
       <Select value={value} onChange={() => {}} ariaLabel="Region">
         {OPTIONS}
       </Select>,
     );
     const trigger = screen.getByRole('combobox', { name: 'Region' });
-    await userEvent.click(trigger);
+    if (how === 'pointer') await userEvent.click(trigger);
+    else {
+      trigger.focus();
+      await userEvent.keyboard('{Enter}');
+    }
     return trigger;
   };
-  const inked = () => inkCircles().map((c) => c.r > 0);
+  const inked = () => inkBrushes().map((b) => b.on);
 
-  it('rests the ink on the selected option when the panel opens', async () => {
+  it('lies on the menu sheet: paper and grain, no pen line, no dividers, rows 44', async () => {
     await openSelect('jp');
+    const panel = screen.getByRole('listbox').parentElement!;
+    expect(panel.querySelector('path[fill="var(--sheet-paper)"]')).not.toBeNull();
+    expect(panel.querySelector('path[stroke]')).toBeNull();
+    // 6 of paper over the first row and under the last, 44 a row.
+    expect(panel.style.height).toBe(`${6 + 4 * 44 + 6}px`);
+    const css = readFileSync(join(process.cwd(), 'src/components/atoms/Field/Field.module.css'), 'utf8');
+    const row = css.slice(css.indexOf('.dropdownOption {'));
+    expect(row).toMatch(/height: 44px;/);
+    expect(row).toMatch(/padding: 0 20px;/);
+    // The ink of every row is the menus' one, cut to its band inside the sheet's wobble.
+    const ink = inkBrushes();
+    expect(ink).toHaveLength(4);
+    expect(new Set(ink.map((b) => b.color)).size).toBe(1);
+    expect(ink[0].color).toContain('15%');
+    for (const b of ink) expect(b.band).toMatch(/^path\('M .* C .* Z'\)$/);
+  });
+
+  it('inks no row when a pointer opens it', async () => {
+    await openSelect('jp');
+    expect(inked()).toEqual([false, false, false, false]);
+  });
+
+  it('starts the keyboard on the chosen option, from its centre', async () => {
+    await openSelect('jp', 'keyboard');
     expect(inked()).toEqual([false, true, false, false]);
-    // Keyboard ink grows from the row's centre.
-    expect(inkCircles()[1]).toMatchObject({ cx: 120, cy: 54 + 27 });
+    expect(inkBrushes()[1]).toMatchObject({ cx: 120, cy: 6 + 44 + 22 });
   });
 
   it('spreads from the pointer onto the hovered option', async () => {
     await openSelect('jp');
     const korea = screen.getByRole('option', { name: 'Korea' });
-    fireEvent.mouseEnter(korea, { clientX: 40, clientY: 180 });
+    fireEvent.mouseEnter(korea, { clientX: 40, clientY: 150 });
 
     expect(inked()).toEqual([false, false, false, true]);
-    expect(inkCircles()[3]).toMatchObject({ cx: 40, cy: 180 });
-    // Reaches the far corner of the 240 × 216 panel from the pointer.
-    expect(inkCircles()[3].r).toBeCloseTo(Math.hypot(200, 180) + 4, 5);
+    expect(inkBrushes()[3]).toMatchObject({ cx: 40, cy: 150 });
+    expect(korea).toHaveAttribute('data-active');
   });
 
-  it('keeps the ink on the last hovered option once the pointer leaves', async () => {
+  it('withdraws the ink once the pointer leaves, keeping the option it was on for the keyboard', async () => {
     const trigger = await openSelect('tw');
     const us = screen.getByRole('option', { name: 'United States' });
-    fireEvent.mouseEnter(us, { clientX: 40, clientY: 130 });
+    fireEvent.mouseEnter(us, { clientX: 40, clientY: 120 });
     fireEvent.mouseLeave(us);
 
-    expect(inked()).toEqual([false, false, true, false]);
+    expect(inked()).toEqual([false, false, false, false]);
     expect(trigger.getAttribute('aria-activedescendant')).toBe(us.id);
+    await userEvent.keyboard('{ArrowDown}');
+    expect(inked()).toEqual([false, false, false, true]);
   });
 
   it('moves the ink down with ArrowDown and up with ArrowUp, from each row\'s centre', async () => {
-    const trigger = await openSelect('tw');
+    const trigger = await openSelect('tw', 'keyboard');
     expect(inked()).toEqual([true, false, false, false]);
 
     await userEvent.keyboard('{ArrowDown}');
     expect(inked()).toEqual([false, true, false, false]);
-    expect(inkCircles()[1]).toMatchObject({ cx: 120, cy: 54 + 27 });
+    expect(inkBrushes()[1]).toMatchObject({ cx: 120, cy: 6 + 44 + 22 });
     expect(trigger.getAttribute('aria-activedescendant')).toBe(
       screen.getByRole('option', { name: 'Japan' }).id,
     );
@@ -141,12 +172,9 @@ describe('Select row ink', () => {
     expect(inked()).toEqual([false, false, true, false]);
   });
 
-  it('washes the option in terracotta and leaves the selected option styling alone', async () => {
+  it('leaves the chosen option its own words and ✓ wherever the ink is', async () => {
     await openSelect('jp');
-    expect(new Set(inkFills()).size).toBe(1);
-    expect(inkFills()[0]).toBe('color-mix(in oklch, var(--color-terracotta) 15%, var(--menu-paper))');
-
-    fireEvent.mouseEnter(screen.getByRole('option', { name: 'Korea' }), { clientX: 10, clientY: 190 });
+    fireEvent.mouseEnter(screen.getByRole('option', { name: 'Korea' }), { clientX: 10, clientY: 160 });
     const japan = screen.getByRole('option', { name: 'Japan' });
     const korea = screen.getByRole('option', { name: 'Korea' });
     // Only the hover/keyboard wash moved; "selected" is still Japan's alone.

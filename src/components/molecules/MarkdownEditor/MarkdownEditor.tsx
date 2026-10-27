@@ -152,6 +152,10 @@ export function MarkdownEditor({
   const [linkSession, setLinkSession] = useState<LinkSession | null>(null);
   const [linkKey, setLinkKey] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // The canvas, and the part of the page it is written in (`data-dialog-host`: the writer's pane), which its
+  // dialogs centre over.
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const dialogHost = useCallback(() => canvasRef.current?.closest<HTMLElement>('[data-dialog-host]') ?? null, []);
   // The toolbar's width sets its wave's turn count (ruleSteps).
   const toolbarRef = useRef<HTMLDivElement>(null);
   const { w: toolbarW } = useElementSize(toolbarRef);
@@ -414,7 +418,7 @@ export function MarkdownEditor({
 
   if (canvas) {
     return (
-      <div className={styles.canvas}>
+      <div ref={canvasRef} className={styles.canvas}>
         <StoryLinkPreviewsContext.Provider value={linkPreviews ?? null}>
           <LinkCardActionContext.Provider value={openLink}>
             <LinkEditorOpenContext.Provider value={linkSession != null}>
@@ -449,6 +453,8 @@ export function MarkdownEditor({
           onApply={applyLink}
           onRemove={removeLink}
           onCancel={() => cancelLink(true)}
+          // Over the part of the page the story is written in (the writer's pane at the desktop split).
+          centerOver={dialogHost}
         />
         {uploading && (
           <p className={styles.uploadingLine} role="status">
