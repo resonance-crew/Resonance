@@ -12,6 +12,7 @@ enum class ReactionColour(val red: Float, val green: Float, val blue: Float) {
     Blush(0.9068f, 0.6662f, 0.6569f),
     Cream(0.9854f, 0.9725f, 0.9481f),
     Sleeve(0.6136f, 0.7694f, 0.8846f),
+    Slate(0.3901f, 0.4886f, 0.6146f),
 }
 
 class ReactionLayer(
@@ -60,25 +61,18 @@ enum class ReactionId(val key: String) {
             Laugh -> listOf(
                 ReactionLayer(floatArrayOf(0f, 11.5f, 4.3f, 2f, 16.1f, 4f, 19.5f, 7.6f, 19.7f, 12.4f, 2f, 19.9f, 17f, 16.1f, 20.8f, 11.3f, 20.7f, 2f, 6.8f, 20.8f, 3.1f, 17.1f, 3.3f, 12.7f, 2f, 3.1f, 8f, 6.9f, 4.4f, 11.5f, 4.3f, 3f), ReactionColour.Face, null, 0f, 1f),
                 ReactionLayer(floatArrayOf(0f, 12.2f, 3.4f, 2f, 16.9f, 3.3f, 20.6f, 7f, 20.6f, 11.9f, 2f, 20.7f, 16.8f, 16.9f, 20.6f, 12f, 20.6f, 2f, 7.2f, 20.7f, 3.4f, 16.9f, 3.4f, 12.1f, 2f, 3.3f, 7.3f, 7.4f, 3.5f, 12.2f, 3.4f, 3f), null, ReactionColour.Outline, 1.4f, 1f),
-                ReactionLayer(floatArrayOf(0f, 6.9f, 10.9f, 2f, 7.5f, 9.6f, 9.3f, 9.3f, 10.3f, 10.5f), null, ReactionColour.Ink, 1.4f, 1f),
-                ReactionLayer(floatArrayOf(0f, 13.7f, 10.5f, 2f, 14.7f, 9.3f, 16.5f, 9.6f, 17.1f, 10.9f), null, ReactionColour.Ink, 1.4f, 1f),
-                ReactionLayer(floatArrayOf(0f, 7.4f, 13.2f, 2f, 10.4f, 13.9f, 13.6f, 13.9f, 16.6f, 13.2f, 2f, 16.3f, 16.4f, 14.4f, 18.3f, 12f, 18.3f, 2f, 9.6f, 18.3f, 7.8f, 16.5f, 7.4f, 13.2f, 3f), ReactionColour.Ink, ReactionColour.Ink, 1.2f, 1f),
-                ReactionLayer(floatArrayOf(0f, 8.3f, 14.3f, 2f, 10.8f, 14.8f, 13.2f, 14.8f, 15.7f, 14.3f), null, ReactionColour.Cream, 1f, 1f),
-                ReactionLayer(floatArrayOf(0f, 10f, 17.2f, 2f, 11.2f, 16.4f, 12.8f, 16.4f, 14f, 17.2f), null, ReactionColour.Heart, 1.1f, 1f),
-                ReactionLayer(floatArrayOf(0f, 4.4f, 10f, 2f, 3.5f, 11.5f, 2.6f, 12.7f, 3.1f, 13.7f, 2f, 3.5f, 14.5f, 4.9f, 14.5f, 5.3f, 13.6f, 2f, 5.6f, 12.6f, 5f, 11.4f, 4.4f, 10f, 3f), ReactionColour.Tear, ReactionColour.Outline, 0.9f, 1f),
-                ReactionLayer(floatArrayOf(0f, 19.6f, 10f, 2f, 19f, 11.4f, 18.4f, 12.6f, 18.7f, 13.6f, 2f, 19.1f, 14.5f, 20.5f, 14.5f, 20.9f, 13.7f, 2f, 21.4f, 12.7f, 20.5f, 11.5f, 19.6f, 10f, 3f), ReactionColour.Tear, ReactionColour.Outline, 0.9f, 1f),
+                ReactionLayer(floatArrayOf(0f, 6.8f, 7.9f, 2f, 7.9f, 8.6f, 9f, 9.3f, 10.1f, 10.1f, 2f, 9f, 10.8f, 7.9f, 11.4f, 6.9f, 12.1f), null, ReactionColour.Ink, 1.5f, 1f),
+                ReactionLayer(floatArrayOf(0f, 17.2f, 7.9f, 2f, 16.1f, 8.6f, 15f, 9.3f, 13.9f, 10.1f, 2f, 15f, 10.8f, 16.1f, 11.4f, 17.1f, 12.1f), null, ReactionColour.Ink, 1.5f, 1f),
+                ReactionLayer(floatArrayOf(0f, 6.6f, 13f, 2f, 10.2f, 13.8f, 13.8f, 13.8f, 17.4f, 13f, 2f, 17.2f, 16.7f, 14.9f, 19f, 12f, 19f, 2f, 9.1f, 19f, 6.8f, 16.7f, 6.6f, 13f, 3f), ReactionColour.Ink, ReactionColour.Ink, 1.2f, 1f),
+                ReactionLayer(floatArrayOf(0f, 7.4f, 13.7f, 2f, 10.5f, 14.4f, 13.5f, 14.4f, 16.6f, 13.7f, 2f, 16.5f, 14.4f, 16.3f, 14.9f, 16.1f, 15.3f, 2f, 13.4f, 15.9f, 10.6f, 15.9f, 7.9f, 15.3f, 2f, 7.7f, 14.9f, 7.5f, 14.4f, 7.4f, 13.7f, 3f), ReactionColour.Cream, null, 0f, 1f),
+                ReactionLayer(floatArrayOf(0f, 9.3f, 17.7f, 2f, 10f, 16.7f, 11.1f, 16.4f, 12f, 16.8f, 2f, 12.9f, 16.4f, 14f, 16.7f, 14.7f, 17.7f, 2f, 14f, 18.3f, 13f, 18.5f, 12f, 18.5f, 2f, 11f, 18.5f, 10f, 18.3f, 9.3f, 17.7f, 3f), ReactionColour.Heart, null, 0f, 1f),
             )
             Hug -> listOf(
-                ReactionLayer(floatArrayOf(0f, 11.5f, 4.3f, 2f, 16.1f, 4f, 19.5f, 7.6f, 19.7f, 12.4f, 2f, 19.9f, 17f, 16.1f, 20.8f, 11.3f, 20.7f, 2f, 6.8f, 20.8f, 3.1f, 17.1f, 3.3f, 12.7f, 2f, 3.1f, 8f, 6.9f, 4.4f, 11.5f, 4.3f, 3f), ReactionColour.Face, null, 0f, 1f),
-                ReactionLayer(floatArrayOf(0f, 12.2f, 3.4f, 2f, 16.9f, 3.3f, 20.6f, 7f, 20.6f, 11.9f, 2f, 20.7f, 16.8f, 16.9f, 20.6f, 12f, 20.6f, 2f, 7.2f, 20.7f, 3.4f, 16.9f, 3.4f, 12.1f, 2f, 3.3f, 7.3f, 7.4f, 3.5f, 12.2f, 3.4f, 3f), null, ReactionColour.Outline, 1.4f, 1f),
-                ReactionLayer(floatArrayOf(0f, 6.9f, 10f, 2f, 7.6f, 8.8f, 9.3f, 8.7f, 10.1f, 9.8f), null, ReactionColour.Ink, 1.35f, 1f),
-                ReactionLayer(floatArrayOf(0f, 13.9f, 9.8f, 2f, 14.7f, 8.7f, 16.4f, 8.8f, 17.1f, 10f), null, ReactionColour.Ink, 1.35f, 1f),
-                ReactionLayer(floatArrayOf(0f, 9.3f, 11.8f, 2f, 10.9f, 12.4f, 13.1f, 12.4f, 14.7f, 11.8f, 2f, 14.4f, 13.8f, 13.3f, 14.7f, 12f, 14.7f, 2f, 10.7f, 14.7f, 9.6f, 13.8f, 9.3f, 11.8f, 3f), ReactionColour.Ink, ReactionColour.Ink, 0.9f, 1f),
-                ReactionLayer(floatArrayOf(0f, 10.6f, 13.9f, 2f, 11.4f, 13.5f, 12.6f, 13.5f, 13.4f, 13.9f), null, ReactionColour.Heart, 1f, 1f),
-                ReactionLayer(floatArrayOf(0f, 2.1f, 17.1f, 2f, 1.9f, 15.4f, 3f, 14f, 4.5f, 13.8f, 2f, 5.6f, 13.6f, 6.6f, 14.2f, 7.1f, 15.2f, 2f, 7.8f, 14.6f, 8.9f, 14.8f, 9.2f, 15.7f, 2f, 9.5f, 16.7f, 8.8f, 18f, 7.8f, 18.9f, 2f, 6.5f, 20.2f, 4.6f, 20.8f, 3.3f, 20.1f, 2f, 2.5f, 19.6f, 2.2f, 18.3f, 2.1f, 17.1f, 3f), ReactionColour.Face, ReactionColour.Outline, 1.3f, 1f),
-                ReactionLayer(floatArrayOf(0f, 21.9f, 17.1f, 2f, 22.1f, 15.4f, 21f, 14f, 19.5f, 13.8f, 2f, 18.4f, 13.6f, 17.4f, 14.2f, 16.9f, 15.2f, 2f, 16.2f, 14.6f, 15.1f, 14.8f, 14.8f, 15.7f, 2f, 14.5f, 16.7f, 15.2f, 18f, 16.2f, 18.9f, 2f, 17.5f, 20.2f, 19.4f, 20.8f, 20.7f, 20.1f, 2f, 21.5f, 19.6f, 21.8f, 18.3f, 21.9f, 17.1f, 3f), ReactionColour.Face, ReactionColour.Outline, 1.3f, 1f),
-                ReactionLayer(floatArrayOf(0f, 4.4f, 15.5f, 2f, 5.1f, 16f, 5.6f, 16.8f, 5.7f, 17.6f), null, ReactionColour.Ink, 0.9f, 1f),
-                ReactionLayer(floatArrayOf(0f, 19.6f, 15.5f, 2f, 18.9f, 16f, 18.4f, 16.8f, 18.3f, 17.6f), null, ReactionColour.Ink, 0.9f, 1f),
+                ReactionLayer(floatArrayOf(0f, 10.5f, 20.1f, 2f, 10.3f, 15.6f, 12.4f, 11.8f, 15.9f, 11f, 2f, 18.5f, 10.5f, 20.5f, 12.4f, 20.7f, 15.2f, 2f, 20.9f, 16.9f, 20.8f, 18.5f, 20.6f, 20.1f, 2f, 17.3f, 20.4f, 13.9f, 20.4f, 10.5f, 20.1f, 3f), ReactionColour.Sleeve, ReactionColour.Outline, 1.3f, 1f),
+                ReactionLayer(floatArrayOf(0f, 14.3f, 3.7f, 2f, 16.3f, 3.6f, 17.7f, 5.1f, 17.6f, 7.1f, 2f, 17.6f, 9.1f, 16.1f, 10.6f, 14.2f, 10.6f, 2f, 12.2f, 10.6f, 10.7f, 9.1f, 10.8f, 7.1f, 2f, 10.9f, 5.1f, 12.4f, 3.7f, 14.3f, 3.7f, 3f), ReactionColour.Sleeve, ReactionColour.Outline, 1.3f, 1f),
+                ReactionLayer(floatArrayOf(0f, 3.4f, 20.1f, 2f, 3.2f, 16.5f, 4.8f, 13.3f, 7.7f, 12.5f, 2f, 9.8f, 11.8f, 12f, 11.6f, 14f, 11.2f, 2f, 15.9f, 10.9f, 17.7f, 10.9f, 19.1f, 11.8f, 2f, 20.3f, 12.7f, 20.6f, 14.3f, 20.1f, 15.3f, 2f, 19.7f, 16.1f, 18.6f, 16.4f, 17.8f, 16f, 2f, 17.3f, 15.8f, 17.2f, 15f, 17f, 14.4f, 2f, 16.7f, 13.9f, 15.9f, 13.8f, 15.4f, 14.2f, 2f, 15f, 14.4f, 14.7f, 14.7f, 14.6f, 15f, 2f, 15.3f, 16.6f, 15.7f, 18.3f, 15.7f, 20.1f, 2f, 11.5f, 20.4f, 7.5f, 20.4f, 3.4f, 20.1f, 3f), ReactionColour.Slate, ReactionColour.Outline, 1.3f, 1f),
+                ReactionLayer(floatArrayOf(0f, 9.9f, 10.5f, 2f, 8.1f, 10.8f, 6.2f, 11f, 5f, 11.9f, 2f, 3.7f, 12.8f, 3.4f, 14.3f, 3.9f, 15.3f, 2f, 4.3f, 16.1f, 5.4f, 16.4f, 6.2f, 16f, 2f, 6.7f, 15.8f, 6.8f, 15f, 7f, 14.4f, 2f, 7.3f, 13.9f, 8.1f, 13.7f, 8.8f, 13.4f, 2f, 9.7f, 13f, 10.3f, 12.5f, 10.8f, 11.5f, 3f), ReactionColour.Sleeve, ReactionColour.Outline, 1.3f, 1f),
+                ReactionLayer(floatArrayOf(0f, 9.7f, 4.9f, 2f, 11.7f, 4.8f, 13.3f, 6.3f, 13.3f, 8.2f, 2f, 13.3f, 10.2f, 11.9f, 11.8f, 9.9f, 11.8f, 2f, 8f, 11.9f, 6.4f, 10.4f, 6.4f, 8.4f, 2f, 6.3f, 6.5f, 7.8f, 5f, 9.7f, 4.9f, 3f), ReactionColour.Slate, ReactionColour.Outline, 1.3f, 1f),
             )
             Thumbs -> listOf(
                 ReactionLayer(floatArrayOf(0f, 4.6f, 10.9f, 2f, 6f, 10.8f, 7.4f, 10.8f, 8.8f, 10.9f, 2f, 8.9f, 13.7f, 8.9f, 16.5f, 8.8f, 19.3f, 2f, 7.4f, 19.4f, 6f, 19.4f, 4.6f, 19.3f, 2f, 4.5f, 16.5f, 4.5f, 13.7f, 4.6f, 10.9f, 3f), ReactionColour.Sleeve, ReactionColour.Outline, 1.4f, 1f),

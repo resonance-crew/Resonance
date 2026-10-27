@@ -11,6 +11,7 @@ public enum ReactionColour: Sendable {
     case blush
     case cream
     case sleeve
+    case slate
 
     public var p3: (red: Double, green: Double, blue: Double) {
         switch self {
@@ -22,6 +23,7 @@ public enum ReactionColour: Sendable {
         case .blush: (0.9068, 0.6662, 0.6569)
         case .cream: (0.9854, 0.9725, 0.9481)
         case .sleeve: (0.6136, 0.7694, 0.8846)
+        case .slate: (0.3901, 0.4886, 0.6146)
         }
     }
 }
@@ -71,25 +73,18 @@ public enum ReactionId: String, CaseIterable, Sendable {
         case .laugh: [
             ReactionLayer(commands: [0, 11.5, 4.3, 2, 16.1, 4, 19.5, 7.6, 19.7, 12.4, 2, 19.9, 17, 16.1, 20.8, 11.3, 20.7, 2, 6.8, 20.8, 3.1, 17.1, 3.3, 12.7, 2, 3.1, 8, 6.9, 4.4, 11.5, 4.3, 3], fill: .face, stroke: nil, width: 0, opacity: 1),
             ReactionLayer(commands: [0, 12.2, 3.4, 2, 16.9, 3.3, 20.6, 7, 20.6, 11.9, 2, 20.7, 16.8, 16.9, 20.6, 12, 20.6, 2, 7.2, 20.7, 3.4, 16.9, 3.4, 12.1, 2, 3.3, 7.3, 7.4, 3.5, 12.2, 3.4, 3], fill: nil, stroke: .outline, width: 1.4, opacity: 1),
-            ReactionLayer(commands: [0, 6.9, 10.9, 2, 7.5, 9.6, 9.3, 9.3, 10.3, 10.5], fill: nil, stroke: .ink, width: 1.4, opacity: 1),
-            ReactionLayer(commands: [0, 13.7, 10.5, 2, 14.7, 9.3, 16.5, 9.6, 17.1, 10.9], fill: nil, stroke: .ink, width: 1.4, opacity: 1),
-            ReactionLayer(commands: [0, 7.4, 13.2, 2, 10.4, 13.9, 13.6, 13.9, 16.6, 13.2, 2, 16.3, 16.4, 14.4, 18.3, 12, 18.3, 2, 9.6, 18.3, 7.8, 16.5, 7.4, 13.2, 3], fill: .ink, stroke: .ink, width: 1.2, opacity: 1),
-            ReactionLayer(commands: [0, 8.3, 14.3, 2, 10.8, 14.8, 13.2, 14.8, 15.7, 14.3], fill: nil, stroke: .cream, width: 1, opacity: 1),
-            ReactionLayer(commands: [0, 10, 17.2, 2, 11.2, 16.4, 12.8, 16.4, 14, 17.2], fill: nil, stroke: .heart, width: 1.1, opacity: 1),
-            ReactionLayer(commands: [0, 4.4, 10, 2, 3.5, 11.5, 2.6, 12.7, 3.1, 13.7, 2, 3.5, 14.5, 4.9, 14.5, 5.3, 13.6, 2, 5.6, 12.6, 5, 11.4, 4.4, 10, 3], fill: .tear, stroke: .outline, width: 0.9, opacity: 1),
-            ReactionLayer(commands: [0, 19.6, 10, 2, 19, 11.4, 18.4, 12.6, 18.7, 13.6, 2, 19.1, 14.5, 20.5, 14.5, 20.9, 13.7, 2, 21.4, 12.7, 20.5, 11.5, 19.6, 10, 3], fill: .tear, stroke: .outline, width: 0.9, opacity: 1),
+            ReactionLayer(commands: [0, 6.8, 7.9, 2, 7.9, 8.6, 9, 9.3, 10.1, 10.1, 2, 9, 10.8, 7.9, 11.4, 6.9, 12.1], fill: nil, stroke: .ink, width: 1.5, opacity: 1),
+            ReactionLayer(commands: [0, 17.2, 7.9, 2, 16.1, 8.6, 15, 9.3, 13.9, 10.1, 2, 15, 10.8, 16.1, 11.4, 17.1, 12.1], fill: nil, stroke: .ink, width: 1.5, opacity: 1),
+            ReactionLayer(commands: [0, 6.6, 13, 2, 10.2, 13.8, 13.8, 13.8, 17.4, 13, 2, 17.2, 16.7, 14.9, 19, 12, 19, 2, 9.1, 19, 6.8, 16.7, 6.6, 13, 3], fill: .ink, stroke: .ink, width: 1.2, opacity: 1),
+            ReactionLayer(commands: [0, 7.4, 13.7, 2, 10.5, 14.4, 13.5, 14.4, 16.6, 13.7, 2, 16.5, 14.4, 16.3, 14.9, 16.1, 15.3, 2, 13.4, 15.9, 10.6, 15.9, 7.9, 15.3, 2, 7.7, 14.9, 7.5, 14.4, 7.4, 13.7, 3], fill: .cream, stroke: nil, width: 0, opacity: 1),
+            ReactionLayer(commands: [0, 9.3, 17.7, 2, 10, 16.7, 11.1, 16.4, 12, 16.8, 2, 12.9, 16.4, 14, 16.7, 14.7, 17.7, 2, 14, 18.3, 13, 18.5, 12, 18.5, 2, 11, 18.5, 10, 18.3, 9.3, 17.7, 3], fill: .heart, stroke: nil, width: 0, opacity: 1),
         ]
         case .hug: [
-            ReactionLayer(commands: [0, 11.5, 4.3, 2, 16.1, 4, 19.5, 7.6, 19.7, 12.4, 2, 19.9, 17, 16.1, 20.8, 11.3, 20.7, 2, 6.8, 20.8, 3.1, 17.1, 3.3, 12.7, 2, 3.1, 8, 6.9, 4.4, 11.5, 4.3, 3], fill: .face, stroke: nil, width: 0, opacity: 1),
-            ReactionLayer(commands: [0, 12.2, 3.4, 2, 16.9, 3.3, 20.6, 7, 20.6, 11.9, 2, 20.7, 16.8, 16.9, 20.6, 12, 20.6, 2, 7.2, 20.7, 3.4, 16.9, 3.4, 12.1, 2, 3.3, 7.3, 7.4, 3.5, 12.2, 3.4, 3], fill: nil, stroke: .outline, width: 1.4, opacity: 1),
-            ReactionLayer(commands: [0, 6.9, 10, 2, 7.6, 8.8, 9.3, 8.7, 10.1, 9.8], fill: nil, stroke: .ink, width: 1.35, opacity: 1),
-            ReactionLayer(commands: [0, 13.9, 9.8, 2, 14.7, 8.7, 16.4, 8.8, 17.1, 10], fill: nil, stroke: .ink, width: 1.35, opacity: 1),
-            ReactionLayer(commands: [0, 9.3, 11.8, 2, 10.9, 12.4, 13.1, 12.4, 14.7, 11.8, 2, 14.4, 13.8, 13.3, 14.7, 12, 14.7, 2, 10.7, 14.7, 9.6, 13.8, 9.3, 11.8, 3], fill: .ink, stroke: .ink, width: 0.9, opacity: 1),
-            ReactionLayer(commands: [0, 10.6, 13.9, 2, 11.4, 13.5, 12.6, 13.5, 13.4, 13.9], fill: nil, stroke: .heart, width: 1, opacity: 1),
-            ReactionLayer(commands: [0, 2.1, 17.1, 2, 1.9, 15.4, 3, 14, 4.5, 13.8, 2, 5.6, 13.6, 6.6, 14.2, 7.1, 15.2, 2, 7.8, 14.6, 8.9, 14.8, 9.2, 15.7, 2, 9.5, 16.7, 8.8, 18, 7.8, 18.9, 2, 6.5, 20.2, 4.6, 20.8, 3.3, 20.1, 2, 2.5, 19.6, 2.2, 18.3, 2.1, 17.1, 3], fill: .face, stroke: .outline, width: 1.3, opacity: 1),
-            ReactionLayer(commands: [0, 21.9, 17.1, 2, 22.1, 15.4, 21, 14, 19.5, 13.8, 2, 18.4, 13.6, 17.4, 14.2, 16.9, 15.2, 2, 16.2, 14.6, 15.1, 14.8, 14.8, 15.7, 2, 14.5, 16.7, 15.2, 18, 16.2, 18.9, 2, 17.5, 20.2, 19.4, 20.8, 20.7, 20.1, 2, 21.5, 19.6, 21.8, 18.3, 21.9, 17.1, 3], fill: .face, stroke: .outline, width: 1.3, opacity: 1),
-            ReactionLayer(commands: [0, 4.4, 15.5, 2, 5.1, 16, 5.6, 16.8, 5.7, 17.6], fill: nil, stroke: .ink, width: 0.9, opacity: 1),
-            ReactionLayer(commands: [0, 19.6, 15.5, 2, 18.9, 16, 18.4, 16.8, 18.3, 17.6], fill: nil, stroke: .ink, width: 0.9, opacity: 1),
+            ReactionLayer(commands: [0, 10.5, 20.1, 2, 10.3, 15.6, 12.4, 11.8, 15.9, 11, 2, 18.5, 10.5, 20.5, 12.4, 20.7, 15.2, 2, 20.9, 16.9, 20.8, 18.5, 20.6, 20.1, 2, 17.3, 20.4, 13.9, 20.4, 10.5, 20.1, 3], fill: .sleeve, stroke: .outline, width: 1.3, opacity: 1),
+            ReactionLayer(commands: [0, 14.3, 3.7, 2, 16.3, 3.6, 17.7, 5.1, 17.6, 7.1, 2, 17.6, 9.1, 16.1, 10.6, 14.2, 10.6, 2, 12.2, 10.6, 10.7, 9.1, 10.8, 7.1, 2, 10.9, 5.1, 12.4, 3.7, 14.3, 3.7, 3], fill: .sleeve, stroke: .outline, width: 1.3, opacity: 1),
+            ReactionLayer(commands: [0, 3.4, 20.1, 2, 3.2, 16.5, 4.8, 13.3, 7.7, 12.5, 2, 9.8, 11.8, 12, 11.6, 14, 11.2, 2, 15.9, 10.9, 17.7, 10.9, 19.1, 11.8, 2, 20.3, 12.7, 20.6, 14.3, 20.1, 15.3, 2, 19.7, 16.1, 18.6, 16.4, 17.8, 16, 2, 17.3, 15.8, 17.2, 15, 17, 14.4, 2, 16.7, 13.9, 15.9, 13.8, 15.4, 14.2, 2, 15, 14.4, 14.7, 14.7, 14.6, 15, 2, 15.3, 16.6, 15.7, 18.3, 15.7, 20.1, 2, 11.5, 20.4, 7.5, 20.4, 3.4, 20.1, 3], fill: .slate, stroke: .outline, width: 1.3, opacity: 1),
+            ReactionLayer(commands: [0, 9.9, 10.5, 2, 8.1, 10.8, 6.2, 11, 5, 11.9, 2, 3.7, 12.8, 3.4, 14.3, 3.9, 15.3, 2, 4.3, 16.1, 5.4, 16.4, 6.2, 16, 2, 6.7, 15.8, 6.8, 15, 7, 14.4, 2, 7.3, 13.9, 8.1, 13.7, 8.8, 13.4, 2, 9.7, 13, 10.3, 12.5, 10.8, 11.5, 3], fill: .sleeve, stroke: .outline, width: 1.3, opacity: 1),
+            ReactionLayer(commands: [0, 9.7, 4.9, 2, 11.7, 4.8, 13.3, 6.3, 13.3, 8.2, 2, 13.3, 10.2, 11.9, 11.8, 9.9, 11.8, 2, 8, 11.9, 6.4, 10.4, 6.4, 8.4, 2, 6.3, 6.5, 7.8, 5, 9.7, 4.9, 3], fill: .slate, stroke: .outline, width: 1.3, opacity: 1),
         ]
         case .thumbs: [
             ReactionLayer(commands: [0, 4.6, 10.9, 2, 6, 10.8, 7.4, 10.8, 8.8, 10.9, 2, 8.9, 13.7, 8.9, 16.5, 8.8, 19.3, 2, 7.4, 19.4, 6, 19.4, 4.6, 19.3, 2, 4.5, 16.5, 4.5, 13.7, 4.6, 10.9, 3], fill: .sleeve, stroke: .outline, width: 1.4, opacity: 1),

@@ -24,6 +24,14 @@ describe('the reactions', () => {
     }
   });
 
+  // Round 17 §3: 抱抱 is 🫂, two people holding each other with no face; 大笑 is 😆, the grin with no tears.
+  it('draw hug as two people, not a face, and laugh as a grin without tears', () => {
+    const fills = (id: (typeof REACTION_IDS)[number]) => new Set(REACTION_GLYPHS[id].map((l) => l.fill).filter(Boolean));
+    expect(fills('hug')).toEqual(new Set(['sleeve', 'slate']));
+    expect(fills('laugh')).toContain('face');
+    expect(fills('laugh')).not.toContain('tear');
+  });
+
   it('bakes a fill’s offset into its points for the apps', () => {
     expect(placedPath({ d: 'M1,2 C3,4 5,6 7,8 Z', fill: 'face', offset: [-0.5, 0.25] })).toBe('M0.5,2.25 C2.5,4.25 4.5,6.25 6.5,8.25 Z');
     expect(placedPath({ d: 'M1,2 L3,4', stroke: 'ink' })).toBe('M1,2 L3,4');

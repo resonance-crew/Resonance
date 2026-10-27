@@ -74,7 +74,7 @@ import kotlinx.coroutines.delay
 // and the chip a reaction leaves beside a bubble's foot.
 
 /**
- * A reaction sticker (round 16 §4: ❤️ heart, 🥹 moved, 😂 laugh, 🤗 hug, 👍 thumbs), drawn from the
+ * A reaction sticker (round 16 §4, round 17 §3: ❤️ heart, 🥹 moved, 😆 laugh, 🫂 hug, 👍 thumbs), drawn from the
  * generated layers (`generated/Reactions.kt`, from src/lib/design/reactions.ts) bottom to top in a 24
  * box scaled to [size]: fills a little off their line, as crayon. The colours are the stickers' own,
  * the same in both schemes as emoji keep — but the outer rim is the palette's `reaction-outline` (deep
