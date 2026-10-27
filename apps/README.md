@@ -804,3 +804,14 @@ editor is the app's modal (`StoryLinkDialog`: 插入連結 / 編輯連結, the a
 state at the 1.25 text cap (`OrganicInlineBar` with `hasStatus`). The tab bar's one pen is `TabGlyphPen` (INK_STRONG). At
 the writer's split the publish step has no back of its own: the map's Leave is step-aware (`WriterHandle.inPublishStep`
 / `stepBack`), back to writing and named 繼續寫 from the step.
+
+Round 17 review (2026-10-27), Android: a row that ends or removes something — every such row, a card's own menu's too —
+wears the danger ink alone, glyph and words, with nothing under it at rest, and pressed spreads the danger hue at the
+other rows' 15 % (`SheetRow.danger`, `SheetInks.rowInks`; the yellow wash and `PaletteMixes.menuDangerWash` are gone); a
+pressed row's words take the pressed pen with its glyph. A held message lifts its bubble alone: their face stays in the
+thread under the scrim. In a tablet's pane the scrim reaches back to the rule between the panes, its edge the rule's own
+wave from the pane bar's line down (`PaneScrimEdge` through `LocalPaneScrimEdge`), so no strip is left undimmed. The lift
+of the hold that brought the list up under the finger chooses nothing (a gesture belongs to what it went down on;
+pinned in `RoundSeventeenTest`). The composer's ＋, open, takes the full ink over a soft disc, as the web's bare trigger
+(`bareMenuOpen`). The link editor's 移除連結 is a quiet word (`QuietButton`) and its field, its 卡片 | 文字 and 完成 share one
+height, 44 (`LinkDialogControl`; `SegmentedActionBar` `minHeight`).
