@@ -151,7 +151,9 @@ function darkBase(s: ThemeSpec): Base {
     'color-text': lch(0.88, 0.02 * k, h + 14),
     'color-text-muted': lch(0.68, 0.03 * k, h + 8),
     'field-border': lch(0.4, 0.02 * k, h + 8),
-    'field-border-hover': lch(0.6, 0.035 * k, h + 4),
+    // The pane lines (the header's pen line, dividers): quieter than light's (2.7:1 on the paper, 0.76× light's) —
+    // a light line on night paper reads heavier than the same contrast the other way.
+    'field-border-hover': lch(0.48, 0.025 * k, h + 4),
     placeholder: lch(0.58, 0.03 * k, h + 8),
     'color-terracotta': accent,
     'color-terracotta-light': fitGamut(lch(0.36, accent.C * 0.5, accent.H + 5)),
@@ -279,6 +281,9 @@ export const PALETTE_TOKENS: readonly PaletteToken[] = [
 /** A mix of a over b with a's share p, in oklch (CSS color-mix). */
 const over = (a: Oklch, p: number, b: Oklch) => mix(a, b, p);
 
+/** The call-to-action band's second action: 15 points of lightness under the band. */
+const ctaGhost = (band: Oklch) => mixWithBlack(band, Math.min(0.5, 0.15 / band.L));
+
 /** The colour mixed with black by at least `share`, more (in 1% steps) until it clears `min` against `other`. */
 function deepenUntil(c: Oklch, share: number, other: Oklch, min: number): Oklch {
   let k = share;
@@ -317,10 +322,11 @@ const RECIPES: Record<Scheme, (b: Base) => Record<DerivedToken, Oklch>> = {
     // The footer is a band of ink with paper words; the call to action a band of the accent.
     'footer-bg': b['color-text'],
     'footer-ink': b['color-cream'],
-    'cta-band': b['color-terracotta'],
+    // The band the accent deepened until its paper words clear 5.2:1 (4.6 over its blobs), as the solid verb's face.
+    'cta-band': deepenUntil(b['color-terracotta'], 0.12, b['color-cream'], 5.2),
     'cta-ink': b['color-cream'],
-    // On the band: the second action a deeper accent under the band's words, the verb a paper pill with the tonal label.
-    'cta-ghost': mixWithBlack(b['color-terracotta'], 0.18),
+    // On the band: the second action 15 points deeper than the band, the verb a paper pill with the tonal label.
+    'cta-ghost': ctaGhost(deepenUntil(b['color-terracotta'], 0.12, b['color-cream'], 5.2)),
     'cta-verb-ink': deepenUntil(b['color-terracotta'], 0.22, over(b['color-terracotta-light'], 0.75, b['color-cream-dark']), 4.6),
     // A loading block: the well with a touch of ink, a little see-through; the shimmer runs toward the paper.
     'skeleton-base': { ...over(b['color-text'], 0.06, b['color-cream-dark']), alpha: 0.85 },
@@ -350,21 +356,23 @@ const RECIPES: Record<Scheme, (b: Base) => Record<DerivedToken, Oklch>> = {
       'terracotta-deep': over(accent, 0.75, b['color-text']),
       'terracotta-outline': over(accent, 0.85, b['color-text']),
       'auth-interior': over(b['color-terracotta-light'], 0.14, b['color-card-bg']),
-      'auth-border': over(accent, 0.82, b['color-text']),
+      'auth-border': fitGamut(lch(0.6, accent.C * 0.6, accent.H)),
       'toggle-off': lch(0.32, paper.C * 1.33, paper.H + 8),
       'toggle-off-stroke': lch(0.52, b['color-text-muted'].C * 0.75, b['color-text-muted'].H),
-      'ghost-stroke': lch(0.78, b['color-text-muted'].C, b['color-text-muted'].H),
-      'modal-border': lch(0.8, b['color-text'].C * 2, b['color-text'].H),
+      'ghost-stroke': lch(0.62, b['color-text-muted'].C, b['color-text-muted'].H),
+      // Decorative pens sit under light's own ratios on night paper (see palette.test's calm check).
+      'modal-border': lch(0.6, b['color-text'].C * 2, b['color-text'].H),
       'segment-idle-ink': over(b['color-text'], 0.1, b['color-text-muted']),
       'link-wave': lch(accent.L - 0.06, accent.C * 0.6, accent.H),
       'story-code-tint': { ...b['color-text'], alpha: 0.08 },
       // Ink as a band would be a cream slab, the accent a glaring one: both go deep, their words light.
       'footer-bg': lch(0.15, paper.C * 0.75, paper.H),
       'footer-ink': b['color-text'],
-      'cta-band': fitGamut(lch(0.44, accent.C * 0.78, accent.H - 2)),
+      // The most saturated area of the night page, so the deepest and quietest band (7.3–7.7:1 under its words).
+      'cta-band': fitGamut(lch(0.4, accent.C * 0.6, accent.H - 2)),
       'cta-ink': lch(0.93, b['color-text'].C, b['color-text'].H),
-      'cta-ghost': mixWithBlack(fitGamut(lch(0.44, accent.C * 0.78, accent.H - 2)), 0.22),
-      'cta-verb-ink': deepenUntil(fitGamut(lch(0.44, accent.C * 0.78, accent.H - 2)), 0, lch(0.93, b['color-text'].C, b['color-text'].H), 4.6),
+      'cta-ghost': mixWithBlack(fitGamut(lch(0.4, accent.C * 0.6, accent.H - 2)), 0.22),
+      'cta-verb-ink': deepenUntil(fitGamut(lch(0.4, accent.C * 0.6, accent.H - 2)), 0, lch(0.93, b['color-text'].C, b['color-text'].H), 4.6),
       // Lifted off the night paper (the well under it would sink to the paper's own lightness), the shimmer near it.
       'skeleton-base': { ...over(b['color-text'], 0.08, b['color-card-bg']), alpha: 0.85 },
       'skeleton-glow': lch(0.3, paper.C, paper.H),
@@ -421,14 +429,14 @@ const SCHEME_VALUES: Record<Scheme, Record<SchemeToken, Oklch>> = {
     'color-yellow': o('oklch(31% 0.05 85)'),
     'color-sky': o('oklch(30% 0.045 220)'),
     'avatar-stroke': o('oklch(85% 0.02 70 / 0.35)'),
-    'tag-stroke': o('oklch(84% 0.03 70 / 0.42)'),
+    'tag-stroke': o('oklch(84% 0.03 70 / 0.34)'),
     scrim: o('oklch(8% 0.01 60 / 0.6)'),
     'shadow-ink': o('oklch(5% 0.01 60)'),
     'grain-ink': o('oklch(96% 0.01 75)'),
     'toward-ink': o('oklch(100% 0 0)'),
     'footer-ink-soft': o('oklch(85% 0.015 75)'),
     'picture-backing': o('oklch(93% 0.012 75)'),
-    'soft-pen': o('oklch(72% 0.03 66)'),
+    'soft-pen': o('oklch(58% 0.03 66)'),
     'color-ok': o('oklch(74% 0.12 145)'),
     'verified-mark': o('oklch(70% 0.1 145)'),
     'photo-ink': o('oklch(96.5% 0.015 75)'),
@@ -487,15 +495,17 @@ function family(scheme: Scheme, i: number): Record<FamilyToken, Oklch> {
   const fill = i === 3 ? lch(0.31, 0.045, 85) : fitGamut(lch(0.3, C * 0.75, h));
   return {
     'card-fill': fill,
-    'card-border': fitGamut(lch(0.72, o(LIGHT_BORDERS[i][0]).C * 0.75, h)),
-    'card-border-deep': fitGamut(lch(0.84, o(LIGHT_BORDERS[i][0]).C * 0.5, h)),
-    'card-interior': lch(0.235, 0.014, h),
-    'card-separator': lch(0.72, 0.04, h, 0.4),
+    // The family's pen at 0.45× its light chroma, each at or under its light twin's ratio — an outline, not a neon.
+    'card-border': fitGamut(lch(0.56, o(LIGHT_BORDERS[i][0]).C * 0.45, h)),
+    'card-border-deep': fitGamut(lch(0.7, o(LIGHT_BORDERS[i][0]).C * 0.4, h)),
+    // A card's own paper barely tinted: at night a little chroma reads as a slab of colour.
+    'card-interior': lch(0.235, 0.007, h),
+    'card-separator': lch(0.6, 0.03, h, 0.35),
     'card-note-ink': fitGamut(lch(0.78, 0.08, h)),
     // The coverless frame's hatching, light enough to read on the fill at 28% (as light's does).
     'card-stripe': lch(fill.L + 0.1, fill.C, fill.H),
     'card-accent': lch(0.38, 0.05, h),
-    'card-hover': lch(0.27, 0.022, h),
+    'card-hover': lch(0.27, 0.012, h),
     'card-skeleton': lch(0.34, 0.05, h),
     'card-tag': fitGamut(lch(fill.L + 0.04, fill.C, fill.H)),
     // A tonal pill on the dark frame (a bright cream pill would be the brightest thing on the step): chalk words.
@@ -640,32 +650,32 @@ export function themeColor(accent: Accent, scheme: Scheme): Oklch {
  */
 export const HUE_ROLES = {
   /** A card's paper (an embed, a thought-map card, the writer's cover slot). */
-  interior: { light: [0.975, 0.012], dark: [0.235, 0.014] },
+  interior: { light: [0.975, 0.012], dark: [0.235, 0.007] },
   /** A coverless thumbnail, a resting pill. */
   accent: { light: [0.9, 0.06], dark: [0.38, 0.05] },
   /** A tag in the card's hue. */
   tint: { light: [0.92, 0.06], dark: [0.33, 0.05] },
   /** A card's outline. */
-  pen: { light: [0.52, 0.11], dark: [0.72, 0.0825] },
+  pen: { light: [0.52, 0.11], dark: [0.56, 0.05] },
   /** The outline pointed at. */
-  'pen-deep': { light: [0.38, 0.09], dark: [0.84, 0.045] },
+  'pen-deep': { light: [0.38, 0.09], dark: [0.7, 0.04] },
   /** A menu's paper of that hue. */
-  menu: { light: [0.98, 0.01], dark: [0.25, 0.014] },
+  menu: { light: [0.98, 0.01], dark: [0.25, 0.008] },
   /** A rule between rows (taken at 0.4 alpha). */
-  separator: { light: [0.55, 0.04], dark: [0.72, 0.04] },
+  separator: { light: [0.55, 0.04], dark: [0.6, 0.03] },
   /** A resting pill's words. */
   'pill-ink': { light: [0.5, 0.04], dark: [0.8, 0.04] },
   /** A chosen card's paper (the thought map). */
   wash: { light: [0.925, 0.045], dark: [0.31, 0.045] },
   /** A chosen card's outline. */
-  emphasis: { light: [0.38, 0.13], dark: [0.84, 0.08] },
+  emphasis: { light: [0.38, 0.13], dark: [0.76, 0.06] },
   /** A thought-map group's ground (taken at 0.78–0.92 alpha). */
   group: { light: [0.965, 0.032], dark: [0.265, 0.03] },
   /** A group's outline, at rest and chosen. */
-  'group-pen': { light: [0.6, 0.085], dark: [0.6, 0.07] },
-  'group-pen-hot': { light: [0.45, 0.1], dark: [0.78, 0.085] },
+  'group-pen': { light: [0.6, 0.085], dark: [0.5, 0.045] },
+  'group-pen-hot': { light: [0.45, 0.1], dark: [0.66, 0.06] },
   /** A group title's underline. */
-  'group-ink': { light: [0.48, 0.09], dark: [0.76, 0.08] },
+  'group-ink': { light: [0.48, 0.09], dark: [0.66, 0.06] },
   /** Words and handles in a card's hue, pointed at. */
   ink: { light: [0.45, 0.13], dark: [0.8, 0.1] },
   label: { light: [0.42, 0.1], dark: [0.8, 0.07] },

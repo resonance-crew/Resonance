@@ -548,20 +548,20 @@ class ResonanceColors(
  * chroma in light and in dark ([ResonanceColors.hue]).
  */
 enum class HueRole(val key: String, val light: List<Double>, val dark: List<Double>) {
-    Interior("interior", listOf(0.975, 0.012), listOf(0.235, 0.014)),
+    Interior("interior", listOf(0.975, 0.012), listOf(0.235, 0.007)),
     Accent("accent", listOf(0.9, 0.06), listOf(0.38, 0.05)),
     Tint("tint", listOf(0.92, 0.06), listOf(0.33, 0.05)),
-    Pen("pen", listOf(0.52, 0.11), listOf(0.72, 0.0825)),
-    PenDeep("pen-deep", listOf(0.38, 0.09), listOf(0.84, 0.045)),
-    Menu("menu", listOf(0.98, 0.01), listOf(0.25, 0.014)),
-    Separator("separator", listOf(0.55, 0.04), listOf(0.72, 0.04)),
+    Pen("pen", listOf(0.52, 0.11), listOf(0.56, 0.05)),
+    PenDeep("pen-deep", listOf(0.38, 0.09), listOf(0.7, 0.04)),
+    Menu("menu", listOf(0.98, 0.01), listOf(0.25, 0.008)),
+    Separator("separator", listOf(0.55, 0.04), listOf(0.6, 0.03)),
     PillInk("pill-ink", listOf(0.5, 0.04), listOf(0.8, 0.04)),
     Wash("wash", listOf(0.925, 0.045), listOf(0.31, 0.045)),
-    Emphasis("emphasis", listOf(0.38, 0.13), listOf(0.84, 0.08)),
+    Emphasis("emphasis", listOf(0.38, 0.13), listOf(0.76, 0.06)),
     Group("group", listOf(0.965, 0.032), listOf(0.265, 0.03)),
-    GroupPen("group-pen", listOf(0.6, 0.085), listOf(0.6, 0.07)),
-    GroupPenHot("group-pen-hot", listOf(0.45, 0.1), listOf(0.78, 0.085)),
-    GroupInk("group-ink", listOf(0.48, 0.09), listOf(0.76, 0.08)),
+    GroupPen("group-pen", listOf(0.6, 0.085), listOf(0.5, 0.045)),
+    GroupPenHot("group-pen-hot", listOf(0.45, 0.1), listOf(0.66, 0.06)),
+    GroupInk("group-ink", listOf(0.48, 0.09), listOf(0.66, 0.06)),
     Ink("ink", listOf(0.45, 0.13), listOf(0.8, 0.1)),
     Label("label", listOf(0.42, 0.1), listOf(0.8, 0.07)),
 }
@@ -605,9 +605,9 @@ internal object PaletteTables {
         0.26, 0.03, 60.0, 0.06, // story-code-tint
         0.26, 0.03, 60.0, 1.0, // footer-bg
         0.965, 0.015, 75.0, 1.0, // footer-ink
-        0.62, 0.14, 45.0, 1.0, // cta-band
+        0.5146, 0.1162, 45.0, 1.0, // cta-band
         0.965, 0.015, 75.0, 1.0, // cta-ink
-        0.5084, 0.1148, 45.0, 1.0, // cta-ghost
+        0.3646, 0.082329, 45.0, 1.0, // cta-ghost
         0.4836, 0.1092, 45.0, 1.0, // cta-verb-ink
         0.8898, 0.01872, 74.1, 0.85, // skeleton-base
         0.965, 0.015, 75.0, 1.0, // skeleton-glow
@@ -726,7 +726,7 @@ internal object PaletteTables {
         0.88, 0.02, 76.0, 1.0, // color-text
         0.68, 0.03, 70.0, 1.0, // color-text-muted
         0.4, 0.02, 70.0, 1.0, // field-border
-        0.6, 0.035, 66.0, 1.0, // field-border-hover
+        0.48, 0.025, 66.0, 1.0, // field-border-hover
         0.58, 0.03, 70.0, 1.0, // placeholder
         0.329, 0.0566, 54.0, 1.0, // bubble-mine
         0.2725, 0.0137, 63.4, 1.0, // bubble-theirs
@@ -740,20 +740,20 @@ internal object PaletteTables {
         0.7525, 0.10625, 54.25, 1.0, // terracotta-deep
         0.7355, 0.11775, 51.35, 1.0, // terracotta-outline
         0.2568, 0.021524, 62.32, 1.0, // auth-interior
-        0.7406, 0.1143, 52.22, 1.0, // auth-border
+        0.6, 0.081, 47.0, 1.0, // auth-border
         0.32, 0.01729, 70.0, 1.0, // toggle-off
         0.52, 0.0225, 70.0, 1.0, // toggle-off-stroke
-        0.78, 0.03, 70.0, 1.0, // ghost-stroke
-        0.8, 0.04, 76.0, 1.0, // modal-border
+        0.62, 0.03, 70.0, 1.0, // ghost-stroke
+        0.6, 0.04, 76.0, 1.0, // modal-border
         0.7, 0.029, 70.6, 1.0, // segment-idle-ink
         0.65, 0.081, 47.0, 1.0, // link-wave
         0.88, 0.02, 76.0, 0.08, // story-code-tint
         0.15, 0.00975, 62.0, 1.0, // footer-bg
         0.88, 0.02, 76.0, 1.0, // footer-ink
-        0.44, 0.1053, 45.0, 1.0, // cta-band
+        0.4, 0.081, 45.0, 1.0, // cta-band
         0.93, 0.02, 76.0, 1.0, // cta-ink
-        0.3432, 0.082134, 45.0, 1.0, // cta-ghost
-        0.44, 0.1053, 45.0, 1.0, // cta-verb-ink
+        0.312, 0.06318, 45.0, 1.0, // cta-ghost
+        0.4, 0.081, 45.0, 1.0, // cta-verb-ink
         0.2912, 0.014517, 64.96, 0.85, // skeleton-base
         0.3, 0.013, 62.0, 1.0, // skeleton-glow
         0.24, 0.01404, 64.0, 1.0, // avatar-wait
@@ -768,14 +768,14 @@ internal object PaletteTables {
         0.31, 0.05, 85.0, 1.0, // color-yellow
         0.3, 0.045, 220.0, 1.0, // color-sky
         0.85, 0.02, 70.0, 0.35, // avatar-stroke
-        0.84, 0.03, 70.0, 0.42, // tag-stroke
+        0.84, 0.03, 70.0, 0.34, // tag-stroke
         0.08, 0.01, 60.0, 0.6, // scrim
         0.05, 0.01, 60.0, 1.0, // shadow-ink
         0.96, 0.01, 75.0, 1.0, // grain-ink
         1.0, 0.0, 0.0, 1.0, // toward-ink
         0.85, 0.015, 75.0, 1.0, // footer-ink-soft
         0.93, 0.012, 75.0, 1.0, // picture-backing
-        0.72, 0.03, 66.0, 1.0, // soft-pen
+        0.58, 0.03, 66.0, 1.0, // soft-pen
         0.74, 0.12, 145.0, 1.0, // color-ok
         0.7, 0.1, 145.0, 1.0, // verified-mark
         0.965, 0.015, 75.0, 1.0, // photo-ink
@@ -787,30 +787,30 @@ internal object PaletteTables {
         0.31, 0.045, 85.0, 1.0, // card-fill-3
         0.3, 0.02475, 215.0, 1.0, // card-fill-4
         0.3, 0.03525, 18.0, 1.0, // card-fill-5
-        0.72, 0.0975, 55.0, 1.0, // card-border-0
-        0.72, 0.075, 290.0, 1.0, // card-border-1
-        0.72, 0.09, 140.0, 1.0, // card-border-2
-        0.72, 0.105, 88.0, 1.0, // card-border-3
-        0.72, 0.075, 215.0, 1.0, // card-border-4
-        0.72, 0.0675, 18.0, 1.0, // card-border-5
-        0.84, 0.065, 55.0, 1.0, // card-border-deep-0
-        0.84, 0.05, 290.0, 1.0, // card-border-deep-1
-        0.84, 0.06, 140.0, 1.0, // card-border-deep-2
-        0.84, 0.07, 88.0, 1.0, // card-border-deep-3
-        0.84, 0.05, 215.0, 1.0, // card-border-deep-4
-        0.84, 0.045, 18.0, 1.0, // card-border-deep-5
-        0.235, 0.014, 55.0, 1.0, // card-interior-0
-        0.235, 0.014, 290.0, 1.0, // card-interior-1
-        0.235, 0.014, 140.0, 1.0, // card-interior-2
-        0.235, 0.014, 88.0, 1.0, // card-interior-3
-        0.235, 0.014, 215.0, 1.0, // card-interior-4
-        0.235, 0.014, 18.0, 1.0, // card-interior-5
-        0.72, 0.04, 55.0, 0.4, // card-separator-0
-        0.72, 0.04, 290.0, 0.4, // card-separator-1
-        0.72, 0.04, 140.0, 0.4, // card-separator-2
-        0.72, 0.04, 88.0, 0.4, // card-separator-3
-        0.72, 0.04, 215.0, 0.4, // card-separator-4
-        0.72, 0.04, 18.0, 0.4, // card-separator-5
+        0.56, 0.0585, 55.0, 1.0, // card-border-0
+        0.56, 0.045, 290.0, 1.0, // card-border-1
+        0.56, 0.054, 140.0, 1.0, // card-border-2
+        0.56, 0.063, 88.0, 1.0, // card-border-3
+        0.56, 0.045, 215.0, 1.0, // card-border-4
+        0.56, 0.0405, 18.0, 1.0, // card-border-5
+        0.7, 0.052, 55.0, 1.0, // card-border-deep-0
+        0.7, 0.04, 290.0, 1.0, // card-border-deep-1
+        0.7, 0.048, 140.0, 1.0, // card-border-deep-2
+        0.7, 0.056, 88.0, 1.0, // card-border-deep-3
+        0.7, 0.04, 215.0, 1.0, // card-border-deep-4
+        0.7, 0.036, 18.0, 1.0, // card-border-deep-5
+        0.235, 0.007, 55.0, 1.0, // card-interior-0
+        0.235, 0.007, 290.0, 1.0, // card-interior-1
+        0.235, 0.007, 140.0, 1.0, // card-interior-2
+        0.235, 0.007, 88.0, 1.0, // card-interior-3
+        0.235, 0.007, 215.0, 1.0, // card-interior-4
+        0.235, 0.007, 18.0, 1.0, // card-interior-5
+        0.6, 0.03, 55.0, 0.35, // card-separator-0
+        0.6, 0.03, 290.0, 0.35, // card-separator-1
+        0.6, 0.03, 140.0, 0.35, // card-separator-2
+        0.6, 0.03, 88.0, 0.35, // card-separator-3
+        0.6, 0.03, 215.0, 0.35, // card-separator-4
+        0.6, 0.03, 18.0, 0.35, // card-separator-5
         0.78, 0.08, 55.0, 1.0, // card-note-ink-0
         0.78, 0.08, 290.0, 1.0, // card-note-ink-1
         0.78, 0.08, 140.0, 1.0, // card-note-ink-2
@@ -829,12 +829,12 @@ internal object PaletteTables {
         0.38, 0.05, 88.0, 1.0, // card-accent-3
         0.38, 0.05, 215.0, 1.0, // card-accent-4
         0.38, 0.05, 18.0, 1.0, // card-accent-5
-        0.27, 0.022, 55.0, 1.0, // card-hover-0
-        0.27, 0.022, 290.0, 1.0, // card-hover-1
-        0.27, 0.022, 140.0, 1.0, // card-hover-2
-        0.27, 0.022, 88.0, 1.0, // card-hover-3
-        0.27, 0.022, 215.0, 1.0, // card-hover-4
-        0.27, 0.022, 18.0, 1.0, // card-hover-5
+        0.27, 0.012, 55.0, 1.0, // card-hover-0
+        0.27, 0.012, 290.0, 1.0, // card-hover-1
+        0.27, 0.012, 140.0, 1.0, // card-hover-2
+        0.27, 0.012, 88.0, 1.0, // card-hover-3
+        0.27, 0.012, 215.0, 1.0, // card-hover-4
+        0.27, 0.012, 18.0, 1.0, // card-hover-5
         0.34, 0.05, 55.0, 1.0, // card-skeleton-0
         0.34, 0.05, 290.0, 1.0, // card-skeleton-1
         0.34, 0.05, 140.0, 1.0, // card-skeleton-2
@@ -895,9 +895,9 @@ internal object PaletteTables {
         0.26, 0.025, 150.0, 0.06, // story-code-tint
         0.26, 0.025, 150.0, 1.0, // footer-bg
         0.965, 0.013, 140.0, 1.0, // footer-ink
-        0.55, 0.13, 140.0, 1.0, // cta-band
+        0.484, 0.1144, 140.0, 1.0, // cta-band
         0.965, 0.013, 140.0, 1.0, // cta-ink
-        0.451, 0.1066, 140.0, 1.0, // cta-ghost
+        0.334, 0.078945, 140.0, 1.0, // cta-ghost
         0.429, 0.1014, 140.0, 1.0, // cta-verb-ink
         0.8898, 0.01654, 140.6, 0.85, // skeleton-base
         0.965, 0.013, 140.0, 1.0, // skeleton-glow
@@ -1016,7 +1016,7 @@ internal object PaletteTables {
         0.88, 0.02, 154.0, 1.0, // color-text
         0.68, 0.03, 148.0, 1.0, // color-text-muted
         0.4, 0.02, 148.0, 1.0, // field-border
-        0.6, 0.035, 144.0, 1.0, // field-border-hover
+        0.48, 0.025, 144.0, 1.0, // field-border-hover
         0.58, 0.03, 148.0, 1.0, // placeholder
         0.329, 0.0506, 148.0, 1.0, // bubble-mine
         0.2725, 0.0137, 141.4, 1.0, // bubble-theirs
@@ -1030,20 +1030,20 @@ internal object PaletteTables {
         0.7675, 0.095, 147.25, 1.0, // terracotta-deep
         0.7525, 0.105, 146.35, 1.0, // terracotta-outline
         0.2568, 0.020474, 143.12, 1.0, // auth-interior
-        0.757, 0.102, 146.62, 1.0, // auth-border
+        0.6, 0.072, 145.0, 1.0, // auth-border
         0.32, 0.01729, 148.0, 1.0, // toggle-off
         0.52, 0.0225, 148.0, 1.0, // toggle-off-stroke
-        0.78, 0.03, 148.0, 1.0, // ghost-stroke
-        0.8, 0.04, 154.0, 1.0, // modal-border
+        0.62, 0.03, 148.0, 1.0, // ghost-stroke
+        0.6, 0.04, 154.0, 1.0, // modal-border
         0.7, 0.029, 148.6, 1.0, // segment-idle-ink
         0.67, 0.072, 145.0, 1.0, // link-wave
         0.88, 0.02, 154.0, 0.08, // story-code-tint
         0.15, 0.00975, 140.0, 1.0, // footer-bg
         0.88, 0.02, 154.0, 1.0, // footer-ink
-        0.44, 0.0936, 143.0, 1.0, // cta-band
+        0.4, 0.072, 143.0, 1.0, // cta-band
         0.93, 0.02, 154.0, 1.0, // cta-ink
-        0.3432, 0.073008, 143.0, 1.0, // cta-ghost
-        0.44, 0.0936, 143.0, 1.0, // cta-verb-ink
+        0.312, 0.05616, 143.0, 1.0, // cta-ghost
+        0.4, 0.072, 143.0, 1.0, // cta-verb-ink
         0.2912, 0.014517, 142.96, 0.85, // skeleton-base
         0.3, 0.013, 140.0, 1.0, // skeleton-glow
         0.24, 0.01404, 142.0, 1.0, // avatar-wait
@@ -1058,14 +1058,14 @@ internal object PaletteTables {
         0.31, 0.05, 85.0, 1.0, // color-yellow
         0.3, 0.045, 220.0, 1.0, // color-sky
         0.85, 0.02, 70.0, 0.35, // avatar-stroke
-        0.84, 0.03, 70.0, 0.42, // tag-stroke
+        0.84, 0.03, 70.0, 0.34, // tag-stroke
         0.08, 0.01, 60.0, 0.6, // scrim
         0.05, 0.01, 60.0, 1.0, // shadow-ink
         0.96, 0.01, 75.0, 1.0, // grain-ink
         1.0, 0.0, 0.0, 1.0, // toward-ink
         0.85, 0.015, 75.0, 1.0, // footer-ink-soft
         0.93, 0.012, 75.0, 1.0, // picture-backing
-        0.72, 0.03, 66.0, 1.0, // soft-pen
+        0.58, 0.03, 66.0, 1.0, // soft-pen
         0.74, 0.12, 145.0, 1.0, // color-ok
         0.7, 0.1, 145.0, 1.0, // verified-mark
         0.965, 0.015, 75.0, 1.0, // photo-ink
@@ -1077,30 +1077,30 @@ internal object PaletteTables {
         0.31, 0.045, 85.0, 1.0, // card-fill-3
         0.3, 0.02475, 215.0, 1.0, // card-fill-4
         0.3, 0.03525, 18.0, 1.0, // card-fill-5
-        0.72, 0.0975, 55.0, 1.0, // card-border-0
-        0.72, 0.075, 290.0, 1.0, // card-border-1
-        0.72, 0.09, 140.0, 1.0, // card-border-2
-        0.72, 0.105, 88.0, 1.0, // card-border-3
-        0.72, 0.075, 215.0, 1.0, // card-border-4
-        0.72, 0.0675, 18.0, 1.0, // card-border-5
-        0.84, 0.065, 55.0, 1.0, // card-border-deep-0
-        0.84, 0.05, 290.0, 1.0, // card-border-deep-1
-        0.84, 0.06, 140.0, 1.0, // card-border-deep-2
-        0.84, 0.07, 88.0, 1.0, // card-border-deep-3
-        0.84, 0.05, 215.0, 1.0, // card-border-deep-4
-        0.84, 0.045, 18.0, 1.0, // card-border-deep-5
-        0.235, 0.014, 55.0, 1.0, // card-interior-0
-        0.235, 0.014, 290.0, 1.0, // card-interior-1
-        0.235, 0.014, 140.0, 1.0, // card-interior-2
-        0.235, 0.014, 88.0, 1.0, // card-interior-3
-        0.235, 0.014, 215.0, 1.0, // card-interior-4
-        0.235, 0.014, 18.0, 1.0, // card-interior-5
-        0.72, 0.04, 55.0, 0.4, // card-separator-0
-        0.72, 0.04, 290.0, 0.4, // card-separator-1
-        0.72, 0.04, 140.0, 0.4, // card-separator-2
-        0.72, 0.04, 88.0, 0.4, // card-separator-3
-        0.72, 0.04, 215.0, 0.4, // card-separator-4
-        0.72, 0.04, 18.0, 0.4, // card-separator-5
+        0.56, 0.0585, 55.0, 1.0, // card-border-0
+        0.56, 0.045, 290.0, 1.0, // card-border-1
+        0.56, 0.054, 140.0, 1.0, // card-border-2
+        0.56, 0.063, 88.0, 1.0, // card-border-3
+        0.56, 0.045, 215.0, 1.0, // card-border-4
+        0.56, 0.0405, 18.0, 1.0, // card-border-5
+        0.7, 0.052, 55.0, 1.0, // card-border-deep-0
+        0.7, 0.04, 290.0, 1.0, // card-border-deep-1
+        0.7, 0.048, 140.0, 1.0, // card-border-deep-2
+        0.7, 0.056, 88.0, 1.0, // card-border-deep-3
+        0.7, 0.04, 215.0, 1.0, // card-border-deep-4
+        0.7, 0.036, 18.0, 1.0, // card-border-deep-5
+        0.235, 0.007, 55.0, 1.0, // card-interior-0
+        0.235, 0.007, 290.0, 1.0, // card-interior-1
+        0.235, 0.007, 140.0, 1.0, // card-interior-2
+        0.235, 0.007, 88.0, 1.0, // card-interior-3
+        0.235, 0.007, 215.0, 1.0, // card-interior-4
+        0.235, 0.007, 18.0, 1.0, // card-interior-5
+        0.6, 0.03, 55.0, 0.35, // card-separator-0
+        0.6, 0.03, 290.0, 0.35, // card-separator-1
+        0.6, 0.03, 140.0, 0.35, // card-separator-2
+        0.6, 0.03, 88.0, 0.35, // card-separator-3
+        0.6, 0.03, 215.0, 0.35, // card-separator-4
+        0.6, 0.03, 18.0, 0.35, // card-separator-5
         0.78, 0.08, 55.0, 1.0, // card-note-ink-0
         0.78, 0.08, 290.0, 1.0, // card-note-ink-1
         0.78, 0.08, 140.0, 1.0, // card-note-ink-2
@@ -1119,12 +1119,12 @@ internal object PaletteTables {
         0.38, 0.05, 88.0, 1.0, // card-accent-3
         0.38, 0.05, 215.0, 1.0, // card-accent-4
         0.38, 0.05, 18.0, 1.0, // card-accent-5
-        0.27, 0.022, 55.0, 1.0, // card-hover-0
-        0.27, 0.022, 290.0, 1.0, // card-hover-1
-        0.27, 0.022, 140.0, 1.0, // card-hover-2
-        0.27, 0.022, 88.0, 1.0, // card-hover-3
-        0.27, 0.022, 215.0, 1.0, // card-hover-4
-        0.27, 0.022, 18.0, 1.0, // card-hover-5
+        0.27, 0.012, 55.0, 1.0, // card-hover-0
+        0.27, 0.012, 290.0, 1.0, // card-hover-1
+        0.27, 0.012, 140.0, 1.0, // card-hover-2
+        0.27, 0.012, 88.0, 1.0, // card-hover-3
+        0.27, 0.012, 215.0, 1.0, // card-hover-4
+        0.27, 0.012, 18.0, 1.0, // card-hover-5
         0.34, 0.05, 55.0, 1.0, // card-skeleton-0
         0.34, 0.05, 290.0, 1.0, // card-skeleton-1
         0.34, 0.05, 140.0, 1.0, // card-skeleton-2
@@ -1185,9 +1185,9 @@ internal object PaletteTables {
         0.26, 0.025, 295.0, 0.06, // story-code-tint
         0.26, 0.025, 295.0, 1.0, // footer-bg
         0.965, 0.012, 300.0, 1.0, // footer-ink
-        0.58, 0.14, 290.0, 1.0, // cta-band
+        0.5104, 0.1232, 290.0, 1.0, // cta-band
         0.965, 0.012, 300.0, 1.0, // cta-ink
-        0.4756, 0.1148, 290.0, 1.0, // cta-ghost
+        0.3604, 0.086993, 290.0, 1.0, // cta-ghost
         0.4524, 0.1092, 290.0, 1.0, // cta-verb-ink
         0.8945, 0.0156, 299.7, 0.85, // skeleton-base
         0.965, 0.012, 300.0, 1.0, // skeleton-glow
@@ -1306,7 +1306,7 @@ internal object PaletteTables {
         0.88, 0.016923, 312.0, 1.0, // color-text
         0.68, 0.025385, 306.0, 1.0, // color-text-muted
         0.4, 0.016923, 306.0, 1.0, // field-border
-        0.6, 0.029615, 302.0, 1.0, // field-border-hover
+        0.48, 0.021154, 302.0, 1.0, // field-border-hover
         0.58, 0.025385, 306.0, 1.0, // placeholder
         0.329, 0.0482, 297.2, 1.0, // bubble-mine
         0.2725, 0.011592, 299.4, 1.0, // bubble-theirs
@@ -1320,20 +1320,20 @@ internal object PaletteTables {
         0.7675, 0.090481, 297.0, 1.0, // terracotta-deep
         0.7525, 0.100288, 295.0, 1.0, // terracotta-outline
         0.2568, 0.018267, 299.58, 1.0, // auth-interior
-        0.757, 0.097346, 295.6, 1.0, // auth-border
+        0.6, 0.069, 292.0, 1.0, // auth-border
         0.32, 0.01463, 306.0, 1.0, // toggle-off
         0.52, 0.019038, 306.0, 1.0, // toggle-off-stroke
-        0.78, 0.025385, 306.0, 1.0, // ghost-stroke
-        0.8, 0.033846, 312.0, 1.0, // modal-border
+        0.62, 0.025385, 306.0, 1.0, // ghost-stroke
+        0.6, 0.033846, 312.0, 1.0, // modal-border
         0.7, 0.024538, 306.6, 1.0, // segment-idle-ink
         0.67, 0.069, 292.0, 1.0, // link-wave
         0.88, 0.016923, 312.0, 0.08, // story-code-tint
         0.15, 0.00825, 298.0, 1.0, // footer-bg
         0.88, 0.016923, 312.0, 1.0, // footer-ink
-        0.44, 0.0897, 290.0, 1.0, // cta-band
+        0.4, 0.069, 290.0, 1.0, // cta-band
         0.93, 0.016923, 312.0, 1.0, // cta-ink
-        0.3432, 0.069966, 290.0, 1.0, // cta-ghost
-        0.44, 0.0897, 290.0, 1.0, // cta-verb-ink
+        0.312, 0.05382, 290.0, 1.0, // cta-ghost
+        0.4, 0.069, 290.0, 1.0, // cta-verb-ink
         0.2912, 0.012283, 300.96, 0.85, // skeleton-base
         0.3, 0.011, 298.0, 1.0, // skeleton-glow
         0.24, 0.01188, 300.0, 1.0, // avatar-wait
@@ -1348,14 +1348,14 @@ internal object PaletteTables {
         0.31, 0.05, 85.0, 1.0, // color-yellow
         0.3, 0.045, 220.0, 1.0, // color-sky
         0.85, 0.02, 70.0, 0.35, // avatar-stroke
-        0.84, 0.03, 70.0, 0.42, // tag-stroke
+        0.84, 0.03, 70.0, 0.34, // tag-stroke
         0.08, 0.01, 60.0, 0.6, // scrim
         0.05, 0.01, 60.0, 1.0, // shadow-ink
         0.96, 0.01, 75.0, 1.0, // grain-ink
         1.0, 0.0, 0.0, 1.0, // toward-ink
         0.85, 0.015, 75.0, 1.0, // footer-ink-soft
         0.93, 0.012, 75.0, 1.0, // picture-backing
-        0.72, 0.03, 66.0, 1.0, // soft-pen
+        0.58, 0.03, 66.0, 1.0, // soft-pen
         0.74, 0.12, 145.0, 1.0, // color-ok
         0.7, 0.1, 145.0, 1.0, // verified-mark
         0.965, 0.015, 75.0, 1.0, // photo-ink
@@ -1367,30 +1367,30 @@ internal object PaletteTables {
         0.31, 0.045, 85.0, 1.0, // card-fill-3
         0.3, 0.02475, 215.0, 1.0, // card-fill-4
         0.3, 0.03525, 18.0, 1.0, // card-fill-5
-        0.72, 0.0975, 55.0, 1.0, // card-border-0
-        0.72, 0.075, 290.0, 1.0, // card-border-1
-        0.72, 0.09, 140.0, 1.0, // card-border-2
-        0.72, 0.105, 88.0, 1.0, // card-border-3
-        0.72, 0.075, 215.0, 1.0, // card-border-4
-        0.72, 0.0675, 18.0, 1.0, // card-border-5
-        0.84, 0.065, 55.0, 1.0, // card-border-deep-0
-        0.84, 0.05, 290.0, 1.0, // card-border-deep-1
-        0.84, 0.06, 140.0, 1.0, // card-border-deep-2
-        0.84, 0.07, 88.0, 1.0, // card-border-deep-3
-        0.84, 0.05, 215.0, 1.0, // card-border-deep-4
-        0.84, 0.045, 18.0, 1.0, // card-border-deep-5
-        0.235, 0.014, 55.0, 1.0, // card-interior-0
-        0.235, 0.014, 290.0, 1.0, // card-interior-1
-        0.235, 0.014, 140.0, 1.0, // card-interior-2
-        0.235, 0.014, 88.0, 1.0, // card-interior-3
-        0.235, 0.014, 215.0, 1.0, // card-interior-4
-        0.235, 0.014, 18.0, 1.0, // card-interior-5
-        0.72, 0.04, 55.0, 0.4, // card-separator-0
-        0.72, 0.04, 290.0, 0.4, // card-separator-1
-        0.72, 0.04, 140.0, 0.4, // card-separator-2
-        0.72, 0.04, 88.0, 0.4, // card-separator-3
-        0.72, 0.04, 215.0, 0.4, // card-separator-4
-        0.72, 0.04, 18.0, 0.4, // card-separator-5
+        0.56, 0.0585, 55.0, 1.0, // card-border-0
+        0.56, 0.045, 290.0, 1.0, // card-border-1
+        0.56, 0.054, 140.0, 1.0, // card-border-2
+        0.56, 0.063, 88.0, 1.0, // card-border-3
+        0.56, 0.045, 215.0, 1.0, // card-border-4
+        0.56, 0.0405, 18.0, 1.0, // card-border-5
+        0.7, 0.052, 55.0, 1.0, // card-border-deep-0
+        0.7, 0.04, 290.0, 1.0, // card-border-deep-1
+        0.7, 0.048, 140.0, 1.0, // card-border-deep-2
+        0.7, 0.056, 88.0, 1.0, // card-border-deep-3
+        0.7, 0.04, 215.0, 1.0, // card-border-deep-4
+        0.7, 0.036, 18.0, 1.0, // card-border-deep-5
+        0.235, 0.007, 55.0, 1.0, // card-interior-0
+        0.235, 0.007, 290.0, 1.0, // card-interior-1
+        0.235, 0.007, 140.0, 1.0, // card-interior-2
+        0.235, 0.007, 88.0, 1.0, // card-interior-3
+        0.235, 0.007, 215.0, 1.0, // card-interior-4
+        0.235, 0.007, 18.0, 1.0, // card-interior-5
+        0.6, 0.03, 55.0, 0.35, // card-separator-0
+        0.6, 0.03, 290.0, 0.35, // card-separator-1
+        0.6, 0.03, 140.0, 0.35, // card-separator-2
+        0.6, 0.03, 88.0, 0.35, // card-separator-3
+        0.6, 0.03, 215.0, 0.35, // card-separator-4
+        0.6, 0.03, 18.0, 0.35, // card-separator-5
         0.78, 0.08, 55.0, 1.0, // card-note-ink-0
         0.78, 0.08, 290.0, 1.0, // card-note-ink-1
         0.78, 0.08, 140.0, 1.0, // card-note-ink-2
@@ -1409,12 +1409,12 @@ internal object PaletteTables {
         0.38, 0.05, 88.0, 1.0, // card-accent-3
         0.38, 0.05, 215.0, 1.0, // card-accent-4
         0.38, 0.05, 18.0, 1.0, // card-accent-5
-        0.27, 0.022, 55.0, 1.0, // card-hover-0
-        0.27, 0.022, 290.0, 1.0, // card-hover-1
-        0.27, 0.022, 140.0, 1.0, // card-hover-2
-        0.27, 0.022, 88.0, 1.0, // card-hover-3
-        0.27, 0.022, 215.0, 1.0, // card-hover-4
-        0.27, 0.022, 18.0, 1.0, // card-hover-5
+        0.27, 0.012, 55.0, 1.0, // card-hover-0
+        0.27, 0.012, 290.0, 1.0, // card-hover-1
+        0.27, 0.012, 140.0, 1.0, // card-hover-2
+        0.27, 0.012, 88.0, 1.0, // card-hover-3
+        0.27, 0.012, 215.0, 1.0, // card-hover-4
+        0.27, 0.012, 18.0, 1.0, // card-hover-5
         0.34, 0.05, 55.0, 1.0, // card-skeleton-0
         0.34, 0.05, 290.0, 1.0, // card-skeleton-1
         0.34, 0.05, 140.0, 1.0, // card-skeleton-2
@@ -1475,9 +1475,9 @@ internal object PaletteTables {
         0.26, 0.03, 80.0, 0.06, // story-code-tint
         0.26, 0.03, 80.0, 1.0, // footer-bg
         0.965, 0.02, 95.0, 1.0, // footer-ink
-        0.64, 0.13, 78.0, 1.0, // cta-band
+        0.512, 0.104, 78.0, 1.0, // cta-band
         0.965, 0.02, 95.0, 1.0, // cta-ink
-        0.5248, 0.1066, 78.0, 1.0, // cta-ghost
+        0.362, 0.073531, 78.0, 1.0, // cta-ghost
         0.4992, 0.1014, 78.0, 1.0, // cta-verb-ink
         0.8898, 0.02436, 94.1, 0.85, // skeleton-base
         0.965, 0.02, 95.0, 1.0, // skeleton-glow
@@ -1596,7 +1596,7 @@ internal object PaletteTables {
         0.88, 0.023077, 102.0, 1.0, // color-text
         0.68, 0.034615, 96.0, 1.0, // color-text-muted
         0.4, 0.023077, 96.0, 1.0, // field-border
-        0.6, 0.040385, 92.0, 1.0, // field-border-hover
+        0.48, 0.028846, 92.0, 1.0, // field-border-hover
         0.58, 0.034615, 96.0, 1.0, // placeholder
         0.329, 0.053, 85.6, 1.0, // bubble-mine
         0.2725, 0.015808, 89.4, 1.0, // bubble-theirs
@@ -1610,20 +1610,20 @@ internal object PaletteTables {
         0.8125, 0.099519, 85.5, 1.0, // terracotta-deep
         0.8035, 0.109712, 83.3, 1.0, // terracotta-outline
         0.2568, 0.022682, 89.3, 1.0, // auth-interior
-        0.8062, 0.106654, 83.96, 1.0, // auth-border
+        0.6, 0.075, 80.0, 1.0, // auth-border
         0.32, 0.01995, 96.0, 1.0, // toggle-off
         0.52, 0.025962, 96.0, 1.0, // toggle-off-stroke
-        0.78, 0.034615, 96.0, 1.0, // ghost-stroke
-        0.8, 0.046154, 102.0, 1.0, // modal-border
+        0.62, 0.034615, 96.0, 1.0, // ghost-stroke
+        0.6, 0.046154, 102.0, 1.0, // modal-border
         0.7, 0.033462, 96.6, 1.0, // segment-idle-ink
         0.73, 0.075, 80.0, 1.0, // link-wave
         0.88, 0.023077, 102.0, 0.08, // story-code-tint
         0.15, 0.01125, 88.0, 1.0, // footer-bg
         0.88, 0.023077, 102.0, 1.0, // footer-ink
-        0.44, 0.0975, 78.0, 1.0, // cta-band
+        0.4, 0.075, 78.0, 1.0, // cta-band
         0.93, 0.023077, 102.0, 1.0, // cta-ink
-        0.3432, 0.07605, 78.0, 1.0, // cta-ghost
-        0.44, 0.0975, 78.0, 1.0, // cta-verb-ink
+        0.312, 0.0585, 78.0, 1.0, // cta-ghost
+        0.4, 0.075, 78.0, 1.0, // cta-verb-ink
         0.2912, 0.01675, 90.96, 0.85, // skeleton-base
         0.3, 0.015, 88.0, 1.0, // skeleton-glow
         0.24, 0.0162, 90.0, 1.0, // avatar-wait
@@ -1638,14 +1638,14 @@ internal object PaletteTables {
         0.31, 0.05, 85.0, 1.0, // color-yellow
         0.3, 0.045, 220.0, 1.0, // color-sky
         0.85, 0.02, 70.0, 0.35, // avatar-stroke
-        0.84, 0.03, 70.0, 0.42, // tag-stroke
+        0.84, 0.03, 70.0, 0.34, // tag-stroke
         0.08, 0.01, 60.0, 0.6, // scrim
         0.05, 0.01, 60.0, 1.0, // shadow-ink
         0.96, 0.01, 75.0, 1.0, // grain-ink
         1.0, 0.0, 0.0, 1.0, // toward-ink
         0.85, 0.015, 75.0, 1.0, // footer-ink-soft
         0.93, 0.012, 75.0, 1.0, // picture-backing
-        0.72, 0.03, 66.0, 1.0, // soft-pen
+        0.58, 0.03, 66.0, 1.0, // soft-pen
         0.74, 0.12, 145.0, 1.0, // color-ok
         0.7, 0.1, 145.0, 1.0, // verified-mark
         0.965, 0.015, 75.0, 1.0, // photo-ink
@@ -1657,30 +1657,30 @@ internal object PaletteTables {
         0.31, 0.045, 85.0, 1.0, // card-fill-3
         0.3, 0.02475, 215.0, 1.0, // card-fill-4
         0.3, 0.03525, 18.0, 1.0, // card-fill-5
-        0.72, 0.0975, 55.0, 1.0, // card-border-0
-        0.72, 0.075, 290.0, 1.0, // card-border-1
-        0.72, 0.09, 140.0, 1.0, // card-border-2
-        0.72, 0.105, 88.0, 1.0, // card-border-3
-        0.72, 0.075, 215.0, 1.0, // card-border-4
-        0.72, 0.0675, 18.0, 1.0, // card-border-5
-        0.84, 0.065, 55.0, 1.0, // card-border-deep-0
-        0.84, 0.05, 290.0, 1.0, // card-border-deep-1
-        0.84, 0.06, 140.0, 1.0, // card-border-deep-2
-        0.84, 0.07, 88.0, 1.0, // card-border-deep-3
-        0.84, 0.05, 215.0, 1.0, // card-border-deep-4
-        0.84, 0.045, 18.0, 1.0, // card-border-deep-5
-        0.235, 0.014, 55.0, 1.0, // card-interior-0
-        0.235, 0.014, 290.0, 1.0, // card-interior-1
-        0.235, 0.014, 140.0, 1.0, // card-interior-2
-        0.235, 0.014, 88.0, 1.0, // card-interior-3
-        0.235, 0.014, 215.0, 1.0, // card-interior-4
-        0.235, 0.014, 18.0, 1.0, // card-interior-5
-        0.72, 0.04, 55.0, 0.4, // card-separator-0
-        0.72, 0.04, 290.0, 0.4, // card-separator-1
-        0.72, 0.04, 140.0, 0.4, // card-separator-2
-        0.72, 0.04, 88.0, 0.4, // card-separator-3
-        0.72, 0.04, 215.0, 0.4, // card-separator-4
-        0.72, 0.04, 18.0, 0.4, // card-separator-5
+        0.56, 0.0585, 55.0, 1.0, // card-border-0
+        0.56, 0.045, 290.0, 1.0, // card-border-1
+        0.56, 0.054, 140.0, 1.0, // card-border-2
+        0.56, 0.063, 88.0, 1.0, // card-border-3
+        0.56, 0.045, 215.0, 1.0, // card-border-4
+        0.56, 0.0405, 18.0, 1.0, // card-border-5
+        0.7, 0.052, 55.0, 1.0, // card-border-deep-0
+        0.7, 0.04, 290.0, 1.0, // card-border-deep-1
+        0.7, 0.048, 140.0, 1.0, // card-border-deep-2
+        0.7, 0.056, 88.0, 1.0, // card-border-deep-3
+        0.7, 0.04, 215.0, 1.0, // card-border-deep-4
+        0.7, 0.036, 18.0, 1.0, // card-border-deep-5
+        0.235, 0.007, 55.0, 1.0, // card-interior-0
+        0.235, 0.007, 290.0, 1.0, // card-interior-1
+        0.235, 0.007, 140.0, 1.0, // card-interior-2
+        0.235, 0.007, 88.0, 1.0, // card-interior-3
+        0.235, 0.007, 215.0, 1.0, // card-interior-4
+        0.235, 0.007, 18.0, 1.0, // card-interior-5
+        0.6, 0.03, 55.0, 0.35, // card-separator-0
+        0.6, 0.03, 290.0, 0.35, // card-separator-1
+        0.6, 0.03, 140.0, 0.35, // card-separator-2
+        0.6, 0.03, 88.0, 0.35, // card-separator-3
+        0.6, 0.03, 215.0, 0.35, // card-separator-4
+        0.6, 0.03, 18.0, 0.35, // card-separator-5
         0.78, 0.08, 55.0, 1.0, // card-note-ink-0
         0.78, 0.08, 290.0, 1.0, // card-note-ink-1
         0.78, 0.08, 140.0, 1.0, // card-note-ink-2
@@ -1699,12 +1699,12 @@ internal object PaletteTables {
         0.38, 0.05, 88.0, 1.0, // card-accent-3
         0.38, 0.05, 215.0, 1.0, // card-accent-4
         0.38, 0.05, 18.0, 1.0, // card-accent-5
-        0.27, 0.022, 55.0, 1.0, // card-hover-0
-        0.27, 0.022, 290.0, 1.0, // card-hover-1
-        0.27, 0.022, 140.0, 1.0, // card-hover-2
-        0.27, 0.022, 88.0, 1.0, // card-hover-3
-        0.27, 0.022, 215.0, 1.0, // card-hover-4
-        0.27, 0.022, 18.0, 1.0, // card-hover-5
+        0.27, 0.012, 55.0, 1.0, // card-hover-0
+        0.27, 0.012, 290.0, 1.0, // card-hover-1
+        0.27, 0.012, 140.0, 1.0, // card-hover-2
+        0.27, 0.012, 88.0, 1.0, // card-hover-3
+        0.27, 0.012, 215.0, 1.0, // card-hover-4
+        0.27, 0.012, 18.0, 1.0, // card-hover-5
         0.34, 0.05, 55.0, 1.0, // card-skeleton-0
         0.34, 0.05, 290.0, 1.0, // card-skeleton-1
         0.34, 0.05, 140.0, 1.0, // card-skeleton-2

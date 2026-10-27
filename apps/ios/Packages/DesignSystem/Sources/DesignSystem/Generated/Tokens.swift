@@ -21,7 +21,7 @@ public nonisolated enum Tokens {
     public static let textMuted = Color(uiColor: UI.textMuted)
     /// --field-border · terracotta: light #c5bcb0, dark #4f463c
     public static let fieldBorder = Color(uiColor: UI.fieldBorder)
-    /// --field-border-hover · terracotta: light #937b69, dark #8f7c6a
+    /// --field-border-hover · terracotta: light #937b69, dark #685b4f
     public static let fieldBorderHover = Color(uiColor: UI.fieldBorderHover)
     /// --placeholder · terracotta: light #988979, dark #867867
     public static let placeholder = Color(uiColor: UI.placeholder)
@@ -49,15 +49,15 @@ public nonisolated enum Tokens {
     public static let terracottaOutline = Color(uiColor: UI.terracottaOutline)
     /// --auth-interior · terracotta: light #faf1e4, dark #2b2119
     public static let authInterior = Color(uiColor: UI.authInterior)
-    /// --auth-border · terracotta: light #9a4d27, dark #e49665
+    /// --auth-border · terracotta: light #9a4d27, dark #a87156
     public static let authBorder = Color(uiColor: UI.authBorder)
     /// --toggle-off · terracotta: light #d9cfc3, dark #393129
     public static let toggleOff = Color(uiColor: UI.toggleOff)
     /// --toggle-off-stroke · terracotta: light #ab9c8b, dark #72675b
     public static let toggleOffStroke = Color(uiColor: UI.toggleOffStroke)
-    /// --ghost-stroke · terracotta: light #614f3a, dark #c4b4a3
+    /// --ghost-stroke · terracotta: light #614f3a, dark #928373
     public static let ghostStroke = Color(uiColor: UI.ghostStroke)
-    /// --modal-border · terracotta: light #5f4025, dark #cdbba2
+    /// --modal-border · terracotta: light #5f4025, dark #8e7d66
     public static let modalBorder = Color(uiColor: UI.modalBorder)
     /// --segment-idle-ink · terracotta: light #685744, dark #aa9c8b
     public static let segmentIdleInk = Color(uiColor: UI.segmentIdleInk)
@@ -69,13 +69,13 @@ public nonisolated enum Tokens {
     public static let footerBg = Color(uiColor: UI.footerBg)
     /// --footer-ink · terracotta: light #faf2e9, dark #dfd6c9
     public static let footerInk = Color(uiColor: UI.footerInk)
-    /// --cta-band · terracotta: light #c96736, dark #803c1a
+    /// --cta-band · terracotta: light #9c4e28, dark #6b3820
     public static let ctaBand = Color(uiColor: UI.ctaBand)
     /// --cta-ink · terracotta: light #faf2e9, dark #f0e6da
     public static let ctaInk = Color(uiColor: UI.ctaInk)
-    /// --cta-ghost · terracotta: light #9a4d27, dark #5a280f
+    /// --cta-ghost · terracotta: light #612e15, dark #4b2514
     public static let ctaGhost = Color(uiColor: UI.ctaGhost)
-    /// --cta-verb-ink · terracotta: light #904724, dark #803c1a
+    /// --cta-verb-ink · terracotta: light #904724, dark #6b3820
     public static let ctaVerbInk = Color(uiColor: UI.ctaVerbInk)
     /// --skeleton-base · terracotta: light #e2d9cd, dark #312a24
     public static let skeletonBase = Color(uiColor: UI.skeletonBase)
@@ -119,7 +119,7 @@ public nonisolated enum Tokens {
     public static let footerInkSoft = Color(uiColor: UI.footerInkSoft)
     /// --picture-backing · terracotta: light #faf2e9, dark #ede7df
     public static let pictureBacking = Color(uiColor: UI.pictureBacking)
-    /// --soft-pen · terracotta: light #886b54, dark #b2a191
+    /// --soft-pen · terracotta: light #886b54, dark #877768
     public static let softPen = Color(uiColor: UI.softPen)
     /// --color-ok · terracotta: light #448335, dark #78bf7b
     public static let ok = Color(uiColor: UI.ok)
@@ -143,53 +143,53 @@ public nonisolated enum Tokens {
     public static let cardFill4 = Color(uiColor: UI.cardFill4)
     /// --card-fill-5 · terracotta: light #f9cfcf, dark #3e2727
     public static let cardFill5 = Color(uiColor: UI.cardFill5)
-    /// --card-border-0 · terracotta: light #a05000, dark #d49468
+    /// --card-border-0 · terracotta: light #a05000, dark #906c53
     public static let cardBorder0 = Color(uiColor: UI.cardBorder0)
-    /// --card-border-1 · terracotta: light #6e64a5, dark #a39dd1
+    /// --card-border-1 · terracotta: light #6e64a5, dark #74708e
     public static let cardBorder1 = Color(uiColor: UI.cardBorder1)
-    /// --card-border-2 · terracotta: light #3a732c, dark #86b37d
+    /// --card-border-2 · terracotta: light #3a732c, dark #647d5e
     public static let cardBorder2 = Color(uiColor: UI.cardBorder2)
-    /// --card-border-3 · terracotta: light #9d7300, dark #c0a152
+    /// --card-border-3 · terracotta: light #9d7300, dark #847348
     public static let cardBorder3 = Color(uiColor: UI.cardBorder3)
-    /// --card-border-4 · terracotta: light #007187, dark #6ab1c2
+    /// --card-border-4 · terracotta: light #007187, dark #567c85
     public static let cardBorder4 = Color(uiColor: UI.cardBorder4)
-    /// --card-border-5 · terracotta: light #965255, dark #cc9495
+    /// --card-border-5 · terracotta: light #965255, dark #8b6b6b
     public static let cardBorder5 = Color(uiColor: UI.cardBorder5)
-    /// --card-border-deep-0 · terracotta: light #6c2d00, dark #edc0a3
+    /// --card-border-deep-0 · terracotta: light #6c2d00, dark #b99680
     public static let cardBorder0Dark = Color(uiColor: UI.cardBorder0Dark)
-    /// --card-border-deep-1 · terracotta: light #4d437a, dark #c9c6ea
+    /// --card-border-deep-1 · terracotta: light #4d437a, dark #9d9bb6
     public static let cardBorder1Dark = Color(uiColor: UI.cardBorder1Dark)
-    /// --card-border-deep-2 · terracotta: light #1c500e, dark #b6d5b0
+    /// --card-border-deep-2 · terracotta: light #1c500e, dark #8fa68a
     public static let cardBorder2Dark = Color(uiColor: UI.cardBorder2Dark)
-    /// --card-border-deep-3 · terracotta: light #6e4c00, dark #dec996
+    /// --card-border-deep-3 · terracotta: light #6e4c00, dark #ad9d77
     public static let cardBorder3Dark = Color(uiColor: UI.cardBorder3Dark)
-    /// --card-border-deep-4 · terracotta: light #004d60, dark #a6d3df
+    /// --card-border-deep-4 · terracotta: light #004d60, dark #83a5ae
     public static let cardBorder4Dark = Color(uiColor: UI.cardBorder4Dark)
-    /// --card-border-deep-5 · terracotta: light #6c3437, dark #e7bfbf
+    /// --card-border-deep-5 · terracotta: light #6c3437, dark #b49696
     public static let cardBorder5Dark = Color(uiColor: UI.cardBorder5Dark)
-    /// --card-interior-0 · terracotta: light #fef5ef, dark #231c18
+    /// --card-interior-0 · terracotta: light #fef5ef, dark #211d1b
     public static let cardInterior0 = Color(uiColor: UI.cardInterior0)
-    /// --card-interior-1 · terracotta: light #f6f6ff, dark #1e1d24
+    /// --card-interior-1 · terracotta: light #f6f6ff, dark #1e1e21
     public static let cardInterior1 = Color(uiColor: UI.cardInterior1)
-    /// --card-interior-2 · terracotta: light #f3f9f1, dark #1b201a
+    /// --card-interior-2 · terracotta: light #f3f9f1, dark #1c1f1c
     public static let cardInterior2 = Color(uiColor: UI.cardInterior2)
-    /// --card-interior-3 · terracotta: light #faf6ee, dark #211e17
+    /// --card-interior-3 · terracotta: light #faf6ee, dark #1f1e1a
     public static let cardInterior3 = Color(uiColor: UI.cardInterior3)
-    /// --card-interior-4 · terracotta: light #eef9fc, dark #172022
+    /// --card-interior-4 · terracotta: light #eef9fc, dark #1a1f20
     public static let cardInterior4 = Color(uiColor: UI.cardInterior4)
-    /// --card-interior-5 · terracotta: light #fff4f4, dark #241c1c
+    /// --card-interior-5 · terracotta: light #fff4f4, dark #211d1d
     public static let cardInterior5 = Color(uiColor: UI.cardInterior5)
-    /// --card-separator-0 · terracotta: light #856c5b, dark #b99f8d
+    /// --card-separator-0 · terracotta: light #856c5b, dark #8f7c6f
     public static let cardSeparator0 = Color(uiColor: UI.cardSeparator0)
-    /// --card-separator-1 · terracotta: light #716e88, dark #a4a1bd
+    /// --card-separator-1 · terracotta: light #716e88, dark #7f7e91
     public static let cardSeparator1 = Color(uiColor: UI.cardSeparator1)
-    /// --card-separator-2 · terracotta: light #657861, dark #98ab94
+    /// --card-separator-2 · terracotta: light #657861, dark #778574
     public static let cardSeparator2 = Color(uiColor: UI.cardSeparator2)
-    /// --card-separator-3 · terracotta: light #7b7157, dark #afa489
+    /// --card-separator-3 · terracotta: light #7b7157, dark #88806c
     public static let cardSeparator3 = Color(uiColor: UI.cardSeparator3)
-    /// --card-separator-4 · terracotta: light #577880, dark #89abb4
+    /// --card-separator-4 · terracotta: light #577880, dark #6c858b
     public static let cardSeparator4 = Color(uiColor: UI.cardSeparator4)
-    /// --card-separator-5 · terracotta: light #886869, dark #bd9b9b
+    /// --card-separator-5 · terracotta: light #886869, dark #917979
     public static let cardSeparator5 = Color(uiColor: UI.cardSeparator5)
     /// --card-note-ink-0 · terracotta: light #744624, dark #e0aa86
     public static let cardNoteInk0 = Color(uiColor: UI.cardNoteInk0)
@@ -227,17 +227,17 @@ public nonisolated enum Tokens {
     public static let cardAccent4 = Color(uiColor: UI.cardAccent4)
     /// --card-accent-5 · terracotta: light #ffcfcf, dark #5a3738
     public static let cardAccent5 = Color(uiColor: UI.cardAccent5)
-    /// --card-hover-0 · terracotta: light #f4e2d7, dark #2f241c
+    /// --card-hover-0 · terracotta: light #f4e2d7, dark #2b2521
     public static let cardHover0 = Color(uiColor: UI.cardHover0)
-    /// --card-hover-1 · terracotta: light #e5e4f6, dark #262531
+    /// --card-hover-1 · terracotta: light #e5e4f6, dark #26262c
     public static let cardHover1 = Color(uiColor: UI.cardHover1)
-    /// --card-hover-2 · terracotta: light #deeadb, dark #21291f
+    /// --card-hover-2 · terracotta: light #deeadb, dark #232822
     public static let cardHover2 = Color(uiColor: UI.cardHover2)
-    /// --card-hover-3 · terracotta: light #ede6d5, dark #2b261a
+    /// --card-hover-3 · terracotta: light #ede6d5, dark #292620
     public static let cardHover3 = Color(uiColor: UI.cardHover3)
-    /// --card-hover-4 · terracotta: light #d5ebf0, dark #1a292d
+    /// --card-hover-4 · terracotta: light #d5ebf0, dark #20282a
     public static let cardHover4 = Color(uiColor: UI.cardHover4)
-    /// --card-hover-5 · terracotta: light #f6e0e0, dark #302222
+    /// --card-hover-5 · terracotta: light #f6e0e0, dark #2c2424
     public static let cardHover5 = Color(uiColor: UI.cardHover5)
     /// --card-skeleton-0 · terracotta: light #ffcaa5, dark #4c311e
     public static let cardSkeleton0 = Color(uiColor: UI.cardSkeleton0)

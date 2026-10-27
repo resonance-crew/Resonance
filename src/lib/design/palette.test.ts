@@ -57,7 +57,9 @@ const PAIRS: [PaletteToken, PaletteToken, number][] = [
   ['color-ok', 'color-cream', 3.4],
   // The accent itself never carries a label; as a pen or an icon it clears 3.
   ['color-terracotta', 'color-cream', 3],
-  ['field-border-hover', 'color-cream', 3],
+  // The pane lines (the header's pen line, dividers): light 3.6, night 2.7.
+  ['field-border-hover', 'color-cream', 2.5],
+  ['cta-ink', 'cta-band', 4.5],
   ['reading-progress', 'color-cream', 2.2],
   ['placeholder', 'color-cream', 2.4],
   ...[0, 1, 2, 3, 4, 5].flatMap((i): [PaletteToken, PaletteToken, number][] => [
@@ -78,8 +80,25 @@ const DARK_PAIRS: [PaletteToken, PaletteToken, number][] = [
     ['color-text-muted', `card-fill-${i}` as PaletteToken, 4.5],
     ['color-text', `card-interior-${i}` as PaletteToken, 7],
     ['color-text-muted', `card-interior-${i}` as PaletteToken, 4.5],
-    [`card-border-${i}` as PaletteToken, `card-fill-${i}` as PaletteToken, 4.5],
-    [`card-border-${i}` as PaletteToken, 'color-cream', 4.5],
+    // An outline, not text: it must show (3:1 on the paper and the card's own paper), never shout.
+    [`card-border-${i}` as PaletteToken, 'color-cream', 3],
+    [`card-border-${i}` as PaletteToken, `card-interior-${i}` as PaletteToken, 3],
+  ]),
+];
+
+/**
+ * The calm check: a decorative pen on night paper is never stronger than the same pen in light
+ * (a light line on a dark ground already reads heavier than the same ratio the other way):
+ * [pen, its ground] — dark's ratio ≤ light's.
+ */
+const CALM: [PaletteToken, PaletteToken][] = [
+  ['field-border-hover', 'color-cream'],
+  ['modal-border', 'color-card-bg'],
+  ['ghost-stroke', 'color-cream'],
+  ['soft-pen', 'color-cream'],
+  ...[0, 1, 2, 3, 4, 5].flatMap((i): [PaletteToken, PaletteToken][] => [
+    [`card-border-${i}` as PaletteToken, `card-fill-${i}` as PaletteToken],
+    [`card-border-${i}` as PaletteToken, 'color-cream'],
   ]),
 ];
 
@@ -137,6 +156,14 @@ describe('palette', () => {
     }
   });
 
+  it.each(ACCENTS)('%s: no decorative pen is louder at night than in light', (accent) => {
+    const light = paletteFor(accent, 'light');
+    const dark = paletteFor(accent, 'dark');
+    for (const [pen, ground] of CALM) {
+      expect(contrast(dark[pen], dark[ground]), `${pen} on ${ground}`).toBeLessThanOrEqual(contrast(light[pen], light[ground]) + 0.05);
+    }
+  });
+
   it('the dark ladder keeps light\'s elevation: well below paper below card', () => {
     for (const a of ACCENTS) {
       const p = paletteFor(a, 'dark');
@@ -174,7 +201,7 @@ describe('palette', () => {
     expect(hueColour('pen', 290, 'light')).toBe('oklch(52% 0.11 290)');
     expect(hueColour('separator', 88, 'light', 0.4)).toBe('oklch(55% 0.04 88 / 0.4)');
     expect(paletteCss('oklch')).toContain('--hue-pen: 0.52 0.11;');
-    expect(paletteCss('oklch')).toContain('--hue-pen: 0.72 0.0825;');
+    expect(paletteCss('oklch')).toContain('--hue-pen: 0.56 0.05;');
   });
 
   it('a grey wallpaper wears terracotta', () => {

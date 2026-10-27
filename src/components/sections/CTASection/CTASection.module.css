@@ -19,7 +19,8 @@
   position: absolute;
   top: 120px;
   left: 5%;
-  opacity: 0.15;
+  /* Faint enough that the band's words clear AA wherever a blob lies under them (phones put it behind the text). */
+  opacity: 0.06;
   pointer-events: none;
   z-index: 0;
 }
@@ -28,7 +29,7 @@
   position: absolute;
   bottom: 40px;
   right: 8%;
-  opacity: 0.12;
+  opacity: 0.06;
   pointer-events: none;
   z-index: 0;
 }
@@ -60,7 +61,7 @@
 .description {
   font-family: var(--font-body);
   font-size: 17px;
-  color: color-mix(in oklch, var(--cta-ink) 80%, transparent);
+  color: var(--cta-ink);
   margin: 0 0 clamp(44px, 5vw, 56px);
   line-height: 1.65;
   text-wrap: pretty;

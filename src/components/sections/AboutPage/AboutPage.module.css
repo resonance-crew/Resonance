@@ -424,26 +424,9 @@
   position: absolute;
   top: 110px;
   left: -40px;
-  opacity: 0.14;
-  pointer-events: none;
-}
-
-/* In dark the paper blob lay on the band's quieter words and lifted them under
-   AA (4.0:1): there it is only a hint, and those words take the band's whole
-   ink. Light is the page as it always was. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-scheme='light']) .closingBlob {
-    opacity: 0.06;
-  }
-  :root:not([data-scheme='light']) :is(.closingBody, .motto2) {
-    color: var(--cta-ink);
-  }
-}
-:root[data-scheme='dark'] .closingBlob {
+  /* Only a hint, in both schemes: a paper blob lay on the band's words and lifted them under AA. */
   opacity: 0.06;
-}
-:root[data-scheme='dark'] :is(.closingBody, .motto2) {
-  color: var(--cta-ink);
+  pointer-events: none;
 }
 
 .closingContent {
@@ -469,7 +452,7 @@
   font-family: var(--font-body);
   font-size: 17px;
   line-height: 1.7;
-  color: color-mix(in oklch, var(--cta-ink) 85%, transparent);
+  color: var(--cta-ink);
   margin: 0 0 8px;
 }
 
@@ -477,7 +460,7 @@
   font-family: var(--font-heading);
   font-style: italic;
   font-size: 18px;
-  color: color-mix(in oklch, var(--cta-ink) 85%, transparent);
+  color: var(--cta-ink);
   margin: 0 0 36px;
 }
 
