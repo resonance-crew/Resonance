@@ -68,9 +68,10 @@ function scrollerOf(el: HTMLElement | null): Element {
 /**
  * The writer's tags (round 16 §1, and its review's S1 / S2). The section's
  * label 「標籤」 on its own line; under it the chosen tags as removable pills
- * wrapping like words (TagPill lg, outlined and quiet — half the accent's
- * light wash, the soft pen, words at 500 —, a 44 × 44 target round each ✕,
- * named for its tag), a new one popping in. Below, the field in the chat composer's language — one
+ * wrapping like words (TagPill lg with no outline, in the 「AI 建議」
+ * segment's tonal face and ink, words at 500 — round 17 §4 —, a 44 × 44
+ * target round each ✕, in that ink at 70 % and named for its tag), a new one
+ * popping in. Below, the field in the chat composer's language — one
  * capsule (its wobble, cream, its pen darkening while written in), one line
  * exactly 48 tall, ending in a segment behind a wavy seam: with nothing typed
  * (or an input method mid-word) the tonal 「✦ AI 建議」, which asks the model
@@ -250,16 +251,17 @@ export function TagField({ tags, onChange, onSuggest, suggesting, error, id }: T
       <label id={labelId} className={styles.label} htmlFor={inputId}>
         {t('tagsLabel')}
       </label>
-      {/* The chosen tags, quieter than the step's one button (review S2): half the accent's light wash on the
-          paper, the soft pen, words at 500, a muted ✕ named for its tag. Empty, the row takes no room. */}
+      {/* The chosen tags (round 17 §4): no outline, in the 「AI 建議」 segment's own colours — its tonal face
+          and its ink, words at 500, the ✕ in that ink at 70 % and named for its tag. Empty, the row takes no room. */}
       <div ref={rowRef} className={styles.row}>
         {tags.map((tag) => (
           <span key={tag} className={styles.pill} data-standing={standing.has(tag) || undefined}>
             <TagPill
               size="lg"
-              outlined
+              outlined={false}
               quiet
-              color="color-mix(in oklch, var(--color-terracotta-light) 50%, var(--color-cream))"
+              color="var(--button-tonal)"
+              ink="var(--button-on-tonal)"
               removeLabel={t('tagsRemoveLabel', { tag })}
               onRemove={() => onChange(tags.filter((x) => x !== tag))}
             >

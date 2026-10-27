@@ -1,6 +1,7 @@
 'use client';
 
 import { CSSProperties, ReactNode, useEffect, useRef, useState } from 'react';
+import { keyboardInset } from '@/lib/hooks/useKeyboardInset';
 import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
 import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
@@ -21,7 +22,8 @@ export interface ModalProps {
    */
   onClose?: () => void;
   children: ReactNode;
-  maxWidth?: number;
+  /** Its widest (a number of px, or any CSS length: `min(400px, calc(100vw - 32px))`). */
+  maxWidth?: CSSProperties['maxWidth'];
   seed?: number;
   fillColor?: string;
   borderColor?: string;
@@ -35,6 +37,41 @@ export interface ModalProps {
    * apps (`ModalCloseRow`).
    */
   closeButton?: boolean;
+  /**
+   * It holds a field a phone's keyboard comes up for: it stays centred in the
+   * room the keyboard leaves (the visual viewport), not behind the keyboard.
+   */
+  keyboardAware?: boolean;
+}
+
+/**
+ * The part of the window the on-screen keyboard leaves (top and bottom insets
+ * of the visual viewport), while `active`: 0, 0 with no keyboard up.
+ */
+function useVisibleBox(active: boolean): { top: number; bottom: number } {
+  const [box, setBox] = useState({ top: 0, bottom: 0 });
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!active || !vv) return;
+    let frame = 0;
+    const update = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const next = { top: Math.max(0, Math.round(vv.offsetTop)), bottom: keyboardInset() };
+        setBox((now) => (now.top === next.top && now.bottom === next.bottom ? now : next));
+      });
+    };
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      cancelAnimationFrame(frame);
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+      setBox({ top: 0, bottom: 0 });
+    };
+  }, [active]);
+  return box;
 }
 
 /**
@@ -134,6 +171,7 @@ export function Modal({
   ariaLabel = 'Dialog',
   closeLabel,
   closeButton = false,
+  keyboardAware = false,
 }: ModalProps) {
   const t = useTranslations('safety.report');
   const close = closeLabel ?? t('close');
@@ -175,6 +213,7 @@ export function Modal({
   }, [open, onClose]);
 
   useDimmedChrome(open);
+  const visible = useVisibleBox(open && keyboardAware);
 
   // Focus goes into the dialog when it opens (unless a field in it took it
   // already), so a screen reader is in it and Tab starts there; it goes back
@@ -206,6 +245,7 @@ export function Modal({
   return createPortal(
     <div
       className={styles.backdrop}
+      style={keyboardAware && (visible.top || visible.bottom) ? { top: visible.top, bottom: visible.bottom } : undefined}
       onPointerDown={(e) => {
         pressedBackdrop.current = e.target === e.currentTarget;
       }}

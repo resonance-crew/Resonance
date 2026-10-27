@@ -557,6 +557,40 @@ describe('Messenger’s thread, drawn by hand', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
+  // Round 17 §2.1, §2.2: only the thread's body dims — from under its header's pen line down, the header (and on
+  // two panes the list and the rule) left crisp — and the reactions float on the scrim with no paper under them.
+  it('dims only the thread under its header, the reactions floating on the scrim without paper', async () => {
+    server.messages = [text('m1', 'hold me', { sentAt: at(10, 0) })];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    const { container } = renderWithIntl(thread());
+    await screen.findByText('hold me');
+    const header = container.querySelector<HTMLElement>('[class*="threadHeader"]')!;
+    header.getBoundingClientRect = () => new DOMRect(0, 100, 375, 58);
+
+    const message = container.querySelector<HTMLElement>('[data-message-id="m1"] div[class*="message"]')!;
+    fireEvent.pointerDown(message, { pointerType: 'touch', button: 0, clientX: 40, clientY: 40 });
+    const menu = await screen.findByRole('dialog', {}, { timeout: 1500 });
+    fireEvent.pointerUp(message, { pointerType: 'touch', button: 0 });
+    const scrim = within(menu).getByRole('button', { name: 'Close' });
+    // Its box starts at the header's wave (100 + the 58 row + 0.35 of the 14 band, less the wave's lean and the pen),
+    // and its outline follows the wave down to the window's foot.
+    expect(parseFloat(scrim.style.top)).toBeCloseTo(100 + 58 + 14 * 0.35 - 1.4 - 1.8, 1);
+    expect(scrim.style.left).toBe('0px');
+    expect(scrim.style.clipPath).toMatch(/^path\('M .* C .* L .* Z'\)$/);
+    // The reactions: five stickers, no sheet of paper under them.
+    const tray = within(menu).getByRole('toolbar');
+    expect(within(tray).getAllByRole('button')).toHaveLength(5);
+    expect(tray.querySelector('path[fill="var(--sheet-paper)"]')).toBeNull();
+    // The actions keep theirs, the time at their end, 216–280 wide.
+    expect(within(menu).getByRole('menu').parentElement!.querySelector('[class*="footer"]')).toHaveTextContent(/\d/);
+    expect(within(menu).getByRole('menu').parentElement!.className).toMatch(/wide/);
+
+    // A press on the crisp header (outside the scrim) puts it away as the scrim does.
+    fireEvent.pointerDown(menu, { pointerType: 'touch', button: 0 });
+    fireEvent.click(menu, { detail: 1 });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
   it('a mouse never long-presses (it has the tools beside the message)', async () => {
     server.messages = [text('m1', 'click me', { sentAt: at(10, 0) })];
     vi.mocked(callApi).mockResolvedValue({ cards: [] });

@@ -782,10 +782,12 @@ button.chips::before {
   }
 }
 
-/* The thread dims and softens under the modals' scrim and blur (the whole
-   window: no bright band; Modal's backdrop, so the unsend confirm a tap later
-   looks the same), whose colour the browser's bars take meanwhile. The blur
-   keeps the neighbours' words from competing with the lifted message. */
+/* The thread's body dims and softens under the modals' scrim and blur
+   (Modal's backdrop, so the unsend confirm a tap later looks the same) —
+   only the body (round 17 §2.1): its box and its wave-topped outline come
+   from MessageMenuOverlay (threadBodyArea), the header, the conversation list
+   and the rule beside them left crisp. The blur keeps the neighbours' words
+   from competing with the lifted message. */
 .scrim {
   all: unset;
   position: absolute;
@@ -854,8 +856,8 @@ button.chips::before {
   transition: opacity 120ms ease-in;
 }
 
-/* The reactions over the held message (ReactionTray): five 44 cells on a
-   borderless paper sheet, 8 above it, on its side. */
+/* The reactions over the held message (ReactionTray): five 44 cells floating
+   on the scrim (no paper — round 17 §2.2), 8 above it, on its side. */
 .overlayTray {
   position: fixed;
   z-index: 1;
@@ -919,9 +921,10 @@ button.chips::before {
   outline-offset: -2px;
 }
 
-/* The viewer's own reaction sits on a wobbly disc of the accent's light wash
-   — at night the accent itself at 30 % over the tray's raised paper (the
-   light wash there all but vanished, ≈ 1.2 : 1). */
+/* The viewer's own reaction sits on an opaque wobbly disc of the accent's
+   light wash — at night the accent itself at 30 % over the sheet's raised
+   paper (the light wash there all but vanished, ≈ 1.2 : 1) — on the paper of
+   the ☺ popover and on the bare scrim alike. */
 .trayWash {
   position: absolute;
   inset: 0;
@@ -930,12 +933,12 @@ button.chips::before {
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-scheme='light']) .trayWash {
-    fill: color-mix(in oklch, var(--color-terracotta) 30%, color-mix(in oklch, var(--menu-paper) 94%, var(--toward-ink)));
+    fill: color-mix(in oklch, var(--color-terracotta) 30%, var(--sheet-paper));
   }
 }
 
 :root[data-scheme='dark'] .trayWash {
-  fill: color-mix(in oklch, var(--color-terracotta) 30%, color-mix(in oklch, var(--menu-paper) 94%, var(--toward-ink)));
+  fill: color-mix(in oklch, var(--color-terracotta) 30%, var(--sheet-paper));
 }
 
 .traySticker {

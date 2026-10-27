@@ -102,3 +102,22 @@ export function inkFills(root: ParentNode = document) {
     (g) => g.querySelector('path')?.getAttribute('fill') ?? '',
   );
 }
+
+/**
+ * The row ink of an open menu sheet (RowBrushes, round 17 §1), one entry per
+ * row that takes ink, in order: whether its brush is spread (`on`), the spot
+ * it spreads (or withdrew) from, its colour, and the band it is cut to.
+ */
+export function inkBrushes(root: ParentNode = document) {
+  return Array.from(root.querySelectorAll<HTMLElement>('[data-row-brushes] > [data-brush-wash]')).map((region) => {
+    const disc = region.firstElementChild as HTMLElement;
+    const full = parseFloat(disc.style.width) / 2;
+    return {
+      on: disc.hasAttribute('data-on'),
+      cx: parseFloat(disc.style.left) + full,
+      cy: parseFloat(disc.style.top) + full,
+      color: disc.style.background,
+      band: region.style.clipPath,
+    };
+  });
+}

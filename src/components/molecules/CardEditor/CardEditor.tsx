@@ -971,7 +971,6 @@ export function CardEditor({
               active={step === 'publish'}
               inlineHeading={inlineStepHeading}
               headingRef={setHeading}
-              onBack={() => changeStep('write')}
               values={values}
               onTagsChange={setTags}
               onAudienceChange={(next) => {

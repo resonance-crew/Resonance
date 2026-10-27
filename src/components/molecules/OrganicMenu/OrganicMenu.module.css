@@ -1,7 +1,7 @@
 /* ── OrganicMenu ────────────────────────────────────────────────────
-   Generic organic dropdown: wobbly chip trigger + hand-drawn panel with wavy
-   pen dividers (the CardActionsMenu language, host-agnostic). Colors ride the
-   --menu-* variables set inline by the component. */
+   Generic organic dropdown: wobbly chip trigger + the one menu sheet (round
+   17 §1: paper and grain, no pen, no dividers, a shadow that follows its
+   wobble). Colors ride the --menu-* variables set inline by the component. */
 .root {
   position: relative;
   display: inline-block;
@@ -163,14 +163,17 @@
   }
 }
 
+/* The sheet: as wide as its longest row with 20 each side — 168 at least, so a
+   two-row menu (圖片 · 卡片) is still a sheet, not a blob; 300 at most — as
+   tall as MenuPanel says. */
 .panel {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
   z-index: 40;
-  min-width: 180px;
+  min-width: 168px;
+  max-width: 300px;
   background: transparent;
-  border-radius: var(--field-radius);
   padding: 0;
   transform-origin: top right;
   animation: organicMenuIn 180ms cubic-bezier(0.2, 0.8, 0.3, 1);
@@ -191,6 +194,12 @@
   }
 }
 
+/* A message's action list (held, or a fine pointer's ⋯): 216–280 wide, room for its time at the end. */
+.wide {
+  min-width: 216px;
+  max-width: 280px;
+}
+
 /* A panel its host (or the floating wrapper) places: no hanging under the
    trigger; it grows from the corner the wrapper names. */
 .placed {
@@ -207,39 +216,33 @@
   z-index: 120;
 }
 
-.border {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  pointer-events: none;
-}
-
+/* The rows, 6 of paper over the first (MenuPanel's SHEET_TOP). */
 .list {
   position: relative;
   z-index: 1;
   display: flex;
   flex-direction: column;
-  padding: 0 8px;
+  padding: 6px 0 0;
 }
 /* It takes the focus as it opens (the arrows and Tab start there); the rows show where the keyboard is. */
 .list:focus {
   outline: none;
 }
 
+/* A row: 44 tall, its content 20 in from either side, the glyph (17) 12 before its words (round 17 §1). */
 .option {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   width: 100%;
-  height: 42px;
-  padding: 0 8px;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 0 20px;
   margin: 0;
   border: none;
   background: transparent;
   font-family: var(--font-body);
-  font-size: 14px;
+  font-size: 14.5px;
   /* One line, so 1 centres the label's glyphs on the row (normal reserves
      the CJK fallback's taller ascent above them). */
   line-height: 1;
@@ -248,6 +251,7 @@
   cursor: pointer;
   transition: color 120ms ease;
   white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
 }
 .option:disabled {
   opacity: 0.55;
@@ -262,12 +266,17 @@
   outline: none;
 }
 
-/* The quiet line under the rows (a message's full time). No ink, no pointer. */
+/* The quiet line at the rows' end (a message's full time — round 17 §2.3):
+   information, not one more action, so it stands at the trailing edge, 12
+   and muted, in a 24-tall line directly under the last row, 10 of paper
+   under it. No ink, no pointer. */
 .footer {
   display: flex;
   align-items: center;
-  height: 38px;
-  padding: 0 8px;
+  justify-content: flex-end;
+  height: 24px;
+  box-sizing: border-box;
+  padding: 0 20px;
   font-family: var(--font-body);
   font-size: 12px;
   line-height: 1;
@@ -275,17 +284,18 @@
   white-space: nowrap;
   cursor: default;
 }
-/* A hint rather than a time: it adds no width past 256px, wraps there in
-   balanced lines, and the panel takes its height (MenuPanel measures it).
-   On a 320px phone narrower still, so a panel hung from a glyph near the
-   gutter (the share glyph, a ⋯ after it) stays on the screen. */
+/* A hint rather than a time: read from its start, it adds no width past
+   256px, wraps there in balanced lines, and the panel takes its height
+   (MenuPanel measures it). On a 320px phone narrower still, so a panel hung
+   from a glyph near the gutter (the share glyph, a ⋯ after it) stays on the
+   screen. */
 .footerWrap {
+  justify-content: flex-start;
   height: auto;
-  min-height: 38px;
+  min-height: 24px;
   max-width: min(256px, calc(100vw - 96px));
-  box-sizing: border-box;
-  padding-top: 11px;
-  padding-bottom: 11px;
+  padding-top: 4px;
+  padding-bottom: 2px;
   line-height: 1.45;
   white-space: normal;
   text-wrap: balance;
@@ -303,30 +313,4 @@
 .option[data-active] .optionIcon,
 .option:focus-visible .optionIcon {
   color: var(--menu-glyph-active, var(--menu-border-hover));
-}
-
-/* A borderless paper sheet (OrganicMenuPanel `sheet`, the message menu's
-   actions — round 16 §3): its paper and grain are atoms/PaperSheet's, under
-   the rows; rows 44 tall from a little air at its top, the footer parted by
-   6 more space, never a line. 216 wide at least, growing to its longest row
-   up to 280. */
-.sheet {
-  min-width: 216px;
-  max-width: 280px;
-}
-
-.sheet .list {
-  padding: 4px 8px 0;
-}
-
-.sheet .option {
-  height: 44px;
-  gap: 10px;
-  font-size: 14.5px;
-}
-
-.sheet .footer {
-  height: 32px;
-  margin-top: 6px;
-  padding-bottom: 2px;
 }

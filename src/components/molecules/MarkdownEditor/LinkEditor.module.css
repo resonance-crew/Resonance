@@ -1,13 +1,23 @@
-/* The link editor (LinkEditor): the address field, 顯示為 卡片 | 文字, then
-   移除連結 · 完成 — in the chrome its host gives it (the bubble's paper, the
-   keyboard bar's). */
+/* The link editor (LinkEditor, round 17 §6.2) inside the house dialog: its
+   title, the address field across the width, 顯示為 on its own line over the
+   卡片 | 文字 choice, then the foot — 移除連結 at its start, 完成 at its end.
+   The sections stand 20 apart, a label 12 over its control (the publish
+   step's --publish-label-gap), the foot 24 under what it closes. */
 .editor {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  width: min(340px, calc(100vw - 32px));
-  box-sizing: border-box;
+  gap: 20px;
+}
+
+/* The dialog's title (ConfirmModal's face). */
+.title {
+  margin: 0 0 -4px;
+  font-family: var(--font-heading);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--color-text);
 }
 
 .field {
@@ -27,12 +37,11 @@
 
 .showAs {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: var(--publish-label-gap);
 }
 
 .label {
-  flex: none;
   font-family: var(--font-body);
   font-size: var(--label-size);
   letter-spacing: var(--label-tracking);
@@ -41,60 +50,33 @@
 
 .choice {
   display: flex;
+}
+
+/* The choice runs across the dialog as its field does, the two sides sharing it (the segmented bar's phone
+   layout, at every width here). */
+.choice > * {
+  display: flex;
+  width: 100%;
+}
+
+.choice > * > button {
   flex: 1;
-  min-width: 0;
 }
 
 .actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  margin-top: 4px;
 }
 
 .spacer {
   flex: 1;
 }
 
-/* From 900 wide (round 16 review S9): no row for a lone 完成. The foot is one
-   row — 顯示為 卡片 | 文字 at its start, 移除連結 · 完成 at its end — and
-   without 顯示為 those stand at the field's end, centred on its one line (an
-   invalid address's line hangs under the field alone). */
-@media (min-width: 900px) {
-  .editor {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    column-gap: 12px;
-    width: min(448px, calc(100vw - 32px));
-  }
-
-  .field {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-
-  .editor[data-show-as] .field {
-    flex-basis: 100%;
-  }
-
-  .showAs {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  .actions {
-    flex: none;
-  }
-
-  .spacer {
-    display: none;
-  }
-
-  .editor:not([data-show-as]) {
-    align-items: flex-start;
-  }
-
-  .editor:not([data-show-as]) .actions {
-    height: calc(2 * var(--field-pad-y) + 16px * 1.6);
+/* A finger needs 44px to land on (the small pills are about 38px). */
+@media (pointer: coarse) {
+  .actions > button {
+    min-height: 44px;
   }
 }

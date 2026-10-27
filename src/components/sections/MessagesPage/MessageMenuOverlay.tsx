@@ -3,7 +3,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
-import { useDimmedChrome } from '@/components/molecules/Modal/Modal';
 import { OrganicMenuPanel, menuPanelHeight } from '@/components/molecules/OrganicMenu/OrganicMenu';
 import { seedFromId } from '@/lib/design/bubble';
 import { canReact } from '@/lib/chat/message';
@@ -11,6 +10,7 @@ import { MENU_MARGIN, alignToMessage, placeMessageMenu } from '@/lib/chat/menuPl
 import type { ReactionId } from '@/lib/design/reactions';
 import { MessageCore } from './MessageRow';
 import { ReactionTray, TRAY_H, TRAY_W } from './ReactionTray';
+import type { ThreadBodyArea } from './ThreadHeaderChrome';
 import { chooseMenuItem, messageMenuItems, useThreadActions, type PressedMessage } from './threadActions';
 import styles from './Thread.module.css';
 
@@ -31,24 +31,28 @@ export interface MessageMenuOverlayProps {
    * message is drawn in its place again — until then it, and its tools, are hidden there.
    */
   onClose: (focusBack: HTMLElement | null) => void;
+  /** The thread's body on the screen as it opens (round 17 §2.1): what dims, and where the menu stays. Null: the window. */
+  areaOf?: () => ThreadBodyArea | null;
 }
 
 /**
  * What holding a message opens (round 16 §3; LINE's and Instagram's feel):
- * the thread dims under the palette's scrim and the message — its quote,
- * its bubble with all it carries, its reactions — is lifted out where it
- * lies, a little larger, which is what says it is the one chosen. The five
- * reactions lie directly above it, on a borderless paper sheet; the actions
- * directly below it, on the same paper with no rows' lines, its full time
- * the quiet last line. When that doesn't fit where the message is, the
- * message glides by the least distance that fits — never the menus flip
- * (lib/chat/menuPlacement).
+ * the thread's body dims under the palette's scrim — only the body, from
+ * under its header's pen line to the window's foot (round 17 §2.1: the
+ * header, the conversation list and the rule between them stay crisp) — and
+ * the message — its quote, its bubble with all it carries, its reactions —
+ * is lifted out where it lies, a little larger, which is what says it is the
+ * one chosen. The five reactions float directly above it on the scrim, no
+ * paper under them (round 17 §2.2); the actions lie directly below it on the
+ * menu sheet, its full time the quiet last line at the end. When that doesn't
+ * fit where the message is, the message glides by the least distance that
+ * fits, inside the body — never the menus flip (lib/chat/menuPlacement).
  *
  * A dialog to the keyboard: the focus lands on the reactions (a toolbar,
  * ← →), Tab goes on to the actions and round again, Escape — or a tap on the
  * scrim — puts it away, giving the focus back to the ☺ or ⋯ that opened it.
  */
-export function MessageMenuOverlay({ pressed, own, fullTime, onClose }: MessageMenuOverlayProps) {
+export function MessageMenuOverlay({ pressed, own, fullTime, onClose, areaOf }: MessageMenuOverlayProps) {
   const t = useTranslations('messages');
   const tNative = useTranslations('native');
   const tSafety = useTranslations('safety');
@@ -84,8 +88,8 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose }: MessageM
   const trayShown = actions.canReact && canReact(message);
   const current = message.reactions?.[actions.viewerId] ?? null;
 
-  // The browser's bars dim with the window, as under a modal.
-  useDimmedChrome(true);
+  // Where the thread's body lies as it opens (it never follows: anything that would move it closes it).
+  const [area] = useState(() => areaOf?.() ?? null);
 
   /** Puts it away; the focus goes back to what opened it unless the choice took it somewhere of its own. */
   const dismiss = (giveBack = true) => {
@@ -131,8 +135,8 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose }: MessageM
 
   const vw = window.innerWidth;
   const vh = window.visualViewport?.height ?? window.innerHeight;
-  const listH = items.length ? menuPanelHeight(items.length, true, true) : 0;
-  const place = placeMessageMenu({ top: rect.top, height: rect.height, viewport: vh, trayH: trayShown ? TRAY_H : 0, listH });
+  const listH = items.length ? menuPanelHeight(items.length, true) : 0;
+  const place = placeMessageMenu({ top: rect.top, height: rect.height, viewport: vh, areaTop: area?.bodyTop ?? 0, trayH: trayShown ? TRAY_H : 0, listH });
   const side = own ? 'right' : 'left';
   const liftStyle: CSSProperties = {
     left: rect.left,
@@ -142,11 +146,15 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose }: MessageM
     // Clipped (its foot fading out), with room at its sides for the 3 % it grows by and its wobble.
     ...(place.clipped ? { height: place.shown, left: rect.left - CLIP_SIDE, width: rect.width + 2 * CLIP_SIDE, paddingInline: CLIP_SIDE } : {}),
   };
-  const trayStyle: CSSProperties = { top: place.trayTop, left: alignToMessage(TRAY_W, rect.left, rect.right, own, vw) };
+  const areaLeft = area?.left ?? 0;
+  const trayStyle: CSSProperties = { top: place.trayTop, left: alignToMessage(TRAY_W, rect.left, rect.right, own, vw, areaLeft) };
   const listStyle: CSSProperties = {
     top: place.listTop,
-    ...(own ? { right: Math.max(MENU_MARGIN, vw - rect.right) } : { left: Math.max(MENU_MARGIN, rect.left) }),
+    ...(own ? { right: Math.max(MENU_MARGIN, vw - rect.right) } : { left: Math.max(areaLeft + MENU_MARGIN, rect.left) }),
   };
+  const scrimStyle: CSSProperties | undefined = area
+    ? { left: area.left, top: area.top, width: area.width, height: area.height, right: 'auto', bottom: 'auto', clipPath: `path('${area.clip}')` }
+    : undefined;
 
   const pick = (reaction: ReactionId | null) => {
     navigator.vibrate?.(6);
@@ -163,10 +171,18 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose }: MessageM
       aria-modal="true"
       aria-label={tSafety('menuLabel')}
       onKeyDown={onKeyDown}
+      // Outside the dimmed body (the crisp header, the list) a press is the scrim's too: the menu goes.
+      onPointerDown={(e) => {
+        if (e.target === e.currentTarget) pressedScrim.current = true;
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && pressedScrim.current) dismiss();
+      }}
     >
       <button
         type="button"
         className={styles.scrim}
+        style={scrimStyle}
         aria-label={tClose('close')}
         tabIndex={-1}
         onPointerDown={() => {
@@ -183,7 +199,7 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose }: MessageM
       </div>
       {trayShown && (
         <div className={styles.overlayTray} style={trayStyle}>
-          <ReactionTray ref={trayRef} current={current} onPick={pick} seed={seedFromId(message.key, 31)} />
+          <ReactionTray ref={trayRef} current={current} onPick={pick} seed={seedFromId(message.key, 31)} paper={false} />
         </div>
       )}
       {items.length > 0 && (
@@ -192,8 +208,8 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose }: MessageM
             items={items}
             seed={seedFromId(message.key, 23)}
             footer={fullTime}
+          wide
             origin={`top ${side}`}
-            sheet
             onChoose={(key) => {
               // Done in the tap itself — a copy, a page opened, the field focused for a reply (iOS raises the
               // keyboard only for a focus the tap gave) — then the menu goes, staying long enough to show the

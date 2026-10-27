@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { FieldHint, Input } from '@/components/atoms/Field/Field';
 import { Icon } from '@/components/atoms/Icon';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
+import { Modal } from '@/components/molecules/Modal/Modal';
 import { SegmentedActionBar, type SegmentSpec } from '@/components/molecules/SegmentedActionBar/SegmentedActionBar';
 import { linkTarget } from '@/lib/links/soleLink';
 import type { LinkDisplay } from '@/lib/markdown/storyLinkEdit';
@@ -23,11 +24,14 @@ export interface LinkSession {
 }
 
 export interface LinkEditorProps {
-  session: LinkSession;
+  /** The session while it is open, else null (closed). */
+  session: LinkSession | null;
+  /** Bumped each time it opens, so a second opening starts from its session again. */
+  sessionKey: number;
   /** 完成: false when the address isn't one we link to (the field then says so). */
   onApply: (href: string, display: LinkDisplay) => boolean;
   onRemove: () => void;
-  /** Escape: back to the story, nothing changed. */
+  /** Closed with nothing changed (the backdrop, Escape): back to the story. */
   onCancel: () => void;
   seed: number;
 }
@@ -35,28 +39,60 @@ export interface LinkEditorProps {
 const DISPLAYS: LinkDisplay[] = ['card', 'text'];
 
 /**
- * The writer's link editor (round 16 §6): one small surface, the same parts
- * as the apps' link sheet — the address field (the caret's link, never the
- * clipboard's: a paste is the writer's), 顯示為 卡片 | 文字 only where the
- * link is or will be alone in its paragraph, then 移除連結 for a link being
- * edited and 完成. Enter is 完成, Escape gives the story back. An address the
- * link rules don't take (`linkTarget`: http(s) only, a bare `example.com/x`
- * gets https://) keeps the editor open with one muted line under the field.
- * Its host gives it its chrome: the selection bubble's paper sheet for a fine
- * pointer, the keyboard bar's paper on a touch screen. From 900 wide its foot
- * is one row — 顯示為 at its start, 移除連結 · 完成 at its end — and without
- * 顯示為 those stand at the field's end (round 16 review S9).
+ * The writer's link editor (round 17 §6.2): the house dialog (molecules/Modal,
+ * no ✕ — the backdrop and Escape close it), at every width and pointer —
+ * 「插入連結」 for a new link, 「編輯連結」 for one already there; the address
+ * field across its width (the caret's link, never the clipboard's: a paste is
+ * the writer's), focused with its text selected; 顯示為 on its own line and
+ * the 卡片 | 文字 choice under it — the publish step's segmented choice — only
+ * where the link is or will be alone in its paragraph; and the foot:
+ * 移除連結 (quiet) at its start for a link being edited, 完成 at its end.
+ * Enter is 完成. An address the link rules don't take (`linkTarget`: http(s)
+ * only, a bare `example.com/x` gets https://) keeps it open with one muted
+ * line under the field. On a phone it sits centred in the room the keyboard
+ * leaves; closed, the story has its focus and selection back (its host's).
  */
-export function LinkEditor({ session, onApply, onRemove, onCancel, seed }: LinkEditorProps) {
+export function LinkEditor({ session, sessionKey, onApply, onRemove, onCancel, seed }: LinkEditorProps) {
+  const t = useTranslations('write.editor');
+  const title = session?.editing ? t('linkEdit') : t('insertLink');
+  return (
+    <Modal
+      open={session != null}
+      onClose={onCancel}
+      seed={seed + 107}
+      maxWidth="min(400px, calc(100vw - 32px))"
+      padding="26px 24px 22px"
+      ariaLabel={title}
+      keyboardAware
+    >
+      {session && <LinkForm key={sessionKey} session={session} title={title} seed={seed} onApply={onApply} onRemove={onRemove} />}
+    </Modal>
+  );
+}
+
+function LinkForm({
+  session,
+  title,
+  seed,
+  onApply,
+  onRemove,
+}: {
+  session: LinkSession;
+  title: string;
+  seed: number;
+  onApply: LinkEditorProps['onApply'];
+  onRemove: () => void;
+}) {
   const t = useTranslations('write.editor');
   const [value, setValue] = useState(session.href);
   const [display, setDisplay] = useState<LinkDisplay>(session.offerCard ? session.display : 'text');
   const [invalid, setInvalid] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const titleId = useId();
   const showAsId = useId();
   const errorId = useId();
 
-  // The field takes the focus as the editor opens, its address selected to be typed over.
+  // The field takes the focus as the dialog opens, its address selected to be typed over.
   useEffect(() => {
     const input = inputRef.current;
     if (!input) return;
@@ -72,11 +108,7 @@ export function LinkEditor({ session, onApply, onRemove, onCancel, seed }: LinkE
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopPropagation();
-      onCancel();
-    } else if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT' && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+    if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT' && !e.nativeEvent.isComposing && e.keyCode !== 229) {
       e.preventDefault();
       apply();
     }
@@ -85,15 +117,17 @@ export function LinkEditor({ session, onApply, onRemove, onCancel, seed }: LinkE
   return (
     <div
       className={styles.editor}
-      data-show-as={session.offerCard || undefined}
       role="group"
-      aria-label={t('link')}
+      aria-labelledby={titleId}
       onKeyDown={onKeyDown}
       // A press on its buttons keeps the focus in the field (Safari never focuses a clicked button).
       onMouseDown={(e) => {
         if (!(e.target as HTMLElement).closest('input')) e.preventDefault();
       }}
     >
+      <h3 id={titleId} className={styles.title}>
+        {title}
+      </h3>
       <div className={styles.field}>
         <Input
           ref={inputRef}

@@ -113,7 +113,11 @@ function screenAtSplit(wide: boolean) {
       }) as unknown as MediaQueryList,
   );
 }
-beforeEach(() => screenAtSplit(true));
+// Each test opens the writer at its own address (an earlier one may have left the step's in the tab's).
+beforeEach(() => {
+  screenAtSplit(true);
+  window.history.replaceState(null, '', '/');
+});
 afterEach(() => {
   window.matchMedia = realMatchMedia;
   vi.clearAllMocks();

@@ -48,7 +48,7 @@ import { SearchResults } from './ThreadSearch';
 import { FloatingSlip } from './FloatingSlip';
 import { ThreadComposer } from './ThreadComposer';
 import { useDockInset } from './useDockInset';
-import { ThreadHeaderChrome } from './ThreadHeaderChrome';
+import { ThreadHeaderChrome, threadBodyArea } from './ThreadHeaderChrome';
 import { ThreadActionsContext, type PressedMessage, type ThreadActions } from './threadActions';
 import { centerRow, useThreadScroll } from './useThreadScroll';
 import { useEdgeFades } from '@/lib/hooks/useEdgeFades';
@@ -328,6 +328,8 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
   const [jumpTarget, setJumpTarget] = useState<{ id: string; flash: boolean } | null>(null);
   // The message a long-press lifted out, with its menu.
   const [pressed, setPressed] = useState<PressedMessage | null>(null);
+  // The thread's header row: what a held message's scrim stops under (round 17 §2.1).
+  const headerRef = useRef<HTMLDivElement>(null);
   // One of the viewer's own messages waiting for the yes to unsend it.
   const [unsending, setUnsending] = useState<{ id: string } | null>(null);
   const [unsendBusy, setUnsendBusy] = useState(false);
@@ -754,7 +756,7 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
             the「⋯」trigger was. Once a match is picked from the list, the
             header steps through the matches. On single-pane phones the app
             header is gone, so a back control leads this row instead. */}
-        <div className={pageStyles.threadHeader}>
+        <div ref={headerRef} className={pageStyles.threadHeader}>
           <ThreadHeaderChrome under={under} />
           {searchOpen ? (
             <>
@@ -990,6 +992,13 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
                 <MessageMenuOverlay
                   // The message as it is now (a reaction that came in since it was held shows on the lifted copy too).
                   pressed={{ ...pressed, message: drawn.find((m) => m.key === pressed.message.key) ?? pressed.message }}
+                  // Only the thread's body dims: its header, the list and the rule between them stay as they are.
+                  areaOf={() => {
+                    const header = headerRef.current;
+                    if (!header) return null;
+                    const rule = header.parentElement?.previousElementSibling as HTMLElement | null;
+                    return threadBodyArea(header, rule ?? null, window.innerWidth, window.visualViewport?.height ?? window.innerHeight);
+                  }}
                   own={pressed.message.senderId === user?.id}
                   fullTime={fullFmt.format(pressed.message.sentAt)}
                   onClose={(back) => {

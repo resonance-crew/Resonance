@@ -257,4 +257,41 @@ describe('Modal', () => {
     );
     expect(meta.content).toBe('#faf2e9');
   });
+
+  // Round 17 §6.2: a dialog holding a field (the link editor) stays centred in the room a phone's keyboard leaves.
+  it('keeps a keyboard-aware dialog in the room the on-screen keyboard leaves', async () => {
+    const listeners: Record<string, () => void> = {};
+    const vv = { height: 812, offsetTop: 0, addEventListener: (k: string, f: () => void) => (listeners[k] = f), removeEventListener: vi.fn() };
+    const real = Object.getOwnPropertyDescriptor(window, 'visualViewport');
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: vv });
+    const innerHeight = window.innerHeight;
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 812 });
+    try {
+      render(
+        <Modal open keyboardAware ariaLabel="Link">
+          <input aria-label="Address" />
+        </Modal>
+      );
+      expect(backdrop().style.bottom).toBe('');
+      // The keyboard comes up over the window's foot.
+      vv.height = 476;
+      listeners.resize();
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      await vi.waitFor(() => expect(backdrop().style.bottom).toBe('336px'));
+      expect(backdrop().style.top).toBe('0px');
+    } finally {
+      if (real) Object.defineProperty(window, 'visualViewport', real);
+      else delete (window as { visualViewport?: unknown }).visualViewport;
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: innerHeight });
+    }
+  });
+
+  it('takes a width that is a CSS length (the link editor: 400, or the window less 32)', () => {
+    render(
+      <Modal open ariaLabel="Link" maxWidth="min(400px, calc(100vw - 32px))">
+        <p>Body</p>
+      </Modal>
+    );
+    expect(screen.getByRole('dialog').style.maxWidth).toBe('min(400px, calc(100vw - 32px))');
+  });
 });

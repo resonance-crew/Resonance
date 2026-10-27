@@ -16,13 +16,11 @@ import { createPortal } from 'react-dom';
 import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import { useElementSize } from '@/lib/hooks/useElementSize';
 import { Icon, type IconName } from '@/components/atoms/Icon';
-import { RowInkWash, useRowInk } from '@/components/atoms/RowInk/RowInk';
+import { RowBrushes, useRowInk } from '@/components/atoms/RowInk/RowInk';
 import { PaperSheet, sheetPath } from '@/components/atoms/PaperSheet/PaperSheet';
-import { wobRect } from '@/lib/design/wobRect';
 import { wobCircle } from '@/lib/design/wobCircle';
-import { dividerPath, rowBoundary, rowRegion } from '@/lib/design/rowMenu';
-import { autoCurve, autoMag, autoSegments } from '@/lib/design/wobAuto';
-import { INK, INK_LIGHT } from '@/lib/design/strokes';
+import { rowBoundary, rowRegion } from '@/lib/design/rowMenu';
+import { INK } from '@/lib/design/strokes';
 import styles from './OrganicMenu.module.css';
 
 export interface OrganicMenuItem {
@@ -84,7 +82,7 @@ export interface OrganicMenuProps {
    * column of glyphs in one ink.
    */
   glyphs?: 'pen' | 'ink';
-  /** A quiet line under the rows (a message's full time), parted from them by one more divider. */
+  /** A quiet line under the rows (a message's full time), at their end, directly under the last. */
   footer?: ReactNode;
   /**
    * The footer may run to more than one line (a hint, not a time): it adds
@@ -115,46 +113,48 @@ export interface OrganicMenuProps {
 }
 
 /**
- * The `--menu-*` colours a panel draws with: the theme's terracotta (the
- * glyphs; the panel's frame and paper are palette.ts's menu-frame and
- * menu-paper, quieter and raised at night), or the accent `hue` at the
- * scheme's lightness (palette.ts HUE_ROLES).
+ * The `--menu-*` colours a menu draws with: the theme's terracotta (the
+ * glyphs and the row ink), or the accent `hue` at the scheme's lightness
+ * (palette.ts HUE_ROLES) — and the chip trigger's paper. A card's own menu
+ * (a `hue`) keeps the card's menu paper as its sheet's (`--sheet-base`,
+ * raised at night as every sheet is); every other menu is the menu paper.
  */
 function menuColors(hue: number | undefined): CSSProperties {
-  return (
+  const colors: Record<string, string> =
     hue === undefined
       ? {
           '--menu-border': 'var(--color-terracotta)',
           '--menu-border-hover': 'var(--terracotta-deep)',
-          '--menu-outline': 'var(--menu-frame)',
           '--menu-cream': 'var(--menu-paper)',
-          '--menu-divider': 'color-mix(in oklch, var(--menu-frame) 40%, transparent)',
         }
       : {
           '--menu-border': `oklch(var(--hue-pen) ${hue})`,
           '--menu-border-hover': `oklch(var(--hue-pen-deep) ${hue})`,
-          '--menu-outline': `oklch(var(--hue-pen) ${hue})`,
           '--menu-cream': `oklch(var(--hue-menu) ${hue})`,
-          '--menu-divider': `oklch(var(--hue-separator) ${hue} / 0.4)`,
-        }
-  ) as CSSProperties;
+          '--sheet-base': `oklch(var(--hue-menu) ${hue})`,
+        };
+  return colors as CSSProperties;
 }
 
-/** A panel's height: its rows, and the footer line under them (a `sheet` panel's taller rows, pad and parted footer). */
-export function menuPanelHeight(rows: number, footer: boolean, sheet = false): number {
-  if (sheet) return SHEET_PAD + rows * SHEET_ROW_H + (footer ? SHEET_FOOTER_GAP + SHEET_FOOTER_H : SHEET_PAD);
-  return rows * ROW_H + (footer ? FOOTER_H : 0);
+/**
+ * A panel's height (round 17 §1, §2.3): 6 of paper over its first row, its rows 44 each, then either the
+ * footer line (24, directly under the last row) and 10 of paper under it, or 6 of paper.
+ */
+export function menuPanelHeight(rows: number, footer: boolean): number {
+  return SHEET_TOP + rows * ROW_H + (footer ? FOOTER_H + FOOTER_PAD : SHEET_BOTTOM);
 }
 
 /** Room kept between a floating panel and the window's edge. */
 const EDGE = 12;
 
 /**
- * The organic「⋯」dropdown, extracted from the card menu's language: a wobbly
- * chip trigger dropping a hand-drawn panel with wavy pen dividers and a
- * spreading ink wash on the hovered row. Closes on outside pointer-down or
- * Escape. The chip is paper with no rim — it sits on a card's cover or beside
- * a title, already framed, like the apps' (their bars draw the glyph bare).
+ * The organic「⋯」dropdown: a wobbly chip trigger (or a bare glyph) dropping
+ * the one menu sheet (round 17 §1) — borderless paper and grain lifted by a
+ * soft shadow, no dividers, rows 44 tall, a spreading ink wash on the hovered
+ * (or pressed) row clipped to its band within the sheet's wobble. Closes on
+ * outside pointer-down or Escape. The chip is paper with no rim — it sits on
+ * a card's cover or beside a title, already framed, like the apps' (their
+ * bars draw the glyph bare). No scrim: a menu opened from a button is quick.
  */
 export function OrganicMenu({
   items,
@@ -401,36 +401,30 @@ export interface OrganicMenuPanelProps {
   onChoose: (key: string) => void;
   seed: number;
   busy?: boolean;
-  /** A quiet line under the rows, parted from them by one more divider. */
+  /** A quiet line at the rows' end, directly under the last (a message's full time). */
   footer?: ReactNode;
   hue?: number;
   /** The corner it grows from (CSS `transform-origin`): the edge of what it belongs to. */
   origin?: string;
-  /**
-   * A borderless paper sheet (round 16 §3, the message menu's actions): no
-   * pen line round it and no dividers between its rows — the menu's paper and
-   * grain (atoms/PaperSheet) — rows 44 tall, the footer parted by space
-   * alone; 216 wide at least, growing to its longest row up to 280.
-   */
-  sheet?: boolean;
   /** Where the focus goes as it opens (default: nowhere — the host decides). */
   autoFocus?: 'row' | 'panel' | null;
   /** Tab leaves its rows (a panel floating out of the page's tab order closes on it, as OrganicMenu's `floating`). */
   onTabOut?: () => void;
+  /** A message's action list: 216 wide at least, 280 at most (every other menu: 168 at least). */
+  wide?: boolean;
   className?: string;
 }
 
 /**
  * The menu's panel on its own, for a host that places it — the thread's
- * long-press menu, which hangs it under the message it lifted. The same
- * wobbly card, wavy dividers and spreading row ink as the dropdown's (or,
- * as a `sheet`, the ink alone on bare paper).
+ * long-press menu, which hangs it under the message it lifted, and a fine
+ * pointer's ⋯ beside a message. The same sheet and row ink as the dropdown's.
  */
-export function OrganicMenuPanel({ items, onChoose, seed, busy = false, footer, hue, origin, sheet = false, autoFocus = null, onTabOut, className }: OrganicMenuPanelProps) {
+export function OrganicMenuPanel({ items, onChoose, seed, busy = false, footer, hue, origin, autoFocus = null, onTabOut, wide = false, className }: OrganicMenuPanelProps) {
   const uid = useId().replace(/:/g, '');
   return (
     <div className={className} style={{ ...menuColors(hue), ...(origin ? { transformOrigin: origin } : {}) }}>
-      <MenuPanel uid={uid} seed={seed} items={items} busy={busy} footer={footer} placed sheet={sheet} autoFocus={autoFocus} onTabOut={onTabOut} onChoose={onChoose} />
+      <MenuPanel uid={uid} seed={seed} items={items} busy={busy} footer={footer} placed wide={wide} autoFocus={autoFocus} onTabOut={onTabOut} onChoose={onChoose} />
     </div>
   );
 }
@@ -449,16 +443,18 @@ function BareWash({ seed }: { seed: number }) {
   );
 }
 
-const ROW_H = 42;
-/** The footer line is a little shorter than a row. */
-const FOOTER_H = 38;
-/** A sheet panel's rows, the air above its first, its footer and the space that parts the footer from the rows. */
-const SHEET_ROW_H = 44;
-const SHEET_PAD = 4;
-const SHEET_FOOTER_H = 32;
-const SHEET_FOOTER_GAP = 6;
-/** A sheet panel's corners. */
+/** A row (round 17 §1: 44 everywhere). */
+const ROW_H = 44;
+/** The paper over the first row, and under the last when there is no footer. */
+const SHEET_TOP = 6;
+const SHEET_BOTTOM = 6;
+/** The footer's line, directly under the last row (round 17 §2.3), and the paper under it. */
+const FOOTER_H = 24;
+const FOOTER_PAD = 10;
+/** The sheet's corners. */
 const SHEET_R = 20;
+/** How far a row's band (the ink's) may lean off its line: the bands keep the hand's waver with no line drawn. */
+const BAND_WAVER = 2;
 
 interface MenuPanelProps {
   uid: string;
@@ -474,8 +470,8 @@ interface MenuPanelProps {
   autoFocus?: 'row' | 'panel' | null;
   /** Tab leaves its rows (a panel out of the page's tab order closes on it). */
   onTabOut?: () => void;
-  /** A borderless paper sheet (OrganicMenuPanel's `sheet`). */
-  sheet?: boolean;
+  /** A message's action list (216–280 wide). */
+  wide?: boolean;
   onChoose: (key: string) => void;
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -490,7 +486,7 @@ function MenuPanel({
   placed = false,
   autoFocus = null,
   onTabOut,
-  sheet = false,
+  wide = false,
   onChoose,
   ref: outerRef,
 }: MenuPanelProps) {
@@ -502,15 +498,12 @@ function MenuPanel({
     else if (outerRef) (outerRef as React.RefObject<HTMLDivElement | null>).current = el;
   };
   const hasFooter = footer != null;
-  // The footer is one more band under the rows: a divider above it, and no ink in it.
+  // The footer is one more band under the rows, which takes no ink.
   const bands = items.length + (hasFooter ? 1 : 0);
-  // A footer that wraps is as tall as its lines (never shorter than one line's band).
+  // A footer that wraps (a hint) is as tall as its lines, never shorter than the time's one line.
   const footerRef = useRef<HTMLDivElement>(null);
   const [footerH, setFooterH] = useState(FOOTER_H);
-  // A sheet's rows are taller, with a little air above the first; its footer is parted by space, not a line.
-  const rowH = sheet ? SHEET_ROW_H : ROW_H;
-  const top = sheet ? SHEET_PAD : 0;
-  const h = sheet ? menuPanelHeight(items.length, hasFooter, true) : items.length * ROW_H + (hasFooter ? footerH : 0);
+  const h = hasFooter && footerWrap ? SHEET_TOP + items.length * ROW_H + footerH + FOOTER_PAD : menuPanelHeight(items.length, hasFooter);
   const [w, setW] = useState(0);
 
   useLayoutEffect(() => {
@@ -534,22 +527,17 @@ function MenuPanel({
   }, []);
 
   const pad = Math.max(10, h * 0.04);
-
-  const outerPath = useMemo(() => {
-    if (!w || !h) return '';
-    // A sheet's outline is its PaperSheet's (the row ink is clipped to the paper it lies on).
-    if (sheet) return sheetPath(w, h, SHEET_R, seed + 100);
-    return wobRect(w, h, 16, seed + 100, autoMag(w, h), {
-      segmentsH: autoSegments(w),
-      segmentsV: autoSegments(h),
-      curve: autoCurve(w, h),
-    });
-  }, [w, h, seed, sheet]);
-
+  // The sheet's outline: its paper's (PaperSheet draws the same path), and the ink's clip.
+  const outline = useMemo(() => sheetPath(w, h, SHEET_R, seed + 100), [w, h, seed]);
+  // Where one row's band meets the next's — no line is drawn there (round 17 §1), but the ink keeps to its band.
   const boundaries = useMemo<[number, number][][]>(() => {
     if (!w) return [];
-    return Array.from({ length: bands - 1 }, (_, i) => rowBoundary(top + (i + 1) * rowH, w, seed + i * 31 + 7, 2, pad));
-  }, [w, bands, seed, pad, top, rowH]);
+    return Array.from({ length: bands - 1 }, (_, i) => rowBoundary(SHEET_TOP + (i + 1) * ROW_H, w, seed + i * 31 + 7, BAND_WAVER, pad));
+  }, [w, bands, seed, pad]);
+  const regions = useMemo(
+    () => (w && boundaries.length === bands - 1 ? Array.from({ length: bands }, (_, i) => rowRegion(i, bands, boundaries, w, h, pad)) : []),
+    [w, h, bands, boundaries, pad],
+  );
 
   const listRef = useRef<HTMLDivElement>(null);
   const rows = () => Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []);
@@ -582,13 +570,13 @@ function MenuPanel({
     }
   };
 
-  const ready = w > 0 && boundaries.length === bands - 1;
+  const ready = w > 0 && regions.length === bands;
   const dangerIndex = items.findIndex((it) => it.danger);
 
   // The pointer's row takes the ink, and so does the keyboard's (a row focused from the keyboard: the arrows,
   // Tab), growing from its centre — the same wash, never a box around it.
   const [keyRow, setKeyRow] = useState<number | null>(null);
-  const inkRows = useMemo(() => items.map((_, i) => ({ top: top + i * rowH, height: rowH })), [items, top, rowH]);
+  const inkRows = useMemo(() => items.map((_, i) => ({ top: SHEET_TOP + i * ROW_H, height: ROW_H })), [items]);
   const ink = useRowInk({ panelRef: ref, rows: inkRows, w, h, activeIndex: keyRow });
   // Whether the focus is the keyboard's to show: it opened the menu, or a key moved it since a pointer last did —
   // anywhere, not only in the rows: a host's own Tab (the message overlay's, from its reactions) lands on a row too
@@ -610,81 +598,23 @@ function MenuPanel({
   }, []);
   const washes: string[] = items.map((_, i) =>
     i === dangerIndex
-      ? 'color-mix(in oklch, var(--color-yellow) 45%, var(--menu-cream))'
+      ? 'color-mix(in oklch, var(--color-yellow) 55%, transparent)'
       : 'color-mix(in oklch, var(--menu-border-hover) 15%, transparent)',
   );
   // The footer's band takes no ink.
   if (hasFooter) washes.push('transparent');
+  // A destructive row rests on its warning wash before any ink. Every wash is see-through: the paper's grain shows
+  // through it, so an inked or warned row is the same paper, never a second layer on it.
+  const rests = washes.map((_, i) => (i === dangerIndex ? 'color-mix(in oklch, var(--color-yellow) 30%, transparent)' : null));
 
   return (
     <div
       ref={setRef}
-      className={[styles.panel, placed ? styles.placed : '', sheet ? styles.sheet : ''].filter(Boolean).join(' ')}
+      className={[styles.panel, placed ? styles.placed : '', wide ? styles.wide : ''].filter(Boolean).join(' ')}
       style={{ height: `${h}px` }}
     >
-      {sheet && w > 0 && <PaperSheet w={w} h={h} R={SHEET_R} seed={seed + 100} />}
-      {w > 0 && (
-        <svg
-          className={`${styles.border} res-shape-fade-in`}
-          width={w}
-          height={h}
-          viewBox={`0 0 ${w} ${h}`}
-          aria-hidden
-        >
-          <defs>
-            <clipPath id={`organicmenu-clip-${uid}`}>
-              <path d={outerPath} />
-            </clipPath>
-          </defs>
-          <g clipPath={`url(#organicmenu-clip-${uid})`}>
-            {/* A sheet's paper is its PaperSheet's, under this. */}
-            {!sheet && <path d={outerPath} fill="var(--menu-cream)" />}
-            {/* warning wash under the destructive row, before any hover */}
-            {ready && dangerIndex >= 0 && (
-              <path
-                d={rowRegion(dangerIndex, bands, boundaries, w, h, pad)}
-                fill="color-mix(in oklch, var(--color-yellow) 25%, var(--menu-cream))"
-              />
-            )}
-            {/* the hovered row's ink, spreading from the pointer */}
-            {ready && (
-              <RowInkWash
-                uid={`organicmenu-${uid}`}
-                ink={ink}
-                boundaries={boundaries}
-                w={w}
-                h={h}
-                pad={pad}
-                fills={washes}
-              />
-            )}
-          </g>
-          {/* A sheet has no pen: no dividers, no outline. */}
-          {ready &&
-            !sheet &&
-            boundaries.map((pts, i) => (
-              <path
-                key={i}
-                d={dividerPath(pts)}
-                fill="none"
-                stroke="var(--menu-divider)"
-                strokeWidth={INK_LIGHT}
-                strokeLinecap="round"
-                clipPath={`url(#organicmenu-clip-${uid})`}
-              />
-            ))}
-          {!sheet && (
-            <path
-              d={outerPath}
-              fill="none"
-              stroke="var(--menu-outline)"
-              strokeWidth={INK}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          )}
-        </svg>
-      )}
+      {w > 0 && <PaperSheet w={w} h={h} R={SHEET_R} seed={seed + 100} />}
+      {ready && <RowBrushes w={w} h={h} outline={outline} bands={regions} ink={ink} fills={washes} rests={rests} />}
       <div
         id={`${uid}-menu`}
         ref={listRef}

@@ -9,3 +9,26 @@
     transition: none;
   }
 }
+
+/* A paper sheet's row ink (RowBrushes): one layer the sheet's size, cut to its wobble; each row's brush inside it. */
+.sheetInk {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.rest {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+}
+
+/* Reduced motion: a row's wash simply appears, as the mask circle's did. */
+@media (prefers-reduced-motion: reduce) {
+  .sheetInk [data-brush-wash] > div {
+    transition: none;
+  }
+}

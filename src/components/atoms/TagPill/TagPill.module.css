@@ -87,3 +87,15 @@
 .pill[data-quiet] .removeBtn:hover {
   color: var(--color-text);
 }
+
+/* A pill in a button's colours (TagPill `ink`, the writer's chosen tags — round
+   17 §4): its × in the words' ink at 70 %, whole when pointed at. */
+.pill[data-ink] .removeBtn {
+  color: currentColor;
+  opacity: 0.7;
+}
+
+.pill[data-ink] .removeBtn:hover {
+  color: currentColor;
+  opacity: 1;
+}

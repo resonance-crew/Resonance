@@ -4,6 +4,7 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -14,12 +15,18 @@ import {
   type UIEvent,
 } from 'react';
 import { useTranslations } from 'next-intl';
+import { BareIconButton } from '@/components/atoms/BareIconButton/BareIconButton';
+import { BrushWash } from '@/components/atoms/BrushWash/BrushWash';
 import { Icon } from '@/components/atoms/Icon';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { ThoughtMapBoard } from '@/components/molecules/ThoughtMap/ThoughtMapBoard';
 import { HeaderBar } from '@/components/sections/AppHeader/HeaderBar';
 import { HEADER_TOTAL_H } from '@/components/sections/AppHeader/HeaderChrome';
 import { useIsMobile } from '@/lib/hooks/useIsMobile';
+import { makePrng } from '@/lib/design/prng';
+import { INK_STRONG } from '@/lib/design/strokes';
+import { pointsToBezier } from '@/lib/design/wavyPath';
+import { wobRect } from '@/lib/design/wobRect';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { useRouter } from '@/i18n/navigation';
 import type { Card } from '@/lib/db/types';
@@ -43,6 +50,41 @@ export const FULL_EDITOR_FRAC = 0.75;
 const KEY_STEP = 0.02;
 /** How far the docked grip is dragged toward the map before it shows the pane. */
 const SHOW_DRAG_PX = 8;
+/**
+ * A throw (round 17 §5.1): released moving at least this fast (px per ms, over the last {@link THROW_WINDOW_MS})
+ * after at least {@link THROW_TRAVEL_PX} of travel, the divider goes on to the next stop in its direction — toward
+ * the map, the whole width (the writer's pane; 1:1 for another); back toward the pane's side, folded away.
+ */
+export const THROW_SPEED = 0.5;
+export const THROW_WINDOW_MS = 80;
+export const THROW_TRAVEL_PX = 24;
+/** Samples nearer together than this say nothing of a speed (one frame's coalesced moves). */
+const THROW_MIN_SPAN_MS = 8;
+
+/** The pointer's speed over the last {@link THROW_WINDOW_MS} before `t` (px per ms, negative toward the left), 0 when unknown. */
+export function releaseSpeed(samples: { t: number; x: number }[], t: number): number {
+  const recent = samples.filter((p) => p.t >= t - THROW_WINDOW_MS && p.t <= t);
+  if (recent.length < 2) return 0;
+  const first = recent[0];
+  const last = recent[recent.length - 1];
+  const span = last.t - first.t;
+  return span >= THROW_MIN_SPAN_MS ? (last.x - first.x) / span : 0;
+}
+
+/** The grip's box and its mark (round 17 §5.4): a short vertical pen stroke, 40 tall, three gentle waves of the hand. */
+const GRIP_W = 28;
+const GRIP_H = 52;
+function gripMark(): string {
+  const rnd = makePrng(23);
+  const top = (GRIP_H - 40) / 2;
+  // Laid along x (the bezier helper's axis), then turned to stand along y.
+  const pts: [number, number][] = [];
+  for (let i = 0; i <= 6; i++) {
+    const lean = i === 0 || i === 6 ? 0 : (i % 2 ? 1 : -1) * (1.5 + (rnd() - 0.5) * 0.4);
+    pts.push([top + (i * 40) / 6, GRIP_W / 2 + lean]);
+  }
+  return pointsToBezier(pts).replace(/(-?[\d.]+),(-?[\d.]+)/g, '$2,$1');
+}
 
 export interface WorkspaceShellProps {
   /** Whether there is something in the right (editor) pane; none = full-bleed map. */
@@ -87,6 +129,13 @@ export interface WorkspaceShellProps {
    * over the map (`onLeave`) its way back.
    */
   bar?: { title: ReactNode; onBack: () => void; backDisabled?: boolean; backLabel?: string };
+  /**
+   * The Leave's words over the map at the split (and its glyph's name at the whole width) — 離開 while writing,
+   * the step's way back (繼續寫) in the publish step (round 17 §5.3: one back, the host's `onLeave` step-aware).
+   */
+  leaveLabel?: string;
+  /** The Leave waits (a publish on its way). */
+  leaveDisabled?: boolean;
   /**
    * The pane's save state (the editor's SaveState): after the title in the
    * writer's bar or the pane's header row below the split; at the split, just
@@ -136,6 +185,8 @@ export function WorkspaceShell({
   leftOverride,
   bar,
   onLeave,
+  leaveLabel: leaveWords,
+  leaveDisabled = false,
   paneStatus,
   paneAction,
   titleRef,
@@ -178,7 +229,19 @@ export function WorkspaceShell({
   // A drag of the divider: `over` is the pane's width while dragged on past the narrowest (it follows the
   // pointer there), null within 32–50 %; `from` the width it had when the drag began, which it shows again
   // at if this drag hides it.
-  const drag = useRef<{ id: number; from: number; x: number; docked: Dock | undefined; shown: boolean } | null>(null);
+  // Where the drag is now (`over`, `beyond`) is kept here too: a release that comes before the last move's render
+  // (a fast drag — round 17 §5.1) is judged by where the pointer was, not by the render before it. `samples` are
+  // its recent moves, for the speed it is released at.
+  const drag = useRef<{
+    id: number;
+    from: number;
+    x: number;
+    docked: Dock | undefined;
+    shown: boolean;
+    over: number | null;
+    beyond: number | null;
+    samples: { t: number; x: number }[];
+  } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [over, setOver] = useState<number | null>(null);
   // Past 1:1 (the writer's pane only), the pane's width as the pointer has it, else null.
@@ -221,7 +284,16 @@ export function WorkspaceShell({
   const onRailPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
-    drag.current = { id: e.pointerId, from: editorFrac, x: e.clientX, docked: dock, shown: false };
+    drag.current = {
+      id: e.pointerId,
+      from: editorFrac,
+      x: e.clientX,
+      docked: dock,
+      shown: false,
+      over: null,
+      beyond: null,
+      samples: [{ t: e.timeStamp, x: e.clientX }],
+    };
     e.currentTarget.setPointerCapture?.(e.pointerId);
     if (!dock) setDragging(true);
   };
@@ -229,11 +301,15 @@ export function WorkspaceShell({
     const d = drag.current;
     if (!d || d.id !== e.pointerId) return;
     // A mouse moving with no button held is not dragging: its release went somewhere the rail never heard of
-    // (out of the window, a lost capture). It ends here — a hover never moves the divider.
-    if (e.pointerType === 'mouse' && e.buttons === 0) {
-      finishDrag(e.clientX, true);
+    // (out of the window, a lost capture). It ends here — a hover never moves the divider. While the rail still
+    // holds the pointer's capture the release is still to come (a capture ends with it), so the move is the
+    // drag's: a fast trackpad drag can report no button on a move.
+    if (e.pointerType === 'mouse' && e.buttons === 0 && !e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+      finishDrag(e.clientX, true, e.timeStamp);
       return;
     }
+    d.samples.push({ t: e.timeStamp, x: e.clientX });
+    if (d.samples.length > 12) d.samples.shift();
     if (d.docked === 'end') {
       // Docked at the trailing edge: drawn toward the map, the pane comes back as it was.
       if (!d.shown && d.x - e.clientX > SHOW_DRAG_PX) {
@@ -253,21 +329,23 @@ export function WorkspaceShell({
     const f = fracAt(e.clientX);
     if (f == null) return;
     if (f > MAX_EDITOR_FRAC && canFull) {
+      d.over = null;
+      d.beyond = Math.min(1, f);
       setEditorFrac(MAX_EDITOR_FRAC);
-      setOver(null);
-      setBeyond(Math.min(1, f));
     } else if (f >= MIN_EDITOR_FRAC) {
+      d.over = null;
+      d.beyond = null;
       setEditorFrac(Math.min(MAX_EDITOR_FRAC, f));
-      setOver(null);
-      setBeyond(null);
     } else {
+      d.over = Math.max(0, f);
+      d.beyond = null;
       setEditorFrac(MIN_EDITOR_FRAC);
-      setOver(Math.max(0, f));
-      setBeyond(null);
     }
+    setOver(d.over);
+    setBeyond(d.beyond);
   };
-  /** The drag is over — released (or `cancelled`: lost, left the window) at `clientX`. */
-  const finishDrag = (clientX: number, cancelled: boolean) => {
+  /** The drag is over — released (or `cancelled`: lost, left the window) at `clientX`, at `t` (the event's time). */
+  const finishDrag = (clientX: number, cancelled: boolean, t?: number) => {
     const d = drag.current;
     if (!d) return;
     drag.current = null;
@@ -280,14 +358,28 @@ export function WorkspaceShell({
       }
       return;
     }
+    // Thrown (round 17 §5.1): released moving fast after a real travel, the divider goes on to the next stop in
+    // its direction — toward the map the whole width (the writer's pane; another stops at 1:1), back toward the
+    // pane's side folded away, to come back at the width it had.
+    const speed = t == null ? 0 : releaseSpeed([...d.samples, { t, x: clientX }], t);
+    const thrown = !cancelled && Math.abs(clientX - d.x) >= THROW_TRAVEL_PX && Math.abs(speed) >= THROW_SPEED;
     // Released past the hide line: the pane slides away, to come back at the width it had. Between it and the
     // narrowest, the pane springs back to the narrowest. Past 3/4 of the width it takes the whole; between 1:1
-    // and there, it eases back to 1:1.
-    setEase(over != null ? 'spring' : 'release');
-    if (!cancelled && inHideZone) {
+    // and there, it eases back to 1:1 — judged by where the drag was, never by a render that hadn't caught up.
+    const hideZone = d.over != null && d.over < HIDE_EDITOR_FRAC;
+    const fullZone = d.beyond != null && d.beyond >= FULL_EDITOR_FRAC;
+    setEase(d.over != null && !thrown ? 'spring' : 'release');
+    if (thrown && speed > 0) {
       setEditorFrac(d.from);
       hide();
-    } else if (!cancelled && inFullZone) {
+    } else if (thrown) {
+      if (canFull) setFull(true);
+      else setEditorFrac(MAX_EDITOR_FRAC);
+      settle();
+    } else if (!cancelled && hideZone) {
+      setEditorFrac(d.from);
+      hide();
+    } else if (!cancelled && fullZone) {
       setFull(true);
       settle();
     } else settle();
@@ -296,7 +388,7 @@ export function WorkspaceShell({
   };
   const endDrag = (e: ReactPointerEvent<HTMLDivElement>, cancelled: boolean) => {
     if (drag.current?.id !== e.pointerId) return;
-    finishDrag(e.clientX, cancelled);
+    finishDrag(e.clientX, cancelled, e.timeStamp);
   };
   // The window losing the focus mid-drag (another app, a dialog) ends the drag where it was, as a cancel.
   useEffect(() => {
@@ -466,8 +558,20 @@ export function WorkspaceShell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [escapes, split, onClose, onHide, full]);
 
-  const leaveLabel = tMap('leave');
+  const leaveLabel = leaveWords ?? tMap('leave');
+  const leave = onLeave ?? (() => router.back());
   const shownFrac = folded ? 0 : full ? 1 : (over ?? beyond ?? editorFrac);
+
+  // The grip's mark and the disc of ink behind it on hover (round 17 §5.4).
+  const mark = useMemo(gripMark, []);
+  const disc = useMemo(() => wobRect(GRIP_W, GRIP_H, GRIP_W / 2, 29, 1.2, { segmentsH: 1, segmentsV: 2, curve: 1.2 }), []);
+  const gripRef = useRef<HTMLDivElement>(null);
+  const [gripHover, setGripHover] = useState({ x: GRIP_W / 2, y: GRIP_H / 2, on: false });
+  const brushGrip = (e: ReactPointerEvent<HTMLDivElement>, on: boolean) => {
+    if (e.pointerType !== 'mouse') return;
+    const r = gripRef.current?.getBoundingClientRect();
+    setGripHover({ x: r ? e.clientX - r.left : GRIP_W / 2, y: r ? e.clientY - r.top : GRIP_H / 2, on });
+  };
 
   return (
     <div
@@ -523,17 +627,42 @@ export function WorkspaceShell({
           // Floats over the map: the tonal pill, opaque over the board's dots, no pen line of its own. The
           // writer's only at the split (below it, its bar has the way back). At the whole width it stays where
           // it was, over the pane's edge (the map behind it is hidden, the pill is not).
-          <div className={styles.back} data-split-only={bar ? '' : undefined} data-over-pane={full || undefined}>
-            <OrganicButton variant="tonal" size="sm" onClick={onLeave ?? (() => router.back())}>
-              <span className={styles.backIcon}>
-                <Icon
-                  name="arrow-right"
-                  size={15}
-                  ariaLabel={isMobile ? leaveLabel : undefined}
+          // At the whole width the pill becomes its glyph alone (round 17 §5.2): the words fade, the paper draws in
+          // to the glyph and fades, the ← left where it stood at the ✓'s size and line — and back when the map
+          // comes back. Its words follow the step (round 17 §5.3), and so does its name.
+          <div className={styles.back} data-split-only={bar ? '' : undefined} data-over-pane={full || undefined} data-glyph={full || undefined}>
+            <span className={styles.backPill} aria-hidden={full || undefined} inert={full}>
+              <OrganicButton variant="tonal" size="sm" onClick={leave} disabled={leaveDisabled}>
+                <span className={styles.backIcon}>
+                  <Icon
+                    name="arrow-right"
+                    size={15}
+                    ariaLabel={isMobile ? leaveLabel : undefined}
+                  />
+                </span>
+                {!isMobile && (
+                  <span key={leaveLabel} className={styles.backLabel}>
+                    {leaveLabel}
+                  </span>
+                )}
+              </OrganicButton>
+            </span>
+            {canFull && split === true && (
+              <span className={styles.backGlyph} aria-hidden={!full || undefined} inert={!full}>
+                <BareIconButton
+                  icon="arrow-right"
+                  mirror
+                  tone="ink"
+                  iconSize={22}
+                  label={leaveLabel}
+                  tip="below"
+                  tipAlign="start"
+                  seed={17}
+                  disabled={leaveDisabled}
+                  onClick={leave}
                 />
               </span>
-              {!isMobile && leaveLabel}
-            </OrganicButton>
+            )}
           </div>
         )}
       </div>
@@ -564,10 +693,29 @@ export function WorkspaceShell({
             onLostPointerCapture={(e) => endDrag(e, true)}
             onKeyDown={onRailKeyDown}
           >
-            <div className={styles.railGrip} aria-hidden="true">
-              <span className={styles.railGripIcon}>
-                <Icon name="arrows-horizontal" size={16} />
-              </span>
+            {/* One mark wherever the grip is — between the panes, docked at either edge: a short wavy pen stroke,
+                terracotta under the hand, the keyboard and a drag, a disc of ink spreading behind it on hover. */}
+            <div
+              ref={gripRef}
+              className={styles.railGrip}
+              aria-hidden="true"
+              onPointerEnter={(e) => brushGrip(e, true)}
+              onPointerLeave={(e) => brushGrip(e, false)}
+            >
+              <BrushWash
+                w={GRIP_W}
+                h={GRIP_H}
+                d={disc}
+                color="color-mix(in oklch, var(--color-terracotta) 14%, transparent)"
+                x={gripHover.x}
+                y={gripHover.y}
+                on={gripHover.on || dragging}
+                duration={240}
+                overshoot={2}
+              />
+              <svg className={styles.railMark} width={GRIP_W} height={GRIP_H} viewBox={`0 0 ${GRIP_W} ${GRIP_H}`}>
+                <path d={mark} fill="none" stroke="currentColor" strokeWidth={INK_STRONG} strokeLinecap="round" />
+              </svg>
             </div>
             {inHideZone && (
               <span className={styles.releasePill} aria-hidden="true">

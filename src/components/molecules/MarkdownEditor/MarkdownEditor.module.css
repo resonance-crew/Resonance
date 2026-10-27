@@ -302,12 +302,6 @@ button.linkCardFace:focus-visible {
   gap: 2px;
 }
 
-/* The link editor where a fine pointer writes (LinkBubble): the bubble's paper sheet, roomier. */
-.linkPanel {
-  position: relative;
-  padding: 14px 14px 12px;
-}
-
 /* The "+" left of an empty line (Tiptap's FloatingMenu). */
 .insertHandle {
   z-index: 6;

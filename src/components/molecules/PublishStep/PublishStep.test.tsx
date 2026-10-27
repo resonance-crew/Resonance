@@ -48,7 +48,6 @@ function Step(
       mode="publish"
       active
       inlineHeading={false}
-      onBack={vi.fn()}
       values={values}
       onTagsChange={(next) => setValues((v) => ({ ...v, tags: typeof next === 'function' ? next(v.tags) : next }))}
       onAudienceChange={(next) => {
@@ -440,14 +439,15 @@ describe('PublishStep', () => {
     await echoSettled();
   });
 
-  it('names itself in its own row at the split, with the save state and the way back to writing', async () => {
-    const onBack = vi.fn();
-    renderWithIntl(<Step inlineHeading onBack={onBack} saveStatus={{ label: en.write.status.saved, title: 'Saved · 14:32' }} />);
-    expect(screen.getByRole('heading', { level: 2, name: en.write.publishPanel.title })).toBeInTheDocument();
+  // Round 17 §5.3: one back — the shell's Leave over the map returns to writing; the step draws none of its own.
+  it('names itself in its own row at the split, with the save state, and no back of its own', async () => {
+    renderWithIntl(<Step inlineHeading saveStatus={{ label: en.write.status.saved, title: 'Saved · 14:32' }} />);
+    const heading = screen.getByRole('heading', { level: 2, name: en.write.publishPanel.title });
     const state = screen.getAllByRole('status').find((el) => el.textContent === en.write.status.saved);
     expect(state).toHaveAttribute('title', 'Saved · 14:32');
-    await userEvent.click(screen.getByRole('button', { name: en.write.leaveStay }));
-    expect(onBack).toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: en.write.leaveStay })).toBeNull();
+    // The heading leads its row: nothing stands before it.
+    expect(heading.closest('[class*="headingRow"]')!.firstElementChild).toContainElement(heading);
     await echoSettled();
   });
 });
