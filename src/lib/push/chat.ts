@@ -112,6 +112,8 @@ export async function pushMessage(db: Firestore, push: MessagePush, sender: Push
     db.collection('devices').where('userId', '==', to).get(),
   ]);
   if (!message.exists || message.get('senderId') !== from) return null;
+  // Unsent before its push went out: nothing to say (pushUnsend tells the phone instead).
+  if (message.get('unsentAt') != null) return null;
   if (blockedByRecipient.exists || blockedBySender.exists) return null;
   if (mutedBy(connection.get('muted'), to)) return null;
   if (devices.empty) return { sent: 0, pruned: 0 };
@@ -153,7 +155,93 @@ export async function pushMessage(db: Firestore, push: MessagePush, sender: Push
         // mark `notifications/` itself read on the tap (an invalid path, a crash). They open the route without it.
         data: { type: 'message', route, fromUserId: from, conversationId, messageId, ...kind },
         android: { priority: 'high', notification: { channelId: MESSAGES_CHANNEL, tag: conversationId } },
-        apns: { payload: { aps: { sound: 'default', threadId: conversationId } } },
+        // The message's own collapse id: never merging two messages, but what an unsend replaces (pushUnsend).
+        apns: { ...collapsing(messageId), payload: { aps: { sound: 'default', threadId: conversationId } } },
+      }));
+    }
+  }
+  const { sent, dead } = await multicastAll(sender, groups);
+  await forgetDevices(db, dead);
+  return { sent, pruned: dead.length };
+}
+
+/** APNs takes a collapse id of at most 64 bytes; a message's id (ASCII, a clientId ≤ 64) fits, anything longer goes without. */
+function collapsing(messageId: string): { headers?: Record<string, string> } {
+  return messageId.length <= 64 ? { headers: { 'apns-collapse-id': messageId } } : {};
+}
+
+/**
+ * Tell the recipient's phone that `push.messageId` was unsent (after the
+ * response to POST …/unsend), so its notification stops showing what it said.
+ * Never throws into a writer; null when nothing may be said — no such message
+ * from that sender, not unsent, a block either way, the recipient muted the
+ * connection.
+ *
+ * - A device registered with `chat-push` (Android, which draws the
+ *   conversation's notification itself) gets a data-only message `type:
+ *   'unsend'` with `conversationId`, `messageId` and `toUserId`: it redraws
+ *   the notification without that line, or takes it away when none is left.
+ * - Every other device, only while the unsent message is still the
+ *   conversation's newest (its preview says so): a quiet replacement of the
+ *   conversation's notification — the same Android `tag` and iOS `threadId`
+ *   as the chat push, and on iOS the message's own collapse id — saying
+ *   "{handle} unsent a message" in the device's language. No sound; on iOS
+ *   `passive`, so it never lights the screen. Older than the newest, the
+ *   notification on screen is a later message's and is left as it is.
+ */
+export async function pushUnsend(db: Firestore, push: MessagePush, sender: PushSender): Promise<PushResult | null> {
+  const { conversationId, messageId, from, to } = push;
+  if (![conversationId, messageId, from, to].every((v) => DOC_ID.test(v)) || from === to || conversationId !== pairOf(from, to)) return null;
+
+  const [message, convo, blockedByRecipient, blockedBySender, connection, author, devices] = await Promise.all([
+    db.doc(`conversations/${conversationId}/messages/${messageId}`).get(),
+    db.doc(`conversations/${conversationId}`).get(),
+    db.doc(`users/${to}/blocks/${from}`).get(),
+    db.doc(`users/${from}/blocks/${to}`).get(),
+    db.doc(`connections/${conversationId}`).get(),
+    db.doc(`users/${from}`).get(),
+    db.collection('devices').where('userId', '==', to).get(),
+  ]);
+  if (!message.exists || message.get('senderId') !== from || message.get('unsentAt') == null) return null;
+  if (blockedByRecipient.exists || blockedBySender.exists) return null;
+  if (mutedBy(connection.get('muted'), to)) return null;
+  if (devices.empty) return { sent: 0, pruned: 0 };
+
+  // Still the newest: the conversation's preview is this message, unsent (the same sender, the same time).
+  const last = convo.get('lastMessage') as { senderId?: unknown; sentAt?: unknown; unsent?: unknown } | null | undefined;
+  const sentAt = message.get('sentAt') as { isEqual?: (other: unknown) => boolean } | undefined;
+  const newest =
+    !!last && last.unsent === true && last.senderId === from && typeof sentAt?.isEqual === 'function' && last.sentAt != null && sentAt.isEqual(last.sentAt);
+
+  const handle = str(author.get('handle'));
+  const title = handle || 'Resonance';
+  const route = pushRoute('message', { fromHandle: handle });
+
+  const groups: MulticastGroup[] = [];
+  const queue = (targets: DeviceTarget[], build: (tokens: string[]) => MulticastMessage) => void groups.push({ targets, build });
+  for (const [locale, targets] of groupByLocale(deviceTargets(devices.docs))) {
+    const draws = (t: DeviceTarget) => t.platform === 'android' && t.capabilities.includes(CHAT_PUSH_CAPABILITY);
+    const own = targets.filter(draws);
+    const system = targets.filter((t) => !draws(t));
+    if (own.length) {
+      queue(own, (tokens) => ({
+        tokens,
+        data: { type: 'unsend', conversationId, messageId, fromUserId: from, toUserId: to },
+        android: { priority: 'high' },
+      }));
+    }
+    if (system.length && newest) {
+      const body = createTranslator({ locale, messages: MESSAGES[locale], namespace: 'app.notifications' })('messageUnsent', { handle: title });
+      queue(system, (tokens) => ({
+        tokens,
+        notification: { title, body },
+        // `type: 'message'`: a tap opens the thread, and an app showing that thread keeps it off screen, as for any message.
+        data: { type: 'message', route, fromUserId: from, toUserId: to, conversationId, messageId },
+        android: { priority: 'normal', notification: { channelId: MESSAGES_CHANNEL, tag: conversationId, priority: 'min', defaultSound: false } },
+        apns: {
+          headers: { ...collapsing(messageId).headers, 'apns-priority': '5' },
+          payload: { aps: { threadId: conversationId, 'interruption-level': 'passive' } },
+        },
       }));
     }
   }

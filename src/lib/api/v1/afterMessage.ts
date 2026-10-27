@@ -3,7 +3,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { getAdminMessaging } from '@/lib/db/firestore/admin';
 import { unfurlMessage } from '@/lib/links/preview';
 import { firstLink } from '@/lib/links/url';
-import { pushMessage, type MessagePush } from '@/lib/push/chat';
+import { pushMessage, pushUnsend, type MessagePush } from '@/lib/push/chat';
 import type { SentMessage } from './conversations';
 
 /** Ring a message's recipient; logs and gives up on any failure (it runs after the response). */
@@ -44,5 +44,19 @@ export function afterNoteSent(db: Firestore, push: MessagePush | null) {
   if (!push) return;
   after(async () => {
     await ring(db, push);
+  });
+}
+
+/**
+ * After the response to an unsend (unsendMessage's `push`): tell the
+ * recipient's phone, so its notification stops showing what the message said
+ * (pushUnsend). Nothing for a message that was unsent already.
+ */
+export function afterMessageUnsent(db: Firestore, push: MessagePush | null) {
+  if (!push) return;
+  after(async () => {
+    await getAdminMessaging()
+      .then((messaging) => pushUnsend(db, push, messaging))
+      .catch((e) => console.error('[push] unsend', push.messageId, e));
   });
 }

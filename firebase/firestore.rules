@@ -440,6 +440,7 @@ service cloud.firestore {
           return get(/databases/$(database)/documents/conversations/$(conversationId)).data;
         }
         allow read: if signedIn() && request.auth.uid in parentConvo().participants;
+        // The server writes every message, its reactions and its unsending (POST /api/v1/messages, …/reaction, …/unsend).
         allow create, update: if false;
         // Deletable only as part of deleting the whole conversation — by
         // either participant, not just the sender.
@@ -455,6 +456,15 @@ service cloud.firestore {
     // card a resonance was, and a resonance may be made anonymous later, so
     // clients never see it (lib/api/v1/origins). Purged with either account.
     match /connectionOrigins/{pairId} {
+      allow read, write: if false;
+    }
+
+    // --- unsent messages (server-only) ---
+    // unsentMessages/{pair}_{messageId}: what an unsent message said (POST
+    // /api/v1/conversations/{pair}/messages/{id}/unsend), kept 30 days for
+    // moderation only — attached to a report of that conversation, deleted by
+    // the daily trash cron and with either account. Clients never see it.
+    match /unsentMessages/{copyId} {
       allow read, write: if false;
     }
 

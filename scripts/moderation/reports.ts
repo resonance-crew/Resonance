@@ -10,8 +10,10 @@
  *
  * What a report was about is kept as it read when it was filed
  * (reportEvidence/{id}, written by the server beside the report): the card,
- * the profile, or the reported message with the ones before it. Reports the
- * apps' older builds filed straight from the client have none.
+ * the profile, or the reported message with the ones before it — and, for a
+ * message or a conversation, what its unsent messages said (`unsent`, kept 30
+ * days after each was unsent; a picture one carried opens with `picture`).
+ * Reports the apps' older builds filed straight from the client have none.
  *
  * Add `--emulator` to run against the local emulators instead of production
  * (credentials come from .env otherwise).
@@ -142,8 +144,14 @@ function summarize(e: Record<string, unknown> | undefined): string {
   if (profile) return `profile ${profile.handle ?? '?'}: ${cut(profile.bio)}`;
   const message = e.message as Record<string, unknown> | null | undefined;
   const context = (e.context as unknown[] | undefined) ?? [];
-  if (message) return `message from ${e.senderHandle ?? message.senderId}: “${cut(message.text)}” (+${context.length} before it)`;
-  return `conversation with ${e.senderHandle ?? '?'}: its last ${context.length} messages`;
+  // What the conversation's unsent messages said, kept 30 days for a report (`show` prints them).
+  const unsent = ((e.unsent as unknown[] | undefined) ?? []).length;
+  const kept = unsent ? `, ${unsent} unsent kept` : '';
+  if (message) {
+    const said = message.unsent ? '(unsent — see `unsent`)' : `“${cut(message.text)}”`;
+    return `message from ${e.senderHandle ?? message.senderId}: ${said} (+${context.length} before it${kept})`;
+  }
+  return `conversation with ${e.senderHandle ?? '?'}: its last ${context.length} messages${kept}`;
 }
 
 /** Firestore values as plain JSON (timestamps as ISO strings). */

@@ -100,6 +100,10 @@ async function seedWorld() {
     set('letters/alice_bob', { from: 'alice', to: 'bob', count: 1 }),
     set('letters/carol_alice', { from: 'carol', to: 'alice', count: 2 }),
     set('letters/bob_carol', { from: 'bob', to: 'carol', count: 3 }),
+    // What unsent messages said (server-only, kept 30 days for moderation): theirs, and what was unsent to them.
+    set('unsentMessages/alice_bob_u1', { pair: 'alice_bob', messageId: 'u1', senderId: 'alice', to: 'bob', text: 'unsent by alice', sentAt: now, unsentAt: now }),
+    set('unsentMessages/alice_carol_u2', { pair: 'alice_carol', messageId: 'u2', senderId: 'carol', to: 'alice', text: 'unsent to alice', sentAt: now, unsentAt: now }),
+    set('unsentMessages/bob_carol_u3', { pair: 'bob_carol', messageId: 'u3', senderId: 'bob', to: 'carol', text: 'not hers', sentAt: now, unsentAt: now }),
 
     set('cardLinks/bob-card_alice-card', { sourceAuthorId: 'bob', targetAuthorId: 'alice' }),
     set('cardLinks/alice-card_bob-card', { sourceAuthorId: 'alice', targetAuthorId: 'bob' }),
@@ -248,6 +252,8 @@ describe('purgeAccount', () => {
       'connectionOrigins/alice_bob',
       'letters/alice_bob',
       'letters/carol_alice',
+      'unsentMessages/alice_bob_u1',
+      'unsentMessages/alice_carol_u2',
       'cardLinks/bob-card_alice-card',
       'cardLinks/alice-card_bob-card',
       'notifications/to-alice',
@@ -282,6 +288,7 @@ describe('purgeAccount', () => {
       'notes/w-bob',
       'connectionOrigins/bob_carol',
       'letters/bob_carol',
+      'unsentMessages/bob_carol_u3',
       'notifications/bob-own',
       'cardVectors/bob-card__insight',
       'reports/r2', // reports about the deleted user stay for moderation history

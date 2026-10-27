@@ -136,12 +136,13 @@ export async function unfurlMessage(
   const signal = deps.signal ? AbortSignal.any([deadline, deps.signal]) : deadline;
   const preview = await rememberedPreview(link, { signal, fetch: deps.fetch, memo: deps.memo });
   if (!preview) return null;
-  try {
-    // `update` fails on a document that is gone: a message deleted meanwhile just goes without.
-    await ref.update({ preview });
-  } catch (e) {
-    if ((e as { code?: unknown }).code === 5) return null;
-    throw e;
-  }
-  return preview;
+  // Written only onto the message as it is now: one deleted meanwhile, or unsent (which must carry nothing but its
+  // sender and times), goes without.
+  const written = await db.runTransaction(async (tx) => {
+    const now = await tx.get(ref);
+    if (!now.exists || now.get('unsentAt') != null || now.get('preview') != null) return false;
+    tx.update(ref, { preview });
+    return true;
+  });
+  return written ? preview : null;
 }
