@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.clipPath
@@ -69,6 +70,9 @@ internal val LocalTwoPane = staticCompositionLocalOf { false }
 
 /** The thread the pane beside the conversations shows (its row wears the chosen wash). */
 internal val LocalSelectedThread = staticCompositionLocalOf<Route.Thread?> { null }
+
+/** In the pane beside the conversations: where a held message's scrim reaches back to (the rule, [PaneScrimEdge]); null elsewhere. */
+internal val LocalPaneScrimEdge = staticCompositionLocalOf<PaneScrimEdge?> { null }
 
 /** What a stack entry's metadata says about it: its route and its place on its stack. */
 internal const val ROUTE_METADATA = "resonance.route"
@@ -145,12 +149,13 @@ private fun MessagesPanes(entries: List<NavEntry<Route>>, session: Session) {
         }
         // The detail starts under the header's paper. Its pages still lay themselves out under a status
         // bar (their bars pad for it): that much of them is drawn above the pane's top, and clipped —
-        // and only that: the pane bar's line may reach back to the rule beside the pane.
+        // and only that: the pane bar's line and a held message's scrim may reach back to the rule beside the
+        // pane (the scrim to its wave's farthest swing).
         Box(
             Modifier
                 .fillMaxSize()
                 .padding(start = listWidth + PaneGap * 2, top = status + header)
-                .drawWithContent { clipRect(left = -PaneGap.toPx()) { this@drawWithContent.drawContent() } }
+                .drawWithContent { clipRect(left = -(PaneGap + PaneRuleAmp).toPx()) { this@drawWithContent.drawContent() } }
                 .layout { measurable, constraints ->
                     val lift = status.roundToPx()
                     val placeable = measurable.measure(constraints.copy(minHeight = constraints.minHeight + lift, maxHeight = constraints.maxHeight + lift))
@@ -163,6 +168,7 @@ private fun MessagesPanes(entries: List<NavEntry<Route>>, session: Session) {
             CompositionLocalProvider(
                 LocalHeaderChrome provides null, LocalInlineBarHeight provides PaneBarRow, LocalTwoPane provides true,
                 LocalBarPen provides pen, LocalBarLineLead provides PaneGap - PaneLeadTuck,
+                LocalPaneScrimEdge provides PaneScrimEdge(status, header),
             ) {
                 AnimatedContent(
                     detail,
@@ -205,13 +211,9 @@ private fun PaneRule(x: Dp, status: Dp, pen: Color, modifier: Modifier) {
             val d = density
             val g = paneRuleGeometry(status.value, size.height / d)
             val cx = x.toPx()
-            fun run(from: Float, to: Float, seed: Double): Path {
-                val h = to - from
-                return wavyVertical(h.toDouble(), seed, 2.0, max(2, (h / 34).roundToInt())).toPath(d, cx, from * d)
-            }
             val rule = Path().apply {
-                addPath(run(g.top, g.junction, 73.0))
-                addPath(run(g.junction, g.bottom, 71.0))
+                addPath(paneRuleRun(g.top, g.junction, PaneRuleUpperSeed, cx, d))
+                addPath(paneRuleRun(g.junction, g.bottom, PaneRuleLowerSeed, cx, d))
             }
             // The header's paper over the rule's top: the window-wide bar the Messages root draws.
             val paper = headerEdgePaths(size.width, (status + TopBarRow + HeaderEdgeHeight).toPx(), d).fill
@@ -219,6 +221,49 @@ private fun PaneRule(x: Dp, status: Dp, pen: Color, modifier: Modifier) {
             onDrawBehind { clipPath(paper, ClipOp.Difference) { drawPath(rule, pen, style = stroke) } }
         },
     )
+}
+
+/** The rule's two runs' seeds — over the pane bar's line, and from it down — and how far its wave swings either way. */
+private const val PaneRuleUpperSeed = 73.0
+private const val PaneRuleLowerSeed = 71.0
+private val PaneRuleAmp: Dp = 2.dp
+
+/**
+ * One run of the rule between the panes, [from] → [to] (dp from the window's top), down the line at [cx] (px): a
+ * turn every 34. [lift] (dp) is how far below the window's top the frame it is drawn in starts.
+ */
+private fun paneRuleRun(from: Float, to: Float, seed: Double, cx: Float, d: Float, lift: Float = 0f): Path {
+    val h = to - from
+    return wavyVertical(h.toDouble(), seed, PaneRuleAmp.value.toDouble(), max(2, (h / 34).roundToInt())).toPath(d, cx, (from - lift) * d)
+}
+
+/**
+ * Where the scrim of a message held in the thread pane lies (round 17 review D2): it starts at the rule between the
+ * panes, not at the pane's own edge 12 past it — no undimmed strip between the rule and the dimmed thread. In the
+ * detail pane's own frame (px; its pages are laid out from a status bar's height above the pane's top, under the
+ * header's [header] row): the pane itself from its top (its bar's paper lies over the scrim there), and the 12 beside
+ * it from the pane bar's line down, bounded by the rule's own wave (its lower run, the very curve [PaneRule] draws
+ * over it), so the scrim meets the line and the rule stays crisp above it.
+ */
+internal class PaneScrimEdge(private val status: Dp, private val header: Dp) {
+    /** The dimmed region for a pane [size] px large, at [d] px a dp. */
+    fun region(size: Size, d: Float): Path {
+        // The window's height: the pane's frame starts the header's row down from the window's top.
+        val g = paneRuleGeometry(status.value, size.height / d + header.value)
+        val line = (g.junction - header.value) * d
+        return paneRuleRun(g.junction, g.bottom, PaneRuleLowerSeed, -PaneGap.value * d, d, lift = header.value).apply {
+            // Down the rule's wave to the foot, across, up the pane's far edge, back along its top, and down its own edge
+            // to the bar's line, which runs back to where the rule's run began.
+            lineTo(size.width, size.height)
+            lineTo(size.width, 0f)
+            lineTo(0f, 0f)
+            lineTo(0f, line)
+            close()
+        }
+    }
+
+    override fun equals(other: Any?) = other is PaneScrimEdge && other.status == status && other.header == header
+    override fun hashCode() = status.hashCode() * 31 + header.hashCode()
 }
 
 /**
