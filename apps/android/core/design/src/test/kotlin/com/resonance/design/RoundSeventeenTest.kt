@@ -15,7 +15,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PixelMap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -55,11 +54,11 @@ import kotlin.math.abs
  * Round 17 on Android's design language: every menu is the one sheet (§1) — rows 44 tall, their content 20 in
  * from either side, the glyph 17 and 12 before the words, the sheet as wide as its longest row, 6 over the first
  * row and the quiet foot's 24-tall line right under the last, its words at the end, 10 under it (§2.3); the
- * sheet's shadow (light two, night one) and the room a popup keeps round it; the bar's pen (§7); and a writer's
+ * room a popup keeps round the sheet; the bar's pen (§7); and a writer's
  * bar that grows to hold its title and save state at a large text size instead of cutting the second line (§8).
- * From the round's review: a row that ends or removes something is told by the danger ink alone — no wash under it,
- * the paper's grain through its band as through any other, by day and at night — its pressed ink the danger hue at
- * the others' strength (D1); a pressed row's words take the pressed pen with its glyph (A8); and the lift of the
+ * From the round's review: a row that removes something wears the danger ink, its pressed ink the danger hue at the
+ * others' strength (D1; round 18 lays a red wash under it at rest, RoundEighteenTest); a pressed row's words take the
+ * pressed pen with its glyph (A8); and the lift of the
  * hold that brought a sheet up under the finger chooses nothing (D4).
  */
 @RunWith(RobolectricTestRunner::class)
@@ -152,23 +151,9 @@ class RoundSeventeenTest {
         assertTrue(foot.top.value >= line && foot.bottom.value <= line + 24f + 0.5f)
     }
 
-    // §1: the shadow, and the room a popup keeps for it
+    // §1: the room a popup keeps round its sheet (round 18: for its wobble and pen line, no shadow)
 
-    @Test fun theSheetCastsTwoSoftShadowsByDayAndOneDeeperAtNight() {
-        val day = SheetShadow.of(ResonanceColors.LightTerracotta)
-        val night = SheetShadow.of(ResonanceColors.of(com.resonance.design.generated.PaletteTheme.Terracotta, true))
-        assertEquals(listOf(8f to 24f, 1f to 3f), day.map { it.dy.value to it.blur.value })
-        assertEquals(0.16f, day[0].color.alpha, 0.005f)
-        assertEquals(0.10f, day[1].color.alpha, 0.005f)
-        assertEquals(listOf(10f to 28f), night.map { it.dy.value to it.blur.value })
-        assertEquals(0.45f, night.single().color.alpha, 0.01f)
-        // The CSS blur (a Gaussian of half its radius) in Skia's terms: 24 css px at 1× is a deviation of 12.
-        assertEquals(12f, SheetShadow.skiaRadius(24.dp, 1f) * 0.57735f + 0.5f, 0.01f)
-        // The room round a popup's sheet holds the deepest shadow's offset and two of its deviations.
-        assertTrue(SheetShadow.Room.value >= 10f + 28f)
-    }
-
-    @Test fun aPopupPlacesItsSheetAndHangsTheShadowsRoomRoundIt() {
+    @Test fun aPopupPlacesItsSheetAndHangsItsRoomRoundIt() {
         val window = IntSize(1000, 2000)
         val room = 40
         // The popup's content is the sheet and its room on every side.
@@ -212,64 +197,19 @@ class RoundSeventeenTest {
         assertTrue((bar.bottom - bar.top).value > (InlineBarHeight + HeaderEdgeHeight).value)
     }
 
-    // Round 17 review D1, A8: a loss is told by its ink alone, and a pressed row's words take the pressed pen
-
-    /** The mean colour and the spread of luminance of the [w]×[h] patch at ([x], [y]) of [pixels]. */
-    private fun patch(pixels: PixelMap, x: Int, y: Int, w: Int, h: Int): Pair<FloatArray, Float> {
-        val all = (x until x + w).flatMap { i -> (y until y + h).map { j -> pixels[i, j] } }
-        val mean = floatArrayOf(all.map { it.red }.average().toFloat(), all.map { it.green }.average().toFloat(), all.map { it.blue }.average().toFloat())
-        val lum = all.map { (it.red + it.green + it.blue) / 3f }
-        val m = lum.average().toFloat()
-        return mean to kotlin.math.sqrt(lum.map { (it - m) * (it - m) }.average().toFloat())
-    }
-
-    private fun aLossRestsOnThePaperItself(palette: ResonanceColors) {
-        compose.setContent {
-            CompositionLocalProvider(LocalDensity provides one, LocalResonanceColors provides palette) {
-                Box(Modifier.background(Color.White).padding(40.dp)) {
-                    Box(Modifier.testTag("sheet")) {
-                        OrganicMenuPanel(
-                            listOf(
-                                OrganicMenuItem("回覆", IconName.Reply) {},
-                                OrganicMenuItem("封鎖", IconName.Ban, destructive = true) {},
-                                OrganicMenuItem("刪除對話", IconName.Trash, destructive = true) {},
-                            ),
-                            seed = 7.0,
-                        ) {}
-                    }
-                }
-            }
-        }
-        compose.mainClock.advanceTimeBy(400)
-        val sheet = compose.onNodeWithTag("sheet").getBoundsInRoot()
-        val pixels = compose.onRoot().captureToImage().toPixelMap()
-        // A patch of each row's band past its words, well inside the wobble.
-        fun band(row: Int) = patch(pixels, sheet.right.value.toInt() - 40, sheet.top.value.toInt() + 6 + row * 44 + 12, 24, 20)
-        val (plain, grain) = band(0)
-        assertTrue("the paper's grain shows", grain > 0.002f)
-        for (row in 1..2) {
-            val (mean, spread) = band(row)
-            // The same paper and grain as a plain row's — every loss, not only the first — with nothing laid over it.
-            for (c in 0..2) assertEquals("row $row, channel $c", plain[c], mean[c], 2.5f / 255)
-            assertEquals("row $row's grain", grain, spread, 0.01f)
-        }
-    }
-
-    @Test fun aLossIsToldByItsInkAloneWithNothingUnderItAtRestByDay() = aLossRestsOnThePaperItself(ResonanceColors.LightTerracotta)
-
-    @Test fun aLossIsToldByItsInkAloneWithNothingUnderItAtRestAtNight() =
-        aLossRestsOnThePaperItself(ResonanceColors.of(com.resonance.design.generated.PaletteTheme.Terracotta, true))
+    // Round 17 review D1, A8 (round 18 keeps both): a loss's glyph and words wear the danger ink, and a pressed row's
+    // words take the pressed pen
 
     @Test fun aLossWearsTheDangerInkPressedOrNotAndItsInkSpreadsAtTheRowsStrength() {
         for (palette in listOf(ResonanceColors.LightTerracotta, ResonanceColors.of(com.resonance.design.generated.PaletteTheme.Terracotta, true))) {
             // The theme's menu and a card's own (its hue): a loss's words and glyph are the palette's deeper danger
             // fill either way (the web's --danger-fill, readable on the paper), its spreading ink the danger hue.
             for (hue in listOf(null, 210.0)) {
-                val inks = MenuColors(hue, palette).sheetInks()
+                val inks = MenuColors(hue, palette).sheetInks(palette)
                 assertEquals(palette.DangerFill, inks.danger)
                 assertEquals(palette.Danger.copy(alpha = SheetPressAlpha), inks.dangerPress)
                 assertEquals(inks.press.alpha, inks.dangerPress.alpha, 0f)
-                val loss = SheetRow("封鎖", IconName.Ban, danger = true)
+                val loss = SheetRow("刪除", IconName.Trash, tone = RowTone.Danger)
                 assertEquals(inks.danger to inks.danger, inks.rowInks(loss, down = false, text = palette.Text))
                 assertEquals(inks.danger to inks.danger, inks.rowInks(loss, down = true, text = palette.Text))
             }
@@ -277,7 +217,7 @@ class RoundSeventeenTest {
     }
 
     @Test fun aPressedRowsWordsTakeThePressedPenWithItsGlyph() {
-        val inks = MenuColors(null, ResonanceColors.LightTerracotta).sheetInks()
+        val inks = MenuColors(null, ResonanceColors.LightTerracotta).sheetInks(ResonanceColors.LightTerracotta)
         val row = SheetRow("回覆", IconName.Reply)
         val text = ResonanceColors.LightTerracotta.Text
         assertEquals(inks.glyph to text, inks.rowInks(row, down = false, text = text))
