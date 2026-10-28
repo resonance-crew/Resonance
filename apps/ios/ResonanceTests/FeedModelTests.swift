@@ -178,6 +178,136 @@ import Testing
         #expect(await asked.all.count == 3)
     }
 
+    /// 「顯示更多」 shows what is already here (round 19): the page after the ones on screen is fetched
+    /// while the reader nears the foot, quietly — nothing new shows — and a tap shows it at once.
+    @Test func aPageFetchedAheadShowsAtOnceOnATap() async {
+        let (a, b, c) = (a, b, c)
+        let asked = Calls<PageAfter?>()
+        let model = FeedModel(feed: { after in
+            await asked.record(after)
+            switch after {
+            case nil: return Fixture.page([a], token: "t1")
+            case .token("t1"): return Fixture.page([b], token: "t2")
+            default: return Fixture.page([c])
+            }
+        }, recommended: { [] }, patience: .milliseconds(10))
+        await model.load()
+        #expect(model.wantsAhead)
+
+        model.fetchAhead()
+        #expect(await eventually {
+            let n = await asked.all.count
+            return !model.wantsAhead && n == 2
+        })
+        try? await Task.sleep(for: .milliseconds(30))
+        // Fetched, not shown, and the button isn't busy.
+        #expect(ids(model.cards) == ["a"])
+        #expect(!model.isLoadingMore)
+        #expect(model.canLoadMore)
+
+        // The tap shows it there and then, asking the server nothing.
+        await model.loadMore()
+        #expect(ids(model.cards) == ["a", "b"])
+        #expect(await asked.all.count == 2)
+        // The reader still near the foot: the next page is fetched ahead again.
+        #expect(model.wantsAhead)
+        model.fetchAhead()
+        #expect(await eventually { await asked.all == [nil, .token("t1"), .token("t2")] })
+        #expect(ids(model.cards) == ["a", "b"])
+        await model.loadMore()
+        #expect(ids(model.cards) == ["a", "b", "c"])
+        // The last page: nothing more to fetch ahead, nothing more to show.
+        #expect(!model.wantsAhead)
+        #expect(!model.canLoadMore)
+    }
+
+    /// Tapped before the page fetched ahead has come: the button says it is on its way, taps do nothing
+    /// more, and the page shows the moment it arrives.
+    @Test func aTapBeforeThePageComesWaitsThenShowsIt() async {
+        let (a, b) = (a, b)
+        let next = Gate<FeedPage>()
+        let asked = Calls<PageAfter?>()
+        let model = FeedModel(feed: { after in
+            await asked.record(after)
+            return after == nil ? Fixture.page([a], token: "t1") : await next.wait()
+        }, recommended: { [] }, patience: .milliseconds(10))
+        await model.load()
+        model.fetchAhead()
+        #expect(await eventually { await asked.all.count == 2 })
+
+        let tap = Task { await model.loadMore() }
+        #expect(await eventually { model.isLoadingMore })
+        #expect(ids(model.cards) == ["a"])
+        // A second tap meanwhile asks for nothing more.
+        await model.loadMore()
+        #expect(await asked.all.count == 2)
+
+        await next.open(Fixture.page([b]))
+        await tap.value
+        #expect(ids(model.cards) == ["a", "b"])
+        #expect(!model.isLoadingMore)
+        #expect(!model.canLoadMore)
+    }
+
+    /// Never more than one page ahead: while one is on its way or waiting to be shown, nearing the foot
+    /// again fetches nothing; nor does the first stage (picks leading, the latest behind 「顯示更多」),
+    /// whose tap shows the latest cards already here.
+    @Test func neverMoreThanOnePageAhead() async {
+        let (a, b, x) = (a, b, x)
+        let asked = Calls<PageAfter?>()
+        let model = FeedModel(feed: { after in
+            await asked.record(after)
+            return after == nil ? Fixture.page([a], token: "t1") : Fixture.page([b], token: "t2")
+        }, recommended: { [x] }, patience: .seconds(5))
+        await model.load()
+        // Picks lead: the latest cards wait behind the button, and nothing is fetched ahead of them.
+        #expect(!model.wantsAhead)
+        model.fetchAhead()
+        try? await Task.sleep(for: .milliseconds(30))
+        #expect(await asked.all.count == 1)
+        await model.loadMore()
+        #expect(ids(model.cards) == ["x", "a"])
+        #expect(await asked.all.count == 1)
+
+        model.fetchAhead()
+        model.fetchAhead()
+        #expect(await eventually {
+            let n = await asked.all.count
+            return !model.wantsAhead && n == 2
+        })
+        try? await Task.sleep(for: .milliseconds(30))
+        model.fetchAhead()
+        try? await Task.sleep(for: .milliseconds(30))
+        #expect(await asked.all == [nil, .token("t1")])
+        #expect(ids(model.cards) == ["x", "a"])
+    }
+
+    /// A page ahead that fails is not asked for again on its own (no loop against a failing server);
+    /// a tap asks again, and shows it when it comes.
+    @Test func aFailedPageAheadWaitsForATap() async {
+        let (a, b) = (a, b)
+        let failing = Flag()
+        failing.on = true
+        let asked = Calls<PageAfter?>()
+        let model = FeedModel(feed: { after in
+            await asked.record(after)
+            if after == nil { return Fixture.page([a], token: "t1") }
+            if failing.on { throw APIFailure.unexpected(status: 502) }
+            return Fixture.page([b])
+        }, recommended: { [] }, patience: .milliseconds(10))
+        await model.load()
+        model.fetchAhead()
+        #expect(await eventually {
+            let n = await asked.all.count
+            return n == 2 && !model.wantsAhead
+        })
+        #expect(model.canLoadMore)
+        failing.on = false
+        await model.loadMore()
+        #expect(ids(model.cards) == ["a", "b"])
+        #expect(await asked.all.count == 3)
+    }
+
     @Test func aServerWithoutPageTokensPagesByItsCursor() async {
         let (a, b) = (a, b)
         let asked = Calls<PageAfter?>()

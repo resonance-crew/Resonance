@@ -1,25 +1,70 @@
 /* ── The owner's card in the trash ───────────────────────────────────
    The article's first block, above the cover (or the title without one):
-   what this is, for how long, and the two ways out. */
+   what this is, for how long, and the two ways out — one hand-drawn shape
+   (TrashedCardBanner draws it), the words on its paper, 還原 and 永久刪除
+   filling its end as segments behind wavy seams. */
 .banner {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: stretch;
+  min-height: 76px;
   margin-bottom: 24px;
 }
-/* The soft panel's room, tighter than a section's: a notice, not a form. */
-.banner > div {
-  padding: 14px 18px;
+
+.backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
 }
-.row {
+
+/* The grain and the brushes, under the words and the labels. */
+.layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+.layer > .layer {
+  position: absolute;
+}
+
+.paper {
+  fill: var(--color-cream-dark);
+}
+.restoreFace {
+  fill: var(--button-fill);
+}
+.dangerFace {
+  fill: var(--button-danger-tonal);
+}
+/* Cut in the page's paper, as the segmented bar's seams are. */
+.seam {
+  fill: none;
+  stroke: var(--color-cream);
+  stroke-linecap: round;
+}
+/* The outline in the quiet grey a sheet wears: the shape's curves, plain to see. */
+.pen {
+  fill: none;
+  stroke: var(--field-border-hover);
+  stroke-linejoin: round;
+}
+
+.text {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 14px;
+  padding: 14px 20px;
+  min-width: 0;
 }
 .glyph {
   flex: none;
+  display: flex;
   color: var(--color-text-muted);
-}
-.text {
-  flex: 1;
-  min-width: 0;
 }
 .title {
   margin: 0;
@@ -39,22 +84,69 @@
   line-height: 1.5;
   color: var(--color-text-muted);
 }
-.actions {
-  flex: none;
-  display: flex;
+
+.seg {
+  position: relative;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  gap: 6px;
+  min-height: 48px;
+  padding: 0 24px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  transition: opacity 160ms ease;
+  -webkit-tap-highlight-color: transparent;
 }
-/* A phone: the two buttons wrap under the words, in one row at their start. */
+/* The first segment's start is the seam's line: room for its wave. */
+.restore {
+  padding-left: 26px;
+  color: var(--color-cream);
+}
+.delete {
+  padding-right: 26px;
+  color: var(--button-on-danger-tonal);
+}
+/* As the segmented bar's: a ring inside the segment, in its label's ink. */
+.seg:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -6px;
+  border-radius: 12px;
+}
+.seg:active {
+  opacity: 0.82;
+}
+.seg[aria-disabled='true'] {
+  cursor: default;
+}
+.seg[aria-busy='true'] {
+  cursor: progress;
+}
+.seg[aria-disabled='true']:active {
+  opacity: 1;
+}
+
+/* A phone: the words take the width, the two ways out its foot, side by side. */
 @media (max-width: 640px) {
-  .row {
-    flex-wrap: wrap;
+  .banner {
+    grid-template-columns: 1fr 1fr;
   }
   .text {
-    flex-basis: calc(100% - 34px);
+    grid-column: 1 / -1;
+    align-items: flex-start;
+    padding: 14px 18px 12px;
   }
-  .actions {
-    flex-basis: 100%;
-    padding-left: 34px;
+  .glyph {
+    padding-top: 1px;
+  }
+  .seg {
+    min-height: 50px;
+    padding: 0 12px;
   }
 }

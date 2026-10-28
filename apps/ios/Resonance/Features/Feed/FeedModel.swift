@@ -2,8 +2,15 @@ import Observation
 import ResonanceKit
 
 /// The home feed as the web runs it (home/page.tsx): today's recommendations
-/// first; "load more" then reveals the latest public cards, deduped against
+/// first; 「顯示更多」 then shows the latest public cards, deduped against
 /// the picks, a page at a time.
+///
+/// 「顯示更多」 shows what is already here (round 19): the feed keeps one page
+/// of the latest cards fetched ahead of what it shows — asked for quietly while
+/// the reader nears the feed's foot (`fetchAhead`, the screen's call) — and a
+/// tap shows it at once. Tapped before it has come, the button is busy
+/// (`isLoadingMore`) and the page shows the moment it arrives. Never more than
+/// one page ahead.
 ///
 /// The two are asked for together, but the feed never waits long for the
 /// picks: the latest cards show as soon as they arrive (after a short
@@ -28,6 +35,8 @@ final class FeedModel {
     private(set) var recommended: [FeedCard] = []
     private(set) var latest: [FeedCard] = []
     private(set) var showLatest = false
+    /// 「顯示更多」 was tapped before the page it shows was here: the button's pen loader, taps ignored,
+    /// until the page comes (and shows at once) or its fetch fails.
     private(set) var isLoadingMore = false
     /// The picks heading the feed came after the latest cards were showing, and were put on top of
     /// them: a grid keeps them in rows of their own (`leadingPicks` of `cards`), so the cards already
@@ -45,8 +54,18 @@ final class FeedModel {
     private var hasMorePages = true
     /// The first page of the latest cards has arrived (it may fail while the picks show).
     private var latestLoaded = false
-    /// Pages after the first that "load more" added since the first page arrived.
+    /// Pages after the first that 「顯示更多」 showed since the first page arrived.
     private var extraPages = 0
+    /// The page of the latest cards fetched ahead and not shown yet: what the next 「顯示更多」 shows.
+    /// `nextPage` already points past it.
+    private var ahead: [FeedCard]?
+    /// The page ahead on its way.
+    @ObservationIgnored private var aheadFetch: Task<Void, Never>?
+    /// Which fetch ahead an answer belongs to: each start, and each let-go, makes older answers moot.
+    @ObservationIgnored private var aheadToken = 0
+    /// The fetch ahead failed: not asked again on its own (no loop against a server that fails) until
+    /// the reader taps, or a new load starts.
+    private var aheadFailed = false
     /// What each load answers to; a newer load (a refresh, a retry) makes older answers moot.
     private var generation = 0
     /// Picks from the current load that arrived before the feed was shown (nil: still on their way).
@@ -94,7 +113,15 @@ final class FeedModel {
 
     /// With no picks there is nothing to hold back: the latest cards show at once.
     var latestVisible: Bool { recommended.isEmpty || showLatest }
-    var canLoadMore: Bool { !latestVisible || hasMorePages }
+    /// Something more to show: the latest cards behind the picks, the page fetched ahead, or one the
+    /// server still has.
+    var canLoadMore: Bool { !latestVisible || ahead != nil || hasMorePages }
+    /// Whether a page should be fetched ahead now (the reader near the foot, the screen asks): the
+    /// latest cards showing, nothing ahead or on its way, and more on the server.
+    var wantsAhead: Bool {
+        phase == .loaded && latestVisible && latestLoaded && ahead == nil && aheadFetch == nil && !aheadFailed
+            && hasMorePages && nextPage != nil
+    }
     var isEmpty: Bool { phase == .loaded && cards.isEmpty }
     /// How many of `cards` are the picks heading them.
     var leadingPicks: Int { visible(shownPicks).count }
@@ -127,6 +154,7 @@ final class FeedModel {
         extraPages = 0
         nextPage = nil
         hasMorePages = true
+        dropAhead()
         let deadline = ContinuousClock.now.advanced(by: patience)
         // Unstructured on purpose: leaving the screen doesn't abandon them.
         let fetchRecommended = fetchRecommended
@@ -172,7 +200,7 @@ final class FeedModel {
 
     /// Pulled to refresh: both are asked for again, with the feed kept on screen meanwhile (no
     /// skeleton). The answers take their places as a fresh load's do — today's picks heading the
-    /// feed and the first page of the latest cards behind "load more" (picks nearly there still
+    /// feed and the first page of the latest cards behind 「顯示更多」 (picks nearly there still
     /// lead; later ones go on top of the latest cards, as late picks do) — and one that fails leaves
     /// its part as it was. When nothing comes back the feed stays as it is and `refreshFailure` says
     /// why. Nothing on screen yet: an ordinary load, its failure the page's.
@@ -184,6 +212,9 @@ final class FeedModel {
         }
         generation += 1
         let asked = generation
+        // A page on its way ahead answers to the feed as it was: moot now (one already here stays,
+        // unless the refresh brings a new first page).
+        dropAheadFetch()
         refreshing = asked
         refreshPicks = nil
         defer { if refreshing == asked { refreshing = nil } }
@@ -234,6 +265,7 @@ final class FeedModel {
         hasMorePages = page.next != nil
         latestLoaded = true
         extraPages = 0
+        dropAhead()
         if case let picks?? = refreshPicks { takeRefreshed(picks: picks) }
     }
 
@@ -250,6 +282,7 @@ final class FeedModel {
         }
         generation += 1
         let asked = generation
+        dropAheadFetch()
         // Unstructured on purpose, as in `load`: leaving the screen doesn't abandon them.
         let (fetchFeed, fetchRecommended) = (fetchFeed, fetchRecommended)
         let picks = Task { [weak self] in
@@ -274,6 +307,7 @@ final class FeedModel {
         guard phase == .loaded else { return await refresh() }
         generation += 1
         let asked = generation
+        dropAheadFetch()
         // Unstructured on purpose, as in `load`: leaving the screen doesn't abandon them.
         let (fetchFeed, fetchRecommended) = (fetchFeed, fetchRecommended)
         let picks = Task { [weak self] () -> Bool in
@@ -296,17 +330,19 @@ final class FeedModel {
         refreshFailure = RefreshFailure(failure)
     }
 
-    /// First reveals the latest cards; after that, fetches the next page.
+    /// 「顯示更多」: first shows the latest cards (already here behind the picks); after that, the page
+    /// fetched ahead — at once when it is here, else the moment it comes (busy meanwhile). Returns once
+    /// it shows, or its fetch failed.
     func loadMore() async {
-        guard !isLoadingMore else { return }
         if !latestVisible {
             showLatest = true
             if latestLoaded { return }
         }
-        isLoadingMore = true
-        defer { isLoadingMore = false }
+        guard !isLoadingMore else { return }
         if !latestLoaded {
             // The first page failed while the picks showed: ask again.
+            isLoadingMore = true
+            defer { isLoadingMore = false }
             guard let page = try? await fetchFeed(nil) else { return }
             keeping?.keepLatest(page)
             latest = page.cards
@@ -314,16 +350,77 @@ final class FeedModel {
             hasMorePages = page.next != nil
             latestLoaded = true
             extraPages = 0
+            dropAhead()
             return
         }
-        guard hasMorePages, let after = nextPage else { return }
-        if let page = try? await fetchFeed(after) {
-            let known = Set(latest.map(\.id))
-            latest += page.cards.filter { !known.contains($0.id) }
-            nextPage = page.next
-            hasMorePages = page.next != nil
-            extraPages += 1
+        if ahead != nil { return showAhead() }
+        guard hasMorePages, nextPage != nil else { return }
+        // Not here yet: the button waits for it (`aheadArrived` shows it and ends the wait).
+        aheadFailed = false
+        isLoadingMore = true
+        if aheadFetch == nil { startAhead() }
+        await aheadFetch?.value
+    }
+
+    /// The reader is near the feed's foot: the next page is fetched, quietly, so 「顯示更多」 can show it
+    /// at once. Nothing when one is here or on its way already (never more than one page ahead).
+    func fetchAhead() {
+        guard wantsAhead else { return }
+        startAhead()
+    }
+
+    private func startAhead() {
+        guard let after = nextPage else { return }
+        aheadToken += 1
+        let mine = aheadToken
+        let fetchFeed = fetchFeed
+        aheadFetch = Task { [weak self] in
+            let page = try? await fetchFeed(after)
+            self?.aheadArrived(page, for: mine)
         }
+    }
+
+    /// The page fetched ahead came (nil: it failed): kept until 「顯示更多」 shows it — at once, when the
+    /// reader is waiting for it.
+    private func aheadArrived(_ page: FeedPage?, for token: Int) {
+        // A newer load or answer let go of it (and of the wait) already.
+        guard token == aheadToken, aheadFetch != nil else { return }
+        aheadFetch = nil
+        guard let page else {
+            aheadFailed = true
+            isLoadingMore = false
+            return
+        }
+        ahead = page.cards
+        nextPage = page.next
+        hasMorePages = page.next != nil
+        if isLoadingMore {
+            isLoadingMore = false
+            showAhead()
+        }
+    }
+
+    /// The page ahead goes under the cards shown (without those already among them).
+    private func showAhead() {
+        guard let page = ahead else { return }
+        ahead = nil
+        let known = Set(latest.map(\.id))
+        latest += page.filter { !known.contains($0.id) }
+        extraPages += 1
+    }
+
+    /// A page on its way ahead is moot (a newer load or answer): let go of it, and of a wait for it.
+    private func dropAheadFetch() {
+        aheadToken += 1
+        aheadFetch = nil
+        isLoadingMore = false
+    }
+
+    /// The feed starts its pages afresh: nothing ahead, nothing on its way, nothing failed.
+    private func dropAhead() {
+        dropAheadFetch()
+        ahead = nil
+        aheadFailed = false
     }
 
     /// The kept feed, drawn as the server last answered it. False when nothing was kept.
@@ -340,6 +437,7 @@ final class FeedModel {
         hasMorePages = page.map { $0.next != nil } ?? true
         latestLoaded = page != nil
         extraPages = 0
+        dropAhead()
         phase = .loaded
         return true
     }
@@ -365,6 +463,8 @@ final class FeedModel {
             latest = page.cards
             nextPage = page.next
             hasMorePages = page.next != nil
+            // The page fetched ahead (or on its way) followed the first page as it was.
+            dropAhead()
         } else {
             // The reader has read on past the first page: the new cards go on top, the rest stay.
             let fresh = Set(page.cards.map(\.id))
@@ -386,7 +486,7 @@ final class FeedModel {
     }
 
     /// Picks a refresh brought in time: they head the feed, as after a fresh load (the latest
-    /// cards behind "load more" again); none at all leave the latest showing.
+    /// cards behind 「顯示更多」 again); none at all leave the latest showing.
     private func takeRefreshed(picks: [FeedCard]) {
         keeping?.keepPicks(picks)
         refreshFailure = nil
@@ -422,7 +522,7 @@ final class FeedModel {
         switch phase {
         case .loading:
             arrivedPicks = picks
-            // Here first: they lead now, and the latest cards wait behind "load more".
+            // Here first: they lead now, and the latest cards wait behind 「顯示更多」.
             // (Latest already here and waiting out its patience: show both at once.)
             if !picks.isEmpty || latestLoaded { show(picks: picks) }
             patienceWait?.cancel()

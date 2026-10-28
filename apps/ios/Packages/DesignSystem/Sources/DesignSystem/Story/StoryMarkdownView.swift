@@ -40,7 +40,9 @@ public struct StoryMarkdownView<Embed: View, LinkCard: View>: View {
 
     public var body: some View {
         BlockStack(blocks: blocks, style: .body(typography, language: language), rhythm: typography.rhythm(), onOpenURL: onOpenURL, embed: embed,
-                   linkCard: linkCard, anchors: anchorsHeadings, headingSpace: headingSpace)
+                   linkCard: linkCard, anchors: anchorsHeadings, headingSpace: headingSpace, marks: true)
+            // The story's column, for the paper puppets (its own blocks are marked too).
+            .readingMark(.column)
     }
 
     /// Each heading among the story's own blocks (not inside a quote or a list) carries a
@@ -95,6 +97,8 @@ struct BlockStack<Embed: View, LinkCard: View>: View {
     let linkCard: (String?, String) -> LinkCard?
     var anchors = false
     var headingSpace: String?
+    /// The story's own blocks (not a quote's or a list's) say where they are, for the paper puppets.
+    var marks = false
 
     var body: some View {
         // A standalone link with its page's card is a block (the block gap round it), else the paragraph it is.
@@ -106,6 +110,7 @@ struct BlockStack<Embed: View, LinkCard: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { i, block in
                 let view = BlockView(block: block, style: style, rhythm: rhythm, onOpenURL: onOpenURL, embed: embed, linkCard: linkCard)
+                    .readingMark(marks ? .block : nil)
                 if anchors, case .heading = block {
                     // The anchor is a child of its own, laid out `margin` above the heading — a scroll
                     // lands on the identified view's frame, and one in a background takes its host's —

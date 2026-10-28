@@ -18,6 +18,10 @@ struct StoryCardList: View {
     /// their own — and the cards under them stay exactly as they were drawn before they came: in
     /// their places and columns, in their colours and shapes.
     var splitAt: Int? = nil
+    /// Cards from this index on have just been brought in (the home feed's 「顯示更多」, round 19): each
+    /// rises into place as it comes on screen, a beat after the one before it. Cards already drawn
+    /// never play it again.
+    var enterFrom: Int? = nil
     var onAppearLast: (() -> Void)? = nil
     @Environment(SessionStore.self) private var session
 
@@ -47,6 +51,9 @@ struct StoryCardList: View {
                           palette: palette)
         }
         .buttonStyle(.plain)
+        // Where the paper puppets may sit (round 19): its top, a band's flat, a bordered card's corners.
+        .readingMark(.card(radius: bordered ? 22 : 0))
+        .modifier(CardEntrance(delay: enterFrom.flatMap { i >= $0 ? CardEntrance.delay(i - $0) : nil }))
         .onAppear {
             session.cardPreviews.remember(card)
             if i == cards.count - 1 { onAppearLast?() }
@@ -148,6 +155,47 @@ struct CardColumns<Item: View>: View {
         .frame(maxWidth: .infinity)
         .padding(.top, top)
         .padding(.bottom, 8)
+    }
+}
+
+/// A card brought in by 「顯示更多」 (CardLinkGrid's `card-enter`): its ink comes up from nothing as it
+/// rises 18 into place — 460 ms on the web's curve, each card 70 ms after the one before it, none
+/// waiting more than 420 ms. Drawn without a delay (already on screen, or come in some other way), it
+/// is simply there; so is every card under Reduce Motion. The rise is drawn only (an offset), so
+/// nothing around it moves.
+struct CardEntrance: ViewModifier {
+    /// The card's wait before it rises; nil: it doesn't.
+    let delay: Double?
+    @State private var risen: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    static let duration = 0.46
+    static let stagger = 0.07
+    static let maxDelay = 0.42
+    static let rise: CGFloat = 18
+    static let curve = Animation.timingCurve(0.2, 0.7, 0.2, 1, duration: duration)
+
+    /// The wait of the card `k` places after the first one brought in.
+    static func delay(_ k: Int) -> Double { min(Double(max(0, k)) * stagger, maxDelay) }
+
+    init(delay: Double?) {
+        self.delay = delay
+        // Decided once, when the card is first drawn: a card on screen keeps its place whatever comes later.
+        _risen = State(initialValue: delay == nil)
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(risen ? 1 : 0)
+            .offset(y: risen ? 0 : Self.rise)
+            .onAppear {
+                guard !risen else { return }
+                if reduceMotion {
+                    risen = true
+                } else {
+                    withAnimation(Self.curve.delay(delay ?? 0)) { risen = true }
+                }
+            }
     }
 }
 

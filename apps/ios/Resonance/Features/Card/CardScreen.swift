@@ -64,7 +64,12 @@ struct CardScreen: View {
         ScrollViewReader { proxy in
             ScrollView {
                 column.id(Self.pageHead)
+                    // Where the paper puppets' marks are measured: the scrolled content's own points.
+                    .readingContent()
             }
+            // The paper puppets (round 19), while Settings → 外觀 → 小精靈 is on: on the card once it has
+            // loaded, never one in the trash. A tablet's contents rail keeps them out of the right margin.
+            .modifier(MascotStage(page: "card", allowed: mascotsAllowed, rail: layout.rail ? CGRect(x: layout.railX, y: 0, width: Tokens.cardRailW, height: 1) : nil))
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             // The page's own scroll (the bar's line and progress): on the page's scroll view alone, not
             // on the rail's table of contents, which scrolls by itself.
@@ -80,6 +85,12 @@ struct CardScreen: View {
             .onChange(of: model?.detail.map(TrashedCardBanner.shows) == true) { _, banner in bringBanner(banner, proxy: proxy) }
             .onChange(of: trashedHere) { bringBanner(model?.detail.map(TrashedCardBanner.shows) == true, proxy: proxy) }
         }
+    }
+
+    /// The page may host the paper puppets: the card has loaded, and it isn't the owner's card in the trash.
+    private var mascotsAllowed: Bool {
+        guard model?.phase == .loaded, let detail = model?.detail else { return false }
+        return !TrashedCardBanner.shows(detail)
     }
 
     private func bringBanner(_ banner: Bool, proxy: ScrollViewProxy) {
@@ -327,6 +338,7 @@ struct CardScreen: View {
                     FlowRow(spacing: 8) {
                         ForEach(card.tags, id: \.self) { TagPill($0, fill: Tokens.terracottaLight) }
                     }
+                    .readingMark(.ceiling)
                     .padding(.bottom, 40)
                 }
                 // The story's end (round 9 §3): the response bar alone — share and ⋯ are the bar's (a phone's) or
@@ -407,6 +419,8 @@ struct CardScreen: View {
         return CardViewerActions(cardId: card.id, referenceCardId: card.referenceCardId)
             .frame(maxWidth: window.layoutClass == .compact ? .infinity : nil, alignment: .leading)
             .fixedSize(horizontal: window.layoutClass != .compact, vertical: false)
+            // The response bar, over which a puppet may peek.
+            .readingMark(.respond)
             .frame(maxWidth: .infinity, alignment: .leading)
             .revealedOnScroll()
     }
@@ -425,6 +439,7 @@ struct CardScreen: View {
                     // On its way, the cover shimmers in the card's own hue (as in its story card).
                     .environment(\.skeletonHue, card.accentHue)
                     .aspectRatio(1 / 0.52, contentMode: .fit)
+                    .readingMark(.cover)
                     .padding(.bottom, story.coverGap)
                     .accessibilityLabel(card.imageLabel ?? card.title)
             }

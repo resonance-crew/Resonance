@@ -26,6 +26,26 @@
   /* mobile: cards stack flush, no gap */
 }
 
+/* Brought in by 顯示更多: each card rises a little into place and its ink
+   comes up, a beat after the one before it (--enter-delay). It plays as the
+   card mounts, so a card already on screen never moves again. Reduced motion:
+   the cards are simply there. */
+@media (prefers-reduced-motion: no-preference) {
+  .item[data-entering] {
+    animation: card-enter 460ms cubic-bezier(0.2, 0.7, 0.2, 1) var(--enter-delay, 0ms) both;
+  }
+}
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* Owner-management「⋯」anchored over the card's top-right corner. On pointer
    devices it fades in on hover/focus; on touch it stays visible (there is no
    hover to reveal it). */

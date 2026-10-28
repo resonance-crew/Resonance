@@ -33,6 +33,7 @@ public struct StoryTitle: View {
         BalancedClauses(lineBox: font.pointSize * typography.titleLeading) {
             ForEach(Array(clauses.enumerated()), id: \.offset) { _, clause in
                 TitleClauseLabel(text: typography.titleText(clause, font: font, color: color))
+                    .readingMark(.titleClause(lineBox: font.pointSize * typography.titleLeading))
             }
         }
         .accessibilityHidden(true)

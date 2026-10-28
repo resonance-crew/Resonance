@@ -102,6 +102,37 @@ import Testing
         #expect(!TrashedCardBanner.shows(Fixture.detail(Fixture.card("b"), isOwner: true)))
     }
 
+    /// One shape, cut as the segmented bar is (round 19): side by side the seams stand where 還原 and
+    /// 永久刪除 start, the bar's seeds and swing; stacked (a phone) the words' seam runs across at the
+    /// foot's top and the split down the foot's middle, starting no higher than the seam above it does.
+    @Test func theBannerIsOneShapeCutByTheBarsSeams() throws {
+        let size = CGSize(width: 600, height: 76)
+        let side = try #require(TrashBannerShape(size: size, restore: CGRect(x: 380, y: 0, width: 110, height: 76),
+                                                 delete: CGRect(x: 490, y: 0, width: 110, height: 76), stacked: false))
+        let pad = SegmentSeams.pad(76)
+        #expect(side.seams.count == 2)
+        #expect(SegmentSeams.down(x: 380, h: 76, seed: 94, amp: 1.8, pad: pad).first == CGPoint(x: 380, y: -pad))
+        #expect(side.seams[0].boundingRect.minX >= 380 - 1.8 && side.seams[0].boundingRect.maxX <= 380 + 1.8)
+        #expect(side.seams[1].boundingRect.minX >= 490 - 1.8 && side.seams[1].boundingRect.maxX <= 490 + 1.8)
+        // The faces lie past their seams: nothing of them over the words.
+        #expect(side.segments.boundingRect.minX >= 380 - 1.8)
+        #expect(side.danger.boundingRect.minX >= 490 - 1.8)
+
+        let phone = CGSize(width: 360, height: 120)
+        let stacked = try #require(TrashBannerShape(size: phone, restore: CGRect(x: 0, y: 70, width: 180, height: 50),
+                                                    delete: CGRect(x: 180, y: 70, width: 180, height: 50), stacked: true))
+        let under = SegmentSeams.across(y: 70, w: 360, seed: 94, amp: 2.6, pad: SegmentSeams.pad(120))
+        #expect(under.allSatisfy { abs($0.y - 70) <= 2.6 })
+        #expect(abs((under.first?.x ?? 0) + SegmentSeams.pad(120)) < 0.001)
+        #expect(stacked.seams[0].boundingRect.minY >= 70 - 2.6)
+        // The foot is the segments; the split runs from just above it (the foot cuts it back) to past its end.
+        #expect(stacked.segments.boundingRect.minY >= 70 - 2.6)
+        #expect(stacked.seams[1].boundingRect.minX >= 180 - 1.8 && stacked.seams[1].boundingRect.maxX <= 180 + 1.8)
+        #expect(abs(stacked.seams[1].boundingRect.minY - (70 - SegmentSeams.pad(120))) < 0.001)
+        // Nothing to draw before it is laid out.
+        #expect(TrashBannerShape(size: .zero, restore: .zero, delete: .zero, stacked: true) == nil)
+    }
+
     @Test func theBannerSaysWhenItGoesAndThatOnlyTheOwnerSeesIt() {
         let now = ISO8601.date("2026-10-08T00:00:00.000Z")!
         #expect(TrashedCardBanner.caption(trashed("a"), now: now)

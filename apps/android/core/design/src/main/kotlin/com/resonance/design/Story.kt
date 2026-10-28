@@ -498,13 +498,19 @@ fun StoryTitle(text: String, type: StoryType, lang: String?, modifier: Modifier 
     val read = remember(text, lang) { proseSemantics(text, lang) }
     // Laid out while measured, for the width offered (no subcomposition: [builtForWidth]).
     val built = remember { WidthBuilt<StaticLayout>() }
-    Box(modifier.fillMaxWidth()) {
+    val marks = LocalMascotMarks.current
+    Box(modifier.fillMaxWidth().mascotMark("title")) {
         Box(
             Modifier
                 .builtForWidth(
                     key = TitleKey(text, style, density, scaled.fontScale, AppFonts.useBundledCJK, type.cjk),
                     built = built,
-                    build = { widthPx -> titleLayout(text, style, widthPx, scaled, clauses = type.cjk) },
+                    build = { widthPx ->
+                        titleLayout(text, style, widthPx, scaled, clauses = type.cjk).also { layout ->
+                            // The island's place at the end of the title's first line (round 19).
+                            marks?.title(layout)
+                        }
+                    },
                     size = { IntSize(it.width, it.height) },
                 ) { layout -> drawIntoCanvas { layout.draw(it.nativeCanvas) } }
                 .semantics { this.text = read },
@@ -629,10 +635,13 @@ private fun grown(type: StoryType): Float = with(LocalDensity.current) { cssFont
 private fun BlockColumn(blocks: List<StoryBlock>, style: ProseStyle, story: Story, nested: Boolean) {
     val gaps = remember(blocks, story) { ProseMetrics.gaps(blocks, story.spacing, nested, story::drawnAsCard) }
     val grown = grown(story.type)
+    // The story's own blocks (not a quote's or a list's) are the island's paragraphs (round 19).
+    val marks = if (nested) null else LocalMascotMarks.current
     Column(Modifier.fillMaxWidth()) {
         blocks.forEachIndexed { i, block ->
             if (gaps[i] > 0) Spacer(Modifier.height((gaps[i] * grown).dp))
-            Block(block, style, story)
+            if (marks != null && block != StoryBlock.Blank) Box(Modifier.mascotMark("block:${"%04d".format(i)}")) { Block(block, style, story) }
+            else Block(block, style, story)
         }
     }
 }

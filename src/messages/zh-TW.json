@@ -191,7 +191,9 @@
     "themeTerracotta": "赤陶",
     "themeSage": "鼠尾草",
     "themeLavender": "薰衣草",
-    "themeYellow": "金黃"
+    "themeYellow": "金黃",
+    "mascots": "小精靈",
+    "mascotsHint": "偶爾會有紙做的小精靈到首頁和卡片頁走走"
   },
   "app": {
     "pageNotFound": "找不到這個頁面",
@@ -244,7 +246,7 @@
   "home": {
     "heading": "推薦給你的故事",
     "subheading": "從你寫下的體悟出發挑選的故事，加上最新的公開卡片，在這裡與你相遇",
-    "moreBtn": "載入更多",
+    "moreBtn": "顯示更多",
     "moreLoading": "載入中…",
     "endOfDay": "你已經看完最新公開卡片",
     "feedEnd": "暫時就這些了",

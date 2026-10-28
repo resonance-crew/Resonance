@@ -69,12 +69,14 @@ android {
         getByName("main") {
             // Subset fonts (apps/shared/fonts), the grain tiles (shared with iOS's
             // DesignSystem package), the web's message catalogs, as they are, and
-            // the story editor island (npm run native:editor → native/editor/dist).
+            // the story editor island (npm run native:editor → native/editor/dist) and the paper
+            // puppets' island (npm run native:mascots → native/mascots/dist).
             assets.srcDirs(
                 "../../shared/fonts",
                 "../../ios/Packages/DesignSystem/Sources/DesignSystem/Resources",
                 "../../../src/messages",
                 "../../../native/editor/dist",
+                "../../../native/mascots/dist",
             )
         }
         // A bench build's App Check is a release's (it never starts one: it runs on the local stack).
@@ -115,13 +117,31 @@ val requireStoryEditor = tasks.register("requireStoryEditor") {
     doLast { if (!editor.isFile || editor.length() == 0L) throw GradleException(message) }
 }
 tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(requireStoryEditor) }
+
+// The paper puppets' island (native/mascots/dist/mascots.html, round 19) is build output too, from
+// `npm run native:mascots` (part of `npm run apps:generate`): without it 外觀's 小精靈 would lay an
+// empty page over the feed. A release build stops when it is missing, a debug build says so.
+val mascotIsland = file("../../../native/mascots/dist/mascots.html")
+val mascotIslandMissing = "native/mascots/dist/mascots.html is missing or empty: the paper puppets (外觀 → 小精靈) would " +
+    "not load. Run `npm run native:mascots` (or `npm run apps:generate`) in the repository root first."
+val requireMascotIsland = tasks.register("requireMascotIsland") {
+    val island = mascotIsland
+    val message = mascotIslandMissing
+    doLast { if (!island.isFile || island.length() == 0L) throw GradleException(message) }
+}
+tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(requireMascotIsland) }
 tasks.matching { it.name == "preDebugBuild" }.configureEach {
     val editor = storyEditor
     val message = storyEditorMissing
+    val island = mascotIsland
+    val islandMessage = mascotIslandMissing
     doFirst {
+        val bar = "=".repeat(78)
         if (!editor.isFile || editor.length() == 0L) {
-            val bar = "=".repeat(78)
             logger.warn("\n$bar\nWARNING: $message\nThis debug build will have NO story editor.\n$bar\n")
+        }
+        if (!island.isFile || island.length() == 0L) {
+            logger.warn("\n$bar\nWARNING: $islandMessage\nThis debug build will have NO paper puppets.\n$bar\n")
         }
     }
 }

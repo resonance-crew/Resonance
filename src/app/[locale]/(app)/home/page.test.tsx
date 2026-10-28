@@ -112,7 +112,7 @@ describe('HomeFeedPage', () => {
     expect(screen.queryByText('Write your first card')).not.toBeInTheDocument();
   });
 
-  it('offers "load more" only while the feed has more pages', async () => {
+  it('offers "show more" only while the feed has more to show', async () => {
     const loadMore = vi.fn();
     mockUseFeed.mockReturnValue({
       data: { cards: [card('c1', 'a1', 'A thought')], authors: { a1: user('a1') } },
@@ -122,9 +122,12 @@ describe('HomeFeedPage', () => {
     });
 
     const { unmount } = renderWithIntl(<HomeFeedPage />);
-    const btn = screen.getByRole('button', { name: 'Load more' });
+    const btn = screen.getByRole('button', { name: 'Show more' });
     // Its words alone under the list, not a form's pill: no OrganicButton face.
     expect(btn).not.toHaveAttribute('data-variant');
+    // The marks the paper puppets find the feed and its foot by (lib/mascots/reading/measure).
+    expect(btn.closest('[data-mascot="feed-foot"]')?.closest('[data-mascot-zone="home"]')).not.toBeNull();
+    // Nothing fetched ahead yet (the reader came straight to it): the tap asks for the next page.
     await userEvent.setup().click(btn);
     expect(loadMore).toHaveBeenCalled();
     unmount();
@@ -137,25 +140,31 @@ describe('HomeFeedPage', () => {
       loadMore,
     });
     renderWithIntl(<HomeFeedPage />);
-    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument();
     expect(screen.queryByText('Write a card')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /write/i })).not.toBeInTheDocument();
   });
 
-  it('says the next page is on its way and takes no second click while it loads', async () => {
+  it('looks busy only once tapped while the next page is still coming, and asks for it once', async () => {
     const loadMore = vi.fn();
     mockUseFeed.mockReturnValue({
       data: { cards: [card('c1', 'a1', 'A thought')], authors: { a1: user('a1') } },
       isLoading: false,
       isLoadingMore: true,
       hasMore: true,
+      pageSizes: [1],
       loadMore,
     });
 
     renderWithIntl(<HomeFeedPage />);
-    const btn = screen.getByRole('button', { name: 'Load more' });
+    const btn = screen.getByRole('button', { name: 'Show more' });
+    // Fetching ahead is quiet: the button rests.
+    expect(btn).not.toHaveAttribute('aria-busy');
+    const user_ = userEvent.setup();
+    await user_.click(btn);
     expect(btn).toHaveAttribute('aria-busy', 'true');
-    await userEvent.setup().click(btn);
+    await user_.click(btn);
+    // The page already on its way is the one it waits for.
     expect(loadMore).not.toHaveBeenCalled();
   });
 
@@ -358,13 +367,16 @@ describe('HomeFeedPage — latest first, picks when they come', () => {
     const { rerender } = renderWithIntl(<HomeFeedPage />);
     expect(shown()).toEqual(['/card/r1']);
 
-    // Latest cards arriving later wait behind「載入更多」, as they always have.
+    // Latest cards arriving later wait behind「顯示更多」, as they always have.
     mockUseFeed.mockReturnValue(latest);
     rerender(<HomeFeedPage />);
     expect(shown()).toEqual(['/card/r1']);
     expect(screen.queryByRole('button', { name: "Today's picks are ready" })).not.toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Load more' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Show more' }));
     expect(shown()).toEqual(['/card/r1', '/card/l1', '/card/l2']);
+    // They come in rising, after the pick that was there.
+    expect(document.querySelector('[data-card-id="r1"]')).not.toHaveAttribute('data-entering');
+    expect(document.querySelector('[data-card-id="l1"]')).toHaveAttribute('data-entering');
   });
 
   it('waits for the picks before calling an empty latest feed empty', () => {
@@ -376,5 +388,92 @@ describe('HomeFeedPage — latest first, picks when they come', () => {
     mockUseRecommendedFeed.mockReturnValue({ data: { cards: [], authors: {}, reasons: {} }, isLoading: false });
     rerender(<HomeFeedPage />);
     expect(screen.getByText('Write your first card')).toBeInTheDocument();
+  });
+});
+
+// The next page is fetched while the reader scrolls toward the feed's foot, and
+// shown only when they ask for it: the tap shows what is already here.
+describe('HomeFeedPage — fetched ahead, shown on a tap', () => {
+  let near: ((entries: { isIntersecting: boolean }[]) => void) | null = null;
+  class Watch {
+    constructor(cb: (entries: { isIntersecting: boolean }[]) => void) {
+      near = cb;
+    }
+    observe() {}
+    disconnect() {}
+  }
+  const twoPages = {
+    data: {
+      cards: [card('p1', 'a1', 'Page one'), card('p2', 'a1', 'Page two')],
+      authors: { a1: user('a1') },
+    },
+    isLoading: false,
+    hasMore: true,
+    pageSizes: [1, 1],
+  };
+  const shown = () =>
+    screen
+      .getAllByRole('link')
+      .map((a) => a.getAttribute('href'))
+      .filter((h) => h?.startsWith('/card/'));
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    near = null;
+  });
+
+  it('fetches the next page as the reader nears the foot, without showing it', () => {
+    vi.stubGlobal('IntersectionObserver', Watch);
+    const loadMore = vi.fn();
+    mockUseFeed.mockReturnValue({
+      data: { cards: [card('p1', 'a1', 'Page one')], authors: { a1: user('a1') } },
+      isLoading: false,
+      hasMore: true,
+      pageSizes: [1],
+      loadMore,
+    });
+    renderWithIntl(<HomeFeedPage />);
+    expect(loadMore).not.toHaveBeenCalled();
+    act(() => near?.([{ isIntersecting: true }]));
+    expect(loadMore).toHaveBeenCalledTimes(1);
+    expect(shown()).toEqual(['/card/p1']);
+  });
+
+  it('shows the page fetched ahead at once on a tap, rising in, and only then fetches the one after it', async () => {
+    vi.stubGlobal('IntersectionObserver', Watch);
+    const loadMore = vi.fn();
+    mockUseFeed.mockReturnValue({ ...twoPages, loadMore });
+    renderWithIntl(<HomeFeedPage />);
+    act(() => near?.([{ isIntersecting: true }]));
+    // A page is already waiting: nothing more is asked for, and only the first shows.
+    expect(loadMore).not.toHaveBeenCalled();
+    expect(shown()).toEqual(['/card/p1']);
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Show more' }));
+    expect(shown()).toEqual(['/card/p1', '/card/p2']);
+    expect(document.querySelector('[data-card-id="p2"]')).toHaveAttribute('data-entering');
+    expect(document.querySelector('[data-card-id="p1"]')).not.toHaveAttribute('data-entering');
+    // Now nothing waits, and the reader is still by the foot: the next page is fetched ahead.
+    expect(loadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a page tapped for before it came the moment it arrives', async () => {
+    const loadMore = vi.fn();
+    mockUseFeed.mockReturnValue({
+      data: { cards: [card('p1', 'a1', 'Page one')], authors: { a1: user('a1') } },
+      isLoading: false,
+      hasMore: true,
+      pageSizes: [1],
+      loadMore,
+    });
+    const { rerender } = renderWithIntl(<HomeFeedPage />);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Show more' }));
+    expect(loadMore).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Show more' })).toHaveAttribute('aria-busy', 'true');
+
+    mockUseFeed.mockReturnValue({ ...twoPages, hasMore: false, loadMore });
+    rerender(<HomeFeedPage />);
+    expect(shown()).toEqual(['/card/p1', '/card/p2']);
+    expect(screen.getByText("That's all for now")).toBeInTheDocument();
   });
 });

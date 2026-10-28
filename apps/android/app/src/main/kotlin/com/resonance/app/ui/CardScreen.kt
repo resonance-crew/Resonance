@@ -1,5 +1,12 @@
 package com.resonance.app.ui
 
+import com.resonance.app.AppearanceStore
+import kotlinx.coroutines.flow.map
+import androidx.compose.runtime.CompositionLocalProvider
+import com.resonance.design.LocalMascotMarks
+import com.resonance.design.MascotMarks
+import com.resonance.design.mascotMark
+
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.mutableIntStateOf
@@ -371,6 +378,9 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     val cls = LocalWindowLayout.current.cls
     // Moved to the trash on this page a moment ago: the banner's title takes the focus as it comes.
     var trashedHere by remember { mutableIntStateOf(0) }
+    val mascots by remember { AppearanceStore.shared.state.map { it.mascots } }.collectAsStateWithLifecycle(AppearanceStore.shared.state.value.mascots)
+    val marks = remember(mascots) { if (mascots) MascotMarks() else null }
+    CompositionLocalProvider(LocalMascotMarks provides marks) {
     Box(Modifier.fillMaxSize().cream().onGloballyPositioned { progress.page = it }) {
     Column(Modifier.fillMaxSize().padding(top = if (phase == "loaded") 0.dp else top)) {
         when (phase) {
@@ -398,7 +408,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                         // The story's type, read off its title and words together (StoryScripts), in this window's numbers.
                         val text = model.storyText ?: remember(card.title, d.story) { StoryScripts.storyType(card.title, d.story) }
                         val type = StoryType.of(text.script, cls)
-                        Column(heading.onItem.then(byline.onItem).onPlaced { articleCoords = it }.padding(start = columns.start, end = columns.end).padding(top = articleTop)) {
+                        Column(heading.onItem.then(byline.onItem).onPlaced { articleCoords = it }.padding(start = columns.start, end = columns.end).mascotMark("column").padding(top = articleTop)) {
                             if (trashedOwn) TrashedCardBanner(card, d.anonymous, compact = cls == LayoutClass.Compact, focusTicket = trashedHere, onDeleted = popToRoot)
                             ArticleHead(
                                 card, d.anonymous, type, text.lang, titleModifier = heading.onHeading, bylineModifier = byline.onHeading,
@@ -409,7 +419,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                 privateCard = isPrivateCard(d) || isSharedPrivateCard(d),
                             ) { open(Route.Author(it)) }
                             // The story alone is what the bar's progress measures (not the cover, title or lists).
-                            Box(Modifier.onGloballyPositioned(progress::story)) {
+                            Box(Modifier.onGloballyPositioned(progress::story).mascotMark("story")) {
                                 // Its words follow the system's text size up to 2× (the cards in it keep the interface's).
                                 ReadingTextScale {
                                     StoryMarkdown(blocks, type, text.lang, openUrl, linkCards, headingAnchor = if (railed) anchors::anchor else null) { href, title, style ->
@@ -417,7 +427,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                     }
                                 }
                             }
-                            FlowRow(Modifier.padding(top = type.endGap.dp, bottom = 40.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FlowRow(Modifier.padding(top = type.endGap.dp, bottom = 40.dp).mascotMark("tags"), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 card.tags.forEach { TagPill(it, fill = Tokens.TerracottaLight) }
                             }
                             // The story's end is the response bar alone (round 9 §3: share and ⋯ are in the bar,
@@ -473,6 +483,10 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
             }
         }
     }
+    // 外觀's 小精靈 (round 19): the paper puppets' island over the page once it has loaded — never on a card in the trash.
+    if (marks != null && phase == "loaded" && detail?.let(::ownTrashed) == false) {
+        MascotOverlay(list, marks, insetTop = top, insetBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(), rail = railed, modifier = Modifier.fillMaxSize())
+    }
     // The contents' rail beside the article (an expanded window, a story with headings): pinned under the bar
     // while the article scrolls, leaving with its end. The author is under the title at every width (round 8 §10.1).
     val railStart = columns.railStart
@@ -503,6 +517,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
     }
     // Where the share card is drawn into its pictures: out of sight, taking no room.
     ShareCardRendererHost(sharing.renderer)
+    }
     }
     // Sharing their own anonymous card from their own account may give its owner away: said once, before the sheet.
     detail?.takeIf { askAnonymousShare }?.let { d ->
@@ -603,7 +618,7 @@ private fun ArticleHead(
     if (card.imageUrl != null) {
         // While it is on its way the cover shimmers in the card's own hue (CardDetailClient's `hue`).
         WithSkeletonHue(card.accentHue ?: 55.0) {
-            OrganicImage(card.imageUrl, (card.accentHue ?: 55.0) + 11, Modifier.fillMaxWidth().aspectRatio(1 / 0.52f)) {
+            OrganicImage(card.imageUrl, (card.accentHue ?: 55.0) + 11, Modifier.fillMaxWidth().aspectRatio(1 / 0.52f).mascotMark("cover")) {
                 Box(Modifier.fillMaxSize().background(Tokens.CreamDark))
             }
         }

@@ -15,6 +15,16 @@ import type { CastEntry, Ledge, Rect, StageApi, StageClock, StageEnv, StageEvent
 import { measureLanding, type LandingLayout } from './measure';
 import { presetIn, presetQueries, type LandingPreset } from './presets';
 
+/** What a page's stage needs besides the engine: its preset at a width, and its places measured under that preset. */
+export interface PageScene<P extends { unitHeight: number; options: Partial<StageOptions> }> {
+  presetIn(win: Window): P;
+  presetQueries(win: Window): MediaQueryList[];
+  measure(doc: Document, layer: HTMLElement, preset: P): LandingLayout;
+}
+
+/** The landing page's: its three presets and measure.ts. */
+export const LANDING_SCENE: PageScene<LandingPreset> = { presetIn, presetQueries, measure: measureLanding };
+
 export interface LandingStageDeps {
   createStage: (env: StageEnv, cast: readonly CastEntry[], options?: Partial<StageOptions>) => StageApi;
   cast: readonly CastEntry[];
@@ -24,9 +34,9 @@ export interface LandingStageDeps {
   settle?: number;
 }
 
-export interface LandingStageHandle {
+export interface LandingStageHandle<P = LandingPreset> {
   readonly stage: StageApi | null;
-  readonly preset: LandingPreset;
+  readonly preset: P;
   readonly layout: LandingLayout;
   readonly env: StageEnv | null;
   /** Measures again now (a visitor whose place moved moves with it). */
@@ -66,9 +76,24 @@ function where(l: Ledge): string {
  * again — ends it quietly: it is decoration, and the page goes on without it.
  */
 export function mountLandingStage(window: Window, layer: HTMLElement, deps: LandingStageDeps): LandingStageHandle {
+  return mountPageStage(window, layer, LANDING_SCENE, deps);
+}
+
+/**
+ * The same over any page: `scene` says which preset a width calls for and where its places are (the home feed's and
+ * the card page's puppets, lib/mascots/reading).
+ */
+export function mountPageStage<P extends { unitHeight: number; options: Partial<StageOptions> }>(
+  window: Window,
+  layer: HTMLElement,
+  scene: PageScene<P>,
+  deps: LandingStageDeps,
+): LandingStageHandle<P> {
   const win = window as Window & typeof globalThis;
   const doc = layer.ownerDocument;
   const settle = deps.settle ?? 150;
+  const { presetIn, presetQueries } = scene;
+  const measureLanding = (d: Document, l: HTMLElement, p: P) => scene.measure(d, l, p);
   let preset = presetIn(win);
   let layout = measureLanding(doc, layer, preset);
   let body = bodySize();

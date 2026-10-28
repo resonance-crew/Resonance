@@ -36,6 +36,18 @@ class AppearanceStoreTest {
         assertEquals(emptyMap<String, Any?>(), prefs.all)
     }
 
+    @Test fun thePaperPuppetsAreOffUntilTurnedOnAndTheChoiceIsKept() {
+        val s = store()
+        assertFalse(s.state.value.mascots)
+        s.setMascots(true)
+        assertTrue(prefs.getBoolean(AppearanceStore.MASCOTS_KEY, false))
+        // The app opened again; turning it on changed nothing else, nor told the system anything.
+        assertEquals(AppearanceStore.Appearance(mascots = true), store().state.value)
+        assertEquals(emptyList<AppearanceScheme>(), told)
+        s.setMascots(false)
+        assertFalse(store().state.value.mascots)
+    }
+
     @Test fun aChoiceIsKeptAndToldToTheSystem() {
         val s = store()
         s.setScheme(AppearanceScheme.Dark)

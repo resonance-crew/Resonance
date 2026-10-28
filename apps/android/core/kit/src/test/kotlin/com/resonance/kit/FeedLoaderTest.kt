@@ -104,7 +104,7 @@ class FeedLoaderTest {
         assertTrue(reread.picksAbove)
 
         routes.on("/feed") { json(pageJson("p3", "c")) }
-        loader.loadMore()
+        loader.showMore()
         // A pick the next page brings stays among the latest, where it comes; the picks above leave it out.
         val more = until { it.latest.size == 5 }
         assertEquals(listOf("p1", "mine", "a", "b", "p3", "c"), more.cards.map { it.id })
@@ -133,7 +133,7 @@ class FeedLoaderTest {
         val both = until { it.latest.isNotEmpty() }
         assertEquals(listOf("p1", "p2"), both.cards.map { it.id })
         assertTrue(both.canLoadMore)
-        loader.loadMore()
+        loader.showMore()
         assertEquals(listOf("p1", "p2", "a"), loader.state.value.cards.map { it.id })
         assertFalse(loader.state.value.canLoadMore)
     }
@@ -157,10 +157,94 @@ class FeedLoaderTest {
         loader.load()
         until { it.phase == FeedLoader.Phase.Loaded && it.next != null }
         routes.on("/feed") { json(pageJson("b", "c")) }
-        loader.loadMore()
+        loader.showMore()
         val more = until { it.cards.size == 3 }
         assertEquals(listOf("a", "b", "c"), more.cards.map { it.id })
         assertFalse(more.canLoadMore)
+    }
+
+    @Test fun thePageFetchedAheadShowsOnlyOnATapAndThenAtOnce() = runBlocking {
+        routes.on("/feed") { json(pageJson("a", "b", cursor = "2026-09-01T08:00:00.000Z", token = "t1")) }
+        routes.on("/feed/recommended") { json(listJson()) }
+        loader.load()
+        assertTrue(until { it.phase == FeedLoader.Phase.Loaded && it.next != null }.wantsAhead)
+        routes.on("/feed") { json(pageJson("b", "c", "d", cursor = "2026-09-01T07:00:00.000Z", token = "t2")) }
+        loader.fetchAhead()
+        val fetched = until { it.ahead != null }
+        // Fetched, deduped, and not shown: the button isn't busy, and nothing more is wanted ahead.
+        assertEquals(listOf("a", "b"), fetched.cards.map { it.id })
+        assertEquals(listOf("c", "d"), fetched.ahead!!.map { it.id })
+        assertFalse(fetched.waiting)
+        assertFalse(fetched.wantsAhead)
+        assertTrue(fetched.canLoadMore)
+        // One page ahead, never two: asking again while it waits fetches nothing.
+        loader.fetchAhead()
+        assertFalse(loader.state.value.loadingMore)
+        assertEquals(2, routes.parameters("/feed", "pageToken").size)
+
+        // The tap shows it at once (no request), and says which cards it brought.
+        loader.showMore()
+        val shown = loader.state.value
+        assertEquals(listOf("a", "b", "c", "d"), shown.cards.map { it.id })
+        assertNull(shown.ahead)
+        assertFalse(shown.waiting)
+        assertEquals(1, shown.reveal?.seq)
+        assertEquals(setOf("c", "d"), shown.reveal?.ids)
+        assertEquals(2, routes.parameters("/feed", "pageToken").size)
+        // Still near the foot: the next one is fetched ahead again, from where the shown page ended.
+        assertTrue(shown.wantsAhead)
+        routes.on("/feed") { json(pageJson("e")) }
+        loader.fetchAhead()
+        assertEquals(listOf("e"), until { it.ahead != null }.ahead!!.map { it.id })
+        assertEquals("t2", routes.parameters("/feed", "pageToken").last())
+        assertEquals(listOf("a", "b", "c", "d"), loader.state.value.cards.map { it.id })
+        assertTrue(loader.state.value.canLoadMore)
+        loader.showMore()
+        assertEquals(listOf("a", "b", "c", "d", "e"), loader.state.value.cards.map { it.id })
+        assertEquals(2, loader.state.value.reveal?.seq)
+        assertFalse(loader.state.value.canLoadMore)
+    }
+
+    @Test fun aTapBeforeThePageHasComeWaitsAndShowsItTheMomentItArrives() = runBlocking {
+        routes.on("/feed") { json(pageJson("a", cursor = "2026-09-01T08:00:00.000Z")) }
+        routes.on("/feed/recommended") { json(listJson()) }
+        loader.load()
+        until { it.phase == FeedLoader.Phase.Loaded && it.next != null }
+        routes.on("/feed") { held(latestGate, pageJson("b", "c")) }
+        // The fetch ahead is on its way (quietly) when the reader taps: the button is busy, nothing shows yet.
+        loader.fetchAhead()
+        until { it.loadingMore }
+        loader.showMore()
+        val waiting = loader.state.value
+        assertTrue(waiting.waiting)
+        assertEquals(listOf("a"), waiting.cards.map { it.id })
+        // No second request for the same page.
+        loader.showMore()
+        latestGate.countDown()
+        val shown = until { !it.waiting }
+        assertEquals(listOf("a", "b", "c"), shown.cards.map { it.id })
+        assertNull(shown.ahead)
+        assertEquals(setOf("b", "c"), shown.reveal?.ids)
+        assertEquals(2, routes.parameters("/feed", "pageToken").size)
+    }
+
+    @Test fun aTapWithNothingFetchedAsksForThePageAndAFailureLetsItBeTappedAgain() = runBlocking {
+        routes.on("/feed") { json(pageJson("a", cursor = "2026-09-01T08:00:00.000Z")) }
+        routes.on("/feed/recommended") { json(listJson()) }
+        loader.load()
+        until { it.phase == FeedLoader.Phase.Loaded && it.next != null }
+        routes.on("/feed") { MockResponse().setResponseCode(500) }
+        loader.showMore()
+        assertTrue(loader.state.value.waiting)
+        val failed = until { !it.waiting && !it.loadingMore }
+        assertEquals(listOf("a"), failed.cards.map { it.id })
+        assertTrue(failed.canLoadMore)
+        // The quiet fetch waits a little after a failure; a tap asks at once.
+        loader.fetchAhead()
+        assertFalse(loader.state.value.loadingMore)
+        routes.on("/feed") { json(pageJson("b")) }
+        loader.showMore()
+        assertEquals(listOf("a", "b"), until { !it.waiting && it.cards.size == 2 }.cards.map { it.id })
     }
 
     @Test fun theNextPageIsAskedForByItsTokenNotTheMillisecond() = runBlocking {
@@ -170,12 +254,12 @@ class FeedLoaderTest {
         until { it.phase == FeedLoader.Phase.Loaded && it.next != null }
         // Two cards published in the same millisecond as "b": the token resumes right after it.
         routes.on("/feed") { json(pageJson("c", "d", cursor = "2026-09-01T08:00:00.000Z", token = "t2")) }
-        loader.loadMore()
+        loader.showMore()
         until { it.cards.size == 4 }
         assertEquals(listOf(null, "t1"), routes.parameters("/feed", "pageToken"))
         assertEquals(listOf<String?>(null, null), routes.parameters("/feed", "cursor"))
         routes.on("/feed") { json(pageJson("e")) }
-        loader.loadMore()
+        loader.showMore()
         assertEquals(listOf("a", "b", "c", "d", "e"), until { it.cards.size == 5 }.cards.map { it.id })
         assertEquals("t2", routes.parameters("/feed", "pageToken").last())
         assertFalse(loader.state.value.canLoadMore)
@@ -187,7 +271,7 @@ class FeedLoaderTest {
         loader.load()
         until { it.phase == FeedLoader.Phase.Loaded && it.next != null }
         routes.on("/feed") { json(pageJson("b")) }
-        loader.loadMore()
+        loader.showMore()
         until { it.cards.size == 2 }
         assertEquals(listOf<String?>(null, null), routes.parameters("/feed", "pageToken"))
         assertEquals("2026-09-01T08:00:00.123Z", routes.parameters("/feed", "cursor").last())

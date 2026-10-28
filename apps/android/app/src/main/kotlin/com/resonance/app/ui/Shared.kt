@@ -2,6 +2,9 @@ package com.resonance.app.ui
 
 import com.resonance.design.avatarFill
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.ui.input.pointer.PointerIcon
@@ -204,8 +207,10 @@ fun LazyListScope.storyCards(
     leading: Int = 0,
     /** Keeps the items' keys apart from another list's in the same page (a card page's resonances and related cards). */
     keyPrefix: String = "",
+    /** The cards a tap of the feed's 「顯示更多」 just brought in: they rise into place ([CardEntrance]). */
+    entering: CardEntrance? = null,
 ) {
-    if (layout.isGrid) return borderedCards(cards, open, onLast, firstUnderBar, layout, keyPrefix = keyPrefix, leading = leading)
+    if (layout.isGrid) return borderedCards(cards, open, onLast, firstUnderBar, layout, keyPrefix = keyPrefix, leading = leading, entering = entering)
     // No card wears the family of any of the three before it (design note B3), over the list as shown — each run as its own.
     val palettes = cardRunFamilies(cards, leading)
     itemsIndexed(cards, key = { _, c -> keyPrefix + c.id }, contentType = { _, _ -> "storyCard" }) { i, card ->
@@ -213,7 +218,7 @@ fun LazyListScope.storyCards(
         val content = remember(card) { card.story() }
         StoryCard(
             content, runPosition(i, leading, cards.size), i == cards.lastIndex,
-            Modifier.plainClickable { open(Route.Card(card.routeKey, card)) }.pointerHoverIcon(PointerIcon.Hand),
+            Modifier.entering(entering, i).plainClickable { open(Route.Card(card.routeKey, card)) }.pointerHoverIcon(PointerIcon.Hand),
             isFirst = firstUnderBar && i == 0, inset = layout.inset, palette = palettes[i],
         )
         if (i == cards.lastIndex) onLast?.invoke()
@@ -244,6 +249,8 @@ internal fun LazyListScope.borderedCards(
     caption: (@Composable (FeedCard) -> Unit)? = null,
     /** How many of the first cards came on top of the others once those showed: a run of blocks of their own. */
     leading: Int = 0,
+    /** The cards a tap of the feed's 「顯示更多」 just brought in: they rise into place ([CardEntrance]). */
+    entering: CardEntrance? = null,
 ) {
     val n = layout.columns
     val blocks = gridBlocks(cards.size, n * GridBlockRows, leading)
@@ -262,7 +269,7 @@ internal fun LazyListScope.borderedCards(
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(gap)) {
                     for ((m, i) in block.indices.withIndex()) if (m % n == c) {
                         val card = cards[i]
-                        Column {
+                        Column(Modifier.entering(entering, i)) {
                             Box {
                                 BorderedStoryCard(remember(card) { card.story() }, runPosition(i, leading, cards.size), Modifier.plainClickable { open(tap(card)) }, palette = palettes[i])
                                 overlay?.invoke(this, card, i)
@@ -274,6 +281,42 @@ internal fun LazyListScope.borderedCards(
             }
         }
         if (b == blocks.lastIndex) onLast?.invoke()
+    }
+}
+
+/**
+ * The cards a tap of the home feed's 「顯示更多」 brought in (round 19, the web's CardLinkGrid
+ * `enterFrom`): from the list's card [from] on, each rises 18 dp into place as its ink comes up,
+ * 460 ms on cubic-bezier(0.2, 0.7, 0.2, 1), [EnterStaggerMs] after the one before it (none waiting
+ * more than [EnterMaxDelayMs]). Timed from [startedAt] ([System.nanoTime], when they came in), so a
+ * card composed later — scrolled to, or the list laid out again — is drawn where the entrance is by
+ * then: still, once it is over. Cards before [from] never move.
+ */
+@Immutable
+class CardEntrance(val from: Int, val startedAt: Long = System.nanoTime())
+
+private const val EnterStaggerMs = 70L
+private const val EnterMaxDelayMs = 420L
+private const val EnterDurationMs = 460f
+private val EnterEasing = CubicBezierEasing(0.2f, 0.7f, 0.2f, 1f)
+private val EnterRise = 18.dp
+
+/** Card [index]'s part of [entrance] (nothing for a card before it, or none). */
+@Composable
+internal fun Modifier.entering(entrance: CardEntrance?, index: Int): Modifier {
+    if (entrance == null || index < entrance.from) return this
+    val delay = minOf((index - entrance.from) * EnterStaggerMs, EnterMaxDelayMs)
+    fun at(now: Long) = (((now - entrance.startedAt) / 1_000_000f - delay) / EnterDurationMs).coerceIn(0f, 1f)
+    val progress = remember(entrance) { mutableFloatStateOf(at(System.nanoTime())) }
+    LaunchedEffect(entrance) {
+        while (progress.floatValue < 1f) withFrameNanos { progress.floatValue = at(System.nanoTime()) }
+    }
+    val rise = with(LocalDensity.current) { EnterRise.toPx() }
+    // Read in the layer alone: the entrance redraws the card, never composes it again.
+    return graphicsLayer {
+        val e = EnterEasing.transform(progress.floatValue)
+        alpha = e
+        translationY = (1f - e) * rise
     }
 }
 
@@ -409,6 +452,8 @@ fun TabScreen(
     headGap: Dp? = null,
     /** The phone's tab bar slides away while this list is read down (round 16 §2: the home feed alone). */
     hidesTabBar: Boolean = false,
+    /** Laid over the list in its frame, under the bar (the paper puppets' island, round 19). */
+    overlay: (@Composable (Modifier) -> Unit)? = null,
     content: LazyListScope.() -> Unit,
 ) {
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + brandBarHeight() + HeaderEdgeHeight
@@ -465,6 +510,9 @@ fun TabScreen(
             }
             content()
         }
+        // In the list's frame, as the list's own sibling: an overlay sharing the pointer with what is under it
+        // (the island) must not sit in a box of its own, which would take the touch from the list.
+        overlay?.invoke(if (pane != null) Modifier.width(pane).fillMaxHeight() else Modifier.fillMaxSize())
         Box(if (pane != null) Modifier.width(pane).fillMaxHeight() else Modifier.fillMaxSize()) { SketchPullIndicator(pull, top, size = PullLoaderSize * pullScale) }
         // The bar slides up under the status bar while reading down and comes back on the way up
         // (the brand has nothing to press, so it gives the stories the room); the status bar keeps its paper.

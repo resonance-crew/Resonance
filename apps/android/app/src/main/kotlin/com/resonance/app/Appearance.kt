@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * 外觀 (Settings → 外觀): the reader's 顯示模式 (system · light · dark) and 主題色 (a theme, or the
  * wallpaper's colour on Android 12+), kept on this device in the app's settings
- * (`appearance.scheme`, `appearance.accent`; the backup takes them with the language). Everyone starts
+ * (`appearance.scheme`, `appearance.accent`, `appearance.mascots`; the backup takes them with the language). Everyone starts
  * on the system's mode in terracotta, and nothing tells them it can change: it is there for whoever
  * opens 外觀. A change applies at once, everywhere — the root's ResonanceTheme reads [state] — and
  * keeps the reader where they are.
@@ -29,8 +29,12 @@ import kotlinx.coroutines.flow.asStateFlow
  * the splash the system's mode.
  */
 class AppearanceStore(private val prefs: SharedPreferences, private val nightMode: (AppearanceScheme) -> Unit = {}) {
-    /** What the reader chose. */
-    data class Appearance(val scheme: AppearanceScheme = AppearanceScheme.System, val accent: AppearanceAccent = AppearanceAccent.Terracotta)
+    /** What the reader chose; [mascots]: 小精靈, the paper puppets on the home feed and a card's page (round 19), off until turned on. */
+    data class Appearance(
+        val scheme: AppearanceScheme = AppearanceScheme.System,
+        val accent: AppearanceAccent = AppearanceAccent.Terracotta,
+        val mascots: Boolean = false,
+    )
 
     private val _state = MutableStateFlow(read())
     val state: StateFlow<Appearance> = _state.asStateFlow()
@@ -38,6 +42,7 @@ class AppearanceStore(private val prefs: SharedPreferences, private val nightMod
     private fun read(): Appearance = Appearance(
         AppearanceScheme.of(prefs.getString(SCHEME_KEY, null)),
         AppearanceAccent.of(prefs.getString(ACCENT_KEY, null)),
+        prefs.getBoolean(MASCOTS_KEY, false),
     )
 
     fun setScheme(scheme: AppearanceScheme) {
@@ -51,6 +56,12 @@ class AppearanceStore(private val prefs: SharedPreferences, private val nightMod
         if (accent == _state.value.accent) return
         prefs.edit().putString(ACCENT_KEY, accent.key).apply()
         _state.value = _state.value.copy(accent = accent)
+    }
+
+    fun setMascots(on: Boolean) {
+        if (on == _state.value.mascots) return
+        prefs.edit().putBoolean(MASCOTS_KEY, on).apply()
+        _state.value = _state.value.copy(mascots = on)
     }
 
     /** Whether the screens are dark now: the choice, or for 跟隨系統 what [configuration] says. */
@@ -75,6 +86,7 @@ class AppearanceStore(private val prefs: SharedPreferences, private val nightMod
     companion object {
         const val SCHEME_KEY = "appearance.scheme"
         const val ACCENT_KEY = "appearance.accent"
+        const val MASCOTS_KEY = "appearance.mascots"
 
         /** The process's store (ResonanceApp makes it before any screen). */
         lateinit var shared: AppearanceStore

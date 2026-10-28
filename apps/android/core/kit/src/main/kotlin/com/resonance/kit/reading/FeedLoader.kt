@@ -23,8 +23,8 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * The home feed (home/page.tsx): the latest public cards and today's picks,
  * asked for together, each shown as soon as it arrives. Picks that come first
- * — or within [picksGrace] of the latest — lead the feed ("load more" then
- * reveals the latest, deduped against them). Picks that come once the latest
+ * — or within [picksGrace] of the latest — lead the feed (「顯示更多」 then
+ * shows the latest, deduped against them). Picks that come once the latest
  * cards are on screen go on top of them at once ([State.picksAbove]), less any
  * the latest already show: the latest stay exactly as they were below them, so
  * scrolling up finds the new cards and nothing being read moves (no hint to
@@ -36,6 +36,12 @@ import kotlin.time.Duration.Companion.seconds
  * was last read (on a cold start too) instead of the skeleton, and keeps what
  * each read brings for the next time.
  *
+ * 「顯示更多」 shows what is already here (round 19): the feed keeps one page of
+ * the latest cards fetched ahead of what it shows ([fetchAhead], asked for as
+ * the reader nears the feed's foot, quietly), and a tap ([showMore]) shows it
+ * at once. Tapped before it has come, the button is busy ([State.waiting]) and
+ * the page shows the moment it arrives. Never more than one page ahead.
+ *
  * A pull ([reload]) that brings nothing back — neither list — keeps the feed on
  * screen and says why ([State.refreshFailure]) until the next answer.
  */
@@ -44,6 +50,8 @@ class FeedLoader(
     private val scope: CoroutineScope,
     private val retryPicksAfter: Duration = 20.seconds,
     private val picksGrace: Duration = 400.milliseconds,
+    /** How long the quiet fetch ahead waits after one failed (a tap never waits). */
+    private val aheadRetryAfter: Duration = 5.seconds,
     /** Where a reader's feed is kept between launches (null: nowhere). */
     private val storeFor: (viewer: String) -> FeedStore? = { null },
     /** Today's picks (the recommended feed; a debug build's stand-ins for the emulator, which has none). */
@@ -64,7 +72,17 @@ class FeedLoader(
          * keep every card they showed, where it was, and the picks above leave out the ones they hold.
          */
         val picksAbove: Boolean = false,
+        /** The next page of the latest cards is being fetched (quietly: the button isn't busy for it). */
         val loadingMore: Boolean = false,
+        /** The page fetched ahead of what shows (deduped against it): what the next 「顯示更多」 shows. Null: none here. */
+        val ahead: List<FeedCard>? = null,
+        /** 「顯示更多」 was tapped before the page ahead came: the button is busy, and the page shows when it arrives. */
+        val waiting: Boolean = false,
+        /**
+         * The last time a tap brought cards in: how many taps so far, and the cards it brought (the
+         * screen lets them rise into place). Null until the first.
+         */
+        val reveal: Reveal? = null,
         /** The last pull brought nothing back (and why): the feed on screen stayed as it was. Gone with the next answer. */
         val refreshFailure: RefreshFailure? = null,
         internal val latestSettled: Boolean = false,
@@ -98,7 +116,11 @@ class FeedLoader(
         /** What the feed shows, in order. */
         val cards: List<FeedCard> get() = picksShown + latestShown
 
-        val canLoadMore: Boolean get() = !latestVisible || next != null
+        /** Something more to show: the latest under the picks, the page fetched ahead, or one the server still has. */
+        val canLoadMore: Boolean get() = !latestVisible || ahead != null || next != null
+
+        /** The reader nearing the foot should have the next page fetched now: none ahead, none on its way, and more to fetch. */
+        val wantsAhead: Boolean get() = latestVisible && ahead == null && !loadingMore && next != null
 
         /** Loading until either list has something to show, or both have answered. */
         internal fun settled(): State {
@@ -112,6 +134,9 @@ class FeedLoader(
         }
     }
 
+    /** A tap's cards: the [seq]th tap, the cards it brought in ([ids]), and when they came in ([at], [System.nanoTime]). */
+    data class Reveal(val seq: Int, val ids: Set<String>, val at: Long = System.nanoTime())
+
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state
 
@@ -121,6 +146,8 @@ class FeedLoader(
     private var loadedVersion: Int? = null
     private var loadedAt = 0L
     private var store: FeedStore? = null
+    /** Before this (epoch ms) the quiet fetch ahead doesn't ask: the last one failed. */
+    private var quietAfter = 0L
 
     /**
      * Reads the feed when what it holds isn't current: for another reader, after a change to
@@ -197,7 +224,11 @@ class FeedLoader(
     }
 
     private fun reading() = _state.update { s ->
-        if (s.phase == Phase.Loaded) s.copy(latestSettled = false, latestFailed = false, latestFailure = null, picksSettled = false, picksFailed = false)
+        // A fetch ahead still on its way belongs to the read before (its answer is dropped): none is now.
+        if (s.phase == Phase.Loaded) s.copy(
+            latestSettled = false, latestFailed = false, latestFailure = null, picksSettled = false, picksFailed = false,
+            loadingMore = false, waiting = false,
+        )
         else State()
     }
 
@@ -220,7 +251,11 @@ class FeedLoader(
                 }
                 _state.update { s ->
                     if (page == null) s.copy(latestSettled = true, latestFailed = true, latestFailure = failure).settled()
-                    else s.copy(latest = page.cards, next = page.next, latestSettled = true, latestFailed = false, refreshFailure = null).settled()
+                    // A re-read starts the latest again from their first page: nothing fetched ahead of it, nothing awaited.
+                    else s.copy(
+                        latest = page.cards, next = page.next, ahead = null, waiting = false, loadingMore = false,
+                        latestSettled = true, latestFailed = false, refreshFailure = null,
+                    ).settled()
                 }
                 if (page != null) keep?.let { runCatching { it.saveLatest(page) } }
             }
@@ -244,31 +279,92 @@ class FeedLoader(
         }
     }
 
-    /** First reveals the latest cards; after that, reads the next page of them. */
-    fun loadMore() {
-        val s = _state.value
-        if (s.loadingMore) return
-        if (!s.latestVisible) {
-            _state.update { it.copy(showLatest = true) }
-            return
+    /**
+     * 「顯示更多」: first shows the latest cards (already fetched) under the picks; after that, the
+     * page fetched ahead, at once — or, tapped before it has come, waits for it ([State.waiting])
+     * and shows it the moment it arrives.
+     */
+    fun showMore() {
+        var fetch = false
+        _state.update { s ->
+            when {
+                !s.latestVisible -> s.copy(showLatest = true).revealing(s.latestShownAfterShowing())
+                s.ahead != null -> s.withAheadShown()
+                s.next != null && !s.waiting -> {
+                    fetch = !s.loadingMore
+                    s.copy(waiting = true)
+                }
+                else -> s
+            }
         }
+        if (fetch) fetch()
+    }
+
+    /**
+     * Fetches the page after what the feed holds, quietly, when none is ahead or on its way
+     * ([State.wantsAhead]; the screen asks as the reader nears the feed's foot). It shows only on
+     * a tap — at once if the tap came first ([State.waiting]). After a fetch that failed, the quiet
+     * one waits [aheadRetryAfter] (a tap asks at once).
+     */
+    fun fetchAhead(now: Long = System.currentTimeMillis()) {
+        if (now < quietAfter) return
+        fetch()
+    }
+
+    private fun fetch() {
+        val s = _state.value
+        if (!s.latestVisible || s.ahead != null || s.loadingMore) return
         val next = s.next ?: return
+        val run = generation
         _state.update { it.copy(loadingMore = true) }
         scope.launch {
             val page = try {
                 api.feed(after = next)
             } catch (e: CancellationException) {
-                _state.update { it.copy(loadingMore = false) }
+                if (run == generation) _state.update { it.copy(loadingMore = false) }
                 throw e
             } catch (e: Exception) {
                 null
             }
+            // Read again meanwhile (a pull, a change of the reader's): that read's first page is what holds.
+            if (run != generation) return@launch
             _state.update { st ->
-                if (page == null) return@update st.copy(loadingMore = false)
-                val known = st.latest.map { it.id }.toSet()
-                st.copy(latest = st.latest + page.cards.filter { it.id !in known }, next = page.next, loadingMore = false, refreshFailure = null)
+                // Nothing came: the button can be tapped again (and the foot asks again a little later).
+                if (page == null) {
+                    quietAfter = System.currentTimeMillis() + aheadRetryAfter.inWholeMilliseconds
+                    return@update st.copy(loadingMore = false, waiting = false)
+                }
+                val known = st.latest.mapTo(HashSet()) { it.id }
+                val fresh = page.cards.filter { it.id !in known }
+                val fetched = st.copy(loadingMore = false, next = page.next, refreshFailure = null, ahead = fresh.ifEmpty { null })
+                when {
+                    !st.waiting -> fetched
+                    fresh.isNotEmpty() -> fetched.withAheadShown()
+                    // A page of cards already shown: nothing to bring in yet — the next one, if any, is asked for.
+                    else -> fetched.copy(waiting = page.next != null)
+                }
             }
+            if (_state.value.waiting) fetch()
         }
+    }
+
+    /** The page ahead joins the latest cards on screen. */
+    private fun State.withAheadShown(): State {
+        val page = ahead ?: return this
+        val known = latest.mapTo(HashSet()) { it.id }
+        val before = latestShown.size
+        val shown = copy(latest = latest + page.filter { it.id !in known }, ahead = null, waiting = false)
+        // Appended to the latest, so they are what the latest as shown gained at its end.
+        return shown.revealing(shown.latestShown.drop(before))
+    }
+
+    /** The latest cards the feed would show under the picks once asked for. */
+    private fun State.latestShownAfterShowing(): List<FeedCard> = copy(showLatest = true).latestShown
+
+    /** Marks [brought] (a tap's cards, as shown) as the newest reveal. */
+    private fun State.revealing(brought: List<FeedCard>): State {
+        if (brought.isEmpty()) return this
+        return copy(reveal = Reveal((reveal?.seq ?: 0) + 1, brought.mapTo(HashSet()) { it.id }))
     }
 
     private suspend fun picks(): List<FeedCard>? = try {

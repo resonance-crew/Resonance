@@ -36,9 +36,13 @@ final class AppearanceStore {
     static let shared = AppearanceStore()
     static let modeKey = "appearance.scheme"
     static let accentKey = "appearance.accent"
+    /// 小精靈 (round 19): the paper puppets now and then on the home feed and a card's page. Off until turned on.
+    static let mascotsKey = "appearance.mascots"
 
     private(set) var mode: Mode
     private(set) var accent: Accent
+    /// The paper puppets come to the home feed and a card's page (``MascotStage``); off by default.
+    private(set) var mascots: Bool
     @ObservationIgnored private let defaults: UserDefaults
     /// The scenes a change is laid on (the app's; a test's none).
     @ObservationIgnored private let scenes: () -> [UIWindowScene]
@@ -49,6 +53,13 @@ final class AppearanceStore {
         self.scenes = scenes
         mode = defaults.string(forKey: Self.modeKey).flatMap(Mode.init(rawValue:)) ?? .system
         accent = defaults.string(forKey: Self.accentKey).flatMap(Accent.init(rawValue:)) ?? .terracotta
+        mascots = defaults.bool(forKey: Self.mascotsKey)
+    }
+
+    func setMascots(_ on: Bool) {
+        guard on != mascots else { return }
+        mascots = on
+        defaults.set(on, forKey: Self.mascotsKey)
     }
 
     func setMode(_ mode: Mode) {

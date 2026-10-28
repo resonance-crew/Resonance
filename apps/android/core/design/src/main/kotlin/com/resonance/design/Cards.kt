@@ -342,7 +342,9 @@ fun StoryCard(
     val seed = position * 77.0 + 13
     // A cover on its way shimmers in the card's own hue, as its skeleton does (StoryCard.tsx's --skeleton-highlight).
     WithSkeletonHue(palette.hue) {
-        StoryBand(palette, seed + 17, isLast, 32.dp, 14.dp, modifier, isFirst, inset) { StoryCardBody(content, palette, seed, cover, preview) }
+        // The island's mark (round 19): the band's frame, and the rule along its top a puppet sits on.
+        val marked = modifier.mascotMark("card:${content.id}", if (isFirst) null else MascotMarks.BandRule(seed + 17))
+        StoryBand(palette, seed + 17, isLast, 32.dp, 14.dp, marked, isFirst, inset) { StoryCardBody(content, palette, seed, cover, preview) }
     }
 }
 
@@ -384,16 +386,20 @@ private fun ColumnScope.StoryCardBody(
     FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         content.tags.take(4).forEach { TagPill(it, fill = palette.colors.tag) }
     }
-    CssText(content.title, AppFonts.Family.Heading, 18f, 700, lineHeight = 1.3f, modifier = Modifier.fillMaxWidth())
+    CssText(content.title, AppFonts.Family.Heading, 18f, 700, lineHeight = 1.3f, modifier = Modifier.fillMaxWidth().mascotMark("card:${content.id}:title"))
     CssText(content.excerpt, AppFonts.Family.Body, 14f, 400, lineHeight = 1.65f, color = Tokens.TextMuted, modifier = Modifier.fillMaxWidth())
     BylineRule(seed, palette.separator)
+    // The author row's ink (its avatar, its words, its arrow) is what the island keeps a puppet on the card below off.
+    val foot = "card:${content.id}:foot"
     Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        HandDrawnAvatar(content.authorInitials, content.authorImageUrl, avatarFill(content.authorAccent, palette.fill), 30.dp, content.avatarSeed)
-        Column(Modifier.weight(1f)) {
-            BasicText(content.authorName, style = AppFonts.body(13f, 600, lineHeight = 1.4f))
-            BasicText(content.readTime, style = AppFonts.body(12f, lineHeight = 1.4f, color = Tokens.TextMuted))
+        Box(Modifier.mascotMark("$foot:avatar")) {
+            HandDrawnAvatar(content.authorInitials, content.authorImageUrl, avatarFill(content.authorAccent, palette.fill), 30.dp, content.avatarSeed)
         }
-        if (!preview) OrganicIcon(IconName.ArrowRight, size = 18.dp, color = Tokens.Text.copy(alpha = 0.28f), strokeWidth = Tokens.Ink.value)
+        Column(Modifier.weight(1f)) {
+            BasicText(content.authorName, style = AppFonts.body(13f, 600, lineHeight = 1.4f), modifier = Modifier.mascotMark("$foot:name"))
+            BasicText(content.readTime, style = AppFonts.body(12f, lineHeight = 1.4f, color = Tokens.TextMuted), modifier = Modifier.mascotMark("$foot:time"))
+        }
+        if (!preview) OrganicIcon(IconName.ArrowRight, Modifier.mascotMark("$foot:arrow"), size = 18.dp, color = Tokens.Text.copy(alpha = 0.28f), strokeWidth = Tokens.Ink.value)
     }
     if (!content.reason.isNullOrEmpty()) {
         Row(Modifier.marginTop((-4).dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -464,7 +470,7 @@ fun BorderedStoryCard(
     val palette = cardPalette(palette, content.accentHue, position)
     val seed = position * 77.0 + 13
     WithSkeletonHue(palette.hue) {
-        BorderedCardFrame(palette, seed, modifier, hover = !preview) { StoryCardBody(content, palette, seed, cover, preview) }
+        BorderedCardFrame(palette, seed, modifier.mascotMark("card:${content.id}"), hover = !preview) { StoryCardBody(content, palette, seed, cover, preview) }
     }
 }
 
@@ -570,10 +576,11 @@ fun FeedEndMark(text: String, modifier: Modifier = Modifier) {
 private val FeedEndWave = 40.dp
 
 /**
- * The feed's way on (the web's FeedMore): "Load more" alone, in the tonal label's ink with no face
+ * The feed's way on (the web's FeedMore): 「顯示更多」 alone, in the tonal label's ink with no face
  * of its own — not a form's button — the press washing a wobbly outline as a bare glyph's does.
- * While the next page is on its way the pen loop draws itself before the label (as a button's
- * does) and taps do nothing. The twin of iOS's FeedMoreButton.
+ * It shows the page the feed fetched ahead; tapped before that page has come ([loading]), the pen
+ * loop draws itself before the label (as a button's does) and taps do nothing until it shows. The
+ * twin of iOS's FeedMoreButton.
  */
 @Composable
 fun FeedMoreButton(loading: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {

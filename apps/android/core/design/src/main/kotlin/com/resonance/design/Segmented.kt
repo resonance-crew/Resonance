@@ -115,6 +115,8 @@ fun SegmentedActionBar(
     divider: Color = Tokens.Cream,
     enabled: Boolean = true,
     minHeight: Dp = 48.dp,
+    /** The bar as the paper puppets' island knows it ([mascotMark]: the card page's response bar), at its own width. */
+    mascotKey: String? = null,
 ) {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -138,7 +140,7 @@ fun SegmentedActionBar(
         val wash = OrganicIndication.Wash
         val grainInk = GrainInk.current
         Row(
-            Modifier
+            (if (mascotKey != null) Modifier.mascotMark(mascotKey) else Modifier)
                 .fade(if (enabled) 1f else 0.6f)
                 // As tall as the tallest segment (a large text size), every segment that tall.
                 .height(IntrinsicSize.Min)

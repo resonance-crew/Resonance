@@ -4,8 +4,9 @@ import SwiftUI
 
 /// 外觀 (spec §2): the display mode — 跟隨系統 · 淺色 · 深色, the writer's segmented choice (the
 /// publish step's 卡片類型) — and the theme colour, a row of hand-drawn swatches, each the theme's
-/// paper with its accent in the scheme now worn, the chosen one ringed and checked, its name under it.
-/// Both apply at once, everywhere (``AppearanceStore``), and are kept on this device.
+/// paper with its accent in the scheme now worn, the chosen one ringed and checked, its name under it;
+/// then 小精靈, the paper puppets' switch (round 19). All apply at once, everywhere (``AppearanceStore``),
+/// and are kept on this device.
 struct AppearanceSettings: View {
     private let store = AppearanceStore.shared
 
@@ -27,6 +28,21 @@ struct AppearanceSettings: View {
                 }
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel(L10n.Tweaks.accentColor)
+            }
+            // 小精靈 (round 19, the web's MascotsSwitch): the field's label over it, the hint at its start
+            // and the switch at its end; off until turned on, kept on this device.
+            VStack(alignment: .leading, spacing: 10) {
+                label(L10n.Tweaks.mascots)
+                HStack(alignment: .top, spacing: 20) {
+                    CSSText(L10n.Tweaks.mascotsHint, font: AppFonts.scaledUIFont(.body, size: Tokens.hintSize), lineHeight: 1.55,
+                            color: Tokens.UI.textMuted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityHidden(true)
+                    OrganicToggle(isOn: Binding(get: { store.mascots }, set: { store.setMascots($0) }),
+                                  label: L10n.Tweaks.mascots, seed: 97)
+                        .accessibilityHint(L10n.Tweaks.mascotsHint)
+                        .padding(.top, 1)
+                }
             }
         }
     }

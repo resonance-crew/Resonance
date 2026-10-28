@@ -38,7 +38,17 @@ export interface CardLinkGridProps {
    * first band's paper begins on the bar's pen line, with no rule of its own.
    */
   seamTop?: boolean;
+  /**
+   * Cards from this index on have just been brought in (the home feed's
+   * 「顯示更多」): each rises into place as it mounts, a beat after the one
+   * before it. Cards already on screen never play it again.
+   */
+  enterFrom?: number;
 }
+
+/** The stagger between two cards coming in, and the most of it any card waits. */
+const ENTER_STAGGER_MS = 70;
+const ENTER_MAX_DELAY_MS = 420;
 
 /**
  * Column count mirroring the grid's CSS breakpoints (640 / 1024). Resolves
@@ -59,14 +69,14 @@ function useFeedColumns(): number | null {
 
 /**
  * The masonry feed. Cards fill left-to-right, wrapping to the next visual row
- * once a row is full — card `i` lives in column `i % n`, so「載入更多」appends
+ * once a row is full — card `i` lives in column `i % n`, so「顯示更多」appends
  * after the last card instead of reshuffling the columns (CSS `columns` is
  * column-major: it would pour everything top-to-bottom again). Before the
  * column count is known (SSR / first paint) a plain grid lays the cards out
  * the same way — card i in column i % n, by the CSS breakpoints — so the
  * landing page ships its cards in its HTML where they will stay.
  */
-export function CardLinkGrid({ cards, authors, cardHref, renderActions, renderCaption, quoteFor, seamTop = false }: CardLinkGridProps) {
+export function CardLinkGrid({ cards, authors, cardHref, renderActions, renderCaption, quoteFor, seamTop = false, enterFrom }: CardLinkGridProps) {
   const t = useTranslations('card');
   const cols = useFeedColumns();
   const prefill = usePrefillCard();
@@ -93,8 +103,18 @@ export function CardLinkGrid({ cards, authors, cardHref, renderActions, renderCa
   const renderItem = (card: Card, i: number) => {
     const author = authors[card.authorId];
     const story = storyOf(card, author);
+    const entering = enterFrom !== undefined && i >= enterFrom;
     return (
-      <div key={card.id} data-card-id={card.id} className={styles.item} style={{ position: 'relative' }}>
+      <div
+        key={card.id}
+        data-card-id={card.id}
+        data-entering={entering || undefined}
+        className={styles.item}
+        style={{
+          position: 'relative',
+          ...(entering ? { '--enter-delay': `${Math.min((i - enterFrom) * ENTER_STAGGER_MS, ENTER_MAX_DELAY_MS)}ms` } : null),
+        } as React.CSSProperties}
+      >
         <Link
           href={cardHref ? cardHref(card) : `/card/${card.slug ?? card.id}`}
           // The card page opens on what the list already has (see usePrefillCard).

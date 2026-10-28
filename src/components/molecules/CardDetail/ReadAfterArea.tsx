@@ -88,6 +88,7 @@ export function ReadAfterArea({ cardId, cardTitle, referenceCardId, author, trai
   return (
     <div
       ref={ref}
+      data-mascot="respond"
       style={{
         opacity: shown ? 1 : 0,
         transform: shown ? 'none' : 'translateY(10px)',

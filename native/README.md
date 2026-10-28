@@ -8,6 +8,7 @@ they are in git history before 2026-10-11.
 | --- | --- | --- |
 | `geometry/swift`, `geometry/kotlin` | the hand-drawn geometry (`src/lib/design`) ported exactly | the iOS DesignSystem package, the Android build (`includeBuild`) |
 | `editor/` | the story editor island (`npm run native:editor` → `editor/dist/editor.html`, not committed) | both apps' writer, in a WebView |
+| `mascots/` | the paper puppets' island: the web's engine, cast and reading-page places (`npm run native:mascots` → `mascots/dist/mascots.html`, not committed) | both apps' home feed and card page, in a transparent WebView, when Settings → 外觀 → 小精靈 is on |
 | `fixtures/geometry.json` | golden geometry from the TypeScript (`scripts/native/geometry-fixtures.ts`) | the geometry packages' and apps' tests |
 | `fixtures/markdown-corpus*.json` | how each kind of story content round-trips through the editor | `editorSchema.test.ts`, both apps' story parsers |
 | `fixtures/story-link-cards.json` | which links stand alone and get a preview card | the web, the server, both apps |

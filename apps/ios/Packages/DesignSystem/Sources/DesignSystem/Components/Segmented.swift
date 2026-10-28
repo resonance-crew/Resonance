@@ -374,3 +374,53 @@ private struct SegmentFace<Label: View>: View {
             .sensoryFeedback(.impact(weight: .light), trigger: isPressed) { _, new in new }
     }
 }
+
+// MARK: - Seams for shapes cut like the bar
+
+/// The segmented bar's seams for a shape cut as the bar is but drawn whole (the card page's trash
+/// banner, round 19): the same seeded wave (``boundaryPoints(x:h:seed:amp:pad:)``) running down at `x`,
+/// or across at `y` — the wave turned on its side — reaching `pad` past both ends so an outer clip
+/// trims it. One point list serves the seam's stroke and the faces' edges.
+public nonisolated enum SegmentSeams {
+    /// How far a seam runs past the shape's edges (the bar's own rule).
+    public static func pad(_ h: Double) -> Double { max(12, h * 0.3) }
+
+    /// A seam from top to bottom at `x`, over a height `h`.
+    public static func down(x: Double, h: Double, seed: Double, amp: Double, pad: Double) -> [CGPoint] {
+        boundaryPoints(x: x, h: h, seed: seed, amp: amp, pad: pad)
+    }
+
+    /// A seam from left to right at `y`, over a width `w`.
+    public static func across(y: Double, w: Double, seed: Double, amp: Double, pad: Double) -> [CGPoint] {
+        boundaryPoints(x: y, h: w, seed: seed, amp: amp, pad: pad).map { CGPoint(x: $0.y, y: $0.x) }
+    }
+
+    /// The region past a seam running top to bottom (to its right), reaching out past a `w` × `h` shape.
+    public static func right(of seam: [CGPoint], w: Double, h: Double, pad: Double) -> Path {
+        Path(polyline: seam + [CGPoint(x: w + pad, y: h + pad), CGPoint(x: w + pad, y: -pad)]).closed()
+    }
+
+    /// The region before a seam running top to bottom (to its left), reaching out past a `h` tall shape.
+    public static func left(of seam: [CGPoint], h: Double, pad: Double) -> Path {
+        Path(polyline: [CGPoint(x: -pad, y: -pad)] + seam + [CGPoint(x: -pad, y: h + pad)]).closed()
+    }
+
+    /// The region under a seam running left to right, reaching out past a `w` × `h` shape.
+    public static func below(_ seam: [CGPoint], w: Double, h: Double, pad: Double) -> Path {
+        Path(polyline: seam + [CGPoint(x: w + pad, y: h + pad), CGPoint(x: -pad, y: h + pad)]).closed()
+    }
+
+    /// The region between two seams running top to bottom.
+    public static func between(_ first: [CGPoint], _ second: [CGPoint]) -> Path {
+        Path(polyline: first + second.reversed()).closed()
+    }
+}
+
+nonisolated extension Path {
+    /// The same path, its last subpath closed.
+    func closed() -> Path {
+        var p = self
+        p.closeSubpath()
+        return p
+    }
+}

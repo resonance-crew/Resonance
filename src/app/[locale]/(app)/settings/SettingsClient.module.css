@@ -48,3 +48,20 @@
 .appearanceChoice {
   display: flex;
 }
+
+/* 外觀 → 小精靈: the hint at the field's start, the switch level with its first line at the end. */
+.switchRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+.switchHint {
+  margin: 3px 0 0;
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-body);
+  font-size: var(--hint-size);
+  line-height: 1.55;
+  color: var(--color-text-muted);
+}

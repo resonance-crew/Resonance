@@ -3,8 +3,10 @@ import ResonanceKit
 import SwiftUI
 
 /// The home feed (home/page.tsx): today's picks right under the brand bar (no
-/// page title: the first card's top edge is the bar's pen line), then "load
-/// more" for the latest cards, a quiet end mark once nothing more can load, and
+/// page title: the first card's top edge is the bar's pen line), then 「顯示
+/// 更多」 for the latest cards — a page fetched ahead while the reader nears the
+/// foot, shown at once by a tap, its cards rising in (round 19) — a quiet end
+/// mark once nothing more can load, and
 /// the prompt to write. Picks that come after the latest cards are showing go
 /// on top of them at once: a reader at the top sees the first of them there, one
 /// further down keeps the cards in front of them where they are (the list anchors
@@ -24,10 +26,28 @@ struct FeedScreen: View {
     /// Between appearing and disappearing: the top of the tab's stack.
     @State private var appeared = false
     @State private var picksNotice = PicksNotice()
+    /// The reader is within a screen and a half of the feed's foot: the next page is fetched then.
+    @State private var nearFoot = false
+    /// Where the cards the last 「顯示更多」 brought in start (they rise in), until they are in.
+    @State private var enterFrom: Int?
 
     var body: some View {
-        TabScreen("", head: model?.cards.first?.id, toTopRequests: upRequests, onAtTop: reachedTop, hidesTabBar: true) {
+        TabScreen("", head: model?.cards.first?.id, toTopRequests: upRequests, onAtTop: reachedTop, hidesTabBar: true,
+                  onNearEnd: { nearFoot = $0 }, hostsMascots: true) {
             content
+        }
+        // One page ahead of what shows, never more: fetched while the reader is near the foot (again
+        // after a tap has shown it, the reader still there).
+        .onChange(of: nearFoot && model?.wantsAhead == true, initial: true) { _, wanted in
+            if wanted { model?.fetchAhead() }
+        }
+        // Once they are in, the cards a tap brought are cards like the others (a page that comes late,
+        // the tap waiting for it, starts the count when it shows).
+        .task(id: Entering(from: enterFrom, count: model?.cards.count ?? 0, waiting: model?.isLoadingMore == true)) {
+            guard enterFrom != nil, model?.isLoadingMore != true else { return }
+            try? await Task.sleep(for: .seconds(1.4))
+            guard !Task.isCancelled else { return }
+            enterFrom = nil
         }
         .animation(.easeInOut(duration: 0.25), value: model?.refreshFailure)
         // A pull's gap wears the first band's paper (round 5 B1).
@@ -166,7 +186,7 @@ struct FeedScreen: View {
                 }
                 // The scroll anchors on the cards, so picks put on top of them never move the one being read.
                 StoryCardList(cards: model.cards, underBar: model.refreshFailure == nil, anchorsScroll: true,
-                              splitAt: splitAt(model))
+                              splitAt: splitAt(model), enterFrom: enterFrom)
                 footer(model)
             }
         }
@@ -177,18 +197,30 @@ struct FeedScreen: View {
     @ViewBuilder private func footer(_ model: FeedModel) -> some View {
         if model.canLoadMore {
             FeedMoreButton(loading: model.isLoadingMore) {
+                // What it brings in rises in, from the card after the last one showing.
+                enterFrom = model.cards.count
                 Task { await model.loadMore() }
             }
+            .readingMark(.more)
             .frame(maxWidth: .infinity)
             .padding(.top, 48)
             .padding(.horizontal, 20)
         } else if model.latestVisible {
             FeedEndMark()
+                .readingMark(.end)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 48)
                 .padding(.horizontal, 20)
         }
     }
+}
+
+/// What the entrance's clock follows: where the cards brought in start, how many cards show, and
+/// whether the tap still waits for its page.
+private struct Entering: Equatable {
+    let from: Int?
+    let count: Int
+    let waiting: Bool
 }
 
 /// The end of the feed (design §2): a short pen wave with a terracotta dot just past its end —
@@ -210,10 +242,10 @@ struct FeedEndMark: View {
     }
 }
 
-/// The feed's way on (the web's FeedMore): "Load more" alone, in the tonal label's ink with no face
+/// The feed's way on (the web's FeedMore): 「顯示更多」 alone, in the tonal label's ink with no face
 /// of its own — not a form's button — the press washing a wobbly squircle as a bare glyph's does.
-/// While the next page is on its way the pen loop draws itself before the label (as a button's
-/// does) and taps do nothing.
+/// It shows the page already fetched ahead; tapped before that page has come, the pen loop draws
+/// itself before the label (as a button's does) and taps do nothing until it shows.
 struct FeedMoreButton: View {
     let loading: Bool
     let action: () -> Void

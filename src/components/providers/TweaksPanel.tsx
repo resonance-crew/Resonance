@@ -9,6 +9,7 @@ const TWEAK_DEFAULTS: TweakState = {
   scheme: 'system',
   fontFamily: 'default',
   grainIntensity: 2,
+  mascots: false,
 };
 
 /*
@@ -42,6 +43,11 @@ export interface TweakState {
   scheme: SchemeChoice;
   fontFamily: string;
   grainIntensity: number;
+  /**
+   * The paper puppets now and then on the home feed and a card's page (round 19): this browser's choice, off until
+   * the reader turns it on in Settings → 顯示.
+   */
+  mascots: boolean;
 }
 
 export { TWEAK_DEFAULTS };
@@ -61,6 +67,7 @@ export function loadTweaks(): TweakState {
     scheme: isSchemeChoice(saved.scheme) ? saved.scheme : TWEAK_DEFAULTS.scheme,
     fontFamily: typeof saved.fontFamily === 'string' ? saved.fontFamily : TWEAK_DEFAULTS.fontFamily,
     grainIntensity: typeof saved.grainIntensity === 'number' ? saved.grainIntensity : TWEAK_DEFAULTS.grainIntensity,
+    mascots: saved.mascots === true,
   };
 }
 
@@ -128,7 +135,8 @@ export function applySavedTweaks(): void {
     saved.accentColor === TWEAK_DEFAULTS.accentColor &&
     saved.scheme === TWEAK_DEFAULTS.scheme &&
     saved.fontFamily === TWEAK_DEFAULTS.fontFamily &&
-    saved.grainIntensity === TWEAK_DEFAULTS.grainIntensity;
+    saved.grainIntensity === TWEAK_DEFAULTS.grainIntensity &&
+    saved.mascots === TWEAK_DEFAULTS.mascots;
   if (defaults) postToEditor({ type: '__edit_mode_set_keys', edits: saved });
   else applyTweaks(saved);
 }

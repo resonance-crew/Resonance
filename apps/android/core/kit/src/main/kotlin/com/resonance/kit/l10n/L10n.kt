@@ -328,6 +328,10 @@ object L10n {
         val themeLavender: String get() = Strings.string("tweaks.themeLavender")
         /** Gold */
         val themeYellow: String get() = Strings.string("tweaks.themeYellow")
+        /** Paper friends */
+        val mascots: String get() = Strings.string("tweaks.mascots")
+        /** Little paper puppets drop by the home feed and card pages now and then */
+        val mascotsHint: String get() = Strings.string("tweaks.mascotsHint")
     }
     object App {
         /** This page can't be found */
@@ -422,7 +426,7 @@ object L10n {
         val heading: String get() = Strings.string("home.heading")
         /** Chosen from the insights you have written, alongside the newest public cards */
         val subheading: String get() = Strings.string("home.subheading")
-        /** Load more */
+        /** Show more */
         val moreBtn: String get() = Strings.string("home.moreBtn")
         /** Loading… */
         val moreLoading: String get() = Strings.string("home.moreLoading")

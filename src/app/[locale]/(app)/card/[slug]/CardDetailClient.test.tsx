@@ -210,6 +210,10 @@ describe('CardDetailClient (no server content)', () => {
     expect(screen.getAllByText('@author').length).toBeGreaterThan(0);
     expect(screen.getByText('grief')).toBeInTheDocument();
     expect(getCardBySlugOrId).toHaveBeenCalledWith('c1');
+    // The marks the paper puppets find the story by (lib/mascots/reading/measure).
+    const title = screen.getByRole('heading', { level: 1, name: 'The core thought of this card' });
+    expect(title).toHaveAttribute('data-mascot', 'story-title');
+    expect(title.closest('[data-mascot-zone="card"]')?.querySelector('[data-mascot="story"]')).toHaveTextContent('The longer story body');
   });
 
   it('shows the not-found message when the card is missing or not visible', async () => {
@@ -610,8 +614,9 @@ describe("the owner's card in the trash", () => {
     expect(screen.queryByRole('button', { name: 'Manage card' })).toBeNull();
     expect(screen.queryByText('Cards resonating with this')).toBeNull();
     expect(screen.queryByText('Extended cards')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Restore' })).toHaveAttribute('data-variant', 'solid');
-    expect(screen.getByRole('button', { name: 'Delete forever' })).toHaveAttribute('data-variant', 'dangerTonal');
+    // One segmented shape: the verb's solid face, then the danger's tonal one.
+    expect(screen.getByRole('button', { name: 'Restore' })).toHaveAttribute('data-face', 'solid');
+    expect(screen.getByRole('button', { name: 'Delete forever' })).toHaveAttribute('data-face', 'dangerTonal');
     // Its story's notes are a named card's: no word of them.
     expect(screen.queryByText('The notes left on this anonymous card have been deleted')).toBeNull();
   });

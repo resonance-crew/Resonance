@@ -566,6 +566,26 @@ private fun AppearanceSettings() {
                 }
             }
         }
+        // 小精靈 (round 19, the web's MascotsSwitch): the field's label over it, the hint at its start and the
+        // switch at its end — the whole row the one switch, named by the label and described by the hint.
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            FieldLabel(L10n.Tweaks.mascots)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .toggleRow(appearance.mascots) { store.setMascots(it) }
+                    .semantics { contentDescription = L10n.Tweaks.mascots },
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BasicText(
+                    L10n.Tweaks.mascotsHint,
+                    style = AppFonts.body(Tokens.HintSize, lineHeight = 1.55f, color = Tokens.TextMuted),
+                    modifier = Modifier.weight(1f),
+                )
+                OrganicToggle(appearance.mascots, seed = 97.0)
+            }
+        }
     }
 }
 

@@ -164,6 +164,12 @@ export interface FeedState {
   isLoadingMore: boolean;
   /** False once the newest fetch came back short — the feed is exhausted. */
   hasMore: boolean;
+  /**
+   * How many cards each page fetched so far holds, in order (`data.cards` is
+   * them one after another): the home feed shows a page only once its reader
+   * asks for it (「顯示更多」), while the next one is already fetched.
+   */
+  pageSizes?: number[];
   loadMore: () => void;
 }
 
@@ -195,7 +201,7 @@ export function useFeed(): FeedState {
             );
       return { ...summaryList(page.cards), next: page.nextCursor };
     },
-    // 「載入更多」fetches the next page only — not page one again.
+    // Fetching ahead takes the next page only — not page one again.
     { revalidateFirstPage: false },
   );
 
@@ -212,11 +218,13 @@ export function useFeed(): FeedState {
         : undefined,
     [data],
   );
+  const pageSizes = useMemo(() => (data ?? []).map((p) => p.cards.length), [data]);
   return {
     data: merged,
     isLoading: isLoading || !path,
     isLoadingMore: size > pages.length,
     hasMore: pages.length > 0 && pages[pages.length - 1].next !== null,
+    pageSizes,
     loadMore: () => void setSize((s) => s + 1),
   };
 }

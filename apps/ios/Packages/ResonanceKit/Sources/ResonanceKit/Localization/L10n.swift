@@ -326,6 +326,10 @@ public enum L10n {
         public static var themeLavender: String { Strings.shared.string("tweaks.themeLavender") }
         /// Gold
         public static var themeYellow: String { Strings.shared.string("tweaks.themeYellow") }
+        /// Paper friends
+        public static var mascots: String { Strings.shared.string("tweaks.mascots") }
+        /// Little paper puppets drop by the home feed and card pages now and then
+        public static var mascotsHint: String { Strings.shared.string("tweaks.mascotsHint") }
     }
     public enum App {
         /// This page can't be found
@@ -420,7 +424,7 @@ public enum L10n {
         public static var heading: String { Strings.shared.string("home.heading") }
         /// Chosen from the insights you have written, alongside the newest public cards
         public static var subheading: String { Strings.shared.string("home.subheading") }
-        /// Load more
+        /// Show more
         public static var moreBtn: String { Strings.shared.string("home.moreBtn") }
         /// Loading…
         public static var moreLoading: String { Strings.shared.string("home.moreLoading") }

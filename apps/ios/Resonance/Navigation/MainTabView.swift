@@ -572,6 +572,11 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
     var onAtTop: (Bool) -> Void = { _ in }
     /// The phone's tab bar slides away as this list is read down (round 16 §2: the home feed only).
     var hidesTabBar = false
+    /// Told whether the reader is within a screen and a half of the list's end, each time that changes
+    /// (the home feed fetches its next page then: round 19). Nil: nothing watches.
+    var onNearEnd: ((Bool) -> Void)?
+    /// The paper puppets may come to this list (round 19: the home feed), while Settings → 外觀 → 小精靈 is on.
+    var hostsMascots = false
     @Environment(TabBarHiding.self) private var barHiding: TabBarHiding?
     let trailing: Trailing
     let banner: Banner
@@ -615,9 +620,12 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
 
     init(_ title: String, headerSpacing: CGFloat = 20, titleInBar: Bool = false, phoneTop: CGFloat = 16, tabletGap: Bool = true,
          tabletTop: CGFloat? = nil, head: String? = nil, toTopRequests: Int = 0, onAtTop: @escaping (Bool) -> Void = { _ in },
-         hidesTabBar: Bool = false, @ViewBuilder trailing: () -> Trailing = { EmptyView() },
+         hidesTabBar: Bool = false, onNearEnd: ((Bool) -> Void)? = nil, hostsMascots: Bool = false,
+         @ViewBuilder trailing: () -> Trailing = { EmptyView() },
          @ViewBuilder banner: () -> Banner, @ViewBuilder content: () -> Content) {
         self.hidesTabBar = hidesTabBar
+        self.hostsMascots = hostsMascots
+        self.onNearEnd = onNearEnd
         self.title = title
         self.headerSpacing = headerSpacing
         self.titleInBar = titleInBar
@@ -651,7 +659,10 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
             .padding(.bottom, window.topTabs ? 40 : 110 - lowered)
             // For whoever can't pull, the same refresh is the list's "Refresh" action (among VoiceOver's actions on any of its rows).
             .sketchRefreshAction(named: L10n.Native.refresh)
+            // Where the paper puppets' marks are measured: the scrolled content's own points.
+            .readingContent()
         }
+        .modifier(MascotHosting(hosts: hostsMascots, footRoom: bottomRoom))
         .scrollPosition($position)
         .onChange(of: toTop) { backToTop() }
         .onChange(of: toTopRequests) { backToTop() }
@@ -672,6 +683,15 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
             return min(max(geo.contentOffset.y + geo.contentInsets.top, 0), limit)
         } action: { old, new in
             hidden = new <= 0 ? 0 : min(travel, max(0, hidden + new - old))
+        }
+        // How far the end is, in steps of 16 (so the answer follows a scroll and the content growing
+        // under it, the first page's arrival included) — told on as near or not.
+        .onScrollGeometryChange(for: Int.self) { geo in
+            guard onNearEnd != nil, geo.containerSize.height > 0 else { return 0 }
+            let left = geo.contentSize.height - (geo.contentOffset.y + geo.containerSize.height)
+            return Int(((left - 1.5 * geo.containerSize.height) / 16).rounded(.down))
+        } action: { _, steps in
+            onNearEnd?(steps < 0)
         }
         // The tab bar's own rule (round 16 §2), from the same offset and its end.
         .onScrollGeometryChange(for: [CGFloat].self) { geo in
@@ -720,9 +740,10 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
 extension TabScreen where Banner == EmptyView {
     init(_ title: String, headerSpacing: CGFloat = 20, titleInBar: Bool = false, phoneTop: CGFloat = 16, tabletGap: Bool = true,
          tabletTop: CGFloat? = nil, head: String? = nil, toTopRequests: Int = 0, onAtTop: @escaping (Bool) -> Void = { _ in },
-         hidesTabBar: Bool = false, @ViewBuilder trailing: () -> Trailing = { EmptyView() }, @ViewBuilder content: () -> Content) {
+         hidesTabBar: Bool = false, onNearEnd: ((Bool) -> Void)? = nil, hostsMascots: Bool = false,
+         @ViewBuilder trailing: () -> Trailing = { EmptyView() }, @ViewBuilder content: () -> Content) {
         self.init(title, headerSpacing: headerSpacing, titleInBar: titleInBar, phoneTop: phoneTop, tabletGap: tabletGap,
                   tabletTop: tabletTop, head: head, toTopRequests: toTopRequests, onAtTop: onAtTop, hidesTabBar: hidesTabBar,
-                  trailing: trailing, banner: { EmptyView() }, content: content)
+                  onNearEnd: onNearEnd, hostsMascots: hostsMascots, trailing: trailing, banner: { EmptyView() }, content: content)
     }
 }

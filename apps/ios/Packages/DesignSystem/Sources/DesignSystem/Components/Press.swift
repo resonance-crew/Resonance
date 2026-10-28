@@ -4,9 +4,11 @@ import SwiftUI
 
 /// How long the ink takes to reach the far edge, and to lift — every control's
 /// press (buttons, bare glyphs, tabs, menu rows) runs on these.
-enum InkTiming {
-    static let spread = Animation.timingCurve(0.2, 0.8, 0.3, 1, duration: 0.3)
-    static let lift = Animation.easeOut(duration: 0.22)
+public enum InkTiming {
+    public static let spread = Animation.timingCurve(0.2, 0.8, 0.3, 1, duration: 0.3)
+    public static let lift = Animation.easeOut(duration: 0.22)
+    /// The least a press's spread runs before it lifts (a quick tap still shows all of it).
+    public static let leastSpread = 0.3
 }
 
 /// Press feedback in the hand-drawn language, for controls with no frame of

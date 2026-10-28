@@ -114,6 +114,7 @@ fun CardViewerActions(
         modifier.fillMaxWidth(),
         // Wait for the lookup, so a second resonance can't be started by accident (dimmed and inert meanwhile).
         enabled = mine != null,
+        mascotKey = "respond",
     )
     if (picking) ResonatePicker(
         session, cardId, referenceCardId,

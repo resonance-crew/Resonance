@@ -24,6 +24,7 @@ import { useTweaks } from '@/components/providers/TweaksPanel';
 import { SCHEME_CHOICES, type SchemeChoice } from '@/lib/design/appearance';
 import { SegmentedActionBar, type SegmentSpec } from '@/components/molecules/SegmentedActionBar/SegmentedActionBar';
 import { ThemeSwatches } from './ThemeSwatches';
+import { MascotsSwitch } from './MascotsSwitch';
 import { useIsMobile } from '@/lib/hooks/useIsMobile';
 import { usePathname, useRouter } from '@/i18n/navigation';
 import type { Locale } from '@/lib/db/types';
@@ -433,6 +434,7 @@ export function SettingsClient({ initial }: SettingsClientProps) {
                 <span>{tTweaks('grainHeavy')}</span>
               </div>
             </Field>
+            <MascotsSwitch on={tweaks.mascots} onChange={(mascots) => updateTweaks({ mascots })} />
           </div>
         )}
         {active === 'terms' && (

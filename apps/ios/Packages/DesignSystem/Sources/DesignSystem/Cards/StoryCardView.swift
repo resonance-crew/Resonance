@@ -124,18 +124,22 @@ public struct StoryCardView: View {
 
             CSSText(content.title, font: AppFonts.scaledUIFont(.heading, size: 18, weight: .bold), lineHeight: 1.3)
                 .accessibilityAddTraits(.isHeader)
+                .readingMark(.cardWords)
 
             CSSText(content.excerpt, font: AppFonts.scaledUIFont(.body, size: 14), lineHeight: 1.65, color: Tokens.UI.textMuted)
 
             StoryCardSeparator(palette: palette, seed: seed)
 
             HStack(spacing: 10) {
+                // The author row's ink (the avatar, the name and time) is where a puppet on the next card keeps off.
                 HandDrawnAvatar(initials: content.authorInitials, imageURL: content.authorImageURL,
                                 color: content.authorAccent ?? palette.fill, size: 30, seed: content.avatarSeed)
+                    .readingMark(.cardFoot)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(content.authorName).font(AppFonts.body(13, weight: .semibold)).foregroundStyle(Tokens.text)
                     Text(content.readTime).font(AppFonts.body(12)).foregroundStyle(Tokens.textMuted)
                 }
+                .readingMark(.cardFoot)
                 Spacer()
                 if !isPreview {
                     OrganicIcon(.arrowRight, size: 18, strokeWidth: Tokens.ink)

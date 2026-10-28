@@ -39,6 +39,8 @@ import kotlinx.coroutines.launch
  *     --es pushChatAvatar <url> --es pushChatInitials … --es pushChatColor "oklch(…)"]   posts a chat message's notification, as a data-only chat push does
  *   --ez avifDecoder true          reads AVIF with the app's own decoder (Android 10–11's path) on any version
  *   --ei feedPicksDelay <s> [--es feedPicks <id,…>]   holds today's picks back that long, and stands those cards in for them
+ *   --ez mascots true|false        turns 外觀's 小精靈 on or off; --es mascotJs "mascots.visit({ ledge: 'more', slug: 'tuck' }); mascots.advance(3)"
+ *                                  calls the paper puppets' island on screen (answers in Logcat, tag Mascots)
  *   --ez firestoreLog true         Firestore's own debug log in Logcat (tag Firestore: its streams, connectivity, targets)
  */
 class MainActivity : ComponentActivity() {
@@ -99,6 +101,7 @@ class MainActivity : ComponentActivity() {
             DebugLaunch.avifDecoder = intent.getBooleanExtra("avifDecoder", false)
             DebugLaunch.feedPicksDelay = intent.getIntExtra("feedPicksDelay", 0)
             DebugLaunch.feedPicksIds = intent.getStringExtra("feedPicks")?.split(',')?.map(String::trim)?.filter(String::isNotEmpty)
+            mascotExtras(intent)
         }
         // A recreated activity (rotation, process restore) still holds the intent it was first started with,
         // and its back stacks come back as they were: the link was opened then and isn't pushed again.
@@ -180,8 +183,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (BuildConfig.DEBUG) mascotExtras(intent)
         incomingRoute.value = routeFrom(intent)
         handleExtras(intent)
+    }
+
+    /** Debug: `--ez mascots true|false` sets 外觀's 小精靈; `--es mascotJs "mascots.visit({…})"` calls the island on screen. */
+    private fun mascotExtras(intent: Intent) {
+        if (intent.hasExtra("mascots")) AppearanceStore.shared.setMascots(intent.getBooleanExtra("mascots", false))
+        intent.getStringExtra("mascotJs")?.let { DebugLaunch.mascotCalls.tryEmit(it) }
     }
 
     /** A site link: /card/…, /u/…, /messages/…?note=…&card=…, its query kept. */
@@ -253,6 +263,8 @@ object DebugLaunch {
     var feedPicksDelay = 0
     /** Cards stood in for today's picks (the emulator's recommender has none). */
     var feedPicksIds: List<String>? = null
+    /** The paper puppets' island's screen checks (`--es mascotJs …`): calls into its API, logged with their answers (tag Mascots). */
+    val mascotCalls = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 8)
 
     /**
      * The home feed's picks as the debug extras ask (null: as the server answers them): held back

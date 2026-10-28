@@ -18,6 +18,7 @@ import { StoryByline } from '@/components/molecules/CardDetail/StoryByline';
 import { ShareMenu } from '@/components/molecules/ShareMenu/ShareMenu';
 import { CardActionsMenu } from '@/components/molecules/CardActionsMenu/CardActionsMenu';
 import { TrashedCardBanner } from '@/components/molecules/CardDetail/TrashedCardBanner';
+import { ReadingStage } from '@/components/sections/ReadingStage/ReadingStage';
 import { RestoredAloneNotice } from '@/components/molecules/TrashActionsMenu/RestoredAloneNotice';
 import { CardSafetyMenu } from '@/components/molecules/CardDetail/CardSafetyMenu';
 import { ReadAfterArea } from '@/components/molecules/CardDetail/ReadAfterArea';
@@ -305,9 +306,12 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
       aria-busy={held || undefined}
     >
       <ReadingProgress targetRef={storyRef} />
+      {/* The paper puppets, now and then (a setting, off by default); not over a card in the trash. Always in the
+          tree (a node that comes and goes with the hold would move every useId after it between server and client). */}
+      <ReadingStage key={card.id} off={trashed || held} />
       <div className={styles.articleWrap} data-head={card.media?.url && !trashed ? 'cover' : 'title'}>
         <div className={styles.layout} data-contents={contents || undefined}>
-          <article className={styles.article}>
+          <article className={styles.article} data-mascot-zone="card">
             {trashed && <TrashedCardBanner card={card} focusTitle={trashedHere} />}
             {card.media?.url && (
               <OrganicImage
@@ -321,7 +325,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
             )}
 
             {/* The title has the column to itself; its language is the story's (never the page's around it). */}
-            <h1 className={`story-title ${styles.title}`} data-script={type.script} lang={type.lang}>
+            <h1 className={`story-title ${styles.title}`} data-script={type.script} lang={type.lang} data-mascot="story-title">
               {type.script === 'cjk' ? <LatinMarkText text={card.thoughtCore} /> : card.thoughtCore}
             </h1>
 
@@ -336,7 +340,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
               actions={cardActions}
             />
 
-            <div ref={storyRef} className={styles.story}>
+            <div ref={storyRef} className={styles.story} data-mascot="story">
               {/* Signed in, the embedded cards came with the lists; the link previews come with the card. */}
               <CardEmbedSourceContext.Provider value={lists.embeds}>
                 <StoryLinkPreviewsContext.Provider value={card.linkPreviews ?? null}>

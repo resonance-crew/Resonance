@@ -47,15 +47,15 @@ export interface LandingLayout {
   width: number;
 }
 
-type Inks = Partial<Record<Theme, Ink>>;
+export type Inks = Partial<Record<Theme, Ink>>;
 /** The pencil that reads on the cream papers (hero, feed) and on the bands (the CTA's terracotta, the footer's ink). */
-const ON_PAPER: Inks = { light: 'dark', dark: 'light' };
+export const ON_PAPER: Inks = { light: 'dark', dark: 'light' };
 const ON_BAND: Inks = { light: 'light', dark: 'light' };
 const WAVE_ACTS = ['wave', 'look', 'stretch', 'hop', 'deco', 'reveal', 'twinkle'];
 const CARD_ACTS = ['read', 'swing', 'look', 'wave', 'reveal'];
 const PEEK_ACTS = ['look', 'wave', 'duck'];
 
-interface Glyph {
+export interface Glyph {
   x0: number;
   x1: number;
   /** Its ink's top. */
@@ -66,7 +66,7 @@ interface Glyph {
 }
 
 /** The page as the stage sees it: every rect in layer px. */
-class Page {
+export class Page {
   readonly origin: { x: number; y: number };
   private readonly ox: number;
   private readonly oy: number;
@@ -215,12 +215,12 @@ class Page {
   }
 }
 
-const grow = (r: Rect, pad: number): Rect => ({ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad });
-const right = (r: Rect) => r.x + r.w;
-const bottom = (r: Rect) => r.y + r.h;
+export const grow = (r: Rect, pad: number): Rect => ({ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad });
+export const right = (r: Rect) => r.x + r.w;
+export const bottom = (r: Rect) => r.y + r.h;
 const round1 = (v: number) => Math.round(v * 10) / 10;
 
-function union(rs: readonly Rect[]): Rect | null {
+export function union(rs: readonly Rect[]): Rect | null {
   if (!rs.length) return null;
   const x = Math.min(...rs.map(r => r.x));
   const y = Math.min(...rs.map(r => r.y));
@@ -228,7 +228,7 @@ function union(rs: readonly Rect[]): Rect | null {
 }
 
 /** The glyphs of the first line. */
-function firstLine(gs: readonly Glyph[]): Glyph[] {
+export function firstLine(gs: readonly Glyph[]): Glyph[] {
   if (!gs.length) return [];
   const top = Math.min(...gs.map(g => g.lineTop));
   const line = gs.filter(g => g.lineTop < top + 4);
@@ -241,7 +241,7 @@ function firstLine(gs: readonly Glyph[]): Glyph[] {
  * between glyphs, and stand on the letters under them: on a Latin line that is the x-height or an ascender, not a
  * board laid across the ascenders (the prototype's glyph_tops reached 40 px, which only its CJK lines could take).
  */
-function inkTops(gs: readonly Glyph[], x0: number, x1: number, reach = 6, smooth = 2): Point[] {
+export function inkTops(gs: readonly Glyph[], x0: number, x1: number, reach = 6, smooth = 2): Point[] {
   const env: Point[] = [];
   for (let x = Math.round(x0); x <= x1; x += 3) {
     const near = gs.filter(g => g.x1 >= x - reach && g.x0 <= x + reach);
@@ -256,7 +256,7 @@ function inkTops(gs: readonly Glyph[], x0: number, x1: number, reach = 6, smooth
 }
 
 /** The drawn top of an outline (its points near `y`), one point every 6 px from x0 to x1, gaps filled from neighbours. */
-function topContour(pts: readonly Point[], x0: number, x1: number, y: number, band = 24): Point[] {
+export function topContour(pts: readonly Point[], x0: number, x1: number, y: number, band = 24): Point[] {
   const near = pts.filter(p => Math.abs(p[1] - y) < band && p[0] >= x0 - 4 && p[0] <= x1 + 4);
   if (!near.length) return [];
   const out: Point[] = [];
@@ -278,7 +278,7 @@ function alongX(pts: readonly Point[]): Point[] {
 }
 
 /** `span` less what lies within `cuts` (x ranges): the longest piece left, or null. */
-function longestPiece(span: [number, number], cuts: readonly [number, number][]): [number, number] | null {
+export function longestPiece(span: [number, number], cuts: readonly [number, number][]): [number, number] | null {
   let pieces: [number, number][] = [span];
   for (const [a, b] of cuts) {
     pieces = pieces.flatMap(([p, q]): [number, number][] => (b <= p || a >= q ? [[p, q]] : [[p, a], [b, q]].filter(([u, v]) => v - u > 0) as [number, number][]));
@@ -287,7 +287,7 @@ function longestPiece(span: [number, number], cuts: readonly [number, number][])
   return pieces[0] ?? null;
 }
 
-const visible = (doc: ParentNode, sel: string, page: Page): Element[] => Array.from(doc.querySelectorAll(sel)).filter(e => page.rect(e));
+export const visible = (doc: ParentNode, sel: string, page: Page): Element[] => Array.from(doc.querySelectorAll(sel)).filter(e => page.rect(e));
 
 /**
  * The landing page's places for this preset, measured now. `layer` is the stage's layer (its box is the page's

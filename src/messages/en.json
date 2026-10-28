@@ -191,7 +191,9 @@
     "themeTerracotta": "Terracotta",
     "themeSage": "Sage",
     "themeLavender": "Lavender",
-    "themeYellow": "Gold"
+    "themeYellow": "Gold",
+    "mascots": "Paper friends",
+    "mascotsHint": "Little paper puppets drop by the home feed and card pages now and then"
   },
   "app": {
     "pageNotFound": "This page can't be found",
@@ -244,7 +246,7 @@
   "home": {
     "heading": "Stories picked for you",
     "subheading": "Chosen from the insights you have written, alongside the newest public cards",
-    "moreBtn": "Load more",
+    "moreBtn": "Show more",
     "moreLoading": "Loading…",
     "endOfDay": "You are caught up on the latest public cards",
     "feedEnd": "That's all for now",
