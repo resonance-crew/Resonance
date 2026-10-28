@@ -287,6 +287,15 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
         handle(type, body)
     }
 
+    /// The story's editable root asks for no autocorrection, spelling marks or writing suggestions.
+    static let withoutSuggestions = """
+        for (const root of document.querySelectorAll('[contenteditable]')) {
+          root.setAttribute('autocorrect', 'off');
+          root.setAttribute('spellcheck', 'false');
+          root.setAttribute('writingsuggestions', 'false');
+        }
+        """
+
     /// One message from the island (`type` and its fields); a type it doesn't know is left alone.
     func handle(_ type: String, _ body: [String: Any]) {
         switch type {
@@ -294,6 +303,12 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
             ready = true
             // In case WebKit made its content view anew with the page.
             webView.hideFormAccessoryBar()
+            // On a Mac, UIKit hosts the story's suggestions (QuickType) in a blurred strip of its own across the
+            // window's foot, over the format bar; a story that asks for none, with no shortcuts either
+            // (``WKWebView/hideFormAccessoryBar()``), gets no strip.
+            if ProcessInfo.processInfo.isiOSAppOnMac {
+                Task { _ = try? await webView.callAsyncJavaScript(Self.withoutSuggestions, arguments: [:], contentWorld: .page) }
+            }
             // The appearance as the web view stands in its window now (it may have changed while the page
             // loaded); out of a window its traits say nothing yet, and its trait change on landing in one will.
             if webView.window != nil { wear(IslandAppearance(webView.traitCollection)) }
@@ -402,8 +417,9 @@ extension WKWebView {
             guard let method = class_getInstanceMethod(UIResponder.self, #selector(getter: UIResponder.inputAccessoryView)) else { return }
             class_addMethod(made, #selector(getter: UIResponder.inputAccessoryView), imp_implementationWithBlock(none),
                             method_getTypeEncoding(method))
-            // On a Mac the shortcuts bar (WebKit's undo · redo · paste, B I U) has no keyboard to ride: it lies
-            // over the window's foot as a blurred strip of its own, over the format bar. An empty one shows none.
+            // On a Mac the bar over the keyboard (WebKit's undo · redo · paste, B I U, and the story's suggestions —
+            // ``StoryEditorBridge/withoutSuggestions``) has no keyboard to ride: it lies over the window's foot as a
+            // blurred strip of its own, over the format bar. With nothing to show, it shows none.
             if ProcessInfo.processInfo.isiOSAppOnMac,
                let assistant = class_getInstanceMethod(UIResponder.self, #selector(getter: UIResponder.inputAssistantItem)) {
                 let empty = UITextInputAssistantItem()
