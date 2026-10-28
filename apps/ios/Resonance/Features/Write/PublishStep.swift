@@ -249,8 +249,10 @@ struct PublishStep: View {
                 audienceOption(.anonymous, L10n.Write.Visibility.anonymous, icon: .mask),
                 audienceOption(.private, L10n.Write.Visibility.draft, icon: .lock),
             ], fill: Tokens.creamDark)
-            // A resonance's line stays with the choice it follows.
+            // A resonance's line stays with the choice it follows; so does the warning of a card once shared
+            // privately, while 匿名公開 is chosen (the verb stays: it is the writer's to choose).
             if let line = model.resonanceLine { resonance(line).padding(.top, 2) }
+            if let warning = model.sharedWarning { sharedWarning(warning).padding(.top, 2) }
         }
     }
 
@@ -276,6 +278,19 @@ struct PublishStep: View {
         .accessibilityElement(children: .combine)
         // Said as it changes with the choices above it (the web's aria-live).
         .onChange(of: line) { _, now in AccessibilityNotification.Announcement(now).post() }
+    }
+
+    // MARK: 6 — a 私人卡 once shared, about to go anonymous
+
+    private func sharedWarning(_ line: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            OrganicIcon(.lock, size: 14, color: Tokens.terracotta)
+            Text(line).font(AppFonts.body(13)).foregroundStyle(Tokens.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+        // Said as it comes, with the choice that brings it.
+        .onAppear { AccessibilityNotification.Announcement(line).post() }
     }
 
     // MARK: The foot

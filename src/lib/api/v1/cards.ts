@@ -10,6 +10,7 @@ import { refuseInTrash } from './inTrash';
 import { readTakeBack, takeBack } from './origins';
 import { toFeedCard } from './present';
 import { becameReachable, hiddenResonance } from './resonate';
+import { privateShareRef } from './sharedCards';
 import { summaryFields } from './summary';
 import type { FeedCardBody, UpdateCardInput } from './schemas';
 
@@ -188,6 +189,8 @@ export async function deleteCard(db: Firestore, uid: string, id: string, opts: D
     // let a client write edits/current alone, and no server path writes anything else there). Deleting a missing
     // one is nothing; once the card is gone the rules take no new one.
     tx.delete(db.doc(`cards/${id}/edits/current`));
+    // Whether it was ever shared privately is about this card alone (sharedCards PRIVATE_SHARES).
+    tx.delete(privateShareRef(db, id));
     tx.set(tombstoneRef(db, id), TOMBSTONE);
     const slug = snap.get('slug');
     if (retirable(slug)) tx.set(retiredSlugRef(db, slug), RETIRED_SLUG);

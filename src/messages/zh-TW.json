@@ -416,7 +416,7 @@
     "openImage": "查看圖片",
     "imageUnsupported": "不支援這種圖片格式",
     "pickCard": "分享你的一張卡片",
-    "pickCardSubtitle": "在這段對話裡分享你的一張卡片。私人卡只有對方讀得到，收回訊息或刪除對話後就不再分享。",
+    "pickCardSubtitle": "在這段對話裡分享你的一張卡片。私人卡只有對方讀得到，停止分享、收回訊息或刪除對話後就不再分享。",
     "moreMenu": "對話選項",
     "menuSearch": "搜尋訊息",
     "menuMedia": "卡片與連結",
@@ -493,7 +493,10 @@
     "unsentByThem": "{handle} 收回了一則訊息",
     "unsentQuote": "訊息已收回",
     "privateCard": "私人卡",
-    "pickCardEmpty": "你還沒有可以分享的卡片"
+    "pickCardEmpty": "你還沒有可以分享的卡片",
+    "stopSharing": "停止分享",
+    "stoppedSharing": "已停止分享這張私人卡",
+    "stopSharingError": "沒有停止分享，請再試一次"
   },
   "write": {
     "titleRequired": "先寫下一句話標題",
@@ -588,7 +591,8 @@
       "draft": "私人卡",
       "anonymous": "匿名公開",
       "publicLine": "所有人都看得到，署名 {handle}",
-      "anonymousLine": "所有人都看得到，但不會知道是你寫的"
+      "anonymousLine": "所有人都看得到，但不會知道是你寫的",
+      "sharedWarning": "這張卡片曾私下分享給別人，他們會知道是你寫的"
     },
     "ai": {
       "panel": "AI 寫作夥伴",

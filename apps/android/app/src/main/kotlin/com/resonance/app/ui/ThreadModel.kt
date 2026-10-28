@@ -544,6 +544,27 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
         }
     }
 
+    /**
+     * Stops sharing the 私人卡 [message] carries (停止分享): every message of the viewer's here sharing that
+     * card stops being the other person's pass to read it. Asked nothing first — the message stays, and
+     * the conversation drops its marker in a moment; [onDone] says it is done, [onError] that it isn't.
+     */
+    fun stopSharing(message: ChatMessage, onDone: (String) -> Unit, onError: (String) -> Unit) {
+        val pair = pairId ?: return
+        val cardId = message.cardRef ?: return
+        if (!canStopSharing(message, me)) return
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) { session.messaging.stopSharingCard(pair, cardId) }
+                onDone(L10n.Messages.stoppedSharing)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onError(L10n.Messages.stopSharingError)
+            }
+        }
+    }
+
     /** Everything held is forgotten (the conversation is gone, or the listener lost track of it). */
     private fun resetHistory() {
         history.clear()

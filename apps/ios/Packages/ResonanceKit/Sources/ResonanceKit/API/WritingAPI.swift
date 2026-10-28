@@ -75,6 +75,19 @@ public struct WritingAPI: Sendable {
         }
     }
 
+    /// Whether your card `cardId` was ever sent privately in a message — a 私人卡 shared in a conversation
+    /// (GET /api/v1/cards/{id}/private-shares), whatever became of that message since: its recipient knows
+    /// you wrote it, so the publish step warns before 匿名公開. `not_found` when it isn't yours.
+    public func privateShares(_ cardId: String) async throws -> Bool {
+        switch try await client.getPrivateShares(path: .init(key: cardId)) {
+        case let .ok(r): return try r.body.json.sharedPrivately
+        case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
+        case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
+        case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
+        case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
+        }
+    }
+
     /// Deletes your card for good, draft or published, with its pending edit, the notes left on it
     /// and its place in the recommender (DELETE /api/v1/cards/{id}); the server refreshes the
     /// site's cached pages. A build with the trash moves a card there first (`trashCard`) and

@@ -182,6 +182,17 @@ struct MessagingAPITests {
         #expect(transport.requests.first?.path?.hasSuffix("/conversations/alice_bob/messages/m1/unsend") == true)
     }
 
+    /// 停止分享: the conversation's shared card, deleted; over the budget it is rate limited.
+    @Test func aPrivateCardStopsBeingShared() async throws {
+        let transport = StubTransport(status: .noContent, body: "")
+        try await api(transport).stopSharingCard(pairId: "alice_bob", cardId: "kept")
+        #expect(transport.requests.first?.method == .delete)
+        #expect(transport.requests.first?.path?.hasSuffix("/conversations/alice_bob/shared-cards/kept") == true)
+        let limited = StubTransport(status: .tooManyRequests, body: #"{"error":{"code":"rate_limited","message":"Slow down."}}"#)
+        let failure = await #expect(throws: APIFailure.self) { try await api(limited).stopSharingCard(pairId: "alice_bob", cardId: "kept") }
+        #expect(failure?.status == 429)
+    }
+
     @Test func tooLateToUnsendIsAConflict() async throws {
         let transport = StubTransport(status: .conflict, body: #"{"error":{"code":"conflict","message":"This message can no longer be unsent."}}"#)
         let failure = await #expect(throws: APIFailure.self) { try await api(transport).unsendMessage(pairId: "alice_bob", messageId: "m1") }

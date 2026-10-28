@@ -37,6 +37,7 @@ import {
   getConversation,
   markConversationRead,
   reactToMessage,
+  stopSharingCard,
   unsendMessage,
 } from '@/lib/db/firestore/client/messages';
 import { linkify } from '@/lib/links/linkify';
@@ -607,6 +608,15 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
         });
       },
       unsend: (message) => setUnsending({ id: message.id }),
+      stopSharing: (message) => {
+        const { pairId: pair, toast: toasts, t: words } = live.current;
+        if (!pair || !message.cardRef) return;
+        // The listener brings the message back without its marker; the toast says it went (or didn't).
+        stopSharingCard(pair, message.cardRef).then(
+          () => toasts.show({ message: words('stoppedSharing') }),
+          () => toasts.show({ message: words('stopSharingError') }),
+        );
+      },
       report: (message) => {
         setReportedId(message.id);
         live.current.messageSafety.choose('safety:report');

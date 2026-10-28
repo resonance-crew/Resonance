@@ -289,6 +289,18 @@ export function buildOpenApi(): Json {
           responses: { '204': { description: 'It no longer answers this card' }, ...errors(400, 401, 404) },
         },
       },
+      '/cards/{key}/private-shares': get(
+        'getPrivateShares',
+        'Whether your card was ever sent privately in a message — to warn before making it anonymous',
+        'PrivateShares',
+        {
+          description:
+            'True once one of your messages shared this card as a 私人卡, whatever became of the message since (unsent, ' +
+            'stopped, the conversation deleted): its recipient may have read it, and knows it is yours. Making it anonymous ' +
+            'is still yours to choose; clients say so first. Anyone else\'s card, or none, is `404`.',
+          parameters: [cardId],
+        },
+      ),
       '/cards/{key}/related': get('getRelatedCards', 'A few recent cards sharing its tags', 'CardList', { parameters: [cardId] }),
       '/cards/{key}/publish': {
         post: {
@@ -395,7 +407,7 @@ export function buildOpenApi(): Json {
             'yourself, no text, no card and no picture, a card and a picture together, a `clientId` or `replyTo` Firestore keeps ' +
             "for itself); `cardRef` (`404` for a card you can't read, or one in the trash; one of your own 私人卡, published or " +
             'never, may be sent — the message is its recipient\'s pass to read it, never to answer it, for as long as the message ' +
-            'stands and the card is named and out of the trash, with no block either way; `400`, "An anonymous card is shared ' +
+            'stands and shares it (`stopSharingCard`) and the card is named and out of the trash, with no block either way; `400`, "An anonymous card is shared ' +
             'only while it is public.", for an anonymous card of yours no one else may read); ' +
             "a `clientId` already used — yours answers `201` as it was first sent, someone else's is `400`; your pen " +
             'name (`403 forbidden`, "Choose a pen name first."); a block either way (`403 blocked`); the connection (`403 ' +
@@ -468,6 +480,23 @@ export function buildOpenApi(): Json {
             pathParam('messageId', "The message's id"),
           ],
           responses: { '204': { description: 'Unsent (or already unsent)' }, ...errors(400, 401, 404, 409, 429) },
+        },
+      },
+      '/conversations/{pair}/shared-cards/{cardId}': {
+        delete: {
+          operationId: 'stopSharingCard',
+          summary:
+            'Stop sharing your 私人卡 in this conversation (停止分享): every message of yours here that shares it stops being ' +
+            "the other person's pass to read it — any time, not only within unsend's 24 hours. The messages stay; the card " +
+            'reads to them as one they cannot read. Sending it again shares it again. Nothing to stop answers `204`',
+          description:
+            'Checked in this order: the contract (`400`); your budget (`429`); the conversation (`404` for one you are not in, ' +
+            'whether it exists or not). Across a block too: it reaches no one.',
+          parameters: [
+            pathParam('pair', "The conversation's id: its two participants' uids, sorted, joined by `_`"),
+            pathParam('cardId', "The card's id"),
+          ],
+          responses: { '204': { description: 'No message here shares it any longer' }, ...errors(400, 401, 404, 429) },
         },
       },
       '/chat-images': {

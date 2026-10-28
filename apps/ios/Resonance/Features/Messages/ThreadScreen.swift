@@ -227,6 +227,7 @@ struct ThreadScreen: View {
                                    items: menu.items(model: model, reply: { reply(message) }, openLink: openLink,
                                                      copied: { say(L10n.Messages.copied) },
                                                      unsend: { unsending = message },
+                                                     stopSharing: { stopSharing(message, model) },
                                                      report: {
                                                          reportedMessage = message.id
                                                          reporting = true
@@ -476,6 +477,15 @@ struct ThreadScreen: View {
             try? await Task.sleep(for: .seconds(1.4))
             guard toast == text else { return }
             withAnimation(.easeOut(duration: 0.2)) { toast = nil }
+        }
+    }
+
+    /// 停止分享: no question first — the message stays, and sending the card again shares it again — then the
+    /// shell's toast says how it went. The row goes once the document no longer carries its pass.
+    private func stopSharing(_ message: ChatMessage, _ model: ThreadModel) {
+        Task {
+            let stopped = await model.stopSharing(message)
+            session.toasts.show(stopped ? L10n.Messages.stoppedSharing : L10n.Messages.stopSharingError)
         }
     }
 

@@ -416,7 +416,7 @@
     "openImage": "View photo",
     "imageUnsupported": "This kind of image isn't supported",
     "pickCard": "Share one of your cards",
-    "pickCardSubtitle": "Share one of your cards in this conversation. A private card is theirs alone to read, until you unsend the message or delete the conversation.",
+    "pickCardSubtitle": "Share one of your cards in this conversation. A private card is theirs alone to read, until you stop sharing it, unsend the message or delete the conversation.",
     "moreMenu": "Conversation options",
     "menuSearch": "Search messages",
     "menuMedia": "Cards & links",
@@ -493,7 +493,10 @@
     "unsentByThem": "{handle} unsent a message",
     "unsentQuote": "Message unsent",
     "privateCard": "Private card",
-    "pickCardEmpty": "You have no cards to share yet"
+    "pickCardEmpty": "You have no cards to share yet",
+    "stopSharing": "Stop sharing",
+    "stoppedSharing": "Stopped sharing this private card",
+    "stopSharingError": "Couldn’t stop sharing — please try again"
   },
   "write": {
     "titleRequired": "Give it a one-line title first",
@@ -588,7 +591,8 @@
       "draft": "Private",
       "anonymous": "Anonymous",
       "publicLine": "Anyone can read it, signed {handle}",
-      "anonymousLine": "Anyone can read it, but no one will know it's yours"
+      "anonymousLine": "Anyone can read it, but no one will know it's yours",
+      "sharedWarning": "You once shared this card privately — whoever you sent it to will know you wrote it"
     },
     "ai": {
       "panel": "AI writing partner",

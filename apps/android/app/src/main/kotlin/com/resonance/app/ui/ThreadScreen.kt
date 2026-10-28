@@ -406,6 +406,8 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                         m, model, links, context, open,
                         reply = { reply(held) },
                         unsend = { unsending = held },
+                        // 停止分享 asks nothing: the message stays, and sending the card again shares it again.
+                        stopSharing = { model.stopSharing(held, onDone = { toasts.show(it) }, onError = sayError) },
                         report = { reportingMessage = held },
                     )
                 },

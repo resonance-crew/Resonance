@@ -70,6 +70,7 @@ export function MessagePopover({ pressed, own, fullTime, onClose }: MessagePopov
             openLink: t('openLink'),
             copyLink: t('copyLink'),
             unsend: t('unsend'),
+            stopSharing: t('stopSharing'),
             report: tSafety('reportThisMessage'),
             retry: t('retry'),
             discard: t('discardFailed'),

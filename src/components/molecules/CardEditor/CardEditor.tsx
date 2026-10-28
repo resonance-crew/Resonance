@@ -29,6 +29,7 @@ import { useRouter } from '@/i18n/navigation';
 import { ApiError } from '@/lib/db/firestore/client/api';
 import { useOpenedOnce } from '@/lib/hooks/useOpenedOnce';
 import { useConnectionRefresh } from '@/lib/data/resonate';
+import { useSharedPrivately } from '@/lib/data/privateShares';
 import { localeScript, storyLang, writerScript, type StoryScript } from '@/lib/text/script';
 import { isTrashed, isTrashRefusal, mayBeTrashed, restoreTrashedCard } from './trashedCard';
 import '@/styles/story.css';
@@ -373,6 +374,8 @@ export function CardEditor({
   const draftIdRef = useRef(initial?.id);
   // The same id, for what is drawn from it (the preview's colours): a new card has one from its first save.
   const [cardId, setCardId] = useState(initial?.id);
+  // Before 匿名公開: was this card ever sent privately in a message? (asked once the step is shown; a warning only)
+  const sharedPrivately = useSharedPrivately(cardId, publishLoaded);
   const values: DraftValues = { thoughtCore, story, tags, visibility, anonymous, media, accentHue };
   const valuesRef = useRef(values);
   valuesRef.current = values;
@@ -990,6 +993,7 @@ export function CardEditor({
                 setAccentHue(hue);
               }}
               resonance={referenceCardId != null}
+              sharedPrivately={sharedPrivately}
               liveVisibility={liveVisibility}
               saveStatus={saveStatus}
               liveReaches={

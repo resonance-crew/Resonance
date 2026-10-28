@@ -5,7 +5,8 @@ import ResonanceAPI
 /// Notes and messages — the writes that reach another person, so they go
 /// through the server (POST /api/v1/notes, /api/v1/messages), which re-checks
 /// connections and blocks and rings the right bell — reacting to a message and unsending one
-/// (round 16: PUT/DELETE …/messages/{id}/reaction, POST …/messages/{id}/unsend), deleting a conversation
+/// (round 16: PUT/DELETE …/messages/{id}/reaction, POST …/messages/{id}/unsend), no longer sharing a 私人卡
+/// (DELETE …/shared-cards/{cardId}), deleting a conversation
 /// (DELETE /api/v1/conversations/{pair}, both people's at once) and the pictures sent in a
 /// conversation (POST /api/v1/chat-images, read back with GET
 /// /api/v1/chat-images/{id}: for the two people of the conversation only, so
@@ -153,6 +154,21 @@ public struct MessagingAPI: Sendable {
         case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
         case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
         case let .conflict(r): throw APIFailure(try r.body.json, status: 409)
+        case let .tooManyRequests(r): throw APIFailure(try r.body.json, status: 429)
+        case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
+        }
+    }
+
+    /// Stops sharing the viewer's 私人卡 `cardId` in the conversation `pairId` (停止分享, DELETE
+    /// …/conversations/{pair}/shared-cards/{cardId}): every message of theirs there that shares it stops being
+    /// the other person's pass to read it — at any time. The messages stay; nothing left to stop is nothing.
+    /// A conversation not theirs is 404; 429 past the budget.
+    public func stopSharingCard(pairId: String, cardId: String) async throws {
+        switch try await client.stopSharingCard(path: .init(pair: pairId, cardId: cardId)) {
+        case .noContent: return
+        case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
+        case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
+        case let .notFound(r): throw APIFailure(try r.body.json, status: 404)
         case let .tooManyRequests(r): throw APIFailure(try r.body.json, status: 429)
         case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
         }

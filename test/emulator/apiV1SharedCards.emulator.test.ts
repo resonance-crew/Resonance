@@ -5,6 +5,8 @@ import { ApiFailure } from '@/lib/api/v1/http';
 import { deleteConversation, sendMessage, sendNote } from '@/lib/api/v1/conversations';
 import { unsendMessage } from '@/lib/api/v1/messageActions';
 import { getCardDetail, getCardsByKeys, getResonances } from '@/lib/api/v1/reads';
+import { deleteCard } from '@/lib/api/v1/cards';
+import { stopSharing, wasSharedPrivately } from '@/lib/api/v1/sharedCards';
 import { resonateWith } from '@/lib/api/v1/resonate';
 import { reportCard } from '@/lib/api/v1/safety';
 import { trashCard } from '@/lib/api/v1/trash';
@@ -250,5 +252,93 @@ describe('a private card shared in a message', () => {
     await trashCard(db, 'bob', 'secret');
     const again = await sendMessage(db, 'bob', { to: 'alice', text: '', cardRef: 'secret', clientId: 'retry-0000000001' });
     expect(again).toMatchObject({ id: first.id, duplicate: true });
+  });
+});
+
+describe('停止分享: its author ends the pass, any time', () => {
+  it('ends it for every message of theirs sharing the card in that conversation, at any age, and leaves the messages', async () => {
+    const first = await sendMessage(db, 'bob', { to: 'alice', text: 'read this', cardRef: 'secret' });
+    await sendMessage(db, 'bob', { to: 'alice', text: '', cardRef: 'secret' });
+    // Long past unsend's 24 hours.
+    await db.doc(`conversations/alice_bob/messages/${first.id}`).update({ sentAt: Timestamp.fromDate(new Date('2026-01-01T00:00:00Z')) });
+    expect(await readsDetail('alice', 'secret')).toBe('the story of secret');
+
+    expect(await stopSharing(db, 'bob', 'alice_bob', 'secret')).toEqual({ unmarked: 2 });
+    expect(await readsDetail('alice', 'secret')).toBeNull();
+    expect(await readsSummary('alice', 'secret')).toEqual([]);
+    const messages = await db.collection('conversations/alice_bob/messages').get();
+    expect(messages.size).toBe(2);
+    expect(messages.docs.map((m) => [m.get('cardRef'), m.get('privateShare')])).toEqual([
+      ['secret', undefined],
+      ['secret', undefined],
+    ]);
+    expect((await db.doc(`conversations/alice_bob/messages/${first.id}`).get()).get('text')).toBe('read this');
+  });
+
+  it('touches only that card, and only in that conversation', async () => {
+    await sendMessage(db, 'bob', { to: 'alice', text: '', cardRef: 'secret' });
+    await sendMessage(db, 'bob', { to: 'alice', text: '', cardRef: 'unfinished' });
+    await sendMessage(db, 'bob', { to: 'carol', text: '', cardRef: 'secret' });
+    await stopSharing(db, 'bob', 'alice_bob', 'secret');
+    expect(await readsDetail('alice', 'secret')).toBeNull();
+    expect(await readsDetail('alice', 'unfinished')).toBe('the story of unfinished');
+    expect(await readsDetail('carol', 'secret')).toBe('the story of secret');
+  });
+
+  it('is its author’s alone: the recipient stops nothing, a stranger’s conversation is a 404', async () => {
+    await sendMessage(db, 'bob', { to: 'alice', text: '', cardRef: 'secret' });
+    expect(await stopSharing(db, 'alice', 'alice_bob', 'secret')).toEqual({ unmarked: 0 });
+    expect(await readsDetail('alice', 'secret')).toBe('the story of secret');
+    expect((await failure(stopSharing(db, 'carol', 'alice_bob', 'secret'))).code).toBe('not_found');
+    expect((await failure(stopSharing(db, 'bob', 'bob_carol', 'secret'))).code).toBe('not_found');
+    expect((await failure(stopSharing(db, 'bob', 'bob_bob', 'secret'))).code).toBe('not_found');
+    expect(await readsDetail('alice', 'secret')).toBe('the story of secret');
+  });
+
+  it('answers again with nothing to do, works across a block, and sending the card again shares it again', async () => {
+    await sendMessage(db, 'bob', { to: 'alice', text: '', cardRef: 'secret' });
+    await db.doc('users/alice/blocks/bob').set({ at: published });
+    expect(await stopSharing(db, 'bob', 'alice_bob', 'secret')).toEqual({ unmarked: 1 });
+    expect(await stopSharing(db, 'bob', 'alice_bob', 'secret')).toEqual({ unmarked: 0 });
+    await db.doc('users/alice/blocks/bob').delete();
+    expect(await readsDetail('alice', 'secret')).toBeNull();
+    await sendMessage(db, 'bob', { to: 'alice', text: '', cardRef: 'secret' });
+    expect(await readsDetail('alice', 'secret')).toBe('the story of secret');
+  });
+});
+
+describe('a card once shared privately: its author is warned before it goes out anonymous', () => {
+  it('is recorded as the message is sent — a 私人卡 only — and the record outlives the pass', async () => {
+    expect(await wasSharedPrivately(db, 'bob', 'secret')).toBe(false);
+    await sendMessage(db, 'bob', { to: 'alice', text: '', cardRef: 'public' });
+    expect(await wasSharedPrivately(db, 'bob', 'public')).toBe(false);
+    const sent = await sendMessage(db, 'bob', { to: 'alice', text: '', cardRef: 'secret' });
+    expect((await db.doc('privateShares/secret').get()).data()).toMatchObject({ authorId: 'bob' });
+    expect(await wasSharedPrivately(db, 'bob', 'secret')).toBe(true);
+
+    // Alice read it then: unsending it, stopping it or deleting the conversation forgets nothing.
+    await stopSharing(db, 'bob', 'alice_bob', 'secret');
+    await unsendMessage(db, 'bob', 'alice_bob', sent.id);
+    await deleteConversation(db, 'bob', 'alice_bob');
+    expect(await wasSharedPrivately(db, 'bob', 'secret')).toBe(true);
+  });
+
+  it('is asked of by its author alone (a 404 for anyone else, the recipient too), and goes with the card', async () => {
+    await sendMessage(db, 'bob', { to: 'alice', text: '', cardRef: 'unfinished' });
+    expect(await wasSharedPrivately(db, 'bob', 'unfinished')).toBe(true);
+    expect((await failure(wasSharedPrivately(db, 'alice', 'unfinished'))).code).toBe('not_found');
+    expect((await failure(wasSharedPrivately(db, 'carol', 'unfinished'))).code).toBe('not_found');
+    expect((await failure(wasSharedPrivately(db, 'bob', 'nothing-here'))).code).toBe('not_found');
+    await deleteCard(db, 'bob', 'unfinished', { vectors: { deleteByCard: async () => {} } });
+    expect((await db.doc('privateShares/unfinished').get()).exists).toBe(false);
+  });
+
+  it('warns, never refuses: the card still goes out anonymous, and the recipient no longer reads it through the message', async () => {
+    await sendMessage(db, 'bob', { to: 'alice', text: '', cardRef: 'secret' });
+    await db.doc('cards/secret').update({ visibility: 'public', anonymous: true });
+    expect(await wasSharedPrivately(db, 'bob', 'secret')).toBe(true);
+    const detail = await getCardDetail(db, 'alice', 'secret');
+    expect(detail).toMatchObject({ anonymous: true, isOwner: false });
+    expect(detail.card.author).toBeFalsy();
   });
 });

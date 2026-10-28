@@ -265,6 +265,25 @@ describe('PublishStep', () => {
     await echoSettled();
   });
 
+  // A 私人卡 once sent in a message: 匿名公開 hides its author from no one who read it — said, never refused.
+  it('warns under 匿名公開 when the card was shared privately, and leaves the verb alone', async () => {
+    renderWithIntl(<Step sharedPrivately />);
+    expect(screen.queryByText(en.write.visibility.sharedWarning)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.anonymous }));
+    expect(screen.getByText(en.write.visibility.sharedWarning)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: en.write.publishPanel.publishAnonymously })).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
+    expect(screen.queryByText(en.write.visibility.sharedWarning)).not.toBeInTheDocument();
+    await echoSettled();
+  });
+
+  it('says nothing under 匿名公開 for a card never shared privately', async () => {
+    renderWithIntl(<Step />);
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.anonymous }));
+    expect(screen.queryByText(en.write.visibility.sharedWarning)).not.toBeInTheDocument();
+    await echoSettled();
+  });
+
   // A live resonance made public and named by this save reaches its original after it (PATCH's becameReachable).
   it('says so for a live resonance only when the save makes a hidden one public and named', async () => {
     const view = renderWithIntl(<Step mode="update" liveVisibility="private" resonance liveReaches={false} start={{ visibility: 'private' }} />);

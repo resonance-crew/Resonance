@@ -44,6 +44,8 @@ export const LIMITS = {
   react: { max: 300, windowMs: DAY },
   /** Unsending a message: rewrites it and its quotes, keeps a copy for moderation, and tells the recipient's phone. */
   unsend: { max: 100, windowMs: DAY },
+  /** 停止分享 (DELETE …/shared-cards/{cardId}): rewrites the author's messages sharing a 私人卡 in one conversation. */
+  stopShare: { max: 100, windowMs: DAY },
   report: { max: 20, windowMs: DAY },
   /** /api/upload: files, and their bytes (see `weight`). */
   upload: { max: 50, windowMs: DAY },

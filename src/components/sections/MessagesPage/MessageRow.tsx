@@ -158,10 +158,10 @@ export function MessageCore({ message: m, own, position, carried, highlights, hi
 }
 
 /** What a message's bubble carries, from the card it is about (looked up in the thread's shared cards). */
-export function useCarried(message: ChatMessage): Carried {
+export function useCarried(message: ChatMessage, viewerId: string): Carried {
   const shared = useMemo(() => messageCard(message), [message]);
   const lookup = useCardEmbed(shared ? `/card/${shared.key}` : '');
-  return carriedOf(message, shared, shared ? lookup : null);
+  return carriedOf(message, shared, shared ? lookup : null, viewerId);
 }
 
 export interface MessageRowProps {
@@ -213,7 +213,7 @@ export const MessageRow = memo(function MessageRow({
   const t = useTranslations('messages');
   const tSafety = useTranslations('safety');
   const actions = useThreadActions();
-  const carried = useCarried(m);
+  const carried = useCarried(m, actions.viewerId);
   const messageRef = useRef<HTMLDivElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const unsent = isUnsent(m);

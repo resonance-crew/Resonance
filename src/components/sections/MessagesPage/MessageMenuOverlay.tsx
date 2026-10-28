@@ -79,6 +79,7 @@ export function MessageMenuOverlay({ pressed, own, fullTime, onClose, areaOf }: 
       openLink: t('openLink'),
       copyLink: t('copyLink'),
       unsend: t('unsend'),
+      stopSharing: t('stopSharing'),
       report: tSafety('reportThisMessage'),
       retry: t('retry'),
       discard: t('discardFailed'),

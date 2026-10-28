@@ -58,6 +58,13 @@ class WritingApi(private val configuration: ApiConfiguration, http: OkHttpClient
     suspend fun applyEdit(cardId: String): ApplyEditResponse = call { api.applyCardEdit(cardId) }
 
     /**
+     * Whether your card was ever sent privately in a message — a 私人卡 shared in a conversation,
+     * whatever became of the message since (GET /api/v1/cards/{id}/private-shares): whoever read it
+     * knows you wrote it, so the publish step warns before 匿名公開. Someone else's card is `not_found`.
+     */
+    suspend fun sharedPrivately(cardId: String): Boolean = call { api.getPrivateShares(cardId).sharedPrivately }
+
+    /**
      * The card box's ⋯ on one of your cards: its visibility (`public`, `connections`, `private`)
      * and/or its byline — null leaves one as it is (PATCH /api/v1/cards/{id}). The server keeps a
      * pending edit in step and refreshes the site's cached pages. Answers the card as your card

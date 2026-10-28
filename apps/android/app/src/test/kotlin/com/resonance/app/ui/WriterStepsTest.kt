@@ -834,6 +834,10 @@ class WriterStepsTest {
         var applyResult = ApplyEditResponse("c1", "a-walk", applied = true)
         var insights = 0
         var insightAnswer: String? = "你想說的是雨"
+        /** GET …/private-shares: what it answers (or throws), and the cards it was asked about. */
+        var shared = false
+        var sharedFails: Exception? = null
+        val sharedAsked = mutableListOf<String>()
 
         override suspend fun publish(cardId: String): PublishResponse {
             publishFails?.let { throw it }
@@ -866,6 +870,12 @@ class WriterStepsTest {
         }
 
         override fun illustrate(story: String): Flow<WritingApi.IllustrationEvent> = emptyFlow()
+
+        override suspend fun sharedPrivately(cardId: String): Boolean {
+            sharedAsked += cardId
+            sharedFails?.let { throw it }
+            return shared
+        }
 
         private fun card(id: String) = FeedCard(
             id = id, slug = null, title = "雨中散步", excerpt = "…", tags = emptyList(), publishedAt = null,

@@ -447,6 +447,19 @@ describe("a message's reactions and its unsending are the server's", () => {
     }
     await assertFails(getDoc(doc(anonymous(), 'unsentMessages', `${PAIR}_m0`)));
   });
+
+  it('keeps which cards were shared privately from everyone, their author too (GET …/private-shares is how they ask)', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'privateShares', 'alices-secret'), { authorId: 'alice', at: new Date() });
+    });
+    for (const uid of ['alice', 'bob', 'carol']) {
+      const db = as(uid);
+      await assertFails(getDoc(doc(db, 'privateShares', 'alices-secret')));
+      await assertFails(getDocs(query(collection(db, 'privateShares'), where('authorId', '==', 'alice'))));
+      await assertFails(deleteDoc(doc(db, 'privateShares', 'alices-secret')));
+      await assertFails(setDoc(doc(db, 'privateShares', `${uid}-card`), { authorId: uid, at: new Date() }));
+    }
+  });
 });
 
 describe('notifications', () => {

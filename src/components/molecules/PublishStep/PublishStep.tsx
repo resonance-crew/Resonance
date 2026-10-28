@@ -144,6 +144,11 @@ export interface PublishStepProps {
   onCoverChange: (media: CardMedia | undefined, accentHue: number | null) => void;
   /** The card answers another (it is a resonance). */
   resonance: boolean;
+  /**
+   * The card was once sent privately in a message: while 匿名公開 is chosen, a
+   * line says whoever read it knows who wrote it. A warning only — the verb stays.
+   */
+  sharedPrivately?: boolean;
   /** For `update`: how readers have the card now (a private one is a 私人卡 to them). */
   liveVisibility?: Visibility;
   /** The editor's save state, said at the end of the inline heading row (at the split, where there is no bar). */
@@ -200,6 +205,7 @@ export function PublishStep({
   onAudienceChange,
   onCoverChange,
   resonance,
+  sharedPrivately = false,
   liveVisibility,
   saveStatus = null,
   liveReaches = false,
@@ -458,6 +464,14 @@ export function PublishStep({
             />
           </div>
         </div>
+
+        {/* 5 — 匿名公開 hides the name from no one who was sent the card privately (warn, never refuse) */}
+        {sharedPrivately && audience === 'anonymous' && (
+          <p className={styles.resonance} role="note">
+            <Icon name="lock" size={14} color="var(--color-terracotta)" />
+            <span>{tVis('sharedWarning')}</span>
+          </p>
+        )}
 
         {/* 6 — whether a resonance tells its original's author */}
         {resonance && (

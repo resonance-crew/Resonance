@@ -7,7 +7,7 @@ import { ApiFailure } from './http';
 import { addReason, answeredBy, connect, letterReason, originsRef } from './origins';
 import { CARD_VISIBILITY_FIELDS, cardVisible } from './present';
 import { visibleCardById } from './reads';
-import { keptPrivate } from './sharedCards';
+import { keptPrivate, privateShareRef } from './sharedCards';
 
 /** notes.ts / firestore.rules: a note's length, and the bell's preview of it. */
 export const NOTE_MAX_LENGTH = 2000;
@@ -607,6 +607,8 @@ async function writeMessage(db: Firestore, uid: string, input: SendMessageInput,
       ...(quoted ? { replyTo: quoted } : {}),
       ...(picture ? { image: picture } : {}),
     });
+    // Its record, which outlives the message: whoever read the card knows whose it is (sharedCards PRIVATE_SHARES).
+    if (privateShare && card) tx.set(privateShareRef(db, card.id), { authorId: uid, at: FieldValue.serverTimestamp() });
     // Sent: the picture is this message's from now on (and no longer one the unsent purge looks at).
     if (picture) tx.update(chatImageRef(db, picture.id), { messageId: message.id, unsentAt: FieldValue.delete() });
     // The list's preview: the text, or the attached card's title when there is none; a picture says so

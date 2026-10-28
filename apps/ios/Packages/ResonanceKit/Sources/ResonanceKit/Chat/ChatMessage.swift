@@ -146,12 +146,17 @@ public struct ChatMessage: Equatable, Sendable {
     /// Its sender unsent it (round 16 §3: the document keeps only `senderId`, `sentAt` and
     /// `unsentAt`): the thread draws one quiet line in its place, and nothing it said.
     public var isUnsent: Bool
+    /// The card it shares (`cardRef`) is its sender's 私人卡, and this message is the recipient's pass to
+    /// read it (the document's `privateShare: true`, written by the server). It goes when the sender stops
+    /// sharing it (停止分享) — while the thread is open too, so it is part of what makes two messages the same.
+    public var privateShare: Bool
     public var delivery: Delivery
     public var key: String
 
     public init(id: String, senderId: String, text: String, sentAt: Date, cardRef: String? = nil, noteRef: MessagingAPI.NoteRef? = nil,
                 isNote: Bool = false, replyTo: ReplyQuote? = nil, preview: LinkPreview? = nil, image: ChatImage? = nil,
-                reactions: [String: String] = [:], isUnsent: Bool = false, delivery: Delivery = .delivered, key: String? = nil) {
+                reactions: [String: String] = [:], isUnsent: Bool = false, privateShare: Bool = false,
+                delivery: Delivery = .delivered, key: String? = nil) {
         self.id = id
         self.senderId = senderId
         self.isUnsent = isUnsent
@@ -165,6 +170,7 @@ public struct ChatMessage: Equatable, Sendable {
         self.preview = isUnsent ? nil : preview
         self.image = isUnsent ? nil : image
         self.reactions = isUnsent ? [:] : reactions
+        self.privateShare = !isUnsent && cardRef != nil && privateShare
         self.delivery = delivery
         self.key = key ?? id
     }
@@ -206,6 +212,13 @@ public struct ChatMessage: Equatable, Sendable {
         senderId == viewer && delivery == .delivered && !isNote && !isUnsent && now.timeIntervalSince(sentAt) <= Self.unsendWindow
     }
 
+    /// Whether `viewer` can stop sharing the 私人卡 it carries (停止分享, DELETE …/shared-cards/{cardId}): their
+    /// own, delivered, still standing, sharing a card as its recipient's pass to read it — at any time, unlike
+    /// unsending.
+    public func canStopSharing(viewer: String) -> Bool {
+        senderId == viewer && delivery == .delivered && !isUnsent && cardRef != nil && privateShare
+    }
+
     /// Oldest first: the send time, then the id (messages sent in the same instant keep a stable order).
     public static func isOrderedBefore(_ a: ChatMessage, _ b: ChatMessage) -> Bool {
         a.sentAt != b.sentAt ? a.sentAt < b.sentAt : a.id < b.id
@@ -237,7 +250,9 @@ public struct ChatMessage: Equatable, Sendable {
             replyTo: quote(fields["replyTo"] as? [String: Any]),
             preview: preview(fields["preview"] as? [String: Any], origin: origin),
             image: ChatImage.from(fields["image"] as? [String: Any]),
-            reactions: reactions(fields["reactions"] as? [String: Any])
+            reactions: reactions(fields["reactions"] as? [String: Any]),
+            // Only `true` is a pass: anything else (absent once its sender stopped sharing) is none.
+            privateShare: fields["privateShare"] as? Bool == true
         )
     }
 

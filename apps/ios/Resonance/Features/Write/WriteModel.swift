@@ -27,6 +27,9 @@ struct WriterCalls {
     var restore: (String) async throws -> Bool
     /// A card went out: the moment to ask whether notifications may show (`PushCenter.reachedOut`).
     var reachedOut: () -> Void
+    /// Whether the card was ever sent privately in a message (GET …/private-shares): the step warns before
+    /// 匿名公開, since its recipient knows who wrote it.
+    var privateShares: (String) async throws -> Bool
 
     /// What POST …/edits/apply came to: `applied` false when the card had no pending edit by then —
     /// applied or dropped elsewhere (the web, another device) since the writer last wrote it.
@@ -37,12 +40,13 @@ struct WriterCalls {
 
     init(publish: @escaping (String) async throws -> String, applyEdit: @escaping (String) async throws -> AppliedEdit,
          insight: @escaping (String, String) async throws -> String?, restore: @escaping (String) async throws -> Bool,
-         reachedOut: @escaping () -> Void = {}) {
+         reachedOut: @escaping () -> Void = {}, privateShares: @escaping (String) async throws -> Bool = { _ in false }) {
         self.publish = publish
         self.applyEdit = applyEdit
         self.insight = insight
         self.restore = restore
         self.reachedOut = reachedOut
+        self.privateShares = privateShares
     }
 
     init(_ writing: WritingAPI) {
@@ -56,7 +60,9 @@ struct WriterCalls {
             try await writing.insight(title: title, story: story)
         }, restore: { id in
             try await writing.restoreCard(id).droppedResonance
-        }, reachedOut: { PushCenter.shared.reachedOut() })
+        }, reachedOut: { PushCenter.shared.reachedOut() }, privateShares: { id in
+            try await writing.privateShares(id)
+        })
     }
 }
 
@@ -137,7 +143,12 @@ final class WriteModel {
     var step: WriterStep = .write {
         didSet {
             guard step != oldValue else { return }
-            if step == .publish { askInsight() } else { dropInsight() }
+            if step == .publish {
+                askInsight()
+                askPrivateShares()
+            } else {
+                dropInsight()
+            }
         }
     }
     /// ✓ found no title: the title asks for one (先寫下一句話標題) until it is typed in.
@@ -664,6 +675,36 @@ final class WriteModel {
         let reaches = Self.reaches(visibility: values.visibility, anonymous: values.anonymous)
         if isPublished { return !liveReaches && reaches ? L10n.Write.PublishPanel.resonanceReaches : nil }
         return reaches ? L10n.Write.PublishPanel.resonanceReaches : L10n.Write.PublishPanel.resonanceQuiet
+    }
+
+    // MARK: Step 2: a 私人卡 once shared
+
+    /// The card was once sent privately in a message (GET …/private-shares, asked as the step first opens):
+    /// its recipient knows whose it is. False until known — and when the question fails.
+    private(set) var sharedPrivately = false
+    @ObservationIgnored private var privateSharesAsked = false
+
+    /// The step opened on a card with an id: asked once for the writer's visit. Nothing waits on it, and a
+    /// failure is no warning — publishing is never held up by it.
+    private func askPrivateShares() {
+        guard !privateSharesAsked, let id = draftId else { return }
+        privateSharesAsked = true
+        let ask = calls.privateShares
+        Task { [weak self] in
+            let shared = (try? await ask(id)) ?? false
+            guard let self, shared else { return }
+            sharedPrivately = true
+        }
+    }
+
+    /// The quiet line under 卡片類型 while 匿名公開 is chosen for a card once shared privately (a warning
+    /// only — the verb stays): whoever it was sent to will know who wrote it. Nil otherwise.
+    var sharedWarning: String? {
+        Self.sharedWarning(audience: audience, sharedPrivately: sharedPrivately)
+    }
+
+    static func sharedWarning(audience: Audience?, sharedPrivately: Bool) -> String? {
+        audience == .anonymous && sharedPrivately ? L10n.Write.Visibility.sharedWarning : nil
     }
 
     // MARK: Step 2: the mirror

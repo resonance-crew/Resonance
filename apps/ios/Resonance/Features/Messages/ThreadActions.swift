@@ -6,17 +6,17 @@ import SwiftUI
 // softens and the message is lifted where it lies — the lift is what says it is the one chosen — with the
 // five reactions always directly above it and its actions always directly below: Reply, Copy, the link it
 // leads to (Open, Copy — leading the list when the finger was on it), 收回 for one's own plain message of
-// the last day, 檢舉這則訊息 for theirs, and Retry / Delete for one that didn't go, over a quiet line with
-// the full time. When both don't fit round the message where it is, the message moves, never the menus.
+// the last day, 停止分享 for one's own that shares a 私人卡 (any time), 檢舉這則訊息 for theirs, and Retry /
+// Delete for one that didn't go, over a quiet line with the full time. When both don't fit round the message where it is, the message moves, never the menus.
 // The twin of Android's ThreadActions.
 
 extension MessageMenu {
     /// A row the list can hold.
     nonisolated enum Row: String, CaseIterable {
-        case openLink = "open-link", copyLink = "copy-link", reply, copy, unsend, report, retry, discard
+        case openLink = "open-link", copyLink = "copy-link", reply, copy, unsend, stopSharing = "stop-sharing", report, retry, discard
 
         /// Its glyph: 開啟連結 the arrow out and 複製連結 the link (review S8 — never 複製's twin two rows
-        /// away); 收回 the turn back, 檢舉 the flag.
+        /// away); 收回 the turn back, 停止分享 the 私人卡's lock, 檢舉 the flag.
         var icon: IconName {
             switch self {
             case .openLink: .arrowRight
@@ -24,6 +24,7 @@ extension MessageMenu {
             case .reply: .reply
             case .copy: .copy
             case .unsend: .restore
+            case .stopSharing: .lock
             case .report: .flag
             case .retry: .send
             case .discard: .trash
@@ -32,10 +33,10 @@ extension MessageMenu {
     }
 
     /// Which rows the list has, in their order (pure, so it is pinned): Reply, Copy, the link's Open and Copy,
-    /// 收回, 檢舉這則訊息, then Retry and Delete for one that didn't go — the link's two first when the finger
+    /// 收回, 停止分享, 檢舉這則訊息, then Retry and Delete for one that didn't go — the link's two first when the finger
     /// was on it (review S8).
-    nonisolated static func rows(link: Bool, onLink: Bool, reply: Bool, copy: Bool, unsend: Bool, report: Bool,
-                                 failed: Bool) -> [Row] {
+    nonisolated static func rows(link: Bool, onLink: Bool, reply: Bool, copy: Bool, unsend: Bool, stopSharing: Bool = false,
+                                 report: Bool, failed: Bool) -> [Row] {
         var rows: [Row] = []
         let linkRows: [Row] = link ? [.openLink, .copyLink] : []
         if onLink { rows += linkRows }
@@ -43,18 +44,22 @@ extension MessageMenu {
         if copy { rows.append(.copy) }
         if !onLink { rows += linkRows }
         if unsend { rows.append(.unsend) }
+        if stopSharing { rows.append(.stopSharing) }
         if report { rows.append(.report) }
         if failed { rows += [.retry, .discard] }
         return rows
     }
 
-    /// The list's rows for the message pressed, in their order (``rows(link:onLink:reply:copy:unsend:report:failed:)``).
-    /// `copied` is told when something went to the clipboard (the thread says so: nothing else would).
+    /// The list's rows for the message pressed, in their order
+    /// (``rows(link:onLink:reply:copy:unsend:stopSharing:report:failed:)``). `copied` is told when something
+    /// went to the clipboard (the thread says so: nothing else would).
     func items(model: ThreadModel, reply: @escaping () -> Void, openLink: @escaping (URL) -> Void,
-               copied: @escaping () -> Void, unsend: @escaping () -> Void, report: @escaping () -> Void) -> [OrganicMenuItem] {
+               copied: @escaping () -> Void, unsend: @escaping () -> Void, stopSharing: @escaping () -> Void,
+               report: @escaping () -> Void) -> [OrganicMenuItem] {
         let message = row.message
         let rows = Self.rows(link: link != nil, onLink: onLink && link != nil, reply: model.canReply(message), copy: !message.text.isEmpty,
                              unsend: model.me.map { message.canUnsend(viewer: $0) } ?? false,
+                             stopSharing: model.me.map { message.canStopSharing(viewer: $0) } ?? false,
                              report: !model.isMine(message) && message.delivery == .delivered && !message.isUnsent,
                              failed: message.delivery == .failed)
         return rows.map { row in
@@ -76,6 +81,9 @@ extension MessageMenu {
             case .unsend:
                 // Plain colour: taking one's own words back is no danger (its confirm says what it does).
                 return OrganicMenuItem(id: row.rawValue, title: L10n.Messages.unsend, icon: row.icon, action: unsend)
+            case .stopSharing:
+                // Plain colour, no question: the message stays, and sending the card again shares it again.
+                return OrganicMenuItem(id: row.rawValue, title: L10n.Messages.stopSharing, icon: row.icon, action: stopSharing)
             case .report:
                 return OrganicMenuItem(id: row.rawValue, title: L10n.Safety.reportThisMessage, icon: row.icon, action: report)
             case .retry:

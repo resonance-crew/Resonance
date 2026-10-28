@@ -11,6 +11,21 @@ const msg = (extra: Partial<Message>): Message => ({ id: 'm1', senderId: 'bob', 
 const preview = { url: 'https://resonance.channel/zh-TW/card/rain-walk', title: '一場雨後的散步' };
 
 describe('carriedOf', () => {
+  it('draws someone else’s 私人卡 only while their message shares it (停止分享 takes the marker away)', () => {
+    const kept = { ...card, authorId: 'bob', publishedAt: null, visibility: 'private' } as Card;
+    const lookup: CardLookup = { status: 'ready', card: kept, author };
+    const sharing = msg({ cardRef: 'c1', privateShare: true });
+    expect(carriedOf(sharing, messageCard(sharing, []), lookup, 'alice')).toMatchObject({ kind: 'card' });
+    // Stopped: the card the thread holds reads as one Alice can't see — and a message that was only it, as nothing.
+    const stopped = msg({ cardRef: 'c1' });
+    expect(carriedOf(stopped, messageCard(stopped, []), lookup, 'alice')).toEqual({ kind: 'nothing' });
+    expect(carriedOf({ ...stopped, text: '你看' }, messageCard(stopped, []), lookup, 'alice')).toEqual({ kind: 'words' });
+    // Its author still has their own card; a published public card needs no pass.
+    expect(carriedOf(stopped, messageCard(stopped, []), lookup, 'bob')).toMatchObject({ kind: 'card' });
+    const open: CardLookup = { status: 'ready', card: { ...kept, publishedAt: new Date(0), visibility: 'public' } as Card, author };
+    expect(carriedOf(stopped, messageCard(stopped, []), open, 'alice')).toMatchObject({ kind: 'card' });
+  });
+
   it('carries the card once it is read, its stand-in while it is', () => {
     const m = msg({ cardRef: 'c1' });
     const shared = messageCard(m, []);

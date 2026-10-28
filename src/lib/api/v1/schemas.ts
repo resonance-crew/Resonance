@@ -621,6 +621,13 @@ export const SetReactionRequest = named(
 );
 
 
+export const PrivateShares = named(
+  z.object({ sharedPrivately: z.boolean() }),
+  'PrivateShares',
+  'Whether your card was ever sent privately in a message (a 私人卡 shared in a conversation). Its recipient knows ' +
+    'you wrote it, so making it anonymous hides it from no one who read it then.',
+);
+
 export const HandleAvailability = named(
   z.object({ handle: z.string(), available: z.boolean() }),
   'HandleAvailability',

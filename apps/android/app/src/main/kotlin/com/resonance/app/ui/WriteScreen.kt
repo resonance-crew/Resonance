@@ -486,7 +486,10 @@ private fun WriteForm(
     LaunchedEffect(step) {
         bridge.setHidden(step == WriterStep.Publish)
         if (step == stepSeen) {
-            if (step == WriterStep.Publish) model.reflect()
+            if (step == WriterStep.Publish) {
+                model.reflect()
+                model.askSharedPrivately()
+            }
             return@LaunchedEffect
         }
         stepSeen = step
@@ -494,6 +497,7 @@ private fun WriteForm(
             publishOpened = true
             publishScroll.scrollTo(0)
             model.reflect()
+            model.askSharedPrivately()
             view.announce(model.stepTitle)
         } else {
             model.stopReflecting()
@@ -1022,6 +1026,18 @@ private fun PublishStep(
             Tags(model, tagAnchor, dismissKeyboard)
             Spacer(Modifier.height(gap))
             AudienceChoice(model)
+            // 匿名公開 for a card once shared privately in a message: whoever read it knows who wrote it. A word, never a stop.
+            if (model.sharedWarning) {
+                Spacer(Modifier.height(gap))
+                Row(
+                    Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OrganicIcon(IconName.Mask, size = 14.dp, color = Tokens.Terracotta)
+                    BasicText(L10n.Write.Visibility.sharedWarning, style = AppFonts.body(13f, lineHeight = 1.5f, color = Tokens.TextMuted))
+                }
+            }
             model.resonanceLine?.let { line ->
                 Spacer(Modifier.height(gap))
                 Row(

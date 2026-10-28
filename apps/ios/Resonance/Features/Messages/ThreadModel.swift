@@ -786,6 +786,19 @@ final class ThreadModel {
         }
     }
 
+    /// Stops sharing the 私人卡 one of the viewer's messages carries (停止分享): every message of theirs here
+    /// that shares that card stops being the other person's pass to read it; the listener then shows the
+    /// documents without it. Whether the server took it.
+    func stopSharing(_ message: ChatMessage) async -> Bool {
+        guard let pairId, let me, message.canStopSharing(viewer: me), let cardId = message.cardRef else { return false }
+        do {
+            try await MessagingAPI(client: session.api).stopSharingCard(pairId: pairId, cardId: cardId)
+            return true
+        } catch {
+            return false
+        }
+    }
+
     // MARK: - Shared cards
 
     /// The Resonance card `message` shares — by the card button, or as a link to the card's page —
@@ -801,9 +814,22 @@ final class ThreadModel {
     func cardLookup(_ key: String) -> CardSummaries.Lookup { sharedCards.lookup(key) }
 
     /// What `message`'s bubble carries besides its words: the card it shares (or its stand-in while
-    /// that is read), else its link's preview, else nothing more (`Carried.of`).
+    /// that is read), else its link's preview, else nothing more (`Carried.of`). A 私人卡 its sender no longer
+    /// shares here reads as one the viewer can't see, whatever was read of it before (``readable(_:in:viewer:)``).
     func carried(_ message: ChatMessage) -> Carried<FeedCard> {
-        Carried.of(message, share: cardShare(of: message), lookup: sharedCards.lookup)
+        Carried.of(message, share: cardShare(of: message)) { Self.readable(sharedCards.lookup($0), in: message, viewer: me) }
+    }
+
+    /// A shared card as the message lets the viewer see it: someone else's 私人卡 — sent by its author, never
+    /// published or kept private — is theirs to read only while the message is their pass to it
+    /// (`privateShare`); once its sender stops sharing it (or for a message from before passes), the card
+    /// read earlier is no longer drawn, and the bubble falls back as for any card the viewer can't see. The
+    /// viewer's own cards, and any card readers have, are as looked up. The web's rule too.
+    static func readable(_ lookup: CardLookup<FeedCard>, in message: ChatMessage, viewer: String?) -> CardLookup<FeedCard> {
+        guard case let .found(card) = lookup, message.cardRef != nil, !message.privateShare,
+              let author = card.author?.value1.id, author != viewer, author == message.senderId,
+              CardScreen.isPrivate(card) else { return lookup }
+        return .hidden
     }
 
     /// The card a link in a message leads to, when it is a card page of the site (it opens in the app).

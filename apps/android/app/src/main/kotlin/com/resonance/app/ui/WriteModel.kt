@@ -136,6 +136,8 @@ interface WriterCalls {
     suspend fun insight(title: String, story: String): String?
     suspend fun upload(image: ByteArray, filename: String): String
     fun illustrate(story: String): Flow<WritingApi.IllustrationEvent>
+    /** Whether the card was ever sent privately in a message (GET …/private-shares); none known, false. */
+    suspend fun sharedPrivately(cardId: String): Boolean = false
 }
 
 /** The writer's calls through the app's [WritingApi]. */
@@ -149,6 +151,7 @@ fun WritingApi.writerCalls(): WriterCalls {
         override suspend fun insight(title: String, story: String) = api.insight(title, story)
         override suspend fun upload(image: ByteArray, filename: String) = api.upload(image, filename)
         override fun illustrate(story: String) = api.illustrate(story)
+        override suspend fun sharedPrivately(cardId: String) = api.sharedPrivately(cardId)
     }
 }
 
@@ -222,6 +225,8 @@ class WriteModel(
     val liveSeen: Boolean = opened != null && opened.isPublished && opened.liveVisibility != "private"
     /** Opened on a card of yours (not one begun here in this visit): its title says what it is. */
     private val editing = opened != null && !beganNew
+    /** The card opened here, when it is one of yours from before this visit (the one the step asks [sharedPrivately] of). */
+    private val openedId: String? = opened?.id?.takeIf { editing }
     var tagDraft by mutableStateOf("")
     var suggestingTags by mutableStateOf(false)
         private set
@@ -400,6 +405,39 @@ class WriteModel(
 
     /** 捨棄修改, the step's one other button: a published card's, only while it has a revision to drop. */
     val showsWayOut: Boolean get() = isPublished && (hasPendingEdit || values != lastSaved)
+
+    /**
+     * The card was once sent privately in a message (a 私人卡 shared in a conversation): whoever read it
+     * knows who wrote it, so 匿名公開 says so ([sharedWarning]). Asked once as the step shows
+     * ([askSharedPrivately]); unknown — not asked yet, or the question failed — is false.
+     */
+    var sharedPrivately by mutableStateOf(false)
+        private set
+    private var sharesAsked = false
+
+    /** The publish step's quiet line under 卡片類型 while 匿名公開 is chosen for a card once shared privately. Warns only. */
+    val sharedWarning: Boolean get() = sharedWarningShows(audience, sharedPrivately)
+
+    /**
+     * As the publish step shows: whether this card of yours was ever shared privately — once per writer,
+     * for a card opened here (one begun here was never sent anywhere). A failure is no warning, and the
+     * next showing of the step asks again; nothing ever waits on it.
+     */
+    fun askSharedPrivately() {
+        val id = openedId ?: return
+        if (sharesAsked) return
+        sharesAsked = true
+        scope.launch {
+            sharedPrivately = try {
+                writing.sharedPrivately(id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                sharesAsked = false
+                false
+            }
+        }
+    }
 
     /** The publish step's resonance line (null: none). */
     val resonanceLine: ResonanceLine?
@@ -1139,6 +1177,9 @@ internal fun reachesOriginal(visibility: String, anonymous: Boolean): Boolean = 
  * named ([liveReaches] false, the audience now reaching) — then it reaches its original, as making it
  * public would.
  */
+/** 卡片類型's warning line: 匿名公開 chosen for a card once shared privately (write.visibility.sharedWarning). */
+internal fun sharedWarningShows(audience: Audience?, sharedPrivately: Boolean): Boolean = sharedPrivately && audience == Audience.Anonymous
+
 internal fun resonanceLine(resonance: Boolean, updating: Boolean, liveReaches: Boolean, visibility: String, anonymous: Boolean): ResonanceLine? {
     if (!resonance) return null
     val reaches = reachesOriginal(visibility, anonymous)

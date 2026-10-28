@@ -86,4 +86,12 @@ class MessagingApi(private val api: DefaultApi) {
      * unsent is nothing.
      */
     suspend fun unsendMessage(pair: String, messageId: String) = call { api.unsendMessage(pair, messageId) }
+
+    /**
+     * Stops sharing one of the viewer's 私人卡 in [pair] (停止分享, DELETE …/shared-cards/{cardId}): every
+     * message of theirs there that shares [cardId] stops being the other person's pass to read it — any
+     * time, unlike unsending. The messages stay. Nothing to stop is nothing; a conversation the viewer
+     * isn't in is `not_found`, over the day's budget `rate_limited` ([ApiFailure]).
+     */
+    suspend fun stopSharingCard(pair: String, cardId: String) = call { api.stopSharingCard(pair, cardId) }
 }

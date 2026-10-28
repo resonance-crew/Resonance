@@ -468,6 +468,16 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // --- private shares (server-only) ---
+    // privateShares/{cardId}: `{ authorId, at }`, the 私人卡 its author once
+    // sent in a message (lib/api/v1/sharedCards) — kept whatever became of the
+    // message, so the publish step can warn before the card goes out
+    // anonymous. Read by its author through GET /api/v1/cards/{id}/private-shares
+    // only; deleted with the card and the account.
+    match /privateShares/{cardId} {
+      allow read, write: if false;
+    }
+
     // --- letters (server-only) ---
     // letters/{writer}_{recipient}: how many notes someone has left a person
     // they aren't connected with, still unanswered (`{ from, to, count, at,

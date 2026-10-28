@@ -2,6 +2,7 @@ import { Timestamp, type BulkWriter, type DocumentReference, type Firestore, typ
 import { cardPagePaths, landingPagePaths, profilePagePaths } from '@/lib/api/revalidate';
 import { CHAT_IMAGES, chatImageFiles } from '@/lib/api/v1/chatImages';
 import { UNSENT_MESSAGES } from '@/lib/api/v1/messageActions';
+import { PRIVATE_SHARES } from '@/lib/api/v1/sharedCards';
 import { restoreCard, trashCard } from '@/lib/api/v1/trash';
 import { HANDLE_HOLDS, HANDLES, holdHandle, reservable, handleKey } from '@/lib/db/firestore/handles';
 import { RETIRED_SLUG, TOMBSTONE, retirable, retiredSlugRef, tombstoneRef } from '@/lib/db/firestore/tombstones';
@@ -233,6 +234,8 @@ async function collectAccountData(db: Firestore, uid: string) {
     // the pictures those carried go above, with the chat pictures sent by or to them.
     db.collection(UNSENT_MESSAGES).where('senderId', '==', uid),
     db.collection(UNSENT_MESSAGES).where('to', '==', uid),
+    // Which of their cards they once sent privately in a message (lib/api/v1/sharedCards).
+    db.collection(PRIVATE_SHARES).where('authorId', '==', uid),
     db.collection('reportEvidence').where('reporterId', '==', uid),
     db.collection('reportEvidence').where('targetUserId', '==', uid),
     // A pending edit outlives its card when an older app deleted the card

@@ -85,6 +85,38 @@ import Testing
         #expect(ReplyQuote(id: "m0", senderId: "a", text: "x", unsent: true).text.isEmpty)
     }
 
+    /// A 私人卡 shared in a message: `privateShare: true` is the recipient's pass, read only beside a card; it
+    /// goes when its sender stops sharing (the document loses the field), and the two then differ.
+    @Test func aPrivateSharesPassComesThroughAndItsGoingIsAChange() {
+        let shared = read(["senderId": "alice", "text": "", "cardRef": "kept", "privateShare": true])
+        #expect(shared.privateShare)
+        let stopped = read(["senderId": "alice", "text": "", "cardRef": "kept"])
+        #expect(!stopped.privateShare)
+        #expect(shared != stopped)
+        // Only `true` beside a card is a pass; an unsent message carries none.
+        #expect(!read(["senderId": "alice", "cardRef": "kept", "privateShare": "true"]).privateShare)
+        #expect(!read(["senderId": "alice", "cardRef": "kept", "privateShare": false]).privateShare)
+        #expect(!read(["senderId": "alice", "text": "hi", "privateShare": true]).privateShare)
+        #expect(!read(["senderId": "alice", "cardRef": "kept", "privateShare": true, "unsentAt": at]).privateShare)
+    }
+
+    /// 停止分享 is the sender's, for a delivered message still sharing a 私人卡 — at any age, unlike unsending.
+    @Test func onlyTheSenderStopsSharingAPrivateCardAtAnyTime() {
+        let sent = Date(timeIntervalSince1970: 1_000_000)
+        let shared = ChatMessage(id: "m1", senderId: "alice", text: "", sentAt: sent, cardRef: "kept", privateShare: true)
+        #expect(shared.canStopSharing(viewer: "alice"))
+        #expect(!shared.canStopSharing(viewer: "bob"))
+        // Long past unsend's day: still the sender's to stop.
+        #expect(!shared.canUnsend(viewer: "alice", now: sent.addingTimeInterval(48 * 3600)))
+        #expect(shared.canStopSharing(viewer: "alice"))
+        // A card that is no pass (public, or stopped already), one not delivered, or an unsent one: nothing to stop.
+        #expect(!ChatMessage(id: "m2", senderId: "alice", text: "", sentAt: sent, cardRef: "pub").canStopSharing(viewer: "alice"))
+        #expect(!ChatMessage(id: "m3", senderId: "alice", text: "", sentAt: sent, cardRef: "kept", privateShare: true,
+                             delivery: .sending).canStopSharing(viewer: "alice"))
+        #expect(!ChatMessage(id: "m4", senderId: "alice", text: "", sentAt: sent, cardRef: "kept", isUnsent: true,
+                             privateShare: true).canStopSharing(viewer: "alice"))
+    }
+
     /// Unsending is for the sender's own delivered plain message within 24 hours.
     @Test func onlyTheSendersOwnPlainMessageOfTheLastDayCanBeUnsent() {
         let sent = Date(timeIntervalSince1970: 1_000_000)

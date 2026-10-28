@@ -107,6 +107,7 @@ function mapMessage(id: string, data: Record<string, unknown>): Message {
     // snapshot — surface "now" so an optimistic message sorts last.
     sentAt: tsToDate(data.sentAt) ?? new Date(),
     cardRef: data.cardRef ? String(data.cardRef) : undefined,
+    ...(data.privateShare === true ? { privateShare: true } : {}),
     noteRef: data.noteRef as Message['noteRef'],
     replyTo: mapReplyQuote(data.replyTo),
     preview: mapPreview(data.preview),
@@ -257,6 +258,12 @@ export async function reactToMessage(pairId: string, messageId: string, reaction
 export async function unsendMessage(pairId: string, messageId: string): Promise<void> {
   requireUid();
   await callApi(`/api/v1/conversations/${encodeURIComponent(pairId)}/messages/${encodeURIComponent(messageId)}/unsend`, { method: 'POST' });
+}
+
+/** 停止分享: the viewer's messages in `pairId` stop sharing their 私人卡 `cardId` (any time, not only within 24 hours). */
+export async function stopSharingCard(pairId: string, cardId: string): Promise<void> {
+  requireUid();
+  await callApi(`/api/v1/conversations/${encodeURIComponent(pairId)}/shared-cards/${encodeURIComponent(cardId)}`, { method: 'DELETE' });
 }
 
 /** Where a picture a message carries is read (the session cookie names the reader): `thumb` the thread's size. */

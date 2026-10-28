@@ -64,6 +64,14 @@ export function isUnsent(message: Message): boolean {
 export const UNSEND_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * Whether the viewer may stop sharing the 私人卡 `message` carries (停止分享):
+ * their own delivered message that shares it (`privateShare`) — at any age.
+ */
+export function canStopSharing(message: ChatMessage, viewerId: string): boolean {
+  return message.senderId === viewerId && message.delivery === 'delivered' && !message.unsentAt && !!message.cardRef && !!message.privateShare;
+}
+
+/**
  * Whether the viewer may unsend `message`: their own, delivered, a plain
  * message (a note — a letter left on a card — never is), within
  * {@link UNSEND_WINDOW_MS} of its sending.

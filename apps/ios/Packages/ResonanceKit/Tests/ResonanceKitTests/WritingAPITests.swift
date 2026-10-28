@@ -103,6 +103,18 @@ actor TokenLog {
         #expect(transport.sentJSON.last??.keys.sorted() == ["anonymous"])
     }
 
+    /// Whether a card was ever sent privately in a message (the publish step's warning before 匿名公開).
+    @Test func asksWhetherACardWasSharedPrivately() async throws {
+        let transport = StubTransport(body: #"{"sharedPrivately":true}"#)
+        #expect(try await api(transport).privateShares("c1"))
+        let request = try #require(transport.requests.first)
+        #expect(request.method == .get)
+        #expect(request.path == "/cards/c1/private-shares")
+        #expect(try await api(StubTransport(body: #"{"sharedPrivately":false}"#)).privateShares("c1") == false)
+        let notYours = StubTransport(status: .notFound, body: #"{"error":{"code":"not_found","message":"No."}}"#)
+        await #expect(throws: APIFailure.self) { try await api(notYours).privateShares("c1") }
+    }
+
     @Test func deletesACardThroughTheContract() async throws {
         let transport = StubTransport(status: .noContent, body: "")
         try await api(transport).deleteCard("c1")

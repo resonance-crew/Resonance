@@ -96,6 +96,16 @@ export interface PublishedCard {
 }
 
 /**
+ * Whether the viewer's card `id` was ever sent privately in a message (a 私人卡
+ * shared in a conversation): whoever read it knows whose it is, so the publish
+ * step warns before it goes out anonymous. Server-only record; asked of the API.
+ */
+export async function getPrivateShares(id: string): Promise<boolean> {
+  requireUid();
+  return (await callApi<{ sharedPrivately: boolean }>(`/api/v1/cards/${encodeURIComponent(id)}/private-shares`)).sharedPrivately === true;
+}
+
+/**
  * Publish one of your cards through the server, the same call the apps make.
  * The rules keep `publishedAt` and the slug out of the client's reach: the
  * server stamps the card once (re-stamping would re-date it in every feed),

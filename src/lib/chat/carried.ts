@@ -22,14 +22,34 @@ export type Carried =
   | { kind: 'cardLoading'; shared: MessageCard }
   | { kind: 'nothing' };
 
-/** `shared` is the card the message is about ({@link messageCard}); `lookup` what is known of it. */
-export function carriedOf(message: Message, shared: MessageCard | null, lookup: CardLookup | null): Carried {
+/**
+ * `shared` is the card the message is about ({@link messageCard}); `lookup` what is known of it; `viewerId` who
+ * reads the thread. Someone else's 私人卡 read earlier is drawn only while a message of its author shares it
+ * (`privateShare`): once they stop sharing it, the card the thread still holds reads as one the viewer can't see,
+ * as the server would answer it now.
+ */
+export function carriedOf(message: Message, shared: MessageCard | null, lookup: CardLookup | null, viewerId?: string): Carried {
   if (shared && lookup) {
-    if (lookup.status === 'ready') return { kind: 'card', card: lookup.card, author: lookup.author, shared };
+    if (lookup.status === 'ready' && !sharedNoLonger(message, shared, lookup.card, viewerId)) {
+      return { kind: 'card', card: lookup.card, author: lookup.author, shared };
+    }
     if (lookup.status === 'loading') return { kind: 'cardLoading', shared };
   }
   if (message.preview) return { kind: 'preview', preview: message.preview };
   return message.text || message.noteRef ? { kind: 'words' } : { kind: 'nothing' };
+}
+
+/** A card its author sent as this message and no longer shares with the viewer (see carriedOf). */
+function sharedNoLonger(message: Message, shared: MessageCard, card: Card, viewerId: string | undefined): boolean {
+  const kept = !card.publishedAt || card.visibility === 'private';
+  return (
+    !!viewerId &&
+    shared.via === 'cardRef' &&
+    !message.privateShare &&
+    kept &&
+    card.authorId === message.senderId &&
+    card.authorId !== viewerId
+  );
 }
 
 /**

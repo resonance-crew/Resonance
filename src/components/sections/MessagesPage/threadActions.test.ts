@@ -10,6 +10,7 @@ const labels: MenuLabels = {
   openLink: 'Open link',
   copyLink: 'Copy link',
   unsend: 'Unsend',
+  stopSharing: 'Stop sharing',
   report: 'Report',
   retry: 'Retry',
   discard: 'Delete',
@@ -31,5 +32,20 @@ describe('messageMenuItems', () => {
 
   it('leads with the link’s rows when the press was on the link', () => {
     expect(rows(true).map(([key]) => key)).toEqual(['open', 'copyLink', 'reply', 'copy', 'report']);
+  });
+
+  it('offers 停止分享 on the viewer’s own message sharing their 私人卡, at any age, and on nothing else', () => {
+    const old = new Date('2026-01-01T00:00:00Z');
+    const now = new Date('2026-10-28T00:00:00Z').getTime();
+    const keys = (m: Partial<ChatMessage>) =>
+      messageMenuItems({ ...theirs, text: '', senderId: 'me', sentAt: old, ...m }, null, labels, { withReply: true, viewerId: 'me', now }).map(
+        (it) => it.key,
+      );
+    expect(keys({ cardRef: 'c1', privateShare: true })).toEqual(['reply', 'stopSharing']);
+    // Stopped already, a card no longer shared, someone else's, not yet delivered, unsent: no row.
+    expect(keys({ cardRef: 'c1' })).toEqual(['reply']);
+    expect(keys({ cardRef: 'c1', privateShare: true, senderId: 'alice' })).not.toContain('stopSharing');
+    expect(keys({ cardRef: 'c1', privateShare: true, delivery: 'sending' })).not.toContain('stopSharing');
+    expect(keys({ cardRef: 'c1', privateShare: true, unsentAt: old })).toEqual([]);
   });
 });

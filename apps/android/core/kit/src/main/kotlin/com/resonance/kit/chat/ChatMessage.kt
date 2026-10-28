@@ -89,6 +89,12 @@ data class ChatMessage(
     val reactions: Map<String, String> = emptyMap(),
     /** When its sender unsent it (round 16 §3): the document then holds nothing else but who sent it and when. */
     val unsentAt: Date? = null,
+    /**
+     * Its sender shared their own 私人卡 ([cardRef]) and the message is its recipient's pass to read it
+     * (`privateShare: true`, written by the server). It goes when the sender stops sharing it (停止分享)
+     * while the thread is open — the message stays, the card no longer reads.
+     */
+    val privateShare: Boolean = false,
 ) {
     /** Still on its way, or failed: nothing is known of it by the server (yet). */
     val isPending: Boolean get() = delivery != Delivery.Delivered
@@ -124,6 +130,8 @@ data class ChatMessage(
                 image = ChatImage.from(fields["image"] as? Map<*, *>),
                 isNote = fields["kind"] == "note",
                 reactions = reactions(fields["reactions"] as? Map<*, *>),
+                // Only beside the card it shares: a stray marker on a message without one is no pass to anything.
+                privateShare = fields["privateShare"] == true && !(fields["cardRef"] as? String).isNullOrEmpty(),
             )
         }
 

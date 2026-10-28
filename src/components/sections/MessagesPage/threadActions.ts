@@ -2,7 +2,7 @@
 
 import { createContext, useContext, type KeyboardEvent, type MouseEvent } from 'react';
 import type { OrganicMenuItem } from '@/components/molecules/OrganicMenu/OrganicMenu';
-import { canReply, canUnsend, type ChatMessage } from '@/lib/chat/message';
+import { canReply, canStopSharing, canUnsend, type ChatMessage } from '@/lib/chat/message';
 import type { ReactionId } from '@/lib/design/reactions';
 import type { Carried } from '@/lib/chat/carried';
 import type { RunPosition } from '@/lib/chat/rows';
@@ -61,6 +61,8 @@ export interface ThreadActions {
   react(message: ChatMessage, reaction: ReactionId | null): void;
   /** Asks to unsend one of the viewer's own messages (a confirm first). */
   unsend(message: ChatMessage): void;
+  /** 停止分享: the viewer's 私人卡 this message shares is no longer the other person's to read (a toast says so). */
+  stopSharing(message: ChatMessage): void;
   /** Reports one of their messages: the report dialog, for that message. */
   report(message: ChatMessage): void;
 }
@@ -80,6 +82,7 @@ export interface MenuLabels {
   openLink: string;
   copyLink: string;
   unsend: string;
+  stopSharing: string;
   report: string;
   retry: string;
   discard: string;
@@ -102,7 +105,9 @@ export interface MenuViewer {
  * the link's Open (→) and Copy (its link glyph, never Copy's twin) — the one
  * under the finger, or the message's own; leading the list when the finger
  * was on it —, Unsend (the viewer's own plain message, delivered, within 24
- * hours — plain colour, it asks first), Report this message (theirs,
+ * hours — plain colour, it asks first), Stop sharing (停止分享: the viewer's
+ * own message sharing their 私人卡, at any age — plain colour, a toast after),
+ * Report this message (theirs,
  * delivered), and for one that didn't go, Retry and Delete. An unsent
  * message has no menu.
  */
@@ -120,6 +125,7 @@ export function messageMenuItems(message: ChatMessage, link: MessageLink | null,
   if (message.text) items.push({ key: 'copy', icon: 'copy', label: labels.copy });
   if (!viewer.onLink) items.push(...linkRows);
   if (canUnsend(message, viewer.viewerId, viewer.now)) items.push({ key: 'unsend', icon: 'restore', label: labels.unsend });
+  if (canStopSharing(message, viewer.viewerId)) items.push({ key: 'stopSharing', icon: 'lock', label: labels.stopSharing });
   if (message.senderId !== viewer.viewerId && message.delivery === 'delivered') items.push({ key: 'report', icon: 'flag', label: labels.report });
   if (message.delivery === 'failed') {
     items.push({ key: 'retry', icon: 'send', label: labels.retry });
@@ -135,6 +141,7 @@ export function chooseMenuItem(key: string, message: ChatMessage, link: MessageL
   else if (key === 'open' && link) actions.openLink(link);
   else if (key === 'copyLink' && link) actions.copy(link.url);
   else if (key === 'unsend') actions.unsend(message);
+  else if (key === 'stopSharing') actions.stopSharing(message);
   else if (key === 'report') actions.report(message);
   else if (key === 'retry') actions.retry(message.key);
   else if (key === 'discard') actions.discard(message.key);

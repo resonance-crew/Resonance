@@ -67,6 +67,7 @@ import com.resonance.design.generated.ReactionId
 import com.resonance.design.messageActionsHeight
 import com.resonance.design.plainClickable
 import com.resonance.design.prefersReducedMotion
+import com.resonance.kit.chat.ChatMessage
 import com.resonance.kit.chat.Delivery
 import com.resonance.kit.chat.MessageReactions
 import com.resonance.kit.l10n.L10n
@@ -79,7 +80,7 @@ import kotlin.math.roundToInt
  * What a press and hold on a message offers (round 16 §3), in this order: when the press was on a link,
  * its two rows first (round 16 review S8: 開啟連結 with the arrow, 複製連結 with the link — no longer the
  * copy glyph twice two rows apart) · 回覆 · 複製 · 收回 (your own, delivered, not a note, within 24 h;
- * asked first) · 檢舉這則訊息 (theirs, delivered: the report flow for that one message) · and for one that
+ * asked first) · 停止分享 (your own 私人卡 still shared by it, any time: [canStopSharing]) · 檢舉這則訊息 (theirs, delivered: the report flow for that one message) · and for one that
  * didn't go, 重試 and 刪除. The full time is the list's quiet foot.
  */
 internal fun messageActions(
@@ -90,6 +91,7 @@ internal fun messageActions(
     open: (Route) -> Unit,
     reply: () -> Unit,
     unsend: () -> Unit,
+    stopSharing: () -> Unit,
     report: () -> Unit,
 ): List<MessageAction> {
     val message = menu.row.message
@@ -100,6 +102,7 @@ internal fun messageActions(
         hasText = message.text.isNotEmpty(),
         onLink = menu.link != null,
         canUnsend = MessageReactions.canUnsend(message, model.me),
+        canStopSharing = canStopSharing(message, model.me),
         canReport = !mine && message.delivery == Delivery.Delivered && !message.isUnsent,
         failed = message.delivery == Delivery.Failed,
     )
@@ -111,6 +114,8 @@ internal fun messageActions(
             MessageActionKind.Reply -> MessageAction(L10n.Messages.reply, IconName.Reply) { reply() }
             MessageActionKind.Copy -> MessageAction(L10n.Native.copy, IconName.Copy) { copyText(context, message.text) }
             MessageActionKind.Unsend -> MessageAction(L10n.Messages.unsend, IconName.Restore) { unsend() }
+            // Plain colour, asked nothing: it ends their reading, the message stays (sending it again shares it again).
+            MessageActionKind.StopSharing -> MessageAction(L10n.Messages.stopSharing, IconName.Lock) { stopSharing() }
             MessageActionKind.Report -> MessageAction(L10n.Safety.reportThisMessage, IconName.Flag) { report() }
             MessageActionKind.Retry -> MessageAction(L10n.Messages.retry, IconName.Send) { model.retry(message.key) }
             MessageActionKind.Discard -> MessageAction(L10n.Messages.discardFailed, IconName.Trash, destructive = true) { model.discard(message.key) }
@@ -119,11 +124,20 @@ internal fun messageActions(
 }
 
 /** The rows a held message's action list can have ([messageActionKinds] orders them). */
-internal enum class MessageActionKind { OpenLink, CopyLink, Reply, Copy, Unsend, Report, Retry, Discard }
+internal enum class MessageActionKind { OpenLink, CopyLink, Reply, Copy, Unsend, StopSharing, Report, Retry, Discard }
+
+/**
+ * Whether [me] may stop sharing the card [message] carries (停止分享): their own message, delivered and
+ * not unsent, carrying a card it is still the other person's pass to read ([ChatMessage.privateShare]).
+ * No time window, unlike 收回.
+ */
+internal fun canStopSharing(message: ChatMessage, me: String?): Boolean =
+    me != null && message.senderId == me && message.delivery == Delivery.Delivered && !message.isUnsent &&
+        message.cardRef != null && message.privateShare
 
 /**
  * The held message's rows, in order: the link's two first when the press was on one ([onLink]), then
- * 回覆 · 複製 · 收回 · 檢舉這則訊息 · 重試 · 刪除 as each applies.
+ * 回覆 · 複製 · 收回 · 停止分享 · 檢舉這則訊息 · 重試 · 刪除 as each applies.
  */
 internal fun messageActionKinds(
     canReply: Boolean,
@@ -132,6 +146,7 @@ internal fun messageActionKinds(
     canUnsend: Boolean,
     canReport: Boolean,
     failed: Boolean,
+    canStopSharing: Boolean = false,
 ): List<MessageActionKind> = buildList {
     if (onLink) {
         add(MessageActionKind.OpenLink)
@@ -140,6 +155,7 @@ internal fun messageActionKinds(
     if (canReply) add(MessageActionKind.Reply)
     if (hasText) add(MessageActionKind.Copy)
     if (canUnsend) add(MessageActionKind.Unsend)
+    if (canStopSharing) add(MessageActionKind.StopSharing)
     if (canReport) add(MessageActionKind.Report)
     if (failed) {
         add(MessageActionKind.Retry)

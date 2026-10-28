@@ -1136,6 +1136,66 @@
         }
       }
     },
+    "/cards/{key}/private-shares": {
+      "get": {
+        "operationId": "getPrivateShares",
+        "summary": "Whether your card was ever sent privately in a message — to warn before making it anonymous",
+        "description": "True once one of your messages shared this card as a 私人卡, whatever became of the message since (unsent, stopped, the conversation deleted): its recipient may have read it, and knows it is yours. Making it anonymous is still yours to choose; clients say so first. Anyone else's card, or none, is `404`.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "The card id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrivateShares"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/cards/{key}/related": {
       "get": {
         "operationId": "getRelatedCards",
@@ -1913,7 +1973,7 @@
       "post": {
         "operationId": "sendMessage",
         "summary": "Message someone you are connected with (opens the conversation; its first message rings their bell), or answer a note they left you while you weren't (`request.from` is them): that answer connects you — and answers it all the same once you are",
-        "description": "Checked in this order: the contract (`400`); your message budget (`429`); the request itself (`400`: messaging yourself, no text, no card and no picture, a card and a picture together, a `clientId` or `replyTo` Firestore keeps for itself); `cardRef` (`404` for a card you can't read, or one in the trash; one of your own 私人卡, published or never, may be sent — the message is its recipient's pass to read it, never to answer it, for as long as the message stands and the card is named and out of the trash, with no block either way; `400`, \"An anonymous card is shared only while it is public.\", for an anonymous card of yours no one else may read); a `clientId` already used — yours answers `201` as it was first sent, someone else's is `400`; your pen name (`403 forbidden`, \"Choose a pen name first.\"); a block either way (`403 blocked`); the connection (`403 forbidden`, \"You can message people you are connected with.\", unless a letter of theirs waits in your conversation — then your answer connects you); `noteRef`, a note they left you on the card it names (else `400`, \"That is not a note they left you.\"); `replyTo`, a message of this conversation (else `400`); `image`, a picture you uploaded for this conversation and sent with no other message (else `400`, \"That is not a picture you can send here.\"). A reply to a note left on your anonymous card, or to a note no longer there whose card is gone too (deleting a card deletes its notes) or isn't yours, is sent without its `noteRef`, saying nothing of the card — and still answers a letter; a note no longer there on your own card, still there, is the `400`. A message from the original's author of a resonance standing between you, to its writer, answers that resonance (see `unresonateCard`).",
+        "description": "Checked in this order: the contract (`400`); your message budget (`429`); the request itself (`400`: messaging yourself, no text, no card and no picture, a card and a picture together, a `clientId` or `replyTo` Firestore keeps for itself); `cardRef` (`404` for a card you can't read, or one in the trash; one of your own 私人卡, published or never, may be sent — the message is its recipient's pass to read it, never to answer it, for as long as the message stands and shares it (`stopSharingCard`) and the card is named and out of the trash, with no block either way; `400`, \"An anonymous card is shared only while it is public.\", for an anonymous card of yours no one else may read); a `clientId` already used — yours answers `201` as it was first sent, someone else's is `400`; your pen name (`403 forbidden`, \"Choose a pen name first.\"); a block either way (`403 blocked`); the connection (`403 forbidden`, \"You can message people you are connected with.\", unless a letter of theirs waits in your conversation — then your answer connects you); `noteRef`, a note they left you on the card it names (else `400`, \"That is not a note they left you.\"); `replyTo`, a message of this conversation (else `400`); `image`, a picture you uploaded for this conversation and sent with no other message (else `400`, \"That is not a picture you can send here.\"). A reply to a note left on your anonymous card, or to a note no longer there whose card is gone too (deleting a card deletes its notes) or isn't yours, is sent without its `noteRef`, saying nothing of the card — and still answers a letter; a note no longer there on your own card, still there, is the `400`. A message from the original's author of a resonance standing between you, to its writer, answers that resonance (see `unresonateCard`).",
         "requestBody": {
           "required": true,
           "content": {
@@ -2241,6 +2301,78 @@
             }
           },
           "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conversations/{pair}/shared-cards/{cardId}": {
+      "delete": {
+        "operationId": "stopSharingCard",
+        "summary": "Stop sharing your 私人卡 in this conversation (停止分享): every message of yours here that shares it stops being the other person's pass to read it — any time, not only within unsend's 24 hours. The messages stay; the card reads to them as one they cannot read. Sending it again shares it again. Nothing to stop answers `204`",
+        "description": "Checked in this order: the contract (`400`); your budget (`429`); the conversation (`404` for one you are not in, whether it exists or not). Across a block too: it reaches no one.",
+        "parameters": [
+          {
+            "name": "pair",
+            "in": "path",
+            "required": true,
+            "description": "The conversation's id: its two participants' uids, sorted, joined by `_`",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cardId",
+            "in": "path",
+            "required": true,
+            "description": "The card's id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No message here shares it any longer"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "Error",
             "content": {
               "application/json": {
@@ -3651,6 +3783,18 @@
           "reaction"
         ],
         "description": "Answer a message with a reaction (it replaces your own earlier one on that message)."
+      },
+      "PrivateShares": {
+        "type": "object",
+        "properties": {
+          "sharedPrivately": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sharedPrivately"
+        ],
+        "description": "Whether your card was ever sent privately in a message (a 私人卡 shared in a conversation). Its recipient knows you wrote it, so making it anonymous hides it from no one who read it then."
       },
       "HandleAvailability": {
         "type": "object",

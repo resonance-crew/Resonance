@@ -140,6 +140,8 @@ function sameMessage(held: Message | undefined, next: Message): boolean {
     held.text === next.text &&
     held.sentAt.getTime() === next.sentAt.getTime() &&
     held.cardRef === next.cardRef &&
+    // 停止分享 takes the marker away while the thread is open: the recipient's bubble then reads as unreadable.
+    !!held.privateShare === !!next.privateShare &&
     held.kind === next.kind &&
     JSON.stringify(held.noteRef ?? null) === JSON.stringify(next.noteRef ?? null) &&
     JSON.stringify(held.replyTo ?? null) === JSON.stringify(next.replyTo ?? null) &&

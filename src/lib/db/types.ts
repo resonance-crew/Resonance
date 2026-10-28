@@ -297,6 +297,12 @@ export interface Message {
   sentAt: Date;
   /** A shared card (後期: renders as an EmbedStoryCard). */
   cardRef?: string;
+  /**
+   * The sender's own 私人卡 (`cardRef`), shared with the recipient by this
+   * message (api/v1/sharedCards): their pass to read it, until its sender
+   * stops sharing it (停止分享), unsends it or the conversation goes.
+   */
+  privateShare?: boolean;
   /** Set when the message quotes the 紙條 that seeded the conversation. */
   noteRef?: { cardId: string; noteId: string };
   /** The message this one answers, as it read when the reply was sent. */

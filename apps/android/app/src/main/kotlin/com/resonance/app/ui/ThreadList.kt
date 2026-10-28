@@ -605,9 +605,28 @@ private fun TheirFace(shown: Boolean, ctx: ThreadContext) {
 }
 
 /** What [message]'s bubble carries besides its words ([Carried.of], with what this thread has read of shared cards). */
-internal fun ThreadModel.carried(message: ChatMessage): Carried =
+internal fun ThreadModel.carried(message: ChatMessage): Carried {
     // An unsent message is still a row (its ghost), though it carries nothing.
-    if (message.isUnsent) Carried.Words else Carried.of(message, sharedCard(message), cards, cardsLoading)
+    if (message.isUnsent) return Carried.Words
+    val shared = sharedCard(message)
+    // A 私人卡 whose sharing ended while this thread held it (停止分享) reads as a card the viewer can't see, not as read before.
+    if (shared != null && shared.attached && sharingEnded(message, cards[shared.key], me)) {
+        return Carried.of(message, shared, mapOf(shared.key to null), emptySet())
+    }
+    return Carried.of(message, shared, cards, cardsLoading)
+}
+
+/**
+ * Whether [message]'s carried [card], as this thread read it earlier, is no longer the viewer's to read:
+ * the message carries it without the pass ([ChatMessage.privateShare] gone — its sender stopped sharing
+ * it), and it is its sender's 私人卡 — someone else's, kept to its author. The viewer's own cards, and
+ * anyone's card readers have, are unaffected (the web's rule too).
+ */
+internal fun sharingEnded(message: ChatMessage, card: FeedCard?, me: String?): Boolean {
+    card ?: return false
+    val author = card.author?.id ?: return false
+    return message.cardRef != null && !message.privateShare && author != me && author == message.senderId && card.keptPrivate
+}
 
 /** A bubble carrying a link's preview is this wide (or the row's widest); one carrying a card, [CARD_WIDTH]. */
 private val PREVIEW_WIDTH = 280.dp
