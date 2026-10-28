@@ -12,8 +12,8 @@ struct AuthorScreen: View {
     @State private var model: ProfileModel?
     @State private var scrolled = false
     @State private var unblocking = false
-    /// A tablet's header (round 5 C1): the person's name fades into its centre once theirs on the page
-    /// has scrolled under it.
+    /// The person comes up into the bar once their name on the page has scrolled under it, as a card's
+    /// author does once its byline has: beside the arrow on a phone, on a tablet header's centre line.
     @Environment(\.headerChrome) private var headerChrome
     @State private var nameBottom: CGFloat?
     @State private var nameGone = false
@@ -42,13 +42,16 @@ struct AuthorScreen: View {
         .onHeaderScroll($scrolled)
         .onScrollGeometryChange(for: Bool.self) { geo in
             HeaderContext.shown(headingBottom: nameBottom, visibleTop: geo.contentOffset.y + geo.contentInsets.top)
-        } action: { _, gone in nameGone = gone }
+        } action: { _, gone in
+            withAnimation(.easeOut(duration: 0.2)) { nameGone = gone }
+        }
         .scrollIndicators(.hidden)
         .background(Tokens.cream)
         .safeAreaInset(edge: .top, spacing: 0) {
             OrganicInlineBar("", backLabel: L10n.App.Nav.back, scrolled: scrolled) {
-                if headerChrome != nil, let profile = model?.profile {
-                    HeaderContextTitle(profile.author.handle, shown: nameGone && model?.phase == .loaded)
+                if let profile = model?.profile, model?.phase == .loaded, nameGone {
+                    BarPerson(author: profile.author, centred: headerChrome != nil)
+                        .transition(.opacity.combined(with: .offset(y: 8)))
                 }
             } trailing: {
                 // Their page's link, straight to the system's sheet (nothing to choose between): before the
@@ -201,6 +204,29 @@ struct AuthorScreen: View {
 
     /// "TW" → "台灣" in the reader's language (its SquareFlag is drawn beside it); free text stays as it is.
     static func regionLabel(_ region: String) -> String { ProfileRegion.label(region) }
+}
+
+/// The person in the bar once their name on the page has gone up under it (the card page's author in
+/// its bar): their avatar small and the pen name, one line, truncated — a phone's beside the arrow in the
+/// bar's 15 semibold, a tablet's on the header's centre line in its context title's face.
+private struct BarPerson: View {
+    let author: Author
+    let centred: Bool
+
+    var body: some View {
+        HStack(spacing: centred ? 10 : 8) {
+            HandDrawnAvatar(initials: author.initials, imageURL: author.avatarUrl.flatMap(URL.init(string:)),
+                            color: author.accent, size: 28, seed: author.avatarSeedValue)
+            Text(author.handle)
+                .font(centred ? HeaderContextTitle.font : AppFonts.body(15, weight: .semibold))
+                .foregroundStyle(Tokens.text)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(author.handle)
+        .accessibilityAddTraits(.isHeader)
+    }
 }
 
 /// The profile's loading state: the hero's avatar, name, bio and meta as

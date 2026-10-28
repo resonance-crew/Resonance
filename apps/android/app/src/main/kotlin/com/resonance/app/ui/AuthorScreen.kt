@@ -1,6 +1,16 @@
 package com.resonance.app.ui
 
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.ui.text.style.TextOverflow
+import com.resonance.api.models.Author
+import com.resonance.design.TabletPageTitle
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.contentDescription
@@ -242,8 +252,9 @@ fun AuthorScreen(session: Session, handle: String, open: (Route) -> Unit, back: 
     }
     OrganicInlineBar(
         L10n.App.Nav.back, back, scrolled = list.scrolledPast20(),
-        title = if (chrome != null) profile?.author?.handle else null,
-        titleShown = nameGone,
+        // The person comes up into the bar once their name on the page has gone under it, as a card's author does
+        // once its byline has: beside the arrow on a phone, in the middle of a tablet's header.
+        centre = { profile?.let { BarPerson(it.author, visible = phase == "loaded" && nameGone, centred = chrome != null) } },
     ) {
         // Their page's link, straight to the system sheet (nothing to choose between): before the ⋯,
         // alone on your own page, and not while you've blocked them.
@@ -257,6 +268,33 @@ fun AuthorScreen(session: Session, handle: String, open: (Route) -> Unit, back: 
             SafetyMenu(session, SafetyService.Target.User(p.author.id), p.author.handle, p.isBlocked, seed = seedFromString(p.author.id).toDouble(), onChange = reload)
         }
     }
+    }
+}
+
+/**
+ * The person in the bar (the card page's author in its bar): their avatar small and the pen name, one line,
+ * rising in as their name on the page leaves — a phone's in the bar's 15 semibold, a tablet's in its header
+ * title's face.
+ */
+@Composable
+private fun RowScope.BarPerson(author: Author, visible: Boolean, centred: Boolean) {
+    AnimatedVisibility(
+        visible,
+        Modifier.weight(1f, fill = false),
+        enter = fadeIn(tween(180)) + slideInVertically(tween(220)) { it / 3 },
+        exit = fadeOut(tween(140)) + slideOutVertically(tween(180)) { it / 3 },
+    ) {
+        Row(
+            Modifier.padding(start = 2.dp).semantics(mergeDescendants = true) { heading() },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(if (centred) 10.dp else 8.dp),
+        ) {
+            HandDrawnAvatar(author.initials, author.avatarUrl, author.accent(), 28.dp, author.avatarSeedValue())
+            BasicText(
+                author.handle, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = if (centred) AppFonts.heading(TabletPageTitle, 700, lineHeight = 1.25f).copy(letterSpacing = (-0.01).em) else AppFonts.body(15f, 600, color = Tokens.Text),
+            )
+        }
     }
 }
 
