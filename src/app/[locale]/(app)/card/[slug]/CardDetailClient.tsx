@@ -223,6 +223,9 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   // A 私人卡 (round 9 §1): a card only its author sees — never published, or published and kept private.
   // Its page is its owner's reader of it: the meta line says so, and its pen (where share would be) edits it.
   const privateCard = isOwner && (!card.publishedAt || card.visibility === 'private');
+  // Someone else's 私人卡 the viewer reads at all was shared with them in a message (api/v1/sharedCards): theirs
+  // to read, and only to read — no note, no resonance, no bookmark (the server would refuse each).
+  const sharedPrivate = !isOwner && (!card.publishedAt || card.visibility === 'private');
 
   // The card's share and ⋯: under its title (the byline's end) and again at its story's end (round 8 §10.2).
   const cardActions = (
@@ -329,7 +332,7 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
               anonymous={card.anonymous}
               minutes={readMinutes(card.story)}
               published={published}
-              privateCard={privateCard}
+              privateCard={privateCard || sharedPrivate}
               actions={cardActions}
             />
 
@@ -363,6 +366,11 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
                 story is long enough that the byline's are out of view (round 12 §5); its author's alone. */}
             {isOwner ? (
               endsApart && wide === true && <div className={styles.endActions}>{cardActions}</div>
+            ) : sharedPrivate ? (
+              <div className={styles.sharedEnd}>
+                <p className={styles.sharedNote}>{t('sharedPrivately', { handle: author.handle })}</p>
+                {endsApart && wide === true && cardActions}
+              </div>
             ) : (
               <ReadAfterArea
                 cardId={card.id}

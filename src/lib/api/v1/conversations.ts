@@ -7,6 +7,7 @@ import { ApiFailure } from './http';
 import { addReason, answeredBy, connect, letterReason, originsRef } from './origins';
 import { CARD_VISIBILITY_FIELDS, cardVisible } from './present';
 import { visibleCardById } from './reads';
+import { keptPrivate } from './sharedCards';
 
 /** notes.ts / firestore.rules: a note's length, and the bell's preview of it. */
 export const NOTE_MAX_LENGTH = 2000;
@@ -530,14 +531,23 @@ async function writeMessage(db: Firestore, uid: string, input: SendMessageInput,
     ]);
     // The budget answers before anything else, and before anything is written (see budgetFirst).
     await spent;
-    const card = cardRead ? await cardRead : null;
-    // A draft, or your own card in the trash (no one else can read one), is no card to share.
-    if (card && (!card.publishedAt || card.trashedAt != null)) throw new ApiFailure('not_found', 'No such card.');
-    // The same message again: what the first send wrote is the answer, whatever has changed since.
+    // The same message again: what the first send wrote is the answer, whatever has changed since (its card too).
     if (existing?.exists) {
       if (existing.get('senderId') !== uid) throw new ApiFailure('invalid_request', 'Not a valid client id.');
       return { conversationId: pair, id: message.id, notificationId: null, duplicate: true, push: null };
     }
+    const card = cardRead ? await cardRead : null;
+    // Your own card in the trash (no one else can read one) is no card to share; nor is someone else's draft,
+    // which you can't read. Your own 私人卡, published or never, is: the message lets them read it (./sharedCards).
+    if (card && (card.trashedAt != null || (!card.publishedAt && card.authorId !== uid))) throw new ApiFailure('not_found', 'No such card.');
+    // An anonymous card no one else may read would come with its author's name (the sender's): it isn't shared
+    // so (sharedCards reads none) — public, its link names no one.
+    if (card && card.authorId === uid && card.anonymous === true && !(card.publishedAt && card.visibility === 'public')) {
+      throw new ApiFailure('invalid_request', 'An anonymous card is shared only while it is public.');
+    }
+    // Your 私人卡 sent now: this message is their pass to read it (sharedCards reads only messages so marked —
+    // never a card sent while others could read it and made private later, nor an older message's card).
+    const privateShare = !!card && card.authorId === uid && keptPrivate(card);
     if (!hasPenName(me)) throw noPenName();
     if (blockOut.exists || blockIn.exists) throw new ApiFailure('blocked', 'You cannot message this person.');
     // Answering their letter (I am its recipient): without a connection, this reply is what connects the two of you.
@@ -592,6 +602,7 @@ async function writeMessage(db: Firestore, uid: string, input: SendMessageInput,
       text: input.text,
       sentAt: FieldValue.serverTimestamp(),
       ...(card ? { cardRef: card.id } : {}),
+      ...(privateShare ? { privateShare: true } : {}),
       ...(keptNoteRef ? { noteRef: { cardId: keptNoteRef.cardId, noteId: keptNoteRef.noteId } } : {}),
       ...(quoted ? { replyTo: quoted } : {}),
       ...(picture ? { image: picture } : {}),
@@ -604,7 +615,7 @@ async function writeMessage(db: Firestore, uid: string, input: SendMessageInput,
     tx.set(conversation, {
       lastMessage: {
         // A card's title only when anyone may read the card: the list is the recipient's even when the card isn't.
-        text: cut(input.text || (card && card.visibility === 'public' ? card.thoughtCore : '') || '', LAST_MESSAGE_PREVIEW),
+        text: cut(input.text || (card && card.publishedAt && card.visibility === 'public' ? card.thoughtCore : '') || '', LAST_MESSAGE_PREVIEW),
         senderId: uid,
         sentAt: FieldValue.serverTimestamp(),
         image: picture ? true : FieldValue.delete(),

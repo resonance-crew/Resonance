@@ -63,7 +63,9 @@ struct ThreadComposer: View {
             }
         case .card:
             if let card = model.pendingCard {
-                ComposerRow(label: L10n.Messages.attachCardShort, detail: card.title, removeLabel: L10n.Messages.removeCard,
+                // A 私人卡 says so: the message is what lets them read it.
+                ComposerRow(label: CardScreen.isPrivate(card) ? L10n.Messages.privateCard : L10n.Messages.attachCardShort,
+                            detail: card.title, removeLabel: L10n.Messages.removeCard,
                             onRemove: { model.pendingCard = nil }) {
                     ComposerRowTile(card.imageUrl.flatMap(URL.init(string:)).map { .cover($0) } ?? .glyph(.cards))
                 }

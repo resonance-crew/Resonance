@@ -405,7 +405,8 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                 actions = if (actionsSlot == CardActionsSlot.Byline && !trashedOwn) {
                                     { CardPageActions(session, d, sharing, open, onShare = share, onTrashed = { trashedHere++ }, seed = card.accentHue ?: 55.0) }
                                 } else null,
-                                privateCard = isPrivateCard(d),
+                                // Someone else's 私人卡, shared with the viewer in a message, wears the same lock.
+                                privateCard = isPrivateCard(d) || isSharedPrivateCard(d),
                             ) { open(Route.Author(it)) }
                             // The story alone is what the bar's progress measures (not the cover, title or lists).
                             Box(Modifier.onGloballyPositioned(progress::story)) {
@@ -420,8 +421,15 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                 card.tags.forEach { TagPill(it, fill = Tokens.TerracottaLight) }
                             }
                             // The story's end is the response bar alone (round 9 §3: share and ⋯ are in the bar,
-                            // or the byline); the author's own card has no end row.
-                            if (!trashedOwn && !d.isOwner) CardViewerActions(
+                            // or the byline); the author's own card has no end row. Someone else's 私人卡 is theirs
+                            // to read and only to read (the server refuses a note, a resonance, a bookmark): a quiet
+                            // line says whose it is and why the viewer reads it, in the response row's place.
+                            if (isSharedPrivateCard(d)) BasicText(
+                                L10n.Card.sharedPrivately(card.author?.handle.orEmpty()),
+                                style = AppFonts.body(14f, lineHeight = 1.5f, color = Tokens.TextMuted),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 40.dp),
+                            )
+                            else if (!trashedOwn && !d.isOwner) CardViewerActions(
                                 session, card.id, card.referenceCardId,
                                 onWriteNew = { open(Route.Write(referenceCardId = card.id)) },
                                 onModify = { mine -> open(Route.Write(cardId = mine)) },
@@ -683,6 +691,15 @@ private fun StoryByline(
  */
 internal fun isPrivateCard(d: com.resonance.api.models.CardDetail): Boolean =
     d.isOwner && !d.card.isTrashed && (d.card.publishedAt == null || d.card.visibility == FeedCard.Visibility.`private`)
+
+/**
+ * Someone else's 私人卡 (never published, or kept private): read at all only because its author
+ * shared it with the viewer in a message (api/v1/sharedCards). Its page wears the 私人卡 lock, has no
+ * share (ShareLinks.canShare) and, in the response row's place, the quiet card.sharedPrivately line;
+ * its ⋯ is the reader's report / block as on any card of theirs.
+ */
+internal fun isSharedPrivateCard(d: com.resonance.api.models.CardDetail): Boolean =
+    !d.isOwner && (d.card.publishedAt == null || d.card.visibility == FeedCard.Visibility.`private`)
 
 /** How far under the bar's foot the article starts (round 9 §2): to a cover's (or the trash banner's) top edge, else the title's line box. */
 internal fun articleTop(cls: LayoutClass, card: FeedCard, trashed: Boolean): Dp =

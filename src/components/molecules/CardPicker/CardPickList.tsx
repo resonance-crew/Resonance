@@ -38,6 +38,8 @@ export interface CardPickListProps {
   loading?: boolean;
   /** Leads an anonymous card's meta line (「匿名 · 9月28日」); without it nothing marks one. */
   anonymousLabel?: string;
+  /** Leads a 私人卡's meta line (「私人卡 · 9月28日」) — never published, or kept private; without it nothing marks one. */
+  privateLabel?: string;
   /** Drawn in place of the rows when there are no cards; without it, no cards draw nothing (no empty list). */
   empty?: ReactNode;
   /** A quiet line under the rows (why some cards are not listed). */
@@ -74,6 +76,7 @@ export function CardPickList({
   disabled = false,
   loading = false,
   anonymousLabel,
+  privateLabel,
   empty,
   footnote,
 }: CardPickListProps) {
@@ -104,7 +107,8 @@ export function CardPickList({
           >
             {cards.map((c, i) => {
               const chosen = choosing && c.id === selectedId;
-              const meta = [c.anonymous && anonymousLabel, c.publishedAt && dateOf(c.publishedAt)]
+              const kept = !c.publishedAt || c.visibility === 'private';
+              const meta = [c.anonymous && anonymousLabel, kept && privateLabel, c.publishedAt && dateOf(c.publishedAt)]
                 .filter(Boolean)
                 .join(' · ');
               return (

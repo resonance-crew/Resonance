@@ -706,7 +706,9 @@ struct ThreadScreen: View {
                 }
             }
             .organicModal(isPresented: $pickingCard, seed: 53, maxWidth: 480, closeLabel: L10n.Write.Editor.CardModal.cancel) {
-                CardPickerContent(title: L10n.Messages.pickCard, subtitle: L10n.Messages.pickCardSubtitle) { card in
+                // The thread's picker lists your 私人卡 too, after the public cards: the message lets its recipient read one.
+                CardPickerContent(title: L10n.Messages.pickCard, subtitle: L10n.Messages.pickCardSubtitle,
+                                  privateLabel: L10n.Messages.privateCard, empty: L10n.Messages.pickCardEmpty) { card in
                     model?.pendingCard = card
                     pickingCard = false
                 } onCancel: { pickingCard = false }

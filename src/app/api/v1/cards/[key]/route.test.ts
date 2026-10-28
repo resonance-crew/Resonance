@@ -64,9 +64,19 @@ describe('GET /api/v1/cards/{key}', () => {
     getCardDetail.mockResolvedValue({ card: { id: 'c1' } });
     const res = await GET(new Request('http://localhost/api/v1/cards/a-walk?include=embeds,%20resonances,likes,'), ctx('a-walk'));
     expect(res.status).toBe(200);
-    expect(getCardDetail).toHaveBeenCalledWith({}, 'alice', 'a-walk', new Set(['embeds', 'resonances']));
+    expect(getCardDetail).toHaveBeenCalledWith({}, 'alice', 'a-walk', new Set(['embeds', 'resonances']), { shared: true });
     await GET(new Request('http://localhost/api/v1/cards/a-walk'), ctx('a-walk'));
-    expect(getCardDetail).toHaveBeenLastCalledWith({}, 'alice', 'a-walk', new Set());
+    expect(getCardDetail).toHaveBeenLastCalledWith({}, 'alice', 'a-walk', new Set(), { shared: true });
+  });
+
+  it("reads no 私人卡 pass for a store build that would offer answers the server refuses, and keeps no answer that one gave", async () => {
+    getCardDetail.mockResolvedValue({ card: { id: 'c1', publishedAt: null }, visibility: 'private', isOwner: false });
+    const old = { 'user-agent': 'Resonance/2.2.0 (iOS 26.0; build 12)' };
+    await GET(new Request('http://localhost/api/v1/cards/c1', { headers: old }), ctx('c1'));
+    expect(getCardDetail).toHaveBeenLastCalledWith({}, 'alice', 'c1', new Set(), { shared: false });
+    const res = await GET(new Request('http://localhost/api/v1/cards/c1', { headers: { 'user-agent': 'Resonance/2.2.0 (iOS 26.0; build 13)' } }), ctx('c1'));
+    expect(getCardDetail).toHaveBeenLastCalledWith({}, 'alice', 'c1', new Set(), { shared: true });
+    expect(res.headers.get('cache-control')).toContain('no-store');
   });
 });
 

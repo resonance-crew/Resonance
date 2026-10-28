@@ -5,9 +5,17 @@ import SwiftUI
 /// InsertCardModal: one of your public cards — dropped into a story as an
 /// embedded card, or shared in a conversation. Rows carry a small cover
 /// (the card's hue when it has none), the title and when it came out; a tap is the pick.
+///
+/// In a thread (`privateLabel`), your 私人卡 come after the public cards, each row's line led by that
+/// label: the message is its recipient's pass to read one (api/v1/sharedCards); a story's link is
+/// not, so the editor's picker (no label) stays public-only.
 struct CardPickerContent: View {
     let title: String
     let subtitle: String
+    /// The thread's 「私人卡」: lists your 私人卡 too, after the public cards, marked with it.
+    var privateLabel: String?
+    /// The line when there is nothing to pick (the editor's own by default).
+    var empty: String?
     let onPick: (FeedCard) -> Void
     let onCancel: () -> Void
     @Environment(SessionStore.self) private var session
@@ -19,11 +27,11 @@ struct CardPickerContent: View {
         VStack(alignment: .leading, spacing: 0) {
             ModalTitle(title).padding(.bottom, 4)
             Text(subtitle).font(AppFonts.body(14)).foregroundStyle(Tokens.textMuted).padding(.bottom, 12)
-            CardPickList(cards: cards ?? [], onPick: onPick) {
+            CardPickList(cards: cards ?? [], privateLabel: privateLabel, onPick: onPick) {
                 EmptyView()
             } empty: {
                 if cards != nil {
-                    Text(L10n.Write.Editor.CardModal.empty)
+                    Text(empty ?? L10n.Write.Editor.CardModal.empty)
                         .font(AppFonts.body(14)).foregroundStyle(Tokens.textMuted).padding(.vertical, 12)
                 } else if failed {
                     // Why there is nothing to pick, and the way to ask again.
@@ -45,11 +53,19 @@ struct CardPickerContent: View {
         .task { await load() }
     }
 
-    /// getCardsByAuthor(me, 'published'), public ones only.
+    /// getCardsByAuthor(me, 'published'), public ones only — and in a thread the 私人卡 shelf's two
+    /// lists beside it, in the same request.
     private func load() async {
         failed = false
         do {
-            cards = Self.pickable(try await session.reading.cardBox(.published))
+            if privateLabel == nil {
+                cards = Self.pickable(try await session.reading.cardBox(.published))
+            } else {
+                let box = try await session.reading.cardBox(shelves: [.published, ._private, .draft])
+                // The published shelf left out of the answer is no list to offer (never read as empty).
+                guard let published = box[.published] else { throw APIFailure.unexpected(status: 200) }
+                cards = Self.shareable(published: published, privateCards: box[._private] ?? [], drafts: box[.draft] ?? [])
+            }
         } catch {
             failed = true
         }
@@ -58,6 +74,19 @@ struct CardPickerContent: View {
     /// What can be picked: the published, public cards.
     static func pickable(_ cards: [FeedCard]) -> [FeedCard] {
         cards.filter { $0.visibility == ._public && $0.publishedAt != nil }
+    }
+
+    /// What a thread can share: the published, public cards first, then the 私人卡 as their shelf orders
+    /// them (``CardBoxScreen/draftShelf(private:drafts:)``) — never an anonymous one (it would come with
+    /// its sender's name; the server refuses it), one with no title yet, or one already listed.
+    static func shareable(published: [FeedCard], privateCards: [FeedCard], drafts: [FeedCard]) -> [FeedCard] {
+        let shown = pickable(published)
+        var seen = Set(shown.map(\.id))
+        let kept = (CardBoxScreen.draftShelf(private: privateCards, drafts: drafts) ?? []).filter { card in
+            !card.anonymous && !card.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && CardScreen.isPrivate(card) && seen.insert(card.id).inserted
+        }
+        return shown + kept
     }
 }
 
@@ -104,6 +133,8 @@ struct CardPickList<Lead: View, Empty: View>: View {
     var disabled = false
     var label: String?
     var anonymousLabel: String?
+    /// Leads a 私人卡's line (「私人卡 · 9月28日」) — never published, or kept private; without it nothing marks one.
+    var privateLabel: String?
     var footnote: String?
     let onPick: (FeedCard) -> Void
     @ViewBuilder let lead: Lead
@@ -152,8 +183,9 @@ struct CardPickList<Lead: View, Empty: View>: View {
     static var ringRoom: CGFloat { 6 }
 
     /// A row's muted line: when the card came out (「10月5日」/ "Oct 5", the year too before this
-    /// one), led by 「匿名 · 」/ "Anonymous · " for an anonymous card when the list marks them.
-    static func meta(_ card: FeedCard, anonymousLabel: String?, now: Date = .now,
+    /// one), led by 「匿名 · 」/ "Anonymous · " for an anonymous card and 「私人卡 · 」/ "Private card · "
+    /// for a 私人卡 when the list marks them (a never-published one is its label alone).
+    static func meta(_ card: FeedCard, anonymousLabel: String?, privateLabel: String? = nil, now: Date = .now,
                      language: Strings.Language = Strings.shared.language) -> String {
         let locale = Locale(identifier: language == .zhTW ? "zh-Hant-TW" : "en")
         let date = card.publishedAt.flatMap(ISO8601.date).map { day in
@@ -162,12 +194,13 @@ struct CardPickList<Lead: View, Empty: View>: View {
                 ? day.formatted(Date.FormatStyle(locale: locale).month(.abbreviated).day())
                 : day.formatted(Date.FormatStyle(locale: locale).year().month(.abbreviated).day())
         }
-        return [card.anonymous ? anonymousLabel : nil, date].compactMap { $0 }.joined(separator: " · ")
+        return [card.anonymous ? anonymousLabel : nil, CardScreen.isPrivate(card) ? privateLabel : nil, date]
+            .compactMap { $0 }.joined(separator: " · ")
     }
 
     private func row(_ card: FeedCard, at i: Int) -> some View {
         let chosen = choosing && card.id == selectedId
-        let meta = Self.meta(card, anonymousLabel: anonymousLabel)
+        let meta = Self.meta(card, anonymousLabel: anonymousLabel, privateLabel: privateLabel)
         return Button { onPick(card) } label: {
             HStack(spacing: 12) {
                 // The avatar's shape at a smaller radius (design §6); chosen, washed in the accent with the grain and a tick.

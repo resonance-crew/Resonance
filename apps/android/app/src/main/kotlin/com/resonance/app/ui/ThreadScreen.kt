@@ -516,10 +516,16 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
         { pickingCard = false }, L10n.Messages.pickCard,
         seed = 53.0, maxWidth = 480.dp, closeLabel = L10n.Write.Editor.CardModal.cancel,
     ) {
-        CardPickerContent(session, L10n.Messages.pickCard, L10n.Messages.pickCardSubtitle, onPick = { card ->
-            model.attachCard(ThreadModel.Attachment(card.id, card.title, card.imageUrl))
-            pickingCard = false
-        }) { pickingCard = false }
+        // Your public cards, then your 私人卡 (named, titled): the message lets its recipient read one.
+        CardPickerContent(
+            session, L10n.Messages.pickCard, L10n.Messages.pickCardSubtitle,
+            onPick = { card ->
+                model.attachCard(ThreadModel.Attachment(card.id, card.title, card.imageUrl, keptPrivate = card.keptPrivate))
+                pickingCard = false
+            },
+            privateLabel = L10n.Messages.privateCard,
+            empty = L10n.Messages.pickCardEmpty,
+        ) { pickingCard = false }
     }
 }
 

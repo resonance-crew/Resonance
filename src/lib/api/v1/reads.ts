@@ -12,6 +12,7 @@ import { pairOf } from './conversations';
 import { letterReadsAsConnection } from './preLetter';
 import { blockedByViewer, blockHides, canView, connected, loadAuthors, presentLinkPreviews, toAuthor, toFeedCard, trashedAtOf, visibilityOf, visibleTo } from './present';
 import { properlyPublished } from './service';
+import { sharedAmong, sharedWith } from './sharedCards';
 import {
   CARD_KEYS_MAX,
   type CardBoxBody,
@@ -61,13 +62,28 @@ async function cardDoc(db: Firestore, id: string, fields?: readonly string[]): P
   return snap.exists ? mapCard(snap.id, snap.data()!) : null;
 }
 
-/** A card the viewer may read, by slug or document id — else not_found (never "forbidden": that would confirm it exists). */
-export async function visibleCard(db: Firestore, viewerId: string, key: string): Promise<Card> {
+/**
+ * A card the viewer may read, by slug or document id — else not_found (never
+ * "forbidden": that would confirm it exists). One its author shared with the
+ * viewer in their conversation counts (./sharedCards): this shows a card
+ * (GET /cards/{key}) and reports one, and answers none.
+ */
+export async function visibleCard(db: Firestore, viewerId: string, key: string, opts: SharedOption = {}): Promise<Card> {
   const found = await cardByKey(db, key);
   const snap = found && !anonymousBySlug(found, key, viewerId) ? found : null;
   const card = snap ? mapCard(snap.id, snap.data()!) : null;
-  if (!card || !(await canView(db, card, viewerId))) throw notFound();
+  const shared = opts.shared ?? true;
+  if (!card || !((await canView(db, card, viewerId)) || (shared && (await sharedWith(db, viewerId, card))))) throw notFound();
   return card;
+}
+
+/**
+ * `shared: false` reads no pass (./sharedCards): for an app build that would
+ * draw someone else's 私人卡 with answers the server refuses
+ * (clientBuild knowsSharedCards). Default true.
+ */
+export interface SharedOption {
+  shared?: boolean;
 }
 
 /**
@@ -85,6 +101,8 @@ export async function visibleCardById(db: Firestore, viewerId: string, id: strin
 
 interface PresentOptions {
   reasons?: Map<string, string>;
+  /** Cards shown though the rules would keep them from the viewer: shared with them in a conversation (./sharedCards). */
+  shared?: ReadonlySet<ListCard>;
   /** The viewer's blocks when the caller already read them (beside its own query). */
   blocked?: Set<string>;
 }
@@ -95,12 +113,20 @@ interface PresentOptions {
  * profile, and the stories of the cards shown without a stored summary are
  * read once for all of them.
  */
-async function presentAll(db: Firestore, viewerId: string, lists: ListCard[][], blocked: Set<string>, reasons?: Map<string, string>): Promise<FeedCardBody[][]> {
+async function presentAll(
+  db: Firestore,
+  viewerId: string,
+  lists: ListCard[][],
+  blocked: Set<string>,
+  reasons?: Map<string, string>,
+  shared?: ReadonlySet<ListCard>,
+): Promise<FeedCardBody[][]> {
   // A card in the trash is in no list but the trash shelf — not even its
   // author's (a thought map falling back to ?keys=, a thread's shared card
   // read the same by both people); to everyone else it is private anyway.
   const unblocked = lists.map((cards) => cards.filter((c) => !blockHides(c, blocked) && !inTrash(c)));
   const visible = new Set(await visibleTo(db, viewerId, unblocked.flat()));
+  for (const c of unblocked.flat()) if (shared?.has(c)) visible.add(c);
   const [authors] = await Promise.all([loadAuthors(db, [...visible]), withStories(db, [...visible])]);
   // An empty reason (a quick first pass has none) is no reason.
   return unblocked.map((cards) =>
@@ -111,7 +137,7 @@ async function presentAll(db: Firestore, viewerId: string, lists: ListCard[][], 
 /** Cards the viewer may read, in the given order, minus the named cards of people they blocked (blockHides). */
 async function present(db: Firestore, viewerId: string, cards: ListCard[], opts: PresentOptions = {}): Promise<FeedCardBody[]> {
   const blocked = opts.blocked ?? (await blockedByViewer(db, viewerId));
-  return (await presentAll(db, viewerId, [cards], blocked, opts.reasons))[0];
+  return (await presentAll(db, viewerId, [cards], blocked, opts.reasons, opts.shared))[0];
 }
 
 const toCards = (snap: QuerySnapshot) => snap.docs.map((d) => listCard(d.id, d.data()));
@@ -177,9 +203,15 @@ export async function cardsByKeys(db: Firestore, keys: string[]): Promise<ListCa
  * everyone, its author too (presentAll): its slug still names it, so the key
  * names nothing else.
  */
-export async function getCardsByKeys(db: Firestore, viewerId: string, keys: string[]): Promise<CardListBody> {
-  const [cards, blocked] = await Promise.all([cardsByKeys(db, keys), blockedByViewer(db, viewerId)]);
-  return { cards: await present(db, viewerId, askedByKey(cards, keys, viewerId), { blocked }) };
+export async function getCardsByKeys(db: Firestore, viewerId: string, keys: string[], opts: SharedOption = {}): Promise<CardListBody> {
+  const [found, blocked] = await Promise.all([cardsByKeys(db, keys), blockedByViewer(db, viewerId)]);
+  const cards = askedByKey(found, keys, viewerId);
+  if (opts.shared === false) return { cards: await present(db, viewerId, cards, { blocked }) };
+  // A thread's bubbles ask for the cards sent in it: one its author shared with
+  // the viewer there is shown though the rules would keep it from them.
+  const readable = new Set(await visibleTo(db, viewerId, cards));
+  const shared = await sharedAmong(db, viewerId, cards.filter((c) => !readable.has(c) && !inTrash(c)));
+  return { cards: await present(db, viewerId, cards, { blocked, shared }) };
 }
 
 /** The cards a story embeds; one that can't be read for them gives none (embeds only save the reader a request each). */
@@ -243,8 +275,9 @@ export async function getCardDetail(
   viewerId: string,
   key: string,
   include: ReadonlySet<CardInclude> = new Set(),
+  opts: SharedOption = {},
 ): Promise<CardDetailBody> {
-  const card = await visibleCard(db, viewerId, key);
+  const card = await visibleCard(db, viewerId, key, opts);
   const isOwner = card.authorId === viewerId;
   // Your own card in the trash (no one else's to read): the card and its
   // story, the cards it embeds — and none of the lists around it, which a

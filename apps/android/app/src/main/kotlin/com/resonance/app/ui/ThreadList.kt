@@ -870,12 +870,16 @@ internal fun ColumnScope.SharedCard(card: FeedCard, onClick: (() -> Unit)?, onLo
         excerpt = card.excerpt,
         imageUrl = card.imageUrl,
         accentHue = card.accentHue,
-        source = L10n.Messages.cardSource,
+        // A 私人卡 (shared in a message, the only way anyone else reads one) says so where 共振 would stand.
+        source = sharedCardSource(card),
         onClick = onClick,
         onLongPress = onLongPress,
         pictureBleed = pictureBleed,
     )
 }
+
+/** The word that leads a shared card's meta line: 共振, or 私人卡 for a card kept to its author. */
+internal fun sharedCardSource(card: FeedCard): String = if (card.keptPrivate) L10n.Messages.privateCard else L10n.Messages.cardSource
 
 /** The line under a message on its way or one that didn't go (its bubble above is dimmed). */
 @Composable

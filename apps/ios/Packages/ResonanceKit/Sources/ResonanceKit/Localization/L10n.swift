@@ -614,6 +614,8 @@ public enum L10n {
             /// The notes left on this anonymous card have been deleted
             public static var notesGone: String { Strings.shared.string("card.trashed.notesGone") }
         }
+        /// {handle} shared this private card with you — only you can read it
+        public static func sharedPrivately(handle: String) -> String { Strings.shared.format("card.sharedPrivately", ["handle": handle]) }
     }
     public enum Share {
         /// Share profile
@@ -726,7 +728,7 @@ public enum L10n {
         public static var imageUnsupported: String { Strings.shared.string("messages.imageUnsupported") }
         /// Share one of your cards
         public static var pickCard: String { Strings.shared.string("messages.pickCard") }
-        /// Share one of your published cards in this conversation
+        /// Share one of your cards in this conversation. A private card is theirs alone to read, until you unsend the message or de
         public static var pickCardSubtitle: String { Strings.shared.string("messages.pickCardSubtitle") }
         /// Conversation options
         public static var moreMenu: String { Strings.shared.string("messages.moreMenu") }
@@ -876,6 +878,10 @@ public enum L10n {
         public static func unsentByThem(handle: String) -> String { Strings.shared.format("messages.unsentByThem", ["handle": handle]) }
         /// Message unsent
         public static var unsentQuote: String { Strings.shared.string("messages.unsentQuote") }
+        /// Private card
+        public static var privateCard: String { Strings.shared.string("messages.privateCard") }
+        /// You have no cards to share yet
+        public static var pickCardEmpty: String { Strings.shared.string("messages.pickCardEmpty") }
     }
     public enum Write {
         /// Give it a one-line title first

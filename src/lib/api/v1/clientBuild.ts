@@ -56,6 +56,43 @@ export function isPreLetterBuild(from: Request | string | null | undefined): boo
 }
 
 /**
+ * The last store builds that don't know someone else's 私人卡 shared with them
+ * in a thread (api/v1/sharedCards): iOS 2.2.0 (12) and Android 2.2.0
+ * versionCode 14, and every build before them. Shown such a card, they would
+ * offer a note, a resonance and a bookmark the server refuses — so the pass
+ * isn't read for them, and the card stays hidden from them as any private
+ * card is (their bubble's "not visible to you"). Every later 2.2.0 build is
+ * iOS ≥ 13, Android ≥ 15 — keep it so.
+ */
+export const LAST_BUILD_WITHOUT_SHARED_CARDS = { version: '2.2.0', build: { ios: 12, android: 14 } as const };
+
+/** `a` against `b`, dotted numeric versions (`2.10.0` after `2.9.1`); a part that isn't a number counts as 0. */
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map((n) => Number.parseInt(n, 10) || 0);
+  const pb = b.split('.').map((n) => Number.parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d) return Math.sign(d);
+  }
+  return 0;
+}
+
+/**
+ * Whether a request comes from a client that draws someone else's 私人卡
+ * read-only: the web (and anything that names no app build), or an app build
+ * after {@link LAST_BUILD_WITHOUT_SHARED_CARDS}. A User-Agent claiming a newer
+ * build gets nothing the web wouldn't give the same account.
+ */
+export function knowsSharedCards(from: Request | string | null | undefined): boolean {
+  const agent = typeof from === 'string' || from == null ? from : from.headers.get('user-agent');
+  const build = clientBuild(agent);
+  if (!build) return true;
+  const last = LAST_BUILD_WITHOUT_SHARED_CARDS;
+  const order = compareVersions(build.version, last.version);
+  return order > 0 || (order === 0 && build.build > last.build[build.platform]);
+}
+
+/**
  * The language an Accept-Language header asks for first (its highest `q`,
  * the earlier on a tie), or null when it names none. iOS's URLSession sends
  * the system's languages as the app supports them; OkHttp sends none.

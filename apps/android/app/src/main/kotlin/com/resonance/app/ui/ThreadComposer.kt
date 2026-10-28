@@ -177,7 +177,8 @@ private fun ComposerRows(model: ThreadModel, modifier: Modifier = Modifier) {
                 }
                 Riding.Note -> ComposerRow(L10n.Messages.quotedNote, null, L10n.Messages.removeCard, { model.noteRef = null }) { ComposerTile(IconName.Note) }
                 Riding.Card -> card?.let { c ->
-                    ComposerRow(L10n.Messages.attachCardShort, c.title, L10n.Messages.removeCard, { model.pendingCard = null }) {
+                    // A 私人卡 says so where 卡片 would: the message is what lets them read it.
+                    ComposerRow(if (c.keptPrivate) L10n.Messages.privateCard else L10n.Messages.attachCardShort, c.title, L10n.Messages.removeCard, { model.pendingCard = null }) {
                         ComposerTile(IconName.Cards) {
                             c.cover?.let { AsyncImage(model = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
                         }

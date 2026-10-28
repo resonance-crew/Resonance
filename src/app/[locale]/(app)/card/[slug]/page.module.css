@@ -133,6 +133,21 @@
   }
 }
 
+/* Someone else's 私人卡, shared with the viewer in a message: a quiet line in place of the response row. */
+.sharedEnd {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 40px;
+}
+.sharedNote {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
 /* Right rail: the story's contents; sticks while the article scrolls.
    It never runs past the window: a long ToC scrolls inside it (CardToc). */
 .aside {

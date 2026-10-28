@@ -82,16 +82,33 @@ import java.time.format.DateTimeFormatter
  * card's hue when it has none), the title on one line and when it came out
  * ([CardPickList]); a tap is the pick. The host wraps it in an OrganicModal (seed 53, max width
  * 480). The twin of iOS's CardPickerContent.
+ *
+ * With [privateLabel] (the thread's 分享卡片) your 私人卡 come after the public cards, each row's
+ * meta line led by that word ([shareableCards]): the message is its recipient's pass to read one
+ * (api/v1/sharedCards). A story's link is not, so the editor's picker passes none and stays public.
  */
 @Composable
-fun CardPickerContent(session: Session, title: String, subtitle: String, onPick: (FeedCard) -> Unit, onCancel: () -> Unit) {
+fun CardPickerContent(
+    session: Session,
+    title: String,
+    subtitle: String,
+    onPick: (FeedCard) -> Unit,
+    privateLabel: String? = null,
+    empty: String = L10n.Write.Editor.CardModal.empty,
+    onCancel: () -> Unit,
+) {
     var read by remember { mutableStateOf<PickRead>(PickRead.Loading) }
     var reads by remember { mutableIntStateOf(0) }
-    // getCardsByAuthor(me, 'published'), public ones only — a read that fails says so, never "no cards" (round 9 C2).
-    LaunchedEffect(reads) {
+    // getCardsByAuthor(me, 'published'), public ones only — a read that fails says so, never "no cards" (round 9 C2);
+    // in a thread the 私人卡 shelf's two halves come in the same request (GET /me/cardbox?shelves=).
+    LaunchedEffect(reads, privateLabel != null) {
         read = PickRead.Loading
         read = try {
-            PickRead.Loaded(publicCards(session.reading.cardBox(TabGetCardBox.published)))
+            if (privateLabel == null) PickRead.Loaded(publicCards(session.reading.cardBox(TabGetCardBox.published)))
+            else {
+                val box = session.reading.cardBox(listOf(TabGetCardBox.published, TabGetCardBox.`private`, TabGetCardBox.draft))
+                PickRead.Loaded(shareableCards(box[TabGetCardBox.published].orEmpty(), box[TabGetCardBox.`private`], box[TabGetCardBox.draft]))
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -105,7 +122,7 @@ fun CardPickerContent(session: Session, title: String, subtitle: String, onPick:
             // Four rows in the shimmer, shaped as the rows they stand for — never "…".
             PickRead.Loading -> PickSkeleton(rows = 4)
             PickRead.Failed -> PickFailed(L10n.Write.Editor.CardModal.failed, L10n.Write.Editor.CardModal.retry) { reads++ }
-            is PickRead.Loaded -> CardPickList(r.cards, onPick, empty = { PickNote(L10n.Write.Editor.CardModal.empty) })
+            is PickRead.Loaded -> CardPickList(r.cards, onPick, privateLabel = privateLabel, empty = { PickNote(empty) })
         }
         // A list to pick from, its one way out under it at the right — the modal's gap given here, in a column of its own.
         ModalCloseButton(L10n.Write.Editor.CardModal.cancel, onCancel, Modifier.padding(top = ModalGap))
@@ -132,6 +149,8 @@ internal fun CardPickList(
     enabled: Boolean = true,
     /** Leads an anonymous card's meta line (「匿名 · 9月28日」); without it nothing marks one. */
     anonymousLabel: String? = null,
+    /** Leads a 私人卡's meta line (「私人卡 · 9月28日」, a never-published one 「私人卡」); without it nothing marks one. */
+    privateLabel: String? = null,
     /** Drawn in place of the rows when there are none. */
     empty: (@Composable () -> Unit)? = null,
     /** A quiet line under the rows (why some cards are not listed). */
@@ -147,7 +166,7 @@ internal fun CardPickList(
             Column(if (choosing) Modifier.selectableGroup() else Modifier) {
                 // One wavy rule between groups (the lead's, above), none between the rows: their air parts them.
                 cards.forEachIndexed { i, card ->
-                    CardPickRow(card, i, choosing, chosen = choosing && card.id == selectedId, enabled, anonymousLabel) { onPick(card) }
+                    CardPickRow(card, i, choosing, chosen = choosing && card.id == selectedId, enabled, anonymousLabel, privateLabel) { onPick(card) }
                 }
             }
         }
@@ -161,7 +180,7 @@ internal fun CardPickList(
 }
 
 @Composable
-private fun CardPickRow(card: FeedCard, index: Int, choosing: Boolean, chosen: Boolean, enabled: Boolean, anonymousLabel: String?, onClick: () -> Unit) {
+private fun CardPickRow(card: FeedCard, index: Int, choosing: Boolean, chosen: Boolean, enabled: Boolean, anonymousLabel: String?, privateLabel: String?, onClick: () -> Unit) {
     val press = if (choosing) Modifier.selectable(chosen, enabled = enabled, role = Role.RadioButton, interactionSource = null, indication = null, onClick = onClick)
     else Modifier.plainClickable(role = Role.Button, onClick = onClick)
     Row(
@@ -181,7 +200,7 @@ private fun CardPickRow(card: FeedCard, index: Int, choosing: Boolean, chosen: B
                 // Chosen: the tonal buttons' deep terracotta (plain terracotta is 3.3:1 on the modal's paper).
                 style = AppFonts.body(15f, 600, lineHeight = 1.3f, color = if (chosen) Tokens.ButtonOnTonal else Tokens.Text),
             )
-            pickMeta(card.anonymous, card.publishedAt, anonymousLabel)?.let {
+            pickMeta(card.anonymous, card.publishedAt, anonymousLabel, privateLabel = privateLabel?.takeIf { card.keptPrivate })?.let {
                 BasicText(it, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(13f, lineHeight = 1.4f, color = Tokens.TextMuted))
             }
         }
@@ -240,10 +259,18 @@ internal fun pickThumbShape(seed: Double) = WobRectShape(
 
 /**
  * A pick row's muted line: when the card came out ([pickDate]), led by [anonymousLabel] for an
- * anonymous card (「匿名 · 9月28日」/ "Anonymous · Sep 28"); null when there is nothing to say.
+ * anonymous card (「匿名 · 9月28日」/ "Anonymous · Sep 28") and by [privateLabel] — given only for a
+ * 私人卡 — for one kept to its author (「私人卡 · 9月28日」, never published: 「私人卡」); null when
+ * there is nothing to say.
  */
-internal fun pickMeta(anonymous: Boolean, publishedAt: String?, anonymousLabel: String?, today: LocalDate = LocalDate.now()): String? =
-    listOfNotNull(anonymousLabel?.takeIf { anonymous }, pickDate(publishedAt, today)).joinToString(" · ").ifEmpty { null }
+internal fun pickMeta(
+    anonymous: Boolean,
+    publishedAt: String?,
+    anonymousLabel: String?,
+    today: LocalDate = LocalDate.now(),
+    privateLabel: String? = null,
+): String? =
+    listOfNotNull(anonymousLabel?.takeIf { anonymous }, privateLabel, pickDate(publishedAt, today)).joinToString(" · ").ifEmpty { null }
 
 /**
  * When a card came out, for its row (CardPickList.tsx's pickDate): the month and day this year,
@@ -269,9 +296,24 @@ internal sealed interface PickRead {
     data class Loaded(val cards: List<FeedCard>) : PickRead
 }
 
-/** The cards a picker offers: published public ones (a 私人卡 or a card for connections can't be shared or embedded). */
+/** The cards a picker offers: published public ones (a 私人卡 or a card for connections can't be embedded). */
 internal fun publicCards(cards: List<FeedCard>): List<FeedCard> =
     cards.filter { it.visibility == FeedCard.Visibility.`public` && it.publishedAt != null }
+
+/**
+ * The cards the thread's picker offers (InsertCardModal with `privateLabel`): your published public
+ * cards first, as they came, then your 私人卡 — the card box's 私人卡 shelf ([draftShelf]: the private
+ * and draft shelves, the latest changed first) — less anonymous ones (sharing one would name its
+ * author: the server refuses it), untitled ones, ones in the trash and any already listed.
+ */
+internal fun shareableCards(published: List<FeedCard>, private: List<FeedCard>?, drafts: List<FeedCard>?): List<FeedCard> {
+    val shown = publicCards(published)
+    val ids = shown.mapTo(HashSet()) { it.id }
+    val own = draftShelf(private, drafts).orEmpty().filter {
+        !it.anonymous && it.title.isNotBlank() && it.trashedAt == null && it.keptPrivate && ids.add(it.id)
+    }
+    return shown + own
+}
 
 /**
  * The rows' footprint while the cards are read (round 9 C2): shimmering rows shaped as the real ones

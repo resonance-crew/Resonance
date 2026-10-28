@@ -128,9 +128,9 @@
 }
 
 .langSelect button[role='option'] {
-  padding: 11px 8px;
+  /* Rows keep every menu's 20 a side (the sheet's own padding): the flag
+     clear of the left pen line, the ✓ clear of the right. */
   font-size: 14px;
-  line-height: 1;
 }
 
 /* Mobile: collapse the trigger to a frameless globe icon button (via the

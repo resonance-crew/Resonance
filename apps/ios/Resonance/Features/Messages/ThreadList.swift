@@ -830,13 +830,19 @@ extension CardByline {
 
 extension SharedCardSection {
     /// A card as a chat (or a story embedding it) draws it: its byline (``CardByline/of(_:)``), read
-    /// time, cover, title, excerpt, the source line.
+    /// time, cover, title, excerpt, the source line — 「私人卡」 for a 私人卡 (shared in a message, the
+    /// only way anyone else reads one) where 「共振」 would stand.
     init(card: FeedCard, onOpen: (() -> Void)?) {
         self.init(
             byline: .of(card),
             readTime: L10n.App.readMinutes(count: card.readMinutes),
             title: card.title, excerpt: card.excerpt, imageURL: card.imageUrl.flatMap(URL.init(string:)),
-            accentHue: card.accentHue, source: L10n.Messages.cardSource, onOpen: onOpen)
+            accentHue: card.accentHue, source: Self.source(card), onOpen: onOpen)
+    }
+
+    /// The source line's word: 「私人卡」 for a card only its author (and whoever they sent it to) reads, else 「共振」.
+    static func source(_ card: FeedCard) -> String {
+        CardScreen.isPrivate(card) ? L10n.Messages.privateCard : L10n.Messages.cardSource
     }
 }
 

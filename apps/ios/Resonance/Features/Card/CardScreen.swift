@@ -260,6 +260,20 @@ struct CardScreen: View {
         card.publishedAt == nil || card.visibility == ._private
     }
 
+    /// Someone else's 私人卡 that the reader reads at all was shared with them in a message
+    /// (api/v1/sharedCards): theirs to read, and only to read — its byline wears the same 🔒 私人卡, and
+    /// the story's end says who shared it instead of the response bar (a note, a resonance, a bookmark:
+    /// the server refuses each). No share (``CardShareGate``); the ⋯ is the reader's safety menu.
+    static func isSharedPrivate(_ detail: CardDetail) -> Bool {
+        !detail.isOwner && isPrivate(detail.card)
+    }
+
+    /// The story's end of a shared 私人卡: who shared it, and that it is the reader's alone.
+    static func sharedPrivatelyLine(_ detail: CardDetail) -> String {
+        let author = detail.anonymous ? nil : detail.card.author?.value1
+        return L10n.Card.sharedPrivately(handle: author?.handle ?? L10n.Card.anonymousAuthor)
+    }
+
     private func page(_ model: CardModel, _ detail: CardDetail) -> some View {
         let card = detail.card
         let type = model.storyType
@@ -276,7 +290,7 @@ struct CardScreen: View {
                 // A tablet's byline ends in the card's share and ⋯ — not the owner's card in the trash, whose banner is
                 // the way out — until it scrolls under the bar, which takes them (round 9 §3).
                 head(card, anonymous: detail.anonymous, type: type, actions: actionsInByline && !trashed ? detail : nil,
-                     privateCard: Self.isPrivateCard(detail))
+                     privateCard: Self.isPrivateCard(detail) || Self.isSharedPrivate(detail))
                 // A card the reader can't see (private, gone, blocked) is the link the story wrote, as the prose draws one.
                 StoryMarkdownView(blocks: model.blocks, typography: story, language: type.lang, onOpenURL: open) { href, _ in
                     model.embed(for: href).map { CardEmbedView(href: href, card: $0) }
@@ -316,8 +330,16 @@ struct CardScreen: View {
                     .padding(.bottom, 40)
                 }
                 // The story's end (round 9 §3): the response bar alone — share and ⋯ are the bar's (a phone's) or
-                // the byline's (a tablet's) — and none on the author's own card.
-                if !trashed, !detail.isOwner {
+                // the byline's (a tablet's) — and none on the author's own card. Someone else's 私人卡, shared in a
+                // message, is only to read: one quiet line in its place.
+                if !trashed, Self.isSharedPrivate(detail) {
+                    Text(Self.sharedPrivatelyLine(detail))
+                        .font(AppFonts.body(14)).foregroundStyle(Tokens.textMuted)
+                        .lineSpacing(14 * 0.4)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, 40)
+                } else if !trashed, !detail.isOwner {
                     endRow(detail).padding(.bottom, 40)
                 }
                 if !trashed, !model.links.isEmpty {
@@ -434,8 +456,8 @@ struct CardScreen: View {
         let type = model?.storyType ?? StoryType(script: .cjk, lang: nil)
         let story = StoryTypography(script: type.script, layout: window.layoutClass)
         return VStack(alignment: .leading, spacing: 0) {
-            head(card, anonymous: card.anonymous, type: type,
-                 privateCard: card.author?.value1.id == session.uid && Self.isPrivate(card))
+            // A 私人卡 — the owner's, or one shared with the reader in a message — wears its lock from the start.
+            head(card, anonymous: card.anonymous, type: type, privateCard: Self.isPrivate(card))
             StorySkeleton(typography: story)
         }
         .padding(.horizontal, 20)
@@ -523,7 +545,7 @@ struct StoryBylineRow<Actions: View>: View {
     var avatar: CGFloat = 40
     /// The meta line's size: 13 on a phone, 14 wider (`StoryTypography.metaSize`).
     var metaSize: CGFloat = Tokens.storyMetaSizeCompact
-    /// The owner's 私人卡: the meta line ends with the lock and 私人卡 (round 9 §1).
+    /// A 私人卡 — the owner's, or one shared with the reader: the meta line ends with the lock and 私人卡 (round 9 §1).
     var privateCard = false
     /// What ends the row, after the author's words: a tablet's share and ⋯ (nothing on a phone).
     @ViewBuilder var actions: Actions

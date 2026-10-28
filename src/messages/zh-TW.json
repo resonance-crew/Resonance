@@ -355,7 +355,8 @@
       "title": "這張卡片在垃圾桶裡",
       "onlyYou": "只有你看得到",
       "notesGone": "留在這張匿名卡片上的紙條已經刪除"
-    }
+    },
+    "sharedPrivately": "{handle} 私下分享給你的私人卡，只有你讀得到"
   },
   "share": {
     "profile": "分享個人頁",
@@ -415,7 +416,7 @@
     "openImage": "查看圖片",
     "imageUnsupported": "不支援這種圖片格式",
     "pickCard": "分享你的一張卡片",
-    "pickCardSubtitle": "在這段對話裡分享你公開發表過的一張卡片",
+    "pickCardSubtitle": "在這段對話裡分享你的一張卡片。私人卡只有對方讀得到，收回訊息或刪除對話後就不再分享。",
     "moreMenu": "對話選項",
     "menuSearch": "搜尋訊息",
     "menuMedia": "卡片與連結",
@@ -490,7 +491,9 @@
     "unsendError": "訊息沒有收回，請再試一次",
     "unsentByYou": "你收回了一則訊息",
     "unsentByThem": "{handle} 收回了一則訊息",
-    "unsentQuote": "訊息已收回"
+    "unsentQuote": "訊息已收回",
+    "privateCard": "私人卡",
+    "pickCardEmpty": "你還沒有可以分享的卡片"
   },
   "write": {
     "titleRequired": "先寫下一句話標題",

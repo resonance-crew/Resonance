@@ -55,7 +55,9 @@ export function SharedCardContent({ card, author, titleId }: SharedCardContentPr
   // A summary's story is its plain excerpt and brings the whole story's read time along; a card read in full
   // (its summary didn't come) has its Markdown, to be read as words.
   const minutes = card.summary?.readMinutes ?? readMinutes(card.story);
-  const meta = `${t('cardSource')} · ${tApp('readMinutes', { count: minutes })}`;
+  // A 私人卡 (shared in a message, the only way anyone else reads one) says so where 共振 would stand.
+  const kept = !card.publishedAt || card.visibility === 'private';
+  const meta = `${kept ? t('privateCard') : t('cardSource')} · ${tApp('readMinutes', { count: minutes })}`;
   const excerpt = card.summary ? card.story.replace(/\s+/g, ' ').trim() : plainExcerpt(card.story, 200);
 
   return (

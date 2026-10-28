@@ -171,6 +171,12 @@ internal fun cardRunFamilies(cards: List<FeedCard>, leading: Int): List<Int> =
 /** Where the card lives on the site (its slug, or its id before it had one). */
 val FeedCard.routeKey: String get() = slug ?: id
 
+/**
+ * A 私人卡: never published, or published and kept private. Only its author reads one — and, read
+ * only, whoever they shared it with in a message (api/v1/sharedCards).
+ */
+val FeedCard.keptPrivate: Boolean get() = publishedAt == null || visibility == FeedCard.Visibility.`private`
+
 fun Author.avatarSeedValue(): Double = avatarSeed?.toDoubleOrNull() ?: ((initials.firstOrNull()?.code ?: 7) * 13).toDouble()
 
 /** The web's `Number(avatarSeed) || fallback`: Messages draw a missing or zero seed as their own fixed one (5 in the list, 3 in a thread). */

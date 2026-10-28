@@ -177,7 +177,10 @@ export function buildOpenApi(): Json {
         ...get('getCard', 'A card you may read, by slug or id, with its story', 'CardDetail', {
           description:
             'With `include`, the lists its page shows come along — each exactly what its own endpoint answers ' +
-            '(`resonances`, `related`, `links`) — and `embeds`: the cards its story embeds.',
+            '(`resonances`, `related`, `links`) — and `embeds`: the cards its story embeds. Someone else\'s 私人卡 ' +
+            '(`visibility: private`, or `publishedAt: null`, with `isOwner: false`) is one its author sent you in a message: ' +
+            'yours to read only — a note, a resonance or sending it on is refused as for any card you can\'t read — and only ' +
+            'while that message stands (`GET /cards?keys=` answers it the same way).',
           parameters: [pathParam('key', 'The card slug, or (older cards) its id'), include(CARD_INCLUDES, 'Lists to bring along')],
         }),
         patch: {
@@ -390,7 +393,11 @@ export function buildOpenApi(): Json {
           description:
             'Checked in this order: the contract (`400`); your message budget (`429`); the request itself (`400`: messaging ' +
             'yourself, no text, no card and no picture, a card and a picture together, a `clientId` or `replyTo` Firestore keeps ' +
-            "for itself); `cardRef` (`404` for a card you can't read); a `clientId` already used — yours answers `201` as it was first sent, someone else's is `400`; your pen " +
+            "for itself); `cardRef` (`404` for a card you can't read, or one in the trash; one of your own 私人卡, published or " +
+            'never, may be sent — the message is its recipient\'s pass to read it, never to answer it, for as long as the message ' +
+            'stands and the card is named and out of the trash, with no block either way; `400`, "An anonymous card is shared ' +
+            'only while it is public.", for an anonymous card of yours no one else may read); ' +
+            "a `clientId` already used — yours answers `201` as it was first sent, someone else's is `400`; your pen " +
             'name (`403 forbidden`, "Choose a pen name first."); a block either way (`403 blocked`); the connection (`403 ' +
             'forbidden`, "You can message people you are connected with.", unless a letter of theirs waits in your ' +
             'conversation — then your answer connects you); `noteRef`, a note they left you on the card it names (else `400`, ' +

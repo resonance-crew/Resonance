@@ -149,7 +149,7 @@ export function ThreadComposer({ inputRef, otherHandle, replyingTo, replyHandle,
           {pendingCard && (
             <CarryRow
               lead={<CarryTile icon="cards" picture={pendingCard.media?.type === 'image' ? pendingCard.media.url : undefined} />}
-              label={t('attachCardShort')}
+              label={!pendingCard.publishedAt || pendingCard.visibility === 'private' ? t('privateCard') : t('attachCardShort')}
               detail={pendingCard.thoughtCore}
               removeLabel={t('removeCard')}
               onRemove={() => setPendingCard(null)}
@@ -251,6 +251,8 @@ export function ThreadComposer({ inputRef, otherHandle, replyingTo, replyHandle,
           onClose={() => setCardModalOpen(false)}
           title={t('pickCard')}
           subtitle={t('pickCardSubtitle')}
+          privateLabel={t('privateCard')}
+          empty={t('pickCardEmpty')}
           onPick={(card) => {
             // One of the two: a card in place of a picture.
             setPicture(null);

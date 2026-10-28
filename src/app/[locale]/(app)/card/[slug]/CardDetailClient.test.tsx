@@ -955,3 +955,35 @@ describe('the pre-paint hold script', () => {
     expect(SESSION_MARK_STORAGE_KEY).toBe(SESSION_MARK_KEY);
   });
 });
+
+// Someone else's 私人卡 is read at all only when they shared it with the viewer in a message (api/v1/sharedCards):
+// the rules refuse the browser's own read, the server answers it — to read, never to answer.
+describe("someone else's 私人卡 shared in a message", () => {
+  afterEach(() => {
+    vi.mocked(callApi).mockReset();
+    vi.mocked(getCardBySlugOrId).mockReset();
+  });
+  it('shows its story with the 私人卡 mark and a quiet line in place of the response row', async () => {
+    signIn();
+    mockUseAuth.mockReturnValue({ user: { id: 'me' }, loading: false });
+    vi.mocked(getCardById).mockResolvedValue(null);
+    vi.mocked(getCardBySlugOrId).mockResolvedValue(null);
+    vi.mocked(resolveCardId).mockResolvedValue('kept1');
+    vi.mocked(callApi).mockImplementation((async () =>
+      detail({
+        card: summary('kept1', 'A quiet morning', { visibility: 'private', slug: null, author: { ...summary('x', 'x').author!, id: 'a1', handle: 'bob' } }),
+        visibility: 'private',
+        story: STORY,
+        referenceCard: null,
+        resonances: { cards: [] },
+        related: { cards: [] },
+        embeds: { cards: [] },
+      })) as never);
+
+    renderPage({ slug: 'kept1' });
+    await waitFor(() => expect(storyVisible()).toBe(true));
+    expect(screen.getByText('Private')).toBeInTheDocument();
+    expect(screen.getByText('bob shared this private card with you — only you can read it')).toBeInTheDocument();
+    expect(screen.queryByTestId('read-after-area')).not.toBeInTheDocument();
+  });
+});

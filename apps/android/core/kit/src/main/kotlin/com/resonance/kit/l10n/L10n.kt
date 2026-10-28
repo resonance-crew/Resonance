@@ -616,6 +616,8 @@ object L10n {
             /** The notes left on this anonymous card have been deleted */
             val notesGone: String get() = Strings.string("card.trashed.notesGone")
         }
+        /** {handle} shared this private card with you — only you can read it */
+        fun sharedPrivately(handle: String): String = Strings.format("card.sharedPrivately", mapOf("handle" to handle))
     }
     object Share {
         /** Share profile */
@@ -728,7 +730,7 @@ object L10n {
         val imageUnsupported: String get() = Strings.string("messages.imageUnsupported")
         /** Share one of your cards */
         val pickCard: String get() = Strings.string("messages.pickCard")
-        /** Share one of your published cards in this conversation */
+        /** Share one of your cards in this conversation. A private card is theirs alone to read, until you unsend the message or de */
         val pickCardSubtitle: String get() = Strings.string("messages.pickCardSubtitle")
         /** Conversation options */
         val moreMenu: String get() = Strings.string("messages.moreMenu")
@@ -878,6 +880,10 @@ object L10n {
         fun unsentByThem(handle: String): String = Strings.format("messages.unsentByThem", mapOf("handle" to handle))
         /** Message unsent */
         val unsentQuote: String get() = Strings.string("messages.unsentQuote")
+        /** Private card */
+        val privateCard: String get() = Strings.string("messages.privateCard")
+        /** You have no cards to share yet */
+        val pickCardEmpty: String get() = Strings.string("messages.pickCardEmpty")
     }
     object Write {
         /** Give it a one-line title first */

@@ -22,7 +22,7 @@ describe('GET /api/v1/cards?keys=', () => {
     const res = await get('?keys=a-walk,%20c1,,x_2');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ cards: [] });
-    expect(getCardsByKeys).toHaveBeenCalledWith({}, 'alice', ['a-walk', 'c1', 'x_2']);
+    expect(getCardsByKeys).toHaveBeenCalledWith({}, 'alice', ['a-walk', 'c1', 'x_2'], { shared: true });
   });
 
   it('refuses no keys, a key that could be a path, and more than 30', async () => {

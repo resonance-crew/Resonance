@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clientBuild, isPreLetterBuild, LAST_PRE_LETTER_BUILD, PRE_LETTER_VERSION, preferredLanguage } from './clientBuild';
+import { clientBuild, isPreLetterBuild, knowsSharedCards, LAST_PRE_LETTER_BUILD, PRE_LETTER_VERSION, preferredLanguage } from './clientBuild';
 
 // Which app build a request comes from, by the User-Agent both apps send
 // (iOS AppHTTP, Android AppHttp: the same at 7136d72, the store builds) —
@@ -90,5 +90,32 @@ describe('preferredLanguage', () => {
     expect(preferredLanguage('*')).toBeNull();
     expect(preferredLanguage('en;q=0')).toBeNull();
     expect(preferredLanguage('<script>, en;q=abc')).toBeNull();
+  });
+});
+
+describe('knowsSharedCards', () => {
+  const agent = (version: string, platform: 'iOS' | 'Android', build: number) => `Resonance/${version} (${platform} 18.5; build ${build})`;
+
+  it('is the web and anything that names no app build', () => {
+    expect(knowsSharedCards(null)).toBe(true);
+    expect(knowsSharedCards('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')).toBe(true);
+  });
+
+  it('is never the 2.2.0 store builds, nor any build before them', () => {
+    expect(knowsSharedCards(agent('2.2.0', 'iOS', 12))).toBe(false);
+    expect(knowsSharedCards(agent('2.2.0', 'Android', 14))).toBe(false);
+    expect(knowsSharedCards(agent('2.1.3', 'iOS', 40))).toBe(false);
+    expect(knowsSharedCards(agent('2.0.0', 'Android', 99))).toBe(false);
+  });
+
+  it('is every build after them: a later 2.2.0 build, or a later version whatever its build number', () => {
+    expect(knowsSharedCards(agent('2.2.0', 'iOS', 13))).toBe(true);
+    expect(knowsSharedCards(agent('2.2.0', 'Android', 15))).toBe(true);
+    expect(knowsSharedCards(agent('2.2.1', 'iOS', 1))).toBe(true);
+    expect(knowsSharedCards(agent('2.10.0', 'Android', 1))).toBe(true);
+  });
+
+  it('reads a request by its User-Agent', () => {
+    expect(knowsSharedCards(new Request('https://x.test', { headers: { 'user-agent': agent('2.2.0', 'iOS', 12) } }))).toBe(false);
   });
 });

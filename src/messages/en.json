@@ -355,7 +355,8 @@
       "title": "This card is in the trash",
       "onlyYou": "Only you can see it",
       "notesGone": "The notes left on this anonymous card have been deleted"
-    }
+    },
+    "sharedPrivately": "{handle} shared this private card with you — only you can read it"
   },
   "share": {
     "profile": "Share profile",
@@ -415,7 +416,7 @@
     "openImage": "View photo",
     "imageUnsupported": "This kind of image isn't supported",
     "pickCard": "Share one of your cards",
-    "pickCardSubtitle": "Share one of your published cards in this conversation",
+    "pickCardSubtitle": "Share one of your cards in this conversation. A private card is theirs alone to read, until you unsend the message or delete the conversation.",
     "moreMenu": "Conversation options",
     "menuSearch": "Search messages",
     "menuMedia": "Cards & links",
@@ -490,7 +491,9 @@
     "unsendError": "Couldn’t unsend — please try again",
     "unsentByYou": "You unsent a message",
     "unsentByThem": "{handle} unsent a message",
-    "unsentQuote": "Message unsent"
+    "unsentQuote": "Message unsent",
+    "privateCard": "Private card",
+    "pickCardEmpty": "You have no cards to share yet"
   },
   "write": {
     "titleRequired": "Give it a one-line title first",
