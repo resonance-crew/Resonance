@@ -125,6 +125,20 @@ import Testing
         }
     }
 
+    // A held divider once framed everything on every frame of the drag, zooming every card under the finger.
+    @Test func aHeldDividerHoldsTheCameraUntilItIsLetGo() {
+        let store = Self.store()
+        store.beginVisit()
+        store.setViewport(beside)
+        Self.showBoard(on: store)
+        let before = store.camera
+        store.resizing = true
+        for width in [700, 760, 820, 900] as [CGFloat] { store.setViewport(CGSize(width: width, height: 1032)) }
+        #expect(store.camera == before)
+        store.resizing = false
+        #expect(store.camera == Self.framed(CGSize(width: 900, height: 1032)))
+    }
+
     @Test func aSmallSlipOfTheFingerUnderTheFourPixelRuleLeavesItFraming() {
         let store = Self.store()
         store.beginVisit()

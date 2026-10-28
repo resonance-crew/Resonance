@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -173,8 +174,14 @@ internal class PaneState(card: PaneCard?, open: Boolean, frac: Float, settled: I
     var settled by mutableIntStateOf(settled)
 
     val drawn: Float get() = drag ?: shown.value
-    val inHideZone: Boolean get() = drag?.let(PaneDrag::inHideZone) == true
-    val inFullZone: Boolean get() = drag?.let(PaneDrag::inFullZone) == true
+    // What the page composes by, each a state of its own: the width itself is read only where the pane, the map
+    // and the grip are laid out, so a held grip's frames lay them out again and compose nothing until one of these flips.
+    /** Some of the pane is drawn. */
+    val drawnAtAll: Boolean by derivedStateOf { drawn > 0f }
+    /** The grip is held. */
+    val held: Boolean by derivedStateOf { drag != null }
+    val inHideZone: Boolean by derivedStateOf { drag?.let(PaneDrag::inHideZone) == true }
+    val inFullZone: Boolean by derivedStateOf { drag?.let(PaneDrag::inFullZone) == true }
     /**
      * The writer alone: the pane left at the whole window (the map under it hidden from TalkBack, the writer in its
      * own bar) — while its grip is held too, so nothing changes under the finger until it lets go.
@@ -370,7 +377,7 @@ internal fun Workspace(
         val card = pane.card
         // Below the split the writer come into is the whole page; the map come into shows the pane only as it held one.
         val paneOnScreen = when {
-            split -> pane.drawn > 0f
+            split -> pane.drawnAtAll
             writer != null -> true
             else -> pane.open
         }
@@ -395,6 +402,7 @@ internal fun Workspace(
                 openMine = if (split) ::openFromMap else null,
                 paneCardId = card?.cardId?.takeIf { split && pane.open },
                 paneSettled = pane.settled,
+                resizing = split && pane.held,
             )
         }
         if (card != null) {

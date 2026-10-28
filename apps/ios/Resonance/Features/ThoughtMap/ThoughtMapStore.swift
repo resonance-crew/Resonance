@@ -70,6 +70,15 @@ final class ThoughtMapStore {
     /// reader pans, pinches or zooms it themself; 顯示全部 hands the camera back to it (round 13, the web's
     /// `followFitRef`).
     @ObservationIgnored private(set) var framing = true
+    /// The writer's divider is held: the map's size is noted as it changes, but nothing is framed again (nor a
+    /// glide re-aimed) until it is let go — framing everything on each frame of the drag zoomed every card on the
+    /// map under the finger. Let go, the map does what the size it was left at asks.
+    @ObservationIgnored var resizing = false {
+        didSet {
+            guard oldValue, !resizing else { return }
+            if framing { frameIfReady() } else { applyFocus() }
+        }
+    }
     /// The card to centre (see `centre(on:animated:)`): while the camera glides to it, or until the map
     /// can (not loaded yet, no size yet).
     @ObservationIgnored private var focus: (id: String, animated: Bool)?
@@ -351,6 +360,7 @@ final class ThoughtMapStore {
     func setViewport(_ size: CGSize) {
         guard size != viewport else { return }
         viewport = size
+        guard !resizing else { return }
         if framing { frameIfReady() } else { applyFocus() }
     }
 

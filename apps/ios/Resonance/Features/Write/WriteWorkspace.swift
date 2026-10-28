@@ -191,6 +191,9 @@ struct WriteWorkspace: View {
             #endif
         }
         .sensoryFeedback(.impact(weight: .light), trigger: hidings)
+        // The map beside the pane holds its camera while the grip is held, and frames itself once it is let go.
+        .onChange(of: drag != nil || docking != nil) { _, held in session.thoughtMap.resizing = held }
+        .onDisappear { session.thoughtMap.resizing = false }
         // Narrowed under the split, the map page is the map alone again: a card in its pane is saved
         // and let go (its cards then push the writer, which would otherwise open it twice).
         .onChange(of: split) { _, now in

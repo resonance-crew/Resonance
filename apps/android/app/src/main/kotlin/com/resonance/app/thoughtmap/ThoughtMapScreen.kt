@@ -107,6 +107,10 @@ import com.resonance.kit.l10n.L10n
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.max
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.draw.clipToBounds
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -136,6 +140,8 @@ fun ThoughtMapScreen(
      * glides [paneCardId] to the middle of it, at the zoom it is at.
      */
     paneSettled: Int = 0,
+    /** The workspace's divider is held: the map holds its camera until it is let go ([ThoughtMapStore.resizing]). */
+    resizing: Boolean = false,
 ) {
     val uid = session.uid
     val changes by session.cardChanges.collectAsStateWithLifecycle()
@@ -146,6 +152,11 @@ fun ThoughtMapScreen(
     val reduced = LocalContext.current.prefersReducedMotion()
     // The last settling handled, saved with the page: coming back to it (or rotating) moves nothing.
     var centred by rememberSaveable { mutableIntStateOf(0) }
+    // Let go of whenever it ends, or the map goes mid-drag (the session keeps the store).
+    DisposableEffect(store, resizing) {
+        store.resizing = resizing
+        onDispose { store.resizing = false }
+    }
 
     // Every card of mine opens in the writer, a 私人卡 as a shared one (a published one with its pending edit) — at the
     // split in the pane beside the map, below it pushed over the map (round 10 §1; the card box and the trash still
@@ -181,13 +192,24 @@ fun ThoughtMapScreen(
     // Leaving the map (or opening a card from it) while a title or arrow's words are being typed keeps them, as the web's blur does.
     DisposableEffect(store) { onDispose { store.commitEditors() } }
 
-    Box(Modifier.fillMaxSize().background(Tokens.CardBg)) {
-        MapGridLayer(store)
-        MapUnderLayer(store)
-        MapRegionChrome(store)
-        MapNodesLayer(store)
-        MapOverLayer(store)
-        MapEdgeLabels(store)
+    // The world is laid out at the window's width whatever the map's box, and cut at the box: the workspace's divider
+    // resizes the box on every frame of a drag, and only the touch surface, the editors and the controls follow it —
+    // re-laying out and re-drawing every card, region and arrow on each frame made the drag stutter.
+    val worldWidth = LocalWindowInfo.current.containerSize.width
+    Box(Modifier.fillMaxSize().clipToBounds().background(Tokens.CardBg)) {
+        Box(
+            Modifier.layout { measurable, constraints ->
+                val world = measurable.measure(Constraints.fixed(max(constraints.maxWidth, worldWidth), constraints.maxHeight))
+                layout(constraints.maxWidth, constraints.maxHeight) { world.place(0, 0) }
+            },
+        ) {
+            MapGridLayer(store)
+            MapUnderLayer(store)
+            MapRegionChrome(store)
+            MapNodesLayer(store)
+            MapOverLayer(store)
+            MapEdgeLabels(store)
+        }
         MapTouchSurface(store)
         MapEditors(store)
         Chrome(store, session, leave) { scope.launch { store.addGroup() } }

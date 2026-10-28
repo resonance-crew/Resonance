@@ -72,6 +72,19 @@ class ThoughtMapFramingTest {
         touchUp(1, 10.0 + dx, 10.0)
     }
 
+    // A held divider once framed everything on every frame of the drag, zooming every card under the finger.
+    @Test fun aHeldDividerHoldsTheCameraUntilItIsLetGo() {
+        val store = store()
+        val before = store.camera
+        store.resizing = true
+        store.setViewport(1000.0, 800.0)
+        store.setViewport(900.0, 800.0)
+        assertEquals(before, store.camera)
+        assertEquals(900.0, store.viewportW, 0.0)
+        store.resizing = false
+        assertEquals(framed(900.0, 800.0), store.camera)
+    }
+
     @Test fun theBoardReadAfterTheMapHasItsSizeArrivesFramed() {
         val store = ThoughtMapStore(ReadingApi(ApiConfiguration("http://localhost/") { "token" }))
         store.setViewport(1280.0, 800.0)

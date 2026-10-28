@@ -138,6 +138,18 @@ class ThoughtMapStore(private val reading: ReadingApi) {
     var viewportH = 0.0
         private set
 
+    /**
+     * The workspace's divider is held: the map's size is noted as it changes but nothing is framed again
+     * until it is let go — framing everything on each frame of the drag zoomed every card on the map
+     * under the finger. Let go, everything is framed in the width it was left at (still [framing]).
+     */
+    var resizing = false
+        set(value) {
+            if (field == value) return
+            field = value
+            if (!value) frameIfFraming()
+        }
+
     /** How far the controls floating over the map reach in from its top (Leave and the tools) and its foot (the zoom sheet), in dp as the screen measures them: framing everything keeps the cards clear of them. */
     private var chromeTop = 0.0
     private var chromeBottom = 0.0
@@ -512,7 +524,7 @@ class ThoughtMapStore(private val reading: ReadingApi) {
         if (w == viewportW && h == viewportH) return
         viewportW = w
         viewportH = h
-        frameIfFraming()
+        if (!resizing) frameIfFraming()
     }
 
     /** The controls over the map were laid out (or moved): still [framing], everything framed clear of them. */
