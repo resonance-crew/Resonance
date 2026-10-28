@@ -259,7 +259,7 @@ export function ProfileTabs({
                       }}
                       seed={cardHue}
                       hue={cardHue}
-                      onTrashed={leave}
+                      onLeaving={leave}
                       onRestored={(r) => setRefocus({ back: r.id })}
                     />
                   );

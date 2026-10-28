@@ -1331,6 +1331,8 @@ object L10n {
             fun undoTrashLabel(title: String): String = Strings.format("me.actions.undoTrashLabel", mapOf("title" to title))
             /** \"{title}\" moved to the trash */
             fun movedToTrash(title: String): String = Strings.format("me.actions.movedToTrash", mapOf("title" to title))
+            /** Couldn't move it to the trash — try again */
+            val trashFailed: String get() = Strings.string("me.actions.trashFailed")
             /** Couldn't restore it — try again from the trash */
             val undoFailed: String get() = Strings.string("me.actions.undoFailed")
             /** Restore */
@@ -1355,6 +1357,8 @@ object L10n {
             val deletedForever: String get() = Strings.string("me.actions.deletedForever")
             /** This card isn't in the trash any more */
             val notInTrash: String get() = Strings.string("me.actions.notInTrash")
+            /** Couldn't delete it forever — try again */
+            val deleteForeverFailed: String get() = Strings.string("me.actions.deleteForeverFailed")
             /** Delete this resonance? */
             val trashResonanceTitle: String get() = Strings.string("me.actions.trashResonanceTitle")
             /** The card moves to the trash, where you can restore it for {days} days. If this resonance is what connected you two and t */

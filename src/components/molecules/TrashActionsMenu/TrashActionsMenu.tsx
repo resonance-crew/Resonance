@@ -15,8 +15,8 @@ export interface TrashActionsMenuProps {
   hue?: number;
   /** After it came back (the shelf it returns to is read again already). */
   onRestored?: (card: TrashCardRef) => void;
-  /** After it was deleted for good. */
-  onDeleted?: (id: string) => void;
+  /** As it leaves the shelf for good (at once, before the server answers: it comes back should the server refuse). */
+  onLeaving?: (id: string) => void;
 }
 
 /**
@@ -25,14 +25,12 @@ export interface TrashActionsMenuProps {
  * delete keeps to the trash (`onlyIfTrashed`): a card restored meanwhile,
  * on another device, is not deleted — the shelf is read again and says so.
  */
-export function TrashActionsMenu({ card, seed = 7, hue, onRestored, onDeleted }: TrashActionsMenuProps) {
+export function TrashActionsMenu({ card, seed = 7, hue, onRestored, onLeaving }: TrashActionsMenuProps) {
   const t = useTranslations('me.actions');
-  const tSafety = useTranslations('safety');
   const toast = useToast();
   const actions = useTrashActions();
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const [failed, setFailed] = useState(false);
 
   const items: OrganicMenuItem[] = [
     { key: 'restore', icon: 'restore', label: t('restore') },
@@ -53,23 +51,20 @@ export function TrashActionsMenu({ card, seed = 7, hue, onRestored, onDeleted }:
     }
   }
 
+  // The card leaves its shelf at once (and this menu, its question, with it: useTrashActions); what the server
+  // answers is said in a toast, which outlives them — a refusal brings the card back.
   async function deleteForever() {
     if (busy) return;
     setBusy(true);
-    setFailed(false);
+    onLeaving?.(card.id);
     try {
       await actions.deleteForever(card);
       setConfirming(false);
       toast.show({ message: t('deletedForever') });
-      onDeleted?.(card.id);
     } catch (e) {
-      if (e instanceof ApiError && e.code === 'conflict') {
-        // Restored meanwhile (another device): it stays, and the shelf now shows where it is.
-        setConfirming(false);
-        toast.show({ message: t('notInTrash') });
-      } else {
-        setFailed(true);
-      }
+      setConfirming(false);
+      // Restored meanwhile (another device): it stays, and the shelf now shows where it is.
+      toast.show({ message: t(e instanceof ApiError && e.code === 'conflict' ? 'notInTrash' : 'deleteForeverFailed') });
     } finally {
       setBusy(false);
     }
@@ -82,17 +77,14 @@ export function TrashActionsMenu({ card, seed = 7, hue, onRestored, onDeleted }:
         onChoose={(key) => {
           if (busy) return;
           if (key === 'restore') void restore();
-          else {
-            setFailed(false);
-            setConfirming(true);
-          }
+          else setConfirming(true);
         }}
         label={t('menuLabel')}
         seed={seed}
         hue={hue}
         busy={busy}
       />
-      {/* For good: the verb in red. A refusal is said in the dialog, which stays to try again. */}
+      {/* For good: the verb in red. */}
       <ConfirmModal
         open={confirming}
         title={t('deleteForeverConfirmTitle')}
@@ -103,7 +95,6 @@ export function TrashActionsMenu({ card, seed = 7, hue, onRestored, onDeleted }:
         onConfirm={() => void deleteForever()}
         busy={busy}
         destructive
-        error={failed ? tSafety('actionError') : null}
         seed={seed + 5}
       />
     </>

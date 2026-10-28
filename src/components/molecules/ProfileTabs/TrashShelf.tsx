@@ -90,7 +90,7 @@ export function TrashShelf({ cards, authors, onLeft }: TrashShelfProps) {
         cardHref={(c) => `/card/${c.slug ?? c.id}`}
         renderActions={(c, _i, palette) => {
           const hue = CARD_HUES[palette];
-          return <TrashActionsMenu card={ref(c)} seed={hue} hue={hue} onRestored={(r) => onLeft?.(r.id)} onDeleted={onLeft} />;
+          return <TrashActionsMenu card={ref(c)} seed={hue} hue={hue} onRestored={(r) => onLeft?.(r.id)} onLeaving={onLeft} />;
         }}
       />
       <ConfirmModal

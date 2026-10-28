@@ -1329,6 +1329,8 @@ public enum L10n {
             public static func undoTrashLabel(title: String) -> String { Strings.shared.format("me.actions.undoTrashLabel", ["title": title]) }
             /// \"{title}\" moved to the trash
             public static func movedToTrash(title: String) -> String { Strings.shared.format("me.actions.movedToTrash", ["title": title]) }
+            /// Couldn't move it to the trash — try again
+            public static var trashFailed: String { Strings.shared.string("me.actions.trashFailed") }
             /// Couldn't restore it — try again from the trash
             public static var undoFailed: String { Strings.shared.string("me.actions.undoFailed") }
             /// Restore
@@ -1353,6 +1355,8 @@ public enum L10n {
             public static var deletedForever: String { Strings.shared.string("me.actions.deletedForever") }
             /// This card isn't in the trash any more
             public static var notInTrash: String { Strings.shared.string("me.actions.notInTrash") }
+            /// Couldn't delete it forever — try again
+            public static var deleteForeverFailed: String { Strings.shared.string("me.actions.deleteForeverFailed") }
             /// Delete this resonance?
             public static var trashResonanceTitle: String { Strings.shared.string("me.actions.trashResonanceTitle") }
             /// The card moves to the trash, where you can restore it for {days} days. If this resonance is what connected you two and t

@@ -4,6 +4,7 @@ import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { useSWRConfig } from 'swr';
 import { useAuth } from '@/components/providers/AuthProvider';
 import type { RestoredCardBody, TrashedCardBody } from '@/lib/api/v1/schemas';
+import type { CardBoxShelfData } from './hooks';
 import {
   deleteCardForever,
   emptyTrash as emptyTrashOnServer,
@@ -22,6 +23,10 @@ import { dependsOnConnections, resonanceKeys } from './resonate';
  * map, the card's own page. A resonance going in or coming back can end or
  * keep a connection with its original's author, and changes what shows the
  * link between the two: what turns on connections is read again too.
+ *
+ * Moving a card to the trash and deleting it for good take it off the card
+ * box's shelves at once, before the server answers (`hide`): the rest close
+ * up without a skeleton, and a refusal puts it back where it was.
  *
  * What to say about it (the toast, the banner, a dialog) is the caller's.
  */
@@ -45,8 +50,26 @@ export interface TrashActions {
 
 export function useTrashActions(): TrashActions {
   const { user } = useAuth();
-  const { mutate } = useSWRConfig();
+  const { mutate, cache } = useSWRConfig();
   const uid = user?.id;
+
+  // The card off every card-box shelf this browser holds, at once; what it answers puts them back as they were.
+  const hide = useCallback(
+    (id: string) => {
+      const kept = new Map<string, CardBoxShelfData>();
+      if (uid) {
+        for (const key of cache.keys()) {
+          if (!key.startsWith(`cardbox:${uid}:`)) continue;
+          const shelf = cache.get(key)?.data as CardBoxShelfData | undefined;
+          if (!Array.isArray(shelf?.cards) || !shelf.cards.some((c) => c.id === id)) continue;
+          kept.set(key, shelf);
+          void mutate(key, { ...shelf, cards: shelf.cards.filter((c) => c.id !== id) }, { revalidate: false });
+        }
+      }
+      return () => kept.forEach((shelf, key) => void mutate(key, shelf, { revalidate: false }));
+    },
+    [cache, mutate, uid],
+  );
 
   const refresh = useCallback(
     (card?: TrashCardRef) => {
@@ -76,8 +99,12 @@ export function useTrashActions(): TrashActions {
   return useMemo<TrashActions>(
     () => ({
       async trash(card) {
+        const putBack = hide(card.id);
         try {
           return await trashOnServer(card.id);
+        } catch (e) {
+          putBack();
+          throw e;
         } finally {
           refresh(card);
         }
@@ -94,8 +121,12 @@ export function useTrashActions(): TrashActions {
         }
       },
       async deleteForever(card) {
+        const putBack = hide(card.id);
         try {
           await deleteCardForever(card.id, { onlyIfTrashed: true });
+        } catch (e) {
+          putBack();
+          throw e;
         } finally {
           refresh(card);
         }
@@ -109,7 +140,7 @@ export function useTrashActions(): TrashActions {
       },
       refresh,
     }),
-    [refresh],
+    [hide, refresh],
   );
 }
 

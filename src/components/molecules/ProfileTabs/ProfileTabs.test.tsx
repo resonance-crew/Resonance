@@ -17,10 +17,10 @@ vi.mock('@/i18n/navigation', () => ({
 // The card a stand-in toast's 復原 brings back (its own ⋯ left the shelf with it).
 const undone = vi.hoisted(() => ({ id: '' }));
 vi.mock('@/components/molecules/CardActionsMenu/CardActionsMenu', () => ({
-  // Stands in for the ⋯: its 刪除 says the card went to the trash, a toast's 復原 that one came back.
-  CardActionsMenu: (props: { card: { id: string }; onTrashed?: (id: string) => void; onRestored?: (c: { id: string }) => void }) => (
+  // Stands in for the ⋯: its 刪除 says the card is leaving for the trash, a toast's 復原 that one came back.
+  CardActionsMenu: (props: { card: { id: string }; onLeaving?: (id: string) => void; onRestored?: (c: { id: string }) => void }) => (
     <>
-      <button type="button" onClick={() => props.onTrashed?.(props.card.id)}>{`trash ${props.card.id}`}</button>
+      <button type="button" onClick={() => props.onLeaving?.(props.card.id)}>{`trash ${props.card.id}`}</button>
       <button type="button" onClick={() => props.onRestored?.({ id: undone.id })}>{`undo from ${props.card.id}`}</button>
     </>
   ),
@@ -169,7 +169,7 @@ describe('ProfileTabs — focus as a card leaves the shelf', () => {
   it('moves on to the next card, else the one before it, else the shelf control — never left on nothing', async () => {
     const { rerender } = renderWithIntl(shelf([card('a'), card('b'), card('c')]));
     await userEvent.click(screen.getByRole('button', { name: 'trash b' }));
-    // The shelf is read again without it.
+    // The shelf shows it gone at once.
     rerender(shelf([card('a'), card('c')]));
     expect(document.activeElement).toBe(screen.getAllByText('Thought c')[0].closest('a'));
 

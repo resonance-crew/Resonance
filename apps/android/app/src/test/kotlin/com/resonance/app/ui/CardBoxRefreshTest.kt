@@ -41,6 +41,33 @@ class CardBoxRefreshTest {
 
     private fun ids(shelf: TabGetCardBox) = model.shelves[shelf]?.map { it.id }
 
+    // 刪除 / 永久刪除: the card leaves its shelf at once, before the server answers; a refusal brings it back,
+    // and once the server took it every shelf keeps what it shows without it — no skeleton — the trash it
+    // went into read again when shown.
+    @Test fun aCardLeavesItsShelfAtOnceAndComesBackOnARefusal() = runBlocking {
+        answer = { asked -> asked.associateWith { s -> if (s == TabGetCardBox.trash) listOf(card("t")) else listOf(card("a"), card("b")) } }
+        model.refresh(TabGetCardBox.published, changes = 0)?.join()
+        model.refresh(TabGetCardBox.trash, changes = 0)?.join()
+
+        model.leave("b", going = true)
+        assertEquals(listOf("a"), model.cardsOf(TabGetCardBox.published)?.map { it.id })
+        model.leave("b", going = false)
+        assertEquals(listOf("a", "b"), model.cardsOf(TabGetCardBox.published)?.map { it.id })
+
+        model.leave("b", going = true)
+        model.left("b")
+        assertEquals(listOf("a"), model.cardsOf(TabGetCardBox.published)?.map { it.id })
+        assertNull(model.cardsOf(TabGetCardBox.trash))
+
+        // 永久刪除 from the trash: the trash keeps the rest.
+        model.refresh(TabGetCardBox.trash, changes = 0)?.join()
+        model.leave("t", going = true)
+        assertEquals(emptyList<String>(), model.cardsOf(TabGetCardBox.trash)?.map { it.id })
+        model.left("t")
+        assertEquals(emptyList<String>(), model.cardsOf(TabGetCardBox.trash)?.map { it.id })
+        assertEquals(listOf("a"), model.cardsOf(TabGetCardBox.published)?.map { it.id })
+    }
+
     @Test fun aPullThatBringsNothingBackKeepsTheShelfAndSaysWhyOverItOnly() = runBlocking {
         model.shelfShown(TabGetCardBox.resonated)
         answer = shelfOf("a")

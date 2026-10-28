@@ -37,6 +37,25 @@ import Testing
         #expect(asked(.linked, force: true, known: own.union([.linked])) == [.linked])
     }
 
+    /// 刪除 / 永久刪除 (the card left its shelf at once): once the server took it, the shelves keep what they
+    /// showed, without it — no skeleton — and the trash it went into is read again; one leaving the trash
+    /// for good leaves the trash as it was, less that card.
+    @Test func aCardThatLeftItsShelfIsGoneFromEveryShelfItWasOn() {
+        let a = ownCard("a", published: "2026-10-01T00:00:00Z", edited: nil, visibility: "public")
+        let b = ownCard("b", published: "2026-10-02T00:00:00Z", edited: nil, visibility: "public")
+        let t = ownCard("t", published: nil, edited: nil)
+        let shelves: [Shelf: [FeedCard]] = [.published: [a, b], .draft: [], .trash: [t]]
+
+        let trashed = CardBoxScreen.without("b", in: shelves)
+        #expect(trashed[.published]?.map(\.id) == ["a"])
+        #expect(trashed[.draft]?.isEmpty == true)
+        #expect(trashed[.trash] == nil)
+
+        let deleted = CardBoxScreen.without("t", in: shelves)
+        #expect(deleted[.trash]?.isEmpty == true)
+        #expect(deleted[.published]?.map(\.id) == ["a", "b"])
+    }
+
     /// A card on an own shelf, as GET /me/cardbox answers it (`editedAt` on the owner's shelves only).
     private func ownCard(_ id: String, published: String?, edited: String?, visibility: String = "private") -> FeedCard {
         let json = """

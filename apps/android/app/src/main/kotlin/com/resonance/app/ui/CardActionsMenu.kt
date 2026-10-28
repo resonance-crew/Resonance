@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.resonance.app.Session
 import com.resonance.design.OrganicConfirmDialog
+import com.resonance.design.LocalToasts
 import com.resonance.design.MenuTrigger
 import com.resonance.design.OrganicAlert
 import com.resonance.design.OrganicMenu
@@ -93,6 +94,11 @@ fun CardActionsMenu(
     /** After the card went to the trash (the screens showing it read it again already). */
     onTrashed: () -> Unit = {},
     /**
+     * The card box ([TrashFeedback.Toast]): the card leaves its shelf at once (`true`), before the server
+     * answers, and comes back should it refuse (`false`) — said then in a toast, which outlives the ⋯.
+     */
+    onLeaving: (Boolean) -> Unit = {},
+    /**
      * The page draws the 私人卡's 編輯 pen beside the ⋯ (its own card page, round 12 §3): the ⋯ leads with
      * 公開發表 instead, which opens the writer at its publish step with the card offered to readers.
      */
@@ -110,23 +116,34 @@ fun CardActionsMenu(
     var trashNotice by remember { mutableStateOf(false) }
     val ref = TrashRef(cardId, title, referenceCardId)
 
+    val toasts = LocalToasts.current
     // To the trash, then said so: the toast and its 復原, or the page's own banner. Run in the shell's
-    // scope, so the toast still comes once the card (and this menu) has left its shelf.
+    // scope, so the toast still comes once the card (and this menu) has left its shelf — which, in the
+    // card box, it does at once, before the server answers.
     fun trashNow() {
         if (busy) return
         busy = true
         trashFailed = false
+        val leaves = trashFeedback == TrashFeedback.Toast
+        if (leaves) {
+            confirmingTrash = false
+            onLeaving(true)
+        }
         trash.launch {
             try {
                 trash(ref)
                 confirmingTrash = false
-                if (trashFeedback == TrashFeedback.Toast) offerUndo(ref)
                 onTrashed()
+                if (leaves) offerUndo(ref)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Not moved: the card stays in every list, and the viewer is told — in the question, if one was asked.
-                if (confirmingTrash) trashFailed = true else trashNotice = true
+                // Not moved: the card is back in every list, and the viewer is told — in the toast where it had
+                // left its shelf, else in the question, if one was asked.
+                if (leaves) {
+                    onLeaving(false)
+                    toasts.show(L10n.Me.Actions.trashFailed)
+                } else if (confirmingTrash) trashFailed = true else trashNotice = true
             } finally {
                 busy = false
             }

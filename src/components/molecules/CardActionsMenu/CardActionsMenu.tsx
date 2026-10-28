@@ -60,6 +60,11 @@ export interface CardActionsMenuProps {
   onChanged?: () => void;
   /** Called after the card went to the trash (its lists are read again already). */
   onTrashed?: (id: string) => void;
+  /**
+   * Called as the card leaves the card box's shelf for the trash: at once, before the server answers
+   * (useTrashActions takes it off the shelves; a refusal brings it back). The toast's feedback only.
+   */
+  onLeaving?: (id: string) => void;
   /** Called after the toast's 復原 brought it back. */
   onRestored?: (card: TrashCardRef) => void;
   /** On the page's own paper (the card page's title row): see OrganicMenu's `bare`. */
@@ -106,6 +111,7 @@ export function CardActionsMenu({
   hue,
   onChanged,
   onTrashed,
+  onLeaving,
   onRestored,
   bare = false,
   editShown = false,
@@ -185,6 +191,9 @@ export function CardActionsMenu({
   async function trashNow() {
     setBusy(true);
     setFailed(false);
+    // In the card box the card leaves its shelf at once, and this menu (its question too) with it: what the
+    // server answers is said in a toast, which outlives them.
+    if (trashFeedback === 'toast') onLeaving?.(card.id);
     try {
       await trashActions.trash(ref);
       setConfirming(null);
@@ -202,8 +211,10 @@ export function CardActionsMenu({
         });
       }
     } catch {
-      // Not moved: the card stays in every list, and the viewer is told — in the question, if one was asked.
-      if (confirming === 'trash') setFailed(true);
+      // Not moved: the card is back in every list, and the viewer is told — in the toast where it had left its
+      // shelf, else in the question, if one was asked.
+      if (trashFeedback === 'toast') toast.show({ message: t('trashFailed') });
+      else if (confirming === 'trash') setFailed(true);
       else setNotice('trash');
     } finally {
       setBusy(false);

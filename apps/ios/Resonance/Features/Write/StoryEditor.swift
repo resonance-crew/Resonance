@@ -384,7 +384,8 @@ struct IslandAppearance: Equatable {
 extension WKWebView {
     /// Leaves out the bar WebKit puts over the keyboard for a web form (‹ › Done). There is no
     /// setting for it: the view that takes the keyboard (WebKit's content view) is given a subclass,
-    /// made once with public runtime calls, whose `inputAccessoryView` is nil.
+    /// made once with public runtime calls, whose `inputAccessoryView` is nil — and, on a Mac, whose
+    /// shortcuts bar is empty.
     func hideFormAccessoryBar() {
         guard let content = scrollView.subviews.first(where: { String(describing: type(of: $0)).hasPrefix("WKContent") }) else { return }
         let base: AnyClass = type(of: content)
@@ -401,6 +402,17 @@ extension WKWebView {
             guard let method = class_getInstanceMethod(UIResponder.self, #selector(getter: UIResponder.inputAccessoryView)) else { return }
             class_addMethod(made, #selector(getter: UIResponder.inputAccessoryView), imp_implementationWithBlock(none),
                             method_getTypeEncoding(method))
+            // On a Mac the shortcuts bar (WebKit's undo · redo · paste, B I U) has no keyboard to ride: it lies
+            // over the window's foot as a blurred strip of its own, over the format bar. An empty one shows none.
+            if ProcessInfo.processInfo.isiOSAppOnMac,
+               let assistant = class_getInstanceMethod(UIResponder.self, #selector(getter: UIResponder.inputAssistantItem)) {
+                let empty = UITextInputAssistantItem()
+                empty.leadingBarButtonGroups = []
+                empty.trailingBarButtonGroups = []
+                let item: @convention(block) (AnyObject) -> UITextInputAssistantItem = { _ in empty }
+                class_addMethod(made, #selector(getter: UIResponder.inputAssistantItem), imp_implementationWithBlock(item),
+                                method_getTypeEncoding(assistant))
+            }
             objc_registerClassPair(made)
             subclass = made
         }

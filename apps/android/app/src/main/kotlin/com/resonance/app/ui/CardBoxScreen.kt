@@ -27,6 +27,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -124,6 +125,11 @@ class CardBoxModel internal constructor(
 
     private val scope: CoroutineScope = scope ?: viewModelScope
     val shelves = mutableStateMapOf<TabGetCardBox, List<FeedCard>>()
+    /**
+     * Cards on their way off a shelf (刪除 to the trash, 永久刪除 from it), shown gone at once — before the
+     * server answers: the rest close up, and a refusal brings the card back where it was ([leave], [left]).
+     */
+    private val leaving = mutableStateListOf<String>()
     var failed by mutableStateOf(false)
         private set
     /** The last refresh by hand that brought nothing back for the shelf it was asked for while that showed: gone with its next answer, or another shelf shown. */
@@ -152,8 +158,30 @@ class CardBoxModel internal constructor(
      * What [shelf] shows (null: not read yet): 草稿 ([TabGetCardBox.draft]) is the drafts and the
      * published private cards together ([draftShelf]); every other shelf as it was read.
      */
-    fun cardsOf(shelf: TabGetCardBox): List<FeedCard>? =
-        if (shelf == TabGetCardBox.draft) draftShelf(shelves[TabGetCardBox.`private`], shelves[TabGetCardBox.draft]) else shelves[shelf]
+    fun cardsOf(shelf: TabGetCardBox): List<FeedCard>? {
+        val known = if (shelf == TabGetCardBox.draft) draftShelf(shelves[TabGetCardBox.`private`], shelves[TabGetCardBox.draft]) else shelves[shelf]
+        return if (leaving.isEmpty()) known else known?.filterNot { it.id in leaving }
+    }
+
+    /** Card [id] leaves its shelf at once ([going]), or stays after all (the server refused): back where it was. */
+    fun leave(id: String, going: Boolean) {
+        if (going) { if (id !in leaving) leaving.add(id) } else leaving.remove(id)
+    }
+
+    /**
+     * The server took card [id] off its shelf: every shelf keeps what it shows, without it — no skeleton —
+     * while the change reads them again behind; the trash it went into from another shelf is read again
+     * when shown ([withoutCard]).
+     */
+    fun left(id: String) {
+        val after = withoutCard(id, shelves.toMap())
+        for (s in shelves.keys.toList()) if (s !in after) {
+            shelves.remove(s)
+            readAt.remove(s)
+        }
+        for ((s, cards) in after) shelves[s] = cards
+        leaving.remove(id)
+    }
 
     /** [shelf] is the one on screen: what a refresh of the one before couldn't bring is no longer said. */
     fun shelfShown(shelf: TabGetCardBox) {
@@ -216,6 +244,16 @@ class CardBoxModel internal constructor(
             }
         }
     }
+}
+
+/**
+ * The shelves once card [id] has left them: gone from each that showed it — and the trash, which it
+ * went into from another shelf, left out to be read again (it is missing there until then).
+ */
+internal fun withoutCard(id: String, shelves: Map<TabGetCardBox, List<FeedCard>>): Map<TabGetCardBox, List<FeedCard>> {
+    val fromTrash = shelves[TabGetCardBox.trash]?.any { it.id == id } == true
+    return shelves.mapValues { (_, cards) -> cards.filterNot { it.id == id } }
+        .filterKeys { fromTrash || it != TabGetCardBox.trash }
 }
 
 /**
@@ -342,7 +380,7 @@ fun CardBoxScreen(session: Session, open: (Route) -> Unit) {
         when {
             cards == null && failed -> item { OrganicEmptyState(L10n.Native.loadError, L10n.Native.retry, { model.refresh(shelf, changes, retry = true) }, action = EmptyAction.Outline) }
             cards == null -> storyCardSkeletons(if (layout.isGrid) layout.columns * 2 else 6, layout = layout)
-            shelf == TabGetCardBox.trash -> trashShelf(cards, open, layout, air) { emptying = Emptying.Asking }
+            shelf == TabGetCardBox.trash -> trashShelf(cards, open, layout, air, model) { emptying = Emptying.Asking }
             // An empty shelf: the shared empty state (its own words as the title; the bookmarks' as its line),
             // and the empty published shelf points at the first story (ux §4).
             cards.isEmpty() -> item {
@@ -359,7 +397,7 @@ fun CardBoxScreen(session: Session, open: (Route) -> Unit) {
             }
             // The linked shelf lists the pared-back cards, as the web's MiniCardGrid does.
             shelf == TabGetCardBox.linked -> miniCards(cards, open, keyPrefix = "linked:")
-            shelf in OwnedShelves -> managedCards(session, cards, open, shelf, layout = layout)
+            shelf in OwnedShelves -> managedCards(session, cards, open, shelf, layout = layout, model = model)
             else -> storyCards(cards, open, layout = layout)
         }
     }
@@ -415,7 +453,7 @@ private fun EmptyTrashDialog(state: Emptying, set: (Emptying?) -> Unit) {
  * opens its page, with its trash banner ([trashTap]).
  * Empty, the trash's own empty state.
  */
-private fun LazyListScope.trashShelf(cards: List<FeedCard>, open: (Route) -> Unit, layout: CardListLayout, air: CardBoxAir, onEmpty: () -> Unit) {
+private fun LazyListScope.trashShelf(cards: List<FeedCard>, open: (Route) -> Unit, layout: CardListLayout, air: CardBoxAir, model: CardBoxModel, onEmpty: () -> Unit) {
     val now = Instant.now()
     val shown = inTrash(cards, now)
     if (shown.isEmpty()) {
@@ -435,7 +473,10 @@ private fun LazyListScope.trashShelf(cards: List<FeedCard>, open: (Route) -> Uni
         overlay = { card, i ->
             val hue = CardPalette.of(palettes[i]).hue
             Box(Modifier.align(Alignment.TopEnd).padding(top = 14.dp - 3.dp, end = 14.dp - 3.dp)) {
-                TrashActionsMenu(TrashRef(card.id, card.title), seed = hue, hue = hue)
+                TrashActionsMenu(
+                    TrashRef(card.id, card.title), seed = hue, hue = hue,
+                    onLeaving = { model.leave(card.id, it) }, onDeleted = { model.left(card.id) },
+                )
             }
         },
     )
@@ -444,7 +485,10 @@ private fun LazyListScope.trashShelf(cards: List<FeedCard>, open: (Route) -> Uni
         Box(Modifier.fillMaxWidth()) {
             StoryCard(remember(card) { card.story() }, i, i == shown.lastIndex, Modifier.plainClickable { open(tap(card)) }, inset = layout.inset, palette = palettes[i])
             Box(Modifier.align(Alignment.TopEnd).padding(top = 14.dp - 3.dp, end = layout.inset - 4.dp - 3.dp)) {
-                TrashActionsMenu(TrashRef(card.id, card.title), seed = hue, hue = hue)
+                TrashActionsMenu(
+                    TrashRef(card.id, card.title), seed = hue, hue = hue,
+                    onLeaving = { model.leave(card.id, it) }, onDeleted = { model.left(card.id) },
+                )
             }
         }
     }
@@ -549,14 +593,14 @@ internal fun shelfShown(chosen: TabGetCardBox): TabGetCardBox = if (chosen == Ta
  * as everyone else sees it ([story]) — that is its mark here, no badge. A tap
  * opens the card's page, a 私人卡's too ([managedTap]).
  */
-private fun LazyListScope.managedCards(session: Session, cards: List<FeedCard>, open: (Route) -> Unit, shelf: TabGetCardBox, layout: CardListLayout) {
+private fun LazyListScope.managedCards(session: Session, cards: List<FeedCard>, open: (Route) -> Unit, shelf: TabGetCardBox, layout: CardListLayout, model: CardBoxModel) {
     val tap: (FeedCard) -> Route = ::managedTap
     val palettes = cardFamilies(cards)
     if (layout.isGrid) return borderedCards(cards, open, null, false, layout, tap, overlay = { card, i ->
         val hue = CardPalette.of(palettes[i]).hue
         // 14 in from the card's corner, as on a band; the trigger's 44dp hit box reaches 3 past the chip.
         Box(Modifier.align(Alignment.TopEnd).padding(top = 14.dp - 3.dp, end = 14.dp - 3.dp)) {
-            CardMenu(session, card, open, hue)
+            CardMenu(session, card, open, hue, model)
         }
     })
     itemsIndexed(cards, key = { _, c -> c.id }, contentType = { _, _ -> "shelfCard" }) { i, card ->
@@ -567,7 +611,7 @@ private fun LazyListScope.managedCards(session: Session, cards: List<FeedCard>, 
                 // The chip 14 in from the card's corner (the card's box sits 20 in from the screen, or
                 // its column's inset less the band's 18); the trigger's 44dp hit box reaches 3 past the 38dp chip.
                 Box(Modifier.align(Alignment.TopEnd).padding(top = 14.dp - 3.dp, end = layout.inset - 4.dp - 3.dp)) {
-                    CardMenu(session, card, open, hue)
+                    CardMenu(session, card, open, hue, model)
                 }
             }
         }
@@ -577,13 +621,14 @@ private fun LazyListScope.managedCards(session: Session, cards: List<FeedCard>, 
 /**
  * The owner's ⋯ on one of my shelved cards: 刪除 moves it to the trash with the undo toast — asking
  * first only for a published, public, named resonance (whose original's byline the shelf doesn't
- * know: looked up when it matters).
+ * know: looked up when it matters). The card leaves the shelf as 刪除 is pressed ([CardBoxModel.leave]).
  */
 @Composable
-private fun CardMenu(session: Session, card: FeedCard, open: (Route) -> Unit, hue: Double) {
+private fun CardMenu(session: Session, card: FeedCard, open: (Route) -> Unit, hue: Double, model: CardBoxModel) {
     CardActionsMenu(
         session, card.id, card.visibility.value, open, seed = hue, hue = hue, referenceCardId = card.referenceCardId,
         published = card.publishedAt != null, anonymous = card.anonymous, title = card.title,
+        onTrashed = { model.left(card.id) }, onLeaving = { model.leave(card.id, it) },
     )
 }
 

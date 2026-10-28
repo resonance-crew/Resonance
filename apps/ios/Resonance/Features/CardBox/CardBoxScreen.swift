@@ -26,6 +26,9 @@ struct CardBoxScreen: View {
     /// 清空垃圾桶's question, here rather than on the trash shelf: the shelves read again after an
     /// emptying (they all go to their skeletons), and the question — with what went wrong — stays.
     @State private var emptying = EmptyTrashQuestion()
+    /// Cards on their way off a shelf (刪除 to the trash, 永久刪除 from it), shown gone at once — before the
+    /// server answers: the rest close up, and a refusal brings the card back where it was.
+    @State private var leaving: Set<String> = []
 
     /// The shelves in the strip's order: the trash always last (trash.spec §4), shown even while empty —
     /// it is read only when chosen, never to decide whether it shows. No 私人卡 shelf: a published
@@ -82,8 +85,16 @@ struct CardBoxScreen: View {
         // before it (one on its way may hold the shelf from before) is what they show.
         .onChange(of: writer.changes) {
             reads.supersedeAll()
-            shelves = [:]
-            unconfirmed = []
+            if let id = writer.lastChange?.cardId, leaving.contains(id) {
+                // A card that left its shelf here at once: the shelves keep what they show, without it, and
+                // are asked again behind it — no skeleton.
+                leaving.remove(id)
+                shelves = Self.without(id, in: shelves)
+                unconfirmed = Set(shelves.keys)
+            } else {
+                shelves = [:]
+                unconfirmed = []
+            }
             Task { await load(shelf) }
         }
         // Back after a while: every shelf asks again behind what it shows (this one now, the others when opened).
@@ -209,10 +220,26 @@ struct CardBoxScreen: View {
     }
 
     /// What shelf `s` shows, as far as it is known: the 私人卡 shelf is the drafts and the published
-    /// private cards together (both must be known), every other shelf its own list.
+    /// private cards together (both must be known), every other shelf its own list — less the cards
+    /// on their way off it.
     private func cards(_ s: ReadingAPI.CardBoxShelf) -> [FeedCard]? {
-        guard s == .draft else { return shelves[s] }
-        return Self.draftShelf(private: shelves[._private], drafts: shelves[.draft])
+        let known = s == .draft ? Self.draftShelf(private: shelves[._private], drafts: shelves[.draft]) : shelves[s]
+        guard !leaving.isEmpty else { return known }
+        return known?.filter { !leaving.contains($0.id) }
+    }
+
+    /// The shelves once card `id` has left them: gone from each that showed it — and the trash, which
+    /// it went into from another shelf, to be read again (it is missing there until then).
+    static func without(_ id: String, in shelves: [ReadingAPI.CardBoxShelf: [FeedCard]]) -> [ReadingAPI.CardBoxShelf: [FeedCard]] {
+        let fromTrash = shelves[.trash]?.contains { $0.id == id } == true
+        var left = shelves.mapValues { $0.filter { $0.id != id } }
+        if !fromTrash { left[.trash] = nil }
+        return left
+    }
+
+    /// A card leaving a shelf (`true`, at once) or staying after all (`false`: the server refused).
+    private func leave(_ id: String, _ going: Bool) {
+        if going { leaving.insert(id) } else { leaving.remove(id) }
     }
 
     @ViewBuilder private var shelfContent: some View {
@@ -233,11 +260,11 @@ struct CardBoxScreen: View {
                     OrganicEmptyState(title: Self.empty(shelf), icon: .cards, seed: 53)
                 }
             } else if shelf == .trash {
-                TrashShelf(cards: cards) { emptying.ask() }
+                TrashShelf(cards: cards, onLeaving: leave) { emptying.ask() }
             } else if shelf == .linked {
                 MiniCardList(cards: cards)
             } else if Self.owned.contains(shelf) {
-                ManagedCardList(cards: cards)
+                ManagedCardList(cards: cards, onLeaving: leave)
             } else {
                 StoryCardList(cards: cards)
             }
@@ -396,6 +423,8 @@ struct CardBoxScreen: View {
 /// a tap away in the bar, as on every card.
 private struct ManagedCardList: View {
     let cards: [FeedCard]
+    /// A card leaving its shelf for the trash at once, or staying after all (``CardActionsMenu/onLeaving``).
+    let onLeaving: (String, Bool) -> Void
     @Environment(SessionStore.self) private var session
 
     var body: some View {
@@ -414,7 +443,7 @@ private struct ManagedCardList: View {
             .overlay(alignment: .topTrailing) {
                 CardActionsMenu(cardId: card.id, visibility: card.visibility.rawValue, seed: hue, hue: hue,
                                 answering: card.referenceCardId, isPublished: card.publishedAt != nil,
-                                anonymous: card.anonymous, title: card.title)
+                                anonymous: card.anonymous, title: card.title, onLeaving: { onLeaving(card.id, $0) })
                     .padding(.top, 14 - 3)
                     .padding(.trailing, (bordered ? 14 : 34) - 3)
             }
@@ -429,6 +458,8 @@ private struct ManagedCardList: View {
 /// is here, that the notes left on it went with it — and 清空 at its end.
 private struct TrashShelf: View {
     let cards: [FeedCard]
+    /// A card leaving the trash for good at once, or staying after all (``TrashActionsMenu/onLeaving``).
+    let onLeaving: (String, Bool) -> Void
     /// 清空垃圾桶: the question is the card box's (it outlives the shelf reading again).
     let onEmpty: () -> Void
     @Environment(\.window) private var window
@@ -437,7 +468,7 @@ private struct TrashShelf: View {
         // 16 down to a phone's first band, 24 to a grid (whose own top keeps 4).
         VStack(alignment: .leading, spacing: window.layoutClass == .expanded ? 20 : 16) {
             header.alignedWithCardGrid()
-            TrashCardList(cards: cards)
+            TrashCardList(cards: cards, onLeaving: onLeaving)
         }
     }
 
@@ -546,6 +577,7 @@ final class ShelfReads {
 /// the server answers its author for both).
 private struct TrashCardList: View {
     let cards: [FeedCard]
+    let onLeaving: (String, Bool) -> Void
 
     var body: some View {
         let palettes = CardPalette.palettes(cards.map(\.accentHue))
@@ -558,7 +590,7 @@ private struct TrashCardList: View {
             NavigationLink(value: Route.card(card.routeKey)) { face }
                 .buttonStyle(.plain)
             .overlay(alignment: .topTrailing) {
-                TrashActionsMenu(cardId: card.id, seed: hue, hue: hue)
+                TrashActionsMenu(cardId: card.id, seed: hue, hue: hue, onLeaving: { onLeaving(card.id, $0) })
                     .padding(.top, 14 - 3)
                     .padding(.trailing, (bordered ? 14 : 34) - 3)
             }

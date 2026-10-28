@@ -80,6 +80,9 @@ struct CardActionsMenu: View {
     var onChanged: () -> Void = {}
     /// The card went to the trash (its lists are told already).
     var onTrashed: () -> Void = {}
+    /// The card box (`.toast`): the card leaves its shelf at once (`true`), before the server answers, and
+    /// comes back should it refuse (`false`) — said then in a toast, which outlives the card's ⋯.
+    var onLeaving: (Bool) -> Void = { _ in }
     /// A chip over a card's cover (the card box), bare in the card page's bar.
     var trigger: MenuTrigger = .chip
     @Environment(SessionStore.self) private var session
@@ -238,18 +241,31 @@ struct CardActionsMenu: View {
         busy = true
         failed = false
         defer { busy = false }
+        // In the card box the card leaves its shelf at once, and this ⋯ (its question too) with it: what the
+        // rest needs is taken before it goes.
+        let leaves = trashFeedback == .toast
+        let (cardId, change, title, answering, session, writer, onLeaving, onTrashed) =
+            (cardId, change, title, answering, session, writer, onLeaving, onTrashed)
+        if leaves {
+            confirming = false
+            onLeaving(true)
+        }
         do {
             try await session.writing.trashCard(cardId)
         } catch {
-            // Not moved: the card stays in every list, and the writer is told — in the question, if one was asked.
-            if confirming { failed = true } else { trashFailed = true }
+            // Not moved: the card is back in every list, and the writer is told — in the toast where it had left
+            // its shelf, else in the question, if one was asked.
+            if leaves {
+                onLeaving(false)
+                session.toasts.show(L10n.Me.Actions.trashFailed)
+            } else if confirming { failed = true } else { trashFailed = true }
             return
         }
         confirming = false
         session.cardPreviews.forget(cardId)
         writer.noteChange(change)
         onTrashed()
-        if trashFeedback == .toast {
+        if leaves {
             TrashMoves.announceTrashed(cardId: cardId, title: title, answering: answering, session: session, writer: writer)
         }
     }

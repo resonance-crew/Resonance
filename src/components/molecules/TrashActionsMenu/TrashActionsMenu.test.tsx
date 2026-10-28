@@ -92,9 +92,9 @@ describe('TrashActionsMenu', () => {
   });
 
   it('deletes for good only after asking, in red, and only while the card is still in the trash', async () => {
-    const onDeleted = vi.fn();
+    const onLeaving = vi.fn();
     mockCallApi.mockResolvedValue(null);
-    renderMenu(<TrashActionsMenu card={{ id: 'c1' }} onDeleted={onDeleted} />);
+    renderMenu(<TrashActionsMenu card={{ id: 'c1' }} onLeaving={onLeaving} />);
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
     await userEvent.click(screen.getByText('Delete forever'));
 
@@ -109,14 +109,13 @@ describe('TrashActionsMenu', () => {
     await userEvent.click(verb);
     await waitFor(() => expect(mockCallApi).toHaveBeenCalledWith('/api/v1/cards/c1?onlyIfTrashed=true', { method: 'DELETE' }));
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Deleted forever'));
-    expect(onDeleted).toHaveBeenCalledWith('c1');
+    expect(onLeaving).toHaveBeenCalledWith('c1');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('leaves a card restored meanwhile (on another device) as it is, and says it is no longer in the trash', async () => {
-    const onDeleted = vi.fn();
     mockCallApi.mockRejectedValue(new ApiError(409, 'conflict', 'This card is not in the trash.'));
-    renderMenu(<TrashActionsMenu card={{ id: 'c1' }} onDeleted={onDeleted} />);
+    renderMenu(<TrashActionsMenu card={{ id: 'c1' }} />);
     await waitFor(() => expect(trashReads).toHaveBeenCalledTimes(1));
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
     await userEvent.click(screen.getByText('Delete forever'));
@@ -124,18 +123,18 @@ describe('TrashActionsMenu', () => {
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent("This card isn't in the trash any more"));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(onDeleted).not.toHaveBeenCalled();
     // The shelf is read again: it shows where the card really is.
     await waitFor(() => expect(trashReads).toHaveBeenCalledTimes(2));
   });
 
-  it('keeps the question open and says so when the delete fails for another reason', async () => {
+  // The card left the shelf (and its question with it) as 永久刪除 was pressed: a refusal is said in the toast.
+  it('says so in a toast when the delete fails for another reason', async () => {
     mockCallApi.mockRejectedValue(new Error('offline'));
     renderMenu(<TrashActionsMenu card={{ id: 'c1' }} />);
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
     await userEvent.click(screen.getByText('Delete forever'));
     await userEvent.click(screen.getByRole('button', { name: 'Delete forever' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent("That didn't work — try again");
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent("Couldn't delete it forever — try again"));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 });

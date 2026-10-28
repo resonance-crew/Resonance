@@ -33,10 +33,19 @@ internal fun deleteForeverOutcome(e: Throwable?): DeleteForever = when {
  * 永久刪除, asked first in red (it can't be undone): 永久刪除這張卡片？ · 刪除後無法復原，卡片的故事與共振連結
  * 都會消失 · 先留著 | 永久刪除. Gone, it says 已永久刪除 and [onDeleted] runs; restored meanwhile on
  * another device (the server's 409), the question closes and says 這張卡片已經不在垃圾桶裡; any other
- * failure is said in the question, which stays for another try.
+ * failure is said in the question, which stays for another try. On the trash shelf ([onLeaving]) the card
+ * leaves it as the verb is pressed, the question with it; a failure then brings the card back and says so in a toast.
  */
 @Composable
-internal fun DeleteForeverDialog(trash: TrashCenter, toasts: Toasts, card: TrashRef, seed: Double, onClose: () -> Unit, onDeleted: () -> Unit = {}) {
+internal fun DeleteForeverDialog(
+    trash: TrashCenter,
+    toasts: Toasts,
+    card: TrashRef,
+    seed: Double,
+    onClose: () -> Unit,
+    onDeleted: () -> Unit = {},
+    onLeaving: ((Boolean) -> Unit)? = null,
+) {
     var busy by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     OrganicConfirmDialog(
@@ -49,6 +58,10 @@ internal fun DeleteForeverDialog(trash: TrashCenter, toasts: Toasts, card: Trash
             if (!busy) {
                 busy = true
                 failed = false
+                if (onLeaving != null) {
+                    onClose()
+                    onLeaving(true)
+                }
                 trash.launch {
                     val error = try {
                         deleteForever(card)
@@ -68,8 +81,15 @@ internal fun DeleteForeverDialog(trash: TrashCenter, toasts: Toasts, card: Trash
                         DeleteForever.NotInTrash -> {
                             onClose()
                             toasts.show(L10n.Me.Actions.notInTrash)
+                            // Restored on another device, off the shelf it had left: it is not coming back to the trash.
+                            onLeaving?.let { onDeleted() }
                         }
-                        DeleteForever.Failed -> failed = true
+                        DeleteForever.Failed -> if (onLeaving != null) {
+                            onLeaving(false)
+                            toasts.show(L10n.Me.Actions.deleteForeverFailed)
+                        } else {
+                            failed = true
+                        }
                     }
                 }
             }
@@ -93,6 +113,10 @@ fun TrashActionsMenu(
     seed: Double = 7.0,
     hue: Double? = null,
     trigger: MenuTrigger = MenuTrigger.Chip,
+    /** 永久刪除 takes the card off the shelf at once (`true`), a refusal brings it back (`false`). */
+    onLeaving: ((Boolean) -> Unit)? = null,
+    /** Gone for good (or restored meanwhile elsewhere): off the shelf for good. */
+    onDeleted: () -> Unit = {},
 ) {
     val trash = LocalTrash.current ?: return
     val toasts = LocalToasts.current
@@ -116,5 +140,5 @@ fun TrashActionsMenu(
     Box(Modifier.fade(if (restoring) 0.6f else 1f)) {
         OrganicMenu(items, L10n.Me.Actions.menuLabel, seed, hue = hue, trigger = trigger, enabled = !restoring)
     }
-    if (deleting) DeleteForeverDialog(trash, toasts, card, seed + 5, onClose = { deleting = false })
+    if (deleting) DeleteForeverDialog(trash, toasts, card, seed + 5, onClose = { deleting = false }, onDeleted = onDeleted, onLeaving = onLeaving)
 }

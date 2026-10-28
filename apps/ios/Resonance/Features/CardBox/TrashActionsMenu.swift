@@ -174,27 +174,28 @@ struct TrashActionsMenu: View {
     let cardId: String
     var seed: Double = 7
     var hue: Double?
+    /// 永久刪除 takes the card off the shelf at once (`true`), before the server answers; a refusal
+    /// brings it back (`false`). Said in a toast, which outlives the card's ⋯.
+    var onLeaving: (Bool) -> Void = { _ in }
     @Environment(SessionStore.self) private var session
     @Environment(WriteLauncher.self) private var writer
     @State private var busy = false
     @State private var confirming = false
-    @State private var failed = false
 
     var body: some View {
         OrganicMenu(items: [
             OrganicMenuItem(id: "restore", title: L10n.Me.Actions.restore, icon: .restore) { Task { await restore() } },
             OrganicMenuItem(id: "deleteForever", title: L10n.Me.Actions.deleteForever, icon: .trash, danger: true) {
-                failed = false
                 confirming = true
             },
         ], label: L10n.Me.Actions.menuLabel, seed: seed, hue: hue)
         .opacity(busy && !confirming ? 0.6 : 1)
         .allowsHitTesting(!busy || confirming)
-        // For good: the verb in red. A refusal is said in the dialog, which stays to try again.
+        // For good: the verb in red. The card leaves the shelf as it is pressed, the question with it.
         .organicConfirm(isPresented: $confirming, title: L10n.Me.Actions.deleteForeverConfirmTitle,
                         message: L10n.Me.Actions.deleteConfirmBody, cancelLabel: L10n.Me.Actions.deleteCancel,
                         confirmLabel: L10n.Me.Actions.deleteForever, closeLabel: L10n.Me.Actions.deleteCancel, busy: busy,
-                        error: failed ? L10n.Safety.actionError : nil, destructive: true, seed: seed + 5) {
+                        destructive: true, seed: seed + 5) {
             Task { await deleteForever() }
         }
     }
@@ -206,16 +207,20 @@ struct TrashActionsMenu: View {
         await TrashMoves.restore(cardId, answering: nil, says: .audience, session: session, writer: writer)
     }
 
+    /// Off the shelf at once — this ⋯ with it, so what it needs is taken before it goes — then said in a
+    /// toast: 已永久刪除, or, refused, 沒能永久刪除 with the card back where it was.
     private func deleteForever() async {
         guard !busy else { return }
         busy = true
-        failed = false
         defer { busy = false }
+        let (cardId, session, writer, onLeaving) = (cardId, session, writer, onLeaving)
+        confirming = false
+        onLeaving(true)
         do {
             _ = try await TrashMoves.deleteForever(cardId, session: session, writer: writer)
-            confirming = false
         } catch {
-            failed = true
+            onLeaving(false)
+            session.toasts.show(L10n.Me.Actions.deleteForeverFailed)
         }
     }
 }

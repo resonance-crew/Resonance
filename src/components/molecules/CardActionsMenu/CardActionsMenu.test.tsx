@@ -271,17 +271,36 @@ describe('CardActionsMenu', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
-  it('says so in a notice of its own when the trash refuses, leaving the card in its lists', async () => {
+  // The card box: the card has left its shelf (and this menu with it) before the server answers, so a refusal
+  // is said in the toast, which outlives them — the card is back in its lists.
+  it('says so in a toast when the trash refuses the card box’s card, which is back in its lists', async () => {
     const onTrashed = vi.fn();
+    const onLeaving = vi.fn();
     mockCallApi.mockRejectedValue(new Error('offline'));
-    renderMenu(<CardActionsMenu card={{ id: 'c3', visibility: 'public' }} onTrashed={onTrashed} />);
+    renderMenu(<CardActionsMenu card={{ id: 'c3', visibility: 'public' }} onTrashed={onTrashed} onLeaving={onLeaving} />);
     await waitFor(() => expect(boxReads).toHaveBeenCalledTimes(1));
+    await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
+    await userEvent.click(screen.getByText('Delete'));
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent("Couldn't move it to the trash — try again"));
+    expect(onLeaving).toHaveBeenCalledWith('c3');
+    expect(onTrashed).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  // The card's own page stays where it is: the refusal is said in a notice of its own.
+  it('says so in a notice of its own when the trash refuses the card on its own page', async () => {
+    const onTrashed = vi.fn();
+    const onLeaving = vi.fn();
+    mockCallApi.mockRejectedValue(new Error('offline'));
+    renderMenu(<CardActionsMenu card={{ id: 'c3', visibility: 'public' }} trashFeedback="page" onTrashed={onTrashed} onLeaving={onLeaving} />);
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
     await userEvent.click(screen.getByText('Delete'));
 
     const notice = await screen.findByRole('dialog', { name: 'Delete' });
     expect(notice).toHaveTextContent("That didn't work — try again");
     expect(onTrashed).not.toHaveBeenCalled();
+    expect(onLeaving).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
@@ -433,9 +452,9 @@ describe('CardActionsMenu', () => {
     expect(connectionReads.people).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the question open and says so when the trash refuses a resonance it asked about', async () => {
+  it('keeps the question open and says so when the trash refuses a resonance it asked about on its own page', async () => {
     mockCallApi.mockRejectedValue(new Error('offline'));
-    renderMenu(<CardActionsMenu card={reaching} referenceAnonymous={false} />);
+    renderMenu(<CardActionsMenu card={reaching} referenceAnonymous={false} trashFeedback="page" />);
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
     await userEvent.click(screen.getByText('Delete'));
     await userEvent.click(await screen.findByRole('button', { name: 'Move to trash' }));
