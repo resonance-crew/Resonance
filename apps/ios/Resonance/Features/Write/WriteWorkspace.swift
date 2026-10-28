@@ -68,9 +68,6 @@ enum EditorSplit {
 
 /// What the workspace asks of the card in its pane, filled in by its ``WriteScreen``.
 @MainActor @Observable final class WritePane {
-    /// The card in the pane is at its publish step (round 17 §9): the Leave on the map is then its way back
-    /// to writing, and says so — the step draws no back of its own.
-    var publishing = false
     /// Saves what is written now (hiding the pane, opening another card in it).
     @ObservationIgnored var saveNow: () -> Void = {}
     /// The card it writes, once it has an id (a new card's once first saved): what the map centres once
@@ -90,7 +87,6 @@ enum EditorSplit {
     @ObservationIgnored var backToMap: () -> Bool = { false }
 
     func clear() {
-        publishing = false
         saveNow = {}
         cardId = { nil }
         holds = { false }
@@ -208,7 +204,6 @@ struct WriteWorkspace: View {
                 // writer's own once it has an id.
                 // Under a pane wider than half, the map keeps its half: the pane slides over it.
                 ThoughtMapScreen(openCard: split ? { openFromMap($0) } : nil, back: { leaveFromMap() },
-                                 backLabel: stepsBack ? L10n.Write.leaveStay : nil,
                                  focus: { card?.cardId ?? pane.cardId() }, settled: settled)
                     .frame(width: split ? max(0, w - min(shown, EditorSplit.maxFraction * w)) : w)
                     .allowsHitTesting(!full)
@@ -465,16 +460,10 @@ struct WriteWorkspace: View {
         if card != nil, let goBack = pane.goBack { goBack() } else { dismiss() }
     }
 
-    /// Whether the Leave on the canvas takes the pane's card back to writing rather than out of the page:
-    /// the pane shown beside the map, at its publish step (round 17 §9: one back, as §5.3's web — the step
-    /// draws none of its own).
-    private var stepsBack: Bool { split && open && !full && card != nil && pane.publishing }
-
-    /// The Leave on the canvas, the workspace's one back: from the pane's publish step back to writing
-    /// (named 繼續寫 meanwhile); from writing — or with the pane hidden — out of the page (the question first
-    /// when there is writing).
+    /// The Leave on the canvas: out of the page from either of the pane's steps (the question first
+    /// when there is writing) — beside the map the step's own ← 繼續寫 is the way back to writing; at the
+    /// whole width the map is under the pane and the bar's back is the one back.
     private func leaveFromMap() {
-        if stepsBack, let goBack = pane.goBack { return goBack() }
         if card != nil, let leave = pane.leave { leave() } else { dismiss() }
     }
 }

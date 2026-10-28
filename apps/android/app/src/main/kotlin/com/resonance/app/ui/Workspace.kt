@@ -387,18 +387,11 @@ internal fun Workspace(
                 }
                 .then(if (writerAlone) Modifier.clearAndSetSemantics { } else Modifier),
         ) {
-            // The workspace's one back (round 17 §9): from the pane's publish step it goes back to writing, named for it.
-            val stepBack = split && pane.open && handle.inPublishStep
+            // The map's Leave leaves the page from either of the pane's steps: beside the map the publish step has its own
+            // ← 繼續寫 (StepHeading), and at the whole width the map is under the pane and the bar's back is the one back.
             ThoughtMapScreen(
                 session, session.thoughtMap, open,
-                leave = {
-                    when {
-                        !split -> leave()
-                        stepBack -> handle.stepBack()
-                        else -> leavePage()
-                    }
-                },
-                leaveLabel = if (stepBack) L10n.Write.leaveStay else L10n.Me.ThoughtMap.leave,
+                leave = { if (split) leavePage() else leave() },
                 openMine = if (split) ::openFromMap else null,
                 paneCardId = card?.cardId?.takeIf { split && pane.open },
                 paneSettled = pane.settled,

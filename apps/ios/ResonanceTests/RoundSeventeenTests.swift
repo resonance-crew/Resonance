@@ -8,7 +8,7 @@ import Testing
 /// Round 17 (2026-10-27, the owner's review of round 16 on an iPad): one menu sheet everywhere, the press
 /// layer dimming the thread's body alone with its reactions floating, the tag pills in the tonal face and
 /// a Return that keeps the field, the link editor as a modal with 連結 last on the format bar, the phone's
-/// tab bar lower and in a stronger pen, and the split's publish step with one back.
+/// tab bar lower and in a stronger pen.
 @MainActor @Suite struct RoundSeventeenMenuTests {
     private func item(_ title: String) -> OrganicMenuItem {
         OrganicMenuItem(id: title, title: title, icon: .flag) {}
@@ -134,14 +134,5 @@ import Testing
         #expect(BarTitles.titleOffset(subtitle: nil, line: 21) == 11)
         #expect(BarTitles.titleOffset(subtitle: "已儲存", line: 21) == 0)
         #expect(BarTitles.scaledSubtitleLine >= BarTitles.subtitleLine - 0.001)
-    }
-
-    @Test func thePaneKnowsItsStepAndForgetsItWithItsCard() {
-        // The workspace's one back reads it (round 17 §9): the Leave over the map steps back to writing.
-        let pane = WritePane()
-        #expect(!pane.publishing)
-        pane.publishing = true
-        pane.clear()
-        #expect(!pane.publishing)
     }
 }

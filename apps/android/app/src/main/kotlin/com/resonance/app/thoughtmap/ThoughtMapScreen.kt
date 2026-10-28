@@ -122,8 +122,6 @@ fun ThoughtMapScreen(
     store: ThoughtMapStore,
     open: (Route) -> Unit,
     leave: () -> Unit,
-    /** What the Leave is named (round 17 §9: at the split, from the pane's publish step it goes back to writing). */
-    leaveLabel: String = L10n.Me.ThoughtMap.leave,
     /**
      * The split workspace's map (round 5 E5): a card of mine tapped opens here — in the editor pane
      * beside the map, in place — instead of in the writer pushed over it. Null: the writer is pushed.
@@ -192,7 +190,7 @@ fun ThoughtMapScreen(
         MapEdgeLabels(store)
         MapTouchSurface(store)
         MapEditors(store)
-        Chrome(store, session, leave, leaveLabel) { scope.launch { store.addGroup() } }
+        Chrome(store, session, leave) { scope.launch { store.addGroup() } }
         if (store.trayOpen) MapTray(store)
     }
 }
@@ -241,7 +239,7 @@ private suspend fun glide(store: ThoughtMapStore, target: MapCamera, reduced: Bo
 private const val CENTRE_MILLIS = 300f
 
 @Composable
-private fun BoxScope.Chrome(store: ThoughtMapStore, session: Session, leave: () -> Unit, leaveLabel: String, addGroup: () -> Unit) {
+private fun BoxScope.Chrome(store: ThoughtMapStore, session: Session, leave: () -> Unit, addGroup: () -> Unit) {
     val status = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val scope = rememberCoroutineScope()
@@ -265,7 +263,7 @@ private fun BoxScope.Chrome(store: ThoughtMapStore, session: Session, leave: () 
     val top = if (tablet) status + TabletBarRowLine - leaveHeight / 2 else status + 8.dp
     val edge = if (tablet) tabletBackCentre(layout.pad) - leaveHeight * LEAVE_ASPECT / 2 else 20.dp
     OrganicButton(
-        leaveLabel,
+        L10n.Me.ThoughtMap.leave,
         Modifier.align(Alignment.TopStart).padding(start = edge, top = top).size(leaveHeight * LEAVE_ASPECT, leaveHeight),
         variant = ButtonVariant.Tonal, icon = IconName.ArrowRight, small = true, iconOnly = true, iconSize = 15.dp, mirrorIcon = true,
     ) {
