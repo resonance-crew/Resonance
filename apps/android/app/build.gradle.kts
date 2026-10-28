@@ -18,7 +18,7 @@ android {
         minSdk = 29 // Typeface.CustomFallbackBuilder (the web's per-glyph font stack)
         targetSdk = 36
         versionCode = 15
-        versionName = "2.2.0"
+        versionName = "2.2.1"
     }
 
     buildFeatures {
