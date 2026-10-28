@@ -2,7 +2,8 @@
  * The landing stage on the real page: the DOM env the engine is told (measure.ts's places, the view below the fixed
  * header, the page's scheme and motion preference followed live, a clock on animation frames and timers) and the
  * stage built over it — again whenever the page's width changes (a rotated tablet, a resized window: the preset may
- * change, and every place moves), its places swapped quietly when only something else moved (fonts, late content).
+ * change, and every place moves), its places swapped quietly when only something else moved (fonts, late content, a
+ * window made taller: the visitors move with their places).
  *
  *   const handle = mountLandingStage(window, layer, { createStage, cast });   …   handle.destroy();
  *
@@ -28,7 +29,7 @@ export interface LandingStageHandle {
   readonly preset: LandingPreset;
   readonly layout: LandingLayout;
   readonly env: StageEnv | null;
-  /** Measures again now (and rebuilds the stage if a visitor's place moved). */
+  /** Measures again now (a visitor whose place moved moves with it). */
   measure(): void;
   destroy(): void;
 }
@@ -117,7 +118,11 @@ export function mountLandingStage(window: Window, layer: HTMLElement, deps: Land
     stage = deps.createStage(env, deps.cast, { ...preset.options, seed: deps.seed, onEvent: deps.onEvent });
   }
 
-  /** Measures again; a visitor whose place moved (or went) means a new stage, else the new places are simply used. */
+  /**
+   * Measures again. A new preset is a new stage; otherwise the new places are simply used, and a visitor whose place
+   * moved moves with it (or leaves, if its place went or moved sideways) — never the whole stage built again over a
+   * visitor mid-act (the hero is centred in the window: a window made taller or shorter moves every place in it).
+   */
   function remeasure(): void {
     timer = 0;
     if (destroyed) return;
@@ -143,7 +148,7 @@ export function mountLandingStage(window: Window, layer: HTMLElement, deps: Land
     const after = new Map(layout.ledges.map(l => [l.id, where(l)]));
     const moved = stage.visitors().some(v => v.ledge != null && before.get(v.ledge) !== after.get(v.ledge));
     size();
-    if (moved) build();
+    if (moved) stage.relayout();
   }
   function soon(): void {
     if (destroyed) return;

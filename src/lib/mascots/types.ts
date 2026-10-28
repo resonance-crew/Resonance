@@ -255,7 +255,7 @@ export interface StageOptions {
   greetEvery: number;
   /** Px from the side of the view past which a spot is usually popped up at instead. */
   farWalk: number;
-  /** Seconds a walk in or out is kept to (a scurry, at most 2.6×). */
+  /** Seconds a walk in or out is kept to (a brisker walk, at most motion.ts's MAX_HURRY×). */
   walkLimit: number;
   /** Brightness of the characters on the dark page (the stars' glow stays). */
   nightDim: number;
@@ -342,6 +342,11 @@ export interface StageApi {
   advance(sec: number): void;
   /** Re-reads the viewport and draws (after a scroll or a resize while paused). */
   refresh(): void;
+  /**
+   * The places were measured again (env.ledges answers the new ones): visitors whose place moved straight up or down
+   * move with it, the others leave.
+   */
+  relayout(): void;
   visitors(): VisitorInfo[];
   stats(): StageStats;
   resetStats(): void;

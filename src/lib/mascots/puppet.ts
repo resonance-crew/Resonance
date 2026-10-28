@@ -6,9 +6,11 @@
 import { ACTS } from './acts';
 import type { Stage } from './engine';
 import { clamp, DEG, overlaps, pathY } from './geometry';
-import { mouthOpen } from './motion';
+import { HOP_SEC, mouthOpen } from './motion';
 import { rigInfo, type Arm, type RigInfo } from './rig';
-import type { ArmSide, BehindCover, CastEntry, Cover, Duet, Manifest, Plan, PuppetMode, Rect, Stance, Task, Traits } from './types';
+import type {
+  ArmSide, BehindCover, CastEntry, Cover, Duet, Ledge, Manifest, Plan, PuppetMode, Rect, Stance, Task, Traits,
+} from './types';
 
 /** The frame's pose, rebuilt from the stance's baseline every step; tasks and the overlay add to it. */
 export interface Pose {
@@ -92,6 +94,8 @@ export class Puppet {
   release: (() => void) | null = null;
   cover: BehindCover | null = null;
   blushHold = 0;
+  /** It has fallen back onto the page (popDown): it never stands up again. */
+  fallen = false;
   gone = false;
   drawn = false;
   still = false;
@@ -121,8 +125,10 @@ export class Puppet {
     const R = this.rig;
     this.hop = this.m.walk === 'hop';
     this.scaleBy();
+    // rig units a second: long legs walk a little faster, not much (the five walk within about 1.3× of each other —
+    // 75 to 100 px a second on a desktop — where 1.5 × legLen once had them nearly 2× apart)
     this.gait = {
-      speed: (240 + R.legLen * 1.5) * (this.traits.pace || 1), stride: Math.max(44, R.legLen * 1.05),
+      speed: (250 + R.legLen * 0.5) * (this.traits.pace || 1), stride: Math.max(44, R.legLen * 1.05),
       swing: this.traits.shuffle ? 14 : 24, arm: 10, hopLen: (R.box.r - R.box.l) * 0.62, hopH: 44,
     };
     this.decoH = Math.max(0, R.torso.y - Math.min(...this.m.parts.filter(p => p.parent === 'body' && p.w && !p.variantOf).map(p => p.y)));
@@ -161,7 +167,7 @@ export class Puppet {
   }
   /** Px per second along the ground, walking or hopping. */
   pace(): number {
-    return this.hop ? (this.gait.hopLen * this.k) / 0.5 : this.gait.speed * this.k;
+    return this.hop ? (this.gait.hopLen * this.k) / HOP_SEC : this.gait.speed * this.k;
   }
   setLift(side: ArmSide, v: number): void {
     if (side === 'L') this.pose.liftL = v;
@@ -304,6 +310,10 @@ export class Puppet {
       liftL: R.arms.L.rest, liftR: R.arms.R.rest, faceX: 0, faceY: 0, eyes: 'open', mouth: 'mouth', alt: false,
       decoR: 0, decoY: 0, blush: 0, stars: 1, alpha: 1, shadow: 1 - 0.4 * sit + 0.15 * flo, front: false, popX: 1, popY: 1,
     };
+    if (this.fallen) {
+      this.pose.popY = 0.02;
+      this.pose.alpha = 0;
+    }
   }
 
   push(task: Task): void {
@@ -470,13 +480,16 @@ export class Puppet {
   facePage(): [number, number] {
     return this.pagePoint(this.rig.face[0] + this.face.x, this.rig.face[1] + this.face.y);
   }
-  /** Where an arm's mitten is, page px, and the arm's screen angle. */
-  mitten(side: ArmSide): [number, number, number] {
+  /**
+   * Where an arm's mitten is, page px, and the arm's screen angle: `at` of the way along the arm (0.82, its far rim, by
+   * default; MITTEN_MIDDLE, where it holds a pencil).
+   */
+  mitten(side: ArmSide, at = 0.82): [number, number, number] {
     const a = this.arm(side);
     const lift = side === 'L' ? this.pose.liftL : this.pose.liftR;
     const ang = (side === 'L' ? 90 + lift : 90 - lift) + this.pose.tilt;
     const [bx, by] = this.pagePoint(...a.pivot);
-    const r = a.len * 0.82 * this.k;
+    const r = a.len * at * this.k;
     return [bx + Math.cos(ang * DEG) * r, by + Math.sin(ang * DEG) * r, ang];
   }
   /** How far (px) this arm reaches out sideways from the ground point under the body, held straight out. */
@@ -524,6 +537,31 @@ export class Puppet {
     const other: ArmSide = want === 'L' ? 'R' : 'L';
     for (const lift of lifts) for (const side of [want, other]) if (this.armShows(side, lift)) return { side, lift };
     return null;
+  }
+
+  /** Its place moved `dy` px down (the page measured again, `ledge` the place as it is now): it moves with it. */
+  moveBy(dy: number, ledge: Ledge): void {
+    const pl = this.plan;
+    if (!pl) return;
+    const down = <T extends Cover>(c: T): T => ({ ...c, y: c.y + dy, top: c.top && c.top.map(([x, y]) => [x, y + dy] as const) });
+    pl.ledge = ledge;
+    if (Math.abs(dy) < 0.01) return;
+    const surface = pl.surface;
+    pl.surface = x => surface(x) + dy;
+    this.surface = pl.surface;
+    pl.y += dy;
+    if (pl.ground != null) pl.ground += dy;
+    if (pl.target) pl.target = [pl.target[0], pl.target[1] + dy];
+    if (pl.cover) pl.cover = down(pl.cover);
+    this.y += dy;
+    if (this.cover) {
+      const c = down(this.cover);
+      this.cover = c;
+      if (this.release && this.S.env.behind) {
+        this.release();
+        this.release = this.S.env.behind(this.el, c);
+      }
+    }
   }
 
   goBehind(cover: Cover, lowestRise: number): void {

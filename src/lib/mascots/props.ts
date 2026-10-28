@@ -10,10 +10,16 @@ import type { Duet } from './types';
 
 export type PropKind = 'waves' | 'note' | 'burst' | 'pencil' | 'paper' | 'book' | 'z';
 
-/** Each drawing's own size (its viewBox): `at` centres it. */
+/** Each drawing's own size (its viewBox): `at` centres it unless told which of its points goes where. */
 const SIZE: Record<PropKind, readonly [number, number]> = {
   waves: [100, 44], note: [44, 34], burst: [60, 60], pencil: [12, 56], paper: [40, 30], book: [64, 42], z: [40, 40],
 };
+
+/** The pencil's point and the top of its cap, in its drawing. */
+export const PENCIL_TIP: readonly [number, number] = [6, 54];
+export const PENCIL_LEN = 52;
+/** The slip's three written lines, in its drawing: where each starts and ends, and its height (their waves: 1.5 up, then 1.5 down, every 7). */
+export const PAPER_LINES: readonly (readonly [number, number, number])[] = [[8, 29, 10], [8, 31, 16], [8, 21, 22]];
 
 const svg = (kind: PropKind, body: string) => {
   const [w, h] = SIZE[kind];
@@ -68,10 +74,11 @@ export class Prop {
     this.page = kind === 'book' ? el.querySelector<SVGPathElement>('path.pg') : null;
   }
 
-  /** Centred at page (x, y). */
-  at(x: number, y: number, k: number, alpha: number, rot = 0): void {
+  /** Its `anchor` (a point of its drawing; the centre by default) at page (x, y), turned `rot` degrees about it. */
+  at(x: number, y: number, k: number, alpha: number, rot = 0, anchor?: readonly [number, number]): void {
     const [w, h] = SIZE[this.kind];
-    this.q.tf = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px) rotate(${rot.toFixed(1)}deg) scale(${k.toFixed(3)}) translate(${-w / 2}px,${-h / 2}px)`;
+    const [ax, ay] = anchor || [w / 2, h / 2];
+    this.q.tf = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px) rotate(${rot.toFixed(1)}deg) scale(${k.toFixed(3)}) translate(${-ax}px,${-ay}px)`;
     this.q.op = clamp(alpha, 0, 1).toFixed(2);
   }
 

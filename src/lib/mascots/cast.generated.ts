@@ -4,7 +4,7 @@ import type { CastEntry } from './types';
 
 /** sha256 (first 16 hex) of what the cast was built from: the build script, each character's manifest and part images. */
 export const MASCOT_CAST_SOURCES: { script: string; cast: Readonly<Record<string, string>> } = {
-  script: "8ce90bf576340639",
+  script: "15a270d98d0e8e31",
   cast: {
     tuck: "04615c81a93c259c",
     tag: "93f2bf0ba4bd6be1",
@@ -55,7 +55,7 @@ export const MASCOT_CAST: readonly CastEntry[] = [
   {
     slug: "tag",
     base: "/mascots/tag/",
-    traits: {"pace":1.1,"likes":["reveal","wave"]},
+    traits: {"pace":1.04,"likes":["reveal","wave"]},
     manifest: {
       name: "牽牽 Twine",
       prefix: "tg-",
@@ -87,7 +87,7 @@ export const MASCOT_CAST: readonly CastEntry[] = [
   {
     slug: "card",
     base: "/mascots/card/",
-    traits: {"pace":0.85,"shuffle":true,"likes":["deco","read"]},
+    traits: {"pace":0.95,"shuffle":true,"likes":["deco","read"]},
     manifest: {
       name: "聆聆 Nod",
       prefix: "cd-",
@@ -152,7 +152,7 @@ export const MASCOT_CAST: readonly CastEntry[] = [
   {
     slug: "night",
     base: "/mascots/night/",
-    traits: {"pace":0.7,"naps":true,"likes":["nap","twinkle"],"zones":{"light":{"hero":0.35,"cta":1.5,"footer":2},"dark":{"hero":1.3,"footer":1.5}},"often":{"light":0.8,"dark":1.6}},
+    traits: {"pace":0.88,"naps":true,"likes":["nap","twinkle"],"zones":{"light":{"hero":0.35,"cta":1.5,"footer":2},"dark":{"hero":1.3,"footer":1.5}},"often":{"light":0.8,"dark":1.6}},
     manifest: {
       name: "悄悄 Hush",
       prefix: "nt-",

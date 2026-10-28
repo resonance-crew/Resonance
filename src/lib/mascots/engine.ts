@@ -19,13 +19,17 @@ import { Prop, type PropKind, type PropOwner } from './props';
 import { Puppet } from './puppet';
 import { duet, greetFromAfar, leave, shy, visit, type GreetShared } from './scenes';
 import type {
-  ActName, CastEntry, Cover, Duet, Ledge, LineLedge, MeetVariant, Plan, Rect, Side, StageApi, StageClock, StageEnv,
+  ActName, CastEntry, Cover, Duet, Ledge, LineLedge, MeetVariant, Plan, Point, Rect, Side, StageApi, StageClock, StageEnv,
   StageEventDetail, StageOptions, StageSettings, Theme, VisitRequest,
 } from './types';
 
+/**
+ * The pacing: the stage prototype's, slowed in round 5 (the owner: entrances, exits and walks too quick, no rest
+ * between acts) — longer visits for the rests between acts, walks in kept to about four seconds rather than a scurry.
+ */
 export const DEFAULT_OPTIONS: Readonly<StageOptions> = {
-  size: 1, fps: 12, moveFps: 24, heightCurve: 0.75, first: [1.2, 2.5], visit: [9, 16], dwell: 4.5, gap: [3, 7],
-  meetChance: 0.45, pairChance: 0.2, meetEvery: 60, greetChance: 0.85, greetEvery: 20, farWalk: 340, walkLimit: 2.6,
+  size: 1, fps: 12, moveFps: 24, heightCurve: 0.75, first: [1.2, 2.5], visit: [12, 20], dwell: 6, gap: [3, 7],
+  meetChance: 0.45, pairChance: 0.2, meetEvery: 60, greetChance: 0.85, greetEvery: 20, farWalk: 340, walkLimit: 4.2,
   nightDim: 0.9,
 };
 
@@ -62,6 +66,8 @@ const WARM_RETRY = 20;
 const MAX_FAILS = 3;
 /** Of a character at its place, at least this much shows (the rest under the view's top edge) or it goes. */
 const SHOWN_ENOUGH = 0.6;
+/** Rig units past its far eye a character peeking out past a side shows at least. */
+const EYE_ROOM = 24;
 
 /** Who comes next and when: a visitor, two walking in to meet, or a guest for `host`. */
 type Schedule =
@@ -285,6 +291,7 @@ export class Stage {
         this.vp = this.env.viewport();
         this.update(0);
       },
+      relayout: () => this.relayout(),
       visitors: () => this.chars.map(c => ({
         slug: c.slug, name: c.name, x: c.x, y: c.y, mode: c.mode, ledge: c.plan ? c.plan.ledge.id : null, h: c.h,
       })),
@@ -700,8 +707,8 @@ export class Stage {
     const dur = this.o.visit[0] + this.rand() * (this.o.visit[1] - this.o.visit[0]);
     const out = pl.how === 'walk' ? Math.min(pl.x - vp.x, vp.x + vp.w - pl.x) + ch.halfW : 0;
     pl.endAt = this.time + dur;
-    pl.exitDur = pl.how === 'walk' ? Math.min(this.o.walkLimit, out / (ch.pace() * quick(ch, out, this.o.walkLimit) * 1.3)) + 0.4
-      : pl.how === 'pop' ? 0.5 : 1.2;
+    pl.exitDur = pl.how === 'walk' ? Math.min(this.o.walkLimit, out / (ch.pace() * quick(ch, out, this.o.walkLimit) * 1.15)) + 0.5
+      : pl.how === 'pop' ? 1.1 : 1.5;
     return pl;
   }
   /** Is `pl` where someone else stands or is heading, or is its way in through someone on the same level? */
@@ -833,9 +840,13 @@ export class Stage {
         surface: () => g, endAt: 0, exitDur: 0,
       };
     }
-    const vis = l.reveal ?? 0.6;
     const W2 = halfW * 2;
     const dir = l.side === 'left' ? -1 : 1;
+    // and never less than both eyes out, with a little room past the far one (a face cut through an eye reads as
+    // hidden, not peeking)
+    const eyesX = R.eyes.map(e => e[0] - R.gx);
+    const farEye = dir < 0 ? Math.max(...eyesX) : -Math.min(...eyesX);
+    const vis = clamp(Math.max(l.reveal ?? 0.6, (halfW + (farEye + EYE_ROOM) * k) / W2), 0, 0.92);
     const edgeX = l.side === 'left' ? c.x : c.x + c.w;
     const x = edgeX + dir * (vis * W2 - halfW);
     const x0 = edgeX - dir * (halfW + 4);
@@ -922,6 +933,33 @@ export class Stage {
       if (d.met && !shows(d.a) && !shows(d.b)) this.endDuet(d);   // once they have met: walking in, they come on
     }
   }
+  /**
+   * The page was measured again and the places moved (with no new width: the hero, centred in the window, moves with
+   * the window's height). A visitor whose place moved straight up or down moves with it, mid-act or mid-walk; one
+   * whose place went, changed shape or moved sideways leaves as it would for a scroll. Never a visitor gone on the spot
+   * and the next one turning up there (the owner, round 5: it vanished a while, then came back).
+   */
+  relayout(): void {
+    if (this.destroyed) return;
+    this.vp = this.env.viewport();
+    const now = new Map(this.ledges().map(l => [l.id, l]));
+    for (const ch of [...this.chars]) {
+      const pl = ch.plan;
+      if (!pl || ch.gone) continue;
+      const next = now.get(pl.ledge.id);
+      const dy = next ? verticalShift(pl.ledge, next) : null;
+      if (next && dy != null) {
+        ch.moveBy(dy, next);
+        continue;
+      }
+      if (ch.still) {   // nothing moves with reduced motion: it simply stands at a place as it is now
+        this.clearAll();
+        this.still();
+        return;
+      }
+      if (ch.mode !== 'exit') this.leaveSoon(ch);
+    }
+  }
   leaveSoon(ch: Puppet, { shy: isShy }: { shy?: boolean } = {}): void {
     if (ch.duet) this.endDuet(ch.duet, ch);
     ch.fx = [];
@@ -930,7 +968,7 @@ export class Stage {
     const pl = ch.plan;
     ch.tasks = [(function* (S: Stage) {
       if (isShy) yield* shy(S, ch);
-      if (pl) yield* leave(S, ch, pl, 1.7);
+      if (pl) yield* leave(S, ch, pl, 1.35);
     })(this)];
     ch.mode = 'exit';
   }
@@ -946,7 +984,7 @@ export class Stage {
       const look = ch === d.a ? 8 : -8;
       ch.tasks = [(function* (S: Stage) {
         yield* idle(S, ch, 0.6, look);
-        yield* leave(S, ch, pl, 1.4);
+        yield* leave(S, ch, pl, 1.2);
       })(this)];
     }
   }
@@ -1275,6 +1313,29 @@ export class Stage {
     this.clearAll();
     this.root.remove();
   }
+}
+
+/** The points that say where a place is: its line or edge, its spot, what hides it, what it aims at. */
+function anchors(l: Ledge): Point[] {
+  const pts: Point[] = [];
+  if (l.kind === 'line' || l.kind === 'edge') pts.push(...l.points);
+  else if (l.kind === 'spot') pts.push([l.x, l.y]);
+  else pts.push([l.x ?? l.cover.x, l.ground ?? l.cover.y + l.cover.h]);
+  const c = l.kind === 'edge' || l.kind === 'peek' ? l.cover : undefined;
+  if (c) pts.push([c.x, c.y], [c.x + c.w, c.y + c.h], ...(c.top || []));
+  if (l.target) pts.push(l.target);
+  return pts;
+}
+
+/** How far (px, down) `b` is `a` moved straight up or down; null if it moved sideways or isn't the same shape. */
+export function verticalShift(a: Ledge, b: Ledge): number | null {
+  if (a.kind !== b.kind) return null;
+  const pa = anchors(a);
+  const pb = anchors(b);
+  if (pa.length !== pb.length || !pa.length) return null;
+  const dy = pb[0][1] - pa[0][1];
+  const same = pa.every((p, i) => Math.abs(pb[i][0] - p[0]) <= 0.75 && Math.abs(pb[i][1] - p[1] - dy) <= 0.75);
+  return same ? dy : null;
 }
 
 /** What place() is told: the page's first visitor, and who is already on stage. */

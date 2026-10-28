@@ -96,6 +96,12 @@ export function readManifest(raw: unknown): Manifest {
   return m;
 }
 
+/**
+ * How far along an arm (brad to the far corner of its image's box, its `len`) the middle of its mitten is: measured
+ * on the cast's arm images, 0.63 (點點) to 0.69 of it. What a mitten grips goes through here.
+ */
+export const MITTEN_MIDDLE = 0.67;
+
 export interface Arm {
   part: RigPart;
   name: string;
