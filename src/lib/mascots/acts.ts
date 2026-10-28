@@ -4,8 +4,10 @@
 import type { Stage } from './engine';
 import { bell, clamp, DEG, easeOut, lerp, smooth } from './geometry';
 import { aimLift, during, mouthOpen } from './motion';
+import { PAPER_LINES, PENCIL_LEN, PENCIL_TIP } from './props';
 import type { Puppet } from './puppet';
-import type { ActName, ArmSide, Plan, Task } from './types';
+import { MITTEN_MIDDLE } from './rig';
+import type { ActName, ArmSide, Plan, Point, Rect, Task } from './types';
 
 type Act = (S: Stage, ch: Puppet, pl: Plan) => Task;
 
@@ -21,10 +23,127 @@ function awayFrom(ch: Puppet, pl: Plan): ArmSide | null {
   return mid < ch.x ? 'R' : 'L';
 }
 
+/** An arm's angle on the body at a lift (0 = right, 90 = down), the body's own tilt left out. */
+const armAngle = (side: ArmSide, lift: number): number => (side === 'L' ? 90 + lift : 90 - lift);
+/** Degrees from b round to a, the short way. */
+const turn = (a: number, b: number): number => ((((a - b) % 360) + 540) % 360) - 180;
+/** The middle of an arm's mitten at a lift, rig units on the body (Puppet.mitten(side, MITTEN_MIDDLE) on the page). */
+function mittenAt(ch: Puppet, side: ArmSide, lift: number): Point {
+  const a = ch.arm(side);
+  const ang = armAngle(side, lift) * DEG;
+  const r = a.len * MITTEN_MIDDLE;
+  return [a.pivot[0] + Math.cos(ang) * r, a.pivot[1] + Math.sin(ang) * r];
+}
+
+/** Where the pencil's point is on the slip (its drawing's units) once `ink` of its three lines is written. */
+function writingAt(ink: number): Point {
+  const n = clamp(ink * 3, 0, 2.999);
+  const i = Math.floor(n);
+  const [x0, x1, y] = PAPER_LINES[i];
+  const x = x0 + (x1 - x0) * (n - i);
+  return [x, y - 1.5 * Math.sin(((x - x0) / 7) * Math.PI)];
+}
+
+/** How a character holds a slip to write on: rig units on its body. */
+interface WritePose {
+  /** The lift of the arm holding the slip (the pencil arm's follows the pencil: penLiftFor). */
+  hold: number;
+  /** The slip: rig units per unit of its drawing, its turn on the body, the point of it the mitten holds, its box. */
+  paperScale: number;
+  paperRot: number;
+  anchor: Point;
+  box: Rect;
+  /** The pencil: rig units per unit of its drawing, and its length. */
+  penScale: number;
+  penLen: number;
+  /** A point of the slip's drawing → rig units on the body. */
+  on(d: Point): Point;
+}
+
+/** How far off upright a pencil is held, its top out toward its hand's side (degrees). */
+const SLANT = 35;
+
+/** Where a pencil whose point is at `tip` is held: half way up it, slanting its top out toward the pen's side `s`. */
+const gripFor = (tip: Point, s: number, penLen: number): Point =>
+  [tip[0] + s * Math.sin(SLANT * DEG) * 0.5 * penLen, tip[1] - Math.cos(SLANT * DEG) * 0.5 * penLen];
+
+/**
+ * The pen arm's lift that brings its mitten nearest that grip (a mitten goes round its brad at one distance: the
+ * nearest it gets is straight toward the grip), the short way round from where the arm hangs.
+ */
+function penLiftFor(ch: Puppet, pen: ArmSide, tip: Point, penLen: number): number {
+  const a = ch.arm(pen);
+  const [gx, gy] = gripFor(tip, pen === 'R' ? 1 : -1, penLen);
+  return a.rest + turn(aimLift(pen, Math.atan2(gy - a.pivot[1], gx - a.pivot[0]) / DEG), a.rest);
+}
+
+/**
+ * The slip held by the middle of its edge away from the pencil, before the chest and below the eyes, where the pencil
+ * arm can hold a pencil writing on it: its mitten reaching the grip, not behind the slip (the slip is drawn over it).
+ * The holding arm is tried all the way round (short arms reach across the body).
+ */
+function writePose(ch: Puppet, hold: ArmSide, pen: ArmSide): WritePose {
+  const R = ch.rig;
+  const s = pen === 'R' ? 1 : -1;
+  // a slip about a quarter of the body across; a bigger one where the two mittens can't come close (a wide body,
+  // short arms: the slip bridges the gap)
+  const usual = clamp((R.torso.w * 0.26) / 40, 1.3, 2.1);
+  const penScale = usual * 0.6;
+  const penLen = PENCIL_LEN * penScale;
+  const anchor: Point = [20 - s * 15, 17];
+  const paperRot = -s * 5;   // its pencil side a little up, as a slip held to be written on is
+  const c = Math.cos(paperRot * DEG);
+  const sn = Math.sin(paperRot * DEG);
+  const place = (mh: Point, scale: number) => (d: Point): Point => {
+    const x = (d[0] - anchor[0]) * scale;
+    const y = (d[1] - anchor[1]) * scale;
+    return [mh[0] + x * c - y * sn, mh[1] + x * sn + y * c];
+  };
+  const boxOf = (on: (d: Point) => Point): Rect => {
+    const pts = ([[3, 2], [38, 2], [2, 28], [38, 28]] as const).map(q => on(q));
+    const xs = pts.map(q => q[0]);
+    const ys = pts.map(q => q[1]);
+    return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+  };
+  const eyes = Math.max(R.eyes[0][1], R.eyes[1][1]);
+  const chest = lerp(R.face[1], R.tp[1], 0.6);
+  const foot = R.torso.y + R.torso.h * 0.95;
+  const holdRest = ch.arm(hold).rest;
+  const arm = ch.arm(pen);
+  const reach = arm.len * MITTEN_MIDDLE;
+  let best = { cost: Infinity, hold: holdRest, mh: mittenAt(ch, hold, holdRest), scale: usual };
+  for (const scale of [usual, usual * 1.25, usual * 1.5, usual * 1.8]) for (let hl = -90; hl < 270; hl += 2) {
+    const mh = mittenAt(ch, hold, hl);
+    const on = place(mh, scale);
+    const box = boxOf(on);
+    const mid = on([20, 15]);
+    let cost = 0.5 * Math.abs(mid[0] - R.gx) + 0.5 * Math.max(0, Math.abs(mid[1] - chest) - 12)
+      + 3 * Math.max(0, eyes + 14 - box.y) + 2 * Math.max(0, box.y + box.h - foot) + 0.03 * Math.abs(turn(hl, holdRest))
+      + 12 * (scale / usual - 1);
+    // the pencil at both ends of the lines: the mitten reaching its grip, in front of the slip, the pencil slanting out
+    for (const d of [[8, 10], [30, 16], [21, 22]] as const) {
+      const tip = on(d);
+      const [gx, gy] = gripFor(tip, s, penLen);
+      cost += 1.5 * Math.abs(Math.hypot(gx - arm.pivot[0], gy - arm.pivot[1]) - reach);
+      const m = mittenAt(ch, pen, penLiftFor(ch, pen, tip, penLen));
+      if (m[0] > box.x && m[0] < box.x + box.w && m[1] > box.y && m[1] < box.y + box.h) cost += 40;
+      const lean = Math.atan2(-s * (tip[0] - m[0]), tip[1] - m[1]) / DEG;
+      cost += 2 * Math.max(0, 15 - lean, lean - 60);
+    }
+    if (cost < best.cost) best = { cost, hold: hl, mh, scale };
+  }
+  const on = place(best.mh, best.scale);
+  // the lift the short way round from where its arm hangs, so raising it never swings it over the head
+  return {
+    hold: holdRest + turn(best.hold, holdRest), paperScale: best.scale, paperRot, anchor, box: boxOf(on), penScale, penLen,
+    on,
+  };
+}
+
 export const ACTS: Record<ActName, Act> = {
   *look(S, ch) {
     const a = S.rand() < 0.5 ? -1 : 1;
-    yield* during(S, 2.2, u => {
+    yield* during(S, 2.8, u => {
       const p = ch.pose;
       p.faceX += 11 * (u < 0.42 ? a * smooth(u / 0.15) : u < 0.84 ? -a * smooth((u - 0.42) / 0.15) : -a * (1 - smooth((u - 0.84) / 0.16)));
       p.faceY -= 2 * bell(u);
@@ -37,10 +156,10 @@ export const ACTS: Record<ActName, Act> = {
     // keeps clear (a store badge, a button), the arm away from it
     const any: ArmSide = S.rand() < 0.5 ? 'L' : 'R';
     const w = ch.waveArm(pl.waveSide || (pl.hidden ? other(pl.hidden) : awayFrom(ch, pl) ?? any));
-    yield* during(S, 1.5, (u, t) => {
-      const e = bell(u, 0.18);
+    yield* during(S, 1.9, (u, t) => {
+      const e = bell(u, 0.2);
       const p = ch.pose;
-      if (w) ch.setLift(w.side, lerp(ch.arm(w.side).rest, w.lift + 18 * Math.sin(t * Math.PI * 2 * 2.6), e));
+      if (w) ch.setLift(w.side, lerp(ch.arm(w.side).rest, w.lift + 18 * Math.sin(t * Math.PI * 2 * 2), e));
       else p.rise += 6 * bell(u, 0.3);   // no arm can show: a little bob instead
       p.mouth = mouthOpen(ch);
       p.tilt += (w && w.side === 'L' ? -3 : 3) * e;
@@ -49,7 +168,7 @@ export const ACTS: Record<ActName, Act> = {
     });
   },
   *stretch(S, ch) {
-    yield* during(S, 2.1, u => {
+    yield* during(S, 2.6, u => {
       const e = bell(u, 0.3, 0.25);
       const p = ch.pose;
       ch.setLift('L', lerp(ch.arm('L').rest, 168, e));
@@ -66,11 +185,12 @@ export const ACTS: Record<ActName, Act> = {
   },
   *hop(S, ch) {
     for (let i = 0; i < 2; i++) {
-      yield* during(S, 0.12, u => {
+      if (i) yield* during(S, 0.16);   // a breath between the two
+      yield* during(S, 0.15, u => {
         ch.pose.sy *= 1 - 0.1 * u;
         ch.pose.sx *= 1 + 0.05 * u;
       });
-      yield* during(S, 0.4, u => {
+      yield* during(S, 0.46, u => {
         const p = ch.pose;
         p.rise += 34 * Math.sin(Math.PI * u);
         p.legS *= 0.85;
@@ -79,7 +199,7 @@ export const ACTS: Record<ActName, Act> = {
         if (i === 1) p.eyes = 'shut';
         p.mouth = 'mouth-o';
       });
-      yield* during(S, 0.14, u => {
+      yield* during(S, 0.18, u => {
         ch.pose.sy *= 1 - 0.09 * (1 - u);
         ch.pose.sx *= 1 + 0.05 * (1 - u);
       });
@@ -102,7 +222,7 @@ export const ACTS: Record<ActName, Act> = {
     }
     const tip = !!best && best.dist < best.len * 1.1 && (S.rand() < 0.5 || !!ch.traits.likes?.includes('deco'));
     const nod = !tip && S.rand() < 0.55;
-    yield* during(S, 1.8, u => {
+    yield* during(S, 2.3, u => {
       const e = bell(u, 0.25);
       const p = ch.pose;
       if (tip && best) {   // lift it like a hat
@@ -140,7 +260,7 @@ export const ACTS: Record<ActName, Act> = {
         if (d < 1.6 && (!reach || d < reach.d)) reach = { side, d };
       }
     }
-    yield* during(S, turn ? 3.0 : 2.8, u => {
+    yield* during(S, turn ? 3.5 : 3.3, u => {
       const e = bell(u, 0.15);
       const p = ch.pose;
       if (turn) {   // the body narrows to its edge at each swap, like a card turned in the fingers
@@ -169,7 +289,7 @@ export const ACTS: Record<ActName, Act> = {
   *twinkle(S, ch) {
     let next = 0;
     let lvl = 1;
-    yield* during(S, 2.6, (u, t) => {
+    yield* during(S, 3.0, (u, t) => {
       if (t >= next) {
         next = t + 0.16;
         lvl = 0.3 + 0.7 * S.rand();
@@ -187,14 +307,14 @@ export const ACTS: Record<ActName, Act> = {
     const side: ArmSide = pl.hidden ? other(pl.hidden) : tx < ch.x ? 'L' : 'R';
     // what it points at keeps its margin (a store badge must): the mitten stops short of the place's clear rects
     const keepOff = pl.ledge.clear || [];
-    yield* during(S, 2.4, (u, t) => {
+    yield* during(S, 2.9, (u, t) => {
       const e = bell(u, 0.18);
       const p = ch.pose;
       p.tilt += (side === 'L' ? -3 : 3) * e;
       const [bx, by] = ch.pagePoint(...ch.arm(side).pivot);
       const aim = aimLift(side, Math.atan2(ty - by, tx - bx) / DEG);
       const rest = ch.arm(side).rest;
-      const want = lerp(rest, aim + 4 * Math.sin(t * 14) * (u > 0.3 ? 1 : 0), e);
+      const want = lerp(rest, aim + 4 * Math.sin(t * 9) * (u > 0.3 ? 1 : 0), e);
       let reach = 1;   // raised from rest as far as the mitten stays off them: it stops at their edge
       while (reach > 0 && keepOff.length && !ch.mittenClear(side, rest + (want - rest) * reach, keepOff, POINT_MARGIN)) reach -= 0.05;
       ch.setLift(side, rest + (want - rest) * Math.max(0, reach));
@@ -211,11 +331,11 @@ export const ACTS: Record<ActName, Act> = {
   *beckon(S, ch, pl) {
     const want: ArmSide = pl.target && pl.target[0] < ch.x ? 'L' : 'R';
     const w = ch.waveArm(want, [120, 150]);
-    yield* during(S, 2.6, (u, t) => {
+    yield* during(S, 3.0, (u, t) => {
       const e = bell(u, 0.15);
       const p = ch.pose;
       const side = w ? w.side : want;
-      if (w) ch.setLift(side, lerp(ch.arm(side).rest, w.lift - 8 + 22 * Math.sin(t * Math.PI * 2 * 2.2), e));
+      if (w) ch.setLift(side, lerp(ch.arm(side).rest, w.lift - 8 + 22 * Math.sin(t * Math.PI * 2 * 1.7), e));
       p.faceX += (u < 0.5 ? 0 : want === 'L' ? -8 : 8) * e;
       p.faceY -= 2 * e;
       p.mouth = mouthOpen(ch);
@@ -228,7 +348,7 @@ export const ACTS: Record<ActName, Act> = {
     const side: ArmSide = target[0] < ch.x ? 'L' : 'R';
     const dir = side === 'L' ? -1 : 1;
     const [tx, ty] = target;
-    yield* during(S, 3.4, u => {
+    yield* during(S, 3.8, u => {
       const e = bell(u, 0.15);
       const p = ch.pose;
       const [bx, by] = ch.pagePoint(...ch.arm(side).pivot);
@@ -243,49 +363,56 @@ export const ACTS: Record<ActName, Act> = {
     });
   },
   *write(S, ch, pl) {
-    // writes a little note on a slip of paper (held in one mitten, the pencil in the other), then holds it out
-    // toward the button
+    // writes three short lines on a slip of paper held by its outer edge in one mitten, the pencil gripped in the
+    // other — its point on the line being written, following the words; the hand goes where the pencil's slant puts
+    // it (the owner, round 5: the pencil floated, upright, in no hand). Then it holds the slip out toward the button
+    // and lets it go
     const target = pl.target;
     if (!target) return yield* ACTS.look(S, ch, pl);
-    const R = ch.rig;
     const toward: ArmSide = target[0] < ch.x ? 'L' : 'R';
     const pen = other(toward);
+    const pose = writePose(ch, toward, pen);
     const paper = S.prop('paper', ch, ch);
     const pencil = S.prop('pencil', ch, ch);
-    const [fx, fy] = R.face;
-    const hy = lerp(fy, R.tp[1], 0.6);
-    const hx = fx + (toward === 'L' ? -34 : 34);
     const ap = ch.arm(toward);
     const aw = ch.arm(pen);
-    const hold = aimLift(toward, Math.atan2(hy - ap.pivot[1], hx - ap.pivot[0]) / DEG);
-    const ha = (toward === 'L' ? 90 + hold : 90 - hold) * DEG;   // where the holding mitten is, rig units
-    const r = ap.len * 0.82;
-    const px = ap.pivot[0] + Math.cos(ha) * r;
-    const py = ap.pivot[1] + Math.sin(ha) * r;
-    const penLift = aimLift(pen, Math.atan2(py - 4 - aw.pivot[1], px - aw.pivot[0]) / DEG);
+    const k = ch.k;
+    const holdAng = armAngle(toward, pose.hold);
+    const s = pen === 'R' ? 1 : -1;
     const [tx, ty] = target;
-    yield* during(S, 3.9, (u, t) => {
+    yield* during(S, 4.8, (u, t) => {
       const p = ch.pose;
+      const h = smooth(u / 0.12) * (1 - smooth((u - 0.93) / 0.07));   // the slip held up
       const w = smooth(u / 0.12) * (1 - smooth((u - 0.6) / 0.1));   // writing
       const g = smooth((u - 0.62) / 0.14) * (1 - smooth((u - 0.93) / 0.07));   // holding it out
+      const ink = clamp((u - 0.12) / 0.46, 0, 1);
       const [bx, by] = ch.pagePoint(...ap.pivot);
       const give = aimLift(toward, Math.atan2(ty - by, tx - bx) / DEG);
-      ch.setLift(toward, lerp(ap.rest, lerp(hold, give, smooth((u - 0.62) / 0.14)), Math.max(w, g)));
-      ch.setLift(pen, lerp(aw.rest, penLift + 6 * Math.sin(t * 21) + 3 * Math.sin(t * 7), w));
+      ch.setLift(toward, lerp(ap.rest, lerp(pose.hold + 1.5 * Math.sin(t * 1.7), give, smooth((u - 0.62) / 0.14)), h));
+      const tip = pose.on(writingAt(ink));
+      const penLift = penLiftFor(ch, pen, tip, pose.penLen);
+      ch.setLift(pen, lerp(aw.rest, penLift, w));
       p.front = true;
       p.faceY += 5 * w - 2 * g;
-      p.faceX += (toward === 'L' ? -6 : 6) * Math.max(w, g);
+      p.faceX += clamp((pose.on([20, 15])[0] - ch.rig.face[0]) / 5, -8, 8) * Math.max(w, g);
       if (g > 0.4) {
         p.mouth = mouthOpen(ch);
         p.blush = Math.max(p.blush, 0.5 * g);
       }
-      const [mx, my, ang] = ch.mitten(toward);
+      // the slip, by the edge its mitten holds
+      const [mx, my, ang] = ch.mitten(toward, MITTEN_MIDDLE);
       const fly = smooth((u - 0.84) / 0.16);
-      paper.at(lerp(mx, lerp(mx, tx, 0.4), fly), lerp(my - 5 * ch.k, my - 12 * ch.k, fly), ch.k * 2.1,
-        smooth(u / 0.08) * (1 - fly), (ang - 90) * 0.12);
-      paper.write(clamp((u - 0.1) / 0.48, 0, 1));
-      const [qx, qy, qa] = ch.mitten(pen);
-      pencil.at(qx, qy, ch.k * 1.4, w, (qa - 90) * 0.4 + (pen === 'L' ? 25 : -25));
+      paper.at(lerp(mx, lerp(mx, tx, 0.4), fly), lerp(my, my - 12 * k, fly), k * pose.paperScale, smooth(u / 0.08) * (1 - fly),
+        pose.paperRot + p.tilt + 0.25 * (ang - p.tilt - holdAng), pose.anchor);
+      paper.write(ink);
+      // the pencil, in its mitten, slanting as it does at the pose: its point on the line being written
+      const [qx, qy, qa] = ch.mitten(pen, MITTEN_MIDDLE);
+      const m = mittenAt(ch, pen, penLift);
+      const slant = clamp(Math.atan2(-s * (tip[0] - m[0]), tip[1] - m[1]) / DEG, 12, 58);
+      const toTip = Math.atan2(Math.cos(slant * DEG), -s * Math.sin(slant * DEG)) / DEG;   // the mitten to the point
+      const len = clamp(Math.hypot(tip[0] - m[0], tip[1] - m[1]), 0.2 * pose.penLen, 0.85 * pose.penLen) * k;
+      const dir = qa + toTip - armAngle(pen, penLift);
+      pencil.at(qx + Math.cos(dir * DEG) * len, qy + Math.sin(dir * DEG) * len, k * pose.penScale, w, dir - 90, PENCIL_TIP);
     });
     paper.remove();
     pencil.remove();
@@ -297,7 +424,7 @@ export const ACTS: Record<ActName, Act> = {
     const [fx, fy] = R.face;
     const hy = lerp(fy, R.tp[1], 0.62);
     const size = clamp((R.torso.w * 0.4) / 64, 1.3, 2.1);
-    yield* during(S, 3.8 + S.rand(), (u, t) => {
+    yield* during(S, 4.2 + S.rand(), (u, t) => {
       const e = bell(u, 0.12);
       const p = ch.pose;
       p.faceY += 6 * e;
@@ -318,12 +445,12 @@ export const ACTS: Record<ActName, Act> = {
     book.remove();
   },
   *swing(S, ch) {
-    yield* during(S, 3.2, (u, t) => {
+    yield* during(S, 3.6, (u, t) => {
       const e = bell(u, 0.15);
       const p = ch.pose;
-      const s = Math.sin(t * Math.PI * 2 * 1.3);
+      const s = Math.sin(t * Math.PI * 2 * 1.05);
       p.legL += 22 * s * e;
-      p.legR += 22 * Math.sin(t * Math.PI * 2 * 1.3 + 2.2) * e;
+      p.legR += 22 * Math.sin(t * Math.PI * 2 * 1.05 + 2.2) * e;
       p.bodyUp += 2 * Math.abs(s) * e;
       p.faceX += 4 * s * e;
       if (u > 0.4 && u < 0.7) p.eyes = 'shut';
@@ -354,13 +481,13 @@ export const ACTS: Record<ActName, Act> = {
     if (pl.how === 'slide') {   // back behind the side for a moment, then out again
       const x1 = ch.x;
       const x0 = pl.x0 ?? x1;
-      yield* during(S, 0.3, u => {
+      yield* during(S, 0.45, u => {
         ch.x = lerp(x1, x0, easeOut(u));
       });
       yield* during(S, 0.5 + S.rand() * 0.6, () => {
         ch.x = x0;
       });
-      yield* during(S, 0.35, u => {
+      yield* during(S, 0.5, u => {
         ch.x = lerp(x0, x1, easeOut(u));
         ch.pose.mouth = 'mouth-o';
         ch.pose.faceX += (x1 > x0 ? 1 : -1) * 10;
@@ -369,13 +496,13 @@ export const ACTS: Record<ActName, Act> = {
       return;
     }
     const deep = (pl.show || 0.6) * ch.rig.height + 30;
-    yield* during(S, 0.25, u => {
+    yield* during(S, 0.38, u => {
       ch.pose.rise -= deep * easeOut(u);
     });
     yield* during(S, 0.6 + S.rand() * 0.6, () => {
       ch.pose.rise -= deep;
     });
-    yield* during(S, 0.3, u => {
+    yield* during(S, 0.42, u => {
       ch.pose.rise -= deep * (1 - easeOut(u));
       ch.pose.mouth = 'mouth-o';
       ch.pose.liftL += 30 * u;

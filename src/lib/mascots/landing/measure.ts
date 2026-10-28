@@ -383,7 +383,11 @@ export function measureLanding(doc: Document, layer: HTMLElement, preset: Landin
     // or stand by the badges; across the block from each other, two greet (or one walks up)
     content.push(qr);
     const target: Point = [qr.x + qr.w / 2, qr.y + qr.h / 2];
-    add<PeekLedge>({ id: 'qr-left', kind: 'peek', side: 'left', cover: { ...qr, radius: 16 }, ground: bottom(qr) - 2, target, acts: PEEK_ACTS }, bottom(qr));
+    // most of it out past the code's side, only its far edge behind it (the owner, round 5: at 0.6 it still looked
+    // hidden behind the code)
+    add<PeekLedge>({
+      id: 'qr-left', kind: 'peek', side: 'left', cover: { ...qr, radius: 16 }, ground: bottom(qr) - 2, reveal: 0.78, target, acts: PEEK_ACTS,
+    }, bottom(qr));
     add<SpotLedge>({
       id: 'qr-point', kind: 'spot', meet: true, partner: block ? 'badges' : undefined, x: qr.x - 56, y: bottom(qr) - 1, from: 'left',
       clear: [qr], ceiling: underPara, target, acts: ['point', 'look', 'wave'],

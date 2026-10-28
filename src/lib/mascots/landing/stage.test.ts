@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CastEntry, StageApi, StageEnv, StageOptions } from '../types';
+import type { CastEntry, StageApi, StageEnv, StageOptions, VisitorInfo } from '../types';
 import { installLanding } from './landingFixture';
 import { HEADER_CLEAR, mountLandingStage, type LandingStageHandle } from './stage';
 
@@ -38,13 +38,16 @@ interface FakeStage {
 }
 
 let stages: FakeStage[] = [];
+/** Who the fake stages say is on stage. */
+let onStage: VisitorInfo[] = [];
 function createStage(env: StageEnv, _cast: readonly CastEntry[], options?: Partial<StageOptions>): StageApi {
   const calls: string[] = [];
   const api = {
     setTheme: vi.fn((t: string) => calls.push(`theme:${t}`)),
     setReducedMotion: vi.fn((r: boolean) => calls.push(`reduced:${r}`)),
     destroy: vi.fn(() => calls.push('destroy')),
-    visitors: () => [],
+    relayout: vi.fn(() => calls.push('relayout')),
+    visitors: () => onStage,
   } as unknown as StageApi;
   stages.push({ api, env, options, calls });
   return api;
@@ -60,6 +63,7 @@ beforeEach(() => {
   Object.assign(media, { width: 1440, dark: false, reduced: false });
   lists.clear();
   stages = [];
+  onStage = [];
   window.matchMedia = matchMedia;
   Object.defineProperty(window, 'innerHeight', { configurable: true, get: () => 900 });
 });
@@ -150,6 +154,35 @@ describe('mountLandingStage', () => {
     expect(stages).toHaveLength(1);
     expect(current().calls).not.toContain('destroy');
     expect(current().env.viewport().h).toBe(700 - 82 - HEADER_CLEAR);
+  });
+
+  it('moves a visitor with its place when the page moves it, never building the stage again over it', () => {
+    const page = mount();
+    const first = current();
+    const spot = handle?.layout.ledges.find(l => l.id === 'avatars-end');
+    expect(spot?.kind).toBe('spot');
+    onStage = [{ slug: 'tuck', name: '摺摺', x: 0, y: 0, mode: 'act', ledge: 'avatars-end', h: 120 }];
+    // the window made taller: the hero, centred in it, moves everything in it 30 px down (the fixed header stays)
+    const rect = Element.prototype.getBoundingClientRect;
+    const rects = Range.prototype.getClientRects;
+    const down = <T extends { y: number; top: number; bottom: number }>(r: T): T => ({ ...r, y: r.y + 30, top: r.top + 30, bottom: r.bottom + 30 });
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      const r = rect.call(this);
+      return this.tagName === 'HEADER' || this === document.body || this === page.layer ? r : (down(r) as DOMRect);
+    };
+    Range.prototype.getClientRects = function (this: Range) {
+      return [...rects.call(this)].map(down) as unknown as DOMRectList;
+    };
+    try {
+      handle?.measure();
+    } finally {
+      Element.prototype.getBoundingClientRect = rect;
+      Range.prototype.getClientRects = rects;
+    }
+    const moved = handle?.layout.ledges.find(l => l.id === 'avatars-end');
+    expect(moved?.kind === 'spot' && spot?.kind === 'spot' && moved.y - spot.y).toBeCloseTo(30, 5);
+    expect(stages).toHaveLength(1);   // the same stage: its visitor moves with the place, rather than vanishing
+    expect(first.calls).toEqual(['relayout']);
   });
 
   it('cleans up on destroy: the stage goes, and nothing it listened to reaches it any more', async () => {

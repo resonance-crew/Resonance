@@ -14,31 +14,59 @@ import type { ArmSide, Duet, MeetVariant, Plan, Task } from './types';
 const seatOnly = (pl: Plan): boolean => pl.stance === 'sit' && !!pl.ledge.clear?.length;
 /** legS of legs folded up under a sitter climbing from behind a card. */
 const FOLDED = 0.15;
+/** Seconds to climb up from behind a card and back down, to rise over or slide out past a cover and back. */
+const CLIMB = 1.35;
+const CLIMB_DOWN = 1.1;
+const PEEK_IN = 1.2;
+const PEEK_OUT = 1.0;
 
+/** Seconds a paper figure takes to stand up from the page, and to fall back onto it (the owner, round 5: both were too quick). */
+const POP_UP = 0.8;
+const POP_DOWN = 1.05;
+
+/** Stands up from the page like a pop-up book's figure: up past upright, then settling, eyes opening on the way. */
 function* popUp(S: Stage, ch: Puppet): Task {
-  yield* during(S, 0.42, u => {
+  yield* during(S, POP_UP, u => {
     const p = ch.pose;
-    const e = u < 0.7 ? 1.07 * easeOut(u / 0.7) : lerp(1.07, 1, smooth((u - 0.7) / 0.3));
+    const e = u < 0.6 ? 1.06 * easeOut(u / 0.6) : lerp(1.06, 1, smooth((u - 0.6) / 0.4));
     p.popY = Math.max(0.02, e);
-    p.popX = 0.8 + 0.2 * Math.min(1, e);
-    if (u < 0.45) p.eyes = 'shut';
-    else p.mouth = 'mouth-o';
-    p.liftL += 34 * (1 - u);
-    p.liftR += 34 * (1 - u);
+    p.popX = 0.85 + 0.15 * Math.min(1, e);
+    if (u < 0.4) p.eyes = 'shut';
+    else if (u < 0.8) p.mouth = 'mouth-o';
+    p.liftL += 34 * (1 - smooth(u));
+    p.liftR += 34 * (1 - smooth(u));
   });
 }
 
+/**
+ * Falls back onto the page as a sheet of paper falls over: up on its toes for a moment, then tipping back slowly at
+ * first and faster as it goes (its height the cosine of an angle that grows with the square of the time, as a falling
+ * card's does), arms flung up; flat on the page it bounces once, a little, and fades.
+ */
 export function* popDown(S: Stage, ch: Puppet, speed = 1): Task {
-  yield* during(S, 0.34 / speed, u => {
+  yield* during(S, POP_DOWN / Math.min(speed, 1.4), u => {
     const p = ch.pose;
-    const e = u < 0.3 ? 1 + 0.05 * Math.sin((Math.PI * u) / 0.3) : 1 - easeOut((u - 0.3) / 0.7);
-    p.popY = Math.max(0.02, e);
-    p.popX = 0.8 + 0.2 * Math.min(1, e);
-    p.eyes = 'shut';
-    p.liftL += 30 * u;
-    p.liftR += 30 * u;
+    let h: number;
+    if (u < 0.16) h = 1 + 0.03 * Math.sin(Math.PI * smooth(u / 0.16));
+    else if (u < 0.84) {
+      const f = (u - 0.16) / 0.68;
+      h = Math.cos(90 * f * f * DEG);
+    } else {
+      const b = (u - 0.84) / 0.16;
+      h = Math.cos((90 - 6 * Math.sin(Math.PI * b)) * DEG);
+      p.alpha = 1 - smooth(b);
+    }
+    p.popY = Math.max(0.02, h);
+    p.popX = 1 - 0.06 * (1 - h);
+    if (u > 0.1) p.eyes = 'shut';
+    if (u < 0.3) p.mouth = 'mouth-o';
+    p.liftL += 34 * smooth(u / 0.6);
+    p.liftR += 34 * smooth(u / 0.6);
+    p.tilt += 2.5 * Math.sin(u * Math.PI * 3) * (1 - h);   // a sheet sways a little as it falls
   });
-  ch.pose.popY = 0.02;
+  ch.fallen = true;   // flat on the page from here on, whatever runs after it (a meeting waiting for the other to go)
+  ch.pose.popY = 0.02;   // this step's pose was set before it
+  ch.pose.alpha = 0;
 }
 
 function* enter(S: Stage, ch: Puppet, pl: Plan): Task {
@@ -47,12 +75,12 @@ function* enter(S: Stage, ch: Puppet, pl: Plan): Task {
     ch.x = S.offX(ch, pl.side ?? 'left');
     ch.y = ch.surface(ch.x);
     yield* travel(S, ch, pl.x, pl.speed || 1);
-    if (pl.stance === 'floor') yield* changeStance(S, ch, 'floor', 0.45);
+    if (pl.stance === 'floor') yield* changeStance(S, ch, 'floor', 0.6);
   } else if (pl.how === 'pop') {
     ch.x = pl.x;
     ch.y = pl.y;
     yield* popUp(S, ch);
-    if (pl.stance === 'floor') yield* changeStance(S, ch, 'floor', 0.45);
+    if (pl.stance === 'floor') yield* changeStance(S, ch, 'floor', 0.6);
   } else if (pl.how === 'climb' && seatOnly(pl)) {
     // words just above the seat (the card over this one, the feed's heading): it comes up already sitting, never
     // taller than its seat (fit() kept the seated body off them), its legs folded behind and unfolding over the front
@@ -61,7 +89,7 @@ function* enter(S: Stage, ch: Puppet, pl: Plan): Task {
     ch.sitU = 1;
     ch.base();   // this step's pose too, or its first frame would stand a seat's height out of hiding
     const deep = r0 - ch.seatRise;   // as deep below the seat as a standing climb starts below its feet
-    yield* during(S, 1.0, (u, t) => {
+    yield* during(S, CLIMB, (u, t) => {
       const p = ch.pose;
       p.rise += deep * (1 - easeOut(u));
       p.legS *= FOLDED;
@@ -72,7 +100,7 @@ function* enter(S: Stage, ch: Puppet, pl: Plan): Task {
       p.faceY -= 4 * (1 - u);
     });
     ch.leaveBehind();
-    yield* during(S, 0.3, u => {
+    yield* during(S, 0.42, u => {
       ch.pose.legS *= lerp(FOLDED, 1, smooth(u));
       ch.pose.sy *= 1 - 0.06 * Math.sin(Math.PI * u);
     });
@@ -80,7 +108,7 @@ function* enter(S: Stage, ch: Puppet, pl: Plan): Task {
   } else if (pl.how === 'climb') {
     const r0 = -(ch.rig.height + ch.decoH + 8);
     if (pl.cover) ch.goBehind(pl.cover, r0);
-    yield* during(S, 1.0, (u, t) => {
+    yield* during(S, CLIMB, (u, t) => {
       const p = ch.pose;
       p.rise += r0 * (1 - easeOut(u));
       p.legL += 16 * Math.sin(t * 16);
@@ -90,12 +118,12 @@ function* enter(S: Stage, ch: Puppet, pl: Plan): Task {
       p.faceY -= 4 * (1 - u);
     });
     if (pl.stance === 'sit') {
-      yield* during(S, 0.28, u => {
+      yield* during(S, 0.36, u => {
         ch.pose.rise += 22 * Math.sin(Math.PI * u * 0.5);
         ch.pose.legS *= 0.85;
       });
       ch.leaveBehind();
-      yield* during(S, 0.22, u => {
+      yield* during(S, 0.32, u => {
         ch.sitU = smooth(u);
         ch.base();
         ch.pose.rise += 22 * (1 - u);
@@ -108,7 +136,7 @@ function* enter(S: Stage, ch: Puppet, pl: Plan): Task {
     const r1 = pl.rise1 ?? 0;
     const r0 = pl.rise0 ?? 0;
     if (pl.cover) ch.goBehind(pl.cover, r0);
-    yield* during(S, 0.9, u => {
+    yield* during(S, PEEK_IN, u => {
       ch.pose.rise += lerp(r0, r1, easeOut(u));
       ch.pose.faceY -= 3 * (1 - u);
     });
@@ -119,7 +147,7 @@ function* enter(S: Stage, ch: Puppet, pl: Plan): Task {
     const x0 = pl.x0 ?? x1;
     ch.x = x0;
     ch.y = pl.ground ?? pl.y;
-    yield* during(S, 0.9, u => {
+    yield* during(S, PEEK_IN, u => {
       ch.x = lerp(x0, x1, easeOut(u));
       const dir = Math.sign(x1 - x0);
       ch.pose.tilt += dir * 7 * Math.sin(Math.PI * u * 0.5);
@@ -134,24 +162,24 @@ function* enter(S: Stage, ch: Puppet, pl: Plan): Task {
 export function* leave(S: Stage, ch: Puppet, pl: Plan, speed = 1): Task {
   ch.mode = 'exit';
   if (pl.how === 'walk') {
-    if (ch.stance !== 'stand') yield* changeStance(S, ch, 'stand', 0.3 / speed);
+    if (ch.stance !== 'stand') yield* changeStance(S, ch, 'stand', 0.42 / speed);
     const side = S.exitSide(ch, pl);
     if (side) {
       const x1 = S.offX(ch, side);
       yield* travel(S, ch, x1, speed * quick(ch, Math.abs(x1 - ch.x), S.o.walkLimit));
     } else yield* popDown(S, ch, speed);   // someone stands in the way on both sides: fold back into the page
   } else if (pl.how === 'pop') {
-    if (ch.stance !== 'stand') yield* changeStance(S, ch, 'stand', 0.3 / speed);
+    if (ch.stance !== 'stand') yield* changeStance(S, ch, 'stand', 0.42 / speed);
     yield* popDown(S, ch, speed);
   } else if (pl.how === 'climb' && seatOnly(pl) && ch.stance === 'sit') {
     // back down behind the card as it came, never standing up first (its head would cover the words above)
-    yield* during(S, 0.2 / speed, u => {
+    yield* during(S, 0.3 / speed, u => {
       ch.pose.legS *= lerp(1, FOLDED, smooth(u));
     });
     const r1 = -(ch.rig.height + ch.decoH + 8);
     if (pl.cover) ch.goBehind(pl.cover, r1);
     const deep = r1 - ch.seatRise;
-    yield* during(S, 0.8 / speed, (u, t) => {
+    yield* during(S, CLIMB_DOWN / speed, (u, t) => {
       ch.pose.rise += deep * smooth(u);
       ch.pose.legS *= FOLDED;
       ch.pose.legL += 14 * Math.sin(t * 16);
@@ -159,7 +187,7 @@ export function* leave(S: Stage, ch: Puppet, pl: Plan, speed = 1): Task {
     });
   } else if (pl.how === 'climb') {
     if (ch.stance === 'sit') {
-      yield* during(S, 0.22 / speed, u => {
+      yield* during(S, 0.32 / speed, u => {
         ch.sitU = 1 - smooth(u);
         ch.base();
         ch.pose.rise += 22 * Math.sin(Math.PI * u * 0.5);
@@ -169,21 +197,21 @@ export function* leave(S: Stage, ch: Puppet, pl: Plan, speed = 1): Task {
     }
     const r1 = -(ch.rig.height + ch.decoH + 8);
     if (pl.cover) ch.goBehind(pl.cover, r1);
-    yield* during(S, 0.8 / speed, (u, t) => {
+    yield* during(S, CLIMB_DOWN / speed, (u, t) => {
       ch.pose.rise += r1 * smooth(u);
       ch.pose.legL += 14 * Math.sin(t * 16);
       ch.pose.legR -= 14 * Math.sin(t * 16);
     });
   } else if (pl.how === 'rise') {
     const r0 = pl.rise0 ?? 0;
-    yield* during(S, 0.7 / speed, u => {
+    yield* during(S, PEEK_OUT / speed, u => {
       ch.pose.rise += lerp(ch.baseRise, r0, smooth(u)) - ch.baseRise;
     });
   } else if (pl.how === 'slide') {
     const x0 = ch.x;
     const x1 = pl.x0 ?? x0;
     const dir = Math.sign(x1 - x0);
-    yield* during(S, 0.7 / speed, u => {
+    yield* during(S, PEEK_OUT / speed, u => {
       ch.x = lerp(x0, x1, smooth(u));
       ch.pose.faceX += dir * 8;
       ch.pose.alpha = 1 - smooth((u - 0.7) / 0.3);
@@ -218,7 +246,9 @@ export function* visit(S: Stage, ch: Puppet, pl: Plan): Task {
   pl.endAt = Math.max(pl.endAt, S.time + S.o.dwell + pl.exitDur);   // a long way in still leaves time to do something
   S.emit(ch, { type: 'arrive', ledge: pl.ledge.id, label: pl.ledge.label });
   const quiet = () => S.time > pl.endAt - pl.exitDur;
-  yield* pause(S, ch, 0.2);
+  // a breath on arriving, and a rest between two activities (the owner, round 5: one thing straight after another
+  // never let it rest) — the rest's stage business keeps it alive
+  yield* pause(S, ch, 0.7 + S.rand() * 0.5);
   let n = 0;
   let last: string | null = null;
   while (!quiet() || n === 0) {
@@ -228,8 +258,9 @@ export function* visit(S: Stage, ch: Puppet, pl: Plan): Task {
     last = act;
     n++;
     if (quiet()) break;
-    yield* pause(S, ch, 0.5 + S.rand() * 0.9, (S.rand() - 0.5) * 8);
+    yield* pause(S, ch, 1.3 + S.rand() * 1.4, (S.rand() - 0.5) * 8);
   }
+  yield* pause(S, ch, 0.5 + S.rand() * 0.4);
   S.emit(ch, { type: 'leave' });
   yield* leave(S, ch, pl, 1);
 }
@@ -248,8 +279,8 @@ export function* greetFromAfar(S: Stage, ch: Puppet, other: Puppet, sh: GreetSha
   const lead = dir > 0;
   const w = ch.waveArm(dir > 0 ? 'R' : 'L');
   if (lead) sh.waves = S.prop('waves', ch, ch);
-  const dur = 3.1;
-  const period = 0.6;
+  const dur = 3.6;
+  const period = 0.68;
   yield* during(S, dur, (u, t) => {
     const p = ch.pose;
     p.faceX += dir * 11 * smooth(u / 0.08);
@@ -260,7 +291,7 @@ export function* greetFromAfar(S: Stage, ch: Puppet, other: Puppet, sh: GreetSha
     }
     const ew = bell(clamp((u - 0.12) / 0.36, 0, 1), 0.25);   // wave to each other
     if (ew > 0) {
-      if (w) ch.setLift(w.side, lerp(ch.arm(w.side).rest, w.lift + 16 * Math.sin(t * 16 + (lead ? 0 : 1)), ew));
+      if (w) ch.setLift(w.side, lerp(ch.arm(w.side).rest, w.lift + 16 * Math.sin(t * 12 + (lead ? 0 : 1)), ew));
       p.mouth = mouthOpen(ch);
     }
     const rt = t - 0.44 * dur;   // resonate: the same bob
@@ -309,7 +340,7 @@ export function* duet(S: Stage, d: Duet): Task {
     }
   };
   const pace = (ch: Puppet, dist: number) => {
-    const q = quick(ch, dist, 3.0);
+    const q = quick(ch, dist, 4.0);
     return () => q * (seen.at != null ? 1.2 : 1);
   };
   if (d.mode === 'pair') {
@@ -360,7 +391,7 @@ export function* duet(S: Stage, d: Duet): Task {
   a.mode = b.mode = 'duet';
   S.emit(a, { type: 'meet', pair: true, with: b.slug });
   // 1 · notice
-  yield* during(S, 0.8, u => {
+  yield* during(S, 1.0, u => {
     for (const [ch, dir] of [[a, 1], [b, -1]] as const) {
       const p = ch.pose;
       p.faceX += dir * 10;
@@ -383,16 +414,16 @@ export function* duet(S: Stage, d: Duet): Task {
     b.pose.faceX -= 10 * u;
   };
   // 3 · wave
-  yield* during(S, 1.1, (u, t) => {
+  yield* during(S, 1.5, (u, t) => {
     const e = bell(u, 0.2);
     face();
-    a.setLift('R', lerp(a.arm('R').rest, 140 + 16 * Math.sin(t * 17), e));
-    b.setLift('L', lerp(b.arm('L').rest, 140 + 16 * Math.sin(t * 17 + 1), e));
+    a.setLift('R', lerp(a.arm('R').rest, 140 + 16 * Math.sin(t * 13), e));
+    b.setLift('L', lerp(b.arm('L').rest, 140 + 16 * Math.sin(t * 13 + 1), e));
     a.pose.mouth = b.pose.mouth = 'mouth-o';
   });
   // 4 · resonate: the same rhythm, three wavy lines between them, a blush
   const beats = 2 + (S.rand() < 0.5 ? 1 : 0);
-  const period = 0.62;
+  const period = 0.7;
   const waves = S.prop('waves', d, a);
   S.emit(a, { type: 'act', act: 'resonate', pair: true, with: b.slug });
   yield* during(S, beats * period + 0.3, (u, t) => {
@@ -443,7 +474,7 @@ export function* duet(S: Stage, d: Duet): Task {
       const [ox, oy] = other.pagePoint(...other.arm(side === 'L' ? 'R' : 'L').pivot);
       return aimLift(side, Math.atan2((oy + by) / 2 - by - 4 * k, ox - bx) / DEG);
     };
-    yield* during(S, 2.4, u => {
+    yield* during(S, 2.9, u => {
       face();
       const eg = bell(u, 0.15, 0.3);
       const et = bell((u - 0.2) / 0.8, 0.15, 0.2);
@@ -468,7 +499,7 @@ export function* duet(S: Stage, d: Duet): Task {
   } else if (variant === 'five') {
     S.emit(a, { type: 'act', act: 'five', pair: true, with: b.slug });
     const burst = S.prop('burst', d, a);
-    yield* during(S, 1.4, u => {
+    yield* during(S, 1.7, u => {
       face();
       // where the mittens meet: between the brads (nearer the shorter arm), raised as high as both arms allow
       const [abx, aby] = a.pagePoint(...a.arm('R').pivot);
@@ -497,7 +528,7 @@ export function* duet(S: Stage, d: Duet): Task {
     });
     burst.remove();
   }
-  yield* during(S, 0.4, () => face(0.6));
+  yield* during(S, 0.9, () => face(0.6));
   // 6 · part: each its own way, or together (at the slower one's pace, the follower never closer than a step)
   for (const ch of [a, b]) ch.mode = 'exit';
   d.together = d.together ?? S.rand() < 0.4;
@@ -522,8 +553,13 @@ export function* duet(S: Stage, d: Duet): Task {
   } else {
     const L = S.offX(a, 'left');
     const R = S.offX(b, 'right');
-    const go = (ch: Puppet, x: number) =>
-      S.pathClear(ch, ch.x, x) ? travel(S, ch, x, quick(ch, Math.abs(x - ch.x), S.o.walkLimit)) : popDown(S, ch);
+    // one with no way to walk off falls back onto the page and is gone then, not when the other has walked away
+    const go = (ch: Puppet, x: number) => S.pathClear(ch, ch.x, x)
+      ? travel(S, ch, x, quick(ch, Math.abs(x - ch.x), S.o.walkLimit))
+      : (function* () {
+        yield* popDown(S, ch);
+        ch.gone = true;
+      })();
     yield* all([go(a, L), go(b, R)]);
   }
   a.gone = b.gone = true;

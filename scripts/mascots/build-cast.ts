@@ -30,17 +30,20 @@ const PX_PER_UNIT = 0.66;
  */
 const WEBP = { quality: 94, alphaQuality: 100, smartSubsample: true, effort: 6 } as const;
 
-/** Per-character habits the engine reads (the stage prototype's TRAITS). */
+/**
+ * Per-character habits the engine reads (the stage prototype's TRAITS). Paces stay near 1 (the owner, round 5: each may
+ * walk at its own speed, but not far apart).
+ */
 const TRAITS: Record<string, Traits> = {
   tuck: { likes: ['read', 'reveal'] },
-  tag: { pace: 1.1, likes: ['reveal', 'wave'] },
-  card: { pace: 0.85, shuffle: true, likes: ['deco', 'read'] },
+  tag: { pace: 1.04, likes: ['reveal', 'wave'] },
+  card: { pace: 0.95, shuffle: true, likes: ['deco', 'read'] },
   // keeps its eyes open while it stretches: shut, its pale face would have no dark mark
   dot: { likes: ['hop'], openStretch: true },
   // the night one: by day it keeps to the footer and the CTA more than the bright hero, and comes round more often
   // on the dark page
   night: {
-    pace: 0.7, naps: true, likes: ['nap', 'twinkle'],
+    pace: 0.88, naps: true, likes: ['nap', 'twinkle'],
     zones: { light: { hero: 0.35, cta: 1.5, footer: 2 }, dark: { hero: 1.3, footer: 1.5 } },
     often: { light: 0.8, dark: 1.6 },
   },

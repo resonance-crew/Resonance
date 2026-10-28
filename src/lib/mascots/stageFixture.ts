@@ -41,7 +41,7 @@ export const FEED: Rect = { x: 0, y: 1050, w: 1440, h: 900 };
 
 const TRAITS: Record<string, Traits> = {
   tuck: { likes: ['read', 'reveal'] },
-  tag: { pace: 1.1, likes: ['reveal', 'wave'] },
+  tag: { pace: 1.04, likes: ['reveal', 'wave'] },
   dot: { likes: ['hop'], openStretch: true },
 };
 

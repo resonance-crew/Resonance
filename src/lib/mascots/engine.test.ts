@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEG } from './geometry';
+import { MAX_HURRY } from './motion';
+import { PENCIL_LEN } from './props';
 import type { Puppet } from './puppet';
+import { MITTEN_MIDDLE } from './rig';
 import { FEED, LEDGES, mountStage, type TestStage } from './stageFixture';
-import type { ArmSide, Ledge, Rect, StageEvent } from './types';
+import type { ArmSide, Ledge, PeekLedge, Rect, SpotLedge, StageEvent } from './types';
 
 let mounted: TestStage[] = [];
 const mount = (o?: Parameters<typeof mountStage>[0]) => {
@@ -99,7 +102,7 @@ describe('mascot stage', () => {
     // they did come, and often two at once: the count above is not an empty stage's zero
     expect(visits).toBeGreaterThan(20);
     expect(pairs).toBeGreaterThan(2);
-  });
+  }, 20_000);   // eight minutes of the stage, read every frame: the resting characters keep moving (jsdom's styles are slow)
 
   it('has two on screen meet or greet each other within a minute', () => {
     const kinds = new Set<string>();
@@ -131,14 +134,15 @@ describe('mascot stage', () => {
   it('walks a guest up to someone on the wave: they meet, resonate and touch mittens', () => {
     const t = mount({ seed: 7 });
     t.stage.visit({ ledge: 'hero-wave', slug: 'tuck', acts: ['look', 'look', 'look'] });
-    t.stage.advance(5);
+    until(t, e => e.type === 'arrive', 10);   // standing there before anyone walks up
+    t.stage.advance(1.5);
     expect(t.stage.meet('five')).toBe(true);
     const meet = until(t, e => e.type === 'meet', 20);
     expect(meet.type === 'meet' && meet.with).toBeTruthy();
     until(t, e => e.type === 'act' && e.act === 'five', 10);
     expect(acts(t)).toContain('resonate');
     until(t, e => e.type === 'leave' && !!e.pair, 10);
-    t.stage.advance(6);
+    t.stage.advance(9);   // each walks off at a walk, not a scurry
     expect(t.stage.visitors()).toHaveLength(0);
   });
 
@@ -433,7 +437,7 @@ describe('mascot stage', () => {
       const t = mount({ seed: 5, ledges, view: FEED });
       expect(t.stage.visit({ ledge: 'card-1-top', slug: 'tag', acts: ['look', 'look'] })).toBe(true);
       let top = Infinity;
-      for (let i = 0; i < 24 * 2; i++) {
+      for (let i = 0; i < 24 * 3; i++) {
         t.stage.advance(1 / 24);
         top = Math.min(top, drawnBoxes(t.layer)[0].y);
       }
@@ -445,5 +449,175 @@ describe('mascot stage', () => {
     const capped = highest(withWords);
     expect(capped.top).toBeGreaterThanOrEqual(capped.seated - 1);
     expect(Math.abs(capped.seated - plain.seated)).toBeLessThan(1);   // and sits in the same place
+  });
+
+  it('moves a visitor with its place when the page moves it up or down, and sends it off when it moves sideways', () => {
+    const ledges = [...LEDGES];
+    const t = mount({ seed: 3, ledges });
+    expect(t.stage.visit({ ledge: 'qr-point', slug: 'tuck', acts: ['look', 'look', 'look', 'look'] })).toBe(true);
+    until(t, e => e.type === 'arrive', 10);
+    t.stage.advance(1);
+    const i = ledges.findIndex(l => l.id === 'qr-point');
+    const spot = ledges[i] as SpotLedge;
+    const [before] = t.stage.visitors();
+    // the window made taller: the hero, centred in it, moves down
+    const down = (l: SpotLedge, dx: number, dy: number): SpotLedge => ({
+      ...l, x: l.x + dx, y: l.y + dy, target: l.target && [l.target[0] + dx, l.target[1] + dy],
+    });
+    ledges[i] = down(spot, 0, 30);
+    t.stage.relayout();
+    t.stage.advance(0.5);
+    const [after] = t.stage.visitors();
+    expect(after.slug).toBe('tuck');   // the same one, still at it: never gone on the spot for another to come
+    expect(after.mode).toBe('act');
+    expect(after.y).toBeCloseTo(before.y + 30, 5);
+    expect(after.x).toBeCloseTo(before.x, 5);
+    ledges[i] = down(spot, 80, 30);   // moved sideways: it can't follow, so it leaves as it would for a scroll
+    t.stage.relayout();
+    t.stage.advance(1 / 24);
+    expect(t.stage.visitors()[0]?.mode).toBe('exit');
+  });
+
+  it('writes with the pencil in its mitten: the point on the slip, slanting out to the pencil’s side', () => {
+    const ledges = LEDGES.map(l => (l.id === 'avatars-end' ? { ...l, target: [760, 700] as const } : l));
+    const transform = (el: Element) => {
+      const m = /translate\((-?[\d.]+)px,(-?[\d.]+)px\) rotate\((-?[\d.]+)deg\) scale\(([\d.]+)\) translate\((-?[\d.]+)px,(-?[\d.]+)px\)/
+        .exec((el as HTMLElement).style.transform);
+      if (!m) throw new Error('no transform');
+      const [x, y, r, k, ax, ay] = m.slice(1).map(Number);
+      return { x, y, r: r * DEG, k, ax: -ax, ay: -ay };
+    };
+    const prop = (t: TestStage, box: string) => {
+      const el = [...t.layer.querySelectorAll('.ms-prop')].find(p => p.querySelector(`svg[viewBox="0 0 ${box}"]`));
+      if (!el) throw new Error(`no ${box} prop`);
+      return transform(el);
+    };
+    for (const slug of ['tuck', 'tag', 'dot']) {
+      const t = mount({ seed: 2, ledges });
+      expect(t.stage.visit({ ledge: 'avatars-end', slug, acts: ['write'] })).toBe(true);
+      until(t, e => e.type === 'act' && e.act === 'write', 12);
+      const ch = t.engine.chars[0];
+      const pen: ArmSide = 760 < ch.x ? 'R' : 'L';
+      const s = pen === 'R' ? 1 : -1;
+      for (const at of [1.4, 1.9, 2.5]) {   // through the three lines
+        t.stage.advance(at - (t.engine.time - t.events.find(e => e.type === 'act' && e.act === 'write')!.t));
+        const pencil = prop(t, '12 56');
+        const paper = prop(t, '40 30');
+        const tip = [pencil.x, pencil.y];
+        // on the slip: the point, read back into the slip's own drawing
+        const dx = tip[0] - paper.x;
+        const dy = tip[1] - paper.y;
+        const qx = (dx * Math.cos(paper.r) + dy * Math.sin(paper.r)) / paper.k + paper.ax;
+        const qy = (-dx * Math.sin(paper.r) + dy * Math.cos(paper.r)) / paper.k + paper.ay;
+        expect(qx, `${slug} at ${at}s: the point on the slip`).toBeGreaterThan(4);
+        expect(qx).toBeLessThan(36);
+        expect(qy).toBeGreaterThan(4);
+        expect(qy).toBeLessThan(26);
+        // in the mitten: the mitten on the pencil's shaft, between its point and its top
+        const up = [Math.sin(pencil.r), -Math.cos(pencil.r)];   // from the point toward the top
+        const len = PENCIL_LEN * pencil.k;
+        const [mx, my] = ch.mitten(pen, MITTEN_MIDDLE);
+        const along = (mx - tip[0]) * up[0] + (my - tip[1]) * up[1];
+        const off = Math.abs((mx - tip[0]) * up[1] - (my - tip[1]) * up[0]);
+        expect(along / len, `${slug} at ${at}s: held up the shaft`).toBeGreaterThan(0.18);
+        expect(along / len).toBeLessThan(0.9);
+        expect(off / len, `${slug} at ${at}s: held on the shaft`).toBeLessThan(0.12);
+        // slanting: its top out toward the pencil arm's side, as a pencil is held
+        const slant = Math.atan2(s * up[0], -up[1]) / DEG;
+        expect(slant, `${slug} at ${at}s: slant`).toBeGreaterThan(10);
+        expect(slant).toBeLessThan(65);
+      }
+    }
+  });
+
+  it('peeks out past a side far enough that both eyes show', () => {
+    const qr = LEDGES.find((l): l is PeekLedge => l.id === 'qr-left' && l.kind === 'peek')!;
+    for (const slug of ['tuck', 'tag', 'dot']) {
+      const t = mount({ seed: 4 });
+      if (!t.stage.visit({ ledge: 'qr-left', slug, acts: ['look', 'look'] })) continue;   // too tall to hide there
+      until(t, e => e.type === 'arrive', 10);
+      const ch = t.engine.chars[0];
+      const far = Math.max(...ch.rig.eyes.map(([x, y]) => ch.pagePoint(x, y)[0]));
+      expect(far, slug).toBeLessThan(qr.cover.x - 12 * ch.k);
+    }
+  });
+
+  it('falls back onto the page as a sheet of paper falls: slowly at first, then flat, in about a second', () => {
+    const t = mount({ seed: 6 });
+    expect(t.stage.visit({ ledge: 'pill-top', slug: 'tuck', acts: ['look'] })).toBe(true);
+    const left = until(t, e => e.type === 'leave', 20).t;
+    const root = chars(t.layer)[0];
+    const height = () => Number(/scale\([\d.]+,([\d.]+)\)/.exec(root.style.transform)?.[1] ?? 1);
+    t.stage.advance(0.4);
+    expect(height()).toBeGreaterThan(0.85);   // tipping back, still nearly upright
+    t.stage.advance(0.45);
+    expect(height()).toBeLessThan(0.5);   // and faster as it goes
+    while (t.stage.visitors().length) t.stage.advance(1 / 24);
+    expect(t.engine.time - left).toBeGreaterThan(0.95);
+  });
+
+  it('rests between two activities without freezing: it settles first, and keeps breathing and swaying', () => {
+    const t = mount({ seed: 8 });
+    expect(t.stage.visit({ ledge: 'badges', slug: 'tuck', acts: ['look', 'look'] })).toBe(true);
+    const arrived = until(t, e => e.type === 'arrive', 10).t;
+    const body = chars(t.layer)[0].querySelector<HTMLElement>('.ms-body')!;
+    const seen = new Set<string>();
+    for (let i = 0; i < 6; i++) {
+      t.stage.advance(1 / 12);
+      seen.add(body.style.transform);
+    }
+    expect(seen.size).toBeGreaterThan(3);   // moving, if only a little
+    const first = until(t, e => e.type === 'act', 5).t;
+    expect(first - arrived).toBeGreaterThan(0.65);
+    const second = t.events.length;
+    until(t, e => e.type === 'act', 10);
+    const acts2 = t.events.slice(second).filter(e => e.type === 'act');
+    expect(acts2.length).toBeGreaterThan(0);
+    expect(acts2[0].t - first).toBeGreaterThan(2.8 + 1.25);   // a look takes 2.8 s; then at least the shortest rest
+  });
+
+  it('stays down once it has fallen over, parting from a meeting with no way to walk off', () => {
+    const t = mount({ seed: 7 });
+    // by the badges: the badges block the way left, so the one on the left falls back onto the page as they part
+    t.stage.visit({ ledge: 'badges', slug: 'tuck', acts: ['look', 'look', 'look'] });
+    until(t, e => e.type === 'arrive', 10);
+    t.stage.advance(1.5);
+    expect(t.stage.meet('none')).toBe(true);
+    const duet = t.engine.chars[0].duet;
+    expect(duet).toBeTruthy();
+    if (duet) duet.together = false;   // each its own way (they leave together by chance otherwise)
+    until(t, e => e.type === 'leave' && !!e.pair, 30);
+    const fallen = new Set<string>();
+    let standingAgain = 0;
+    for (let i = 0; i < 24 * 12 && t.engine.chars.length; i++) {
+      t.stage.advance(1 / 24);
+      for (const ch of t.engine.chars) {
+        const height = Number(/scale\([\d.]+,([\d.]+)\)/.exec(ch.el.style.transform)?.[1] ?? 1);
+        const shows = ch.el.style.opacity !== '0';
+        if (height < 0.1) fallen.add(ch.slug);
+        else if (fallen.has(ch.slug) && shows && height > 0.5) standingAgain++;   // up again after lying flat (not the landing's little bounce)
+      }
+    }
+    expect(fallen.size).toBeGreaterThan(0);   // someone did fall over
+    expect(standingAgain).toBe(0);
+    expect(t.engine.chars).toHaveLength(0);
+  });
+
+  it('walks within about 1.3× of each other, and never more than a brisk walk', () => {
+    const t = mount({ seed: 9 });
+    const paces: number[] = [];
+    for (const slug of ['tuck', 'tag', 'dot']) {
+      expect(t.stage.visit({ ledge: 'hero-wave', slug, acts: ['look'] })).toBe(true);
+      const ch = t.engine.chars[0];
+      paces.push(ch.pace());
+      t.stage.advance(1 / 24);   // put at the side of the view: a jump, not a step
+      const from = ch.x;
+      let secs = 0;
+      for (; secs < 12 && ch.mode === 'enter'; secs += 1 / 24) t.stage.advance(1 / 24);
+      const speed = Math.abs(ch.x - from) / secs;   // the whole way in (a hop is quicker in the air than on average)
+      expect(speed, slug).toBeGreaterThan(0.5 * ch.pace());
+      expect(speed, slug).toBeLessThan(ch.pace() * MAX_HURRY * 1.25);
+    }
+    expect(Math.max(...paces) / Math.min(...paces)).toBeLessThan(1.35);
   });
 });
