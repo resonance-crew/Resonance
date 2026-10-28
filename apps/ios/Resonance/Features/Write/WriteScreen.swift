@@ -272,9 +272,7 @@ struct WriteScreen: View {
             }
         }
         .animation(reduceMotion ? .easeOut(duration: 0.15) : .easeOut(duration: 0.22), value: model.step)
-        .onChange(of: model.step, initial: true) { _, step in
-            // The workspace's one back follows the step (round 17 §9).
-            pane.publishing = step == .publish
+        .onChange(of: model.step) { _, step in
             if step == .publish {
                 publishLoaded = true
                 publishScroll.scrollTo(edge: .top)
@@ -584,7 +582,8 @@ struct WriteScreen: View {
     private func publishStep(_ model: WriteModel) -> some View {
         let compact = window.layoutClass == .compact
         return ScrollView {
-            PublishStep(model: model, inlineHeading: !showsBar, onPickCover: {
+            PublishStep(model: model, inlineHeading: !showsBar,
+                        onBack: { model.stepBack() }, onPickCover: {
                             model.clearCoverError()
                             pickingCover = true
                         },
