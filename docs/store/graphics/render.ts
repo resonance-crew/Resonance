@@ -531,18 +531,20 @@ async function slideHtml(
 
 /**
  * App Store Connect's 「標題和搜尋結果」 take two creative assets, made here per language:
- * - the product page header, 21:9 (3840×1646 opaque PNG). Its preview shows the top half of it above the app's info
- *   sheet (iPhone crops it to about the middle 45 % of its width), so it is the brand line in that upper band,
- *   story cards scattered either side for the wider views and nothing that needs the lower half;
+ * - the product page header, 21:9 (3840×1646 opaque PNG). The iPhone's product page (iOS 27, the owner's phone,
+ *   2026-10-28) shows about the middle three quarters of its width and nearly all its height above the info sheet,
+ *   the back and share buttons over its upper corners and the Dynamic Island over its top middle; iPad and Mac
+ *   show more of the width. So it is the brand line with its subline in the middle, set well inside the centre
+ *   bubble, two story cards flying in close on either side within that band, and one more card at each end for the
+ *   wider views. No brand: the app's name and icon sit right under it;
  * - the search result, 16:9 (5244×2950 opaque PNG), shown almost whole: the brand line and its subline at the
  *   top, three landscape iPads (the feed in the middle, the writer beside its map and Messages either side)
  *   below them with clear air between.
- * The site's share image (`og`, below) grew out of this one and is the better layout: before either asset is
- * uploaded again, redraw it in that layout (README: 頁首、搜尋結果與主題圖片用在哪裡).
+ * Both are flat, as the app is: the cards are told from the paper by their own pen line, never a shadow.
  */
 const HEADER = { w: 3840, h: 1646 };
-/** Where the iPhone's header crop and the iPads' visible band both keep the line (preview-measured). */
-const HEADER_SAFE = { l: 1100, t: 260, r: 2740, b: 860 };
+/** Where the iPhone's view of the header keeps the words clear of the buttons and the island (preview-measured). */
+const HEADER_SAFE = { l: 560, t: 330, r: 3280, b: 1420 };
 const SEARCH = { w: 5244, h: 2950 };
 const SEARCH_SAFE = { l: 410, t: 120, r: 4834, b: 2830 };
 const BRAND_LINE: Record<Lang, { text: string; em: string; sub: string }> = {
@@ -551,17 +553,20 @@ const BRAND_LINE: Record<Lang, { text: string; em: string; sub: string }> = {
 };
 /** Font sizes (px) per asset and language: the headline, then the subline (0 = none). */
 const ASSET_TYPE: Record<'header' | 'search', Record<Lang, [number, number]>> = {
-  header: { 'zh-TW': [220, 0], en: [128, 0] },
+  header: { 'zh-TW': [168, 68], en: [100, 56] },
   search: { 'zh-TW': [330, 118], en: [236, 112] },
 };
-/** The cards scattered beside the header's line: demo cards, where they sit (canvas fractions) and their tilt. */
+/**
+ * The cards around the header's line: demo cards, where they sit (canvas fractions) and their tilt — the inner
+ * two on each side inside the iPhone's band, close to the words; the outer one only for the wider views.
+ */
 const HEADER_CARDS: { id: string; x: number; y: number; deg: number }[] = [
-  { id: 'first-lamp-in-my-rental', x: 0.105, y: 0.27, deg: -7 },
-  { id: 'fathers-old-bicycle', x: 0.215, y: 0.62, deg: 5 },
-  { id: 'mint-on-the-balcony', x: 0.06, y: 0.8, deg: 4 },
-  { id: 'first-morning-after-quitting', x: 0.895, y: 0.26, deg: 6 },
-  { id: 'mothers-phone-call', x: 0.785, y: 0.63, deg: -5 },
-  { id: 'the-day-i-moved-out', x: 0.95, y: 0.8, deg: -3 },
+  { id: 'first-lamp-in-my-rental', x: 0.262, y: 0.38, deg: -7 },
+  { id: 'fathers-old-bicycle', x: 0.318, y: 0.76, deg: 5 },
+  { id: 'mint-on-the-balcony', x: 0.064, y: 0.52, deg: 4 },
+  { id: 'first-morning-after-quitting', x: 0.738, y: 0.37, deg: 6 },
+  { id: 'mothers-phone-call', x: 0.682, y: 0.75, deg: -5 },
+  { id: 'the-day-i-moved-out', x: 0.936, y: 0.54, deg: -3 },
 ];
 
 /** A landscape iPad capture in the slides' hand-drawn frame, `outerW` wide. */
@@ -641,7 +646,7 @@ function assetCss(T: Tokens, W: number, H: number, lang: Lang, A: Accent, size: 
 
 /** Doodles per asset, as canvas fractions, all clear of the brand line's band. */
 const ASSET_DOODLES: Record<'header' | 'search' | 'og', { ring: [number, number]; squiggle: [number, number]; sparkles: [number, number][]; dots: [number, number] }> = {
-  header: { ring: [0.335, 0.12], squiggle: [0.63, 0.1], sparkles: [[0.4, 0.8], [0.61, 0.84]], dots: [0.7, 0.16] },
+  header: { ring: [0.39, 0.2], squiggle: [0.6, 0.17], sparkles: [[0.43, 0.84], [0.575, 0.87]], dots: [0.83, 0.13] },
   search: { ring: [0.17, 0.36], squiggle: [0.84, 0.34], sparkles: [[0.09, 0.47], [0.93, 0.47]], dots: [0.79, 0.24] },
   og: { ring: [0.3, 0.13], squiggle: [0.66, 0.11], sparkles: [[0.33, 0.86], [0.68, 0.88]], dots: [0.72, 0.17] },
 };
@@ -672,21 +677,21 @@ function backdrop(W: number, H: number, U: number, A: Record<AccentName, Accent>
 async function headerAssetHtml(T: Tokens, fonts: string, A: Record<AccentName, Accent>, lang: Lang): Promise<string> {
   const { w: W, h: H } = HEADER;
   const U = H;
-  const [size] = ASSET_TYPE.header[lang];
-  const cardW = Math.round(W * 0.135);
+  const [size, sub] = ASSET_TYPE.header[lang];
+  const cardW = Math.round(W * 0.118);
   const cards = await Promise.all(HEADER_CARDS.map((c, i) => storyCard(c.id, lang, cardW, 70 + i * 7, U)));
-  const shadow = `filter:drop-shadow(0 ${Math.round(U * 0.016)}px ${Math.round(U * 0.026)}px oklch(20% 0.04 60 / 0.2))`;
   const cardHtml = HEADER_CARDS.map((c, i) => {
     const k = cards[i];
-    return `<div class="abs" style="left:${Math.round(W * c.x - k.w / 2)}px;top:${Math.round(H * c.y - k.h / 2)}px;transform:rotate(${c.deg}deg);${shadow}">${k.svg}</div>`;
+    return `<div class="abs" style="left:${Math.round(W * c.x - k.w / 2)}px;top:${Math.round(H * c.y - k.h / 2)}px;transform:rotate(${c.deg}deg)">${k.svg}</div>`;
   }).join('\n  ');
-  const lineTop = Math.round(H * 0.42 - size * 0.6);
+  const blockH = size * 1.2 + size * 0.3 + sub * 1.45;
+  const lineTop = Math.round(H * 0.5 - blockH / 2);
   const body = `<div class="canvas">
-  ${backdrop(W, H, U, A, { y: H * 0.5, r: U * 0.5 }, 'header')}
+  ${backdrop(W, H, U, A, { y: H * 0.52, r: U * 0.52 }, 'header')}
   ${cardHtml}
-  <div class="text" style="top:${lineTop}px">${brandLine(lang, A.terracotta, size, 0, HEADER_SAFE.r - HEADER_SAFE.l)}</div>
+  <div class="text" style="top:${lineTop}px">${brandLine(lang, A.terracotta, size, sub, W * 0.34)}</div>
 </div>`;
-  return htmlDoc(`App Store header ${lang}`, assetCss(T, W, H, lang, A.terracotta, size, 0), fonts, body, lang === 'en' ? 'en' : 'zh-Hant-TW');
+  return htmlDoc(`App Store header ${lang}`, assetCss(T, W, H, lang, A.terracotta, size, sub), fonts, body, lang === 'en' ? 'en' : 'zh-Hant-TW');
 }
 
 async function searchAssetHtml(T: Tokens, fonts: string, A: Record<AccentName, Accent>, lang: Lang): Promise<string> {
