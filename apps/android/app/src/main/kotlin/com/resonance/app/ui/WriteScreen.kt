@@ -1031,7 +1031,7 @@ private fun PublishStep(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    OrganicIcon(IconName.Mask, size = 14.dp, color = Tokens.Terracotta)
+                    OrganicIcon(IconName.Lock, size = 14.dp, color = Tokens.Terracotta)
                     BasicText(L10n.Write.Visibility.sharedWarning, style = AppFonts.body(13f, lineHeight = 1.5f, color = Tokens.TextMuted))
                 }
             }
