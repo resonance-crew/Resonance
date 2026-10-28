@@ -141,6 +141,7 @@ struct WriteWorkspace: View {
     /// shows (ThoughtMapStore.settle). The writer's pane is open from the start.
     @State private var settled: Int
     @State private var pane = WritePane()
+    @State private var keyboard = KeyboardKind()
     private static let space = "write.workspace"
 
     /// Where the pane's first row, `row` tall, starts under the status bar: its middle on a pushed
@@ -184,6 +185,10 @@ struct WriteWorkspace: View {
                 backToMap()
                 return true
             }
+            #if DEBUG
+            // `-writeFull YES` gives the writer's pane the whole width at the split (screen checks).
+            if UserDefaults.standard.bool(forKey: "writeFull"), split, card != nil { fraction = 1 }
+            #endif
         }
         .sensoryFeedback(.impact(weight: .light), trigger: hidings)
         // Narrowed under the split, the map page is the map alone again: a card in its pane is saved
@@ -211,8 +216,14 @@ struct WriteWorkspace: View {
             }
             if let card, split || isWriter {
                 let paneW = split ? paneWidth * w : w
-                WriteScreen(request: card, pane: pane, showsBar: !split || full, onDone: fromMap ? { done() } : nil)
+                WriteScreen(request: card, pane: pane, showsBar: !split || full, onDone: fromMap ? { done() } : nil,
+                            hardwareKeyboard: keyboard.hardware)
                     .id(card)
+                    // A hardware keyboard's band is the system's input pill alone, floating over the page: the pane runs on to the home
+                    // indicator, the format bar resting at its foot as tall as with no keyboard, rather than standing
+                    // on that band (where it read as a bar grown taller) — and no strip is left there for the map under
+                    // the pane, which ignores the keyboard, to show through.
+                    .ignoresSafeArea(keyboard.hardware ? .keyboard : [], edges: .bottom)
                     .frame(width: paneW)
                     // The boundary: a hair of line on the pane's own leading edge, from the top.
                     .overlay(alignment: .leading) {

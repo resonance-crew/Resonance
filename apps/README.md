@@ -161,7 +161,8 @@ language, appearance, terms, delete) opens Settings or one of its pages.
 `-openWriter YES` opens the writer on a new card at launch and `-writeCard <id>`
 on one of yours (a draft, a published card, one in the trash); `-writeStep publish`
 then opens its second step, `-writeFocus YES` puts the caret in the story (the
-keyboard and its format bar up), and `-writeAppend "…" -writeAppendAfter <s>`
+keyboard and its format bar up), `-writeFull YES` gives the writer's pane the whole
+width at a tablet's split, and `-writeAppend "…" -writeAppendAfter <s>`
 types onto the story a while later (a save to watch, e.g. refused once the card
 is moved to the trash elsewhere). `-writePaste "…"` (with `-writePasteHTML "…"`
 beside it, as a rich-text source's clipboard holds HTML) pastes into the story

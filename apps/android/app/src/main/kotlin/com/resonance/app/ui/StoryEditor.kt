@@ -73,6 +73,8 @@ import androidx.compose.ui.node.requireLayoutCoordinates
 import androidx.compose.ui.relocation.BringIntoViewModifierNode
 import androidx.compose.ui.relocation.bringIntoView
 import com.resonance.design.AppFonts
+import com.resonance.design.LayoutClass
+import com.resonance.design.LocalWindowLayout
 import com.resonance.design.OrganicIcon
 import com.resonance.design.OrganicVerticalRule
 import com.resonance.design.ReadingTextScale
@@ -699,7 +701,9 @@ fun StoryCanvas(bridge: StoryEditorBridge, minHeight: Dp, modifier: Modifier = M
  * 收起鍵盤 pinned at its end. Its buttons never take the focus from the story. With the keyboard down
  * (the story still holding the focus) its paper runs on to the screen's bottom edge, under the
  * system's navigation bar — gesture or three-button — the row standing above it (the inset is the
- * paper's own padding, never air below it the story would show through).
+ * paper's own padding, never air below it the story would show through). Wider than a phone the row
+ * lies along the writing column ([dockEdges]): its first tool's ink on the words' left edge, 收起鍵盤 on
+ * their right — the wave and the paper still run from edge to edge.
  */
 @Composable
 fun StoryFormatBar(
@@ -712,9 +716,14 @@ fun StoryFormatBar(
     onLink: () -> Unit = {},
 ) {
     val scroll = rememberScrollState()
+    val window = LocalWindowLayout.current
+    val density = LocalDensity.current
+    var barWidth by remember { mutableIntStateOf(0) }
+    val (leading, trailing) = dockEdges(with(density) { barWidth.toDp() }, window.pad, window.cls == LayoutClass.Compact)
     Row(
         modifier
             .fillMaxWidth()
+            .onSizeChanged { barWidth = it.width }
             .dockedWave(EDITOR_SEED + 5)
             // Inside the paper: an inset the keyboard (consumed above, imePadding) doesn't cover.
             .navigationBarsPadding()
@@ -726,7 +735,7 @@ fun StoryFormatBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
-            Modifier.weight(1f).fadingEdges(scroll, DOCK_FADE).horizontalScroll(scroll).padding(horizontal = 8.dp),
+            Modifier.weight(1f).fadingEdges(scroll, DOCK_FADE).horizontalScroll(scroll).padding(start = leading, end = DOCK_ROW_INSET),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val a = bridge.active
@@ -748,6 +757,7 @@ fun StoryFormatBar(
         }
         Box(
             Modifier
+                .padding(end = trailing)
                 .size(DOCK_ROW_HEIGHT)
                 .plainClickable(role = Role.Button, onClick = bridge::releaseKeyboard)
                 .semantics { contentDescription = L10n.Write.Editor.hideKeyboard },
@@ -761,6 +771,24 @@ private const val EDITOR_SEED = 17.0
 
 /** How far the tools fade at the row's scrolling edges. */
 private val DOCK_FADE = 16.dp
+
+/** The tools start this far in from the row's ends on a phone. */
+private val DOCK_ROW_INSET = 8.dp
+
+/** A tool's ink starts this far into its button; 收起鍵盤's glyph (20) sits this far in from its 44. */
+private val DOCK_TOOL_INK = 9.dp
+private val DOCK_CHEVRON_INK = 12.dp
+
+/**
+ * The row's leading inset and 收起鍵盤's trailing one in a bar [width] wide: a phone's row runs from the
+ * bar's edges (8 in); wider, the tools start on the writing column's left edge (WriteScreen's centred
+ * Measure column, never under [pad]) and 收起鍵盤 ends on its right — as iOS's StoryFormatBar.edges.
+ */
+internal fun dockEdges(width: Dp, pad: Dp, compact: Boolean): Pair<Dp, Dp> {
+    if (compact || width <= 0.dp) return DOCK_ROW_INSET to 0.dp
+    val column = maxOf(pad, (width - Tokens.Measure.dp) / 2)
+    return maxOf(DOCK_ROW_INSET, column - DOCK_TOOL_INK) to maxOf(0.dp, column - DOCK_CHEVRON_INK)
+}
 
 /** The docked bar's row: a finger's 44. */
 internal val DOCK_ROW_HEIGHT = 44.dp

@@ -28,6 +28,8 @@ struct WriteScreen: View {
     /// A card opened from the thought map in the workspace's pane: being done with it (published,
     /// revised, dropped, saved and left) hides the pane rather than leaving the page.
     var onDone: (() -> Void)? = nil
+    /// The keyboard is a hardware one (``KeyboardKind``): the format bar keeps clear of the system's input pill.
+    var hardwareKeyboard = false
     @Environment(SessionStore.self) private var session
     @Environment(WriteLauncher.self) private var writer
     @Environment(\.scenePhase) private var scenePhase
@@ -96,7 +98,9 @@ struct WriteScreen: View {
                     .padding(.top, 120)
             }
         }
-        .background(Tokens.cream)
+        // On to the screen's foot, under the home indicator: at the whole width the map lies under the pane
+        // (ignoring the safe areas), and a strip of it showed there.
+        .background { Tokens.cream.ignoresSafeArea() }
         .safeAreaInset(edge: .top, spacing: 0) {
             if showsBar { bar.transition(.opacity) }
         }
@@ -398,7 +402,7 @@ struct WriteScreen: View {
                             storyLentFocus = true
                             linkRequest = .of(link: model.editor.link, canCard: model.editor.canCard, caret: caret)
                         }
-                    })
+                    }, hardwareKeyboard: hardwareKeyboard)
                         .transition(.opacity.animation(.easeOut(duration: 0.12)))
                 }
             }

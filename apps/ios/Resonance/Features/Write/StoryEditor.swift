@@ -470,7 +470,9 @@ struct StoryCanvasField: View {
 /// that never wraps — 插入圖片 · 插入卡片 ┆ 粗體 · 斜體 ┆ H2 · H3 ┆ 引言 · 清單 · 編號 ┆ 連結 (round 17 §6.1:
 /// the link last, after a rule of its own, keeping its glyph) — scrolling sideways, fading where more
 /// lies, and 收起鍵盤 pinned at its end. Its buttons never take the focus from the story (the island
-/// keeps it, and each command focuses it again).
+/// keeps it, and each command focuses it again). Wider than a phone the row lies along the writing
+/// column (``edges(width:pad:compact:inputPill:)``): its first tool's ink on the words' left edge,
+/// 收起鍵盤 on their right — the wave and the paper still run from edge to edge.
 struct StoryFormatBar: View {
     let bridge: StoryEditorBridge
     var onInsertImage: () -> Void
@@ -478,6 +480,11 @@ struct StoryFormatBar: View {
     var uploadingImage = false
     /// 連結 (round 16 §6): the link editor for the selection or the caret's link.
     var onLink: () -> Void = {}
+    /// A hardware keyboard's (the bar rests at the window's foot): the system's input pill sits in the
+    /// window's trailing corner there, so the row keeps clear of it.
+    var hardwareKeyboard = false
+    @Environment(\.window) private var window
+    @State private var barWidth: CGFloat = 0
     /// MarkdownEditor's `seed`; the buttons, rules and wave offset from it.
     private let seed = 17.0
     /// The row's height (each button a 44 target).
@@ -511,6 +518,7 @@ struct StoryFormatBar: View {
     static let toolOrder = ["image", "card", "bold", "italic", "h2", "h3", "quote", "bullets", "numbers", "link"]
 
     var body: some View {
+        let edges = Self.edges(width: barWidth, pad: window.pad, compact: window.layoutClass == .compact, inputPill: hardwareKeyboard)
         HStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView(.horizontal) {
@@ -533,7 +541,8 @@ struct StoryFormatBar: View {
                         rule(23)
                         tool(L10n.Write.Editor.link, id: "link", on: bridge.link != nil, icon: .link, seed: 31, action: onLink)
                     }
-                    .padding(.horizontal, Self.rowInset)
+                    .padding(.leading, edges.leading)
+                    .padding(.trailing, Self.rowInset)
                 }
                 .scrollIndicators(.hidden)
                 .coordinateSpace(.named(Self.rowSpace))
@@ -576,9 +585,10 @@ struct StoryFormatBar: View {
             }
             .buttonStyle(ToolButtonStyle())
             .accessibilityLabel(L10n.Write.Editor.hideKeyboard)
-            .padding(.trailing, 8)
+            .padding(.trailing, edges.trailing)
         }
         .frame(height: Self.rowHeight)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { barWidth = $0 }
         .padding(.top, Self.waveTop)
         .background(alignment: .top) {
             ZStack(alignment: .top) {
@@ -601,6 +611,23 @@ struct StoryFormatBar: View {
     /// The row's tools start this far in from its ends (Android's DockTool row).
     static let rowInset: CGFloat = 8
     private static let rowSpace = "storyFormatRow"
+    /// A tool's ink starts this far into its button; 收起鍵盤's glyph (18) sits this far in from its 44.
+    static let toolInk: CGFloat = 9
+    static let chevronInk: CGFloat = 13
+    /// What the system's input pill takes at the window's trailing foot under a hardware keyboard
+    /// (iPadOS 26: about 62 wide, 24 in), with air.
+    static let inputPillClear: CGFloat = 96
+
+    /// The row's leading inset and 收起鍵盤's trailing one in a bar `width` wide. A phone's row runs from
+    /// the bar's edges (8 in); wider, the tools start on the writing column's left edge (the page's
+    /// ``LayoutClass/columnInset(_:measure:pad:)``) and 收起鍵盤 ends on its right — clear of the
+    /// system's input pill under a hardware keyboard.
+    static func edges(width: CGFloat, pad: CGFloat, compact: Bool, inputPill: Bool) -> (leading: CGFloat, trailing: CGFloat) {
+        let clear = inputPill ? inputPillClear : 0
+        guard !compact, width > 0 else { return (rowInset, max(8, clear)) }
+        let column = LayoutClass.columnInset(width, pad: pad)
+        return (max(rowInset, column - toolInk), max(8, column - chevronInk, clear))
+    }
 
     /// How wide each end's fade is: ``fade`` where more of the row lies that way — but none over a tool that is
     /// on (its wash would read as cut), whose frame across the visible row is in `onFrames`.
@@ -646,6 +673,30 @@ struct StoryFormatBar: View {
         .onGeometryChange(for: CGRect?.self) { on ? $0.frame(in: .named(Self.rowSpace)) : nil } action: { frame in
             onFrames[id] = frame
         }
+    }
+}
+
+/// Whether the keyboard is a hardware one. UIKit then reports the keyboard as a sliver (iPadOS 26: no
+/// height at all) while SwiftUI still keeps a band at the foot for the system's input pill; a software
+/// keyboard is 260 and more, and a floating one keeps no band.
+@MainActor @Observable final class KeyboardKind {
+    private(set) var hardware = false
+    @ObservationIgnored private var observer: NSObjectProtocol?
+
+    /// A keyboard frame this tall is a hardware keyboard's.
+    nonisolated static func isHardware(height: CGFloat) -> Bool { height < 120 }
+
+    init() {
+        observer = NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification,
+                                                          object: nil, queue: .main) { [weak self] note in
+            guard let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+            let hardware = Self.isHardware(height: frame.height)
+            MainActor.assumeIsolated { self?.hardware = hardware }
+        }
+    }
+
+    isolated deinit {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
     }
 }
 
