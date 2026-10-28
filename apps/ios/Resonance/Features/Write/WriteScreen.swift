@@ -30,6 +30,8 @@ struct WriteScreen: View {
     var onDone: (() -> Void)? = nil
     /// The keyboard is a hardware one (``KeyboardKind``): the format bar keeps clear of the system's input pill.
     var hardwareKeyboard = false
+    /// On a Mac, the keyboard's strip across the window's foot (``KeyboardKind/macStrip``): the format bar stands on it.
+    var keyboardStrip: CGFloat = 0
     @Environment(SessionStore.self) private var session
     @Environment(WriteLauncher.self) private var writer
     @Environment(\.scenePhase) private var scenePhase
@@ -403,6 +405,7 @@ struct WriteScreen: View {
                             linkRequest = .of(link: model.editor.link, canCard: model.editor.canCard, caret: caret)
                         }
                     }, hardwareKeyboard: hardwareKeyboard)
+                        .padding(.bottom, keyboardStrip)
                         .transition(.opacity.animation(.easeOut(duration: 0.12)))
                 }
             }

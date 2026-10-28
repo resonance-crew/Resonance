@@ -287,15 +287,6 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
         handle(type, body)
     }
 
-    /// The story's editable root asks for no autocorrection, spelling marks or writing suggestions.
-    static let withoutSuggestions = """
-        for (const root of document.querySelectorAll('[contenteditable]')) {
-          root.setAttribute('autocorrect', 'off');
-          root.setAttribute('spellcheck', 'false');
-          root.setAttribute('writingsuggestions', 'false');
-        }
-        """
-
     /// One message from the island (`type` and its fields); a type it doesn't know is left alone.
     func handle(_ type: String, _ body: [String: Any]) {
         switch type {
@@ -303,12 +294,6 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
             ready = true
             // In case WebKit made its content view anew with the page.
             webView.hideFormAccessoryBar()
-            // On a Mac, UIKit hosts the story's suggestions (QuickType) in a blurred strip of its own across the
-            // window's foot, over the format bar; a story that asks for none, with no shortcuts either
-            // (``WKWebView/hideFormAccessoryBar()``), gets no strip.
-            if ProcessInfo.processInfo.isiOSAppOnMac {
-                Task { _ = try? await webView.callAsyncJavaScript(Self.withoutSuggestions, arguments: [:], contentWorld: .page) }
-            }
             // The appearance as the web view stands in its window now (it may have changed while the page
             // loaded); out of a window its traits say nothing yet, and its trait change on landing in one will.
             if webView.window != nil { wear(IslandAppearance(webView.traitCollection)) }
@@ -417,9 +402,8 @@ extension WKWebView {
             guard let method = class_getInstanceMethod(UIResponder.self, #selector(getter: UIResponder.inputAccessoryView)) else { return }
             class_addMethod(made, #selector(getter: UIResponder.inputAccessoryView), imp_implementationWithBlock(none),
                             method_getTypeEncoding(method))
-            // On a Mac the bar over the keyboard (WebKit's undo · redo · paste, B I U, and the story's suggestions —
-            // ``StoryEditorBridge/withoutSuggestions``) has no keyboard to ride: it lies over the window's foot as a
-            // blurred strip of its own, over the format bar. With nothing to show, it shows none.
+            // On a Mac the bar over the keyboard (``KeyboardKind``) is a strip across the window's foot: WebKit's
+            // undo · redo · paste and B I U there would only repeat the format bar standing on it.
             if ProcessInfo.processInfo.isiOSAppOnMac,
                let assistant = class_getInstanceMethod(UIResponder.self, #selector(getter: UIResponder.inputAssistantItem)) {
                 let empty = UITextInputAssistantItem()
@@ -572,7 +556,7 @@ struct StoryFormatBar: View {
                     .padding(.leading, edges.leading)
                     .padding(.trailing, Self.rowInset)
                 }
-                .scrollIndicators(.hidden)
+                .scrollIndicators(.never)
                 .coordinateSpace(.named(Self.rowSpace))
                 .onScrollGeometryChange(for: [Bool].self) { geo in
                     let range = geo.contentSize.width - geo.containerSize.width
@@ -706,21 +690,44 @@ struct StoryFormatBar: View {
 
 /// Whether the keyboard is a hardware one. UIKit then reports the keyboard as a sliver (iPadOS 26: no
 /// height at all) while SwiftUI still keeps a band at the foot for the system's input pill; a software
-/// keyboard is 260 and more, and a floating one keeps no band.
+/// keyboard is 260 and more, and a floating one keeps no band. Never on a Mac: there the band (55) is a
+/// glass strip across the window's foot — the keyboard's empty bar — over which SwiftUI lifts nothing, so
+/// the format bar is lifted by hand to stand on it (``macStrip``) rather than lie under it.
 @MainActor @Observable final class KeyboardKind {
     private(set) var hardware = false
+    /// On a Mac, how much of the window's foot the keyboard's strip covers while it is up (0 elsewhere).
+    private(set) var macStrip: CGFloat = 0
     @ObservationIgnored private var observer: NSObjectProtocol?
 
-    /// A keyboard frame this tall is a hardware keyboard's.
-    nonisolated static func isHardware(height: CGFloat) -> Bool { height < 120 }
+    /// A keyboard frame this tall is a hardware keyboard's (`onMac`: never).
+    nonisolated static func isHardware(height: CGFloat, onMac: Bool = ProcessInfo.processInfo.isiOSAppOnMac) -> Bool {
+        !onMac && height < 120
+    }
 
     init() {
         observer = NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification,
                                                           object: nil, queue: .main) { [weak self] note in
             guard let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
             let hardware = Self.isHardware(height: frame.height)
-            MainActor.assumeIsolated { self?.hardware = hardware }
+            MainActor.assumeIsolated {
+                self?.hardware = hardware
+                if ProcessInfo.processInfo.isiOSAppOnMac { self?.macStrip = Self.covered(by: frame) }
+            }
         }
+    }
+
+    /// How far up from the key window's foot a keyboard frame (in the screen's space) reaches.
+    private static func covered(by frame: CGRect) -> CGFloat {
+        let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+        guard let window else { return 0 }
+        let local = window.convert(frame, from: window.screen.coordinateSpace)
+        return Self.overlap(windowHeight: window.bounds.height, keyboardTop: local.minY)
+    }
+
+    /// What a keyboard whose top is at `keyboardTop` covers of a window `windowHeight` tall (none once it
+    /// has gone below the foot).
+    nonisolated static func overlap(windowHeight: CGFloat, keyboardTop: CGFloat) -> CGFloat {
+        max(0, windowHeight - keyboardTop)
     }
 
     isolated deinit {

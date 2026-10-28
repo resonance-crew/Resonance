@@ -220,7 +220,7 @@ struct WriteWorkspace: View {
             if let card, split || isWriter {
                 let paneW = split ? paneWidth * w : w
                 WriteScreen(request: card, pane: pane, showsBar: !split || full, onDone: fromMap ? { done() } : nil,
-                            hardwareKeyboard: keyboard.hardware)
+                            hardwareKeyboard: keyboard.hardware, keyboardStrip: keyboard.macStrip)
                     .id(card)
                     // A hardware keyboard's band is the system's input pill alone, floating over the page: the pane runs on to the home
                     // indicator, the format bar resting at its foot as tall as with no keyboard, rather than standing
