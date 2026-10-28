@@ -19,6 +19,8 @@ export interface ThoughtMapBoardProps {
   focusCardId?: string | null;
   /** Bumped by the host when the map's width has settled (a divider released). */
   settleKey?: number;
+  /** The host's divider is being dragged: the map holds still until it is released (see {@link ThoughtMapCanvas}). */
+  resizing?: boolean;
 }
 
 /**
@@ -36,6 +38,7 @@ export function ThoughtMapBoard({
   paneOpen = false,
   focusCardId,
   settleKey,
+  resizing,
 }: ThoughtMapBoardProps) {
   const { data, mutate } = useMyThoughtMap();
 
@@ -93,6 +96,7 @@ export function ThoughtMapBoard({
       paneOpen={paneOpen}
       focusCardId={focusCardId}
       settleKey={settleKey}
+      resizing={resizing}
       onBoardChange={onBoardChange}
     />
   );

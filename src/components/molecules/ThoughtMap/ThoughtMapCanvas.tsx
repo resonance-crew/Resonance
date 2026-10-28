@@ -292,6 +292,12 @@ export interface ThoughtMapCanvasProps {
   /** Bumped by the host when the map's width has settled after a resize of its own (a divider released). */
   settleKey?: number;
   /**
+   * The host is resizing the map (its divider being dragged): the board holds still meanwhile — no render and
+   * no new framing on each frame of the drag, which with a full map made the drag stutter — and takes the size
+   * it is left at once this turns false (with `settleKey`).
+   */
+  resizing?: boolean;
+  /**
    * Reports the board after every local change. The canvas owns its state
    * optimistically, so without this the host's cached copy would still hold
    * the board as it was when the canvas mounted — and the next mount (coming
@@ -321,6 +327,7 @@ export function ThoughtMapCanvas({
   paneOpen = false,
   focusCardId = null,
   settleKey = 0,
+  resizing = false,
   onBoardChange,
 }: ThoughtMapCanvasProps) {
   const t = useTranslations('me.thoughtMap');
@@ -417,8 +424,23 @@ export function ThoughtMapCanvas({
   const dragRef = useRef<Drag | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
-  const { w: vw, h: vh } = useElementSize(viewportRef);
   const fittedRef = useRef(false);
+  // The viewport's size, as the board lays itself out by. While the host resizes the map (`resizing`) the
+  // sizes it passes through are not heard: the board is rendered at the one the resize is left at.
+  const [{ w: vw, h: vh }, setViewport] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const el = viewportRef.current;
+    if (!el || resizing) return;
+    const update = () => {
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      setViewport((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+    };
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    update();
+    return () => observer.disconnect();
+  }, [resizing]);
 
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
@@ -1471,7 +1493,9 @@ export function ThoughtMapCanvas({
     labelDraft, linkColor, linkDraft, linkTargetId, nodes, selection, t,
   ]);
 
-  const { w: boardW, h: boardH } = useElementSize(boardRef);
+  // The frame's size, for its border: a flush board (the workspace's) has none to draw, and so nothing to measure.
+  const noFrame = useRef<HTMLDivElement>(null);
+  const { w: boardW, h: boardH } = useElementSize(flush ? noFrame : boardRef);
   // Read from the ref: mid-gesture renders (the pan's layer, a selection) must draw the camera as it is now.
   const camera = cameraRef.current;
 

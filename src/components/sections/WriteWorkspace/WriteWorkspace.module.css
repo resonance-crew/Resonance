@@ -435,6 +435,14 @@
   left: 24px;
 }
 
+/* The pane's share of the width, written on the pane alone (WorkspaceShell): none of what it holds inherits it,
+   so a divider drag's move restyles the pane and nothing under it. */
+@property --editor-frac {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0.5;
+}
+
 .editorPane {
   position: relative;
   flex: none;

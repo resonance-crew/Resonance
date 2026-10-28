@@ -236,6 +236,9 @@ export function WorkspaceShell({
   const shellRef = useRef<HTMLDivElement>(null);
   const railRef = useRef<HTMLDivElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
+  // The pane itself: its width is written on it (`--editor-frac`, a property its subtree doesn't inherit), so a
+  // drag's move restyles the pane alone, not the map beside it.
+  const paneBoxRef = useRef<HTMLElement>(null);
   const [editorFrac, setEditorFrac] = useState(MAX_EDITOR_FRAC);
 
   // At the split the pane can be folded away by its divider: kept mounted (what it shows stays as it was), the
@@ -256,33 +259,37 @@ export function WorkspaceShell({
   const dock: Dock | undefined = folded ? 'end' : full ? 'start' : undefined;
 
   // A drag of the divider: `over` is the pane's width while dragged on past the narrowest (it follows the
-  // pointer there), null within 32–50 %; `from` the width it had when the drag began, which it shows again
-  // at if this drag hides it.
-  // Where the drag is now (`over`, `beyond`) is kept here too: a release that comes before the last move's render
-  // (a fast drag — round 17 §5.1) is judged by where the pointer was, not by the render before it. `samples` are
-  // its recent moves, for the speed it is released at.
+  // pointer there), null within 32–50 %; `beyond` its width past 1:1 (the writer's pane only), else null;
+  // `frac` the width within 32–50 % it is left at; `from` the width it had when the drag began, which it shows
+  // again at if this drag hides it. `samples` are its recent moves, for the speed it is released at.
+  // The drag lives here, not in the state: the pane follows the pointer straight on the page (`--editor-frac`),
+  // and the page renders only when the drag crosses a line it shows — a render per move drew the whole map and
+  // the pane again on every frame, and a full map made the drag stutter and lag behind the hand. A release is
+  // judged by where the pointer was (a fast drag — round 17 §5.1).
   const drag = useRef<{
     id: number;
     from: number;
     x: number;
     docked: Dock | undefined;
     shown: boolean;
+    frac: number;
     over: number | null;
     beyond: number | null;
     samples: { t: number; x: number }[];
+    span: { right: number; width: number } | null;
   } | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [over, setOver] = useState<number | null>(null);
-  // Past 1:1 (the writer's pane only), the pane's width as the pointer has it, else null.
-  const [beyond, setBeyond] = useState<number | null>(null);
-  const inFullZone = beyond != null && beyond >= FULL_EDITOR_FRAC;
+  // The lines a drag crosses that the page shows: past 1:1 (the map's tools fade), past 3/4 (released here, the
+  // whole width), and under the hide line (released here, the pane folds away).
+  const [beyondHalf, setBeyondHalf] = useState(false);
+  const [inFullZone, setInFullZone] = useState(false);
+  const [inHideZone, setInHideZone] = useState(false);
   // How the pane eases to where it was left: a pointer's release settles at once (no swing after the mouse
   // has let go — round 16 §7), a key's step and the spring back to the narrowest keep their spring.
   const [ease, setEase] = useState<'release' | 'spring'>('spring');
   // Bumped once the divider has been released (or stepped by a key): the map's width has settled.
   const [settleKey, setSettleKey] = useState(0);
   const settle = () => setSettleKey((k) => k + 1);
-  const inHideZone = over != null && over < HIDE_EDITOR_FRAC;
 
   const hide = () => {
     // What had the focus in the pane goes with it: the docked grip is where it shows again.
@@ -304,10 +311,11 @@ export function WorkspaceShell({
     settle();
   };
 
-  const fracAt = (clientX: number) => {
+  // The shell's span across the window, read once as a drag begins: read on each move, after the move before it
+  // had widened the pane, it laid the page out again then and there — several times a frame for a fast mouse.
+  const shellSpan = () => {
     const r = shellRef.current?.getBoundingClientRect();
-    if (!r || r.width === 0) return null;
-    return (r.right - clientX) / r.width;
+    return r && r.width > 0 ? { right: r.right, width: r.width } : null;
   };
 
   const onRailPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -319,9 +327,11 @@ export function WorkspaceShell({
       x: e.clientX,
       docked: dock,
       shown: false,
+      frac: editorFrac,
       over: null,
       beyond: null,
       samples: [{ t: e.timeStamp, x: e.clientX }],
+      span: shellSpan(),
     };
     e.currentTarget.setPointerCapture?.(e.pointerId);
     if (!dock) setDragging(true);
@@ -355,23 +365,28 @@ export function WorkspaceShell({
       }
       return;
     }
-    const f = fracAt(e.clientX);
-    if (f == null) return;
+    d.span ??= shellSpan();
+    if (!d.span) return;
+    const f = (d.span.right - e.clientX) / d.span.width;
     if (f > MAX_EDITOR_FRAC && canFull) {
       d.over = null;
       d.beyond = Math.min(1, f);
-      setEditorFrac(MAX_EDITOR_FRAC);
+      d.frac = MAX_EDITOR_FRAC;
     } else if (f >= MIN_EDITOR_FRAC) {
       d.over = null;
       d.beyond = null;
-      setEditorFrac(Math.min(MAX_EDITOR_FRAC, f));
+      d.frac = Math.min(MAX_EDITOR_FRAC, f);
     } else {
       d.over = Math.max(0, f);
       d.beyond = null;
-      setEditorFrac(MIN_EDITOR_FRAC);
+      d.frac = MIN_EDITOR_FRAC;
     }
-    setOver(d.over);
-    setBeyond(d.beyond);
+    const at = d.over ?? d.beyond ?? d.frac;
+    paneBoxRef.current?.style.setProperty('--editor-frac', String(at));
+    railRef.current?.setAttribute('aria-valuenow', String(Math.round(at * 100)));
+    setBeyondHalf(d.beyond != null);
+    setInFullZone(d.beyond != null && d.beyond >= FULL_EDITOR_FRAC);
+    setInHideZone(d.over != null && d.over < HIDE_EDITOR_FRAC);
   };
   /** The drag is over — released (or `cancelled`: lost, left the window) at `clientX`, at `t` (the event's time). */
   const finishDrag = (clientX: number, cancelled: boolean, t?: number) => {
@@ -379,6 +394,9 @@ export function WorkspaceShell({
     if (!d) return;
     drag.current = null;
     setDragging(false);
+    setBeyondHalf(false);
+    setInFullZone(false);
+    setInHideZone(false);
     if (d.docked) {
       // A tap on a docked grip: at the trailing edge it shows the pane again, at the leading one the map.
       if (!cancelled && !d.shown && Math.abs(clientX - d.x) <= SHOW_DRAG_PX) {
@@ -398,6 +416,7 @@ export function WorkspaceShell({
     const hideZone = d.over != null && d.over < HIDE_EDITOR_FRAC;
     const fullZone = d.beyond != null && d.beyond >= FULL_EDITOR_FRAC;
     setEase(d.over != null && !thrown ? 'spring' : 'release');
+    setEditorFrac(d.frac);
     if (thrown && speed > 0) {
       setEditorFrac(d.from);
       hide();
@@ -412,8 +431,6 @@ export function WorkspaceShell({
       setFull(true);
       settle();
     } else settle();
-    setOver(null);
-    setBeyond(null);
   };
   const endDrag = (e: ReactPointerEvent<HTMLDivElement>, cancelled: boolean) => {
     if (drag.current?.id !== e.pointerId) return;
@@ -589,7 +606,14 @@ export function WorkspaceShell({
 
   const leaveLabel = leaveWords ?? tMap('leave');
   const leave = onLeave ?? (() => router.back());
-  const shownFrac = folded ? 0 : full ? 1 : (over ?? beyond ?? editorFrac);
+  // Mid-drag, where the pointer has it (a render while dragging — a line crossed — keeps the pane under the hand).
+  const live = dragging ? drag.current : null;
+  const shownFrac = folded ? 0 : full ? 1 : live ? (live.over ?? live.beyond ?? live.frac) : editorFrac;
+  // Written onto the page, as the drag writes it between renders: from the state at every render that changes it
+  // and at each drag's end (React would leave a value the drag wrote in place when its own had not changed).
+  useLayoutEffect(() => {
+    paneBoxRef.current?.style.setProperty('--editor-frac', String(shownFrac));
+  }, [shownFrac, dragging, open]);
 
   // The grip's mark and the disc of ink behind it on hover (round 17 §5.4).
   const mark = useMemo(gripMark, []);
@@ -611,7 +635,6 @@ export function WorkspaceShell({
       onScrollCapture={barShown ? onScrollCapture : undefined}
       style={
         {
-          '--editor-frac': shownFrac,
           '--min-editor-frac': MIN_EDITOR_FRAC,
           // Under the bar (below the split) everything keeps clear of it as of the app header.
           ...(bar && { '--bar-h': `${HEADER_TOTAL_H}px` }),
@@ -639,7 +662,7 @@ export function WorkspaceShell({
         ref={mapRef}
         className={leftOverride ? `${styles.mapPane} ${styles.mapPaneDoc}` : styles.mapPane}
         data-full={full || undefined}
-        data-beyond={beyond != null || undefined}
+        data-beyond={beyondHalf || undefined}
         inert={mapCovered}
       >
         {leftOverride ??
@@ -651,6 +674,7 @@ export function WorkspaceShell({
               paneOpen={open && !folded}
               focusCardId={focusCardId}
               settleKey={settleKey}
+              resizing={dragging}
             />
           ))}
         {(!bar || split !== false) && (
@@ -766,6 +790,7 @@ export function WorkspaceShell({
           </div>
 
           <section
+            ref={paneBoxRef}
             id={paneId}
             className={styles.editorPane}
             // What the pane's dialogs centre over (the link editor, round 17 review W10): the pane at the split,

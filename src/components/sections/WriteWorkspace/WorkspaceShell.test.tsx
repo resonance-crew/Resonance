@@ -13,20 +13,23 @@ vi.mock('@/i18n/navigation', () => ({
 }));
 // The shell is about the chrome around the map; the map itself is swapped out
 // for a card (its tab's 開啟卡片 shown while `map.tabShown`) and an arrow's label field.
-const map = { tabShown: true };
+const map = { tabShown: true, renders: 0 };
 vi.mock('@/components/molecules/ThoughtMap/ThoughtMapBoard', () => ({
   ThoughtMapBoard: ({
     onOpenCard,
     paneOpen,
     focusCardId,
     settleKey,
+    resizing,
   }: {
     onOpenCard?: (card: Card) => void;
     paneOpen?: boolean;
     focusCardId?: string | null;
     settleKey?: number;
+    resizing?: boolean;
   }) => (
-    <div data-testid="map" data-focus={focusCardId ?? ''} data-settle={settleKey}>
+    map.renders++,
+    <div data-testid="map" data-focus={focusCardId ?? ''} data-settle={settleKey} data-resizing={resizing || undefined}>
       <div role="button" tabIndex={-1} data-card-id="c1" onDoubleClick={() => onOpenCard?.({ id: 'c1' } as Card)}>
         A card
       </div>
@@ -520,6 +523,33 @@ describe('the workspace at the split', () => {
     expect(settled()).toBe(before + 1);
     fireEvent.keyDown(divider(), { key: 'ArrowLeft' });
     expect(settled()).toBe(before + 2);
+  });
+
+  // A full map drew again on every move once (the drag stuttered): the pane follows the pointer on the page, the
+  // map is told it is being resized and renders again only when the drag crosses a line, or ends.
+  it('follows the pointer without drawing the map again on each move', () => {
+    renderWithIntl(
+      <WorkspaceShell open bar={{ title: 'New card', onBack: vi.fn() }}>
+        <p>editor</p>
+      </WorkspaceShell>,
+    );
+    fireEvent.pointerDown(divider(), { button: 0, pointerId: 1, clientX: 500 });
+    expect(screen.getByTestId('map')).toHaveAttribute('data-resizing');
+    const drawn = map.renders;
+    for (const x of [520, 540, 560, 580, 600, 620, 640]) fireEvent.pointerMove(divider(), { pointerId: 1, clientX: x });
+    expect(map.renders).toBe(drawn);
+    expect(pane().style.getPropertyValue('--editor-frac')).toBe('0.36');
+    expect(divider()).toHaveAttribute('aria-valuenow', '36');
+    // Past 1:1 the map's tools fade: one render for the line crossed, none for the moves past it.
+    fireEvent.pointerMove(divider(), { pointerId: 1, clientX: 420 });
+    fireEvent.pointerMove(divider(), { pointerId: 1, clientX: 400 });
+    expect(map.renders).toBe(drawn + 1);
+    expect(pane().style.getPropertyValue('--editor-frac')).toBe('0.6');
+    fireEvent.pointerMove(divider(), { pointerId: 1, clientX: 620 });
+    fireEvent.pointerUp(divider(), { pointerId: 1, clientX: 620 });
+    expect(screen.getByTestId('map')).not.toHaveAttribute('data-resizing');
+    expect(pane().style.getPropertyValue('--editor-frac')).toBe('0.38');
+    expect(divider()).toHaveAttribute('aria-valuenow', '38');
   });
 
   // Dragged on toward the edge the pane follows; narrower than 18 % it dims and the pill says what releasing
