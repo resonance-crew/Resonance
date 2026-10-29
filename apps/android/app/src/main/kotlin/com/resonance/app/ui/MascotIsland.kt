@@ -93,7 +93,7 @@ import kotlin.math.roundToInt
 
 /**
  * The paper puppets on a reading screen (round 19: 「偶爾會出現的小精靈」 on the home feed and a card's
- * page, only while 外觀's 小精靈 is on): the web's own stage (src/lib/mascots) running in the bundled
+ * page, only while 外觀's 小紙團 is on): the web's own stage (src/lib/mascots) running in the bundled
  * mascot island (`native/mascots/dist/mascots.html`, an asset) in a transparent WebView laid over the
  * scrolling list, under the bars, menus and toasts, that takes no focus and is not in the
  * accessibility tree. The screen marks its views ([MascotMarks], read through LocalMascotMarks by
@@ -289,7 +289,7 @@ private fun sceneParts(overlay: LayoutCoordinates, marks: MascotMarks, density: 
 }
 
 /**
- * Settings → 外觀's strip under the 小精靈 row (round 20, the owner: 「在設定的頁面這裡也放一隻小精靈」,
+ * Settings → 外觀's strip under the 小紙團 row (round 20, the owner: 「在設定的頁面這裡也放一隻小精靈」,
  * so it is plain what the switch is — 「讓它在下面走來走去」): a floor drawn in the light pen and the
  * island over it, a WebView of its own, as wide as the strip and [STRIP_HEADROOM] taller, reaching up
  * over the row above (drawn over it, not taking room) so a raised arm is never cut off. Off ([on]

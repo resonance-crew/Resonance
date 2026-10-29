@@ -9,7 +9,7 @@
  * band, onto the end of a story's title or its cover, beside a paragraph in a margin wide enough to stand in, over the
  * response bar at the story's end, beside 顯示更多 or napping by the feed's end — never over the words being read.
  * Round 20 (the owner: 「讓動畫不會看起來都差不多」): a card offers each of those ways, one at a time, so visits differ
- * as the landing page's do; and settings' strip under the 小精靈 switch (`settings`) is a little floor of its own.
+ * as the landing page's do; and settings' strip under the 小紙團 switch (`settings`) is a little floor of its own.
  */
 import { INK } from '@/lib/design/strokes';
 import { bottom, firstLine, grow, inkTops, longestPiece, ON_PAPER, right, type Glyph } from '../landing/measure';
@@ -65,7 +65,7 @@ export interface ReadingScene {
   /** Words and buttons besides the above: props keep off them. */
   content?: readonly Rect[];
   /**
-   * Settings → 外觀's strip under the 小精靈 row (round 20, the owner: a puppet there, so it is plain what the switch
+   * Settings → 外觀's strip under the 小紙團 row (round 20, the owner: a puppet there, so it is plain what the switch
    * is): `floor` the strip (walked along at its foot), `control` the switch over it (pointed at), `asleep` while the
    * switch is off — then one puppet naps there and nobody else comes.
    */

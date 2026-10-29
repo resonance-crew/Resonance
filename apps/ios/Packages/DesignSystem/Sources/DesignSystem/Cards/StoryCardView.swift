@@ -11,8 +11,6 @@ public struct StoryCardContent: Sendable, Identifiable {
     public var authorInitials: String
     public var authorImageURL: URL?
     public var avatarSeed: Double
-    /// The author's own avatar colour (their profile's `accentColor`); nil — an anonymous card — wears the card's family.
-    public var authorAccent: Color?
     public var readTime: String
     public var tags: [String]
     public var imageURL: URL?
@@ -22,7 +20,7 @@ public struct StoryCardContent: Sendable, Identifiable {
     public var reason: String?
 
     public init(id: String, title: String, excerpt: String, authorName: String, authorInitials: String,
-                authorImageURL: URL?, avatarSeed: Double, authorAccent: Color? = nil, readTime: String, tags: [String],
+                authorImageURL: URL?, avatarSeed: Double, readTime: String, tags: [String],
                 imageURL: URL?, imageLabel: String, accentHue: Double?, reason: String?) {
         self.id = id
         self.title = title
@@ -31,7 +29,6 @@ public struct StoryCardContent: Sendable, Identifiable {
         self.authorInitials = authorInitials
         self.authorImageURL = authorImageURL
         self.avatarSeed = avatarSeed
-        self.authorAccent = authorAccent
         self.readTime = readTime
         self.tags = tags
         self.imageURL = imageURL
@@ -139,8 +136,9 @@ public struct StoryCardView: View {
 
             HStack(spacing: 10) {
                 // The author row's ink (the avatar, the name and time) is where a puppet on the next card keeps off.
+                // The card's own family, never the author's colour (the owner, 2026-10-29: it fought the card).
                 HandDrawnAvatar(initials: content.authorInitials, imageURL: content.authorImageURL,
-                                color: content.authorAccent ?? palette.fill, size: 30, seed: content.avatarSeed)
+                                color: palette.fill, size: 30, seed: content.avatarSeed)
                     .readingMark(.cardFoot)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(content.authorName).font(AppFonts.body(13, weight: .semibold)).foregroundStyle(Tokens.text)
@@ -306,20 +304,17 @@ public struct MiniStoryCardContent: Sendable, Identifiable {
     public var authorInitials: String
     public var authorImageURL: URL?
     public var avatarSeed: Double
-    /// The author's accent (tints the avatar and the empty cover); nil for anonymous cards.
-    public var authorAccent: Color?
     public var imageURL: URL?
     public var accentHue: Double?
 
     public init(id: String, title: String, authorName: String, authorInitials: String, authorImageURL: URL?,
-                avatarSeed: Double, authorAccent: Color?, imageURL: URL?, accentHue: Double?) {
+                avatarSeed: Double, imageURL: URL?, accentHue: Double?) {
         self.id = id
         self.title = title
         self.authorName = authorName
         self.authorInitials = authorInitials
         self.authorImageURL = authorImageURL
         self.avatarSeed = avatarSeed
-        self.authorAccent = authorAccent
         self.imageURL = imageURL
         self.accentHue = accentHue
     }
@@ -327,7 +322,7 @@ public struct MiniStoryCardContent: Sendable, Identifiable {
 
 /// MiniStoryCard's phone form: the pared-back sibling of StoryCardView for
 /// resonances and linked cards — the same band, 28pt deep, holding a cover
-/// in the author's accent, the title, and the byline.
+/// in the card's own accent, the title, and the byline.
 public struct MiniStoryCardView: View {
     let content: MiniStoryCardContent
     let position: Int
@@ -344,7 +339,9 @@ public struct MiniStoryCardView: View {
     public var body: some View {
         let palette = family.map(CardPalette.init(index:)) ?? CardPalette(accentHue: content.accentHue, position: position)
         let seed = Double(position * 71 + 19)
-        let accent = content.authorAccent ?? palette.accent
+        // The avatar and an empty cover wear the card's family, never the author's colour: on a card's paper
+        // another person's colour fought it (the owner, 2026-10-29). The profile and the thread keep theirs.
+        let accent = palette.accent
         VStack(alignment: .leading, spacing: 12) {
             OrganicImage(url: content.imageURL, seed: seed + 5, grain: StoryGrain.cover, fill: accent)
                 .aspectRatio(1 / 0.56, contentMode: .fit)

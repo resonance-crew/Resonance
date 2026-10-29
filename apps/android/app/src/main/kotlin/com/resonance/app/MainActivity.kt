@@ -39,7 +39,7 @@ import kotlinx.coroutines.launch
  *     --es pushChatAvatar <url> --es pushChatInitials … --es pushChatColor "oklch(…)"]   posts a chat message's notification, as a data-only chat push does
  *   --ez avifDecoder true          reads AVIF with the app's own decoder (Android 10–11's path) on any version
  *   --ei feedPicksDelay <s> [--es feedPicks <id,…>]   holds today's picks back that long, and stands those cards in for them
- *   --ez mascots true|false        turns 外觀's 小精靈 on or off; --es mascotJs "mascots.visit({ ledge: 'more', slug: 'tuck' }); mascots.advance(3)"
+ *   --ez mascots true|false        turns 外觀's 小紙團 on or off; --es mascotJs "mascots.visit({ ledge: 'more', slug: 'tuck' }); mascots.advance(3)"
  *                                  calls the paper puppets' island on screen (answers in Logcat, tag Mascots)
  *   --ez firestoreLog true         Firestore's own debug log in Logcat (tag Firestore: its streams, connectivity, targets)
  */
@@ -188,7 +188,7 @@ class MainActivity : ComponentActivity() {
         handleExtras(intent)
     }
 
-    /** Debug: `--ez mascots true|false` sets 外觀's 小精靈; `--es mascotJs "mascots.visit({…})"` calls the island on screen. */
+    /** Debug: `--ez mascots true|false` sets 外觀's 小紙團; `--es mascotJs "mascots.visit({…})"` calls the island on screen. */
     private fun mascotExtras(intent: Intent) {
         if (intent.hasExtra("mascots")) AppearanceStore.shared.setMascots(intent.getBooleanExtra("mascots", false))
         intent.getStringExtra("mascotJs")?.let { DebugLaunch.mascotCalls.trySend(it) }

@@ -20,7 +20,6 @@ extension FeedCard {
             authorInitials: author?.initials ?? "·",
             authorImageURL: author?.avatarUrl.flatMap(URL.init(string:)),
             avatarSeed: author.map { $0.avatarSeedValue } ?? anonymousSeed,
-            authorAccent: author.flatMap { OKLCHColor.avatar($0.accentColor) },
             readTime: L10n.App.readMinutes(count: readMinutes),
             tags: tags,
             imageURL: imageUrl.flatMap(URL.init(string:)),
@@ -33,7 +32,7 @@ extension FeedCard {
     }
 
     /// MiniStoryCard's fields (MiniCardGrid): cover, title, byline — the
-    /// author's accent tints the avatar and an empty cover.
+    /// card's own family tints the avatar and an empty cover.
     var mini: MiniStoryCardContent {
         let author = self.author?.value1
         return MiniStoryCardContent(
@@ -43,7 +42,6 @@ extension FeedCard {
             authorInitials: author?.initials ?? "·",
             authorImageURL: author?.avatarUrl.flatMap(URL.init(string:)),
             avatarSeed: author.map { $0.avatarSeedValue } ?? anonymousSeed,
-            authorAccent: author.flatMap { OKLCHColor.avatar($0.accentColor) },
             imageURL: imageUrl.flatMap(URL.init(string:)),
             accentHue: accentHue
         )

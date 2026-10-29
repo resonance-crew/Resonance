@@ -160,7 +160,7 @@ fun FeedScreen(session: Session, open: (Route) -> Unit) {
     // Bands on a phone, a centred column of them on a medium window, the bordered grid on an expanded one.
     val layout = cardListLayout()
 
-    // 外觀's 小精靈 (round 19): the paper puppets' island over the feed, only while it is on.
+    // 外觀's 小紙團 (round 19): the paper puppets' island over the feed, only while it is on.
     val mascots by remember { AppearanceStore.shared.state.map { it.mascots } }.collectAsStateWithLifecycle(AppearanceStore.shared.state.value.mascots)
     val marks = remember(mascots) { if (mascots) MascotMarks() else null }
     val barTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + brandBarHeight() + HeaderEdgeHeight

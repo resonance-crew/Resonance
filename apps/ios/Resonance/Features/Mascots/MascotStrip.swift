@@ -1,7 +1,7 @@
 import DesignSystem
 import SwiftUI
 
-/// Settings → 外觀 → 小精靈's strip (round 20, the owner: a puppet in settings, so it is plain what the switch
+/// Settings → 外觀 → 小紙團's strip (round 20, the owner: a puppet in settings, so it is plain what the switch
 /// is — 「讓它在下面走來走去」, with something to do when tapped; the web's MascotsStrip): under the row, as wide
 /// as it, a floor drawn in the light pen and a small island of its own over it, exactly the strip's size and
 /// `headroom` more above it (a raised arm, a pointing mitten over the row is never cut off). Off, one puppet

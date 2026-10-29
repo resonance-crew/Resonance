@@ -15,7 +15,7 @@ declare global {
 }
 
 /**
- * The strip under the 小精靈 row (round 20, the owner: a puppet in settings, so it is plain what the switch is): a
+ * The strip under the 小紙團 row (round 20, the owner: a puppet in settings, so it is plain what the switch is): a
  * floor drawn in the light pen and a small stage over it — off, one puppet naps there; on, they walk along it, meet
  * and point at the switch, and a click makes one hop (lib/mascots/reading/settingsStage). Decorative: hidden from
  * assistive tech. The engine and cast load with it (this section only), never under Save-Data.

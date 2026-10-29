@@ -29,7 +29,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * the splash the system's mode.
  */
 class AppearanceStore(private val prefs: SharedPreferences, private val nightMode: (AppearanceScheme) -> Unit = {}) {
-    /** What the reader chose; [mascots]: 小精靈, the paper puppets on the home feed and a card's page (round 19), off until turned on. */
+    /** What the reader chose; [mascots]: 小紙團, the paper puppets on the home feed and a card's page (round 19), off until turned on. */
     data class Appearance(
         val scheme: AppearanceScheme = AppearanceScheme.System,
         val accent: AppearanceAccent = AppearanceAccent.Terracotta,

@@ -26,8 +26,6 @@ export interface Story {
   authorInitials: string;
   avatarUrl?: string;
   avatarSeed?: string;
-  /** The author's own avatar colour (their profile's `accentColor`); without one — an anonymous card — the card's family. */
-  avatarColor?: string;
   readTime: string;
   tags: string[];
   imageUrl?: string;
@@ -396,7 +394,9 @@ export const StoryCard = memo(function StoryCard({
               src={story!.avatarUrl}
               initials={story!.authorInitials}
               size={30}
-              color={story!.avatarColor ?? accentFill}
+              // The card's own family, never the author's colour: on a card's paper another person's colour
+              // fought it (the owner, 2026-10-29). The profile and the thread keep the person's.
+              color={accentFill}
               seed={Number(story!.avatarSeed) || story!.authorInitials.charCodeAt(0) * 13}
             />
           )}

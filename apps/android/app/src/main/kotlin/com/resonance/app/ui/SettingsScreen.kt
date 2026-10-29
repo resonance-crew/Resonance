@@ -568,7 +568,7 @@ private fun AppearanceSettings() {
                 }
             }
         }
-        // 小精靈 (round 19, the web's MascotsSwitch): the field's label over it, the hint at its start and the
+        // 小紙團 (round 19, the web's MascotsSwitch): the field's label over it, the hint at its start and the
         // switch at its end — the whole row the one switch, named by the label and described by the hint —
         // and under it (round 20) the puppets' own strip, so it is plain what the switch is.
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

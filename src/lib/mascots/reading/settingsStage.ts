@@ -1,5 +1,5 @@
 /**
- * Settings → 外觀's strip under the 小精靈 switch (round 20, the owner: a puppet there, so it is plain what the switch
+ * Settings → 外觀's strip under the 小紙團 switch (round 20, the owner: a puppet there, so it is plain what the switch
  * is — 「讓它在下面走來走去」, with something to do when tapped): a small stage of its own, the strip's own px. Off, one
  * puppet naps on its floor and nobody else comes; on, they walk along it, meet, stand by the switch pointing at it.
  * Turning it on wakes the napper where it lay; turning it off sends everyone off and one comes back to nap.

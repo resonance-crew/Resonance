@@ -40,11 +40,10 @@ describe('cardToStory', () => {
     expect(story.tags).toEqual(['life', 'kindness']);
   });
 
-  it("gives the avatar its author's own colour, as their profile wears it, and an anonymous card none", () => {
+  // The owner, 2026-10-29: an avatar on a card wears the card's family, so the story carries no person's colour.
+  it("carries no avatar colour: a card's avatar wears the card's family", () => {
     const own = { ...author, accentColor: 'oklch(90% 0.05 215)' };
-    expect(cardToStory(makeCard(), own).avatarColor).toBe('oklch(90% 0.05 215)');
-    expect(cardToStory(makeCard(), author).avatarColor).toBeUndefined();
-    expect(cardToStory(makeCard({ anonymous: true }), own).avatarColor).toBeUndefined();
+    expect(cardToStory(makeCard(), own)).not.toHaveProperty('avatarColor');
   });
 
   it('counts the read time as the stored summaries do (lib/readTime): CJK by the character, the rest by the word', () => {

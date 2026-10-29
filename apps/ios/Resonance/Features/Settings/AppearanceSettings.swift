@@ -5,11 +5,11 @@ import SwiftUI
 /// 外觀 (spec §2): the display mode — 跟隨系統 · 淺色 · 深色, the writer's segmented choice (the
 /// publish step's 卡片類型) — and the theme colour, a row of hand-drawn swatches, each the theme's
 /// paper with its accent in the scheme now worn, the chosen one ringed and checked, its name under it;
-/// then 小精靈, the paper puppets' switch (round 19). All apply at once, everywhere (``AppearanceStore``),
+/// then 小紙團, the paper puppets' switch (round 19). All apply at once, everywhere (``AppearanceStore``),
 /// and are kept on this device.
 struct AppearanceSettings: View {
     private let store = AppearanceStore.shared
-    /// Where the 小精靈 switch is (the strip's puppets point at it).
+    /// Where the 小紙團 switch is (the strip's puppets point at it).
     @State private var toggle: CGRect?
 
     var body: some View {
@@ -31,7 +31,7 @@ struct AppearanceSettings: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel(L10n.Tweaks.accentColor)
             }
-            // 小精靈 (round 19, the web's MascotsSwitch): the field's label over it, the hint at its start
+            // 小紙團 (round 19, the web's MascotsSwitch): the field's label over it, the hint at its start
             // and the switch at its end; off until turned on, kept on this device. Under it (round 20) the
             // strip where one naps while it is off and they come and go while it is on.
             VStack(alignment: .leading, spacing: 10) {
@@ -55,7 +55,7 @@ struct AppearanceSettings: View {
         }
     }
 
-    /// The 小精靈 field's own space: the switch and the strip under it are measured in it.
+    /// The 小紙團 field's own space: the switch and the strip under it are measured in it.
     private nonisolated static let mascotsField = "settings.mascots"
 
     /// The theme's name (tweaks.theme*).

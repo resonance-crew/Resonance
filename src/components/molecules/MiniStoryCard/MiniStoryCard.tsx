@@ -21,7 +21,6 @@ export interface MiniStoryCardProps {
   title: string;
   author: string;
   authorInitials: string;
-  authorAccent?: string;
   authorSeed?: number;
   authorAvatarUrl?: string;
   imageUrl?: string;
@@ -44,7 +43,6 @@ export function MiniStoryCard({
   title,
   author,
   authorInitials,
-  authorAccent,
   authorSeed,
   authorAvatarUrl,
   imageUrl,
@@ -69,8 +67,9 @@ export function MiniStoryCard({
   const paletteIdx = palette ?? preferredPalette(accentHue, index);
   // The family's palette tokens (palette.css), so the server's paint is right in either scheme.
   const bc1 = cardVar('border', paletteIdx);
-  // The author's stored colour (drawn as the scheme draws avatars), else the family's accent.
-  const accent = authorAccent ?? cardVar('accent', paletteIdx);
+  // The avatar and an empty cover wear the card's own family, never the author's colour: on a card's
+  // paper another person's colour fought it (the owner, 2026-10-29).
+  const accent = cardVar('accent', paletteIdx);
   const fallback = personFill(accent);
   const seed = index * 71 + 19;
   const R = 20;

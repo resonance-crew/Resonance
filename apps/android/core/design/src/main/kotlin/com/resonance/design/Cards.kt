@@ -242,8 +242,6 @@ data class StoryCardContent(
     val accentHue: Double?,
     /** Why the feed picked it — Resonance's handwritten margin note. */
     val reason: String? = null,
-    /** The author's stored avatar colour (an oklch() string), drawn per scheme by [avatarFill]; null (anonymous): the card's family. */
-    val authorAccent: String? = null,
 )
 
 /** CSS `margin-top` (negative too): shifts the child and takes the same amount off the space it claims. */
@@ -394,7 +392,8 @@ private fun ColumnScope.StoryCardBody(
     val foot = "card:${content.id}:foot"
     Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Box(Modifier.mascotMark("$foot:avatar")) {
-            HandDrawnAvatar(content.authorInitials, content.authorImageUrl, avatarFill(content.authorAccent, palette.fill), 30.dp, content.avatarSeed)
+            // The card's own family, never the author's colour (the owner, 2026-10-29: it fought the card).
+            HandDrawnAvatar(content.authorInitials, content.authorImageUrl, palette.fill, 30.dp, content.avatarSeed)
         }
         Column(Modifier.weight(1f)) {
             BasicText(content.authorName, style = AppFonts.body(13f, 600, lineHeight = 1.4f), modifier = Modifier.mascotMark("$foot:name"))
@@ -544,14 +543,16 @@ internal const val BorderedCardGrain = 0.2f
 
 /**
  * MiniStoryCard on a phone — the pared-back card of the resonance and
- * linked-cards lists: cover (0.56, the author's color when there is no
+ * linked-cards lists: cover (0.56, the card's own accent when there is no
  * picture), title, avatar and name. No tags, excerpt or read time.
  */
 @Composable
 fun MiniStoryCard(content: StoryCardContent, position: Int, isLast: Boolean = false, modifier: Modifier = Modifier, inset: Dp = BandInset, palette: Int? = null) {
     val palette = cardPalette(palette, content.accentHue, position)
     val seed = position * 71.0 + 19
-    val accent = avatarFill(content.authorAccent, palette.accent)
+    // The avatar and an empty cover wear the card's family, never the author's colour: on a card's paper
+    // another person's colour fought it (the owner, 2026-10-29). The profile and the thread keep theirs.
+    val accent = palette.accent
     WithSkeletonHue(palette.hue) {
         StoryBand(palette, seed + 17, isLast, 28.dp, 12.dp, modifier, inset = inset) {
             OrganicImage(content.imageUrl, seed + 5, Modifier.fillMaxWidth().aspectRatio(1 / 0.56f), grain = StoryGrain.Cover) {

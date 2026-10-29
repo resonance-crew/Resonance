@@ -8,10 +8,10 @@ import { MascotsStrip } from './MascotsStrip';
 import styles from './SettingsClient.module.css';
 
 /**
- * Settings → 外觀 → 小精靈: the paper puppets now and then on the home feed and a card's page (round 19), off until
+ * Settings → 外觀 → 小紙團: the paper puppets now and then on the home feed and a card's page (round 19), off until
  * turned on — this browser's choice, kept with the other display tweaks. A field as the section's others are: its
  * label over it, the hint at its start and the switch at its end; under it a strip where one naps while it is off
- * and they come and go while it is on (round 20: what 小精靈 means, plain to see).
+ * and they come and go while it is on (round 20: what 小紙團 means, plain to see).
  */
 export function MascotsSwitch({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
   const t = useTranslations('tweaks');

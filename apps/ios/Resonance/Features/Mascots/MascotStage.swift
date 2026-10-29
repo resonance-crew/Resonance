@@ -5,7 +5,7 @@ import UIKit
 import WebKit
 
 /// The paper puppets on a reading page (round 19, the owner's: 「偶爾會出現的小精靈」 on the home feed
-/// and a card's page, behind Settings → 外觀 → 小精靈, off until turned on). The app doesn't draw them:
+/// and a card's page, behind Settings → 外觀 → 小紙團, off until turned on). The app doesn't draw them:
 /// the web's own engine, cast and places run in the mascot island (`native/mascots/dist/mascots.html`,
 /// `npm run native:mascots`), a transparent web view that is not there for VoiceOver. The app tells it where
 /// its views are (``ReadingMarks`` → ``ReadingScene``) and what of the page is in view.
@@ -600,7 +600,7 @@ struct ReadingScene: Codable, Equatable {
         var firstLine: SceneRect
     }
 
-    /// Settings → 外觀's strip under the 小精靈 row (round 20).
+    /// Settings → 外觀's strip under the 小紙團 row (round 20).
     struct Settings: Codable, Equatable {
         var floor: SceneRect
         var control: SceneRect?

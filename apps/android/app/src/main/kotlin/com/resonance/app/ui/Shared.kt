@@ -147,7 +147,6 @@ fun FeedCard.story(): StoryCardContent {
         imageLabel = imageLabel ?: title.take(24),
         accentHue = accentHue,
         reason = null,
-        authorAccent = a?.accentColor,
     )
 }
 

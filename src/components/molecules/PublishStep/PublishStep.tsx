@@ -308,7 +308,6 @@ export function PublishStep({
     authorInitials: anonymous ? '·' : (me?.initials ?? '?'),
     avatarUrl: anonymous ? undefined : me?.avatarUrl,
     avatarSeed: anonymous ? '217' : me?.avatarSeed,
-    avatarColor: anonymous ? undefined : me?.accentColor || undefined,
     readTime: `${readMinutes(story)} min`,
     tags,
     imageUrl: cover.partial ?? media?.url,

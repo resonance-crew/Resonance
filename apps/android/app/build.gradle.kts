@@ -119,10 +119,10 @@ val requireStoryEditor = tasks.register("requireStoryEditor") {
 tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(requireStoryEditor) }
 
 // The paper puppets' island (native/mascots/dist/mascots.html, round 19) is build output too, from
-// `npm run native:mascots` (part of `npm run apps:generate`): without it 外觀's 小精靈 would lay an
+// `npm run native:mascots` (part of `npm run apps:generate`): without it 外觀's 小紙團 would lay an
 // empty page over the feed. A release build stops when it is missing, a debug build says so.
 val mascotIsland = file("../../../native/mascots/dist/mascots.html")
-val mascotIslandMissing = "native/mascots/dist/mascots.html is missing or empty: the paper puppets (外觀 → 小精靈) would " +
+val mascotIslandMissing = "native/mascots/dist/mascots.html is missing or empty: the paper puppets (外觀 → 小紙團) would " +
     "not load. Run `npm run native:mascots` (or `npm run apps:generate`) in the repository root first."
 val requireMascotIsland = tasks.register("requireMascotIsland") {
     val island = mascotIsland

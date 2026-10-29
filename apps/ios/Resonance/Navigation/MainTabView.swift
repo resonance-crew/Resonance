@@ -575,7 +575,7 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
     /// Told whether the reader is within a screen and a half of the list's end, each time that changes
     /// (the home feed fetches its next page then: round 19). Nil: nothing watches.
     var onNearEnd: ((Bool) -> Void)?
-    /// The paper puppets may come to this list (round 19: the home feed), while Settings → 外觀 → 小精靈 is on.
+    /// The paper puppets may come to this list (round 19: the home feed), while Settings → 外觀 → 小紙團 is on.
     var hostsMascots = false
     @Environment(TabBarHiding.self) private var barHiding: TabBarHiding?
     let trailing: Trailing

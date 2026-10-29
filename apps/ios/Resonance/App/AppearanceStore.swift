@@ -36,7 +36,7 @@ final class AppearanceStore {
     static let shared = AppearanceStore()
     static let modeKey = "appearance.scheme"
     static let accentKey = "appearance.accent"
-    /// 小精靈 (round 19): the paper puppets now and then on the home feed and a card's page. Off until turned on.
+    /// 小紙團 (round 19): the paper puppets now and then on the home feed and a card's page. Off until turned on.
     static let mascotsKey = "appearance.mascots"
 
     private(set) var mode: Mode

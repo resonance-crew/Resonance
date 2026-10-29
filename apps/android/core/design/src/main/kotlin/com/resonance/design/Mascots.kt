@@ -14,7 +14,7 @@ import com.resonance.geometry.wavyLine
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
- * Where the paper puppets' island (round 19: the home feed's and a card page's 小精靈, behind 外觀's
+ * Where the paper puppets' island (round 19: the home feed's and a card page's 小紙團, behind 外觀's
  * switch) finds what a screen shows — the twin of the web's `data-mascot` marks. A screen hosting the
  * island provides one ([LocalMascotMarks]); with none (the switch off, every other screen) nothing is
  * marked and nothing is kept. A mark keeps only the view's [LayoutCoordinates], written as the

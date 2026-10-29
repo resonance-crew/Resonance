@@ -34,7 +34,7 @@ export const READING_PACE: Partial<StageOptions> = {
 };
 
 /**
- * Settings' strip under the 小精靈 switch (round 20): awake, someone is nearly always there — the next one walks in
+ * Settings' strip under the 小紙團 switch (round 20): awake, someone is nearly always there — the next one walks in
  * a moment after the last goes, and two often meet; asleep (the switch off), one comes at once and naps all day.
  */
 export const SETTINGS_AWAKE: Partial<StageOptions> = {

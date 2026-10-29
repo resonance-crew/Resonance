@@ -62,7 +62,6 @@ export function cardToStory(
         authorInitials: author.initials,
         avatarUrl: author.avatarUrl,
         avatarSeed: author.avatarSeed,
-        avatarColor: author.accentColor || undefined,
       };
   return {
     title: card.thoughtCore,

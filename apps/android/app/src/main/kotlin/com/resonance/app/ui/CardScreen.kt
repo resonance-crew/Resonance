@@ -483,7 +483,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
             }
         }
     }
-    // 外觀's 小精靈 (round 19): the paper puppets' island over the page once it has loaded — never on a card in the trash.
+    // 外觀's 小紙團 (round 19): the paper puppets' island over the page once it has loaded — never on a card in the trash.
     if (marks != null && phase == "loaded" && detail?.let(::ownTrashed) == false) {
         MascotOverlay(list, marks, insetTop = top, insetBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(), rail = railed, modifier = Modifier.fillMaxSize())
     }
