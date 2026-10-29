@@ -79,6 +79,30 @@ import WebKit
         #expect(field.height == 200)
     }
 
+    /// The page's process ending (a crash, the system taking it back) reloads the page with the story it
+    /// held — the last one written into it, not the one first loaded — never an empty one a word typed into
+    /// would then replace the whole story with.
+    @Test func aPageLoadedAgainHoldsTheStoryAsItWas() async throws {
+        let editor = StoryEditorBridge(placeholder: "Write", layout: .canvas, locale: "en")
+        editor.setTitle("After the rain")
+        editor.setMarkdown("The street shone.")
+        try await waitReady(editor)
+        // Written into since: the island's own change message.
+        editor.handle("change", ["markdown": "The street shone like glass."])
+        editor.webViewWebContentProcessDidTerminate(editor.webView)
+        #expect(!editor.ready)
+        try await waitReady(editor)
+        // The story is handed over right after "ready"; give it a moment to land.
+        var story = ""
+        let end = ContinuousClock.now.advanced(by: .seconds(5))
+        while story != "The street shone like glass.", ContinuousClock.now < end {
+            story = try await editor.webView.callAsyncJavaScript("return ResonanceEditor.getMarkdown()", arguments: [:],
+                                                                 contentWorld: .page) as? String ?? ""
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(story == "The street shone like glass.")
+    }
+
     private func waitReady(_ editor: StoryEditorBridge) async throws {
         let end = ContinuousClock.now.advanced(by: .seconds(15))
         while !editor.ready, ContinuousClock.now < end { try await Task.sleep(for: .milliseconds(50)) }

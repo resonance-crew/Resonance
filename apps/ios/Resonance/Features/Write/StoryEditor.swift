@@ -61,6 +61,11 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
     @ObservationIgnored private var pendingMarkdown: String?
     @ObservationIgnored private var pendingTitle: String?
     @ObservationIgnored private var pendingPreviews: (previews: [HostLinkPreview], origin: URL)?
+    /// What the island holds now — the title, the story as last loaded or written, the previews — so a page
+    /// WebKit has to load again (its process ended) opens on them rather than empty.
+    @ObservationIgnored private var heldTitle: String?
+    @ObservationIgnored private var heldMarkdown: String?
+    @ObservationIgnored private var heldPreviews: (previews: [HostLinkPreview], origin: URL)?
     @ObservationIgnored private var textScale: CGFloat = 1
     /// Holds the island's own scroll view at its top (its delegate; the scroll view keeps it weakly).
     @ObservationIgnored private let pin = PinnedScroll()
@@ -144,6 +149,21 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
         return nil
     }
 
+    /// The page's process ended (it crashed, or the system took it back): load the page again and hand it
+    /// what it held. Left to WebKit, the page would come back empty — a story written into it would then
+    /// be saved in place of the whole one.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        ready = false
+        focused = false
+        caret = nil
+        // The page comes back in the appearance it opened in: ``wear(_:)`` sets today's on `ready`.
+        appearance = nil
+        pendingTitle = heldTitle
+        pendingMarkdown = heldMarkdown
+        pendingPreviews = heldPreviews
+        webView.reload()
+    }
+
     // MARK: - The island's appearance
 
     /// What the island's <html> says (`data-scheme`, `data-accent`): the opening script's, then each worn since.
@@ -159,6 +179,7 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
 
     /// The card's title, which the island reads with the story to set them both (`script`).
     func setTitle(_ title: String) {
+        heldTitle = title
         guard ready else {
             pendingTitle = title
             return
@@ -168,6 +189,7 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
 
     /// Loads a saved story (kept out of undo history by the island).
     func setMarkdown(_ markdown: String) {
+        heldMarkdown = markdown
         guard ready else {
             pendingMarkdown = markdown
             return
@@ -219,6 +241,7 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
     /// A live card's stored link previews (its `linkPreviews`), for the link cards the story shows: their
     /// titles, and pictures from our own link-image route only (made absolute against `origin`).
     func setLinkPreviews(_ previews: [HostLinkPreview], origin: URL) {
+        heldPreviews = (previews, origin)
         guard ready else {
             pendingPreviews = (previews, origin)
             return
@@ -306,7 +329,9 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
             if let pendingPreviews { setLinkPreviews(pendingPreviews.previews, origin: pendingPreviews.origin) }
             pendingPreviews = nil
         case "change":
-            onChange(body["markdown"] as? String ?? "")
+            let markdown = body["markdown"] as? String ?? ""
+            heldMarkdown = markdown
+            onChange(markdown)
         case "height":
             if let px = Self.number(body["px"]) { height = max(minimumHeight, CGFloat(px)) }
             if layout == .canvas { measureContent() }
@@ -692,7 +717,8 @@ struct StoryFormatBar: View {
 /// height at all) while SwiftUI still keeps a band at the foot for the system's input pill; a software
 /// keyboard is 260 and more, and a floating one keeps no band. Never on a Mac: there the band (55) is a
 /// glass strip across the window's foot — the keyboard's empty bar — over which SwiftUI lifts nothing, so
-/// the format bar is lifted by hand to stand on it (``macStrip``) rather than lie under it.
+/// the format bar and the map's zoom sheet are lifted by hand to stand on it (``macStrip``) rather than
+/// lie under it.
 @MainActor @Observable final class KeyboardKind {
     private(set) var hardware = false
     /// On a Mac, how much of the window's foot the keyboard's strip covers while it is up (0 elsewhere).

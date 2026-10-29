@@ -37,6 +37,9 @@ struct ThoughtMapScreen: View {
     /// the store frames the cards clear of them (``ThoughtMapStore/setChromeClear(top:bottom:)``).
     @State private var chromeTop: CGFloat = 0
     @State private var chromeBottom: CGFloat = 0
+    /// On a Mac, the keyboard's strip across the window's foot while a field has the focus (0 elsewhere —
+    /// an iPad's keyboard lifts nothing here, the map ignoring it): the zoom sheet stands on it.
+    @State private var keyboard = KeyboardKind()
     /// Kept by the session between visits (see ThoughtMapStore.open).
     private var store: ThoughtMapStore { session.thoughtMap }
 
@@ -167,12 +170,13 @@ struct ThoughtMapScreen: View {
                 chromeTop = $0
             }
             zoomCluster
+                // The strip comes and goes with the focus: the cards stay framed as they were.
                 .onGeometryChange(for: CGFloat.self) { size.height - $0.frame(in: .named(Self.mapSpace)).minY } action: {
-                    chromeBottom = $0
+                    chromeBottom = $0 - keyboard.macStrip
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 .padding(.leading, tablet ? edge : 16)
-                .padding(.bottom, (tablet ? edge : 16) + insets.bottom)
+                .padding(.bottom, (tablet ? edge : 16) + insets.bottom + keyboard.macStrip)
             if store.loaded, store.isEmpty, !store.trayOpen { emptyState.frame(width: size.width, height: size.height) }
             if !store.loaded {
                 Group {
