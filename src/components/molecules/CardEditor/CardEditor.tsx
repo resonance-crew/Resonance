@@ -39,6 +39,8 @@ import styles from './CardEditor.module.css';
 export const TITLE_MAX = 60;
 /** From this many characters on, the title says how many are left. */
 const TITLE_COUNT_FROM = 50;
+/** Who a new card is for until its author chooses: a 私人卡, theirs alone (the apps' DraftValues alike). */
+const NEW_CARD_VISIBILITY: Visibility = 'private';
 /** How long ✓ waits on the first save before it shows its loader. */
 const NEXT_LOADER_MS = 300;
 /** How long a write runs before the bar says 儲存中⋯ (a quick one goes straight to its next word: no flicker). */
@@ -271,7 +273,8 @@ export function CardEditor({
   const [thoughtCore, setThoughtCore] = useState(initial?.thoughtCore ?? '');
   const [story, setStory] = useState(initial?.story ?? seedStory ?? '');
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
-  const [visibility, setVisibility] = useState<Visibility>(initial?.visibility ?? 'public');
+  // A new card starts as a 私人卡 — its author's alone until they choose otherwise in the publish step.
+  const [visibility, setVisibility] = useState<Visibility>(initial?.visibility ?? NEW_CARD_VISIBILITY);
   const [anonymous, setAnonymous] = useState(initial?.anonymous ?? false);
   const [media, setMedia] = useState<CardMedia | undefined>(initial?.media);
   // Cover-image dominant hue (snapped to the card palette). Recomputed when a
@@ -384,7 +387,7 @@ export function CardEditor({
       thoughtCore: initial?.thoughtCore ?? '',
       story: initial?.story ?? '',
       tags: initial?.tags ?? [],
-      visibility: initial?.visibility ?? 'public',
+      visibility: initial?.visibility ?? NEW_CARD_VISIBILITY,
       anonymous: initial?.anonymous ?? false,
       media: initial?.media,
       accentHue: initial?.accentHue ?? null,

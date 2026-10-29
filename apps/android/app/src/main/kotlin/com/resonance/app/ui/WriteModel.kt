@@ -199,7 +199,8 @@ class WriteModel(
 ) {
     /** The card this one resonates with, if any (a response card). */
     val referenceCardId: String? = opened?.referenceCardId ?: referenceCardId
-    var values by mutableStateOf(opened?.values ?: DraftValues())
+    /** A new card starts as a 私人卡 — its author's alone until they choose otherwise in the publish step. */
+    var values by mutableStateOf(opened?.values ?: DraftValues(visibility = "private"))
         private set
     var draftId: String? = opened?.id
         private set

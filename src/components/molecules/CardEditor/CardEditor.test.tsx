@@ -161,6 +161,9 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
+/** 公開 picked in the step (a new card starts as a 私人卡). */
+const choosePublic = () => userEvent.click(screen.getByRole('button', { name: en.write.visibility.public }));
+
 /** Writes a title and a story, then presses 下一步 and waits for the publish step. */
 async function toPublishStep(t = 'A quiet thought', s = 'Once there was a long enough story to publish.') {
   fireEvent.change(title(), { target: { value: t } });
@@ -217,7 +220,10 @@ describe('CardEditor — writing', () => {
     expect(inStep()).toBe(false);
     await act(async () => created({ id: 'draft-1' }));
     await waitFor(() => expect(inStep()).toBe(true));
-    expect(screen.getByRole('region', { name: en.write.publishPanel.title })).toBeInTheDocument();
+    // A new card is a 私人卡 until its author chooses otherwise.
+    expect(createCardDraft).toHaveBeenCalledWith(expect.objectContaining({ visibility: 'private', anonymous: false }));
+    expect(screen.getByRole('region', { name: en.write.publishPanel.saveTitle })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: en.write.visibility.draft })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('stays to write when that first save fails, and says so', async () => {
@@ -293,11 +299,11 @@ describe('CardEditor — the publish step', () => {
     await toPublishStep();
     // The writing step's way forward goes with it: the step's foot has the verb.
     expect(screen.queryByRole('button', { name: en.write.finish })).toBeNull();
+    await choosePublic();
     await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.publish }));
     await waitFor(() => expect(publishCard).toHaveBeenCalledWith('draft-1'));
-    expect(createCardDraft).toHaveBeenCalledWith(
-      expect.objectContaining({ thoughtCore: 'A quiet thought', originalLocale: 'en', anonymous: false, visibility: 'public' }),
-    );
+    expect(createCardDraft).toHaveBeenCalledWith(expect.objectContaining({ thoughtCore: 'A quiet thought', originalLocale: 'en' }));
+    expect(updateCardDraft).toHaveBeenLastCalledWith('draft-1', expect.objectContaining({ anonymous: false, visibility: 'public' }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/card/pub-1'));
     expect(push).not.toHaveBeenCalled();
   });
@@ -340,8 +346,8 @@ describe('CardEditor — the publish step', () => {
     // At the split, where the host's one back (the Leave over the map) returns to writing (round 17 §5.3).
     renderWithIntl(<Writer locale="en" onStepChange={onStepChange} inlineStepHeading editorRef={handle} />);
     await toPublishStep();
-    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
-    await waitFor(() => expect(updateCardDraft).toHaveBeenCalledWith('draft-1', expect.objectContaining({ visibility: 'private' })), {
+    await choosePublic();
+    await waitFor(() => expect(updateCardDraft).toHaveBeenCalledWith('draft-1', expect.objectContaining({ visibility: 'public' })), {
       timeout: 4000,
     });
 
@@ -352,7 +358,7 @@ describe('CardEditor — the publish step', () => {
     await waitFor(() => expect(inStep()).toBe(false));
     await userEvent.click(next());
     await waitFor(() => expect(inStep()).toBe(true));
-    expect(screen.getByRole('button', { name: en.write.visibility.draft })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: en.write.visibility.public })).toHaveAttribute('aria-pressed', 'true');
   });
 
   // An anonymous card is public or private, never for connections only: no write is ever both.
@@ -379,7 +385,13 @@ describe('CardEditor — the publish step', () => {
     const onStepTitleChange = vi.fn();
     renderWithIntl(<Writer locale="en" onStepTitleChange={onStepTitleChange} />);
     await toPublishStep();
+    expect(onStepTitleChange).toHaveBeenLastCalledWith(en.write.publishPanel.saveTitle);
+    await choosePublic();
     expect(onStepTitleChange).toHaveBeenLastCalledWith(en.write.publishPanel.title);
+    // Kept public first, so going back to 私人卡 is a change the button has to save.
+    await waitFor(() => expect(updateCardDraft).toHaveBeenCalledWith('draft-1', expect.objectContaining({ visibility: 'public' })), {
+      timeout: 4000,
+    });
     await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
     expect(onStepTitleChange).toHaveBeenLastCalledWith(en.write.publishPanel.saveTitle);
     // The one button: no way out beside it any more (草稿 is a choice of its own).
@@ -400,8 +412,7 @@ describe('CardEditor — the publish step', () => {
     await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
     await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.save }));
     await waitFor(() => expect(onShowCard).toHaveBeenCalledWith('/card/draft-1'));
-    expect(createCardDraft).toHaveBeenCalledWith(expect.objectContaining({ thoughtCore: 'Enough for today' }));
-    expect(updateCardDraft).toHaveBeenLastCalledWith('draft-1', expect.objectContaining({ visibility: 'private' }));
+    expect(createCardDraft).toHaveBeenCalledWith(expect.objectContaining({ thoughtCore: 'Enough for today', visibility: 'private' }));
     expect(publishCard).not.toHaveBeenCalled();
     expect(back).not.toHaveBeenCalled();
   });
@@ -425,6 +436,7 @@ describe('CardEditor — the publish step', () => {
       vi.mocked(publishCard).mockRejectedValue(new ApiError(429, 'rate_limited', 'Too many requests.'));
       renderWithIntl(<Writer locale="en" />);
       await toPublishStep();
+      await choosePublic();
       await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.publish }));
       expect(await screen.findByRole('alert')).toHaveTextContent(en.write.publishPanel.rateLimited);
       expect(screen.queryByText('Too many requests.')).not.toBeInTheDocument();
@@ -436,6 +448,7 @@ describe('CardEditor — the publish step', () => {
       vi.mocked(publishCard).mockRejectedValue(new ApiError(500, 'internal', 'Something went wrong.'));
       renderWithIntl(<Writer locale="en" />);
       await toPublishStep();
+      await choosePublic();
       await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.publish }));
       expect(await screen.findByRole('alert')).toHaveTextContent(en.write.publishPanel.failed);
       expect(screen.queryByText('Something went wrong.')).not.toBeInTheDocument();
@@ -693,7 +706,7 @@ describe('CardEditor — a card trashed elsewhere', () => {
     vi.mocked(publishCard).mockRejectedValue(new ApiError(409, 'conflict', 'This card is in the trash.'));
     vi.mocked(getCardById).mockResolvedValue(trashedCard as never);
     const onStepChange = vi.fn();
-    renderWithIntl(<Writer locale="en" initial={{ id: 'draft-9', thoughtCore: 'Kept for later' }} onStepChange={onStepChange} />);
+    renderWithIntl(<Writer locale="en" initial={{ id: 'draft-9', thoughtCore: 'Kept for later', visibility: 'public' }} onStepChange={onStepChange} />);
     await userEvent.click(next());
     await waitFor(() => expect(inStep()).toBe(true));
     await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.publish }));
@@ -708,7 +721,7 @@ describe('CardEditor — a card trashed elsewhere', () => {
 
   it('keeps an ordinary refusal an ordinary one', async () => {
     vi.mocked(publishCard).mockRejectedValue(new ApiError(500, 'internal', 'Something went wrong.'));
-    renderWithIntl(<Writer locale="en" initial={{ id: 'draft-9', thoughtCore: 'Kept for later' }} />);
+    renderWithIntl(<Writer locale="en" initial={{ id: 'draft-9', thoughtCore: 'Kept for later', visibility: 'public' }} />);
     await userEvent.click(next());
     await waitFor(() => expect(inStep()).toBe(true));
     await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.publish }));

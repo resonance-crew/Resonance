@@ -79,7 +79,8 @@ struct WriterCalls {
 /// publishes it.
 @MainActor @Observable
 final class WriteModel {
-    var values = DraftValues() {
+    /// A new card starts as a 私人卡 — its author's alone until they choose otherwise in the publish step.
+    var values = DraftValues(visibility: "private") {
         didSet {
             if values != oldValue { scheduleSave() }
             if values.title != oldValue.title {

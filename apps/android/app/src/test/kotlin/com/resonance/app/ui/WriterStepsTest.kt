@@ -100,7 +100,7 @@ class WriterStepsTest {
         assertEquals(WriterStep.Publish, m.step)
         assertEquals("d-new", m.draftId)
         assertFalse(m.nextLoading)
-        assertEquals(listOf(DraftValues(title = "雨中散步", story = "那天下午雨停了。")), store.created)
+        assertEquals(listOf(DraftValues(title = "雨中散步", story = "那天下午雨停了。", visibility = "private")), store.created)
     }
 
     @Test fun offlineNextOpensTheStepOnTheDraftOnTheDeviceAfterAMoment() = runBlocking {
@@ -124,7 +124,8 @@ class WriterStepsTest {
         assertNull(m.saveError)
         // The network comes back: the write lands as it was issued.
         gate.complete(Unit)
-        assertEquals(listOf(DraftValues(title = "雨中散步")), store.created)
+        // A new card is kept as a 私人卡 until the step chooses otherwise.
+        assertEquals(listOf(DraftValues(title = "雨中散步", visibility = "private")), store.created)
         assertEquals(listOf("d-new"), store.createdIds)
     }
 
