@@ -5,7 +5,7 @@
  *
  *   capture [web ios android mac] [--only home,card] [--device phone] [--no-stack]
  *   compare  [--run <id>]          recompute the comparison and the report
- *   review   [--run <id>] [--gemini]
+ *   review   [--run <id>] [--gemini] [--all]   --all: unchanged captures too
  *   accept   [--run <id>] [--only <key|screen>,…]
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -128,8 +128,9 @@ async function main() {
     case 'review': {
       const runDir = runDirOf(args);
       const results = compareRun(runDir);
-      if (args.includes('--gemini')) await reviewWithGemini(runDir, results, log);
-      else log(`Hand this to a reviewing agent: ${writeReviewPack(runDir, results)}`);
+      const all = args.includes('--all');
+      if (args.includes('--gemini')) await reviewWithGemini(runDir, results, log, all);
+      else log(`Hand this to a reviewing agent: ${writeReviewPack(runDir, results, all)}`);
       return log(`Report: ${writeReport(runDir, results)}`);
     }
     case 'accept':

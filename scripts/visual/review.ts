@@ -37,10 +37,10 @@ The wobbles are on purpose — never call an outline "uneven". Look for:
 - anything the "should show" line names that is missing
 For a changed screen, compare with the baseline: say what moved, and whether the release notes explain it.`;
 
-function items(runDir: string, results: Result[]): Item[] {
+function items(runDir: string, results: Result[], all = false): Item[] {
   const byId = new Map(SCREENS.map((s) => [s.id, s.expect]));
   return results
-    .filter((r) => r.status === 'changed' || r.status === 'new')
+    .filter((r) => r.status === 'changed' || r.status === 'new' || (all && r.status === 'unchanged'))
     .map((r) => {
       const id = r.key.split('/').pop()!.split('@')[0];
       return {
@@ -64,8 +64,9 @@ function releaseNotes(runDir: string): string {
   return git('log', '--no-merges', '--format=- %s', `${since}..${info?.commit || 'HEAD'}`) || '(no commits since the baseline)';
 }
 
-export function writeReviewPack(runDir: string, results: Result[]): string {
-  const list = items(runDir, results);
+/** `all`: every capture, unchanged ones too (a first look over a new baseline). */
+export function writeReviewPack(runDir: string, results: Result[], all = false): string {
+  const list = items(runDir, results, all);
   const file = join(runDir, 'review', 'REVIEW.md');
   const rows = list
     .map((it, i) =>
@@ -136,11 +137,11 @@ async function askGemini(it: Item, notes: string): Promise<Verdict> {
   }
 }
 
-export async function reviewWithGemini(runDir: string, results: Result[], log: (line: string) => void) {
+export async function reviewWithGemini(runDir: string, results: Result[], log: (line: string) => void, all = false) {
   if (!process.env.GEMINI_API_KEY) throw new Error('Set GEMINI_API_KEY (and optionally GEMINI_MODEL) to review with Gemini');
   const notes = releaseNotes(runDir);
   const verdicts: Verdict[] = [];
-  const list = items(runDir, results);
+  const list = items(runDir, results, all);
   for (const [i, it] of list.entries()) {
     log(`Gemini ${i + 1}/${list.length}: ${it.key}`);
     verdicts.push(await askGemini(it, notes));

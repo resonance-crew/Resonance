@@ -10,6 +10,7 @@ npm run visual -- capture                    # web, ios, android, mac (each buil
 npm run visual -- capture web --only home,card --device phone   # a slice, while working on something
 npm run visual -- review                     # writes the brief for a reviewing agent (Antigravity, Claude…)
 npm run visual -- review --gemini            # or asks the Gemini API directly (GEMINI_API_KEY, GEMINI_MODEL)
+npm run visual -- review --all               # every capture, unchanged too: a first look over a new baseline
 npm run visual -- compare                    # redraws the report after a review wrote its verdicts
 npm run visual -- accept                     # the latest run becomes the baseline
 npm run visual -- accept --only card,web/phone/home@dark-zh-TW.png   # only these screens / captures
