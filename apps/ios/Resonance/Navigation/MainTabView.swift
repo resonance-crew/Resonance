@@ -659,8 +659,8 @@ struct TabScreen<Trailing: View, Banner: View, Content: View>: View {
             .padding(.bottom, window.topTabs ? 40 : 110 - lowered)
             // For whoever can't pull, the same refresh is the list's "Refresh" action (among VoiceOver's actions on any of its rows).
             .sketchRefreshAction(named: L10n.Native.refresh)
-            // Where the paper puppets' marks are measured: the scrolled content's own points.
-            .readingContent()
+            // Where the paper puppets' marks are measured, and their island laid over: the scrolled content's own points.
+            .mascotContent()
         }
         .modifier(MascotHosting(hosts: hostsMascots, footRoom: bottomRoom))
         .scrollPosition($position)

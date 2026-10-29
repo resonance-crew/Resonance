@@ -19,23 +19,31 @@ export const READING_MARKS = {
   card_item: ['card-edge', 'card-foot'],
 } as const;
 
-/** The cards under `root`, as the scene takes them: box, drawn top, author row, title words. */
+/** The cards under `root`, as the scene takes them: id, drawn box and top, pen, author row, title words. */
 function cardsIn(root: ParentNode, page: Page): SceneCard[] {
   return Array.from(root.querySelectorAll(CARD_ITEM))
     .map((item): SceneCard | null => {
       const article = item.querySelector('article');
-      const box = page.rect(article);
-      if (!article || !box) return null;
+      const frame = page.rect(article);
+      if (!article || !frame) return null;
       const chrome = visible(article, '[data-mascot="card-edge"]', page)[0];
-      const drawn = chrome
+      const strokes = chrome
         ? Array.from(chrome.querySelectorAll<SVGGeometryElement>('path[stroke]'))
             .filter((p) => !['none', 'transparent'].includes(p.getAttribute('stroke') || 'none'))
-            .flatMap((p) => page.pathPoints(p, 4))
         : [];
-      const top = topContour(drawn, box.x + 6, box.x + box.w - 6, box.y);
+      const drawn = strokes.flatMap((p) => page.pathPoints(p, 4));
+      // the outline's own extent: its wobble swings a little past the frame it is laid out in
+      const xs = drawn.map((p) => p[0]);
+      const box = drawn.length ? { ...frame, x: Math.min(...xs), w: Math.max(...xs) - Math.min(...xs) } : frame;
+      const top = topContour(drawn, box.x + 1, box.x + box.w - 1, frame.y);
+      const pen = strokes.length ? parseFloat(strokes[0].getAttribute('stroke-width') || '') || undefined : undefined;
       return {
+        key: item.getAttribute('data-card-id') || undefined,
         box,
         top: top.length >= 2 ? top : undefined,
+        pen,
+        // a bordered card's sides (a phone's band has none: its outline is the rule across its top)
+        outline: drawn.length && drawn.some(([, y]) => y > frame.y + frame.h / 2) ? drawn : undefined,
         foot: page.inkRects(article.querySelector('[data-mascot="card-foot"]')),
         words: page.textRects(article.querySelector('h3')),
         radius: 18,

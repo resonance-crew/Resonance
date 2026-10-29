@@ -9,6 +9,8 @@ import SwiftUI
 /// and are kept on this device.
 struct AppearanceSettings: View {
     private let store = AppearanceStore.shared
+    /// Where the 小精靈 switch is (the strip's puppets point at it).
+    @State private var toggle: CGRect?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
@@ -30,22 +32,31 @@ struct AppearanceSettings: View {
                 .accessibilityLabel(L10n.Tweaks.accentColor)
             }
             // 小精靈 (round 19, the web's MascotsSwitch): the field's label over it, the hint at its start
-            // and the switch at its end; off until turned on, kept on this device.
+            // and the switch at its end; off until turned on, kept on this device. Under it (round 20) the
+            // strip where one naps while it is off and they come and go while it is on.
             VStack(alignment: .leading, spacing: 10) {
                 label(L10n.Tweaks.mascots)
-                HStack(alignment: .top, spacing: 20) {
-                    CSSText(L10n.Tweaks.mascotsHint, font: AppFonts.scaledUIFont(.body, size: Tokens.hintSize), lineHeight: 1.55,
-                            color: Tokens.UI.textMuted)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .accessibilityHidden(true)
-                    OrganicToggle(isOn: Binding(get: { store.mascots }, set: { store.setMascots($0) }),
-                                  label: L10n.Tweaks.mascots, seed: 97)
-                        .accessibilityHint(L10n.Tweaks.mascotsHint)
-                        .padding(.top, 1)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .top, spacing: 20) {
+                        CSSText(L10n.Tweaks.mascotsHint, font: AppFonts.scaledUIFont(.body, size: Tokens.hintSize), lineHeight: 1.55,
+                                color: Tokens.UI.textMuted)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityHidden(true)
+                        OrganicToggle(isOn: Binding(get: { store.mascots }, set: { store.setMascots($0) }),
+                                      label: L10n.Tweaks.mascots, seed: 97)
+                            .accessibilityHint(L10n.Tweaks.mascotsHint)
+                            .padding(.top, 1)
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.mascotsField)) } action: { toggle = $0 }
+                    }
+                    MascotStrip(awake: store.mascots, control: toggle, space: Self.mascotsField)
                 }
+                .coordinateSpace(.named(Self.mascotsField))
             }
         }
     }
+
+    /// The 小精靈 field's own space: the switch and the strip under it are measured in it.
+    private nonisolated static let mascotsField = "settings.mascots"
 
     /// The theme's name (tweaks.theme*).
     static func name(_ accent: Accent) -> String {

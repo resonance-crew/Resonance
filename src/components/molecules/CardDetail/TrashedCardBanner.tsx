@@ -9,7 +9,7 @@ import { ShapeGrain } from '@/components/atoms/ShapeGrain/ShapeGrain';
 import { ConfirmModal } from '@/components/molecules/ConfirmModal/ConfirmModal';
 import { boundaryPoints, polyline } from '@/components/molecules/SegmentedActionBar/SegmentedActionBar';
 import { wobRect } from '@/lib/design/wobRect';
-import { autoCurve, autoSegments } from '@/lib/design/wobAuto';
+import { autoCurve, autoMag, autoSegments } from '@/lib/design/wobAuto';
 import { INK } from '@/lib/design/strokes';
 import { useToast } from '@/components/providers/ToastProvider';
 import { useRouter } from '@/i18n/navigation';
@@ -29,6 +29,12 @@ export interface TrashedCardBannerProps {
 const SEED = 83;
 /** The corner, as a card's. */
 const R = 18;
+/**
+ * How far the seams wave (px): a gentle bend, not a swing — the owner, round 20, the outline's curve too strong; it is
+ * now a Panel's wobble a little calmer (autoMag × 0.8, autoCurve × 0.7), and the seams follow.
+ */
+const SEAM = 1.1;
+const SEAM_ACROSS = 1.5;
 
 type Shape = {
   outline: string;
@@ -44,7 +50,7 @@ type Shape = {
 
 /** A seam across the bar at `y` (left to right), the segmented bar's wave turned on its side. */
 function acrossAt(y: number, w: number, seed: number, pad: number): [number, number][] {
-  return boundaryPoints(y, w, seed, 2.6, pad).map(([a, b]) => [b, a]);
+  return boundaryPoints(y, w, seed, SEAM_ACROSS, pad).map(([a, b]) => [b, a]);
 }
 
 /** The region right of a seam running top to bottom, reaching out past the outline (which clips it). */
@@ -62,16 +68,16 @@ function rightOf(pts: [number, number][], w: number, h: number, pad: number): st
  */
 function bannerShape(w: number, h: number, restoreAt: { x: number; y: number }, dangerX: number, stacked: boolean): Shape | null {
   if (!w || !h) return null;
-  const outline = wobRect(w, h, R, SEED, Math.min(4.5, 2.6 + Math.min(w, h) * 0.02), {
-    segmentsH: autoSegments(w) + 1,
-    segmentsV: Math.max(2, autoSegments(h)),
-    curve: autoCurve(w, h) * 1.15,
-    cornerJitter: 1.4,
+  const outline = wobRect(w, h, R, SEED, autoMag(w, h) * 0.8, {
+    segmentsH: autoSegments(w),
+    segmentsV: 2,
+    curve: autoCurve(w, h) * 0.7,
+    cornerJitter: 0.8,
   });
   const pad = Math.max(12, h * 0.3);
   if (!stacked) {
-    const first = boundaryPoints(restoreAt.x, h, SEED + 11, 1.8, pad);
-    const second = boundaryPoints(dangerX, h, SEED + 48, 1.8, pad);
+    const first = boundaryPoints(restoreAt.x, h, SEED + 11, SEAM, pad);
+    const second = boundaryPoints(dangerX, h, SEED + 48, SEAM, pad);
     const restore = `${polyline(first)} ${[...second].reverse().map(([x, y]) => `L ${x},${y}`).join(' ')} Z`;
     return {
       outline,
@@ -84,7 +90,7 @@ function bannerShape(w: number, h: number, restoreAt: { x: number; y: number }, 
   const under = acrossAt(restoreAt.y, w, SEED + 11, pad);
   const rowH = h - restoreAt.y;
   // Down the middle of the foot, from a little above the seam over it (which hides what reaches above).
-  const split = boundaryPoints(dangerX, rowH, SEED + 48, 1.8, pad).map(([x, y]) => [x, y + restoreAt.y] as [number, number]);
+  const split = boundaryPoints(dangerX, rowH, SEED + 48, SEAM, pad).map(([x, y]) => [x, y + restoreAt.y] as [number, number]);
   const segments = `${polyline(under)} L ${w + pad},${h + pad} L ${-pad},${h + pad} Z`;
   return {
     outline,

@@ -64,8 +64,8 @@ struct CardScreen: View {
         ScrollViewReader { proxy in
             ScrollView {
                 column.id(Self.pageHead)
-                    // Where the paper puppets' marks are measured: the scrolled content's own points.
-                    .readingContent()
+                    // Where the paper puppets' marks are measured, and their island laid over: the content's own points.
+                    .mascotContent()
             }
             // The paper puppets (round 19), while Settings → 外觀 → 小精靈 is on: on the card once it has
             // loaded, never one in the trash. A tablet's contents rail keeps them out of the right margin.

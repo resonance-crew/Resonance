@@ -277,13 +277,38 @@ describe('mascot stage', () => {
     t.content = t.content.slice(0, -1);
     t.stage.advance(1 / 12);
     expect(takes(hit)).toBe(true);
-    // a poke reaches it: a happy hop, then a second one sends it off, shy
+    // a poke reaches it: a happy hop, then something its place allows, a hop again, and a fourth sends it off, shy
+    hit.click();
+    expect(t.events.at(-1)).toMatchObject({ type: 'act', act: 'hop', cause: 'poke' });
+    t.stage.advance(1);
+    hit.click();
+    expect(t.events.at(-1)).toMatchObject({ type: 'act', cause: 'poke' });
+    expect(['wave', 'deco', 'reveal', 'twinkle', 'stretch']).toContain((t.events.at(-1) as { act: string }).act);
+    t.stage.advance(3);
     hit.click();
     expect(t.events.at(-1)).toMatchObject({ type: 'act', act: 'hop', cause: 'poke' });
     hit.click();
     expect(t.events.at(-1)).toMatchObject({ type: 'act', act: 'shy', cause: 'poke' });
     t.stage.advance(5);
     expect(t.stage.visitors()).toHaveLength(0);
+  });
+
+  // The apps' island: its web view takes no touch, so the app hands a tap over by where it landed.
+  it('answers a tap where a torso is, and says where those are', () => {
+    const t = mount({ seed: 6 });
+    t.stage.visit({ ledge: 'hero-wave', slug: 'tuck', acts: ['look', 'look', 'look'] });
+    until(t, e => e.type === 'arrive', 10);
+    const [box] = t.stage.hits();
+    expect(box.w).toBeGreaterThan(10);
+    expect(t.stage.tap(box.x - 40, box.y - 40)).toBe(false);
+    expect(t.stage.tap(box.x + box.w / 2, box.y + box.h / 2)).toBe(true);
+    expect(t.events.at(-1)).toMatchObject({ type: 'act', act: 'hop', cause: 'poke' });
+    // over a button, a tap is the button's
+    const { x, y, h } = t.stage.visitors()[0];
+    t.content = [...t.content, { x: x - 10, y: y - h * 0.6, w: 20, h: 20 }];
+    t.stage.advance(1);
+    expect(t.stage.hits()).toEqual([]);
+    expect(t.stage.tap(box.x + box.w / 2, box.y + box.h / 2)).toBe(false);
   });
 
   it('dims the characters on the dark page, not on the light one', () => {

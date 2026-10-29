@@ -9,7 +9,7 @@ import { clamp, DEG, overlaps, pathY } from './geometry';
 import { HOP_SEC, mouthOpen } from './motion';
 import { rigInfo, type Arm, type RigInfo } from './rig';
 import type {
-  ArmSide, BehindCover, CastEntry, Cover, Duet, Ledge, Manifest, Plan, PuppetMode, Rect, Stance, Task, Traits,
+  ArmSide, BehindCover, CastEntry, Cover, Duet, Ledge, Manifest, Plan, Point, PuppetMode, Rect, Stance, Task, Traits,
 } from './types';
 
 /** The frame's pose, rebuilt from the stance's baseline every step; tasks and the overlay add to it. */
@@ -455,15 +455,18 @@ export class Puppet {
     const own = this.plan && this.plan.ledge.clear;
     const page = this.S.content();
     if (!(own && own.length) && !page.length) return true;
+    const box = this.torsoBox(0.06);
+    return !(own && own.some(r => overlaps(box, r, 2))) && !page.some(r => overlaps(box, r, 2));
+  }
+  /** The torso's box on the page this frame (px), `m` of it trimmed off each side. */
+  torsoBox(m = 0): Rect {
     const t = this.rig.torso;
     const pts = [[t.x, t.y], [t.x + t.w, t.y], [t.x, t.y + t.h], [t.x + t.w, t.y + t.h]].map(([x, y]) => this.pagePoint(x, y));
     const xs = pts.map(q => q[0]);
     const ys = pts.map(q => q[1]);
-    const m = 0.06;
     const w = Math.max(...xs) - Math.min(...xs);
     const h = Math.max(...ys) - Math.min(...ys);
-    const box = { x: Math.min(...xs) + w * m, y: Math.min(...ys) + h * m, w: w * (1 - 2 * m), h: h * (1 - 2 * m) };
-    return !(own && own.some(r => overlaps(box, r, 2))) && !page.some(r => overlaps(box, r, 2));
+    return { x: Math.min(...xs) + w * m, y: Math.min(...ys) + h * m, w: w * (1 - 2 * m), h: h * (1 - 2 * m) };
   }
 
   /** A rig point (units, on the body) → page px, through the frame's pose. */
@@ -577,24 +580,37 @@ export class Puppet {
     this.release = null;
     this.cover = null;
   }
-  /** The built-in "behind": everything inside the element's outline (and the slot below it) is cut away. */
+  /**
+   * The built-in "behind": everything inside the element's outline (and the slot below it) is cut away — out to the
+   * outer edge of its pen line (`pen`), so the whole line stays in front, never half of it under the character.
+   */
   private clipPolygon(c: BehindCover): string {
     const ox = this.x;
     const oy = this.y - this.pose.rise * this.k;
     const f = (v: number) => `${v.toFixed(1)}px`;
-    let top: readonly (readonly [number, number])[] = c.top && c.top.length ? c.top : [[c.x, c.y], [c.x + c.w, c.y]];
+    const lift = c.pen ? c.pen / 2 + 0.6 : 0;
+    const x0 = c.x - lift;
+    const x1 = c.x + c.w + lift;
+    let top: readonly (readonly [number, number])[] = c.top && c.top.length
+      ? c.top.map(([x, y]) => [x, y - lift] as const) : [[x0, c.y - lift], [x1, c.y - lift]];
     if (!(c.top && c.top.length) && c.radius) {   // rounded top corners
-      const r = Math.min(c.radius, c.w / 2, c.h / 2);
+      const r = Math.min(c.radius + lift, (x1 - x0) / 2, c.h / 2 + lift);
       const arc = (cx: number, a0: number) => [0, 1, 2, 3, 4].map(i => {
         const a = (a0 + i * 22.5) * DEG;
-        return [cx + Math.cos(a) * r, c.y + r + Math.sin(a) * r] as const;
+        return [cx + Math.cos(a) * r, c.y - lift + r + Math.sin(a) * r] as const;
       });
-      top = [...arc(c.x + r, 180), ...arc(c.x + c.w - r, 270)];
+      top = [...arc(x0 + r, 180), ...arc(x1 - r, 270)];
     }
     const bottom = c.y + c.h + c.depth;
-    const hole = [[c.x, top[0][1]], ...top, [c.x + c.w, top[top.length - 1][1]], [c.x + c.w, bottom], [c.x, bottom]]
+    // the drawn sides where given (below the top's own ends), each pushed out by the pen; else straight down
+    const below = (pts: readonly Point[] | undefined, y0: number) => (pts ?? []).filter(([, y]) => y > y0 + 1 && y < bottom);
+    const rightSide = below(c.sides?.right, top[top.length - 1][1]).map(([x, y]) => [x + lift, y] as const);
+    const leftSide = below(c.sides?.left, top[0][1]).map(([x, y]) => [x - lift, y] as const).reverse();
+    const xr = rightSide.length ? rightSide[rightSide.length - 1][0] : x1;
+    const xl = leftSide.length ? leftSide[0][0] : x0;
+    const hole = [[x0, top[0][1]], ...top, [x1, top[top.length - 1][1]], ...rightSide, [xr, bottom], [xl, bottom], ...leftSide]
       .map(([x, y]) => `${f(x - ox)} ${f(y - oy)}`);
-    return `polygon(evenodd, -4000px -4000px, 4000px -4000px, 4000px 4000px, -4000px 4000px, -4000px -4000px, ${hole.join(', ')}, ${f(c.x - ox)} ${f(top[0][1] - oy)})`;
+    return `polygon(evenodd, -4000px -4000px, 4000px -4000px, 4000px 4000px, -4000px 4000px, -4000px -4000px, ${hole.join(', ')}, ${f(x0 - ox)} ${f(top[0][1] - oy)})`;
   }
 
   // --- the visitor ---
@@ -629,11 +645,19 @@ export class Puppet {
     this.hover = { fx: clamp(dx / 5, -11, 11), fy: clamp(dy / 7, -6, 6) };
   }
   private onClick(e: MouseEvent): void {
-    const S = this.S;
     e.stopPropagation();
+    this.poke();
+  }
+  /**
+   * A click or a tap: a hop, then (round 20, the owner: 「點擊是會有互動的」, more than one) something its place
+   * allows — a wave back, a twirl, its secret, a stretch — and a hop again; a fourth and it is shy and goes.
+   */
+  poke(): void {
+    const S = this.S;
     if (S.reduced || this.mode === 'exit' || this.mode === 'shy') return;
     this.clicks++;
-    if (this.clicks === 1) {
+    if (this.clicks === 2 && S.pokeAct(this)) return;
+    if (this.clicks < 4) {
       this.fx.push({
         t0: S.time, dur: 0.6, fn: u => {
           const p = this.pose;

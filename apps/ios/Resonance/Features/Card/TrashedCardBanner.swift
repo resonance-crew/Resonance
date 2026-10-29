@@ -248,8 +248,8 @@ private struct BannerSegmentStyle: ButtonStyle {
     }
 }
 
-/// The banner's drawing at its laid-out size (the web's bannerShape): its outline — a card's wobble,
-/// plain to see — and the two segments cut off by the segmented bar's wavy seams. Side by side the
+/// The banner's drawing at its laid-out size (the web's bannerShape): its outline — a calm wobble (round 20)
+/// — and the two segments cut off by the segmented bar's wavy seams. Side by side the
 /// segments are the shape's end, past the words; stacked (a phone) its foot, under them, split down
 /// the middle. One point list for each seam's stroke and the faces' edges.
 struct TrashBannerShape {
@@ -266,27 +266,31 @@ struct TrashBannerShape {
     static let seed = 83.0
     /// The corner, as a card's.
     static let radius = 18.0
+    /// How far the seams wave: a gentle bend, not a swing (round 20; the web's SEAM / SEAM_ACROSS).
+    static let seam = 1.1
+    static let seamAcross = 1.5
 
     /// Nil until the banner and its segments are laid out.
     init?(size: CGSize, restore: CGRect, delete: CGRect, stacked: Bool) {
         let w = Double(size.width), h = Double(size.height)
         guard w > 0, h > 0, restore.width > 0, delete.width > 0 else { return nil }
-        outline = WobRectShape(radius: Self.radius, seed: Self.seed, mag: min(4.5, 2.6 + min(w, h) * 0.02), options: WobRectOptions(
-            curve: autoCurve(w, h) * 1.15, cornerJitter: 1.4, segmentsH: .count(Double(autoSegments(w) + 1)),
-            segmentsV: .count(Double(max(2, autoSegments(h)))))).path(in: CGRect(origin: .zero, size: size))
+        // Calm (round 20, the owner: the curve was too strong): a Panel's wobble a little quieter.
+        outline = WobRectShape(radius: Self.radius, seed: Self.seed, mag: autoMag(w, h) * 0.8, options: WobRectOptions(
+            curve: autoCurve(w, h) * 0.7, cornerJitter: 0.8, segmentsH: .count(Double(autoSegments(w))),
+            segmentsV: .count(2))).path(in: CGRect(origin: .zero, size: size))
         let pad = SegmentSeams.pad(h)
         if !stacked {
-            let first = SegmentSeams.down(x: Double(restore.minX), h: h, seed: Self.seed + 11, amp: 1.8, pad: pad)
-            let second = SegmentSeams.down(x: Double(delete.minX), h: h, seed: Self.seed + 48, amp: 1.8, pad: pad)
+            let first = SegmentSeams.down(x: Double(restore.minX), h: h, seed: Self.seed + 11, amp: Self.seam, pad: pad)
+            let second = SegmentSeams.down(x: Double(delete.minX), h: h, seed: Self.seed + 48, amp: Self.seam, pad: pad)
             seams = [Path(polyline: first), Path(polyline: second)]
             segments = SegmentSeams.right(of: first, w: w, h: h, pad: pad)
             danger = SegmentSeams.right(of: second, w: w, h: h, pad: pad)
             self.restore = SegmentSeams.between(first, second)
         } else {
             let top = Double(restore.minY)
-            let under = SegmentSeams.across(y: top, w: w, seed: Self.seed + 11, amp: 2.6, pad: pad)
+            let under = SegmentSeams.across(y: top, w: w, seed: Self.seed + 11, amp: Self.seamAcross, pad: pad)
             // Down the middle of the foot, from a little above the seam over it (which hides what reaches above).
-            let split = SegmentSeams.down(x: Double(delete.minX), h: h - top, seed: Self.seed + 48, amp: 1.8, pad: pad)
+            let split = SegmentSeams.down(x: Double(delete.minX), h: h - top, seed: Self.seed + 48, amp: Self.seam, pad: pad)
                 .map { CGPoint(x: $0.x, y: $0.y + top) }
             seams = [Path(polyline: under), Path(polyline: split)]
             segments = SegmentSeams.below(under, w: w, h: h, pad: pad)

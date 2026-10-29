@@ -21,10 +21,17 @@ export interface Rect {
   h: number;
 }
 
-/** An element a character can be behind: its rect, its drawn top edge (x ascending) or its rounded top corners. */
+/**
+ * An element a character can be behind: its rect, its drawn top edge (x ascending) or its rounded top corners, and the
+ * width of the pen that drew its outline — whoever is behind it keeps under the whole line (round 20, the owner: the
+ * card's border stays in front of the puppet), not just under its middle.
+ */
 export interface Cover extends Rect {
   top?: readonly Point[];
   radius?: number;
+  pen?: number;
+  /** Its drawn sides, y ascending (a wobbly card's): someone slid out past one is cut along it, not at the box. */
+  sides?: { left?: readonly Point[]; right?: readonly Point[] };
 }
 
 /** What `env.behind` is handed: the cover and how far below it (`depth`) the character's feet reach. */
@@ -348,6 +355,13 @@ export interface StageApi {
    */
   relayout(): void;
   visitors(): VisitorInfo[];
+  /**
+   * A tap at a page point (the apps' island, whose web view takes no touch): the visitor whose torso is there reacts as
+   * to a click, and true; false if nobody is there.
+   */
+  tap(x: number, y: number): boolean;
+  /** Where a tap would reach someone: each visitor's torso, page px (the apps keep a tap there from the card under it). */
+  hits(): Rect[];
   stats(): StageStats;
   resetStats(): void;
   destroy(): void;

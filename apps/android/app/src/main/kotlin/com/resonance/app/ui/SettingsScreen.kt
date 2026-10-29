@@ -95,6 +95,8 @@ import com.resonance.design.OrganicToggle
 import com.resonance.design.toggleRow
 import com.resonance.design.SketchLoader
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onPlaced
 import com.resonance.design.Skeleton
 import com.resonance.design.WavyDivider
 import com.resonance.design.cream
@@ -567,23 +569,29 @@ private fun AppearanceSettings() {
             }
         }
         // 小精靈 (round 19, the web's MascotsSwitch): the field's label over it, the hint at its start and the
-        // switch at its end — the whole row the one switch, named by the label and described by the hint.
+        // switch at its end — the whole row the one switch, named by the label and described by the hint —
+        // and under it (round 20) the puppets' own strip, so it is plain what the switch is.
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             FieldLabel(L10n.Tweaks.mascots)
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .toggleRow(appearance.mascots) { store.setMascots(it) }
-                    .semantics { contentDescription = L10n.Tweaks.mascots },
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                BasicText(
-                    L10n.Tweaks.mascotsHint,
-                    style = AppFonts.body(Tokens.HintSize, lineHeight = 1.55f, color = Tokens.TextMuted),
-                    modifier = Modifier.weight(1f),
-                )
-                OrganicToggle(appearance.mascots, seed = 97.0)
+            var switchAt by remember { mutableStateOf<LayoutCoordinates?>(null) }
+            Column {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .toggleRow(appearance.mascots) { store.setMascots(it) }
+                        .semantics { contentDescription = L10n.Tweaks.mascots },
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    BasicText(
+                        L10n.Tweaks.mascotsHint,
+                        style = AppFonts.body(Tokens.HintSize, lineHeight = 1.55f, color = Tokens.TextMuted),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Box(Modifier.onPlaced { switchAt = it }) { OrganicToggle(appearance.mascots, seed = 97.0) }
+                }
+                // The web's strip: 4 under the row.
+                MascotStrip(appearance.mascots, switchAt, Modifier.padding(top = 4.dp))
             }
         }
     }

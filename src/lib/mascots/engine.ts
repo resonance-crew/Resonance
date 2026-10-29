@@ -12,7 +12,7 @@
  * somewhere in view. A character comes only once its parts are loaded and decoded (never a torso without its eyes),
  * and one whose place is mostly out of view — under a fixed header the view leaves out, say — goes.
  */
-import { ACT_STANCE, isActName } from './acts';
+import { ACT_STANCE, ACTS, isActName } from './acts';
 import { clamp, overlaps, pathY, seeded, topY } from './geometry';
 import { idle, quick } from './motion';
 import { Prop, type PropKind, type PropOwner } from './props';
@@ -68,6 +68,10 @@ const MAX_FAILS = 3;
 const SHOWN_ENOUGH = 0.6;
 /** Rig units past its far eye a character peeking out past a side shows at least. */
 const EYE_ROOM = 24;
+/** Px round a torso a fingertip still reaches it by (the apps' tap). */
+const TAP_SLOP = 6;
+/** What a second tap may get back (pokeAct). */
+const TAP_ACTS: readonly ActName[] = ['wave', 'deco', 'reveal', 'twinkle', 'stretch'];
 
 /** Who comes next and when: a visitor, two walking in to meet, or a guest for `host`. */
 type Schedule =
@@ -292,6 +296,14 @@ export class Stage {
         this.update(0);
       },
       relayout: () => this.relayout(),
+      tap: (x, y) => {
+        const ch = this.tapTarget(x, y);
+        if (!ch) return false;
+        ch.poke();
+        this.poke();
+        return true;
+      },
+      hits: () => this.chars.filter(c => this.tappable(c)).map(c => c.torsoBox()),
       visitors: () => this.chars.map(c => ({
         slug: c.slug, name: c.name, x: c.x, y: c.y, mode: c.mode, ledge: c.plan ? c.plan.ledge.id : null, h: c.h,
       })),
@@ -909,6 +921,37 @@ export class Stage {
     return acts[acts.length - 1];
   }
 
+  /** Can a tap reach `ch` (it is on stage, not going, its torso clear of the page's words and buttons)? */
+  private tappable(ch: Puppet): boolean {
+    return !ch.gone && ch.mode !== 'exit' && ch.mode !== 'shy' && ch.takesPointer();
+  }
+  /** Who a tap at a page point reaches: the front-most whose torso (and a fingertip round it) is there. */
+  private tapTarget(x: number, y: number): Puppet | null {
+    for (const ch of [...this.chars].reverse()) {
+      if (!this.tappable(ch)) continue;
+      const b = ch.torsoBox();
+      if (x >= b.x - TAP_SLOP && x <= b.x + b.w + TAP_SLOP && y >= b.y - TAP_SLOP && y <= b.y + b.h + TAP_SLOP) return ch;
+    }
+    return null;
+  }
+  /**
+   * A second tap's answer: something its place and stance allow that needs nothing to aim at (a wave back, a twirl of
+   * its decoration, its secret, the stars, a stretch). False when it is busy (arriving, meeting) or nothing fits.
+   */
+  pokeAct(ch: Puppet): boolean {
+    const pl = ch.plan;
+    if (!pl || ch.mode !== 'act' || ch.duet || this.reduced) return false;
+    const R = ch.rig;
+    const stance = pl.stance === 'peek' ? 'peek' : ch.stance;
+    const acts = TAP_ACTS.filter(a => ACT_STANCE[stance].includes(a) && (a !== 'reveal' || R.has('torso-alt'))
+      && (a !== 'twinkle' || R.has('stars')) && (a !== 'deco' || R.deco) && (a !== 'wave' || pl.how !== 'rise' || ch.waveArm('L')));
+    if (!acts.length) return false;
+    const act = acts[Math.floor(this.rand() * acts.length)];
+    ch.push(ACTS[act](this, ch, { ...pl, waveSide: this.rand() < 0.5 ? 'L' : 'R' }));
+    this.emit(ch, { type: 'act', act, cause: 'poke' });
+    return true;
+  }
+
   /**
    * A character whose place scrolled away hurries off (or simply goes, if nobody can see it) — and so does one left
    * mostly above the view's top: on the real page that is under the fixed header, where only its legs would show.
@@ -1148,6 +1191,8 @@ export class Stage {
   /** A visitor now: this character (by slug) at this ledge (by id), if it fits in view; acts: what it does first. */
   private visitNow({ ledge, slug, acts }: VisitRequest = {}): boolean {
     if (this.reduced) return false;
+    // a place this page doesn't have: nothing to do, and nobody on stage sent off for it
+    if (ledge && !this.ledges().some(l => l.id === ledge)) return false;
     this.clearAll();
     this.plan = null;
     this.vp = this.env.viewport();

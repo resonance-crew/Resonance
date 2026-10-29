@@ -19,18 +19,51 @@ export interface ReadingPreset {
 }
 
 /**
- * Seldom and one at a time: the first comes after half a minute or so, then one every two minutes or so, and a meeting
- * only now and then. A visit itself is the landing page's (approved pacing).
+ * Seldom and mostly one at a time: the first comes after a quarter of a minute or so, then one every minute or two;
+ * now and then a second comes to greet it or two meet on a phone's band (round 20: more than one way a visit goes).
+ * A visit itself is the landing page's (approved pacing).
  */
 export const READING_PACE: Partial<StageOptions> = {
-  first: [24, 48],
-  gap: [80, 160],
+  first: [12, 30],
+  gap: [60, 130],
   visit: [11, 17],
-  pairChance: 0.04,
-  meetChance: 0.15,
-  greetChance: 0.5,
-  meetEvery: 240,
+  pairChance: 0.1,
+  meetChance: 0.3,
+  greetChance: 0.6,
+  meetEvery: 120,
 };
+
+/**
+ * Settings' strip under the 小精靈 switch (round 20): awake, someone is nearly always there — the next one walks in
+ * a moment after the last goes, and two often meet; asleep (the switch off), one comes at once and naps all day.
+ */
+export const SETTINGS_AWAKE: Partial<StageOptions> = {
+  first: [0.3, 0.8],
+  gap: [1.2, 3],
+  visit: [9, 14],
+  pairChance: 0.2,
+  meetChance: 0.45,
+  greetChance: 0.8,
+  meetEvery: 20,
+  greetEvery: 12,
+};
+export const SETTINGS_ASLEEP: Partial<StageOptions> = {
+  first: [0.2, 0.5],
+  gap: [0.5, 1],
+  visit: [86400, 86400],
+  pairChance: 0,
+  meetChance: 0,
+  greetChance: 0,
+};
+
+/**
+ * Px for 摺摺 on settings' strip, as wide as it is: a little smaller than the reading pages', so 牽牽 (1.3 × that,
+ * the tallest) stands inside the strip — 104 px tall on a phone, 116 wider (SettingsClient.module.css; the apps'
+ * strips the same), its stage reaching STRIP_HEADROOM above it for raised arms.
+ */
+export function settingsUnit(width: number): number {
+  return width >= 480 ? 68 : 60;
+}
 
 export const READING_PRESETS: Readonly<Record<PresetName, ReadingPreset>> = {
   phone: { name: 'phone', unitHeight: 68, marginRoom: 1, cardPeeks: false, options: READING_PACE },

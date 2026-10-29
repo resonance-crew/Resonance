@@ -7,6 +7,7 @@
  *
  * Run it on a resize, once fonts are in and when the page's height changes — never per frame: it reads layout.
  */
+import { INK } from '@/lib/design/strokes';
 import type { Cover, EdgeLedge, Ink, Ledge, LineLedge, PeekLedge, Point, Rect, SpotLedge, Theme, Zone } from '../types';
 import type { LandingPreset } from './presets';
 import { flattenPath } from './svgPath';
@@ -491,14 +492,14 @@ export function measureLanding(doc: Document, layer: HTMLElement, preset: Landin
     if (span && span[1] - span[0] >= 60 && seat.length >= 2) {
       add<EdgeLedge>({
         id: `card-${i + 1}-top`, kind: 'edge', points: seat, stance: 'sit',
-        cover: { ...c.card, top: top.length >= 2 ? top : undefined, radius: 18 } satisfies Cover, acts: CARD_ACTS,
+        cover: { ...c.card, top: top.length >= 2 ? top : undefined, radius: 18, pen: INK } satisfies Cover, acts: CARD_ACTS,
         clear: clear.length ? clear : undefined,
       }, c.card.y);
     }
     if (preset.cardPeeks && cols > 1) {
       const side = Math.abs(c.item.x - minX) < 2 && minX >= 40 ? 'left' : Math.abs(right(c.item) - maxR) < 2 && W - maxR >= 40 ? 'right' : null;
       if (side) {
-        add<PeekLedge>({ id: `card-${i + 1}-${side}`, kind: 'peek', side, cover: { ...c.card, radius: 18 }, ground: bottom(c.card) - 4, acts: PEEK_ACTS }, bottom(c.card));
+        add<PeekLedge>({ id: `card-${i + 1}-${side}`, kind: 'peek', side, cover: { ...c.card, radius: 18, pen: INK }, ground: bottom(c.card) - 4, acts: PEEK_ACTS }, bottom(c.card));
       }
     }
   });

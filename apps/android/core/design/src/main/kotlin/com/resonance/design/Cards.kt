@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.resonance.design.generated.Tokens
+import com.resonance.geometry.PathCommand
 import com.resonance.geometry.SegValue
 import com.resonance.geometry.WobRectOptions
 import com.resonance.geometry.wobRect
@@ -470,7 +471,10 @@ fun BorderedStoryCard(
     val palette = cardPalette(palette, content.accentHue, position)
     val seed = position * 77.0 + 13
     WithSkeletonHue(palette.hue) {
-        BorderedCardFrame(palette, seed, modifier.mascotMark("card:${content.id}"), hover = !preview) { StoryCardBody(content, palette, seed, cover, preview) }
+        // The island's mark: the card's frame, and its drawn outline (round 20: the line stays in front of a puppet behind it).
+        BorderedCardFrame(palette, seed, modifier.mascotMark("card:${content.id}", MascotMarks.CardOutline(seed)), hover = !preview) {
+            StoryCardBody(content, palette, seed, cover, preview)
+        }
     }
 }
 
@@ -502,7 +506,7 @@ private fun BorderedCardFrame(palette: CardPalette, seed: Double, modifier: Modi
             .drawWithCache {
                 val w = (size.width / density).toDouble()
                 val h = (size.height / density).toDouble()
-                val outline = WobRectShape(22.0, seed, mag = min(w, h) * 0.025, options = BorderedCardWob).createOutline(size, layoutDirection, this)
+                val outline = Outline.Generic(borderedCardOutline(w, h, seed).toPath(density))
                 val grain = Grain.brush(GrainMode.Tile, "grain-card", size, density, BorderedCardGrain, grainInk)
                 val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                 onDrawBehind {
@@ -515,6 +519,19 @@ private fun BorderedCardFrame(palette: CardPalette, seed: Double, modifier: Modi
         verticalArrangement = Arrangement.spacedBy(14.dp),
         content = content,
     )
+}
+
+/**
+ * The bordered card's outline at [w] × [h] (dp): R 22 (no more than half its side), 2.5 % wobble,
+ * [BorderedCardWob] — what its frame fills and inks, and what the paper puppets' island is told is
+ * its drawn edge ([MascotMarks.CardOutline]).
+ */
+fun borderedCardOutline(w: Double, h: Double, seed: Double): List<PathCommand> {
+    if (w <= 0 || h <= 0) return emptyList()
+    val r = min(22.0, min(w, h) / 2)
+    val mag = min(w, h) * 0.025
+    // Not through GeometryCache: its frame asks once per size (drawWithCache), the island once per scene.
+    return wobRect(w, h, r, seed, mag, BorderedCardWob)
 }
 
 /** StoryCard.tsx's desktop outline: 3–4 turns across, 5–6 down, gentle curves, corners drifting 4 (the share card's too). */

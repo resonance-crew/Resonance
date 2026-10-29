@@ -8,6 +8,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import com.resonance.design.generated.Tokens
 import com.resonance.geometry.PathCommand
 import com.resonance.geometry.wavyLine
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +29,13 @@ class MascotMarks {
 
     /** A phone band's wavy rule along its top ([wavyLine] at its width with this seed); none for the list's first band. */
     data class BandRule(val seed: Double)
+
+    /**
+     * A bordered card's hand-drawn outline ([borderedCardOutline] at its size with this seed), in the
+     * pen [Tokens.Ink]: the island is handed its drawn top and extent (round 20, the owner: the card's
+     * line in front of whoever is behind it), not the flat frame it is laid out in.
+     */
+    data class CardOutline(val seed: Double)
 
     /** Bumped when a view is marked for the first time (or anew: a card composed again): the scene is read again. */
     val version = MutableStateFlow(0)

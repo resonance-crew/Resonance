@@ -191,7 +191,7 @@ class MainActivity : ComponentActivity() {
     /** Debug: `--ez mascots true|false` sets 外觀's 小精靈; `--es mascotJs "mascots.visit({…})"` calls the island on screen. */
     private fun mascotExtras(intent: Intent) {
         if (intent.hasExtra("mascots")) AppearanceStore.shared.setMascots(intent.getBooleanExtra("mascots", false))
-        intent.getStringExtra("mascotJs")?.let { DebugLaunch.mascotCalls.tryEmit(it) }
+        intent.getStringExtra("mascotJs")?.let { DebugLaunch.mascotCalls.trySend(it) }
     }
 
     /** A site link: /card/…, /u/…, /messages/…?note=…&card=…, its query kept. */
@@ -263,8 +263,12 @@ object DebugLaunch {
     var feedPicksDelay = 0
     /** Cards stood in for today's picks (the emulator's recommender has none). */
     var feedPicksIds: List<String>? = null
-    /** The paper puppets' island's screen checks (`--es mascotJs …`): calls into its API, logged with their answers (tag Mascots). */
-    val mascotCalls = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 8)
+    /**
+     * The paper puppets' island's screen checks (`--es mascotJs …`): calls into its API, logged with
+     * their answers (tag Mascots). Each is taken once, by the island on screen, once it has a scene —
+     * one sent with the launch waits for it; none is ever run again or retried (round 20).
+     */
+    val mascotCalls = kotlinx.coroutines.channels.Channel<String>(capacity = 8)
 
     /**
      * The home feed's picks as the debug extras ask (null: as the server answers them): held back

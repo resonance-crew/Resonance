@@ -5,8 +5,9 @@ import SwiftUI
 /// What a view marked for the paper puppets is on a reading page (the home feed, a card's page): the
 /// web's ReadingScene (src/lib/mascots/reading/scene.ts) is put together from these.
 public nonisolated enum ReadingMarkRole: Hashable, Sendable {
-    /// A card in a list, drawn with corners this round (a phone's band: 0).
-    case card(radius: CGFloat)
+    /// A card in a list: its id (the puppets' places on it are named by it, so they stay put as a lazy
+    /// list's other cards come and go) and how its outline is drawn (round 20).
+    case card(key: String, outline: ReadingCardOutline)
     /// A card's author row (whoever sits on the card under it keeps off it).
     case cardFoot
     /// A card's title words.
@@ -25,6 +26,90 @@ public nonisolated enum ReadingMarkRole: Hashable, Sendable {
     /// The feed's 顯示更多, or its end line.
     case more
     case end
+}
+
+/// How a marked card's line is drawn (round 20, the owner: 「卡片的 border 應該要在小精靈的前面」): the
+/// puppets' scene follows the drawn line — its extent, its top edge, its pen — not the flat frame the card
+/// is laid out in, which the wobble swings a few points past, so whoever climbs up from behind a card
+/// stays under the whole of its line.
+public nonisolated enum ReadingCardOutline: Hashable, Sendable {
+    /// A phone's band (and down a medium window's middle): the seven-turn wavy rule along its top
+    /// (``StoryBand``'s edge), in the light pen. `seed` is the card's own.
+    case band(seed: Double)
+    /// A wide grid's bordered card: its own wobbly outline (``CardOutlineShape``), in the house pen.
+    case bordered(seed: Double)
+
+    /// The width of the pen the line is drawn with.
+    public var pen: CGFloat {
+        switch self {
+        case .band: Tokens.inkLight
+        case .bordered: Tokens.ink
+        }
+    }
+
+    /// The corner the card is laid out with (a band has none).
+    public var radius: CGFloat {
+        switch self {
+        case .band: 0
+        case .bordered: 22
+        }
+    }
+
+    /// The drawn line in the card's own box of `size` (its top left at 0,0), as points along it a few
+    /// apart (`step`) — the very shapes the card draws.
+    public func drawn(in size: CGSize, step: CGFloat = 4) -> [CGPoint] {
+        guard size.width > 0, size.height > 0 else { return [] }
+        let path: Path = switch self {
+        // The band's edge: 6 tall, laid 3 above the band's top, its wave about its middle.
+        case let .band(seed): StoryBand.edgeShape(seed: seed).path(in: CGRect(x: 0, y: -3, width: size.width, height: 6))
+        case let .bordered(seed): CardOutlineShape(seed: seed).path(in: CGRect(origin: .zero, size: size))
+        }
+        return path.flattened(step: step)
+    }
+}
+
+extension Path {
+    /// The path as points along it, about `step` apart (each curve cut into pieces no longer than that).
+    nonisolated func flattened(step: CGFloat) -> [CGPoint] {
+        var out: [CGPoint] = []
+        var at = CGPoint.zero
+        var start = CGPoint.zero
+        func line(to p: CGPoint) {
+            let n = max(1, Int((hypot(p.x - at.x, p.y - at.y) / step).rounded(.up)))
+            for i in 1...n {
+                let t = CGFloat(i) / CGFloat(n)
+                out.append(CGPoint(x: at.x + (p.x - at.x) * t, y: at.y + (p.y - at.y) * t))
+            }
+            at = p
+        }
+        func curve(_ c1: CGPoint, _ c2: CGPoint, _ p: CGPoint) {
+            // The control polygon's length bounds the curve's: cut by it.
+            let length = hypot(c1.x - at.x, c1.y - at.y) + hypot(c2.x - c1.x, c2.y - c1.y) + hypot(p.x - c2.x, p.y - c2.y)
+            let n = max(1, Int((length / step).rounded(.up)))
+            let p0 = at
+            for i in 1...n {
+                let t = CGFloat(i) / CGFloat(n), u = 1 - t
+                let a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t
+                out.append(CGPoint(x: a * p0.x + b * c1.x + c * c2.x + d * p.x, y: a * p0.y + b * c1.y + c * c2.y + d * p.y))
+            }
+            at = p
+        }
+        forEach { element in
+            switch element {
+            case let .move(to: p):
+                at = p
+                start = p
+                out.append(p)
+            case let .line(to: p): line(to: p)
+            case let .quadCurve(to: p, control: c):
+                curve(CGPoint(x: at.x + (c.x - at.x) * 2 / 3, y: at.y + (c.y - at.y) * 2 / 3),
+                      CGPoint(x: p.x + (c.x - p.x) * 2 / 3, y: p.y + (c.y - p.y) * 2 / 3), p)
+            case let .curve(to: p, control1: c1, control2: c2): curve(c1, c2, p)
+            case .closeSubpath: line(to: start)
+            }
+        }
+        return out
+    }
 }
 
 /// A marked view's frame in the scrolled content (``ReadingMarks/space``).
@@ -108,42 +193,10 @@ extension View {
     }
 }
 
-/// Where the scrolled content's top left is in the page's frame (``ReadingMarks/frameSpace``, the scroll
-/// view's own space, in which the puppets' overlay is measured too): how far it is scrolled, as the
-/// overlay sees it. Reported while there is a ``EnvironmentValues/readingMarkSink``.
-public nonisolated struct ReadingContentOrigin: PreferenceKey {
-    public static let defaultValue: CGPoint? = nil
-
-    public static func reduce(value: inout CGPoint?, nextValue: () -> CGPoint?) {
-        if let next = nextValue() { value = next }
-    }
-}
-
-extension ReadingMarks {
-    /// The named coordinate space of the page's scroll view (around it and the overlay over it).
-    public static let frameSpace = "reading.frame"
-}
-
 extension View {
     /// The scrolled content's root on a page that may host the paper puppets: the space its marks are
-    /// measured in (``ReadingMarks/space``), and where it is in the scroll view (``ReadingContentOrigin``).
+    /// measured in (``ReadingMarks/space``) — the puppets' own layer lies over it, in the same points.
     public func readingContent() -> some View {
-        modifier(ReadingContentModifier())
-    }
-}
-
-private struct ReadingContentModifier: ViewModifier {
-    @Environment(\.readingMarkSink) private var sink
-
-    func body(content: Content) -> some View {
-        content
-            .coordinateSpace(.named(ReadingMarks.space))
-            .background {
-                if sink != nil {
-                    GeometryReader { geo in
-                        Color.clear.preference(key: ReadingContentOrigin.self, value: geo.frame(in: .named(ReadingMarks.frameSpace)).origin)
-                    }
-                }
-            }
+        coordinateSpace(.named(ReadingMarks.space))
     }
 }

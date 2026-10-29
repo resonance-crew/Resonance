@@ -28,9 +28,10 @@ struct StoryCardList: View {
     var body: some View {
         let split = min(max(splitAt ?? 0, 0), cards.count)
         let families = Self.families(cards, splitAt: splitAt)
+        let keys = Self.keys(cards)
         // The cards under a block put on top are drawn by their place among them, as before it came.
-        CardColumns(count: cards.count, underBar: underBar, split: split, ids: ids()) { i, bordered in
-            cell(i, position: i < split ? i : i - split, palette: families[i], bordered: bordered)
+        CardColumns(count: cards.count, underBar: underBar, split: split, ids: anchorsScroll ? keys : nil) { i, bordered in
+            cell(i, key: keys[i], position: i < split ? i : i - split, palette: families[i], bordered: bordered)
         }
     }
 
@@ -44,15 +45,16 @@ struct StoryCardList: View {
         return CardPalette.palettes(cards[..<split].map(\.accentHue), over: below) + below
     }
 
-    private func cell(_ i: Int, position: Int, palette: Int, bordered: Bool) -> some View {
+    private func cell(_ i: Int, key: String, position: Int, palette: Int, bordered: Bool) -> some View {
         let card = cards[i]
         return NavigationLink(value: Route.card(card.routeKey)) {
             StoryCardView(card.story, position: position, isLast: i == cards.count - 1, underBar: underBar && i == 0, bordered: bordered,
                           palette: palette)
         }
         .buttonStyle(.plain)
-        // Where the paper puppets may sit (round 19): its top, a band's flat, a bordered card's corners.
-        .readingMark(.card(radius: bordered ? 22 : 0))
+        // Where the paper puppets may sit (round 19): its top as drawn (round 20: its line stays in front
+        // of whoever is behind it), named by the card, so a visitor stays as the cards round it come and go.
+        .readingMark(.card(key: key, outline: StoryCardView.readingOutline(position: position, bordered: bordered)))
         .modifier(CardEntrance(delay: enterFrom.flatMap { i >= $0 ? CardEntrance.delay(i - $0) : nil }))
         .onAppear {
             session.cardPreviews.remember(card)
@@ -70,9 +72,9 @@ struct StoryCardList: View {
         return cards[(i + 1)..<min(cards.count, i + 1 + coversAhead)].compactMap { $0.imageUrl.flatMap(URL.init(string:)) }
     }
 
-    /// The cards' identities when the scroll anchors on them (a card twice in a list keeps both).
-    private func ids() -> [String]? {
-        guard anchorsScroll else { return nil }
+    /// The cards' identities (a card twice in a list keeps both): the scroll's anchors on the feed, and
+    /// what names the paper puppets' places on each.
+    static func keys(_ cards: [FeedCard]) -> [String] {
         var seen = Set<String>()
         return cards.indices.map { i in seen.insert(cards[i].id).inserted ? cards[i].id : "\(cards[i].id)#\(i)" }
     }

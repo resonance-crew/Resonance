@@ -100,7 +100,14 @@ public struct StoryCardView: View {
     private var palette: CardPalette {
         family.map(CardPalette.init(index:)) ?? CardPalette(accentHue: content.accentHue, position: position)
     }
-    private var seed: Double { Double(position * 77 + 13) }
+    private var seed: Double { Self.seed(position: position) }
+    nonisolated static func seed(position: Int) -> Double { Double(position * 77 + 13) }
+
+    /// How the card at `position` draws its line (a band's top rule, or a bordered card's outline), for the
+    /// paper puppets' scene (``ReadingMarkRole/card(key:outline:)``).
+    public nonisolated static func readingOutline(position: Int, bordered: Bool) -> ReadingCardOutline {
+        bordered ? .bordered(seed: seed(position: position)) : .band(seed: seed(position: position))
+    }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -415,8 +422,14 @@ struct StoryBand: ViewModifier {
             .padding(.top, -tuck)
     }
 
-    private var edge: some View {
+    /// The band's wavy rule (its top edge; the last card's foot too), for a card of `seed` — also where the
+    /// paper puppets' scene reads the band's drawn top (``ReadingCardOutline``).
+    nonisolated static func edgeShape(seed: Double) -> WavyRuleShape {
         WavyRuleShape(seed: seed + 17, amp: 1.4, steps: 7)
+    }
+
+    private var edge: some View {
+        Self.edgeShape(seed: seed)
             .stroke(palette.border, style: StrokeStyle(lineWidth: Tokens.inkLight, lineCap: .round))
             .frame(height: 6)
             .accessibilityHidden(true)

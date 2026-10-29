@@ -65,13 +65,13 @@ import com.resonance.design.toPath
 import com.resonance.geometry.SegValue
 import com.resonance.geometry.WobRectOptions
 import com.resonance.geometry.autoCurve
+import com.resonance.geometry.autoMag
 import com.resonance.geometry.autoSegments
 import com.resonance.geometry.wobRect
 import com.resonance.kit.api.isTrashed
 import com.resonance.kit.l10n.L10n
 import java.time.Instant
 import kotlin.math.max
-import kotlin.math.min
 
 /**
  * 「這張卡片在垃圾桶裡」 — what the owner sees at the head of their card's page while it is in the
@@ -276,15 +276,22 @@ internal class TrashBannerShape(
         const val SEED = 83.0
         /** The corner, as a card's. */
         const val RADIUS = 18.0
+        /**
+         * How far the seams wave (dp): a gentle bend, not a swing — round 20, the owner: the outline's curve
+         * too strong; it is now a Panel's wobble a little calmer (autoMag × 0.8, autoCurve × 0.7), the seams with it.
+         */
+        const val SEAM = 1.1
+        /** The stacked bar's seam across, over the foot. */
+        const val SEAM_ACROSS = 1.5
 
         fun of(w: Double, h: Double, restoreX: Double, footY: Double, deleteX: Double, stacked: Boolean): TrashBannerShape {
             val outline = wobRect(
-                w, h, RADIUS, SEED, min(4.5, 2.6 + min(w, h) * 0.02),
+                w, h, RADIUS, SEED, autoMag(w, h) * 0.8,
                 WobRectOptions(
-                    segmentsH = SegValue.Count((autoSegments(w) + 1).toDouble()),
-                    segmentsV = SegValue.Count(max(2, autoSegments(h)).toDouble()),
-                    curve = autoCurve(w, h) * 1.15,
-                    cornerJitter = 1.4,
+                    segmentsH = SegValue.Count(autoSegments(w).toDouble()),
+                    segmentsV = SegValue.Count(2.0),
+                    curve = autoCurve(w, h) * 0.7,
+                    cornerJitter = 0.8,
                 ),
             )
             val pad = max(12.0, h * 0.3)
@@ -293,13 +300,13 @@ internal class TrashBannerShape(
             val hf = h.toFloat()
             fun rightOf(pts: List<Offset>) = pts + listOf(Offset(wf + p, hf + p), Offset(wf + p, -p))
             if (!stacked) {
-                val first = boundaryPoints(restoreX, h, SEED + 11, 1.8, pad)
-                val second = boundaryPoints(deleteX, h, SEED + 48, 1.8, pad)
+                val first = boundaryPoints(restoreX, h, SEED + 11, SEAM, pad)
+                val second = boundaryPoints(deleteX, h, SEED + 48, SEAM, pad)
                 return TrashBannerShape(outline, listOf(first, second), rightOf(first), rightOf(second), first + second.reversed())
             }
             // The segmented bar's wave turned on its side: a seam across the shape at the foot's top, left to right.
-            val under = boundaryPoints(footY, w, SEED + 11, 2.6, pad).map { Offset(it.y, it.x) }
-            val split = boundaryPoints(deleteX, h - footY, SEED + 48, 1.8, pad).map { Offset(it.x, it.y + footY.toFloat()) }
+            val under = boundaryPoints(footY, w, SEED + 11, SEAM_ACROSS, pad).map { Offset(it.y, it.x) }
+            val split = boundaryPoints(deleteX, h - footY, SEED + 48, SEAM, pad).map { Offset(it.x, it.y + footY.toFloat()) }
             return TrashBannerShape(
                 outline,
                 listOf(under, split),
