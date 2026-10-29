@@ -316,6 +316,67 @@ export function* greetFromAfar(S: Stage, ch: Puppet, other: Puppet, sh: GreetSha
 }
 
 /**
+ * How large a note is drawn, handed over (its drawing's own size × this), and how much larger once held before the
+ * chest (the owner, 2026-10-29: at its drawing's size it was too small to read as a letter).
+ */
+const NOTE_SIZE = 1.6;
+const NOTE_HELD = 0.25;
+
+/** A note held before a taker's chest, in the mitten that took it. */
+interface Kept {
+  ch: Puppet;
+  side: ArmSide;
+  note: Prop;
+  k: number;
+  /** How far it leans, held (its top toward the other mitten). */
+  tilt: number;
+}
+
+/**
+ * The lift that brings this arm's mitten before the chest, under the face, swung in across the body (never up over
+ * the head: an inward lift is kept negative).
+ */
+function chestLift(ch: Puppet, side: ArmSide): number {
+  const R = ch.rig;
+  const [bx, by] = ch.arm(side).pivot;
+  const [fx, fy] = R.face;
+  // the held note's top (its drawing is 34 tall) a little under the mouth, so the smile shows (點點's chest is short)
+  const mouth = R.parts.get('mouth');
+  const hy = Math.max(lerp(fy, R.tp[1], 0.45), mouth ? mouth.y + mouth.h + 17 * NOTE_SIZE * (1 + NOTE_HELD) + 12 : 0);
+  const lift = aimLift(side, Math.atan2(hy - by, fx - bx) / DEG);
+  return lift > 180 ? lift - 360 : lift;
+}
+
+/** The kept note at its mitten, as far as `e` has drawn it in: leaning in, and a little larger, nearer to us. */
+function holdAt(h: Kept, e: number, alpha = 1): void {
+  const [x, y] = h.ch.mitten(h.side);
+  h.note.at(x, y, h.k * (1 + NOTE_HELD * e), alpha, (h.tilt + h.ch.pose.tilt) * e);
+}
+
+/**
+ * Steps `task` with the note kept before the taker's chest: the other mitten lets go of it as the walk starts, and a
+ * taker that falls back onto the page lets the note fade.
+ */
+function* carrying(S: Stage, h: Kept, task: Task): Task {
+  const { ch, side } = h;
+  const other: ArmSide = side === 'R' ? 'L' : 'R';
+  let fade = 1;
+  for (let t = 0; ; t += S.dt) {
+    if (task.next().done) return;
+    const p = ch.pose;
+    if (ch.fallen || Math.abs(p.popY - 1) > 1e-3) fade = Math.max(0, fade - S.dt / 0.3);
+    else {
+      ch.setLift(side, chestLift(ch, side));
+      const cupped = lerp(ch.arm(other).rest, chestLift(ch, other), 0.85);
+      ch.setLift(other, lerp(other === 'L' ? p.liftL : p.liftR, cupped, 1 - smooth((t - 0.2) / 0.5)));
+      p.front = true;
+    }
+    holdAt(h, 1, fade);
+    yield;
+  }
+}
+
+/**
  * The meeting. `a` is on the left at the end, `b` on the right; 'host': a guest walks up to someone already there,
  * 'pair': both walk in from the two sides. Then: notice, close in, wave, resonate (the same bob, three pencil waves
  * between them, a blush), maybe a note or a touch of mittens, and part — each its own way, or together.
@@ -462,11 +523,13 @@ export function* duet(S: Stage, d: Duet): Task {
     const m2 = (a.x + b.x) / 2;
     if (D3 < D - 2) yield* all([walkTo(S, a, m2 - D3 / 2, 0.6), walkTo(S, b, m2 + D3 / 2, 0.6)]);
   }
+  let kept: Kept | null = null;
   if (variant === 'note') {
     const giver = S.rand() < 0.5 ? a : b;
     const taker = giver === a ? b : a;
     const gs: ArmSide = giver === a ? 'R' : 'L';
     const ts: ArmSide = taker === a ? 'R' : 'L';
+    const os: ArmSide = ts === 'R' ? 'L' : 'R';
     S.emit(giver, { type: 'act', act: 'note', with: taker.slug });
     const note = S.prop('note', d, giver);
     const aimAt = (ch: Puppet, side: ArmSide, other: Puppet) => {
@@ -474,28 +537,63 @@ export function* duet(S: Stage, d: Duet): Task {
       const [ox, oy] = other.pagePoint(...other.arm(side === 'L' ? 'R' : 'L').pivot);
       return aimLift(side, Math.atan2((oy + by) / 2 - by - 4 * k, ox - bx) / DEG);
     };
-    yield* during(S, 2.9, u => {
+    const held = { ch: taker, side: ts, note, k: k * NOTE_SIZE, tilt: ts === 'R' ? -7 : 7 };
+    // the hand-over: from the giver's mitten into the taker's, which stays held out once it has it
+    yield* during(S, 2.2, u => {
       face();
-      const eg = bell(u, 0.15, 0.3);
-      const et = bell((u - 0.2) / 0.8, 0.15, 0.2);
-      giver.setLift(gs, lerp(giver.arm(gs).rest, aimAt(giver, gs, taker), eg));
-      if (u < 0.75) taker.setLift(ts, lerp(taker.arm(ts).rest, aimAt(taker, ts, giver), et));
-      else {   // the taker brings it up to read
-        const [bx, by] = taker.arm(ts).pivot;
-        const [fx, fy] = taker.rig.face;
-        taker.setLift(ts, lerp(taker.arm(ts).rest, aimLift(ts, Math.atan2(fy + 30 - by, fx - bx) / DEG),
-          bell((u - 0.75) / 0.25, 0.3, 0.3) * 0.9 + 0.1));
-        taker.pose.faceY += 5;
-        taker.pose.blush = 1;
-        taker.pose.front = true;
-      }
+      giver.setLift(gs, lerp(giver.arm(gs).rest, aimAt(giver, gs, taker), bell(u, 0.14, 0.3)));
+      taker.setLift(ts, lerp(taker.arm(ts).rest, aimAt(taker, ts, giver), smooth((u - 0.18) / 0.2)));
       const [gx, gy] = giver.mitten(gs);
       const [tx, ty] = taker.mitten(ts);
-      const m = smooth((u - 0.3) / 0.3);
-      note.at(lerp(gx, tx, m), lerp(gy, ty, m) - 10 * k * Math.sin(Math.PI * m), k, smooth(u / 0.15) * (1 - smooth((u - 0.92) / 0.08)), 0);
-      if (u > 0.55) taker.pose.mouth = 'mouth-o';
+      const m = smooth((u - 0.28) / 0.38);
+      note.at(lerp(gx, tx, m), lerp(gy, ty, m) - 10 * k * Math.sin(Math.PI * m), k * NOTE_SIZE, smooth(u / 0.14), 0);
+      if (u > 0.62) taker.pose.mouth = 'mouth-o';
     });
-    note.remove();
+    // the taker draws it in before its chest, the other mitten cupped over it, looks down at it, and is moved: eyes
+    // shut, a full blush, a slow sway, for about a second (the owner, 2026-10-29: it used to go up onto its head at once)
+    const out = aimAt(taker, ts, giver);
+    yield* during(S, 2.0, (u, t) => {
+      face();
+      const p = taker.pose;
+      const e = smooth(t / 0.5);
+      taker.setLift(ts, lerp(out, chestLift(taker, ts), e));
+      taker.setLift(os, lerp(taker.arm(os).rest, chestLift(taker, os), 0.85 * smooth((t - 0.1) / 0.5)));
+      p.front = true;
+      p.blush = Math.max(p.blush, smooth(t / 0.6));
+      const moved = smooth((t - 0.6) / 0.3);
+      p.faceY += 6 * e - 2 * moved;
+      if (t < 0.6) p.mouth = 'mouth-o';
+      else {
+        p.eyes = 'shut';
+        p.blush = 1;
+        p.tilt += 3.5 * Math.sin((2 * Math.PI * (t - 0.6)) / 1.4) * moved * smooth((2.0 - t) / 0.3);
+        const hug = bell((t - 0.6) / 1.4, 0.3, 0.4);   // hugs it, a little: narrower and shorter for a moment
+        p.sx *= 1 - 0.02 * hug;
+        p.sy *= 1 - 0.035 * hug;
+        p.rise += 4 * Math.sin(Math.PI * clamp((t - 0.6) / 0.4, 0, 1));
+      }
+      // the giver watches it land, glad: a smile, a blush, its eyes shut for a moment
+      const g = giver.pose;
+      g.blush = Math.max(g.blush, 0.7);
+      if (t > 0.9 && t < 1.5) g.eyes = 'shut';
+      holdAt(held, e);
+    });
+    // a small bow each, the taker first, its note still held: a thank-you and a goodbye
+    yield* during(S, 1.2, (u, t) => {
+      face();
+      taker.setLift(ts, chestLift(taker, ts));
+      taker.setLift(os, lerp(taker.arm(os).rest, chestLift(taker, os), 0.85));
+      taker.pose.front = true;
+      for (const [ch, at] of [[taker, 0], [giver, 0.3]] as const) {
+        const bow = bell(clamp((t - at) / 0.7, 0, 1), 0.4, 0.5);
+        ch.pose.faceY += 6 * bow;
+        ch.pose.sy *= 1 - 0.04 * bow;
+        if (bow > 0.6) ch.pose.eyes = 'shut';
+      }
+      taker.pose.blush = Math.max(taker.pose.blush, 0.9);
+      holdAt(held, 1);
+    });
+    kept = held;
   } else if (variant === 'five') {
     S.emit(a, { type: 'act', act: 'five', pair: true, with: b.slug });
     const burst = S.prop('burst', d, a);
@@ -528,39 +626,43 @@ export function* duet(S: Stage, d: Duet): Task {
     });
     burst.remove();
   }
-  yield* during(S, 0.9, () => face(0.6));
-  // 6 · part: each its own way, or together (at the slower one's pace, the follower never closer than a step)
-  for (const ch of [a, b]) ch.mode = 'exit';
-  d.together = d.together ?? S.rand() < 0.4;
-  S.emit(a, { type: 'leave', pair: true, with: b.slug, together: d.together });
-  const clearL = S.pathClear(a, a.x, S.offX(a, 'left')) && S.pathClear(b, b.x, S.offX(b, 'left'));
-  const clearR = S.pathClear(a, a.x, S.offX(a, 'right')) && S.pathClear(b, b.x, S.offX(b, 'right'));
-  if (d.together && !clearL && !clearR) d.together = false;
-  if (d.together) {
-    const right = clearL && clearR ? (a.x + b.x) / 2 > S.vp.x + S.vp.w / 2 : clearR;
-    const dir = right ? 1 : -1;
-    const lead = right ? b : a;
-    const foll = right ? a : b;
-    const gap = a.halfW + b.halfW + 12;
-    const end = S.offX(foll, right ? 'right' : 'left');
-    const v = Math.min(a.pace(), b.pace());
-    const q = quick(lead, Math.abs(end - lead.x), S.o.walkLimit + 0.6);
-    yield* all([travel(S, lead, end + dir * gap, (q * v) / lead.pace()),
-      (function* () {
-        yield* during(S, 0.25);
-        yield* follow(S, foll, lead, end, (q * v) / foll.pace(), dir, gap);
-      })()]);
-  } else {
-    const L = S.offX(a, 'left');
-    const R = S.offX(b, 'right');
-    // one with no way to walk off falls back onto the page and is gone then, not when the other has walked away
-    const go = (ch: Puppet, x: number) => S.pathClear(ch, ch.x, x)
-      ? travel(S, ch, x, quick(ch, Math.abs(x - ch.x), S.o.walkLimit))
-      : (function* () {
-        yield* popDown(S, ch);
-        ch.gone = true;
-      })();
-    yield* all([go(a, L), go(b, R)]);
-  }
+  // 6 · part: each its own way, or together (at the slower one's pace, the follower never closer than a step); the
+  // taker of a note walks off holding it
+  const parting = function* (): Task {
+    yield* during(S, kept ? 0.4 : 0.9, () => face(0.6));
+    for (const ch of [a, b]) ch.mode = 'exit';
+    d.together = d.together ?? S.rand() < 0.4;
+    S.emit(a, { type: 'leave', pair: true, with: b.slug, together: d.together });
+    const clearL = S.pathClear(a, a.x, S.offX(a, 'left')) && S.pathClear(b, b.x, S.offX(b, 'left'));
+    const clearR = S.pathClear(a, a.x, S.offX(a, 'right')) && S.pathClear(b, b.x, S.offX(b, 'right'));
+    if (d.together && !clearL && !clearR) d.together = false;
+    if (d.together) {
+      const right = clearL && clearR ? (a.x + b.x) / 2 > S.vp.x + S.vp.w / 2 : clearR;
+      const dir = right ? 1 : -1;
+      const lead = right ? b : a;
+      const foll = right ? a : b;
+      const gap = a.halfW + b.halfW + 12;
+      const end = S.offX(foll, right ? 'right' : 'left');
+      const v = Math.min(a.pace(), b.pace());
+      const q = quick(lead, Math.abs(end - lead.x), S.o.walkLimit + 0.6);
+      yield* all([travel(S, lead, end + dir * gap, (q * v) / lead.pace()),
+        (function* () {
+          yield* during(S, 0.25);
+          yield* follow(S, foll, lead, end, (q * v) / foll.pace(), dir, gap);
+        })()]);
+    } else {
+      const L = S.offX(a, 'left');
+      const R = S.offX(b, 'right');
+      // one with no way to walk off falls back onto the page and is gone then, not when the other has walked away
+      const go = (ch: Puppet, x: number) => S.pathClear(ch, ch.x, x)
+        ? travel(S, ch, x, quick(ch, Math.abs(x - ch.x), S.o.walkLimit))
+        : (function* () {
+          yield* popDown(S, ch);
+          ch.gone = true;
+        })();
+      yield* all([go(a, L), go(b, R)]);
+    }
+  };
+  yield* kept ? carrying(S, kept, parting()) : parting();
   a.gone = b.gone = true;
 }

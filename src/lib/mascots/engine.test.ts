@@ -146,6 +146,40 @@ describe('mascot stage', () => {
     expect(t.stage.visitors()).toHaveLength(0);
   });
 
+  it('hands a note over: the taker holds it before its chest, moved, for a second, and walks off with it', () => {
+    const t = mount({ seed: 7 });
+    t.stage.visit({ ledge: 'hero-wave', slug: 'tuck', acts: ['look', 'look', 'look'] });
+    until(t, e => e.type === 'arrive', 10);
+    t.stage.advance(1.5);
+    expect(t.stage.meet('note')).toBe(true);
+    const given = until(t, e => e.type === 'act' && e.act === 'note', 30);
+    const taker = t.engine.chars.find(c => given.type === 'act' && c.slug === given.with);
+    if (!taker) throw new Error('no taker');
+    const noteEl = [...t.layer.querySelectorAll<HTMLElement>('.ms-prop')].find(el => el.innerHTML.includes('0 0 44 34'));
+    if (!noteEl) throw new Error('no note');
+    const noteAt = () => (/translate\((-?[\d.]+)px,(-?[\d.]+)px\)/.exec(noteEl.style.transform) ?? []).slice(1, 3).map(Number);
+    // once the taker has it, the note never goes up past its face before they part (it went onto its head at once)
+    let movedFor = 0;
+    let above = 0;
+    for (let i = 0; i < 24 * 15 && !t.events.some(e => e.type === 'leave' && e.pair); i++) {
+      t.stage.advance(1 / 24);
+      const [, ny] = noteAt();
+      const [, fy] = taker.facePage();
+      if (i / 24 > 2.2 && ny < fy) above++;   // in the taker's mitten from 2.2 s on
+      const other = t.engine.chars.find(c => c !== taker);
+      const [mx, my] = taker.mitten(other && other.x < taker.x ? 'L' : 'R');
+      if (taker.pose.eyes === 'shut' && ny > fy && Math.hypot(noteAt()[0] - mx, ny - my) < 8) movedFor += 1 / 24;
+    }
+    expect(above).toBe(0);
+    expect(movedFor).toBeGreaterThan(1);   // eyes shut, the note in its mitten below its face, a second or more
+    // it walks off holding it
+    const from = taker.x;
+    t.stage.advance(1.5);
+    expect(Math.abs(taker.x - from)).toBeGreaterThan(10);
+    expect(Number(noteEl.style.opacity)).toBe(1);
+    expect(noteEl.isConnected).toBe(true);
+  });
+
   it('hides the face, arms and bow while the tag shows its back', () => {
     const t = mount({ seed: 3 });
     t.stage.visit({ ledge: 'hero-wave', slug: 'tag', acts: ['reveal'] });
