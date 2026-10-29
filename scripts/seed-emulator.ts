@@ -29,7 +29,9 @@ async function main() {
   const app = initializeApp({ projectId: EMULATOR_PROJECT_ID }, 'seed');
   const auth = getAuth(app);
   const db = getFirestore(app);
-  const now = Date.now();
+  // SEED_NOW (an ISO time) pins the world's clock: the release screenshots
+  // (scripts/visual) seed one fixed day, so no date on a screen moves between runs.
+  const now = process.env.SEED_NOW ? Date.parse(process.env.SEED_NOW) : Date.now();
   const at = (minutesAgo: number) => Timestamp.fromMillis(now - minutesAgo * 60_000);
 
   for (const u of SEED_USERS) {

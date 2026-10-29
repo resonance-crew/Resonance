@@ -1,5 +1,6 @@
 package com.resonance.app.ui
 
+import com.resonance.app.BuildConfig
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -211,6 +212,29 @@ internal fun pushedTab(route: String): Tab {
 }
 
 /**
+ * Debug builds' launch route only (`--es route …` with no `notificationId`: the release
+ * screenshots, `npm run visual`): the site's places that are a tab's root or a page of the app but
+ * never a push's or a link's route — /home, /messages, /me, /settings, /write, /write/{cardId} —
+ * as the tab to show and the page to open on it. Null for anything else: those go through
+ * [Route.fromPath] and [pushedTab] as a push's route does, and release builds never ask.
+ */
+internal fun debugLaunchPlace(route: String): Pair<Tab, Route?>? {
+    val parts = route.substringBefore('?').split('/').filter { it.isNotEmpty() }.let { if (it.firstOrNull() in setOf("en", "zh-TW")) it.drop(1) else it }
+    return when {
+        parts == listOf("home") -> Tab.Feed to null
+        parts == listOf("messages") -> Tab.Messages to null
+        parts == listOf("me") -> Tab.CardBox to null
+        // Where 編輯個人檔案 opens it.
+        parts == listOf("settings") -> Tab.CardBox to Route.Settings
+        // The pen opens the writer over the tab on screen.
+        parts == listOf("write") -> Tab.Feed to Route.Write()
+        // One of the viewer's cards, as the card box's ⋯ · 編輯 opens it.
+        parts.size == 2 && parts[0] == "write" -> Tab.CardBox to Route.Write(cardId = parts[1])
+        else -> null
+    }
+}
+
+/**
  * Opens a conversation from outside the screens (a push, a link) on the Messages stack. When
  * that conversation is already on top — a push for the thread being read — it stays as it is
  * instead of being stacked a second time; a note to quote takes its place.
@@ -395,7 +419,15 @@ fun MainTabs(session: Session, incomingRoute: MutableState<String?>) {
         opened.notificationId?.let { session.notifications.markRead(it) }
         // A push names the sender by pen name, and by uid when it carries `fromUserId`.
         val route = pushedRoute(Route.fromPath(opened.route), opened.fromUserId) { session.notifications.sender(opened.notificationId) }
-        if (route != null) open(route) else tab = pushedTab(opened.route)
+        val debugPlace = if (BuildConfig.DEBUG && opened.notificationId == null) debugLaunchPlace(opened.route) else null
+        when {
+            route != null -> open(route)
+            debugPlace != null -> {
+                tab = debugPlace.first
+                debugPlace.second?.let { stacks.getValue(debugPlace.first).add(it) }
+            }
+            else -> tab = pushedTab(opened.route)
+        }
     }
 
     // Ctrl-N / Cmd-N on a keyboard: a new card, over the current tab, as the pen does (not over a writer already open).

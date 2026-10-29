@@ -21,7 +21,8 @@
     "mascots:cast": "tsx scripts/mascots/build-cast.ts",
     "native:editor": "tsc -p native/editor/tsconfig.json && tsx scripts/native/build-editor.mjs",
     "native:mascots": "tsc -p native/mascots/tsconfig.json && tsx scripts/native/build-mascots.mjs",
-    "apps:generate": "tsx scripts/native/tokens.ts && tsx scripts/apps/l10n.ts && tsx scripts/apps/icons.ts && tsx scripts/apps/reactions.ts && npm run -s api:openapi && npm run -s native:editor && npm run -s native:mascots"
+    "apps:generate": "tsx scripts/native/tokens.ts && tsx scripts/apps/l10n.ts && tsx scripts/apps/icons.ts && tsx scripts/apps/reactions.ts && npm run -s api:openapi && npm run -s native:editor && npm run -s native:mascots",
+    "visual": "tsx scripts/visual/run.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1055.0",
@@ -58,6 +59,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^22.10.0",
+    "@types/pngjs": "6.0.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^6.0.2",
@@ -65,6 +67,9 @@
     "eslint": "^9.39.4",
     "eslint-config-next": "^15.5.18",
     "jsdom": "^29.1.1",
+    "pixelmatch": "8.0.0",
+    "playwright": "1.64.1",
+    "pngjs": "7.0.0",
     "tsx": "^4.22.3",
     "typescript": "^5.7.0",
     "vite-tsconfig-paths": "^6.1.1",

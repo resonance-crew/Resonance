@@ -14,6 +14,9 @@ struct ResonanceApp: App {
         let config = AppConfig.current
         FirebaseBootstrap.configure(config)
         _session = State(initialValue: SessionStore(config: config))
+        #if DEBUG
+        if VisualCapture.on { UIView.setAnimationsEnabled(false) }
+        #endif
     }
 
     var body: some Scene {
@@ -25,12 +28,35 @@ struct ResonanceApp: App {
                 #if targetEnvironment(macCatalyst)
                 .background(MacWindowChrome())
                 #endif
+                #if DEBUG
+                .modifier(VisualCapture())
+                #endif
         }
         #if targetEnvironment(macCatalyst)
         .commands { MacMenuCommands() }
         #endif
     }
 }
+
+#if DEBUG
+/// `-visualCapture YES`: the release screenshots (scripts/visual/ios.ts) — every screen drawn where it
+/// ends, nothing on its way in or out (UIKit's animations off in `init`, SwiftUI's here) and no scroll
+/// indicators where a screen doesn't choose its own, so two captures of one screen are the same
+/// picture. (A Mac with a mouse still shows `.hidden` ones: mac.ts launches with `-AppleShowScrollBars`.)
+struct VisualCapture: ViewModifier {
+    static let on = UserDefaults.standard.bool(forKey: "visualCapture")
+
+    func body(content: Content) -> some View {
+        if Self.on {
+            content
+                .transaction { $0.disablesAnimations = true; $0.animation = nil }
+                .scrollIndicators(.never)
+        } else {
+            content
+        }
+    }
+}
+#endif
 
 extension View {
     /// A modal's content handed the session itself rather than left to inherit it. On a Mac (the iPad

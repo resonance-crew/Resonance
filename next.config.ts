@@ -6,6 +6,13 @@ const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // A second dev server in this checkout (the release screenshots' stack,
+  // scripts/visual) builds into its own folder: two `next dev`s sharing
+  // `.next` overwrite each other's chunks and answer 404s.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
+  // …and its own tsconfig, which `next dev` adds that folder's types to, so the
+  // tracked tsconfig.json is never rewritten.
+  typescript: { tsconfigPath: process.env.NEXT_TSCONFIG_PATH || 'tsconfig.json' },
 
   // ── Prevent Webpack from vendor-chunking Firebase on the server ──────
   // Next.js 15 (Webpack) generates vendor chunks named after the package

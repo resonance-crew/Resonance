@@ -391,6 +391,11 @@ final class SessionStore {
     /// can be checked without typing.
     private func autoSignInForTesting() {
         let defaults = UserDefaults.standard
+        // `-signedOut YES`: the signed-out start, whoever was restored (the release screenshots).
+        if config.usesEmulator, defaults.bool(forKey: "signedOut") {
+            if Auth.auth().currentUser != nil { signOut() }
+            return
+        }
         guard config.usesEmulator, let email = defaults.string(forKey: "email"),
               let password = defaults.string(forKey: "password"),
               Auth.auth().currentUser?.email?.lowercased() != email.lowercased() else { return }

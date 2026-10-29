@@ -457,6 +457,11 @@ struct MainTabView: View {
             // `/settings` and `/settings/<section>` (profile, account, privacy, notifications, language, appearance,
             // terms, delete) open Settings or one of its pages, which have no site URL.
             if let settings = Self.launchSettings(path) { return paths[tab, default: []].append(contentsOf: settings) }
+            // The tabs' own paths and the writer's (the release screenshots, scripts/visual/ios.ts, open every screen so).
+            if let (root, pages) = Self.launchTab(path) {
+                tab = root
+                return paths[root, default: []].append(contentsOf: pages)
+            }
             open(URL(string: path, relativeTo: session.config.origin)?.absoluteURL ?? session.config.origin.appending(path: path))
         }
         #endif
@@ -470,6 +475,20 @@ struct MainTabView: View {
         guard parts.count > 1 else { return [.settings] }
         guard let section = SettingsSection.allCases.first(where: { "\($0)" == parts[1] }) else { return [.settings] }
         return [.settings, .settingsSection(section)]
+    }
+
+    /// The tab and pages a `-route` launch opens for the site's paths that are a tab here, not a page:
+    /// `/home`, `/messages`, `/me` (its tab), `/write` (a new card) and `/write/<id>` (one of yours).
+    static func launchTab(_ path: String) -> (AppTab, [Route])? {
+        let parts = path.split(separator: "?").first.map { $0.split(separator: "/").map(String.init) } ?? []
+        switch (parts.first, parts.count) {
+        case ("home", 1): return (.feed, [])
+        case ("messages", 1): return (.messages, [])
+        case ("me", 1): return (.cardBox, [])
+        case ("write", 1): return (.feed, [.write(.init())])
+        case ("write", 2): return (.feed, [.write(.init(cardId: parts[1]))])
+        default: return nil
+        }
     }
     #endif
 
