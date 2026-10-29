@@ -43,10 +43,15 @@ struct OpenRouteAction: Equatable {
     let push: (Route) -> Void
     var popToRoot: () -> Void = {}
     var replaceTop: (Route) -> Void = { _ in }
+    /// Leaves this tab's pages for the card box (a card just deleted for good from its own page, as the
+    /// web's `router.replace('/me')`).
+    var cardBox: () -> Void = {}
 
     static func == (lhs: Self, rhs: Self) -> Bool { lhs.tab == rhs.tab }
     func callAsFunction(_ route: Route) { push(route) }
     func dismissToRoot() { popToRoot() }
+    /// This tab back at its root, and the card box shown.
+    func toCardBox() { cardBox() }
     /// The page on top gives way to `route` (a published card takes the writer's place).
     func replacingTop(with route: Route) { replaceTop(route) }
 }

@@ -96,10 +96,10 @@ targets:
         SWIFT_APPROACHABLE_CONCURRENCY: "YES"
         # iPhone and iPad (round 5: the iPad layouts — side rail, two-pane Messages, the feed grid).
         TARGETED_DEVICE_FAMILY: "1,2"
-        # The Mac app draws at the Mac's own size ("Optimize Interface for Mac"), not the iPad's scaled to
-        # 77 %: a story read at 13 pt instead of 17 was too small. Every control is the app's own drawing,
-        # so the Mac idiom changes no look (apps/README.md, "The Mac app").
-        "TARGETED_DEVICE_FAMILY[sdk=macosx*]": "1,2,6"
+        # The Mac app is the iPad's layout at Mac Catalyst's 77 % ("Scale Interface to Match iPad"; round 21,
+        # the owner's call): drawn 1:1 ("Optimize Interface for Mac", family 6) everything read about 30 %
+        # larger than the Mac's own apps. A story's own words are drawn larger there by the inverse
+        # (TextScale.macReadingBoost), so a story still reads at 17 pt (apps/README.md, "The Mac app").
         CODE_SIGN_ENTITLEMENTS: Resonance/Resonance.entitlements
         # The Mac app (Mac Catalyst, the owner's 2026-10-29 call): the same bundle id as the iPhone and
         # iPad app (one App Store record, universal purchase), in the Mac's sandbox.

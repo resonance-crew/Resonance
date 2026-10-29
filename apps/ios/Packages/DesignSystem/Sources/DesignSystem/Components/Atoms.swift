@@ -119,13 +119,18 @@ public struct HandDrawnAvatar: View {
     var color: Color
     var size: CGFloat
     var seed: Double
+    /// A picture already on the device, drawn in place of `imageURL`'s (a photo just framed, shown before
+    /// it is uploaded: round 21).
+    var image: UIImage?
 
-    public init(initials: String, imageURL: URL? = nil, color: Color = Tokens.terracottaLight, size: CGFloat = 32, seed: Double = 7) {
+    public init(initials: String, imageURL: URL? = nil, color: Color = Tokens.terracottaLight, size: CGFloat = 32, seed: Double = 7,
+                image: UIImage? = nil) {
         self.initials = initials
         self.imageURL = imageURL
         self.color = color
         self.size = size
         self.seed = seed
+        self.image = image
     }
 
     /// The initials' type size as a share of the avatar (the web's initialsScale): 0.35, unless the
@@ -153,7 +158,12 @@ public struct HandDrawnAvatar: View {
             Text(initials)
                 .font(AppFonts.body(size * Self.initialsScale(initials), weight: .bold))
                 .foregroundStyle(Tokens.text)
-            if let imageURL {
+            if let image {
+                Color.clear
+                    .overlay { Image(uiImage: image).resizable().scaledToFill() }
+                    .clipped()
+                    .clipShape(shape)
+            } else if let imageURL {
                 OrganicAvatarPhoto(url: imageURL).clipShape(shape)
             }
         }

@@ -69,10 +69,31 @@ public nonisolated enum TextScale {
         min(system, readingCeiling)
     }
 
-    /// The reading factor for `style` at the person's current text size (re-run on a change, as `factor`).
+    /// The reading factor for `style` at the person's current text size (re-run on a change, as `factor`),
+    /// on a Mac drawn larger by `macReadingBoost`.
     @MainActor public static func readingFactor(relativeTo style: UIFont.TextStyle) -> CGFloat {
-        reading(system: currentSystem(relativeTo: style))
+        reading(system: currentSystem(relativeTo: style)) * macReadingBoost
     }
+
+    // MARK: The Mac
+
+    /// How much larger a story's own words are drawn on a Mac (round 21, the owner's call): the Mac app is
+    /// the iPad's layout at Mac Catalyst's 77 % ("Scale Interface to Match iPad"), so the window keeps the
+    /// Mac's own proportions — and a story's title, headings and body, on the card page and in the writer,
+    /// are drawn by the inverse, reading at their own size there (17 pt, not 13). The story's column widens
+    /// with them (`StoryTypography.measure`), so a line holds as many characters. 1 on an iPhone or iPad.
+    public static let macReadingBoost: CGFloat = {
+        #if DEBUG
+        // `-macReadingBoost 1`: a debug build drawn without it, to compare.
+        if let forced = UserDefaults.standard.string(forKey: "macReadingBoost").flatMap(Double.init) { return forced }
+        #endif
+        return macBoost(onMac: ProcessInfo.processInfo.isMacCatalystApp)
+    }()
+
+    /// Mac Catalyst's scale for an app laid out as an iPad's.
+    public static let macInterfaceScale: CGFloat = 0.77
+
+    public static func macBoost(onMac: Bool) -> CGFloat { onMac ? 1 / macInterfaceScale : 1 }
 }
 
 /// The person's text size, watched. A `Font(UIFont)` is a fixed size, not a

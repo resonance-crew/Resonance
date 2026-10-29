@@ -126,6 +126,31 @@ final class CardModel {
         }
     }
 
+    /// Shows `move`, made on this page, before the server answers it (round 21): the card in the trash
+    /// (its banner, its days counted from now), kept private, or answering nothing. Answers how to put it
+    /// back should the server refuse — which leaves alone a card read again since (the server's word).
+    func show(_ move: CardMove, now: Date = .now) -> () -> Void {
+        guard var shown = detail else { return {} }
+        let before = shown
+        switch move {
+        case .trashed:
+            let stamp = ISO8601DateFormatter()
+            stamp.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            shown.card.trashedAt = stamp.string(from: now)
+            shown.card.purgeAt = stamp.string(from: CardTrash.purgeAt(trashedAt: now))
+        case .madePrivate:
+            shown.card.visibility = ._private
+        case .unresonated:
+            shown.card.referenceCardId = nil
+            shown.referenceCard = nil
+        }
+        detail = shown
+        return { [weak self] in
+            guard let self, self.detail == shown else { return }
+            self.detail = before
+        }
+    }
+
     /// What the page draws of a story, read off its title and words.
     nonisolated struct ReadStory: Sendable {
         let type: StoryType
@@ -160,4 +185,9 @@ struct StoryLinkFallback: Equatable {
     let host: String
     /// The address as written, under it.
     let address: String
+}
+
+/// A move a card's ⋯ makes, drawn on its page before the server answers (``CardModel/show(_:now:)``).
+enum CardMove: Equatable {
+    case trashed, madePrivate, unresonated
 }

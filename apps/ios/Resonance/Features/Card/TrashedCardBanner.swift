@@ -6,7 +6,7 @@ import SwiftUI
 /// their card's page while it is in the trash (from the shelf, a bell, a link, or the page's own
 /// 刪除, which leaves them here): how long it has and that only they can see it, and that an
 /// anonymous card's notes went with it; then 還原 (the card comes back here, as it was) and 永久刪除
-/// (asked first, in red, then back to the tab's root). Everyone else gets the page's not-found.
+/// (asked first, in red, then gone at once, to the card box). Everyone else gets the page's not-found.
 ///
 /// One hand-drawn shape, cut as the segmented bar is (round 19): the words on its paper, the two ways
 /// out filling its end as segments behind wavy seams — 還原 the verb's solid face, 永久刪除 the
@@ -15,7 +15,7 @@ struct TrashedCardBanner: View {
     let card: FeedCard
     /// It was moved to the trash on this very page a moment ago: VoiceOver comes to the banner's title.
     var focusTitle = false
-    /// Deleted for good: the page goes.
+    /// Deleted for good (as far as the reader is concerned, at once): the page goes, to the card box.
     var onDeleted: () -> Void
     @Environment(SessionStore.self) private var session
     @Environment(WriteLauncher.self) private var writer
@@ -24,7 +24,6 @@ struct TrashedCardBanner: View {
     @AccessibilityFocusState private var titleFocused: Bool
     @State private var busy: Busy?
     @State private var confirming = false
-    @State private var failed = false
     /// Where the segments are laid out, in the banner's own space: the drawing follows them.
     @State private var size: CGSize = .zero
     @State private var restoreFrame: CGRect = .zero
@@ -35,7 +34,7 @@ struct TrashedCardBanner: View {
     @State private var presses = 0
     @State private var pressedAt: Date?
 
-    private enum Busy { case restore, delete }
+    private enum Busy { case restore }
     private static let space = "trashBanner"
 
     /// Whether the card's page shows the banner (and leaves out its share, its ⋯ and its lists): the
@@ -90,10 +89,12 @@ struct TrashedCardBanner: View {
         .background { backdrop(stacked: stacked) }
         .accessibilityElement(children: .contain)
         .onAppear { if focusTitle { titleFocused = true } }
+        // For good: asked in red, then gone at once (round 21) — the page with it, back to the card box, which
+        // leaves the card out — and said in a toast, which brings it back should the server refuse.
         .organicConfirm(isPresented: $confirming, title: L10n.Me.Actions.deleteForeverConfirmTitle,
                         message: L10n.Me.Actions.deleteConfirmBody, cancelLabel: L10n.Me.Actions.deleteCancel,
-                        confirmLabel: L10n.Me.Actions.deleteForever, closeLabel: L10n.Me.Actions.deleteCancel,
-                        busy: busy == .delete, error: failed ? L10n.Safety.actionError : nil, destructive: true, seed: 71) {
+                        confirmLabel: L10n.Me.Actions.deleteForever, workingLabel: L10n.Me.Actions.delete,
+                        closeLabel: L10n.Me.Actions.deleteCancel, destructive: true, seed: 71) {
             Task { await deleteForever() }
         }
     }
@@ -132,7 +133,6 @@ struct TrashedCardBanner: View {
 
     private func deleteSegment(stacked: Bool) -> some View {
         Button {
-            failed = false
             confirming = true
         } label: {
             segmentLabel(L10n.Me.Actions.deleteForever, icon: .trash, ink: Tokens.buttonOnDangerTonal, working: false,
@@ -221,17 +221,23 @@ struct TrashedCardBanner: View {
         await TrashMoves.restore(card.id, answering: nil, session: session, writer: writer)
     }
 
+    /// Gone at once: the card box leaves it out (``WriteLauncher/leave(_:)``) and the page goes; then the
+    /// server is asked — 已永久刪除, or, restored meanwhile (另一台裝置), 這張卡片不在垃圾桶裡 and it shows again;
+    /// refused, 沒能永久刪除 and it is back where it was. What it needs is taken before the page goes.
     private func deleteForever() async {
         guard busy == nil else { return }
-        busy = .delete
-        failed = false
-        defer { busy = nil }
+        let (cardId, session, writer, onDeleted) = (card.id, session, writer, onDeleted)
+        confirming = false
+        writer.leave(cardId)
+        onDeleted()
         do {
-            let result = try await TrashMoves.deleteForever(card.id, session: session, writer: writer)
-            confirming = false
-            if result == .deleted { onDeleted() }
+            if try await TrashMoves.deleteForever(cardId, session: session, writer: writer) == .notInTrash {
+                writer.arrive(cardId)
+            }
         } catch {
-            failed = true
+            writer.arrive(cardId)
+            writer.noteChange(.init(cardId: cardId))
+            session.toasts.show(L10n.Me.Actions.deleteForeverFailed)
         }
     }
 }

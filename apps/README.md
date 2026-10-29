@@ -505,10 +505,15 @@ only); the sign-in screen also shows an email form in emulator builds.
 
 The same target built for Mac Catalyst (`SUPPORTS_MACCATALYST`, the owner's call on 2026-10-29): the
 same bundle id `com.resonance.stories`, so it is the Mac half of one App Store record (it takes the
-place of the iPad app the Mac App Store offered as "Designed for iPad"). It draws at the Mac's own size
-(`TARGETED_DEVICE_FAMILY` 6 on macOS, "Optimize Interface for Mac": every control is the app's own
-drawing, so the Mac idiom changes no look, and a story reads at 17, not the iPad's 77 %), runs the
-tablet layouts — the window never narrows past 720 (`MacWindowChrome`), so the phone layout never
+place of the iPad app the Mac App Store offered as "Designed for iPad"). It is the iPad's layout at
+Mac Catalyst's 77 % ("Scale Interface to Match iPad", round 21, the owner's call: drawn 1:1 every
+control and word read about 30 % larger than the Mac's own apps), and a story's own words — its title,
+headings and body, on the card page and in the writer — are drawn larger by the inverse
+(`TextScale.macReadingBoost`), so a story still reads at 17 pt; its column widens with them
+(`StoryTypography.measure`), so a line holds as many characters. The writer's page draws it at its own
+sizes (`EditorPage.url`'s `scale`: island.ts scales its stylesheet's px), never a zoom — under the 77 % a
+CSS zoom put a click's caret at the line's start and a page zoom didn't reflow. It runs the
+tablet layouts — the window never narrows past 720 of the layout's points, 554 of the Mac's (`MacWindowChrome`), so the phone layout never
 shows — and adds what a Mac app has (`App/MacApp.swift`): no title over the app's own header (the band
 over it is the title bar's, where the traffic lights are — no status bar's room), the menu bar's
 寫卡片 ⌘N, 設定 ⌘,, the four tabs ⌘1…⌘4 and Resonance 支援 (each sent to `MainTabView` as a
@@ -529,8 +534,9 @@ xcodebuild -project Resonance.xcodeproj -scheme Resonance -configuration Release
 A local run beside the App Store copy on the same Mac takes its own bundle id and container, with
 entitlements that need nothing but a development profile (`keychain-access-groups` for
 `$(AppIdentifierPrefix)com.resonance.stories.macdev` beside the sandbox and network keys — without the
-keychain, Firebase Auth can't keep a session); `-macWindowSize 1440x900` holds the window at a size
-(the store's screenshots):
+keychain, Firebase Auth can't keep a session); `-macWindowSize 1440x900` holds the window at a size in
+the Mac's points (the store's screenshots; it may come out a point wider — crop the capture), and
+`-macReadingBoost 1` draws a debug build's stories without the Mac's boost, to compare:
 
 ```bash
 xcodebuild … -configuration Debug -destination 'platform=macOS,variant=Mac Catalyst' \

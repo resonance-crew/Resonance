@@ -196,7 +196,13 @@ struct SafetyMenu: View {
 
     private func unblock() async {
         guard let other = target.userId else { return }
-        try? await session.safety?.unblock(other)
+        do {
+            try await session.safety?.unblock(other)
+        } catch {
+            // Still blocked: said in the toast, never silently (round 21).
+            session.toasts.show(L10n.Safety.unblockFailed)
+            return
+        }
         onChange()
     }
 }

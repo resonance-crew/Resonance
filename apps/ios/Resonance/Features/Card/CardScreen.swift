@@ -253,6 +253,8 @@ struct CardScreen: View {
                             trashFeedback: .page, showsCardAfterEdit: false,
                             // A 私人卡's pen stands beside it: its ⋯ leads with 公開發表 instead of a second 編輯 (round 12 §3).
                             editShown: Self.isPrivateCard(detail), onTrashed: { trashedHere.trashed() },
+                            // Each move shows on the page at once, before the server answers (round 21).
+                            showMove: { [model] move in model?.show(move) ?? {} },
                             trigger: .bare)
         } else {
             let author = detail.anonymous ? nil : card.author?.value1
@@ -295,7 +297,8 @@ struct CardScreen: View {
         return VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 if trashed {
-                    TrashedCardBanner(card: card, focusTitle: trashedHere.focusTitle) { openRoute.dismissToRoot() }
+                    // Deleted for good: to the card box, the card left out of it at once (round 21, the web's `/me`).
+                    TrashedCardBanner(card: card, focusTitle: trashedHere.focusTitle) { openRoute.toCardBox() }
                         .padding(.bottom, 24)
                 }
                 // A tablet's byline ends in the card's share and ⋯ — not the owner's card in the trash, whose banner is

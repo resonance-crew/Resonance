@@ -103,4 +103,16 @@ import UIKit
         // The fixed face is what the thought map measures with.
         #expect(close(AppFonts.uiFont(.body, size: 14).pointSize, 14))
     }
+
+    /// Round 21: the Mac draws the iPad's layout at 77 %, and a story's own words and column by the inverse —
+    /// so 17 pt reads as 17 pt there, and a line holds as many characters. An iPhone or iPad draws them as they are.
+    @Test func aStoryReadsAtItsOwnSizeOnAMac() {
+        let boost = TextScale.macBoost(onMac: true)
+        #expect(close(17 * boost * TextScale.macInterfaceScale, 17))
+        #expect(close(Tokens.measure * boost * TextScale.macInterfaceScale, Tokens.measure))
+        #expect(TextScale.macBoost(onMac: false) == 1)
+        // The simulator is no Mac: the reader's factor and the column are as they always were.
+        #expect(TextScale.macReadingBoost == 1)
+        #expect(StoryTypography.measure == Tokens.measure)
+    }
 }

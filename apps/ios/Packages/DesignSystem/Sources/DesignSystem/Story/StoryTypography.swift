@@ -36,8 +36,9 @@ public nonisolated struct StoryTypography: Hashable, Sendable {
 
     private var cjk: Bool { script == .cjk }
 
-    /// The story column's widest (`--measure`): 36 CJK characters at the body's size, 75 Latin.
-    public static var measure: CGFloat { Tokens.measure }
+    /// The story column's widest (`--measure`): 36 CJK characters at the body's size, 75 Latin — on a Mac
+    /// widened with the type (`TextScale.macReadingBoost`), so a line there holds as many.
+    public static var measure: CGFloat { Tokens.measure * TextScale.macReadingBoost }
 
     // MARK: Faces
 

@@ -1,4 +1,5 @@
 import CryptoKit
+import DesignSystem
 import Foundation
 import WebKit
 
@@ -46,6 +47,8 @@ enum EditorPage {
         // the story itself (StoryCanvasField lays no tap area of its own there).
         if layout == .canvas, ProcessInfo.processInfo.isMacCatalystApp { query.append(URLQueryItem(name: "fill", value: "1")) }
         if let locale { query.append(URLQueryItem(name: "locale", value: locale)) }
+        // The Mac app: the story drawn larger by the inverse of the Mac's 77 %, at the page's own sizes (island.ts).
+        if TextScale.macReadingBoost != 1 { query.append(URLQueryItem(name: "scale", value: String(Double(TextScale.macReadingBoost)))) }
         components.queryItems = query
         return components.url!
     }

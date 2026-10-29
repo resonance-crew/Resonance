@@ -49,8 +49,9 @@ enum TrashFeedback: Equatable {
 /// web's own small dialog. Visibility, the trash and the resonance go through
 /// the server (PATCH /api/v1/cards/{id}, POST …/trash, DELETE …/resonances/{id}),
 /// which also refreshes the site's cached pages — never straight to Firestore, whose
-/// rules refuse both on a published card. A change that didn't go through says
-/// so, and the card stays where it was.
+/// rules refuse both on a published card. Each is shown at once (round 21): the
+/// question closes, the card leaves its shelf or its page shows the move; a change
+/// that didn't go through puts it back as it was and says so in a toast.
 ///
 /// On a resonance each of them can end the connection with the original's
 /// author: the change names the card it answered (its page reads again), and
@@ -83,6 +84,9 @@ struct CardActionsMenu: View {
     /// The card box (`.toast`): the card leaves its shelf at once (`true`), before the server answers, and
     /// comes back should it refuse (`false`) — said then in a toast, which outlives the card's ⋯.
     var onLeaving: (Bool) -> Void = { _ in }
+    /// The card's own page (`.page`): draws a move before the server answers it (the trash banner, 私人卡,
+    /// the link to the original gone) and answers how to put it back, should the server refuse.
+    var showMove: (CardMove) -> (() -> Void) = { _ in {} }
     /// A chip over a card's cover (the card box), bare in the card page's bar.
     var trigger: MenuTrigger = .chip
     @Environment(SessionStore.self) private var session
@@ -90,12 +94,8 @@ struct CardActionsMenu: View {
     /// The resonance's question before it goes to the trash.
     @State private var confirming = false
     @State private var unresonating = false
+    /// Looking up the original's byline before 刪除 can go on.
     @State private var busy = false
-    @State private var failed = false
-    /// The visibility change didn't go through: a small notice says so.
-    @State private var visibilityFailed = false
-    /// Moving it to the trash didn't go through (asked without a question): a notice says so.
-    @State private var trashFailed = false
     /// The answered card's title, asked for when the page didn't have it.
     @State private var asked = AnsweredTitle()
 
@@ -112,27 +112,21 @@ struct CardActionsMenu: View {
             .opacity(busy && !confirming && !unresonating ? 0.6 : 1)
             .allowsHitTesting(!busy || confirming || unresonating)
             // To the trash, where it can be restored: the plain solid fill, as 取消共振's — only the
-            // connection it takes back doesn't come back, which is what the question is for.
+            // connection it takes back doesn't come back, which is what the question is for. It closes as it
+            // is answered (round 21): the card goes at once, and comes back with a toast should the server refuse.
             .organicConfirm(isPresented: $confirming, title: L10n.Me.Actions.trashResonanceTitle,
                             message: L10n.Me.Actions.trashResonanceBody(days: CardTrash.days),
                             cancelLabel: L10n.Me.Actions.deleteCancel, confirmLabel: L10n.Me.Actions.trashResonanceConfirm,
-                            closeLabel: L10n.Me.Actions.deleteCancel, busy: busy,
-                            error: failed ? L10n.Safety.actionError : nil, seed: seed + 5) {
+                            workingLabel: L10n.Me.Actions.delete, closeLabel: L10n.Me.Actions.deleteCancel, seed: seed + 5) {
                 Task { await trashNow() }
             }
-            // The card stays: nothing here can't be undone, so the verb is the plain solid fill.
+            // The card stays: nothing here can't be undone, so the verb is the plain solid fill. Closed as it is
+            // answered, the link gone at once (round 21).
             .organicConfirm(isPresented: $unresonating, title: unresonateTitle, message: L10n.Me.Actions.unresonateConfirmBody,
                             cancelLabel: L10n.Me.Actions.deleteCancel, confirmLabel: L10n.Me.Actions.unresonateConfirm,
-                            closeLabel: L10n.Me.Actions.deleteCancel, busy: busy, error: failed ? L10n.Safety.actionError : nil,
-                            titlePending: asked.looking, seed: seed + 9) {
+                            closeLabel: L10n.Me.Actions.deleteCancel, titlePending: asked.looking, seed: seed + 9) {
                 Task { await unresonate() }
             }
-            // Moving it to the drafts didn't go through: the card is as it was. Said in a notice with one way
-            // out, as every refusal is (the web's, Android's): the menu is still there to try again from.
-            .organicNotice(isPresented: $visibilityFailed, title: L10n.Me.Actions.makePrivate, message: L10n.Safety.actionError,
-                           closeLabel: L10n.Safety.Report.close, seed: seed + 11)
-            .organicNotice(isPresented: $trashFailed, title: L10n.Me.Actions.delete, message: L10n.Safety.actionError,
-                           closeLabel: L10n.Safety.Report.close, seed: seed + 13)
             .task(id: unresonating) {
                 guard unresonating, asked.looking, let answering else { return }
                 await AnsweredTitle.lookUp {
@@ -168,7 +162,6 @@ struct CardActionsMenu: View {
                 OrganicMenuItem(id: "visibility", title: L10n.Me.Actions.makePrivate, icon: .lock) { Task { await makeDraft() } }
             case .unresonate:
                 OrganicMenuItem(id: "unresonate", title: L10n.Me.Actions.unresonate, icon: .wave) {
-                    failed = false
                     // The title before the question shows, when the page or the session has it; else it is asked for,
                     // the heading held back meanwhile — never words that change under the reader.
                     asked.open(page: answeringTitle, kept: answering.flatMap { session.cardPreviews.card(for: $0)?.title })
@@ -185,34 +178,47 @@ struct CardActionsMenu: View {
     /// What changed: this card, and on a resonance the card it answers (its page lists it).
     private var change: WriteLauncher.Change { .init(cardId: cardId, referenceCardId: answering) }
 
-    /// 轉為草稿: the card kept to its author (PATCH visibility private, as 轉為私人 was); its byline stays.
+    /// 轉為私人卡: the card kept to its author (PATCH visibility private, as 轉為私人 was); its byline stays. Shown
+    /// at once (round 21) — off the card box's shelf, or 私人卡 on its page — and put back, with a toast, should
+    /// the server refuse.
     private func makeDraft() async {
-        guard !busy else { return }
-        busy = true
-        defer { busy = false }
-        guard let card = try? await session.writing.updateCard(cardId, visibility: ._private) else {
-            visibilityFailed = true
+        let (cardId, change, session, writer, onChanged, onLeaving, showMove, leaves) =
+            (cardId, change, session, writer, onChanged, onLeaving, showMove, trashFeedback == .toast)
+        var undo: () -> Void = {}
+        if leaves { onLeaving(true) } else { undo = showMove(.madePrivate) }
+        do {
+            let card = try await session.writing.updateCard(cardId, visibility: ._private)
+            session.cardPreviews.remember(card)
+        } catch {
+            if leaves { onLeaving(false) } else { undo() }
+            session.toasts.show(Self.makePrivateFailure(error))
             return
         }
-        visibilityFailed = false
-        session.cardPreviews.remember(card)
         writer.noteChange(change)
         onChanged()
     }
 
-    /// The card stays, answering nothing; the server lets go of its link to the card it answered.
+    /// What a refused 轉為私人卡 says: the plain "couldn't", or — the card in the trash meanwhile (409) — the
+    /// refusal's own words.
+    static func makePrivateFailure(_ error: Error) -> String {
+        if let failure = error as? APIFailure, failure.status == 409 || failure.isConflict { return L10n.Safety.actionError }
+        return L10n.Me.Actions.makePrivateFailed
+    }
+
+    /// The card stays, answering nothing; the server lets go of its link to the card it answered. The
+    /// question closes as it is answered and the link goes at once (round 21); a refusal puts it back.
     private func unresonate() async {
-        guard let answering, !busy else { return }
-        busy = true
-        failed = false
-        defer { busy = false }
+        guard let answering else { return }
+        let (cardId, change, session, writer, onChanged, showMove) = (cardId, change, session, writer, onChanged, showMove)
+        unresonating = false
+        let undo = showMove(.unresonated)
         do {
             try await session.writing.unresonate(from: answering, cardId: cardId)
         } catch {
-            failed = true
+            undo()
+            session.toasts.show(L10n.Me.Actions.unresonateFailed)
             return
         }
-        unresonating = false
         // This card's page, the page of the card it answered, and the card box's shelves read again.
         writer.noteChange(change)
         onChanged()
@@ -221,7 +227,6 @@ struct CardActionsMenu: View {
     /// 刪除: to the trash — asking first only for a resonance that reached a named original.
     private func delete() async {
         guard !busy else { return }
-        failed = false
         var decision = TrashDecision.of(published: isPublished, visibility: visibility, anonymous: anonymous,
                                         answering: answering, answeringAnonymous: answeringAnonymous)
         if decision == .lookUp, let answering {
@@ -236,36 +241,32 @@ struct CardActionsMenu: View {
         }
     }
 
+    /// To the trash, shown at once (round 21): in the card box the card leaves its shelf, on its page the
+    /// trash banner takes its head (its days counted from now) — and this ⋯, its question too, goes with
+    /// either, so what the rest needs is taken first. Refused, the card is back as it was and a toast says so.
     private func trashNow() async {
-        guard !busy else { return }
-        busy = true
-        failed = false
-        defer { busy = false }
-        // In the card box the card leaves its shelf at once, and this ⋯ (its question too) with it: what the
-        // rest needs is taken before it goes.
         let leaves = trashFeedback == .toast
-        let (cardId, change, title, answering, session, writer, onLeaving, onTrashed) =
-            (cardId, change, title, answering, session, writer, onLeaving, onTrashed)
+        let (cardId, change, title, answering, session, writer, onLeaving, onTrashed, showMove) =
+            (cardId, change, title, answering, session, writer, onLeaving, onTrashed, showMove)
+        confirming = false
+        var undo: () -> Void = {}
         if leaves {
-            confirming = false
             onLeaving(true)
+        } else {
+            undo = showMove(.trashed)
+            onTrashed()
         }
         do {
             try await session.writing.trashCard(cardId)
         } catch {
-            // Not moved: the card is back in every list, and the writer is told — in the toast where it had left
-            // its shelf, else in the question, if one was asked.
-            if leaves {
-                onLeaving(false)
-                session.toasts.show(L10n.Me.Actions.trashFailed)
-            } else if confirming { failed = true } else { trashFailed = true }
+            if leaves { onLeaving(false) } else { undo() }
+            session.toasts.show(L10n.Me.Actions.trashFailed)
             return
         }
-        confirming = false
         session.cardPreviews.forget(cardId)
         writer.noteChange(change)
-        onTrashed()
         if leaves {
+            onTrashed()
             TrashMoves.announceTrashed(cardId: cardId, title: title, answering: answering, session: session, writer: writer)
         }
     }

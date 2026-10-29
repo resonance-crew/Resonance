@@ -645,7 +645,13 @@ struct ThreadScreen: View {
 
     private func unblock(_ model: ThreadModel) async {
         guard let other = model.other else { return }
-        try? await session.safety?.unblock(other.id)
+        do {
+            try await session.safety?.unblock(other.id)
+        } catch {
+            // Still blocked: said in the toast, never silently (round 21).
+            session.toasts.show(L10n.Safety.unblockFailed)
+            return
+        }
         await model.refreshConnection()
     }
 
@@ -681,20 +687,20 @@ struct ThreadScreen: View {
                 }
             }
             // 收回 (round 16 §3): asked first, in plain colour — taking one's own words back is no danger.
+            // Closed as it is answered, the message unsent at once (round 21); a refusal puts it back with a toast.
             .organicConfirm(isPresented: Binding(get: { unsending != nil }, set: { if !$0 { unsending = nil } }),
                             title: L10n.Messages.unsendTitle, message: L10n.Messages.unsendBody,
                             cancelLabel: L10n.Messages.unsendCancel, confirmLabel: L10n.Messages.unsendConfirm,
-                            closeLabel: L10n.Messages.unsendCancel, busy: busy, seed: 67) {
+                            closeLabel: L10n.Messages.unsendCancel, seed: 67) {
                 guard let model, let message = unsending else { return }
+                unsending = nil
+                let toasts = session.toasts
                 Task {
-                    busy = true
                     let result = await model.unsend(message)
-                    busy = false
-                    unsending = nil
                     switch result {
                     case .done: break
-                    case .tooLate: session.toasts.show(L10n.Messages.unsendTooLate)
-                    case .failed: session.toasts.show(L10n.Messages.unsendError)
+                    case .tooLate: toasts.show(L10n.Messages.unsendTooLate)
+                    case .failed: toasts.show(L10n.Messages.unsendError)
                     }
                 }
             }
@@ -703,16 +709,20 @@ struct ThreadScreen: View {
                             closeLabel: L10n.Safety.cancel, busy: busy, error: blockError, seed: 71) {
                 if let model { Task { await block(model) } }
             }
+            // Closed as it is answered (round 21): the thread goes, the conversation leaves the list at once and is
+            // deleted behind it; refused, it is listed again and a toast says so.
             .organicConfirm(isPresented: $confirmingDelete, title: L10n.Messages.deleteConfirmTitle, message: L10n.Messages.deleteConfirmBody,
                             cancelLabel: L10n.Messages.deleteCancel, confirmLabel: L10n.Messages.deleteConfirm,
-                            closeLabel: L10n.Messages.deleteCancel, busy: busy, destructive: true, seed: 59) {
-                guard let model else { return }
+                            closeLabel: L10n.Messages.deleteCancel, destructive: true, seed: 59) {
+                guard let model, let pairId = model.pairId else { return }
+                confirmingDelete = false
+                let (conversations, toasts) = (session.conversations, session.toasts)
+                conversations.hide(pairId)
+                dismiss()
                 Task {
-                    busy = true
-                    let deleted = await model.deleteConversation()
-                    busy = false
-                    confirmingDelete = false
-                    if deleted { dismiss() }
+                    guard !(await model.deleteConversation()) else { return }
+                    conversations.unhide(pairId)
+                    toasts.show(L10n.Messages.deleteError)
                 }
             }
             .organicModal(isPresented: $pickingCard, seed: 53, maxWidth: 480, closeLabel: L10n.Write.Editor.CardModal.cancel) {

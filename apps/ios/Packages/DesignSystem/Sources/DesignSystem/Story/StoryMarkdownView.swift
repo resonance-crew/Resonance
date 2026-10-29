@@ -341,7 +341,7 @@ struct StoryImageView: View {
     private var height: CGFloat {
         let maxH = min(520, window.height * 0.62)
         let a = aspect ?? 1.5
-        let width = column ?? min(window.contentWidth - 40, Tokens.measure)
+        let width = column ?? min(window.contentWidth - 40, StoryTypography.measure)
         return min(width, maxH * a) / a
     }
 }

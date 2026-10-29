@@ -50,4 +50,36 @@ import UIKit
             #expect(size(button.loading(true)) == size(button.loading(false)))
         }
     }
+
+    /// Round 21 (the owner: a dialog's verb grew as its loop came in): a button that can be busy is always
+    /// as wide as its busy self — the loop, 6, and its working words — and keeps the normal gutters around
+    /// them; one with a shorter working word needs no more room than its idle words when they are wider;
+    /// a button that never loads keeps its own words' size.
+    @Test func aButtonThatCanBeBusyIsAsWideAsItsBusySelf() {
+        func size(_ view: some View) -> CGSize {
+            UIHostingController(rootView: view.fixedSize()).sizeThatFits(in: CGSize(width: 1000, height: 1000))
+        }
+        let plain = size(OrganicButton("發布", variant: .solid, size: .sm) {})
+        let able = size(OrganicButton("發布", variant: .solid, size: .sm) {}.loading(false))
+        let busy = size(OrganicButton("發布", variant: .solid, size: .sm) {}.loading(true))
+        // No shorter word: room for the 14 loop and 6 more, at rest too.
+        #expect(abs(able.width - plain.width - 20) < 1)
+        #expect(abs(busy.width - able.width) < 0.5 && abs(busy.height - plain.height) < 0.5)
+        // 清空垃圾桶 → 清空: the idle words are wider than the loop and 清空, so nothing grows.
+        let long = size(OrganicButton("清空垃圾桶", variant: .danger, size: .sm) {})
+        let longAble = size(OrganicButton("清空垃圾桶", variant: .danger, size: .sm) {}.workingLabel("清空").loading(false))
+        let longBusy = size(OrganicButton("清空垃圾桶", variant: .danger, size: .sm) {}.workingLabel("清空").loading(true))
+        #expect(abs(longAble.width - long.width) < 0.5)
+        #expect(abs(longBusy.width - long.width) < 0.5)
+        // A dialog's foot given a `busy` (false too) makes its verb one that can be; one given none doesn't.
+        func foot(_ busy: Bool?) -> some View {
+            ModalActions(busy: busy) {
+                OrganicButton("取消", variant: .tonal, size: .sm) {}
+            } verb: {
+                OrganicButton("發布", variant: .solid, size: .sm) {}
+            }
+        }
+        #expect(abs(size(foot(false)).width - size(foot(nil)).width - 20) < 1)
+        #expect(abs(size(foot(true)).width - size(foot(false)).width) < 0.5)
+    }
 }

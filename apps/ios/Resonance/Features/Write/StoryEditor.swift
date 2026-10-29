@@ -67,6 +67,10 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
     @ObservationIgnored private var heldMarkdown: String?
     @ObservationIgnored private var heldPreviews: (previews: [HostLinkPreview], origin: URL)?
     @ObservationIgnored private var textScale: CGFloat = 1
+    /// The Mac's share of the text scale (`TextScale.macReadingBoost`, 1 elsewhere): the page draws it itself, its
+    /// stylesheet's sizes scaled (`EditorPage.url`'s `scale`) — under the Mac's 77 % a zoomed body put a click's
+    /// caret at the line's start, and a page zoom didn't reflow.
+    @ObservationIgnored private let pageScale: CGFloat = TextScale.macReadingBoost
     /// Holds the island's own scroll view at its top (its delegate; the scroll view keeps it weakly).
     @ObservationIgnored private let pin = PinnedScroll()
     /// Where a web link the writer taps in the story opens.
@@ -291,11 +295,11 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
 
     /// The page's own text doesn't follow Dynamic Type, so the page is zoomed
     /// by the factor the rest of the story text takes (it reflows to the width
-    /// and reports its zoomed height).
+    /// and reports its zoomed height) — less the Mac's share, which the page draws at its own sizes.
     func setTextScale(_ factor: CGFloat) {
         textScale = factor
         guard ready else { return }
-        Task { _ = try? await webView.callAsyncJavaScript("document.body.style.zoom = z", arguments: ["z": factor], contentWorld: .page) }
+        Task { _ = try? await webView.callAsyncJavaScript("document.body.style.zoom = z", arguments: ["z": factor / pageScale], contentWorld: .page) }
     }
 
     /// The state message's `link`: `{ href, display, standalone, words }`, or null for none.

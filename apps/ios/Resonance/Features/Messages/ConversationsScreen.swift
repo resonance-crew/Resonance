@@ -168,8 +168,8 @@ private struct ConversationsSkeleton: View {
 }
 
 /// RowWash: the row's hand-drawn wash (R h·0.28, three turns across), shown while pressed or under
-/// a pointer; the chosen row of a two-pane list wears it in terracotta.
-private struct RowWashStyle: ButtonStyle {
+/// a pointer; the chosen row of a two-pane list wears it in terracotta. The bell's rows wear it too.
+struct RowWashStyle: ButtonStyle {
     let seed: Double
     var chosen = false
 
@@ -178,7 +178,7 @@ private struct RowWashStyle: ButtonStyle {
     }
 }
 
-private struct RowWash<Label: View>: View {
+struct RowWash<Label: View>: View {
     let label: Label
     let seed: Double
     let pressed: Bool

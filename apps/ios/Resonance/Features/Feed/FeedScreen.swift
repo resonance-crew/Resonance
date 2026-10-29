@@ -244,20 +244,27 @@ struct FeedEndMark: View {
 
 /// The feed's way on (the web's FeedMore): 「顯示更多」 alone, in the tonal label's ink with no face
 /// of its own — not a form's button — the press washing a wobbly squircle as a bare glyph's does.
-/// It shows the page already fetched ahead; tapped before that page has come, the pen loop draws
-/// itself before the label (as a button's does) and taps do nothing until it shows.
+/// It shows the page already fetched ahead; tapped before that page has come, the button's small pen
+/// loop (``ButtonLoader``, 15) hangs 6 before the label, outside its box — nothing moves, the words
+/// stay where they were and the button keeps its width (round 21, the web's FeedMore) — and taps do
+/// nothing until it shows.
 struct FeedMoreButton: View {
     let loading: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
-                if loading { SketchLoader(size: 15, color: Tokens.buttonOnTonal) }
-                Text(L10n.Home.moreBtn)
-                    .font(AppFonts.body(14, weight: .semibold))
-                    .foregroundStyle(Tokens.buttonOnTonal)
-            }
+            Text(L10n.Home.moreBtn)
+                .font(AppFonts.body(14, weight: .semibold))
+                .foregroundStyle(Tokens.buttonOnTonal)
+                .overlay(alignment: .leading) {
+                    if loading {
+                        ButtonLoader(size: 15, color: Tokens.buttonOnTonal)
+                            .offset(x: -(15 + 6))
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeOut(duration: 0.12), value: loading)
             .padding(.horizontal, 16)
             .frame(minHeight: 44)
             .contentShape(Rectangle())

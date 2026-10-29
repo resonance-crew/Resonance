@@ -142,7 +142,7 @@ public nonisolated struct CardPageLayout: Sendable, Equatable {
         case .expanded:
             guard contents else { return centred(width: width, pad: pad) }
             let inner = max(0, width - 2 * pad)
-            let text = max(0, min(Tokens.measure, inner - railReach))
+            let text = max(0, min(StoryTypography.measure, inner - railReach))
             let slide = max(0, min((inner - text) / 2, inner - text - railReach))
             let start = pad + slide
             return CardPageLayout(rail: true, article: text + 2 * articleInset, leading: start - articleInset,
@@ -159,7 +159,7 @@ public nonisolated struct CardPageLayout: Sendable, Equatable {
 
     /// One column of the measure (or the width less its pads), centred; no rail.
     private static func centred(width: CGFloat, pad: CGFloat) -> CardPageLayout {
-        let text = max(0, min(Tokens.measure, width - 2 * pad))
+        let text = max(0, min(StoryTypography.measure, width - 2 * pad))
         return CardPageLayout(rail: false, article: text + 2 * articleInset, leading: (width - text) / 2 - articleInset, railX: 0)
     }
 }

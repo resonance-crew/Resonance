@@ -494,8 +494,9 @@ struct WriteScreen: View {
         // at the same place. In the pane there is no bar: its first line sits level with the Back on the canvas.
         .padding(.top, showsBar ? Self.headTop(typo: typo, font: font) : WriteWorkspace.paneTop(row: Self.splitRow))
         .padding(.bottom, 48)
-        // Wider than a phone, the web's writing measure (680 and the page's pads), centred.
-        .frame(maxWidth: window.layoutClass == .compact ? .infinity : Tokens.measure + 2 * window.pad)
+        // Wider than a phone, the web's writing measure (680 and the page's pads), centred — on a Mac widened
+        // with the story's type (`StoryTypography.measure`).
+        .frame(maxWidth: window.layoutClass == .compact ? .infinity : StoryTypography.measure + 2 * window.pad)
         .frame(maxWidth: .infinity)
     }
 
@@ -784,6 +785,7 @@ struct WriteScreen: View {
                 .padding(.bottom, 20)
             OrganicButton(L10n.Write.Trashed.restore, variant: .solid, size: .sm) { Task { await restoreOpened(card) } }
                 .loading(restoringOpened)
+                .workingLabel(L10n.Me.Actions.restore)
             if restoreOpenedFailed {
                 Text(L10n.Me.Actions.undoFailed).font(AppFonts.body(12)).foregroundStyle(Tokens.terracotta)
                     .multilineTextAlignment(.center)

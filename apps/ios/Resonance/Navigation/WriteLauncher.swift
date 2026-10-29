@@ -44,6 +44,15 @@ final class WriteLauncher {
     }
     /// The latest of those changes (which card).
     private(set) var lastChange: Change?
+    /// Cards deleted for good from their own page (round 21), hidden by the card box at once — before the
+    /// server answers — and back should it refuse (``arrive(_:)``).
+    private(set) var gone: Set<String> = []
+
+    /// Card `id` is on its way out for good: the lists leave it out from now.
+    func leave(_ id: String) { gone.insert(id) }
+
+    /// Card `id` stays after all (the server refused, or it was restored meanwhile).
+    func arrive(_ id: String) { gone.remove(id) }
     /// Told of every change before any screen refreshes for it (drafts are
     /// written straight to Firestore, where the HTTP cache can't see them).
     @ObservationIgnored var onChange: (() -> Void)?

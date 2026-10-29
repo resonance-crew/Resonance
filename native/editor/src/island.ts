@@ -371,6 +371,20 @@ const IslandLinkCard = LinkCard.extend({
 });
 
 const params = new URLSearchParams(location.search);
+// ?scale=1.3: every px of the page's stylesheet drawn this much larger — the Mac app, the iPad's layout at 77 %,
+// where a story still reads at its own size (TextScale.macReadingBoost). The page lays out at those sizes, never
+// under a zoom: a click puts the caret where it lands, the lines wrap to the page's own width, and what the
+// page reports (its height, the caret) stays in the host's points. A `url(…)` (a font, a grain tile) is left be.
+const pxScale = Number(params.get('scale'));
+if (pxScale > 0 && pxScale !== 1) scaleStylePixels(pxScale);
+
+function scaleStylePixels(k: number) {
+  for (const style of document.querySelectorAll('style')) {
+    style.textContent = (style.textContent ?? '').replace(/url\([^)]*\)|(-?\d*\.?\d+)px\b/g, (match: string, n?: string) =>
+      n === undefined ? match : `${Number((Number(n) * k).toFixed(3))}px`,
+    );
+  }
+}
 // ?embed=1: the story field of the writing screen — the host frames it, sizes
 // the view to the content (the 'height' message) and scrolls the page itself.
 if (params.get('embed') === '1') document.documentElement.classList.add('embed');

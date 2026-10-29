@@ -249,16 +249,43 @@ private struct ProfilePhotoRow: View {
     @State private var picked: PhotosPickerItem?
     @State private var framing: CGImage?
     @State private var openFailed = false
-    @State private var uploading = false
     @State private var uploadError: String?
+    /// The photo just framed, shown on the avatar at once (round 21) while it goes up — and after, until the
+    /// profile names another — or nil, the profile's own.
+    @State private var local: LocalAvatar?
+
+    struct LocalAvatar {
+        let image: UIImage
+        var uploading = true
+        /// The profile's photo once this one was saved as it.
+        var saved: String?
+    }
 
     private var hasPhoto: Bool { !(me.avatarUrl ?? "").isEmpty }
+
+    /// The framed photo while it is the avatar: on its way, or the one the profile now names.
+    private var shownLocal: LocalAvatar? {
+        guard let local, local.uploading || local.saved == me.avatarUrl else { return nil }
+        return local
+    }
 
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
             Button { picking = true } label: {
                 HandDrawnAvatar(initials: me.initials, imageURL: me.avatarUrl.flatMap(URL.init(string:)),
-                                color: OKLCHColor.avatar(me.accentColor) ?? Tokens.avatarWait, size: 88, seed: 77)
+                                color: OKLCHColor.avatar(me.accentColor) ?? Tokens.avatarWait, size: 88, seed: 77,
+                                image: shownLocal?.image)
+                    .overlay(alignment: .bottomTrailing) {
+                        // Going up: the button's small loop on a paper disc at its corner.
+                        if shownLocal?.uploading == true {
+                            Circle().fill(Tokens.cream)
+                                .frame(width: 28, height: 28)
+                                .overlay { ButtonLoader(size: 16, color: Tokens.terracotta) }
+                                .transition(.opacity)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .animation(.easeOut(duration: 0.16), value: shownLocal?.uploading)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(hasPhoto ? L10n.Settings.Profile.avatarChange : L10n.Settings.Profile.avatarAdd)
@@ -290,11 +317,11 @@ private struct ProfilePhotoRow: View {
             Task { await open(item) }
         }
         .organicModal(isPresented: Binding(get: { framing != nil }, set: { if !$0 { framing = nil; uploadError = nil } }),
-                      seed: 83, maxWidth: 400, closeLabel: L10n.Settings.Profile.cropCancel, dismissible: !uploading) {
+                      seed: 83, maxWidth: 400, closeLabel: L10n.Settings.Profile.cropCancel) {
             if let framing {
-                AvatarCropContent(image: framing, busy: uploading, error: uploadError,
+                AvatarCropContent(image: framing, error: uploadError,
                                   onCancel: { self.framing = nil; uploadError = nil }) { crop, side in
-                    Task { await use(framing, crop: crop, side: side) }
+                    use(framing, crop: crop, side: side)
                 }
             }
         }
@@ -313,17 +340,27 @@ private struct ProfilePhotoRow: View {
         framing = image
     }
 
-    private func use(_ image: CGImage, crop: CGRect, side: Int) async {
-        guard !uploading, let uid = session.uid else { return }
-        uploading = true
-        uploadError = nil
-        defer { uploading = false }
-        do {
-            guard let jpeg = AvatarImage.render(image, crop: crop, side: side) else { throw URLError(.cannotDecodeContentData) }
-            try await AvatarSaver.live(session, uid: uid).save(jpeg)
-            framing = nil
-        } catch {
+    /// 使用: the crop closes and the framed photo is the avatar at once (round 21), its small loop on it while it
+    /// goes up and is saved; refused or lost, the avatar is the profile's again and a toast says so.
+    private func use(_ image: CGImage, crop: CGRect, side: Int) {
+        guard local?.uploading != true, let uid = session.uid else { return }
+        guard let jpeg = AvatarImage.render(image, crop: crop, side: side), let shown = UIImage(data: jpeg) else {
             uploadError = L10n.Settings.Profile.avatarError
+            return
+        }
+        uploadError = nil
+        framing = nil
+        local = LocalAvatar(image: shown)
+        let (saver, toasts) = (AvatarSaver.live(session, uid: uid), session.toasts)
+        Task {
+            do {
+                try await saver.save(jpeg)
+                local?.uploading = false
+                local?.saved = session.me?.avatarUrl
+            } catch {
+                local = nil
+                toasts.show(L10n.Settings.Profile.avatarError)
+            }
         }
     }
 }
@@ -608,7 +645,6 @@ private struct BlockedListContent: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.window) private var window
     @State private var people: [SafetyService.BlockedPerson]?
-    @State private var pending: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -676,22 +712,25 @@ private struct BlockedListContent: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             OrganicButton(L10n.Safety.unblock, variant: .tonal, size: .sm) {
-                Task { await unblock(person.id) }
+                Task { await unblock(person) }
             }
-            .loading(pending == person.id)
-            .disabled(pending != nil && pending != person.id)
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 2)
     }
 
-    private func unblock(_ id: String) async {
-        guard pending == nil else { return }
-        pending = id
-        defer { pending = nil }
+    /// The row goes at once (round 21); refused, it is back where it stood and a toast says so.
+    private func unblock(_ person: SafetyService.BlockedPerson) async {
+        guard let at = people?.firstIndex(of: person) else { return }
+        let toasts = session.toasts
+        withAnimation(.easeOut(duration: 0.2)) { _ = people?.remove(at: at) }
         do {
-            try await session.safety?.unblock(id)
-            people?.removeAll { $0.id == id }
-        } catch {}
+            try await session.safety?.unblock(person.id)
+        } catch {
+            withAnimation(.easeOut(duration: 0.2)) {
+                if people?.contains(person) == false { people?.insert(person, at: min(at, people?.count ?? 0)) }
+            }
+            toasts.show(L10n.Safety.unblockFailed)
+        }
     }
 }

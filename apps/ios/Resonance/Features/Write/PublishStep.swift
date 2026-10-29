@@ -340,13 +340,24 @@ struct PublishStep: View {
         // The one button follows the card and its type: 發布 · 匿名發布 · 儲存 · 儲存修改 · 轉為草稿.
         OrganicButton(model.verbTitle, variant: .solid, size: .sm, action: onSubmit)
             .loading(model.pending && model.busyVerb == .publish)
-            .workingLabel(model.verbTitle == L10n.Write.PublishPanel.update ? L10n.Write.saveShort : nil)
+            .workingLabel(Self.workingLabel(verb: model.verbTitle))
     }
 
-    /// 捨棄修改: a published card's revision dropped.
+    /// What the verb says while it works (round 21): its bare verb, where it has a shorter one — 儲存修改 and
+    /// 轉為私人卡 say 儲存, 匿名發布 says 發布; the rest are their own bare verb already.
+    static func workingLabel(verb: String) -> String? {
+        switch verb {
+        case L10n.Write.PublishPanel.update, L10n.Write.PublishPanel.makeDraft: L10n.Write.saveShort
+        case L10n.Write.PublishPanel.publishAnonymously: L10n.Write.PublishPanel.publish
+        default: nil
+        }
+    }
+
+    /// 捨棄修改: a published card's revision dropped (捨棄 while it works).
     private var secondary: OrganicButton {
         OrganicButton(L10n.Write.discardChanges, variant: .tonal, size: .sm, action: onSecondary)
             .loading(model.pending && model.busyVerb == .leave)
+            .workingLabel(L10n.Write.discardShort)
     }
 
     /// A section's label (PublishStep's `.label`): in sentence case, as the web and Android set it — 「Tags」,

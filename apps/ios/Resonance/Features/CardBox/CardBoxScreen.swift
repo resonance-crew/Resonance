@@ -29,6 +29,8 @@ struct CardBoxScreen: View {
     /// Cards on their way off a shelf (刪除 to the trash, 永久刪除 from it), shown gone at once — before the
     /// server answers: the rest close up, and a refusal brings the card back where it was.
     @State private var leaving: Set<String> = []
+    /// The trash was just emptied here: the next change keeps the shelves as they show (the trash empty).
+    @State private var emptied = false
 
     /// The shelves in the strip's order: the trash always last (trash.spec §4), shown even while empty —
     /// it is read only when chosen, never to decide whether it shows. No 私人卡 shelf: a published
@@ -85,11 +87,15 @@ struct CardBoxScreen: View {
         // before it (one on its way may hold the shelf from before) is what they show.
         .onChange(of: writer.changes) {
             reads.supersedeAll()
-            if let id = writer.lastChange?.cardId, leaving.contains(id) {
-                // A card that left its shelf here at once: the shelves keep what they show, without it, and
-                // are asked again behind it — no skeleton.
+            if let id = writer.lastChange?.cardId, leaving.contains(id) || writer.gone.contains(id) {
+                // A card that left its shelf here at once (or was deleted for good from its page): the shelves keep
+                // what they show, without it, and are asked again behind it — no skeleton.
                 leaving.remove(id)
                 shelves = Self.without(id, in: shelves)
+                unconfirmed = Set(shelves.keys)
+            } else if emptied {
+                // The trash emptied here, shown empty at once: the shelves keep what they show and are asked again behind it.
+                emptied = false
                 unconfirmed = Set(shelves.keys)
             } else {
                 shelves = [:]
@@ -102,21 +108,28 @@ struct CardBoxScreen: View {
             unconfirmed = Set(shelves.keys)
             Task { await load(shelf) }
         }
-        // For good, every card here: the verb in red; busy through the whole emptying; a failure said
-        // in the question, which stays to try again — unless the trash, read again, is empty after all.
+        // For good, every card here: the verb in red. Answered, the question closes and the shelf shows empty at
+        // once (round 21) while the emptying goes on; a failure — unless the trash, read again, is empty after
+        // all — says so in a toast, and the shelves read again.
         .organicConfirm(isPresented: $emptying.asking, title: L10n.Me.Actions.emptyTrashTitle, message: L10n.Me.Actions.emptyTrashBody,
                         cancelLabel: L10n.Me.Actions.deleteCancel, confirmLabel: L10n.Me.Actions.emptyTrash,
-                        closeLabel: L10n.Me.Actions.deleteCancel, busy: emptying.busy,
-                        error: emptying.failed ? L10n.Safety.actionError : nil, destructive: true, seed: 67) {
+                        workingLabel: L10n.Me.Actions.emptyTrashShort, closeLabel: L10n.Me.Actions.deleteCancel,
+                        destructive: true, seed: 67) {
+            let (session, writer) = (session, writer)
             Task {
-                await emptying.confirm(empty: { _ = try await session.writing.emptyTrash() }, remaining: {
+                let outcome = await emptying.confirm(empty: { _ = try await session.writing.emptyTrash() }, remaining: {
                     // Whatever went before the answer was lost: asked of the server, not the HTTP cache.
                     session.noteOwnWrite()
                     return try? await session.reading.cardBox(.trash).count
-                }, changed: {
+                }, cleared: {
+                    withAnimation(.easeOut(duration: 0.2)) { shelves[.trash] = [] }
+                }, changed: { outcome in
                     session.noteOwnWrite()
+                    // Emptied: what shows stays (read again behind it); failed: every shelf reads again.
+                    emptied = outcome == .emptied
                     writer.noteChange(.init())
                 })
+                if outcome == .failed { session.toasts.show(L10n.Me.Actions.emptyTrashFailed) }
             }
         }
     }
@@ -224,8 +237,9 @@ struct CardBoxScreen: View {
     /// on their way off it.
     private func cards(_ s: ReadingAPI.CardBoxShelf) -> [FeedCard]? {
         let known = s == .draft ? Self.draftShelf(private: shelves[._private], drafts: shelves[.draft]) : shelves[s]
-        guard !leaving.isEmpty else { return known }
-        return known?.filter { !leaving.contains($0.id) }
+        let away = leaving.union(writer.gone)
+        guard !away.isEmpty else { return known }
+        return known?.filter { !away.contains($0.id) }
     }
 
     /// The shelves once card `id` has left them: gone from each that showed it — and the trash, which
@@ -516,36 +530,42 @@ struct EmptyTrashButton: View {
     }
 }
 
-/// 清空垃圾桶's question (trash.spec §5.3): asked first, busy through the whole emptying, then gone —
-/// or, when it didn't all go, still asking with the error, to try once more (先留著 closes it). A
-/// failed emptying may have emptied the trash all the same (the server went on deleting after an
-/// answer that came too late, round 8 §6.2): the trash is read again before anything is said, and
-/// found empty, the question goes as if it had worked. What is left is read again either way
-/// (`changed`), under the question.
+/// 清空垃圾桶's question (trash.spec §5.3, round 21): asked first, then gone as it is answered — the shelf
+/// shown empty at once (`cleared`) — while the emptying goes on outside it (`WritingAPI.emptyTrash`: a page
+/// at a time, while a call deleted some and some are left, 20 calls at most). A failed emptying may have
+/// emptied the trash all the same (the server went on deleting after an answer that came too late, round 8
+/// §6.2): the trash is read again before anything is said, and found empty, it is as if it had worked. What
+/// is left is read again either way (`changed`); a failure is the caller's toast.
 @MainActor @Observable
 final class EmptyTrashQuestion {
+    enum Outcome: Equatable { case emptied, failed }
+
     var asking = false
-    private(set) var busy = false
-    private(set) var failed = false
+    /// The emptying is on its way (a second one waits for it).
+    private(set) var running = false
 
     func ask() {
-        failed = false
         asking = true
     }
 
     /// `remaining`: how many cards the trash holds, read again after a failure (nil: it couldn't be read).
-    func confirm(empty: () async throws -> Void, remaining: () async -> Int?, changed: () -> Void) async {
-        guard !busy else { return }
-        busy = true
-        failed = false
-        defer { busy = false }
+    @discardableResult
+    func confirm(empty: () async throws -> Void, remaining: () async -> Int?, cleared: () -> Void,
+                 changed: (Outcome) -> Void) async -> Outcome? {
+        asking = false
+        guard !running else { return nil }
+        running = true
+        defer { running = false }
+        cleared()
+        let outcome: Outcome
         do {
             try await empty()
-            asking = false
+            outcome = .emptied
         } catch {
-            if await remaining() == 0 { asking = false } else { failed = true }
+            outcome = await remaining() == 0 ? .emptied : .failed
         }
-        changed()
+        changed(outcome)
+        return outcome
     }
 }
 

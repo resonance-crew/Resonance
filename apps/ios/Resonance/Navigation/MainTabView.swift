@@ -333,6 +333,11 @@ struct MainTabView: View {
                         var path = paths[t] ?? []
                         if !path.isEmpty { path.removeLast() }
                         paths[t] = path + [route]
+                    },
+                    cardBox: {
+                        paths[t] = []
+                        paths[.cardBox] = []
+                        tab = .cardBox
                     }
                 ))
                 .environment(\.isSelectedTab, t == tab)

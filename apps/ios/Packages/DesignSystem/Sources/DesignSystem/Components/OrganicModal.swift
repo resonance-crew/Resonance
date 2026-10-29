@@ -20,15 +20,16 @@ extension View {
     /// ConfirmModal: title, a line of explanation, then cancel and the verb at
     /// the bottom right (``ModalActions``). No button draws a pen line: cancel
     /// is the tonal pill, the verb a solid fill — red when it can't be undone
-    /// (`destructive`), saying `workingLabel` (the bare verb) while `busy`. `error` shows under the
+    /// (`destructive`), saying `workingLabel` (the bare verb) while `busy`. A confirm given no `busy`
+    /// closes at once and never works in place: its verb keeps its own words' size (round 21). `error` shows under the
     /// text in the danger ink when the action didn't go through. `titlePending`: the title's words are
     /// still being looked for — its line is kept, unwritten, rather than words
     /// that change under the reader (the web's `data-pending`).
     public func organicConfirm(isPresented: Binding<Bool>, title: String, message: String, cancelLabel: String,
-                               confirmLabel: String, workingLabel: String? = nil, closeLabel: String, busy: Bool = false,
+                               confirmLabel: String, workingLabel: String? = nil, closeLabel: String, busy: Bool? = nil,
                                error: String? = nil, destructive: Bool = false, titlePending: Bool = false, seed: Double = 67,
                                onConfirm: @escaping () -> Void) -> some View {
-        organicModal(isPresented: isPresented, seed: seed, maxWidth: 400, closeLabel: closeLabel, dismissible: !busy) {
+        organicModal(isPresented: isPresented, seed: seed, maxWidth: 400, closeLabel: closeLabel, dismissible: busy != true) {
             OrganicConfirmContent(title: title, message: message, cancelLabel: cancelLabel, confirmLabel: confirmLabel,
                                   workingLabel: workingLabel, busy: busy, error: error, destructive: destructive,
                                   titlePending: titlePending,
@@ -80,7 +81,7 @@ public struct OrganicConfirmContent: View {
     let cancelLabel: String
     let confirmLabel: String
     var workingLabel: String?
-    var busy: Bool
+    var busy: Bool?
     var error: String?
     var destructive: Bool
     var titlePending: Bool
@@ -88,7 +89,7 @@ public struct OrganicConfirmContent: View {
     let onConfirm: () -> Void
 
     public init(title: String, message: String, cancelLabel: String, confirmLabel: String, workingLabel: String? = nil,
-                busy: Bool = false, error: String? = nil, destructive: Bool = false, titlePending: Bool = false,
+                busy: Bool? = nil, error: String? = nil, destructive: Bool = false, titlePending: Bool = false,
                 onCancel: @escaping () -> Void, onConfirm: @escaping () -> Void) {
         self.title = title
         self.message = message
@@ -171,21 +172,24 @@ public struct ModalError: View {
 /// the right (Material's stacked dialog buttons, iOS's stacked alerts). Each button is at least
 /// 44pt tall, a finger's. `busy` (the action on its way, round 5 B6): the verb shows its pen loop
 /// at full colour (``OrganicButton/loading(_:)``), the way out is disabled (its usual fade), and
-/// neither takes a tap, VoiceOver's included.
+/// neither takes a tap, VoiceOver's included. A foot given a `busy` at all (false too) has a verb that
+/// can be busy, as wide at rest as at work (round 21); one given none closes before anything is asked.
 public struct ModalActions<Cancel: View, Verb: View>: View {
+    let canBeBusy: Bool
     let busy: Bool
     let cancel: Cancel
     let verb: Verb
 
-    public init(busy: Bool = false, @ViewBuilder cancel: () -> Cancel, @ViewBuilder verb: () -> Verb) {
-        self.busy = busy
+    public init(busy: Bool? = nil, @ViewBuilder cancel: () -> Cancel, @ViewBuilder verb: () -> Verb) {
+        canBeBusy = busy != nil
+        self.busy = busy == true
         self.cancel = cancel()
         self.verb = verb()
     }
 
     public var body: some View {
         let way = cancel.disabled(busy)
-        let doing = verb.environment(\.organicButtonLoading, busy)
+        let doing = verb.environment(\.organicButtonLoading, busy).environment(\.organicButtonCanBeBusy, canBeBusy)
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 10) {
                 way

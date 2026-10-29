@@ -1,4 +1,5 @@
 #if targetEnvironment(macCatalyst)
+import DesignSystem
 import ResonanceKit
 import SwiftUI
 import UIKit
@@ -81,7 +82,7 @@ extension AppDelegate {
 /// tablet layouts begin.
 struct MacWindowChrome: UIViewRepresentable {
     /// The medium layout's breakpoint and a little more: below it the iPhone layout, its tab bar at the
-    /// foot, would take over a Mac window.
+    /// foot, would take over a Mac window. In the layout's (the iPad's) points: 554 × 431 of the Mac's.
     static let minimumSize = CGSize(width: 720, height: 560)
 
     func makeUIView(context: Context) -> ChromeView { ChromeView() }
@@ -96,10 +97,13 @@ struct MacWindowChrome: UIViewRepresentable {
             scene.titlebar?.toolbar = nil
             scene.sizeRestrictions?.minimumSize = MacWindowChrome.minimumSize
             #if DEBUG
-            // `-macWindowSize 1440x900`: the window held at that size (the store's screenshots are taken at it).
+            // `-macWindowSize 1440x900`: the window held at that size in the Mac's points (the store's screenshots
+            // are taken at it) — the scene counts the iPad's, which the Mac draws at 77 %.
             let parts = (UserDefaults.standard.string(forKey: "macWindowSize") ?? "").split(separator: "x").compactMap { Double($0) }
             if parts.count == 2 {
-                let size = CGSize(width: parts[0], height: parts[1])
+                // Rounded up: the scene keeps whole points, and one fewer would draw the window a point short.
+                let size = CGSize(width: (parts[0] / TextScale.macInterfaceScale).rounded(.up),
+                                  height: (parts[1] / TextScale.macInterfaceScale).rounded(.up))
                 scene.sizeRestrictions?.minimumSize = size
                 scene.sizeRestrictions?.maximumSize = size
             }

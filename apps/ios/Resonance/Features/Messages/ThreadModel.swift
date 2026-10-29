@@ -144,6 +144,9 @@ final class ThreadModel {
     @ObservationIgnored private var pendingReactions: [String: String?] = [:]
     /// Messages whose reaction request hasn't been answered yet (the latest asked wins).
     @ObservationIgnored private var reactionsInFlight: Set<String> = []
+    /// Messages unsent here, drawn as unsent at once (round 21, Android's `localUnsent`) until the
+    /// conversation says so too — or the server refuses, and they are back.
+    @ObservationIgnored private var localUnsent: Set<String> = []
     @ObservationIgnored private var reactionTokens: [String: Int] = [:]
 
     init(handle: String, uid: String?, noteRef: MessagingAPI.NoteRef?, session: SessionStore) {
@@ -482,6 +485,18 @@ final class ThreadModel {
         let held = history
         box?.reconcile { $0.isIn(held) }
         var built = thread.build(held, onItsWay: box?.entries ?? [])
+        // Unsent here, not yet by the document: drawn as the document will say it (one quiet line); one the
+        // document now says is unsent is no longer pending.
+        if !localUnsent.isEmpty {
+            for (i, message) in built.enumerated() where localUnsent.contains(message.id) {
+                if message.isUnsent {
+                    localUnsent.remove(message.id)
+                } else {
+                    built[i] = ChatMessage(id: message.id, senderId: message.senderId, text: "", sentAt: message.sentAt,
+                                           isUnsent: true, delivery: message.delivery, key: message.key)
+                }
+            }
+        }
         // The viewer's reactions still on their way are drawn at once (round 16 §4); one the document now
         // carries as asked is no longer pending.
         if !pendingReactions.isEmpty, let me {
@@ -772,16 +787,25 @@ final class ThreadModel {
     /// How an unsend went.
     enum UnsendResult: Equatable { case done, tooLate, failed }
 
-    /// Unsends one of the viewer's messages (POST …/unsend): the documents then say so for both people.
+    /// Unsends one of the viewer's messages (POST …/unsend): drawn unsent at once (round 21) — a reply being
+    /// written to it let go — then asked of the server, whose documents then say so for both people; refused
+    /// or lost, it is back as it was (the caller's toast says why).
     func unsend(_ message: ChatMessage) async -> UnsendResult {
         guard let pairId, let me, message.canUnsend(viewer: me) else { return .failed }
+        localUnsent.insert(message.id)
+        if replyingTo?.id == message.id { replyingTo = nil }
+        rebuild()
         do {
             try await MessagingAPI(client: session.api).unsendMessage(pairId: pairId, messageId: message.id)
             pendingReactions[message.id] = nil
             return .done
         } catch let failure as APIFailure where failure.isConflict {
+            localUnsent.remove(message.id)
+            rebuild()
             return .tooLate
         } catch {
+            localUnsent.remove(message.id)
+            rebuild()
             return .failed
         }
     }

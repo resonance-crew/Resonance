@@ -227,49 +227,50 @@ private let goneCard = APIFailure(code: "not_found", message: "Card not found.",
     }
 }
 
-/// 清空垃圾桶's question (trash.spec §5.3) lives with the card box, not the shelf: the shelves all read
-/// again after an emptying, and a failure is said in the question, which stays to try once more.
+/// 清空垃圾桶's question (trash.spec §5.3, round 21) lives with the card box, not the shelf: it closes as it
+/// is answered and the shelf shows empty at once; the emptying goes on, the shelves read again after it,
+/// and a failure is the card box's toast.
 @MainActor @Suite struct EmptyTrashQuestionTests {
     struct Refused: Error {}
 
-    @Test func aFailedEmptyingKeepsAskingWithItsErrorAndTheShelvesReadAgain() async {
+    @Test func itClosesAtOnceTheShelfEmptyAndAFailureIsSaid() async {
         let question = EmptyTrashQuestion()
         question.ask()
-        var reads = 0
-        var asked = 0
-        // The trash read again still holds cards: the question stays, saying so.
-        await question.confirm(empty: { throw Refused() }, remaining: { asked += 1; return 3 }, changed: { reads += 1 })
         #expect(question.asking)
-        #expect(question.failed)
-        #expect(!question.busy)
-        #expect((asked, reads) == (1, 1))
-        // Tried again, it goes — and nothing is read again before the answer.
-        await question.confirm(empty: {}, remaining: { asked += 1; return 0 }, changed: { reads += 1 })
-        #expect(!question.asking)
-        #expect(!question.failed)
-        #expect((asked, reads) == (1, 2))
-        // Asked again later: no old error.
-        question.ask()
-        #expect(question.asking && !question.failed)
+        var cleared = 0
+        var outcomes: [EmptyTrashQuestion.Outcome] = []
+        var asked = 0
+        // Answered yes: emptied; then refused, the trash read again still holding cards: failed.
+        let done = await question.confirm(empty: {
+            // Already closed, the shelf already shown empty, while the server is asked.
+            #expect(!question.asking)
+            #expect(question.running)
+        }, remaining: { asked += 1; return 3 }, cleared: { cleared += 1 }, changed: { outcomes.append($0) })
+        #expect(done == .emptied)
+        let refused = await question.confirm(empty: { throw Refused() }, remaining: { asked += 1; return 3 },
+                                             cleared: { cleared += 1 }, changed: { outcomes.append($0) })
+        #expect(refused == .failed)
+        #expect(!question.asking && !question.running)
+        // Nothing is read again before an emptying that worked; the shelf was cleared each time.
+        #expect((asked, cleared) == (1, 2))
+        #expect(outcomes == [.emptied, .failed])
     }
 
     /// Round 8 §6.2: the emptying's answer was lost (the server went on deleting): the trash, read
-    /// again, is empty — the question goes as if it had worked, no error said.
-    @Test func aFailedEmptyingThatEmptiedTheTrashAllTheSameCloses() async {
+    /// again, is empty — as if it had worked, no failure said.
+    @Test func aFailedEmptyingThatEmptiedTheTrashAllTheSameIsDone() async {
         let question = EmptyTrashQuestion()
         question.ask()
-        await question.confirm(empty: { throw Refused() }, remaining: { 0 }, changed: {})
-        #expect(!question.asking)
-        #expect(!question.failed)
+        let outcome = await question.confirm(empty: { throw Refused() }, remaining: { 0 }, cleared: {}, changed: { _ in })
+        #expect(outcome == .emptied)
     }
 
-    /// The trash couldn't be read again: nothing is known to have gone, so the question stays with its error.
-    @Test func aFailedEmptyingWhoseTrashCantBeReadKeepsAsking() async {
+    /// The trash couldn't be read again: nothing is known to have gone, so it failed.
+    @Test func aFailedEmptyingWhoseTrashCantBeReadFailed() async {
         let question = EmptyTrashQuestion()
         question.ask()
-        await question.confirm(empty: { throw Refused() }, remaining: { nil }, changed: {})
-        #expect(question.asking)
-        #expect(question.failed)
+        let outcome = await question.confirm(empty: { throw Refused() }, remaining: { nil }, cleared: {}, changed: { _ in })
+        #expect(outcome == .failed)
     }
 }
 
@@ -315,5 +316,89 @@ private let goneCard = APIFailure(code: "not_found", message: "Card not found.",
         #expect(order == ["a", "b"])
         #expect(nodes["b"] == MapNode(cardId: "b", x: 300, y: 40, groupId: "g1"))
         #expect(parked.isEmpty)
+    }
+}
+
+/// Round 21: a move made on a card's page shows at once, before the server answers — and is put back
+/// should it refuse, unless the card was read again meanwhile (the server's word stands).
+@MainActor @Suite struct CardPageMovesTests {
+    private func loaded(_ card: FeedCard, reference: FeedCard? = nil) async -> CardModel {
+        let model = CardModel(key: card.id) { _ in Fixture.detail(card, isOwner: true, reference: reference) }
+        await model.load()
+        return model
+    }
+
+    @Test func theTrashShowsAtOnceItsDaysFromNowAndGoesBackOnARefusal() async throws {
+        let model = await loaded(Fixture.card("c1"))
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let undo = model.show(.trashed, now: now)
+        let detail = try #require(model.detail)
+        #expect(TrashedCardBanner.shows(detail))
+        let left = CardTrash.daysLeft(purgeAt: try #require(detail.card.purgeDate), now: now)
+        #expect(left.days == CardTrash.days)
+        undo()
+        #expect(model.detail.map(TrashedCardBanner.shows) == false)
+    }
+
+    @Test func privateAndTheLinkGoneAtOnceAndBack() async throws {
+        let original = Fixture.card("o1")
+        var resonance = Fixture.card("r1")
+        resonance.referenceCardId = "o1"
+        let model = await loaded(resonance, reference: original)
+        let makePrivate = model.show(.madePrivate)
+        #expect(model.detail?.card.visibility == ._private)
+        makePrivate()
+        #expect(model.detail?.card.visibility == ._public)
+        let unresonate = model.show(.unresonated)
+        #expect(model.detail?.card.referenceCardId == nil && model.detail?.referenceCard == nil)
+        unresonate()
+        #expect(model.detail?.card.referenceCardId == "o1" && model.detail?.referenceCard != nil)
+    }
+
+    @Test func aCardReadAgainMeanwhileKeepsTheServersWord() async {
+        let model = await loaded(Fixture.card("c1"))
+        let undo = model.show(.madePrivate)
+        // The server's answer arrives (here: the card as it reads now) before the refusal is handled.
+        await model.load()
+        undo()
+        #expect(model.detail?.card.visibility == ._public)
+        _ = model.show(.trashed)
+        await model.load()
+        #expect(model.detail.map(TrashedCardBanner.shows) == false)
+    }
+
+    /// A refused 轉為私人卡 is said in the toast: the plain "couldn't", or — the card in the trash meanwhile — the refusal's words.
+    @Test func aRefusedMakePrivateSaysWhy() {
+        #expect(CardActionsMenu.makePrivateFailure(URLError(.timedOut)) == L10n.Me.Actions.makePrivateFailed)
+        #expect(CardActionsMenu.makePrivateFailure(APIFailure(code: "conflict", message: "This card is in the trash.", status: 409))
+            == L10n.Safety.actionError)
+    }
+}
+
+/// A note sent on after its composer closed (round 21): the same words go under the same client id
+/// whichever composer sends them, a refusal is kept for the composer opened again, and the toast's
+/// 再寄一次 is taken once by the card's page.
+@MainActor @Suite struct NoteSendsTests {
+    @Test func theAttemptOutlivesTheComposerAndTheReopenIsTakenOnce() {
+        let sends = NoteSends()
+        let first = sends.attempt("c1").clientId(cardId: "c1", text: "hello")
+        #expect(sends.attempt("c1").clientId(cardId: "c1", text: " hello ") == first)
+        #expect(sends.attempt("c2") !== sends.attempt("c1"))
+        sends.refused("c1", words: "hello", message: "wait")
+        #expect(sends.refusal("c1")?.words == "hello")
+        sends.refused("c1", words: nil)
+        #expect(sends.refusal("c1") == nil)
+        #expect(!sends.isHosted("c1"))
+        sends.host("c1", true)
+        #expect(sends.isHosted("c1"))
+        sends.host("c1", false)
+        #expect(!sends.isHosted("c1"))
+        sends.reopen("c1")
+        let request = try? #require(sends.reopening)
+        #expect(request?.cardId == "c1")
+        if let request { sends.take(request) }
+        #expect(sends.reopening == nil)
+        sends.reset()
+        #expect(sends.attempt("c1").clientId(cardId: "c1", text: "hello") != first)
     }
 }

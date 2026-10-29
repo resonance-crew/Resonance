@@ -42,7 +42,8 @@ import UIKit
         func size(_ button: OrganicButton) -> CGSize {
             UIHostingController(rootView: button.fixedSize()).sizeThatFits(in: CGSize(width: 400, height: 400))
         }
-        let idle = size(OrganicButton(L10n.Card.Note.send, variant: .solid, size: .sm) {})
+        // A button that can be busy (round 21) is as wide at rest as at work.
+        let idle = size(OrganicButton(L10n.Card.Note.send, variant: .solid, size: .sm) {}.loading(false))
         let working = size(OrganicButton(L10n.Card.Note.send, variant: .solid, size: .sm) {}.loading(true))
         #expect(idle.width > 20)
         #expect(abs(working.width - idle.width) < 0.5)
@@ -58,7 +59,7 @@ import UIKit
         for variant in [OrganicButton.Variant.solid, .tonal, .danger] {
             for buttonSize in [OrganicButton.Size.sm, .md, .lg] {
                 for icon in [nil, IconName.image] {
-                    let idle = size(OrganicButton(L10n.Write.publish, icon: icon, variant: variant, size: buttonSize) {})
+                    let idle = size(OrganicButton(L10n.Write.publish, icon: icon, variant: variant, size: buttonSize) {}.loading(false))
                     let busy = size(OrganicButton(L10n.Write.publish, icon: icon, variant: variant, size: buttonSize) {}.loading(true))
                     #expect(abs(busy.width - idle.width) < 0.5 && abs(busy.height - idle.height) < 0.5,
                             "\(variant) \(buttonSize) icon \(String(describing: icon))")
@@ -66,7 +67,8 @@ import UIKit
             }
         }
         // The bare verb while it works ("刪除卡片" → "刪除") changes nothing beside it either.
-        let delete = size(OrganicButton(L10n.Me.Actions.deleteConfirm, variant: .danger, size: .sm) {})
+        let delete = size(OrganicButton(L10n.Me.Actions.deleteConfirm, variant: .danger, size: .sm) {}
+            .workingLabel(L10n.Me.Actions.delete).loading(false))
         let deleting = size(OrganicButton(L10n.Me.Actions.deleteConfirm, variant: .danger, size: .sm) {}
             .workingLabel(L10n.Me.Actions.delete).loading(true))
         #expect(abs(deleting.width - delete.width) < 0.5 && abs(deleting.height - delete.height) < 0.5)

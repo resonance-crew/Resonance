@@ -2,8 +2,10 @@ import DesignSystem
 import ResonanceKit
 import SwiftUI
 
-/// Notifications, live (web: NotificationBell). Each one says who did what;
-/// a note shows its words; tapping opens where it happened and marks it read.
+/// Notifications, live (web: NotificationBell, round 21). In parts by time — 今天, 這週, 更早 — the
+/// rows apart by air alone, no rules between them: who did it (their face) on the left, their pen name
+/// and what they did — a note's own words quoted under it in its card's colour — and when, and the
+/// card it is about on the right. Tapping opens where it happened and marks it read.
 struct NotificationsScreen: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.openRoute) private var openRoute
@@ -20,45 +22,95 @@ struct NotificationsScreen: View {
                     store.resume()
                 }
             } else if !store.loaded {
-                // Still reading: the rows' own shapes between the same wavy rules, not a loader.
+                // Still reading: the rows' own shapes, not a loader.
                 NotificationsSkeleton().readableColumn()
             } else {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(store.items.enumerated()), id: \.element.id) { i, item in
-                        if i > 0 { WavyDivider(seed: Double(29 + i * 7)).padding(.horizontal, 20) }
-                        row(item)
-                    }
+                let extras = store.extras(reading: session.reading)
+                // The times move on by themselves (剛剛 → 1 分鐘前), and a row passes from 今天 to 這週 at midnight.
+                TimelineView(.everyMinute) { timeline in
+                    list(store.items, extras: extras, now: timeline.date)
                 }
                 .readableColumn()
+                // Who they are and the cards they are about: asked for once each time the screen shows, for
+                // the ones not read yet; what was read is kept.
+                .task(id: BellExtras.key(store.items)) {
+                    await extras.load(store.items) { session.conversations.person($0) }
+                }
             }
         }
     }
 
-    private func row(_ item: NotificationsStore.Item) -> some View {
+    private func list(_ items: [NotificationsStore.Item], extras: BellExtras, now: Date) -> some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(BellTime.parts(items, now: now).enumerated()), id: \.element.id) { i, part in
+                Text(part.group.title)
+                    .font(AppFonts.body(13, weight: .semibold))
+                    .foregroundStyle(Tokens.textMuted)
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.top, i == 0 ? 0 : 14)
+                    .padding(.bottom, 4)
+                    // Its words start where the rows' faces do.
+                    .padding(.horizontal, Self.gutter + Self.rowPad)
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(part.items) { item in row(item, extras: extras, now: now) }
+                }
+            }
+        }
+    }
+
+    /// The column's own room either side of a row, whose press wash spans it; and the row's inside it,
+    /// so its content keeps the screen's usual 20.
+    static let gutter: CGFloat = 6
+    static let rowPad: CGFloat = 14
+
+    private func row(_ item: NotificationsStore.Item, extras: BellExtras, now: Date) -> some View {
         Button {
             session.notifications.markRead(item)
             if let route = Self.route(for: item) { openRoute(route) }
         } label: {
-            NotificationRowLabel(text: Self.text(for: item),
-                                 preview: item.type == "note" ? item.preview.flatMap { $0.isEmpty ? nil : $0 } : nil,
-                                 unread: item.isUnread)
+            NotificationRowLabel(sentence: BellSentence.of(item),
+                                 preview: Self.preview(of: item),
+                                 unread: item.isUnread,
+                                 face: Self.face(of: item, extras: extras),
+                                 card: Self.card(of: item, extras: extras),
+                                 when: item.createdAt.map { BellTime.when($0, now: now) } ?? "")
+                .padding(.horizontal, Self.rowPad)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(RowWashStyle(seed: Double(seedFromString(item.id) % 97)))
+        .padding(.horizontal, Self.gutter)
     }
 
-    static func text(for item: NotificationsStore.Item) -> String {
+    /// A note's own words (a note IS what it says), nothing for any other row.
+    static func preview(of item: NotificationsStore.Item) -> String? {
+        guard item.type == "note", let preview = item.preview, !preview.isEmpty else { return nil }
+        return preview
+    }
+
+    /// The row's left: its sender's face (as read), or the glyph of a row with nobody behind it.
+    static func face(of item: NotificationsStore.Item, extras: BellExtras) -> BellFace {
+        guard BellSentence.namesSomeone(item.type) else { return .glyph(BellSentence.glyph(item.type)) }
         let handle = item.fromHandle ?? ""
-        switch item.type {
-        case "invite": return L10n.App.Notifications.invite(handle: handle)
-        case "invite_accepted": return L10n.App.Notifications.inviteAccepted(handle: handle)
-        case "message": return L10n.App.Notifications.message(handle: handle)
-        case "resonance_summary": return L10n.App.Notifications.resonanceSummary(count: item.count ?? 0)
-        case "translation_done": return L10n.App.Notifications.translationDone
-        case "resonance": return L10n.App.Notifications.resonance(handle: handle)
-        case "note": return L10n.App.Notifications.note(handle: handle)
-        case "card_link": return L10n.App.Notifications.cardLink(handle: handle)
-        default: return item.type
+        switch extras.person(item.fromUserId) {
+        case let .found(person): return .person(person)
+        case .pending: return .pending
+        case .settled: return .initials(BellFace.initials(handle), seed: BellFace.seed(uid: item.fromUserId, handle: handle))
         }
+    }
+
+    /// The row's right: the card it is about, as read (nothing for a row about no card, or a card the
+    /// viewer can't read any more).
+    static func card(of item: NotificationsStore.Item, extras: BellExtras) -> BellCard {
+        guard let id = item.cardId, !id.isEmpty else { return .none }
+        switch extras.cards.lookup(id) {
+        case let .found(card): return .card(card)
+        case .loading: return .pending
+        case .hidden, .failed: return .none
+        }
+    }
+
+    /// The row's sentence as one string (what the bell says in words: the name and what they did).
+    static func text(for item: NotificationsStore.Item) -> String {
+        BellSentence.of(item).whole
     }
 
     /// Where a notification leads (the web's hrefs).
@@ -81,65 +133,397 @@ struct NotificationsScreen: View {
     }
 }
 
-/// The bell's rows still on their way: six of a row's measures — who did what, and under two of
-/// them a note's words — parted by the list's own wavy rules. Android's NotificationsSkeleton.
+// MARK: - Parts and times
+
+/// The bell's parts and its rows' times (the web's bellTime.ts): newest first, the viewer's today, the
+/// six calendar days before it, and everything older — by the viewer's own calendar days, so yesterday
+/// 23:59 is a day before today 00:01.
+nonisolated enum BellTime {
+    enum Group: Equatable, Hashable {
+        case today, thisWeek, earlier
+
+        var title: String {
+            switch self {
+            case .today: L10n.App.Notifications.today
+            case .thisWeek: L10n.App.Notifications.thisWeek
+            case .earlier: L10n.App.Notifications.earlier
+            }
+        }
+    }
+
+    /// Whole calendar days from `at` to `now` in `calendar`'s time zone (negative: `at` is on a later day).
+    static func calendarDays(_ at: Date, now: Date, calendar: Calendar = .current) -> Int {
+        calendar.dateComponents([.day], from: calendar.startOfDay(for: at), to: calendar.startOfDay(for: now)).day ?? 0
+    }
+
+    /// Which part a row stands in (`bellGroup`): the same calendar day → today; 1–6 days before → this
+    /// week; else earlier. A clock behind the server's (a row from "later today") is today's.
+    static func group(_ at: Date, now: Date, calendar: Calendar = .current) -> Group {
+        let days = calendarDays(at, now: now, calendar: calendar)
+        if days <= 0 { return .today }
+        return days < 7 ? .thisWeek : .earlier
+    }
+
+    /// One part of the bell: its heading's group and its rows.
+    struct Part: Identifiable {
+        let group: Group
+        var items: [NotificationsStore.Item]
+        var id: Group { group }
+    }
+
+    /// The rows in their parts, in the list's order (newest first); a row without a time is today's.
+    static func parts(_ items: [NotificationsStore.Item], now: Date, calendar: Calendar = .current) -> [Part] {
+        var out: [Part] = []
+        for item in items {
+            let group = item.createdAt.map { Self.group($0, now: now, calendar: calendar) } ?? .today
+            if let i = out.firstIndex(where: { $0.group == group }) {
+                // Out of order (a clock that moved) joins its own part all the same.
+                out[i].items.append(item)
+            } else {
+                out.append(Part(group: group, items: [item]))
+            }
+        }
+        return out
+    }
+
+    /// When it happened, as its row says it (`bellWhen`) — in step with its part: today the minutes or
+    /// hours (under a minute, 剛剛 / Just now), this week the calendar days (昨天, 3 天前), earlier the
+    /// date (with the year when it isn't this year's). Never "in 1 minute" from a clock behind the server's.
+    static func when(_ at: Date, now: Date, locale: Locale = Strings.shared.locale, justNow: String = L10n.App.Notifications.justNow,
+                     calendar: Calendar = .current) -> String {
+        let days = calendarDays(at, now: now, calendar: calendar)
+        let relative = RelativeDateTimeFormatter()
+        relative.locale = locale
+        relative.calendar = calendar
+        relative.unitsStyle = .short
+        relative.dateTimeStyle = .named
+        if days <= 0 {
+            let minutes = max(0, Int(now.timeIntervalSince(at) / 60))
+            if minutes < 1 { return justNow }
+            return minutes < 60 ? relative.localizedString(from: DateComponents(minute: -minutes))
+                : relative.localizedString(from: DateComponents(hour: -(minutes / 60)))
+        }
+        if days < 7 { return relative.localizedString(from: DateComponents(day: -days)) }
+        let sameYear = calendar.component(.year, from: at) == calendar.component(.year, from: now)
+        let format = DateFormatter()
+        format.locale = locale
+        format.calendar = calendar
+        format.timeZone = calendar.timeZone
+        format.setLocalizedDateFormatFromTemplate(sameYear ? "Md" : "yMd")
+        return format.string(from: at)
+    }
+}
+
+// MARK: - The sentence
+
+/// A row's sentence, its pen name apart (the web's `bellSentence`): `before`, `handle`, `after` — the
+/// name set in semibold wherever the language puts it (「{handle} 寄來一張小紙條」, "{handle} sent you a
+/// little note"). A row with nobody behind it (a summary, a translation, an expired invite) is all `before`.
+nonisolated struct BellSentence: Equatable {
+    let before: String
+    let handle: String?
+    let after: String
+
+    var whole: String { before + (handle ?? "") + after }
+
+    /// Stands in for the pen name while the sentence is formatted, so the name can be set apart wherever it falls.
+    static let mark = "\u{2063}"
+
+    /// The rows that name who did it.
+    static func namesSomeone(_ type: String) -> Bool {
+        ["invite", "invite_accepted", "message", "resonance", "note", "card_link"].contains(type)
+    }
+
+    /// The glyph a row with nobody behind it wears instead of a face.
+    static func glyph(_ type: String) -> IconName {
+        switch type {
+        case "resonance_summary": .sparkle
+        case "translation_done": .globe
+        case "invite_expired": .users
+        default: .bell
+        }
+    }
+
+    static func of(_ item: NotificationsStore.Item) -> BellSentence {
+        of(type: item.type, handle: item.fromHandle ?? "", count: item.count ?? 0)
+    }
+
+    static func of(type: String, handle: String, count: Int) -> BellSentence {
+        let formatted: String? = switch type {
+        case "invite": L10n.App.Notifications.invite(handle: mark)
+        case "invite_accepted": L10n.App.Notifications.inviteAccepted(handle: mark)
+        case "message": L10n.App.Notifications.message(handle: mark)
+        case "resonance": L10n.App.Notifications.resonance(handle: mark)
+        case "note": L10n.App.Notifications.note(handle: mark)
+        case "card_link": L10n.App.Notifications.cardLink(handle: mark)
+        default: nil
+        }
+        if let formatted {
+            let parts = formatted.components(separatedBy: mark)
+            return BellSentence(before: parts.first ?? "", handle: handle, after: parts.dropFirst().joined())
+        }
+        let whole = switch type {
+        case "resonance_summary": L10n.App.Notifications.resonanceSummary(count: count)
+        case "translation_done": L10n.App.Notifications.translationDone
+        case "invite_expired": L10n.App.Notifications.inviteExpired
+        default: type
+        }
+        return BellSentence(before: whole, handle: nil, after: "")
+    }
+}
+
+// MARK: - The row
+
+/// A row's left: their face (the photo, else initials on their colour), a quiet tile while they are
+/// read, or the glyph of a row with nobody behind it.
+enum BellFace: Equatable {
+    case pending
+    case person(Person)
+    /// A profile that is gone (or couldn't be read): the initials of the pen name the row kept.
+    case initials(String, seed: Double)
+    case glyph(IconName)
+
+    /// The first two characters of the pen name, upper-cased (`?` for none).
+    static func initials(_ handle: String) -> String {
+        let two = String(handle.prefix(2)).uppercased()
+        return two.isEmpty ? "?" : two
+    }
+
+    /// The web's fallback seed: from the sender's id (else their pen name), 1–50.
+    static func seed(uid: String?, handle: String) -> Double {
+        Double(seedFromString(uid.flatMap { $0.isEmpty ? nil : $0 } ?? handle) % 50 + 1)
+    }
+}
+
+/// A row's right: the card it is about — a quiet tile while it is read, nothing for none.
+enum BellCard: Equatable {
+    case none
+    case pending
+    case card(FeedCard)
+}
+
+/// One bell row (round 21, the web's BellRow): [face 40] [words] [card 46], top-aligned, 12 apart. The
+/// words: the sentence — the pen name in semibold, always in the text's ink; the rest in the text's
+/// ink while unread, muted once read (weight never changes) — with the unread dot ending its first
+/// line; a note's words quoted under it in the story's serif after a wavy rule in its card's pen; then
+/// when. VoiceOver hears "Unread" as the row's value, never the dot.
+struct NotificationRowLabel: View {
+    let sentence: BellSentence
+    let preview: String?
+    let unread: Bool
+    var face: BellFace = .pending
+    var card: BellCard = .none
+    var when: String = ""
+
+    static let faceSize: CGFloat = 40
+    static let thumbSize: CGFloat = 46
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            BellFaceView(face: face)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(Self.attributed(sentence, unread: unread))
+                        .lineSpacing(Self.lineSpacing(.body, size: 14, lineHeight: 1.45))
+                        .fixedSize(horizontal: false, vertical: true)
+                    if unread {
+                        // The web's 6 dot, 8 after the words, on their middle — ending the first line, beside who
+                        // it is from, never after a note's words.
+                        Circle().fill(Tokens.terracotta).frame(width: 6, height: 6)
+                            .alignmentGuide(.firstTextBaseline) { $0.height + 2.5 }
+                            .accessibilityHidden(true)
+                    }
+                }
+                if let preview { BellNoteQuote(text: preview, card: card.found) }
+                if !when.isEmpty {
+                    Text(verbatim: when).font(AppFonts.body(12)).foregroundStyle(Tokens.textMuted)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            BellThumbView(card: card)
+        }
+        .multilineTextAlignment(.leading)
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(unread ? L10n.App.Notifications.unread : "")
+    }
+
+    /// The sentence's runs: the name in semibold and the text's ink; the rest in the text's ink while
+    /// unread, muted once read. Drawn as written — never a localized interpolation, which set their
+    /// 「，」「。」 the zh-TW way, centred.
+    static func attributed(_ sentence: BellSentence, unread: Bool) -> AttributedString {
+        let rest = unread ? Tokens.text : Tokens.textMuted
+        func run(_ text: String, _ font: Font, _ color: Color) -> AttributedString {
+            var run = AttributedString(text)
+            run.font = font
+            run.foregroundColor = color
+            return run
+        }
+        var out = run(sentence.before, AppFonts.body(14), rest)
+        if let handle = sentence.handle { out += run(handle, AppFonts.body(14, weight: .semibold), Tokens.text) }
+        out += run(sentence.after, AppFonts.body(14), rest)
+        return out
+    }
+
+    /// SwiftUI's extra room between lines for a CSS `line-height` (a multiple of the size).
+    static func lineSpacing(_ family: AppFonts.Family, size: CGFloat, lineHeight: CGFloat) -> CGFloat {
+        let font = AppFonts.scaledUIFont(family, size: size)
+        return max(0, font.pointSize * lineHeight - font.lineHeight)
+    }
+}
+
+extension BellCard {
+    var found: FeedCard? {
+        if case let .card(card) = self { return card }
+        return nil
+    }
+}
+
+/// The row's face: the sender's (the conversation list's avatar), a quiet tile while read, or a glyph's tile.
+private struct BellFaceView: View {
+    let face: BellFace
+    private let size = NotificationRowLabel.faceSize
+
+    var body: some View {
+        switch face {
+        case .pending:
+            UnevenRoundedRectangle(cornerRadii: Self.radii, style: .continuous)
+                .fill(Tokens.skeletonBase)
+                .frame(width: size, height: size)
+                .accessibilityHidden(true)
+        case let .person(person):
+            HandDrawnAvatar(initials: person.initials, imageURL: person.avatarURL,
+                            color: OKLCHColor.avatar(person.accentColor) ?? Tokens.avatarWait, size: size,
+                            seed: person.avatarSeed.flatMap(Double.init).flatMap { $0 == 0 ? nil : $0 } ?? 5)
+        case let .initials(initials, seed):
+            HandDrawnAvatar(initials: initials, color: Tokens.avatarWait, size: size, seed: seed)
+        case let .glyph(icon):
+            // Terracotta-light at 40 % over the page, the glyph in terracotta.
+            UnevenRoundedRectangle(cornerRadii: Self.radii, style: .continuous)
+                .fill(Tokens.terracottaLight.opacity(0.4))
+                .frame(width: size, height: size)
+                .overlay { OrganicIcon(icon, size: 18, color: Tokens.terracotta) }
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// 13 15 13 15: a tile a little lopsided, as the web's.
+    static let radii = RectangleCornerRadii(topLeading: 13, bottomLeading: 15, bottomTrailing: 13, topTrailing: 15)
+}
+
+/// The card a row is about, at 46: its cover clipped to a small wobbly square with no pen line (a feed
+/// card's picture has none either), else its own colours with the first character of its title; a quiet
+/// tile while it is read; nothing when the viewer can't read it any more.
+private struct BellThumbView: View {
+    let card: BellCard
+    private let size = NotificationRowLabel.thumbSize
+
+    var body: some View {
+        switch card {
+        case .none:
+            EmptyView()
+        case .pending:
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Tokens.skeletonBase)
+                .frame(width: size, height: size)
+                .accessibilityHidden(true)
+        case let .card(card):
+            let family = PublishStep.previewPalette(accentHue: card.accentHue, cardId: card.id)
+            let shape = BellThumb.shape(id: card.id)
+            let cover = card.imageUrl.flatMap { $0.isEmpty ? nil : URL(string: $0) }
+            ZStack {
+                shape.fill(cover == nil ? family.fill : family.skeleton)
+                if let cover {
+                    RemoteImage(url: cover, pixelSize: CGSize(width: size * 3, height: size * 3))
+                        .frame(width: size, height: size)
+                        .clipShape(shape)
+                } else {
+                    Text(verbatim: card.title.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "")
+                        .font(AppFonts.font(.headingCJK, size: 19, weight: .semibold))
+                        .foregroundStyle(family.deep)
+                }
+            }
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+        }
+    }
+}
+
+/// The thumb's small wobbly square (the web's `wobRect(46, 46, 46 × 0.24, seed, 1.1, one turn a side)`).
+enum BellThumb {
+    static func shape(id: String) -> WobRectShape {
+        WobRectShape(radius: NotificationRowLabel.thumbSize * 0.24, seed: Double(seedFromString(id) % 97), mag: 1.1,
+                     options: WobRectOptions(curve: 1.2, cornerJitter: 1.2, segmentsH: .count(1), segmentsV: .count(1)))
+    }
+}
+
+/// A note's words as the bell quotes them: the story's serif, 14 on 1.65, the text's ink, three lines at
+/// most, 14 in after a wavy rule at the house pen in its card's colour family's pen (the quiet grey
+/// sheet pen until the card is known).
+private struct BellNoteQuote: View {
+    let text: String
+    let card: FeedCard?
+
+    var body: some View {
+        let pen = card.map { PublishStep.previewPalette(accentHue: $0.accentHue, cardId: $0.id).border } ?? Tokens.fieldBorderHover
+        let spacing = NotificationRowLabel.lineSpacing(.headingCJK, size: 14, lineHeight: 1.65)
+        Text(verbatim: text)
+            .font(AppFonts.font(.headingCJK, size: 14))
+            .foregroundStyle(Tokens.text)
+            .lineSpacing(spacing)
+            .lineLimit(3)
+            .truncationMode(.tail)
+            .fixedSize(horizontal: false, vertical: true)
+            // The CSS line box's half-leading above the first line and under the last.
+            .padding(.vertical, spacing / 2)
+            .padding(.leading, 14)
+            .overlay(alignment: .leading) {
+                BellQuoteRule()
+                    .stroke(pen, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round))
+                    .frame(width: 6)
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, 1)
+    }
+}
+
+/// The quote's rule: the web's `wavyVertical(h, 7, 1.4, max(2, round(h / 20)))`, down the middle of its 6.
+private nonisolated struct BellQuoteRule: Shape {
+    func path(in rect: CGRect) -> Path {
+        let h = Double(rect.height)
+        guard h > 0 else { return Path() }
+        return wavyVertical(h, seed: 7, amp: 1.4, steps: max(2, Int((h / 20).rounded())))
+            .path(offsetX: Double(rect.midX), offsetY: Double(rect.minY))
+    }
+}
+
+/// The bell's rows still on their way: six of the new row's measures — a 40 face tile, two lines of
+/// words, and on two of them a 46 card tile — apart by air, no rules. Android's NotificationsSkeleton.
 private struct NotificationsSkeleton: View {
     private static let lines: [CGFloat] = [0.82, 0.64, 0.9, 0.58, 0.76, 0.7]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 2) {
             ForEach(0..<6, id: \.self) { i in
-                if i > 0 { WavyDivider(seed: Double(29 + i * 7)).padding(.horizontal, 20) }
-                VStack(alignment: .leading, spacing: 9) {
-                    SkeletonBlock(fraction: Self.lines[i], height: 14)
-                    if i == 1 || i == 3 { SkeletonBlock(fraction: 0.46, height: 12) }
+                HStack(alignment: .top, spacing: 12) {
+                    SkeletonBlock(width: NotificationRowLabel.faceSize, height: NotificationRowLabel.faceSize, radius: 13)
+                    VStack(alignment: .leading, spacing: 9) {
+                        SkeletonBlock(fraction: Self.lines[i], height: 14)
+                        SkeletonBlock(fraction: 0.32, height: 11)
+                    }
+                    .padding(.top, 3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if i == 0 || i == 2 {
+                        SkeletonBlock(width: NotificationRowLabel.thumbSize, height: NotificationRowLabel.thumbSize, radius: 12)
+                    }
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 15)
+                .padding(.horizontal, NotificationsScreen.gutter + NotificationsScreen.rowPad)
+                .padding(.vertical, 10)
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(L10n.Home.moreLoading)
         .skeletonTimeline()
-    }
-}
-
-/// A bell row's words: who did what, and under a note the note's own words. Read and unread differ
-/// by ink alone, and the unread dot ends the first line, beside who it is from — on a note's row
-/// too, never after the note's words, where it would read as a mark on the note (the web's
-/// NotificationBell, Android's NotificationRow). The words are drawn as written (`verbatim`) and the
-/// dot apart from them, so their 「，」「。」 sit as in every other line of the app — a localized
-/// `Text` interpolation around them set them the zh-TW way, centred, while the row was unread.
-/// VoiceOver hears "Unread" as the row's value, never the glyph (the web hides it, Android names it).
-struct NotificationRowLabel: View {
-    let text: String
-    let preview: String?
-    let unread: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .center, spacing: 8) {
-                Text(verbatim: text)
-                    .font(AppFonts.body(14))
-                    .foregroundStyle(unread ? Tokens.text : Tokens.textMuted)
-                if unread {
-                    // The web's 6px dot, 8 after the words, on their middle.
-                    Circle().fill(Tokens.terracotta).frame(width: 6, height: 6)
-                        .accessibilityHidden(true)
-                }
-            }
-            if let preview {
-                Text(verbatim: "「\(preview)」")
-                    .font(AppFonts.body(13))
-                    .foregroundStyle(Tokens.textMuted)
-            }
-        }
-        .multilineTextAlignment(.leading)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 13)
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityValue(unread ? L10n.App.Notifications.unread : "")
     }
 }

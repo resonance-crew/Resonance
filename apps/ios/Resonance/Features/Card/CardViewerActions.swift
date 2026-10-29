@@ -35,12 +35,20 @@ struct CardViewerActions: View {
             }
         }
         .organicModal(isPresented: $writingNote, seed: 17, maxWidth: 520, closeLabel: L10n.Card.Note.close) {
-            NoteComposer(cardId: cardId) { writingNote = false } onUpgrade: { text in
+            NoteComposer(cardId: cardId, onClose: { writingNote = false }, onUpgrade: { text in
                 writingNote = false
                 // The note's words become the resonance's story (the web drops them; the apps keep them).
                 writer.open(.init(referenceCardId: cardId, story: text))
-            }
+            }, openCard: { [openRoute, cardId] in openRoute(.card(cardId)) })
             .withSession(session)
+        }
+        // A note that didn't go (round 21): the toast's 再寄一次 opens the composer again here, on its words.
+        .onAppear { session.noteSends.host(cardId, true) }
+        .onDisappear { session.noteSends.host(cardId, false) }
+        .onChange(of: session.noteSends.reopening, initial: true) { _, request in
+            guard let request, request.cardId == cardId else { return }
+            session.noteSends.take(request)
+            writingNote = true
         }
         .organicModal(isPresented: $picking, seed: 53, maxWidth: 480, closeLabel: L10n.Card.ResonatePicker.cancel,
                       dismissible: !resonating) {

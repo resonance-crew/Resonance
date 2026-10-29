@@ -5,26 +5,25 @@ import SwiftUI
 /// NoteComposer (the plain variant in its modal): a little note to the card's
 /// author — the only reader it will ever have. Four lines to write in, the
 /// privacy hint for the first few times, the count, and past 200 characters
-/// an offer to make it a resonance card instead. Sending replaces the form
-/// with a quiet confirmation. Words typed and not sent are kept on the device
+/// an offer to make it a resonance card instead. 寄出 closes it at once with a
+/// toast (round 21) and the note goes on behind it, under its card's attempt
+/// (``NoteSends``); a failure says so in a toast whose 再寄一次 opens the composer
+/// again on the words, kept. Words typed and not sent are kept on the device
 /// (``NoteDrafts``) as they are typed and however the composer closes — a tap
 /// beside it, 取消, the app going away — and it opens again from them on this
-/// card; they go once the note is sent, or handed to a resonance.
+/// card; they go once the server has the note, or handed to a resonance.
 struct NoteComposer: View {
     let cardId: String
     let onClose: () -> Void
     /// 紙條 → 共振: the text becomes the story of a resonance to this card.
     let onUpgrade: (String) -> Void
+    /// Opens this card's page (the toast's 再寄一次, when the page is gone by then).
+    var openCard: () -> Void = {}
     @Environment(SessionStore.self) private var session
     @Environment(\.scenePhase) private var scenePhase
     @State private var text = ""
-    @State private var pending = false
-    @State private var sent = false
     @State private var error: String?
     @State private var showsHint = false
-    /// The note on its way, under one client id until it is left: Send pressed again on the same
-    /// words after a failure is a retry the server can recognise, never a second note.
-    @State private var attempt = NoteAttempt()
     /// The words the server refused (three notes already wait, a block): the same words sent again
     /// would only be refused again, so Send waits for an edit (and the refusal stays said until then).
     @State private var refused: String?
@@ -54,21 +53,7 @@ struct NoteComposer: View {
             .onChange(of: scenePhase) { _, phase in if phase != .active { keepDraft() } }
     }
 
-    @ViewBuilder private var content: some View {
-        if sent {
-            VStack(spacing: 0) {
-                HStack(spacing: 10) {
-                    OrganicIcon(.note, size: 18, color: Tokens.text)
-                    Text(L10n.Card.Note.sent).font(AppFonts.body(14)).foregroundStyle(Tokens.text)
-                    Spacer(minLength: 0)
-                }
-                // Said and done: the one-exit notice's close, under the confirmation (a modal keeps no ✕).
-                ModalCloseButton(L10n.Card.Note.close, action: onClose)
-            }
-        } else {
-            form
-        }
-    }
+    private var content: some View { form }
 
     private var form: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -127,36 +112,48 @@ struct NoteComposer: View {
             ModalActions {
                 OrganicButton(L10n.Card.Note.cancel, variant: .tonal, size: .sm, action: onClose)
             } verb: {
-                // While the server answers, the pen inks where the word was (the resonate picker's way): one size throughout.
-                OrganicButton(L10n.Card.Note.send, variant: .solid, size: .sm) { Task { await send() } }
-                    .loading(pending)
-                    .disabled(!valid && !pending)
+                // Closes as it is pressed (round 21): nothing to wait for here.
+                OrganicButton(L10n.Card.Note.send, variant: .solid, size: .sm, action: send)
+                    .disabled(!valid)
             }
             .padding(.top, 18)
         }
         .task { showsHint = await session.hints?.claim("note-privacy") ?? false }
     }
 
-    private func send() async {
-        guard valid, !pending else { return }
-        pending = true
-        error = nil
-        defer { pending = false }
+    /// 寄出: the composer closes at once with 「紙條已寄出」 and the note goes on behind it (round 21) — its words
+    /// kept on the device until the server has them, under the card's attempt's client id (a retry, never a
+    /// second note). A failure says so in a toast (三張已在等 for the letter's cap), whose 再寄一次 opens the
+    /// composer again on the words. The notification permission is asked only once the note has gone.
+    private func send() {
+        guard valid else { return }
         let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Taken now: the composer may be closed before the server answers.
-        let drafts = session.noteDrafts, uid = author, cardId = cardId
-        do {
-            _ = try await attempt.send(cardId: cardId, text: words) { try await session.messaging.sendNote(cardId: cardId, text: words, clientId: $0) }
-            // The server has it (201): its draft goes — even when the composer was closed meanwhile.
-            keeping?.cancel()
-            letGo = true
-            if let uid { drafts.clear(uid: uid, cardId: cardId) }
-            sent = true
-            PushCenter.shared.reachedOut()
-        } catch {
-            let failure = NoteFailure(error)
-            self.error = failure.message
-            if failure.refused { refused = words }
+        // Taken now: the composer is closed before the server answers.
+        let (drafts, uid, cardId, sends, toasts, messaging, openCard) =
+            (session.noteDrafts, author, cardId, session.noteSends, session.toasts, session.messaging, openCard)
+        let attempt = sends.attempt(cardId)
+        sends.refused(cardId, words: nil)
+        keepDraft()
+        onClose()
+        toasts.show(L10n.Card.Note.sent)
+        Task {
+            do {
+                _ = try await attempt.send(cardId: cardId, text: words) { try await messaging.sendNote(cardId: cardId, text: words, clientId: $0) }
+                // The server has it (201): its draft goes — unless other words were written there since.
+                if let uid, drafts.text(uid: uid, cardId: cardId)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? words == words {
+                    drafts.clear(uid: uid, cardId: cardId)
+                }
+                PushCenter.shared.reachedOut()
+            } catch {
+                let failure = NoteFailure(error)
+                if failure.refused { sends.refused(cardId, words: words, message: failure.message) }
+                let waits = (error as? APIFailure)?.status == 409
+                toasts.show(waits ? L10n.Card.Note.waitForReply : L10n.Card.Note.failed,
+                            action: ToastCenter.Action(label: L10n.Card.Note.reopen, accessibilityLabel: L10n.Card.Note.reopen) {
+                    sends.reopen(cardId)
+                    if !sends.isHosted(cardId) { openCard() }
+                })
+            }
         }
     }
 
@@ -167,6 +164,11 @@ struct NoteComposer: View {
         guard author == nil, let uid = session.uid else { return }
         author = uid
         if text.isEmpty, let kept = session.noteDrafts.text(uid: uid, cardId: cardId) { text = kept }
+        // Opened again on words the server refused: said again, and Send waits for an edit.
+        if let refusal = session.noteSends.refusal(cardId), refusal.words == words {
+            refused = refusal.words
+            error = refusal.message
+        }
     }
 
     /// The words as they are now, kept — or, emptied, let go — for the account that typed them, while

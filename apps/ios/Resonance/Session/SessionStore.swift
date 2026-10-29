@@ -88,6 +88,8 @@ final class SessionStore {
     let kept = APICache.standard()
     /// Notes typed and not sent, per card (the signed-in account's only): the composer starts from them.
     let noteDrafts = NoteDrafts.standard()
+    /// Notes sent on after their composer closed: their client ids, refusals and the toast's 再寄一次 (round 21).
+    let noteSends = NoteSends()
     let api: Client
     let account: AccountAPI
     let writing: WritingAPI
@@ -315,6 +317,7 @@ final class SessionStore {
         httpCache.use(account: newUID)
         kept.retainOnly(newUID)
         noteDrafts.retainOnly(newUID)
+        if previous != newUID { noteSends.reset() }
         keptBlocked = newUID.flatMap { kept.value(.blocked, uid: $0) }.map(Set.init) ?? []
         foreground = ForegroundRefresh(last: .now)
         // Drawn until the API answers (the card box's header on a cold start).

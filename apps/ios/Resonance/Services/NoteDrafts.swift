@@ -1,5 +1,7 @@
 import CryptoKit
 import Foundation
+import Observation
+import ResonanceKit
 
 /// A note's unsent words (小紙條), kept on the device for each signed-in account and card, so that
 /// closing the composer — a tap beside it, 取消, the app going away — never loses what was typed:
@@ -116,5 +118,69 @@ import Foundation
     /// An account's file: a digest of its uid, so no uid is ever a path.
     nonisolated static func fileName(_ uid: String) -> String {
         SHA256.hash(data: Data(uid.utf8)).prefix(16).map { String(format: "%02x", $0) }.joined() + ".json"
+    }
+}
+
+/// Notes on their way after their composer closed (round 21): 寄出 closes the composer at once and the note
+/// goes on behind it. Kept here, for the session, are what must outlive the composer: each card's attempt —
+/// the client id its words go under, so sending them again after a failure is a retry the server
+/// recognises, never a second note — the words the server refused (the composer opened on them again waits
+/// for an edit), and the toast's 再寄一次: the composer to open again on a card (on its page if it shows,
+/// else the card's page is opened first).
+@MainActor @Observable
+final class NoteSends {
+    /// The composer to open again on a card: its page's composer opens it and takes it (`take`).
+    struct Reopen: Equatable {
+        let cardId: String
+        let id: Int
+    }
+
+    private(set) var reopening: Reopen?
+    @ObservationIgnored private var count = 0
+    @ObservationIgnored private var attempts: [String: NoteAttempt] = [:]
+    /// The words the server refused on a card, and what was said.
+    @ObservationIgnored private var refusals: [String: (words: String, message: String)] = [:]
+    /// The card pages whose composer can open now (one page or two of the same card).
+    @ObservationIgnored private var hosts: [String: Int] = [:]
+
+    /// The attempt the words to `cardId` go under, the same across the composer closing and opening again.
+    func attempt(_ cardId: String) -> NoteAttempt {
+        if let kept = attempts[cardId] { return kept }
+        let made = NoteAttempt()
+        attempts[cardId] = made
+        return made
+    }
+
+    /// The server refused `words` on `cardId` (`message`: what the composer says of it); nil once other words go.
+    func refused(_ cardId: String, words: String?, message: String = "") {
+        refusals[cardId] = words.map { ($0, message) }
+    }
+
+    func refusal(_ cardId: String) -> (words: String, message: String)? { refusals[cardId] }
+
+    /// A card's page with its composer is showing (`true`) or gone (`false`).
+    func host(_ cardId: String, _ showing: Bool) {
+        hosts[cardId, default: 0] += showing ? 1 : -1
+        if hosts[cardId, default: 0] <= 0 { hosts[cardId] = nil }
+    }
+
+    func isHosted(_ cardId: String) -> Bool { hosts[cardId] != nil }
+
+    /// Opens the composer again on `cardId` (the toast's 再寄一次).
+    func reopen(_ cardId: String) {
+        count += 1
+        reopening = Reopen(cardId: cardId, id: count)
+    }
+
+    /// The page's composer opened for `request`.
+    func take(_ request: Reopen) {
+        if reopening == request { reopening = nil }
+    }
+
+    /// Signed out, or another account: nothing of the last one's notes is kept.
+    func reset() {
+        attempts = [:]
+        refusals = [:]
+        reopening = nil
     }
 }

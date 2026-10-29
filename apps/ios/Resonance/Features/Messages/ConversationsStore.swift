@@ -76,6 +76,23 @@ final class ConversationsStore {
     @ObservationIgnored private var blocked: Set<String> = []
     @ObservationIgnored private var people = PeopleBook()
     @ObservationIgnored private var ready: Set<String> = []
+    /// Conversations deleted here, left out of the list at once (round 21) until the listener no longer
+    /// has them — or the server refused, and they are back (``unhide(_:)``).
+    @ObservationIgnored private var hidden: Set<String> = []
+
+    /// Leaves conversation `id` out of the list now, before the server deletes it.
+    func hide(_ id: String) {
+        hidden.insert(id)
+        publish(conversations.filter { $0.id != id })
+        let talking = Set(conversations.map(\.other.id))
+        starters = connectionUids.filter { !talking.contains($0) && !blocked.contains($0) }.compactMap { people.found[$0] }
+    }
+
+    /// The deletion didn't go through: the conversation is listed again, as the listener has it.
+    func unhide(_ id: String) {
+        guard hidden.remove(id) != nil else { return }
+        Task { await rebuild() }
+    }
 
     func start(uid: String) {
         stop()
@@ -155,6 +172,7 @@ final class ConversationsStore {
         blockedIds = nil
         people = PeopleBook()
         ready = []
+        hidden = []
         publish([])
         starters = []
         loaded = false
@@ -184,7 +202,11 @@ final class ConversationsStore {
         // A row whose profile is gone is skipped (one that couldn't be read yet waits for the next try);
         // blocked people drop out entirely.
         let found = people.found
+        // A conversation deleted here stays out until the listener drops it too (then it is forgotten: the pair
+        // may talk again, under the same id).
+        hidden.formIntersection(rawConversations.map(\.documentID))
         publish(rawConversations.compactMap { doc in
+            guard !hidden.contains(doc.documentID) else { return nil }
             guard let otherId = Self.other(in: doc, me: uid), !blocked.contains(otherId), let other = found[otherId] else { return nil }
             let last = doc.get("lastMessage") as? [String: Any]
             let unread = ((doc.get("unread") as? [String: Any])?[uid] as? NSNumber)?.intValue ?? 0
@@ -209,8 +231,8 @@ final class ConversationsStore {
 
     /// Someone's profile (users/{uid} is public). A missing one, or one without
     /// a pen name, is someone who's gone; so is a refusal. Anything else failed
-    /// for now.
-    nonisolated private static func read(_ id: String) async -> PeopleBook.Read {
+    /// for now. (The bell reads its senders the same way.)
+    nonisolated static func read(_ id: String) async -> PeopleBook.Read {
         do {
             let data = try await FirebaseBootstrap.db.collection("users").document(id).getDocument().data()
             return Person(id: id, data: data).map(PeopleBook.Read.found) ?? .gone

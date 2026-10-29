@@ -151,6 +151,7 @@ struct AuthorScreen: View {
                 Task { await unblock(author.id) }
             }
             .loading(unblocking)
+            .workingLabel(L10n.Safety.unblockShort)
         }
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
@@ -162,7 +163,13 @@ struct AuthorScreen: View {
         guard !unblocking else { return }
         unblocking = true
         defer { unblocking = false }
-        try? await session.safety?.unblock(id)
+        do {
+            try await session.safety?.unblock(id)
+        } catch {
+            // Still blocked: the notice stays, and the toast says it didn't go through (round 21).
+            session.toasts.show(L10n.Safety.unblockFailed)
+            return
+        }
         await model?.load()
     }
 

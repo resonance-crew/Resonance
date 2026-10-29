@@ -142,11 +142,11 @@ struct AvatarSaver {
 }
 
 /// The crop modal's inside (round 5 B7): title, the hint, the stage, the zoom row, then Cancel and
-/// 使用 at the bottom right. 使用 shows the button loader while the photo goes up and is saved; a
-/// failure says so above the actions and 使用 can be pressed again.
+/// 使用 at the bottom right. 使用 closes it at once (round 21): the photo goes up behind it, shown on the
+/// avatar meanwhile; a photo that can't be framed says so above the actions.
 struct AvatarCropContent: View {
     let image: CGImage
-    let busy: Bool
+    var busy = false
     let error: String?
     let onCancel: () -> Void
     let onUse: (_ crop: CGRect, _ side: Int) -> Void
@@ -180,13 +180,14 @@ struct AvatarCropContent: View {
                 .disabled(busy)
             }
             if let error { ModalError(error).padding(.top, 12) }
-            ModalActions(busy: busy) {
+            ModalActions {
                 OrganicButton(L10n.Settings.Profile.cropCancel, variant: .tonal, size: .sm, action: onCancel)
             } verb: {
                 OrganicButton(L10n.Settings.Profile.cropUse, variant: .solid, size: .sm) {
                     guard let crop else { return }
                     onUse(crop.cropRect, crop.outputSide)
                 }
+                .workingLabel(L10n.Settings.Profile.cropUseShort)
             }
             .padding(.top, 20)
         }
