@@ -1,20 +1,21 @@
 'use client';
 
-import { Fragment, useMemo, useRef, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useMemo, useRef, useState } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
 import { Modal } from '@/components/molecules/Modal/Modal';
 import { Icon } from '@/components/atoms/Icon';
-import { Divider } from '@/components/atoms/Divider/Divider';
 import { EmptyState } from '@/components/molecules/EmptyState/EmptyState';
 import { HandDrawnBorder } from '@/components/atoms/HandDrawnBorder/HandDrawnBorder';
 import { OrganicScrollbar, organicScrollTarget } from '@/components/atoms/OrganicScrollbar/OrganicScrollbar';
 import styles from './NotificationBell.module.css';
 import type { Notification } from '@/lib/db/types';
-import { useNotifications } from '@/lib/data/hooks';
+import { useBellExtras, useNotifications } from '@/lib/data/hooks';
 import { markNotificationRead } from '@/lib/db/firestore/client/notifications';
 import { useEdgeFades } from '@/lib/hooks/useEdgeFades';
 import { bellHref } from './bellLink';
+import { BellRowContent } from './BellRow';
+import { bellGroup, bellWhen, type BellGroup } from './bellTime';
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
@@ -34,6 +35,21 @@ export function NotificationBell() {
 
   const tApp = useTranslations('app.notifications');
   const tNav = useTranslations('app.nav');
+  const locale = useLocale();
+  // Each row's face and card, read once the list is open (the badge needs neither).
+  const extras = useBellExtras(open ? items : undefined);
+  // The parts of the list — today, the week before, earlier — and each row's time, as of this render.
+  const now = new Date();
+  const groups = useMemo(() => {
+    const out: { group: BellGroup; items: Notification[] }[] = [];
+    const at = new Date();
+    for (const n of items) {
+      const group = bellGroup(n.createdAt, at);
+      if (out.at(-1)?.group !== group) out.push({ group, items: [] });
+      out.at(-1)!.items.push(n);
+    }
+    return out;
+  }, [items]);
 
   const unreadCount = useMemo(
     () => items.filter((n) => n.readAt === null).length,
@@ -109,7 +125,8 @@ export function NotificationBell() {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        maxWidth={400}
+        // Round 21: room for a face, the words and the card's picture side by side (a phone takes its own width).
+        maxWidth={480}
         seed={29}
         padding="24px 22px 22px"
         ariaLabel={tNav('notifications')}
@@ -124,84 +141,42 @@ export function NotificationBell() {
         )}
         <div className={styles.scrollArea}>
           <div ref={scrollEdges} className={`${styles.scrollBody} ${organicScrollTarget}`}>
-            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column' }}>
-              {items.map((n, i) => {
-                const isUnread = n.readAt === null;
-                const handle = String(n.payload.fromHandle ?? '');
-                // Where the row leads (as its push does): a note on an anonymous card opens the card, never a
-                // thread with its writer — see bellLink.
-                const href = bellHref(n);
-                let body = '';
-                if (n.type === 'invite') body = tApp('invite', { handle });
-                else if (n.type === 'invite_accepted') body = tApp('inviteAccepted', { handle });
-                else if (n.type === 'message') body = tApp('message', { handle });
-                else if (n.type === 'resonance_summary') body = tApp('resonanceSummary', { count: Number(n.payload.count ?? 0) });
-                else if (n.type === 'translation_done') body = tApp('translationDone');
-                else if (n.type === 'resonance') body = tApp('resonance', { handle });
-                else if (n.type === 'note') body = tApp('note', { handle });
-                else if (n.type === 'card_link') body = tApp('cardLink', { handle });
-                else if (n.type === 'invite_expired') body = tApp('inviteExpired');
-                const inner = (
-                  <div
-                    style={{
-                      padding: '13px 2px',
-                      fontSize: 14,
-                      cursor: 'pointer',
-                      color: isUnread ? 'var(--color-text)' : 'var(--color-text-muted)',
-                    }}
-                  >
-                    {body}
-                    {/* The unread dot ends the row's first line, beside who it is from — on a note
-                        row too, never under the note's words below it. */}
-                    {isUnread && (
-                      <span
-                        aria-hidden
-                        data-unread-dot
-                        style={{
-                          display: 'inline-block',
-                          width: 6,
-                          height: 6,
-                          borderRadius: '50%',
-                          background: 'var(--color-terracotta)',
-                          marginLeft: 8,
-                          verticalAlign: 'middle',
-                        }}
+            {groups.map((g) => (
+              <section key={g.group} aria-labelledby={`bell-${g.group}`}>
+                <h4 id={`bell-${g.group}`} className={styles.groupTitle}>
+                  {tApp(g.group)}
+                </h4>
+                <ul className={styles.list}>
+                  {g.items.map((n) => {
+                    // Where the row leads (as its push does): a note on an anonymous card opens the card, never a
+                    // thread with its writer — see bellLink.
+                    const href = bellHref(n);
+                    const from = typeof n.payload.fromUserId === 'string' ? n.payload.fromUserId : '';
+                    const cardId = typeof n.payload.cardId === 'string' ? n.payload.cardId : '';
+                    const inner = (
+                      <BellRowContent
+                        n={n}
+                        person={extras?.people[from]}
+                        card={extras?.cards[cardId]}
+                        settled={extras !== undefined}
+                        when={bellWhen(n.createdAt, now, locale, tApp('justNow'))}
                       />
-                    )}
-                    {/* A note's content IS the notification — the reader wrote to
-                        the author, so show the words right here (truncated). */}
-                    {n.type === 'note' && !!n.payload.preview && (
-                      <div
-                        style={{
-                          marginTop: 5,
-                          fontSize: 13,
-                          color: 'var(--color-text-muted)',
-                          whiteSpace: 'pre-wrap',
-                        }}
-                      >
-                        「{String(n.payload.preview)}」
-                      </div>
-                    )}
-                  </div>
-                );
-                return (
-                  <Fragment key={n.id}>
-                    {i > 0 && <Divider seed={29 + i * 7} spacing={0} />}
-                    <li>
-                      <div onClick={() => handleClickItem(n)}>
+                    );
+                    return (
+                      <li key={n.id} onClick={() => handleClickItem(n)}>
                         {href ? (
-                          <Link href={href} style={{ textDecoration: 'none' }}>
+                          <Link href={href} className={styles.rowLink}>
                             {inner}
                           </Link>
                         ) : (
                           inner
                         )}
-                      </div>
-                    </li>
-                  </Fragment>
-                );
-              })}
-            </ul>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
           </div>
           <OrganicScrollbar targetRef={scrollRef} seed={31} />
         </div>

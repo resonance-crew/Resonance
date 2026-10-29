@@ -91,6 +91,7 @@ export function TrashActionsMenu({ card, seed = 7, hue, onRestored, onLeaving }:
         body={t('deleteConfirmBody')}
         cancelLabel={t('deleteCancel')}
         confirmLabel={t('deleteForever')}
+        workingLabel={t('delete')}
         onCancel={() => setConfirming(false)}
         onConfirm={() => void deleteForever()}
         busy={busy}

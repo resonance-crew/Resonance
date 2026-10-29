@@ -14,6 +14,8 @@ export interface ConfirmModalProps {
   body: ReactNode;
   cancelLabel: string;
   confirmLabel: string;
+  /** The verb's bare form, said beside its loop while busy (刪除 for 刪除卡片): the button never changes width. */
+  workingLabel?: string;
   onCancel: () => void;
   onConfirm: () => void;
   /** Action in flight: the verb shows it is working, the way out rests and the dialog can't be dismissed. */
@@ -46,6 +48,7 @@ export function ConfirmModal({
   body,
   cancelLabel,
   confirmLabel,
+  workingLabel,
   onCancel,
   onConfirm,
   busy = false,
@@ -75,7 +78,7 @@ export function ConfirmModal({
         <OrganicButton variant="tonal" size="sm" onClick={onCancel} disabled={busy}>
           {cancelLabel}
         </OrganicButton>
-        <OrganicButton variant={destructive ? 'danger' : 'solid'} size="sm" onClick={onConfirm} loading={busy}>
+        <OrganicButton variant={destructive ? 'danger' : 'solid'} size="sm" onClick={onConfirm} loading={busy} workingLabel={workingLabel}>
           {confirmLabel}
         </OrganicButton>
       </ModalActions>

@@ -6,9 +6,17 @@
 }
 
 .scrollBody {
-  max-height: min(420px, 60vh);
+  /* Rows carry a face and a card now (~70 tall): room for six or seven before it scrolls; on a computer's
+     screen, room for nine or ten. */
+  max-height: min(520px, 66vh);
   overflow-y: auto;
   padding-right: var(--sb-hit);
+}
+
+@media (min-width: 721px) and (hover: hover) and (pointer: fine) {
+  .scrollBody {
+    max-height: min(720px, 72vh);
+  }
 }
 
 /* The gutter is the drawn bar's 14px column (--sb-hit), and only while the
@@ -23,4 +31,169 @@
   .scrollBody {
     padding-right: 0;
   }
+}
+
+/* --- The list (round 21): parts by time, rows apart by air — no rules between them — each with
+   its sender's face, its words and the card it is about. --- */
+.groupTitle {
+  margin: 14px 8px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+section:first-child > .groupTitle {
+  margin-top: 0;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rowLink {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 8px;
+  cursor: pointer;
+  --row-fill: transparent;
+}
+
+.row:hover {
+  --row-fill: color-mix(in oklch, var(--toward-ink) 4.5%, transparent);
+}
+
+.words {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--color-text-muted);
+}
+
+.words[data-unread] {
+  color: var(--color-text);
+}
+
+.line {
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.handle {
+  font-weight: 650;
+  color: var(--color-text);
+}
+
+/* Ends the first line, beside who it is from — never under a note's words. */
+.dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 8px;
+  border-radius: 50%;
+  background: var(--color-terracotta);
+  vertical-align: middle;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.when {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+/* A note's words: the story's type after a wavy rule in its card's pen, three lines at most. */
+.quote {
+  position: relative;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 1px 0;
+  padding-left: 14px;
+  font-family: var(--font-story-serif);
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--color-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.quoteRule {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+}
+
+.glyphTile,
+.facePending {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 13px 15px 13px 15px;
+  background: color-mix(in oklch, var(--color-terracotta-light) 40%, var(--color-cream));
+}
+
+.facePending,
+.thumbPending {
+  background: var(--skeleton-base);
+}
+
+.thumb,
+.thumbPending {
+  position: relative;
+  flex-shrink: 0;
+  width: 46px;
+  height: 46px;
+  overflow: hidden;
+}
+
+.thumbPending {
+  border-radius: 12px;
+}
+
+.thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumbWord {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-story-serif);
+  font-size: 19px;
+  font-weight: 600;
 }

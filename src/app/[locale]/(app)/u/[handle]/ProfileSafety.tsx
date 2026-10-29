@@ -7,6 +7,7 @@ import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { OrganicMenu } from '@/components/molecules/OrganicMenu/OrganicMenu';
 import { useSafetyActions } from '@/components/molecules/SafetyActions/useSafetyActions';
 import { unblockUser } from '@/lib/db/firestore/client/blocks';
+import { useToast } from '@/components/providers/ToastProvider';
 import { seedFromString } from '@/lib/design/prng';
 import type { User } from '@/lib/db/types';
 import styles from './page.module.css';
@@ -38,6 +39,7 @@ export function ProfileSafetyMenu({ user, isBlocked }: { user: User; isBlocked: 
 export function BlockedNotice({ user }: { user: User }) {
   const t = useTranslations('safety');
   const { mutate } = useSWRConfig();
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
 
   async function unblock() {
@@ -46,6 +48,8 @@ export function BlockedNotice({ user }: { user: User }) {
     try {
       await unblockUser(user.id);
       void mutate(() => true);
+    } catch {
+      toast.show({ message: t('unblockFailed') });
     } finally {
       setBusy(false);
     }
@@ -56,7 +60,7 @@ export function BlockedNotice({ user }: { user: User }) {
       <p className={styles.blockedTitle}>{t('blockedNotice', { handle: user.handle })}</p>
       <p className={styles.blockedBody}>{t('blockedNoticeBody')}</p>
       <div>
-        <OrganicButton variant="textAccent" size="sm" onClick={() => void unblock()} loading={busy}>
+        <OrganicButton variant="textAccent" size="sm" onClick={() => void unblock()} loading={busy} workingLabel={t('unblockShort')}>
           {t('unblock')}
         </OrganicButton>
       </div>

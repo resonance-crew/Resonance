@@ -55,6 +55,7 @@
    (lib/design/storyLinkWave) appears under them, whole tiles on the label's
    bottom edge, its centre about the story's WAVE_DEPTH_EM under the baseline. */
 .moreLabel {
+  position: relative;
   display: inline-block;
   padding-bottom: 3px;
   background-repeat: round no-repeat;
@@ -73,6 +74,16 @@
 
 .more[aria-busy='true'] {
   cursor: default;
+}
+
+/* The loop hangs 6 before the words, outside their box: nothing moves. */
+.moreLoader {
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  margin-right: 6px;
+  transform: translateY(-50%);
+  display: flex;
 }
 
 .more:active {

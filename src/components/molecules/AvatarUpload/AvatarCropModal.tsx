@@ -39,8 +39,11 @@ export interface AvatarCropModalProps {
   source: CropSource | null;
   /** Cancel, the backdrop or Escape (none of them while the photo is on its way). */
   onCancel: () => void;
-  /** The framed square (a JPEG): resolves once it is uploaded and saved, rejects when that failed. */
-  onUse: (blob: Blob) => Promise<void>;
+  /**
+   * The framed square (a JPEG). The avatar uses it at once and closes this (round 21: it goes up behind the
+   * dialog); a caller that returns a promise keeps the dialog waiting on it, and a rejection is said here.
+   */
+  onUse: (blob: Blob) => void | Promise<void>;
 }
 
 /** The scrim over the picture outside the mask (the avatar dropzone's wash). */
@@ -293,7 +296,7 @@ export function AvatarCropModal({ source, onCancel, onUse }: AvatarCropModalProp
           <OrganicButton variant="tonal" size="sm" onClick={onCancel} disabled={busy}>
             {t('cropCancel')}
           </OrganicButton>
-          <OrganicButton variant="solid" size="sm" onClick={() => void use()} loading={busy}>
+          <OrganicButton variant="solid" size="sm" onClick={() => void use()} loading={busy} workingLabel={t('cropUseShort')}>
             {t('cropUse')}
           </OrganicButton>
         </ModalActions>

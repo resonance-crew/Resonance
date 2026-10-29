@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { BareIconButton } from '@/components/atoms/BareIconButton/BareIconButton';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
@@ -34,7 +34,8 @@ import { useAuth } from '@/components/providers/AuthProvider';
 import { hasSessionMark } from '@/lib/auth/firebase/client';
 import { cardKey } from '@/lib/data/cardPrefill';
 import type { CardSeed } from '@/lib/data/cardSeed';
-import { useCard, useCardPageLists, useMyBlockedIds } from '@/lib/data/hooks';
+import type { Card } from '@/lib/db/types';
+import { useCard, useCardPageLists, useMyBlockedIds, type CardView } from '@/lib/data/hooks';
 import { SectionEdge } from '@/components/atoms/SectionEdge/SectionEdge';
 import { HEADER_TOTAL_H } from '@/components/sections/AppHeader/HeaderChrome';
 import { useEndsApart } from '@/lib/hooks/useEndsApart';
@@ -139,6 +140,25 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   // The owner's card in the trash: its banner heads the article, and nothing around the card shows.
   const trashed = isOwner && !!data?.card?.trashedAt;
   const [trashedHere, setTrashedHere] = useState(false);
+  // The ⋯'s changes show on this page at once (round 21): the card's copy here changed, and put back as it was
+  // if the server refuses; the page reads it again once the server has answered.
+  const patchCard = useCallback(
+    (patch: Partial<Card>) => {
+      if (!user) return () => {};
+      const key = cardKey(slug, user.id);
+      let before: CardView | null | undefined;
+      void mutate(
+        key,
+        (current: CardView | null | undefined) => {
+          before = current;
+          return current?.card ? { ...current, card: { ...current.card, ...patch } } : current;
+        },
+        { revalidate: false },
+      );
+      return () => void mutate(key, before, { revalidate: true });
+    },
+    [mutate, slug, user],
+  );
   // The lists around the card (resonances, related, the author's linking
   // cards) and its story's embedded cards: signed in, one request beside the
   // card's own read, keyed by the id the server render found; signed out,
@@ -276,8 +296,9 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
           editShown={privateCard && !trashed}
           // Re-read this card so the visibility chip/state reflects the change.
           onChanged={() => void mutate(cardKey(slug, user!.id))}
-          // Moved to the trash: the page stays, and shows its banner (the card read again).
+          // Moved to the trash: the page stays, and shows its banner — at once (patchCard), then the card read again.
           trashFeedback="page"
+          patchCard={patchCard}
           onTrashed={() => {
             setTrashedHere(true);
             void mutate(cardKey(slug, user!.id));

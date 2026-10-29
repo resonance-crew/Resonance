@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import useSWR from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import { useAuth } from '@/components/providers/AuthProvider';
@@ -866,13 +866,43 @@ function useLiveConversations(): LiveState<Conversation[]> {
 }
 
 /**
+ * Conversations this browser is deleting (round 21): gone from the list and
+ * the badge at once, before the server answers; `hideConversation` returns
+ * what brings one back (a refusal). One the server deleted stays hidden a
+ * while after, until the live list has heard it went.
+ */
+const leavingConversations = new Set<string>();
+const leavingListeners = new Set<() => void>();
+let leavingVersion = 0;
+function leavingChanged() {
+  leavingVersion++;
+  leavingListeners.forEach((l) => l());
+}
+const subscribeLeaving = (l: () => void) => {
+  leavingListeners.add(l);
+  return () => void leavingListeners.delete(l);
+};
+function useLeavingConversations(): number {
+  return useSyncExternalStore(subscribeLeaving, () => leavingVersion, () => 0);
+}
+
+export function hideConversation(pair: string): { putBack: () => void; gone: () => void } {
+  leavingConversations.add(pair);
+  leavingChanged();
+  const show = () => {
+    if (leavingConversations.delete(pair)) leavingChanged();
+  };
+  return { putBack: show, gone: () => setTimeout(show, 10_000) };
+}
+
+/**
  * Conversations minus those with someone the viewer blocked (the thread itself
- * is frozen by rules — the connection is gone). Undefined until both the list
- * and the block list are in.
+ * is frozen by rules — the connection is gone) and those being deleted here.
+ * Undefined until both the list and the block list are in.
  */
 function visibleConversations(all: Conversation[] | undefined, blocked: Set<string> | undefined): Conversation[] | undefined {
   if (!all || !blocked) return undefined;
-  return all.filter((c) => !c.participants.some((p) => blocked.has(p)));
+  return all.filter((c) => !leavingConversations.has(c.id) && !c.participants.some((p) => blocked.has(p)));
 }
 
 function unreadOf(conversations: Conversation[], uid: string): number {
@@ -885,6 +915,7 @@ function unreadOf(conversations: Conversation[], uid: string): number {
  * messages page's). 0 until known.
  */
 export function useUnreadMessages(): number {
+  useLeavingConversations();
   const { user } = useAuth();
   const live = useLiveConversations();
   const { data: blocked } = useMyBlockedIds();
@@ -900,6 +931,7 @@ export function useUnreadMessages(): number {
  * a block or a delete).
  */
 export function useConversations(): { data: ConversationsData | undefined; error: unknown } {
+  useLeavingConversations();
   const { user, loading } = useAuth();
   const uid = user && !loading ? user.id : null;
   const live = useLiveConversations();
@@ -937,6 +969,46 @@ export function useNotifications(max = 20): LiveState<Notification[]> {
   return useLive<Notification[]>(uid ? `notifications:live:${uid}:${max}` : null, (emit, fail) =>
     listenNotifications(uid!, emit, fail, max),
   );
+}
+
+/** What the bell's rows draw beside their words. */
+export interface BellExtras {
+  /** Who each row is from, by uid — a deleted account is absent (its row keeps the pen name it was written with). */
+  people: Record<string, User>;
+  /** The card each row is about, by id — one the viewer can't read any more (deleted, in the trash) is absent. */
+  cards: Record<string, Card>;
+}
+
+const NO_BELL_EXTRAS: BellExtras = { people: {}, cards: {} };
+
+/**
+ * Who each bell row is from (their face) and the card it is about (its cover,
+ * or its colours and title), read together: the people through the page's
+ * profile cache, the cards in one GET /api/v1/cards?keys= — the viewer's own
+ * cards, the anonymous ones too, which their author reads whole. Either read
+ * failing leaves its half empty and the rows draw initials and plain tiles;
+ * a new row reads again, keeping the last answer up meanwhile.
+ */
+export function useBellExtras(items: Notification[] | undefined): BellExtras | undefined {
+  const { user, loading } = useAuth();
+  const uid = user && !loading ? user.id : null;
+  const idsOf = (field: 'fromUserId' | 'cardId') =>
+    [...new Set((items ?? []).map((n) => n.payload[field]).filter((v): v is string => typeof v === 'string' && v !== ''))].sort();
+  const from = idsOf('fromUserId');
+  const cardIds = idsOf('cardId');
+  const key = uid && (from.length || cardIds.length) ? `bell-extras:${uid}:${from.join(',')}|${cardIds.join(',')}` : null;
+  const { data } = useSWR<BellExtras>(
+    key,
+    async () => {
+      const [people, cards] = await Promise.all([
+        from.length ? getUsersByIds(from).catch(() => ({})) : {},
+        cardIds.length ? fetchCardSummaries(cardIds).catch(() => EMPTY) : EMPTY,
+      ]);
+      return { people, cards: Object.fromEntries(cards.cards.map((c) => [c.id, c])) };
+    },
+    { keepPreviousData: true },
+  );
+  return key ? data : items ? NO_BELL_EXTRAS : undefined;
 }
 
 /** The head of a user's outward-facing profile: who they are, and how the viewer stands with them. */

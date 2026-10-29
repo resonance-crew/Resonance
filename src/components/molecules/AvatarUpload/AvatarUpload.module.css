@@ -30,8 +30,10 @@
 }
 .dropzone:hover .overlay,
 .dropzone:focus-visible .overlay,
-.dropzone[data-drag] .overlay {
+.dropzone[data-drag] .overlay,
+.overlay[data-uploading] {
   opacity: 1;
+  color: var(--photo-ink);
 }
 
 .meta {

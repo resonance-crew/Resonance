@@ -89,6 +89,8 @@ import { loadMyThoughtMap } from '@/lib/db/firestore/client/thoughtMap';
 import type { CardDetailBody, FeedCardBody, FeedPageBody, RecommendedFeedBody } from '@/lib/api/v1/schemas';
 import { getMyBlockedIds } from '@/lib/db/firestore/client/blocks';
 import {
+  hideConversation,
+  useBellExtras,
   useCard,
   useConversations,
   useFeed,
@@ -1050,6 +1052,28 @@ describe('the header badges', () => {
     expect(result.current.list!.connectedWithoutConversation.map((u) => u.id)).toEqual(['c']);
   });
 
+  // Round 21: deleting a conversation takes it off the list and the badge at once; a refusal puts it back.
+  it('drops a conversation being deleted from the list and the badge at once, and brings it back on a refusal', async () => {
+    const heard = listenToConversations();
+    vi.mocked(listMyConnectionUids).mockResolvedValue(['a', 'b']);
+    vi.mocked(getUsersByIds).mockResolvedValue({ a: user('a'), b: user('b') });
+    const { result } = renderHook(() => ({ badge: useUnreadMessages(), list: useConversations().data }), { wrapper });
+    await waitFor(() => expect(listenConversations).toHaveBeenCalled());
+    act(() => heard.emit([conversation('a_me', 'a', 2), conversation('b_me', 'b', 1)]));
+    await waitFor(() => expect(result.current.list?.conversations).toHaveLength(2));
+
+    let hidden!: ReturnType<typeof hideConversation>;
+    act(() => {
+      hidden = hideConversation('a_me');
+    });
+    expect(result.current.list!.conversations.map((c) => c.id)).toEqual(['b_me']);
+    expect(result.current.badge).toBe(1);
+
+    act(() => hidden.putBack());
+    expect(result.current.list!.conversations.map((c) => c.id)).toEqual(['a_me', 'b_me']);
+    expect(result.current.badge).toBe(3);
+  });
+
   it('keeps the bell live: a new notification, or one read elsewhere, shows without a reload', async () => {
     const heard: { emit: (n: Notification[]) => void } = { emit: () => {} };
     vi.mocked(listenNotifications).mockImplementation((_uid, emit) => {
@@ -1265,6 +1289,52 @@ describe('useCardSummaries', () => {
     expect(renderHook(() => useCardSummaries([]), { wrapper }).result.current).toBeNull();
     mockUseAuth.mockReturnValue({ user: null, loading: false });
     expect(renderHook(() => useCardSummaries(['c1']), { wrapper }).result.current).toBeNull();
+    expect(callApi).not.toHaveBeenCalled();
+  });
+});
+
+// The bell's rows show who each is from and the card it is about: read together, and a row whose card the
+// viewer can't read any more (deleted, in the trash) keeps its words with no card beside them.
+describe('useBellExtras', () => {
+  const bell = (id: string, payload: Record<string, unknown>): Notification => ({
+    id,
+    userId: 'me',
+    type: 'note',
+    payload,
+    readAt: null,
+    createdAt: new Date('2026-10-29'),
+  });
+
+  it('reads the senders through the profile cache and the cards in one request', async () => {
+    vi.mocked(getUsersByIds).mockResolvedValue({ u1: user('u1', 'acheng') });
+    api({ '/api/v1/cards?keys=': (path: string) => ({ cards: new URL(path, 'http://x').searchParams.get('keys')!.split(',').filter((k) => k !== 'gone').map((k) => summary(k, 'me', { imageUrl: `https://img/${k}.webp` })) }) });
+    const items = [
+      bell('n1', { fromUserId: 'u1', fromHandle: 'acheng', cardId: 'c1' }),
+      bell('n2', { fromUserId: 'u1', fromHandle: 'acheng', cardId: 'gone' }),
+      bell('n3', { fromUserId: 'u2', fromHandle: 'left' }),
+    ];
+    const { result } = renderHook(() => useBellExtras(items), { wrapper });
+    await waitFor(() => expect(result.current?.people.u1).toBeDefined());
+    expect(getUsersByIds).toHaveBeenCalledWith(['u1', 'u2']);
+    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(callApi).toHaveBeenCalledWith('/api/v1/cards?keys=c1,gone');
+    expect(result.current!.cards.c1).toMatchObject({ id: 'c1', media: { url: 'https://img/c1.webp' } });
+    // Gone: no card; a deleted account: no person — the rows fall back, nothing throws.
+    expect(result.current!.cards.gone).toBeUndefined();
+    expect(result.current!.people.u2).toBeUndefined();
+  });
+
+  it('keeps the people when the cards fail, and asks nothing with nothing to show', async () => {
+    vi.mocked(getUsersByIds).mockResolvedValue({ u1: user('u1') });
+    vi.mocked(callApi).mockRejectedValue(new Error('offline'));
+    const { result } = renderHook(() => useBellExtras([bell('n1', { fromUserId: 'u1', cardId: 'c1' })]), { wrapper });
+    await waitFor(() => expect(result.current?.people.u1).toBeDefined());
+    expect(result.current!.cards).toEqual({});
+
+    vi.clearAllMocks();
+    const none = renderHook(() => useBellExtras([bell('n9', { count: 3 })]), { wrapper });
+    expect(none.result.current).toEqual({ people: {}, cards: {} });
+    expect(getUsersByIds).not.toHaveBeenCalled();
     expect(callApi).not.toHaveBeenCalled();
   });
 });

@@ -52,6 +52,7 @@ export interface ReportModalProps {
 export function ReportModal({ open, target, offerBlock = true, onClose, onReported }: ReportModalProps) {
   const t = useTranslations('safety.report');
   const tSafety = useTranslations('safety');
+  const tSend = useTranslations('messages');
   const [reason, setReason] = useState<ReportReason>('spam');
   const [detail, setDetail] = useState('');
   const [alsoBlock, setAlsoBlock] = useState(false);
@@ -163,7 +164,7 @@ export function ReportModal({ open, target, offerBlock = true, onClose, onReport
               <OrganicButton variant="tonal" size="sm" onClick={onClose} disabled={busy}>
                 {tSafety('cancel')}
               </OrganicButton>
-              <OrganicButton variant="solid" size="sm" onClick={() => void send()} loading={busy}>
+              <OrganicButton variant="solid" size="sm" onClick={() => void send()} loading={busy} workingLabel={tSend('send')}>
                 {t('submit')}
               </OrganicButton>
             </ModalActions>

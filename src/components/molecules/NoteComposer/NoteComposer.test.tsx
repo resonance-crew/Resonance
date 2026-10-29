@@ -16,6 +16,8 @@ vi.mock('@/lib/hints', () => ({
 }));
 const viewer = vi.hoisted(() => ({ user: { id: 'me' } as { id: string } | null }));
 vi.mock('@/components/providers/AuthProvider', () => ({ useAuth: () => viewer }));
+const toast = vi.hoisted(() => ({ show: vi.fn(), dismiss: vi.fn() }));
+vi.mock('@/components/providers/ToastProvider', () => ({ useToast: () => toast }));
 
 import { sendNote } from '@/lib/db/firestore/client/notes';
 import { ApiError } from '@/lib/db/firestore/client/api';
@@ -121,25 +123,39 @@ describe('NoteComposer', () => {
   it('retries the same words under the same clientId, and gives other words one of their own', async () => {
     vi.mocked(sendNote).mockRejectedValueOnce(new TypeError('Failed to fetch')).mockRejectedValueOnce(new TypeError('Failed to fetch'));
     renderWithIntl(<NoteComposer cardId="c1" />);
-    const box = screen.getByPlaceholderText('Something you want to tell the author…');
+    // Looked up each time: the composer shows it was sent at once (round 21), and comes back on a failure.
+    const box = () => screen.getByPlaceholderText('Something you want to tell the author…');
     const clientIdOf = (call: number) => vi.mocked(sendNote).mock.calls[call][0].clientId;
 
-    fireEvent.change(box, { target: { value: 'First words' } });
+    fireEvent.change(box(), { target: { value: 'First words' } });
     await user().click(screen.getByRole('button', { name: 'Send' }));
     expect(await screen.findByText("Couldn't send — please try again")).toBeInTheDocument();
     // Trailing space trimmed away: still the same words, still the same note.
-    fireEvent.change(box, { target: { value: 'First words ' } });
+    fireEvent.change(box(), { target: { value: 'First words ' } });
     await user().click(screen.getByRole('button', { name: 'Send' }));
     await waitFor(() => expect(sendNote).toHaveBeenCalledTimes(2));
     expect(await screen.findByText("Couldn't send — please try again")).toBeInTheDocument();
     expect(clientIdOf(1)).toBe(clientIdOf(0));
 
-    fireEvent.change(box, { target: { value: 'Second thoughts' } });
+    fireEvent.change(box(), { target: { value: 'Second thoughts' } });
     await user().click(screen.getByRole('button', { name: 'Send' }));
     expect(await screen.findByText('Your note is on its way')).toBeInTheDocument();
     expect(sendNote).toHaveBeenCalledTimes(3);
     expect(clientIdOf(2)).toMatch(/^[A-Za-z0-9_-]{16,64}$/);
     expect(clientIdOf(2)).not.toBe(clientIdOf(0));
+  });
+
+  // Round 21: sent at once — the composer may close while the note is on its way; a failure then is a toast.
+  it('says it was sent before the server answers, and says a failure in a toast once it has closed', async () => {
+    let refuse!: (e: unknown) => void;
+    vi.mocked(sendNote).mockReturnValueOnce(new Promise((_resolve, reject) => (refuse = reject)) as never);
+    const view = renderWithIntl(<NoteComposer cardId="c1" />);
+    fireEvent.change(screen.getByPlaceholderText('Something you want to tell the author…'), { target: { value: 'Thank you' } });
+    await user().click(screen.getByRole('button', { name: 'Send' }));
+    expect(screen.getByText('Your note is on its way')).toBeInTheDocument();
+    view.unmount();
+    refuse(new TypeError('Failed to fetch'));
+    await waitFor(() => expect(toast.show).toHaveBeenCalledWith({ message: "Your note didn't go out" }));
   });
 
   it('does not send an empty note', async () => {

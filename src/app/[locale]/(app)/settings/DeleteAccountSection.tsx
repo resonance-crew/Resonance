@@ -21,6 +21,7 @@ import styles from './DeleteAccountSection.module.css';
  */
 export function DeleteAccountSection() {
   const t = useTranslations('settings.delete');
+  const tActions = useTranslations('me.actions');
   const locale = useLocale();
   const auth = useAuth();
   const [confirming, setConfirming] = useState(false);
@@ -112,6 +113,7 @@ export function DeleteAccountSection() {
         body={t(apple ? 'confirmBodyApple' : 'confirmBody', { date: purgeDate })}
         cancelLabel={t('cancel')}
         confirmLabel={t('confirm')}
+        workingLabel={tActions('delete')}
         onCancel={() => setConfirming(false)}
         onConfirm={() => void confirmDelete()}
         busy={busy}

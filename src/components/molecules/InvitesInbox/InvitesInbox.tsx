@@ -62,19 +62,14 @@ export function InvitesInbox() {
     });
   }
 
+  // Round 21: declining goes at once (it connects no one); a refusal brings the invite back where it was, saying so.
   function decline(invite: Invite) {
-    setPendingId(invite.id);
-    setPendingVerb('decline');
     setError(null);
-    start(async () => {
-      try {
-        await declineInvite(invite.id);
-        setItems((prev) => prev.filter((i) => i.id !== invite.id));
-      } catch {
-        setError(t('error'));
-      } finally {
-        setPendingId(null);
-      }
+    const at = items.findIndex((i) => i.id === invite.id);
+    setItems((prev) => prev.filter((i) => i.id !== invite.id));
+    declineInvite(invite.id).catch(() => {
+      setItems((prev) => (prev.some((i) => i.id === invite.id) ? prev : [...prev.slice(0, at), invite, ...prev.slice(at)]));
+      setError(t('error'));
     });
   }
 

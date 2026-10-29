@@ -239,8 +239,9 @@ function cardInView(): { id: string; top: number } | null {
 /**
  * The feed's way on: the label alone, in the tonal label's ink with no face of
  * its own — not a form's button. Tapped before the next page has come, the pen
- * loop draws itself before the label (as a button's does); the button keeps
- * its focus, takes no click and says it is busy. The apps' FeedMoreButton.
+ * loop draws itself before the label, outside its box, so neither the button
+ * nor the words move (round 21); the button keeps its focus, takes no click
+ * and says it is busy. The apps' FeedMoreButton.
  */
 function FeedMore({ label, loading, onClick }: { label: string; loading: boolean; onClick: () => void }) {
   // The wave the label wears under a pointer: a story link's, in the page's wave ink.
@@ -253,8 +254,12 @@ function FeedMore({ label, loading, onClick }: { label: string; loading: boolean
       aria-busy={loading || undefined}
       aria-disabled={loading || undefined}
     >
-      {loading && <ButtonLoader size={15} />}
       <span className={styles.moreLabel} style={wave}>
+        {loading && (
+          <span className={styles.moreLoader}>
+            <ButtonLoader size={15} />
+          </span>
+        )}
         {label}
       </span>
     </button>

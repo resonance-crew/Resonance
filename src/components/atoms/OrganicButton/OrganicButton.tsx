@@ -142,10 +142,13 @@ export interface OrganicButtonProps {
   /** Not pressable yet (a dialog's verb before there is anything to act on): faded, no hover ink. */
   disabled?: boolean;
   /**
-   * Its action is on its way: the label stays, a small pen loop draws
-   * itself in the label's ink (in place of a leading icon, else just before
-   * the label), the button keeps its size and colour, takes no click and
-   * says it is busy (aria-busy) — focus stays on it.
+   * Its action is on its way: a small pen loop draws itself in the label's
+   * ink (in place of a leading icon, else before the words), the button keeps
+   * its size and colour, takes no click and says it is busy (aria-busy) —
+   * focus stays on it. Passing it at all (false too) marks a button that can
+   * be busy: such a button is always as wide as its busy self — the loop and
+   * its working words — so going busy never changes its size and the loop
+   * never presses against the pill's end (round 21).
    */
   loading?: boolean;
   /**
@@ -154,13 +157,20 @@ export interface OrganicButtonProps {
    * button only takes the busy state.
    */
   callerLoader?: boolean;
+  /**
+   * With `loading`: the shorter words it says while it works — the bare verb
+   * (刪除 for 刪除卡片), as the apps' `workingLabel` / `loadingTitle`. The idle
+   * words stay laid out unseen (still its name); the loop and these words sit
+   * centred in the same room.
+   */
+  workingLabel?: string;
   style?: CSSProperties & { fillColor?: string };
   className?: string;
   /** Its accessible name when the words shown are a short form of it (清空 for 清空垃圾桶). */
   ariaLabel?: string;
 }
 
-export function OrganicButton({ children, variant = 'primary', size = 'md', block = false, onClick, disabled = false, loading = false, callerLoader = false, style = {}, className, ariaLabel }: OrganicButtonProps) {
+export function OrganicButton({ children, variant = 'primary', size = 'md', block = false, onClick, disabled = false, loading, callerLoader = false, workingLabel, style = {}, className, ariaLabel }: OrganicButtonProps) {
   const [hovered, setHovered] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const ref = useRef<HTMLButtonElement>(null);
@@ -191,7 +201,7 @@ export function OrganicButton({ children, variant = 'primary', size = 'md', bloc
   }, [w, h, R, seed, mag, cornerOff]);
 
   const { fillColor: _fill, ...restStyle } = style;
-  const { content, shift } = loadingLabel(children, loading && !callerLoader, size === 'sm' ? 14 : 16);
+  const content = callerLoader ? children : busyLabel(children, loading, size === 'sm' ? 14 : 16, workingLabel);
   // Until measured (the server's HTML, a browser still loading or running no
   // scripts) the button stands in as a plain pill of its own fill
   // (.res-shape-stand-in): a solid's cream label never sits on cream.
@@ -237,47 +247,33 @@ export function OrganicButton({ children, variant = 'primary', size = 'md', bloc
         color={v.hoverOverlay}
         x={pos.x} y={pos.y} on={hovered && !disabled && !loading} duration={340} overshoot={4}
       />
-      <span
-        className={styles.label}
-        data-loading-shift={shift != null || undefined}
-        style={shift != null ? ({ '--loader-shift': `${shift}px` } as CSSProperties) : undefined}
-      >
-        {content}
-      </span>
+      <span className={styles.label}>{content}</span>
     </button>
   );
 }
 
-/** The loader's distance from the label it stands before. */
-const LOADER_GAP = 6;
-
 /**
- * A busy button's label: the loader takes a leading icon's place (at the
- * icon's size), else it stands `LOADER_GAP` before the label, outside its
- * box, and the label moves half that much toward the end — so the pair stays
- * centred and the button never changes size. `shift` is that move (null when
- * nothing moves).
+ * The label of a button that can be busy (`loading` passed, false too): a
+ * leading icon gives its place to the loop at its size; otherwise the idle
+ * words and the busy line — the loop and the working words (the label itself
+ * when it has no shorter form) — lie in one cell, each laid out always, so
+ * the button is as wide as the wider of the two whether it is busy or not,
+ * and only one of them shows. A button that never loads keeps its label.
  */
-export function loadingLabel(
-  children: ReactNode,
-  loading: boolean,
-  box: number,
-): { content: ReactNode; shift: number | null } {
-  if (!loading) return { content: children, shift: null };
+export function busyLabel(children: ReactNode, loading: boolean | undefined, box: number, working?: string): ReactNode {
+  if (loading === undefined) return children;
   const kids = Children.toArray(children);
   const first = kids[0];
   if (isValidElement<{ size?: number }>(first) && first.type === Icon) {
-    return { content: [<ButtonLoader key="loader" size={first.props.size ?? box} />, ...kids.slice(1)], shift: null };
+    return loading ? [<ButtonLoader key="loader" size={first.props.size ?? box} />, ...kids.slice(1)] : children;
   }
-  return {
-    content: (
-      <>
-        <span className={styles.loaderSlot}>
-          <ButtonLoader size={box} />
-        </span>
-        {children}
-      </>
-    ),
-    shift: (box + LOADER_GAP) / 2,
-  };
+  return (
+    <span className={styles.layers} data-busy={loading || undefined}>
+      <span className={styles.idleWords}>{children}</span>
+      <span className={styles.busyWords} aria-hidden data-working-label="">
+        {loading ? <ButtonLoader size={box} /> : <span style={{ width: box, height: box }} />}
+        {working ?? children}
+      </span>
+    </span>
+  );
 }

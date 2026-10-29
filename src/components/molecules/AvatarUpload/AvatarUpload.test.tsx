@@ -25,6 +25,9 @@ vi.mock('@/lib/images/avatarCropImage', () => ({
   releaseCropSource: vi.fn(),
 }));
 
+const toast = vi.hoisted(() => ({ show: vi.fn(), dismiss: vi.fn() }));
+vi.mock('@/components/providers/ToastProvider', () => ({ useToast: () => toast }));
+
 const { AvatarUpload } = await import('./AvatarUpload');
 
 const t = en.settings.profile;
@@ -32,6 +35,9 @@ const framed = new Blob([new Uint8Array(4)], { type: 'image/jpeg' });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // jsdom has no object URLs: the framed square drawn from this browser while it goes up.
+  URL.createObjectURL = vi.fn(() => 'blob:framed');
+  URL.revokeObjectURL = vi.fn();
   loadCropSource.mockImplementation(async () => ({ canvas: document.createElement('canvas'), ...picture }));
   renderCrop.mockResolvedValue(framed);
 });
@@ -107,38 +113,42 @@ describe('AvatarUpload', () => {
     expect(rect.side).toBeCloseTo(want.side, 6);
   });
 
-  it('shows the loader on 使用 while the photo goes up, rests Cancel and keeps the dialog', async () => {
+  // Round 21: 使用 closes the dialog at once; the avatar shows the framed square, the pen loop on it, while it goes up.
+  it('closes the dialog at once and shows the framed photo with its loop while it goes up', async () => {
     let finish: (v: unknown) => void = () => undefined;
     uploadImageFile.mockReturnValue(new Promise((resolve) => (finish = resolve)));
-    const { input } = setup();
-    const dialog = await openDialog(input);
-    const use = within(dialog).getByRole('button', { name: t.cropUse });
-    await userEvent.click(use);
-    await waitFor(() => expect(use).toHaveAttribute('aria-busy', 'true'));
-    expect(within(dialog).getByRole('button', { name: t.cropCancel })).toBeDisabled();
-    await userEvent.keyboard('{Escape}');
-    expect(screen.getByRole('dialog', { name: t.cropTitle })).toBeInTheDocument();
-    finish({ publicUrl: 'https://img.example/me.webp', key: 'k' });
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: t.cropTitle })).not.toBeInTheDocument());
-  });
-
-  it('says the photo couldn’t go up — the upload or the profile’s save — and lets 使用 try again', async () => {
-    uploadImageFile.mockRejectedValueOnce(new Error('Image is too large'));
-    const { onUploaded, input } = setup();
+    const { input, onUploaded } = setup({ src: 'https://img.example/old.webp' });
     const dialog = await openDialog(input);
     await userEvent.click(within(dialog).getByRole('button', { name: t.cropUse }));
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(t.avatarError);
-    expect(onUploaded).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: t.cropTitle })).not.toBeInTheDocument());
+    const avatar = screen.getByRole('button', { name: t.avatarChange });
+    expect(avatar.querySelector('img')).toHaveAttribute('src', 'blob:framed');
+    expect(avatar.querySelector('[data-uploading] [data-button-loader]')).not.toBeNull();
+    finish({ publicUrl: 'https://img.example/me.webp', key: 'k' });
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith('https://img.example/me.webp'));
+    await waitFor(() => expect(avatar.querySelector('img')).toHaveAttribute('src', 'https://img.example/old.webp'));
+    expect(avatar.querySelector('[data-uploading]')).toBeNull();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:framed');
+  });
 
-    // The upload goes through, but the profile's save fails: still said in the dialog.
+  it('puts the old photo back when it couldn’t go up — the upload or the profile’s save — and offers to send it again', async () => {
+    uploadImageFile.mockRejectedValueOnce(new Error('Image is too large'));
+    const { onUploaded, input } = setup({ src: 'https://img.example/old.webp' });
+    const dialog = await openDialog(input);
+    await userEvent.click(within(dialog).getByRole('button', { name: t.cropUse }));
+    await waitFor(() => expect(toast.show).toHaveBeenCalledWith(expect.objectContaining({ message: t.avatarError })));
+    expect(onUploaded).not.toHaveBeenCalled();
+    const avatar = screen.getByRole('button', { name: t.avatarChange });
+    expect(avatar.querySelector('img')).toHaveAttribute('src', 'https://img.example/old.webp');
+
+    // 再試一次 sends the same square; this time the upload goes through but the profile's save fails.
     uploadImageFile.mockResolvedValue({ publicUrl: 'https://img.example/me.webp', key: 'k' });
     onUploaded.mockRejectedValueOnce(new Error('denied'));
-    const use = within(dialog).getByRole('button', { name: t.cropUse });
-    expect(use).not.toHaveAttribute('aria-busy');
-    await userEvent.click(use);
+    const { action } = toast.show.mock.calls[0][0] as { action: { onAction: () => void } };
+    action.onAction();
     await waitFor(() => expect(onUploaded).toHaveBeenCalledTimes(1));
-    expect(within(dialog).getByRole('alert')).toHaveTextContent(t.avatarError);
-    expect(screen.getByRole('dialog', { name: t.cropTitle })).toBeInTheDocument();
+    await waitFor(() => expect(toast.show).toHaveBeenCalledTimes(2));
+    expect(uploadImageFile.mock.calls[1][0]).toBeInstanceOf(File);
   });
 
   it('closes on Cancel with nothing sent', async () => {

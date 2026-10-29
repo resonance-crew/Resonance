@@ -407,6 +407,14 @@ object L10n {
             fun newCard(handle: String): String = Strings.format("app.notifications.newCard", mapOf("handle" to handle))
             /** {handle} unsent a message */
             fun messageUnsent(handle: String): String = Strings.format("app.notifications.messageUnsent", mapOf("handle" to handle))
+            /** Today */
+            val today: String get() = Strings.string("app.notifications.today")
+            /** This week */
+            val thisWeek: String get() = Strings.string("app.notifications.thisWeek")
+            /** Earlier */
+            val earlier: String get() = Strings.string("app.notifications.earlier")
+            /** Just now */
+            val justNow: String get() = Strings.string("app.notifications.justNow")
         }
         object SignOutConfirm {
             /** Sign out? */
@@ -515,6 +523,10 @@ object L10n {
             val cancel: String get() = Strings.string("card.note.cancel")
             /** Close */
             val close: String get() = Strings.string("card.note.close")
+            /** Your note didn't go out */
+            val failed: String get() = Strings.string("card.note.failed")
+            /** Try again */
+            val reopen: String get() = Strings.string("card.note.reopen")
         }
         object Bookmark {
             /** Bookmark */
@@ -1196,6 +1208,8 @@ object L10n {
         fun tagsAdded(count: Int): String = Strings.format("write.tagsAdded", mapOf("count" to count))
         /** Remove tag: {tag} */
         fun tagsRemoveLabel(tag: String): String = Strings.format("write.tagsRemoveLabel", mapOf("tag" to tag))
+        /** Discard */
+        val discardShort: String get() = Strings.string("write.discardShort")
     }
     object Me {
         /** Joined {date} */
@@ -1377,6 +1391,12 @@ object L10n {
             val emptyTrashBody: String get() = Strings.string("me.actions.emptyTrashBody")
             /** Empty */
             val emptyTrashShort: String get() = Strings.string("me.actions.emptyTrashShort")
+            /** Couldn't empty the trash — try again */
+            val emptyTrashFailed: String get() = Strings.string("me.actions.emptyTrashFailed")
+            /** Couldn't stop resonating — try again */
+            val unresonateFailed: String get() = Strings.string("me.actions.unresonateFailed")
+            /** Couldn't make it private — try again */
+            val makePrivateFailed: String get() = Strings.string("me.actions.makePrivateFailed")
         }
         /** Anonymous */
         val anonymousBadge: String get() = Strings.string("me.anonymousBadge")
@@ -1629,6 +1649,8 @@ object L10n {
             val cropCancel: String get() = Strings.string("settings.profile.cropCancel")
             /** Use photo */
             val cropUse: String get() = Strings.string("settings.profile.cropUse")
+            /** Use */
+            val cropUseShort: String get() = Strings.string("settings.profile.cropUseShort")
         }
         object Account {
             /** Email */
@@ -1810,6 +1832,10 @@ object L10n {
         }
         /** Report this message */
         val reportThisMessage: String get() = Strings.string("safety.reportThisMessage")
+        /** Unblock */
+        val unblockShort: String get() = Strings.string("safety.unblockShort")
+        /** Couldn't unblock — try again */
+        val unblockFailed: String get() = Strings.string("safety.unblockFailed")
     }
     object AccountDeletion {
         /** Your account is scheduled for deletion */

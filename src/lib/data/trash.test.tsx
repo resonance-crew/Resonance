@@ -8,12 +8,12 @@ import type { CardBoxShelfData } from './hooks';
 import { useTrashActions } from './trash';
 
 vi.mock('@/components/providers/AuthProvider', () => ({ useAuth: () => ({ user: { id: 'u1' }, loading: false }) }));
-const server = vi.hoisted(() => ({ trash: vi.fn(), deleteForever: vi.fn() }));
+const server = vi.hoisted(() => ({ trash: vi.fn(), deleteForever: vi.fn(), empty: vi.fn() }));
 vi.mock('@/lib/db/firestore/client/cards', () => ({
   trashCard: (id: string) => server.trash(id),
   deleteCardForever: (id: string) => server.deleteForever(id),
   restoreCard: vi.fn(),
-  emptyTrash: vi.fn(),
+  emptyTrash: () => server.empty(),
 }));
 
 const card = (id: string) => ({ id }) as Card;
@@ -116,5 +116,35 @@ describe('useTrashActions — the card leaves its shelf at once', () => {
       await move;
     });
     await waitFor(() => expect(result.current.trash).toEqual(['x', 'y']));
+  });
+
+  // Round 21: 清空 closes its question at once — the shelf empties before the server answers.
+  it('empties the trash shelf at once, leaves the other shelves be, and puts its cards back on a refusal', async () => {
+    const answer = held();
+    server.empty.mockReturnValue(answer.promise);
+    const reread = held();
+    let calls = 0;
+    const { result } = renderHook(
+      () =>
+        useBox({
+          published: async () => shelfOf('a'),
+          trash: () => (calls++ === 0 ? Promise.resolve(shelfOf('x', 'y')) : (reread.promise as Promise<CardBoxShelfData>)),
+        }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.trash).toEqual(['x', 'y']));
+
+    let move!: Promise<unknown>;
+    act(() => {
+      move = result.current.actions.emptyTrash().catch((e) => e);
+    });
+    await waitFor(() => expect(result.current.trash).toEqual([]));
+    expect(result.current.published).toEqual(['a']);
+
+    await act(async () => {
+      answer.reject(new Error('offline'));
+      expect(await move).toBeInstanceOf(Error);
+    });
+    expect(result.current.trash).toEqual(['x', 'y']);
   });
 });

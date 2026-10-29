@@ -180,7 +180,7 @@ export default function EditCardPage() {
             title={tCard('trashed.title')}
             line={t('trashed.line')}
             action={
-              <OrganicButton variant="solid" size="sm" loading={restoring} onClick={() => void restore()}>
+              <OrganicButton variant="solid" size="sm" loading={restoring} workingLabel={tActions('restore')} onClick={() => void restore()}>
                 {t('trashed.restore')}
               </OrganicButton>
             }

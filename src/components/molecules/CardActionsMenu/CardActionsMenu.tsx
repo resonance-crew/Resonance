@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useSWRConfig } from 'swr';
-import { Modal } from '@/components/molecules/Modal/Modal';
 import { ConfirmModal } from '@/components/molecules/ConfirmModal/ConfirmModal';
 import { OrganicMenu, type OrganicMenuItem } from '@/components/molecules/OrganicMenu/OrganicMenu';
 import { useAuth } from '@/components/providers/AuthProvider';
@@ -14,8 +13,7 @@ import { useCardSummaries } from '@/lib/data/hooks';
 import { useConnectionRefresh, useResonanceRefresh } from '@/lib/data/resonate';
 import { announceRestoredAlone, useTrashActions, type TrashCardRef } from '@/lib/data/trash';
 import { unresonate, updateCardSettings } from '@/lib/db/firestore/client/cards';
-import type { Visibility } from '@/lib/db/types';
-import styles from './CardActionsMenu.module.css';
+import type { Card, Visibility } from '@/lib/db/types';
 
 export interface CardActionsMenuProps {
   /**
@@ -60,6 +58,11 @@ export interface CardActionsMenuProps {
   onChanged?: () => void;
   /** Called after the card went to the trash (its lists are read again already). */
   onTrashed?: (id: string) => void;
+  /**
+   * The page's own copy of the card, changed at once (round 21: the card's page — its trash banner, its
+   * 🔒, its link to the original show before the server answers); returns what puts it back as it was.
+   */
+  patchCard?: (patch: Partial<Card>) => () => void;
   /**
    * Called as the card leaves the card box's shelf for the trash: at once, before the server answers
    * (useTrashActions takes it off the shelves; a refusal brings it back). The toast's feedback only.
@@ -111,6 +114,7 @@ export function CardActionsMenu({
   hue,
   onChanged,
   onTrashed,
+  patchCard,
   onLeaving,
   onRestored,
   bare = false,
@@ -118,7 +122,6 @@ export function CardActionsMenu({
   className,
 }: CardActionsMenuProps) {
   const t = useTranslations('me.actions');
-  const tSafety = useTranslations('safety');
   const router = useRouter();
   const { user } = useAuth();
   const { mutate } = useSWRConfig();
@@ -132,9 +135,6 @@ export function CardActionsMenu({
   const [confirming, setConfirming] = useState<'trash' | 'unresonate' | null>(null);
   // 刪除 on a resonance whose original's byline is unknown: it is looked up before anything else happens.
   const [deciding, setDeciding] = useState(false);
-  const [failed, setFailed] = useState(false);
-  // A change the server refused, said in a dialog of its own (the menu has closed by then).
-  const [notice, setNotice] = useState<'visibility' | 'trash' | null>(null);
 
   const original = card.referenceCardId;
   // What the trash takes back for good: a resonance that reached the original's author (public, named, published).
@@ -188,15 +188,17 @@ export function CardActionsMenu({
     }
   };
 
+  // Round 21: the card goes at once and any question with it — in the card box it leaves its shelf (and this
+  // menu with it), on its own page the page shows its trash banner (patchCard). What the server answers is
+  // said in a toast, which outlives them; a refusal puts the card back.
   async function trashNow() {
     setBusy(true);
-    setFailed(false);
-    // In the card box the card leaves its shelf at once, and this menu (its question too) with it: what the
-    // server answers is said in a toast, which outlives them.
+    setConfirming(null);
+    let putBack: (() => void) | undefined;
     if (trashFeedback === 'toast') onLeaving?.(card.id);
+    else putBack = patchCard?.({ trashedAt: new Date(), trashedFrom: { visibility: card.visibility, referenceCardId: original ?? null } });
     try {
       await trashActions.trash(ref);
-      setConfirming(null);
       onTrashed?.(card.id);
       if (trashFeedback === 'toast') {
         toast.show({
@@ -211,11 +213,9 @@ export function CardActionsMenu({
         });
       }
     } catch {
-      // Not moved: the card is back in every list, and the viewer is told — in the toast where it had left its
-      // shelf, else in the question, if one was asked.
-      if (trashFeedback === 'toast') toast.show({ message: t('trashFailed') });
-      else if (confirming === 'trash') setFailed(true);
-      else setNotice('trash');
+      // Not moved: the card is back in every list and on its page, and the viewer is told.
+      putBack?.();
+      toast.show({ message: t('trashFailed') });
     } finally {
       setBusy(false);
     }
@@ -235,10 +235,7 @@ export function CardActionsMenu({
     if (!decided) return;
     setDeciding(false);
     if (decided === 'at-once') void trashNow();
-    else {
-      setFailed(false);
-      setConfirming('trash');
-    }
+    else setConfirming('trash');
     // trashNow reads only what this render has.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [decided]);
@@ -254,21 +251,22 @@ export function CardActionsMenu({
       return;
     }
     if (key === 'visibility') {
+      // Private at once on its page; a refusal puts it back and says so (round 21).
       setBusy(true);
-      setNotice(null);
+      const putBack = patchCard?.({ visibility: 'private' });
       try {
         await updateCardSettings(card.id, { visibility: 'private' });
         refreshOwnLists();
         onChanged?.();
       } catch {
-        setNotice('visibility');
+        putBack?.();
+        toast.show({ message: t('makePrivateFailed') });
       } finally {
         setBusy(false);
       }
       return;
     }
     if (key === 'unresonate') {
-      setFailed(false);
       setConfirming('unresonate');
       return;
     }
@@ -276,7 +274,6 @@ export function CardActionsMenu({
     if (!reachingResonance || referenceAnonymous === true) {
       void trashNow();
     } else if (referenceAnonymous === false) {
-      setFailed(false);
       setConfirming('trash');
     } else {
       setDeciding(true);
@@ -284,24 +281,26 @@ export function CardActionsMenu({
   }
 
   // The card stays, answering nothing; the server lets go of its link to the
-  // original (DELETE /api/v1/cards/{original}/resonances/{id}).
+  // original (DELETE /api/v1/cards/{original}/resonances/{id}). Round 21: the
+  // question closes and the link goes from its page at once; a refusal puts it
+  // back and says so.
   async function confirmUnresonate() {
     if (busy || !original) return;
     setBusy(true);
-    setFailed(false);
+    setConfirming(null);
+    const putBack = patchCard?.({ referenceCardId: undefined });
     try {
       await unresonate(original, card.id);
       refreshResonance(original, card);
-      setConfirming(null);
       onChanged?.();
     } catch {
-      setFailed(true);
+      putBack?.();
+      toast.show({ message: t('unresonateFailed') });
     } finally {
       setBusy(false);
     }
   }
 
-  const noticeTitle = notice === 'trash' ? t('delete') : t('makePrivate');
   return (
     <>
       <OrganicMenu
@@ -323,10 +322,9 @@ export function CardActionsMenu({
         body={t('trashResonanceBody', { days: TRASH_DAYS })}
         cancelLabel={t('deleteCancel')}
         confirmLabel={t('trashResonanceConfirm')}
+        workingLabel={t('delete')}
         onCancel={() => setConfirming(null)}
         onConfirm={() => void trashNow()}
-        busy={busy}
-        error={failed ? tSafety('actionError') : null}
         seed={seed + 5}
       />
 
@@ -341,18 +339,8 @@ export function CardActionsMenu({
         confirmLabel={t('unresonateConfirm')}
         onCancel={() => setConfirming(null)}
         onConfirm={() => void confirmUnresonate()}
-        busy={busy}
-        error={failed ? tSafety('actionError') : null}
         seed={seed + 9}
       />
-
-      {/* The menu has closed by the time the server answers: a refusal is said here, and the card stays as it was. */}
-      <Modal open={notice !== null} onClose={() => setNotice(null)} seed={seed + 13} maxWidth={400} ariaLabel={noticeTitle} closeButton>
-        <h3 className={styles.noticeTitle}>{noticeTitle}</h3>
-        <p className={styles.notice} role="alert">
-          {tSafety('actionError')}
-        </p>
-      </Modal>
     </>
   );
 }

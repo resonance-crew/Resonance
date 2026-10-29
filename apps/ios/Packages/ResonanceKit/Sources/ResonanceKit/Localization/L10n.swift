@@ -405,6 +405,14 @@ public enum L10n {
             public static func newCard(handle: String) -> String { Strings.shared.format("app.notifications.newCard", ["handle": handle]) }
             /// {handle} unsent a message
             public static func messageUnsent(handle: String) -> String { Strings.shared.format("app.notifications.messageUnsent", ["handle": handle]) }
+            /// Today
+            public static var today: String { Strings.shared.string("app.notifications.today") }
+            /// This week
+            public static var thisWeek: String { Strings.shared.string("app.notifications.thisWeek") }
+            /// Earlier
+            public static var earlier: String { Strings.shared.string("app.notifications.earlier") }
+            /// Just now
+            public static var justNow: String { Strings.shared.string("app.notifications.justNow") }
         }
         public enum SignOutConfirm {
             /// Sign out?
@@ -513,6 +521,10 @@ public enum L10n {
             public static var cancel: String { Strings.shared.string("card.note.cancel") }
             /// Close
             public static var close: String { Strings.shared.string("card.note.close") }
+            /// Your note didn't go out
+            public static var failed: String { Strings.shared.string("card.note.failed") }
+            /// Try again
+            public static var reopen: String { Strings.shared.string("card.note.reopen") }
         }
         public enum Bookmark {
             /// Bookmark
@@ -1194,6 +1206,8 @@ public enum L10n {
         public static func tagsAdded(count: Int) -> String { Strings.shared.format("write.tagsAdded", ["count": count]) }
         /// Remove tag: {tag}
         public static func tagsRemoveLabel(tag: String) -> String { Strings.shared.format("write.tagsRemoveLabel", ["tag": tag]) }
+        /// Discard
+        public static var discardShort: String { Strings.shared.string("write.discardShort") }
     }
     public enum Me {
         /// Joined {date}
@@ -1375,6 +1389,12 @@ public enum L10n {
             public static var emptyTrashBody: String { Strings.shared.string("me.actions.emptyTrashBody") }
             /// Empty
             public static var emptyTrashShort: String { Strings.shared.string("me.actions.emptyTrashShort") }
+            /// Couldn't empty the trash — try again
+            public static var emptyTrashFailed: String { Strings.shared.string("me.actions.emptyTrashFailed") }
+            /// Couldn't stop resonating — try again
+            public static var unresonateFailed: String { Strings.shared.string("me.actions.unresonateFailed") }
+            /// Couldn't make it private — try again
+            public static var makePrivateFailed: String { Strings.shared.string("me.actions.makePrivateFailed") }
         }
         /// Anonymous
         public static var anonymousBadge: String { Strings.shared.string("me.anonymousBadge") }
@@ -1627,6 +1647,8 @@ public enum L10n {
             public static var cropCancel: String { Strings.shared.string("settings.profile.cropCancel") }
             /// Use photo
             public static var cropUse: String { Strings.shared.string("settings.profile.cropUse") }
+            /// Use
+            public static var cropUseShort: String { Strings.shared.string("settings.profile.cropUseShort") }
         }
         public enum Account {
             /// Email
@@ -1808,6 +1830,10 @@ public enum L10n {
         }
         /// Report this message
         public static var reportThisMessage: String { Strings.shared.string("safety.reportThisMessage") }
+        /// Unblock
+        public static var unblockShort: String { Strings.shared.string("safety.unblockShort") }
+        /// Couldn't unblock — try again
+        public static var unblockFailed: String { Strings.shared.string("safety.unblockFailed") }
     }
     public enum AccountDeletion {
         /// Your account is scheduled for deletion

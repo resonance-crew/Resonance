@@ -21,7 +21,7 @@ import { useToast } from '@/components/providers/ToastProvider';
 import { seedFromString } from '@/lib/design/prng';
 import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { useCardSummaries, useMyBlockedIds } from '@/lib/data/hooks';
+import { hideConversation, useCardSummaries, useMyBlockedIds } from '@/lib/data/hooks';
 import { OLDER_PAGE, useChatThread } from '@/lib/data/thread';
 import { resonanceCardKey, threadCardKeys } from '@/lib/chat/cardLink';
 import { footComposes, threadFoot } from '@/lib/chat/foot';
@@ -312,7 +312,6 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
   );
   const lastMessageId = lastMessage?.id;
 
-  const [error, setError] = useState<string | null>(null);
   // Header「⋯」menu surfaces: in-thread search, the shared cards/links list,
   // and delete-with-confirm.
   const [searchOpen, setSearchOpen] = useState(false);
@@ -333,7 +332,6 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
   const headerRef = useRef<HTMLDivElement>(null);
   // One of the viewer's own messages waiting for the yes to unsend it.
   const [unsending, setUnsending] = useState<{ id: string } | null>(null);
-  const [unsendBusy, setUnsendBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -625,17 +623,23 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
     [user?.id, other?.handle, composes, canReact],
   );
 
+  // Round 21: unsent at once, the question gone with it (Android's thread does the same); a refusal brings the
+  // message back as it was, with a word.
   function confirmUnsend() {
-    if (!unsending || !pairId || unsendBusy) return;
+    if (!unsending || !pairId) return;
     const { id } = unsending;
-    setUnsendBusy(true);
-    void unsendMessage(pairId, id)
-      .then(() => setLocalChanges((cur) => new Map(cur).set(id, { unsent: true })))
-      .catch((e: unknown) => toast.show({ message: t(e instanceof ApiError && e.code === 'conflict' ? 'unsendTooLate' : 'unsendError') }))
-      .finally(() => {
-        setUnsendBusy(false);
-        setUnsending(null);
+    setUnsending(null);
+    const change: LocalChange = { unsent: true };
+    setLocalChanges((cur) => new Map(cur).set(id, change));
+    unsendMessage(pairId, id).catch((e: unknown) => {
+      setLocalChanges((cur) => {
+        if (cur.get(id) !== change) return cur;
+        const next = new Map(cur);
+        next.delete(id);
+        return next;
       });
+      toast.show({ message: t(e instanceof ApiError && e.code === 'conflict' ? 'unsendTooLate' : 'unsendError') });
+    });
   }
 
   // The overlay gone, the ☺ / ⋯ / chip that opened it takes the focus back — now that the message is drawn again.
@@ -719,21 +723,29 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
     setJumpTarget({ id: hit.messageId, flash: false });
   }
 
+  // Round 21: gone at once — off the list (and the badge), and the viewer back on it; a refusal puts the
+  // conversation back in the list and says so there.
   function confirmDelete() {
     if (deleting || !pairId || !user) return;
     setDeleting(true);
-    void deleteConversation(pairId)
-      .then(() => {
-        thread.forget();
-        void globalMutate(`conversations:${user.id}`);
-        void globalMutate(`conversation:${pairId}`, null, { revalidate: false });
-        router.push('/messages');
-      })
-      .catch(() => {
-        setError(t('deleteError'));
-        setDeleting(false);
-        setConfirmingDelete(false);
-      });
+    setConfirmingDelete(false);
+    const pair = pairId;
+    const uid = user.id;
+    const words = t;
+    const hidden = hideConversation(pair);
+    thread.forget();
+    router.push('/messages');
+    void deleteConversation(pair).then(
+      () => {
+        hidden.gone();
+        void globalMutate(`conversations:${uid}`);
+        void globalMutate(`conversation:${pair}`, null, { revalidate: false });
+      },
+      () => {
+        hidden.putBack();
+        toast.show({ message: words('deleteError') });
+      },
+    );
   }
 
   if (loadingOther) return null;
@@ -957,11 +969,6 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
                 stays in the column's flow (iOS Safari's keyboard keeps it in view so); the thread's body reaches
                 under it by its measured height (useDockInset). */}
             <div ref={dockRef} className={styles.dock}>
-              {error && (
-                <FloatingSlip seed={43} className={styles.noticeSlip} role="alert">
-                  <p className={styles.error}>{error}</p>
-                </FloatingSlip>
-              )}
               {foot === 'awaiting' ? (
                 // Their answer is what connects the two: until it comes, nothing more to write here.
                 <FloatingSlip seed={37} className={styles.noticeSlip}>
@@ -1090,7 +1097,6 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
               confirmLabel={t('deleteConfirm')}
               onCancel={() => setConfirmingDelete(false)}
               onConfirm={confirmDelete}
-              busy={deleting}
               destructive
               seed={59}
             />
@@ -1103,7 +1109,6 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
               confirmLabel={t('unsendConfirm')}
               onCancel={() => setUnsending(null)}
               onConfirm={confirmUnsend}
-              busy={unsendBusy}
               seed={67}
             />
             {safety.modals}

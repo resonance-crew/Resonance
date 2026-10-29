@@ -11,6 +11,7 @@ import { CARD_HUES } from '@/components/molecules/StoryCard/StoryCard';
 import { TrashActionsMenu } from '@/components/molecules/TrashActionsMenu/TrashActionsMenu';
 import { TRASH_DAYS } from '@/lib/cards/trash';
 import { useTrashActions, type TrashCardRef } from '@/lib/data/trash';
+import { useToast } from '@/components/providers/ToastProvider';
 import type { Card, User } from '@/lib/db/types';
 import styles from './TrashShelf.module.css';
 
@@ -32,10 +33,9 @@ export interface TrashShelfProps {
 export function TrashShelf({ cards, authors, onLeft }: TrashShelfProps) {
   const t = useTranslations('me');
   const tActions = useTranslations('me.actions');
-  const tSafety = useTranslations('safety');
   const actions = useTrashActions();
-  const [emptying, setEmptying] = useState<'asking' | 'busy' | null>(null);
-  const [failed, setFailed] = useState(false);
+  const toast = useToast();
+  const [asking, setAsking] = useState(false);
 
   if (!cards.length) {
     return <EmptyState icon="trash" seed={61} title={t('emptyTrash')} line={t('emptyTrashLine', { days: TRASH_DAYS })} />;
@@ -45,17 +45,11 @@ export function TrashShelf({ cards, authors, onLeft }: TrashShelfProps) {
   const anonymousHere = cards.some((c) => c.anonymous === true && c.publishedAt);
   const ref = (c: Card): TrashCardRef => ({ id: c.id, slug: c.slug, referenceCardId: c.trashedFrom?.referenceCardId ?? undefined });
 
-  async function empty() {
-    setEmptying('busy');
-    setFailed(false);
-    try {
-      await actions.emptyTrash();
-      setEmptying(null);
-    } catch {
-      // What is left is read again (useTrashActions), and the question stays to try once more.
-      setFailed(true);
-      setEmptying('asking');
-    }
+  // Round 21: the question closes at once and the shelf shows empty (useTrashActions); a refusal puts the
+  // cards back, reads the shelf again and says so in a toast.
+  function empty() {
+    setAsking(false);
+    actions.emptyTrash().catch(() => toast.show({ message: tActions('emptyTrashFailed') }));
   }
 
   return (
@@ -73,10 +67,7 @@ export function TrashShelf({ cards, authors, onLeft }: TrashShelfProps) {
           size="sm"
           className={styles.empty}
           ariaLabel={tActions('emptyTrash')}
-          onClick={() => {
-            setFailed(false);
-            setEmptying('asking');
-          }}
+          onClick={() => setAsking(true)}
         >
           <Icon name="trash" size={16} />
           {tActions('emptyTrashShort')}
@@ -94,16 +85,15 @@ export function TrashShelf({ cards, authors, onLeft }: TrashShelfProps) {
         }}
       />
       <ConfirmModal
-        open={emptying !== null}
+        open={asking}
         title={tActions('emptyTrashTitle')}
         body={tActions('emptyTrashBody')}
         cancelLabel={tActions('deleteCancel')}
         confirmLabel={tActions('emptyTrash')}
-        onCancel={() => setEmptying(null)}
-        onConfirm={() => void empty()}
-        busy={emptying === 'busy'}
+        workingLabel={tActions('emptyTrashShort')}
+        onCancel={() => setAsking(false)}
+        onConfirm={empty}
         destructive
-        error={failed ? tSafety('actionError') : null}
         seed={67}
       />
     </>

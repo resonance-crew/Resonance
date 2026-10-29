@@ -12,7 +12,6 @@ import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { timeOfDay } from '@/lib/chat/time';
 import { useConversations } from '@/lib/data/hooks';
-import { useEdgeFades } from '@/lib/hooks/useEdgeFades';
 import type { Conversation, User } from '@/lib/db/types';
 import { EmptyState } from '@/components/molecules/EmptyState/EmptyState';
 import { RowWash } from './RowWash';
@@ -44,7 +43,6 @@ export function MessagesPage({ activeHandle, replyNote, userId }: MessagesPagePr
   const { user, loading } = useAuth();
   const { data } = useConversations();
   const listRef = useRef<HTMLElement>(null);
-  const listEdges = useEdgeFades(listRef);
 
   useEffect(() => {
     if (!loading && !user) router.push('/signin');
@@ -106,7 +104,7 @@ export function MessagesPage({ activeHandle, replyNote, userId }: MessagesPagePr
   return (
     <div className={styles.page} data-thread-open={activeHandle || undefined}>
       <div className={styles.listCol}>
-        <aside ref={listEdges} className={`${styles.listPane} ${organicScrollTarget}`}>
+        <aside ref={listRef} className={`${styles.listPane} ${organicScrollTarget}`}>
           {/* Nothing at all yet: said here on a phone; beside a two-pane list (which stays empty), the
               detail pane says it. */}
           {empty && (

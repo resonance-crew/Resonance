@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useState } from 'react';
+import { Fragment } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import useSWR, { useSWRConfig } from 'swr';
 import { Modal } from '@/components/molecules/Modal/Modal';
@@ -8,6 +8,7 @@ import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
 import { HandDrawnAvatar } from '@/components/atoms/HandDrawnAvatar/HandDrawnAvatar';
 import { Divider } from '@/components/atoms/Divider/Divider';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { useToast } from '@/components/providers/ToastProvider';
 import { listMyBlocks, unblockUser } from '@/lib/db/firestore/client/blocks';
 import { getUsersByIds } from '@/lib/db/firestore/client/reads';
 import { EmptyState } from '@/components/molecules/EmptyState/EmptyState';
@@ -26,7 +27,7 @@ export function BlockedListModal({ open, onClose }: BlockedListModalProps) {
   const locale = useLocale();
   const { user } = useAuth();
   const { mutate: globalMutate } = useSWRConfig();
-  const [pending, setPending] = useState<string | null>(null);
+  const toast = useToast();
   const listEdges = useEdgeFades<HTMLUListElement>();
 
   const { data, mutate } = useSWR(open && user ? `blocklist:${user.id}` : null, async () => {
@@ -35,16 +36,20 @@ export function BlockedListModal({ open, onClose }: BlockedListModalProps) {
     return blocks.map((b) => ({ ...b, user: people[b.uid] }));
   });
 
-  async function unblock(uid: string) {
-    if (pending) return;
-    setPending(uid);
-    try {
-      await unblockUser(uid);
-      await mutate();
-      void globalMutate(() => true);
-    } finally {
-      setPending(null);
-    }
+  // Round 21: the row goes at once; a refusal puts it back where it was and says so.
+  function unblock(uid: string) {
+    const before = data;
+    void mutate(data?.filter((row) => row.uid !== uid), { revalidate: false });
+    unblockUser(uid).then(
+      () => {
+        void mutate();
+        void globalMutate(() => true);
+      },
+      () => {
+        void mutate(before, { revalidate: true });
+        toast.show({ message: tSafety('unblockFailed') });
+      },
+    );
   }
 
   return (
@@ -85,14 +90,7 @@ export function BlockedListModal({ open, onClose }: BlockedListModalProps) {
                   )}
                 </span>
                 <span>
-                  {/* One at a time: the row on its way shows the loader, the others rest. */}
-                  <OrganicButton
-                    variant="textAccent"
-                    size="sm"
-                    onClick={() => void unblock(row.uid)}
-                    loading={pending === row.uid}
-                    disabled={pending != null && pending !== row.uid}
-                  >
+                  <OrganicButton variant="textAccent" size="sm" onClick={() => unblock(row.uid)}>
                     {tSafety('unblock')}
                   </OrganicButton>
                 </span>

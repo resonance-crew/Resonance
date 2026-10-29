@@ -48,25 +48,38 @@
 }
 
 /* In progress (loading): the face keeps its colour, takes no click, and the
-   pointer says it is working. The label moves half the loader's room toward
-   the end, so the loader and the label stay centred together. */
+   pointer says it is working. */
 .btn[aria-busy='true'] {
   cursor: progress;
 }
 
-.label[data-loading-shift] {
-  transform: translateX(var(--loader-shift));
+/* A button that can be busy: its idle words and its busy line (the loop and
+   the working words) share one cell, both laid out, so the button is always
+   as wide as the wider; only one shows. The idle words stay its name. */
+.layers {
+  display: inline-grid;
 }
 
-/* The loader before a label with no icon: outside the label's box, so the
-   button is measured exactly as when idle. */
-.loaderSlot {
-  position: absolute;
-  right: 100%;
-  top: 50%;
-  margin-right: 6px;
-  transform: translateY(-50%);
-  display: flex;
+.idleWords,
+.busyWords {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.busyWords {
+  visibility: hidden;
+  white-space: nowrap;
+}
+
+.layers[data-busy] .busyWords {
+  visibility: visible;
+}
+
+.layers[data-busy] .idleWords {
+  opacity: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

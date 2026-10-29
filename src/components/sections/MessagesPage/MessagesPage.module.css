@@ -28,7 +28,8 @@
 /* The list and, in the gutter on its right, its drawn bar (OrganicScrollbar,
    autoHide): nothing at rest — beside the split's rule a bar standing the
    window's height read as a second rule — shown while the list is pointed at
-   or scrolling. The list's edges fade where more is (useEdgeFades). */
+   or scrolling. No fading edges (round 21): the header's pen line already
+   ends the list at the top. */
 .listCol {
   position: relative;
   min-width: 0;
@@ -42,6 +43,8 @@
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  /* Its end doesn't hand the scroll on to the page. */
+  overscroll-behavior: contain;
   /* The right: 4px, and the bar's 14px column (--sb-hit) while there is one. */
   padding: 18px calc(4px + var(--sb-hit)) 16px 14px;
   /* A column, so an empty state can take the pane's height. */
@@ -452,6 +455,17 @@
   /* Phone: list OR thread, never both. */
   .page[data-thread-open] .listCol {
     display: none;
+  }
+  /* The list alone scrolls with the page itself (round 21): one scroller, so a phone's browser never hands a
+     swipe back and forth between the list and the page (the list moved in two stages), and its bars fold away
+     as on any page. The thread still owns the screen. */
+  .page:not([data-thread-open]) {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  .page:not([data-thread-open]) .listPane {
+    overflow: visible;
   }
   .page:not([data-thread-open]) .threadPane {
     display: none;

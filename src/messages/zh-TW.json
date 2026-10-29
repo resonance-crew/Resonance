@@ -233,7 +233,11 @@
       "pickTitle": "今晚的一張卡片",
       "pickBody": "一張可能與你共振的卡片",
       "newCard": "{handle} 寫了一張新卡片",
-      "messageUnsent": "{handle} 收回了一則訊息"
+      "messageUnsent": "{handle} 收回了一則訊息",
+      "today": "今天",
+      "thisWeek": "這週",
+      "earlier": "更早",
+      "justNow": "剛剛"
     },
     "signOutConfirm": {
       "title": "確定要登出嗎？",
@@ -295,7 +299,9 @@
       "waitForReply": "你留的紙條對方還沒回覆，先等等對方吧",
       "send": "寄出",
       "cancel": "取消",
-      "close": "關閉"
+      "close": "關閉",
+      "failed": "紙條沒寄出",
+      "reopen": "再寄一次"
     },
     "bookmark": {
       "add": "收藏",
@@ -657,7 +663,8 @@
     "tagsSuggestLabel": "AI 建議標籤",
     "tagsAddLabel": "新增標籤：{tag}",
     "tagsAdded": "已加入 {count} 個標籤",
-    "tagsRemoveLabel": "移除標籤：{tag}"
+    "tagsRemoveLabel": "移除標籤：{tag}",
+    "discardShort": "捨棄"
   },
   "me": {
     "joined": "{date} 加入",
@@ -752,7 +759,10 @@
       "emptyTrash": "清空垃圾桶",
       "emptyTrashTitle": "清空垃圾桶？",
       "emptyTrashBody": "垃圾桶裡的卡片都會永久刪除，無法復原",
-      "emptyTrashShort": "清空"
+      "emptyTrashShort": "清空",
+      "emptyTrashFailed": "沒能清空垃圾桶，再試一次",
+      "unresonateFailed": "沒能取消共振，再試一次",
+      "makePrivateFailed": "沒能轉為私人卡，再試一次"
     },
     "anonymousBadge": "匿名發布",
     "emptyPublishedCta": "寫下一個故事",
@@ -885,7 +895,8 @@
       "cropStage": "頭像裁切範圍",
       "cropZoom": "縮放",
       "cropCancel": "取消",
-      "cropUse": "使用"
+      "cropUse": "使用",
+      "cropUseShort": "使用"
     },
     "account": {
       "email": "電子郵件",
@@ -986,7 +997,9 @@
       "unknownUser": "已刪除的帳號",
       "close": "關閉"
     },
-    "reportThisMessage": "檢舉這則訊息"
+    "reportThisMessage": "檢舉這則訊息",
+    "unblockShort": "解除",
+    "unblockFailed": "沒能解除封鎖，再試一次"
   },
   "accountDeletion": {
     "title": "帳號已排定刪除",

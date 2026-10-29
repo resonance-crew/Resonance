@@ -35,7 +35,10 @@ vi.mock('@/lib/data/hooks', () => ({
   useMyProfile: () => mockUseMyProfile(),
   useMyBlockedIds: () => ({ data: new Set<string>() }),
   useCardSummaries: (keys: string[]) => mockUseCardSummaries(keys),
+  hideConversation: (pair: string) => mockHideConversation(pair),
 }));
+const conversationShown = { putBack: vi.fn(), gone: vi.fn() };
+const mockHideConversation = vi.fn((_pair: string) => conversationShown);
 
 const mockBlockUser = vi.fn();
 vi.mock('@/lib/db/firestore/client/blocks', () => ({
@@ -563,6 +566,10 @@ describe('MessagesPage thread safety menu', () => {
       }),
     );
     await waitFor(() => expect(mockDeleteConversation).toHaveBeenCalledWith('alice_me'));
+    // Round 21: off the list at once, the question gone, and back on the list.
+    expect(mockHideConversation).toHaveBeenCalledWith('alice_me');
+    expect(screen.queryByRole('dialog', { name: 'Delete this conversation?' })).toBeNull();
+    expect(mockPush).toHaveBeenCalledWith('/messages');
   });
 
   it('files a report about the conversation, with the chosen reason and details', async () => {

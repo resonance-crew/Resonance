@@ -93,6 +93,15 @@ export function stepVerb(
   return visibility === 'public' && anonymous ? 'publishAnonymously' : 'publish';
 }
 
+/** Each verb's bare form, said beside its loop while it works: 匿名發布 → 發布, 儲存修改 / 轉為私人卡 → 儲存. */
+const WORKING_VERB: Record<ReturnType<typeof stepVerb>, 'publish' | 'save'> = {
+  publish: 'publish',
+  publishAnonymously: 'publish',
+  save: 'save',
+  update: 'save',
+  makeDraft: 'save',
+};
+
 /** Whether a card in this audience reaches the card it answers: public and under its author's name. */
 export function reachesOriginal(visibility: Visibility, anonymous: boolean): boolean {
   return visibility === 'public' && !anonymous;
@@ -505,6 +514,7 @@ export function PublishStep({
                 variant="tonal"
                 size="sm"
                 loading={pending && busyVerb === 'leave'}
+                workingLabel={t('discardShort')}
                 disabled={pending && busyVerb !== 'leave'}
                 onClick={onSecondary}
               >
@@ -515,6 +525,7 @@ export function PublishStep({
               variant="solid"
               size="sm"
               loading={pending && busyVerb === 'publish'}
+              workingLabel={tPanel(WORKING_VERB[verb])}
               disabled={mediaBusy || (pending && busyVerb !== 'publish')}
               onClick={onSubmit}
             >

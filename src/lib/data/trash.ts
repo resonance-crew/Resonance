@@ -4,6 +4,7 @@ import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { useSWRConfig } from 'swr';
 import { useAuth } from '@/components/providers/AuthProvider';
 import type { RestoredCardBody, TrashedCardBody } from '@/lib/api/v1/schemas';
+import type { Card } from '@/lib/db/types';
 import type { CardBoxShelfData } from './hooks';
 import {
   deleteCardForever,
@@ -43,6 +44,7 @@ export interface TrashActions {
   restore: (card: TrashCardRef) => Promise<RestoredCardBody>;
   /** For good, and only while it is still in the trash (a card restored meanwhile is a 409 and stays). */
   deleteForever: (card: TrashCardRef) => Promise<void>;
+  /** The trash shelf shows empty at once; a failure puts its cards back (and reads the shelf again). */
   emptyTrash: () => Promise<{ deleted: number; remaining: number }>;
   /** Read again what showed the card (after a failure too: the shelf then shows what is really there). */
   refresh: (card?: TrashCardRef) => void;
@@ -53,23 +55,25 @@ export function useTrashActions(): TrashActions {
   const { mutate, cache } = useSWRConfig();
   const uid = user?.id;
 
-  // The card off every card-box shelf this browser holds, at once; what it answers puts them back as they were.
-  const hide = useCallback(
-    (id: string) => {
+  // Cards off the card-box shelves this browser holds, at once — one card from every shelf, or every card of
+  // one shelf; what it answers puts them back as they were.
+  const hideWhere = useCallback(
+    (drop: (key: string, card: Card) => boolean) => {
       const kept = new Map<string, CardBoxShelfData>();
       if (uid) {
         for (const key of cache.keys()) {
           if (!key.startsWith(`cardbox:${uid}:`)) continue;
           const shelf = cache.get(key)?.data as CardBoxShelfData | undefined;
-          if (!Array.isArray(shelf?.cards) || !shelf.cards.some((c) => c.id === id)) continue;
+          if (!Array.isArray(shelf?.cards) || !shelf.cards.some((c) => drop(key, c))) continue;
           kept.set(key, shelf);
-          void mutate(key, { ...shelf, cards: shelf.cards.filter((c) => c.id !== id) }, { revalidate: false });
+          void mutate(key, { ...shelf, cards: shelf.cards.filter((c) => !drop(key, c)) }, { revalidate: false });
         }
       }
       return () => kept.forEach((shelf, key) => void mutate(key, shelf, { revalidate: false }));
     },
     [cache, mutate, uid],
   );
+  const hide = useCallback((id: string) => hideWhere((_key, c) => c.id === id), [hideWhere]);
 
   const refresh = useCallback(
     (card?: TrashCardRef) => {
@@ -132,15 +136,19 @@ export function useTrashActions(): TrashActions {
         }
       },
       async emptyTrash() {
+        const putBack = hideWhere((key) => key === `cardbox:${uid}:trash`);
         try {
           return await emptyTrashOnServer();
+        } catch (e) {
+          putBack();
+          throw e;
         } finally {
           refresh();
         }
       },
       refresh,
     }),
-    [hide, refresh],
+    [hide, hideWhere, refresh, uid],
   );
 }
 

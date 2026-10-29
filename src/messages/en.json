@@ -233,7 +233,11 @@
       "pickTitle": "A card for tonight",
       "pickBody": "A card that might resonate with you",
       "newCard": "{handle} wrote a new card",
-      "messageUnsent": "{handle} unsent a message"
+      "messageUnsent": "{handle} unsent a message",
+      "today": "Today",
+      "thisWeek": "This week",
+      "earlier": "Earlier",
+      "justNow": "Just now"
     },
     "signOutConfirm": {
       "title": "Sign out?",
@@ -295,7 +299,9 @@
       "waitForReply": "You've left notes they haven't answered yet — wait for their reply",
       "send": "Send",
       "cancel": "Cancel",
-      "close": "Close"
+      "close": "Close",
+      "failed": "Your note didn't go out",
+      "reopen": "Try again"
     },
     "bookmark": {
       "add": "Bookmark",
@@ -657,7 +663,8 @@
     "tagsSuggestLabel": "Suggest tags with AI",
     "tagsAddLabel": "Add tag: {tag}",
     "tagsAdded": "{count, plural, one {# tag added} other {# tags added}}",
-    "tagsRemoveLabel": "Remove tag: {tag}"
+    "tagsRemoveLabel": "Remove tag: {tag}",
+    "discardShort": "Discard"
   },
   "me": {
     "joined": "Joined {date}",
@@ -752,7 +759,10 @@
       "emptyTrash": "Empty trash",
       "emptyTrashTitle": "Empty the trash?",
       "emptyTrashBody": "Every card in the trash will be deleted forever. This can't be undone.",
-      "emptyTrashShort": "Empty"
+      "emptyTrashShort": "Empty",
+      "emptyTrashFailed": "Couldn't empty the trash — try again",
+      "unresonateFailed": "Couldn't stop resonating — try again",
+      "makePrivateFailed": "Couldn't make it private — try again"
     },
     "anonymousBadge": "Anonymous",
     "emptyPublishedCta": "Write a story",
@@ -885,7 +895,8 @@
       "cropStage": "Photo framing area",
       "cropZoom": "Zoom",
       "cropCancel": "Cancel",
-      "cropUse": "Use photo"
+      "cropUse": "Use photo",
+      "cropUseShort": "Use"
     },
     "account": {
       "email": "Email",
@@ -986,7 +997,9 @@
       "unknownUser": "Deleted account",
       "close": "Close"
     },
-    "reportThisMessage": "Report this message"
+    "reportThisMessage": "Report this message",
+    "unblockShort": "Unblock",
+    "unblockFailed": "Couldn't unblock — try again"
   },
   "accountDeletion": {
     "title": "Your account is scheduled for deletion",

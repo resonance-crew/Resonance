@@ -7,6 +7,8 @@ import {
   avatarWobPath,
 } from '@/components/atoms/HandDrawnAvatar/HandDrawnAvatar';
 import { Icon } from '@/components/atoms/Icon';
+import { ButtonLoader } from '@/components/atoms/ButtonLoader/ButtonLoader';
+import { useToast } from '@/components/providers/ToastProvider';
 import { uploadImageFile } from '@/lib/images/upload';
 import { loadCropSource, releaseCropSource, type CropSource } from '@/lib/images/avatarCropImage';
 import { AvatarCropModal } from './AvatarCropModal';
@@ -22,8 +24,7 @@ export interface AvatarUploadProps {
   seed?: number;
   /**
    * Called with the public R2 URL once the framed photo is stored. May return
-   * the save's promise: the crop dialog waits for it, and says it failed when
-   * it rejects.
+   * the save's promise: a rejection puts the old photo back and says so.
    */
   onUploaded: (url: string) => void | Promise<void>;
 }
@@ -48,10 +49,14 @@ export function AvatarUpload({
   onUploaded,
 }: AvatarUploadProps) {
   const t = useTranslations('settings.profile');
+  const tNative = useTranslations('native');
   const inputRef = useRef<HTMLInputElement>(null);
   const [source, setSource] = useState<CropSource | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The framed photo on its way (round 21): drawn at once, from this browser, until the saved one takes over.
+  const [uploading, setUploading] = useState<string | null>(null);
+  const toast = useToast();
 
   // The decoded picture's pixels go when the dialog closes (or the page does).
   useEffect(() => () => {
@@ -76,12 +81,26 @@ export function AvatarUpload({
     }
   }
 
-  /** The framed square: stored (the server scales a profile photo to 256 px), then saved by the caller. */
-  async function use(blob: Blob) {
-    const file = new File([blob], 'avatar.jpg', { type: 'image/jpeg' });
-    const { publicUrl } = await uploadImageFile(file, { purpose: 'avatar' });
-    await onUploaded(publicUrl);
+  /**
+   * The framed square, used at once (round 21): the dialog closes and the avatar shows it, the pen loop on it,
+   * while it is stored (the server scales a profile photo to 256 px) and saved by the caller. A failure puts the
+   * old photo back and says so in a toast whose 再試一次 sends the same square again.
+   */
+  function send(blob: Blob) {
+    const local = URL.createObjectURL(blob);
+    setUploading(local);
     setSource(null);
+    const file = new File([blob], 'avatar.jpg', { type: 'image/jpeg' });
+    uploadImageFile(file, { purpose: 'avatar' })
+      .then(({ publicUrl }) => onUploaded(publicUrl))
+      .then(
+        () => setUploading(null),
+        () => {
+          setUploading(null);
+          toast.show({ message: t('avatarError'), action: { label: tNative('retry'), ariaLabel: tNative('retry'), icon: 'restore', onAction: () => send(blob) } });
+        },
+      )
+      .finally(() => URL.revokeObjectURL(local));
   }
 
   return (
@@ -106,7 +125,7 @@ export function AvatarUpload({
         }}
       >
         <HandDrawnAvatar
-          src={src}
+          src={uploading ?? src}
           initials={initials}
           color={accentColor}
           size={size}
@@ -115,9 +134,10 @@ export function AvatarUpload({
         <span
           className={styles.overlay}
           style={{ clipPath, WebkitClipPath: clipPath }}
+          data-uploading={uploading ? '' : undefined}
           aria-hidden="true"
         >
-          <Icon name="image" size={26} color="var(--photo-ink)" />
+          {uploading ? <ButtonLoader size={26} /> : <Icon name="image" size={26} color="var(--photo-ink)" />}
         </span>
       </button>
 
@@ -143,7 +163,7 @@ export function AvatarUpload({
         )}
       </div>
 
-      <AvatarCropModal source={source} onCancel={() => setSource(null)} onUse={use} />
+      <AvatarCropModal source={source} onCancel={() => setSource(null)} onUse={send} />
     </div>
   );
 }

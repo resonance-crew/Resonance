@@ -638,7 +638,7 @@ describe("the owner's card in the trash", () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Delete forever' }));
     expect(screen.getByText('Delete this card forever?')).toBeInTheDocument();
     const dialog = screen.getByRole('dialog');
-    const verb = Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'Delete forever')!;
+    const verb = within(dialog).getByRole('button', { name: 'Delete forever' });
     expect(verb).toHaveAttribute('data-variant', 'danger');
     await userEvent.click(verb);
     await waitFor(() => expect(mockDeleteForever).toHaveBeenCalledWith('pub1', { onlyIfTrashed: true }));

@@ -9,6 +9,7 @@ import { ConfirmModal } from '@/components/molecules/ConfirmModal/ConfirmModal';
 import type { ReportTarget } from '@/components/molecules/ReportModal/ReportModal';
 import { blockUser, unblockUser } from '@/lib/db/firestore/client/blocks';
 import { useOpenedOnce } from '@/lib/hooks/useOpenedOnce';
+import { useToast } from '@/components/providers/ToastProvider';
 
 // Loaded the first time someone reports, not with every page that has a ⋯.
 const ReportModal = dynamic(() => import('@/components/molecules/ReportModal/ReportModal').then((m) => m.ReportModal));
@@ -49,6 +50,8 @@ export function useSafetyActions({ report, isBlocked = false, onBlockedChange }:
   const [reporting, setReporting] = useState(false);
   const [confirmingBlock, setConfirmingBlock] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [blockFailed, setBlockFailed] = useState(false);
+  const toast = useToast();
   const reportLoaded = useOpenedOnce(reporting);
 
   const handle = report.handle ?? t('anonymousAuthor');
@@ -80,19 +83,27 @@ export function useSafetyActions({ report, isBlocked = false, onBlockedChange }:
       await unblockUser(report.userId);
       onBlockedChange?.(false);
       refreshAll();
+    } catch {
+      // Still blocked (the safe way to fail), and said so — never in silence.
+      toast.show({ message: t('unblockFailed') });
     } finally {
       setBusy(false);
     }
   }
 
+  // A block waits for the server (Safety: it must hold before the page says so); one that didn't go through
+  // keeps the question and says so in it.
   async function confirmBlock() {
     if (busy) return;
     setBusy(true);
+    setBlockFailed(false);
     try {
       await blockUser(report.userId);
       setConfirmingBlock(false);
       onBlockedChange?.(true);
       refreshAll();
+    } catch {
+      setBlockFailed(true);
     } finally {
       setBusy(false);
     }
@@ -100,7 +111,10 @@ export function useSafetyActions({ report, isBlocked = false, onBlockedChange }:
 
   function choose(key: string): boolean {
     if (key === 'safety:report') setReporting(true);
-    else if (key === 'safety:block' && canBlock) setConfirmingBlock(true);
+    else if (key === 'safety:block' && canBlock) {
+      setBlockFailed(false);
+      setConfirmingBlock(true);
+    }
     else if (key === 'safety:unblock' && canBlock) void unblock();
     else return false;
     return true;
@@ -130,6 +144,7 @@ export function useSafetyActions({ report, isBlocked = false, onBlockedChange }:
         onCancel={() => setConfirmingBlock(false)}
         onConfirm={() => void confirmBlock()}
         busy={busy}
+        error={blockFailed ? t('actionError') : null}
         seed={71}
       />
     </>

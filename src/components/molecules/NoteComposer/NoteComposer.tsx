@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Field, Textarea, CharCount } from '@/components/atoms/Field/Field';
 import { OrganicButton } from '@/components/atoms/OrganicButton/OrganicButton';
@@ -8,6 +8,7 @@ import { Icon } from '@/components/atoms/Icon';
 import { Panel } from '@/components/molecules/Panel/Panel';
 import { ModalActions, ModalCloseRow } from '@/components/molecules/Modal/ModalActions';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { useToast } from '@/components/providers/ToastProvider';
 import { useMyProfile } from '@/lib/data/hooks';
 import { forgetNoteDraft, keepNoteDraft, readNoteDraft } from '@/lib/data/noteDrafts';
 import { ApiError } from '@/lib/db/firestore/client/api';
@@ -63,7 +64,15 @@ export function NoteComposer({
   const [text, setText] = useState(() => initialText ?? (uid ? readNoteDraft(uid, cardId) : null) ?? '');
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
+  const toast = useToast();
+  // Whether this composer is still on screen when the server answers (its dialog may have closed by then).
+  const shown = useRef(true);
+  useEffect(() => {
+    shown.current = true;
+    return () => {
+      shown.current = false;
+    };
+  }, []);
   const privacyHint = useHint('note-privacy');
   // The send in flight or failed: its words and its clientId. Pressing Send
   // again on the same words is a retry and reuses the id — the server then
@@ -74,32 +83,40 @@ export function NoteComposer({
   const trimmed = text.trim();
   const valid = trimmed.length > 0 && trimmed.length <= NOTE_MAX_LENGTH && !!me;
 
+  // Round 21: sent at once — the composer says so and may close while the note is on its way. The words stay
+  // kept (noteDrafts) until the server has them; a refusal brings the composer back with them and says why, or,
+  // once it has closed, says so in a toast (opening it again finds the words).
   function submit() {
-    if (!valid || pending) return;
+    if (!valid || sent) return;
     setError(null);
     const same = attempt.current?.cardId === cardId && attempt.current.text === trimmed;
     if (!same) attempt.current = { cardId, text: trimmed, clientId: newClientId() };
     const { clientId } = attempt.current!;
-    start(async () => {
-      try {
-        await sendNote({ cardId, text: trimmed, clientId });
+    setSent(true);
+    sendNote({ cardId, text: trimmed, clientId }).then(
+      () => {
         attempt.current = null;
         if (uid) forgetNoteDraft(uid, cardId);
-        setSent(true);
         onSent?.();
-      } catch (err) {
+      },
+      (err) => {
         // Said in the reader's language, never the server's: a letter already full waits for its answer, and a
         // card gone (deleted, or hidden from the writer since — taking its notes with it) can't be written to:
         // sending again won't help, so not "try again".
-        setError(
+        const why =
           err instanceof ApiError && err.code === 'conflict'
             ? t('waitForReply')
             : err instanceof ApiError && err.status === 404
               ? tCard('notFound.title')
-              : tMessages('sendError'),
-        );
-      }
-    });
+              : tMessages('sendError');
+        if (shown.current) {
+          setSent(false);
+          setError(why);
+        } else {
+          toast.show({ message: err instanceof ApiError && err.code === 'conflict' ? why : t('failed') });
+        }
+      },
+    );
   }
 
   if (sent) {
@@ -173,13 +190,13 @@ export function NoteComposer({
           draws a pen line: cancel the tonal pill, Send the solid verb,
           rightmost — the modal foot every dialog shares. */}
       <div style={{ marginTop: 18 }}>
-        <ModalActions busy={pending}>
+        <ModalActions>
           {onClose && (
-            <OrganicButton variant="tonal" size="sm" onClick={onClose} disabled={pending}>
+            <OrganicButton variant="tonal" size="sm" onClick={onClose}>
               {t('cancel')}
             </OrganicButton>
           )}
-          <OrganicButton variant="solid" size="sm" onClick={submit} disabled={!valid} loading={pending}>
+          <OrganicButton variant="solid" size="sm" onClick={submit} disabled={!valid}>
             {t('send')}
           </OrganicButton>
         </ModalActions>

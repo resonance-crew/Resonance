@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderWithIntl, screen, userEvent, waitFor } from '@/../test/render';
+import { renderWithIntl, screen, userEvent, waitFor, within } from '@/../test/render';
 import type { Card, User } from '@/lib/db/types';
 
+const toast = vi.hoisted(() => ({ show: vi.fn(), dismiss: vi.fn() }));
+vi.mock('@/components/providers/ToastProvider', () => ({ useToast: () => toast }));
 vi.mock('@/components/providers/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 'me' }, loading: false }),
 }));
@@ -247,7 +249,7 @@ describe('ProfileTabs — the trash', () => {
     await userEvent.click(empty);
     expect(screen.getByText('Empty the trash?')).toBeInTheDocument();
     expect(screen.getByText("Every card in the trash will be deleted forever. This can't be undone.")).toBeInTheDocument();
-    const verb = Array.from(screen.getByRole('dialog').querySelectorAll('button')).find((b) => b.textContent === 'Empty trash')!;
+    const verb = within(screen.getByRole('dialog')).getByRole('button', { name: 'Empty trash' });
     expect(verb).toHaveAttribute('data-variant', 'danger');
     await userEvent.click(verb);
     expect(mockEmptyTrash).toHaveBeenCalledTimes(1);
@@ -255,18 +257,17 @@ describe('ProfileTabs — the trash', () => {
 
   // The server deleted everything, then the answer was lost (a 500 after the deletes, a timeout): the trash read
   // again is empty, so the question goes as if it had worked — never stuck saying it didn't (round 8 §6.2).
-  it('lets an emptying that failed go once the trash read again is empty, and keeps the question while cards are left', async () => {
+  // Round 21: the question closes at once (the shelf shows empty meanwhile); a refusal is said in a toast.
+  it('closes the question at once, and says an emptying that failed in a toast', async () => {
+    mockEmptyTrash.mockClear();
     mockEmptyTrash.mockRejectedValueOnce(new Error('timeout'));
     const data = { trash: [inTrash('public-one', { publishedAt: new Date('2026-09-01') })] };
-    const view = renderWithIntl(<ProfileTabs manageable tabs={['trash']} authors={{ me }} data={data} />);
+    renderWithIntl(<ProfileTabs manageable tabs={['trash']} authors={{ me }} data={data} />);
     await userEvent.click(screen.getByRole('button', { name: 'Empty trash' }));
-    await userEvent.click(Array.from(screen.getByRole('dialog').querySelectorAll('button')).find((b) => b.textContent === 'Empty trash')!);
-    // Still holding a card: the question stays, saying it didn't go through.
-    expect(await screen.findByRole('alert')).toHaveTextContent("That didn't work — try again");
-    // Read again, empty: the question is gone and the empty state shows.
-    view.rerender(<ProfileTabs manageable tabs={['trash']} authors={{ me }} data={{ trash: [] }} />);
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('heading', { level: 2, name: 'The trash is empty' })).toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Empty trash' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(mockEmptyTrash).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(toast.show).toHaveBeenCalledWith({ message: "Couldn't empty the trash — try again" }));
   });
 
   it('says the notes on an anonymous card went with it, while one is there', () => {

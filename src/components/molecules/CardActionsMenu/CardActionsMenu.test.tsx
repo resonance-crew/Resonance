@@ -288,21 +288,26 @@ describe('CardActionsMenu', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  // The card's own page stays where it is: the refusal is said in a notice of its own.
-  it('says so in a notice of its own when the trash refuses the card on its own page', async () => {
+  // Round 21: on its own page the card shows its trash banner at once (patchCard); a refusal puts it back
+  // and says so in the shell's toast.
+  it('shows the card trashed on its own page at once, and puts it back with a toast when the trash refuses', async () => {
     const onTrashed = vi.fn();
     const onLeaving = vi.fn();
+    const putBack = vi.fn();
+    const patchCard = vi.fn(() => putBack);
     mockCallApi.mockRejectedValue(new Error('offline'));
-    renderMenu(<CardActionsMenu card={{ id: 'c3', visibility: 'public' }} trashFeedback="page" onTrashed={onTrashed} onLeaving={onLeaving} />);
+    renderMenu(
+      <CardActionsMenu card={{ id: 'c3', visibility: 'public' }} trashFeedback="page" patchCard={patchCard} onTrashed={onTrashed} onLeaving={onLeaving} />,
+    );
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
     await userEvent.click(screen.getByText('Delete'));
 
-    const notice = await screen.findByRole('dialog', { name: 'Delete' });
-    expect(notice).toHaveTextContent("That didn't work — try again");
+    expect(patchCard).toHaveBeenCalledWith({ trashedAt: expect.any(Date), trashedFrom: { visibility: 'public', referenceCardId: null } });
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent("Couldn't move it to the trash — try again"));
+    expect(putBack).toHaveBeenCalledTimes(1);
     expect(onTrashed).not.toHaveBeenCalled();
     expect(onLeaving).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it("says when the Undo didn't go through, pointing at the trash", async () => {
@@ -412,15 +417,19 @@ describe('CardActionsMenu', () => {
     expect(mockCallApi).toHaveBeenCalledWith('/api/v1/cards?keys=orig');
   });
 
-  it('keeps the question open and says so when taking the resonance back fails', async () => {
+  it('closes the question at once, and puts the link back with a toast when taking the resonance back fails', async () => {
+    const putBack = vi.fn();
+    const patchCard = vi.fn(() => putBack);
     mockCallApi.mockRejectedValue(new Error('offline'));
-    renderMenu(<CardActionsMenu card={{ id: 'c5', visibility: 'public', referenceCardId: 'orig' }} referenceTitle="A walk" />);
+    renderMenu(<CardActionsMenu card={{ id: 'c5', visibility: 'public', referenceCardId: 'orig' }} referenceTitle="A walk" patchCard={patchCard} />);
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
     await userEvent.click(screen.getByText('Stop resonating'));
     await userEvent.click(screen.getByRole('button', { name: 'Stop resonating' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent("That didn't work — try again");
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(patchCard).toHaveBeenCalledWith({ referenceCardId: undefined });
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent("Couldn't stop resonating — try again"));
+    expect(putBack).toHaveBeenCalledTimes(1);
   });
 
   // A take-back by another way: hiding or deleting a resonance can end the connection with the original's author.
@@ -452,30 +461,32 @@ describe('CardActionsMenu', () => {
     expect(connectionReads.people).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the question open and says so when the trash refuses a resonance it asked about on its own page', async () => {
+  it('closes the question it asked at once, and says so in a toast when the trash then refuses the resonance', async () => {
     mockCallApi.mockRejectedValue(new Error('offline'));
     renderMenu(<CardActionsMenu card={reaching} referenceAnonymous={false} trashFeedback="page" />);
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
     await userEvent.click(screen.getByText('Delete'));
     await userEvent.click(await screen.findByRole('button', { name: 'Move to trash' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent("That didn't work — try again");
-    expect(screen.getByRole('dialog', { name: 'Delete this resonance?' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Delete this resonance?' })).toBeNull();
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent("Couldn't move it to the trash — try again"));
   });
 
-  it('says so when the server refuses a visibility change, and leaves the card as it was', async () => {
+  it('makes it private on its page at once, and puts it back with a toast when the server refuses', async () => {
     const onChanged = vi.fn();
+    const putBack = vi.fn();
+    const patchCard = vi.fn(() => putBack);
     mockCallApi.mockRejectedValue(new Error('Missing or insufficient permissions.'));
-    renderMenu(<CardActionsMenu card={{ id: 'c1', visibility: 'public' }} onChanged={onChanged} />);
+    renderMenu(<CardActionsMenu card={{ id: 'c1', visibility: 'public' }} onChanged={onChanged} patchCard={patchCard} />);
     await waitFor(() => expect(boxReads).toHaveBeenCalledTimes(1));
     await userEvent.click(screen.getByRole('button', { name: 'Manage card' }));
     await userEvent.click(screen.getByText('Make private'));
 
-    const notice = await screen.findByRole('dialog', { name: 'Make private' });
-    expect(notice).toHaveTextContent("That didn't work — try again");
+    expect(patchCard).toHaveBeenCalledWith({ visibility: 'private' });
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent("Couldn't make it private — try again"));
+    expect(putBack).toHaveBeenCalledTimes(1);
     expect(onChanged).not.toHaveBeenCalled();
     expect(boxReads).toHaveBeenCalledTimes(1);
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('keeps the card when the question is answered Keep it', async () => {

@@ -274,20 +274,27 @@ describe('in progress (loading)', () => {
     expect(btn).toHaveFocus();
   });
 
-  it('stands the loader before a bare label, outside its box, and moves the pair to stay centred', () => {
-    const { rerender } = render(<OrganicButton loading>Publish</OrganicButton>);
-    const label = () => screen.getByRole('button').querySelector(`.${styles.label}`) as HTMLElement;
-    // md: a 16 loader + 6 → the label moves 11 toward the end.
-    expect(label()).toHaveAttribute('data-loading-shift');
-    expect(label().style.getPropertyValue('--loader-shift')).toBe('11px');
-    expect(label().querySelector(`.${styles.loaderSlot} [data-button-loader]`)).toHaveAttribute('width', '16');
-    // sm: 14 + 6 → 10.
-    rerender(<OrganicButton loading size="sm">Publish</OrganicButton>);
-    expect(label().style.getPropertyValue('--loader-shift')).toBe('10px');
-    // Idle again: nothing moved, no loader.
-    rerender(<OrganicButton size="sm">Publish</OrganicButton>);
-    expect(label()).not.toHaveAttribute('data-loading-shift');
-    expect(loaders(screen.getByRole('button'))).toHaveLength(0);
+  // Round 21: a button that can be busy is always as wide as its busy self — the loop and its words lie in
+  // the label's cell beside the idle words whether busy or not, so going busy changes nothing around it.
+  it('lays out the busy line beside the idle words in one cell, busy or not, and shows only one', () => {
+    const { rerender } = render(<OrganicButton size="sm" loading={false}>Block</OrganicButton>);
+    const btn = screen.getByRole('button', { name: 'Block' });
+    const layers = () => btn.querySelector(`.${styles.layers}`) as HTMLElement;
+    const busy = () => btn.querySelector('[data-working-label]') as HTMLElement;
+    // Idle: the busy line is there, unseen, holding the loop's room (14 in sm) — no loop drawn.
+    expect(layers()).not.toHaveAttribute('data-busy');
+    expect(busy()).toHaveTextContent('Block');
+    expect(busy().firstElementChild).toHaveStyle({ width: '14px' });
+    expect(loaders(btn)).toHaveLength(0);
+    // Busy: the same cells, the loop drawn, the idle words still the name.
+    rerender(<OrganicButton size="sm" loading>Block</OrganicButton>);
+    expect(layers()).toHaveAttribute('data-busy');
+    expect(busy().querySelector('[data-button-loader]')).toHaveAttribute('width', '14');
+    expect(loaders(btn)).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Block' })).toBe(btn);
+    // A button that never loads keeps a plain label.
+    rerender(<OrganicButton size="sm">Block</OrganicButton>);
+    expect(btn.querySelector(`.${styles.layers}`)).toBeNull();
   });
 
   it('takes a leading icon’s place at the icon’s size, moving nothing', () => {
@@ -303,7 +310,22 @@ describe('in progress (loading)', () => {
     // The icon is gone (the loader is the only drawing in the label), and the label didn't move.
     const label = btn.querySelector(`.${styles.label}`) as HTMLElement;
     expect(label.querySelectorAll('svg')).toHaveLength(1);
-    expect(label).not.toHaveAttribute('data-loading-shift');
+    expect(label.querySelector(`.${styles.layers}`)).toBeNull();
+  });
+
+  it('says its short working words while busy, in the cell beside the idle label, which stays its name', () => {
+    const { rerender } = render(<OrganicButton size="sm" loading workingLabel="Delete">Delete card</OrganicButton>);
+    const btn = screen.getByRole('button', { name: 'Delete card' });
+    const working = btn.querySelector('[data-working-label]') as HTMLElement;
+    expect(working).toHaveTextContent('Delete');
+    expect(working).not.toHaveTextContent('Delete card');
+    expect(working).toHaveAttribute('aria-hidden', 'true');
+    expect(loaders(btn)).toHaveLength(1);
+    expect(btn.querySelector(`.${styles.idleWords}`)).toHaveTextContent('Delete card');
+    // Idle: no loop, the short words still laid out (so the width is the same either way).
+    rerender(<OrganicButton size="sm" loading={false} workingLabel="Delete">Delete card</OrganicButton>);
+    expect(loaders(btn)).toHaveLength(0);
+    expect(btn.querySelector('[data-working-label]')).toHaveTextContent('Delete');
   });
 
   it('leaves the loader to the caller when asked (a brand mark’s slot)', () => {

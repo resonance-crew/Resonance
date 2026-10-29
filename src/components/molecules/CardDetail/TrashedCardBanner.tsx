@@ -118,14 +118,12 @@ export function TrashedCardBanner({ card, focusTitle = false }: TrashedCardBanne
   const t = useTranslations('card.trashed');
   const tActions = useTranslations('me.actions');
   const tMe = useTranslations('me');
-  const tSafety = useTranslations('safety');
   const router = useRouter();
   const toast = useToast();
   const actions = useTrashActions();
   const title = useRef<HTMLParagraphElement>(null);
-  const [busy, setBusy] = useState<'restore' | 'delete' | null>(null);
+  const [busy, setBusy] = useState<'restore' | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const [failed, setFailed] = useState(false);
 
   // The drawing follows the laid-out banner: its size, where 還原 starts and where 永久刪除 does.
   const box = useRef<HTMLDivElement>(null);
@@ -199,26 +197,16 @@ export function TrashedCardBanner({ card, focusTitle = false }: TrashedCardBanne
     }
   }
 
-  async function deleteForever() {
-    if (busy) return;
-    setBusy('delete');
-    setFailed(false);
-    try {
-      await actions.deleteForever(ref);
-      setConfirming(false);
-      toast.show({ message: tActions('deletedForever') });
-      router.replace('/me');
-    } catch (e) {
-      if (e instanceof ApiError && e.code === 'conflict') {
-        // Restored meanwhile (another device): it stays, and the page shows it as it is.
-        setConfirming(false);
-        toast.show({ message: tActions('notInTrash') });
-      } else {
-        setFailed(true);
-      }
-    } finally {
-      setBusy(null);
-    }
+  // Round 21: gone at once — the question closes and the card box opens with the card off its shelves
+  // (useTrashActions); the answer is said in a toast there, and a refusal puts the card back.
+  function deleteForever() {
+    setConfirming(false);
+    router.replace('/me');
+    actions.deleteForever(ref).then(
+      () => toast.show({ message: tActions('deletedForever') }),
+      // Restored meanwhile (another device): it stays where it is now.
+      (e) => toast.show({ message: tActions(e instanceof ApiError && e.code === 'conflict' ? 'notInTrash' : 'deleteForeverFailed') }),
+    );
   }
 
   return (
@@ -292,10 +280,7 @@ export function TrashedCardBanner({ card, focusTitle = false }: TrashedCardBanne
         onClick={
           busy
             ? undefined
-            : () => {
-                setFailed(false);
-                setConfirming(true);
-              }
+            : () => setConfirming(true)
         }
         aria-disabled={busy !== null || undefined}
         {...brushHandlers('delete')}
@@ -309,11 +294,10 @@ export function TrashedCardBanner({ card, focusTitle = false }: TrashedCardBanne
         body={tActions('deleteConfirmBody')}
         cancelLabel={tActions('deleteCancel')}
         confirmLabel={tActions('deleteForever')}
+        workingLabel={tActions('delete')}
         onCancel={() => setConfirming(false)}
-        onConfirm={() => void deleteForever()}
-        busy={busy === 'delete'}
+        onConfirm={deleteForever}
         destructive
-        error={failed ? tSafety('actionError') : null}
         seed={71}
       />
     </div>
