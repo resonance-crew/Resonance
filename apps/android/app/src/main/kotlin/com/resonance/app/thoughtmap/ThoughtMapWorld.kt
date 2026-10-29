@@ -100,7 +100,7 @@ fun MapCameraLayer(store: ThoughtMapStore, content: @Composable BoxScope.() -> U
 /**
  * The map is a fixed-size world (a card is always 232×178 CSS px, its words set at 15/11.5px in 21/18.4px line
  * boxes, like the web's), so its text ignores the system's font scale: at 1.5× the tags row would outgrow its
- * 18px box, a region's title its 44-px-short bar and an arrow's pill its hit target. (The drawn lines already do.)
+ * 18px box, a region's title its 60-px-short bar and an arrow's pill its hit target. (The drawn lines already do.)
  */
 @Composable
 fun FixedFontScale(content: @Composable () -> Unit) {
@@ -373,6 +373,10 @@ fun MapRegionChrome(store: ThoughtMapStore) {
 @Composable
 private fun RegionChrome(store: ThoughtMapStore, gid: String) {
     val g = store.groups[gid] ?: return
+    // Well clear of the region's 34 corner arc (the owner, 2026-10-29: they sat too far into the corners): the title's
+    // line box at (28, 23), the words' middle level with the trash's, 60 kept at its right — the trash's 20 inset, its
+    // 28, 12 between — and 28 each side (`.groupTitle { right: 60px; padding: 23px 28px 11px }`); the trash's 28 box 20
+    // in from the top and right (`.groupDelete`), its icon's middle 34 from each.
     if (store.editingGroupId != gid) {
         BasicText(
             g.title,
@@ -380,10 +384,10 @@ private fun RegionChrome(store: ThoughtMapStore, gid: String) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
-                .requiredWidth(max(0.0, g.w - 44 - 40).dp)
+                .requiredWidth(max(0.0, g.w - 60 - 56).dp)
                 .graphicsLayer {
-                    translationX = ((g.x + 20) * density).toFloat()
-                    translationY = ((g.y + 12) * density).toFloat()
+                    translationX = ((g.x + 28) * density).toFloat()
+                    translationY = ((g.y + 23) * density).toFloat()
                 },
         )
     }
@@ -391,8 +395,8 @@ private fun RegionChrome(store: ThoughtMapStore, gid: String) {
         Modifier
             .requiredSize(28.dp)
             .graphicsLayer {
-                translationX = ((g.x + g.w - 10 - 28) * density).toFloat()
-                translationY = ((g.y + 8) * density).toFloat()
+                translationX = ((g.x + g.w - 20 - 28) * density).toFloat()
+                translationY = ((g.y + 20) * density).toFloat()
             },
         contentAlignment = Alignment.Center,
     ) { OrganicIcon(IconName.Trash, size = 15.dp, color = Tokens.TextMuted) }

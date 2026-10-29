@@ -192,8 +192,8 @@
     "themeSage": "鼠尾草",
     "themeLavender": "薰衣草",
     "themeYellow": "金黃",
-    "mascots": "小精靈",
-    "mascotsHint": "偶爾會有紙做的小精靈到首頁和卡片頁走走"
+    "mascots": "小紙團",
+    "mascotsHint": "偶爾會有小紙團到首頁和卡片頁走走"
   },
   "app": {
     "pageNotFound": "找不到這個頁面",
@@ -685,7 +685,7 @@
       "zoomIn": "放大",
       "zoomOut": "縮小",
       "zoomFit": "顯示全部",
-      "open": "開啟卡片",
+      "open": "開啟",
       "removeFromMap": "從地圖移除",
       "deleteEdge": "刪除連結",
       "deleteGroup": "刪除分類",

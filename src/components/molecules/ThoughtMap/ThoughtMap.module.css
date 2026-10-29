@@ -169,9 +169,6 @@
 
 .linkHandle {
   position: absolute;
-  right: -15px;
-  top: 50%;
-  transform: translateY(-50%);
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -183,13 +180,68 @@
   justify-content: center;
   cursor: crosshair;
   opacity: 0;
+  /* A handle not shown takes no press: four of them ring the card, and a
+     press just past a card's edge belongs to whatever is there. */
+  pointer-events: none;
   transition: opacity 160ms ease, border-color 160ms ease, color 160ms ease;
   z-index: 2;
 }
 
-.node:hover .linkHandle,
-.node[data-selected='true'] .linkHandle {
+/* One on each side, centred on it and straddling the outline (15 out); the
+   arrow glyph points out of its side. */
+.linkHandle[data-side='right'] {
+  right: -15px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.linkHandle[data-side='left'] {
+  left: -15px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.linkHandle[data-side='top'] {
+  top: -15px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.linkHandle[data-side='bottom'] {
+  bottom: -15px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.linkHandle[data-side='left'] svg {
+  transform: scaleX(-1);
+}
+
+.linkHandle[data-side='top'] svg {
+  transform: rotate(-90deg);
+}
+
+.linkHandle[data-side='bottom'] svg {
+  transform: rotate(90deg);
+}
+
+/* With a mouse, the handle on the side the pointer is nearest (data-near,
+   written by the node as the pointer moves) — and a selected card keeps the
+   side last shown. */
+.node:is(:hover, [data-selected='true'])[data-near='top'] .linkHandle[data-side='top'],
+.node:is(:hover, [data-selected='true'])[data-near='right'] .linkHandle[data-side='right'],
+.node:is(:hover, [data-selected='true'])[data-near='bottom'] .linkHandle[data-side='bottom'],
+.node:is(:hover, [data-selected='true'])[data-near='left'] .linkHandle[data-side='left'] {
   opacity: 1;
+  pointer-events: auto;
+}
+
+/* Nothing hovers on a touch screen: a selected card shows all four. */
+@media (hover: none) {
+  .node[data-selected='true'] .linkHandle {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 /* While an arrow is being dragged out, every dashed link handle hides — the
@@ -230,10 +282,11 @@
   position: absolute;
   top: 0;
   left: 0;
-  /* Clear the delete button in the opposite corner. */
-  right: 44px;
+  /* Clear the delete button in the opposite corner (its 20 inset, its 28, 12 between). */
+  right: 60px;
   z-index: 1;
-  padding: 12px 20px 10px;
+  /* Well clear of the region's 34 corner arc: the words' middle level with the trash's (34 down). */
+  padding: 23px 28px 11px;
   font-family: var(--font-heading);
   font-size: 16px;
   font-weight: 700;
@@ -250,9 +303,10 @@
   position: absolute;
   top: 0;
   left: 0;
-  right: 44px;
+  right: 60px;
   z-index: 1;
-  padding: 8px 0 0 16px;
+  /* With the input's own 4px, the typed words sit exactly where the title's were (28, 23). */
+  padding: 19px 0 0 24px;
 }
 
 .groupTitleInput {
@@ -286,13 +340,14 @@
   overflow: visible;
 }
 
-/* Region delete — quiet icon in the top-right corner, opposite the title.
-   Hover washes in the same soft irregular dark region as the node tab's
-   buttons (no ring, no border — the shared borderless-tool language). */
+/* Region delete — quiet icon in the top-right corner, opposite the title,
+   20 in from both edges (its icon's middle 34 from each). Hover washes in the
+   same soft irregular dark region as the node tab's buttons (no ring, no
+   border — the shared borderless-tool language). */
 .groupDelete {
   position: absolute;
-  top: 8px;
-  right: 10px;
+  top: 20px;
+  right: 20px;
   z-index: 1;
   display: flex;
   align-items: center;
@@ -519,10 +574,10 @@
 .nodeTab {
   position: absolute;
   z-index: 2;
-  /* Matches TAB_X in ThoughtMapNode — past the card's top-left corner arc. */
+  /* Matches TAB_X / TAB_W in ThoughtMapNode — past the card's top-left corner arc. */
   left: 24px;
   top: -30px;
-  width: 118px;
+  width: 64px;
   height: 30px;
 }
 
@@ -559,6 +614,37 @@
 
 .nodeTabBtn:hover {
   background: color-mix(in oklch, var(--toward-ink) 7%, transparent);
+}
+
+/* 移除, across the card from 開啟: inside its bottom-right corner, the icon's
+   middle on the meta row's line and its edge on the content's 16 padding
+   (centre W − 23, H − 21). Quiet, as a region's trash is. */
+.nodeRemove {
+  position: absolute;
+  right: 9px;
+  bottom: 7px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: 9px 11px 10px 12px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.nodeRemove:hover {
+  color: oklch(var(--hue-label) var(--node-hue, 55));
+  background: color-mix(in oklch, var(--toward-ink) 7%, transparent);
+}
+
+/* The tags stop 8 short of it while it shows. */
+.node[data-tabbed='true'] .nodeMeta {
+  padding-right: 22px;
 }
 
 /* Dim scrim behind the centered card picker; a tap on it closes the picker. */

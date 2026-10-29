@@ -83,9 +83,9 @@ struct NodeTextLayout {
 
 /// ThoughtMapNode: the card's hand-drawn outline in its hue (a folder tab
 /// grows out of it when selected), the title and excerpt wrapping round the
-/// thumbnail, the visibility glyph and tags, and — selected — the link handle
-/// and the tab's Open / remove buttons. Purely drawn: the map's touch surface
-/// does all the hit-testing.
+/// thumbnail, the visibility glyph and tags, and — selected — a link handle on
+/// each side, 開啟 on the tab and 移除 in the opposite corner. Purely drawn: the
+/// map's touch surface does all the hit-testing.
 struct MapNodeView: View, Equatable {
     let card: MapCard
     let selected: Bool
@@ -136,8 +136,14 @@ struct MapNodeView: View, Equatable {
                 meta
             }
             .padding(EdgeInsets(top: 14, leading: 16, bottom: 12, trailing: 16))
-            if selected && showsHandle && !dragging { linkHandle }
-            if tabbed { tabRow }
+            // Nothing hovers on a touch screen, so a selected card shows all four (the web's `hover: none`).
+            if selected && showsHandle && !dragging {
+                ForEach(ThoughtMapStore.NodeSide.allCases, id: \.self) { linkHandle($0) }
+            }
+            if tabbed {
+                tabRow
+                removeButton
+            }
         }
         .frame(width: mapNodeW, height: mapNodeH, alignment: .topLeading)
     }
@@ -191,6 +197,8 @@ struct MapNodeView: View, Equatable {
                 .truncationMode(.tail)
             Spacer(minLength: 0)
         }
+        // The tags stop 8 short of 移除 while it shows.
+        .padding(.trailing, tabbed ? 22 : 0)
         .frame(height: 18)
     }
 
@@ -208,29 +216,35 @@ struct MapNodeView: View, Equatable {
         }
     }
 
-    /// The link handle: a dashed 28px circle on the right edge, an arrow inside.
-    private var linkHandle: some View {
-        ZStack {
+    /// A link handle: a dashed 28px circle straddling the middle of a side, its arrow pointing out of it.
+    private func linkHandle(_ side: ThoughtMapStore.NodeSide) -> some View {
+        let c = ThoughtMapStore.handleCentre(side)
+        return ZStack {
             Circle().fill(Tokens.cardBg)
             Circle().stroke(Tokens.fieldBorderHover, style: StrokeStyle(lineWidth: 1.6, dash: [4.8, 3.2]))
             OrganicIcon(.arrowRight, size: 14).foregroundStyle(Tokens.textMuted)
+                .scaleEffect(x: side == .left ? -1 : 1, y: 1)
+                .rotationEffect(.degrees(side == .top ? -90 : side == .bottom ? 90 : 0))
         }
         .frame(width: 28, height: 28)
-        .offset(x: mapNodeW - 13, y: mapNodeH / 2 - 14)
+        .offset(x: c.x - 14, y: c.y - 14)
     }
 
-    /// The tab's buttons: "Open" and the trash, centred in the 118×30 tab.
+    /// The tab's one button, "Open", centred in the 64×30 tab and nudged down as the web's padding-top 4.
     private var tabRow: some View {
-        HStack(spacing: 2) {
-            HStack(spacing: 4) {
-                Text(L10n.Me.ThoughtMap.open).font(AppFonts.body(12.5, weight: .semibold)).foregroundStyle(Tokens.text)
-            }
+        Text(L10n.Me.ThoughtMap.open).font(AppFonts.body(12.5, weight: .semibold)).foregroundStyle(Tokens.text)
+            .lineLimit(1)
             .padding(.horizontal, 7).padding(.vertical, 3)
-            OrganicIcon(.trash, size: 14).foregroundStyle(Tokens.text)
-                .padding(.horizontal, 7).padding(.vertical, 3)
-        }
-        .padding(EdgeInsets(top: 4, leading: 6, bottom: 0, trailing: 6))
-        .frame(width: ThoughtMapStore.tabW, height: ThoughtMapStore.tabH, alignment: .center)
-        .offset(x: ThoughtMapStore.tabX, y: -ThoughtMapStore.tabH)
+            .padding(.top, 4)
+            .frame(width: ThoughtMapStore.tabW, height: ThoughtMapStore.tabH, alignment: .center)
+            .offset(x: ThoughtMapStore.tabX, y: -ThoughtMapStore.tabH)
+    }
+
+    /// 移除 (the web's nodeRemove): a quiet trash inside the card's bottom-right corner, in the muted ink
+    /// a region's trash wears, across the card from 開啟.
+    private var removeButton: some View {
+        OrganicIcon(.trash, size: 14).foregroundStyle(Tokens.textMuted)
+            .frame(width: 28, height: 28)
+            .offset(x: ThoughtMapStore.removeX - 14, y: ThoughtMapStore.removeY - 14)
     }
 }

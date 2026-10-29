@@ -86,6 +86,26 @@ class MapGroup(val id: String, title: String, val hue: Double, x: Double, y: Dou
 class EdgeGeo(val geo: EdgeGeometry, val path: Path, val head: Path)
 
 /**
+ * A side of a card an arrow can be drawn out of (the web's `NodeSide`): its link handle's centre, card-local,
+ * on the side's middle and straddling the outline (`.linkHandle[data-side]`: a 28 circle 15 out). The arrow
+ * docks to whichever side faces the finger (`organicEdgePath`), so which handle starts it changes nothing else.
+ */
+enum class LinkSide(val cx: Double, val cy: Double) {
+    Top(mapNodeW / 2, -1.0),
+    Right(mapNodeW + 1, mapNodeH / 2),
+    Bottom(mapNodeW / 2, mapNodeH + 1),
+    Left(-1.0, mapNodeH / 2);
+
+    /** How deep a card-local point lies inside the card's edge on this side (along its inward normal; outside, negative). */
+    fun depth(lx: Double, ly: Double): Double = when (this) {
+        Top -> ly
+        Right -> mapNodeW - lx
+        Bottom -> mapNodeH - ly
+        Left -> lx
+    }
+}
+
+/**
  * The thought map's state and its gestures — ThoughtMapCanvas.tsx without the
  * DOM, the twin of iOS's ThoughtMapStore. Edits are optimistic and written
  * through when a gesture ends (no debounce), exactly as on the web; the web's
@@ -203,10 +223,30 @@ class ThoughtMapStore(private val reading: ReadingApi) {
         val groupHues = listOf(88.0, 215.0, 290.0, 140.0, 55.0, 18.0)
         val nodeHues = listOf(55.0, 290.0, 140.0, 88.0, 215.0, 18.0)
 
-        /** A card's action tab (TAB_X, TAB_W, TAB_H in ThoughtMapNode.tsx). */
+        /**
+         * A card's action tab (TAB_X, TAB_W, TAB_H in ThoughtMapNode.tsx). It holds 開啟 alone: 移除 lives in
+         * the card's opposite corner (the owner, 2026-10-29: side by side, one was tapped for the other).
+         */
         const val tabX = 24.0
-        const val tabW = 118.0
+        const val tabW = 64.0
         const val tabH = 30.0
+
+        /**
+         * 移除 (off the map), across the card from 開啟: its icon's middle inside the selected card's
+         * bottom-right, on the meta row's line, its edge on the content's 16 padding (the web's `.nodeRemove`).
+         */
+        const val removeX = mapNodeW - 23
+        const val removeY = mapNodeH - 21
+
+        /**
+         * The most 移除's box reaches each way, in world units, however far out the map is zoomed: grown with the
+         * finger's reach (22 on screen) it covered the card's whole bottom-right quarter at 0.6× and below, and a
+         * press meant to drag the card took it off the map, with no undo.
+         */
+        const val removeReach = 18.0
+
+        /** How deep inside a card's edge a link handle still takes a press: past it, the press is the card's (it drags). */
+        const val handleDepth = 14.0
 
         /** A region can't shrink below a card with room around it. */
         const val minGroupW = mapNodeW + 60
@@ -261,14 +301,6 @@ class ThoughtMapStore(private val reading: ReadingApi) {
         /** The label pill's size in world units (TagPill sm: 10px 600 uppercase at 0.04em, 3×10 padding). */
         fun pillSize(text: String): Pair<Double, Double> =
             Pair(Math.ceil(MapText.width(text.uppercase(), AppFonts.Family.Body, 600, 10f, 0.04f).toDouble()) + 20, 19.0)
-
-        /** Where the tab's two buttons split ("Open" on the left, the trash on the right). */
-        fun tabSplitX(): Double {
-            val openW = Math.ceil(MapText.width(L10n.Me.ThoughtMap.open, AppFonts.Family.Body, 600, 12.5f).toDouble()) + 14
-            val trashW = 14.0 + 14
-            val content = openW + 2 + trashW
-            return tabX + (tabW - content) / 2 + openW + 1
-        }
     }
 
     // Visits
@@ -665,9 +697,11 @@ class ThoughtMapStore(private val reading: ReadingApi) {
 
     sealed interface Hit {
         data class EdgeLabel(val id: String) : Hit
+        /** The selected card's tab: 開啟, the whole of it. */
         data class TabOpen(val id: String) : Hit
-        data class TabRemove(val id: String) : Hit
-        data class LinkHandle(val id: String) : Hit
+        /** 移除: the trash inside the selected card's bottom-right corner (it was the tab's second button). */
+        data class NodeRemove(val id: String) : Hit
+        data class LinkHandle(val id: String, val side: LinkSide) : Hit
         data class Node(val id: String) : Hit
         data class GroupTitle(val id: String) : Hit
         data class GroupDelete(val id: String) : Hit
@@ -691,13 +725,15 @@ class ThoughtMapStore(private val reading: ReadingApi) {
         }
         val sel = selection
         if (sel is Selection.Node && dragNodeId == null) {
-            nodes[sel.id]?.let { n ->
-                val hx = n.x + 233
-                val hy = n.y + 89
-                if (hypot(w.x - hx, w.y - hy) <= max(14.0, reach)) return Hit.LinkHandle(sel.id)
-                if (w.y >= n.y - tabH && w.y < n.y + 2 && w.x >= n.x + tabX && w.x <= n.x + tabX + tabW) {
-                    return if (w.x - n.x < tabSplitX()) Hit.TabOpen(sel.id) else Hit.TabRemove(sel.id)
-                }
+            nodes[sel.id]?.takeIf { insideClip(it, w) }?.let { n ->
+                val lx = w.x - n.x
+                val ly = w.y - n.y
+                val r = max(14.0, reach)
+                // 開啟 top-left on its tab, 移除 bottom-right inside the card: diagonally apart (~200), never mistaken for each other.
+                if (ly >= -tabH && ly < 2 && lx >= tabX && lx <= tabX + tabW) return Hit.TabOpen(sel.id)
+                val rr = min(r, removeReach)
+                if (abs(lx - removeX) <= rr && abs(ly - removeY) <= rr) return Hit.NodeRemove(sel.id)
+                if (linkDraft == null) linkSideAt(lx, ly, r)?.let { return Hit.LinkHandle(sel.id, it) }
             }
         }
         for (id in (filedOrder + freeOrder).asReversed()) {
@@ -706,13 +742,14 @@ class ThoughtMapStore(private val reading: ReadingApi) {
         }
         for (id in groupOrder.asReversed()) {
             val g = groups[id] ?: continue
-            val rx = g.x + g.w + 6 - 11
-            val ry = g.y + g.h + 6 - 11
-            if (hypot(w.x - rx, w.y - ry) <= max(11.0, reach)) return Hit.GroupResize(id)
-            val dx = g.x + g.w - 10 - 14
-            val dy = g.y + 8 + 14
+            val corner = resizeCorner(g)
+            if (hypot(w.x - corner.x, w.y - corner.y) <= max(11.0, reach)) return Hit.GroupResize(id)
+            // The trash's 28 box 20 in from the top and right (its icon's middle 34 from each), the title's row
+            // beside it, 60 short of the right edge (the web's `.groupDelete`, `.groupTitle`).
+            val dx = g.x + g.w - 34
+            val dy = g.y + 34
             if (abs(w.x - dx) <= max(14.0, reach) && abs(w.y - dy) <= max(14.0, reach)) return Hit.GroupDelete(id)
-            if (w.x >= g.x && w.x <= g.x + g.w - 44 && w.y >= g.y && w.y <= g.y + 43) return Hit.GroupTitle(id)
+            if (w.x >= g.x && w.x <= g.x + g.w - 60 && w.y >= g.y && w.y <= g.y + 56) return Hit.GroupTitle(id)
         }
         val slop = max(8.0, 12 / s)
         for (id in edgeOrder.asReversed()) {
@@ -727,6 +764,22 @@ class ThoughtMapStore(private val reading: ReadingApi) {
         return Hit.Empty
     }
 
+    /**
+     * The link handle a press on the selected card ([lx], [ly] card-local) starts an arrow from, if any: the
+     * nearest within [r] of its centre and no deeper than [handleDepth] inside the card on its side — the reach
+     * grows outward and along the edge, never into the card's body (a drag there still moves the card).
+     */
+    private fun linkSideAt(lx: Double, ly: Double, r: Double): LinkSide? =
+        LinkSide.entries
+            .filter { hypot(lx - it.cx, ly - it.cy) <= r && it.depth(lx, ly) <= handleDepth }
+            .minByOrNull { hypot(lx - it.cx, ly - it.cy) }
+
+    /**
+     * Whether world point [w] is inside the clip [n] is drawn in: a filed card's tab, trash and handles are cut
+     * by its region's box as the card is (`overflow: hidden` on the web, where what is cut takes no press).
+     */
+    private fun insideClip(n: MapNode, w: Pt): Boolean = n.groupId?.let { groups[it] }?.let { rectContains(it.rect, w) } ?: true
+
     /** A filed card only shows (and takes touches) inside its region's rounded clip. */
     private fun clippedRect(n: MapNode): Rect {
         val r = mapNodeRect(n.x, n.y)
@@ -737,6 +790,37 @@ class ThoughtMapStore(private val reading: ReadingApi) {
         val y1 = min(r.y + r.h, g.y + g.h)
         return if (x1 > x0 && y1 > y0) Rect(x0, y0, x1 - x0, y1 - y0) else Rect(0.0, 0.0, -1.0, -1.0)
     }
+
+    /**
+     * What a drag starting at the screen's edge would take hold of, for the system-gesture exclusion
+     * ([MapGestureExclusion]): the selected card's link handles as drawn (not dragged, no arrow being drawn, inside
+     * its region's clip), the regions' resize corners (the selected one apart), and every region's and card's box.
+     * Reads the map's snapshot state, so a derived state over it follows the camera and the map.
+     */
+    fun exclusionScene(): MapGestureExclusion.Scene {
+        val sel = selection
+        val handles = (sel as? Selection.Node)?.takeIf { dragNodeId == null && linkDraft == null }?.let { nodes[it.id] }?.let { n ->
+            LinkSide.entries.map { Pt(n.x + it.cx, n.y + it.cy) }.filter { insideClip(n, it) }
+        }.orEmpty()
+        val regions = groupOrder.mapNotNull { groups[it] }
+        val selectedRegion = (sel as? Selection.Group)?.let { groups[it.id] }
+        val focus = when (sel) {
+            is Selection.Node -> nodes[sel.id]?.let { Pt(it.x + mapNodeW / 2, it.y + mapNodeH / 2) }
+            is Selection.Group -> selectedRegion?.let { Pt(it.x + it.w / 2, it.y + it.h / 2) }
+            else -> null
+        }
+        return MapGestureExclusion.Scene(
+            camera = camera,
+            handles = handles,
+            selectedCorner = selectedRegion?.let(::resizeCorner),
+            corners = regions.filter { it !== selectedRegion }.map(::resizeCorner),
+            boxes = regions.map { it.rect } + nodeOrder.mapNotNull { id -> nodes[id]?.let(::clippedRect)?.takeIf { it.w > 0 } },
+            focus = focus,
+        )
+    }
+
+    /** A region's resize grip's middle (its bottom-right corner, as [hitTest] reads it). */
+    private fun resizeCorner(g: MapGroup) = Pt(g.x + g.w + 6 - 11, g.y + g.h + 6 - 11)
 
     /** Distance from a point to the arrow's cubic, sampled. */
     private fun distance(p: Pt, path: List<PathCommand>): Double {
@@ -977,7 +1061,7 @@ class ThoughtMapStore(private val reading: ReadingApi) {
                 when (val hit = current.hit) {
                     is Hit.EdgeLabel -> startEdgeEdit(hit.id)
                     is Hit.TabOpen -> cards[hit.id]?.let { onOpen(it) }
-                    is Hit.TabRemove -> removeNode(hit.id)
+                    is Hit.NodeRemove -> removeNode(hit.id)
                     is Hit.GroupDelete -> removeGroup(hit.id)
                     else -> {}
                 }

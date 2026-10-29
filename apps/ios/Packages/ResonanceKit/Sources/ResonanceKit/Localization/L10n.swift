@@ -326,9 +326,9 @@ public enum L10n {
         public static var themeLavender: String { Strings.shared.string("tweaks.themeLavender") }
         /// Gold
         public static var themeYellow: String { Strings.shared.string("tweaks.themeYellow") }
-        /// Paper friends
+        /// Paper Pals
         public static var mascots: String { Strings.shared.string("tweaks.mascots") }
-        /// Little paper puppets drop by the home feed and card pages now and then
+        /// The Paper Pals drop by the home feed and card pages now and then
         public static var mascotsHint: String { Strings.shared.string("tweaks.mascotsHint") }
     }
     public enum App {

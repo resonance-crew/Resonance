@@ -22,8 +22,40 @@ final class ThoughtMapStore {
 
     static let groupHues: [Double] = [88, 215, 290, 140, 55, 18]
     static let nodeHues: [Double] = [55, 290, 140, 88, 215, 18]
-    /// A card's action tab (TAB_X, TAB_W, TAB_H in ThoughtMapNode.tsx).
-    static let tabX = 24.0, tabW = 118.0, tabH = 30.0
+    /// A card's action tab (TAB_X, TAB_W, TAB_H in ThoughtMapNode.tsx). It holds 開啟 alone: 移除 lives
+    /// in the card's opposite corner (the owner, 2026-10-29: side by side, one was tapped for the other),
+    /// and narrow, it leaves the top's link handle room.
+    static let tabX = 24.0, tabW = 64.0, tabH = 30.0
+    /// 移除 (the web's nodeRemove): its 14 icon's middle inside the card's bottom-right corner, on the meta
+    /// row's line, its edge on the content's 16 padding — diagonally across the card from 開啟.
+    static let removeX = mapNodeW - 23, removeY = mapNodeH - 21
+    /// How far from 移除's middle a press still reaches it (its drawn 28 box and a little more), at any zoom.
+    static let removeReach = 18.0
+
+    /// A side of a card (the web's NodeSide). Each has a link handle; the arrow being drawn docks to
+    /// whichever side faces the finger (`organicEdgePath`), so which handle starts it changes nothing else.
+    enum NodeSide: CaseIterable { case top, right, bottom, left }
+
+    /// Where a side's 28 link handle is centred (card-local): on the side's middle, straddling the
+    /// outline 1 out (the web's 15 out of the card's box).
+    static func handleCentre(_ side: NodeSide) -> CGPoint {
+        switch side {
+        case .top: CGPoint(x: mapNodeW / 2, y: -1)
+        case .right: CGPoint(x: mapNodeW + 1, y: mapNodeH / 2)
+        case .bottom: CGPoint(x: mapNodeW / 2, y: mapNodeH + 1)
+        case .left: CGPoint(x: -1, y: mapNodeH / 2)
+        }
+    }
+
+    /// A region's corner trash: its 28 box 20 in from the top and the right (`.groupDelete` in
+    /// ThoughtMap.module.css), so its icon's middle is 34 from each — well clear of the 34 corner arc.
+    static let regionTrashInset = 20.0, regionTrashBox = 28.0
+    /// A region's title: its line box at (28, 23), the words' middle level with the trash's; 60 kept
+    /// clear at its right (the trash's 20 + 28, and 12 between) — the web's `.groupTitle`.
+    static let regionTitleX = 28.0, regionTitleY = 23.0, regionTitleRight = 60.0
+    /// The title row's depth from the region's top (23 + its ~21 line + 11 below) — where a press is the title.
+    static let regionTitleRowH = 56.0
+
     /// A region can't shrink below a card with room around it.
     static let minGroupW = mapNodeW + 60, minGroupH = mapNodeH + 80
 
@@ -524,7 +556,9 @@ final class ThoughtMapStore {
     // MARK: - Hit-testing (the web's paint order, top first)
 
     enum Hit: Equatable {
-        case edgeLabel(String), tabOpen(String), tabRemove(String), linkHandle(String), node(String)
+        /// `tabOpen` is the whole tab; `nodeRemove` the trash inside the card; `linkHandle` says which
+        /// card and which of its four handles.
+        case edgeLabel(String), tabOpen(String), nodeRemove(String), linkHandle(String, NodeSide), node(String)
         case groupTitle(String), groupDelete(String), groupResize(String), edge(String), group(String), empty
     }
 
@@ -555,14 +589,26 @@ final class ThoughtMapStore {
     /// and arrow (its id seeds it) make the same geometry.
     @ObservationIgnored private var edgeMemo: [String: (source: Rect, target: Rect, geometry: EdgeGeometry)] = [:]
 
-    /// Where the tab's two buttons split ("Open" on the left, the trash on the right).
-    static let tabSplitX: Double = {
-        let font = AppFonts.uiFont(.body, size: 12.5, weight: .semibold)
-        let openW = ceil((L10n.Me.ThoughtMap.open as NSString).size(withAttributes: [.font: font]).width) + 14
-        let trashW = 14.0 + 14
-        let content = openW + 2 + trashW
-        return tabX + (tabW - content) / 2 + openW + 1
-    }()
+    /// The selected card's link handle under `w` (world), if any: within `radius` of a handle's centre and
+    /// no deeper than 14 inside the card's edge on that side (depth along the side's inward normal, negative
+    /// outside), so a finger's reach grows outward and along the edge but never eats the card's body — a
+    /// drag on a selected card's body still moves it. Near a corner at a far zoom, the nearest handle.
+    static func handleHit(_ w: Point, node n: MapNode, radius: Double) -> NodeSide? {
+        var best: (side: NodeSide, d: Double)?
+        for side in NodeSide.allCases {
+            let c = handleCentre(side)
+            let d = hypot(w.x - (n.x + c.x), w.y - (n.y + c.y))
+            let depth = switch side {
+            case .top: w.y - n.y
+            case .right: n.x + mapNodeW - w.x
+            case .bottom: n.y + mapNodeH - w.y
+            case .left: w.x - n.x
+            }
+            guard d <= radius, depth <= 14, d < best?.d ?? .infinity else { continue }
+            best = (side, d)
+        }
+        return best?.side
+    }
 
     func hitTest(_ p: CGPoint) -> Hit {
         let w = screenToWorld(camera, p.x, p.y)
@@ -574,12 +620,20 @@ final class ThoughtMapStore {
             let size = Self.pillSize(labelText(e))
             if abs(w.x - g.mid.x) <= size.width / 2 + 4 / s, abs(w.y - g.mid.y) <= size.height / 2 + 6 / s { return .edgeLabel(id) }
         }
-        if case let .node(id)? = selection, let n = nodes[id], dragNodeId == nil {
-            let hx = n.x + 233, hy = n.y + 89
-            if hypot(w.x - hx, w.y - hy) <= max(14, reach) { return .linkHandle(id) }
+        // A filed card's controls show only inside its region's box (its clip), and take presses only there —
+        // the web's overflow-hidden clip does the same; an unseen handle would steal a press at the region's edge.
+        if case let .node(id)? = selection, let n = nodes[id], dragNodeId == nil, insideClip(n, w) {
+            // 開啟 is the whole tab (exact, as drawn), then 移除 in the opposite corner, then the four handles.
             if w.y >= n.y - Self.tabH, w.y < n.y + 2, w.x >= n.x + Self.tabX, w.x <= n.x + Self.tabX + Self.tabW {
-                return w.x - n.x < Self.tabSplitX ? .tabOpen(id) : .tabRemove(id)
+                return .tabOpen(id)
             }
+            // 移除 takes no more than 18 each way, whatever the zoom: grown with the finger's reach, it would
+            // cover the zoomed-out card's whole corner, and a press meant for the card would take it off the map.
+            let removeReach = min(max(14, reach), Self.removeReach)
+            if abs(w.x - (n.x + Self.removeX)) <= removeReach, abs(w.y - (n.y + Self.removeY)) <= removeReach {
+                return .nodeRemove(id)
+            }
+            if let side = Self.handleHit(w, node: n, radius: max(14, reach)) { return .linkHandle(id, side) }
         }
         for id in (filedOrder + freeOrder).reversed() {
             guard let n = nodes[id] else { continue }
@@ -589,9 +643,12 @@ final class ThoughtMapStore {
             guard let g = groups[id] else { continue }
             let rx = g.x + g.w + 6 - 11, ry = g.y + g.h + 6 - 11
             if hypot(w.x - rx, w.y - ry) <= max(11, reach) { return .groupResize(id) }
-            let dx = g.x + g.w - 10 - 14, dy = g.y + 8 + 14
-            if abs(w.x - dx) <= max(14, reach), abs(w.y - dy) <= max(14, reach) { return .groupDelete(id) }
-            if w.x >= g.x, w.x <= g.x + g.w - 44, w.y >= g.y, w.y <= g.y + 43 { return .groupTitle(id) }
+            let half = Self.regionTrashBox / 2
+            let dx = g.x + g.w - Self.regionTrashInset - half, dy = g.y + Self.regionTrashInset + half
+            if abs(w.x - dx) <= max(half, reach), abs(w.y - dy) <= max(half, reach) { return .groupDelete(id) }
+            if w.x >= g.x, w.x <= g.x + g.w - Self.regionTitleRight, w.y >= g.y, w.y <= g.y + Self.regionTitleRowH {
+                return .groupTitle(id)
+            }
         }
         let slop = max(8, 12 / s)
         for id in edgeOrder.reversed() {
@@ -603,6 +660,12 @@ final class ThoughtMapStore {
             if rectContains(Rect(x: g.x, y: g.y, w: g.w, h: g.h), w) { return .group(id) }
         }
         return .empty
+    }
+
+    /// Whether world point `w` is inside the box a filed card is clipped to (always, for a free card).
+    private func insideClip(_ n: MapNode, _ w: Point) -> Bool {
+        guard let gid = n.groupId, let g = groups[gid] else { return true }
+        return rectContains(Rect(x: g.x, y: g.y, w: g.w, h: g.h), w)
     }
 
     /// A filed card only shows (and takes touches) inside its region's rounded clip.
@@ -682,7 +745,7 @@ final class ThoughtMapStore {
         last = p
         let w = screenToWorld(camera, p.x, p.y)
         switch hitTest(p) {
-        case let .linkHandle(id):
+        case let .linkHandle(id, _):
             drag = .link(sourceId: id)
             linkDraft = LinkDraft(sourceId: id, wx: w.x, wy: w.y)
         case let .node(id):
@@ -827,7 +890,7 @@ final class ThoughtMapStore {
             switch hit {
             case let .edgeLabel(eid): startEdgeEdit(eid)
             case let .tabOpen(nid): if let card = cards[nid] { onOpen(card) }
-            case let .tabRemove(nid): removeNode(nid)
+            case let .nodeRemove(nid): removeNode(nid)
             case let .groupDelete(gid): removeGroup(gid)
             default: break
             }

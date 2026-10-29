@@ -328,9 +328,9 @@ object L10n {
         val themeLavender: String get() = Strings.string("tweaks.themeLavender")
         /** Gold */
         val themeYellow: String get() = Strings.string("tweaks.themeYellow")
-        /** Paper friends */
+        /** Paper Pals */
         val mascots: String get() = Strings.string("tweaks.mascots")
-        /** Little paper puppets drop by the home feed and card pages now and then */
+        /** The Paper Pals drop by the home feed and card pages now and then */
         val mascotsHint: String get() = Strings.string("tweaks.mascotsHint")
     }
     object App {

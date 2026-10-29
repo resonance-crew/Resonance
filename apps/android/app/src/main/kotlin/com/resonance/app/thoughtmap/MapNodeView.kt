@@ -168,8 +168,8 @@ fun visibilityIcon(v: String): IconName = when (v) {
 /**
  * ThoughtMapNode: the card's hand-drawn outline in its hue (a folder tab grows
  * out of it when selected), the title and excerpt wrapping round the thumbnail,
- * the visibility glyph and tags, and — selected — the link handle and the tab's
- * Open / remove buttons. Purely drawn: the map's touch surface does all the
+ * the visibility glyph and tags, and — selected — a link handle on each side,
+ * 開啟 on the tab and 移除 in the card's opposite corner. Purely drawn: the map's touch surface does all the
  * hit-testing. Sized in dp, placed and scaled by the camera's layer around it.
  */
 @Composable
@@ -250,9 +250,9 @@ fun MapNodeView(
     ) {
         if (thumb != null) MapThumb(thumb, hue, seed, Modifier.offset((16 + NodeTextLayout.width - 56).dp, (14 + 2).dp))
         // The meta row: the visibility glyph (the lock for every 私人卡, published or not: round 9 C4) and the tags,
-        // 8 apart, under the body's 126 and the 8 gap.
+        // 8 apart, under the body's 126 and the 8 gap — stopping 8 short of 移除 while it shows (`padding-right: 22px`).
         Row(
-            Modifier.offset(16.dp, (14 + 126 + 8).dp).requiredSize(200.dp, 18.dp),
+            Modifier.offset(16.dp, (14 + 126 + 8).dp).requiredSize(200.dp, 18.dp).padding(end = if (tabbed) 22.dp else 0.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
         ) {
@@ -265,8 +265,12 @@ fun MapNodeView(
                 modifier = Modifier.weight(1f),
             )
         }
-        if (selected && showsHandle && !dragging) LinkHandle()
-        if (tabbed) TabRow()
+        // Nothing hovers on a phone: a selected card shows a handle on each of its four sides (the web's `hover: none`).
+        if (selected && showsHandle && !dragging) for (side in LinkSide.entries) LinkHandle(side)
+        if (tabbed) {
+            TabRow()
+            RemoveButton()
+        }
     }
 }
 
@@ -308,14 +312,18 @@ private fun MapThumb(url: String, hue: Double, seed: Double, modifier: Modifier)
     }
 }
 
-/** The link handle: a dashed 28dp circle on the right edge (centred on the card's edge at 233, 89), an arrow inside. */
+/**
+ * A link handle: a dashed 28dp circle centred on [side]'s middle, straddling the outline ([LinkSide]'s centre),
+ * its arrow pointing out of that side (the web's `.linkHandle[data-side] svg`: mirrored on the left, turned on
+ * the top and bottom).
+ */
 @Composable
-private fun LinkHandle() {
+private fun LinkHandle(side: LinkSide) {
     val paper = Tokens.CardBg
     val dash = Tokens.FieldBorderHover
     Box(
         Modifier
-            .offset((mapNodeW - 13).dp, (mapNodeH / 2 - 14).dp)
+            .offset((side.cx - 14).dp, (side.cy - 14).dp)
             .size(28.dp)
             .drawBehind {
                 drawCircle(paper)
@@ -327,31 +335,53 @@ private fun LinkHandle() {
                 )
             },
         contentAlignment = Alignment.Center,
-    ) { OrganicIcon(IconName.ArrowRight, size = 14.dp, color = Tokens.TextMuted) }
+    ) {
+        OrganicIcon(
+            IconName.ArrowRight, size = 14.dp, color = Tokens.TextMuted,
+            mirrored = side == LinkSide.Left,
+            rotation = when (side) {
+                LinkSide.Top -> -90f
+                LinkSide.Bottom -> 90f
+                else -> 0f
+            },
+        )
+    }
 }
 
-/** The tab's buttons: "Open" and the trash, centred in the 118×30 tab above the card. */
+/** The tab's one button: 開啟 (開啟 / Open), centred in the 64×30 tab above the card, nudged down under the bump's arc. */
 @Composable
 private fun TabRow() {
     Box(
         Modifier
             .offset(ThoughtMapStore.tabX.dp, (-ThoughtMapStore.tabH).dp)
-            .requiredSize(ThoughtMapStore.tabW.dp, ThoughtMapStore.tabH.dp),
+            .requiredSize(ThoughtMapStore.tabW.dp, ThoughtMapStore.tabH.dp)
+            .padding(start = 6.dp, end = 6.dp, top = 4.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Row(
-            Modifier.padding(start = 6.dp, end = 6.dp, top = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp),
-        ) {
-            BasicText(
-                com.resonance.kit.l10n.L10n.Me.ThoughtMap.open,
-                style = AppFonts.body(12.5f, 600, lineHeight = 1.3f, color = Tokens.Text),
-                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-            )
-            OrganicIcon(IconName.Trash, size = 14.dp, color = Tokens.Text, modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp).size(14.dp))
-        }
+        BasicText(
+            com.resonance.kit.l10n.L10n.Me.ThoughtMap.open,
+            style = AppFonts.body(12.5f, 600, lineHeight = 1.3f, color = Tokens.Text),
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+        )
     }
+}
+
+/**
+ * 移除 (off the map), across the card from 開啟: a quiet 14 trash inside the card's bottom-right corner, its middle
+ * at ([ThoughtMapStore.removeX], [ThoughtMapStore.removeY]) — on the meta row's line, its edge on the content's 16
+ * padding — in the muted ink, as a region's trash sits inside its region. The store hit-tests a box about it that
+ * grows with a finger's reach only up to [ThoughtMapStore.removeReach] each way (it never takes the card's body).
+ */
+@Composable
+private fun RemoveButton() {
+    Box(
+        Modifier
+            .offset((ThoughtMapStore.removeX - 14).dp, (ThoughtMapStore.removeY - 14).dp)
+            .size(28.dp),
+        contentAlignment = Alignment.Center,
+    ) { OrganicIcon(IconName.Trash, size = 14.dp, color = Tokens.TextMuted) }
 }
 
 /**

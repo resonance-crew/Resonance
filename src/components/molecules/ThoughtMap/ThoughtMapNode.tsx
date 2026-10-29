@@ -61,10 +61,41 @@ export interface ThoughtMapNodeProps {
    wobTabRect as one closed path with the border), left-aligned like a file
    folder tab. TAB_X must clear the card's top-left corner arc (R=18 plus up
    to ~2px of jitter) — starting inside the arc makes the outline double back
-   on itself and the joint reads as a gap. */
+   on itself and the joint reads as a gap. It holds 開啟 alone: 移除 lives in
+   the card's opposite corner (the owner, 2026-10-29: side by side, one was
+   tapped for the other), and narrow, it leaves the top's link handle room. */
 const TAB_X = 24;
-const TAB_W = 118;
+const TAB_W = 64;
 const TAB_H = 30;
+
+export type NodeSide = 'top' | 'right' | 'bottom' | 'left';
+const SIDES: readonly NodeSide[] = ['top', 'right', 'bottom', 'left'];
+
+/**
+ * The side of a card a point (card-local, unscaled) is nearest — by signed
+ * distance, so a point past an edge (on that side's link handle) keeps it.
+ */
+export function nearestSide(x: number, y: number): NodeSide {
+  const d: Record<NodeSide, number> = { left: x, right: NODE_W - x, top: y, bottom: NODE_H - y };
+  return SIDES.reduce((best, side) => (d[side] < d[best] ? side : best), 'right' as NodeSide);
+}
+
+/**
+ * Hover shows the link handle on the side the pointer is nearest (the arrow
+ * leaves whichever side faces the card it is dragged to). Written to the
+ * node's own attribute, never state: a memoized card isn't drawn again for a
+ * mouse move. It stays when the pointer leaves, so a selected card keeps the
+ * side last shown (right until the pointer has been over it).
+ */
+function trackNearSide(e: PointerEvent<HTMLDivElement>) {
+  if (e.pointerType !== 'mouse' && e.pointerType !== 'pen') return;
+  const el = e.currentTarget;
+  const r = el.getBoundingClientRect();
+  if (r.width <= 0 || r.height <= 0) return;
+  // The rect is the camera's scaled box; the card's own units are NODE_W × NODE_H.
+  const side = nearestSide(((e.clientX - r.left) / r.width) * NODE_W, ((e.clientY - r.top) / r.height) * NODE_H);
+  if (el.dataset.near !== side) el.dataset.near = side;
+}
 
 /**
  * A card as it appears on the thought map: a fixed-size, hand-drawn mini card
@@ -108,8 +139,11 @@ export const ThoughtMapNode = memo(function ThoughtMapNode({
       data-card-id={card.id}
       data-selected={selected || undefined}
       data-dragging={dragging || undefined}
+      data-tabbed={tabbed || undefined}
+      data-near="right"
       style={{ left: x, top: y, width: NODE_W, height: NODE_H, '--node-hue': hue } as CSSProperties}
       onPointerDown={onPointerDown}
+      onPointerMove={trackNearSide}
       onDoubleClick={onOpen}
       role="button"
       tabIndex={-1}
@@ -176,31 +210,44 @@ export const ThoughtMapNode = memo(function ThoughtMapNode({
           <span className={styles.nodeTags}>{card.tags.map((t) => `#${t}`).join(' ')}</span>
         </div>
       </div>
-      <button
-        type="button"
-        className={styles.linkHandle}
-        aria-label={linkHandleLabel}
-        onPointerDown={onStartLink}
-      >
-        <Icon name="arrow-right" size={14} />
-      </button>
+      {/* A link handle on each side; CSS shows the one nearest the pointer
+          (all four on a touch screen, where nothing hovers). The arrow
+          glyph points out of its side. */}
+      {SIDES.map((side) => (
+        <button
+          key={side}
+          type="button"
+          className={styles.linkHandle}
+          data-side={side}
+          aria-label={linkHandleLabel}
+          tabIndex={-1}
+          onPointerDown={onStartLink}
+        >
+          <Icon name="arrow-right" size={14} />
+        </button>
+      ))}
       {tabbed && (
         <div className={styles.nodeTab} onPointerDown={(e) => e.stopPropagation()}>
           <div className={styles.nodeTabRow}>
             <button type="button" className={styles.nodeTabBtn} onClick={onOpen}>
               {openLabel}
             </button>
-            <button
-              type="button"
-              className={styles.nodeTabBtn}
-              aria-label={removeLabel}
-              title={removeLabel}
-              onClick={onRemove}
-            >
-              <Icon name="trash" size={14} />
-            </button>
           </div>
         </div>
+      )}
+      {/* 移除 in the corner across from 開啟 — inside the card, on its meta
+          row's line, as a region's trash sits inside its region. */}
+      {tabbed && (
+        <button
+          type="button"
+          className={styles.nodeRemove}
+          aria-label={removeLabel}
+          title={removeLabel}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={onRemove}
+        >
+          <Icon name="trash" size={14} />
+        </button>
       )}
     </div>
   );

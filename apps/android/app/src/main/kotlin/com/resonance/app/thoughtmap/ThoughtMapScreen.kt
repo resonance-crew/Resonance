@@ -505,8 +505,10 @@ private fun GroupTitleEditor(store: ThoughtMapStore, g: MapGroup) {
     var value by remember(g.id) { mutableStateOf(TextFieldValue(store.groupDraft, TextRange(0, store.groupDraft.length))) }
     var hadFocus by remember { mutableStateOf(false) }
     val cam = store.camera
-    val x = (g.x + 16) * cam.s + cam.x
-    val y = (g.y + 8) * cam.s + cam.y
+    // With the field's own 4, the typed words land exactly where the title's were (28, 23 into the region:
+    // `.groupTitleEdit { padding: 19px 0 0 24px }`), and keep the title's 60 clear of the trash at their right.
+    val x = (g.x + 24) * cam.s + cam.x
+    val y = (g.y + 19) * cam.s + cam.y
     val lineW = max(32.0, MapText.width(value.text, AppFonts.Family.Heading, 700, 16f) + 8.0)
     val inks = MapInk.current
     val underline = inks.regionUnderline(g.hue)
@@ -524,7 +526,7 @@ private fun GroupTitleEditor(store: ThoughtMapStore, g: MapGroup) {
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { store.commitGroupTitle() }),
             modifier = Modifier
-                .widthIn(min = 120.dp, max = max(120.0, g.w * cam.s - 44 - 16).dp)
+                .widthIn(min = 120.dp, max = max(120.0, g.w * cam.s - 60 - 24).dp)
                 .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 1.dp)
                 .focusRequester(focus)
                 .onFocusChanged {

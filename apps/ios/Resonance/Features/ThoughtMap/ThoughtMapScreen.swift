@@ -378,8 +378,10 @@ struct MapEditors: View {
         let font = AppFonts.uiFont(.heading, size: 16, weight: .bold)
         let textW = (store.groupDraft as NSString).size(withAttributes: [.font: font]).width
         let lineW = max(32, textW + 8)
-        let x = (g.x + 16) * store.camera.s + store.camera.x
-        let y = (g.y + 8) * store.camera.s + store.camera.y
+        // With the field's own 4 of padding (and the badge's 6 taken back), the typed words land exactly
+        // where the title's were (28, 23 in the region) — the web's `.groupTitleEdit` 19 / 24.
+        let x = (g.x + ThoughtMapStore.regionTitleX - 4) * store.camera.s + store.camera.x
+        let y = (g.y + ThoughtMapStore.regionTitleY - 4) * store.camera.s + store.camera.y
         return VStack(alignment: .leading, spacing: 0) {
             TextField(L10n.Me.ThoughtMap.groupTitlePlaceholder, text: $store.groupDraft)
                 .font(AppFonts.heading(16, weight: .bold))
@@ -388,7 +390,8 @@ struct MapEditors: View {
                 .submitLabel(.done)
                 .onSubmit { store.commitGroupTitle() }
                 .padding(EdgeInsets(top: 4, leading: 4, bottom: 1, trailing: 4))
-                .frame(width: max(120, g.w * store.camera.s - 44 - 16))
+                // Clear of the trash as the title is: 60 kept at the region's right.
+                .frame(width: max(120, g.w * store.camera.s - ThoughtMapStore.regionTitleRight - (ThoughtMapStore.regionTitleX - 4)))
             WavyLineShape(seed: Double(seedFromString(g.id)) + 17, amp: 1.7, stepsPerPoint: 1.0 / 46)
                 .stroke(Palette.hue(.groupInk, g.hue), style: StrokeStyle(lineWidth: Tokens.inkLight, lineCap: .round))
                 .frame(width: lineW, height: 6)

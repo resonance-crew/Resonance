@@ -191,7 +191,9 @@ struct MapCameraTransform<Content: View>: View {
     }
 }
 
-/// Region titles and their corner trash (under the cards, as on the web).
+/// Region titles and their corner trash (under the cards, as on the web), each well in from the
+/// region's edges: the trash 20 in from the top and the right, the title's words level with it and
+/// clear of it (`.groupTitle` / `.groupDelete`).
 struct MapRegionChrome: View {
     let store: ThoughtMapStore
 
@@ -205,13 +207,16 @@ struct MapRegionChrome: View {
                             .foregroundStyle(Tokens.text)
                             .lineLimit(1)
                             .truncationMode(.tail)
-                            .frame(width: max(0, g.w - 44 - 40), alignment: .leading)
-                            .offset(x: g.x + 20, y: g.y + 12)
+                            // The web's box is `right: 60px` with 28 of padding each side.
+                            .frame(width: max(0, g.w - ThoughtMapStore.regionTitleRight - ThoughtMapStore.regionTitleX * 2),
+                                   alignment: .leading)
+                            .offset(x: g.x + ThoughtMapStore.regionTitleX, y: g.y + ThoughtMapStore.regionTitleY)
                     }
                     OrganicIcon(.trash, size: 15)
                         .foregroundStyle(Tokens.textMuted)
-                        .frame(width: 28, height: 28)
-                        .offset(x: g.x + g.w - 10 - 28, y: g.y + 8)
+                        .frame(width: ThoughtMapStore.regionTrashBox, height: ThoughtMapStore.regionTrashBox)
+                        .offset(x: g.x + g.w - ThoughtMapStore.regionTrashInset - ThoughtMapStore.regionTrashBox,
+                                y: g.y + ThoughtMapStore.regionTrashInset)
                 }
             }
         }
@@ -250,6 +255,7 @@ struct MapNodesLayer: View {
     @ViewBuilder private func node(_ id: String, dx: Double, dy: Double, selection: ThoughtMapStore.Selection?,
                                    dragging: String?, target: String?, linking: Bool) -> some View {
         if let n = store.nodes[id], let card = store.card(id) {
+            // Every handle hides while an arrow is being drawn (all four of the selected card's).
             MapNodeView(card: card, selected: selection == .node(id), linkTarget: target == id,
                         dragging: dragging == id, showsHandle: !linking)
                 .equatable()
