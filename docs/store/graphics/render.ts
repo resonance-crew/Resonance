@@ -3,7 +3,7 @@
  * feature graphic and the Play icon, in Traditional Chinese (zh-TW) and English (en-US).
  *
  *   npx tsx docs/store/graphics/render.ts                 # everything, both languages
- *   npx tsx docs/store/graphics/render.ts ios             # one target: ios | android | ipad | tablet | play | header | og
+ *   npx tsx docs/store/graphics/render.ts ios             # one target: ios | android | ipad | tablet | mac | play | header | og
  *   npx tsx docs/store/graphics/render.ts og              # the site's share image → public/og-cover[.en].jpg (only by name)
  *   npx tsx docs/store/graphics/render.ts ios --only=feed,card
  *   npx tsx docs/store/graphics/render.ts --lang=en       # one language: --lang=zh-TW | --lang=en (default: both)
@@ -18,6 +18,8 @@
  *         raw/ipad/<key>.png         (iPad Pro 13" simulator, landscape) → out/ipad/<nn>-<key>.jpg         2752×2064
  *         raw/tablet/<key>.png       (Pixel Tablet AVD, landscape)       → out/tablet/<nn>-<key>.jpg       2560×1440
  *         raw/ipad-en/, raw/tablet-en/ (the same, app set to English)   → out/ipad-en/, out/tablet-en/
+ *         raw/mac/<key>.png          (Mac app window captures, 2880×1800) → out/mac/<nn>-<key>.jpg          2880×1800
+ *         raw/mac-en/<key>.png       (the same, app set to English)      → out/mac-en/<nn>-<key>.jpg       2880×1800
  * Writes  out/play/feature-graphic.jpg (1024×500, zh-TW), out/play/feature-graphic.en.jpg (the en-US
  *         listing's) and out/play/icon-512.png. --lang picks which feature graphic is made (the icon always is).
  * iOS and Android are built ONLY from their own raw folder (the stores reject a
@@ -359,7 +361,7 @@ document.fonts.ready.then(function () {
   var items = [];
   document.querySelectorAll('[data-measure]').forEach(function (el) {
     var r = el.getBoundingClientRect(), cs = getComputedStyle(el.closest('h1,p,div') || el);
-    items.push({ name: el.dataset.measure, safe: el.dataset.safe === '1', x: r.left, y: r.top, w: r.width, h: r.height, fs: parseFloat(cs.fontSize), fs0: parseFloat(el.dataset.fs || '0') });
+    items.push({ name: el.dataset.measure, safe: el.dataset.safe === '1', x: r.left, y: r.top, w: r.width, h: r.height, fs: parseFloat(cs.fontSize), fs0: parseFloat(el.dataset.fs || '0'), lines: parseInt(el.dataset.lines || '1', 10), lh: parseFloat(el.dataset.lh || '0') });
   });
   var fonts = []; document.fonts.forEach(function (f) { if (f.status === 'loaded') fonts.push(f.family + ' ' + f.weight); });
   document.documentElement.setAttribute('data-metrics', JSON.stringify({ W: innerWidth, H: innerHeight, fonts: fonts, items: items }));
@@ -907,13 +909,329 @@ function featureHtml(T: Tokens, fonts: string, A: Record<AccentName, Accent>, la
   return htmlDoc('Resonance feature graphic', css, fonts, body, en ? 'en' : 'zh-Hant-TW');
 }
 
+/* ── Mac App Store (the iOS target built with Mac Catalyst) ───────────── */
+
+/**
+ * The Mac set: 2880 × 1800 (16:10, the largest size the Mac App Store takes) from window captures of the Mac app
+ * (raw/mac/<key>.png and raw/mac-en/<key>.png: `screencapture -l` of the 1440 × 900 pt window, 2880 × 1800 with
+ * its corners transparent). Where the phones' slides stand the device under the words every time, these change
+ * from slide to slide, as the leading Mac apps' sets do (mac-research.md): the words in a column beside a large
+ * window that runs off the canvas's far edge, the column changing sides, and once the words across the top with
+ * a detail of the window drawn larger beside it. The window is the capture itself in a hand-drawn outline on
+ * tinted paper — no laptop, no shadow: it is told from the paper by its pen line, as a card is.
+ */
+export const MAC_KEYS = ['feed', 'card', 'write-map', 'messages', 'cardbox'] as const;
+type MacKey = (typeof MAC_KEYS)[number];
+const MAC = { w: 2880, h: 1800 };
+/**
+ * The capture: a 1440 × 900 pt window at 2×. `radius` (capture px) is a little over the window's own corners, so
+ * the outline's clip takes all of their transparency; `paper` fills them meanwhile (the app's light cream).
+ */
+const MAC_WINDOW = { radius: 48, paper: '#f7f3ec' };
+
+interface MacSlide {
+  key: MacKey;
+  /** `\n` breaks a line where the copy wants it; each line must then stand on one line (--check). */
+  copy: Record<Lang, Copy>;
+  accent: AccentName;
+  seed: number;
+  /** Where the words stand: in a column left or right of the window, or across the top. */
+  text: 'left' | 'right' | 'top';
+  /** The window's left, top and width as fractions of the canvas. It may run off the canvas. */
+  win: { x: number; y: number; w: number };
+  /**
+   * The captured window's size in points, when it isn't 1440 × 900 (`-macWindowSize`): the card page is taken
+   * in a narrower window, where its reading column fills the frame instead of standing in wide margins.
+   */
+  window?: [number, number];
+  /**
+   * A detail of the capture drawn larger over the paper beside it: the region in window points
+   * [x, y, w, h], and the box's left, top and width as fractions of the canvas.
+   */
+  zoom?: { src: [number, number, number, number]; box: [number, number, number] };
+}
+
+/**
+ * The uploaded order (feed, card page, the writer beside the map, Messages, the card box). The column swaps
+ * sides around the one slide with the words on top, so no two neighbours share a composition; a window that
+ * runs off the right edge shows its leading part (traffic lights, the brand), one that runs off the left keeps
+ * the page's content whole (the card page's column, the thread with its shared card).
+ */
+const MAC_SLIDES: MacSlide[] = [
+  {
+    key: 'feed', accent: 'terracotta', seed: 11, text: 'left', win: { x: 0.45, y: 0.11, w: 0.78 },
+    copy: {
+      'zh-TW': { headline: '用故事\n回應故事', em: '回應', subline: '讀到觸動你的卡片，\n寫下你自己的經歷' },
+      en: { headline: 'Answer stories\nwith stories', em: 'Answer', subline: 'When a card moves you,\nwrite your own' },
+    },
+  },
+  {
+    // The whole window, its ← and its lights, at the narrow size whose reading column fills it (the owner,
+    // 2026-10-29: the wide window run off the left edge was mostly empty paper).
+    key: 'card', accent: 'sage', seed: 23, text: 'right', window: [900, 900], win: { x: 0.065, y: 0.1, w: 0.5 },
+    copy: {
+      'zh-TW': { headline: '每張卡片\n都是一段人生', em: '人生', subline: '標題、故事、照片，慢慢讀' },
+      en: { headline: 'Every card\nis a life', em: 'a life', subline: 'A title, a story, a photo —\nread slowly' },
+    },
+  },
+  {
+    key: 'write-map', accent: 'yellow', seed: 37, text: 'top', win: { x: 0.23, y: 0.27, w: 0.72 },
+    // A card on the map with its arrow and the link's word, drawn larger in the paper left of the window.
+    zoom: { src: [176, 531, 218, 146], box: [0.025, 0.585, 0.235] },
+    copy: {
+      'zh-TW': { headline: '寫下你的故事', em: '故事', subline: '思緒地圖就在旁邊，邊寫邊看見關聯' },
+      en: { headline: 'Write your story', em: 'your story', subline: 'With your thought map right beside the page' },
+    },
+  },
+  {
+    // As the card page's: the whole window at a narrower size, its list and its thread filling it.
+    key: 'messages', accent: 'sky', seed: 53, text: 'right', window: [1000, 900], win: { x: 0.065, y: 0.14, w: 0.5 },
+    copy: {
+      'zh-TW': { headline: '因故事相遇，\n繼續聊', em: '相遇', subline: '連結之間的私訊' },
+      en: { headline: 'Meet through\na story', em: 'a story', subline: 'Private messages\nbetween connections' },
+    },
+  },
+  {
+    key: 'cardbox', accent: 'lavender', seed: 41, text: 'left', win: { x: 0.45, y: 0.26, w: 0.82 },
+    copy: {
+      'zh-TW': { headline: '每張卡片，\n都收進卡片盒', em: '卡片盒', subline: '已發布、私人卡、收藏，各有一格' },
+      en: { headline: 'Every card,\nkept in one box', em: 'one box', subline: 'Published, private, bookmarked —\neach on its own shelf' },
+    },
+  },
+];
+
+for (const s of MAC_SLIDES) {
+  for (const lang of Object.keys(s.copy) as Lang[]) {
+    const { headline, em } = s.copy[lang];
+    if (headline.split(em).length !== 2 || em.includes('\n')) throw new Error(`mac ${s.key} (${lang}): "${em}" must occur exactly once in "${headline}", on one line`);
+  }
+}
+
+/** Type per language as fractions of the canvas width; the headline's line height (Latin sets tighter). */
+const MAC_TYPE: Record<Lang, { h: number; s: number; lh: number }> = {
+  'zh-TW': { h: 0.05, s: 0.0215, lh: 1.2 },
+  en: { h: 0.043, s: 0.0198, lh: 1.12 },
+};
+/** The words' side margin and the room between them and the window, as fractions of the canvas width. */
+const MAC_MARGIN = 0.065;
+const MAC_GAP = 0.045;
+/** The subline's line height. */
+const MAC_SUB_LH = 1.45;
+
+/** The copy as HTML: `\n` a line break, the emphasised phrase in the accent over its wave. */
+function macHeadline(copy: Copy, lang: Lang, A: Accent, seed: number) {
+  const [before, after] = copy.headline.split(copy.em);
+  const html = (s: string) => esc(s).replace(/\n/g, '<br>');
+  return `${html(before)}<span class="em" style="color:${A.ink}">${esc(copy.em)}${underline(waveUnits(copy.em, lang), seed, A.mid)}</span>${html(after)}`;
+}
+
+/** The capture resized to its drawn size, its transparent corners filled with the window's paper. */
+async function macCapture(file: string, w: number, h: number) {
+  const buf = await sharp(file)
+    .flatten({ background: MAC_WINDOW.paper })
+    .resize({ width: w, height: h, fit: 'fill', kernel: 'lanczos3' })
+    .png()
+    .toBuffer();
+  return `data:image/png;base64,${buf.toString('base64')}`;
+}
+
+async function macSlideHtml(T: Tokens, fonts: string, lang: Lang, slide: MacSlide, A: Accent, AA: Record<AccentName, Accent>, rawFile: string): Promise<string> {
+  const { w: W, h: H } = MAC;
+  const raw = imageSize(rawFile);
+  // A window at 2 px per point, at the slide's own size (`window`; 1440 × 900 unless it says otherwise).
+  const want = slide.window ?? [1440, 900];
+  if (raw.w !== want[0] * 2 || raw.h !== want[1] * 2) {
+    throw new Error(`${path.relative(ROOT, rawFile)} is ${raw.w}x${raw.h}: the ${slide.key} capture is a ${want[0]} × ${want[1]} pt window (${want[0] * 2}x${want[1] * 2})`);
+  }
+  const s = (H / 390) * 0.62; // pen scale, as the tablets' slides (their short side is the height too)
+  const pen = INK * s;
+  const ty = TYPE[lang];
+  const mt = MAC_TYPE[lang];
+  const copy = slide.copy[lang];
+  const hFs = Math.round(W * mt.h);
+  const sFs = Math.round(W * mt.s);
+  const hLines = copy.headline.split('\n').length;
+  const sLines = copy.subline.split('\n').length;
+
+  // The window: the capture at its drawn size, clipped to its own hand-drawn outline.
+  const ww = Math.round(W * slide.win.w);
+  const wh = Math.round(ww * (raw.h / raw.w));
+  const wx = Math.round(W * slide.win.x);
+  const wy = Math.round(H * slide.win.y);
+  const k = ww / raw.w; // drawn px per capture px
+  const R = MAC_WINDOW.radius * k;
+  const winD = wobRect(ww, wh, R, slide.seed, W * 0.0016, { cornerJitter: 0.2, segmentsH: 6, segmentsV: 4 });
+  const capture = await macCapture(rawFile, ww, wh);
+
+  // The words: a column beside the window, or a band across the top.
+  const margin = Math.round(W * MAC_MARGIN);
+  const gap = Math.round(W * MAC_GAP);
+  let colX: number;
+  let colW: number;
+  if (slide.text === 'left') {
+    colX = margin;
+    colW = wx - gap - margin;
+  } else if (slide.text === 'right') {
+    colX = wx + ww + gap;
+    colW = W - margin - colX;
+  } else {
+    colX = margin;
+    colW = W - 2 * margin;
+  }
+  const blockH = hLines * hFs * mt.lh + hFs * 0.38 + sLines * sFs * MAC_SUB_LH;
+  const textTop = slide.text === 'top' ? Math.round(H * 0.075) : Math.round((H - blockH) / 2 - H * 0.02);
+  const textBottom = textTop + blockH;
+
+  // The zoomed detail: the region ringed in the window, drawn larger in a box of its own, a stroke between them.
+  let zoomSvg = '';
+  let zoomBox = '';
+  if (slide.zoom) {
+    const [sx, sy, sw, sh] = slide.zoom.src; // window points
+    const [bx, by, bw0] = slide.zoom.box;
+    const bw = Math.round(W * bw0);
+    const bh = Math.round(bw * (sh / sw));
+    const bX = Math.round(W * bx);
+    const bY = Math.round(H * by);
+    const img = await sharp(rawFile)
+      .flatten({ background: MAC_WINDOW.paper })
+      .extract({ left: sx * 2, top: sy * 2, width: sw * 2, height: sh * 2 })
+      .resize({ width: bw, height: bh, fit: 'fill', kernel: 'lanczos3' })
+      // Drawn past the capture's own 2× (about 1.7×): a light unsharp mask keeps its lines and type crisp.
+      .sharpen({ sigma: 0.9, m1: 0.6, m2: 2.2 })
+      .png()
+      .toBuffer();
+    // Where the region lies on the canvas (the capture is 2 px per point).
+    const rx = wx + sx * 2 * k;
+    const ry = wy + sy * 2 * k;
+    const rw = sw * 2 * k;
+    const rh = sh * 2 * k;
+    const pad = W * 0.002; // the ring hugs the region: the map's next card stands just past it
+    const ringD = wobRect(rw + 2 * pad, rh + 2 * pad, W * 0.012, slide.seed + 5, W * 0.0015, { cornerJitter: 0.4 });
+    const boxD = wobRect(bw, bh, W * 0.014, slide.seed + 6, W * 0.0018, { cornerJitter: 0.3, segmentsH: 4, segmentsV: 3 });
+    // From the ring's nearer side to the box's: a gentle hand-drawn curve.
+    const fromLeft = bX + bw < rx;
+    const x1 = fromLeft ? rx - pad : rx + rw + pad;
+    const y1 = ry + rh / 2;
+    const x2 = fromLeft ? bX + bw : bX;
+    const y2 = bY + bh * 0.42;
+    const mx = (x1 + x2) / 2;
+    const curve = `M ${num(x1)},${num(y1)} C ${num(mx)},${num(y1 - H * 0.05)} ${num(mx)},${num(y2 + H * 0.05)} ${num(x2)},${num(y2)}`;
+    zoomSvg =
+      `<path d="${ringD}" transform="translate(${num(rx - pad)} ${num(ry - pad)})" fill="none" stroke="${A.mid}" stroke-width="${num(pen * 1.15)}" stroke-linejoin="round"/>` +
+      `<path d="${curve}" fill="none" stroke="${A.mid}" stroke-width="${num(pen * 1.15)}" stroke-linecap="round"/>` +
+      dot(x1, y1, pen * 1.6, slide.seed + 7, A.mid);
+    zoomBox = `<svg class="abs" data-measure="zoom" style="left:${bX}px;top:${bY}px;overflow:visible" width="${bw}" height="${bh}" viewBox="0 0 ${bw} ${bh}" aria-hidden="true">
+    <defs><clipPath id="zoomclip"><path d="${boxD}"/></clipPath></defs>
+    <path d="${boxD}" fill="${MAC_WINDOW.paper}"/>
+    <image href="data:image/png;base64,${img.toString('base64')}" width="${bw}" height="${bh}" clip-path="url(#zoomclip)"/>
+    <path d="${boxD}" fill="none" stroke="${A.mid}" stroke-width="${num(pen * 1.15)}" stroke-linejoin="round"/>
+  </svg>`;
+  }
+
+  // Paper and doodles: a big blob of the slide's colour peeking from behind the window's inner corner, its
+  // companion at the words' far corner, a few pen marks in the words' free space.
+  const grainId = 'blobgrain';
+  const side = slide.text === 'right' ? -1 : 1; // 1: the words on the left
+  const nearX = slide.text === 'right' ? wx + ww : wx; // the window's edge facing the words
+  const U = H;
+  const mark = (fx: number) => (side === 1 ? colX + colW * fx : colX + colW * (1 - fx));
+  const above = Math.max(H * 0.07, textTop - H * 0.09);
+  const below = Math.min(H * 0.93, textBottom + H * 0.1);
+  const doodles =
+    slide.text === 'top'
+      ? [
+          blob(W * 0.5, wy + wh * 0.62, U * 0.62, slide.seed, A.tone, 0.5, grainId),
+          blob(W * 0.03, H * 0.06, U * 0.2, slide.seed + 3, A.companion, 0.45, grainId),
+          blob(W * 0.98, H * 0.95, U * 0.24, slide.seed + 4, A.companion, 0.4, grainId),
+          ring(W * 0.14, H * 0.15, U * 0.024, slide.seed + 1, A.mid, pen),
+          squiggle(W * 0.8, H * 0.12, U * 0.1, -8, slide.seed + 2, A.mid, pen),
+          sparkle(W * 0.9, H * 0.22, U * 0.028, slide.seed + 8, A.mid, pen * 0.85),
+          dot(W * 0.2, H * 0.24, U * 0.008, slide.seed + 10, A.mid),
+          dot(W * 0.2 + U * 0.02, H * 0.255, U * 0.006, slide.seed + 11, A.mid),
+        ]
+      : [
+          blob(nearX, wy + wh * 0.9, U * 0.36, slide.seed, A.tone, 0.62, grainId),
+          blob(side === 1 ? W * 0.02 : W * 0.98, H * 0.04, U * 0.2, slide.seed + 3, A.companion, 0.45, grainId),
+          blob(side === 1 ? W * 0.04 : W * 0.96, H * 1.02, U * 0.16, slide.seed + 4, A.companion, 0.4, grainId),
+          squiggle(mark(0.02), above, U * 0.1, -6, slide.seed + 2, A.mid, pen),
+          sparkle(mark(0.88), above - U * 0.01, U * 0.03, slide.seed + 8, A.mid, pen * 0.85),
+          ring(mark(0.06), below, U * 0.022, slide.seed + 1, A.mid, pen),
+          dot(mark(0.16), below + U * 0.012, U * 0.008, slide.seed + 10, A.mid),
+          dot(mark(0.16) + U * 0.02, below + U * 0.03, U * 0.006, slide.seed + 11, A.mid),
+        ];
+  void AA;
+
+  const align = slide.text === 'top' ? 'center' : 'left';
+  const css = `${pageCss(T, W, H, lang)}
+  .canvas{background:linear-gradient(170deg,color-mix(in oklch,var(--cream) 82%,${A.tone} 18%) 0%,color-mix(in oklch,var(--cream) 70%,${A.tone} 30%) 100%)}
+  .abs{position:absolute}
+  .words{position:absolute;left:${colX}px;width:${colW}px;top:${textTop}px;text-align:${align}}
+  h1{font:${ty.hWeight} ${hFs}px/${mt.lh} var(--serif);letter-spacing:${ty.hTrack};color:var(--ink)}
+  p{margin-top:${Math.round(hFs * 0.38)}px;font:${ty.sWeight} ${sFs}px/${MAC_SUB_LH} var(--sans);letter-spacing:${ty.sTrack};color:var(--muted)}${
+    lang === 'en' ? `\n  .uline{bottom:${ty.uline}}` : ''
+  }`;
+
+  const body = `<div class="canvas" data-slide="${variantDir('mac', lang)}-${slide.key}">
+  <svg class="layer" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">
+    <defs>${grainDefs('grain', 0.72 / s, slide.seed)}<filter id="${grainId}" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="${num(0.9 / s)}" numOctaves="2" stitchTiles="stitch" seed="${slide.seed % 9}"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="linear" slope="0.4"/></feComponentTransfer><feComposite in2="SourceGraphic" operator="in"/></filter></defs>
+    ${doodles.join('\n    ')}
+    <rect width="${W}" height="${H}" filter="url(#grain)" opacity="0.055"/>
+  </svg>
+  <svg class="abs" style="left:${wx}px;top:${wy}px;overflow:visible" width="${ww}" height="${wh}" viewBox="0 0 ${ww} ${wh}" aria-hidden="true">
+    <defs><clipPath id="winclip"><path d="${winD}"/></clipPath></defs>
+    <image href="${capture}" width="${ww}" height="${wh}" clip-path="url(#winclip)"/>
+    <path d="${winD}" fill="none" stroke="var(--ink)" stroke-width="${num(pen)}" stroke-linejoin="round"/>
+  </svg>
+  <svg class="layer" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">${zoomSvg}</svg>
+  ${zoomBox}
+  <div class="words">
+    <h1><span class="fitbox" data-max="${colW}" data-fs="${hFs}" data-lines="${hLines}" data-lh="${mt.lh}" data-measure="headline">${macHeadline(copy, lang, A, slide.seed + 4)}</span></h1>
+    <p><span class="fitbox" data-max="${colW}" data-fs="${sFs}" data-lines="${sLines}" data-lh="${MAC_SUB_LH}" data-measure="subline">${esc(copy.subline).replace(/\n/g, '<br>')}</span></p>
+  </div>
+</div>`;
+  return htmlDoc(`${variantDir('mac', lang)} ${slide.key}`, css, fonts, body, lang === 'en' ? 'en' : undefined);
+}
+
+async function renderMac(T: Tokens, fonts: string, fontsEn: string, langs: Lang[], only: string[] | null, check: boolean) {
+  const A = accentsFrom(T);
+  const { w, h } = MAC;
+  for (const lang of langs) {
+    const dir = variantDir('mac', lang);
+    console.log(`\n${dir}  ${w}x${h}`);
+    for (let i = 0; i < MAC_SLIDES.length; i++) {
+      const slide = MAC_SLIDES[i];
+      if (only && !only.includes(slide.key)) continue;
+      const name = `${String(i + 1).padStart(2, '0')}-${slide.key}`;
+      const rawFile = path.join(RAW, dir, `${slide.key}.png`);
+      if (!fs.existsSync(rawFile)) {
+        // No stand-in for the Mac: a slide is made from its own window capture or not at all.
+        console.warn(`  ! raw/${dir}/${slide.key}.png is missing: ${name} skipped (capture the window, README)`);
+        warnings.push(`${dir}/${slide.key} (missing)`);
+        continue;
+      }
+      const html = await macSlideHtml(T, lang === 'en' ? fontsEn : fonts, lang, slide, A[slide.accent], A, rawFile);
+      const htmlPath = path.join(BUILD, dir, `${name}.html`);
+      const png = path.join(BUILD, dir, `${name}.png`);
+      const jpg = path.join(OUT, dir, `${name}.jpg`);
+      mkdirp(path.dirname(htmlPath));
+      fs.writeFileSync(htmlPath, html);
+      await screenshot(htmlPath, png, w, h);
+      toJpeg(png, jpg);
+      assertSize(jpg, w, h);
+      console.log(`  ${path.relative(ROOT, jpg)}  ${Math.round(fs.statSync(jpg).size / 1024)} KB`);
+      if (check) report(`${dir}/${name}`, SLIDE_FONTS[lang], await measure(htmlPath, w, h), w, h);
+    }
+  }
+}
+
 /* ── driver ───────────────────────────────────────────────────────────── */
 
 interface Metrics {
   W: number;
   H: number;
   fonts: string[];
-  items: { name: string; safe: boolean; x: number; y: number; w: number; h: number; fs: number; fs0: number }[];
+  /** `lines`: how many lines the copy itself breaks into (its own '\n'); `lh`: its line height, when not the default. */
+  items: { name: string; safe: boolean; x: number; y: number; w: number; h: number; fs: number; fs0: number; lines?: number; lh?: number }[];
 }
 
 async function measure(html: string, w: number, h: number): Promise<Metrics | null> {
@@ -942,8 +1260,9 @@ function report(name: string, need: string[], m: Metrics | null, w: number, h: n
   for (const i of m.items) {
     if (i.x < 0 || i.y < 0 || i.x + i.w > w + 0.5 || i.y + i.h > h + 0.5) problems.push(`${name}: ${i.name} leaves the canvas`);
     if (i.name === 'headline' || i.name === 'subline') {
-      const lines = Math.round(i.h / (i.fs * (i.name === 'headline' ? 1.2 : 1.45)));
-      if (lines !== 1) problems.push(`${name}: ${i.name} wraps to ${lines} lines`);
+      const lines = Math.round(i.h / (i.fs * (i.lh || (i.name === 'headline' ? 1.2 : 1.45))));
+      const meant = i.lines || 1;
+      if (lines !== meant) problems.push(`${name}: ${i.name} wraps to ${lines} lines${meant > 1 ? ` (its copy breaks into ${meant})` : ''}`);
       if (i.fs0 && i.fs < i.fs0 - 0.5) problems.push(`${name}: ${i.name} was shrunk from ${i.fs0}px to ${Math.round(i.fs * 10) / 10}px to fit (too long for its size: shorten the copy)`);
       if (i.x < w * 0.04 || i.x + i.w > w * 0.96) problems.push(`${name}: ${i.name} is closer than 4% to the edge`);
     }
@@ -1039,7 +1358,7 @@ async function renderPlay(T: Tokens, fonts: string, langs: Lang[], check: boolea
 
 async function main() {
   const argv = process.argv.slice(2);
-  const all = ['ios', 'android', 'ipad', 'tablet', 'play', 'header', 'og'] as const;
+  const all = ['ios', 'android', 'ipad', 'tablet', 'mac', 'play', 'header', 'og'] as const;
   const targets: readonly (typeof all)[number][] = all.filter((t) => argv.includes(t));
   // The share image writes into the site's public/: only when asked for by name.
   const run = targets.length ? targets : all.filter((t) => t !== 'og');
@@ -1047,8 +1366,8 @@ async function main() {
   const check = argv.includes('--check');
   const regen = argv.includes('--regen-placeholders');
   const langs = parseLangs(argv);
-  const screens = run.filter((t): t is Platform => t !== 'play' && t !== 'header' && t !== 'og');
-  if (only) for (const k of only) if (!(KEYS as readonly string[]).includes(k)) throw new Error(`unknown key "${k}"`);
+  const screens = run.filter((t): t is Platform => t !== 'play' && t !== 'header' && t !== 'og' && t !== 'mac');
+  if (only) for (const k of only) if (!([...KEYS, ...MAC_KEYS] as readonly string[]).includes(k)) throw new Error(`unknown key "${k}"`);
 
   mkdirp(BUILD);
   const T = readTokens();
@@ -1056,6 +1375,7 @@ async function main() {
   const copy = [
     ...SLIDES.flatMap((s) => [s.copy['zh-TW'], s.tabletCopy?.['zh-TW']].flatMap((c) => (c ? [c.headline, c.subline] : []))),
     ...assetCopy('zh-TW'),
+    ...MAC_SLIDES.flatMap((s) => [s.copy['zh-TW'].headline, s.copy['zh-TW'].subline]),
     TAGLINE.text,
     TAGLINE_EN.text,
     BRAND.latin,
@@ -1074,11 +1394,12 @@ async function main() {
   const copyEn = [
     ...SLIDES.flatMap((s) => [s.copy.en, s.tabletCopy?.en].flatMap((c) => (c ? [c.headline, c.subline] : []))),
     ...assetCopy('en'),
+    ...MAC_SLIDES.flatMap((s) => [s.copy.en.headline, s.copy.en.subline]),
     BRAND.latin,
     ' 0123456789',
   ].join('');
   const fontsEn =
-    langs.includes('en') && (screens.length || run.includes('header') || run.includes('og'))
+    langs.includes('en') && (screens.length || run.includes('mac') || run.includes('header') || run.includes('og'))
       ? await embeddedFonts([
           { family: 'Playfair Display', weights: [700], text: copyEn },
           { family: 'DM Sans', weights: [400, 500], text: copyEn },
@@ -1089,6 +1410,7 @@ async function main() {
     if (t === 'play') await renderPlay(T, fonts, langs, check);
     else if (t === 'header') await renderHeader(T, fonts, fontsEn, langs, check);
     else if (t === 'og') await renderOg(T, fonts, fontsEn, langs, check);
+    else if (t === 'mac') await renderMac(T, fonts, fontsEn, langs, only, check);
     else {
       for (const lang of langs) await renderScreens(t, lang, T, lang === 'en' ? fontsEn : fonts, only, check, regen);
     }

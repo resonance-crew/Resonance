@@ -9,7 +9,8 @@
  * Reads out/ (run render.ts first). With no --lang a language whose slides were not rendered yet is
  * skipped; asking for one with --lang fails instead. Review only — this file is not uploaded.
  * The tablet sets get a sheet of their own once rendered: out/contact-sheet.tablet.jpg (and .tablet.en.jpg),
- * an iPad row and an Android tablet row.
+ * an iPad row and an Android tablet row; so does the Mac set: out/contact-sheet.mac.jpg (and .mac.en.jpg),
+ * its five slides in upload order.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -23,12 +24,16 @@ const ROW_H = 460;
 const BG = '#e9e2d6';
 
 const TABLET_ROW_H = 330;
+/** The Mac set (render.ts MAC_KEYS, in upload order): five 16:10 slides, two rows. */
+const MAC_KEYS = ['feed', 'card', 'write-map', 'messages', 'cardbox'] as const;
+const MAC_ROW_H = 400;
 
-const shot = (platform: 'ios' | 'android' | 'ipad' | 'tablet', lang: Lang, i: number, key: string) =>
+const shot = (platform: 'ios' | 'android' | 'ipad' | 'tablet' | 'mac', lang: Lang, i: number, key: string) =>
   path.join(OUT, variantDir(platform, lang), `${String(i + 1).padStart(2, '0')}-${key}.jpg`);
 const featureFile = (lang: Lang) => path.join(OUT, 'play', lang === 'en' ? 'feature-graphic.en.jpg' : 'feature-graphic.jpg');
 const sheetFile = (lang: Lang) => path.join(OUT, lang === 'en' ? 'contact-sheet.en.jpg' : 'contact-sheet.jpg');
 const tabletSheetFile = (lang: Lang) => path.join(OUT, lang === 'en' ? 'contact-sheet.tablet.en.jpg' : 'contact-sheet.tablet.jpg');
+const macSheetFile = (lang: Lang) => path.join(OUT, lang === 'en' ? 'contact-sheet.mac.en.jpg' : 'contact-sheet.mac.jpg');
 
 async function thumb(file: string, height: number): Promise<{ buf: Buffer; w: number; h: number }> {
   const { data, info } = await sharp(file).resize({ height }).jpeg({ quality: 88 }).toBuffer({ resolveWithObject: true });
@@ -118,6 +123,33 @@ async function tabletSheet(lang: Lang) {
   console.log(`${path.relative(process.cwd(), out)}  ${width}x${height}`);
 }
 
+/** The Mac sheet: the five slides in upload order, three over two. */
+async function macSheet(lang: Lang) {
+  const thumbs = await Promise.all(MAC_KEYS.map((k, i) => thumb(shot('mac', lang, i, k), MAC_ROW_H)));
+  const rows = [thumbs.slice(0, 3), thumbs.slice(3)];
+  const rowW = (r: { w: number }[]) => r.reduce((s, t) => s + t.w, 0) + GAP * (r.length - 1);
+  const width = GAP * 2 + Math.max(...rows.map(rowW));
+  const height = GAP + LABEL + rows.length * (MAC_ROW_H + GAP);
+  const layers: sharp.OverlayOptions[] = [];
+  const tag = lang === 'en' ? 'en-US' : 'zh-TW';
+  layers.push({ input: label(`Mac ${tag}  2880 x 1800  (raw/${variantDir('mac', lang)} window captures)`, width - GAP * 2), left: GAP, top: GAP });
+  let y = GAP + LABEL;
+  for (const row of rows) {
+    let x = GAP;
+    for (const t of row) {
+      layers.push({ input: t.buf, left: x, top: y });
+      x += t.w + GAP;
+    }
+    y += MAC_ROW_H + GAP;
+  }
+  const out = macSheetFile(lang);
+  await sharp({ create: { width, height, channels: 3, background: BG } })
+    .composite(layers)
+    .jpeg({ quality: 88 })
+    .toFile(out);
+  console.log(`${path.relative(process.cwd(), out)}  ${width}x${height}`);
+}
+
 /** Every file a language's sheet reads. */
 const inputs = (lang: Lang) => [
   ...(['ios', 'android'] as const).flatMap((p) => KEYS.map((k, i) => shot(p, lang, i, k))),
@@ -149,6 +181,17 @@ async function main() {
       continue;
     }
     await tabletSheet(lang);
+    made++;
+  }
+  for (const lang of parseLangs(argv)) {
+    const files = MAC_KEYS.map((k, i) => shot('mac', lang, i, k));
+    const missing = files.filter((f) => !fs.existsSync(f));
+    if (missing.length === files.length) continue;
+    if (missing.length) {
+      console.warn(`skipped the ${lang} Mac sheet: ${missing.length} rendered file(s) missing (first: ${path.relative(OUT, missing[0])})`);
+      continue;
+    }
+    await macSheet(lang);
     made++;
   }
   if (!made) throw new Error('nothing to show: render the slides first');
