@@ -917,22 +917,31 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
         }
     }
 
-    /** Deletes the whole conversation, for both people (DELETE /api/v1/conversations/{pair}: the server deletes it whole). */
-    suspend fun deleteConversation(): Boolean {
+    /**
+     * Deletes the whole conversation, for both people (DELETE /api/v1/conversations/{pair}: the server
+     * deletes it whole) — at once (round 21): the thread stops listening and the conversation leaves the
+     * list before the server answers, while the request runs on in the account's scope (the thread is
+     * left meanwhile). Refused, it is back in the list, as Firestore still has it, and [onFailed] says so.
+     * False when there is no conversation to delete.
+     */
+    fun deleteConversationNow(onFailed: () -> Unit): Boolean {
         val pair = pairId ?: return false
-        return try {
-            stop()
-            session.messaging.deleteConversation(pair)
-            session.outboxes.forget(pair)
-            resetHistory()
-            true
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            error = L10n.Messages.deleteError
-            listen(pair)
-            false
+        stop()
+        val conversations = session.conversations
+        conversations.hide(pair)
+        session.launch {
+            try {
+                session.messaging.deleteConversation(pair)
+                session.outboxes.forget(pair)
+                conversations.deleted(pair)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                conversations.unhide(pair)
+                onFailed()
+            }
         }
+        return true
     }
 
     // Search and media

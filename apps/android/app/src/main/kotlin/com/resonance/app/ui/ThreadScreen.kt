@@ -502,16 +502,10 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
         confirmLabel = L10n.Messages.deleteConfirm,
         onCancel = { confirmingDelete = false },
         onConfirm = {
-            if (busy) return@OrganicConfirmDialog
-            scope.launch {
-                busy = true
-                val deleted = model.deleteConversation()
-                busy = false
-                confirmingDelete = false
-                if (deleted) back()
-            }
+            // Gone at once (round 21): the thread is left and its row leaves the list; a refusal brings the row back and says so.
+            confirmingDelete = false
+            if (model.deleteConversationNow { toasts.show(L10n.Messages.deleteError) }) back()
         },
-        busy = busy,
         seed = 59.0,
     )
     if (pickingCard) OrganicModal(
@@ -564,6 +558,7 @@ private fun barMenu(
     delete: () -> Unit,
 ): List<OrganicMenuItem> {
     val scope = rememberCoroutineScope()
+    val toasts = LocalToasts.current
     val other = model.other
     return buildList {
         add(OrganicMenuItem(L10n.Messages.menuSearch, IconName.Search) { searching() })
@@ -572,7 +567,8 @@ private fun barMenu(
         if (model.isBlocked) {
             add(OrganicMenuItem(L10n.Safety.unblock, IconName.Ban) {
                 scope.launch {
-                    other?.let { runCatching { session.safety?.unblock(it.id) } }
+                    // Not undone: said in a toast (round 21), never silently.
+                    other?.let { runCatching { session.safety?.unblock(it.id) }.onFailure { toasts.show(L10n.Safety.unblockFailed) } }
                     model.refreshConnection()
                 }
             })

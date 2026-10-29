@@ -331,7 +331,11 @@ fun OrganicConfirmDialog(
     confirmLabel: String,
     onCancel: () -> Unit,
     onConfirm: () -> Unit,
-    busy: Boolean = false,
+    /**
+     * The verb is working ([ModalActions]' `busy`): null for a question that closes as it is answered
+     * (an optimistic one, round 21), whose verb never works and so keeps its own width.
+     */
+    busy: Boolean? = null,
     seed: Double = 67.0,
     /** What went wrong, under the body (a block that didn't go through); the dialog stays for another try. */
     error: String? = null,
@@ -343,7 +347,7 @@ fun OrganicConfirmDialog(
     busyLabel: String? = null,
 ) {
     // A tap beside the card is the way out at its foot, and says so: "Keep it", not a "Close" it has no button for.
-    OrganicModal(if (busy) null else onCancel, title, seed, closeLabel = cancelLabel) {
+    OrganicModal(if (busy == true) null else onCancel, title, seed, closeLabel = cancelLabel) {
         // ConfirmModal: 8 between title and body, 18 before the actions (14 + ModalActions' 4).
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.fade(if (titlePending) 0f else 1f)) { ModalTitle(title) }
@@ -424,9 +428,10 @@ fun ModalActions(topPadding: Dp = ModalActionsTop, content: @Composable () -> Un
 /**
  * ModalActions' (cancel, verb) form, the foot most dialogs end in: [cancelLabel] tonal, then the
  * verb — solid, or danger when [destructive] — with an optional glyph ([verbIcon]); [verbEnabled]
- * false while there is nothing to act on yet. While [busy] the verb shows its loader (its words
- * kept, design note B6, or [busyLabel] — the bare verb — in the same width) and the way out rests,
- * faded; neither takes a tap.
+ * false while there is nothing to act on yet. While [busy] the verb shows its loader (in its glyph's
+ * place, or before [busyLabel] — the bare verb — or its words, design note B6) and the way out rests,
+ * faded; neither takes a tap. A verb that can be busy ([busy] passed, false too) is always as wide as
+ * its busy self (round 21: [OrganicButton]'s `loading`); null, it never works and keeps its own width.
  */
 @Composable
 fun ModalActions(
@@ -434,7 +439,7 @@ fun ModalActions(
     onCancel: () -> Unit,
     verbLabel: String,
     onVerb: () -> Unit,
-    busy: Boolean = false,
+    busy: Boolean? = null,
     destructive: Boolean = false,
     verbEnabled: Boolean = true,
     verbIcon: IconName? = null,
@@ -442,7 +447,7 @@ fun ModalActions(
     busyLabel: String? = null,
 ) {
     ModalActions(topPadding) {
-        OrganicButton(cancelLabel, variant = ButtonVariant.Tonal, small = true, enabled = !busy, onClick = onCancel)
+        OrganicButton(cancelLabel, variant = ButtonVariant.Tonal, small = true, enabled = busy != true, onClick = onCancel)
         OrganicButton(
             verbLabel, variant = if (destructive) ButtonVariant.Danger else ButtonVariant.Solid, icon = verbIcon,
             small = true, enabled = verbEnabled, loading = busy, loadingTitle = busyLabel, onClick = onVerb,

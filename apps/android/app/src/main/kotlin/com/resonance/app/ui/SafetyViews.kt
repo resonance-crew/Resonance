@@ -30,7 +30,7 @@ import com.resonance.design.AppFonts
 import com.resonance.design.ModalActions
 import com.resonance.design.ModalCloseButton
 import com.resonance.design.ModalError
-import com.resonance.design.OrganicAlert
+import com.resonance.design.LocalToasts
 import com.resonance.design.ModalBody
 import com.resonance.design.ModalTitle
 import com.resonance.design.OrganicConfirmDialog
@@ -66,9 +66,11 @@ fun SafetyMenu(
     onChange: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
+    val toasts = LocalToasts.current
     var reporting by remember { mutableStateOf(false) }
     var confirmingBlock by remember { mutableStateOf(false) }
-    var failed by remember { mutableStateOf(false) }
+    var blocking by remember { mutableStateOf(false) }
+    var blockFailed by remember { mutableStateOf(false) }
     val name = handle ?: L10n.Safety.anonymousAuthor
     val person = target.userId
 
@@ -76,14 +78,20 @@ fun SafetyMenu(
         add(OrganicMenuItem(if (target is SafetyService.Target.Card) L10n.Safety.reportCard else L10n.Safety.reportUser, IconName.Flag) { reporting = true })
         when {
             person == null -> Unit
+            // Not undone: said in a toast (round 21).
             isBlocked -> add(OrganicMenuItem(L10n.Safety.unblock, IconName.UserCheck) {
-                scope.launch { runCatching { session.safety?.unblock(person) }.onSuccess { onChange() }.onFailure { failed = true } }
+                scope.launch { runCatching { session.safety?.unblock(person) }.onSuccess { onChange() }.onFailure { toasts.show(L10n.Safety.unblockFailed) } }
             })
-            else -> add(OrganicMenuItem(L10n.Safety.block, IconName.Ban, destructive = true) { confirmingBlock = true })
+            else -> add(OrganicMenuItem(L10n.Safety.block, IconName.Ban, destructive = true) {
+                blockFailed = false
+                confirmingBlock = true
+            })
         }
     })
 
     if (reporting) ReportDialog(session, target, handle, onBlocked = onChange, offerBlock = person != null && !isBlocked) { reporting = false }
+    // A block waits for the server, as everywhere (round 21: safety is never assumed): the verb works, and a
+    // refusal is said in the question, which stays for another try.
     if (confirmingBlock && person != null) OrganicConfirmDialog(
         title = L10n.Safety.blockTitle(name),
         body = L10n.Safety.blockBody,
@@ -91,11 +99,24 @@ fun SafetyMenu(
         confirmLabel = L10n.Safety.blockConfirm,
         onCancel = { confirmingBlock = false },
         onConfirm = {
-            confirmingBlock = false
-            scope.launch { runCatching { session.safety?.block(person) }.onSuccess { onChange() }.onFailure { failed = true } }
+            if (!blocking) {
+                blocking = true
+                blockFailed = false
+                scope.launch {
+                    runCatching { session.safety?.block(person) ?: error("signed out") }
+                        .onSuccess {
+                            confirmingBlock = false
+                            onChange()
+                        }
+                        .onFailure { blockFailed = true }
+                    blocking = false
+                }
+            }
         },
+        busy = blocking,
+        seed = 71.0,
+        error = if (blockFailed) L10n.Safety.actionError else null,
     )
-    if (failed) OrganicAlert(L10n.Safety.actionError) { failed = false }
 }
 
 /**

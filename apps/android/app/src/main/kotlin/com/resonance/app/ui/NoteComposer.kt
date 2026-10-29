@@ -16,7 +16,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
@@ -24,7 +23,6 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.height
-import com.resonance.design.ModalError
 import com.resonance.design.ModalErrorGap
 import com.resonance.design.ModalErrorTuck
 import androidx.compose.ui.focus.onFocusChanged
@@ -37,7 +35,8 @@ import com.resonance.app.Session
 import com.resonance.design.AppFonts
 import com.resonance.design.FieldLabel
 import com.resonance.design.ModalActions
-import com.resonance.design.ModalCloseButton
+import com.resonance.design.LocalToasts
+import com.resonance.design.Toasts
 import com.resonance.design.OrganicIcon
 import com.resonance.design.fieldHintStyle
 import com.resonance.design.fieldSurface
@@ -45,12 +44,10 @@ import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
 import com.resonance.design.plainClickable
 import com.resonance.kit.api.ApiFailure
-import com.resonance.kit.chat.NoteAttempt
 import com.resonance.kit.chat.NoteDraft
 import com.resonance.kit.l10n.L10n
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 /** The most a note (or a message) may hold, in UTF-16 units — the rules' own cap. */
 const val NOTE_MAX_LENGTH = 2000
@@ -63,17 +60,20 @@ const val NOTE_UPGRADE_THRESHOLD = 200
  * author — the only reader it will ever have. Four lines to write in, the
  * privacy hint for the first few times, the count, and past 200 characters an
  * offer to make it a resonance card instead (`onUpgrade` carries its words
- * into the writer). Sending replaces the form with a quiet confirmation. The
- * twin of iOS's NoteComposer.
+ * into the writer). 寄出 closes it at once (round 21) with 紙條寄出了, and the
+ * note goes on from the account's scope ([sendNoteOnward]); one that doesn't
+ * go says so in a toast whose 再寄一次 opens the composer again on its words
+ * ([onOpenCard]: the card's page, when it is no longer on screen). The twin
+ * of iOS's NoteComposer.
  *
  * Its words wait on the device until the note goes ([NoteDraft]): closed any
- * way — a tap beside the sheet, back, 取消 — or with the app killed, the
+ * way — a tap beside the sheet, back, 取消, 寄出 — or with the app killed, the
  * composer opens on them again for this card; sent (the server's 201) or
  * emptied, nothing is kept.
  */
 @Composable
-fun NoteComposer(session: Session, cardId: String, onClose: () -> Unit, onUpgrade: (String) -> Unit) {
-    val scope = rememberCoroutineScope()
+fun NoteComposer(session: Session, cardId: String, onClose: () -> Unit, onUpgrade: (String) -> Unit, onOpenCard: () -> Unit = {}) {
+    val toasts = LocalToasts.current
     val draft = remember(session, cardId) { NoteDraft(session.noteDrafts, cardId) }
     var text by remember(draft) { mutableStateOf(draft.initial) }
     // Kept a moment after typing stops, as the app leaves the screen, and on every way out of the composer.
@@ -84,28 +84,12 @@ fun NoteComposer(session: Session, cardId: String, onClose: () -> Unit, onUpgrad
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { draft.keep(typed) }
     DisposableEffect(draft) { onDispose { draft.keep(typed) } }
-    var pending by remember { mutableStateOf(false) }
-    var sent by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
     var showsHint by remember { mutableStateOf(false) }
     var focused by remember { mutableStateOf(false) }
-    // The note on its way, under one client id until it is left: Send pressed again on the same
-    // words after a failure is a retry the server can recognise, never a second note.
-    val attempt = remember { NoteAttempt() }
 
     // The web counts the trimmed text in UTF-16 units (Kotlin's length is the same unit).
     val count = text.trim().length
     val valid = count > 0 && count <= NOTE_MAX_LENGTH && session.me != null
-
-    if (sent) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            OrganicIcon(IconName.Note, size = 18.dp, color = Tokens.Text)
-            BasicText(L10n.Card.Note.sent, style = AppFonts.body(14f, lineHeight = 1.3f), modifier = Modifier.weight(1f))
-        }
-        // Said and done: the one way out, under the confirmation (a modal keeps no × in its corner).
-        ModalCloseButton(L10n.Card.Note.close, onClose)
-        return
-    }
 
     LaunchedEffect(Unit) { showsHint = session.hints?.claim("note-privacy") ?: false }
 
@@ -148,44 +132,62 @@ fun NoteComposer(session: Session, cardId: String, onClose: () -> Unit, onUpgrad
                 },
             )
         }
-        // Why it didn't go: the dialogs' error line (13, danger red), ModalErrorGap over the foot as in
-        // every dialog (its line box gives back ModalErrorTuck, which the foot's 18 takes in).
-        error?.let {
-            Spacer(Modifier.height(4.dp))
-            ModalError(it)
-        }
         // The modal is the frame: cancel the tonal pill, Send the solid verb, rightmost — the foot
         // every dialog shares; Send waits, faded, until there is something to send.
         ModalActions(
             L10n.Card.Note.cancel, onClose, L10n.Card.Note.send,
-            busy = pending, verbEnabled = valid, topPadding = NoteFootTop,
+            verbEnabled = valid, topPadding = NoteFootTop,
             onVerb = {
-                if (valid && !pending) {
-                    pending = true
-                    error = null
-                    val words = text.trim()
-                    scope.launch {
-                        try {
-                            attempt.send(cardId, words) { clientId -> session.messaging.sendNote(cardId, words, clientId) }
-                            // Left: its draft goes, and nothing the composer still holds is kept again.
-                            draft.sent()
-                            sent = true
-                            PushCenter.reachedOut()
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            error = noteSendError(e)
-                        } finally {
-                            pending = false
-                        }
-                    }
+                if (valid) {
+                    // Kept until the server has it (the composer's close keeps it too): 再寄一次 opens on these words.
+                    draft.keep(text)
+                    onClose()
+                    toasts.show(L10n.Card.Note.sent)
+                    sendNoteOnward(session, toasts, cardId, text.trim(), onOpenCard)
                 }
             },
         )
     }
 }
 
-/** The air over the composer's foot: ModalErrorGap under an error line, once its tuck is given back. */
+/**
+ * The note on its way once its composer has closed (round 21): under the card's one client id until it is
+ * left ([com.resonance.app.NoteSends.attempt]: the same words sent again after a failure are a retry the
+ * server recognises, never a second note), in the account's scope. Delivered, its kept words go (unless the
+ * composer has been opened on other words since) and the notification permission may be asked; refused,
+ * the toast says why — 紙條沒寄出, or that notes wait for a reply — with 再寄一次, which opens the composer
+ * again on the kept words; a card gone says so alone (sending again won't help).
+ */
+internal fun sendNoteOnward(session: Session, toasts: Toasts, cardId: String, words: String, openCard: () -> Unit) {
+    val sends = session.noteSends
+    val drafts = session.noteDrafts
+    session.launch {
+        try {
+            sends.attempt(cardId).send(cardId, words) { clientId -> session.messaging.sendNote(cardId, words, clientId) }
+            if (drafts?.text(cardId)?.trim() == words) drafts.clear(cardId)
+            PushCenter.reachedOut()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val gone = e is ApiFailure && e.status == 404
+            toasts.show(
+                noteFailure(e),
+                action = if (gone) null else Toasts.Action(L10n.Card.Note.reopen, L10n.Card.Note.reopen, IconName.Note) {
+                    sends.requestReopen(cardId, openCard)
+                },
+            )
+        }
+    }
+}
+
+/** What a toast says of a note that didn't go: notes waiting unanswered, a card gone, else 紙條沒寄出. */
+internal fun noteFailure(e: Exception): String = when {
+    e is ApiFailure && e.isConflict -> L10n.Card.Note.waitForReply
+    e is ApiFailure && e.status == 404 -> L10n.Card.NotFound.title
+    else -> L10n.Card.Note.failed
+}
+
+/** The air over the composer's foot (the dialogs' 18, as when an error line stood over it). */
 private val NoteFootTop = ModalErrorGap + ModalErrorTuck
 
 /** How long after the last keystroke a note's draft is written down. */

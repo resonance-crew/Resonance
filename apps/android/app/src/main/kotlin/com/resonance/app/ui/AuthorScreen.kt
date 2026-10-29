@@ -10,6 +10,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.ui.text.style.TextOverflow
 import com.resonance.api.models.Author
+import com.resonance.design.LocalToasts
 import com.resonance.design.TabletPageTitle
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.semantics.heading
@@ -305,6 +306,7 @@ private fun RowScope.BarPerson(author: Author, visible: Boolean, centred: Boolea
 @Composable
 private fun BlockedNotice(session: Session, userId: String, handle: String, onUnblocked: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val toasts = LocalToasts.current
     var busy by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 32.dp),
@@ -317,10 +319,14 @@ private fun BlockedNotice(session: Session, userId: String, handle: String, onUn
             style = AppFonts.body(14.5f, lineHeight = 1.6f, color = Tokens.TextMuted).copy(textAlign = TextAlign.Center),
             modifier = Modifier.padding(bottom = 8.dp),
         )
-        OrganicButton(L10n.Safety.unblock, variant = ButtonVariant.Tonal, small = true, loading = busy) {
+        // It waits for the server (the page then re-reads), in its busy width, saying 解除 while it works;
+        // refused, a toast says so (round 21).
+        OrganicButton(L10n.Safety.unblock, variant = ButtonVariant.Tonal, small = true, loading = busy, loadingTitle = L10n.Safety.unblockShort) {
             busy = true
             scope.launch {
-                runCatching { session.safety?.unblock(userId) }.onSuccess { onUnblocked() }
+                runCatching { session.safety?.unblock(userId) }
+                    .onSuccess { onUnblocked() }
+                    .onFailure { toasts.show(L10n.Safety.unblockFailed) }
                 busy = false
             }
         }

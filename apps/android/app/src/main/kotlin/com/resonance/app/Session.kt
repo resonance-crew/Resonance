@@ -233,6 +233,8 @@ class Session(
     val bookmarks: BookmarkService? get() = uid?.let(::BookmarkService)
     val drafts: DraftService? get() = uid?.let(::DraftService)
     val hints: HintService? get() = uid?.let { HintService(it, prefs) }
+    /** Notes on their way from the account (round 21): their client ids, and a failed one's 再寄一次. */
+    val noteSends = NoteSends()
     /** The signed-in account's unsent notes, by card (the note composer's words, kept until sent). */
     val noteDrafts: NoteDrafts.Account? get() = uid?.let { noteDraftStore?.of(it) }
     /** The signed-in profile once loaded (the publish panel's card head). */
@@ -243,6 +245,13 @@ class Session(
 
     private val auth: FirebaseAuth get() = AppFirebase.auth
     private val scope = MainScope()
+
+    /**
+     * Runs [work] in the account's scope, on the main thread: what it does and says outlives the screen
+     * that asked — an optimistic move (round 21) closes its question at once, and its answer (or its
+     * failure's toast, and the way back) comes after.
+     */
+    fun launch(work: suspend kotlinx.coroutines.CoroutineScope.() -> Unit): Job = scope.launch(block = work)
 
     /** Messages on their way, per conversation: they outlive the thread screen (see [ChatOutboxes]). */
     val outboxes = ChatOutboxes(scope, messaging, pictures) { PushCenter.reachedOut() }
@@ -283,6 +292,7 @@ class Session(
             notifications.stop()
             conversations.stop()
             outboxes.clear()
+            noteSends.clear()
             val forgetting = previous?.let(::forget)
             _keptBlocks.value = emptySet()
             meReadAt = 0L

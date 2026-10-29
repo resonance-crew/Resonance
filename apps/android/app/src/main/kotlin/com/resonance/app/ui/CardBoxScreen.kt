@@ -92,6 +92,7 @@ import com.resonance.kit.reading.FeedLoader
 import com.resonance.kit.reading.RefreshFailure
 import kotlinx.coroutines.CancellationException
 import com.resonance.design.OrganicConfirmDialog
+import com.resonance.design.LocalToasts
 import com.resonance.kit.api.Trash
 import com.resonance.kit.api.purgeInstant
 import java.time.Instant
@@ -183,6 +184,23 @@ class CardBoxModel internal constructor(
         leaving.remove(id)
     }
 
+    /**
+     * A move from a card's ⋯ drawn on the shelves at once (round 21): made private, it goes from the
+     * published shelf to the 私人卡 one; answering nothing, it loses its link wherever it is. Returns the
+     * way back, for a refusal — the shelves as they were, unless a read has replaced them since.
+     */
+    fun drawNow(id: String, move: CardMove): () -> Unit {
+        val before = shelves.toMap()
+        val after = movedOnShelves(id, move, before)
+        for ((s, cards) in after) shelves[s] = cards
+        return { if (shelves.toMap() == after) for ((s, cards) in before) shelves[s] = cards }
+    }
+
+    /** 清空垃圾桶 pressed (round 21): the trash shelf shows itself empty at once, while it is emptied behind. */
+    fun emptied() {
+        if (shelves.containsKey(TabGetCardBox.trash)) shelves[TabGetCardBox.trash] = emptyList()
+    }
+
     /** [shelf] is the one on screen: what a refresh of the one before couldn't bring is no longer said. */
     fun shelfShown(shelf: TabGetCardBox) {
         shown = shelf
@@ -244,6 +262,28 @@ class CardBoxModel internal constructor(
             }
         }
     }
+}
+
+/**
+ * The shelves as a move from card [id]'s ⋯ leaves them (what [CardBoxModel.drawNow] shows before the server
+ * answers): made private, off the published shelf and at the head of the private one (as the 草稿 shelf
+ * draws its most recently changed first); answering nothing, without its link on every shelf.
+ */
+internal fun movedOnShelves(id: String, move: CardMove, shelves: Map<TabGetCardBox, List<FeedCard>>): Map<TabGetCardBox, List<FeedCard>> = when (move) {
+    CardMove.MakePrivate -> {
+        val card = shelves.values.firstNotNullOfOrNull { cards -> cards.firstOrNull { it.id == id } }
+        shelves.mapValues { (shelf, cards) ->
+            when {
+                shelf == TabGetCardBox.published -> cards.filterNot { it.id == id }
+                shelf == TabGetCardBox.`private` && card != null ->
+                    listOf(card.copy(visibility = FeedCard.Visibility.`private`, editedAt = Instant.now().toString())) + cards.filterNot { it.id == id }
+                else -> cards
+            }
+        }
+    }
+    CardMove.Unresonate -> shelves.mapValues { (_, cards) -> cards.map { if (it.id == id) it.copy(referenceCardId = null) else it } }
+    // The trash's own way off a shelf is [CardBoxModel.leave].
+    CardMove.Trash -> shelves
 }
 
 /**
@@ -323,8 +363,9 @@ fun CardBoxScreen(session: Session, open: (Route) -> Unit) {
     // A phone's card box has 8 more under the bar's line, and 8 more either side of the shelves (round 5 E2).
     val cls = LocalWindowLayout.current.cls
     val air = CardBoxAir.of(cls)
-    // 清空垃圾桶's question (asked over the shelf, whatever has scrolled), and whether its last try failed.
-    var emptying by remember { mutableStateOf<Emptying?>(null) }
+    val trashCenter = LocalTrash.current
+    // 清空垃圾桶's question (asked over the shelf, whatever has scrolled).
+    var emptying by remember { mutableStateOf(false) }
     TabScreen(
         L10n.App.Nav.me,
         titleInBar = true,
@@ -376,11 +417,12 @@ fun CardBoxScreen(session: Session, open: (Route) -> Unit) {
         }
         item { ShelfTabs(shelf, layout.headerInset, air, openMap = { open(Route.ThoughtMap) }) { chosen = it } }
         refreshNote(model.failureOver(shelf))
-        val cards = model.cardsOf(shelf)
+        // A card deleted for good from its page a moment ago is off the shelves already (round 21).
+        val cards = model.cardsOf(shelf)?.let { trashCenter?.shown(it) ?: it }
         when {
             cards == null && failed -> item { OrganicEmptyState(L10n.Native.loadError, L10n.Native.retry, { model.refresh(shelf, changes, retry = true) }, action = EmptyAction.Outline) }
             cards == null -> storyCardSkeletons(if (layout.isGrid) layout.columns * 2 else 6, layout = layout)
-            shelf == TabGetCardBox.trash -> trashShelf(cards, open, layout, air, model) { emptying = Emptying.Asking }
+            shelf == TabGetCardBox.trash -> trashShelf(cards, open, layout, air, model) { emptying = true }
             // An empty shelf: the shared empty state (its own words as the title; the bookmarks' as its line),
             // and the empty published shelf points at the first story (ux §4).
             cards.isEmpty() -> item {
@@ -401,46 +443,42 @@ fun CardBoxScreen(session: Session, open: (Route) -> Unit) {
             else -> storyCards(cards, open, layout = layout)
         }
     }
-    emptying?.let { state -> EmptyTrashDialog(state) { emptying = it } }
+    if (emptying) EmptyTrashDialog(model) { emptying = false }
 }
 
-/** 清空垃圾桶's question: asked, working, or asked again after a try that failed. */
-internal enum class Emptying { Asking, Busy, Failed }
-
 /**
- * 清空垃圾桶？ · 垃圾桶裡的卡片都會永久刪除，無法復原 · 先留著 | 清空垃圾桶, the verb red. It stays,
- * working, while the trash is emptied page by page; done, the shelf reads again and shows it empty.
- * A failure is read again first ([TrashCenter.emptyTrash]): a trash found empty closes the question
- * as if it had worked (the shelf its empty state); one still holding cards keeps it, saying so with
- * its buttons, until 先留著.
+ * 清空垃圾桶？ · 垃圾桶裡的卡片都會永久刪除，無法復原 · 先留著 | 清空垃圾桶, the verb red. Answered, it
+ * closes at once and the shelf shows itself empty (round 21), while the trash is emptied page by page
+ * in the shell's scope; the shelves read again whatever happened. A failure is read again first
+ * ([TrashCenter.emptyTrash]): a trash found empty is done, as if it had worked; one still holding
+ * cards says so in a toast, and the shelf shows what is left.
  */
 @Composable
-private fun EmptyTrashDialog(state: Emptying, set: (Emptying?) -> Unit) {
+private fun EmptyTrashDialog(model: CardBoxModel, close: () -> Unit) {
     val trash = LocalTrash.current ?: return
+    val toasts = LocalToasts.current
     OrganicConfirmDialog(
         title = L10n.Me.Actions.emptyTrashTitle,
         body = L10n.Me.Actions.emptyTrashBody,
         cancelLabel = L10n.Me.Actions.deleteCancel,
         confirmLabel = L10n.Me.Actions.emptyTrash,
-        onCancel = { set(null) },
+        onCancel = close,
         onConfirm = {
-            if (state != Emptying.Busy) {
-                set(Emptying.Busy)
-                trash.launch {
-                    try {
-                        emptyTrash()
-                        set(null)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        set(Emptying.Failed)
-                    }
+            close()
+            model.emptied()
+            trash.launch {
+                try {
+                    emptyTrash()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    toasts.show(L10n.Me.Actions.emptyTrashFailed)
                 }
             }
         },
-        busy = state == Emptying.Busy,
+        busy = false,
+        busyLabel = L10n.Me.Actions.emptyTrashShort,
         seed = 67.0,
-        error = if (state == Emptying.Failed) L10n.Safety.actionError else null,
         destructive = true,
     )
 }
@@ -629,6 +667,7 @@ private fun CardMenu(session: Session, card: FeedCard, open: (Route) -> Unit, hu
         session, card.id, card.visibility.value, open, seed = hue, hue = hue, referenceCardId = card.referenceCardId,
         published = card.publishedAt != null, anonymous = card.anonymous, title = card.title,
         onTrashed = { model.left(card.id) }, onLeaving = { model.leave(card.id, it) },
+        onMoving = { move -> model.drawNow(card.id, move) },
     )
 }
 

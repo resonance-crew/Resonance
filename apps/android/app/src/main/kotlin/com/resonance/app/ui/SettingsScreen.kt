@@ -1,6 +1,7 @@
 package com.resonance.app.ui
 
 import com.resonance.design.avatarFill
+import com.resonance.design.LocalToasts
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawOutline
@@ -759,9 +760,8 @@ private fun DeleteAccountSettings(session: Session) {
 /** BlockedListModal's inside: everyone blocked, newest first, each with a small Unblock, between wavy rules. */
 @Composable
 private fun ColumnScope.BlockedListContent(session: Session, onClose: () -> Unit) {
-    val scope = rememberCoroutineScope()
+    val toasts = LocalToasts.current
     var people by remember { mutableStateOf<List<SafetyService.BlockedPerson>?>(null) }
-    var pending by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { people = runCatching { session.safety?.blocked() }.getOrNull() ?: emptyList() }
 
     ModalTitle(L10n.Safety.BlockedList.title)
@@ -809,17 +809,15 @@ private fun ColumnScope.BlockedListContent(session: Session, onClose: () -> Unit
                             BasicText(L10n.Safety.BlockedList.since(date), style = AppFonts.body(12.5f, color = Tokens.TextMuted))
                         }
                     }
-                    OrganicButton(
-                        L10n.Safety.unblock,
-                        variant = ButtonVariant.Tonal,
-                        small = true,
-                        enabled = pending == null,
-                        loading = pending == person.id,
-                    ) {
-                        scope.launch {
-                            pending = person.id
-                            runCatching { session.safety?.unblock(person.id) }.onSuccess { people = people?.filter { it.id != person.id } }
-                            pending = null
+                    // Unblocked at once (round 21): the row goes, and comes back where it was should the server refuse.
+                    OrganicButton(L10n.Safety.unblock, variant = ButtonVariant.Tonal, small = true) {
+                        val safety = session.safety ?: return@OrganicButton
+                        people = people?.filter { it.id != person.id }
+                        session.launch {
+                            runCatching { safety.unblock(person.id) }.onFailure {
+                                people = people?.let { now -> if (now.any { p -> p.id == person.id }) now else (now + person).sortedBy { p -> list.indexOf(p) } }
+                                toasts.show(L10n.Safety.unblockFailed)
+                            }
                         }
                     }
                 }

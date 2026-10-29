@@ -78,8 +78,9 @@ import kotlin.math.max
  * trash (TrashedCardBanner.tsx; trash.spec §5.4 with the critique's placement: the article's first
  * block, above the cover or the title): how long it has and that only they can see it, that an
  * anonymous card's notes went with it, then 還原 (the card comes back here, as it was) and 永久刪除
- * (asked first, in red; then [onDeleted], away from the page). Everyone else never sees the card at
- * all (it is private while it is there).
+ * (asked first, in red; then at once [onDeleted], away from the page, the card off the card box's
+ * shelves while the server is asked — round 21). Everyone else never sees the card at all (it is
+ * private while it is there).
  *
  * One hand-drawn shape, cut as the segmented bar is (round 19): the words on its paper, the two ways
  * out filling its end as segments behind wavy seams — 還原 the verb's solid face, 永久刪除 the
@@ -248,7 +249,15 @@ fun TrashedCardBanner(
             segments()
         }
     }
-    if (deleting) DeleteForeverDialog(trash, toasts, ref, seed = 71.0, onClose = { deleting = false }, onDeleted = onDeleted)
+    // Gone at once (round 21): the page leaves for where it came from — the card box — with the card off its
+    // shelves before the server answers; refused, it is back on the trash shelf, and the toast says so.
+    if (deleting) DeleteForeverDialog(
+        trash, toasts, ref, seed = 71.0, onClose = { deleting = false },
+        onLeaving = { going ->
+            trash.leave(card.id, going)
+            if (going) onDeleted()
+        },
+    )
 }
 
 /** Points (dp) as a closed polygon, in px. */

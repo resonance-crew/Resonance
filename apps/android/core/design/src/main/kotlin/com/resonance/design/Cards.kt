@@ -19,6 +19,7 @@ import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -62,6 +63,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
@@ -596,22 +598,25 @@ private val FeedEndWave = 40.dp
 /**
  * The feed's way on (the web's FeedMore): 「顯示更多」 alone, in the tonal label's ink with no face
  * of its own — not a form's button — the press washing a wobbly outline as a bare glyph's does.
- * It shows the page the feed fetched ahead; tapped before that page has come ([loading]), the pen
- * loop draws itself before the label (as a button's does) and taps do nothing until it shows. The
- * twin of iOS's FeedMoreButton.
+ * It shows the page the feed fetched ahead; tapped before that page has come ([loading]), the button's
+ * pen loop ([ButtonLoader], 15) draws itself 6 before the label, outside its box — neither the button
+ * nor the words move (round 21) — and taps do nothing until it shows. The twin of iOS's FeedMoreButton.
  */
 @Composable
 fun FeedMoreButton(loading: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    // One node for TalkBack: the label, and while loading the loop's "Loading…" with it.
-    Row(
+    // One node for TalkBack: the label, and while loading that it is busy.
+    Box(
         modifier
             .heightIn(min = 48.dp)
             .clickable(interactionSource = null, indication = OrganicIndication(), enabled = !loading, role = Role.Button, onClick = onClick)
+            .then(if (loading) Modifier.semantics { stateDescription = L10n.App.busy } else Modifier)
             .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        if (loading) SketchLoader(15.dp, Tokens.ButtonOnTonal)
-        BasicText(L10n.Home.moreBtn, style = AppFonts.body(14f, 600, lineHeight = 1.3f, color = Tokens.ButtonOnTonal))
+        Box(contentAlignment = Alignment.CenterStart) {
+            BasicText(L10n.Home.moreBtn, style = AppFonts.body(14f, 600, lineHeight = 1.3f, color = Tokens.ButtonOnTonal))
+            // The button's loop (round 21) hangs 6 before the words, outside their box: nothing moves.
+            if (loading) ButtonLoader(Tokens.ButtonOnTonal, 15.dp, Modifier.offset(x = -(15.dp + 6.dp)))
+        }
     }
 }

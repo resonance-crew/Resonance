@@ -195,6 +195,18 @@ class CardPageModel(private val session: Session, private val key: String, previ
     private var reading: Job? = null
 
     /**
+     * A move from the ⋯ drawn at once, before the server answers (round 21): the card in the trash (its
+     * banner, its days from now), private, or answering nothing. Returns the way back, for a refusal —
+     * which puts the page as it was unless a read has replaced it since (that read says how it is).
+     */
+    fun drawNow(move: CardMove): () -> Unit {
+        val before = detail ?: return {}
+        val after = moved(before, move)
+        detail = after
+        return { if (detail === after) detail = before }
+    }
+
+    /**
      * Reads the card unless what the page holds is current ([isCurrent]: read lately, and no change
      * since that concerns it — `lastChange` is the latest of `changes`); `retry` always does.
      */
@@ -239,6 +251,13 @@ class CardPageModel(private val session: Session, private val key: String, previ
     }
 
     companion object {
+        /** The page's card as [move] leaves it (what [drawNow] shows before the server has answered). */
+        internal fun moved(d: com.resonance.api.models.CardDetail, move: CardMove, now: java.time.Instant = java.time.Instant.now()): com.resonance.api.models.CardDetail = when (move) {
+            CardMove.Trash -> d.copy(card = d.card.copy(trashedAt = now.toString(), purgeAt = null))
+            CardMove.MakePrivate -> d.copy(card = d.card.copy(visibility = FeedCard.Visibility.`private`), visibility = com.resonance.api.models.CardDetail.Visibility.`private`)
+            CardMove.Unresonate -> d.copy(card = d.card.copy(referenceCardId = null), referenceCard = null)
+        }
+
         /**
          * Whether a page read at `readAt`, as of change `readFor`, still shows `cardId` as it is: read
          * lately, and since then no change, or just one (`lastChange`) about another card — not
@@ -413,7 +432,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                             ArticleHead(
                                 card, d.anonymous, type, text.lang, titleModifier = heading.onHeading, bylineModifier = byline.onHeading,
                                 actions = if (actionsSlot == CardActionsSlot.Byline && !trashedOwn) {
-                                    { CardPageActions(session, d, sharing, open, onShare = share, onTrashed = { trashedHere++ }, seed = card.accentHue ?: 55.0) }
+                                    { CardPageActions(session, d, sharing, open, onShare = share, onTrashed = { trashedHere++ }, onMoving = model::drawNow, seed = card.accentHue ?: 55.0) }
                                 } else null,
                                 // Someone else's 私人卡, shared with the viewer in a message, wears the same lock.
                                 privateCard = isPrivateCard(d) || isSharedPrivateCard(d),
@@ -446,6 +465,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
                                 onOpenMine = { key -> open(Route.Card(key)) },
                                 onUpgradeNote = { words -> open(Route.Write(referenceCardId = card.id, story = words)) },
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 40.dp),
+                                onOpenCard = { open(Route.Card(card.id)) },
                             )
                         }
                     }
@@ -505,7 +525,7 @@ fun CardScreen(session: Session, key: String, preview: FeedCard?, open: (Route) 
         // its banner holds the way back (and nothing is shared from it).
         detail?.takeUnless(::ownTrashed)?.let { d ->
             val actions: @Composable () -> Unit = {
-                CardPageActions(session, d, sharing, open, onShare = share, onTrashed = { trashedHere++ }, seed = d.card.accentHue ?: 55.0)
+                CardPageActions(session, d, sharing, open, onShare = share, onTrashed = { trashedHere++ }, onMoving = model::drawNow, seed = d.card.accentHue ?: 55.0)
             }
             if (actionsSlot == CardActionsSlot.Bar) actions()
             else AnimatedVisibility(
@@ -811,6 +831,8 @@ private fun CardPageActions(
     open: (Route) -> Unit,
     onShare: (com.resonance.api.models.CardDetail) -> Unit,
     onTrashed: () -> Unit,
+    /** A move from the owner's ⋯ drawn on the page at once ([CardPageModel.drawNow]), and its way back. */
+    onMoving: (CardMove) -> (() -> Unit),
     seed: Double,
 ) {
     val card = d.card
@@ -829,7 +851,7 @@ private fun CardPageActions(
                 referenceCardId = card.referenceCardId, referenceTitle = d.referenceCard?.title,
                 referenceAnonymous = d.referenceCard?.anonymous,
                 published = card.publishedAt != null, anonymous = d.anonymous, title = card.title,
-                trashFeedback = TrashFeedback.Page, onTrashed = onTrashed,
+                trashFeedback = TrashFeedback.Page, onTrashed = onTrashed, onMoving = onMoving,
                 // Its pen is 編輯 already: the ⋯ leads with 公開發表 (round 12 §3).
                 penBeside = isPrivateCard(d),
             )

@@ -289,6 +289,7 @@ private fun TrashedWriter(session: Session, card: DraftService.OpenedCard, bar: 
                 message = L10n.Write.Trashed.line,
                 actionTitle = L10n.Write.Trashed.restore,
                 actionLoading = restoring,
+                actionLoadingTitle = L10n.Me.Actions.restore,
                 onAction = {
                     if (!restoring) {
                         restoring = true
@@ -1590,11 +1591,11 @@ private fun StepFoot(
     if (compact) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             OrganicButton(verb, Modifier.fillMaxWidth(), small = true, enabled = verbEnabled, loading = verbLoading, loadingTitle = verbBusyLabel, onClick = onVerb)
-            if (wayOut != null) OrganicButton(wayOut, Modifier.fillMaxWidth(), variant = ButtonVariant.Tonal, small = true, enabled = wayOutEnabled, loading = wayOutLoading, onClick = onWayOut)
+            if (wayOut != null) OrganicButton(wayOut, Modifier.fillMaxWidth(), variant = ButtonVariant.Tonal, small = true, enabled = wayOutEnabled, loading = wayOutLoading, loadingTitle = L10n.Write.discardShort, onClick = onWayOut)
         }
     } else {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
-            if (wayOut != null) OrganicButton(wayOut, variant = ButtonVariant.Tonal, small = true, enabled = wayOutEnabled, loading = wayOutLoading, onClick = onWayOut)
+            if (wayOut != null) OrganicButton(wayOut, variant = ButtonVariant.Tonal, small = true, enabled = wayOutEnabled, loading = wayOutLoading, loadingTitle = L10n.Write.discardShort, onClick = onWayOut)
             OrganicButton(verb, small = true, enabled = verbEnabled, loading = verbLoading, loadingTitle = verbBusyLabel, onClick = onVerb)
         }
     }

@@ -3,6 +3,7 @@ package com.resonance.app.ui
 import com.resonance.design.generated.ResonanceColors
 import com.resonance.design.avatarFill
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
@@ -29,6 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -37,6 +39,10 @@ import androidx.compose.ui.unit.dp
 import com.resonance.api.models.Me
 import com.resonance.app.Session
 import com.resonance.design.AppFonts
+import com.resonance.design.ButtonLoader
+import com.resonance.design.ButtonLoaderSmall
+import com.resonance.design.LocalToasts
+import com.resonance.design.Toasts
 import com.resonance.design.AvatarCrop
 import com.resonance.design.AvatarCropStage
 import com.resonance.design.ButtonVariant
@@ -63,6 +69,14 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 
 /**
  * The profile photo (design note B7): picked from the system's Photo Picker, framed in our own
@@ -96,14 +110,19 @@ object AvatarPhoto {
 /**
  * The first row of Settings → Profile, the web's: the avatar (88, seed 77), what it is and how it
  * is chosen, and the tonal photo button — add one, or change it. Tapping the avatar does the same.
- * A photo that can't be opened says so under the hint; one that opens goes to the crop modal.
+ * A photo that can't be opened says so under the hint; one that opens goes to the crop modal, whose
+ * 使用 closes it at once (round 21): the crop shows on the avatar with the small loop on it while it
+ * goes up and is saved, in the account's scope; refused, the old avatar is back and a toast says so.
  */
 @Composable
 internal fun AvatarSettingsRow(session: Session, me: Me) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val toasts = LocalToasts.current
     var photo by remember { mutableStateOf<Bitmap?>(null) }
     var openError by remember { mutableStateOf(false) }
+    // The crop on its way: drawn in the avatar's place until the profile has it.
+    val sending by AvatarUpload.pending.collectAsStateWithLifecycle()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
             openError = false
@@ -123,8 +142,13 @@ internal fun AvatarSettingsRow(session: Session, me: Me) {
     val pick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
     val verb = if (me.avatarUrl != null) L10n.Settings.Profile.avatarChange else L10n.Settings.Profile.avatarAdd
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.clickable(onClickLabel = verb, role = Role.Button, onClick = pick)) {
-            HandDrawnAvatar(me.initials, me.avatarUrl, avatarFill(me.accentColor), 88.dp, 77.0)
+        Box(Modifier.clickable(onClickLabel = verb, role = Role.Button, onClick = pick), contentAlignment = Alignment.Center) {
+            val shown = sending
+            HandDrawnAvatar(me.initials, if (shown != null) null else me.avatarUrl, avatarFill(me.accentColor), 88.dp, 77.0, image = shown)
+            if (shown != null) Box(
+                Modifier.size(28.dp).semantics { stateDescription = L10n.App.busy }.background(Tokens.Cream.copy(alpha = 0.85f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) { ButtonLoader(Tokens.Text, ButtonLoaderSmall) }
         }
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
@@ -137,20 +161,47 @@ internal fun AvatarSettingsRow(session: Session, me: Me) {
     }
     photo?.let { picked ->
         AvatarCropModal(picked, onCancel = { photo = null }) { jpeg ->
-            session.setAvatar(jpeg)
             photo = null
+            AvatarUpload.send(session, toasts, jpeg)
+        }
+    }
+}
+
+/**
+ * The profile photo on its way (round 21): the crop drawn on the avatar at once ([pending]) while it goes up
+ * and is saved in the account's scope — the settings left meanwhile, it still goes; done, the profile has it
+ * and [pending] clears; refused, [pending] clears too (the old avatar is back) and a toast says so.
+ */
+internal object AvatarUpload {
+    private val _pending = MutableStateFlow<ImageBitmap?>(null)
+    val pending: StateFlow<ImageBitmap?> = _pending
+
+    fun send(session: Session, toasts: Toasts, jpeg: ByteArray) {
+        val shown = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)?.asImageBitmap()
+        _pending.value = shown
+        session.launch {
+            try {
+                session.setAvatar(jpeg)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                toasts.show(L10n.Settings.Profile.avatarError)
+            } finally {
+                if (_pending.value === shown) _pending.value = null
+            }
         }
     }
 }
 
 /**
  * The crop modal (design note B7), in the app's own modal: title and hint, the stage, the zoom
- * slider between − and +, then Cancel | 使用 at the right. 使用 draws the square, sends it up and
- * saves it, showing its loader meanwhile (Cancel resting, the scrim and Back doing nothing); a
- * failure says so above the actions and 使用 can be tried again.
+ * slider between − and +, then Cancel | 使用 at the right. 使用 draws the square (a moment, off the
+ * main thread, its loader meanwhile — Cancel resting, the scrim and Back doing nothing) and hands it
+ * on ([onUse]: the row sends it up, the modal gone); a square that can't be drawn says so above the
+ * actions and 使用 can be tried again.
  */
 @Composable
-private fun AvatarCropModal(photo: Bitmap, onCancel: () -> Unit, onUse: suspend (ByteArray) -> Unit) {
+private fun AvatarCropModal(photo: Bitmap, onCancel: () -> Unit, onUse: (ByteArray) -> Unit) {
     val image = remember(photo) { photo.asImageBitmap() }
     var state by remember(photo) { mutableStateOf(CropState()) }
     var sending by remember { mutableStateOf(false) }
@@ -180,7 +231,7 @@ private fun AvatarCropModal(photo: Bitmap, onCancel: () -> Unit, onUse: suspend 
                 if (failed) ModalError(L10n.Settings.Profile.avatarError)
                 ModalActions(
                     L10n.Settings.Profile.cropCancel, onCancel, L10n.Settings.Profile.cropUse,
-                    busy = sending,
+                    busy = sending, busyLabel = L10n.Settings.Profile.cropUseShort,
                     onVerb = {
                         if (!sending) {
                             sending = true

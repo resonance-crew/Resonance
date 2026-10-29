@@ -2,6 +2,7 @@ package com.resonance.app.ui
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +51,8 @@ fun CardViewerActions(
     onOpenMine: (routeKey: String) -> Unit,
     onUpgradeNote: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** Opens this card's page again: a failed note's 再寄一次 when the page is no longer on screen (round 21). */
+    onOpenCard: () -> Unit = {},
 ) {
     // Your card answering this one (draft or published): null while looking, NONE when there is none.
     var mine by remember(cardId) { mutableStateOf<DraftService.Resonance?>(null) }
@@ -67,6 +70,19 @@ fun CardViewerActions(
             throw e
         } catch (e: Exception) {
             null
+        }
+    }
+    // A note that didn't go: its 再寄一次 opens the composer here again, on its kept words (round 21).
+    val sends = session.noteSends
+    DisposableEffect(sends, cardId) {
+        sends.host(cardId, true)
+        onDispose { sends.host(cardId, false) }
+    }
+    val reopen by sends.reopen.collectAsStateWithLifecycle()
+    LaunchedEffect(reopen, cardId) {
+        if (reopen == cardId) {
+            sends.took(cardId)
+            writingNote = true
         }
     }
     val scope = rememberCoroutineScope()
@@ -130,7 +146,7 @@ fun CardViewerActions(
             writingNote = false
             // The note's words become the resonance's story (the web drops them; the apps keep them).
             onUpgradeNote(text)
-        })
+        }, onOpenCard = onOpenCard)
     }
 }
 

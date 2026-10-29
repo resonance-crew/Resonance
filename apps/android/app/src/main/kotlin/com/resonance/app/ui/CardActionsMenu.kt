@@ -13,12 +13,12 @@ import com.resonance.app.Session
 import com.resonance.design.OrganicConfirmDialog
 import com.resonance.design.LocalToasts
 import com.resonance.design.MenuTrigger
-import com.resonance.design.OrganicAlert
 import com.resonance.design.OrganicMenu
 import com.resonance.design.OrganicMenuItem
 import com.resonance.design.Toasts
 import com.resonance.design.generated.IconName
 import com.resonance.design.fade
+import com.resonance.kit.api.ApiFailure
 import com.resonance.kit.api.Trash
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.reading.cardsByKey
@@ -31,6 +31,12 @@ import kotlinx.coroutines.launch
  * banner as it reads the card again).
  */
 enum class TrashFeedback { Toast, Page }
+
+/**
+ * A move from the owner's ⋯ that the screen showing the card draws at once (round 21: optimistic), before
+ * the server answers — and takes back, should it refuse: to the trash, private, answering nothing.
+ */
+enum class CardMove { Trash, MakePrivate, Unresonate }
 
 /**
  * Whether 刪除 asks first (trash.spec §0): it moves the card to the trash at once, where it waits
@@ -59,8 +65,10 @@ internal fun trashAsk(referenceCardId: String?, published: Boolean, visibility: 
  * ([TrashFeedback.Toast]) or the page's banner ([TrashFeedback.Page]) and the trash shelf are the way
  * back — but for the one resonance that asks first ([trashAsk]). Visibility and 取消共振 go through the server too (PATCH, DELETE
  * …/{original}/resonances/{id}) — never straight to Firestore, whose rules refuse them on a
- * published card — which also refreshes the site's cached pages that showed the card. One that
- * fails says so and changes nothing: the card stays where it is listed. Any of them may end a
+ * published card — which also refreshes the site's cached pages that showed the card. Every move is
+ * drawn at once (round 21): the card leaves its shelf ([onLeaving]) or its page shows it moved
+ * ([onMoving]) and the question closes, while the server is asked in the account's scope; one the
+ * server refuses puts the card back as it was and says so in a toast. Any of them may end a
  * connection a resonance made: every screen showing cards reads them again
  * ([Session.noteCardChange]), and the conversations and an open thread follow the connections live.
  * The twin of iOS's CardActionsMenu.
@@ -103,49 +111,48 @@ fun CardActionsMenu(
      * 公開發表 instead, which opens the writer at its publish step with the card offered to readers.
      */
     penBeside: Boolean = false,
+    /**
+     * A move drawn at once where the card shows (round 21): its page in the trash, private, answering
+     * nothing ([CardMove]) — returning the way back, run should the server refuse. The card box's trash
+     * is [onLeaving] instead.
+     */
+    onMoving: (CardMove) -> (() -> Unit) = { {} },
 ) {
     val scope = rememberCoroutineScope()
     val trash = LocalTrash.current ?: rememberFallbackTrash(session)
     var confirmingTrash by remember { mutableStateOf(false) }
     var unresonating by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
-    /** The visibility change didn't go through (the card is as it was): said in a small alert. */
-    var changeFailed by remember { mutableStateOf(false) }
-    /** The trash didn't take it, asked or not: said in its dialog (which stays for another try), else in a notice. */
-    var trashFailed by remember { mutableStateOf(false) }
-    var trashNotice by remember { mutableStateOf(false) }
     val ref = TrashRef(cardId, title, referenceCardId)
 
     val toasts = LocalToasts.current
-    // To the trash, then said so: the toast and its 復原, or the page's own banner. Run in the shell's
-    // scope, so the toast still comes once the card (and this menu) has left its shelf — which, in the
-    // card box, it does at once, before the server answers.
+    // To the trash at once (round 21): the card leaves its shelf, or its page shows its banner, and the
+    // question closes; the server is asked in the shell's scope, so what it says still comes once the
+    // card (and this menu) has gone — the toast and its 復原 where it left a shelf, or the failure, which
+    // puts the card back where it was.
     fun trashNow() {
         if (busy) return
-        busy = true
-        trashFailed = false
+        confirmingTrash = false
         val leaves = trashFeedback == TrashFeedback.Toast
-        if (leaves) {
-            confirmingTrash = false
+        val back: () -> Unit = if (leaves) {
             onLeaving(true)
+            ({ onLeaving(false) })
+        } else {
+            onMoving(CardMove.Trash).also { onTrashed() }
         }
         trash.launch {
             try {
                 trash(ref)
-                confirmingTrash = false
-                onTrashed()
-                if (leaves) offerUndo(ref)
+                if (leaves) {
+                    onTrashed()
+                    offerUndo(ref)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Not moved: the card is back in every list, and the viewer is told — in the toast where it had
-                // left its shelf, else in the question, if one was asked.
-                if (leaves) {
-                    onLeaving(false)
-                    toasts.show(L10n.Me.Actions.trashFailed)
-                } else if (confirmingTrash) trashFailed = true else trashNotice = true
-            } finally {
-                busy = false
+                // Not moved: the card is back where it was, and the viewer is told.
+                back()
+                toasts.show(L10n.Me.Actions.trashFailed)
             }
         }
     }
@@ -157,8 +164,9 @@ fun CardActionsMenu(
             // 轉為草稿: private, as 轉為私人 was (its byline kept, so it comes back as it went).
             MenuRow.Visibility -> OrganicMenuItem(L10n.Me.Actions.makePrivate, IconName.Lock) {
                 if (busy) return@OrganicMenuItem
-                busy = true
-                scope.launch {
+                // Private at once (round 21); the server asked in the shell's scope, which the ⋯ may not outlive.
+                val back = onMoving(CardMove.MakePrivate)
+                trash.launch {
                     try {
                         session.writing.updateCard(cardId, visibility = "private")
                         session.noteCardChange(menuChange(cardId, referenceCardId))
@@ -166,10 +174,9 @@ fun CardActionsMenu(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        // Nothing changed: the card stays as it was, and says so.
-                        changeFailed = true
-                    } finally {
-                        busy = false
+                        // Nothing changed: the card goes back as it was, and says so (a card in the trash meanwhile, in the plain words).
+                        back()
+                        toasts.show(if (e is ApiFailure && e.isInTrash) L10n.Safety.actionError else L10n.Me.Actions.makePrivateFailed)
                     }
                 }
             }
@@ -178,10 +185,7 @@ fun CardActionsMenu(
                 if (busy) return@OrganicMenuItem
                 when (trashAsk(referenceCardId, published, visibility, anonymous, referenceAnonymous)) {
                     TrashAsk.AtOnce -> trashNow()
-                    TrashAsk.Ask -> {
-                        trashFailed = false
-                        confirmingTrash = true
-                    }
+                    TrashAsk.Ask -> confirmingTrash = true
                     // Whether the original is anonymous, read first (the ⋯ waits meanwhile).
                     TrashAsk.LookUp -> {
                         busy = true
@@ -194,11 +198,7 @@ fun CardActionsMenu(
                                 null
                             }
                             busy = false
-                            if (originalAnonymous == true) trashNow()
-                            else {
-                                trashFailed = false
-                                confirmingTrash = true
-                            }
+                            if (originalAnonymous == true) trashNow() else confirmingTrash = true
                         }
                     }
                 }
@@ -210,7 +210,7 @@ fun CardActionsMenu(
         OrganicMenu(items, L10n.Me.Actions.menuLabel, seed, hue = hue, trigger = trigger)
     }
     // To the trash, where it can be restored: the plain solid fill, as 取消共振's — only the connection it
-    // takes back doesn't come back, which is what the question is for.
+    // takes back doesn't come back, which is what the question is for. It closes as it is answered.
     if (confirmingTrash) OrganicConfirmDialog(
         title = L10n.Me.Actions.trashResonanceTitle,
         body = L10n.Me.Actions.trashResonanceBody(Trash.DAYS),
@@ -218,18 +218,17 @@ fun CardActionsMenu(
         confirmLabel = L10n.Me.Actions.trashResonanceConfirm,
         onCancel = { confirmingTrash = false },
         onConfirm = ::trashNow,
-        busy = busy,
+        busy = false,
+        busyLabel = L10n.Me.Actions.delete,
         seed = seed + 5,
-        error = if (trashFailed) L10n.Safety.actionError else null,
     )
-    if (trashNotice) OneExitNotice(L10n.Me.Actions.delete, L10n.Safety.actionError, seed = seed + 13) { trashNotice = false }
-    if (changeFailed) OrganicAlert(L10n.Safety.actionError, seed = seed + 3) { changeFailed = false }
     if (unresonating && referenceCardId != null) UnresonateDialog(
         session, cardId, referenceCardId, referenceTitle, seed = seed + 9,
-        onDone = {
+        onSent = {
             unresonating = false
-            onChanged()
+            onMoving(CardMove.Unresonate)
         },
+        onDone = onChanged,
         onCancel = { unresonating = false },
     )
 }
@@ -274,7 +273,9 @@ internal fun menuChange(cardId: String, referenceCardId: String?) = Session.Card
  * "Stop resonating with 〈title〉?" — the card stays, answering nothing; the server lets go of its
  * link to the original. The title is the page's when it has it, else read once the question is
  * asked (until then the question keeps its place unwritten; one that can't be read is the plain
- * words). Nothing here is irreversible, so the verb is the plain solid fill.
+ * words). Nothing here is irreversible, so the verb is the plain solid fill. Answered, it closes at
+ * once and the link is dropped where it shows ([onSent], round 21: returning the way back); the
+ * server asked in the account's scope — refused, the link comes back and a toast says so.
  */
 @Composable
 private fun UnresonateDialog(
@@ -283,14 +284,13 @@ private fun UnresonateDialog(
     original: String,
     knownTitle: String?,
     seed: Double,
+    onSent: () -> (() -> Unit),
     onDone: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
+    val toasts = LocalToasts.current
     var title by remember { mutableStateOf(knownTitle) }
     var looking by remember { mutableStateOf(knownTitle == null) }
-    var busy by remember { mutableStateOf(false) }
-    var failed by remember { mutableStateOf(false) }
     LaunchedEffect(original) {
         if (title == null) {
             title = try {
@@ -310,10 +310,8 @@ private fun UnresonateDialog(
         confirmLabel = L10n.Me.Actions.unresonateConfirm,
         onCancel = onCancel,
         onConfirm = {
-            if (busy) return@OrganicConfirmDialog
-            busy = true
-            failed = false
-            scope.launch {
+            val back = onSent()
+            session.launch {
                 try {
                     session.writing.unresonate(original, cardId)
                     // The card's page, the original's resonances, the box's shelves and the thought map.
@@ -322,15 +320,12 @@ private fun UnresonateDialog(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    failed = true
-                } finally {
-                    busy = false
+                    back()
+                    toasts.show(L10n.Me.Actions.unresonateFailed)
                 }
             }
         },
-        busy = busy,
         seed = seed,
-        error = if (failed) L10n.Safety.actionError else null,
         titlePending = looking,
     )
 }

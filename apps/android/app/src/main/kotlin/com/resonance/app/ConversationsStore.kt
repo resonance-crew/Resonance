@@ -120,6 +120,36 @@ class ConversationsStore {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var rebuilding: Job? = null
 
+    /**
+     * Conversations deleted from their thread a moment ago (round 21), left out of the list before the
+     * server answers: `true` once it has (they stay out until Firestore no longer lists them, then are
+     * forgotten — a new conversation between the two has the same id).
+     */
+    private val hidden = HashMap<String, Boolean>()
+
+    /** Conversation [pair] leaves the list at once (its deletion asked for). */
+    fun hide(pair: String) {
+        hidden[pair] = false
+        rebuildSoon()
+    }
+
+    /** The server deleted [pair]: it stays out until Firestore says so too. */
+    fun deleted(pair: String) {
+        if (pair in hidden) hidden[pair] = true
+        rebuildSoon()
+    }
+
+    /** The deletion of [pair] was refused: it is back in the list, as Firestore has it. */
+    fun unhide(pair: String) {
+        if (hidden.remove(pair) != null) rebuildSoon()
+    }
+
+    private fun rebuildSoon() {
+        if (uid == null) return
+        rebuilding?.cancel()
+        rebuilding = scope.launch { rebuild() }
+    }
+
     fun start(uid: String) {
         stop()
         this.uid = uid
@@ -184,6 +214,7 @@ class ConversationsStore {
         people.clear()
         missing.clear()
         retry.clear()
+        hidden.clear()
         uid = null
         rawConversations = emptyList()
         _ids.value = emptySet()
@@ -221,8 +252,11 @@ class ConversationsStore {
                 }
             }.awaitAll()
         }
-        // A row whose profile is gone is skipped; blocked people drop out entirely.
+        // A deletion the server has made and Firestore now shows is over: the id may come back as a new conversation.
+        hidden.entries.removeAll { (pair, done) -> done && rawConversations.none { it.id == pair } }
+        // A row whose profile is gone is skipped; blocked people drop out entirely, and so does one being deleted.
         val conversations = rawConversations.mapNotNull { doc ->
+            if (doc.id in hidden) return@mapNotNull null
             val otherId = other(doc, uid)
             val person = otherId?.let { people[it] }
             if (otherId == null || otherId in blocked || person == null) return@mapNotNull null

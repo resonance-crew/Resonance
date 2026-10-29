@@ -1,53 +1,128 @@
 package com.resonance.app.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
+import com.resonance.api.models.FeedCard
 import com.resonance.app.NotificationsStore
+import com.resonance.app.Person
 import com.resonance.app.Session
-import com.resonance.design.readableColumn
 import com.resonance.design.AppFonts
+import com.resonance.design.CardPalette
 import com.resonance.design.EmptyAction
+import com.resonance.design.HandDrawnAvatar
+import com.resonance.design.Mixes
 import com.resonance.design.OrganicEmptyState
-import com.resonance.design.plainClickable
+import com.resonance.design.OrganicIcon
 import com.resonance.design.SharedShimmer
 import com.resonance.design.Skeleton
-import com.resonance.design.WavyDivider
+import com.resonance.design.WobRectShape
+import com.resonance.design.avatarFill
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
+import com.resonance.design.readableColumn
+import com.resonance.design.toPath
+import com.resonance.geometry.SegValue
+import com.resonance.geometry.WobRectOptions
+import com.resonance.geometry.seedFromString
+import com.resonance.geometry.wavyVertical
 import com.resonance.kit.l10n.L10n
+import com.resonance.kit.l10n.Strings
+import com.resonance.kit.reading.cardsByKey
+import kotlinx.coroutines.delay
+import java.time.Instant
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 /**
- * Notifications, live (web: NotificationBell). Each one says who did what; a
- * note shows its words; tapping opens where it happened and marks it read.
+ * Notifications, live (web: NotificationBell, round 21). The rows stand in parts by time — 今天, 這週,
+ * 更早 — apart by air alone, no rules between them. Each says who did what: their face on the left,
+ * their pen name in bold and what they did (a note's own words quoted under it, in its card's colour),
+ * and when; the card it is about on the right. Unread: the words in the text's ink and the dot ending
+ * the first line; read, muted. Tapping opens where it happened and marks it read.
  */
 @Composable
 fun NotificationsScreen(session: Session, open: (Route) -> Unit) {
     val items by session.notifications.items.collectAsStateWithLifecycle()
     val loaded by session.notifications.loaded.collectAsStateWithLifecycle()
     val failed by session.notifications.failed.collectAsStateWithLifecycle()
+    val extras by session.notifications.extras.collectAsStateWithLifecycle()
+    // Who each row is from and the card it is about: asked once per appearance of the screen, for what
+    // isn't known yet — the rows as they arrive, one read after another (never cut short by the next).
+    LaunchedEffect(session) {
+        val asked = HashSet<String>()
+        session.notifications.items.collect { now ->
+            session.notifications.loadExtras(
+                now, asked,
+                person = { uid -> session.conversations.person(uid) ?: session.notifications.readPerson(uid) },
+                cards = { ids -> session.reading.cardsByKey(ids).also { read -> read.values.filterNotNull().forEach(session.cardCache::rememberPreview) } },
+            )
+        }
+    }
+    // The rows' times and parts follow the clock while the screen is open.
+    var now by remember { mutableStateOf(Instant.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000)
+            now = Instant.now()
+        }
+    }
     TabScreen(L10n.App.Nav.notifications, titleInBar = true) {
         when {
             // Nothing read, and the listener failed: a retry, not a loader forever.
             !loaded && failed -> item {
                 OrganicEmptyState(L10n.Native.loadError, L10n.Native.retry, { session.notifications.resume() }, action = EmptyAction.Outline)
             }
-            // Still reading: the rows' own shapes between the same wavy rules, not a loader.
+            // Still reading: the rows' own shapes, not a loader.
             !loaded -> item(key = "skeleton") { NotificationsSkeleton() }
             items.isEmpty() -> item {
                 OrganicEmptyState(
@@ -55,31 +130,52 @@ fun NotificationsScreen(session: Session, open: (Route) -> Unit) {
                     fill = true, modifier = Modifier.fillParentMaxHeight(),
                 )
             }
-            else -> itemsIndexed(items, key = { _, it -> it.id }, contentType = { _, _ -> "notification" }) { i, item ->
-                Column(Modifier.readableColumn().padding(horizontal = 20.dp)) {
-                    if (i > 0) WavyDivider(seed = 29.0 + i * 7)
-                    NotificationRow(item, session, open)
+            else -> bellParts(items, now).forEachIndexed { part, (group, rows) ->
+                item(key = "part:${group.name}", contentType = "bellPart") {
+                    BasicText(
+                        group.title,
+                        style = AppFonts.body(13f, 600, lineHeight = 1.4f, color = Tokens.TextMuted),
+                        modifier = Modifier.readableColumn().padding(horizontal = 20.dp)
+                            .padding(top = if (part == 0) 0.dp else 14.dp, bottom = 4.dp)
+                            .semantics { heading() },
+                    )
+                }
+                items(rows, key = { it.id }, contentType = { "notification" }) { item ->
+                    Box(Modifier.padding(top = if (item === rows.first()) 0.dp else 2.dp)) {
+                        NotificationRow(item, extras, BellTime.words(item.createdAt?.toInstant() ?: now, now, Strings.language.locale, L10n.App.Notifications.justNow)) {
+                            // The bell row is read; a conversation is marked read only by opening it, which an anonymous card's row never does.
+                            session.notifications.markRead(item)
+                            notificationRoute(item)?.let(open)
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+/** The row's face, its card, and the gap between the parts of a row. */
+private val BellFace = 40.dp
+private val BellThumb = 46.dp
+
 /**
- * The bell's rows still on their way: six of a row's measures — who did what, and under two of them
- * a note's words — parted by the list's own wavy rules. iOS's NotificationsSkeleton.
+ * The bell's rows still on their way: six of a row's measures — the 40 face, two lines of words, and
+ * on two of them the 46 card — with no rules between them. iOS's NotificationsSkeleton.
  */
 @Composable
 private fun NotificationsSkeleton() {
     // One clock for its blocks (composed together).
     SharedShimmer {
         val lines = listOf(0.82f, 0.64f, 0.9f, 0.58f, 0.76f, 0.7f)
-        Column(Modifier.readableColumn().padding(horizontal = 20.dp).semantics { contentDescription = L10n.Home.moreLoading }) {
+        Column(Modifier.readableColumn().padding(horizontal = 20.dp).semantics { contentDescription = L10n.Home.moreLoading }, verticalArrangement = Arrangement.spacedBy(2.dp)) {
             for (i in lines.indices) {
-                if (i > 0) WavyDivider(seed = 29.0 + i * 7)
-                Column(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 15.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                    Skeleton(Modifier.fillMaxWidth(lines[i]), height = 14.dp)
-                    if (i == 1 || i == 3) Skeleton(Modifier.fillMaxWidth(0.46f), height = 12.dp)
+                Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Skeleton(Modifier.width(BellFace), height = BellFace, radius = 13.dp)
+                    Column(Modifier.weight(1f).padding(top = 3.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Skeleton(Modifier.fillMaxWidth(lines[i]), height = 14.dp)
+                        Skeleton(Modifier.fillMaxWidth(0.3f), height = 11.dp)
+                    }
+                    if (i == 0 || i == 2) Skeleton(Modifier.width(BellThumb), height = BellThumb, radius = 12.dp)
                 }
             }
         }
@@ -87,51 +183,180 @@ private fun NotificationsSkeleton() {
 }
 
 /**
- * One row as the bell's list draws it: 14px, the text color while unread and
- * muted once read (never bolder), a 6px terracotta dot 8 after the words.
+ * One row (BellRow.tsx): who did it — their face — on the left; their pen name in bold and what they
+ * did, a note's words quoted under it, and when; the card it is about on the right. Unread: the
+ * sentence in the text's ink and the 6 terracotta dot 8 after it, ending its first line (TalkBack
+ * hears 未讀); read, the sentence muted, the name always in the text's ink. A press washes the row's
+ * own wobbly outline, as the conversation list's rows do.
  */
 @Composable
-private fun NotificationRow(item: NotificationsStore.Item, session: Session, open: (Route) -> Unit) {
-    Column(
+private fun NotificationRow(item: NotificationsStore.Item, extras: NotificationsStore.Extras, time: String, onClick: () -> Unit) {
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val hovered by source.collectIsHoveredAsState()
+    val seed = (seedFromString(item.id) % 97).toDouble()
+    val wash = Tokens.TowardInk.copy(alpha = 0.045f)
+    val unread = item.isUnread
+    val sentence = bellSentence(item)
+    val cardId = item.cardId?.takeIf { it.isNotEmpty() }
+    val card = cardId?.let { extras.cards[it] }
+    val preview = item.preview?.takeIf { item.type == "note" && it.isNotEmpty() }
+    Row(
         Modifier
+            .readableColumn()
+            .padding(horizontal = 8.dp)
             .fillMaxWidth()
-            .plainClickable {
-                // The bell row is read; a conversation is marked read only by opening it, which an anonymous card's row never does.
-                session.notifications.markRead(item)
-                notificationRoute(item)?.let(open)
+            .hoverable(source)
+            .pointerHoverIcon(PointerIcon.Hand)
+            .drawWithCache {
+                val h = (size.height / density).toDouble()
+                val outline = WobRectShape(
+                    h * 0.28, seed, mag = 2.4,
+                    options = WobRectOptions(curve = 1.3, cornerJitter = 2.4, cornerOffset = h * 0.05, segmentsH = SegValue.Count(3.0), segmentsV = SegValue.Count(1.0)),
+                ).createOutline(size, layoutDirection, this)
+                onDrawBehind { if (pressed || hovered) drawOutline(outline, wash) }
             }
-            .padding(horizontal = 2.dp, vertical = 13.dp),
-        verticalArrangement = Arrangement.spacedBy(5.dp),
+            .clickable(source, indication = null, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            BasicText(
-                textFor(item),
-                style = AppFonts.body(14f, lineHeight = 1.5f, color = if (item.isUnread) Tokens.Text else Tokens.TextMuted),
-                modifier = Modifier.weight(1f, fill = false),
-            )
-            if (item.isUnread) {
-                val dot = Tokens.Terracotta
-                Box(Modifier.size(6.dp).semantics { contentDescription = L10n.App.Notifications.unread }.drawBehind { drawCircle(dot) })
-            }
+        if (sentence.handle != null) {
+            val uid = item.fromUserId.orEmpty()
+            Face(extras.people[uid], sentence.handle, uid, settled = uid.isEmpty() || extras.personSettled(uid))
+        } else {
+            GlyphTile(item.type)
         }
-        if (item.type == "note" && !item.preview.isNullOrEmpty()) {
-            BasicText("「${item.preview}」", style = AppFonts.body(13f, color = Tokens.TextMuted))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Sentence(sentence, unread)
+            if (preview != null) NoteQuote(preview, card)
+            BasicText(time, style = AppFonts.body(12f, lineHeight = 1.4f, color = Tokens.TextMuted))
+        }
+        when {
+            cardId == null -> Unit
+            card != null -> CardThumb(card)
+            // Still being read: its place kept; read and not there (gone, in the trash), nothing — the words take the room.
+            !extras.cardSettled(cardId) -> Box(Modifier.size(BellThumb).background(Mixes.SkeletonBase, RoundedCornerShape(12.dp)))
         }
     }
 }
 
-private fun textFor(item: NotificationsStore.Item): String {
-    val handle = item.fromHandle ?: ""
-    return when (item.type) {
-        "invite" -> L10n.App.Notifications.invite(handle)
-        "invite_accepted" -> L10n.App.Notifications.inviteAccepted(handle)
-        "message" -> L10n.App.Notifications.message(handle)
-        "resonance_summary" -> L10n.App.Notifications.resonanceSummary(item.count ?: 0)
-        "translation_done" -> L10n.App.Notifications.translationDone
-        "resonance" -> L10n.App.Notifications.resonance(handle)
-        "note" -> L10n.App.Notifications.note(handle)
-        "card_link" -> L10n.App.Notifications.cardLink(handle)
-        else -> item.type
+/**
+ * The sentence: the pen name semibold in the text's ink, the words around it in the text's ink while
+ * unread and muted once read, and the unread dot 8 after it — inline, so it ends the sentence's line.
+ */
+@Composable
+private fun Sentence(sentence: BellSentence, unread: Boolean) {
+    val density = LocalDensity.current
+    val name = Tokens.Text
+    val dot = Tokens.Terracotta
+    val text = buildAnnotatedString {
+        append(sentence.before)
+        if (sentence.handle != null) withStyle(SpanStyle(fontFamily = AppFonts.family(AppFonts.Family.Body, 600), color = name)) { append(sentence.handle) }
+        append(sentence.after)
+        if (unread) appendInlineContent(DOT, "•")
+    }
+    val inline = if (!unread) emptyMap() else mapOf(
+        DOT to InlineTextContent(
+            with(density) { Placeholder(14.dp.toSp(), 6.dp.toSp(), PlaceholderVerticalAlign.TextCenter) },
+        ) {
+            Box(Modifier.fillMaxSize().padding(start = 8.dp).drawBehind { drawCircle(dot) })
+        },
+    )
+    val spoken = if (unread) "${sentence.whole}, ${L10n.App.Notifications.unread}" else sentence.whole
+    BasicText(
+        text,
+        style = AppFonts.body(14f, lineHeight = 1.45f, color = if (unread) Tokens.Text else Tokens.TextMuted),
+        inlineContent = inline,
+        modifier = Modifier.clearAndSetSemantics { contentDescription = spoken },
+    )
+}
+
+private const val DOT = "unread"
+
+/**
+ * Who it is from: their photo, else their initials on their colour (the conversation list's avatar);
+ * a quiet tile while they are read; a profile that is gone, the initials of the pen name the row names.
+ */
+@Composable
+private fun Face(person: Person?, handle: String, uid: String, settled: Boolean) {
+    if (person == null && !settled) {
+        Box(Modifier.size(BellFace).background(Mixes.SkeletonBase, RoundedCornerShape(13.dp, 15.dp, 13.dp, 15.dp)))
+        return
+    }
+    val initials = person?.initials ?: handle.codePoints().limit(2).toArray().joinToString("") { String(Character.toChars(it)) }.uppercase().ifEmpty { "?" }
+    HandDrawnAvatar(
+        initials, person?.avatarUrl, avatarFill(person?.accentColor),
+        size = BellFace, seed = seedOr(person?.avatarSeed, (seedFromString(uid.ifEmpty { handle }) % 50 + 1).toDouble()),
+    )
+}
+
+/** A row with nobody behind it (a summary, a translation, an expired invite): its glyph on a light terracotta tile. */
+@Composable
+private fun GlyphTile(type: String) {
+    val glyph = when (type) {
+        "resonance_summary" -> IconName.Sparkle
+        "translation_done" -> IconName.Globe
+        "invite_expired" -> IconName.Users
+        else -> IconName.Bell
+    }
+    Box(
+        Modifier.size(BellFace).background(Tokens.TerracottaLight.copy(alpha = 0.4f), RoundedCornerShape(13.dp, 15.dp, 13.dp, 15.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        OrganicIcon(glyph, size = 18.dp, color = Tokens.Terracotta)
+    }
+}
+
+/**
+ * A note's words as the bell quotes them (C's note quote): the story's serif, 14, up to three lines,
+ * 14 in after a wavy rule at the house pen in its card's family pen — the quiet sheet pen until the
+ * card is known.
+ */
+@Composable
+private fun NoteQuote(text: String, card: FeedCard?) {
+    val pen = if (card != null) CardPalette.of(previewFamily(card.accentHue, card.id)).border else Tokens.FieldBorderHover
+    BasicText(
+        text,
+        style = AppFonts.style(AppFonts.Family.HeadingCJK, 14f, lineHeight = 1.65f, color = Tokens.Text),
+        maxLines = 3,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .padding(vertical = 1.dp)
+            .drawBehind {
+                val h = size.height / density
+                val path = wavyVertical(h.toDouble(), 7.0, 1.4, max(2, (h / 20).roundToInt())).toPath(density, 3.dp.toPx(), 0f)
+                drawPath(path, pen, style = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round))
+            }
+            .padding(start = 14.dp),
+    )
+}
+
+/**
+ * The card a row is about, at 46: its cover clipped to a small wobbly square with no pen line (a feed
+ * card's picture has none either), else its family's fill with the first character of its title.
+ */
+@Composable
+private fun CardThumb(card: FeedCard) {
+    val family = CardPalette.of(previewFamily(card.accentHue, card.id))
+    val seed = (seedFromString(card.id) % 97).toDouble()
+    val shape = remember(seed) {
+        WobRectShape(
+            BellThumb.value * 0.24, seed, mag = 1.1,
+            options = WobRectOptions(curve = 1.2, cornerJitter = 1.2, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0)),
+        )
+    }
+    val cover = card.imageUrl
+    val colors = family.colors
+    Box(
+        Modifier.size(BellThumb).clip(shape).background(if (cover != null) colors.skeleton else colors.fill),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (cover != null) {
+            AsyncImage(cover, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        } else {
+            val first = card.title.trim().let { t -> if (t.isEmpty()) "" else String(Character.toChars(t.codePointAt(0))) }
+            BasicText(first, style = AppFonts.style(AppFonts.Family.HeadingCJK, 19f, 600, lineHeight = 1f, color = colors.deep))
+        }
     }
 }
 

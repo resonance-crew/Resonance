@@ -33,8 +33,9 @@ internal fun deleteForeverOutcome(e: Throwable?): DeleteForever = when {
  * 永久刪除, asked first in red (it can't be undone): 永久刪除這張卡片？ · 刪除後無法復原，卡片的故事與共振連結
  * 都會消失 · 先留著 | 永久刪除. Gone, it says 已永久刪除 and [onDeleted] runs; restored meanwhile on
  * another device (the server's 409), the question closes and says 這張卡片已經不在垃圾桶裡; any other
- * failure is said in the question, which stays for another try. On the trash shelf ([onLeaving]) the card
- * leaves it as the verb is pressed, the question with it; a failure then brings the card back and says so in a toast.
+ * failure is said in the question, which stays for another try. With [onLeaving] (the trash shelf, the card's
+ * own page: round 21) the card leaves as the verb is pressed, the question with it; a failure then brings the
+ * card back and says so in a toast.
  */
 @Composable
 internal fun DeleteForeverDialog(
@@ -81,8 +82,11 @@ internal fun DeleteForeverDialog(
                         DeleteForever.NotInTrash -> {
                             onClose()
                             toasts.show(L10n.Me.Actions.notInTrash)
-                            // Restored on another device, off the shelf it had left: it is not coming back to the trash.
-                            onLeaving?.let { onDeleted() }
+                            // Restored on another device: back wherever it is now, but not to the trash shelf it had left.
+                            onLeaving?.let {
+                                it(false)
+                                onDeleted()
+                            }
                         }
                         DeleteForever.Failed -> if (onLeaving != null) {
                             onLeaving(false)
@@ -94,7 +98,9 @@ internal fun DeleteForeverDialog(
                 }
             }
         },
-        busy = busy,
+        // Leaving at once, the verb never works; it keeps its busy width all the same.
+        busy = if (onLeaving == null) busy else false,
+        busyLabel = L10n.Me.Actions.delete,
         seed = seed,
         error = if (failed) L10n.Safety.actionError else null,
         destructive = true,

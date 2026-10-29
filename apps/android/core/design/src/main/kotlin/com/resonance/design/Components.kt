@@ -84,6 +84,7 @@ import com.resonance.geometry.wobCircle
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -457,15 +458,18 @@ fun OrganicButton(
      */
     block: Boolean = false,
     /**
-     * Working on the last tap (design note B6): the label stays, a [ButtonLoader] takes the glyph's
-     * place (or stands 6 before the label, the pair kept centred), the face keeps its full colour
-     * and its size, and the button takes no tap — TalkBack hears it as busy.
+     * Working on the last tap (design note B6): a [ButtonLoader] takes the glyph's place at its size, or
+     * — a label alone — the loop and the working words ([loadingTitle], else the label) stand centred
+     * where the idle words were; the face keeps its full colour and its size, and the button takes no
+     * tap — TalkBack hears it as busy. Passed at all (false too), it marks a button that can be busy:
+     * such a button is always as wide as its busy self (round 21) — its label's room the wider of the
+     * idle words and the loop + 6 + the working words — so going busy never changes its size and the
+     * loop never presses against the pill's end. Null: a button that never works keeps its own size.
      */
-    loading: Boolean = false,
+    loading: Boolean? = null,
     /**
-     * A shorter label while [loading] (the bare verb: 刪除 for 刪除卡片). The idle face keeps the
-     * button's size, unseen and still what TalkBack reads; the loader and this label share its room,
-     * centred, one line — so the button never grows and the loader has air.
+     * A shorter label while [loading] (the bare verb: 刪除 for 刪除卡片). The idle words stay laid out,
+     * unseen and still what TalkBack reads; the loop and these words share their room, centred, one line.
      */
     loadingTitle: String? = null,
     /** A face of its own instead of [variant]'s (a card's family: the writer's cover controls, round 9 §8). */
@@ -479,11 +483,12 @@ fun OrganicButton(
     outline: Color? = null,
     onClick: () -> Unit,
 ) {
-    val active = enabled && !loading
+    val busy = loading == true
+    val active = enabled && !busy
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val haptic = LocalHapticFeedback.current
-    val solidDisabled = !enabled && !loading && disabledFace != null
+    val solidDisabled = !enabled && !busy && disabledFace != null
     val face = if (solidDisabled) disabledFace!! else face ?: ButtonFace.of(variant)
     val grainInk = GrainInk.current
     val text = face.label
@@ -525,16 +530,17 @@ fun OrganicButton(
             // A block's label takes the largest step down to 85% that fits one line, then wraps at 85%.
             val autoSize = if (block) remember(labelStyle.fontSize) { OneLineFirst(labelStyle.fontSize) } else null
             val label: @Composable () -> Unit = { BasicText(title, style = labelStyle, autoSize = autoSize) }
-            // Nothing for the loop to stand in for: it goes 6 before the label, outside the label's
-            // measured room, and the two slide half that over so the pair stays centred.
-            if (icon == null && image == null) LoaderBeforeLabel(busy, text, if (small) ButtonLoaderSmall else ButtonLoaderSize, label)
-            else label()
+            // Nothing for the loop to stand in for, and the button can be busy: the idle words and the busy
+            // line share one room, both laid out, only one shown ([BusyLabel]).
+            if (icon == null && image == null && loading != null) {
+                BusyLabel(busy, text, if (small) ButtonLoaderSmall else ButtonLoaderSize, loadingTitle ?: title, labelStyle, label)
+            } else label()
         }
     }
     Row(
         modifier
             .then(if (block) Modifier.fillMaxWidth().heightIn(min = 52.dp) else Modifier)
-            .fade(if (loading || enabled || solidDisabled) 1f else ButtonFace.DISABLED_ALPHA)
+            .fade(if (busy || enabled || solidDisabled) 1f else ButtonFace.DISABLED_ALPHA)
             .scale(if (pressed) 0.97f else 1f)
             .drawWithCache {
                 val o = shape.createOutline(size, layoutDirection, this)
@@ -552,54 +558,39 @@ fun OrganicButton(
                 onClick()
             }
             .then(if (iconOnly) Modifier.semantics { contentDescription = title } else Modifier)
-            .then(if (loading) Modifier.semantics { stateDescription = L10n.App.busy } else Modifier)
+            .then(if (busy) Modifier.semantics { stateDescription = L10n.App.busy } else Modifier)
             .padding(padding),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = arrangement,
     ) {
-        if (loading && loadingTitle != null && !iconOnly) {
-            // The idle face keeps the button's size (and is what TalkBack reads); the loader and the
-            // short label share its room, centred.
-            Box(contentAlignment = Alignment.Center) {
-                Row(Modifier.alpha(0f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = arrangement) { content(false) }
-                Row(
-                    Modifier.matchParentSize().clearAndSetSemantics { },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-                ) {
-                    ButtonLoader(text, if (small) ButtonLoaderSmall else ButtonLoaderSize)
-                    BasicText(loadingTitle, style = labelStyle, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                }
-            }
-        } else content(loading)
+        content(busy)
+    }
+}
+
+/**
+ * The label of a button that can be busy, with nothing for the loop to stand in for (round 21; the
+ * web's `busyLabel`): the idle words and the busy line — the loop ([size]) 6 before the working
+ * [words] — lie in one box, each laid out always, so the button is as wide as the wider of the two
+ * whether it is [busy] or not; only one shows, centred. The idle words stay what TalkBack reads.
+ */
+@Composable
+private fun BusyLabel(busy: Boolean, color: Color, size: Dp, words: String, style: TextStyle, label: @Composable () -> Unit) {
+    Box(contentAlignment = Alignment.Center) {
+        Box(Modifier.alpha(if (busy) 0f else 1f), contentAlignment = Alignment.Center) { label() }
+        Row(
+            Modifier.alpha(if (busy) 1f else 0f).clearAndSetSemantics { },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (busy) ButtonLoader(color, size) else Box(Modifier.size(size))
+            BasicText(words, style = style, maxLines = 1, softWrap = false)
+        }
     }
 }
 
 /** The button loop's box: 16 in md and lg buttons, 14 in sm (design note B6). */
 val ButtonLoaderSize = 16.dp
 val ButtonLoaderSmall = 14.dp
-
-/**
- * A label that a [ButtonLoader] stands before while [loading]: the loop [size] wide, 6 before the
- * label's start, drawn outside the label's measured width; both slide (size + 6) / 2 toward the
- * end so the pair keeps the label's centre — the button measures the same either way. The loop
- * fades in and the label slides in 120 ms (at once with animations off).
- */
-@Composable
-private fun LoaderBeforeLabel(loading: Boolean, color: Color, size: Dp, label: @Composable () -> Unit) {
-    val context = LocalContext.current
-    val still = remember(context) { context.prefersReducedMotion() }
-    val shown by animateFloatAsState(if (loading) 1f else 0f, tween(if (still) 0 else 120, easing = ButtonEaseOut), label = "buttonLoader")
-    val density = LocalDensity.current
-    val shiftPx = with(density) { ((size + 6.dp) / 2).toPx() }
-    Box(Modifier.graphicsLayer { translationX = shiftPx * shown }, contentAlignment = Alignment.CenterStart) {
-        label()
-        if (shown > 0f) ButtonLoader(color, size, Modifier.offset(x = -(size + 6.dp)).alpha(shown))
-    }
-}
-
-/** CSS `ease-out`, the label's slide. */
-private val ButtonEaseOut = androidx.compose.animation.core.CubicBezierEasing(0f, 0f, 0.58f, 1f)
 
 /**
  * ButtonLoader (design note B6): a pen loop drawing itself round inside a button in progress —
@@ -982,8 +973,13 @@ fun OrganicEmptyState(
     seed: Double = 23.0,
     fill: Boolean = false,
     modifier: Modifier = Modifier,
-    /** The action is working on its last tap: its loader shows and it takes no other ([OrganicButton]'s `loading`). */
-    actionLoading: Boolean = false,
+    /**
+     * The action is working on its last tap: its loader shows and it takes no other ([OrganicButton]'s
+     * `loading`). Passed at all (false too), the action can be busy and keeps its busy width.
+     */
+    actionLoading: Boolean? = null,
+    /** The action's shorter words while it works (還原 for 還原並繼續寫: [OrganicButton]'s `loadingTitle`). */
+    actionLoadingTitle: String? = null,
 ) {
     val content: @Composable () -> Unit = {
         Column(
@@ -1012,8 +1008,8 @@ fun OrganicEmptyState(
             if (actionTitle != null && onAction != null) {
                 Box(Modifier.height(20.dp))
                 when (action) {
-                    EmptyAction.Primary -> OrganicButton(actionTitle, small = icon != null, loading = actionLoading, onClick = onAction)
-                    EmptyAction.Outline -> OrganicButton(actionTitle, variant = ButtonVariant.Tonal, small = icon != null, loading = actionLoading, onClick = onAction)
+                    EmptyAction.Primary -> OrganicButton(actionTitle, small = icon != null, loading = actionLoading, loadingTitle = actionLoadingTitle, onClick = onAction)
+                    EmptyAction.Outline -> OrganicButton(actionTitle, variant = ButtonVariant.Tonal, small = icon != null, loading = actionLoading, loadingTitle = actionLoadingTitle, onClick = onAction)
                 }
             }
         }

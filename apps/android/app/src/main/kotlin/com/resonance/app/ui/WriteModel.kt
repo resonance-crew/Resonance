@@ -352,8 +352,8 @@ class WriteModel(
     /** The step's one button's words ([stepVerb]). */
     val verb: String get() = verbWords(stepVerb)
 
-    /** The verb's shorter words while it works (儲存修改 → 儲存), or none. */
-    val verbBusyLabel: String? get() = if (stepVerb == StepVerb.Update) L10n.Write.saveShort else null
+    /** The verb's shorter words while it works ([verbBusyWords]: 儲存修改 → 儲存, 匿名發布 → 發布, 轉為私人卡 → 儲存), or none. */
+    val verbBusyLabel: String? get() = verbBusyWords(stepVerb)
 
     /**
      * A live card's 「按下之後，讀者看到的就會是這個版本…」: only for a card readers have whose choice keeps
@@ -1124,6 +1124,16 @@ internal fun verbWords(verb: StepVerb): String = when (verb) {
     StepVerb.Save -> L10n.Write.PublishPanel.save
     StepVerb.Update -> L10n.Write.PublishPanel.update
     StepVerb.MakeDraft -> L10n.Write.PublishPanel.makeDraft
+}
+
+/**
+ * A step verb's short working words (round 21), where its own words say more than the bare verb: 儲存修改 and
+ * 轉為私人卡 say 儲存, 匿名發布 says 發布; the others are short already.
+ */
+internal fun verbBusyWords(verb: StepVerb): String? = when (verb) {
+    StepVerb.Update, StepVerb.MakeDraft -> L10n.Write.saveShort
+    StepVerb.PublishAnonymously -> L10n.Write.PublishPanel.publish
+    StepVerb.Publish, StepVerb.Save -> null
 }
 
 /** What a verb that didn't go through says (the day's limit and a gone card aside, [failureText]): 沒發布成功 for a publish, 沒儲存成功 otherwise. */

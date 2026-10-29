@@ -287,10 +287,12 @@ class WriterStepsTest {
         assertEquals(Triple(StepVerb.Publish, "發布", "發布這張卡片"), Triple(kept.stepVerb, kept.verb, kept.stepTitle))
         kept.choose(Audience.Anonymous)
         assertEquals(Triple(StepVerb.PublishAnonymously, "匿名發布", "發布這張卡片"), Triple(kept.stepVerb, kept.verb, kept.stepTitle))
-        // Only 儲存修改 has shorter words at work (儲存).
-        assertNull(live.verbBusyLabel)
+        // At work, the longer verbs say the bare one (round 21): 轉為私人卡 and 儲存修改 say 儲存, 匿名發布 says 發布.
+        assertEquals("儲存", live.verbBusyLabel)
         live.choose(Audience.Public)
         assertEquals("儲存", live.verbBusyLabel)
+        assertEquals("發布", kept.verbBusyLabel)
+        kept.choose(Audience.Public)
         assertNull(kept.verbBusyLabel)
     }
 

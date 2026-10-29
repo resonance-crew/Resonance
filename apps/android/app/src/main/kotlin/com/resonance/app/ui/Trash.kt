@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -86,6 +87,20 @@ class TrashCenter(
 ) {
     /** 「已還原 · 這張卡片回來了，但不再與原本那張卡片共振」 is up. */
     var restoredAlone by mutableStateOf(false)
+
+    /**
+     * Cards deleted for good from their own page's banner (round 21), off every shelf at once — the page
+     * left for the card box before the server answers — and back where they were should it refuse.
+     */
+    private val leaving = mutableStateListOf<String>()
+
+    /** Card [id] leaves the card box's shelves at once ([going]), or comes back (refused, or restored meanwhile elsewhere). */
+    fun leave(id: String, going: Boolean) {
+        if (going) { if (id !in leaving) leaving.add(id) } else leaving.remove(id)
+    }
+
+    /** [cards] without those on their way out ([leave]). */
+    fun shown(cards: List<FeedCard>): List<FeedCard> = if (leaving.isEmpty()) cards else cards.filterNot { it.id in leaving }
 
     private fun change(card: TrashRef) = Session.CardChange(card.id, card.referenceCardId)
 
