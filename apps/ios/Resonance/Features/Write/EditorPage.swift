@@ -42,6 +42,9 @@ enum EditorPage {
             URLQueryItem(name: "placeholder", value: placeholder),
         ]
         if layout == .canvas { query.append(URLQueryItem(name: "layout", value: "canvas")) }
+        // The Mac app: the story's editable root fills its page, so a click anywhere under the words is a click in
+        // the story itself (StoryCanvasField lays no tap area of its own there).
+        if layout == .canvas, ProcessInfo.processInfo.isMacCatalystApp { query.append(URLQueryItem(name: "fill", value: "1")) }
         if let locale { query.append(URLQueryItem(name: "locale", value: locale)) }
         components.queryItems = query
         return components.url!

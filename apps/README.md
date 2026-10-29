@@ -501,6 +501,44 @@ xcrun simctl launch booted com.resonance.stories -emulator YES \
 `-email`/`-password` sign that seeded account in on launch (emulator builds
 only); the sign-in screen also shows an email form in emulator builds.
 
+### The Mac app
+
+The same target built for Mac Catalyst (`SUPPORTS_MACCATALYST`, the owner's call on 2026-10-29): the
+same bundle id `com.resonance.stories`, so it is the Mac half of one App Store record (it takes the
+place of the iPad app the Mac App Store offered as "Designed for iPad"). It draws at the Mac's own size
+(`TARGETED_DEVICE_FAMILY` 6 on macOS, "Optimize Interface for Mac": every control is the app's own
+drawing, so the Mac idiom changes no look, and a story reads at 17, not the iPad's 77 %), runs the
+tablet layouts — the window never narrows past 720 (`MacWindowChrome`), so the phone layout never
+shows — and adds what a Mac app has (`App/MacApp.swift`): no title over the app's own header (the band
+over it is the title bar's, where the traffic lights are — no status bar's room), the menu bar's
+寫卡片 ⌘N, 設定 ⌘,, the four tabs ⌘1…⌘4 and Resonance 支援 (each sent to `MainTabView` as a
+`MacMenuCommand`), and no document items in the File menu. The writer: the story's editable root fills
+its page there (`EditorPage`'s `fill`, no tap area of the host's over it), and the editor reloads
+WebKit's input views as the story takes the focus — without it the first click into a fresh story put
+the caret there but no keys reached it. No QuickType strip either: that was the iPad app on a Mac.
+Entitlements are `Resonance/Resonance-Mac.entitlements` (the sandbox, network, photos, push, App
+Attest, Sign in with Apple).
+
+```bash
+cd apps/ios && xcodegen generate
+xcodebuild -project Resonance.xcodeproj -scheme Resonance -configuration Release \
+  -destination 'generic/platform=macOS,variant=Mac Catalyst' -archivePath build/Resonance-mac.xcarchive \
+  -skipPackagePluginValidation -skipMacroValidation -allowProvisioningUpdates archive
+```
+
+A local run beside the App Store copy on the same Mac takes its own bundle id and container, with
+entitlements that need nothing but a development profile (`keychain-access-groups` for
+`$(AppIdentifierPrefix)com.resonance.stories.macdev` beside the sandbox and network keys — without the
+keychain, Firebase Auth can't keep a session); `-macWindowSize 1440x900` holds the window at a size
+(the store's screenshots):
+
+```bash
+xcodebuild … -configuration Debug -destination 'platform=macOS,variant=Mac Catalyst' \
+  -allowProvisioningUpdates -allowProvisioningDeviceRegistration build \
+  RESONANCE_BUNDLE_SUFFIX=.macdev RESONANCE_MAC_ENTITLEMENTS=<that plist>
+open -n build/Build/Products/Debug-maccatalyst/Resonance.app --args -emulator YES -email … -password …
+```
+
 ## Android
 
 Needs JDK 21 and the Android SDK (compileSdk 37); the Gradle wrapper fetches

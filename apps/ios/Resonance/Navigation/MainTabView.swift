@@ -263,6 +263,17 @@ struct MainTabView: View {
         .onChange(of: tab) { barHiding.show() }
         .onChange(of: bottomBar) { barHiding.show() }
         .onChange(of: scenePhase) { _, phase in if phase == .active { barHiding.show() } }
+        #if targetEnvironment(macCatalyst)
+        // The Mac's menu bar carries ⌘N, ⌘, and ⌘1…⌘4 (MacMenuCommands) and asks for them here.
+        .onReceive(NotificationCenter.default.publisher(for: MacMenuCommand.posted)) { note in
+            guard let command = MacMenuCommand(note) else { return }
+            switch command {
+            case .write: writer.open()
+            case .settings: open(.settings)
+            default: if let t = command.tab { select(t) }
+            }
+        }
+        #else
         // The hardware keyboard's ⌘N opens the writer, as the pen does; ⌘1…⌘4 choose a tab, as a tap does.
         .background {
             Button(L10n.App.Nav.write) { writer.open() }
@@ -278,6 +289,7 @@ struct MainTabView: View {
                     .accessibilityHidden(true)
             }
         }
+        #endif
     }
 
     /// The tablet header's own chrome (round 5 B2, C), drawn once above the stacks over a tab's root:

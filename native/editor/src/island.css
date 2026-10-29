@@ -47,6 +47,8 @@ html.embed .ProseMirror { min-height: 168px; }
 html.canvas, html.canvas body { background: transparent; }
 html.canvas #editor { padding: 0; }
 html.canvas .ProseMirror { min-height: 0; }
+/* ?fill=1 (island.ts): the page's whole height takes a click; the host measures what is written by its last block. */
+html.canvas.fill .ProseMirror { min-height: 100vh; }
 
 /* A link standing alone, as its page's card (island.ts IslandLinkCard): the reader's link card, quiet —
    a light fill cut to its wobbly outline once measured (a rounded block until then), no pen line; its

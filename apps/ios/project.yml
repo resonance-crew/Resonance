@@ -83,16 +83,30 @@ targets:
         product: GoogleSignIn
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.resonance.stories
+        # RESONANCE_BUNDLE_SUFFIX (empty) and RESONANCE_MAC_ENTITLEMENTS let a local Mac run stand beside
+        # the App Store copy on this Mac: its own bundle id and container, ad-hoc signed with entitlements
+        # that need no profile (apps/README.md, "The Mac app").
+        RESONANCE_BUNDLE_SUFFIX: ""
+        PRODUCT_BUNDLE_IDENTIFIER: com.resonance.stories$(RESONANCE_BUNDLE_SUFFIX)
         PRODUCT_NAME: Resonance
-        MARKETING_VERSION: "2.2.1"
-        CURRENT_PROJECT_VERSION: "13"
+        MARKETING_VERSION: "2.3.0"
+        CURRENT_PROJECT_VERSION: "14"
         SWIFT_VERSION: "6.0"
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         SWIFT_APPROACHABLE_CONCURRENCY: "YES"
         # iPhone and iPad (round 5: the iPad layouts — side rail, two-pane Messages, the feed grid).
         TARGETED_DEVICE_FAMILY: "1,2"
+        # The Mac app draws at the Mac's own size ("Optimize Interface for Mac"), not the iPad's scaled to
+        # 77 %: a story read at 13 pt instead of 17 was too small. Every control is the app's own drawing,
+        # so the Mac idiom changes no look (apps/README.md, "The Mac app").
+        "TARGETED_DEVICE_FAMILY[sdk=macosx*]": "1,2,6"
         CODE_SIGN_ENTITLEMENTS: Resonance/Resonance.entitlements
+        # The Mac app (Mac Catalyst, the owner's 2026-10-29 call): the same bundle id as the iPhone and
+        # iPad app (one App Store record, universal purchase), in the Mac's sandbox.
+        SUPPORTS_MACCATALYST: "YES"
+        DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER: "NO"
+        RESONANCE_MAC_ENTITLEMENTS: Resonance/Resonance-Mac.entitlements
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": $(RESONANCE_MAC_ENTITLEMENTS)
         # Device builds sign automatically with the team signed into Xcode
         # (archives: xcodebuild … -allowProvisioningUpdates). Simulator builds
         # sign ad hoc ("Sign to Run Locally"), and Firebase Auth gets the
@@ -126,6 +140,8 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         ITSAppUsesNonExemptEncryption: false
+        # The Mac App Store files a Mac app under a category.
+        LSApplicationCategoryType: public.app-category.social-networking
         # Push: the app hands FCM the APNs token itself (PushCenter.swift), no swizzling.
         FirebaseAppDelegateProxyEnabled: false
         # Google Sign-In: OAuth client and its redirect scheme (GoogleService-Info.plist).

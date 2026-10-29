@@ -996,6 +996,7 @@
     "error": "沒取消成功，再試一次"
   },
   "native": {
+    "menuSupport": "Resonance 支援",
     "loadError": "沒能載入，請再試一次",
     "copy": "複製",
     "saveError": "沒存成，再試一次",

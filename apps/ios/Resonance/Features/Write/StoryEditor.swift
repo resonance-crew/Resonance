@@ -347,6 +347,16 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
         case "focus":
             focused = body["focused"] as? Bool ?? false
             if !focused { caret = nil }
+            // The Mac app (Mac Catalyst): the first click into a fresh story focused it — the caret blinked, the
+            // format bar came — but its keys went nowhere until a second click, UIKit's text input still bound to
+            // nothing. Asked to reload its input views once the story holds the focus, WebKit's content view
+            // takes the keys from the first click.
+            if focused, ProcessInfo.processInfo.isMacCatalystApp {
+                DispatchQueue.main.async { [weak self] in
+                    guard let webView = self?.webView else { return }
+                    webView.scrollView.subviews.first { String(describing: Swift.type(of: $0)).hasPrefix("WKContent") }?.reloadInputViews()
+                }
+            }
         case "script":
             if let raw = body["script"] as? String, let next = StoryScript(rawValue: raw) { script = next }
             scriptLang = body["lang"] as? String
@@ -364,8 +374,11 @@ final class StoryEditorBridge: NSObject, WKScriptMessageHandler, WKNavigationDel
     private func measureContent() {
         Task {
             let script = """
-            const el = document.querySelector('.ProseMirror');
-            if (!el) return null;
+            const root = document.querySelector('.ProseMirror');
+            if (!root) return null;
+            // Its last block's foot (the root's own, with no padding and the block's margin collapsing past it),
+            // so a root that fills the page (the Mac's `fill`) still says how much is written.
+            const el = root.lastElementChild || root;
             const zoom = parseFloat(document.body.style.zoom || '1') || 1;
             const drawn = document.body.getBoundingClientRect().height;
             const laidOut = document.body.offsetHeight;
@@ -412,6 +425,8 @@ extension WKWebView {
     /// made once with public runtime calls, whose `inputAccessoryView` is nil — and, on a Mac, whose
     /// shortcuts bar is empty.
     func hideFormAccessoryBar() {
+        // A Mac (Mac Catalyst) has no bar over a keyboard to hide.
+        if ProcessInfo.processInfo.isMacCatalystApp && !ProcessInfo.processInfo.isiOSAppOnMac { return }
         guard let content = scrollView.subviews.first(where: { String(describing: type(of: $0)).hasPrefix("WKContent") }) else { return }
         let base: AnyClass = type(of: content)
         let suffix = "_ResonanceNoAccessory"
@@ -486,9 +501,11 @@ struct StoryCanvasField: View {
         let height = max(written, minHeight, 44)
         IslandView(webView: bridge.webView)
             .frame(height: height)
-            // Under the words the island's page is empty: a tap there writes on, at the story's end.
+            // Under the words the island's page is empty: a tap there writes on, at the story's end. Not on a
+            // Mac, where the story's editable root fills its page (EditorPage's `fill`): a click there is the
+            // page's own, its caret put on the last line as a click on the text would put it.
             .overlay(alignment: .bottom) {
-                if height - written > 1 {
+                if height - written > 1, !ProcessInfo.processInfo.isMacCatalystApp {
                     Color.clear
                         .frame(height: height - written)
                         .contentShape(Rectangle())

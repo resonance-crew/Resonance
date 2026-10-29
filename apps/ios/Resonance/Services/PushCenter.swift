@@ -224,8 +224,9 @@ final class PushCenter {
     }
 }
 
-/// UIKit's side of push: APNs → FCM, and the system's notification callbacks.
-final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate, MessagingDelegate {
+/// UIKit's side of push: APNs → FCM, and the system's notification callbacks. A responder, so the Mac's
+/// menu bar is built past it (``buildMenu(with:)``, MacApp.swift).
+final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate, MessagingDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         // The emulator build's Firebase project is a stand-in with no FCM behind it.

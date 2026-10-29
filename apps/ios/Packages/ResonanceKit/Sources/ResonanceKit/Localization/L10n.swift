@@ -1822,6 +1822,8 @@ public enum L10n {
         public static var error: String { Strings.shared.string("accountDeletion.error") }
     }
     public enum Native {
+        /// Resonance Support
+        public static var menuSupport: String { Strings.shared.string("native.menuSupport") }
         /// Couldn't load this — please try again
         public static var loadError: String { Strings.shared.string("native.loadError") }
         /// Copy

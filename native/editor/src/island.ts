@@ -376,6 +376,10 @@ const params = new URLSearchParams(location.search);
 if (params.get('embed') === '1') document.documentElement.classList.add('embed');
 // ?layout=canvas: the writer's bare page — no frame and no padding of its own (island.css).
 if (params.get('layout') === 'canvas') document.documentElement.classList.add('canvas');
+// ?fill=1: the editable root fills the page (island.css), so a click anywhere under the words is a click in
+// the story, its caret put on the last line as WebKit puts one — the Mac app's, whose host lays no tap area of
+// its own there (StoryCanvasField).
+if (params.get('fill') === '1') document.documentElement.classList.add('fill');
 // The pen wave every link in the story wears (island.css), as the web editor's, in the ink of the
 // theme and scheme the host puts on <html> (data-accent, data-scheme) — again whenever it changes them.
 const wearWave = () => {

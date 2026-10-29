@@ -1824,6 +1824,8 @@ object L10n {
         val error: String get() = Strings.string("accountDeletion.error")
     }
     object Native {
+        /** Resonance Support */
+        val menuSupport: String get() = Strings.string("native.menuSupport")
         /** Couldn't load this — please try again */
         val loadError: String get() = Strings.string("native.loadError")
         /** Copy */

@@ -22,7 +22,13 @@ struct ResonanceApp: App {
                 .environment(session)
                 .wearsAppearance(AppearanceStore.shared)
                 .onOpenURL { url in _ = GIDSignIn.sharedInstance.handle(url) }
+                #if targetEnvironment(macCatalyst)
+                .background(MacWindowChrome())
+                #endif
         }
+        #if targetEnvironment(macCatalyst)
+        .commands { MacMenuCommands() }
+        #endif
     }
 }
 

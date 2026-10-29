@@ -996,6 +996,7 @@
     "error": "Couldn't cancel — try again"
   },
   "native": {
+    "menuSupport": "Resonance Support",
     "loadError": "Couldn't load this — please try again",
     "copy": "Copy",
     "saveError": "Couldn't save that — try again",
