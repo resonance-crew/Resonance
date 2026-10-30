@@ -242,8 +242,11 @@ describe('an album', () => {
       });
     }
     const c = await convo();
-    expect(c.lastMessage).toMatchObject({ image: true, text: '' });
+    expect(c.lastMessage).toMatchObject({ image: true, text: '', album: { count: 3 } });
     expect(c.unread.bob).toBe(3);
+    // A message after the album takes the album off the list's preview.
+    await send('alice', 'bob', { text: '好美' });
+    expect((await convo()).lastMessage).not.toHaveProperty('album');
 
     // Unsent, a picture's place in its album is kept with its copy; the export and evidence keep it too.
     await unsendMessage(db, 'alice', PAIR, sent[2].id);

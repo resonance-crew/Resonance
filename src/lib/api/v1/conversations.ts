@@ -408,6 +408,7 @@ async function leaveNote(
         sentAt: FieldValue.serverTimestamp(),
         image: FieldValue.delete(),
         sticker: FieldValue.delete(),
+        album: FieldValue.delete(),
         unsent: FieldValue.delete(),
       },
       updatedAt: FieldValue.serverTimestamp(),
@@ -663,8 +664,8 @@ async function writeMessage(db: Firestore, uid: string, input: SendMessageInput,
     if (privateShare && card) tx.set(privateShareRef(db, card.id), { authorId: uid, at: FieldValue.serverTimestamp() });
     // Sent: the picture is this message's from now on (and no longer one the unsent purge looks at).
     if (picture) tx.update(chatImageRef(db, picture.id), { messageId: message.id, unsentAt: FieldValue.delete() });
-    // The list's preview: the text, or the attached card's title when there is none; a picture and a sticker
-    // say so (`image`, `sticker`: written or taken away every time — the preview is merged into the one before,
+    // The list's preview: the text, or the attached card's title when there is none; a picture, an album and a sticker
+    // say so (`image`, `album`, `sticker`: written or taken away every time — the preview is merged into the one before,
     // and so is the `unsent` an unsent last message left there). A sticker's text is its fallback words.
     tx.set(conversation, {
       lastMessage: {
@@ -674,6 +675,8 @@ async function writeMessage(db: Firestore, uid: string, input: SendMessageInput,
         sentAt: FieldValue.serverTimestamp(),
         image: picture ? true : FieldValue.delete(),
         sticker: sticker ? true : FieldValue.delete(),
+        // An album's picture: the list says how many were sent together (「傳送了 3 張圖片」).
+        album: picture && album ? { count: album.count } : FieldValue.delete(),
         unsent: FieldValue.delete(),
       },
       updatedAt: FieldValue.serverTimestamp(),
