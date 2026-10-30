@@ -82,8 +82,8 @@ export default defineSticker({
   frame is rendered as `<id>.thumb.webp`, which is what the picker shows and what every client rests on once the
   animation has played twice — so a resting sticker still says what it says. Never the plain key pose: in a picker of
   standing puppets nobody can tell the stickers apart. Pick it from the contact sheet (frame n is `fr(n)`), then check
-  the sheet's first cell. 摺摺's six: morning `fr(12)`, deep-thanks `fr(17)`, tucked-away `fr(10)`, warm-heart `fr(12)`,
-  take-your-time `fr(13)`, glad-youre-here `fr(22)` (see each file for the current one). The hero is snapped to the
+  the sheet's first cell. 摺摺's six: morning `fr(12)`, deep-thanks `fr(16)`, tucked-away `fr(6)`, warm-heart `fr(12)`,
+  take-your-time `fr(10)`, glad-youre-here `fr(22)` (see each file for the current one). The hero is snapped to the
   nearest frame; the file starts on it, so the first frame a client paints is that picture too.
 - **Puppets** (`kit/puppet.ts`) are the landing page's puppets without their stage: the same rig, DOM, pose fields and
   transforms (`src/lib/mascots/puppet.ts`), so they move as on the site. The pose: `rise`, `bodyUp`, `tilt`, `sx`/`sy`,
@@ -153,7 +153,7 @@ as a picture. So:
 So, as cut-paper stop motion does: **hold the body and move the small things on every frame; move the body on a few
 frames (`snap(t, [...])` for exact poses, `step(t, 1/6)` for on-fours) and put every big change — body, a prop
 travelling, a second puppet — on those same frames.** Look at the frame sizes: `node -e` over the ANMF chunks, or
-just render with `--fast` and read the size; the six of 摺摺's pack are 57–109 KB.
+just render with `--fast` and read the size; the six of 摺摺's pack are 64–111 KB.
 
 ## Review
 

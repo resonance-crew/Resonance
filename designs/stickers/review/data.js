@@ -10,8 +10,8 @@ window.STICKERS = [
   "icon": {
    "durationMs": 0,
    "frames": 1,
-   "bytes": 3040,
-   "v": "54074e1db8"
+   "bytes": 2810,
+   "v": "02dffb2fb0"
   },
   "stickers": [
    {
@@ -22,8 +22,8 @@ window.STICKERS = [
     },
     "durationMs": 2083,
     "frames": 16,
-    "bytes": 112928,
-    "v": "35f34cfe10",
+    "bytes": 113600,
+    "v": "b8099925e4",
     "hero": 1,
     "thumbBytes": 10318
    },
@@ -34,11 +34,11 @@ window.STICKERS = [
      "en": "Thank you so much"
     },
     "durationMs": 2583,
-    "frames": 20,
-    "bytes": 81966,
-    "v": "d08d572bd7",
-    "hero": 1.417,
-    "thumbBytes": 7006
+    "frames": 23,
+    "bytes": 112236,
+    "v": "4ce2030be7",
+    "hero": 1.333,
+    "thumbBytes": 10200
    },
    {
     "id": "tucked-away",
@@ -48,10 +48,10 @@ window.STICKERS = [
     },
     "durationMs": 2583,
     "frames": 27,
-    "bytes": 81196,
-    "v": "b6998f004b",
-    "hero": 0.833,
-    "thumbBytes": 7664
+    "bytes": 97750,
+    "v": "a83f7daffd",
+    "hero": 0.5,
+    "thumbBytes": 9354
    },
    {
     "id": "warm-heart",
@@ -61,10 +61,10 @@ window.STICKERS = [
     },
     "durationMs": 2333,
     "frames": 24,
-    "bytes": 80630,
-    "v": "d125a86d21",
+    "bytes": 96442,
+    "v": "ca397f1d0e",
     "hero": 1,
-    "thumbBytes": 7462
+    "thumbBytes": 8790
    },
    {
     "id": "take-your-time",
@@ -73,11 +73,11 @@ window.STICKERS = [
      "en": "Take your time"
     },
     "durationMs": 2583,
-    "frames": 23,
-    "bytes": 76306,
-    "v": "0eb4c7d811",
-    "hero": 1.083,
-    "thumbBytes": 11434
+    "frames": 26,
+    "bytes": 74078,
+    "v": "536168c2aa",
+    "hero": 0.833,
+    "thumbBytes": 10424
    },
    {
     "id": "glad-youre-here",
@@ -86,11 +86,11 @@ window.STICKERS = [
      "en": "Glad you're here"
     },
     "durationMs": 2583,
-    "frames": 14,
-    "bytes": 65076,
-    "v": "1fc3df6a7d",
+    "frames": 13,
+    "bytes": 65742,
+    "v": "6010f97d7b",
     "hero": 1.833,
-    "thumbBytes": 10540
+    "thumbBytes": 10932
    }
   ]
  },
@@ -104,8 +104,8 @@ window.STICKERS = [
   "icon": {
    "durationMs": 0,
    "frames": 1,
-   "bytes": 3308,
-   "v": "6e706bd54d"
+   "bytes": 3094,
+   "v": "13f38d74ef"
   },
   "stickers": [
    {
@@ -198,8 +198,8 @@ window.STICKERS = [
   "icon": {
    "durationMs": 0,
    "frames": 1,
-   "bytes": 2482,
-   "v": "95798bc323"
+   "bytes": 2732,
+   "v": "28bb43501f"
   },
   "stickers": [
    {
@@ -292,8 +292,8 @@ window.STICKERS = [
   "icon": {
    "durationMs": 0,
    "frames": 1,
-   "bytes": 3790,
-   "v": "854c238a1d"
+   "bytes": 3652,
+   "v": "941d86f899"
   },
   "stickers": [
    {
@@ -386,8 +386,8 @@ window.STICKERS = [
   "icon": {
    "durationMs": 0,
    "frames": 1,
-   "bytes": 3070,
-   "v": "d1ba3e8b5b"
+   "bytes": 3222,
+   "v": "653cdd7244"
   },
   "stickers": [
    {

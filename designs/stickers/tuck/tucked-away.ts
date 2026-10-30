@@ -13,15 +13,16 @@ import { blink, defineSticker, ease, fr, keys, lerp, span } from '../kit';
  * triangle the flap covers has its right angle just below-left of here).
  */
 const POCKET: [number, number] = [462, 418];
-const NOTE = 0.86;
+const NOTE = 1.1;
 /** The arm held a little out, showing the note. */
 const OUT = 40;
 
 export default defineSticker({
   duration: 2.5,
-  // the thumb: the corner lifted, the new note laid in under it
-  hero: fr(10),
-  cast: { tuck: { slug: 'tuck', x: 200, ground: 410, k: 0.64 } },
+  // the thumb: the corner just lifted, the note held up beside it on its way in, a glad open mouth (from f8 the lifted
+  // corner and the mitten cover the note)
+  hero: fr(6),
+  cast: { tuck: { slug: 'tuck', x: 179, ground: 414, k: 0.72 } },
   props: {
     held: { kind: 'note', seed: 7, z: 100 },
     // inside, just above torso-alt and under the flap: the note going in, over the one kept there before
@@ -73,6 +74,7 @@ export default defineSticker({
     p.faceY += keys(t, [[0, 3], [fr(3), 3], [fr(8), -3], [fr(11), -1], [fr(12), 0], [fr(18), 0], [fr(21), -6], [fr(23), -6], [fr(26), 3]]);
     if (t >= fr(12) && t < fr(18)) p.eyes = 'shut';
     if (t >= fr(22) && t < fr(25)) p.mouth = 'mouth-o';
+    if (t >= fr(5) && t < fr(11)) p.mouth = 'mouth-open';
     p.blush = keys(t, [[0, 0.3], [fr(11), 0.5], [fr(14), 1.3], [fr(19), 1.1], [fr(28), 0.3]]);
     blink(tuck, t, fr(2), fr(1));
   },

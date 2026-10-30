@@ -1,57 +1,68 @@
 /**
- * 摺摺 · 慢慢來 Take your time — it gently pats 點點's head, three slow pats; 點點 shuts its eyes, content, and gives a
- * little under each one. Key pose: 摺摺's mitten resting on 點點's head, both smiling.
+ * 摺摺 · 慢慢來 Take your time — 點點 is in a fluster (an "o", a few little strokes); 摺摺, eyes shut and smiling, pats the
+ * side of its head, three slow pats (beside its curls, never on them), and 點點 calms: eyes shut, content, giving a little
+ * under each pat. At the loop's end the fluster comes back, and the pats with it.
+ * Key pose: the fluster, 摺摺's mitten coming. Hero: the second pat landing, both content.
  *
- * 摺摺 leans a little toward 點點 and holds still; only its arm and face move. 點點, small and behind 摺摺's edge, gives
- * a little as each pat lands — and only then, so the frames between change nothing but the arm.
+ * 摺摺 holds still; only its arm and face move. 點點 gives only as a pat lands, so the frames between change little.
  */
-import { blink, defineSticker, fr, keys } from '../kit';
+import { defineSticker, fr, keys } from '../kit';
 
-/** One pat, frame by frame: the mitten's lift (0 resting on 點點's head) and how much 點點 gives under it. */
+/** One pat, frame by frame: how far the mitten is off 點點's head (0 resting on it), and how much 點點 gives. */
 const PAT = [
-  { lift: 0, give: 1 },
-  { lift: 0, give: 0.4 },
-  { lift: 0.55, give: 0 },
-  { lift: 1, give: 0 },
-  { lift: 1, give: 0 },
-  { lift: 0.55, give: 0 },
+  { off: 0, give: 1 },
+  { off: 0, give: 0.4 },
+  { off: 0.55, give: 0 },
+  { off: 1, give: 0 },
+  { off: 1, give: 0 },
+  { off: 0.55, give: 0 },
 ] as const;
 const FIRST = 4;
 const PATS = 3;
 
 export default defineSticker({
   duration: 2.5,
-  // the thumb: a pat landing on 點點, who gives under it, content
-  hero: fr(13),
+  // the thumb: the second pat landing on the side of 點點's head, both content
+  hero: fr(10),
   cast: {
-    pip: { slug: 'dot', x: 334, ground: 410, k: 0.69, z: 10 },
-    tuck: { slug: 'tuck', x: 172, ground: 410, k: 0.69, z: 20 },
+    tuck: { slug: 'tuck', x: 124, ground: 408, k: 0.63, z: 10 },
+    pip: { slug: 'dot', x: 332, ground: 408, k: 0.63, z: 20 },
   },
-  frame(t, { tuck, pip }) {
+  props: { fluster: { kind: 'burst', seed: 9 } },
+  frame(t, { tuck, pip }, { fluster }) {
     const tp = tuck.pose;
     const pp = pip.pose;
-    const f = Math.round(t * 12) - FIRST;
-    // a pat lands first after a lift: the cycle starts at its top so the first frame of motion is the mitten rising
-    const phase = f >= 0 && f < PATS * PAT.length ? PAT[(f + 3) % PAT.length] : { lift: 0, give: 0 };
-    const landed = f >= 0 && f < PATS * PAT.length + 3 && phase.lift === 0 && f > 1 ? phase.give : 0;
-    // 點點 gives under the mitten as it lands: shorter for a moment, its curl and mittens bob
-    pp.sy *= 1 - 0.04 * landed;
-    pp.decoR += 6 * landed;
-    pp.liftL = pip.rest('L') + 10 * landed;
-    pp.liftR = pip.rest('R') + 10 * landed;
-    const [hx, hy] = pip.headPoint();
-    tp.tilt = 3;
-    tuck.setLift('R', tuck.aim('R', hx - 4 * tuck.k, hy - (24 + 18 * phase.lift) * tuck.k));
+    const f = Math.round(t * 12);
+    const i = f - FIRST;
+    // the mitten: coming in (f0–3), three pats (f4–21), resting (f22–26), lifting off again (f27–29)
+    let off = keys(f, [[0, 1], [3, 0.3], [4, 0], [26, 0], [29, 1]]);
+    let give = 0;
+    if (i >= 0 && i < PATS * PAT.length) ({ off, give } = PAT[i % PAT.length]);
+    const calm = f >= FIRST && f < 26;
+    // 點點 gives under the pat: shorter for a moment, its curls bobbing, its mittens up a little
+    pp.sy *= 1 - 0.04 * give;
+    pp.decoR -= 5 * give;
+    pp.liftL = pip.rest('L') - 8 + 8 * give;
+    pp.liftR = pip.rest('R') - 8 + 8 * give;
+    // the pat lands on the side of its head at about ten o'clock, beside the curls, and lifts off along the head's normal
+    const [nx, ny] = [-0.87, -0.5];
+    const [hx, hy] = pip.pagePoint(261 + nx * (16 + 20 * off), 519 + ny * (16 + 20 * off));
+    tuck.setLift('R', tuck.aim('R', hx, hy));
     tp.front = true;
-    // 摺摺 watches it, smiling; a slow blink
+    tp.liftL = 2;   // the other arm hangs straight down (out of the way of the canvas edge)
+    // 摺摺: eyes shut, smiling, a little blush, looking toward 點點
+    tp.eyes = 'shut';
     tp.faceX += 9;
-    tp.faceY += 4;
-    tp.blush = 0.5;
-    blink(tuck, t, fr(26), fr(2));
-    // 點點: eyes shut, content, looking up toward 摺摺, its blush a little fuller while it's patted
-    pp.eyes = 'shut';
+    tp.faceY += 3;
+    tp.blush = 1;
+    // 點點: flustered at the ends (an "o", eyes open, a few strokes), calm and content while it is patted
     pp.faceX -= 6;
     pp.faceY -= 2;
-    pp.blush = keys(Math.round(t * 6) / 6, [[0, 1], [fr(8), 1.4], [fr(22), 1.4], [fr(26), 1]]);
+    if (calm) pp.eyes = 'shut';
+    else pp.mouth = f >= 27 || f < 3 ? 'mouth-o' : 'mouth';
+    pp.blush = calm ? keys(Math.floor(f / 2) * 2, [[4, 1], [8, 1.4], [22, 1.4], [26, 1]]) : 0.6;
+    if (!calm && (f < 3 || f >= 28)) {
+      fluster.at(...pip.pagePoint(410, 452), { k: pip.k * 0.5, rot: 30 }).set({ draw: 1 });
+    }
   },
 });

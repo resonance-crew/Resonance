@@ -9,7 +9,7 @@
     "en": "Tuck"
    },
    "icon": "tuck/icon.webp",
-   "iconV": "54074e1db8",
+   "iconV": "02dffb2fb0",
    "stickers": [
     {
      "id": "morning",
@@ -19,7 +19,7 @@
      },
      "durationMs": 2083,
      "frames": 16,
-     "v": "35f34cfe10"
+     "v": "b8099925e4"
     },
     {
      "id": "deep-thanks",
@@ -28,8 +28,8 @@
       "en": "Thank you so much"
      },
      "durationMs": 2583,
-     "frames": 20,
-     "v": "d08d572bd7"
+     "frames": 23,
+     "v": "4ce2030be7"
     },
     {
      "id": "tucked-away",
@@ -39,7 +39,7 @@
      },
      "durationMs": 2583,
      "frames": 27,
-     "v": "b6998f004b"
+     "v": "a83f7daffd"
     },
     {
      "id": "warm-heart",
@@ -49,7 +49,7 @@
      },
      "durationMs": 2333,
      "frames": 24,
-     "v": "d125a86d21"
+     "v": "ca397f1d0e"
     },
     {
      "id": "take-your-time",
@@ -58,8 +58,8 @@
       "en": "Take your time"
      },
      "durationMs": 2583,
-     "frames": 23,
-     "v": "0eb4c7d811"
+     "frames": 26,
+     "v": "536168c2aa"
     },
     {
      "id": "glad-youre-here",
@@ -68,8 +68,8 @@
       "en": "Glad you're here"
      },
      "durationMs": 2583,
-     "frames": 14,
-     "v": "1fc3df6a7d"
+     "frames": 13,
+     "v": "6010f97d7b"
     }
    ]
   },
@@ -81,7 +81,7 @@
     "en": "Twine"
    },
    "icon": "twine/icon.webp",
-   "iconV": "6e706bd54d",
+   "iconV": "13f38d74ef",
    "stickers": [
     {
      "id": "anyone-there",
@@ -153,7 +153,7 @@
     "en": "Nod"
    },
    "icon": "nod/icon.webp",
-   "iconV": "95798bc323",
+   "iconV": "28bb43501f",
    "stickers": [
     {
      "id": "thanks-for-sharing",
@@ -225,7 +225,7 @@
     "en": "Pip"
    },
    "icon": "pip/icon.webp",
-   "iconV": "854c238a1d",
+   "iconV": "941d86f899",
    "stickers": [
     {
      "id": "hi",
@@ -297,7 +297,7 @@
     "en": "Hush"
    },
    "icon": "hush/icon.webp",
-   "iconV": "d1ba3e8b5b",
+   "iconV": "653cdd7244",
    "stickers": [
     {
      "id": "good-night",
