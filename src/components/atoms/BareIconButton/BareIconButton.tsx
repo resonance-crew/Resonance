@@ -39,6 +39,9 @@ export interface BareIconButtonProps {
   tipAlign?: 'start' | 'center' | 'end';
   seed?: number;
   className?: string;
+  /** It opens something (a popover, a panel): whether that is open now, and what it is (aria-expanded / -haspopup). */
+  expanded?: boolean;
+  haspopup?: 'dialog' | 'menu';
 }
 
 /**
@@ -63,6 +66,8 @@ export function BareIconButton({
   tipAlign = 'center',
   seed = 5,
   className,
+  expanded,
+  haspopup,
 }: BareIconButtonProps) {
   // Escape puts the tooltip away until the pointer or focus leaves (content shown on hover or focus has to be dismissible).
   const [tipDismissed, setTipDismissed] = useState(false);
@@ -98,6 +103,8 @@ export function BareIconButton({
           {...shared}
           disabled={disabled}
           aria-busy={loading || undefined}
+          aria-expanded={expanded}
+          aria-haspopup={haspopup}
           onClick={loading ? undefined : onClick}
         >
           {face}

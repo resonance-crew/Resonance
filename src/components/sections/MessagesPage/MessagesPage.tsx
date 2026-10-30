@@ -12,6 +12,9 @@ import { Link, useRouter } from '@/i18n/navigation';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { timeOfDay } from '@/lib/chat/time';
 import { useConversations } from '@/lib/data/hooks';
+import { useChatDrafts } from '@/lib/data/chatDrafts';
+import { conversationId } from '@/lib/db/firestore/client/messages';
+import { Icon } from '@/components/atoms/Icon';
 import type { Conversation, User } from '@/lib/db/types';
 import { EmptyState } from '@/components/molecules/EmptyState/EmptyState';
 import { RowWash } from './RowWash';
@@ -42,6 +45,7 @@ export function MessagesPage({ activeHandle, replyNote, userId }: MessagesPagePr
   const router = useRouter();
   const { user, loading } = useAuth();
   const { data } = useConversations();
+  const drafts = useChatDrafts(user?.id);
   const listRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -64,14 +68,24 @@ export function MessagesPage({ activeHandle, replyNote, userId }: MessagesPagePr
   const rowFor = (person: User, convo?: Conversation) => {
     const unread = convo ? (convo.unread[user.id] ?? 0) : 0;
     const last = convo?.lastMessage;
-    // An unsent last message reads as its line in the thread does (round 16 §3).
+    // An unsent last message reads as its line in the thread does (round 16 §3); a sticker or an album says
+    // so (round 22) — never the sticker's fallback words, which are for builds that can't draw it.
+    const said = last?.sticker
+      ? t('stickerShared')
+      : last?.album
+        ? last.text || t('albumShared', { count: last.album.count })
+        : last?.text || (last?.image ? t('imageShared') : '');
     const preview = last?.unsent
       ? last.senderId === user.id
         ? t('unsentByYou')
         : t('unsentByThem', { handle: person.handle })
       : last
-      ? (last.senderId === user.id ? t('youPrefix') : '') + (last.text || (last.image ? t('imageShared') : ''))
+      ? (last.senderId === user.id ? t('youPrefix') : '') + said
       : t('noMessagesYet');
+    // What the viewer left unsent to them (round 22 §4.4): its words after a pen, in terracotta — never the word
+    // 草稿 — until it is sent; not on the row of the thread open beside the list, whose composer shows it.
+    const draft = person.handle === activeHandle ? null : drafts[convo?.id ?? conversationId(user.id, person.id)];
+    const draftWords = draft ? draft.text.trim().replace(/\s+/g, ' ') || (draft.cardId ? t('attachCardShort') : '') : '';
     return (
       <Link
         key={person.id}
@@ -89,7 +103,14 @@ export function MessagesPage({ activeHandle, replyNote, userId }: MessagesPagePr
         />
         <span className={styles.rowBody}>
           <span className={styles.rowHandle}>{person.handle}</span>
-          <span className={styles.rowPreview}>{preview}</span>
+          {draftWords ? (
+            <span className={styles.rowPreview} data-draft="" aria-label={t('draftLabel', { text: draftWords })}>
+              <Icon name="pen" size={13} color="currentColor" />
+              <span className={styles.rowDraft}>{draftWords}</span>
+            </span>
+          ) : (
+            <span className={styles.rowPreview}>{preview}</span>
+          )}
         </span>
         <span className={styles.rowMeta}>
           {convo?.lastMessage && (

@@ -1,7 +1,8 @@
 'use client';
 
 import { useRef } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import { stickerName, stickerPath } from '@/lib/stickers/catalog';
 import { QUOTE_RADIUS, bubbleStandInRadius, seedFromId } from '@/lib/design/bubble';
 import type { MessageReplyQuote } from '@/lib/db/types';
 import { useBubbleClip } from './MessageBubble';
@@ -37,8 +38,16 @@ export function ReplyQuote({ quote, own, viewerId, otherHandle, onJump }: ReplyQ
     : quotesViewer
       ? t('repliedToYou', { handle: otherHandle })
       : t('repliedToThemselves', { handle: otherHandle });
+  const locale = useLocale();
+  // A sticker's quote is its key frame and its name (round 22 §3); one this build doesn't know, its fallback words.
+  const sticker = !quote.unsent && quote.sticker ? quote.sticker : null;
+  const stickerWords = sticker ? stickerName(sticker, locale) : null;
   // A quote of a message since unsent says so, and nothing of what it said.
-  const words = quote.unsent ? t('unsentQuote') : quote.text || (quote.image ? t('replyImage') : t('replyCard'));
+  const words = quote.unsent
+    ? t('unsentQuote')
+    : stickerWords
+      ? t('stickerLabel', { name: stickerWords })
+      : quote.text || (sticker ? t('stickerUnknown') : quote.image ? t('replyImage') : t('replyCard'));
   const ref = useRef<HTMLButtonElement>(null);
   const clip = useBubbleClip(ref, seedFromId(quote.id, 19), { maxRadius: QUOTE_RADIUS });
 
@@ -51,12 +60,17 @@ export function ReplyQuote({ quote, own, viewerId, otherHandle, onJump }: ReplyQ
         className={styles.quoteBubble}
         style={clip ? { clipPath: clip } : { borderRadius: bubbleStandInRadius({ maxRadius: QUOTE_RADIUS }) }}
         data-shaped={clip ? '' : undefined}
+        data-sticker={sticker && stickerWords ? '' : undefined}
         aria-label={words}
         tabIndex={onJump ? undefined : -1}
         onClick={() => onJump?.(quote.id)}
       >
+        {sticker && stickerWords && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img className={styles.quoteSticker} src={stickerPath(sticker, 'thumb')} alt="" draggable={false} />
+        )}
         <span className={styles.quoteText} data-unsent={quote.unsent || undefined}>
-          {words}
+          {stickerWords ?? words}
         </span>
       </button>
     </div>

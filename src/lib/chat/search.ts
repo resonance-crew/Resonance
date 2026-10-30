@@ -57,7 +57,8 @@ export function searchMessages(messages: readonly Message[], query: string): Sea
   const hits: SearchHit[] = [];
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    if (!m.text) continue;
+    // A sticker's words are its fallback for older builds, not words anyone wrote.
+    if (!m.text || m.sticker) continue;
     const ranges = rangesOf(foldForSearch(m.text), needle);
     if (ranges.length) hits.push({ messageId: m.id, ranges });
   }

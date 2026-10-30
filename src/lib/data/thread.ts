@@ -18,6 +18,7 @@ import {
   type MessageCursor,
 } from '@/lib/db/firestore/client/messages';
 import type { MessageReplyQuote } from '@/lib/db/types';
+import type { StickerRef } from '@/lib/stickers/catalog';
 
 /** The page {@link ChatThread.loadOlder} reads. */
 export const OLDER_PAGE = 50;
@@ -61,6 +62,8 @@ export function outboxOf(uid: string, pairId: string, to: string): Outbox {
           replyTo: m.replyTo?.id,
           clientId: m.clientId,
           image,
+          ...(image && m.album ? { album: m.album } : {}),
+          ...(m.sticker ? { sticker: m.sticker } : {}),
           as: uid,
         })
       ).id;
@@ -302,7 +305,17 @@ export interface ThreadDraft {
   noteRef?: { cardId: string; noteId: string };
   /** A picture, ready to go up (compressed on the device). A message carries a card or a picture, never both. */
   image?: OutgoingImage;
+  /**
+   * Several pictures sent together (round 22, at most {@link ALBUM_MAX}): an album — one message each, in their
+   * order, under one album id; the words, the note and the reply go with the first. Never beside a card.
+   */
+  images?: OutgoingImage[];
+  /** A 小紙團 sticker (round 22): its own message — the reply being written goes with it, nothing else. */
+  sticker?: StickerRef;
 }
+
+/** The most pictures one send carries (the server's AlbumRef count). */
+export const ALBUM_MAX = 10;
 
 /**
  * One open conversation, the web twin of the apps' ThreadModel: its messages
@@ -350,6 +363,8 @@ export interface ChatThread {
   replyingTo: MessageReplyQuote | null;
   /** The next message answers `message` — only a delivered one can be answered. */
   reply(message: ChatMessage): void;
+  /** The next message answers this quote again (a draft brought back): the composer's own copy of an earlier reply. */
+  restoreReply(quote: MessageReplyQuote): void;
   cancelReply(): void;
 
   search: ThreadSearch;
@@ -422,7 +437,13 @@ export function useChatThread({ pairId, to, listen, onSent }: ChatThreadOptions)
 
   const [replyingTo, setReplyingTo] = useState<MessageReplyQuote | null>(null);
   const [query, setQuery] = useState('');
+  // Another conversation: its reply and search start afresh. Not the first one known — the composer may have
+  // brought a reply back from its draft as it came (its effects run before these).
+  const lastPair = useRef(pairId);
   useEffect(() => {
+    const before = lastPair.current;
+    lastPair.current = pairId;
+    if (before === undefined || before === pairId) return;
     setReplyingTo(null);
     setQuery('');
   }, [pairId]);
@@ -451,26 +472,44 @@ export function useChatThread({ pairId, to, listen, onSent }: ChatThreadOptions)
       ensureLoaded: (id: string, maxPages = 20) => (store ? store.ensureLoaded(id, maxPages) : Promise.resolve(false)),
       send: (draft: ThreadDraft) => {
         if (!box || !uid) return false;
-        const text = draft.text.trim();
-        if ((!text && !draft.cardRef && !draft.image) || text.length > MESSAGE_MAX_LENGTH) return false;
-        if (draft.cardRef && draft.image) return false;
         const replyTo = replyingToRef.current;
-        const clientId = newClientId();
-        // Drawn from the device from now on, under the id the server will keep it by.
-        if (draft.image) keepLocalPicture(clientId, draft.image.file);
-        box.enqueue({
-          clientId,
-          senderId: uid,
-          text,
-          ...(draft.cardRef ? { cardRef: draft.cardRef } : {}),
-          ...(draft.noteRef ? { noteRef: draft.noteRef } : {}),
-          ...(replyTo ? { replyTo } : {}),
-          ...(draft.image ? { image: draft.image } : {}),
-          queuedAt: new Date(),
+        const queuedAt = new Date();
+        const done = () => {
+          replyingToRef.current = null;
+          setReplyingTo(null);
+          return true;
+        };
+        // A sticker is its own message: the reply being written goes with it, nothing else does.
+        if (draft.sticker) {
+          box.enqueue({ clientId: newClientId(), senderId: uid, text: '', sticker: draft.sticker, ...(replyTo ? { replyTo } : {}), queuedAt });
+          return done();
+        }
+        const text = draft.text.trim();
+        const pictures = draft.images?.length ? draft.images : draft.image ? [draft.image] : [];
+        if ((!text && !draft.cardRef && !pictures.length) || text.length > MESSAGE_MAX_LENGTH) return false;
+        if (draft.cardRef && pictures.length) return false;
+        if (pictures.length > ALBUM_MAX) return false;
+        // Several pictures are an album: one message each, in their order, under one album id — the words, the
+        // note and the reply ride the first (the outbox sends them in order, and a line stopped holds the rest).
+        const album = pictures.length > 1 ? newClientId() : null;
+        (pictures.length ? pictures : [undefined]).forEach((image, index) => {
+          const clientId = newClientId();
+          const first = index === 0;
+          // Drawn from the device from now on, under the id the server will keep it by.
+          if (image) keepLocalPicture(clientId, image.file);
+          box.enqueue({
+            clientId,
+            senderId: uid,
+            text: first ? text : '',
+            ...(draft.cardRef ? { cardRef: draft.cardRef } : {}),
+            ...(first && draft.noteRef ? { noteRef: draft.noteRef } : {}),
+            ...(first && replyTo ? { replyTo } : {}),
+            ...(image ? { image } : {}),
+            ...(image && album ? { album: { id: album, index, count: pictures.length } } : {}),
+            queuedAt,
+          });
         });
-        replyingToRef.current = null;
-        setReplyingTo(null);
-        return true;
+        return done();
       },
       retry: (keyOrId: string) => {
         const id = clientIdOf(keyOrId);
@@ -484,6 +523,7 @@ export function useChatThread({ pairId, to, listen, onSent }: ChatThreadOptions)
       reply: (message: ChatMessage) => {
         if (canReply(message)) setReplyingTo(quoteOf(message));
       },
+      restoreReply: (quote: MessageReplyQuote) => setReplyingTo(quote),
       cancelReply: () => setReplyingTo(null),
       setSearchQuery: setQuery,
       find: (idOrKey: string) => messagesRef.current.find((m) => m.id === idOrKey || m.key === idOrKey),

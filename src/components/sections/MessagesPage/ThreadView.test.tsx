@@ -150,6 +150,8 @@ afterEach(() => {
   vi.clearAllMocks();
   forgetOutboxes();
   server.messages = [];
+  // What one test left unsent (round 22's drafts, recent stickers) is no other test's.
+  window.localStorage.clear();
 });
 
 describe('a pen name that has passed to someone else', () => {
@@ -1410,6 +1412,45 @@ describe('reactions and unsending (round 16)', () => {
     renderWithIntl(thread());
     await screen.findByText('a letter');
     expect(screen.queryByRole('button', { name: 'React' })).not.toBeInTheDocument();
+  });
+
+  // Round 22: each picture of an album is a message of its own — holding one lifts that picture with its menu; and
+  // a sticker is reacted to, replied to and unsent as any message, with no Copy.
+  it('lifts the one picture of an album that was held, and unsends that picture alone', async () => {
+    const pic = (id: string, index: number): Message => ({
+      id,
+      senderId: 'me',
+      text: '',
+      sentAt: now(),
+      image: { id: `img-${id}`, width: 800, height: 600 },
+      album: { id: 'alb', index, count: 2 },
+    });
+    server.messages = [text('m0', 'look', { sentAt: now() }), pic('a1', 0), pic('a2', 1)];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    const user = (await import('@testing-library/user-event')).default.setup();
+    const { container } = renderWithIntl(thread());
+    await screen.findByText('look');
+    const cell = container.querySelector<HTMLElement>('[data-album-member="a2"] button')!;
+    fireEvent.pointerDown(cell, { pointerType: 'touch', button: 0, clientX: 40, clientY: 40 });
+    const overlay = await screen.findByRole('dialog', {}, { timeout: 1500 });
+    fireEvent.pointerUp(cell, { pointerType: 'touch', button: 0 });
+    expect(within(overlay).getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Reply', 'Unsend']);
+    await user.click(within(overlay).getByRole('menuitem', { name: 'Unsend' }));
+    await user.click(within(await screen.findByRole('dialog', { name: 'Unsend this message?' })).getByRole('button', { name: 'Unsend' }));
+    expect(unsendMessage).toHaveBeenCalledWith('alice_me', 'a2');
+  });
+
+  it('holds a sticker as any message: its reactions and its reply, no Copy', async () => {
+    server.messages = [text('s1', '〔貼圖：謝謝〕', { sentAt: now(), sticker: { pack: 'twine', id: 'thanks' } })];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    const user = (await import('@testing-library/user-event')).default.setup();
+    const { container } = renderWithIntl(thread());
+    await screen.findByRole('button', { name: 'Sticker: Thanks' });
+    const overlay = await hold(container, 's1');
+    expect(within(overlay).getByRole('toolbar')).toBeInTheDocument();
+    expect(within(overlay).getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Reply', 'Report this message']);
+    await user.click(within(overlay).getByRole('menuitem', { name: 'Reply' }));
+    expect(await screen.findByText('Sticker: Thanks', { selector: '[class*="carryDetail"]' })).toBeInTheDocument();
   });
 
   it('unsends one of the viewer’s own after a plain-coloured yes: a dashed line where it was, its quote emptied', async () => {

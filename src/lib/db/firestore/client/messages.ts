@@ -66,6 +66,8 @@ function mapConversation(id: string, data: Record<string, unknown>): Conversatio
           senderId: String(last.senderId ?? ''),
           sentAt: tsToDate(last.sentAt) ?? new Date(0),
           ...(last.image === true ? { image: true } : {}),
+          ...(last.sticker === true ? { sticker: true } : {}),
+          ...albumCount(last.album),
           ...(last.unsent === true ? { unsent: true } : {}),
         }
       : null,
@@ -112,6 +114,9 @@ function mapMessage(id: string, data: Record<string, unknown>): Message {
     replyTo: mapReplyQuote(data.replyTo),
     preview: mapPreview(data.preview),
     image: mapImage(data.image),
+    ...stickerField(data.sticker),
+    // An album's place only beside its picture.
+    ...(data.image ? albumField(data.album) : {}),
     // A kind this build doesn't know is a plain message.
     ...(data.kind === 'note' ? { kind: 'note' as const } : {}),
     ...(reactions ? { reactions } : {}),
@@ -140,7 +145,35 @@ function mapReplyQuote(v: unknown): Message['replyTo'] {
     text: typeof q.text === 'string' ? q.text : '',
     cardRef: str(q.cardRef),
     ...(q.image === true ? { image: true } : {}),
+    ...stickerField(q.sticker),
   };
+}
+
+/**
+ * A sticker a message names (round 22): its pack and id as the catalog spells them — whether this build knows it
+ * or not (one it doesn't is fetched from the site, else its fallback words are shown). Anything else, none.
+ */
+function stickerField(v: unknown): { sticker?: { pack: string; id: string } } {
+  if (!v || typeof v !== 'object') return {};
+  const { pack, id } = v as Record<string, unknown>;
+  const ok = (x: unknown, max: number): x is string => typeof x === 'string' && x.length <= max && /^[a-z0-9-]+$/.test(x);
+  return ok(pack, 32) && ok(id, 40) ? { sticker: { pack, id } } : {};
+}
+
+/** How many pictures the list's last message was one of, when the server says so (2 to 10), else nothing. */
+function albumCount(v: unknown): { album?: { count: number } } {
+  const count = v && typeof v === 'object' ? (v as Record<string, unknown>).count : undefined;
+  return typeof count === 'number' && Number.isInteger(count) && count >= 2 && count <= 10 ? { album: { count } } : {};
+}
+
+/** One picture's place in an album (round 22): a sane id, index and count, else none (drawn as a picture alone). */
+function albumField(v: unknown): { album?: { id: string; index: number; count: number } } {
+  if (!v || typeof v !== 'object') return {};
+  const { id, index, count } = v as Record<string, unknown>;
+  const int = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n);
+  if (typeof id !== 'string' || !id || id.length > 64 || !int(index) || !int(count)) return {};
+  if (count < 2 || count > 10 || index < 0 || index >= count) return {};
+  return { album: { id, index, count } };
 }
 
 /** A message's picture: an id, and a size that is a size (0 when the server wrote none: drawn square). */
@@ -171,6 +204,10 @@ export interface MessageExtras {
   replyTo?: string;
   /** A picture uploaded for this conversation (uploadChatImage), by its id. */
   image?: string;
+  /** One of several pictures sent together (only beside `image`): the album's id, this picture's place, how many. */
+  album?: { id: string; index: number; count: number };
+  /** A 小紙團 sticker (round 22): sent on its own — no text, card, picture or note beside it. */
+  sticker?: { pack: string; id: string };
   /**
    * The id this message was given before it was sent (lib/chat/outbox's
    * `newClientId`): the server makes it the document's id, so sending it
@@ -204,8 +241,10 @@ export async function sendMessage(
   const uid = requireUid();
   if (extras.as && extras.as !== uid) throw new Error('Signed in as someone else');
   const trimmed = text.trim();
-  if (!trimmed && !extras.cardRef && !extras.image) throw new Error('Message is empty');
+  if (extras.sticker && (trimmed || extras.cardRef || extras.image || extras.noteRef)) throw new Error('A sticker is sent on its own');
+  if (!trimmed && !extras.cardRef && !extras.image && !extras.sticker) throw new Error('Message is empty');
   if (trimmed.length > MESSAGE_MAX_LENGTH) throw new Error('Message too long');
+  if (extras.album && !extras.image) throw new Error('An album holds pictures');
   return callApi('/api/v1/messages', {
     method: 'POST',
     body: {
@@ -216,6 +255,8 @@ export async function sendMessage(
       replyTo: extras.replyTo ?? null,
       clientId: extras.clientId ?? null,
       image: extras.image ?? null,
+      sticker: extras.sticker ?? null,
+      album: extras.album ?? null,
     },
   });
 }

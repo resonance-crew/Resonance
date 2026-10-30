@@ -158,6 +158,25 @@
   text-overflow: ellipsis;
 }
 
+/* A draft left unsent (round 22 §4.4): a small pen, then its words, in the terracotta that reads as text. */
+.rowPreview[data-draft] {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--terracotta-deep);
+}
+
+.rowPreview[data-draft] > :first-child {
+  flex: none;
+}
+
+.rowDraft {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rowMeta {
   display: flex;
   flex-direction: column;

@@ -15,6 +15,10 @@ export interface Outgoing {
   replyTo?: MessageReplyQuote;
   /** A picture it carries, uploaded as it is sent (under the message's client id, so a resend finds it). */
   image?: OutgoingImage;
+  /** The picture's place among several sent together (round 22): the album's id, its index, how many. */
+  album?: { id: string; index: number; count: number };
+  /** A 小紙團 sticker (round 22): the message carries nothing else. */
+  sticker?: { pack: string; id: string };
   queuedAt: Date;
   status: OutgoingStatus;
   /** The document id the server answered with (once `sent`): the client id, from a server that uses it. */
@@ -216,6 +220,9 @@ export function outgoingMessage(message: Outgoing): ChatMessage {
     ...(message.replyTo ? { replyTo: message.replyTo } : {}),
     // Its picture's id will be the message's own (see outboxOf): the thread draws it from the device meanwhile.
     ...(message.image ? { image: { id: message.clientId, width: message.image.width, height: message.image.height } } : {}),
+    ...(message.image && message.album ? { album: message.album } : {}),
+    // Drawn from the catalog at once; the server adds the fallback words older builds show.
+    ...(message.sticker ? { sticker: message.sticker } : {}),
   };
   return { ...drawn, key: message.clientId, delivery: toDelivery[message.status] };
 }

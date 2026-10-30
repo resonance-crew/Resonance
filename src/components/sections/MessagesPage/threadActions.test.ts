@@ -30,6 +30,13 @@ describe('messageMenuItems', () => {
     ]);
   });
 
+  // Round 22: a sticker is replied to, reacted to, unsent and reported as any message — but its words are the
+  // fallback older builds show, nothing to copy.
+  it('offers no Copy on a sticker', () => {
+    const sticker: ChatMessage = { ...theirs, text: '〔貼圖：謝謝〕', sticker: { pack: 'twine', id: 'thanks' } };
+    expect(messageMenuItems(sticker, null, labels, { withReply: true, viewerId: 'me' }).map((it) => it.key)).toEqual(['reply', 'report']);
+  });
+
   it('leads with the link’s rows when the press was on the link', () => {
     expect(rows(true).map(([key]) => key)).toEqual(['open', 'copyLink', 'reply', 'copy', 'report']);
   });
