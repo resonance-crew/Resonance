@@ -262,6 +262,8 @@ private fun GalleryPane(numberOf: (String) -> Int?, gridScroll: NestedScrollConn
         GalleryAccess.Full, GalleryAccess.Partial -> GalleryGrid(
             numberOf, partial = access == GalleryAccess.Partial, nested = gridScroll, onToggle = onToggle, onMore = request,
             modifier = Modifier.fillMaxSize(),
+            // A permission answer (more pictures chosen) or a return from settings: the pictures allowed may differ.
+            access = reads,
         )
         GalleryAccess.NotAsked, GalleryAccess.Denied -> GalleryPrompt(forever = false, onAllow = request, onSystemPicker = onSystemPicker)
         GalleryAccess.DeniedForever -> GalleryPrompt(
