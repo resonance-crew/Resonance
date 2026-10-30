@@ -6,8 +6,15 @@
  * along its knot (the left loop with its tail, the right loop with its tail, and the knot with the string through it),
  * each a copy of the bow's own <img> clipped to its piece: the loops turn about the knot, the knot never moves, so the
  * bow stays centred and level whatever it feels (the proposal: it must never come to rest leaning to one side).
+ *
+ * `mittenAt` / `between`: where a mitten is drawn through the body's lean too, for a prop held in one or both.
+ *
+ * `ripples` (RIPPLES_KIND): a prop kind for 共振了 — the brand's resonance drawn soft, ")))" and "(((" meeting — added
+ * to the kit's PROP_KINDS when this file loads (only in the stickers that import it), drawn with the kit's own paper.
  */
 import { clamp, type StickerPuppet } from '../kit';
+import { F, path, tear, type Pt } from '../kit/paper';
+import { PROP_KINDS, type PropKind, type PropState } from '../kit/props';
 
 /** How far a loop turns at perk ±1, degrees. */
 const PERK_DEG = 16;
@@ -92,3 +99,77 @@ export function between(p: StickerPuppet, at = 0.67): [number, number] {
   const [rx, ry] = mittenAt(p, 'R', at);
   return [(lx + rx) / 2, (ly + ry) / 2];
 }
+
+/** A prop kind as the kit's PROP_KINDS holds one (props.ts keeps its own type to itself). */
+interface LocalKind {
+  size: readonly [number, number];
+  anchors: Record<string, Pt>;
+  draw(seed: number): string;
+  update?(svg: SVGSVGElement, s: PropState, seed: number): void;
+}
+
+/** One soft paper crescent: an arc of radius r about (cx, cy), `half` degrees either side of `dir`, `w` wide. */
+function crescent(cx: number, cy: number, r: number, dir: number, half: number, w: number): Pt[] {
+  const outer: Pt[] = [];
+  const inner: Pt[] = [];
+  const n = 16;
+  for (let i = 0; i <= n; i++) {
+    const u = i / n;
+    const a = ((dir - half + 2 * half * u) * Math.PI) / 180;
+    // fuller in the middle, tapering to soft points at both ends
+    const t = w * (0.25 + 0.75 * Math.sin(Math.PI * u));
+    outer.push([cx + Math.cos(a) * (r + t / 2), cy + Math.sin(a) * (r + t / 2)]);
+    inner.push([cx + Math.cos(a) * (r - t / 2), cy + Math.sin(a) * (r - t / 2)]);
+  }
+  return [...outer, ...inner.reverse()];
+}
+
+/** The ripples' arcs: three from each side, the innermost first. */
+const RIPPLE_R = [40, 63, 86] as const;
+const RIPPLE_SIZE: readonly [number, number] = [260, 150];
+const RIPPLE_L: Pt = [16, 75];
+const RIPPLE_R_AT: Pt = [244, 75];
+/** 牽牽's ripples in its blue, 聆聆's in its lavender (both a step deeper than their papers, so they read on either). */
+const RIPPLE_INK = ['oklch(66% 0.065 228)', 'oklch(64% 0.09 292)'] as const;
+
+/**
+ * `ripples`: the brand's resonance drawn soft — three paper crescents spreading from each of two friends, ")))" from the
+ * left and "(((" from the right, meeting in the middle (`center`), where a heart can grow. `show` 0–1 grows them, the
+ * innermost first and the left a little before the right; `pulse` 0–1 runs one ripple out through both sets toward the
+ * middle; `lead` (0–1) how far the left set runs ahead of the right on a pulse.
+ */
+const RIPPLES: LocalKind = {
+  size: RIPPLE_SIZE,
+  anchors: { center: [130, 75], left: RIPPLE_L, right: RIPPLE_R_AT },
+  draw(seed) {
+    const sets = [[RIPPLE_L, 0, 'L'], [RIPPLE_R_AT, 180, 'R']] as const;
+    return sets.map(([[cx, cy], dir, side], s) => RIPPLE_R.map((r, i) => {
+      const pts = tear(crescent(cx, cy, r, dir, 38 - i * 4, 13 - i), seed + s * 10 + i, { amp: 1, jag: 0.5, wander: 0.8 });
+      return `<g class="r${side}${i}"><path d="${path(pts)}" fill="${RIPPLE_INK[s]}" filter="url(#${F}thin)"/></g>`;
+    }).join('')).join('');
+  },
+  update(svg, s) {
+    const show = clamp(s.show ?? 1, 0, 1);
+    const ph = s.pulse ?? 0;
+    const lead = 0.12;
+    for (const [side, cx, late] of [['L', RIPPLE_L[0], 0], ['R', RIPPLE_R_AT[0], lead]] as const) {
+      RIPPLE_R.forEach((r, i) => {
+        const g = svg.querySelector<SVGGElement>(`.r${side}${i}`);
+        if (!g) return;
+        const grow = clamp((show - late * 0.5) * 1.6 - i * 0.3, 0, 1);
+        const u = clamp((ph - late) * 1.25 - i * 0.2, 0, 1);
+        const v = Math.sin(Math.PI * u);
+        const sc = grow * grow * (3 - 2 * grow);
+        // each crescent swells as the ripple passes it, about its own arc (so it stays on its ring)
+        const mx = side === 'L' ? cx + r : cx - r;
+        g.style.transformBox = 'view-box';
+        g.style.transformOrigin = `${mx}px ${RIPPLE_L[1]}px`;
+        g.style.transform = `scale(${(sc * (1 + 0.28 * v)).toFixed(3)},${(sc * (1 + 0.16 * v)).toFixed(3)})`;
+        g.style.visibility = sc <= 0.001 ? 'hidden' : '';
+      });
+    }
+  },
+};
+(PROP_KINDS as unknown as Record<string, LocalKind>).ripples = RIPPLES;
+/** The `ripples` kind, for a sticker's props (registered when this file loads). */
+export const RIPPLES_KIND = 'ripples' as PropKind;
