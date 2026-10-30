@@ -150,5 +150,7 @@ class ChatMessageTest {
         assertEquals(ChatAlbum("AAAAAAAAAAAAAAAAAAAA", 0, 2), out.toMessage().album)
         val sticker = Outbox.Outgoing("c2", "alice", "", null, null, null, at, sticker = ChatSticker("pip", "hi"))
         assertEquals(ChatSticker("pip", "hi"), sticker.toMessage().sticker)
+        // No words of its own on its way (the server writes the fallback): the thread draws it all the same.
+        assertEquals(Carried.Words, Carried.of(sticker.toMessage(), null, emptyMap(), emptySet()))
     }
 }

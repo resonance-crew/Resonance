@@ -49,7 +49,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import com.resonance.design.AppFonts
-import com.resonance.design.ComposerGlyphs
+import com.resonance.design.generated.IconName
 import com.resonance.design.OrganicIcon
 import com.resonance.design.WobRectShape
 import com.resonance.design.generated.Tokens
@@ -143,7 +143,7 @@ private fun PackBar(sections: List<StickerSection>, current: Int, origin: String
                 contentAlignment = Alignment.Center,
             ) {
                 val pack = section.pack
-                if (pack == null) OrganicIcon(ComposerGlyphs.Clock, size = 22.dp, color = if (chosen) Tokens.Text else Tokens.TextMuted, strokeWidth = Tokens.Ink.value)
+                if (pack == null) OrganicIcon(IconName.Clock, size = 22.dp, color = if (chosen) Tokens.Text else Tokens.TextMuted, strokeWidth = Tokens.Ink.value)
                 else PackIcon(pack, origin, Modifier.size(32.dp))
             }
         }

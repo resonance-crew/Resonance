@@ -243,8 +243,10 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     val still = remember(context) { context.prefersReducedMotion() }
     val panelRoom = remember { PanelRoom(scope, still) }
     val stickerCatalog by Stickers.catalog.collectAsStateWithLifecycle()
-    // The field grown to the thread (round 22 §4.3, option C): the capsule's height then, or null.
-    var expandedHeight by remember { mutableStateOf<androidx.compose.ui.unit.Dp?>(null) }
+    // The field grown to the thread (round 22 §4.3, option C): what it leaves over itself under the bar (px) —
+    // their last message and its air, or only the air — or null. Its height follows the keyboard or a panel under it.
+    var expandedReserve by remember { mutableStateOf<Int?>(null) }
+    var expandedExtras by remember { mutableIntStateOf(0) }
     var capsuleHeight by remember { mutableIntStateOf(0) }
     var screenHeight by remember { mutableIntStateOf(0) }
     var screenWidth by remember { mutableIntStateOf(0) }
@@ -343,11 +345,12 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
         return with(density) { h.dp.toPx() }
     }
     /** Under the header: as tall as the panel grows (the capsule rides up with it). */
-    fun panelMax(): Float = (screenHeight - topPx - room.foot - with(density) { ComposerGap.toPx() } - navigationBars.getBottom(density)).toFloat().coerceAtLeast(panelRoom.base)
+    fun panelMax(): Float =
+        (screenHeight - topPx - room.foot - with(density) { (ComposerGap + PanelTopAir).toPx() } - navigationBars.getBottom(density)).toFloat().coerceAtLeast(panelRoom.base)
     /** A panel comes in the keyboard's place: laid out at once where the keyboard is, then the keyboard goes (no dip). */
     fun openPanel(next: PanelState) {
         val wasUp = imeInsets.getBottom(density) > navigationBars.getBottom(density)
-        expandedHeight = null
+        expandedReserve = null
         previewing = null
         panel = next
         shownPanel = next.panel
@@ -377,6 +380,8 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     }
     val onFieldTap: () -> Unit = { if (panel.panelOpen) backToKeyboard(PanelMachine.keyboardShown(panel)) }
     val setGrown: (Boolean) -> Unit = { grown ->
+        // Grown to under the header there is no room over the capsule for a preview.
+        if (grown) previewing = null
         panel = PanelMachine.setExpanded(panel, grown)
         panelRoom.max = panelMax()
         panelRoom.animateTo(if (grown) panelRoom.max else panelRoom.base)
@@ -433,8 +438,7 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
             val gap = with(density) { ComposerGap.roundToPx() }
             val clear = with(density) { ComposerClear.roundToPx() }
             val avail = screenHeight - topPx - keyboardPlace() - gap
-            val extras = (room.foot - capsuleHeight).coerceAtLeast(0)
-            var capsule = avail - extras - clear
+            var reserve = clear
             val theirs = rowsNow.lastOrNull { !model.isMine(it.message) && !it.message.isUnsent }
             var keep: Int? = null
             if (theirs != null) {
@@ -444,27 +448,33 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                     withFrameNanos { }
                     val size = list.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }?.size
                     if (size != null && size <= avail * TALL_SHARE) {
-                        capsule = avail - extras - clear - size - with(density) { 8.dp.toPx() }.roundToInt()
+                        reserve = clear + size + with(density) { 8.dp.roundToPx() }
                         keep = index
                     }
                 }
             }
-            // Beside the conversations (a tablet's pane) at most 60 % of the pane.
-            if (!phone) capsule = minOf(capsule, (screenHeight * 0.6f).roundToInt())
-            capsule = capsule.coerceAtLeast(with(density) { (ComposerHeight * 3).roundToPx() })
-            expandedHeight = with(density) { capsule.toDp() }
+            expandedExtras = (room.foot - capsuleHeight).coerceAtLeast(0)
+            expandedReserve = reserve
             keep?.let {
                 withFrameNanos { }
                 list.scrollToItem(it)
             }
         }
     }
-    val collapse: () -> Unit = { expandedHeight = null }
+    // Grown, the capsule takes what is left between that and the keyboard, a panel or the navigation bar (recomputed
+    // as they move); beside the conversations (a tablet's pane) at most 60 % of the pane; never less than three rows.
+    val expandedHeight: androidx.compose.ui.unit.Dp? = expandedReserve?.let { reserve ->
+        val gap = with(density) { ComposerGap.roundToPx() }
+        var capsule = screenHeight - topPx - keyboardPlace() - gap - expandedExtras - reserve
+        if (!phone) capsule = minOf(capsule, (screenHeight * 0.6f).roundToInt())
+        with(density) { capsule.coerceAtLeast((ComposerHeight * 3).roundToPx()).toDp() }
+    }
+    val collapse: () -> Unit = { expandedReserve = null }
     val onSegment: (SegmentRole) -> Unit = { role ->
         when (role) {
             SegmentRole.Send -> {
                 model.send()
-                expandedHeight = null
+                expandedReserve = null
             }
             SegmentRole.Expand -> setGrown(true)
             SegmentRole.Collapse -> setGrown(false)
@@ -1097,6 +1107,9 @@ internal sealed class Replace(val then: () -> Unit) {
     class WithCard(then: () -> Unit) : Replace(then)
     class WithPictures(then: () -> Unit) : Replace(then)
 }
+
+/** The air a grown panel leaves between the header's pen line and the capsule riding up with it. */
+private val PanelTopAir = 8.dp
 
 /** How long the keyboard is given to rise over a panel's kept room before the room goes anyway. */
 private const val KEYBOARD_RISE_MILLIS = 700L

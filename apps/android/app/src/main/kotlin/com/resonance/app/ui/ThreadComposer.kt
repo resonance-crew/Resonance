@@ -61,7 +61,6 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.resonance.design.AppFonts
 import com.resonance.design.ComposerCapsule
-import com.resonance.design.ComposerGlyphs
 import com.resonance.design.ComposerHeight
 import com.resonance.design.ComposerLeadShape
 import com.resonance.design.ComposerLeadSize
@@ -197,7 +196,7 @@ internal fun Composer(
                 // ⤢ at the field's top end from the third line (⤡ while grown); ☺ on the last line's row, beside Send.
                 if (expanded || lines >= EXPAND_FROM_LINES) {
                     ToolButton(
-                        glyph = if (expanded) ComposerGlyphs.Collapse else ComposerGlyphs.Expand,
+                        icon = if (expanded) IconName.Collapse else IconName.Expand,
                         label = if (expanded) L10n.Messages.collapseComposer else L10n.Messages.expandComposer,
                         size = 18.dp,
                         modifier = Modifier.align(Alignment.TopEnd).size(TOOL_WIDTH, 40.dp),
@@ -206,8 +205,7 @@ internal fun Composer(
                 }
                 val stickers = panel.panel == ComposerPanel.Stickers
                 ToolButton(
-                    glyph = if (stickers) ComposerGlyphs.Keyboard else null,
-                    icon = if (stickers) null else IconName.Smile,
+                    icon = if (stickers) IconName.Keyboard else IconName.Smile,
                     label = if (stickers) L10n.Messages.keyboard else L10n.Messages.stickers,
                     size = 22.dp,
                     modifier = Modifier.align(Alignment.BottomEnd).size(TOOL_WIDTH, ComposerHeight),
@@ -304,6 +302,8 @@ private fun PictureStrip(model: ThreadModel) {
         Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // The thumbnails and their count take the row's room, the ✕ its end (over Send, as every riding row's).
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
         Row(
             Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -327,10 +327,11 @@ private fun PictureStrip(model: ThreadModel) {
             }
         }
         BasicText(
-            label, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            label, maxLines = 1, softWrap = false,
             style = AppFonts.body(12f, 600, lineHeight = 1.35f, color = Tokens.Text),
-            modifier = Modifier.padding(start = 10.dp).weight(1f),
+            modifier = Modifier.padding(start = 10.dp),
         )
+        }
         Box(
             Modifier
                 .size(44.dp)
@@ -387,8 +388,7 @@ private fun ToolButton(
     label: String,
     size: Dp,
     modifier: Modifier,
-    glyph: com.resonance.design.IconGlyph? = null,
-    icon: IconName? = null,
+    icon: IconName,
     onClick: () -> Unit,
 ) {
     Box(
@@ -396,10 +396,7 @@ private fun ToolButton(
             .clickable(interactionSource = null, indication = OrganicIndication(inset = 4.dp), role = Role.Button, onClickLabel = label, onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
-    ) {
-        if (glyph != null) OrganicIcon(glyph, size = size, color = Tokens.TextMuted, strokeWidth = Tokens.Ink.value)
-        else if (icon != null) OrganicIcon(icon, size = size, color = Tokens.TextMuted, strokeWidth = Tokens.Ink.value)
-    }
+    ) { OrganicIcon(icon, size = size, color = Tokens.TextMuted, strokeWidth = Tokens.Ink.value) }
 }
 
 /** The ＋'s open disc's seed: the web's composer gives its menu, and so its bare trigger's disc, 17. */
