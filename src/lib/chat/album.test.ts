@@ -24,20 +24,55 @@ describe('collapseAlbums', () => {
     expect(keys(members.get(a[0].key)!)).toEqual(keys(a));
   });
 
-  it('draws an unsent or failed picture on its own right after the grid, and a lone picture as itself', () => {
+  // The server's unsend leaves a message nothing but who sent it and when ({ senderId, sentAt, unsentAt }): no
+  // picture, no album. It stands apart, right after the grid, and the album goes on past it.
+  const unsent = (senderId: string, extra: Partial<ChatMessage> = {}) => m(senderId, { unsentAt: new Date(), ...extra });
+
+  it('keeps an album whole past a picture unsent in its middle, the unsent line right after the grid', () => {
+    const a0 = pic('me', 'A', 0, 4, { text: 'rain' });
+    const a1 = unsent('me');
+    const a2 = pic('me', 'A', 2, 4);
+    const a3 = pic('me', 'A', 3, 4);
+    const { messages, members } = collapseAlbums([a0, a1, a2, a3]);
+    expect(keys(messages)).toEqual([a0.key, a1.key]);
+    expect(keys(members.get(a0.key)!)).toEqual([a0.key, a2.key, a3.key]);
+    expect(messages[0].text).toBe('rain');
+  });
+
+  it('draws a failed picture on its own after the grid, and one still on its way in it', () => {
     const a0 = pic('me', 'A', 0, 4);
-    const a1 = pic('me', 'A', 1, 4, { unsentAt: new Date() });
+    const a1 = unsent('me');
     const a2 = pic('me', 'A', 2, 4, { delivery: 'failed' });
     const a3 = pic('me', 'A', 3, 4, { delivery: 'sending' });
     const { messages, members } = collapseAlbums([a0, a1, a2, a3]);
     expect(keys(messages)).toEqual([a0.key, a1.key, a2.key]);
     expect(keys(members.get(a0.key)!)).toEqual([a0.key, a3.key]);
+  });
+
+  it('leaves an unsent message that the album doesn’t go on past where it is, and a lone picture as itself', () => {
+    // The album's last picture unsent, then another of the sender's messages unsent: drawn after the grid, in order.
+    const a0 = pic('me', 'A', 0, 3);
+    const a1 = pic('me', 'A', 1, 3);
+    const gone = unsent('me');
+    const later = unsent('me');
+    const words = m('me', { text: 'and this' });
+    const run = collapseAlbums([a0, a1, gone, later, words]);
+    expect(keys(run.messages)).toEqual([a0.key, gone.key, later.key, words.key]);
+    expect(keys(run.members.get(a0.key)!)).toEqual([a0.key, a1.key]);
+
+    // Someone else's unsent message is not the sender's picture: the album ends there.
+    const b0 = pic('me', 'B', 0, 3);
+    const theirs = unsent('bob');
+    const b2 = pic('me', 'B', 2, 3);
+    const split = collapseAlbums([b0, theirs, b2]);
+    expect(keys(split.messages)).toEqual([b0.key, theirs.key, b2.key]);
+    expect(split.members.size).toBe(0);
 
     // Only one of an album left in the grid: a picture alone, nothing collapsed.
-    const b0 = pic('me', 'B', 0, 2);
-    const b1 = pic('me', 'B', 1, 2, { unsentAt: new Date() });
-    const lone = collapseAlbums([b0, b1]);
-    expect(keys(lone.messages)).toEqual([b0.key, b1.key]);
+    const c0 = pic('me', 'C', 0, 2);
+    const c1 = unsent('me');
+    const lone = collapseAlbums([c0, c1]);
+    expect(keys(lone.messages)).toEqual([c0.key, c1.key]);
     expect(lone.members.size).toBe(0);
   });
 
