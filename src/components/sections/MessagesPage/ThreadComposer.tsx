@@ -162,33 +162,54 @@ export function ThreadComposer({
   }, [pictures]);
   useEffect(() => () => shown.current.forEach((url) => URL.revokeObjectURL(url)), []);
 
-  /** Pictures join the ones riding, in order, up to ten in all (past that, a word); one the browser can't read is said so. */
+  /**
+   * Pictures join the ones riding, in order, up to ten in all (past that, a word); one the browser can't read is
+   * said so. They are made ready one at a time — ten full-size photos decoded at once can take an older phone's
+   * tab down — each joining the strip as it is ready, and a later pick waits for the ones before it.
+   */
+  const prepQueue = useRef<Promise<void>>(Promise.resolve());
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   const addPictures = useCallback(
-    async (files: File[]) => {
+    (files: File[]) => {
       const room = ALBUM_MAX - picturesRef.current.length - preparingRef.current;
       if (room <= 0) {
         toast.show({ message: t('picturesMax') });
-        return;
+        return Promise.resolve();
       }
       const take = files.slice(0, room);
       if (files.length > room) toast.show({ message: t('picturesMax') });
       preparingRef.current += take.length;
       setPreparing(preparingRef.current);
-      const made = await Promise.allSettled(take.map((f) => preparePicture(f)));
-      preparingRef.current -= take.length;
-      setPreparing(preparingRef.current);
-      const ready = made.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
-      if (made.some((r) => r.status === 'rejected')) {
-        const err = made.find((r): r is PromiseRejectedResult => r.status === 'rejected')?.reason;
-        if (!(err instanceof UnsupportedImage)) console.error('Picture not prepared:', err);
-        toast.show({ message: t('imageUnsupported') });
-      }
-      if (!ready.length) return;
-      setPictures((cur) => [
-        ...cur,
-        ...ready.map((p) => ({ ...p, key: `p${++pictureKeys}`, previewUrl: URL.createObjectURL(p.file) })),
-      ].slice(0, ALBUM_MAX));
-      if (!panelOpenRef.current) inputRef.current?.focus();
+      const run = async () => {
+        let unreadable = false;
+        for (const file of take) {
+          try {
+            const ready = await preparePicture(file);
+            if (alive.current) {
+              setPictures((cur) =>
+                [...cur, { ...ready, key: `p${++pictureKeys}`, previewUrl: URL.createObjectURL(ready.file) }].slice(0, ALBUM_MAX),
+              );
+            }
+          } catch (err) {
+            if (!(err instanceof UnsupportedImage)) console.error('Picture not prepared:', err);
+            unreadable = true;
+          }
+          preparingRef.current -= 1;
+          if (alive.current) setPreparing(preparingRef.current);
+        }
+        if (!alive.current) return;
+        if (unreadable) toast.show({ message: t('imageUnsupported') });
+        if (!panelOpenRef.current) inputRef.current?.focus();
+      };
+      const done = prepQueue.current.then(run);
+      prepQueue.current = done.catch(() => undefined);
+      return done;
     },
     [toast, t, inputRef],
   );
