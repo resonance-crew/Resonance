@@ -33,7 +33,8 @@ final class ChatOutboxes {
             var image: ChatImage?
             if let picture = m.picture { image = try await upload(picture, of: m, to: to, with: messaging()) }
             let answer = try await messaging().sendMessage(to: to, text: m.text, cardRef: m.cardRef, noteRef: m.noteRef,
-                                                           replyTo: m.replyTo?.id, clientId: m.clientId, image: image?.id)
+                                                           replyTo: m.replyTo?.id, clientId: m.clientId, image: image?.id,
+                                                           sticker: m.sticker, album: m.album)
             uploaded[m.clientId] = nil
             sent()
             return answer.id

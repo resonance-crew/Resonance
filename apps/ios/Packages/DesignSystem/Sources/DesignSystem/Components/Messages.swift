@@ -215,17 +215,23 @@ extension MessageBubble where Attachment == EmptyView {
 public struct QuoteBubble: View {
     let text: String
     let seed: Double
+    /// Before the words: a quoted sticker's key pose (round 22).
+    let lead: AnyView?
     let onTap: (() -> Void)?
 
-    public init(text: String, seed: Double, onTap: (() -> Void)? = nil) {
+    public init(text: String, seed: Double, lead: AnyView? = nil, onTap: (() -> Void)? = nil) {
         self.text = text
         self.seed = seed
+        self.lead = lead
         self.onTap = onTap
     }
 
     public var body: some View {
         let shape = MessageBubbleShape(seed: seed, maxRadius: BubbleMetrics.quoteRadius)
-        ChatText(text, size: 13.5, color: Tokens.textMuted, maxLines: 2)
+        HStack(spacing: 6) {
+            if let lead { lead }
+            ChatText(text, size: 13.5, color: Tokens.textMuted, maxLines: 2)
+        }
             .padding(.horizontal, 13)
             .padding(.top, 8)
             .padding(.bottom, 8 + BubbleMetrics.replyOverlap)
@@ -367,12 +373,14 @@ private struct BubblePicture: View {
 private struct BubblePartAction: ViewModifier {
     let action: (() -> Void)?
     var trait: AccessibilityTraits = .isLink
+    /// The light wash under the finger (a sticker, which has no bubble to cut it, takes none).
+    var washes = true
     @State private var pressed = false
 
     func body(content: Content) -> some View {
         if let action {
             content
-                .overlay { Tokens.terracotta.opacity(pressed ? 0.1 : 0).allowsHitTesting(false) }
+                .overlay { Tokens.terracotta.opacity(pressed && washes ? 0.1 : 0).allowsHitTesting(false) }
                 .animation(.easeOut(duration: pressed ? 0.08 : 0.22), value: pressed)
                 .gesture(PartTap(onPress: { pressed = $0 }, onTap: action))
                 .accessibilityElement(children: .combine)
@@ -381,6 +389,14 @@ private struct BubblePartAction: ViewModifier {
         } else {
             content
         }
+    }
+}
+
+extension View {
+    /// A part of a message a tap opens without taking the message's own hold or the thread's scroll (round 22:
+    /// an album's picture, a sticker's replay) — ``BubblePartAction``.
+    public func messagePartTap(_ action: (() -> Void)?, trait: AccessibilityTraits = .isButton, washes: Bool = true) -> some View {
+        modifier(BubblePartAction(action: action, trait: trait, washes: washes))
     }
 }
 
@@ -701,6 +717,15 @@ public nonisolated enum ComposerMetrics {
     public static let slipRadius: CGFloat = 14
     /// The text's room after its words, before the send segment's seam.
     public static let textTrailing: CGFloat = 10
+    /// Round 22: the ☺ column before the send segment (its glyph 22), and the ⤢ / ⤡ at its top (glyph 16).
+    public static let stickerWidth: CGFloat = 40
+    public static let stickerGlyph: CGFloat = 22
+    public static let cornerGlyph: CGFloat = 16
+    public static let cornerHeight: CGFloat = 34
+    /// ⤢ shows once the text runs to this many lines.
+    public static let expandAtLines = 3
+    /// Grown over the thread on an iPad or the Mac: at most this share of the thread pane.
+    public static let expandedPaneShare: CGFloat = 0.6
 
     /// The text's padding above and below so a line `lineHeight` tall sits centred in the 48 —
     /// computed from the line the text really draws at its size, so the capsule never grows from the
@@ -743,11 +768,22 @@ public struct ComposerCapsule<Field: View>: View {
     let sendLabel: String
     let onAttach: (CGRect) -> Void
     let onSend: () -> Void
+    /// Round 22: the ☺ before the send segment (⌨ while the sticker panel is open), and the ⤢ / ⤡ over it.
+    var stickers: ComposerSideButton?
+    var corner: ComposerSideButton?
+    /// The send segment's face: Send, or the sticker panel's ↑ / ↓ (with `faceLabel`, `onFace`).
+    var sendFace: ComposerSendFace = .send
+    var faceLabel: String?
+    var onFace: (() -> Void)?
+    /// Grown over the thread (round 22 §4.3, option C): the send segment a 52 × 48 block on the last row.
+    var expanded = false
     @ViewBuilder let field: Field
     @State private var attachFrame: CGRect = .zero
     @State private var sendPressed = false
 
     public init(focused: Bool, canSend: Bool, attachOpen: Bool = false, seed: Double = 17, attachLabel: String, sendLabel: String,
+                stickers: ComposerSideButton? = nil, corner: ComposerSideButton? = nil, sendFace: ComposerSendFace = .send,
+                faceLabel: String? = nil, onFace: (() -> Void)? = nil, expanded: Bool = false,
                 onAttach: @escaping (CGRect) -> Void, onSend: @escaping () -> Void, @ViewBuilder field: () -> Field) {
         self.focused = focused
         self.canSend = canSend
@@ -755,10 +791,19 @@ public struct ComposerCapsule<Field: View>: View {
         self.seed = seed
         self.attachLabel = attachLabel
         self.sendLabel = sendLabel
+        self.stickers = stickers
+        self.corner = corner
+        self.sendFace = sendFace
+        self.faceLabel = faceLabel
+        self.onFace = onFace
+        self.expanded = expanded
         self.onAttach = onAttach
         self.onSend = onSend
         self.field = field()
     }
+
+    /// The segment acts: Send sends, ↑ / ↓ grow or shrink the sticker panel.
+    private var segmentEnabled: Bool { sendFace == .send ? canSend : onFace != nil }
 
     public var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
@@ -777,31 +822,119 @@ public struct ComposerCapsule<Field: View>: View {
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { attachFrame = $0 }
             field
                 .frame(maxWidth: .infinity, minHeight: ComposerMetrics.height, alignment: .leading)
-                .padding(.trailing, ComposerMetrics.textTrailing)
+                .padding(.trailing, stickers == nil && corner == nil ? ComposerMetrics.textTrailing : 0)
+            if stickers != nil || corner != nil {
+                // The ☺ on the last line's row, the ⤢ / ⤡ at the column's top once the text has grown (round 22).
+                VStack(spacing: 0) {
+                    if let corner {
+                        sideButton(corner) {
+                            OrganicIcon(corner.on ? .collapse : .expand, size: ComposerMetrics.cornerGlyph, color: Tokens.textMuted,
+                                        strokeWidth: Tokens.ink)
+                        }
+                            .frame(height: ComposerMetrics.cornerHeight)
+                            .transition(.opacity)
+                    }
+                    Spacer(minLength: 0)
+                    if let stickers {
+                        sideButton(stickers) {
+                            OrganicIcon(stickers.on ? .keyboard : .smile, size: ComposerMetrics.stickerGlyph, color: Tokens.textMuted,
+                                        strokeWidth: Tokens.ink)
+                        }
+                        .frame(height: ComposerMetrics.height)
+                    }
+                }
+                .frame(width: ComposerMetrics.stickerWidth)
+                .frame(maxHeight: .infinity)
+            }
             Button {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                onSend()
+                if sendFace == .send { onSend() } else { onFace?() }
             } label: {
-                OrganicIcon(.send, size: ComposerMetrics.sendGlyph, color: canSend ? Tokens.cream : Tokens.terracotta,
-                            strokeWidth: Tokens.ink)
+                segmentGlyph
                     // Its ink changes in 140 ms; where it sits follows the capsule at once (a sent message's
                     // lines going flip `canSend` in the same update: the plane never glides down to the row).
                     .animation(ComposerCapsuleFace.faceChange, value: canSend)
+                    .animation(ComposerCapsuleFace.faceChange, value: sendFace)
                     .geometryGroup()
                     .frame(width: ComposerMetrics.sendWidth, height: ComposerMetrics.height)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .frame(maxHeight: expanded ? nil : .infinity, alignment: .bottom)
                     .contentShape(Rectangle())
             }
             .buttonStyle(PressReport(pressed: $sendPressed))
-            .disabled(!canSend)
-            .accessibilityLabel(sendLabel)
+            .disabled(!segmentEnabled)
+            .accessibilityLabel(sendFace == .send ? sendLabel : faceLabel ?? sendLabel)
         }
         .frame(minHeight: ComposerMetrics.height)
         // As tall as its text asks (and the segment with it) — never the height it is offered.
         .fixedSize(horizontal: false, vertical: true)
         .background {
-            ComposerCapsuleFace(seed: seed, focused: focused, canSend: canSend, pressed: sendPressed)
+            ComposerCapsuleFace(seed: seed, focused: focused, canSend: canSend && sendFace == .send, pressed: sendPressed,
+                                block: expanded)
         }
+    }
+
+    /// The plane — or the sticker panel's ↑ / ↓ (round 22 §4.1).
+    @ViewBuilder private var segmentGlyph: some View {
+        switch sendFace {
+        case .send:
+            OrganicIcon(.send, size: ComposerMetrics.sendGlyph, color: canSend ? Tokens.cream : Tokens.terracotta, strokeWidth: Tokens.ink)
+        case .expand:
+            OrganicIcon(.arrowUp, size: ComposerMetrics.sendGlyph, color: Tokens.terracotta, strokeWidth: Tokens.ink)
+        case .collapse:
+            OrganicIcon(.arrowUp, size: ComposerMetrics.sendGlyph, color: Tokens.terracotta, strokeWidth: Tokens.ink)
+                .rotationEffect(.degrees(180))
+        }
+    }
+
+    /// A ghost control in the side column (☺ / ⌨, ⤢ / ⤡): the glyph alone, 40 wide.
+    private func sideButton(_ spec: ComposerSideButton, @ViewBuilder glyph: () -> some View) -> some View {
+        Button(action: spec.action) {
+            glyph()
+                .frame(width: ComposerMetrics.stickerWidth)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(OrganicPressStyle(inset: 2))
+        .accessibilityLabel(spec.label)
+    }
+}
+
+/// The send segment's face (round 22 §4.1): Send — or, the sticker panel open with nothing to send, ↑ to grow
+/// the panel to under the header and ↓ to bring it back.
+public enum ComposerSendFace: Equatable, Sendable {
+    case send, expand, collapse
+}
+
+/// A ghost button in the capsule's side column (round 22): ☺ / ⌨ (`on`: the sticker panel is open), or
+/// ⤢ / ⤡ (`on`: the field is grown).
+public struct ComposerSideButton {
+    public let on: Bool
+    public let label: String
+    public let action: () -> Void
+
+    public init(on: Bool, label: String, action: @escaping () -> Void) {
+        self.on = on
+        self.label = label
+        self.action = action
+    }
+}
+
+/// A sheet of the menus' paper (the web's PaperSheet, round 18): the theme's menu paper inside one hand-drawn
+/// pen line at INK in the header's grey — no grain, no shadow. Behind the sticker preview and the Mac's popovers.
+public struct PaperSheet: View {
+    var seed: Double
+
+    public init(seed: Double = 41) {
+        self.seed = seed
+    }
+
+    public var body: some View {
+        let shape = MenuSheetShape(seed: seed)
+        ZStack {
+            shape.fill(MenuSheetColors.paper(hue: nil))
+            shape.stroke(MenuSheetColors.pen(hue: nil), style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
+        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -858,10 +991,12 @@ struct ComposerCapsuleFace: View {
     let canSend: Bool
     let pressed: Bool
     var segmentWidth: CGFloat = ComposerMetrics.sendWidth
+    /// Grown over the thread (round 22 §4.3): the segment a block on the last row, its seam on its top and left.
+    var block = false
 
     var body: some View {
         let shape = ComposerCapsuleShape(seed: seed)
-        let segment = ComposerSendSegment(seed: seed, width: segmentWidth)
+        let segment = ComposerSendSegment(seed: seed, width: segmentWidth, block: block)
         ZStack {
             shape.fill(Tokens.cream)
             ZStack {
@@ -877,7 +1012,8 @@ struct ComposerCapsuleFace: View {
                     .animation(Self.pressChange) { $0.opacity(pressed && !canSend ? 1 : 0) }
                 segment.fill(Tokens.towardInk.opacity(0.14))
                     .animation(Self.pressChange) { $0.opacity(pressed && canSend ? 1 : 0) }
-                ComposerSendSeam(seed: seed, width: segmentWidth).stroke(Tokens.cream, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round))
+                ComposerSendSeam(seed: seed, width: segmentWidth, block: block)
+                    .stroke(Tokens.cream, style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
             }
             .clipShape(shape)
             shape.stroke(style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
@@ -896,9 +1032,13 @@ struct ComposerCapsuleFace: View {
 nonisolated struct ComposerSendSegment: Shape {
     let seed: Double
     var width: CGFloat = ComposerMetrics.sendWidth
+    var block = false
 
     func path(in rect: CGRect) -> Path {
-        SegmentRegion(left: ComposerMetrics.seamSeed(seed), right: nil).path(in: Self.frame(in: rect, width: width))
+        guard block else {
+            return SegmentRegion(left: ComposerMetrics.seamSeed(seed), right: nil).path(in: Self.frame(in: rect, width: width))
+        }
+        return ComposerBlockSeams(seed: seed, width: width).region.offsetBy(dx: rect.maxX - width, dy: rect.maxY - ComposerMetrics.height)
     }
 
     static func frame(in rect: CGRect, width: CGFloat = ComposerMetrics.sendWidth) -> CGRect {
@@ -906,13 +1046,44 @@ nonisolated struct ComposerSendSegment: Shape {
     }
 }
 
-/// The seam at the send segment's start, across the capsule.
+/// The seam at the send segment's start, across the capsule — or, a block, along its top and down its left.
 nonisolated struct ComposerSendSeam: Shape {
     let seed: Double
     var width: CGFloat = ComposerMetrics.sendWidth
+    var block = false
 
     func path(in rect: CGRect) -> Path {
-        SegmentRegion.leftSeam(seed: ComposerMetrics.seamSeed(seed)).path(in: ComposerSendSegment.frame(in: rect, width: width))
+        guard block else {
+            return SegmentRegion.leftSeam(seed: ComposerMetrics.seamSeed(seed)).path(in: ComposerSendSegment.frame(in: rect, width: width))
+        }
+        return ComposerBlockSeams(seed: seed, width: width).seam.offsetBy(dx: rect.maxX - width, dy: rect.maxY - ComposerMetrics.height)
+    }
+}
+
+/// The send block of a grown composer (round 22 §4.3): 52 × 48 in the capsule's foot corner, cut from the text
+/// by two of the bar's wavy seams — one down its left, one along its top — meeting at its top-left corner.
+nonisolated struct ComposerBlockSeams {
+    let region: Path
+    let seam: Path
+
+    init(seed: Double, width: CGFloat) {
+        let w = Double(width), h = Double(ComposerMetrics.height), pad = SegmentSeams.pad(h)
+        let left = SegmentSeams.down(x: 0, h: h, seed: ComposerMetrics.seamSeed(seed), amp: 1.6, pad: pad)
+        let top = SegmentSeams.across(y: 0, w: w, seed: ComposerMetrics.seamSeed(seed) + 5, amp: 1.6, pad: pad)
+        region = SegmentSeams.right(of: left, w: w, h: h, pad: pad).intersection(SegmentSeams.below(top, w: w, h: h, pad: pad))
+        // The two seams from where they meet: the top one on to the right, the left one down.
+        var seam = Path()
+        let topRun = top.filter { $0.x >= -1 }
+        let leftRun = left.filter { $0.y >= -1 }
+        if let first = topRun.first {
+            seam.move(to: first)
+            for pt in topRun.dropFirst() { seam.addLine(to: pt) }
+        }
+        if let first = leftRun.first {
+            seam.move(to: first)
+            for pt in leftRun.dropFirst() { seam.addLine(to: pt) }
+        }
+        self.seam = seam
     }
 }
 

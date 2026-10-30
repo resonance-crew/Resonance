@@ -44,6 +44,11 @@ targets:
       # The paper puppets' island (round 19: npm run native:mascots → native/mascots/dist).
       - path: ../../native/mascots/dist/mascots.html
         buildPhase: resources
+      # The 小紙團 stickers (round 22): the web's catalog and files as they are (public/stickers →
+      # the bundle's stickers/), drawn from here; a sticker this build doesn't carry is read from the site.
+      - path: ../../public/stickers
+        type: folder
+        buildPhase: resources
     # The editor above is build output the repo does not keep. Xcode's own answer to a missing
     # resource is "Build input file cannot be found", which says nothing about npm; this says it first.
     preBuildScripts:

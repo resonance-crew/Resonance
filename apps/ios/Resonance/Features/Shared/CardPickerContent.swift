@@ -61,14 +61,19 @@ struct CardPickerContent: View {
             if privateLabel == nil {
                 cards = Self.pickable(try await session.reading.cardBox(.published))
             } else {
-                let box = try await session.reading.cardBox(shelves: [.published, ._private, .draft])
-                // The published shelf left out of the answer is no list to offer (never read as empty).
-                guard let published = box[.published] else { throw APIFailure.unexpected(status: 200) }
-                cards = Self.shareable(published: published, privateCards: box[._private] ?? [], drafts: box[.draft] ?? [])
+                cards = try await Self.threadCards(session)
             }
         } catch {
             failed = true
         }
+    }
+
+    /// What a thread can share, read in one request (the attach panel's 卡片 too, round 22).
+    static func threadCards(_ session: SessionStore) async throws -> [FeedCard] {
+        let box = try await session.reading.cardBox(shelves: [.published, ._private, .draft])
+        // The published shelf left out of the answer is no list to offer (never read as empty).
+        guard let published = box[.published] else { throw APIFailure.unexpected(status: 200) }
+        return shareable(published: published, privateCards: box[._private] ?? [], drafts: box[.draft] ?? [])
     }
 
     /// What can be picked: the published, public cards.
@@ -136,6 +141,8 @@ struct CardPickList<Lead: View, Empty: View>: View {
     /// Leads a 私人卡's line (「私人卡 · 9月28日」) — never published, or kept private; without it nothing marks one.
     var privateLabel: String?
     var footnote: String?
+    /// Fills the height it is given (the attach panel's 卡片, round 22) instead of its rows' own, up to half the window.
+    var fills = false
     let onPick: (FeedCard) -> Void
     @ViewBuilder let lead: Lead
     @ViewBuilder let empty: Empty
@@ -172,8 +179,8 @@ struct CardPickList<Lead: View, Empty: View>: View {
         }
         // Its ends fade while there is more that way (the web's useEdgeFades).
         .scrollEdgeFades()
-        .frame(maxHeight: window.height * 0.5 + 2 * Self.ringRoom)
-        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxHeight: fills ? .infinity : window.height * 0.5 + 2 * Self.ringRoom)
+        .fixedSize(horizontal: false, vertical: !fills)
         .scrollIndicators(.hidden)
         .padding(-Self.ringRoom)
         .padding(.bottom, choosing ? 18 : 0)

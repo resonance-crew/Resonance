@@ -51,6 +51,10 @@ public enum IconName: String, CaseIterable, Sendable {
     case arrowUp = "arrow-up"
     case mask
     case smile
+    case keyboard
+    case expand
+    case collapse
+    case recent
     case verified
 }
 
@@ -294,6 +298,27 @@ extension IconName {
             IconStroke(filled: false, width: 1, commands: [0, 9.2, 9.6, 2, 9.2, 10.1, 9.2, 10.6, 9.3, 11.1]),
             IconStroke(filled: false, width: 1, commands: [0, 14.8, 9.3, 2, 14.8, 9.8, 14.9, 10.3, 14.9, 10.8]),
             IconStroke(filled: false, width: 1, commands: [0, 8.3, 14, 2, 9.4, 15.8, 11.3, 16.5, 13.2, 16.1, 2, 14.3, 15.8, 15.2, 15.1, 15.9, 13.7]),
+        ])
+        case .keyboard: IconGlyph(viewBox: 24, fillable: false, strokes: [
+            IconStroke(filled: false, width: 1, commands: [0, 3.2, 6.6, 2, 9, 6.1, 15, 6.5, 20.9, 6.3, 2, 21.4, 10, 21.3, 14, 21.1, 17.5, 2, 15, 17.9, 9, 17.4, 3, 17.8, 2, 2.7, 14, 2.8, 10, 3.2, 6.6, 3]),
+            IconStroke(filled: false, width: 1, commands: [0, 6.6, 10.2, 1, 6.8, 10.3, 0, 10.2, 10.2, 1, 10.4, 10.3, 0, 13.8, 10.2, 1, 14, 10.3, 0, 17.4, 10.2, 1, 17.6, 10.3, 0, 8.4, 12.6, 1, 8.6, 12.7, 0, 12, 12.6, 1, 12.2, 12.7, 0, 15.6, 12.6, 1, 15.8, 12.7]),
+            IconStroke(filled: false, width: 1, commands: [0, 8.2, 15, 2, 10.6, 14.8, 13.4, 15.2, 15.8, 15.1]),
+        ])
+        case .expand: IconGlyph(viewBox: 24, fillable: false, strokes: [
+            IconStroke(filled: false, width: 1, commands: [0, 14, 4.6, 1, 19.4, 4.6, 1, 19.4, 10]),
+            IconStroke(filled: false, width: 1, commands: [0, 19.2, 4.8, 2, 17.2, 6.8, 15.3, 8.7, 13.4, 10.6]),
+            IconStroke(filled: false, width: 1, commands: [0, 10, 19.4, 1, 4.6, 19.4, 1, 4.6, 14]),
+            IconStroke(filled: false, width: 1, commands: [0, 4.8, 19.2, 2, 6.8, 17.2, 8.7, 15.3, 10.6, 13.4]),
+        ])
+        case .collapse: IconGlyph(viewBox: 24, fillable: false, strokes: [
+            IconStroke(filled: false, width: 1, commands: [0, 19.4, 4.6, 2, 17.6, 6.4, 15.8, 8.2, 14, 10]),
+            IconStroke(filled: false, width: 1, commands: [0, 13.8, 5.4, 1, 13.8, 10.2, 1, 18.6, 10.2]),
+            IconStroke(filled: false, width: 1, commands: [0, 4.6, 19.4, 2, 6.4, 17.6, 8.2, 15.8, 10, 14]),
+            IconStroke(filled: false, width: 1, commands: [0, 10.2, 18.6, 1, 10.2, 13.8, 1, 5.4, 13.8]),
+        ])
+        case .recent: IconGlyph(viewBox: 24, fillable: false, strokes: [
+            IconStroke(filled: false, width: 1, commands: [0, 12, 3.4, 2, 17, 3.3, 20.7, 7.2, 20.6, 12.2, 2, 20.5, 17, 16.8, 20.7, 11.8, 20.6, 2, 7, 20.5, 3.3, 16.8, 3.4, 11.9, 2, 3.5, 7.1, 7.2, 3.5, 12, 3.4]),
+            IconStroke(filled: false, width: 1, commands: [0, 12, 7.4, 1, 12.1, 12.2, 1, 15.6, 14]),
         ])
         case .verified: IconGlyph(viewBox: 16, fillable: false, strokes: [
             IconStroke(filled: false, width: 1, commands: [0, 2.2, 8.4, 2, 3.3, 8.8, 4.6, 10.2, 5.9, 12, 2, 7.4, 9.2, 9.6, 5.4, 13.6, 2.9]),

@@ -57,7 +57,9 @@ extension MessageMenu {
                copied: @escaping () -> Void, unsend: @escaping () -> Void, stopSharing: @escaping () -> Void,
                report: @escaping () -> Void) -> [OrganicMenuItem] {
         let message = row.message
-        let rows = Self.rows(link: link != nil, onLink: onLink && link != nil, reply: model.canReply(message), copy: !message.text.isEmpty,
+        let rows = Self.rows(link: link != nil, onLink: onLink && link != nil, reply: model.canReply(message),
+                             // A sticker's words are its fallback for builds that can't draw it: nothing to copy.
+                             copy: !message.text.isEmpty && message.sticker == nil,
                              unsend: model.me.map { message.canUnsend(viewer: $0) } ?? false,
                              stopSharing: model.me.map { message.canStopSharing(viewer: $0) } ?? false,
                              report: !model.isMine(message) && message.delivery == .delivered && !message.isUnsent,

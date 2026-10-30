@@ -33,11 +33,27 @@ struct ThreadScreen: View {
     @State private var showResults = false
     @State private var currentHit: String?
     @State private var showingMedia = false
-    @State private var pickingCard = false
-    /// The composer's ＋ is open: where it is, for its menu to hang from.
-    @State private var attachMenu: CGRect?
-    @State private var pickingPhoto = false
-    @State private var photoItem: PhotosPickerItem?
+    /// What lies under the composer (round 22 §4.1–4.2): the keyboard, the sticker panel or the attach panel.
+    @State private var panels = ComposerPanels()
+    /// The sticker previewed over the thread's foot: a second tap sends it.
+    @State private var previewing: StickerRef?
+    /// The attach panel's tab, and the pictures its picker has chosen, in order.
+    @State private var attachTab: AttachTab = .pictures
+    @State private var pickerSelection: [PhotosPickerItem] = []
+    /// Picking pictures while a card rides (or a card while pictures do) asks first.
+    @State private var replacing: Replacing?
+    /// The attach panel's grip, dragged (points up).
+    @State private var panelDrag: CGFloat = 0
+    /// The Mac's popovers at ☺ and ＋ (round 22 §4.1–4.2): a sheet over the thread, never the panels.
+    @State private var macPopover: ComposerPanel?
+    /// The capsule and the composer (with what rides over it) on the screen, and the screen itself.
+    @State private var capsuleFrame: CGRect = .zero
+    @State private var composerFrame: CGRect = .zero
+    @State private var screenFrame: CGRect = .zero
+    /// Grown over the thread (option C): where the capsule's top goes, worked out as it grew.
+    @State private var expandedTop: CGFloat?
+    /// The keyboard's height, remembered (a panel opens at it), and when it has come up.
+    private let keyboard = KeyboardWatch.shared
     /// The picture open full screen.
     @State private var viewing: ChatImage?
     /// The keyboard's part of the thread's foot, held while a picture is open and until the keyboard is
@@ -80,7 +96,8 @@ struct ThreadScreen: View {
     /// foot, in the thread's own space.
     @State private var threadBottom: CGFloat = 0
     @State private var shownHeight: CGFloat = 0
-    @FocusState private var composing: Bool
+    /// The composer's text has the keyboard (its `UITextView` says so, and is told).
+    @State private var composing = false
     @FocusState private var searchFocused: Bool
 
     var body: some View {
@@ -117,6 +134,23 @@ struct ThreadScreen: View {
                 // `-threadPicture <seconds>` opens the newest picture and closes it that long after (the
                 // thread under it checked on a device the simulator can't be tapped on).
                 let defaults = UserDefaults.standard
+                // Round 22's screen checks: `-threadPanel stickers|attach` opens a panel (`-threadPanelTall YES` grown),
+                // `-threadPreview <pack>/<id>` previews a sticker, `-threadExpand YES` grows the composer (option C).
+                if let opened = defaults.string(forKey: "threadPanel") {
+                    while !model.threadReady { try? await Task.sleep(for: .milliseconds(100)) }
+                    try? await Task.sleep(for: .seconds(1))
+                    panels.open(opened == "attach" ? .attach : .stickers)
+                    if defaults.bool(forKey: "threadPanelTall") { panels.setExpanded(true) }
+                    if let shown = defaults.string(forKey: "threadPreview")?.split(separator: "/").map(String.init), shown.count == 2 {
+                        previewing = StickerRef(pack: shown[0], id: shown[1])
+                    }
+                }
+                if defaults.bool(forKey: "threadExpand") {
+                    while !model.threadReady { try? await Task.sleep(for: .milliseconds(100)) }
+                    try? await Task.sleep(for: .seconds(1.5))
+                    while capsuleFrame.height == 0 { try? await Task.sleep(for: .milliseconds(100)) }
+                    expandComposer(true, model)
+                }
                 if defaults.bool(forKey: "threadReply") || defaults.double(forKey: "threadPicture") > 0 {
                     while !model.threadReady { try? await Task.sleep(for: .milliseconds(100)) }
                     try? await Task.sleep(for: .seconds(1))
@@ -151,6 +185,7 @@ struct ThreadScreen: View {
             .onChange(of: onSelectedTab) { _, selected in shown(appeared && selected) }
             // Back in the foreground: listeners that failed listen again; a thread that couldn't find its person asks again.
             .onChange(of: scenePhase) { _, phase in
+                if phase != .active { model?.saveDraft() }
                 guard let model, visible else { return }
                 model.setOnScreen(phase == .active)
                 guard phase == .active else { return }
@@ -167,6 +202,14 @@ struct ThreadScreen: View {
                 Task { await model.connectionsMoved(live: session.conversations.connectedIds) }
             }
             // Opened for a note that is in the thread: there, flashed, and the reply to it set up.
+            // A picture taken off the strip (its ✕, a send) is unchosen in the attach panel's picker too.
+            .onChange(of: model?.pendingPictures.map(\.key) ?? []) { _, keys in
+                let kept = pickerSelection.filter { keys.contains(Self.pickerKey($0)) }
+                if kept.count != pickerSelection.count { pickerSelection = kept }
+            }
+            .onChange(of: model?.composerExpanded ?? false) { _, grown in
+                if !grown { expandedTop = nil }
+            }
             .onChange(of: model?.noteToShow) { _, id in
                 guard let id, let model else { return }
                 model.noteShown()
@@ -201,7 +244,9 @@ struct ThreadScreen: View {
             // back after: the thread keeps the foot it had, so nothing in it moves either way (round 11 §1).
             // Always the same two modifiers, so letting go never rebuilds the thread.
             .padding(.bottom, keyboardHold.padding ?? 0)
-            .ignoresSafeArea(keyboardHold.padding == nil ? [] : .keyboard, edges: .bottom)
+            // A panel in the keyboard's place (round 22 §4.1) stands where the keyboard stood, whatever the keyboard
+            // does under it: the thread lays out as if none were up while one shows.
+            .ignoresSafeArea(keyboardHold.padding == nil && !panels.ignoresKeyboard ? [] : .keyboard, edges: .bottom)
             .accessibilityHidden(menu != nil)
             // Under the press layer the thread's body softens 2 pt beside dimming (review F8: its neighbours'
             // words competed with the lifted message), as under a modal.
@@ -237,12 +282,45 @@ struct ThreadScreen: View {
                                        ? .init(current: model.myReaction(to: message)) { model.react(message, with: $0) }
                                        : nil, dimmed: $pressDimmed) { self.menu = nil }
             }
-            if let attachMenu {
-                AttachMenuOverlay(anchor: attachMenu, items: attachItems) { self.attachMenu = nil }
+            if let sticker = previewing, macPopover == nil, let model {
+                // The sticker previewed (round 22 §4.1) over the thread's foot, above the composer — or, the panel grown
+                // to under the header, over the panel's top. A tap elsewhere on the thread lets it go.
+                StickerPreviewLayer(sticker: sticker, composerTop: composerFrame.minY, capsuleBottom: capsuleFrame.maxY,
+                                    threadTop: barFrame.maxY, onDismiss: { withAnimation(.easeOut(duration: 0.14)) { previewing = nil } },
+                                    onSend: { sendSticker(sticker, model) })
+                    .transition(.opacity)
+            }
+            if let macPopover, let model {
+                MacComposerPopover(kind: macPopover, anchor: capsuleFrame, onDismiss: { closeMacPopover() }) {
+                    if macPopover == .stickers {
+                        StickerPanel(library: StickerLibrary.shared, columns: 5, previewing: previewing) { tapSticker($0, model) }
+                    } else {
+                        attachPanel(model, gripped: false)
+                    }
+                } footer: {
+                    if macPopover == .stickers, previewing != nil {
+                        Text(L10n.Messages.stickerPreviewHint).font(AppFonts.body(12)).foregroundStyle(Tokens.textMuted)
+                    }
+                }
             }
         }
         .background(Tokens.cream)
         .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { safe = $0 }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { screenFrame = $0 }
+        // The keyboard is up: a panel waiting for it goes (round 22 §4.1).
+        .onChange(of: keyboard.shownCount) { _, _ in
+            if panels.awaitingKeyboard { withTransaction(\.disablesAnimations, true) { panels.keyboardShown() } }
+        }
+        // The field took the focus while a panel showed (a tap on it): the panel stays until the keyboard is up.
+        .onChange(of: composing) { _, now in
+            guard now, panels.isOpen, !panels.awaitingKeyboard else { return }
+            awaitKeyboard(forPanel: true)
+        }
+        // A tap on the thread (or the foot's paper): the panel goes too.
+        .onReceive(NotificationCenter.default.publisher(for: KeyboardAway.didAsk)) { _ in
+            guard panels.isOpen, !panels.awaitingKeyboard else { return }
+            withAnimation(.easeOut(duration: 0.22)) { closePanels() }
+        }
         // The keyboard back where it was after a picture: the thread takes its foot from it again.
         .onChange(of: safe.bottom) { _, bottom in
             guard let released = keyboardHold.release(bottom: bottom) else { return }
@@ -264,7 +342,13 @@ struct ThreadScreen: View {
     private func shown(_ visible: Bool) {
         guard let model else { return }
         model.setOnScreen(visible && scenePhase == .active)
-        if visible { model.resume() } else { model.stop() }
+        if visible {
+            model.resume()
+        } else {
+            model.stop()
+            // Leaving the thread: what was being written is kept (round 22 §4.4).
+            model.saveDraft()
+        }
     }
 
     /// Read from the list's ids alone (`listedIds`), which change only as conversations come and go —
@@ -315,7 +399,8 @@ struct ThreadScreen: View {
                 if ready {
                     MessageList(rows: model.rows, ctx: context(model), position: $scroll, topMargin: barHeight,
                                 bottomRoom: bottomRoom, notice: listNotice(model),
-                                pillVisible: !(searching && showResults) && toast == nil, underBar: $underBar)
+                                pillVisible: !(searching && showResults) && toast == nil && !panels.expanded && previewing == nil,
+                                underBar: $underBar)
                         // Under the search's list of matches the thread is out of sight: out of VoiceOver's reach too.
                         .accessibilityHidden(searching && showResults)
                 }
@@ -372,35 +457,55 @@ struct ThreadScreen: View {
     /// its top 12 (round 11 §3); a tap on its solid part puts the keyboard away, as a tap on the thread does.
     @ViewBuilder private func foot(_ model: ThreadModel) -> some View {
         VStack(spacing: 0) {
-            if model.accessKnown {
-                switch model.access {
-                case .open, .replyToConnect:
-                    ThreadComposer(model: model, composing: $composing, attachOpen: attachMenu != nil) { attachMenu = $0 }
-                case .awaitingReply:
-                    ComposerSlip(seed: 29) {
-                        ThreadFootNote(text: L10n.Messages.awaitingReply)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 14)
-                    }
-                case .notConnected:
-                    ComposerSlip(seed: 31) {
-                        VStack(spacing: 6) {
-                            ThreadFootNote(text: L10n.Messages.notConnected)
-                            Button(L10n.Messages.viewProfile) { openRoute(.author(model.displayHandle)) }
-                                .font(AppFonts.body(13)).foregroundStyle(Tokens.terracotta).underline().buttonStyle(.plain)
-                                .frame(minHeight: 32)
+            VStack(spacing: 0) {
+                if model.accessKnown {
+                    switch model.access {
+                    case .open, .replyToConnect:
+                        ThreadComposer(model: model, composing: $composing, panels: panels, expandedTextHeight: expandedTextHeight(model),
+                                       onAttach: { _ in toggleAttach(model) }, onStickers: { toggleStickers(model) },
+                                       onPanelFace: { withAnimation(.easeOut(duration: 0.25)) { panels.setExpanded(!panels.expanded) } },
+                                       onExpand: { expandComposer($0, model) },
+                                       onPastePictures: { pictures in
+                                           for data in pictures { Task { await model.addPicture(key: Outbox.newClientId()) { data } } }
+                                       })
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { composerFrame = $0 }
+                            .background(alignment: .bottom) {
+                                // The capsule's own frame: the composer's foot, 48 and up (option C, the Mac's popovers).
+                                Color.clear.frame(height: max(ComposerMetrics.height, capsuleHeight(model)))
+                                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { capsuleFrame = $0 }
+                            }
+                    case .awaitingReply:
+                        ComposerSlip(seed: 29) {
+                            ThreadFootNote(text: L10n.Messages.awaitingReply)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 14)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
+                    case .notConnected:
+                        ComposerSlip(seed: 31) {
+                            VStack(spacing: 6) {
+                                ThreadFootNote(text: L10n.Messages.notConnected)
+                                Button(L10n.Messages.viewProfile) { openRoute(.author(model.displayHandle)) }
+                                    .font(AppFonts.body(13)).foregroundStyle(Tokens.terracotta).underline().buttonStyle(.plain)
+                                    .frame(minHeight: 32)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                        }
                     }
                 }
             }
+            .padding(.horizontal, ComposerMetrics.gutter)
+            .padding(.bottom, ComposerMetrics.bottomGap)
+            // A wide pane keeps the field to a writing width, centred under the thread.
+            .frame(maxWidth: ComposerMetrics.maxWidth)
+            .frame(maxWidth: .infinity)
+            // The panel in the keyboard's place (round 22 §4.1–4.2): the foot's own paper going on, across the pane.
+            if panels.isOpen, model.access.canWrite {
+                panel(model)
+                    .frame(height: panelHeight)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
-        .padding(.horizontal, ComposerMetrics.gutter)
-        .padding(.bottom, ComposerMetrics.bottomGap)
-        // A wide pane keeps the field to a writing width, centred under the thread.
-        .frame(maxWidth: ComposerMetrics.maxWidth)
-        .frame(maxWidth: .infinity)
         .background(alignment: .top) {
             if model.accessKnown {
                 ComposerBacking { KeyboardAway.now() }
@@ -418,6 +523,7 @@ struct ThreadScreen: View {
             // The row is the list's width inside its 16 margins; their face's column is not counted;
             // never wider than a bubble may be (design §9).
             rowMax: LayoutClass.bubbleMax(listWidth),
+            stickerSide: listWidth >= 600 ? 144 : 128,
             highlights: marking ? Dictionary(model.searchHits.map { ($0.messageId, $0.ranges) }, uniquingKeysWith: { a, _ in a }) : [:],
             currentHit: marking ? currentHit : nil,
             flash: flash,
@@ -461,12 +567,217 @@ struct ThreadScreen: View {
         }
     }
 
-    /// What the composer's ＋ offers: a picture from the library, or one of the viewer's cards.
-    private var attachItems: [OrganicMenuItem] {
-        [
-            OrganicMenuItem(id: "picture", title: L10n.Messages.attachImage, icon: .image) { pickingPhoto = true },
-            OrganicMenuItem(id: "card", title: L10n.Messages.attachCardShort, icon: .cards) { pickingCard = true },
-        ]
+    // MARK: Composer panels (round 22 §4.1–4.3)
+
+    /// On a Mac ☺ and ＋ open popovers (a sheet at the button), never a panel in a keyboard's place.
+    private var onMac: Bool { ProcessInfo.processInfo.isMacCatalystApp || ProcessInfo.processInfo.isiOSAppOnMac }
+
+    /// ☺ / ⌨: the sticker panel in the keyboard's place (laid out at the keyboard's height first, the keyboard
+    /// put away after it — nothing dips), or the keyboard back.
+    private func toggleStickers(_ model: ThreadModel) {
+        if model.composerExpanded { expandComposer(false, model) }
+        if onMac {
+            previewing = nil
+            macPopover = macPopover == .stickers ? nil : .stickers
+            return
+        }
+        let keyboardUp = keyboard.height > 0
+        var next = panels
+        let wantsKeyboard = next.toggleStickers()
+        previewing = nil
+        if wantsKeyboard {
+            panels = next
+            composing = true
+            awaitKeyboard(forPanel: true)
+        } else {
+            panelDrag = 0
+            // Over a keyboard the panel takes its place at once; with none up it rises.
+            withAnimation(keyboardUp ? nil : .easeOut(duration: 0.25)) { panels = next }
+            composing = false
+        }
+    }
+
+    /// ＋: the attach panel in the keyboard's place (or, open, closed again).
+    private func toggleAttach(_ model: ThreadModel) {
+        if model.composerExpanded { expandComposer(false, model) }
+        previewing = nil
+        if onMac {
+            macPopover = macPopover == .attach ? nil : .attach
+            return
+        }
+        let keyboardUp = keyboard.height > 0
+        var next = panels
+        next.toggleAttach()
+        panelDrag = 0
+        withAnimation(keyboardUp && next.isOpen ? nil : .easeOut(duration: 0.25)) { panels = next }
+        if next.isOpen { composing = false }
+    }
+
+    /// The panel goes (and the preview with it).
+    private func closePanels() {
+        panels.close()
+        panelDrag = 0
+        previewing = nil
+    }
+
+    /// The field asked for the keyboard while a panel shows: the panel waits for it, and goes once it is up —
+    /// or, with a hardware keyboard (none comes), a moment later.
+    private func awaitKeyboard(forPanel: Bool) {
+        panels.keyboardRequested()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(700))
+            if panels.awaitingKeyboard { withAnimation(.easeOut(duration: 0.2)) { panels.keyboardShown() } }
+        }
+    }
+
+    /// The panel's height on the screen, above its foot (the home indicator): the keyboard's remembered height,
+    /// the grip's drag, or — grown — up to under the header.
+    private var panelHeight: CGFloat {
+        let foot = KeyboardHold.screenFoot
+        let rest = keyboard.panelHeight
+        let tall = max(rest, screenFrame.maxY - barFrame.maxY - 8 - composerFrame.height - ComposerMetrics.bottomGap)
+        let full = panels.expanded ? tall : rest
+        return min(tall, max(160, full + panelDrag)) - foot
+    }
+
+    /// What the panel holds.
+    @ViewBuilder private func panel(_ model: ThreadModel) -> some View {
+        switch panels.shown {
+        case .stickers:
+            StickerPanel(library: StickerLibrary.shared, columns: listWidth >= 600 ? 6 : 4, previewing: previewing,
+                         onTap: { tapSticker($0, model) },
+                         onGrow: panels.expanded ? nil : { withAnimation(.easeOut(duration: 0.25)) { panels.setExpanded(true) } },
+                         onShrink: panels.expanded ? { withAnimation(.easeOut(duration: 0.25)) { panels.setExpanded(false) } } : nil)
+        case .attach:
+            attachPanel(model, gripped: true)
+        case .none:
+            EmptyView()
+        }
+    }
+
+    /// The attach panel (round 22 §4.2), the phone's in the keyboard's place or the Mac's popover's content.
+    private func attachPanel(_ model: ThreadModel, gripped: Bool) -> some View {
+        AttachPanel(tab: $attachTab, selection: pickerBinding(model),
+                    maxSelection: AlbumRef.maxCount - model.pendingPictures.filter { !Self.fromPicker($0.key) }.count,
+                    onCard: { card in pickCard(card, model) },
+                    onDrag: { panelDrag = $0 },
+                    onDragEnd: { distance, speed in gripLetGo(distance: distance, speed: speed) },
+                    onAdjust: { taller in
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            if taller { panels.setExpanded(true) } else if panels.expanded { panels.setExpanded(false) } else { closePanels() }
+                        }
+                    },
+                    gripped: gripped)
+    }
+
+    /// The grip let go: far enough (or fast enough) up grows the panel to under the header, down closes it
+    /// (or brings a grown one back); otherwise it settles where it was.
+    private func gripLetGo(distance: CGFloat, speed: CGFloat) {
+        withAnimation(.easeOut(duration: 0.22)) {
+            if distance > 60 || speed > 600 {
+                panels.setExpanded(true)
+            } else if distance < -60 || speed < -600 {
+                if panels.expanded { panels.setExpanded(false) } else { closePanels() }
+            }
+            panelDrag = 0
+        }
+    }
+
+    /// A tap on a sticker: its preview — or, previewed already, it goes (round 22 §4.1). VoiceOver hears which.
+    private func tapSticker(_ sticker: StickerRef, _ model: ThreadModel) {
+        if previewing == sticker { return sendSticker(sticker, model) }
+        withAnimation(.easeOut(duration: 0.14)) { previewing = sticker }
+        UIAccessibility.post(notification: .announcement, argument: L10n.Messages.stickerPreviewA11y(name: StickerLibrary.shared.label(sticker)))
+    }
+
+    private func sendSticker(_ sticker: StickerRef, _ model: ThreadModel) {
+        model.sendSticker(sticker)
+        withAnimation(.easeOut(duration: 0.14)) { previewing = nil }
+        if macPopover != nil { closeMacPopover() }
+    }
+
+    /// The Mac's popover goes; the field takes the focus back.
+    private func closeMacPopover() {
+        macPopover = nil
+        previewing = nil
+        composing = true
+    }
+
+    /// A picture of the attach panel's picker, as the strip keys it.
+    private static func pickerKey(_ item: PhotosPickerItem) -> String { "lib:" + (item.itemIdentifier ?? "\(item.hashValue)") }
+    private static func fromPicker(_ key: String) -> Bool { key.hasPrefix("lib:") }
+
+    /// The picker's choice, read from and written to the strip: choosing pictures while a card rides asks first.
+    private func pickerBinding(_ model: ThreadModel) -> Binding<[PhotosPickerItem]> {
+        Binding(get: { pickerSelection }, set: { items in
+            if model.pendingCard != nil, items.count > pickerSelection.count {
+                replacing = .withPictures(items)
+                return
+            }
+            choosePictures(items, model)
+        })
+    }
+
+    private func choosePictures(_ items: [PhotosPickerItem], _ model: ThreadModel) {
+        pickerSelection = items
+        let byKey = Dictionary(items.map { (Self.pickerKey($0), $0) }, uniquingKeysWith: { a, _ in a })
+        model.pickerChose(items.map(Self.pickerKey), fromPicker: Self.fromPicker) { key in
+            let item = byKey[key]
+            return { try? await item?.loadTransferable(type: Data.self) }
+        }
+    }
+
+    /// A card picked in the attach panel rides — over pictures riding, once the person says so — and the panel goes.
+    private func pickCard(_ card: FeedCard, _ model: ThreadModel) {
+        if !model.pendingPictures.isEmpty {
+            replacing = .withCard(card)
+            return
+        }
+        model.pendingCard = card
+        withAnimation(.easeOut(duration: 0.22)) { closePanels() }
+        if macPopover != nil { closeMacPopover() }
+    }
+
+    /// ⤢ / ⤡ (round 22 §4.3, option C): the same text view grows over the thread, its top just under the other
+    /// person's last message — that message and what came after it kept in view under the header — or under the
+    /// header when that is more than a third of the thread (a picture). The thread above stays scrollable.
+    private func expandComposer(_ on: Bool, _ model: ThreadModel) {
+        guard on else {
+            withAnimation(.easeOut(duration: 0.22)) { model.composerExpanded = false }
+            expandedTop = nil
+            return
+        }
+        if panels.isOpen { closePanels() }
+        let space = max(1, capsuleFrame.minY - barFrame.maxY)
+        let top = barFrame.maxY + 12
+        var kept: CGFloat = 0
+        if let theirs = model.rows.last(where: { !model.isMine($0.message) && !$0.message.isUnsent }),
+           let newest = model.rows.last,
+           let from = theirs.messages.compactMap({ frames.frames[$0.key] }).map(\.minY).min(),
+           let to = newest.messages.compactMap({ frames.frames[$0.key] }).map(\.maxY).max(), to > from {
+            kept = to - from
+        }
+        expandedTop = kept > 0 && kept <= space * 0.35 ? top + kept + ComposerMetrics.clearance : top
+        withAnimation(.easeOut(duration: 0.25)) { model.composerExpanded = true }
+    }
+
+    /// The grown text box's height: from the capsule's foot up to where it grows to, less what rides over it and
+    /// the text's padding — never shorter than five lines, and on a wide pane at most 60 % of it.
+    private func expandedTextHeight(_ model: ThreadModel) -> CGFloat? {
+        guard model.composerExpanded, let expandedTop, capsuleFrame.height > 0 else { return nil }
+        let metrics = ComposerText.current()
+        let rides = max(0, capsuleFrame.minY - composerFrame.minY)
+        let bottom = capsuleFrame.maxY
+        var capsule = bottom - expandedTop - rides
+        if listWidth >= 600 { capsule = min(capsule, (bottom - barFrame.maxY) * ComposerMetrics.expandedPaneShare) }
+        let least = ComposerTextView.height(lines: ComposerMetrics.maxLines, metrics: metrics)
+        return max(least, capsule - 2 * metrics.padding)
+    }
+
+    /// The capsule's height as drawn (the composer less what rides over it).
+    private func capsuleHeight(_ model: ThreadModel) -> CGFloat {
+        guard let text = expandedTextHeight(model) else { return ComposerMetrics.height }
+        return text + 2 * ComposerText.current().padding
     }
 
     /// Says `text` over the composer for a moment.
@@ -499,7 +810,7 @@ struct ThreadScreen: View {
     /// it is held; a quote's original pulses once there.
     private func jump(to id: String, pulse: Bool) {
         Task {
-            guard let model, await model.ensureLoaded(id), let key = model.message(id)?.key else { return }
+            guard let model, await model.ensureLoaded(id), let key = model.rowId(for: id) else { return }
             // A message just read in reaches the list a moment later; the list then knows its rows' real heights.
             try? await Task.sleep(for: .milliseconds(60))
             scroll.scrollTo(id: key, anchor: .center)
@@ -725,21 +1036,21 @@ struct ThreadScreen: View {
                     toasts.show(L10n.Messages.deleteError)
                 }
             }
-            .organicModal(isPresented: $pickingCard, seed: 53, maxWidth: 480, closeLabel: L10n.Write.Editor.CardModal.cancel) {
-                // The thread's picker lists your 私人卡 too, after the public cards: the message lets its recipient read one.
-                CardPickerContent(title: L10n.Messages.pickCard, subtitle: L10n.Messages.pickCardSubtitle,
-                                  privateLabel: L10n.Messages.privateCard, empty: L10n.Messages.pickCardEmpty) { card in
-                    model?.pendingCard = card
-                    pickingCard = false
-                } onCancel: { pickingCard = false }
-                .withSession(session)
-            }
-            // One picture from the library (the system's picker, out of the app's process: no library access asked for).
-            .photosPicker(isPresented: $pickingPhoto, selection: $photoItem, matching: .images, preferredItemEncoding: .current)
-            .onChange(of: photoItem) { _, item in
-                guard let item, let model else { return }
-                photoItem = nil
-                Task { await model.attachPicture { try? await item.loadTransferable(type: Data.self) } }
+            // A card and pictures never ride together (round 22 §4.2): the one picked second asks first.
+            .organicConfirm(isPresented: Binding(get: { replacing != nil }, set: { if !$0 { replacing = nil } }),
+                            title: replacing?.title ?? "", message: replacing?.body ?? "",
+                            cancelLabel: L10n.Safety.cancel, confirmLabel: replacing?.confirm ?? "",
+                            closeLabel: L10n.Safety.cancel, seed: 73) {
+                guard let model, let ask = replacing else { return }
+                replacing = nil
+                switch ask {
+                case let .withCard(card):
+                    model.removePictures()
+                    pickCard(card, model)
+                case let .withPictures(items):
+                    model.pendingCard = nil
+                    choosePictures(items, model)
+                }
             }
             .fullScreenCover(item: $viewing) { picture in
                 if let model {
@@ -994,5 +1305,115 @@ nonisolated enum ThreadFoot {
     static func room(threadBottom: CGFloat, shownHeight: CGFloat) -> CGFloat {
         guard shownHeight > 0, threadBottom > 0 else { return 0 }
         return min(max(0, threadBottom - shownHeight), threadBottom)
+    }
+}
+
+/// What the confirm asks before a card takes the pictures' place, or pictures the card's (round 22 §4.2).
+enum Replacing: Equatable {
+    case withCard(FeedCard)
+    case withPictures([PhotosPickerItem])
+
+    var title: String {
+        switch self {
+        case .withCard: L10n.Messages.replaceWithCardTitle
+        case .withPictures: L10n.Messages.replaceWithPicturesTitle
+        }
+    }
+
+    var body: String {
+        switch self {
+        case .withCard: L10n.Messages.replaceWithCardBody
+        case .withPictures: L10n.Messages.replaceWithPicturesBody
+        }
+    }
+
+    var confirm: String {
+        switch self {
+        case .withCard: L10n.Messages.replaceWithCardConfirm
+        case .withPictures: L10n.Messages.replaceWithPicturesConfirm
+        }
+    }
+}
+
+/// The Mac's popover at ☺ or ＋ (round 22 §4.1–4.2): a flat sheet of the menus' paper inside the grey pen line,
+/// no shadow, hanging over the capsule from the button — ☺'s at its end, ＋'s at its start. A click beside it or
+/// Escape closes it, and the field takes the focus back.
+struct MacComposerPopover<Content: View, Footer: View>: View {
+    let kind: ComposerPanel
+    /// The capsule, on the screen.
+    let anchor: CGRect
+    let onDismiss: () -> Void
+    @ViewBuilder let content: Content
+    @ViewBuilder let footer: Footer
+    @State private var shown = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let screen = geo.frame(in: .global)
+            let capsule = anchor.offsetBy(dx: -screen.minX, dy: -screen.minY)
+            let size = CGSize(width: 360, height: kind == .stickers ? 420 : 460)
+            let x = kind == .stickers
+                ? min(geo.size.width - size.width - 12, capsule.maxX - ComposerMetrics.sendWidth - size.width + ComposerMetrics.stickerWidth)
+                : max(12, capsule.minX)
+            let y = max(12, capsule.minY - 8 - size.height)
+            ZStack(alignment: .topLeading) {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onDismiss)
+                    .accessibilityHidden(true)
+                VStack(spacing: 6) {
+                    content
+                    footer
+                }
+                .padding(.top, 8)
+                .padding(.bottom, 10)
+                .frame(width: size.width, height: size.height)
+                .background { PaperSheet(seed: kind == .stickers ? 53 : 59) }
+                .clipShape(MenuSheetShape(seed: kind == .stickers ? 53 : 59))
+                .scaleEffect(shown ? 1 : 0.96, anchor: kind == .stickers ? .bottomTrailing : .bottomLeading)
+                .opacity(shown ? 1 : 0)
+                .offset(x: max(12, x), y: y)
+            }
+        }
+        .ignoresSafeArea()
+        .accessibilityAction(.escape, onDismiss)
+        .onEscapeKey(onDismiss)
+        .onAppear { withAnimation(.timingCurve(0.2, 0.8, 0.3, 1, duration: 0.18)) { shown = true } }
+    }
+}
+
+/// The sticker previewed (round 22 §4.1), placed on the screen: its sheet 10 over the composer while the thread
+/// has room for it, else just under the capsule over the grown panel; the thread above the composer takes a
+/// tap that lets it go.
+struct StickerPreviewLayer: View {
+    let sticker: StickerRef
+    /// The composer's top (what rides over the capsule included), the capsule's foot and the thread's top, on the screen.
+    let composerTop: CGFloat
+    let capsuleBottom: CGFloat
+    let threadTop: CGFloat
+    let onDismiss: () -> Void
+    let onSend: () -> Void
+
+    static let height: CGFloat = 200
+
+    var body: some View {
+        GeometryReader { geo in
+            let origin = geo.frame(in: .global).minY
+            let above = composerTop - threadTop >= Self.height + 24
+            let top = (above ? composerTop - 10 - Self.height : capsuleBottom + 12) - origin
+            ZStack(alignment: .top) {
+                Color.clear
+                    .frame(height: max(0, composerTop - origin))
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onDismiss)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .accessibilityHidden(true)
+                StickerPreview(sticker: sticker, onSend: onSend)
+                    .frame(height: Self.height)
+                    .offset(y: top)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
+        }
+        .ignoresSafeArea()
     }
 }

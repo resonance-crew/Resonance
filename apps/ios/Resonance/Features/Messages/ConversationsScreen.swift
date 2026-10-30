@@ -32,7 +32,7 @@ struct ConversationsScreen: View {
                 }
                 ForEach(store.conversations) { convo in
                     ConversationRow(person: convo.other, preview: preview(convo), time: convo.sentAt.map { Self.time($0) },
-                                    unread: convo.unread)
+                                    unread: convo.unread, draft: draft(convo.id))
                         .id(convo.other.id)
                 }
                 if !store.starters.isEmpty {
@@ -44,7 +44,8 @@ struct ConversationsScreen: View {
                         .padding(.bottom, 4)
                         .padding(.horizontal, 14)
                     ForEach(store.starters) { person in
-                        ConversationRow(person: person, preview: L10n.Messages.noMessagesYet, time: nil, unread: 0)
+                        ConversationRow(person: person, preview: L10n.Messages.noMessagesYet, time: nil, unread: 0,
+                                        draft: session.uid.flatMap { draft(ThreadModel.pairId($0, person.id)) })
                             .id(person.id)
                     }
                 }
@@ -72,16 +73,27 @@ struct ConversationsScreen: View {
 
     private func preview(_ convo: ConversationsStore.Conversation) -> String {
         Self.preview(text: convo.lastText, image: convo.lastImage, fromMe: convo.lastFromMe, unsent: convo.lastUnsent,
-                     handle: convo.other.handle)
+                     handle: convo.other.handle, sticker: convo.lastSticker, album: convo.lastAlbum)
     }
 
-    /// A row's line: the last message's words — 傳送了一張圖片 for a picture sent without any — after
-    /// 你： when it was the viewer's; 還沒有訊息 before the first. An unsent last message reads as its line
-    /// in the thread does (round 16 §3): 你收回了一則訊息 / {handle} 收回了一則訊息.
-    static func preview(text: String?, image: Bool, fromMe: Bool, unsent: Bool = false, handle: String = "") -> String {
+    /// The words left unsent in a conversation, for its row (round 22 §4.4).
+    private func draft(_ pair: String) -> String? {
+        guard let uid = session.uid else { return nil }
+        return session.chatDrafts.preview(uid: uid, pair: pair)
+    }
+
+    /// A row's line: the last message's words — 傳送了一張圖片 for a picture sent without any, 傳送了 N 張圖片 for an
+    /// album's, 傳送了一張貼圖 for a sticker (round 22: its words are the fallback for older builds) — after 你： when
+    /// it was the viewer's;
+    /// 還沒有訊息 before the first. An unsent last message reads as its line in the thread does (round 16 §3):
+    /// 你收回了一則訊息 / {handle} 收回了一則訊息.
+    static func preview(text: String?, image: Bool, fromMe: Bool, unsent: Bool = false, handle: String = "", sticker: Bool = false,
+                        album: Int? = nil) -> String {
         if unsent { return fromMe ? L10n.Messages.unsentByYou : L10n.Messages.unsentByThem(handle: handle) }
         guard let text else { return L10n.Messages.noMessagesYet }
-        let shown = text.isEmpty && image ? L10n.Messages.imageShared : text
+        let shown = sticker ? L10n.Messages.stickerShared
+            : (album ?? 0) > 1 ? L10n.Messages.albumShared(count: album ?? 0)
+            : text.isEmpty && image ? L10n.Messages.imageShared : text
         return (fromMe ? L10n.Messages.youPrefix : "") + shown
     }
 
@@ -102,6 +114,8 @@ private struct ConversationRow: View {
     let preview: String
     let time: String?
     let unread: Int
+    /// The words left unsent here (round 22 §4.4): shown in the line's place after a pen, in terracotta, until sent.
+    var draft: String?
     @Environment(\.chosenThread) private var chosen
 
     var body: some View {
@@ -124,7 +138,16 @@ private struct ConversationRow: View {
                                 size: 40, seed: person.avatarSeed.flatMap(Double.init).flatMap { $0 == 0 ? nil : $0 } ?? 5)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(person.handle).font(AppFonts.body(14, weight: .semibold)).foregroundStyle(Tokens.text)
-                    Text(preview).font(AppFonts.body(13)).foregroundStyle(Tokens.textMuted).lineLimit(1)
+                    if let draft {
+                        HStack(spacing: 4) {
+                            OrganicIcon(.pen, size: 13, color: Tokens.terracotta)
+                            Text(draft).font(AppFonts.body(13)).foregroundStyle(Tokens.terracotta).lineLimit(1)
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(L10n.Messages.draftLabel(text: draft))
+                    } else {
+                        Text(preview).font(AppFonts.body(13)).foregroundStyle(Tokens.textMuted).lineLimit(1)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(alignment: .trailing, spacing: 5) {
