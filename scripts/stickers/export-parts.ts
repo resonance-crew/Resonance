@@ -76,7 +76,9 @@ function nightExtras(svg: string): { svg: string; stars: Star[] } {
   const circles = (s: string) => [...s.matchAll(/<circle cx="([\d.]+)" cy="([\d.]+)" r="([\d.]+)"[^>]*\/>/g)];
   const halos = circles(groups[0][2]);
   const cores = circles(groups[1][2]);
-  const crosses = [...groups[1][2].matchAll(/<path d="M([\d.]+),([\d.]+)L[^"]*"[^>]*\/>/g)];
+  // a cross is two strokes through its star: M x,(y − r) L x,(y + r) M (x − r),y L (x + r),y — its star is the one at
+  // its vertical stroke's x and its middle (stars can share an x: 302 is both star 0's and star 9's)
+  const crosses = [...groups[1][2].matchAll(/<path d="M([\d.]+),([\d.]+)L([\d.]+),([\d.]+)M[^"]*"[^>]*\/>/g)];
   if (!halos.length || halos.length !== cores.length) throw new Error('night: halos and cores differ');
   const pivot = /data-pivot="([^"]*)"/.exec(part.open)![1];
   const stars: Star[] = [];
@@ -84,8 +86,9 @@ function nightExtras(svg: string): { svg: string; stars: Star[] } {
     const [x, y] = [Number(h[1]), Number(h[2])];
     const core = cores.find(c => Number(c[1]) === x && Number(c[2]) === y);
     if (!core) throw new Error(`night: no core for the star at ${x},${y}`);
-    // a cross is drawn from (x, y - r): its first point names its star's x
-    const cross = crosses.filter(c => Number(c[1]) === x).map(c => c[0]).join('');
+    const cross = crosses
+      .filter(c => Number(c[1]) === x && Number(c[3]) === x && (Number(c[2]) + Number(c[4])) / 2 === y)
+      .map(c => c[0]).join('');
     stars.push({ x, y, r: Number(core[3]) });
     return partGroup(`star-glow-${i}`, pivot,
       `<g filter="url(#${groups[0][1]})">${h[0]}</g><g filter="url(#${groups[1][1]})">${core[0]}${cross}</g>`);

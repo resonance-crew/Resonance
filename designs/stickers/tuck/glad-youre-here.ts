@@ -8,21 +8,20 @@
 import { bell, defineSticker, fr, keys, snap, step } from '../kit';
 
 /** How far 悄悄 leans on 摺摺 (degrees; its top toward 摺摺). */
-const LEAN = -15;
+const LEAN = -7;
 
 export default defineSticker({
   duration: 2.5,
   // the thumb: leaning together, blushing, the two sparkles up
   hero: fr(22),
   cast: {
-    hush: { slug: 'night', x: 308, ground: 338, k: 0.6, stance: 'floor', z: 10 },
+    hush: { slug: 'night', x: 296, ground: 338, k: 0.6, stance: 'floor', z: 10 },
     tuck: { slug: 'tuck', x: 146, ground: 392, k: 0.74, stance: 'floor', z: 20 },
   },
   props: {
-    s1: { kind: 'sparkle', seed: 5 },
-    s2: { kind: 'sparkle', seed: 6 },
+    sparkles: { kind: 'sparkles', seed: 5 },
   },
-  frame(t, { tuck, hush }, { s1, s2 }) {
+  frame(t, { tuck, hush }, { sparkles }) {
     const tk = tuck.pose;
     const hs = hush.pose;
     // 悄悄: sits up (f5–6), holds, leans back in slowly (f12–18)
@@ -30,11 +29,14 @@ export default defineSticker({
     const up = keys(tb, [[0, 0], [fr(4), 0], [fr(6), 1], [fr(11), 1], [fr(18), 0, (u: number) => u]]);
     hs.tilt = LEAN * (1 - 0.9 * up);
     // mittens resting in their laps (a sitting arm hanging straight down would go through the floor)
-    // 悄悄's own arms rest close beside it, on the floor
+    // 悄悄's own arms rest close beside it, on the floor; its legs tucked under its dome (nothing sticks out)
     hs.liftL = 18;
     hs.liftR = 18;
-    tk.liftL = -40;
-    tk.liftR = -40;
+    hs.legL = 0;
+    hs.legR = 0;
+    hs.legS = 0.18;
+    tk.liftL = -60;
+    tk.liftR = -60;
     tk.front = true;
     // faces: shut and content while leaning; sat up, they look at each other and smile
     const ts = step(t, 1 / 12);
@@ -50,9 +52,8 @@ export default defineSticker({
     // 摺摺's blush: down while they look at each other, rising as 悄悄 leans back, fullest once it's settled
     tk.blush = keys(step(t, 1 / 6), [[0, 1.6], [fr(4), 1.6], [fr(6), 0.6], [fr(12), 0.6], [fr(18), 1.3], [fr(22), 1.6]]);
     hs.stars = 1;
-    // as it settles back in, two little sparkles over where they touch (grown in and out, on fours)
+    // as it settles back in, sparkles over where they touch (big enough to read at 72; grown in and out, on fours)
     const ss = step(t, 1 / 6);
-    s1.at(234, 126, { k: tuck.k * 0.9 }).set({ show: bell(ss, fr(18), fr(26), 0.3, 0.4) });
-    s2.at(284, 106, { k: tuck.k * 0.7 }).set({ show: bell(ss, fr(20), fr(28), 0.3, 0.4) });
+    sparkles.at(256, 104, { k: tuck.k }).set({ show: bell(ss, fr(18), fr(28), 0.3, 0.35) });
   },
 });

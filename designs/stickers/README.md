@@ -38,10 +38,13 @@ DevTools protocol (`CHROME_PATH`; no browser library) at 432 × 432 and 2×, and
 a pure function of t, so the clock is the renderer's. Each frame is scaled to 432 px, given its die-cut margin (a 2.5 px
 cream outline round everything solid, the torn paper's own rim colour — not a shadow: it is what lets 悄悄's navy read on
 the night paper; anything faint beyond it, a glue shadow's tail, is cut away), and checked: nothing may come within
-2 px of the canvas edge, and t = duration must be the key pose again (t = 0). `img2webp` (libwebp) encodes the frames:
-lossy, quality 80 (stepping down to 74 and 68 to stay near 120 KB), method 6, loop count 2, each frame 83 or 84 ms
-(12 fps without drift), the key frame repeated as the last. Past 200 KB the sticker fails. The frame at `hero` becomes
-the 256 px thumb; the pack icon is drawn at 96 px. Then `catalog.ts` reads every file back into `catalog.generated.ts`
+6 px of the canvas edge (the margin included — the render fails), and t = duration must be the key pose again (t = 0),
+so the loop closes. The file then plays that loop **from its hero**: frame i is the choreography at (hero + i/12) mod
+duration, and the hero frame is repeated as the last — so a sticker starts and ends on the moment that means something,
+the same picture as its thumb, and nothing jumps when a client swaps the played animation for the thumb. `img2webp`
+(libwebp) encodes the frames: lossy, quality 80 (stepping down to 74 and 68 to stay near 120 KB), method 6, loop count 2,
+each frame 83 or 84 ms (12 fps without drift). Past 200 KB the sticker fails. The hero frame becomes the 256 px thumb;
+the pack icon is drawn at 96 px. Then `catalog.ts` reads every file back into `catalog.generated.ts`
 (frames as stored — img2webp merges a held frame into the one before, so a sticker of 31 frames may store 16 —, one
 play's length, bytes, and a content version `v` of the animation and its thumb for the immutable URLs; a placeholder
 still is 1 frame, 0 ms), writes `catalog.json` and the
@@ -70,17 +73,18 @@ export default defineSticker({
 ```
 
 - **Time**: t in seconds; `fr(n)` is frame n's time (12 a second). t = 0 and t = duration must give the same picture —
-  the key pose, so the file loops without a seam. The file is one frame longer than `duration` (the key frame again
-  at the end).
+  the key pose, so the loop closes without a seam. Build every curve so it starts and ends at its rest: `keys`, `env`,
+  `bell`, `cycles`, `taps` (`kit/timeline.ts`) all do. The file is one frame longer than `duration` (its first frame
+  again at the end) and plays the loop from the hero (below), so the key pose is where the loop closes, mid-file.
 - **Hero** (required — a definition without it doesn't type-check): the moment, in seconds within 0–duration, that
   reads best at 128 pt as the sticker's meaning — mid-bow with the blush spread, arms up in the stretch with the sun up,
   the heart at its fullest glow, a pat landing, the lean with its sparkles, the note going in under the dog-ear. Its
   frame is rendered as `<id>.thumb.webp`, which is what the picker shows and what every client rests on once the
   animation has played twice — so a resting sticker still says what it says. Never the plain key pose: in a picker of
   standing puppets nobody can tell the stickers apart. Pick it from the contact sheet (frame n is `fr(n)`), then check
-  the sheet's first cell. 摺摺's six: morning `fr(12)`, deep-thanks `fr(17)`, tucked-away `fr(10)`, warm-heart `fr(12)`,
-  take-your-time `fr(13)`, glad-youre-here `fr(22)`. Build every curve so it starts and ends at its rest:
-  `keys`, `env`, `bell`, `cycles`, `taps` (`kit/timeline.ts`) all do.
+  the sheet's first cell. 摺摺's six: morning `fr(12)`, deep-thanks `fr(16)`, tucked-away `fr(6)`, warm-heart `fr(12)`,
+  take-your-time `fr(10)`, glad-youre-here `fr(22)` (see each file for the current one). The hero is snapped to the
+  nearest frame; the file starts on it, so the first frame a client paints is that picture too.
 - **Puppets** (`kit/puppet.ts`) are the landing page's puppets without their stage: the same rig, DOM, pose fields and
   transforms (`src/lib/mascots/puppet.ts`), so they move as on the site. The pose: `rise`, `bodyUp`, `tilt`, `sx`/`sy`,
   `legL`/`legR`/`legS`, `liftL`/`liftR` (0 hangs straight down, 90 sideways, 180 straight up; `rest(side)` is as drawn),
@@ -99,14 +103,21 @@ export default defineSticker({
   (a mitten's px and the arm's angle; `MITTEN_MIDDLE` is where it holds things), `aim(side, x, y)` (the lift that points
   an arm at a point), `headPoint()`, `facePoint()`, `reach(side)`. Set lifts before reading a mitten.
 - **Moves** (`kit/poses.ts`, each 0 outside its span so they add up): `breathe`, `blink`, `lookAt`, `nod`, `bow`,
-  `hop`, `wave`, `reachTo`, `moved` (eyes shut, a fuller blush, a squeeze), `hold(prop, puppet, side)` (a prop in a
-  mitten, by its `grip` anchor), `polar`.
+  `bowStrokes`, `hop`, `wave`, `reachTo`, `moved` (eyes shut, a fuller blush, a squeeze), `hold(prop, puppet, side)`
+  (a prop in a mitten, by its `grip` anchor), `polar`.
+- **A bow** that reads at 72 px from the front (the review's recipe): `bow()` tips the paper toward us by about half a
+  full tip (lean 31° — more only squashes the sheet into a lump), drops the face toward the foot (faceY +9), swings the
+  deco forward over the brow, gives at the knees, shuts the eyes and keeps the **closed smile** — never `mouth-o` in a
+  thank-you (with shut eyes it reads as a sigh). On its bottom frames add `bowStrokes(puppet, left, right, e)` (two
+  `strokes` props: short pencil motion lines at the shoulders). Hold the bottom; bring the mittens in front (palms
+  together, a note held out) so a bow is never armless.
 - **Props** (`kit/props.ts`, drawn by seeded generator code in the series' paper: torn or cut paper with its fibre rim
   and glue shadow, graphite, crayon) are placed in canvas px at their puppet's k so their grain matches: `heart` (`glow`,
   `warm`, `heart: 0` for the glow alone), `note`, `cup` (`steam`, `phase`), `flower`, `slip` (`seal`: the red ○), `stamp`,
   `pennant` (`wave`), `star` (`shine`), `card` (`lines`, `underline`), `confetti` (`t`), `wave` (the brand's ≋: `show`,
   `pulse`), `tear` (`glint`), `lantern` (悄悄's star held up: `glow`), `sun` (`rays`), `burst` (joy strokes: `draw`),
-  `sparkle` (`show`), `zz` (`draw`), `scribble` (handwriting lines: `lines`), `underline` (`draw`), and two to hide
+  `sparkle` (`show`), `sparkles` (a cluster of three, the big one 1.6× a sparkle: `show`), `strokes` (motion lines:
+  `draw`), `zz` (`draw`), `scribble` (handwriting lines: `lines`), `underline` (`draw`), and two to hide
   behind: `panel` (a page standing on its edge — peek out from behind it; the sticker's own edge can't be peeked from,
   the die-cut needs room all round) and `ground` (a torn strip along the foot — pop up from behind it). Each has a
   `center` anchor and most a `grip`. `review/props.ts` shows them all. A prop can live **inside** a puppet, just above one of its parts
@@ -116,10 +127,13 @@ export default defineSticker({
   A **puppet** can be held inside another the same way (`inside: { puppet: 'nod', above: 'torso' }` in its cast entry:
   聆聆 scooping 點點 into a hug — in front of 聆聆's card, behind its arms brought to the front). It moves with the other's
   body; keep it below the other's face, which is drawn over it.
+  **Sparkles that carry the meaning** (so-moved, a hug, glad-youre-here) must be big: one `sparkle` is about 10 px at
+  128 pt and gone at 72 — draw it at `scale: SPARKLE_BIG` (1.65), or use `sparkles`.
   Grow and shrink anything that sticks out past the puppets by scale, not opacity: the die-cut follows what is solid,
   so a half-faded prop loses its outline (opacity is fine for anything over a puppet or another prop).
-- **Fit**: keep everything 6 px inside the canvas in every frame (arms swinging out, a hop's top, a prop flying in —
-  grow it in from nothing rather than slide it in from the edge). 摺摺 alone is about k 0.66–0.72 (an arm swung out
+- **Fit**: keep everything 6 px inside the canvas in every frame, the die-cut margin included — the render fails
+  otherwise (arms swinging out, a hop's top, a prop flying in: grow it in from nothing rather than slide it in from the
+  edge). Fill the canvas: a solo puppet's thumb should fill 0.4 or more of it (raise k as far as the arms allow). 摺摺 alone is about k 0.66–0.72 (an arm swung out
   sideways reaches 300 rig units from its middle); two puppets share one k (the rigs are in series units, so 點點 is
   small beside 摺摺 by itself); one further back may be a little smaller and higher.
 
@@ -139,7 +153,7 @@ as a picture. So:
 So, as cut-paper stop motion does: **hold the body and move the small things on every frame; move the body on a few
 frames (`snap(t, [...])` for exact poses, `step(t, 1/6)` for on-fours) and put every big change — body, a prop
 travelling, a second puppet — on those same frames.** Look at the frame sizes: `node -e` over the ANMF chunks, or
-just render with `--fast` and read the size; the six of 摺摺's pack are 57–109 KB.
+just render with `--fast` and read the size; the six of 摺摺's pack are 64–111 KB.
 
 ## Review
 

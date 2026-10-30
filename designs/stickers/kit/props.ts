@@ -14,11 +14,11 @@ import { ellipse, F, INK, path, pencil, poly, rng, scribble, smoothPath, spline,
 
 export type PropKind =
   | 'heart' | 'note' | 'cup' | 'flower' | 'slip' | 'stamp' | 'pennant' | 'star' | 'card' | 'confetti' | 'wave' | 'tear'
-  | 'lantern' | 'sun' | 'burst' | 'sparkle' | 'zz' | 'scribble' | 'underline' | 'panel' | 'ground';
+  | 'lantern' | 'sun' | 'burst' | 'sparkle' | 'sparkles' | 'strokes' | 'zz' | 'scribble' | 'underline' | 'panel' | 'ground';
 
 /** What a prop's state may say (each kind reads its own keys; anything else is ignored). */
 export type PropState = Partial<Record<
-  | 'glow' | 'warm' | 'heart' | 'steam' | 'phase' | 'seal' | 'wave' | 'shine' | 'lines' | 'underline' | 't' | 'show'
+  | 'glow' | 'warm' | 'heart' | 'above' | 'steam' | 'phase' | 'seal' | 'wave' | 'shine' | 'lines' | 'underline' | 't' | 'show'
   | 'pulse' | 'glint' | 'rays' | 'draw',
   number
 >>;
@@ -104,6 +104,9 @@ function ribbon(line: readonly Pt[], w: number): Pt[] {
   return [...left, ...right.reverse()];
 }
 
+/** How much larger a `sparkle` is drawn where it is the point of the sticker (`scale: SPARKLE_BIG`): 1.5–1.8×. */
+export const SPARKLE_BIG = 1.65;
+
 /** The cast's papers, for confetti and anything that wants the whole family in it. */
 export const CAST_COLOURS = [INK.terracotta, INK.butter, INK.sage, INK.mist, INK.lavender, INK.gold, INK.midnight] as const;
 
@@ -130,16 +133,17 @@ function confettiBits(seed: number): Bit[] {
 
 export const PROP_KINDS: Record<PropKind, KindDef> = {
   /**
-   * A paper heart; `glow` 0–1 lays warm paper halos behind it and a few crayon rays (to the sides, never up), `warm`
-   * (default: glow) warms the heart's own red. `heart: 0` draws the glow alone — to put the glow behind a puppet's
+   * A paper heart; `glow` 0–1 lays warm paper halos behind it and a few crayon rays (to the sides and below), `above`
+   * 0–1 three short rays over it, `warm` (default: glow) warms the heart's own red. `heart: 0` draws the glow alone — to put the glow behind a puppet's
    * face and arms (a prop inside it) and the heart itself in front of them (a second heart prop, `glow: 0`).
    */
   heart: {
     size: [240, 220],
     anchors: { center: [120, 110], top: [120, 62], bottom: [120, 162] },
     draw(seed) {
-      const halo2 = paper(path(tear(heartPts(120, 110, 200), seed + 1, { jag: 1.4, wander: 6 })), INK.goldPale, 'thin');
-      const halo1 = paper(path(tear(heartPts(120, 110, 160), seed + 2, { jag: 1.2, wander: 5 })), INK.goldLight, 'thin');
+      // warm halos — apricot and peach-orange, never the mittens' cream (they merged into one pale blob)
+      const halo2 = paper(path(tear(heartPts(120, 110, 200), seed + 1, { jag: 1.4, wander: 6 })), 'oklch(89% 0.1 78)', 'thin');
+      const halo1 = paper(path(tear(heartPts(120, 110, 160), seed + 2, { jag: 1.2, wander: 5 })), 'oklch(82% 0.12 60)', 'thin');
       // rays out to the sides and below (never up into a face behind it)
       const rays = [-28, -2, 24, 156, 182, 208].map((deg, i) => {
         const a = deg * DEG;
@@ -147,10 +151,16 @@ export const PROP_KINDS: Record<PropKind, KindDef> = {
         const r1 = 124 - (i % 2) * 8;
         return pencil([[120 + Math.cos(a) * r0, 110 + Math.sin(a) * r0], [120 + Math.cos(a) * r1, 110 + Math.sin(a) * r1]], seed + 10 + i, 1, 0.4)[0];
       });
+      // and three short ones above it (`above`): put them on a glow drawn behind a face, so they never cross its mouth
+      const up = [-128, -90, -52].map((deg, i) => {
+        const a = deg * DEG;
+        return pencil([[120 + Math.cos(a) * 96, 104 + Math.sin(a) * 96], [120 + Math.cos(a) * 118, 104 + Math.sin(a) * 118]], seed + 20 + i, 1, 0.4)[0];
+      });
       const heart = tear(heartPts(120, 110, 116), seed + 3, { jag: 1.1, wander: 5 });
       const hi = pencil([[87, 88], [93, 76], [105, 72]], seed + 4, 2, 0.8);
       return `<g class="h2">${halo2}</g><g class="h1">${halo1}</g>
         ${pencilG(rays, { w: 5.5, op: 0.9, color: INK.terracotta, cls: 'r', dash: true }).replace(`filter="url(#${F}graphite)"`, `filter="url(#${F}crayon)"`)}
+        ${pencilG(up, { w: 5.5, op: 0.9, color: INK.terracotta, cls: 'ru', dash: true }).replace(`filter="url(#${F}graphite)"`, `filter="url(#${F}crayon)"`)}
         <g class="hp">${paper(path(heart), INK.red)}
         <path class="warm" d="${path(heart)}" fill="${INK.goldLight}" opacity="0"/>
         <g stroke="oklch(75% 0.12 40)" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.65" filter="url(#${F}crayon)">${hi.map(d => `<path d="${d}"/>`).join('')}</g></g>`;
@@ -160,6 +170,7 @@ export const PROP_KINDS: Record<PropKind, KindDef> = {
       scaleAll(svg, '.h2', g > 0 ? 0.62 + 0.38 * smooth(g) : 0);
       scaleAll(svg, '.h1', g > 0 ? 0.76 + 0.24 * smooth(g) : 0);
       drawIn(svg, '.r', smooth((g - 0.55) / 0.45));
+      drawIn(svg, '.ru', smooth(((s.above ?? 0) - 0.55) / 0.45));
       const warm = svg.querySelector<SVGPathElement>('.warm');
       if (warm) warm.style.opacity = (0.32 * clamp(s.warm ?? g, 0, 1)).toFixed(3);
       const hp = svg.querySelector<SVGGElement>('.hp');
@@ -506,6 +517,42 @@ export const PROP_KINDS: Record<PropKind, KindDef> = {
     },
     update(svg, s) {
       scaleAll(svg, '.sp', clamp(s.show ?? 1, 0, 1.3));
+    },
+  },
+
+  /**
+   * Sparkles that carry meaning (round 22: one `sparkle` is about 10 px at 128 pt and gone at 72): a cluster of three,
+   * the big one 1.6× a `sparkle`, two smaller round it; `show` 0–1 grows them in turn. For a single big one, draw a
+   * `sparkle` at `scale: SPARKLE_BIG`.
+   */
+  sparkles: {
+    size: [120, 110],
+    anchors: { center: [60, 55] },
+    draw(seed) {
+      return [[44, 60, 35], [92, 30, 18], [94, 84, 14]].map(([x, y, r], i) =>
+        `<g class="sp sp${i}">${paper(path(tear(twinklePts(x, y, r, 0.25), seed + i, { jag: 0.3, wander: 0.5 })), INK.gold, 'cut')}
+        <path d="${path(twinklePts(x, y, r / 2, 0.3))}" fill="${INK.goldPale}" opacity="0.8"/></g>`).join('');
+    },
+    update(svg, s) {
+      const u = clamp(s.show ?? 1, 0, 1.3);
+      for (let i = 0; i < 3; i++) scaleAll(svg, `.sp${i}`, smooth(clamp(Math.min(u, 1) * 1.6 - i * 0.3, 0, 1)) * Math.max(1, u));
+    },
+  },
+
+  /**
+   * Three short pencil strokes falling to the right of a point (draw it mirrored, `sx: -1`, on the other side): a bow's
+   * motion lines at the shoulders (bowStrokes), or anything that drops. `draw` 0–1.
+   */
+  strokes: {
+    size: [60, 64],
+    anchors: { center: [30, 32], left: [6, 16], right: [54, 16] },
+    draw(seed) {
+      const ds = [[12, 8], [28, 4], [44, 10]].map(([x, y], i) =>
+        pencil([[x, y], [x + 3, y + 22 + (i % 2) * 8]], seed + i, 1, 0.3)[0]);
+      return pencilG(ds, { w: 4.2, op: 0.8, cls: 'st', dash: true });
+    },
+    update(svg, s) {
+      drawIn(svg, '.st', s.draw ?? 1);
     },
   },
 
