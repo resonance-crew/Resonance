@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>小紙團 stickers review</title>
 <!--
-  The sticker review: every sticker in public/stickers as clients will play it (two plays, then its key frame), at
+  The sticker review: every sticker in public/stickers as clients will play it (two plays, then its thumb — the hero frame), at
   128 and 144 px on the day paper and the night paper, its key frame (the thumb), its size and length, and a few in a
   mock thread. Open it from disk (file://) or any static server at the repo root; the list is data.js, which
   scripts/stickers/catalog.ts writes after every render. "Replay" restarts every animation.
@@ -78,13 +78,18 @@
   let replay = 0;
   const src = (pack, file, v) => `${BASE}${pack}/${file}?v=${v || 0}&r=${replay}`;
   const kb = (n) => (n / 1024).toFixed(1) + ' KB';
+  // as the clients do: two plays of the animation, then it rests on its thumb (the hero frame), not the last frame
   function anim(pack, st, cls) {
     const im = document.createElement('img');
     im.className = cls;
     im.alt = st.name['zh-TW'];
-    im.dataset.src = `${pack}/${st.id}.webp`;
-    im.dataset.v = st.v || 0;
     im.src = src(pack, `${st.id}.webp`, st.v);
+    if (st.frames > 1 && st.durationMs) {
+      const round = replay;
+      im.addEventListener('load', () => setTimeout(() => {
+        if (round === replay) im.src = src(pack, `${st.id}.thumb.webp`, st.v);
+      }, st.durationMs * 2 + 120), { once: true });
+    }
     return im;
   }
   function render() {
@@ -116,9 +121,9 @@
         const meta = document.createElement('div');
         meta.className = 'meta';
         const over = (st.bytes || 0) > 120 * 1024;
-        meta.innerHTML = `<img alt="thumb" src="${src(p.id, st.id + '.thumb.webp', st.v)}">
+        meta.innerHTML = `<img alt="thumb (hero frame)" title="thumb: the hero frame" src="${src(p.id, st.id + '.thumb.webp', st.v)}">
           <div><div class="name">${st.name['zh-TW']} · ${st.name.en}</div>
-          <div class="nums">${p.id}/${st.id} · ${still ? 'placeholder (still)' : `${st.frames} frames · ${(st.durationMs / 1000).toFixed(2)} s · plays twice`}
+          <div class="nums">${p.id}/${st.id} · ${still ? 'placeholder (still)' : `${st.frames} frames · ${(st.durationMs / 1000).toFixed(2)} s · plays twice, then rests on the thumb (hero ${st.hero != null ? st.hero.toFixed(2) + ' s' : '?'})`}
           · <span class="${over ? 'warn' : ''}">${kb(st.bytes || 0)}</span> · thumb ${kb(st.thumbBytes || 0)}</div></div>`;
         card.append(row, meta);
         grid.append(card);

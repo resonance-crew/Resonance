@@ -1,7 +1,7 @@
 /**
  * Time in a sticker. A choreography is a pure function of t (seconds, 0 → duration): the renderer samples it 12 times a
  * second ("on twos", cut-paper stop motion), and t = 0 and t = duration must both be the key pose — the file's first and
- * last frame, and its thumbnail. Every helper here is a function of t alone, so any frame can be drawn on its own.
+ * last frame (its thumb is the `hero` frame). Every helper here is a function of t alone, so any frame stands alone.
  */
 import { bell as bellU, clamp, easeOut, lerp, smooth } from '../../../src/lib/mascots/geometry';
 

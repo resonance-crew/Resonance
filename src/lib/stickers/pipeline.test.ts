@@ -70,7 +70,7 @@ describe('the sticker pipeline: pictures and files', () => {
     expect(sizeVerdict(SIZE_CAP + 1)).toBe('over-cap');
   });
 
-  it('every drawn sticker is a 432 px animation that plays twice, 1.5–2.5 s, within the cap, its key frame a 256 px still', () => {
+  it('every drawn sticker is a 432 px animation that plays twice, 1.5–2.5 s, within the cap, its thumb a 256 px still', () => {
     let drawn = 0;
     for (const p of STICKER_PACKS) {
       for (const st of p.stickers) {

@@ -8,6 +8,8 @@ import { blink, defineSticker, fr, keys, snap } from '../kit';
 
 export default defineSticker({
   duration: 2,
+  // the thumb: arms up at the top of the stretch, its "ahh", the sun up
+  hero: fr(12),
   cast: { tuck: { slug: 'tuck', x: 214, ground: 414, k: 0.66 } },
   props: { sun: { kind: 'sun', seed: 4, z: 0 } },
   frame(t, { tuck }, { sun }) {

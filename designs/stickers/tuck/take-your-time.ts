@@ -21,6 +21,8 @@ const PATS = 3;
 
 export default defineSticker({
   duration: 2.5,
+  // the thumb: a pat landing on 點點, who gives under it, content
+  hero: fr(13),
   cast: {
     pip: { slug: 'dot', x: 334, ground: 410, k: 0.69, z: 10 },
     tuck: { slug: 'tuck', x: 172, ground: 410, k: 0.69, z: 20 },

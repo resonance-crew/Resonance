@@ -19,6 +19,8 @@ const OUT = 40;
 
 export default defineSticker({
   duration: 2.5,
+  // the thumb: the corner lifted, the new note laid in under it
+  hero: fr(10),
   cast: { tuck: { slug: 'tuck', x: 200, ground: 410, k: 0.64 } },
   props: {
     held: { kind: 'note', seed: 7, z: 100 },

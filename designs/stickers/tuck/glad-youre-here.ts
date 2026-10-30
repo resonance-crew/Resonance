@@ -12,6 +12,8 @@ const LEAN = -15;
 
 export default defineSticker({
   duration: 2.5,
+  // the thumb: leaning together, blushing, the two sparkles up
+  hero: fr(22),
   cast: {
     hush: { slug: 'night', x: 308, ground: 338, k: 0.6, stance: 'floor', z: 10 },
     tuck: { slug: 'tuck', x: 146, ground: 392, k: 0.74, stance: 'floor', z: 20 },

@@ -22,6 +22,8 @@ function hug(tk: StickerPuppet, squeeze: number): void {
 
 export default defineSticker({
   duration: 2.25,
+  // the thumb: hugging the heart at its fullest glow, mid-beat
+  hero: fr(12),
   cast: { tuck: { slug: 'tuck', x: 216, ground: 410, k: 0.68 } },
   props: {
     glow: { kind: 'heart', seed: 11, inside: { puppet: 'tuck', above: 'torso' } },

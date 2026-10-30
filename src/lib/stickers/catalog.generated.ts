@@ -11,12 +11,12 @@ export interface StickerArt {
 
 export const STICKER_ART: Readonly<Record<string, StickerArt>> = {
   "tuck/icon": { durationMs: 0, frames: 1, bytes: 3040, v: "54074e1db8" },
-  "tuck/morning": { durationMs: 2083, frames: 16, bytes: 112928, v: "cdf95b7649" },
-  "tuck/deep-thanks": { durationMs: 2583, frames: 19, bytes: 80430, v: "c224b8d2b2" },
-  "tuck/tucked-away": { durationMs: 2583, frames: 27, bytes: 81196, v: "82e088d7d2" },
-  "tuck/warm-heart": { durationMs: 2333, frames: 24, bytes: 80630, v: "ccc89b7ea2" },
-  "tuck/take-your-time": { durationMs: 2583, frames: 23, bytes: 76306, v: "65c7af4ec0" },
-  "tuck/glad-youre-here": { durationMs: 2583, frames: 14, bytes: 65076, v: "50b07b5a0b" },
+  "tuck/morning": { durationMs: 2083, frames: 16, bytes: 112928, v: "35f34cfe10" },
+  "tuck/deep-thanks": { durationMs: 2583, frames: 20, bytes: 81966, v: "d08d572bd7" },
+  "tuck/tucked-away": { durationMs: 2583, frames: 27, bytes: 81196, v: "b6998f004b" },
+  "tuck/warm-heart": { durationMs: 2333, frames: 24, bytes: 80630, v: "d125a86d21" },
+  "tuck/take-your-time": { durationMs: 2583, frames: 23, bytes: 76306, v: "0eb4c7d811" },
+  "tuck/glad-youre-here": { durationMs: 2583, frames: 14, bytes: 65076, v: "1fc3df6a7d" },
   "twine/icon": { durationMs: 0, frames: 1, bytes: 3308, v: "6e706bd54d" },
   "twine/anyone-there": { durationMs: 0, frames: 1, bytes: 24144, v: "2946b2044a" },
   "twine/thanks": { durationMs: 0, frames: 1, bytes: 24144, v: "2946b2044a" },

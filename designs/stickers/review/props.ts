@@ -18,6 +18,7 @@ const STATE: Partial<Record<PropKind, PropState>> = {
 
 export default defineSticker({
   duration: 2 / 12,
+  hero: 1 / 12,
   cast: {},
   props: Object.fromEntries(KINDS.map((k, i) => [k, { kind: k, seed: 3 + i }])) as Record<PropKind, { kind: PropKind; seed: number }>,
   frame(t, _cast, props) {

@@ -23,8 +23,9 @@ window.STICKERS = [
     "durationMs": 2083,
     "frames": 16,
     "bytes": 112928,
-    "v": "cdf95b7649",
-    "thumbBytes": 9788
+    "v": "35f34cfe10",
+    "hero": 1,
+    "thumbBytes": 10318
    },
    {
     "id": "deep-thanks",
@@ -33,10 +34,11 @@ window.STICKERS = [
      "en": "Thank you so much"
     },
     "durationMs": 2583,
-    "frames": 19,
-    "bytes": 80430,
-    "v": "c224b8d2b2",
-    "thumbBytes": 8404
+    "frames": 20,
+    "bytes": 81966,
+    "v": "d08d572bd7",
+    "hero": 1.417,
+    "thumbBytes": 7006
    },
    {
     "id": "tucked-away",
@@ -47,8 +49,9 @@ window.STICKERS = [
     "durationMs": 2583,
     "frames": 27,
     "bytes": 81196,
-    "v": "82e088d7d2",
-    "thumbBytes": 7982
+    "v": "b6998f004b",
+    "hero": 0.833,
+    "thumbBytes": 7664
    },
    {
     "id": "warm-heart",
@@ -59,8 +62,9 @@ window.STICKERS = [
     "durationMs": 2333,
     "frames": 24,
     "bytes": 80630,
-    "v": "ccc89b7ea2",
-    "thumbBytes": 7258
+    "v": "d125a86d21",
+    "hero": 1,
+    "thumbBytes": 7462
    },
    {
     "id": "take-your-time",
@@ -71,8 +75,9 @@ window.STICKERS = [
     "durationMs": 2583,
     "frames": 23,
     "bytes": 76306,
-    "v": "65c7af4ec0",
-    "thumbBytes": 11388
+    "v": "0eb4c7d811",
+    "hero": 1.083,
+    "thumbBytes": 11434
    },
    {
     "id": "glad-youre-here",
@@ -83,8 +88,9 @@ window.STICKERS = [
     "durationMs": 2583,
     "frames": 14,
     "bytes": 65076,
-    "v": "50b07b5a0b",
-    "thumbBytes": 9668
+    "v": "1fc3df6a7d",
+    "hero": 1.833,
+    "thumbBytes": 10540
    }
   ]
  },
@@ -112,6 +118,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 24144,
     "v": "2946b2044a",
+    "hero": null,
     "thumbBytes": 12002
    },
    {
@@ -124,6 +131,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 24144,
     "v": "2946b2044a",
+    "hero": null,
     "thumbBytes": 12002
    },
    {
@@ -136,6 +144,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 24144,
     "v": "2946b2044a",
+    "hero": null,
     "thumbBytes": 12002
    },
    {
@@ -148,6 +157,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 24144,
     "v": "2946b2044a",
+    "hero": null,
     "thumbBytes": 12002
    },
    {
@@ -160,6 +170,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 24144,
     "v": "2946b2044a",
+    "hero": null,
     "thumbBytes": 12002
    },
    {
@@ -172,6 +183,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 24144,
     "v": "2946b2044a",
+    "hero": null,
     "thumbBytes": 12002
    }
   ]
@@ -200,6 +212,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 30280,
     "v": "76da89bce8",
+    "hero": null,
     "thumbBytes": 14846
    },
    {
@@ -212,6 +225,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 30280,
     "v": "76da89bce8",
+    "hero": null,
     "thumbBytes": 14846
    },
    {
@@ -224,6 +238,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 30280,
     "v": "76da89bce8",
+    "hero": null,
     "thumbBytes": 14846
    },
    {
@@ -236,6 +251,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 30280,
     "v": "76da89bce8",
+    "hero": null,
     "thumbBytes": 14846
    },
    {
@@ -248,6 +264,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 30280,
     "v": "76da89bce8",
+    "hero": null,
     "thumbBytes": 14846
    },
    {
@@ -260,6 +277,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 30280,
     "v": "76da89bce8",
+    "hero": null,
     "thumbBytes": 14846
    }
   ]
@@ -288,6 +306,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 36652,
     "v": "8d1fd5766d",
+    "hero": null,
     "thumbBytes": 17522
    },
    {
@@ -300,6 +319,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 36652,
     "v": "8d1fd5766d",
+    "hero": null,
     "thumbBytes": 17522
    },
    {
@@ -312,6 +332,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 36652,
     "v": "8d1fd5766d",
+    "hero": null,
     "thumbBytes": 17522
    },
    {
@@ -324,6 +345,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 36652,
     "v": "8d1fd5766d",
+    "hero": null,
     "thumbBytes": 17522
    },
    {
@@ -336,6 +358,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 36652,
     "v": "8d1fd5766d",
+    "hero": null,
     "thumbBytes": 17522
    },
    {
@@ -348,6 +371,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 36652,
     "v": "8d1fd5766d",
+    "hero": null,
     "thumbBytes": 17522
    }
   ]
@@ -376,6 +400,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 39956,
     "v": "2eb09911b7",
+    "hero": null,
     "thumbBytes": 19458
    },
    {
@@ -388,6 +413,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 39956,
     "v": "2eb09911b7",
+    "hero": null,
     "thumbBytes": 19458
    },
    {
@@ -400,6 +426,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 39956,
     "v": "2eb09911b7",
+    "hero": null,
     "thumbBytes": 19458
    },
    {
@@ -412,6 +439,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 39956,
     "v": "2eb09911b7",
+    "hero": null,
     "thumbBytes": 19458
    },
    {
@@ -424,6 +452,7 @@ window.STICKERS = [
     "frames": 1,
     "bytes": 39956,
     "v": "2eb09911b7",
+    "hero": null,
     "thumbBytes": 19458
    }
   ]

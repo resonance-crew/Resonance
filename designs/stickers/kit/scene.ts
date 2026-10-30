@@ -5,6 +5,7 @@
  *
  *   export default defineSticker({
  *     duration: 2,
+ *     hero: 1,
  *     cast: { tuck: { slug: 'tuck', x: 216, ground: 404, k: 0.74 } },
  *     props: { sun: { kind: 'sun', z: 0 } },
  *     frame(t, { tuck }, { sun }) { … },
@@ -37,6 +38,12 @@ export interface PropDef<C extends string> {
 export interface StickerDef<C extends string = string, P extends string = string> {
   /** One play, seconds: 1.5–2.5. t = 0 and t = duration are both the key pose. */
   duration: number;
+  /**
+   * The moment that says what this sticker means, seconds (0–duration): the frame that reads best at 128 pt — mid-bow
+   * with its blush, the heart glowing. It becomes the thumb, which is what the picker shows and what a sticker rests on
+   * in the thread once its two plays are over. (The animation still starts and ends on the key pose.)
+   */
+  hero: number;
   cast: Record<C, PuppetDef>;
   props?: Record<P, PropDef<C>>;
   /** Called for every frame with each puppet's pose reset to its stance's baseline: set the poses, place the props. */
@@ -151,6 +158,7 @@ export function iconSticker(slug: Slug): StickerDef<'hero', never> {
   const [gx, gy] = raw.ground;
   return defineSticker({
     duration: 1 / 12,
+    hero: 0,
     cast: { hero: { slug, x: SIZE / 2 - (fx - gx) * k, ground: SIZE / 2 + (gy - cy) * k, k } },
     frame(_t, { hero }) {
       hero.pose.blush = 0.35;
@@ -163,7 +171,7 @@ export function iconSticker(slug: Slug): StickerDef<'hero', never> {
 
 declare global {
   interface Window {
-    __sticker?: { ready: Promise<void>; duration: number; renderAt(t: number): Promise<void> };
+    __sticker?: { ready: Promise<void>; duration: number; hero: number; renderAt(t: number): Promise<void> };
   }
 }
 
@@ -180,6 +188,7 @@ export function mount(def: StickerDef<string, string>, partsBase = '/parts/'): v
   const frame = () => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
   window.__sticker = {
     duration: def.duration,
+    hero: def.hero,
     ready: scene.ready().then(() => document.fonts.ready).then(() => {
       scene.render(0);
       return frame();

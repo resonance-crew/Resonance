@@ -8,7 +8,8 @@
  * With no target every pack is rendered (the stickers that have a choreography, and each pack's icon). Writes
  *   public/stickers/<pack>/<id>.webp        432 × 432, 12 fps, lossy q 80 (stepping down to 68 to keep near 120 KB),
  *                                           loop count 2, first frame = last frame = the key pose; past 200 KB it fails
- *   public/stickers/<pack>/<id>.thumb.webp  the key frame, 256 × 256, still
+ *   public/stickers/<pack>/<id>.thumb.webp  the hero frame (the definition's `hero`, what the sticker means at a
+ *                                           glance: the picker shows it, the thread rests on it), 256 × 256, still
  *   public/stickers/<pack>/icon.webp        the pack's tab icon, 96 × 96 (designs/stickers/<pack>/icon.ts, else the
  *                                           hero's head)
  *   src/lib/stickers/catalog.generated.ts, public/stickers/catalog.json, designs/stickers/review/data.js (catalog.ts)
@@ -27,13 +28,13 @@
  */
 import { execFileSync } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { build } from 'esbuild';
 import sharp from 'sharp';
 import { STICKER_PACKS } from '../../src/lib/stickers/catalog';
-import { writeCatalog } from './catalog';
+import { HEROES, writeCatalog } from './catalog';
 import { launchChrome, openPage, type Browser } from './chrome';
 import { contactSheet } from './contact';
 import {
@@ -144,6 +145,14 @@ function serve(pages: Map<string, string>, port = 0): Promise<{ server: Server; 
 
 const key = (j: Job) => `${j.pack}-${j.id}`;
 
+/** Each sticker's hero time, for the review page and the contact sheets (designs/stickers/review/heroes.json). */
+function recordHero(job: Job, hero: number): void {
+  const all = existsSync(HEROES) ? (JSON.parse(readFileSync(HEROES, 'utf8')) as Record<string, number>) : {};
+  all[`${job.pack}/${job.id}`] = Math.round(hero * 1000) / 1000;
+  const sorted = Object.fromEntries(Object.entries(all).sort(([a], [b]) => a.localeCompare(b)));
+  writeFileSync(HEROES, `${JSON.stringify(sorted, null, 1)}\n`);
+}
+
 /** One frame: the page's 864 px shot, scaled to 432, die-cut. Straight RGBA. */
 async function shoot(png: Buffer, margin: number): Promise<Uint8Array> {
   const { data } = await sharp(png).ensureAlpha().resize(SIZE, SIZE, { kernel: 'lanczos3' }).raw().toBuffer({ resolveWithObject: true });
@@ -168,6 +177,7 @@ async function renderJob(browser: Browser, origin: string, job: Job, o: Options)
     for (let i = 0; i < 200 && !(await page.eval<boolean>('typeof window.__sticker === "object"')); i++) await new Promise(r => setTimeout(r, 50));
     await page.eval('window.__sticker.ready');
     const duration = await page.eval<number>('window.__sticker.duration');
+    const hero = await page.eval<number>('window.__sticker.hero');
     const tmp = mkdtempSync(join(tmpdir(), `sticker-${key(job)}-`));
     try {
       if (job.id === 'icon') {
@@ -200,6 +210,13 @@ async function renderJob(browser: Browser, origin: string, job: Job, o: Options)
       const end = await shoot(await page.shot(), MARGIN);
       const seam = frameDiff(end, frames[0]);
       if (seam > 0.02) throw new Error(`${job.pack}/${job.id}: t = ${duration} is not the key pose (${(seam * 100).toFixed(1)}% of pixels differ from t = 0)`);
+      // the hero frame: what the sticker means at a glance — its thumb (the picker, and the thread once it has played)
+      if (!(hero >= 0 && hero <= duration)) throw new Error(`${job.pack}/${job.id}: hero ${hero} is not within 0–${duration} s`);
+      await page.eval(`window.__sticker.renderAt(${hero})`);
+      const heroFrame = await shoot(await page.shot(), MARGIN);
+      if (frameDiff(heroFrame, frames[0]) < 0.01) {
+        throw new Error(`${job.pack}/${job.id}: hero ${hero} s is the key pose — pick the moment that says what the sticker means`);
+      }
       const files: string[] = [];
       for (const [i, f] of [...frames, frames[0]].entries()) {
         const file = join(tmp, `f${String(i).padStart(3, '0')}.png`);
@@ -221,12 +238,13 @@ async function renderJob(browser: Browser, origin: string, job: Job, o: Options)
       if (verdict === 'over-cap') throw new Error(`${job.pack}/${job.id}: ${(best!.bytes / 1024).toFixed(1)} KB is past the ${SIZE_CAP / 1024} KB cap — simplify the motion or hold more frames`);
       mkdirSync(join(OUT, job.pack), { recursive: true });
       renameSync(best!.file, join(OUT, job.pack, `${job.id}.webp`));
-      await png(frames[0]).resize(THUMB, THUMB, { kernel: 'lanczos3' })
+      await png(heroFrame).resize(THUMB, THUMB, { kernel: 'lanczos3' })
         .webp({ quality: 84, alphaQuality: 90, effort: 6 }).toFile(join(OUT, job.pack, `${job.id}.thumb.webp`));
       const thumb = statSync(join(OUT, job.pack, `${job.id}.thumb.webp`)).size;
       const warn = verdict === 'over-target' ? `  (over the ${SIZE_TARGET / 1024} KB target)` : '';
+      if (OUT === PUBLIC) recordHero(job, hero);
       return `${job.pack}/${job.id}: ${files.length} frames, ${(durations.reduce((a, b) => a + b, 0) / 1000).toFixed(2)} s, ` +
-        `${(best!.bytes / 1024).toFixed(1)} KB at q ${best!.q}, thumb ${(thumb / 1024).toFixed(1)} KB${warn}`;
+        `${(best!.bytes / 1024).toFixed(1)} KB at q ${best!.q}, thumb (hero ${hero.toFixed(2)} s) ${(thumb / 1024).toFixed(1)} KB${warn}`;
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

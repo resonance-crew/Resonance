@@ -8,6 +8,8 @@ import { blink, bow, defineSticker, fr, keys, snap, step } from '../kit';
 
 export default defineSticker({
   duration: 2.5,
+  // the thumb: held deep in the bow, the blush spread
+  hero: fr(17),
   cast: { tuck: { slug: 'tuck', x: 214, ground: 410, k: 0.7 } },
   frame(t, { tuck }) {
     const p = tuck.pose;

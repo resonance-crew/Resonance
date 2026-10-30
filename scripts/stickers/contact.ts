@@ -1,7 +1,8 @@
 /**
  * Contact sheets for the review: every frame of every drawn sticker of a pack, in reading order, from the WebP files
  * themselves (what clients will play) — designs/stickers/review/contact-<pack>.webp. Each sticker's block starts with its
- * key frame on the night paper, then its frames on the day paper, 8 to a row.
+ * hero frame — its thumb, what the picker shows and the thread rests on — on the night paper in a terracotta frame, then
+ * the frames of its animation on the day paper, 8 to a row (the first and the last are its key pose).
  *
  *   npx tsx scripts/stickers/contact.ts [pack…]      (render.ts writes the sheet of every pack it rendered)
  */
@@ -9,7 +10,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { STICKER_PACKS } from '../../src/lib/stickers/catalog';
-import { PUBLIC, REVIEW } from './catalog';
+import { PUBLIC, readHeroes, REVIEW } from './catalog';
 import { readWebp } from './pipeline';
 import { readFileSync } from 'node:fs';
 
@@ -20,6 +21,8 @@ const GAP = 14;
 /** The two papers a sticker must read on (tokens.css: --paper, and the night page). */
 const DAY = { r: 246, g: 240, b: 231 };
 const NIGHT = { r: 33, g: 29, b: 25 };
+/** The hero cell's frame (terracotta). */
+const ACCENT = { r: 196, g: 106, b: 63 };
 
 const esc = (s: string) => s.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]!);
 
@@ -41,18 +44,27 @@ export async function contactSheet(pack: string): Promise<string | null> {
     const cells = n + 1;
     const rows = Math.ceil(cells / COLS);
     const items: sharp.OverlayOptions[] = [];
+    const thumb = await sharp(join(PUBLIC, pack, `${st.id}.thumb.webp`)).resize(CELL - 14, CELL - 14).png().toBuffer();
     for (let c = 0; c < cells; c++) {
       const x = (c % COLS) * CELL;
       const y = HEAD + Math.floor(c / COLS) * CELL;
-      const night = c === 0;
+      const hero = c === 0;
+      if (hero) {
+        items.push({ input: { create: { width: CELL - 2, height: CELL - 2, channels: 4, background: { ...ACCENT, alpha: 1 } } }, left: x + 1, top: y + 1 });
+        items.push({ input: { create: { width: CELL - 10, height: CELL - 10, channels: 4, background: { ...NIGHT, alpha: 1 } } }, left: x + 5, top: y + 5 });
+        items.push({ input: thumb, left: x + 7, top: y + 7 });
+        continue;
+      }
       items.push({
-        input: { create: { width: CELL - 2, height: CELL - 2, channels: 4, background: { ...(night ? NIGHT : DAY), alpha: 1 } } },
+        input: { create: { width: CELL - 2, height: CELL - 2, channels: 4, background: { ...DAY, alpha: 1 } } },
         left: x + 1, top: y + 1,
       });
-      items.push({ input: await frame(night ? 0 : c - 1), left: x + 3, top: y + 3 });
+      items.push({ input: await frame(c - 1), left: x + 3, top: y + 3 });
     }
     const kb = (readFileSync(file).length / 1024).toFixed(1);
-    const label = `${pack}/${st.id} · ${st.name['zh-TW']} · ${st.name.en} · ${n} frames · ${(info.durationMs / 1000).toFixed(2)} s · ${kb} KB`;
+    const hero = readHeroes()[`${pack}/${st.id}`];
+    const label = `${pack}/${st.id} · ${st.name['zh-TW']} · ${st.name.en} · ${n} frames · ${(info.durationMs / 1000).toFixed(2)} s · ${kb} KB`
+      + (hero != null ? ` · first cell: hero ${hero.toFixed(2)} s = thumb` : '');
     blocks.push({ svg: esc(label), items, h: HEAD + rows * CELL + GAP });
   }
   if (!blocks.length) return null;

@@ -13,11 +13,12 @@ cynical, angry or disdainful. The owner has the final say on the art. The packs 
 | `parts/<slug>/` | the cast's parts at 2× (1.6 px per rig unit) and their manifest — `npm run stickers:parts` re-exports them from the live rigs (`designs/mascots/cast/<slug>/rig.svg`, what the generators in `designs/mascots/round3|4/<slug>/gen` write) |
 | `<pack>/<id>.ts` | one choreography per sticker (`tuck/morning.ts` …); `<pack>/icon.ts` may draw the pack's tab icon (else the hero's head) |
 | `review/index.html` | every sticker playing at 128 and 144 px on the day and the night paper, its key frame, size, length, and a mock thread (open from disk) |
-| `review/contact-<pack>.webp` | contact sheets: every frame of every drawn sticker of a pack (the first cell of each, its key frame on the night paper) |
+| `review/contact-<pack>.webp` | contact sheets: every frame of every drawn sticker of a pack; the first cell of each, framed in terracotta on the night paper, is its hero frame (its thumb) |
 | `review/props.ts` | every prop on one canvas, at rest and in its state (a review aid, rendered with `--out`) |
 
 Generated (committed): `public/stickers/<pack>/<id>.webp`, `<id>.thumb.webp`, `icon.webp`,
-`src/lib/stickers/catalog.generated.ts`, `public/stickers/catalog.json`, `review/data.js`, `review/contact-*.webp`.
+`src/lib/stickers/catalog.generated.ts`, `public/stickers/catalog.json`, `review/data.js`, `review/heroes.json` (each
+sticker's hero time), `review/contact-*.webp`.
 
 ## The pipeline
 
@@ -39,8 +40,8 @@ cream outline round everything solid, the torn paper's own rim colour — not a 
 the night paper; anything faint beyond it, a glue shadow's tail, is cut away), and checked: nothing may come within
 2 px of the canvas edge, and t = duration must be the key pose again (t = 0). `img2webp` (libwebp) encodes the frames:
 lossy, quality 80 (stepping down to 74 and 68 to stay near 120 KB), method 6, loop count 2, each frame 83 or 84 ms
-(12 fps without drift), the key frame repeated as the last. Past 200 KB the sticker fails. The key frame becomes the
-256 px thumb; the pack icon is drawn at 96 px. Then `catalog.ts` reads every file back into `catalog.generated.ts`
+(12 fps without drift), the key frame repeated as the last. Past 200 KB the sticker fails. The frame at `hero` becomes
+the 256 px thumb; the pack icon is drawn at 96 px. Then `catalog.ts` reads every file back into `catalog.generated.ts`
 (frames as stored — img2webp merges a held frame into the one before, so a sticker of 31 frames may store 16 —, one
 play's length, bytes, and a content version `v` of the animation and its thumb for the immutable URLs; a placeholder
 still is 1 frame, 0 ms), writes `catalog.json` and the
@@ -56,6 +57,7 @@ import { blink, defineSticker, fr, keys, snap } from '../kit';
 
 export default defineSticker({
   duration: 2,                                            // one play, 1.5–2.5 s (the file plays it twice)
+  hero: fr(12),                                           // required: the frame that says what it means (the thumb)
   cast: { tuck: { slug: 'tuck', x: 214, ground: 414, k: 0.66 } },   // px on the 432 canvas; k = px per rig unit
   props: { sun: { kind: 'sun', seed: 4, z: 0 } },         // z: paint order (puppets 10, 20, …; props 100 unless told)
   frame(t, { tuck }, { sun }) {                           // every frame, each pose reset to its stance first
@@ -68,8 +70,16 @@ export default defineSticker({
 ```
 
 - **Time**: t in seconds; `fr(n)` is frame n's time (12 a second). t = 0 and t = duration must give the same picture —
-  the key pose, which is also the thumbnail and what a sticker rests on after its two plays. The file is one frame
-  longer than `duration` (the key frame again at the end). Build every curve so it starts and ends at its rest:
+  the key pose, so the file loops without a seam. The file is one frame longer than `duration` (the key frame again
+  at the end).
+- **Hero** (required — a definition without it doesn't type-check): the moment, in seconds within 0–duration, that
+  reads best at 128 pt as the sticker's meaning — mid-bow with the blush spread, arms up in the stretch with the sun up,
+  the heart at its fullest glow, a pat landing, the lean with its sparkles, the note going in under the dog-ear. Its
+  frame is rendered as `<id>.thumb.webp`, which is what the picker shows and what every client rests on once the
+  animation has played twice — so a resting sticker still says what it says. Never the plain key pose: in a picker of
+  standing puppets nobody can tell the stickers apart. Pick it from the contact sheet (frame n is `fr(n)`), then check
+  the sheet's first cell. 摺摺's six: morning `fr(12)`, deep-thanks `fr(17)`, tucked-away `fr(10)`, warm-heart `fr(12)`,
+  take-your-time `fr(13)`, glad-youre-here `fr(22)`. Build every curve so it starts and ends at its rest:
   `keys`, `env`, `bell`, `cycles`, `taps` (`kit/timeline.ts`) all do.
 - **Puppets** (`kit/puppet.ts`) are the landing page's puppets without their stage: the same rig, DOM, pose fields and
   transforms (`src/lib/mascots/puppet.ts`), so they move as on the site. The pose: `rise`, `bodyUp`, `tilt`, `sx`/`sy`,
@@ -140,8 +150,9 @@ many) looks at the screenshots before the art is called done.
 ## A new sticker, a new pack
 
 - **A sticker in an existing pack**: add it to `src/lib/stickers/catalog.ts` (id, both names, its place in the pack —
-  bump `STICKER_CATALOG_VERSION`), write `designs/stickers/<pack>/<id>.ts`, run `npm run stickers -- <pack>/<id>`, look
-  at the contact sheet and the review page, commit the choreography and everything it generated.
+  bump `STICKER_CATALOG_VERSION`), write `designs/stickers/<pack>/<id>.ts` (with its `hero`), run
+  `npm run stickers -- <pack>/<id>`, look at the contact sheet (its hero cell too) and the review page, commit the
+  choreography and everything it generated.
 - **A new pack** (a new character): its rig first (`designs/mascots`, the kit's rig contract), then add it to
   `scripts/stickers/export-parts.ts` and `kit/scene.ts` (`MANIFESTS`), `npm run stickers:parts -- <slug>`, the pack in
   `catalog.ts`, its stickers here, `npm run stickers -- <pack>`.
