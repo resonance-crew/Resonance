@@ -13,7 +13,7 @@ const CELL = 432 / COLS;
 const STATE: Partial<Record<PropKind, PropState>> = {
   heart: { glow: 1 }, cup: { steam: 1, phase: 0.3 }, slip: { seal: 1 }, pennant: { wave: 0.3 }, star: { shine: 1 },
   card: { lines: 1, underline: 1 }, confetti: { t: 0.35 }, wave: { pulse: 0.5 }, tear: { glint: 1 }, lantern: { glow: 1 },
-  sun: { rays: 1 }, burst: { draw: 1 }, sparkle: { show: 1 }, zz: { draw: 1 }, scribble: { lines: 1 }, underline: { draw: 1 },
+  sun: { rays: 1 }, burst: { draw: 1 }, sparkle: { show: 1 }, sparkles: { show: 1 }, strokes: { draw: 1 }, zz: { draw: 1 }, scribble: { lines: 1 }, underline: { draw: 1 },
 };
 
 export default defineSticker({
