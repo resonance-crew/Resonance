@@ -1,71 +1,91 @@
 /**
- * 牽牽 · 這是給你的 This is for you — it stands turned round, showing you its back: 「給：」 and the line left blank after
- * it. It turns to face you, and in both mittens it holds out a paper flower, with a small bow; its loops perk up, then it
- * goes shy (eyes shut, a little 'o', the loops drooping) — and it turns round again to its 「給：」.
- * Key pose: turned round, its back to you, 「給：」 showing.
+ * 牽牽 · 這是給你的 This is for you — it stands with its mittens together, innocent, a paper flower peeking out from behind
+ * its back. It reaches round with one mitten and brings the flower out in front, takes it in both mittens and holds it
+ * out to you with a small bow, smiling, its loops perked up — then goes shy (eyes shut, the blush deeper, the loops
+ * drooping). It tucks the flower back behind it, ready to bring it out again.
+ * Key pose: mittens together, the flower peeking from behind its right side.
  *
- * The body moves on 11 frames (each turn 4, the bow 2, up again 1), the turning ones narrow; between, it holds.
+ * The body moves on 3 frames (the bow down 2, up 1); the arm, the flower, the face and the loops carry the rest.
  */
 import { blink, bow, defineSticker, fr, keys, lerp, snap, step } from '../kit';
-import { between, perk } from './_local';
+import { between, mittenAt, perk } from './_local';
 
-/** Both mittens together before its middle, the flower's stem between them. */
+/**
+ * Both mittens together before its middle; the right one out to its side, reaching round behind; on its way back; and
+ * the two holding the flower out to you, a little to its right (the left mitten across, the right one low).
+ */
 const TOGETHER = -37;
+const ROUND = 78;
+const COMING = 24;
+const OFFER_L = -50;
+const OFFER_R = -14;
 /**
  * The flower: held by the middle of its stem (so its head stays below the face), how large beside it — larger as it is
  * held out to you — and how far it leans out.
  */
 const STEM: [number, number] = [52, 112];
-const FLOWER = 1.02;
-const FLOWER_OUT = 1.16;
-const FLOWER_ROT = 24;
+const FLOWER = 1.04;
+const FLOWER_OUT = 1.24;
+const FLOWER_ROT = 38;
+/** Hidden behind it: the head showing past its right side at shoulder height (rig units), leaning out. */
+const PEEK: [number, number] = [478, 352];
 
-/** The turn, frame by frame: how wide the paper is (it turns about its middle) and which side shows. */
-const TURN_IN = [[fr(4), 0.55, 'back'], [fr(5), 0.12, 'front'], [fr(6), 0.6, 'front'], [fr(7), 1.04, 'front'], [fr(8), 1, 'front']] as const;
-const TURN_OUT = [[fr(22), 0.6, 'front'], [fr(23), 0.12, 'back'], [fr(24), 0.55, 'back'], [fr(25), 1.04, 'back'], [fr(26), 1, 'back']] as const;
+/** Where the right mitten is on each frame of the reach (the rest of the time the mittens are together). */
+function rightArm(t: number): number {
+  if (t >= fr(3) && t < fr(4)) return ROUND;
+  if (t >= fr(4) && t < fr(5)) return COMING;
+  if (t >= fr(22) && t < fr(23)) return COMING;
+  if (t >= fr(23) && t < fr(24)) return ROUND;
+  return TOGETHER;
+}
 
 export default defineSticker({
   duration: 2.5,
-  // the thumb: facing you, holding the flower out to you in the small bow, smiling, the loops up
-  hero: fr(12),
-  cast: { tw: { slug: 'tag', x: 216, ground: 414, k: 0.66 } },
-  props: { flower: { kind: 'flower', seed: 8, z: 100 } },
-  frame(t, { tw }, { flower }) {
+  // the thumb: the flower held out to you in both mittens, the small bow, smiling, the loops up
+  hero: fr(10),
+  cast: { tw: { slug: 'tag', x: 206, ground: 411, k: 0.67, z: 10 } },
+  props: {
+    hidden: { kind: 'flower', seed: 8, z: 5 },
+    flower: { kind: 'flower', seed: 8, z: 100 },
+  },
+  frame(t, { tw }, { hidden, flower }) {
     const p = tw.pose;
-    // which side shows, and how wide, on this frame
-    let sx = 1;
-    let front = t >= fr(5) && t < fr(23);
-    for (const [at, w, side] of [...TURN_IN, ...TURN_OUT]) {
-      if (t >= at - 1e-6) {
-        sx = w;
-        front = side === 'front';
+    const k = tw.k;
+    // the small bow as it holds the flower out (down on f6–7, up on f21)
+    const tb = snap(t, [0, fr(6), fr(7), fr(21)]);
+    const e = bow(tw, tb, fr(5), fr(7), fr(20), fr(21), 0.6);
+    const out = t >= fr(4) && t < fr(23);
+    const offering = t >= fr(5) && t < fr(22);
+    p.liftL = offering ? OFFER_L : TOGETHER;
+    p.liftR = offering ? OFFER_R : rightArm(t);
+    if (!out) {
+      // behind its back: peeking past its side, or in the mitten reaching round (still behind it)
+      if (p.liftR === ROUND) {
+        const [mx, my] = mittenAt(tw, 'R');
+        hidden.at(mx, my, { k, scale: FLOWER, anchor: STEM, rot: 14 });
+      } else {
+        const [px, py] = tw.pagePoint(...PEEK);
+        hidden.at(px, py, { k, scale: FLOWER, anchor: 'head', rot: 24 });
       }
-    }
-    p.alt = !front;
-    p.sx *= sx;
-    // as it narrows, its feet come in under it (the hips are pinned to the paper's middle)
-    p.legL -= 10 * (1 - Math.min(sx, 1));
-    p.legR += 10 * (1 - Math.min(sx, 1));
-    // the small bow as it offers (down on f9–10, up on f20)
-    const tb = snap(t, [0, fr(9), fr(10), fr(20)]);
-    const e = bow(tw, tb, fr(8), fr(10), fr(19), fr(20), 0.32);
-    // the mittens together, holding the flower out
-    p.liftL = TOGETHER;
-    p.liftR = TOGETHER;
-    if (front) {
+    } else if (p.liftR === COMING) {
+      // on its way round to the front, in the right mitten
+      const [mx, my] = mittenAt(tw, 'R');
+      flower.at(mx, my, { k, scale: FLOWER, anchor: STEM, rot: 22 });
+    } else {
+      // in both mittens, held out to you
       const [hx, hy] = between(tw);
-      const held = lerp(FLOWER, FLOWER_OUT, e);
-      flower.at(hx, hy + 2 * tw.k, { k: tw.k, scale: held, sx, anchor: STEM, rot: FLOWER_ROT * sx });
+      flower.at(hx, hy + 2 * k, { k, scale: lerp(FLOWER, FLOWER_OUT, e), anchor: STEM, rot: FLOWER_ROT });
     }
-    // the face: smiling, blushing, the loops perked as it offers; then shy — eyes shut, a little 'o', the loops down
+    // the face: an innocent glance while it hides it; smiling at you as it offers (eyes open through the bow); then shy —
+    // eyes shut, the blush deeper, the loops down, the face lowered
     const ts = step(t, 1 / 6);
-    const shy = ts >= fr(15) && ts < fr(21);
-    p.blush = keys(ts, [[0, 0.3], [fr(6), 0.6], [fr(10), 1.2], [fr(14), 1.2], [fr(16), 1.8], [fr(20), 1.8], [fr(24), 0.3]]);
-    perk(tw, shy ? -0.8 : keys(ts, [[0, 0], [fr(8), 0], [fr(10), 1], [fr(14), 1], [fr(22), 0]]));
-    if (shy) p.eyes = 'shut';
-    if (shy && ts >= fr(16)) p.mouth = 'mouth-o';
-    p.faceX += 2;
-    if (shy) p.faceY += 2;
-    blink(tw, t, fr(7), fr(1));
+    const shy = ts >= fr(14) && ts < fr(20);
+    p.eyes = shy ? 'shut' : 'open';
+    if (!out) p.faceX -= 4;
+    else p.faceX += 2;
+    if (shy) p.faceY += 3;
+    p.blush = keys(ts, [[0, 0.5], [fr(4), 0.5], [fr(8), 1.2], [fr(12), 1.2], [fr(14), 1.8], [fr(20), 1.8], [fr(24), 0.5]]);
+    perk(tw, shy ? -0.9 : keys(ts, [[0, 0], [fr(6), 0], [fr(8), 1], [fr(12), 1], [fr(22), 0]]));
+    blink(tw, t, fr(27), fr(1));
   },
 });
