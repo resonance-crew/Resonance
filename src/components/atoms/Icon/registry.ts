@@ -46,6 +46,10 @@ import { CollapseRightIcon } from './icons/collapse-right';
 import { ArrowUpIcon } from './icons/arrow-up';
 import { MaskIcon } from './icons/mask';
 import { SmileIcon } from './icons/smile';
+import { KeyboardIcon } from './icons/keyboard';
+import { ExpandIcon } from './icons/expand';
+import { CollapseIcon } from './icons/collapse';
+import { ClockIcon } from './icons/clock';
 import type { IconRenderer } from './types';
 
 /**
@@ -113,6 +117,11 @@ export const ICONS = {
   mask: MaskIcon,
   // A message's hover tool that opens its reactions (round 16 §3).
   smile: SmileIcon,
+  // The composer's (round 22): back to the keyboard from the stickers, the field grown and shrunk, recent stickers.
+  keyboard: KeyboardIcon,
+  expand: ExpandIcon,
+  collapse: CollapseIcon,
+  clock: ClockIcon,
 } satisfies Record<string, IconRenderer>;
 
 export type IconName = keyof typeof ICONS;
