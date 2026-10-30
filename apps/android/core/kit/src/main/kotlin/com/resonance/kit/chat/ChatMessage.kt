@@ -29,17 +29,64 @@ data class ReplyQuote(
     val image: Boolean = false,
     /** The message it quotes was unsent (round 16 §3: the server scrubs the quote to `{ id, senderId, unsent: true }`): it reads 訊息已收回. */
     val unsent: Boolean = false,
+    /** The message it quotes was a sticker (round 22): the quote shows its key pose and its name; [text] is its fallback words. */
+    val sticker: ChatSticker? = null,
 ) {
     companion object {
         const val MAX_TEXT = 140
 
         /** The quote a reply to [message] carries (the same cut the server makes). */
-        fun of(message: ChatMessage) = ReplyQuote(message.id, message.senderId, cut(message.text), message.cardRef, image = message.image != null)
+        fun of(message: ChatMessage) = ReplyQuote(
+            message.id, message.senderId, cut(message.text), message.cardRef, image = message.image != null, sticker = message.sticker,
+        )
 
         /** At most [MAX_TEXT] code points, never splitting a surrogate pair. */
         fun cut(text: String): String {
             if (text.codePointCount(0, text.length) <= MAX_TEXT) return text
             return text.substring(0, text.offsetByCodePoints(0, MAX_TEXT))
+        }
+    }
+}
+
+/**
+ * A 小紙團 sticker as a message names it (round 22, `public/stickers/catalog.json`): its pack and its
+ * id in the pack — lowercase, `[a-z0-9-]`, stored for good and never renamed. Whether this build can
+ * draw it is [StickerCatalog]'s to say.
+ */
+data class ChatSticker(val pack: String, val id: String) {
+    companion object {
+        private val PACK = Regex("^[a-z0-9-]{1,32}$")
+        private val ID = Regex("^[a-z0-9-]{1,40}$")
+
+        /** Whether [pack] and [id] are what the contract takes (anything else names no sticker, and nothing is asked for it). */
+        fun isValid(pack: String, id: String): Boolean = PACK.matches(pack) && ID.matches(id)
+
+        /** A message's (or a quote's) `sticker: { pack, id }`; null when it isn't one. */
+        fun from(map: Map<*, *>?): ChatSticker? {
+            val pack = map?.get("pack") as? String ?: return null
+            val id = map["id"] as? String ?: return null
+            return if (isValid(pack, id)) ChatSticker(pack, id) else null
+        }
+    }
+}
+
+/**
+ * Several pictures sent together (round 22): the album's [id] (the client's, shared by its pictures),
+ * this picture's place in it ([index], 0 first) and how many were sent ([count], 2–10). The thread
+ * draws one sender's consecutive pictures of an album as one grid ([AlbumRows]).
+ */
+data class ChatAlbum(val id: String, val index: Int, val count: Int) {
+    companion object {
+        private val ID = Regex("^[A-Za-z0-9_-]{16,64}$")
+        const val MAX = 10
+
+        /** A message's `album: { id, index, count }`; null when it isn't one the contract takes. */
+        fun from(map: Map<*, *>?): ChatAlbum? {
+            val id = (map?.get("id") as? String)?.takeIf { ID.matches(it) } ?: return null
+            val index = (map["index"] as? Number)?.toDouble()?.takeIf { it == Math.floor(it) }?.toInt() ?: return null
+            val count = (map["count"] as? Number)?.toDouble()?.takeIf { it == Math.floor(it) }?.toInt() ?: return null
+            if (count !in 2..MAX || index !in 0 until count) return null
+            return ChatAlbum(id, index, count)
         }
     }
 }
@@ -95,6 +142,13 @@ data class ChatMessage(
      * while the thread is open — the message stays, the card no longer reads.
      */
     val privateShare: Boolean = false,
+    /**
+     * A 小紙團 sticker (round 22): the message carries nothing else; [text] is its fallback words
+     * (〔貼圖：謝謝〕), drawn only when this build can't draw the sticker.
+     */
+    val sticker: ChatSticker? = null,
+    /** One of several pictures sent together (round 22): only beside a picture ([image]). */
+    val album: ChatAlbum? = null,
 ) {
     /** Still on its way, or failed: nothing is known of it by the server (yet). */
     val isPending: Boolean get() = delivery != Delivery.Delivered
@@ -132,6 +186,9 @@ data class ChatMessage(
                 reactions = reactions(fields["reactions"] as? Map<*, *>),
                 // Only beside the card it shares: a stray marker on a message without one is no pass to anything.
                 privateShare = fields["privateShare"] == true && !(fields["cardRef"] as? String).isNullOrEmpty(),
+                sticker = ChatSticker.from(fields["sticker"] as? Map<*, *>),
+                // An album names pictures: a stray one on a message without a picture groups nothing.
+                album = ChatAlbum.from(fields["album"] as? Map<*, *>)?.takeIf { ChatImage.from(fields["image"] as? Map<*, *>) != null },
             )
         }
 
@@ -168,6 +225,7 @@ data class ChatMessage(
                 text = ReplyQuote.cut(map["text"] as? String ?: ""),
                 cardRef = (map["cardRef"] as? String)?.takeIf { it.isNotEmpty() },
                 image = map["image"] == true,
+                sticker = ChatSticker.from(map["sticker"] as? Map<*, *>),
             )
         }
 

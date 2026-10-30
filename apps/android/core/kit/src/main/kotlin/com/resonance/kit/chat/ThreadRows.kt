@@ -35,9 +35,20 @@ data class ThreadRow(
     val position: RunPosition,
     val dayLabel: Boolean,
     val timeLabel: Boolean,
+    /**
+     * The pictures of an album drawn as one grid on this row (round 22), in their order — [message]
+     * first, the one with the lowest place (it carries the words and the quote) — or none: one message.
+     */
+    val album: List<ChatMessage> = emptyList(),
 ) {
     /** It stacks under the message before it (a tight gap instead of the one between runs). */
     val joinsAbove: Boolean get() = position.joinsAbove
+
+    /** Every message this row draws: [message], or the album's pictures. */
+    val members: List<ChatMessage> get() = album.ifEmpty { listOf(message) }
+
+    /** Whether this row draws the message with id or key [idOrKey]. */
+    fun holds(idOrKey: String): Boolean = members.any { it.id == idOrKey || it.key == idOrKey }
 }
 
 /**
@@ -60,7 +71,8 @@ object ThreadRows {
      * face — and leads no label.
      */
     fun build(messages: List<ChatMessage>, zone: ZoneId = ZoneId.systemDefault(), drawn: (ChatMessage) -> Boolean = { true }): List<ThreadRow> {
-        @Suppress("NAME_SHADOWING") val messages = messages.filter(drawn)
+        val groups = AlbumRows.group(messages.filter(drawn))
+        @Suppress("NAME_SHADOWING") val messages = groups.map { it.first() }
         if (messages.isEmpty()) return emptyList()
         val days = messages.map { day(it, zone) }
         val day = BooleanArray(messages.size) { it == 0 || days[it] != days[it - 1] }
@@ -86,9 +98,77 @@ object ThreadRows {
                 below -> RunPosition.First
                 else -> RunPosition.Single
             }
-            ThreadRow(m, position, day[i], time[i])
+            ThreadRow(m, position, day[i], time[i], album = groups[i].takeIf { it.size > 1 }.orEmpty())
         }
     }
 
     private fun day(m: ChatMessage, zone: ZoneId): LocalDate = Instant.ofEpochMilli(m.sentAt.time).atZone(zone).toLocalDate()
+}
+
+/**
+ * Albums (round 22 §3): one sender's consecutive pictures of one album are drawn as one grid. A member
+ * still on its way from the other side, unsent or one that failed (its own row, with its retry) just
+ * leaves the grid smaller; a lone member left is an ordinary picture.
+ */
+object AlbumRows {
+    /** Whether [m] can stand in an album's grid. */
+    fun groupable(m: ChatMessage): Boolean = m.album != null && m.image != null && !m.isUnsent && m.delivery != Delivery.Failed
+
+    /**
+     * [messages] (oldest first) in groups: each a single message, or an album's consecutive pictures in
+     * their order (by [ChatAlbum.index]) — the one that carries the words first.
+     */
+    fun group(messages: List<ChatMessage>): List<List<ChatMessage>> {
+        val out = ArrayList<MutableList<ChatMessage>>()
+        for (m in messages) {
+            val last = out.lastOrNull()
+            val head = last?.firstOrNull()
+            if (head != null && groupable(m) && groupable(head) && head.senderId == m.senderId && head.album?.id == m.album?.id) {
+                last.add(m)
+            } else {
+                out.add(mutableListOf(m))
+            }
+        }
+        return out.map { g -> if (g.size > 1) g.sortedBy { it.album?.index ?: 0 } else g }
+    }
+}
+
+/**
+ * Where each picture of an album's grid goes (round 22 §3), in a grid [width] wide with [gap] between
+ * pictures: 2 side by side, 3 one big with two stacked beside it, 4 two by two, 5 to 10 in rows of three
+ * (a last row of one or two shares the width). All in the grid's own units.
+ */
+object AlbumLayout {
+    data class Cell(val x: Float, val y: Float, val width: Float, val height: Float)
+
+    /** The cells for [count] pictures, in order, and the grid's height. */
+    fun cells(count: Int, width: Float, gap: Float): Pair<List<Cell>, Float> {
+        if (count <= 0) return emptyList<Cell>() to 0f
+        if (count == 1) return listOf(Cell(0f, 0f, width, width * 0.75f)) to width * 0.75f
+        if (count == 2) {
+            val w = (width - gap) / 2
+            val h = w * 1.25f
+            return listOf(Cell(0f, 0f, w, h), Cell(w + gap, 0f, w, h)) to h
+        }
+        if (count == 3) {
+            val big = (width - gap) * 2 / 3
+            val small = width - gap - big
+            val h = big
+            val half = (h - gap) / 2
+            return listOf(Cell(0f, 0f, big, h), Cell(big + gap, 0f, small, half), Cell(big + gap, half + gap, small, half)) to h
+        }
+        if (count == 4) {
+            val s = (width - gap) / 2
+            return listOf(Cell(0f, 0f, s, s), Cell(s + gap, 0f, s, s), Cell(0f, s + gap, s, s), Cell(s + gap, s + gap, s, s)) to s * 2 + gap
+        }
+        val side = (width - 2 * gap) / 3
+        val cells = ArrayList<Cell>(count)
+        val rows = (count + 2) / 3
+        for (r in 0 until rows) {
+            val inRow = minOf(3, count - r * 3)
+            val w = (width - (inRow - 1) * gap) / inRow
+            for (c in 0 until inRow) cells.add(Cell(c * (w + gap), r * (side + gap), w, side))
+        }
+        return cells to rows * side + (rows - 1) * gap
+    }
 }
