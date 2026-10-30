@@ -1,57 +1,57 @@
 /**
- * 悄悄 · 我在這裡 I'm here — the big star on its shoulder brightens; it reaches up round its side, takes the star's light
- * in its mitten and holds it up beside its head like a lantern, glowing softly, breathing light, while it looks at you.
- * Then it brings the light back down to where it lives on its shoulder.
+ * 悄悄 · 我在這裡 I'm here — a star on its side brightens; it reaches up round its side, takes the star's light in its
+ * mitten and raises it straight up, a round warm glow, swaying it slowly twice — over here — its eyes on you. Then it
+ * brings the light back down to where it lives.
  * Key pose: standing, a small smile, its stars unlit.
  *
- * The body never moves: the arm, the lantern, the star's glow and the face do. The arm moves on 9 frames, the lantern
- * with it; while it is held up only its glow breathes, on twos.
+ * The body never moves: the arm, the glow, the star and the face do. The arm moves on 15 frames, the glow with it;
+ * between them only the glow breathes.
  */
 import { defineSticker, fr, hold, keys, snap } from '../kit';
-import { STAR_LANTERN } from './_local';
+import { GLOW } from './_local';
 
-/** Its big shoulder star (rig units): where the light is taken from and put back. */
-const STAR = 8;
-const STAR_AT: [number, number] = [472, 418];
-/** The arm held up beside its head with the lantern (a lift: up and out to its right). */
-const UP = 142;
+/** The star on its left side (rig units) the light is taken from and put back: within the left mitten's reach. */
+const STAR = 4;
+const STAR_AT: [number, number] = [238, 406];
+/** The arm raised straight up (a lift: 180 is straight up; a little short of it keeps the glow off its dome). */
+const UP = 168;
 
 export default defineSticker({
   duration: 2.5,
-  // the thumb: the lantern held up at its fullest glow, looking at you
-  hero: fr(16),
-  cast: { hush: { slug: 'night', x: 186, ground: 410, k: 0.72 } },
-  props: { lantern: { kind: STAR_LANTERN, seed: 6 } },
-  frame(t, { hush }, { lantern }) {
+  // the thumb: the light raised high at its fullest glow, its eyes on you
+  hero: fr(10),
+  cast: { hush: { slug: 'night', x: 226, ground: 410, k: 0.8 } },
+  props: { glow: { kind: GLOW, seed: 6 } },
+  frame(t, { hush }, { glow }) {
     const p = hush.pose;
     const f = Math.round(t * 12);
     const [sx, sy] = hush.pagePoint(...STAR_AT);
-    const atStar = hush.aim('R', sx, sy);
-    // the arm: up round its side to the star (f5–7), up and out with the light (f8–10), held, back to the star
-    // (f23–25), down to rest (f26–27)
-    const ta = snap(t, [0, fr(5), fr(6), fr(7), fr(8), fr(9), fr(10), fr(23), fr(24), fr(25), fr(26), fr(27)]);
-    const rest = hush.rest('R');
-    p.liftR = keys(ta, [
-      [0, rest], [fr(5), 100], [fr(6), 165], [fr(7), atStar], [fr(8), atStar - 18], [fr(9), UP + 12], [fr(10), UP],
-      [fr(22), UP], [fr(23), UP + 24], [fr(24), atStar - 6], [fr(25), atStar], [fr(26), 110], [fr(27), rest],
+    const atStar = hush.aim('L', sx, sy);
+    // the arm: up round its side to the star (f4–6), up with the light (f7–9), two slow sways on twos (f11–19), back
+    // to the star (f23–24), down to rest (f25–26)
+    const ta = snap(t, [0, fr(4), fr(5), fr(6), fr(7), fr(8), fr(9), fr(11), fr(13), fr(15), fr(17), fr(19), fr(23), fr(24), fr(25), fr(26)]);
+    const rest = hush.rest('L');
+    const SWAY = 9;
+    p.liftL = keys(ta, [
+      [0, rest], [fr(4), 100], [fr(5), 160], [fr(6), atStar], [fr(7), atStar - 14], [fr(8), UP + 6], [fr(9), UP],
+      [fr(10), UP], [fr(11), UP + SWAY], [fr(13), UP - SWAY], [fr(15), UP + SWAY], [fr(17), UP - SWAY], [fr(19), UP],
+      [fr(22), UP], [fr(23), atStar - 10], [fr(24), atStar], [fr(25), 110], [fr(26), rest],
     ]);
     p.front = true;
-    // the lantern: grown out of the star in the mitten (f7–10), its glow up as it rises, breathing while held (on
-    // twos), shrinking back into the star (f24–25)
-    const size = keys(ta, [[0, 0], [fr(6), 0], [fr(7), 0.3], [fr(8), 0.55], [fr(9), 0.85], [fr(10), 1], [fr(22), 1], [fr(23), 0.85], [fr(24), 0.5], [fr(25), 0.25], [fr(26), 0]]);
+    // the glow: grown out of the star in the mitten (f6–9), open while raised, back into the star (f23–24)
+    const size = keys(ta, [[0, 0], [fr(5), 0], [fr(6), 0.3], [fr(7), 0.55], [fr(8), 0.85], [fr(9), 1], [fr(21), 1], [fr(23), 0.5], [fr(24), 0.25], [fr(25), 0]]);
     if (size > 0) {
       const g2 = Math.floor(f / 2) * 2;
-      const breath = g2 >= 12 && g2 <= 22 ? 0.12 * Math.sin(((g2 - 12) / 10) * Math.PI * 2) : 0;
-      const glow = keys(ta, [[fr(7), 0], [fr(8), 0.3], [fr(10), 0.85], [fr(22), 0.85], [fr(24), 0.2]]) + breath;
-      hold(lantern, hush, 'R', { scale: size });
-      lantern.set({ glow });
+      const breath = g2 >= 10 && g2 <= 20 ? 0.1 * Math.sin(((g2 - 10) / 10) * Math.PI * 2) : 0;
+      hold(glow, hush, 'L', { scale: size });
+      glow.set({ glow: keys(ta, [[fr(6), 0], [fr(7), 0.3], [fr(9), 0.9], [fr(21), 0.9], [fr(23), 0.3]]) + breath });
     }
-    // the star itself: brightens to call (f3–4), its light goes into the lantern, comes back with it and settles
-    p.extra[`star-glow-${STAR}`] = keys(f, [[2, 0], [3, 0.55], [4, 1], [7, 1], [9, 0], [24, 0], [25, 1], [27, 0.5], [28, 0]]);
-    // the face: a glance at the star, up at the lantern as it rises, then to you, smiling; a slow blink while it holds
-    p.faceX += keys(f, [[2, 0], [4, 8], [9, 10], [13, 2], [22, 2], [24, 8], [28, 0]]);
-    p.faceY += keys(f, [[2, 0], [4, 0], [9, -6], [13, -1], [22, -1], [24, 1], [28, 0]]);
-    p.blush = keys(snap(t, [0, fr(4), fr(10), fr(13), fr(23), fr(27)]), [[0, 0.3], [fr(4), 0.45], [fr(10), 0.8], [fr(13), 1], [fr(23), 1], [fr(27), 0.3]]);
-    if (f >= 18 && f < 20) p.eyes = f === 18 ? 'sleepy' : 'shut';
+    // the star itself: brightens to call (f2–3), its light goes into the mitten, comes back with it and settles
+    p.extra[`star-glow-${STAR}`] = keys(f, [[1, 0], [2, 0.55], [3, 1], [6, 1], [8, 0], [23, 0], [24, 1], [26, 0.5], [27, 0]]);
+    // the face: a glance at the star, up at the light as it rises, then on you, smiling; a slow blink while it sways
+    p.faceX += keys(f, [[1, 0], [3, -8], [7, -6], [10, 0], [22, 0], [24, -8], [27, 0]]);
+    p.faceY += keys(f, [[1, 0], [3, 0], [7, -6], [10, -1], [22, -1], [24, 1], [27, 0]]);
+    p.blush = keys(snap(t, [0, fr(3), fr(9), fr(11), fr(22), fr(26)]), [[0, 0.3], [fr(3), 0.45], [fr(9), 0.8], [fr(11), 1], [fr(22), 1], [fr(26), 0.3]]);
+    if (f >= 17 && f < 19) p.eyes = f === 17 ? 'sleepy' : 'shut';
   },
 });
