@@ -19,6 +19,8 @@
     "moderation": "tsx scripts/moderation/reports.ts",
     "api:openapi": "tsx scripts/api-openapi.ts",
     "mascots:cast": "tsx scripts/mascots/build-cast.ts",
+    "stickers": "tsx scripts/stickers/render.ts",
+    "stickers:parts": "tsx scripts/stickers/export-parts.ts",
     "native:editor": "tsc -p native/editor/tsconfig.json && tsx scripts/native/build-editor.mjs",
     "native:mascots": "tsc -p native/mascots/tsconfig.json && tsx scripts/native/build-mascots.mjs",
     "apps:generate": "tsx scripts/native/tokens.ts && tsx scripts/apps/l10n.ts && tsx scripts/apps/icons.ts && tsx scripts/apps/reactions.ts && tsx scripts/stickers/catalog-json.ts && npm run -s api:openapi && npm run -s native:editor && npm run -s native:mascots",

@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": { "incremental": false, "noEmit": true },
+  "include": ["kit/**/*.ts", "*/*.ts", "../../src/lib/mascots/**/*.ts"],
+  "exclude": ["../../src/**/*.test.ts", "../../src/**/*.test.tsx"]
+}
