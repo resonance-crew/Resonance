@@ -69,8 +69,20 @@ fun OrganicIcon(
     mirrored: Boolean = false,
     /** Degrees clockwise (the chevron pointing right is chevron-down turned -90). */
     rotation: Float = 0f,
+) = OrganicIcon(name.glyph, modifier, size, color, strokeWidth, fill, mirrored, rotation)
+
+/** [OrganicIcon] for a glyph of the apps' own ([ComposerGlyphs]), drawn the same way. */
+@Composable
+fun OrganicIcon(
+    glyph: IconGlyph,
+    modifier: Modifier = Modifier,
+    size: Dp = 22.dp,
+    color: Color = Tokens.Text,
+    strokeWidth: Float = Tokens.InkStrong.value,
+    fill: Color? = null,
+    mirrored: Boolean = false,
+    rotation: Float = 0f,
 ) {
-    val glyph = name.glyph
     Box(
         modifier
             .size(size)
@@ -124,4 +136,48 @@ fun OrganicRadio(selected: Boolean, seed: Double = 21.0, modifier: Modifier = Mo
             }
         }
     })
+}
+
+/**
+ * The composer's own glyphs (round 22) that the web's registry has no twin of yet: the keyboard (☺ turned
+ * ⌨), ⤢ and ⤡ (the field grown and back), and the clock of the sticker panel's recents. Drawn in the
+ * registry's hand — a 24 box, wobbly cubic strokes at the icon's pen.
+ */
+object ComposerGlyphs {
+    private fun stroke(vararg c: Float) = IconStroke(filled = false, width = 1f, commands = c)
+
+    /** ⌨: the keyboard's outline, two rows of keys and the space bar. */
+    val Keyboard = IconGlyph(24f, fillable = false, strokes = listOf(
+        stroke(0f, 4.6f, 6.4f, 2f, 9.5f, 6.1f, 14.6f, 6.2f, 19.5f, 6.5f, 2f, 20.6f, 6.6f, 21.1f, 7.3f, 21.1f, 8.4f, 2f, 21.2f, 11f, 21.1f, 13.6f, 20.9f, 16.2f,
+            2f, 20.8f, 17.2f, 20.2f, 17.7f, 19.2f, 17.7f, 2f, 14.2f, 17.9f, 9.3f, 17.9f, 4.5f, 17.6f, 2f, 3.5f, 17.5f, 2.9f, 16.9f, 2.9f, 15.9f,
+            2f, 2.8f, 13.3f, 2.9f, 10.6f, 3.1f, 8.1f, 2f, 3.2f, 7f, 3.7f, 6.4f, 4.6f, 6.4f, 3f),
+        stroke(0f, 6.5f, 9.9f, 1f, 6.6f, 10f),
+        stroke(0f, 10.2f, 9.8f, 1f, 10.3f, 9.9f),
+        stroke(0f, 13.8f, 9.9f, 1f, 13.9f, 10f),
+        stroke(0f, 17.4f, 9.8f, 1f, 17.5f, 9.9f),
+        stroke(0f, 8.4f, 14.3f, 2f, 10.8f, 14.1f, 13.3f, 14.2f, 15.7f, 14.4f),
+    ))
+
+    /** ⤢: two arrows pointing out to the top end and the bottom start corners. */
+    val Expand = IconGlyph(24f, fillable = false, strokes = listOf(
+        stroke(0f, 14.3f, 4.2f, 2f, 16.2f, 4f, 18.1f, 4.1f, 19.9f, 4.1f, 2f, 20f, 5.9f, 19.9f, 7.8f, 19.8f, 9.7f),
+        stroke(0f, 19.6f, 4.4f, 2f, 17.4f, 6.5f, 15.4f, 8.6f, 13.4f, 10.6f),
+        stroke(0f, 9.7f, 19.8f, 2f, 7.8f, 20f, 5.9f, 19.9f, 4.1f, 19.9f, 2f, 4f, 18.1f, 4.1f, 16.2f, 4.2f, 14.3f),
+        stroke(0f, 4.4f, 19.6f, 2f, 6.5f, 17.5f, 8.5f, 15.5f, 10.6f, 13.4f),
+    ))
+
+    /** ⤡: the same two arrows pointing back in. */
+    val Collapse = IconGlyph(24f, fillable = false, strokes = listOf(
+        stroke(0f, 14.1f, 4.8f, 2f, 14f, 6.6f, 14.1f, 8.3f, 14.2f, 9.9f, 2f, 15.9f, 9.9f, 17.6f, 9.8f, 19.3f, 9.9f),
+        stroke(0f, 14.5f, 9.5f, 2f, 16.4f, 7.6f, 18.2f, 5.8f, 20f, 4f),
+        stroke(0f, 9.9f, 19.2f, 2f, 10f, 17.5f, 9.9f, 15.8f, 9.8f, 14.1f, 2f, 8.1f, 14f, 6.4f, 14.1f, 4.7f, 14.2f),
+        stroke(0f, 9.5f, 14.5f, 2f, 7.6f, 16.4f, 5.8f, 18.2f, 4f, 20f),
+    ))
+
+    /** 🕘: a clock, its two hands. */
+    val Clock = IconGlyph(24f, fillable = false, strokes = listOf(
+        stroke(0f, 12.2f, 3.6f, 2f, 16.9f, 3.5f, 20.6f, 7.2f, 20.5f, 12f, 2f, 20.6f, 16.8f, 16.8f, 20.5f, 12f, 20.5f, 2f, 7.2f, 20.6f, 3.4f, 16.7f, 3.5f, 11.9f,
+            2f, 3.5f, 7.3f, 7.3f, 3.7f, 12.2f, 3.6f, 3f),
+        stroke(0f, 12f, 7.4f, 2f, 12.1f, 8.9f, 12f, 10.5f, 12f, 12.1f, 2f, 13.2f, 12.9f, 14.4f, 13.7f, 15.6f, 14.5f),
+    ))
 }

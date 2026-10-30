@@ -130,6 +130,37 @@ fun CardPickerContent(
 }
 
 /**
+ * The cards to share in the attach panel's 卡片 (round 22 §4.2): the same list the thread's 分享卡片
+ * modal holds — your public cards, then your 私人卡 — filling the panel ([modifier]), a tap the pick.
+ */
+@Composable
+internal fun CardPickPanel(session: Session, onPick: (FeedCard) -> Unit, modifier: Modifier = Modifier) {
+    var read by remember { mutableStateOf<PickRead>(PickRead.Loading) }
+    var reads by remember { mutableIntStateOf(0) }
+    LaunchedEffect(reads) {
+        read = PickRead.Loading
+        read = try {
+            val box = session.reading.cardBox(listOf(TabGetCardBox.published, TabGetCardBox.`private`, TabGetCardBox.draft))
+            PickRead.Loaded(shareableCards(box[TabGetCardBox.published].orEmpty(), box[TabGetCardBox.`private`], box[TabGetCardBox.draft]))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            PickRead.Failed
+        }
+    }
+    Column(modifier.padding(horizontal = 14.dp)) {
+        when (val r = read) {
+            PickRead.Loading -> PickSkeleton(rows = 4)
+            PickRead.Failed -> PickFailed(L10n.Write.Editor.CardModal.failed, L10n.Write.Editor.CardModal.retry) { reads++ }
+            is PickRead.Loaded -> CardPickList(
+                r.cards, onPick, privateLabel = L10n.Messages.privateCard, empty = { PickNote(L10n.Messages.pickCardEmpty) },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+/**
  * The author's own cards as a scrollable pick list (CardPickList.tsx), quiet enough to scan: on each
  * row a 40 cover thumb ([PickThumb]), the title on one line, and one muted line under it — when it
  * came out, led by 匿名 for an anonymous card ([pickMeta]) — rows parted by their own air, no rules
@@ -155,10 +186,12 @@ internal fun CardPickList(
     empty: (@Composable () -> Unit)? = null,
     /** A quiet line under the rows (why some cards are not listed). */
     footnote: String? = null,
+    /** How tall it may grow before it scrolls: half the screen in a modal; a panel gives its own room ([Modifier]). */
+    modifier: Modifier = Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.5f).dp),
 ) {
     val scroll = rememberScrollState()
     // Fading at the side it can still move toward, as the modal's own content does.
-    Column(Modifier.heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.5f).dp).scrollFade(scroll, ModalScrollFade).verticalScroll(scroll)) {
+    Column(modifier.scrollFade(scroll, ModalScrollFade).verticalScroll(scroll)) {
         lead?.invoke()
         if (cards.isEmpty() && empty != null) {
             empty()

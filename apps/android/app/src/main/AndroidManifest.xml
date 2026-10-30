@@ -4,6 +4,13 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Push (API 33+ asks at run time, once the person is signed in). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- The chat's own gallery (round 22 §6.2): the phone's pictures, asked for only when the attach panel's 圖片
+         first shows. 14+ may grant only the pictures chosen (READ_MEDIA_VISUAL_USER_SELECTED); 12 and older ask
+         for storage. Refused, the system's photo picker still sends pictures without any. Play's Photo and Video
+         Permissions declaration covers it (communication: sending photos in chat). -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
     <!-- The in-app browser picks a browser to run the page in (never this app, see InAppBrowser). -->
     <queries>

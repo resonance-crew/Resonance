@@ -28,6 +28,9 @@ import com.resonance.kit.api.ReadingApi
 import com.resonance.kit.api.SafetyApi
 import com.resonance.kit.api.WritingApi
 import com.resonance.kit.chat.NoteDrafts
+import com.resonance.kit.chat.ChatDrafts
+import com.resonance.kit.chat.KeyboardHeights
+import com.resonance.kit.chat.StickerRecents
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
 import com.resonance.kit.push.NotificationSwitches
@@ -76,6 +79,15 @@ class Session(
     private val shareFiles: File? = null,
     /** Notes written and not sent yet, per account and card (note-drafts.xml): emptied with the account. */
     private val noteDraftStore: NoteDrafts? = null,
+    /** Messages written and not sent yet, per account and conversation (chat-drafts.xml, round 22): emptied with the account. */
+    chatDraftStore: ChatDrafts? = null,
+    /** The stickers an account sent last (sticker-recents.xml, round 22): emptied with the account. */
+    private val stickerRecentsStore: StickerRecents? = null,
+    /** How tall this device's keyboard is, per orientation (composer.xml): a panel takes its place (round 22). */
+    val keyboardHeights: KeyboardHeights = KeyboardHeights(object : KeyboardHeights.Storage {
+        override fun read(key: String): Float? = null
+        override fun write(key: String, value: Float) {}
+    }),
     /** The app's client without the API's HTTP cache: chat pictures go up and are read through it, with the token ([pictures]). */
     pictureHttp: OkHttpClient = OkHttpClient(),
     /** The loader the thread's pictures are read with, over [pictures]' client (ChatPictures.loader); null: none (a test). */
@@ -237,6 +249,10 @@ class Session(
     val noteSends = NoteSends()
     /** The signed-in account's unsent notes, by card (the note composer's words, kept until sent). */
     val noteDrafts: NoteDrafts.Account? get() = uid?.let { noteDraftStore?.of(it) }
+    /** The signed-in account's unsent messages, by conversation (round 22 §4.4). */
+    val chatDrafts = ChatDraftBook(chatDraftStore)
+    /** The stickers the signed-in account sent last (the sticker panel's 🕘). */
+    val stickerRecents: StickerRecents.Account? get() = uid?.let { stickerRecentsStore?.of(it) }
     /** The signed-in profile once loaded (the publish panel's card head). */
     val me: Me? get() = (_profile.value as? Profile.Loaded)?.me
     /** The sign-in email and phone, shown read-only on the account screen. */
@@ -294,6 +310,7 @@ class Session(
             outboxes.clear()
             noteSends.clear()
             val forgetting = previous?.let(::forget)
+            chatDrafts.start(next)
             _keptBlocks.value = emptySet()
             meReadAt = 0L
             _profile.value = Profile.Unknown
@@ -357,6 +374,9 @@ class Session(
         }
         // The notes it wrote and didn't send: words to someone, kept for this account alone.
         noteDraftStore?.forget(who)
+        // Its unsent messages (round 22) and the stickers it sent last, likewise.
+        chatDrafts.forget(who)
+        stickerRecentsStore?.forget(who)
         // The pushes it got, still in the shade, what this install told the server, and the mark that it has a profile.
         PushCenter.clearDelivered()
         PushCenter.lastRegistration = null

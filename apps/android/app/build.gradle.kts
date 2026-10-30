@@ -88,6 +88,8 @@ android {
     // The APK on the device grows by about 5 MB; Play compresses the download itself.
     androidResources {
         noCompress += "ttf"
+        // The stickers (round 22) are compressed already: stored, they are read where they lie.
+        noCompress += "webp"
         // src/messages is an asset folder as it is: its punctuation test (punctuation.test.ts) stays
         // out of the APK. aapt's own ignore list first — setting one replaces it.
         ignoreAssetsPatterns += listOf("!.svn", "!.git", "!.ds_store", "!*.scc", ".*", "<dir>_*", "!CVS", "!thumbs.db", "!picasa.ini", "!*~", "!*.ts")
@@ -101,6 +103,37 @@ android {
     // The share's intents, its sheet actions and their activity run on the JVM under Robolectric,
     // with the merged manifest (the share FileProvider, the actions' activity) and resources.
     testOptions { unitTests.isIncludeAndroidResources = true }
+}
+
+// The 小紙團 stickers (round 22): public/stickers as the site serves them — catalog.json, each sticker's
+// animated file and key pose, each pack's icon — copied into a generated asset folder under stickers/,
+// so the app draws a sticker from the bundle with nothing to fetch. The art lands at the same paths
+// (scripts/stickers), and the next build picks it up; the copy follows the folder as it is.
+abstract class SyncStickers : DefaultTask() {
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val source: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val output: DirectoryProperty
+
+    @TaskAction
+    fun sync() {
+        val out = output.get().asFile
+        out.deleteRecursively()
+        val into = out.resolve("stickers")
+        source.get().asFile.walkTopDown().filter { it.isFile && (it.name == "catalog.json" || it.extension == "webp") }.forEach { f ->
+            val target = into.resolve(f.relativeTo(source.get().asFile).path)
+            target.parentFile.mkdirs()
+            f.copyTo(target, overwrite = true)
+        }
+    }
+}
+val syncStickers = tasks.register<SyncStickers>("syncStickers") {
+    source.set(layout.projectDirectory.dir("../../../public/stickers"))
+}
+androidComponents {
+    onVariants { variant -> variant.sources.assets?.addGeneratedSourceDirectory(syncStickers, SyncStickers::output) }
 }
 
 // The story editor (native/editor/dist/editor.html) is build output the repo does not keep: it comes

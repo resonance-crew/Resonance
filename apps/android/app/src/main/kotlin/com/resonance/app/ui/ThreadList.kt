@@ -1,6 +1,12 @@
 package com.resonance.app.ui
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onLongClick
+import com.resonance.kit.chat.AlbumLayout
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import com.resonance.design.ReactionChipItem
 import com.resonance.design.ReactionChips
@@ -152,6 +158,8 @@ internal fun rowContentType(row: ThreadRow): Int {
     val m = row.message
     return when {
         m.isUnsent -> 5
+        row.album.isNotEmpty() -> 7
+        m.sticker != null -> 6
         m.image != null -> 1
         m.isNote -> 2
         m.cardRef != null -> 3
@@ -188,6 +196,10 @@ internal class ThreadContext(
     val onReact: (ChatMessage, String) -> Unit = { _, _ -> },
     /** Whether reactions can be given here now (connected, no block: a letter not yet answered takes none). */
     val reacts: Boolean = false,
+    /** A sticker's size on this page (round 22 §4.5): 128 on a phone, 144 wider. */
+    val stickerSize: Dp = 128.dp,
+    /** The API's origin: a sticker this build doesn't bundle is read from the site. */
+    val origin: String = "",
 ) {
     /** A link in a message was tapped ([openLink]). */
     fun tapLink(url: String) = model.openLink(url, opener, open)
@@ -216,23 +228,26 @@ internal class Flash {
     }
 }
 
-/** A message pressed and held: the row, where its bubble is on the screen, and the link under the finger. */
-internal class MessageMenu(val row: ThreadRow, val bounds: Rect, val link: String?)
+/**
+ * A message pressed and held: the row, where its bubble is on the screen, and the link under the finger —
+ * and which of the row's messages it was ([target]: an album's picture pressed; the row's message otherwise).
+ */
+internal class MessageMenu(val row: ThreadRow, val bounds: Rect, val link: String?, val target: ChatMessage = row.message)
 
 /**
  * Where the floating composer stands (round 9 §4): the room it takes at the screen's foot — the
- * navigation bar or the keyboard ([insets]), [ComposerGap] of air, then the capsule as drawn
+ * navigation bar, the keyboard or a panel in its place ([bottom], round 22), [ComposerGap] of air, then the capsule as drawn
  * ([foot]) with what rides over it and, over those rows, the 6 the foot paper's fade starts in
  * (round 10 §3.2, round 11 §3) — read while laying out, so the thread follows the keyboard frame by frame and the
  * composer as it grows, without composing again.
  */
 @Stable
-internal class ComposerRoom(private val insets: WindowInsets, private val density: Density) {
+internal class ComposerRoom(private val bottom: () -> Int, private val density: Density) {
     /** How tall the composer is as drawn — the capsule, its riding rows and their fade, or a notice in their place (px; 0 with none). */
     var foot by mutableIntStateOf(0)
 
-    /** From the screen's foot to the composer's top (px). */
-    val above: Int get() = insets.getBottom(density) + with(density) { ComposerGap.roundToPx() } + foot
+    /** From the screen's foot to the composer's top (px): the keyboard, a panel in its place or the navigation bar, the air, the composer. */
+    val above: Int get() = bottom() + with(density) { ComposerGap.roundToPx() } + foot
 
     /** From the screen's foot to where the newest message may rest, and the pill: [ComposerClear] over the composer (px). */
     val clear: Int get() = above + with(density) { ComposerClear.roundToPx() }
@@ -282,7 +297,7 @@ internal class ThreadScroll(
     }
 
     /** The index of a message in the reversed list, by id or key. */
-    fun indexOf(id: String): Int = rows().asReversed().indexOfFirst { it.message.id == id || it.message.key == id }
+    fun indexOf(id: String): Int = rows().asReversed().indexOfFirst { it.holds(id) }
 
     /**
      * Brings the message to the middle of what the person can see (between the bar and the composer);
@@ -655,11 +670,13 @@ private fun ReplyQuoteView(message: ChatMessage, mine: Boolean, ctx: ThreadConte
     val model = ctx.model
     val spoken = replySpoken(mine, quote.senderId == model.me, model.other?.handle.orEmpty())
     Column(Modifier.semantics { contentDescription = spoken }, horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
+        val sticker = quote.sticker?.takeIf { !quote.unsent }?.let { com.resonance.app.Stickers.find(it) }
         QuoteBubble(
-            // A quote of a message unsent since reads 訊息已收回 (the server scrubbed its words).
-            if (quote.unsent) L10n.Messages.unsentQuote else quote.text.ifEmpty { quoteStandIn(quote) },
+            // A quote of a message unsent since reads 訊息已收回 (the server scrubbed its words); a sticker's, its name by its key pose.
+            if (quote.unsent) L10n.Messages.unsentQuote else if (quote.sticker != null) quoteWords(quote) else quote.text.ifEmpty { quoteStandIn(quote) },
             seed = seedFromId(quote.id, 19),
             onClick = if (interactive) { { ctx.onQuote(quote.id) } } else null,
+            leading = sticker?.let { s -> { StickerPose(s, ctx.origin, Modifier.size(32.dp)) } },
         )
     }
 }
@@ -713,6 +730,12 @@ internal fun MessageCore(row: ThreadRow, ctx: ThreadContext, interactive: Boolea
     val pictureBox = message.image?.takeIf { picture != null }?.let { PictureBox.of(it.width, it.height, ctx.rowMax.value) }
     val haptic = LocalHapticFeedback.current
     var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    // A sticker (round 22 §4.5): drawn from the bundle, or the site's file for a later pack; one found nowhere is its fallback words.
+    val stickerRef = message.sticker
+    val sticker by produceState(stickerRef?.let { com.resonance.app.Stickers.find(it) }, stickerRef) {
+        if (value == null && stickerRef != null) value = com.resonance.app.Stickers.ensure(stickerRef, ctx.origin)
+    }
+    val album = row.album
     val words = carried.words(message)
     val links = remember(words) { Linkify.find(words) }
     val ranges = remember(links) { links.map { it.range } }
@@ -732,12 +755,13 @@ internal fun MessageCore(row: ThreadRow, ctx: ThreadContext, interactive: Boolea
     // Whether this message is the one held up out of the thread, read while drawing: holding one (or letting it go)
     // redraws that one message alone — never composes the thread, nor draws every other message again.
     val isLifted = remember(message.key, ctx.lifted) { derivedStateOf { ctx.lifted() == message.key } }
-    val press: (String?) -> Unit = { link ->
+    val pressOn: (String?, ChatMessage) -> Unit = { link, target ->
         coords?.takeIf { it.isAttached }?.let {
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            ctx.onMenu(MessageMenu(row, it.boundsInRoot(), link))
+            ctx.onMenu(MessageMenu(row, it.boundsInRoot(), link, target))
         }
     }
+    val press: (String?) -> Unit = { link -> pressOn(link, message) }
     Column(
         modifier
             .then(if (message.delivery == Delivery.Failed) Modifier.fade(0.6f) else Modifier)
@@ -748,13 +772,26 @@ internal fun MessageCore(row: ThreadRow, ctx: ThreadContext, interactive: Boolea
     ) {
         if (message.isNote) NoteQuoteView(message, mine, carried, ctx, interactive, press)
         else if (message.replyTo != null) ReplyQuoteView(message, mine, ctx, interactive)
-        // The reactions it carries hang in the gutter beside the bubble's foot, never under it (round 16 §3).
-        val chips = remember(message.reactions, model.me) { reactionChips(message.reactions, model.me) }
-        val reactionWords = remember(message.reactions, model.me, model.other?.handle) { reactionsSpoken(message.reactions, model.me, model.other?.handle.orEmpty()) }
+        // The reactions it carries hang in the gutter beside the bubble's foot, never under it (round 16 §3) —
+        // an album's, every picture's together.
+        val members = row.members
+        val chips = remember(members, model.me) { mergedChips(members.map { reactionChips(it.reactions, model.me) }) }
+        val reactionWords = remember(members, model.me, model.other?.handle) {
+            members.map { reactionsSpoken(it.reactions, model.me, model.other?.handle.orEmpty()) }.filter { it.isNotEmpty() }.joinToString("，")
+        }
         val actions = if (interactive && ctx.reacts && MessageReactions.canReact(message)) reactionActions(message, model.me, ctx) else emptyList()
-        // The reply lies over the foot of what it quotes, a note over the card it was left on.
-        Box(if (message.replyTo != null || message.isNote) Modifier.overlapAbove(REPLY_OVERLAP) else Modifier) {
-        MessageBubble(
+        // The reply lies over the foot of what it quotes, a note over the card it was left on — a sticker stands a step under its quote.
+        val drawnSticker = sticker
+        Box(
+            when {
+                drawnSticker != null && message.replyTo != null -> Modifier.padding(top = 4.dp)
+                message.replyTo != null || message.isNote -> Modifier.overlapAbove(REPLY_OVERLAP)
+                else -> Modifier
+            },
+        ) {
+        if (drawnSticker != null) {
+            StickerFace(drawnSticker, message, ctx, interactive, actions, onLongPress = { press(null) })
+        } else MessageBubble(
             words, mine, seedFromId(message.key),
             actions = actions,
             quoteLabel = if (message.noteRef == null) null else L10n.Messages.quotedNote,
@@ -765,6 +802,7 @@ internal fun MessageCore(row: ThreadRow, ctx: ThreadContext, interactive: Boolea
             // A search hit in words the bubble doesn't show (a card's link, standing for the card) washes the whole bubble.
             flash = if (words != message.text && message.id == ctx.currentHit) { { max(pulse.value, 0.5f) } } else { { pulse.value } },
             width = when {
+                album.isNotEmpty() -> min(ALBUM_WIDTH, ctx.rowMax)
                 pictureBox != null -> pictureBox.width.dp
                 carries is Carried.Preview -> min(PREVIEW_WIDTH, ctx.rowMax)
                 carries is Carried.Card || carries is Carried.CardLoading -> min(CARD_WIDTH, ctx.rowMax)
@@ -773,7 +811,14 @@ internal fun MessageCore(row: ThreadRow, ctx: ThreadContext, interactive: Boolea
             plain = carries is Carried.CardLoading,
             onLinkTap = if (interactive) { i -> links.getOrNull(i)?.let { ctx.tapLink(it.url) } } else null,
             onLongPress = if (interactive) { i -> press(i?.let { links.getOrNull(it)?.url }) } else null,
-            header = if (picture == null || pictureBox == null) null else { {
+            header = if (album.isNotEmpty()) { {
+                AlbumSection(
+                    album, ctx, min(ALBUM_WIDTH, ctx.rowMax),
+                    last = words.isEmpty() && message.noteRef == null && carries !is Carried.Preview,
+                    interactive = interactive,
+                    onLongPress = { member -> pressOn(null, member) },
+                )
+            } } else if (picture == null || pictureBox == null) null else { {
                 ChatPictureSection(
                     picture, model.pictureLoader, pictureBox.width.dp, pictureBox.height.dp,
                     // Nothing under it: it runs to the bubble's foot too.
@@ -799,6 +844,119 @@ internal fun MessageCore(row: ThreadRow, ctx: ThreadContext, interactive: Boolea
             // A tap opens the held message's overlay, in a finger's 44 × 44 round the chip (round 16 review S7).
             onTap = if (interactive) { { press(null) } } else null,
         )
+        }
+    }
+}
+
+/** Several messages' chips as one row of chips (an album's pictures): each reaction once, its counts added. */
+internal fun mergedChips(each: List<List<ReactionChipItem>>): List<ReactionChipItem> {
+    if (each.size == 1) return each.single()
+    val counts = LinkedHashMap<ReactionId, Int>()
+    each.flatten().forEach { counts[it.id] = (counts[it.id] ?: 0) + it.count }
+    return ReactionOrder.mapNotNull { id -> counts[id]?.let { ReactionChipItem(id, it) } }
+}
+
+/** An album's grid in its bubble (round 22): as wide as this, or the row's widest. */
+private val ALBUM_WIDTH = 280.dp
+
+/**
+ * A sticker in the thread (round 22 §4.5): no bubble, [ThreadContext.stickerSize] square on its sender's
+ * side, playing its two plays the first time it comes on screen this session, then at rest on its key
+ * pose; a tap plays it again, a hold is the message's menu (its reactions and unsend as any message's).
+ * Its name is what TalkBack reads.
+ */
+@Composable
+private fun StickerFace(
+    sticker: com.resonance.kit.chat.StickerCatalog.Sticker,
+    message: ChatMessage,
+    ctx: ThreadContext,
+    interactive: Boolean,
+    actions: List<CustomAccessibilityAction>,
+    onLongPress: () -> Unit,
+) {
+    val autoplay = remember(message.key) { interactive && StickerPlayback.firstSight(message.key) }
+    var replays by remember(message.key) { mutableIntStateOf(0) }
+    val name = L10n.Messages.stickerLabel(sticker.name(com.resonance.kit.l10n.Strings.language.tag))
+    PlayingSticker(
+        sticker, ctx.origin, key = message.key, size = ctx.stickerSize, autoplay = autoplay, replays = replays,
+        modifier = Modifier
+            .then(
+                if (interactive) Modifier.pointerInput(message.key) {
+                    detectTapGestures(onTap = { replays++ }, onLongPress = { onLongPress() })
+                } else Modifier,
+            )
+            .then(if (message.delivery == Delivery.Failed) Modifier.fade(0.6f) else Modifier)
+            .semantics {
+                contentDescription = name
+                if (interactive) {
+                    onLongClick { onLongPress(); true }
+                    if (actions.isNotEmpty()) customActions = actions
+                }
+            },
+    )
+}
+
+/**
+ * An album's pictures as one grid heading its bubble (round 22 §3): 2 side by side, 3 one big and two
+ * beside it, 4 two by two, 5–10 in rows of three ([AlbumLayout]), edge to edge — drawn past the bubble's
+ * sides and top (its foot too when nothing follows: [last]), so the bubble's wobble ends them — with the
+ * bubble's paper in the gaps. Each picture opens whole; a hold on one is that picture's menu.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ColumnScope.AlbumSection(
+    members: List<ChatMessage>,
+    ctx: ThreadContext,
+    width: Dp,
+    last: Boolean,
+    interactive: Boolean,
+    onLongPress: (ChatMessage) -> Unit,
+) {
+    val model = ctx.model
+    val bleed = BubblePictureBleed
+    val gap = 2.dp
+    val drawnWidth = width + bleed * 2
+    val (cells, gridHeight) = remember(members.size, drawnWidth) { AlbumLayout.cells(members.size, drawnWidth.value, gap.value) }
+    val visibleHeight = gridHeight.dp - bleed - if (last) bleed else 0.dp
+    Box(
+        Modifier.layout { measurable, _ ->
+            val w = width.roundToPx()
+            val h = visibleHeight.roundToPx().coerceAtLeast(0)
+            val b = bleed.roundToPx()
+            val drawn = measurable.measure(androidx.compose.ui.unit.Constraints.fixed(drawnWidth.roundToPx(), gridHeight.dp.roundToPx()))
+            layout(w, h) { drawn.place(-b, -b) }
+        },
+    ) {
+        members.forEachIndexed { i, member ->
+            val cell = cells.getOrNull(i) ?: return@forEachIndexed
+            val source = remember(member.image?.id, member.key) { model.picture(member) }
+            Box(
+                Modifier
+                    .offset(cell.x.dp, cell.y.dp)
+                    .size(cell.width.dp, cell.height.dp)
+                    .background(Tokens.CreamDark)
+                    .then(
+                        if (!interactive || source == null) Modifier
+                        else Modifier.combinedClickable(
+                            interactionSource = null, indication = null, role = Role.Button,
+                            onClickLabel = L10n.Messages.openImage,
+                            onLongClick = { onLongPress(member) },
+                            onClick = { ctx.onPicture(source) },
+                        ),
+                    )
+                    .semantics { contentDescription = "${L10n.Messages.openImage} ${i + 1}/${members.size}" },
+            ) {
+                when (source) {
+                    is ChatPictureSource.Local -> androidx.compose.foundation.Image(source.preview, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                    is ChatPictureSource.Remote -> model.pictureLoader?.let { loader ->
+                        coil3.compose.AsyncImage(
+                            model = source.thumb, contentDescription = null, imageLoader = loader,
+                            modifier = Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        )
+                    }
+                    null -> {}
+                }
+            }
         }
     }
 }

@@ -12,6 +12,9 @@ import com.resonance.design.Grain
 import com.resonance.kit.api.AppHttp
 import com.resonance.kit.api.HttpCaching
 import com.resonance.kit.chat.NoteDrafts
+import com.resonance.kit.chat.ChatDrafts
+import com.resonance.kit.chat.KeyboardHeights
+import com.resonance.kit.chat.StickerRecents
 import com.resonance.kit.l10n.Strings
 import com.resonance.kit.reading.ApiCache
 import com.resonance.app.ui.share.ShareFiles
@@ -40,6 +43,10 @@ class ResonanceApp : Application(), SingletonImageLoader.Factory {
         shareFiles = File(cacheDir, ShareFiles.DIR),
         // Notes not sent yet, per account and card: they outlive the app being killed, not the account's sign-out.
         noteDraftStore = NoteDrafts(NoteDraftPrefs(getSharedPreferences(NoteDraftPrefs.FILE, MODE_PRIVATE))),
+        // Messages not sent yet, per account and conversation (round 22): likewise.
+        chatDraftStore = ChatDrafts(ChatDraftPrefs(getSharedPreferences(ChatDraftPrefs.FILE, MODE_PRIVATE))),
+        stickerRecentsStore = StickerRecents(StickerRecentsPrefs(getSharedPreferences(StickerRecentsPrefs.FILE, MODE_PRIVATE))),
+        keyboardHeights = KeyboardHeights(KeyboardHeightPrefs(getSharedPreferences(KeyboardHeightPrefs.FILE, MODE_PRIVATE))),
         // Chat pictures: through the app's client with the token, kept in a folder of their own (cache: never backed up).
         pictureHttp = http,
         pictureLoader = { client -> ChatPictures.loader(this, File(cacheDir, "chat-pictures"), client) },
@@ -57,6 +64,8 @@ class ResonanceApp : Application(), SingletonImageLoader.Factory {
         AppearanceStore.init(this)
         Grain.init(this)
         Grain.warmUp()
+        // The 小紙團 stickers the build bundles (round 22): their catalog read once, their files on demand.
+        Stickers.init(this, http)
         // The web's catalogs, bundled as they are (see L10n.kt).
         Strings.load { lang -> runCatching { assets.open("${lang.tag}.json").bufferedReader().use { it.readText() } }.getOrNull() }
         val saved = getSharedPreferences("settings", MODE_PRIVATE).getString(Session.LANGUAGE_KEY, null)

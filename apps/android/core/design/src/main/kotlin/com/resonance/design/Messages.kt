@@ -321,14 +321,25 @@ fun highlightWash(strong: Boolean): Color = Tokens.Terracotta.copy(alpha = if (s
  * [REPLY_OVERLAP] deeper than its words need: the reply's bubble lies over it there.
  */
 @Composable
-fun QuoteBubble(text: String, seed: Double, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
+fun QuoteBubble(
+    text: String,
+    seed: Double,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    /** What leads the words (round 22: a quoted sticker's key pose, 32 square). */
+    leading: (@Composable () -> Unit)? = null,
+) {
     Box(
         modifier
             .bubbleSurface(remember(seed) { MessageBubbleShape(seed, maxRadius = QUOTE_RADIUS) }, Tokens.BubbleQuote)
             .then(if (onClick != null) Modifier.clickable(interactionSource = null, indication = null, role = Role.Button, onClick = onClick) else Modifier)
-            .padding(start = 13.dp, end = 13.dp, top = 8.dp, bottom = 8.dp + REPLY_OVERLAP),
+            .padding(start = if (leading != null) 8.dp else 13.dp, end = 13.dp, top = 8.dp, bottom = 8.dp + REPLY_OVERLAP),
     ) {
-        ChatText(text, sizeSp = 13.5f, lineHeight = 1.4f, color = Tokens.TextMuted, maxLines = 2)
+        if (leading == null) ChatText(text, sizeSp = 13.5f, lineHeight = 1.4f, color = Tokens.TextMuted, maxLines = 2)
+        else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            leading()
+            ChatText(text, sizeSp = 13.5f, lineHeight = 1.4f, color = Tokens.TextMuted, maxLines = 2)
+        }
     }
 }
 
