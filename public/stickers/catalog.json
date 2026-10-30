@@ -9,7 +9,7 @@
     "en": "Tuck"
    },
    "icon": "tuck/icon.webp",
-   "iconV": "0",
+   "iconV": "54074e1db8",
    "stickers": [
     {
      "id": "morning",
@@ -17,9 +17,9 @@
       "zh-TW": "早安",
       "en": "Good morning"
      },
-     "durationMs": 2000,
-     "frames": 1,
-     "v": "0"
+     "durationMs": 2083,
+     "frames": 16,
+     "v": "cdf95b7649"
     },
     {
      "id": "deep-thanks",
@@ -27,9 +27,9 @@
       "zh-TW": "真的很謝謝你",
       "en": "Thank you so much"
      },
-     "durationMs": 2000,
-     "frames": 1,
-     "v": "0"
+     "durationMs": 2583,
+     "frames": 19,
+     "v": "c224b8d2b2"
     },
     {
      "id": "tucked-away",
@@ -37,9 +37,9 @@
       "zh-TW": "收到了",
       "en": "Got it, I'll keep it"
      },
-     "durationMs": 2000,
-     "frames": 1,
-     "v": "0"
+     "durationMs": 2583,
+     "frames": 27,
+     "v": "82e088d7d2"
     },
     {
      "id": "warm-heart",
@@ -47,9 +47,9 @@
       "zh-TW": "心暖暖",
       "en": "Warms my heart"
      },
-     "durationMs": 2000,
-     "frames": 1,
-     "v": "0"
+     "durationMs": 2333,
+     "frames": 24,
+     "v": "ccc89b7ea2"
     },
     {
      "id": "take-your-time",
@@ -57,9 +57,9 @@
       "zh-TW": "慢慢來",
       "en": "Take your time"
      },
-     "durationMs": 2000,
-     "frames": 1,
-     "v": "0"
+     "durationMs": 2583,
+     "frames": 23,
+     "v": "65c7af4ec0"
     },
     {
      "id": "glad-youre-here",
@@ -67,9 +67,9 @@
       "zh-TW": "有你真好",
       "en": "Glad you're here"
      },
-     "durationMs": 2000,
-     "frames": 1,
-     "v": "0"
+     "durationMs": 2583,
+     "frames": 14,
+     "v": "50b07b5a0b"
     }
    ]
   },
@@ -81,7 +81,7 @@
     "en": "Twine"
    },
    "icon": "twine/icon.webp",
-   "iconV": "0",
+   "iconV": "6e706bd54d",
    "stickers": [
     {
      "id": "anyone-there",
@@ -89,9 +89,9 @@
       "zh-TW": "在嗎？",
       "en": "Are you there?"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "2946b2044a"
     },
     {
      "id": "thanks",
@@ -99,9 +99,9 @@
       "zh-TW": "謝謝",
       "en": "Thanks"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "2946b2044a"
     },
     {
      "id": "for-you",
@@ -109,9 +109,9 @@
       "zh-TW": "這是給你的",
       "en": "This is for you"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "2946b2044a"
     },
     {
      "id": "well-done",
@@ -119,9 +119,9 @@
       "zh-TW": "辛苦了",
       "en": "You worked hard"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "2946b2044a"
     },
     {
      "id": "okay",
@@ -129,9 +129,9 @@
       "zh-TW": "好喔",
       "en": "Okay"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "2946b2044a"
     },
     {
      "id": "resonate",
@@ -139,9 +139,9 @@
       "zh-TW": "共振了",
       "en": "We resonate"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "2946b2044a"
     }
    ]
   },
@@ -153,7 +153,7 @@
     "en": "Nod"
    },
    "icon": "nod/icon.webp",
-   "iconV": "0",
+   "iconV": "95798bc323",
    "stickers": [
     {
      "id": "thanks-for-sharing",
@@ -161,9 +161,9 @@
       "zh-TW": "謝謝你願意說",
       "en": "Thank you for telling me"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "76da89bce8"
     },
     {
      "id": "read-to-the-end",
@@ -171,9 +171,9 @@
       "zh-TW": "謝謝你讀到最後",
       "en": "Thanks for reading to the end"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "76da89bce8"
     },
     {
      "id": "so-moved",
@@ -181,9 +181,9 @@
       "zh-TW": "好感動",
       "en": "So moved"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "76da89bce8"
     },
     {
      "id": "i-understand",
@@ -191,9 +191,9 @@
       "zh-TW": "我懂",
       "en": "I understand"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "76da89bce8"
     },
     {
      "id": "love-this-line",
@@ -201,9 +201,9 @@
       "zh-TW": "這句好喜歡",
       "en": "Love this line"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "76da89bce8"
     },
     {
      "id": "hug",
@@ -211,9 +211,9 @@
       "zh-TW": "抱抱",
       "en": "Hug"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "76da89bce8"
     }
    ]
   },
@@ -225,7 +225,7 @@
     "en": "Pip"
    },
    "icon": "pip/icon.webp",
-   "iconV": "0",
+   "iconV": "854c238a1d",
    "stickers": [
     {
      "id": "hi",
@@ -233,9 +233,9 @@
       "zh-TW": "嗨！",
       "en": "Hi!"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "8d1fd5766d"
     },
     {
      "id": "thank-you",
@@ -243,9 +243,9 @@
       "zh-TW": "謝謝你！",
       "en": "Thank you!"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "8d1fd5766d"
     },
     {
      "id": "beautifully-written",
@@ -253,9 +253,9 @@
       "zh-TW": "寫得真好",
       "en": "Beautifully written"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "8d1fd5766d"
     },
     {
      "id": "you-got-this",
@@ -263,9 +263,9 @@
       "zh-TW": "加油",
       "en": "You've got this"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "8d1fd5766d"
     },
     {
      "id": "haha",
@@ -273,9 +273,9 @@
       "zh-TW": "哈哈",
       "en": "Haha"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "8d1fd5766d"
     },
     {
      "id": "congrats",
@@ -283,9 +283,9 @@
       "zh-TW": "恭喜",
       "en": "Congratulations"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "8d1fd5766d"
     }
    ]
   },
@@ -297,7 +297,7 @@
     "en": "Hush"
    },
    "icon": "hush/icon.webp",
-   "iconV": "0",
+   "iconV": "d1ba3e8b5b",
    "stickers": [
     {
      "id": "good-night",
@@ -305,9 +305,9 @@
       "zh-TW": "晚安",
       "en": "Good night"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "2eb09911b7"
     },
     {
      "id": "teary",
@@ -315,9 +315,9 @@
       "zh-TW": "眼眶濕濕的",
       "en": "Teary-eyed"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "2eb09911b7"
     },
     {
      "id": "lit-up",
@@ -325,9 +325,9 @@
       "zh-TW": "心裡亮了一下",
       "en": "That lit me up"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "2eb09911b7"
     },
     {
      "id": "im-here",
@@ -335,9 +335,9 @@
       "zh-TW": "我在這裡",
       "en": "I'm here"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "2eb09911b7"
     },
     {
      "id": "listening",
@@ -345,9 +345,9 @@
       "zh-TW": "慢慢說，我在聽",
       "en": "I'm listening"
      },
-     "durationMs": 2000,
+     "durationMs": 0,
      "frames": 1,
-     "v": "0"
+     "v": "2eb09911b7"
     }
    ]
   }
