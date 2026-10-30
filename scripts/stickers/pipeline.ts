@@ -11,6 +11,8 @@ export const FPS = 12;
 export const SIZE = 432;
 export const THUMB = 256;
 export const ICON = 96;
+/** Px: nothing may come within this of the canvas edge (the die-cut margin included). */
+export const EDGE = 6;
 /** Bytes: what a sticker should weigh, and past what the build fails. */
 export const SIZE_TARGET = 120 * 1024;
 export const SIZE_CAP = 200 * 1024;
@@ -18,14 +20,28 @@ export const SIZE_CAP = 200 * 1024;
 export const MIN_DURATION = 1.5;
 export const MAX_DURATION = 2.5;
 
-/**
- * The times one play is sampled at: 0, 1/12, 2/12, … up to (not including) its duration. The file then repeats the
- * first frame as its last, so it starts and ends on the key pose (and its two plays meet on it).
- */
+/** The times one play is sampled at: 0, 1/12, 2/12, … up to (not including) its duration. */
 export function sampleTimes(duration: number, fps = FPS): number[] {
   const n = Math.round(duration * fps);
   if (n < 1) throw new Error(`a sticker lasts at least one frame (got ${duration} s)`);
   return Array.from({ length: n }, (_, i) => i / fps);
+}
+
+/**
+ * The hero as a frame of the loop: `hero` seconds snapped to the 12 fps grid (a hero at the very end is the key pose's
+ * frame 0 again).
+ */
+export function heroFrame(hero: number, frames: number, fps = FPS): number {
+  return Math.round(hero * fps) % frames;
+}
+
+/**
+ * The order the loop's `frames` sampled frames go into the file when it plays from frame `start` (its hero): start,
+ * start + 1, … round to start − 1. The file then repeats its first frame as its last, so it starts and ends on the hero
+ * — the thumb a client swaps to once the two plays are over — and the loop still closes on the key pose in between.
+ */
+export function phaseOrder(frames: number, start: number): number[] {
+  return Array.from({ length: frames }, (_, i) => (i + start) % frames);
 }
 
 /**
