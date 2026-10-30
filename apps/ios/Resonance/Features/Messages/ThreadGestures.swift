@@ -126,8 +126,12 @@ final class SidewaysDragRecognizer: UIGestureRecognizer {
 /// Puts away whatever keyboard is up — the composer's, or the search's — the way UIKit says it: the
 /// first responder resigns (and SwiftUI's focus follows it).
 enum KeyboardAway {
+    /// Said each time (round 22): a panel in the keyboard's place goes the same way.
+    static let didAsk = Notification.Name("resonance.keyboardAway")
+
     static func now() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        NotificationCenter.default.post(name: didAsk, object: nil)
     }
 }
 

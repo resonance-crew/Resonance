@@ -85,21 +85,33 @@ final class ThreadModel {
 
     // MARK: Composer state
 
-    var draft = ""
-    /// A card to share with the next message (picking one drops a picture picked).
-    var pendingCard: FeedCard? {
-        didSet { if pendingCard != nil, pendingPicture != nil { pendingPicture = nil } }
+    var draft = "" {
+        didSet { if draft != oldValue { draftChanged() } }
     }
-    /// A picture to send with the next message (picking one drops a card picked).
-    var pendingPicture: PickedPicture? {
-        didSet { if pendingPicture != nil, pendingCard != nil { pendingCard = nil } }
+    /// A card to share with the next message (picking one drops the pictures picked — the screen asks first).
+    var pendingCard: FeedCard? {
+        didSet {
+            if pendingCard != nil, !pendingPictures.isEmpty { pendingPictures = [] }
+            if pendingCard?.id != oldValue?.id { draftChanged(now: true) }
+        }
+    }
+    /// The pictures riding with the next send (round 22 §4.2), in the order they were picked: one is a
+    /// message with a picture, several an album (one message each). Picking one drops a card picked.
+    private(set) var pendingPictures: [RidingPicture] = [] {
+        didSet { if !pendingPictures.isEmpty, pendingCard != nil { pendingCard = nil } }
     }
     /// A picture is being readied for sending (made a JPEG of the server's size, off the main thread).
-    private(set) var preparingPicture = false
-    var noteRef: MessagingAPI.NoteRef?
+    var preparingPicture: Bool { pendingPictures.contains { $0.picked == nil } }
+    var noteRef: MessagingAPI.NoteRef? {
+        didSet { if noteRef != oldValue { draftChanged(now: true) } }
+    }
     /// The message the next one answers (set by `reply(to:)`, cleared by sending and `cancelReply`).
-    private(set) var replyingTo: ReplyQuote?
+    private(set) var replyingTo: ReplyQuote? {
+        didSet { if replyingTo != oldValue { draftChanged(now: true) } }
+    }
     var error: String?
+    /// The composer's text view grown over the thread (round 22 §4.3, option C).
+    var composerExpanded = false
 
     // MARK: Search state
 
@@ -148,6 +160,13 @@ final class ThreadModel {
     /// conversation says so too — or the server refuses, and they are back.
     @ObservationIgnored private var localUnsent: Set<String> = []
     @ObservationIgnored private var reactionTokens: [String: Int] = [:]
+    /// The draft was read back for this conversation (once), and the save waiting for typing to stop.
+    @ObservationIgnored private var draftRestored = false
+    @ObservationIgnored private var draftSave: Task<Void, Never>?
+    /// While the draft is put back, its changes aren't saved again.
+    @ObservationIgnored private var restoringDraft = false
+    /// The quoted message of a draft put back, to be checked once the thread is read (unsent or deleted: dropped).
+    @ObservationIgnored private var quoteToCheck: String?
 
     init(handle: String, uid: String?, noteRef: MessagingAPI.NoteRef?, session: SessionStore) {
         self.handle = handle
@@ -191,16 +210,23 @@ final class ThreadModel {
         messages.last { $0.id == idOrKey || $0.key == idOrKey }
     }
 
+    /// The list row that draws the message with this id or key (an album's pictures share their first's row).
+    func rowId(for idOrKey: String) -> String? {
+        rows.last { $0.holds(idOrKey) }?.id
+    }
+
     // MARK: - Who it is with
 
     func load() async {
         if phase == .failed { phase = .loading }
         if otherId != nil {
             phase = .ready
+            restoreDraft()
             attach()
             await refreshConnection()
         } else if await refreshConnection() {
             phase = .ready
+            restoreDraft()
             attach()
         }
     }
@@ -418,6 +444,7 @@ final class ThreadModel {
     /// already arriving is dropped). Messages still sending carry on; they belong to the session.
     func close() {
         guard !closed else { return }
+        saveDraft()
         closed = true
         setOnScreen(false)
         stop()
@@ -468,6 +495,7 @@ final class ThreadModel {
     private func historyChanged() {
         if hasOlder != history.hasOlder { hasOlder = history.hasOlder }
         rebuild()
+        checkRestoredQuote()
         loadCards()
         if !searchQuery.isBlank {
             loadAll()
@@ -626,34 +654,68 @@ final class ThreadModel {
     /// flight doesn't matter: the next one queues behind it.
     var canSend: Bool {
         let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (!trimmed.isEmpty || pendingCard != nil || pendingPicture != nil) && trimmed.utf16.count <= Self.maxLength
+        return (!trimmed.isEmpty || pendingCard != nil || !pendingPictures.isEmpty) && trimmed.utf16.count <= Self.maxLength
             && pairId != nil && !preparingPicture
+    }
+
+    /// Something rides with the message or is written: the sticker panel's ↑ gives way to Send.
+    var hasSomethingToSend: Bool {
+        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingCard != nil || !pendingPictures.isEmpty
     }
 
     /// The pictures of the account's conversations (read with its credentials).
     var pictures: ChatImageStore { session.chatImages }
 
-    /// A picture picked from the library: its bytes read (`load`: the library may fetch them first),
-    /// readied for sending off the main thread, then held above the field until it is sent or taken
-    /// away. One that can't be read, or is no picture, says so instead.
-    func attachPicture(_ load: () async -> Data?) async {
-        preparingPicture = true
-        defer { preparingPicture = false }
+    /// How many more pictures may ride (10 in all, round 22 §4.2).
+    var picturesLeft: Int { max(0, AlbumRef.maxCount - pendingPictures.count) }
+
+    /// A picture picked (from the library, the attach panel's picker, or pasted) under `key`: held above the
+    /// field at once while its bytes are read (`load`: the library may fetch them first) and readied off the
+    /// main thread; one that can't be read, or is no picture, leaves the strip and says so. A key already
+    /// riding, or a strip already full, takes nothing.
+    func addPicture(key: String, _ load: @escaping () async -> Data?) async {
+        guard !pendingPictures.contains(where: { $0.key == key }), picturesLeft > 0 else { return }
         error = nil
-        guard let data = await load() else {
-            error = L10n.Messages.imageUnsupported
-            return
-        }
+        pendingPictures.append(RidingPicture(key: key))
+        guard let data = await load() else { return pictureFailed(key) }
         let picked = await Task.detached(priority: .userInitiated) { ChatPictures.prepare(data) }.value
-        guard let picked else {
-            error = L10n.Messages.imageUnsupported
-            return
-        }
-        pendingPicture = picked
+        guard let picked else { return pictureFailed(key) }
+        guard let at = pendingPictures.firstIndex(where: { $0.key == key }) else { return }
+        pendingPictures[at].picked = picked
+    }
+
+    private func pictureFailed(_ key: String) {
+        pendingPictures.removeAll { $0.key == key }
+        error = L10n.Messages.imageUnsupported
+    }
+
+    /// One picture as before: a picture picked from the system's picker.
+    func attachPicture(_ load: @escaping () async -> Data?) async {
+        await addPicture(key: Outbox.newClientId(), load)
     }
 
     func attachPicture(_ data: Data) async {
         await attachPicture { data }
+    }
+
+    /// Takes the picture `key` off the strip.
+    func removePicture(_ key: String) {
+        pendingPictures.removeAll { $0.key == key }
+    }
+
+    /// Every picture off the strip (a card took their place).
+    func removePictures() {
+        pendingPictures = []
+    }
+
+    /// The attach panel's picker says which of its pictures are chosen, in order (`keys`): those it no longer
+    /// chooses leave the strip, new ones join it at its end (pictures from elsewhere — pasted — stay).
+    func pickerChose(_ keys: [String], fromPicker: (String) -> Bool, load: (String) -> (() async -> Data?)) {
+        pendingPictures.removeAll { fromPicker($0.key) && !keys.contains($0.key) }
+        for key in keys where !pendingPictures.contains(where: { $0.key == key }) {
+            let loader = load(key)
+            Task { await addPicture(key: key, loader) }
+        }
     }
 
     /// This conversation's outbox (kept by the session, so it outlives this model). Nil until we know whom it is with.
@@ -688,19 +750,46 @@ final class ThreadModel {
     func send() {
         guard canSend, let me, let box = outbox else { return }
         watchOutbox()
-        let clientId = Outbox.newClientId()
-        // The card it shares is drawn at once, not asked for; so is its picture, from the device, under
-        // the id the server will keep it by.
-        if let card = pendingCard { sharedCards.remember(card) }
-        if let picture = pendingPicture { session.chatImages.keep(picture.preview, for: clientId) }
-        box.enqueue(Outbox.Outgoing(clientId: clientId, senderId: me,
-                                    text: draft.trimmingCharacters(in: .whitespacesAndNewlines),
-                                    cardRef: pendingCard?.id, noteRef: noteRef, replyTo: replyingTo,
-                                    picture: pendingPicture?.upload))
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pictures = pendingPictures.compactMap(\.picked)
+        if pictures.count > 1 {
+            // An album (round 22 §4.2): one message per picture, in order, sharing the album's id — the words,
+            // the reply and the quoted note go with the first.
+            let album = Outbox.newClientId()
+            for (i, picture) in pictures.enumerated() {
+                let clientId = Outbox.newClientId()
+                session.chatImages.keep(picture.preview, for: clientId)
+                box.enqueue(Outbox.Outgoing(clientId: clientId, senderId: me, text: i == 0 ? text : "",
+                                            noteRef: i == 0 ? noteRef : nil, replyTo: i == 0 ? replyingTo : nil,
+                                            picture: picture.upload, album: AlbumRef(id: album, index: i, count: pictures.count)))
+            }
+        } else {
+            let clientId = Outbox.newClientId()
+            // The card it shares is drawn at once, not asked for; so is its picture, from the device, under
+            // the id the server will keep it by.
+            if let card = pendingCard { sharedCards.remember(card) }
+            if let picture = pictures.first { session.chatImages.keep(picture.preview, for: clientId) }
+            box.enqueue(Outbox.Outgoing(clientId: clientId, senderId: me, text: text,
+                                        cardRef: pendingCard?.id, noteRef: noteRef, replyTo: replyingTo,
+                                        picture: pictures.first?.upload))
+        }
         draft = ""
         pendingCard = nil
-        pendingPicture = nil
+        pendingPictures = []
         noteRef = nil
+        replyingTo = nil
+        error = nil
+        composerExpanded = false
+        clearDraft()
+    }
+
+    /// Sends a sticker (round 22 §4.1) through the outbox like any message, drawn at once from the bundle: a
+    /// reply being written goes with it; the words, a card or pictures waiting in the composer stay for the next.
+    func sendSticker(_ sticker: StickerRef) {
+        guard let me, let box = outbox, pairId != nil else { return }
+        watchOutbox()
+        box.enqueue(Outbox.Outgoing(clientId: Outbox.newClientId(), senderId: me, text: "", replyTo: replyingTo, sticker: sticker))
+        StickerLibrary.shared.sent(sticker)
         replyingTo = nil
         error = nil
     }
@@ -823,6 +912,79 @@ final class ThreadModel {
         }
     }
 
+    // MARK: - Drafts (round 22 §4.4)
+
+    /// The composer changed: saved half a second after the last change (`now`: at once — a reply, a card).
+    private func draftChanged(now: Bool = false) {
+        guard draftRestored, !restoringDraft else { return }
+        draftSave?.cancel()
+        if now { return saveDraft() }
+        draftSave = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            self?.saveDraft()
+        }
+    }
+
+    /// Keeps what the composer holds as this conversation's draft (pictures never), or lets it go when empty.
+    func saveDraft() {
+        draftSave?.cancel()
+        draftSave = nil
+        guard draftRestored, let me, let pairId else { return }
+        session.chatDrafts.keep(text: draft, replyTo: replyingTo, noteRef: noteRef, cardId: pendingCard?.id, uid: me, pair: pairId)
+    }
+
+    private func clearDraft() {
+        draftSave?.cancel()
+        draftSave = nil
+        guard let me, let pairId else { return }
+        session.chatDrafts.clear(uid: me, pair: pairId)
+    }
+
+    /// Puts this conversation's draft back in the composer (once, when it opens): its words, the reply it
+    /// was answering and the note it quoted at once, its card once read again (one no longer readable stays off).
+    private func restoreDraft() {
+        guard !draftRestored, let me, let pairId else { return }
+        defer { draftRestored = true }
+        guard let kept = session.chatDrafts.draft(uid: me, pair: pairId) else { return }
+        restoringDraft = true
+        if draft.isEmpty { draft = kept.text }
+        if replyingTo == nil, let quote = kept.replyTo, !quote.unsent {
+            replyingTo = quote
+            quoteToCheck = quote.id
+        }
+        if noteRef == nil { noteRef = kept.noteRef }
+        restoringDraft = false
+        if let cardId = kept.cardId {
+            Task { [weak self] in
+                guard let self else { return }
+                let card = try? await self.session.reading.cards(keys: [cardId]).first { $0.id == cardId }
+                if let card, self.pendingCard == nil, self.pendingPictures.isEmpty {
+                    self.restoringDraft = true
+                    self.pendingCard = card
+                    self.restoringDraft = false
+                }
+            }
+        }
+    }
+
+    /// A draft's quote put back answers a message since unsent or deleted: it is dropped — the thread holds it
+    /// unsent, or its document is gone.
+    private func checkRestoredQuote() {
+        guard let id = quoteToCheck, threadReady, let pairId else { return }
+        quoteToCheck = nil
+        if let held = message(id) {
+            if held.isUnsent, replyingTo?.id == id { replyingTo = nil }
+            return
+        }
+        Task { [weak self] in
+            let doc = try? await FirebaseBootstrap.db.collection("conversations").document(pairId).collection("messages").document(id).getDocument()
+            guard let self, let doc else { return }
+            let unsent = doc.get("unsentAt").map { !($0 is NSNull) } ?? false
+            if (!doc.exists || unsent), self.replyingTo?.id == id { self.replyingTo = nil }
+        }
+    }
+
     // MARK: - Shared cards
 
     /// The Resonance card `message` shares — by the card button, or as a link to the card's page —
@@ -880,6 +1042,9 @@ final class ThreadModel {
             stop()
             try await MessagingAPI(client: session.api).deleteConversation(pairId)
             session.outboxes.forget(pairId)
+            clearDraft()
+            // Gone with the conversation: nothing written here is kept again as the thread closes.
+            draftRestored = false
             resetHistory()
             return true
         } catch {
@@ -958,6 +1123,15 @@ final class ThreadModel {
                          sentAt: (doc.get("sentAt", serverTimestampBehavior: .estimate) as? Timestamp)?.dateValue() ?? Date(),
                          origin: origin)
     }
+}
+
+/// A picture riding with the next send (round 22 §4.2): its key (the attach panel's picker item, or one of its
+/// own for a picture pasted or picked elsewhere) and, once readied, what is uploaded and drawn.
+struct RidingPicture: Identifiable, Equatable {
+    let key: String
+    var picked: PickedPicture?
+
+    var id: String { key }
 }
 
 extension Author {

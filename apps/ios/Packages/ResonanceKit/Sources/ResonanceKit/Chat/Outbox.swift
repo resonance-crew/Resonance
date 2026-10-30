@@ -61,6 +61,10 @@ public final class Outbox {
         public let replyTo: ReplyQuote?
         /// A picture to upload, then send with the words (never beside a card).
         public let picture: Picture?
+        /// A sticker (round 22): sent on its own — no words, card or picture beside it.
+        public let sticker: StickerRef?
+        /// The picture's place among several sent together (round 22), one message each in order.
+        public let album: AlbumRef?
         public let queuedAt: Date
         public var status: Status
         /// The document id the server answered with (once `sent`); the client id, from a server that uses it.
@@ -69,8 +73,8 @@ public final class Outbox {
         public var refused: Bool
 
         public init(clientId: String, senderId: String, text: String, cardRef: String? = nil, noteRef: MessagingAPI.NoteRef? = nil,
-                    replyTo: ReplyQuote? = nil, picture: Picture? = nil, queuedAt: Date = Date(), status: Status = .queued,
-                    serverId: String? = nil, refused: Bool = false) {
+                    replyTo: ReplyQuote? = nil, picture: Picture? = nil, sticker: StickerRef? = nil, album: AlbumRef? = nil,
+                    queuedAt: Date = Date(), status: Status = .queued, serverId: String? = nil, refused: Bool = false) {
             self.clientId = clientId
             self.senderId = senderId
             self.text = text
@@ -78,6 +82,8 @@ public final class Outbox {
             self.noteRef = noteRef
             self.replyTo = replyTo
             self.picture = picture
+            self.sticker = sticker
+            self.album = picture == nil ? nil : album
             self.queuedAt = queuedAt
             self.status = status
             self.serverId = serverId
@@ -94,7 +100,7 @@ public final class Outbox {
             }
             return ChatMessage(id: clientId, senderId: senderId, text: text, sentAt: queuedAt, cardRef: cardRef, noteRef: noteRef,
                                replyTo: replyTo, image: picture.map { ChatImage(id: clientId, width: $0.width, height: $0.height) },
-                               delivery: delivery)
+                               sticker: sticker, album: album, delivery: delivery)
         }
 
         /// Whether the conversation's own document of this message is in `history`.

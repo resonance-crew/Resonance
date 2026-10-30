@@ -88,6 +88,8 @@ final class SessionStore {
     let kept = APICache.standard()
     /// Notes typed and not sent, per card (the signed-in account's only): the composer starts from them.
     let noteDrafts = NoteDrafts.standard()
+    /// Messages left unsent in each conversation (round 22 §4.4), this account's alone.
+    let chatDrafts = ChatDrafts.standard()
     /// Notes sent on after their composer closed: their client ids, refusals and the toast's 再寄一次 (round 21).
     let noteSends = NoteSends()
     let api: Client
@@ -121,6 +123,8 @@ final class SessionStore {
         let configuration = APIConfiguration(origin: config.origin, idToken: { force in try await Self.idToken(forceRefresh: force) })
         // Story pictures are drawn from this site's hosts only; any other is a link (StoryPictures).
         StoryPictures.siteHost = config.origin.host(percentEncoded: false)?.lowercased()
+        // A sticker this build doesn't carry is read from the site (round 22).
+        StickerLibrary.shared.origin = config.origin
         let client = ResonanceClient.make(configuration, cache: httpCache)
         api = client
         outboxes = ChatOutboxes(messaging: { MessagingAPI(client: client) }, sent: { PushCenter.shared.reachedOut() })
@@ -275,6 +279,7 @@ final class SessionStore {
         }
         kept.removeAll()
         noteDrafts.retainOnly(nil)
+        chatDrafts.retainOnly(nil)
         httpCache.use(account: nil)
         signedOutForDeletion = true
         signOut()
@@ -317,6 +322,8 @@ final class SessionStore {
         httpCache.use(account: newUID)
         kept.retainOnly(newUID)
         noteDrafts.retainOnly(newUID)
+        chatDrafts.retainOnly(newUID)
+        StickerLibrary.shared.use(account: newUID)
         if previous != newUID { noteSends.reset() }
         keptBlocked = newUID.flatMap { kept.value(.blocked, uid: $0) }.map(Set.init) ?? []
         foreground = ForegroundRefresh(last: .now)

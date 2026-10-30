@@ -15,6 +15,8 @@ struct ThreadContext {
     let model: ThreadModel
     /// A bubble's widest: 72% of the row (their face's column not counted), as on the web and Android.
     let rowMax: CGFloat
+    /// A sticker's side (round 22 §4.5): 128 on a phone, 144 wider.
+    var stickerSide: CGFloat = 128
     /// The matches of the search being looked at, by message id; none when not looking.
     let highlights: [String: [NSRange]]
     /// The message id of the hit being looked at.
@@ -39,7 +41,7 @@ struct ThreadContext {
     /// when called), so a row they alone would change is left as it is.
     func draws(_ message: ChatMessage, like other: ThreadContext) -> Bool {
         model === other.model && flash === other.flash && frames === other.frames && rowMax == other.rowMax
-            && marks(on: message) == other.marks(on: message)
+            && stickerSide == other.stickerSide && marks(on: message) == other.marks(on: message)
     }
 
     /// What the context marks on `message`'s row.
@@ -341,7 +343,7 @@ struct ThreadRowView: View, Equatable {
     let deliveryLine: Bool
 
     static func == (a: ThreadRowView, b: ThreadRowView) -> Bool {
-        a.row == b.row && a.deliveryLine == b.deliveryLine && a.ctx.draws(a.row.message, like: b.ctx)
+        a.row == b.row && a.deliveryLine == b.deliveryLine && a.row.messages.allSatisfy { a.ctx.draws($0, like: b.ctx) }
     }
 
     var body: some View {
@@ -442,8 +444,26 @@ private struct MessageItem: View {
                     if !mine { Spacer(minLength: 0) }
                 }
                 .transition(.opacity)
-            } else if model.carried(message) != .nothing {
-                // (A card the viewer can't see, sent alone: nothing to draw — not even a face beside it.)
+            } else if let album = row.album {
+                // An album's pictures (round 22): one grid; a drag replies to its first picture.
+                SwipeToReply(enabled: model.canReply(message), mine: mine, onReply: { ctx.onReply(message) }) {
+                    HStack(alignment: .bottom, spacing: 0) {
+                        if mine {
+                            Spacer(minLength: 0)
+                        } else {
+                            TheirFace(shown: !row.position.joinsBelow, lifted: album.contains { ctx.lifted == $0.key }, ctx: ctx)
+                        }
+                        VStack(alignment: mine ? .trailing : .leading, spacing: 0) {
+                            AlbumGridView(row: row, album: album, ctx: ctx, mine: mine)
+                            if deliveryLine, let last = album.last { DeliveryLine(message: last, model: model) }
+                        }
+                        .frame(maxWidth: ctx.rowMax, alignment: mine ? .trailing : .leading)
+                        if !mine { Spacer(minLength: 0) }
+                    }
+                }
+            } else if message.sticker != nil || model.carried(message) != .nothing {
+                // (A card the viewer can't see, sent alone: nothing to draw — not even a face beside it. A sticker on its
+                // way has no words yet: it is drawn all the same.)
                 SwipeToReply(enabled: model.canReply(message), mine: mine, onReply: { ctx.onReply(message) }) {
                     HStack(alignment: .bottom, spacing: 0) {
                         if mine {
@@ -613,7 +633,19 @@ struct MessageCore: View {
         let wholeHit = words != message.text && message.id == ctx.currentHit
         // A note carries its card above its words, not inside its bubble.
         let note = message.isNote
+        // A sticker stands on the page with no bubble (round 22); one this build can't draw is its words.
+        let sticker = message.sticker.flatMap { StickerLibrary.shared.drawable($0) ? $0 : nil }
         let core = VStack(alignment: mine ? .trailing : .leading, spacing: 0) {
+            if let sticker {
+                if let quote = message.replyTo {
+                    QuotedReply(quote: quote, mine: mine, ctx: ctx, interactive: interactive)
+                }
+                ThreadStickerView(message: message, sticker: sticker, side: ctx.stickerSide, interactive: interactive)
+                    .overlay(alignment: mine ? .bottomLeading : .bottomTrailing) {
+                        MessageReactions(message: message, mine: mine, model: model, onTap: interactive ? { press(nil, carried: carried) } : nil)
+                    }
+                    .padding(.top, message.replyTo == nil ? 0 : 2)
+            } else {
             if note {
                 NotedCard(message: message, carried: carried, mine: mine, ctx: ctx, interactive: interactive)
             } else if let quote = message.replyTo {
@@ -645,6 +677,7 @@ struct MessageCore: View {
             }
             // A reply lies over the foot of what it quotes, a note over the foot of its card.
             .padding(.top, message.replyTo == nil && !note ? 0 : -BubbleMetrics.replyOverlap)
+            }
         }
         .opacity(message.delivery == .failed ? 0.6 : 1)
         if interactive {
@@ -890,8 +923,11 @@ private struct QuotedReply: View {
         VStack(alignment: mine ? .trailing : .leading, spacing: 0) {
             SpokenCaption(ThreadCaptions.reply(mine: mine, quotedMine: quote.senderId == model.me, handle: model.displayHandle))
             QuoteBubble(text: quote.summary(picture: L10n.Messages.replyImage, card: L10n.Messages.replyCard,
-                                            unsentQuote: L10n.Messages.unsentQuote),
-                        seed: seedFromId(quote.id, start: 19), onTap: interactive ? { ctx.onQuote(quote.id) } : nil)
+                                            unsentQuote: L10n.Messages.unsentQuote, stickerName: { StickerLibrary.shared.name($0) }),
+                        seed: seedFromId(quote.id, start: 19),
+                        // A sticker's quote: its key pose beside its name (round 22).
+                        lead: quote.sticker.map { AnyView(StickerStill(sticker: $0, side: 28)) },
+                        onTap: interactive ? { ctx.onQuote(quote.id) } : nil)
         }
     }
 }
