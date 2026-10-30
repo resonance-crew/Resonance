@@ -415,6 +415,10 @@ object L10n {
             val earlier: String get() = Strings.string("app.notifications.earlier")
             /** Just now */
             val justNow: String get() = Strings.string("app.notifications.justNow")
+            /** Sent a sticker: {name} */
+            fun messageSticker(name: String): String = Strings.format("app.notifications.messageSticker", mapOf("name" to name))
+            /** Sent {count, plural, one {# photo} other {# photos}} */
+            fun messageAlbum(count: Int): String = Strings.format("app.notifications.messageAlbum", mapOf("count" to count))
         }
         object SignOutConfirm {
             /** Sign out? */
@@ -906,6 +910,64 @@ object L10n {
         val stoppedSharing: String get() = Strings.string("messages.stoppedSharing")
         /** Couldn’t stop sharing — please try again */
         val stopSharingError: String get() = Strings.string("messages.stopSharingError")
+        /** Stickers */
+        val stickers: String get() = Strings.string("messages.stickers")
+        /** Keyboard */
+        val keyboard: String get() = Strings.string("messages.keyboard")
+        /** Expand stickers */
+        val stickerPanelExpand: String get() = Strings.string("messages.stickerPanelExpand")
+        /** Collapse stickers */
+        val stickerPanelCollapse: String get() = Strings.string("messages.stickerPanelCollapse")
+        /** Tap again to send */
+        val stickerPreviewHint: String get() = Strings.string("messages.stickerPreviewHint")
+        /** Preview: {name}, tap again to send */
+        fun stickerPreviewA11y(name: String): String = Strings.format("messages.stickerPreviewA11y", mapOf("name" to name))
+        /** Recent */
+        val stickerRecent: String get() = Strings.string("messages.stickerRecent")
+        /** Sent a sticker */
+        val stickerShared: String get() = Strings.string("messages.stickerShared")
+        /** Sticker: {name} */
+        fun stickerLabel(name: String): String = Strings.format("messages.stickerLabel", mapOf("name" to name))
+        /** Sticker */
+        val stickerUnknown: String get() = Strings.string("messages.stickerUnknown")
+        /** Sent {count, plural, one {# photo} other {# photos}} */
+        fun albumShared(count: Int): String = Strings.format("messages.albumShared", mapOf("count" to count))
+        /** {count, plural, one {# photo} other {# photos}} */
+        fun picturesCount(count: Int): String = Strings.format("messages.picturesCount", mapOf("count" to count))
+        /** Up to 10 photos at a time */
+        val picturesMax: String get() = Strings.string("messages.picturesMax")
+        /** Expand the message field */
+        val expandComposer: String get() = Strings.string("messages.expandComposer")
+        /** Shrink the message field */
+        val collapseComposer: String get() = Strings.string("messages.collapseComposer")
+        /** Drag to resize */
+        val panelGrip: String get() = Strings.string("messages.panelGrip")
+        /** Use this card instead? */
+        val replaceWithCardTitle: String get() = Strings.string("messages.replaceWithCardTitle")
+        /** The photos you chose will be removed */
+        val replaceWithCardBody: String get() = Strings.string("messages.replaceWithCardBody")
+        /** Use card */
+        val replaceWithCardConfirm: String get() = Strings.string("messages.replaceWithCardConfirm")
+        /** Use photos instead? */
+        val replaceWithPicturesTitle: String get() = Strings.string("messages.replaceWithPicturesTitle")
+        /** The card you chose will be removed */
+        val replaceWithPicturesBody: String get() = Strings.string("messages.replaceWithPicturesBody")
+        /** Use photos */
+        val replaceWithPicturesConfirm: String get() = Strings.string("messages.replaceWithPicturesConfirm")
+        /** Allow Resonance to read your photos to pick them right here */
+        val galleryPrimer: String get() = Strings.string("messages.galleryPrimer")
+        /** Allow photo access */
+        val galleryAllow: String get() = Strings.string("messages.galleryAllow")
+        /** Use the system picker */
+        val gallerySystemPicker: String get() = Strings.string("messages.gallerySystemPicker")
+        /** Choose more photos */
+        val galleryMore: String get() = Strings.string("messages.galleryMore")
+        /** Open Settings */
+        val galleryOpenSettings: String get() = Strings.string("messages.galleryOpenSettings")
+        /** No photos yet */
+        val galleryEmpty: String get() = Strings.string("messages.galleryEmpty")
+        /** Unsent message: {text} */
+        fun draftLabel(text: String): String = Strings.format("messages.draftLabel", mapOf("text" to text))
     }
     object Write {
         /** Give it a one-line title first */

@@ -463,6 +463,27 @@ export const SendNoteResponse = named(z.object({ id: z.string() }), 'SendNoteRes
 
 export const NoteRef = named(z.object({ cardId: DocId, noteId: DocId }), 'NoteRef', 'The note a message answers.');
 
+export const StickerRef = named(
+  z.object({
+    pack: z.string().regex(/^[a-z0-9-]{1,32}$/, 'Not a sticker pack.'),
+    id: z.string().regex(/^[a-z0-9-]{1,40}$/, 'Not a sticker.'),
+  }),
+  'StickerRef',
+  'A 小紙團 sticker: its pack and its id in the pack (public/stickers/catalog.json).',
+);
+
+export const AlbumRef = named(
+  z
+    .object({
+      id: ClientId,
+      index: z.number().int().min(0).max(9),
+      count: z.number().int().min(2).max(10),
+    })
+    .refine((a) => a.index < a.count, { message: 'An album index is below its count.', path: ['index'] }),
+  'AlbumRef',
+  'Several pictures sent together: the album, this picture\'s place in it, and how many it has.',
+);
+
 export const SendMessageRequest = named(
   z.object({
     /** The other person's user id. */
@@ -477,6 +498,16 @@ export const SendMessageRequest = named(
      * A message carries a card or a picture, never both.
      */
     image: DocId.nullish(),
+    /**
+     * A 小紙團 sticker (round 22): a pack and a sticker of the catalog. A sticker is sent on its own — no text, card,
+     * picture or note — though it may answer a message (`replyTo`).
+     */
+    sticker: StickerRef.nullish(),
+    /**
+     * One of several pictures sent together (only beside `image`): the album's id (the sender's own, as a clientId),
+     * this picture's place in it and how many pictures it has. Only the first rings the other person's devices.
+     */
+    album: AlbumRef.nullish(),
     noteRef: NoteRef.nullish(),
     /** The message this one answers: one in the same conversation (its id). The thread quotes it above the reply. */
     replyTo: DocId.nullish(),

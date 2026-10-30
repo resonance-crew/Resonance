@@ -71,6 +71,10 @@ const nextConfig: NextConfig = {
       // The landing stage's paper puppets: every URL carries its picture's content version (`?v=`, written by
       // `npm run mascots:cast`), so a browser keeps each one for good instead of asking again on every visit.
       { source: '/mascots/:path*', headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] },
+      // The 小紙團 stickers (round 22): every URL carries its file's `?v=` (src/lib/stickers/catalog.ts) — except the
+      // catalog itself, which a build that bundles an older one reads for the packs it lacks.
+      { source: '/stickers/catalog.json', headers: [{ key: 'Cache-Control', value: 'public, max-age=3600' }] },
+      { source: '/stickers/:pack/:file', headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] },
     ];
   },
 };

@@ -264,6 +264,8 @@ export interface Conversation {
     sentAt: Date;
     /** It carried a picture (its words, if any, are `text`). */
     image?: boolean;
+    /** It was a sticker (round 22): `text` is its fallback words, for builds that can't draw one. */
+    sticker?: boolean;
     /** Its sender unsent it (round 16): `text` is empty, and the list says who unsent a message. */
     unsent?: boolean;
   } | null;
@@ -321,6 +323,16 @@ export interface Message {
    */
   kind?: 'note';
   /**
+   * A 小紙團 sticker (round 22, `src/lib/stickers/catalog.ts`): the message carries nothing else, and its `text` is
+   * the sticker's fallback words (〔貼圖：謝謝〕) for builds that can't draw it — drawn only when the sticker isn't known.
+   */
+  sticker?: { pack: string; id: string };
+  /**
+   * One of several pictures sent together (round 22): `id` shared by the album, `index` its place, `count` how many
+   * were sent. The thread draws one sender's consecutive messages of an album as one grid.
+   */
+  album?: { id: string; index: number; count: number };
+  /**
    * The two people's reactions (round 16 §4), by uid — one each. Only the
    * five this build knows are kept: a reaction it doesn't know is drawn as nothing.
    */
@@ -340,6 +352,8 @@ export interface MessageReplyQuote {
   cardRef?: string;
   /** The quoted message carried a picture. */
   image?: boolean;
+  /** The quoted message was a sticker (its fallback words are `text`). */
+  sticker?: { pack: string; id: string };
   /** The quoted message was unsent: the quote keeps only who sent it (its words empty). */
   unsent?: boolean;
 }

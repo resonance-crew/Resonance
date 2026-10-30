@@ -3509,6 +3509,49 @@
         ],
         "description": "The note a message answers."
       },
+      "StickerRef": {
+        "type": "object",
+        "properties": {
+          "pack": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]{1,32}$"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]{1,40}$"
+          }
+        },
+        "required": [
+          "pack",
+          "id"
+        ],
+        "description": "A 小紙團 sticker: its pack and its id in the pack (public/stickers/catalog.json)."
+      },
+      "AlbumRef": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{16,64}$"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 10
+          }
+        },
+        "required": [
+          "id",
+          "index",
+          "count"
+        ],
+        "description": "Several pictures sent together: the album, this picture's place in it, and how many it has."
+      },
       "SendMessageRequest": {
         "type": "object",
         "properties": {
@@ -3529,6 +3572,22 @@
             "nullable": true,
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]{1,128}$"
+          },
+          "sticker": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StickerRef"
+              }
+            ]
+          },
+          "album": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AlbumRef"
+              }
+            ]
           },
           "noteRef": {
             "nullable": true,

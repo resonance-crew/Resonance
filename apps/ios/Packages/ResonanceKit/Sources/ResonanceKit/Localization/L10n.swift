@@ -413,6 +413,10 @@ public enum L10n {
             public static var earlier: String { Strings.shared.string("app.notifications.earlier") }
             /// Just now
             public static var justNow: String { Strings.shared.string("app.notifications.justNow") }
+            /// Sent a sticker: {name}
+            public static func messageSticker(name: String) -> String { Strings.shared.format("app.notifications.messageSticker", ["name": name]) }
+            /// Sent {count, plural, one {# photo} other {# photos}}
+            public static func messageAlbum(count: Int) -> String { Strings.shared.format("app.notifications.messageAlbum", ["count": count]) }
         }
         public enum SignOutConfirm {
             /// Sign out?
@@ -904,6 +908,64 @@ public enum L10n {
         public static var stoppedSharing: String { Strings.shared.string("messages.stoppedSharing") }
         /// Couldn’t stop sharing — please try again
         public static var stopSharingError: String { Strings.shared.string("messages.stopSharingError") }
+        /// Stickers
+        public static var stickers: String { Strings.shared.string("messages.stickers") }
+        /// Keyboard
+        public static var keyboard: String { Strings.shared.string("messages.keyboard") }
+        /// Expand stickers
+        public static var stickerPanelExpand: String { Strings.shared.string("messages.stickerPanelExpand") }
+        /// Collapse stickers
+        public static var stickerPanelCollapse: String { Strings.shared.string("messages.stickerPanelCollapse") }
+        /// Tap again to send
+        public static var stickerPreviewHint: String { Strings.shared.string("messages.stickerPreviewHint") }
+        /// Preview: {name}, tap again to send
+        public static func stickerPreviewA11y(name: String) -> String { Strings.shared.format("messages.stickerPreviewA11y", ["name": name]) }
+        /// Recent
+        public static var stickerRecent: String { Strings.shared.string("messages.stickerRecent") }
+        /// Sent a sticker
+        public static var stickerShared: String { Strings.shared.string("messages.stickerShared") }
+        /// Sticker: {name}
+        public static func stickerLabel(name: String) -> String { Strings.shared.format("messages.stickerLabel", ["name": name]) }
+        /// Sticker
+        public static var stickerUnknown: String { Strings.shared.string("messages.stickerUnknown") }
+        /// Sent {count, plural, one {# photo} other {# photos}}
+        public static func albumShared(count: Int) -> String { Strings.shared.format("messages.albumShared", ["count": count]) }
+        /// {count, plural, one {# photo} other {# photos}}
+        public static func picturesCount(count: Int) -> String { Strings.shared.format("messages.picturesCount", ["count": count]) }
+        /// Up to 10 photos at a time
+        public static var picturesMax: String { Strings.shared.string("messages.picturesMax") }
+        /// Expand the message field
+        public static var expandComposer: String { Strings.shared.string("messages.expandComposer") }
+        /// Shrink the message field
+        public static var collapseComposer: String { Strings.shared.string("messages.collapseComposer") }
+        /// Drag to resize
+        public static var panelGrip: String { Strings.shared.string("messages.panelGrip") }
+        /// Use this card instead?
+        public static var replaceWithCardTitle: String { Strings.shared.string("messages.replaceWithCardTitle") }
+        /// The photos you chose will be removed
+        public static var replaceWithCardBody: String { Strings.shared.string("messages.replaceWithCardBody") }
+        /// Use card
+        public static var replaceWithCardConfirm: String { Strings.shared.string("messages.replaceWithCardConfirm") }
+        /// Use photos instead?
+        public static var replaceWithPicturesTitle: String { Strings.shared.string("messages.replaceWithPicturesTitle") }
+        /// The card you chose will be removed
+        public static var replaceWithPicturesBody: String { Strings.shared.string("messages.replaceWithPicturesBody") }
+        /// Use photos
+        public static var replaceWithPicturesConfirm: String { Strings.shared.string("messages.replaceWithPicturesConfirm") }
+        /// Allow Resonance to read your photos to pick them right here
+        public static var galleryPrimer: String { Strings.shared.string("messages.galleryPrimer") }
+        /// Allow photo access
+        public static var galleryAllow: String { Strings.shared.string("messages.galleryAllow") }
+        /// Use the system picker
+        public static var gallerySystemPicker: String { Strings.shared.string("messages.gallerySystemPicker") }
+        /// Choose more photos
+        public static var galleryMore: String { Strings.shared.string("messages.galleryMore") }
+        /// Open Settings
+        public static var galleryOpenSettings: String { Strings.shared.string("messages.galleryOpenSettings") }
+        /// No photos yet
+        public static var galleryEmpty: String { Strings.shared.string("messages.galleryEmpty") }
+        /// Unsent message: {text}
+        public static func draftLabel(text: String) -> String { Strings.shared.format("messages.draftLabel", ["text": text]) }
     }
     public enum Write {
         /// Give it a one-line title first

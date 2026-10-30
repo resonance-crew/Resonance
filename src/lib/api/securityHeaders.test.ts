@@ -35,10 +35,12 @@ describe('securityHeaders', () => {
     const rules = await config.headers!();
     expect(rules[0].source).toBe('/:path*');
     expect(rules[0].headers.map((h) => h.key)).toEqual(securityHeaders(PRODUCTION).map((h) => h.key));
-    // beside them only the landing stage's versioned pictures (`?v=` on every URL), kept for good; Next applies
-    // every rule that matches, so those keep the security headers too
+    // beside them only the landing stage's and the stickers' versioned pictures (`?v=` on every URL), kept for good,
+    // and the sticker catalog for an hour; Next applies every rule that matches, so those keep the security headers too
     expect(rules.slice(1)).toEqual([
       { source: '/mascots/:path*', headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] },
+      { source: '/stickers/catalog.json', headers: [{ key: 'Cache-Control', value: 'public, max-age=3600' }] },
+      { source: '/stickers/:pack/:file', headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] },
     ]);
   });
 
