@@ -144,27 +144,33 @@ export function iconSticker(slug: Slug): StickerDef<'hero', never> {
   const body = raw.parts.filter(p => p.parent === 'body' && !p.variantOf && !p.extra && !p.only && p.w && !p.name.startsWith('arm'));
   // a head-and-shoulders crop round the face: from the top of the deco to a little under the mouth, at least wide
   // enough for the eyes to sit well inside it
-  const top = Math.min(...body.map(p => p.y)) - 4;
+  const top = Math.min(...body.map(p => p.y)) - 14;   // room over the deco: its die-cut rim never meets the edge
   const mouth = part('mouth');
   const bottom = mouth.y + mouth.h + 44;
   const [el, er] = [part('eye-l'), part('eye-r')];
   const eyes = er.x + er.w - el.x;
   const fx = (el.x + er.x + er.w) / 2;
-  // …but never down past the foot of the torso (no legs in a head's crop)
+  // the whole deco in it too (聆聆's beret is wide and off to one side): the crop shifts toward it a little and grows
+  const deco = part('deco');
+  const l = Math.min(el.x - 30, deco.x - 10);
+  const r = Math.max(er.x + er.w + 30, deco.x + deco.w + 10);
+  const cx = fx + Math.max(-40, Math.min(40, (r - fx - (fx - l)) / 2));
+  const half = Math.max((bottom - top) / 2, eyes * 1.3, r - cx, cx - l);
+  // …never down past the foot of the torso (no legs in a head's crop): a big crop rises instead, room over the deco
   const torso = part('torso');
-  const half = Math.min(Math.max((bottom - top) / 2, eyes * 1.25), (torso.y + torso.h - 8 - top) / 2);
+  const cy = Math.min(top + half, torso.y + torso.h - 8 - half);
   const k = (SIZE / 2 - 8) / half;
-  const cy = top + half;
   const [gx, gy] = raw.ground;
   return defineSticker({
     duration: 1 / 12,
     hero: 0,
-    cast: { hero: { slug, x: SIZE / 2 - (fx - gx) * k, ground: SIZE / 2 + (gy - cy) * k, k } },
+    cast: { hero: { slug, x: SIZE / 2 - (cx - gx) * k, ground: SIZE / 2 + (gy - cy) * k, k } },
     frame(_t, { hero }) {
       hero.pose.blush = 0.35;
-      // arms hanging straight down, out of the crop's corners
-      hero.pose.liftL = 0;
-      hero.pose.liftR = 0;
+      // arms out of the crop's corners: tucked in behind the paper where they hang behind it, else straight down
+      const behind = hero.rig.arms.L.part.z < hero.rig.torso.z;
+      hero.pose.liftL = behind ? -45 : 0;
+      hero.pose.liftR = behind ? -45 : 0;
     },
   });
 }

@@ -222,7 +222,7 @@ async function renderJob(browser: Browser, origin: string, job: Job, o: Options)
         }
         frames.push(rgba);
       }
-      if (frameDiff(frames[0], key0) < 0.01) {
+      if (frameDiff(frames[0], key0) < 0.0025) {
         throw new Error(`${job.pack}/${job.id}: hero ${hero} s is the key pose — pick the moment that says what the sticker means`);
       }
       const heroAt = times[start];
