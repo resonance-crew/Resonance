@@ -47,6 +47,7 @@ export function quoteOf(message: Message): MessageReplyQuote {
     text: cutQuote(message.text),
     ...(message.cardRef ? { cardRef: message.cardRef } : {}),
     ...(message.image ? { image: true } : {}),
+    ...(message.sticker ? { sticker: message.sticker } : {}),
   };
 }
 

@@ -96,7 +96,17 @@ describe('sendMessage', () => {
     expect(url).toBe('/api/v1/messages');
     expect(init?.method).toBe('POST');
     expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer id-token');
-    expect(sent()).toEqual({ to: 'aaa', text: 'hello there', cardRef: null, noteRef: null, replyTo: null, clientId: null, image: null });
+    expect(sent()).toEqual({
+      to: 'aaa',
+      text: 'hello there',
+      cardRef: null,
+      noteRef: null,
+      replyTo: null,
+      clientId: null,
+      image: null,
+      sticker: null,
+      album: null,
+    });
     expect(batch.commit).not.toHaveBeenCalled();
   });
 
@@ -116,7 +126,26 @@ describe('sendMessage', () => {
       replyTo: null,
       clientId: null,
       image: null,
+      sticker: null,
+      album: null,
     });
+  });
+
+  // Round 22: a sticker goes on its own (no words, card, picture or note beside it), a picture of an album with
+  // its place in it — and only beside a picture.
+  it('sends a sticker on its own, and a picture with its place in an album', async () => {
+    await sendMessage('aaa', '', { sticker: { pack: 'twine', id: 'thanks' }, replyTo: 'm7', clientId: 'Abcdefghij0123456789' });
+    expect(sent()).toMatchObject({ text: '', sticker: { pack: 'twine', id: 'thanks' }, replyTo: 'm7', image: null, album: null });
+
+    await expect(sendMessage('aaa', 'hi', { sticker: { pack: 'twine', id: 'thanks' } })).rejects.toThrow('A sticker is sent on its own');
+    await expect(sendMessage('aaa', '', { sticker: { pack: 'twine', id: 'thanks' }, image: 'Abcdefghij0123456789' })).rejects.toThrow();
+    await expect(sendMessage('aaa', 'caption', { album: { id: 'Album0123456789abcdef', index: 0, count: 3 } })).rejects.toThrow(
+      'An album holds pictures',
+    );
+
+    fetchMock.mockClear();
+    await sendMessage('aaa', 'caption', { image: 'Abcdefghij0123456789', album: { id: 'Album0123456789abcdef', index: 0, count: 3 } });
+    expect(sent()).toMatchObject({ text: 'caption', image: 'Abcdefghij0123456789', album: { id: 'Album0123456789abcdef', index: 0, count: 3 } });
   });
 
   it('sends a picture uploaded for the conversation, with or without words', async () => {
@@ -298,6 +327,37 @@ describe('the listeners (thread, conversations)', () => {
       { id: 'aaa_bbb', data: { participants: ['aaa', 'bbb'], lastMessage: { text: '', senderId: 'aaa', sentAt, image: true }, unread: {} } },
     ]);
     expect(lists.mock.calls[0][0][0].lastMessage).toMatchObject({ text: '', image: true });
+  });
+
+  // Round 22: a sticker (its fallback words kept as its text), a reply to one, an album's picture, and the list's
+  // preview of a sticker — and anything written oddly read as none.
+  it('hears a sticker, a reply to one, an album picture, and a list preview of a sticker', async () => {
+    const heard = vi.fn();
+    listenThread('aaa_bbb', heard);
+    await vi.waitFor(() => expect(listener.listenNewest).toHaveBeenCalled());
+    const sentAt = fullSdkTimestamp('2026-09-01T08:00:00Z');
+    listener.onDocs!([
+      { id: 'odd', data: { senderId: 'aaa', text: '?', sentAt, sticker: { pack: 'Twine!', id: 7 }, album: { id: 'a', index: 0, count: 2 } } },
+      { id: 'a2', data: { senderId: 'aaa', text: '', sentAt, image: { id: 'p2' }, album: { id: 'alb', index: 5, count: 2 } } },
+      { id: 'a1', data: { senderId: 'aaa', text: 'two', sentAt, image: { id: 'p1' }, album: { id: 'alb', index: 0, count: 2 } } },
+      { id: 'r1', data: { senderId: 'bbb', text: 'ha', sentAt, replyTo: { id: 's1', senderId: 'aaa', text: '〔貼圖：謝謝〕', sticker: { pack: 'twine', id: 'thanks' } } } },
+      { id: 's1', data: { senderId: 'aaa', text: '〔貼圖：謝謝〕', sentAt, sticker: { pack: 'twine', id: 'thanks' } } },
+    ]);
+    const [odd, a2, a1, reply, sticker] = heardMessages(heard);
+    expect(sticker).toMatchObject({ text: '〔貼圖：謝謝〕', sticker: { pack: 'twine', id: 'thanks' } });
+    expect(reply.replyTo).toEqual({ id: 's1', senderId: 'aaa', text: '〔貼圖：謝謝〕', cardRef: undefined, sticker: { pack: 'twine', id: 'thanks' } });
+    expect(a1.album).toEqual({ id: 'alb', index: 0, count: 2 });
+    expect(a2.album).toBeUndefined();
+    expect(odd.sticker).toBeUndefined();
+    expect(odd.album).toBeUndefined();
+
+    const lists = vi.fn();
+    listenConversations('bbb', lists);
+    await vi.waitFor(() => expect(listener.listenNewest).toHaveBeenCalledTimes(2));
+    listener.onDocs!([
+      { id: 'aaa_bbb', data: { participants: ['aaa', 'bbb'], lastMessage: { text: '〔貼圖：謝謝〕', senderId: 'aaa', sentAt, sticker: true }, unread: {} } },
+    ]);
+    expect(lists.mock.calls[0][0][0].lastMessage).toMatchObject({ sticker: true });
   });
 
   // Round 16: a message's reactions (the five this build knows), and one unsent — nothing of it but who and

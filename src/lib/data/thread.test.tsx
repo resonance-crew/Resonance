@@ -49,12 +49,13 @@ vi.mock('@/lib/db/firestore/client/messages', () => ({
       }));
   }),
   sendMessage: vi.fn(),
+  uploadChatImage: vi.fn(async (_file: Blob, _to: string, opts: { clientId: string }) => ({ id: opts.clientId, width: 10, height: 10 })),
 }));
 
 const mockUseAuth = vi.fn();
 vi.mock('@/components/providers/AuthProvider', () => ({ useAuth: () => mockUseAuth() }));
 
-import { getOlderMessages, sendMessage } from '@/lib/db/firestore/client/messages';
+import { getOlderMessages, sendMessage, uploadChatImage } from '@/lib/db/firestore/client/messages';
 import {
   ALL_PAGE,
   LOAD_ALL_CAP,
@@ -388,6 +389,91 @@ describe('replying', () => {
     act(() => result.current.reply(result.current.messages.at(-1)!));
     expect(result.current.replyingTo).toBeNull();
     act(() => result.current.cancelReply());
+    expect(result.current.replyingTo).toBeNull();
+  });
+});
+
+// Round 22: several pictures go as an album — one message each, in order, under one album id, the words, the note
+// and the reply riding the first; a sticker is a message of its own, the reply being written going with it.
+describe('albums and stickers', () => {
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => 'blob:local');
+  });
+  const picture = (n: number) => ({ file: new Blob([String(n)]), width: 100 + n, height: 100 });
+
+  it('sends several pictures as an album, in order, the words, note and reply with the first', async () => {
+    server.all = [msg(1)];
+    const { result } = open();
+    hearNewest();
+    act(() => result.current.reply(result.current.messages[0]));
+    act(() => {
+      expect(
+        result.current.send({ text: ' rain ', noteRef: { cardId: 'c1', noteId: 'n1' }, images: [picture(1), picture(2), picture(3)] }),
+      ).toBe(true);
+    });
+    expect(result.current.replyingTo).toBeNull();
+    const drawn = result.current.messages.slice(-3);
+    const album = drawn[0].album!.id;
+    expect(album).toMatch(/^[A-Za-z0-9]{20}$/);
+    expect(drawn.map((m) => [m.text, m.album, m.image?.width, !!m.replyTo, !!m.noteRef])).toEqual([
+      ['rain', { id: album, index: 0, count: 3 }, 101, true, true],
+      ['', { id: album, index: 1, count: 3 }, 102, false, false],
+      ['', { id: album, index: 2, count: 3 }, 103, false, false],
+    ]);
+    // Each picture under its own message's id, the three sent one after another in their order.
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(3));
+    const calls = vi.mocked(sendMessage).mock.calls;
+    expect(calls.map((c) => [c[1], c[2]!.album, c[2]!.image, c[2]!.replyTo, c[2]!.noteRef])).toEqual([
+      ['rain', { id: album, index: 0, count: 3 }, drawn[0].key, msg(1).id, { cardId: 'c1', noteId: 'n1' }],
+      ['', { id: album, index: 1, count: 3 }, drawn[1].key, undefined, undefined],
+      ['', { id: album, index: 2, count: 3 }, drawn[2].key, undefined, undefined],
+    ]);
+    expect(vi.mocked(uploadChatImage).mock.calls.map((c) => c[2].clientId)).toEqual(drawn.map((m) => m.key));
+    await waitFor(() => expect(result.current.messages.slice(-3).map((m) => m.delivery)).toEqual(['sent', 'sent', 'sent']));
+  });
+
+  it('sends one picture as a picture alone, and refuses more than ten or pictures beside a card', async () => {
+    const { result } = open();
+    hearNewest();
+    act(() => {
+      expect(result.current.send({ text: '', images: Array.from({ length: 11 }, (_, i) => picture(i)) })).toBe(false);
+      expect(result.current.send({ text: '', cardRef: 'walk', images: [picture(1), picture(2)] })).toBe(false);
+      expect(result.current.send({ text: '', images: [picture(1)] })).toBe(true);
+    });
+    expect(result.current.messages.at(-1)).toMatchObject({ image: { width: 101 } });
+    expect(result.current.messages.at(-1)!.album).toBeUndefined();
+    await waitFor(() => expect(result.current.messages.at(-1)!.delivery).toBe('sent'));
+    expect(vi.mocked(sendMessage).mock.calls[0][2]!.album).toBeUndefined();
+  });
+
+  it('sends a sticker on its own, with the reply being written, drawn at once', async () => {
+    server.all = [msg(1)];
+    const { result } = open();
+    hearNewest();
+    act(() => result.current.reply(result.current.messages[0]));
+    act(() => {
+      expect(result.current.send({ text: 'ignored', cardRef: 'walk', sticker: { pack: 'twine', id: 'thanks' } })).toBe(true);
+    });
+    expect(result.current.replyingTo).toBeNull();
+    expect(result.current.messages.at(-1)).toMatchObject({ text: '', sticker: { pack: 'twine', id: 'thanks' }, replyTo: { id: msg(1).id } });
+    expect(result.current.messages.at(-1)!.cardRef).toBeUndefined();
+    await waitFor(() => expect(sendMessage).toHaveBeenCalled());
+    expect(vi.mocked(sendMessage).mock.calls[0]).toEqual([
+      'bob',
+      '',
+      expect.objectContaining({ sticker: { pack: 'twine', id: 'thanks' }, replyTo: msg(1).id, cardRef: undefined }),
+    ]);
+    await waitFor(() => expect(result.current.messages.at(-1)!.delivery).toBe('sent'));
+  });
+
+  // A draft brought back answers its message again as the thread opens — the reply isn't let go of as the
+  // conversation first becomes known (the composer's effects run before the thread's).
+  it('keeps a reply a draft brought back as the conversation becomes known', () => {
+    const { result, rerender } = open({ pairId: undefined, to: undefined });
+    act(() => result.current.restoreReply({ id: 'm9', senderId: 'bob', text: 'from the draft' }));
+    rerender({ pairId: 'bob_me', to: 'bob', listen: true });
+    expect(result.current.replyingTo).toMatchObject({ id: 'm9' });
+    rerender({ pairId: 'carol_me', to: 'carol', listen: true });
     expect(result.current.replyingTo).toBeNull();
   });
 });

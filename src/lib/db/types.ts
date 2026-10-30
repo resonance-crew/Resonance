@@ -266,6 +266,8 @@ export interface Conversation {
     image?: boolean;
     /** It was a sticker (round 22): `text` is its fallback words, for builds that can't draw one. */
     sticker?: boolean;
+    /** It was one of several pictures sent together, when the server says how many (the list: 「傳送了 3 張圖片」). */
+    album?: { count: number };
     /** Its sender unsent it (round 16): `text` is empty, and the list says who unsent a message. */
     unsent?: boolean;
   } | null;
