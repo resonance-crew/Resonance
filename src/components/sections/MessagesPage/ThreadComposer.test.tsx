@@ -8,9 +8,17 @@ import type { Card } from '@/lib/db/types';
 const toast = vi.hoisted(() => ({ show: vi.fn() }));
 vi.mock('@/components/providers/ToastProvider', () => ({ useToast: () => toast }));
 // A picture is made ready on the device (a canvas jsdom hasn't): handed back as it came.
+// How many are being made ready at once (round 22 review: one at a time).
+const prep = vi.hoisted(() => ({ active: 0, most: 0 }));
 vi.mock('@/lib/chat/preparePicture', () => ({
   UnsupportedImage: class extends Error {},
-  preparePicture: async (file: File) => ({ file, width: 800, height: 600 }),
+  preparePicture: async (file: File) => {
+    prep.active++;
+    prep.most = Math.max(prep.most, prep.active);
+    await new Promise((r) => setTimeout(r, 2));
+    prep.active--;
+    return { file, width: 800, height: 600 };
+  },
 }));
 const walk = { id: 'walk', thoughtCore: 'A shared thought', publishedAt: new Date(), visibility: 'public' } as unknown as Card;
 vi.mock('@/lib/db/firestore/client/reads', () => ({ getCardById: vi.fn(async () => walk) }));
@@ -157,6 +165,16 @@ describe('several pictures', () => {
     expect(draft.image).toBeUndefined();
     expect(draft.images.map((p) => p.file.name)).toEqual(['p0.png', 'p2.png']);
     expect(screen.queryByText('2 photos')).not.toBeInTheDocument();
+  });
+
+  it('makes the pictures ready one at a time, a later pick waiting for the ones before it', async () => {
+    prep.most = 0;
+    renderWithIntl(composer());
+    pick(photos(4));
+    fireEvent.paste(field(), { clipboardData: { files: photos(2) } });
+    const row = await waitFor(() => rowOf('6 photos'));
+    expect(prep.most).toBe(1);
+    expect(Array.from(row.querySelectorAll('[class*="carryOrder"]')).map((n) => n.textContent)).toEqual(['1', '2', '3', '4', '5', '6']);
   });
 
   it('takes ten at most, and says so past that', async () => {

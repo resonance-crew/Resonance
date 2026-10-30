@@ -40,3 +40,17 @@ export function noteRecentSticker(uid: string, ref: StickerRef): StickerRef[] {
   }
   return next;
 }
+
+/** Signing out: every account's recent stickers leave this browser (as the apps do). */
+export function forgetAllRecentStickers(): void {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key?.startsWith(KEY)) keys.push(key);
+    }
+    keys.forEach((key) => window.localStorage.removeItem(key));
+  } catch {
+    // nothing to clear
+  }
+}

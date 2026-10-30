@@ -317,6 +317,34 @@ describe('replies, links and link previews in a thread', () => {
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
+  // Round 22: a quote of a picture inside an album goes to the album's grid (its row is the first picture's), and
+  // washes it.
+  it('goes to the album holding a quoted picture', async () => {
+    const scrollTo = vi.fn();
+    Element.prototype.scrollTo = scrollTo as unknown as Element['scrollTo'];
+    const pic = (id: string, index: number): Message => ({
+      id,
+      senderId: 'alice',
+      text: '',
+      sentAt: new Date('2026-03-01T10:00:00Z'),
+      image: { id: `img-${id}`, width: 800, height: 600 },
+      album: { id: 'alb', index, count: 3 },
+    });
+    server.messages = [
+      pic('a1', 0),
+      pic('a2', 1),
+      pic('a3', 2),
+      text('m4', 'that one!', { replyTo: { id: 'a2', senderId: 'alice', text: '', image: true } }, 'me'),
+    ];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    const user = (await import('@testing-library/user-event')).default.setup();
+    const { container } = renderWithIntl(thread());
+    await screen.findByText('that one!');
+    await user.click(screen.getByRole('button', { name: 'A photo' }));
+    await waitFor(() => expect(scrollTo).toHaveBeenCalled());
+    await waitFor(() => expect(container.querySelector('[data-message-id="a1"]')).toHaveAttribute('data-flash'));
+  });
+
   it('draws the link preview under the bubble, picture from our own route only', async () => {
     server.messages = [
         text('m1', 'look https://example.com/post', {
@@ -1091,6 +1119,53 @@ describe('a letter: notes between two people who aren’t connected', () => {
     const line = (await screen.findByText("You can only message people you're connected with")).parentElement!;
     expect(screen.queryByRole('textbox', { name: 'Conversation with alice' })).not.toBeInTheDocument();
     expect(within(line).getByRole('link', { name: 'View profile' })).toHaveAttribute('href', '/u/alice');
+  });
+});
+
+// Round 22 §4.4: a draft brings its reply back as the thread opens — before any message has come — so the quote is
+// asked about again as they come: unsent since, missing from a complete history, or the conversation gone, it goes.
+describe('a draft’s reply, asked about again', () => {
+  const draftReplyingTo = (id: string) =>
+    window.localStorage.setItem(
+      'resonance:draft:me:alice_me',
+      JSON.stringify({ text: 'about that', replyTo: { id, senderId: 'alice', text: 'what they said' }, at: Date.now() }),
+    );
+  const opened = async () => {
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    renderWithIntl(thread());
+    expect(await screen.findByRole('textbox', { name: 'Conversation with alice' })).toHaveValue('about that');
+  };
+
+  it('keeps it while its message is there', async () => {
+    server.messages = [text('m1', 'what they said'), text('m2', 'and more')];
+    draftReplyingTo('m1');
+    await opened();
+    await screen.findByText('and more');
+    await settle(20);
+    expect(screen.getByText('Replying to alice')).toBeInTheDocument();
+  });
+
+  it('lets it go once its message turns out unsent', async () => {
+    server.messages = [{ id: 'm1', senderId: 'alice', text: '', sentAt: new Date('2026-03-01T10:00:00Z'), unsentAt: new Date() }, text('m2', 'and more')];
+    draftReplyingTo('m1');
+    await opened();
+    await waitFor(() => expect(screen.queryByText('Replying to alice')).not.toBeInTheDocument());
+  });
+
+  it('lets it go when the whole conversation is here without its message', async () => {
+    server.messages = [text('m2', 'and more')];
+    draftReplyingTo('m1');
+    await opened();
+    await waitFor(() => expect(screen.queryByText('Replying to alice')).not.toBeInTheDocument());
+    // The words stay.
+    expect(screen.getByRole('textbox', { name: 'Conversation with alice' })).toHaveValue('about that');
+  });
+
+  it('lets it go when the conversation is gone', async () => {
+    vi.mocked(getConversation).mockResolvedValue(null);
+    draftReplyingTo('m1');
+    await opened();
+    await waitFor(() => expect(screen.queryByText('Replying to alice')).not.toBeInTheDocument());
   });
 });
 

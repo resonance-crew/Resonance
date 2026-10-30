@@ -18,12 +18,17 @@ export interface CollapsedAlbums {
   members: Map<string, ChatMessage[]>;
 }
 
+/** An unsent message keeps nothing but who sent it and when (the server strips its album with the rest). */
+const unsentBy = (m: ChatMessage, senderId: string) => !!m.unsentAt && m.senderId === senderId;
+
 /**
  * Collapses each album into the message that stands for its grid: from its
- * first picture on, every later message of that album from the same sender —
- * read on until a message that is neither — joins the grid; one of them unsent
- * or failed is drawn on its own right after it (its line, its retry), and a
- * missing one just leaves the grid smaller. A grid of one is a picture alone.
+ * first picture on, every later message of that album from the same sender
+ * joins the grid. One of them failed, or unsent (which no longer says it was
+ * in the album), is drawn on its own right after the grid (its line, its
+ * retry) while the album goes on after it — an unsent message of the same
+ * sender belongs to the run only when the album continues past it. A missing
+ * picture just leaves the grid smaller; a grid of one is a picture alone.
  * `messages` oldest first, as held.
  */
 export function collapseAlbums(messages: readonly ChatMessage[]): CollapsedAlbums {
@@ -38,12 +43,23 @@ export function collapseAlbums(messages: readonly ChatMessage[]): CollapsedAlbum
       continue;
     }
     const album = m.album.id;
+    const sender = m.senderId;
+    const ofAlbum = (x: ChatMessage | undefined) => !!x && x.album?.id === album && x.senderId === sender;
     let j = i;
     const grid: ChatMessage[] = [];
     const apart: ChatMessage[] = [];
-    while (j < messages.length && messages[j].album?.id === album && messages[j].senderId === m.senderId) {
-      (inGrid(messages[j]) ? grid : apart).push(messages[j]);
-      j++;
+    for (;;) {
+      if (ofAlbum(messages[j])) {
+        (inGrid(messages[j]) ? grid : apart).push(messages[j]);
+        j++;
+        continue;
+      }
+      // Unsent messages of the same sender, with the album going on after them: pictures of it, unsent.
+      let k = j;
+      while (k < messages.length && unsentBy(messages[k], sender)) k++;
+      if (k === j || !ofAlbum(messages[k])) break;
+      apart.push(...messages.slice(j, k));
+      j = k;
     }
     grid.sort((a, b) => a.album!.index - b.album!.index);
     if (grid.length >= 2) {
@@ -56,6 +72,12 @@ export function collapseAlbums(messages: readonly ChatMessage[]): CollapsedAlbum
     i = j;
   }
   return { messages: out, members };
+}
+
+/** The message whose row draws `id`: the grid's first picture for any picture of an album, else itself. */
+export function standingFor(collapsed: CollapsedAlbums, id: string): string {
+  for (const grid of collapsed.members.values()) if (grid.some((x) => x.id === id)) return grid[0].id;
+  return id;
 }
 
 /** One row of an album's grid: how many pictures stand side by side in it, and its height. */

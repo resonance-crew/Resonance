@@ -26,11 +26,12 @@ import { OLDER_PAGE, useChatThread } from '@/lib/data/thread';
 import { resonanceCardKey, threadCardKeys } from '@/lib/chat/cardLink';
 import { footComposes, threadFoot } from '@/lib/chat/foot';
 import { threadRows } from '@/lib/chat/rows';
-import { collapseAlbums } from '@/lib/chat/album';
+import { collapseAlbums, standingFor } from '@/lib/chat/album';
 import { forgetChatDraft, keepChatDraft, readChatDraft } from '@/lib/data/chatDrafts';
 import { fullMessageTime, timeOfDay } from '@/lib/chat/time';
 import { changeShown, withLocalChange, type LocalChange } from '@/lib/chat/message';
 import { ApiError } from '@/lib/db/firestore/client/api';
+import { isAbsent } from '@/lib/db/firestore/client/errors';
 import type { TextRange } from '@/lib/chat/search';
 import { getUserByHandle, getUsersByIds, isConnected } from '@/lib/db/firestore/client/reads';
 import {
@@ -482,13 +483,20 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
       return;
     }
     const scroller = scrollerRef.current;
-    const row = scroller?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(jumpTarget.id)}"]`);
-    if (!scroller || !row) return;
+    if (!scroller) return;
+    // A picture of an album is drawn by its grid, whose row is its first picture's.
+    const id = standingFor(collapsed, jumpTarget.id);
+    const row = scroller.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(id)}"]`);
+    if (!row) {
+      // Drawn, and no row for it: nothing to go to — and the paging the jump held back reads again.
+      jumping.current = false;
+      setJumpTarget(null);
+      return;
+    }
     jumping.current = true;
     scroll.leaveBottom();
     const arrived = centerRow(scroller, row);
     setJumpTarget(null);
-    const id = jumpTarget.id;
     const flash = jumpTarget.flash;
     void arrived.then(() => {
       jumping.current = false;
@@ -663,14 +671,23 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
     focusBack.current = null;
   }, [pressed]);
 
-  // A held message unsent meanwhile (by its sender, elsewhere) has no menu: the overlay goes. A reply being written
-  // to one now quotes nothing worth sending.
+  // A held message unsent meanwhile (by its sender, elsewhere) has no menu: the overlay goes.
   useEffect(() => {
     if (pressed && drawn.some((m) => m.key === pressed.message.key && m.unsentAt)) setPressed(null);
-    const replying = thread.replyingTo;
-    if (replying && drawn.some((m) => m.id === replying.id && m.unsentAt)) thread.cancelReply();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawn]);
+  // The message the next one answers — picked here, or brought back with a draft before any message had come
+  // (round 22 §4.4) — is asked about again as they come: one unsent since, one a complete history doesn't hold
+  // (deleted by an older build), or any once the conversation is gone, quotes nothing worth sending.
+  const historyComplete = thread.ready && !thread.error && !thread.hasOlder && !thread.loadingOlder;
+  useEffect(() => {
+    const replying = thread.replyingTo;
+    if (!replying) return;
+    const held = drawn.find((m) => m.id === replying.id) ?? thread.messages.find((m) => m.id === replying.id);
+    const gone = convo === null || (!!thread.error && isAbsent(thread.error));
+    if (gone || held?.unsentAt || (!held && historyComplete)) thread.cancelReply();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawn, thread.messages, thread.replyingTo, historyComplete, thread.error, convo]);
 
   // The note the thread was opened for: once the conversation's first messages are in (older ones read for it
   // if need be), it is gone to, washed and answered; one that isn't in the conversation is an older note.

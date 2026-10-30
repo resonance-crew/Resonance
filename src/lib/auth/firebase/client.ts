@@ -23,6 +23,7 @@ import {
 import { startAppCheck } from './appCheck';
 import { forgetAllChatDrafts } from '@/lib/data/chatDrafts';
 import { forgetAllNoteDrafts } from '@/lib/data/noteDrafts';
+import { forgetAllRecentStickers } from '@/lib/data/stickerRecents';
 import type { IAuthProvider } from '../interfaces';
 import type { AuthSession, AuthUser, PhoneVerificationInput, SignInInput, SignUpInput } from '../types';
 
@@ -356,6 +357,7 @@ export class FirebaseClientAuthProvider implements IAuthProvider {
     // Words typed in this browser and not sent leave with the account.
     forgetAllNoteDrafts();
     forgetAllChatDrafts();
+    forgetAllRecentStickers();
     await firebaseSignOut(getFirebaseClientAuth());
     await fetch('/api/auth/session', { method: 'DELETE' });
   }
