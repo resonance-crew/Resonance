@@ -26,7 +26,7 @@ import { OLDER_PAGE, useChatThread } from '@/lib/data/thread';
 import { resonanceCardKey, threadCardKeys } from '@/lib/chat/cardLink';
 import { footComposes, threadFoot } from '@/lib/chat/foot';
 import { threadRows } from '@/lib/chat/rows';
-import { collapseAlbums } from '@/lib/chat/album';
+import { collapseAlbums, standingFor } from '@/lib/chat/album';
 import { forgetChatDraft, keepChatDraft, readChatDraft } from '@/lib/data/chatDrafts';
 import { fullMessageTime, timeOfDay } from '@/lib/chat/time';
 import { changeShown, withLocalChange, type LocalChange } from '@/lib/chat/message';
@@ -482,13 +482,20 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
       return;
     }
     const scroller = scrollerRef.current;
-    const row = scroller?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(jumpTarget.id)}"]`);
-    if (!scroller || !row) return;
+    if (!scroller) return;
+    // A picture of an album is drawn by its grid, whose row is its first picture's.
+    const id = standingFor(collapsed, jumpTarget.id);
+    const row = scroller.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(id)}"]`);
+    if (!row) {
+      // Drawn, and no row for it: nothing to go to — and the paging the jump held back reads again.
+      jumping.current = false;
+      setJumpTarget(null);
+      return;
+    }
     jumping.current = true;
     scroll.leaveBottom();
     const arrived = centerRow(scroller, row);
     setJumpTarget(null);
-    const id = jumpTarget.id;
     const flash = jumpTarget.flash;
     void arrived.then(() => {
       jumping.current = false;

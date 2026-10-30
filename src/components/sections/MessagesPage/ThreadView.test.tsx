@@ -317,6 +317,34 @@ describe('replies, links and link previews in a thread', () => {
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
+  // Round 22: a quote of a picture inside an album goes to the album's grid (its row is the first picture's), and
+  // washes it.
+  it('goes to the album holding a quoted picture', async () => {
+    const scrollTo = vi.fn();
+    Element.prototype.scrollTo = scrollTo as unknown as Element['scrollTo'];
+    const pic = (id: string, index: number): Message => ({
+      id,
+      senderId: 'alice',
+      text: '',
+      sentAt: new Date('2026-03-01T10:00:00Z'),
+      image: { id: `img-${id}`, width: 800, height: 600 },
+      album: { id: 'alb', index, count: 3 },
+    });
+    server.messages = [
+      pic('a1', 0),
+      pic('a2', 1),
+      pic('a3', 2),
+      text('m4', 'that one!', { replyTo: { id: 'a2', senderId: 'alice', text: '', image: true } }, 'me'),
+    ];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    const user = (await import('@testing-library/user-event')).default.setup();
+    const { container } = renderWithIntl(thread());
+    await screen.findByText('that one!');
+    await user.click(screen.getByRole('button', { name: 'A photo' }));
+    await waitFor(() => expect(scrollTo).toHaveBeenCalled());
+    await waitFor(() => expect(container.querySelector('[data-message-id="a1"]')).toHaveAttribute('data-flash'));
+  });
+
   it('draws the link preview under the bubble, picture from our own route only', async () => {
     server.messages = [
         text('m1', 'look https://example.com/post', {

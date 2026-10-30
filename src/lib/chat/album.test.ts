@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ALBUM_GAP, albumHeight, albumRows, collapseAlbums } from './album';
+import { ALBUM_GAP, albumHeight, albumRows, collapseAlbums, standingFor } from './album';
 import type { ChatMessage } from './message';
 
 const t = (n: number) => new Date(Date.UTC(2026, 9, 31, 8, 0, n));
@@ -74,6 +74,14 @@ describe('collapseAlbums', () => {
     const lone = collapseAlbums([c0, c1]);
     expect(keys(lone.messages)).toEqual([c0.key, c1.key]);
     expect(lone.members.size).toBe(0);
+  });
+
+  it('names the row that draws any picture of an album', () => {
+    const a = [pic('me', 'A', 0, 3), pic('me', 'A', 1, 3), pic('me', 'A', 2, 3)];
+    const plain = m('bob', { text: 'hi' });
+    const collapsed = collapseAlbums([...a, plain]);
+    expect(a.map((x) => standingFor(collapsed, x.id))).toEqual([a[0].id, a[0].id, a[0].id]);
+    expect(standingFor(collapsed, plain.id)).toBe(plain.id);
   });
 
   it('ends an album at a message of anyone else, and keeps two albums apart', () => {

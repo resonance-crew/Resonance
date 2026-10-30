@@ -74,6 +74,12 @@ export function collapseAlbums(messages: readonly ChatMessage[]): CollapsedAlbum
   return { messages: out, members };
 }
 
+/** The message whose row draws `id`: the grid's first picture for any picture of an album, else itself. */
+export function standingFor(collapsed: CollapsedAlbums, id: string): string {
+  for (const grid of collapsed.members.values()) if (grid.some((x) => x.id === id)) return grid[0].id;
+  return id;
+}
+
 /** One row of an album's grid: how many pictures stand side by side in it, and its height. */
 export interface AlbumRow {
   count: number;
