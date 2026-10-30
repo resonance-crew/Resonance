@@ -1,0 +1,525 @@
+{
+ "name": "摺摺 Tuck",
+ "prefix": "tk-",
+ "ground": [
+  350,
+  700
+ ],
+ "faceCenter": [
+  333.6,
+  445.1
+ ],
+ "height": 420,
+ "walk": "walk",
+ "viewBox": [
+  700,
+  760
+ ],
+ "scale": 1.6,
+ "parts": [
+  {
+   "name": "shadow",
+   "parent": "root",
+   "pivot": [
+    350,
+    700
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 0,
+   "x": 230,
+   "y": 691.25,
+   "w": 237.5,
+   "h": 27.5,
+   "img": "shadow.webp"
+  },
+  {
+   "name": "leg-l",
+   "parent": "root",
+   "pivot": [
+    304.6,
+    572.6
+   ],
+   "angle": null,
+   "len": 127.4,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 1,
+   "x": 273.12,
+   "y": 567.5,
+   "w": 73.12,
+   "h": 143.12,
+   "img": "leg-l.webp"
+  },
+  {
+   "name": "leg-r",
+   "parent": "root",
+   "pivot": [
+    387.7,
+    576.4
+   ],
+   "angle": null,
+   "len": 123.6,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 2,
+   "x": 359.38,
+   "y": 571.25,
+   "w": 70,
+   "h": 139.38,
+   "img": "leg-r.webp"
+  },
+  {
+   "name": "arm-l",
+   "parent": "body",
+   "pivot": [
+    219.9,
+    493.4
+   ],
+   "angle": 122,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 3,
+   "x": 116.88,
+   "y": 466.88,
+   "w": 132.5,
+   "h": 164.38,
+   "img": "arm-l.webp"
+  },
+  {
+   "name": "arm-r",
+   "parent": "body",
+   "pivot": [
+    473.2,
+    495.3
+   ],
+   "angle": 58,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 4,
+   "x": 446.88,
+   "y": 468.75,
+   "w": 131.88,
+   "h": 163.75,
+   "img": "arm-r.webp"
+  },
+  {
+   "name": "torso",
+   "parent": "body",
+   "pivot": [
+    349,
+    597.7
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 5,
+   "x": 191.25,
+   "y": 276.25,
+   "w": 323.75,
+   "h": 335.62,
+   "img": "torso.webp",
+   "hit": [
+    [
+     0.9394,
+     0.5064
+    ],
+    [
+     0.9269,
+     0.5947
+    ],
+    [
+     0.8872,
+     0.6742
+    ],
+    [
+     0.8545,
+     0.7558
+    ],
+    [
+     0.8023,
+     0.8288
+    ],
+    [
+     0.7294,
+     0.8826
+    ],
+    [
+     0.6477,
+     0.9212
+    ],
+    [
+     0.557,
+     0.9261
+    ],
+    [
+     0.4712,
+     0.9378
+    ],
+    [
+     0.3848,
+     0.9295
+    ],
+    [
+     0.2976,
+     0.9147
+    ],
+    [
+     0.2111,
+     0.8855
+    ],
+    [
+     0.1453,
+     0.8239
+    ],
+    [
+     0.0939,
+     0.7519
+    ],
+    [
+     0.0653,
+     0.6702
+    ],
+    [
+     0.0474,
+     0.5885
+    ],
+    [
+     0.0499,
+     0.5064
+    ],
+    [
+     0.0615,
+     0.427
+    ],
+    [
+     0.072,
+     0.3453
+    ],
+    [
+     0.0969,
+     0.2628
+    ],
+    [
+     0.1402,
+     0.184
+    ],
+    [
+     0.2031,
+     0.1156
+    ],
+    [
+     0.2893,
+     0.0787
+    ],
+    [
+     0.3792,
+     0.0558
+    ],
+    [
+     0.4712,
+     0.0539
+    ],
+    [
+     0.5654,
+     0.0454
+    ],
+    [
+     0.6366,
+     0.1175
+    ],
+    [
+     0.6973,
+     0.1769
+    ],
+    [
+     0.7539,
+     0.2311
+    ],
+    [
+     0.8126,
+     0.2843
+    ],
+    [
+     0.8739,
+     0.344
+    ],
+    [
+     0.9269,
+     0.4181
+    ]
+   ]
+  },
+  {
+   "name": "torso-alt",
+   "parent": "body",
+   "pivot": [
+    349,
+    597.7
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "torso",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 6,
+   "x": 191.25,
+   "y": 277.5,
+   "w": 323.75,
+   "h": 334.38,
+   "img": "torso-alt.webp",
+   "reveal": {
+    "at": [
+     415.5,
+     368.6
+    ],
+    "tip": [
+     440,
+     346.2
+    ],
+    "frac": 0.08,
+    "spread": 0.158
+   }
+  },
+  {
+   "name": "flap",
+   "parent": "body",
+   "pivot": [
+    349,
+    597.7
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 7,
+   "x": 367.5,
+   "y": 276.25,
+   "w": 145,
+   "h": 146.88,
+   "img": "flap.webp",
+   "extra": true
+  },
+  {
+   "name": "flap-alt",
+   "parent": "body",
+   "pivot": [
+    349,
+    597.7
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 8,
+   "x": 369.38,
+   "y": 277.5,
+   "w": 142.5,
+   "h": 142.5,
+   "img": "flap-alt.webp",
+   "extra": true
+  },
+  {
+   "name": "deco",
+   "parent": "body",
+   "pivot": [
+    318.1,
+    298.3
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 9,
+   "x": 199.38,
+   "y": 265,
+   "w": 153.12,
+   "h": 112.5,
+   "img": "deco.webp"
+  },
+  {
+   "name": "cheeks",
+   "parent": "face",
+   "pivot": [
+    333.6,
+    451.9
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 10,
+   "x": 251.88,
+   "y": 438.75,
+   "w": 164.38,
+   "h": 26.25,
+   "img": "cheeks.webp"
+  },
+  {
+   "name": "eye-l",
+   "parent": "face",
+   "pivot": [
+    287.2,
+    421.9
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 11,
+   "x": 275,
+   "y": 406.88,
+   "w": 24.38,
+   "h": 30.62,
+   "img": "eye-l.webp"
+  },
+  {
+   "name": "eye-r",
+   "parent": "face",
+   "pivot": [
+    377,
+    420
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 12,
+   "x": 365,
+   "y": 405.62,
+   "w": 23.75,
+   "h": 28.12,
+   "img": "eye-r.webp"
+  },
+  {
+   "name": "eye-l-shut",
+   "parent": "face",
+   "pivot": [
+    287.2,
+    421.9
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "eye-l",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 13,
+   "x": 271.88,
+   "y": 412.5,
+   "w": 31.25,
+   "h": 16.25,
+   "img": "eye-l-shut.webp"
+  },
+  {
+   "name": "eye-r-shut",
+   "parent": "face",
+   "pivot": [
+    377,
+    420
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "eye-r",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 14,
+   "x": 361.88,
+   "y": 411.25,
+   "w": 30,
+   "h": 15.62,
+   "img": "eye-r-shut.webp"
+  },
+  {
+   "name": "mouth",
+   "parent": "face",
+   "pivot": [
+    333.6,
+    468.3
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 15,
+   "x": 320.62,
+   "y": 461.25,
+   "w": 26.25,
+   "h": 11.25,
+   "img": "mouth.webp"
+  },
+  {
+   "name": "mouth-o",
+   "parent": "face",
+   "pivot": [
+    333.6,
+    468.3
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "mouth",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 16,
+   "x": 326.88,
+   "y": 460.62,
+   "w": 13.12,
+   "h": 15,
+   "img": "mouth-o.webp"
+  },
+  {
+   "name": "mouth-open",
+   "parent": "face",
+   "pivot": [
+    333.6,
+    470.2
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "mouth",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 17,
+   "x": 321.88,
+   "y": 461.88,
+   "w": 23.75,
+   "h": 18.75,
+   "img": "mouth-open.webp"
+  }
+ ]
+}

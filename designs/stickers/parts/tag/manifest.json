@@ -1,0 +1,463 @@
+{
+ "name": "牽牽 Twine",
+ "prefix": "tg-",
+ "ground": [
+  350,
+  700
+ ],
+ "faceCenter": [
+  350,
+  328
+ ],
+ "height": 567,
+ "walk": "walk",
+ "viewBox": [
+  700,
+  760
+ ],
+ "scale": 1.6,
+ "parts": [
+  {
+   "name": "shadow",
+   "parent": "root",
+   "pivot": [
+    350,
+    700
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 0,
+   "x": 245,
+   "y": 688.12,
+   "w": 210,
+   "h": 26.25,
+   "img": "shadow.webp"
+  },
+  {
+   "name": "leg-l",
+   "parent": "root",
+   "pivot": [
+    320,
+    505
+   ],
+   "angle": null,
+   "len": 195,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 1,
+   "x": 268.12,
+   "y": 484.38,
+   "w": 76.88,
+   "h": 230.62,
+   "img": "leg-l.webp"
+  },
+  {
+   "name": "leg-r",
+   "parent": "root",
+   "pivot": [
+    380,
+    505
+   ],
+   "angle": null,
+   "len": 195,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 2,
+   "x": 360.62,
+   "y": 485,
+   "w": 75,
+   "h": 226.88,
+   "img": "leg-r.webp"
+  },
+  {
+   "name": "torso",
+   "parent": "body",
+   "pivot": [
+    350,
+    516
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 3,
+   "x": 247.5,
+   "y": 131.25,
+   "w": 211.88,
+   "h": 401.25,
+   "img": "torso.webp",
+   "hit": [
+    [
+     0.9239,
+     0.527
+    ],
+    [
+     0.9154,
+     0.5726
+    ],
+    [
+     0.9158,
+     0.622
+    ],
+    [
+     0.9183,
+     0.6811
+    ],
+    [
+     0.9116,
+     0.7541
+    ],
+    [
+     0.9055,
+     0.862
+    ],
+    [
+     0.8074,
+     0.9424
+    ],
+    [
+     0.638,
+     0.9422
+    ],
+    [
+     0.4816,
+     0.9416
+    ],
+    [
+     0.3251,
+     0.9422
+    ],
+    [
+     0.1536,
+     0.9451
+    ],
+    [
+     0.0515,
+     0.8668
+    ],
+    [
+     0.0476,
+     0.7562
+    ],
+    [
+     0.054,
+     0.6779
+    ],
+    [
+     0.0473,
+     0.622
+    ],
+    [
+     0.0477,
+     0.5726
+    ],
+    [
+     0.0503,
+     0.527
+    ],
+    [
+     0.0531,
+     0.482
+    ],
+    [
+     0.0473,
+     0.4321
+    ],
+    [
+     0.054,
+     0.3762
+    ],
+    [
+     0.0515,
+     0.3
+    ],
+    [
+     0.0699,
+     0.2018
+    ],
+    [
+     0.1895,
+     0.1548
+    ],
+    [
+     0.3208,
+     0.1004
+    ],
+    [
+     0.4816,
+     0.0395
+    ],
+    [
+     0.6444,
+     0.0947
+    ],
+    [
+     0.7799,
+     0.1467
+    ],
+    [
+     0.8963,
+     0.1993
+    ],
+    [
+     0.9234,
+     0.2938
+    ],
+    [
+     0.9229,
+     0.3713
+    ],
+    [
+     0.9209,
+     0.431
+    ],
+    [
+     0.9154,
+     0.4815
+    ]
+   ]
+  },
+  {
+   "name": "torso-alt",
+   "parent": "body",
+   "pivot": [
+    350,
+    516
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "torso",
+   "only": null,
+   "hides": "face arm-l arm-r deco",
+   "hidden": true,
+   "z": 4,
+   "x": 220,
+   "y": 126.88,
+   "w": 261.88,
+   "h": 406.25,
+   "img": "torso-alt.webp",
+   "reveal": {
+    "at": [
+     351.2,
+     312.5
+    ],
+    "tip": [
+     353.8,
+     128.8
+    ],
+    "frac": 1,
+    "spread": 1.147
+   }
+  },
+  {
+   "name": "deco",
+   "parent": "body",
+   "pivot": [
+    350,
+    152
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 5,
+   "x": 276.25,
+   "y": 127.5,
+   "w": 152.5,
+   "h": 78.75,
+   "img": "deco.webp"
+  },
+  {
+   "name": "cheeks",
+   "parent": "face",
+   "pivot": [
+    350,
+    346
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 6,
+   "x": 274.38,
+   "y": 332.5,
+   "w": 150.62,
+   "h": 26.25,
+   "img": "cheeks.webp"
+  },
+  {
+   "name": "eye-l",
+   "parent": "face",
+   "pivot": [
+    307,
+    316
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 7,
+   "x": 295,
+   "y": 301.25,
+   "w": 23.75,
+   "h": 30,
+   "img": "eye-l.webp"
+  },
+  {
+   "name": "eye-r",
+   "parent": "face",
+   "pivot": [
+    393,
+    314
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 8,
+   "x": 381.25,
+   "y": 299.38,
+   "w": 23.12,
+   "h": 28.12,
+   "img": "eye-r.webp"
+  },
+  {
+   "name": "eye-l-shut",
+   "parent": "face",
+   "pivot": [
+    307,
+    316
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "eye-l",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 9,
+   "x": 291.88,
+   "y": 306.88,
+   "w": 30.62,
+   "h": 16.25,
+   "img": "eye-l-shut.webp"
+  },
+  {
+   "name": "eye-r-shut",
+   "parent": "face",
+   "pivot": [
+    393,
+    314
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "eye-r",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 10,
+   "x": 378.12,
+   "y": 305.62,
+   "w": 29.38,
+   "h": 15.62,
+   "img": "eye-r-shut.webp"
+  },
+  {
+   "name": "mouth",
+   "parent": "face",
+   "pivot": [
+    350,
+    344
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 11,
+   "x": 338.75,
+   "y": 338.12,
+   "w": 23.12,
+   "h": 10.62,
+   "img": "mouth.webp"
+  },
+  {
+   "name": "mouth-o",
+   "parent": "face",
+   "pivot": [
+    350,
+    344
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "mouth",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 12,
+   "x": 343.75,
+   "y": 338.12,
+   "w": 12.5,
+   "h": 13.75,
+   "img": "mouth-o.webp"
+  },
+  {
+   "name": "arm-l",
+   "parent": "body",
+   "pivot": [
+    279,
+    394
+   ],
+   "angle": 111.5,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 13,
+   "x": 220,
+   "y": 375,
+   "w": 83.75,
+   "h": 131.25,
+   "img": "arm-l.webp"
+  },
+  {
+   "name": "arm-r",
+   "parent": "body",
+   "pivot": [
+    421,
+    394
+   ],
+   "angle": 68.5,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 14,
+   "x": 401.25,
+   "y": 375.62,
+   "w": 80.62,
+   "h": 131.25,
+   "img": "arm-r.webp"
+  }
+ ]
+}

@@ -1,0 +1,451 @@
+{
+ "name": "點點 Pip",
+ "prefix": "dt-",
+ "ground": [
+  350,
+  700
+ ],
+ "faceCenter": [
+  349,
+  547
+ ],
+ "height": 231,
+ "walk": "hop",
+ "viewBox": [
+  700,
+  760
+ ],
+ "scale": 1.6,
+ "parts": [
+  {
+   "name": "shadow",
+   "parent": "root",
+   "pivot": [
+    350,
+    700
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 0,
+   "x": 275.62,
+   "y": 691.25,
+   "w": 149.38,
+   "h": 19.38,
+   "img": "shadow.webp"
+  },
+  {
+   "name": "leg-l",
+   "parent": "root",
+   "pivot": [
+    324,
+    657
+   ],
+   "angle": null,
+   "len": 43,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 1,
+   "x": 293.75,
+   "y": 653.75,
+   "w": 46.25,
+   "h": 56.25,
+   "img": "leg-l.webp"
+  },
+  {
+   "name": "leg-r",
+   "parent": "root",
+   "pivot": [
+    376,
+    657
+   ],
+   "angle": null,
+   "len": 43,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 2,
+   "x": 363.12,
+   "y": 653.12,
+   "w": 46.88,
+   "h": 57.5,
+   "img": "leg-r.webp"
+  },
+  {
+   "name": "arm-l",
+   "parent": "body",
+   "pivot": [
+    280,
+    603
+   ],
+   "angle": 135,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 3,
+   "x": 227.5,
+   "y": 591.25,
+   "w": 69.38,
+   "h": 66.88,
+   "img": "arm-l.webp"
+  },
+  {
+   "name": "arm-r",
+   "parent": "body",
+   "pivot": [
+    420,
+    601
+   ],
+   "angle": 45,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 4,
+   "x": 407.5,
+   "y": 588.75,
+   "w": 67.5,
+   "h": 67.5,
+   "img": "arm-r.webp"
+  },
+  {
+   "name": "torso",
+   "parent": "body",
+   "pivot": [
+    350,
+    663
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 5,
+   "x": 248.12,
+   "y": 465.62,
+   "w": 211.88,
+   "h": 213.75,
+   "img": "torso.webp",
+   "hit": [
+    [
+     0.9173,
+     0.4724
+    ],
+    [
+     0.9036,
+     0.5567
+    ],
+    [
+     0.884,
+     0.6398
+    ],
+    [
+     0.8436,
+     0.7153
+    ],
+    [
+     0.7893,
+     0.7816
+    ],
+    [
+     0.723,
+     0.836
+    ],
+    [
+     0.6453,
+     0.8713
+    ],
+    [
+     0.5654,
+     0.9013
+    ],
+    [
+     0.4801,
+     0.9042
+    ],
+    [
+     0.3948,
+     0.9013
+    ],
+    [
+     0.3149,
+     0.8713
+    ],
+    [
+     0.2372,
+     0.836
+    ],
+    [
+     0.171,
+     0.7816
+    ],
+    [
+     0.1166,
+     0.7153
+    ],
+    [
+     0.0812,
+     0.6377
+    ],
+    [
+     0.0567,
+     0.5567
+    ],
+    [
+     0.0484,
+     0.4724
+    ],
+    [
+     0.0567,
+     0.3882
+    ],
+    [
+     0.0812,
+     0.3072
+    ],
+    [
+     0.1211,
+     0.2326
+    ],
+    [
+     0.1748,
+     0.1672
+    ],
+    [
+     0.2433,
+     0.118
+    ],
+    [
+     0.3149,
+     0.0736
+    ],
+    [
+     0.3969,
+     0.0544
+    ],
+    [
+     0.4801,
+     0.0407
+    ],
+    [
+     0.5643,
+     0.049
+    ],
+    [
+     0.6453,
+     0.0736
+    ],
+    [
+     0.72,
+     0.1135
+    ],
+    [
+     0.7854,
+     0.1672
+    ],
+    [
+     0.8391,
+     0.2326
+    ],
+    [
+     0.879,
+     0.3072
+    ],
+    [
+     0.9036,
+     0.3882
+    ]
+   ]
+  },
+  {
+   "name": "deco",
+   "parent": "body",
+   "pivot": [
+    350,
+    486
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 6,
+   "x": 287.5,
+   "y": 460,
+   "w": 95.62,
+   "h": 51.25,
+   "img": "deco.webp"
+  },
+  {
+   "name": "cheeks",
+   "parent": "face",
+   "pivot": [
+    349,
+    558
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 7,
+   "x": 286.88,
+   "y": 547.5,
+   "w": 124.38,
+   "h": 18.75,
+   "img": "cheeks.webp"
+  },
+  {
+   "name": "eye-l",
+   "parent": "face",
+   "pivot": [
+    317,
+    538
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 8,
+   "x": 307.5,
+   "y": 526.25,
+   "w": 19.38,
+   "h": 23.75,
+   "img": "eye-l.webp"
+  },
+  {
+   "name": "eye-r",
+   "parent": "face",
+   "pivot": [
+    381,
+    536
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 9,
+   "x": 371.25,
+   "y": 523.75,
+   "w": 19.38,
+   "h": 23.75,
+   "img": "eye-r.webp"
+  },
+  {
+   "name": "eye-l-shut",
+   "parent": "face",
+   "pivot": [
+    317,
+    538
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "eye-l",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 10,
+   "x": 305,
+   "y": 530.62,
+   "w": 24.38,
+   "h": 13.75,
+   "img": "eye-l-shut.webp"
+  },
+  {
+   "name": "eye-r-shut",
+   "parent": "face",
+   "pivot": [
+    381,
+    536
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "eye-r",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 11,
+   "x": 368.75,
+   "y": 529.38,
+   "w": 24.38,
+   "h": 12.5,
+   "img": "eye-r-shut.webp"
+  },
+  {
+   "name": "mouth",
+   "parent": "face",
+   "pivot": [
+    349,
+    562
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": null,
+   "only": null,
+   "hides": null,
+   "hidden": false,
+   "z": 12,
+   "x": 339.38,
+   "y": 556.25,
+   "w": 19.38,
+   "h": 10,
+   "img": "mouth.webp"
+  },
+  {
+   "name": "mouth-o",
+   "parent": "face",
+   "pivot": [
+    349,
+    562
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "mouth",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 13,
+   "x": 343.75,
+   "y": 556.88,
+   "w": 10.62,
+   "h": 12.5,
+   "img": "mouth-o.webp"
+  },
+  {
+   "name": "mouth-open",
+   "parent": "face",
+   "pivot": [
+    349,
+    562
+   ],
+   "angle": null,
+   "len": null,
+   "variantOf": "mouth",
+   "only": null,
+   "hides": null,
+   "hidden": true,
+   "z": 14,
+   "x": 340,
+   "y": 558.12,
+   "w": 18.12,
+   "h": 13.75,
+   "img": "mouth-open.webp"
+  }
+ ]
+}
