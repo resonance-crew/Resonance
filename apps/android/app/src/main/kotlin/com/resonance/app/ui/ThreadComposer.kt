@@ -116,8 +116,8 @@ internal fun Composer(
     expandedHeight: Dp?,
     onExpand: () -> Unit,
     onCollapse: () -> Unit,
-    onCapsuleHeight: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
+    onCapsuleHeight: (Int) -> Unit = {},
 ) {
     var focused by remember { mutableStateOf(false) }
     var lines by remember { mutableIntStateOf(1) }
