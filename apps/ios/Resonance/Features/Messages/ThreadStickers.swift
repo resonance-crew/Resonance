@@ -8,7 +8,7 @@ import UIKit
 // tap; an album's pictures are one grid in one bubble's outline, each opening the viewer and each held for
 // its own menu.
 
-/// A sticker's still key pose at `side` points (its thumb file), decoded off the main thread.
+/// A sticker's still at `side` points (its thumb file: the art's hero pose), decoded off the main thread.
 struct StickerStill: View {
     let sticker: StickerRef
     let side: CGFloat
@@ -71,7 +71,8 @@ struct AnimatedSticker: UIViewRepresentable {
 }
 
 /// A sticker in the thread (round 22 §4.5): 128 pt on a phone, 144 wider, no bubble; it plays as it first
-/// comes on screen (once per message while the app runs) and again on a tap, and rests on its key pose. While
+/// comes on screen (once per message while the app runs) and again on a tap, and rests on its still (the
+/// thumb's hero pose — never drawn under the frames while it plays). While
 /// a sticker this build doesn't carry is read from the site, its place waits empty.
 struct ThreadStickerView: View {
     let message: ChatMessage

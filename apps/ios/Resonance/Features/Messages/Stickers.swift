@@ -54,7 +54,7 @@ final class StickerLibrary {
 
     // MARK: Files
 
-    /// The bundled file of `ref` (its animation, or its still key pose), if this build carries it.
+    /// The bundled file of `ref` (its animation, or its still: the thumb, the art's hero pose), if this build carries it.
     func bundled(_ ref: StickerRef, thumb: Bool = false) -> URL? {
         guard catalog.knows(ref), let bundleRoot else { return nil }
         let file = bundleRoot.appending(path: "\(ref.pack)/\(ref.id)\(thumb ? ".thumb" : "").webp")
@@ -110,7 +110,7 @@ final class StickerLibrary {
         return ok
     }
 
-    /// The still key pose of `ref` at `side` points (its thumb file), decoded off the main thread and kept.
+    /// The still of `ref` at `side` points (its thumb file, the hero pose), decoded off the main thread and kept.
     func still(_ ref: StickerRef, side: CGFloat) async -> UIImage? {
         let pixels = Int((side * UITraitCollection.current.displayScale).rounded())
         let key = "\(ref.pack)/\(ref.id)|\(pixels)" as NSString
@@ -245,13 +245,17 @@ nonisolated struct StickerPlaybackLimiter: Equatable {
     }
 }
 
-/// A sticker drawn by UIKit: its key pose at rest; `play()` animates the file frame by frame with
-/// `CGAnimateImageDataWithBlock` (never every frame decoded up front) for its two loops, then rests on its
-/// last frame — the key pose again. `stop()` ends it at once; leaving the window frees what it read.
+/// A sticker drawn by UIKit: its still (the thumb — the art's hero pose) at rest; `play()` animates the file
+/// frame by frame with `CGAnimateImageDataWithBlock` (never every frame decoded up front) for its two loops.
+/// While it plays only the animation's frames are drawn — never the still under them, whose pose would show
+/// through the frames' clear parts — and once it ends (or is stopped) the still is back: the still until the
+/// first frame is decoded, the frames, the still again. Leaving the window frees what it read.
 final class StickerPlayerView: UIView {
     private let imageView = UIImageView()
     private var run = 0
     private var onEnd: (() -> Void)?
+    /// The still shown whenever it isn't playing.
+    private var still: UIImage?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -269,8 +273,9 @@ final class StickerPlayerView: UIView {
 
     var isPlaying: Bool { onEnd != nil }
 
-    /// The still shown at rest (replaced by the frames while it plays).
+    /// The still shown at rest (replaced by the frames while it plays, back once they end).
     func rest(on image: UIImage?) {
+        still = image
         guard !isPlaying else { return }
         imageView.image = image
     }
@@ -296,10 +301,7 @@ final class StickerPlayerView: UIView {
     private func start(_ data: Data, frames: Int, loop: TimeInterval, loops: Int, run mine: Int) {
         guard run == mine else { return }
         guard frames > 1 else {
-            // A still (a placeholder until the art lands): shown, and done.
-            if let source = CGImageSourceCreateWithData(data as CFData, nil), let first = CGImageSourceCreateImageAtIndex(source, 0, nil) {
-                imageView.image = UIImage(cgImage: first)
-            }
+            // A still (a placeholder until the art lands): nothing to play.
             return finish(mine)
         }
         var last = -1
@@ -327,18 +329,20 @@ final class StickerPlayerView: UIView {
         }
     }
 
-    /// Stops playing now, resting on the frame it was showing.
+    /// Stops playing now, the still back in its place.
     func stop() {
         guard onEnd != nil else { return }
         let ended = onEnd
         onEnd = nil
         run += 1
+        imageView.image = still
         ended?()
     }
 
     private func finish(_ mine: Int) {
         guard run == mine, let ended = onEnd else { return }
         onEnd = nil
+        imageView.image = still
         ended()
     }
 
