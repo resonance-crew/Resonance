@@ -98,7 +98,7 @@ struct StickerPanel: View {
                     } label: {
                         Group {
                             if section.id == Self.recentsId {
-                                OrganicIcon(.recent, size: 22, color: current ? Tokens.text : Tokens.textMuted, strokeWidth: Tokens.ink)
+                                OrganicIcon(.clock, size: 22, color: current ? Tokens.text : Tokens.textMuted, strokeWidth: Tokens.ink)
                             } else if let pack = library.catalog.packs.first(where: { $0.id == section.id }) {
                                 PackIcon(pack: pack, library: library)
                             }

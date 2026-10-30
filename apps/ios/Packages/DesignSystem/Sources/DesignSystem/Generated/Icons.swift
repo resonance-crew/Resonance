@@ -54,7 +54,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case keyboard
     case expand
     case collapse
-    case recent
+    case clock
     case verified
 }
 
@@ -316,7 +316,7 @@ extension IconName {
             IconStroke(filled: false, width: 1, commands: [0, 4.6, 19.4, 2, 6.4, 17.6, 8.2, 15.8, 10, 14]),
             IconStroke(filled: false, width: 1, commands: [0, 10.2, 18.6, 1, 10.2, 13.8, 1, 5.4, 13.8]),
         ])
-        case .recent: IconGlyph(viewBox: 24, fillable: false, strokes: [
+        case .clock: IconGlyph(viewBox: 24, fillable: false, strokes: [
             IconStroke(filled: false, width: 1, commands: [0, 12, 3.4, 2, 17, 3.3, 20.7, 7.2, 20.6, 12.2, 2, 20.5, 17, 16.8, 20.7, 11.8, 20.6, 2, 7, 20.5, 3.3, 16.8, 3.4, 11.9, 2, 3.5, 7.1, 7.2, 3.5, 12, 3.4]),
             IconStroke(filled: false, width: 1, commands: [0, 12, 7.4, 1, 12.1, 12.2, 1, 15.6, 14]),
         ])

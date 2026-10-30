@@ -455,7 +455,8 @@ private struct MessageItem: View {
                         }
                         VStack(alignment: mine ? .trailing : .leading, spacing: 0) {
                             AlbumGridView(row: row, album: album, ctx: ctx, mine: mine)
-                            if deliveryLine, let last = album.last { DeliveryLine(message: last, model: model) }
+                            // One line for the grid: a picture that didn't go (its retry), else the one still on its way.
+                            if deliveryLine, let shown = AlbumGridView.deliveryMessage(album) { DeliveryLine(message: shown, model: model) }
                         }
                         .frame(maxWidth: ctx.rowMax, alignment: mine ? .trailing : .leading)
                         if !mine { Spacer(minLength: 0) }
