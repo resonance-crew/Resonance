@@ -3,7 +3,8 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { keys, snap, step } from '../../../designs/stickers/kit/timeline';
 import {
-  contentVersion, CREAM, dieCut, frameDurations, readWebp, sampleTimes, SIZE, SIZE_CAP, SIZE_TARGET, sizeVerdict, touchesEdge,
+  contentVersion, CREAM, dieCut, EDGE, frameDurations, heroFrame, phaseOrder, readWebp, sampleTimes, SIZE, SIZE_CAP, SIZE_TARGET,
+  sizeVerdict, touchesEdge,
 } from '../../../scripts/stickers/pipeline';
 import { STICKER_PACKS } from './catalog';
 import { STICKER_ART } from './catalog.generated';
@@ -18,6 +19,20 @@ describe('the sticker pipeline: time', () => {
     expect(sampleTimes(2)[23]).toBeCloseTo(23 / 12);
     expect(sampleTimes(1.5)).toHaveLength(18);
     expect(sampleTimes(2.25).every(t => t < 2.25)).toBe(true);
+  });
+
+  it('plays the loop from its hero: the file starts and ends on the hero frame (the thumb), the loop closing in between', () => {
+    expect(heroFrame(1.0, 24)).toBe(12);
+    expect(heroFrame(0.84, 24)).toBe(10);   // snapped to the nearest frame
+    expect(heroFrame(2.0, 24)).toBe(0);   // the very end is the key pose's frame 0 again
+    const order = phaseOrder(24, 12);
+    expect(order).toHaveLength(24);
+    expect(order[0]).toBe(12);
+    expect(order[11]).toBe(23);
+    expect(order[12]).toBe(0);   // through the key pose, where the loop closes…
+    expect(order[23]).toBe(11);   // …and on to the frame before the hero (the file repeats the hero after it)
+    expect(new Set(order).size).toBe(24);
+    expect(phaseOrder(5, 0)).toEqual([0, 1, 2, 3, 4]);
   });
 
   it('gives each frame whole milliseconds that never drift off the 12 fps grid', () => {
@@ -60,6 +75,8 @@ describe('the sticker pipeline: pictures and files', () => {
     expect(at(15, 10)[3]).toBe(0);   // 3 px out: past the margin, nothing
     expect(at(1, 1)[3]).toBe(0);   // the faint speck is clipped away
     expect(touchesEdge(out, w, w)).toBe(false);
+    expect(touchesEdge(out, w, w, EDGE)).toBe(false);   // the margin ends 6 px from this little canvas's edge…
+    expect(touchesEdge(out, w, w, EDGE + 1)).toBe(true);   // …so a 7 px rule would refuse it
     set(0, 10, [0, 0, 0, 255]);
     expect(touchesEdge(px, w, w)).toBe(true);
   });

@@ -33,20 +33,40 @@ export function nod(p: StickerPuppet, t: number, a: number, b: number, n = 1, de
 }
 
 /**
- * A bow toward the viewer: down over [a, b], held to c, up by d. The paper tips toward us about its foot (lean), the
- * face slides down it, the deco tips forward, the knees give a little; depth 1 is a deep, polite bow.
+ * A bow that reads at 72 px from the front (the review's recipe, round 22): the paper tips toward us by a little over
+ * half a full tip (lean 31°: more only squashes it), the face drops toward the foot (faceY +9), the deco swings forward
+ * over the brow (down 6, a touch nearer), the knees give, the eyes shut — and the mouth is the closed smile: never
+ * `mouth-o` in a thank-you (with shut eyes it reads as a sigh). Down over [a, b], held to c, up by d; `depth` scales it
+ * (0.8–1.2). Returns how deep it is (0–1): pass it to bowStrokes on the bottom frames.
  */
 export function bow(p: StickerPuppet, t: number, a: number, b: number, c: number, d: number, depth = 1): number {
   const e = env(t, a, b, c, d);
+  if (e <= 0) return 0;
   const q = p.pose;
-  q.lean += 52 * depth * e;
-  q.faceY += 12 * depth * e;
-  q.sy *= 1 - 0.02 * depth * e;
-  q.bodyUp -= 14 * depth * e;
-  q.legS *= 1 - 0.1 * depth * e;
-  q.decoY -= 12 * depth * e;
-  q.decoS *= 1 + 0.07 * depth * e;
+  q.lean += 31 * depth * e;
+  q.faceY += 9 * depth * e;
+  q.sy *= 1 - 0.015 * depth * e;
+  q.bodyUp -= 6 * depth * e;
+  q.legS *= 1 - 0.05 * depth * e;
+  q.decoY -= 6 * depth * e;
+  q.decoS *= 1 + 0.05 * depth * e;
+  if (e > 0.4) q.eyes = 'shut';
+  q.mouth = 'mouth';
   return e;
+}
+
+/**
+ * Two short downward strokes at the shoulders on a bow's bottom frames (e ≥ 0.95): the bow's own motion lines, so it
+ * reads as a bow even at 72 px. `left` and `right` are two `strokes` props.
+ */
+export function bowStrokes(p: StickerPuppet, left: Prop, right: Prop, e: number): void {
+  if (e < 0.95) return;
+  const t = p.rig.torso;
+  const y = t.y + t.h * 0.3;
+  const [lx, ly] = p.pagePoint(t.x - 4, y);
+  const [rx, ry] = p.pagePoint(t.x + t.w + 4, y);
+  left.at(lx, ly, { k: p.k, anchor: 'right', rot: 14 });
+  right.at(rx, ry, { k: p.k, anchor: 'left', rot: -14, sx: -1 });
 }
 
 /** A hop over [a, b]: a crouch, up `height` rig units (eyes free), a landing that gives. */

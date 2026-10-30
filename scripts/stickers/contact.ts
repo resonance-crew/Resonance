@@ -2,7 +2,7 @@
  * Contact sheets for the review: every frame of every drawn sticker of a pack, in reading order, from the WebP files
  * themselves (what clients will play) — designs/stickers/review/contact-<pack>.webp. Each sticker's block starts with its
  * hero frame — its thumb, what the picker shows and the thread rests on — on the night paper in a terracotta frame, then
- * the frames of its animation on the day paper, 8 to a row (the first and the last are its key pose).
+ * the frames of its animation on the day paper, 8 to a row, as the file plays them: from the hero round to the hero.
  *
  *   npx tsx scripts/stickers/contact.ts [pack…]      (render.ts writes the sheet of every pack it rendered)
  */
