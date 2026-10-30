@@ -37,7 +37,7 @@ import com.resonance.kit.chat.StickerCatalog
 import kotlin.math.roundToInt
 
 /**
- * A sticker's key pose (round 22): the 256 px still, decoded once and kept ([Stickers.pose]) — what the
+ * A sticker's hero pose (round 22): the 256 px still, decoded once and kept ([Stickers.pose]) — what the
  * panel's grid, a quote and a sticker at rest show. Nothing while it is read (a cell keeps its place).
  */
 @Composable
@@ -79,9 +79,9 @@ internal object StickerPlayback {
 
 /**
  * A sticker as the thread draws it (round 22 §4.5): no bubble, [size] square, standing on the page —
- * playing its file's two plays when [autoplay] (its first sight this session), else resting on its key
- * pose; [replays] bumped (a tap) plays it again. At most three play at once ([StickerPlayback]); leaving
- * the screen lets its frames go. With the system's animations off, the key pose only.
+ * playing its file's two plays when [autoplay] (its first sight this session), else resting on its hero
+ * pose (the thumb); [replays] bumped (a tap) plays it again. At most three play at once ([StickerPlayback]); leaving
+ * the screen lets its frames go. With the system's animations off, the hero pose only.
  */
 @Composable
 internal fun PlayingSticker(
@@ -99,11 +99,12 @@ internal fun PlayingSticker(
     val stopped = StickerPlayback.stops[key] ?: 0
     LaunchedEffect(stopped) { if (stopped > 0) playing = false }
     Box(modifier.size(size)) {
-        // The pose under it all the time: the first frame is the key pose, so nothing jumps when the file takes over or lets go.
-        StickerPose(sticker, origin, Modifier.fillMaxSize())
+        // The thumb is the sticker's hero pose, not the file's first frame: it shows at rest and until the file's first
+        // frame is ready, never under the playing frames (their clear parts would show it through, a ghost).
+        val drawable by produceState<Drawable?>(null, sticker, replays, playing) { value = if (playing) Stickers.animated(sticker, origin) else null }
+        val d = drawable
+        if (!playing || d !is AnimatedImageDrawable) StickerPose(sticker, origin, Modifier.fillMaxSize())
         if (playing) {
-            val drawable by produceState<Drawable?>(null, sticker, replays, playing) { value = Stickers.animated(sticker, origin) }
-            val d = drawable
             if (d is AnimatedImageDrawable) {
                 val painter = remember(d) { DrawablePainter(d) }
                 DisposableEffect(d) {
