@@ -210,11 +210,18 @@ internal fun GalleryGrid(
     onToggle: (Uri) -> Unit,
     onMore: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Bumped when what the app may read may have changed (a permission answer — 「選擇更多相片」 on 14+ —
+     * or a return from the settings page): the library is read afresh. A grant is no MediaStore change, so
+     * the observer below never hears of it.
+     */
+    access: Int = 0,
 ) {
     val context = LocalContext.current
     val resolver = context.contentResolver
     val opened = remember { SystemClock.elapsedRealtime() }
-    val pager = remember(resolver) {
+    // What was read stays on screen until the fresh pager's first page takes its place.
+    val pager = remember(resolver, access) {
         GalleryPager(PAGE, keyOf = GalleryPhoto::id, orderOf = GalleryPhoto::order) { offset, limit ->
             withContext(Dispatchers.IO) { runCatching { MediaGallery.page(resolver, offset, limit) }.getOrElse { emptyList() } }
         }

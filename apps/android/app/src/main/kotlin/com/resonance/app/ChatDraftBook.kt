@@ -50,6 +50,39 @@ class ChatDraftBook(private val store: ChatDrafts?) {
     }
 }
 
+/**
+ * One thread's hold on its conversation's draft in the account's [book] (round 22 §4.4): nothing is
+ * written back until the kept draft has been read into the composer ([restore]) — an empty composer
+ * opening must not wipe it — and nothing again once the conversation is deleted ([deleted]), though the
+ * screen keeps its draft as it goes (iOS's ChatDrafts alike).
+ */
+class ThreadDraft(private val book: ChatDraftBook) {
+    /** The kept draft has been read into the composer: what the composer holds may be written down. */
+    var restored = false
+        private set
+
+    /** The draft kept for [pair], once (null: none, or read already). */
+    fun restore(pair: String): ChatDraft? {
+        if (restored) return null
+        restored = true
+        return book.get(pair)
+    }
+
+    /** What the composer holds now, written down for [pair] (an empty draft clears it) — only after [restore]. */
+    fun keep(pair: String, draft: ChatDraft) {
+        if (restored) book.keep(pair, draft)
+    }
+
+    /** The draft was sent (queued): nothing of it is kept; the composer's next words are a draft again. */
+    fun sent(pair: String) = book.clear(pair)
+
+    /** The conversation was deleted: its draft goes, and the screen leaving writes nothing back. */
+    fun deleted(pair: String) {
+        restored = false
+        book.clear(pair)
+    }
+}
+
 /** Where unsent messages wait on the device ([ChatDrafts]): `chat-drafts.xml`, one entry per account, outside the backup. */
 class ChatDraftPrefs(private val prefs: SharedPreferences) : ChatDrafts.Storage {
     override fun read(account: String): String? = prefs.getString("drafts:$account", null)

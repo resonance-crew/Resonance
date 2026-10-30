@@ -117,8 +117,10 @@ object AlbumRows {
     /**
      * [messages] (oldest first) in groups: each a single message, or an album's consecutive pictures in
      * their order (by [ChatAlbum.index]) — the one that carries the words first. A picture of the album
-     * that can't stand in the grid (unsent, failed) doesn't break it: it follows the grid as its own row
-     * (its ghost, its retry), so the grid is only smaller.
+     * that can't stand in the grid doesn't break it: one that failed (it keeps its album), or one its
+     * sender unsent — the server leaves an unsent message only its sender and times, no album, so any of
+     * the sender's unsent messages while their album runs counts — follows the grid as its own row (its
+     * retry, its ghost), and the album's next picture joins the grid again: the grid is only smaller.
      */
     fun group(messages: List<ChatMessage>): List<List<ChatMessage>> {
         val out = ArrayList<List<ChatMessage>>()
@@ -132,9 +134,16 @@ object AlbumRows {
         }
         for (m in messages) {
             val head = current?.first()
-            if (head != null && head.senderId == m.senderId && m.album != null && head.album?.id == m.album.id) {
-                if (groupable(m)) current!!.add(m) else after.add(m)
-                continue
+            if (head != null && head.senderId == m.senderId) {
+                if (m.album != null && head.album?.id == m.album.id) {
+                    if (groupable(m)) current!!.add(m) else after.add(m)
+                    continue
+                }
+                // Unsent, its album is gone with its words: it stands apart, and the album may go on after it.
+                if (m.isUnsent) {
+                    after.add(m)
+                    continue
+                }
             }
             close()
             if (groupable(m)) current = mutableListOf(m) else out.add(listOf(m))

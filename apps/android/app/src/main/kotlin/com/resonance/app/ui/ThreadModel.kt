@@ -24,6 +24,7 @@ import com.resonance.app.FirestoreFailure
 import com.resonance.app.Person
 import com.resonance.app.PushCenter
 import com.resonance.app.Session
+import com.resonance.app.ThreadDraft
 import com.resonance.design.ChatPictureSource
 import com.resonance.kit.api.ApiFailure
 import com.resonance.kit.api.ChatPicturesApi
@@ -347,8 +348,8 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
 
     // Drafts (round 22 §4.4)
 
-    /** The draft kept for this conversation has been read into the composer (until then nothing is written back over it). */
-    private var draftRestored = false
+    /** This thread's hold on its draft: read into the composer once, written back after that — never after the conversation is deleted. */
+    private val threadDraft = ThreadDraft(session.chatDrafts)
     /** A restored reply not yet checked against the thread (its message may have been unsent, or be gone). */
     private var restoredReply: ReplyQuote? = null
 
@@ -358,9 +359,7 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
      */
     private fun restoreDraft() {
         val pair = pairId ?: return
-        if (draftRestored) return
-        draftRestored = true
-        val kept = session.chatDrafts.get(pair) ?: return
+        val kept = threadDraft.restore(pair) ?: return
         if (draft.isEmpty()) draft = kept.text
         if (replyingTo == null && kept.reply != null) {
             replyingTo = kept.reply
@@ -389,8 +388,7 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
     /** Writes the draft down (a moment after typing stops, and as the thread is left); nothing before the kept one was read. */
     fun keepDraft() {
         val pair = pairId ?: return
-        if (!draftRestored) return
-        session.chatDrafts.keep(pair, currentDraft)
+        threadDraft.keep(pair, currentDraft)
     }
 
     /** Listens to the conversation, and watches for it to appear should it not exist yet. */
@@ -840,7 +838,7 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
         noteRef = null
         replyingTo = null
         error = null
-        pairId?.let(session.chatDrafts::clear)
+        pairId?.let(threadDraft::sent)
     }
 
     /**
@@ -1085,8 +1083,8 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
         stop()
         val conversations = session.conversations
         conversations.hide(pair)
-        // Its unsent words go with it (round 22 §4.4).
-        session.chatDrafts.clear(pair)
+        // Its unsent words go with it (round 22 §4.4), and the screen leaving after this writes nothing back.
+        threadDraft.deleted(pair)
         session.launch {
             try {
                 session.messaging.deleteConversation(pair)
