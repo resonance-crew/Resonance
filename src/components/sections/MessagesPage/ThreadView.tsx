@@ -790,27 +790,30 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
     return Math.max(144, Math.round(room));
   }
 
-  /** The field grew on purpose: the other's last message is brought to just above it (what is being answered). */
+  /**
+   * The field grew on purpose: the other's last message is brought to just above it (what is being answered) —
+   * set again for a few frames, while the foot's new height reaches the thread (useDockInset) and the browser's
+   * own scroll anchoring settles.
+   */
   function keepTheirsInView(grown: boolean) {
     if (!grown) return;
-    // Once the foot's new height has reached the thread (useDockInset), two frames on.
-    window.requestAnimationFrame(() =>
-      window.requestAnimationFrame(() => {
-        const scroller = scrollerRef.current;
-        const stack = dockEl.current?.firstElementChild as HTMLElement | null;
-        const theirs = scroller ? [...scroller.querySelectorAll<HTMLElement>('[data-message-key][data-run]:not([data-own])')].pop() : undefined;
-        if (!scroller || !stack || !theirs) return;
-        const header = headerRef.current?.getBoundingClientRect().bottom ?? 0;
-        const want = stack.getBoundingClientRect().top - 20;
-        const r = theirs.getBoundingClientRect();
-        // Taller than the room left (the field reached the header): nothing to keep.
-        if (r.height > want - header) return;
-        const by = r.bottom - want;
-        if (Math.abs(by) < 2) return;
-        scroll.leaveBottom();
-        scroller.scrollTop += by;
-      }),
-    );
+    scroll.leaveBottom();
+    let frames = 0;
+    const settle = () => {
+      const scroller = scrollerRef.current;
+      const stack = dockEl.current?.firstElementChild as HTMLElement | null;
+      const theirs = scroller ? [...scroller.querySelectorAll<HTMLElement>('[data-message-key][data-run]:not([data-own])')].pop() : undefined;
+      if (!scroller || !stack || !theirs) return;
+      const header = headerRef.current?.getBoundingClientRect().bottom ?? 0;
+      const want = stack.getBoundingClientRect().top - 20;
+      const r = theirs.getBoundingClientRect();
+      // Taller than the room left (the field reached the header): nothing to keep.
+      if (r.height > want - header) return;
+      const by = r.bottom - want;
+      if (Math.abs(by) >= 2) scroller.scrollTop += by;
+      if (++frames < 8) window.requestAnimationFrame(settle);
+    };
+    window.requestAnimationFrame(settle);
   }
 
   if (loadingOther) return null;
