@@ -116,20 +116,31 @@ object AlbumRows {
 
     /**
      * [messages] (oldest first) in groups: each a single message, or an album's consecutive pictures in
-     * their order (by [ChatAlbum.index]) — the one that carries the words first.
+     * their order (by [ChatAlbum.index]) — the one that carries the words first. A picture of the album
+     * that can't stand in the grid (unsent, failed) doesn't break it: it follows the grid as its own row
+     * (its ghost, its retry), so the grid is only smaller.
      */
     fun group(messages: List<ChatMessage>): List<List<ChatMessage>> {
-        val out = ArrayList<MutableList<ChatMessage>>()
-        for (m in messages) {
-            val last = out.lastOrNull()
-            val head = last?.firstOrNull()
-            if (head != null && groupable(m) && groupable(head) && head.senderId == m.senderId && head.album?.id == m.album?.id) {
-                last.add(m)
-            } else {
-                out.add(mutableListOf(m))
-            }
+        val out = ArrayList<List<ChatMessage>>()
+        var current: MutableList<ChatMessage>? = null
+        val after = ArrayList<ChatMessage>()
+        fun close() {
+            current?.let { g -> out.add(if (g.size > 1) g.sortedBy { it.album?.index ?: 0 } else g) }
+            after.forEach { out.add(listOf(it)) }
+            current = null
+            after.clear()
         }
-        return out.map { g -> if (g.size > 1) g.sortedBy { it.album?.index ?: 0 } else g }
+        for (m in messages) {
+            val head = current?.first()
+            if (head != null && head.senderId == m.senderId && m.album != null && head.album?.id == m.album.id) {
+                if (groupable(m)) current!!.add(m) else after.add(m)
+                continue
+            }
+            close()
+            if (groupable(m)) current = mutableListOf(m) else out.add(listOf(m))
+        }
+        close()
+        return out
     }
 }
 

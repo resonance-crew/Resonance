@@ -38,7 +38,6 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -149,12 +148,6 @@ internal class PanelRoom(private val scope: CoroutineScope, private val still: B
         const val CLOSE_BELOW = 0.6f
     }
 }
-
-/** Whether the window lies on its side (a phone's panel is kept lower there). */
-internal fun isLandscape(widthPx: Int, heightPx: Int): Boolean = widthPx > heightPx
-
-/** dp → px. */
-internal fun Density.px(dp: Float): Float = dp * density
 
 /**
  * The attach panel (round 22 §4.2), in the keyboard's place: its top edge one hand-drawn pen line with a

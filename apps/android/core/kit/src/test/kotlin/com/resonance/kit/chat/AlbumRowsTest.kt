@@ -41,7 +41,7 @@ class AlbumRowsTest {
         assertEquals(listOf("t0"), rows[0].members.map { it.id })
     }
 
-    @Test fun aFailedOrUnsentMemberAnotherAlbumOrAnotherMessageBetweenLeavesItSmaller() {
+    @Test fun aFailedOrUnsentMemberLeavesItSmallerAndAnotherAlbumOrMessageBetweenEndsIt() {
         val rows = ThreadRows.build(
             listOf(
                 picture("a0", "alice", albumA, 0, 4, 1_000),
@@ -54,9 +54,10 @@ class AlbumRowsTest {
             ),
             utc,
         )
-        // a0 alone (a1 failed: its own row with its retry), a2's ghost, a3 alone, b0 alone, bob, b1 alone.
-        assertEquals(listOf("a0", "a1", "a2", "a3", "b0", "x", "b1"), rows.map { it.message.id })
-        assertTrue(rows.all { it.album.isEmpty() })
+        // a0 and a3 one grid (a1 failed and a2 unsent follow it as their own rows: its retry, its ghost); b0 alone; bob; b1 alone.
+        assertEquals(listOf("a0", "a1", "a2", "b0", "x", "b1"), rows.map { it.message.id })
+        assertEquals(listOf("a0", "a3"), rows[0].album.map { it.id })
+        assertTrue(rows.drop(1).all { it.album.isEmpty() })
         val sending = ThreadRows.build(
             listOf(picture("c0", "alice", albumA, 0, 2, 1_000, delivery = Delivery.Sending), picture("c1", "alice", albumA, 1, 2, 1_100, delivery = Delivery.Sending)),
             utc,

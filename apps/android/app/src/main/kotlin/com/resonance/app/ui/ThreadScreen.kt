@@ -336,11 +336,12 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     }
     // The panels (round 22 §4.1–4.2) ---------------------------------------------------------------
     val phone = LocalWindowLayout.current.cls == LayoutClass.Compact
+    // The window's orientation (a pane beside the conversations may be upright in a window on its side).
+    val landscape = LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
     /** The keyboard's place for a panel now: the keyboard's own height while it is up, else the one remembered. */
     fun panelBase(): Float {
         val keyboardUp = imeInsets.getBottom(density) - navigationBars.getBottom(density)
         if (keyboardUp > with(density) { KeyboardHeights.MIN_DOCKED.dp.toPx() }) return keyboardUp.toFloat()
-        val landscape = isLandscape(screenWidth, screenHeight)
         val h = session.keyboardHeights.panelHeight(landscape, with(density) { screenHeight.toDp().value }, phone)
         return with(density) { h.dp.toPx() }
     }
@@ -420,9 +421,16 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     LaunchedEffect(imeInsets, imeTarget, density) {
         snapshotFlow { Triple(imeInsets.getBottom(density), imeTarget.getBottom(density), navigationBars.getBottom(density)) }.collect { (now, target, nav) ->
             if (now == target && now > nav && screenHeight > 0) {
-                session.keyboardHeights.note(isLandscape(screenWidth, screenHeight), with(density) { (now - nav).toDp().value })
+                session.keyboardHeights.note(landscape, with(density) { (now - nav).toDp().value })
             }
         }
+    }
+    // Turned or resized with a panel open: it takes the keyboard's place for the new window.
+    LaunchedEffect(screenWidth, screenHeight, landscape) {
+        if (!panel.panelOpen || panelRoom.held) return@LaunchedEffect
+        panelRoom.base = panelBase()
+        panelRoom.max = panelMax()
+        panelRoom.snapTo(if (panel.expanded) panelRoom.max else panelRoom.base)
     }
     val sendSticker: (StickerCatalog.Sticker) -> Unit = { sticker ->
         previewing = null
