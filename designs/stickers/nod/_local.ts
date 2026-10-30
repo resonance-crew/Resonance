@@ -1,66 +1,82 @@
 /**
  * What 聆聆's pack needs that the kit lacks.
  *
- * `written(nod, u)`: its card filling with its own handwriting, row by row and each row left to right, as it listens —
- * the rig's `torso-alt` (the same card, every rule written on) laid over the plain card and uncovered up to `u`. The kit's
- * `alt` swaps the whole card at once; this writes it in. Rows end on the card's printed rules, which both pictures share,
- * so the edge where the writing stops never shows.
+ * - `ink(nod, name, markup)`: pencil or crayon drawn straight onto its card — an SVG in rig units laid just above its
+ *   torso (so it tips, squashes and sways with the card, and the face, the beret and arms brought to the front stay
+ *   over it). `WRITTEN` is its card written full: the rig's own `torso-alt` has every rule written in fine pencil, which
+ *   turns to grey grime at chat sizes, so this is the same idea in fewer, bolder lines (round 22 review §3 H).
+ * - The beret held off its head: `hatAt` (by its middle), `hatByGrip` (by the soft brim, in a mitten), `hatPoint`.
+ * - `mittenOnBody`: where a mitten is on the body for a lift.
  */
+import { bow, INK } from '../kit';
+import { scribble } from '../kit/paper';
 import type { StickerPuppet } from '../kit';
 
-/** The torso's box in rig units (designs/stickers/parts/card/manifest.json: torso and torso-alt). */
+/** The torso's box in rig units (designs/stickers/parts/card/manifest.json). */
 const BOX = { x: 153.75, y: 385, w: 397.5, h: 260.62 };
+
+const inks = new WeakMap<StickerPuppet, Map<string, SVGSVGElement>>();
+
 /**
- * Where each row of writing ends, rig y: the card's top, then the terracotta title rule and the printed rules under
- * every row torso-alt writes on (the title row, then nine).
+ * Markup drawn onto the card (made once per puppet and name, just above its torso; hidden until shown). Coordinates
+ * are the rig's.
  */
-const ROWS = [385, 424.4, 447.5, 468.1, 489.4, 510, 530.6, 551.9, 572.5, 593.1, 614.4];
-/** How far along a row the writing runs, rig x (a row is written left to right between these). */
-const LINE = [178, 528];
-
-const clones = new WeakMap<StickerPuppet, HTMLImageElement>();
-
-/** The written card over the plain one (made once per puppet, just above its torso, so props inside it lie over it). */
-function writtenCard(p: StickerPuppet): HTMLImageElement {
-  let im = clones.get(p);
-  if (im) return im;
-  const alt = p.partImg('torso-alt');
+export function ink(p: StickerPuppet, name: string, markup: string): SVGSVGElement {
+  let all = inks.get(p);
+  if (!all) inks.set(p, (all = new Map()));
+  let svg = all.get(name);
+  if (svg) return svg;
   const torso = p.partImg('torso');
-  if (!alt || !torso) throw new Error(`${p.slug} has no torso-alt to write with`);
-  im = alt.cloneNode() as HTMLImageElement;
-  torso.after(im);
-  clones.set(p, im);
-  return im;
+  if (!torso) throw new Error(`${p.slug} has no torso to draw on`);
+  const doc = torso.ownerDocument;
+  svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `${BOX.x} ${BOX.y} ${BOX.w} ${BOX.h}`);
+  svg.setAttribute('overflow', 'visible');
+  const k = p.k;
+  const [gx, gy] = [p.rig.gx, p.rig.gy];
+  Object.assign(svg.style, {
+    position: 'absolute', display: 'block', overflow: 'visible', visibility: 'hidden',
+    left: `${((BOX.x - gx) * k).toFixed(2)}px`, top: `${((BOX.y - gy) * k).toFixed(2)}px`,
+    width: `${(BOX.w * k).toFixed(2)}px`, height: `${(BOX.h * k).toFixed(2)}px`,
+  });
+  svg.innerHTML = markup;
+  // above the torso and anything drawn there before it (props inside the torso lie over it)
+  let at: Element = torso;
+  while (at.nextElementSibling && at.nextElementSibling.tagName.toLowerCase() === 'svg') at = at.nextElementSibling;
+  at.after(svg);
+  all.set(name, svg);
+  return svg;
 }
 
-const X = (x: number) => (((x - BOX.x) / BOX.w) * 100).toFixed(2);
-const Y = (y: number) => (((y - BOX.y) / BOX.h) * 100).toFixed(2);
+/** Shows (or hides) markup drawn by `ink`; `draw` writes its strokes in (paths made with `pathLength="1"`). */
+export function showInk(svg: SVGSVGElement, on: boolean, { alpha = 1, draw = 1 }: { alpha?: number; draw?: number } = {}): void {
+  svg.style.visibility = on && alpha > 0.001 ? 'visible' : 'hidden';
+  svg.style.opacity = alpha >= 1 ? '' : alpha.toFixed(3);
+  svg.querySelectorAll<SVGPathElement>('[data-draw] path').forEach(el => {
+    el.style.strokeDashoffset = (1 - Math.max(0, Math.min(1, draw))).toFixed(3);
+  });
+}
 
-/** The number of rows `written` writes (u = 1 is every one). */
-export const WRITTEN_ROWS = ROWS.length - 1;
+/** Handwriting in bold pencil: a few lines, each [y, x0, x1] on the card (rig units). */
+export function handwriting(lines: readonly (readonly [number, number, number])[], seed: number, { w = 3, h = 6, op = 0.84 } = {}): string {
+  const ds = lines.flatMap(([y, x0, x1], i) => scribble(x0, y, x1 - x0, seed + i * 7, h));
+  return `<g stroke="${INK.graphite}" stroke-width="${w}" opacity="${op}" fill="none" stroke-linecap="round" stroke-linejoin="round" filter="url(#sk-graphite)">${ds.map(d => `<path d="${d}"/>`).join('')}</g>`;
+}
 
 /**
- * 聆聆's card written on up to `u` (0 → nothing beyond its own few words, 1 → every row): rows top to bottom, each left
- * to right. `alpha` fades the writing (it is drawn over the card, so a fade keeps the die-cut).
+ * Its card written full, the other side of the card it turns to when a story fills it: four bold lines on the printed
+ * rules, round its face and its brads, joining the few words it already carries (its title, and two short lines low on
+ * the right).
  */
-export function written(p: StickerPuppet, u: number, alpha = 1): void {
-  const im = writtenCard(p);
-  const r = Math.max(0, Math.min(1, u)) * WRITTEN_ROWS;
-  if (r <= 0.001 || alpha <= 0.001) {
-    im.style.visibility = 'hidden';
-    return;
-  }
-  im.style.visibility = 'visible';
-  im.style.opacity = alpha >= 1 ? '' : alpha.toFixed(3);
-  const i = Math.min(WRITTEN_ROWS - 1, Math.floor(r + 1e-6));
-  const frac = r - i;
-  const top = ROWS[i];
-  const bottom = ROWS[i + 1];
-  const xc = frac >= 0.999 ? 100 : Number(X(LINE[0] + (LINE[1] - LINE[0]) * frac));
-  im.style.clipPath = `polygon(0% 0%, 100% 0%, 100% ${Y(top)}%, ${xc}% ${Y(top)}%, ${xc}% ${Y(bottom)}%, 0% ${Y(bottom)}%)`;
-}
+export const WRITTEN = handwriting([
+  [464, 177, 262], // beside its face
+  [464, 440, 527],
+  [526, 210, 496], // under its face, between the brads
+  [547, 180, 382], // up to its own first line
+  [589, 186, 500],
+], 61);
 
-/** The beret at rest, rig units: the pivot its transforms turn about, its middle, where a mitten takes it (the right, soft side), and its thin left end. */
+/** The beret at rest, rig units: the pivot its transforms turn about, its middle, where a mitten takes it (the soft right side), and its thin left end. */
 export const HAT = { pivot: [480, 394], middle: [426, 385], grip: [539, 407], left: [300, 372] } as const;
 
 const rot = (dx: number, dy: number, deg: number, s: number): [number, number] => {
@@ -97,4 +113,26 @@ export function mittenOnBody(p: StickerPuppet, side: 'L' | 'R', lift: number, at
 export function hatByGrip(p: StickerPuppet, gx: number, gy: number, deg = 0, s = 1): void {
   const [dx, dy] = rot(HAT.grip[0] - HAT.middle[0], HAT.grip[1] - HAT.middle[1], deg, s);
   hatAt(p, gx - dx, gy - dy, deg, s);
+}
+
+/**
+ * Its card turning over to the written side and back: on frame `fIn` the card narrows (the plain side), on the next
+ * it is narrow showing the written side, then whole; on `fOut` it narrows again (written), then narrow (plain), then
+ * whole. `sx` is the card's width this frame, `written` which side shows.
+ */
+export function turned(t: number, fIn: number, fOut: number, narrow = 0.38): { written: boolean; sx: number } {
+  const f = Math.round(t * 12);
+  if (f === fIn) return { written: false, sx: narrow };
+  if (f === fIn + 1 || f === fOut) return { written: true, sx: narrow };
+  if (f === fOut + 1) return { written: false, sx: narrow };
+  return { written: f > fIn && f < fOut, sx: 1 };
+}
+
+/**
+ * The kit's bow (the review's recipe: lean, the face dropping toward the foot, the beret swinging forward, eyes shut,
+ * the closed smile) at a depth e from 0 to 1 given directly — for nods and bows whose depth a choreography keys frame
+ * by frame on its own stop-motion poses. Returns e.
+ */
+export function bowBy(p: StickerPuppet, e: number, depth = 1): number {
+  return e > 0 ? bow(p, Math.min(1, e), 0, 1, 1, 2, depth) : 0;
 }
