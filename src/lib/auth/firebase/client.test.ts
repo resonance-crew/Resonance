@@ -256,6 +256,17 @@ describe('signing in and out', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/session', { method: 'DELETE' });
     expect(window.localStorage.getItem(MARK)).toBeNull();
   });
+
+  // Words typed and stickers picked in this browser leave with the account (round 22: chat drafts, recents).
+  it('leaves nothing typed or picked behind on sign-out', async () => {
+    const left = ['resonance:note-drafts:u1', 'resonance:draft:u1:a_u1', 'resonance:stickers:recent:u1'];
+    left.forEach((key) => window.localStorage.setItem(key, key.includes('recent') ? '[]' : '{}'));
+    window.localStorage.setItem('resonance:theme', 'dark');
+    const { firebaseClientAuthProvider } = await load();
+    await firebaseClientAuthProvider.signOut();
+    expect(left.map((key) => window.localStorage.getItem(key))).toEqual([null, null, null]);
+    expect(window.localStorage.getItem('resonance:theme')).toBe('dark');
+  });
 });
 
 // Firebase's popup resolver, on Safari and mobile, loads Google's gapi script
