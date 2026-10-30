@@ -41,7 +41,9 @@ the night paper; anything faint beyond it, a glue shadow's tail, is cut away), a
 lossy, quality 80 (stepping down to 74 and 68 to stay near 120 KB), method 6, loop count 2, each frame 83 or 84 ms
 (12 fps without drift), the key frame repeated as the last. Past 200 KB the sticker fails. The key frame becomes the
 256 px thumb; the pack icon is drawn at 96 px. Then `catalog.ts` reads every file back into `catalog.generated.ts`
-(frames, one play's length, bytes, and a content version `v` for the immutable URLs), writes `catalog.json` and the
+(frames as stored — img2webp merges a held frame into the one before, so a sticker of 31 frames may store 16 —, one
+play's length, bytes, and a content version `v` of the animation and its thumb for the immutable URLs; a placeholder
+still is 1 frame, 0 ms), writes `catalog.json` and the
 review list, and `contact.ts` the contact sheets. `img2webp` has no alpha-quality flag: alpha is kept lossless
 (a die-cut silhouette's alpha costs little).
 
@@ -94,11 +96,16 @@ export default defineSticker({
   `warm`, `heart: 0` for the glow alone), `note`, `cup` (`steam`, `phase`), `flower`, `slip` (`seal`: the red ○), `stamp`,
   `pennant` (`wave`), `star` (`shine`), `card` (`lines`, `underline`), `confetti` (`t`), `wave` (the brand's ≋: `show`,
   `pulse`), `tear` (`glint`), `lantern` (悄悄's star held up: `glow`), `sun` (`rays`), `burst` (joy strokes: `draw`),
-  `sparkle` (`show`), `zz` (`draw`), `scribble` (handwriting lines: `lines`), `underline` (`draw`). Each has a `center`
-  anchor and most a `grip`. A prop can live **inside** a puppet, just above one of its parts
+  `sparkle` (`show`), `zz` (`draw`), `scribble` (handwriting lines: `lines`), `underline` (`draw`), and two to hide
+  behind: `panel` (a page standing on its edge — peek out from behind it; the sticker's own edge can't be peeked from,
+  the die-cut needs room all round) and `ground` (a torn strip along the foot — pop up from behind it). Each has a
+  `center` anchor and most a `grip`. `review/props.ts` shows them all. A prop can live **inside** a puppet, just above one of its parts
   (`inside: { puppet: 'tuck', above: 'torso-alt' }`): it is then under the parts after that one — the face, the deco, an
   arm brought to the front — as a note slipped under 摺摺's dog-ear lies under its `flap` (see `tuck/tucked-away.ts`, and
   `tuck/warm-heart.ts` for a glow behind the face with its heart in front).
+  A **puppet** can be held inside another the same way (`inside: { puppet: 'nod', above: 'torso' }` in its cast entry:
+  聆聆 scooping 點點 into a hug — in front of 聆聆's card, behind its arms brought to the front). It moves with the other's
+  body; keep it below the other's face, which is drawn over it.
   Grow and shrink anything that sticks out past the puppets by scale, not opacity: the die-cut follows what is solid,
   so a half-faded prop loses its outline (opacity is fine for anything over a puppet or another prop).
 - **Fit**: keep everything 6 px inside the canvas in every frame (arms swinging out, a hop's top, a prop flying in —
