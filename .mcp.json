@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "maestro": {
+      "command": "${HOME}/.maestro/bin/maestro",
+      "args": ["mcp"],
+      "env": {
+        "JAVA_HOME": "${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}",
+        "MAESTRO_CLI_NO_ANALYTICS": "1",
+        "MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED": "true"
+      }
+    }
+  }
+}

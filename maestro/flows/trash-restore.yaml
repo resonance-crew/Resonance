@@ -1,0 +1,31 @@
+# alice moves her public card 寫給十年前的自己 to the trash from its page (⋯ → 刪除): the page says
+# it is in the trash; 還原 brings it back as it was, public again.
+appId: com.resonance.stories
+name: trash-restore
+tags:
+  - card
+  - trash
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /card/letter
+- extendedWaitUntil:
+    visible: 寫給十年前的自己
+    timeout: 30000
+# The owner's ⋯.
+- tapOn: 管理卡片
+- tapOn: 刪除
+- extendedWaitUntil:
+    visible: 這張卡片在垃圾桶裡
+    timeout: 15000
+- takeScreenshot: trash-restore-trashed
+# (The toast that says so, 已還原⋯, may be gone before a check reads it: the page itself is the proof.)
+- tapOn: 還原
+- extendedWaitUntil:
+    notVisible: 這張卡片在垃圾桶裡
+    timeout: 15000
+# Public again: its share is back.
+- assertVisible: 分享
+- takeScreenshot: trash-restore

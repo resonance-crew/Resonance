@@ -7,7 +7,7 @@
 import { writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { BASELINE_DIR, readJson } from './util';
-import { readVerdicts, type Verdict } from './review';
+import { intendedChanges, names, readVerdicts, type Verdict } from './review';
 import type { Result, RunInfo } from './compare';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -19,7 +19,7 @@ function figure(label: string, src: string | null) {
   return `<figure><figcaption>${label}</figcaption><a href="${esc(src)}" target="_blank"><img loading="lazy" src="${esc(src)}" alt="${label}"></a></figure>`;
 }
 
-function item(runDir: string, r: Result, v: Verdict | undefined, runId: string) {
+function item(runDir: string, r: Result, v: Verdict | undefined, runId: string, intended: string[]) {
   const base = r.status === 'changed' || r.status === 'missing' ? relative(runDir, join(BASELINE_DIR, r.key)) : null;
   const now = r.status === 'missing' ? null : r.key;
   const diff = r.status === 'changed' && !r.sizes ? `_diff/${r.key}` : null;
@@ -27,10 +27,13 @@ function item(runDir: string, r: Result, v: Verdict | undefined, runId: string) 
   const sizes = r.sizes ? ` · size ${r.sizes.baseline.join('×')} → ${r.sizes.current.join('×')}` : '';
   const tag = v ? `<span class="tag v-${v.verdict}">${v.verdict}</span>` : '';
   const note = v?.note ? `<p class="note">${esc(v.note)}</p>` : '';
+  const meant = intended.length
+    ? `<p class="meta">Intended: ${intended.map(esc).join(' · ')}</p>`
+    : r.status === 'changed' ? '<p class="meta">Intended: no Visual: trailer names this screen</p>' : '';
   const accept = r.status === 'missing' ? '' : `<code>npm run visual -- accept --run ${esc(runId)} --only ${esc(r.key)}</code>`;
   return `<article data-status="${r.status}" data-verdict="${v?.verdict ?? ''}">
   <header><h3>${esc(r.key)}</h3><span class="tag s-${r.status}">${r.status}</span>${tag}<span class="meta">${ratio}${sizes}</span></header>
-  ${note}
+  ${note}${meant}
   <div class="row">${figure('Baseline', base)}${figure('Now', now)}${r.status === 'changed' ? figure('Diff', diff) : ''}</div>
   ${accept}
 </article>`;
@@ -39,6 +42,8 @@ function item(runDir: string, r: Result, v: Verdict | undefined, runId: string) 
 export function writeReport(runDir: string, results: Result[]): string {
   const info = readJson<RunInfo>(join(runDir, 'run.json'));
   const verdicts = readVerdicts(runDir);
+  const changes = intendedChanges(runDir);
+  const intendedFor = (key: string) => changes.filter((c) => c.targets.some((t) => names(t, key))).map((c) => `${c.reason} (${c.commit})`);
   const rank = (r: Result) => Math.min(ORDER[r.status], ORDER[verdicts.get(r.key)?.verdict ?? 'unchanged']);
   const attention = results.filter((r) => r.status !== 'unchanged').sort((a, b) => rank(a) - rank(b) || a.key.localeCompare(b.key));
   const unchanged = results.filter((r) => r.status === 'unchanged');
@@ -75,7 +80,7 @@ ${unsettled.length ? `<p class="warn">Never stopped changing (taken anyway): ${u
 <button aria-pressed="true" data-f="">All needing a look (${attention.length})</button><button aria-pressed="false" data-f="broken">Broken</button><button aria-pressed="false" data-f="changed">Changed</button><button aria-pressed="false" data-f="new">New</button><button aria-pressed="false" data-f="missing">Missing</button>
 </div>
 <h2>Needs a look</h2>
-${attention.map((r) => item(runDir, r, verdicts.get(r.key), info?.id ?? '')).join('\n') || '<p class="sub">Nothing changed.</p>'}
+${attention.map((r) => item(runDir, r, verdicts.get(r.key), info?.id ?? '', intendedFor(r.key))).join('\n') || '<p class="sub">Nothing changed.</p>'}
 <details><summary><h2 style="display:inline">Unchanged (${unchanged.length})</h2></summary>
 <div class="thumbs">${unchanged.map((r) => `<a href="${esc(r.key)}" target="_blank"><img loading="lazy" src="${esc(r.key)}" alt="">${esc(r.key)}</a>`).join('')}</div>
 </details>

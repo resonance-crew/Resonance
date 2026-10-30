@@ -1,0 +1,47 @@
+# alice opens a new card in the writer, gives it a title and a line of story, goes on to the
+# publish step (✓), picks 公開 and publishes: she lands on the card's page, its title at the top.
+appId: com.resonance.stories
+name: publish-card
+tags:
+  - writer
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /write
+# The empty writer: the title's placeholder, then the story (the editor island) under it.
+- extendedWaitUntil:
+    visible: 一句話標題
+    timeout: 30000
+- tapOn: 一句話標題
+- inputText: 窗邊的小雨 Maestro
+# Return in the title goes on to the story.
+- pressKey: Enter
+- inputText: 雨聲很輕，像有人在遠處翻書。
+# ✓ (完成): the publish step, the card's preview with what was written.
+- tapOn: 完成
+- extendedWaitUntil:
+    visible: 卡片類型
+    timeout: 15000
+# The mirror moment's 正在讀你的故事⋯ stands above the choices while /api/cards/insight answers, and
+# its going moves everything under it up: wait for it, and for the step to settle, before tapping.
+- extendedWaitUntil:
+    notVisible: 正在讀你的故事⋯
+    timeout: 20000
+- waitForAnimationToEnd
+- tapOn: 公開
+# 公開 chosen, the step's one button says 發布 (it said 儲存 for a 私人卡).
+- extendedWaitUntil:
+    visible: 發布
+    timeout: 10000
+- tapOn: 發布
+# Published, the writer gives way to the card's own page.
+- extendedWaitUntil:
+    visible: 雨聲很輕，像有人在遠處翻書。
+    timeout: 30000
+- assertVisible: 窗邊的小雨 Maestro
+- assertNotVisible: 卡片類型
+# Only a published, public card offers its share (a 私人卡 has the edit pen there).
+- assertVisible: 分享
+- takeScreenshot: publish-card

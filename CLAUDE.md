@@ -25,6 +25,8 @@ npm run native:editor   # typecheck + build the native apps' editor island (nati
 npm run apps:generate   # regenerate what the native apps take from the web (tokens, strings, OpenAPI, editor)
 npx tsx docs/store/graphics/render.ts og   # the site's share image (the platform cover): public/og-cover.jpg + og-cover.en.jpg, 1200 × 630, from the App Store header's recipe; bump OG_COVER_VERSION in src/lib/og.ts after redrawing it
 npx tsx scripts/promo/render.ts [--locale zh-TW|en|all] [--preview] [--stills 12.5,30 --stills-dir <dir>] [--silent]   # the README's one-minute tour (scripts/promo/page, drawn with src/lib/design and the tokens) → docs/media/resonance-intro.{locale}.mp4 with its soundtrack scripts/promo/score.m4a (ElevenLabs Music, made under the owner's commercial licence and not MIT — see THIRD_PARTY_NOTICES; the picture is timed to it, so a new score means checking the 24–36 s swell and the 58 s ending) (+ with --preview the README's looping .avif and its .jpg still); needs Chrome (CHROME_PATH) and ffmpeg with libx264 and libsvtav1; the app's own strings come from src/messages, so re-render after renaming one it shows
+npm run visual -- capture [web android ios mac] [--only <screen ids>] [--device <id>] [--flows] [--review]   # release screenshots: every screen of scripts/visual/screens.ts on web (phone/tablet/desktop), iPhone, iPad, the Mac app and Android phone/tablet, against a private seeded stack, one platform at a time, diffed with this machine's baseline (visual/, git-ignored); `--review` hands what changed to Antigravity's CLI (`agy`); `review --run <id> --agy`, `accept --run <id> [--only …]` — scripts/visual/README.md says which devices, sizes and settings, and why
+npx tsx scripts/visual/flows.ts <android|ios> [--only <flow>]   # Maestro interaction flows (maestro/flows) on the harness's own phone simulator/AVD — maestro/README.md
 ```
 
 Seed the emulators with known test accounts: `npx tsx scripts/seed-emulator.ts`. In a `dev:emulator` browser, sign in from devtools with `await window.__emulatorSignIn(email, password)` (values in the seed script) — that helper exists only in emulator builds.
@@ -215,7 +217,7 @@ Shapes use a `seed` prop so they render consistently across SSR and client hydra
 
 ## Testing
 
-Tests run on **Vitest** + **@testing-library/react** + **jsdom**. Config is `vitest.config.ts`; shared setup is in `test/`. We write **integration-style unit tests** — exercise a whole feature (an adapter's rules, a hook's composition, a component's interaction), not single trivial functions. No E2E.
+Tests run on **Vitest** + **@testing-library/react** + **jsdom**. Config is `vitest.config.ts`; shared setup is in `test/`. We write **integration-style unit tests** — exercise a whole feature (an adapter's rules, a hook's composition, a component's interaction), not single trivial functions. What the screens look like on each platform is the release screenshots' job (`npm run visual`, scripts/visual/README.md), and taps through the apps Maestro's (maestro/README.md).
 
 ### Where tests live
 
@@ -248,6 +250,7 @@ Default env is **node** (fast – suits pure-logic suites). Any test that render
 These are non-negotiable — both rules exist because their violation has already shipped regressions:
 
 - **UI changes**: before calling the work done, verify in the browser preview at **both desktop and mobile** widths (`preview_resize`). Mobile-only fixes have silently broken the desktop layout before (and vice versa), and a fix to one organic component must be checked against its siblings (buttons, inputs, selects, toggles share the same border language).
+- **Screens**: a change that alters how a screen looks (web or apps) runs a slice of the release screenshots for the screens it touches, on the platform it touches — `npm run visual -- capture <platform> --only <screen ids> [--device phone,desktop]` — and shows the owner the report's changed captures; the new pictures become the baseline only on the owner's OK (`npm run visual -- accept --run <id> --only …`), never unasked. Its commit names those screens in a `Visual:` trailer (`Visual: card, ios/thread: why`), which the release review reads to tell an intended change from a regression. A new screen joins `SCREENS` in `scripts/visual/screens.ts`. Before a release (a store build, or a push that ships the web) the whole run goes through: `npm run visual -- capture --flows --review` (screens, then the Maestro flows, then the review), and the owner looks at what it flagged.
 - **Data-layer changes** (repositories, `client/*` read-write modules, adapters, page data fetching): ship with an integration-style test that fails without the change. A Server-Render→Firestore migration once broke the home feed and card pages while the whole suite stayed green.
 
 ## Deployment & CLI Tooling

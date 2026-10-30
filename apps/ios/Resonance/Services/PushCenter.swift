@@ -131,6 +131,12 @@ final class PushCenter {
     /// so the moment to ask (once; the system remembers the answer) — not on
     /// first opening the app, before there is anything to be notified about.
     func reachedOut() {
+        #if DEBUG
+        // `-askForNotifications NO` (the interaction flows): the system's question would cover the
+        // screen a flow is checking, in a language its driver can't answer.
+        if UserDefaults.standard.object(forKey: "askForNotifications") != nil,
+           !UserDefaults.standard.bool(forKey: "askForNotifications") { return }
+        #endif
         Task { _ = await askIfUndetermined() }
     }
 

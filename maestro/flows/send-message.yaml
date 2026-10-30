@@ -1,0 +1,27 @@
+# alice opens her conversation with bob (a connection), writes a message and sends it: the bubble
+# shows in the thread and the send completes (nothing left "傳送中⋯").
+appId: com.resonance.stories
+name: send-message
+tags:
+  - chat
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /messages/bob
+# The seeded thread's last message, from bob.
+- extendedWaitUntil:
+    visible: 嗨，謝謝你的共振！
+    timeout: 30000
+# The composer's field: Android names it after the conversation, iOS by its hint.
+- tapOn: 與 bob 的對話|想說的話⋯
+- inputText: 今晚的月亮好圓 Maestro
+- tapOn: 送出
+- extendedWaitUntil:
+    visible: 今晚的月亮好圓 Maestro
+    timeout: 10000
+- extendedWaitUntil:
+    notVisible: 傳送中⋯
+    timeout: 15000
+- takeScreenshot: send-message

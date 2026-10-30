@@ -1,0 +1,83 @@
+# A signed-out start → the emulator build's email form → alice → her home feed.
+appId: com.resonance.stories
+name: sign-in
+tags:
+  - auth
+---
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          clearState: true
+          clearKeychain: true
+          arguments:
+            -emulator: "YES"
+            -emulatorAuthPort: ${AUTH_PORT}
+            -emulatorFirestorePort: ${FIRESTORE_PORT}
+            -emulatorApiPort: ${API_PORT}
+            -visualCapture: "YES"
+            -appearance.scheme: light
+            -appearance.mascots: "NO"
+            -appLanguage: zh-TW
+            -AppleLanguages: (zh-Hant)
+            -AppleLocale: zh_TW
+            -signedOut: "YES"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      # No account given: the app (cleared by the runner) starts signed out.
+      - launchApp:
+          clearState: false
+          arguments:
+            emulator: true
+            emulatorAuthPort: ${AUTH_PORT}
+            emulatorFirestorePort: ${FIRESTORE_PORT}
+            emulatorApiPort: ${API_PORT}
+            mascots: false
+- extendedWaitUntil:
+    visible: 回到共振
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: emulator-password
+    direction: DOWN
+- tapOn:
+    id: emulator-email
+- inputText: alice@resonance.test
+# iOS's keyboard covers the fields below the one being typed in: Return puts it away (Maestro's
+# hideKeyboard doesn't, on these fields). Android's flows type with no keyboard showing.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - pressKey: Enter
+- tapOn:
+    id: emulator-password
+- inputText: ${PASSWORD}
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - pressKey: Enter
+- scrollUntilVisible:
+    element: 登入
+    direction: DOWN
+- tapOn: 登入
+# iOS offers to keep the password (the system's sheet, over the app): not now.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible: 稍後再說|Not Now|我也在雨裡走過
+          timeout: 30000
+      - tapOn:
+          text: 稍後再說|Not Now
+          optional: true
+# The home feed: alice's own newest card is its first.
+- extendedWaitUntil:
+    visible: 我也在雨裡走過
+    timeout: 30000
+- takeScreenshot: sign-in

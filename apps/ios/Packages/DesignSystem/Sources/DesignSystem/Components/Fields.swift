@@ -78,6 +78,13 @@ public nonisolated enum Slant {
     }
 }
 
+extension View {
+    /// An accessibility identifier when there is one (none leaves the view as it was).
+    @ViewBuilder public func accessibilityIdentifier(ifAny identifier: String?) -> some View {
+        if let identifier { accessibilityIdentifier(identifier) } else { self }
+    }
+}
+
 /// OrganicInput: a labelled text field in a wobbly frame.
 public struct OrganicTextField: View {
     let label: String
@@ -85,15 +92,19 @@ public struct OrganicTextField: View {
     @Binding var text: String
     var isSecure: Bool
     var seed: Double
+    /// The text field's own accessibility identifier (the name the interaction flows find it by).
+    var fieldIdentifier: String?
     @FocusState private var focused: Bool
     @Environment(\.isEnabled) private var isEnabled
 
-    public init(_ label: String, text: Binding<String>, placeholder: String = "", isSecure: Bool = false, seed: Double = 13) {
+    public init(_ label: String, text: Binding<String>, placeholder: String = "", isSecure: Bool = false, seed: Double = 13,
+                fieldIdentifier: String? = nil) {
         self.label = label
         self._text = text
         self.placeholder = placeholder
         self.isSecure = isSecure
         self.seed = seed
+        self.fieldIdentifier = fieldIdentifier
     }
 
     public var body: some View {
@@ -112,6 +123,7 @@ public struct OrganicTextField: View {
             .frame(minHeight: 15 * 1.6)
             .opacity(isEnabled ? 1 : 0.55)
             .focused($focused)
+            .accessibilityIdentifier(ifAny: fieldIdentifier)
             .padding(.horizontal, Tokens.fieldPadX)
             .padding(.vertical, Tokens.fieldPadY)
             .modifier(FieldSurface(seed: seed, focused: focused))

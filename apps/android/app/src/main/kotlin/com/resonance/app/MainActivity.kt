@@ -62,7 +62,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val emulator = BuildConfig.LOCAL_STACK && intent.getBooleanExtra("emulator", false)
         val config = if (!emulator) AppConfig(usesEmulator = false) else {
-            fun port(name: String, default: Int) = intent.getIntExtra(name, default).takeIf { it in 1..65535 } ?: default
+            // `--ei` from adb, or a string extra from Maestro (its `launchApp` arguments read from env vars are strings).
+            fun port(name: String, default: Int) =
+                (intent.getStringExtra(name)?.toIntOrNull() ?: intent.getIntExtra(name, default)).takeIf { it in 1..65535 } ?: default
             AppConfig(
                 usesEmulator = true,
                 emulatorHost = AppConfig.emulatorHostOf(intent.getStringExtra("emulatorHost")),
