@@ -55,12 +55,17 @@ public struct MessagingAPI: Sendable {
     /// answers (the server keeps a snapshot of it on the reply); `clientId` (16–64 of `[A-Za-z0-9_-]`)
     /// becomes the message's document id, so sending the same message again after a lost answer
     /// finds it instead of writing it twice. `image` is a picture uploaded for this conversation
-    /// (`uploadChatImage`), sent with the words — `text` may then be empty; never beside a card.
+    /// (`uploadChatImage`), sent with the words — `text` may then be empty; never beside a card. `album`
+    /// (round 22) places that picture among several sent together; `sticker` is a 小紙團 sticker, sent on its
+    /// own (`text` empty, no card, picture or note — it may answer a message).
     @discardableResult
     public func sendMessage(to userId: String, text: String, cardRef: String? = nil, noteRef: NoteRef? = nil,
-                            replyTo: String? = nil, clientId: String? = nil, image: String? = nil) async throws -> Sent {
+                            replyTo: String? = nil, clientId: String? = nil, image: String? = nil,
+                            sticker: StickerRef? = nil, album: AlbumRef? = nil) async throws -> Sent {
         let body = Components.Schemas.SendMessageRequest(
             to: userId, text: text, cardRef: cardRef, image: image,
+            sticker: sticker.map { .init(value1: .init(pack: $0.pack, id: $0.id)) },
+            album: image == nil ? nil : album.map { .init(value1: .init(id: $0.id, index: $0.index, count: $0.count)) },
             noteRef: noteRef.map { .init(value1: .init(cardId: $0.cardId, noteId: $0.noteId)) },
             replyTo: replyTo, clientId: clientId)
         switch try await client.sendMessage(body: .json(body)) {

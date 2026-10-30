@@ -30,12 +30,24 @@ public struct ThreadRow: Identifiable, Equatable, Sendable {
     public let position: RunPosition
     public let dayLabel: Bool
     public let timeLabel: Bool
+    /// Round 22: the pictures of an album this row draws as one grid, in the album's order — `message`
+    /// (the first of them in the thread) among them; nil for a row of one message.
+    public let album: [ChatMessage]?
 
-    public init(message: ChatMessage, position: RunPosition, dayLabel: Bool, timeLabel: Bool) {
+    public init(message: ChatMessage, position: RunPosition, dayLabel: Bool, timeLabel: Bool, album: [ChatMessage]? = nil) {
         self.message = message
         self.position = position
         self.dayLabel = dayLabel
         self.timeLabel = timeLabel
+        self.album = album
+    }
+
+    /// The messages the row draws: its album's, or its own.
+    public var messages: [ChatMessage] { album ?? [message] }
+
+    /// Whether the row draws the message with this id or key.
+    public func holds(_ idOrKey: String) -> Bool {
+        messages.contains { $0.id == idOrKey || $0.key == idOrKey }
     }
 
     /// The row's identity in a list: the message's key (a message sent from here keeps its row when the document replaces it).
@@ -56,7 +68,39 @@ public enum ThreadRows {
     public static let timeLabelGap: TimeInterval = 15 * 60
 
     /// `messages` oldest first, as `ThreadMessages.build` returns them; days as `calendar` counts them.
+    /// One sender's consecutive pictures of one album are one row (round 22, ``albums(_:)``).
     public static func build(_ messages: [ChatMessage], calendar: Calendar = .current) -> [ThreadRow] {
+        let groups = albums(messages)
+        guard groups.contains(where: { $0.count > 1 }) else { return rows(messages, calendar: calendar) }
+        // Laid out as if each album were its first picture alone, which then carries the rest.
+        let heads = groups.map { $0[0] }
+        let laid = rows(heads, calendar: calendar)
+        return zip(laid, groups).map { row, group in
+            guard group.count > 1 else { return row }
+            let ordered = group.sorted { ($0.album?.index ?? 0, $0.sentAt) < ($1.album?.index ?? 0, $1.sentAt) }
+            return ThreadRow(message: row.message, position: row.position, dayLabel: row.dayLabel, timeLabel: row.timeLabel,
+                             album: ordered)
+        }
+    }
+
+    /// `messages` cut into the rows they draw as: each alone, except that consecutive pictures of one album
+    /// from one sender go together — delivered or on their way, still standing; one that failed to send
+    /// stands alone with its retry, and a member missing (not arrived, unsent) leaves the grid smaller.
+    public static func albums(_ messages: [ChatMessage]) -> [[ChatMessage]] {
+        var groups: [[ChatMessage]] = []
+        for m in messages {
+            if let album = m.album, m.image != nil, !m.isUnsent, m.delivery != .failed,
+               let last = groups.last?.last, let lastAlbum = last.album, lastAlbum.id == album.id,
+               last.senderId == m.senderId, last.image != nil, !last.isUnsent, last.delivery != .failed {
+                groups[groups.count - 1].append(m)
+            } else {
+                groups.append([m])
+            }
+        }
+        return groups
+    }
+
+    private static func rows(_ messages: [ChatMessage], calendar: Calendar) -> [ThreadRow] {
         guard !messages.isEmpty else { return [] }
         let days = messages.map { calendar.startOfDay(for: $0.sentAt) }
         let day = messages.indices.map { $0 == 0 || days[$0] != days[$0 - 1] }

@@ -21,7 +21,7 @@ public enum Delivery: Equatable, Sendable {
 /// picture alone (`image`: it carried one — a quote is words, so only that it did). An original
 /// its sender unsent leaves `{ id, senderId, unsent: true }` (round 16 §3): the quote then says so
 /// (`unsent`) and nothing of what it said.
-public struct ReplyQuote: Equatable, Hashable, Sendable {
+public struct ReplyQuote: Equatable, Hashable, Sendable, Codable {
     public static let maxText = 140
 
     public let id: String
@@ -31,26 +31,34 @@ public struct ReplyQuote: Equatable, Hashable, Sendable {
     public let image: Bool
     /// The original was unsent: the quote reads 已收回的訊息 (`messages.unsentQuote`).
     public let unsent: Bool
+    /// The original was a sticker (round 22): the quote shows its key pose and its name; `text` is its
+    /// fallback words (〔貼圖：謝謝〕), for a sticker this build doesn't know.
+    public let sticker: StickerRef?
 
-    public init(id: String, senderId: String, text: String, cardRef: String? = nil, image: Bool = false, unsent: Bool = false) {
+    public init(id: String, senderId: String, text: String, cardRef: String? = nil, image: Bool = false, unsent: Bool = false,
+                sticker: StickerRef? = nil) {
         self.id = id
         self.senderId = senderId
         self.text = unsent ? "" : text
         self.cardRef = unsent ? nil : cardRef
         self.image = unsent ? false : image
         self.unsent = unsent
+        self.sticker = unsent ? nil : sticker
     }
 
     /// The quote a reply to `message` carries (the same cut the server makes).
     public static func of(_ message: ChatMessage) -> ReplyQuote {
         ReplyQuote(id: message.id, senderId: message.senderId, text: cut(message.text), cardRef: message.cardRef,
-                   image: message.image != nil, unsent: message.isUnsent)
+                   image: message.image != nil, unsent: message.isUnsent, sticker: message.sticker)
     }
 
     /// What the quote says: its words — or, with none, what the message was: a picture
-    /// (`picture`, 一張圖片) or a card (`card`, 一張卡片); an unsent original, `unsentQuote`.
-    public func summary(picture: String, card: String, unsentQuote: String = "") -> String {
+    /// (`picture`, 一張圖片) or a card (`card`, 一張卡片); an unsent original, `unsentQuote`; a sticker,
+    /// what `stickerName` calls it (its fallback words when it doesn't know it).
+    public func summary(picture: String, card: String, unsentQuote: String = "",
+                        stickerName: ((StickerRef) -> String?)? = nil) -> String {
         if unsent { return unsentQuote }
+        if let sticker, let name = stickerName?(sticker) { return name }
         guard text.isEmpty else { return text }
         return image ? picture : card
     }
@@ -139,6 +147,12 @@ public struct ChatMessage: Equatable, Sendable {
     public var preview: LinkPreview?
     /// A picture sent with it (a message carries a card or a picture, never both).
     public let image: ChatImage?
+    /// A 小紙團 sticker (round 22): the message carries nothing else — its `text` is the sticker's
+    /// fallback words, drawn only by a build that can't draw the sticker.
+    public let sticker: StickerRef?
+    /// One of several pictures sent together (round 22): the thread draws one sender's consecutive
+    /// pictures of an album as one grid.
+    public let album: AlbumRef?
     /// The two people's reactions to it (round 16 §4): each one's uid → the reaction's id as the
     /// server stores it (`heart`, `moved`, `laugh`, `hug`, `thumbs`). An id this build doesn't know
     /// is kept here and drawn as nothing (``knownReactions(_:)``).
@@ -155,6 +169,7 @@ public struct ChatMessage: Equatable, Sendable {
 
     public init(id: String, senderId: String, text: String, sentAt: Date, cardRef: String? = nil, noteRef: MessagingAPI.NoteRef? = nil,
                 isNote: Bool = false, replyTo: ReplyQuote? = nil, preview: LinkPreview? = nil, image: ChatImage? = nil,
+                sticker: StickerRef? = nil, album: AlbumRef? = nil,
                 reactions: [String: String] = [:], isUnsent: Bool = false, privateShare: Bool = false,
                 delivery: Delivery = .delivered, key: String? = nil) {
         self.id = id
@@ -169,6 +184,8 @@ public struct ChatMessage: Equatable, Sendable {
         self.replyTo = isUnsent ? nil : replyTo
         self.preview = isUnsent ? nil : preview
         self.image = isUnsent ? nil : image
+        self.sticker = isUnsent ? nil : sticker
+        self.album = isUnsent ? nil : album
         self.reactions = isUnsent ? [:] : reactions
         self.privateShare = !isUnsent && cardRef != nil && privateShare
         self.delivery = delivery
@@ -250,6 +267,9 @@ public struct ChatMessage: Equatable, Sendable {
             replyTo: quote(fields["replyTo"] as? [String: Any]),
             preview: preview(fields["preview"] as? [String: Any], origin: origin),
             image: ChatImage.from(fields["image"] as? [String: Any]),
+            sticker: StickerRef.from(fields["sticker"] as? [String: Any]),
+            // An album names pictures: without one a message is no member of it.
+            album: fields["image"] is [String: Any] ? AlbumRef.from(fields["album"] as? [String: Any]) : nil,
             reactions: reactions(fields["reactions"] as? [String: Any]),
             // Only `true` is a pass: anything else (absent once its sender stopped sharing) is none.
             privateShare: fields["privateShare"] as? Bool == true
@@ -270,7 +290,8 @@ public struct ChatMessage: Equatable, Sendable {
         guard let map, let id = map["id"] as? String, !id.isEmpty else { return nil }
         return ReplyQuote(id: id, senderId: map["senderId"] as? String ?? "", text: ReplyQuote.cut(map["text"] as? String ?? ""),
                           cardRef: (map["cardRef"] as? String).flatMap { $0.isEmpty ? nil : $0 },
-                          image: map["image"] as? Bool == true, unsent: map["unsent"] as? Bool == true)
+                          image: map["image"] as? Bool == true, unsent: map["unsent"] as? Bool == true,
+                          sticker: StickerRef.from(map["sticker"] as? [String: Any]))
     }
 
     private static func preview(_ map: [String: Any]?, origin: URL) -> LinkPreview? {
