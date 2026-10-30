@@ -409,7 +409,8 @@ export function ThreadComposer({
     if (!draft) return;
     setText(draft.text);
     if (draft.noteRef && !replyNote) setNoteRef(draft.noteRef);
-    // A quote of a message unsent since is dropped.
+    // A quote of a message known to be unsent is dropped here; the thread asks about it again as its messages come
+    // (unsent, missing from the whole history, the conversation gone: ThreadView).
     if (draft.replyTo && !replyingTo && !isUnsent?.(draft.replyTo.id)) onRestoreReply?.(draft.replyTo);
     if (draft.cardId) {
       const id = draft.cardId;

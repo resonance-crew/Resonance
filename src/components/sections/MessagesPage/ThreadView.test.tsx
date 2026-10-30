@@ -1122,6 +1122,53 @@ describe('a letter: notes between two people who aren’t connected', () => {
   });
 });
 
+// Round 22 §4.4: a draft brings its reply back as the thread opens — before any message has come — so the quote is
+// asked about again as they come: unsent since, missing from a complete history, or the conversation gone, it goes.
+describe('a draft’s reply, asked about again', () => {
+  const draftReplyingTo = (id: string) =>
+    window.localStorage.setItem(
+      'resonance:draft:me:alice_me',
+      JSON.stringify({ text: 'about that', replyTo: { id, senderId: 'alice', text: 'what they said' }, at: Date.now() }),
+    );
+  const opened = async () => {
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    renderWithIntl(thread());
+    expect(await screen.findByRole('textbox', { name: 'Conversation with alice' })).toHaveValue('about that');
+  };
+
+  it('keeps it while its message is there', async () => {
+    server.messages = [text('m1', 'what they said'), text('m2', 'and more')];
+    draftReplyingTo('m1');
+    await opened();
+    await screen.findByText('and more');
+    await settle(20);
+    expect(screen.getByText('Replying to alice')).toBeInTheDocument();
+  });
+
+  it('lets it go once its message turns out unsent', async () => {
+    server.messages = [{ id: 'm1', senderId: 'alice', text: '', sentAt: new Date('2026-03-01T10:00:00Z'), unsentAt: new Date() }, text('m2', 'and more')];
+    draftReplyingTo('m1');
+    await opened();
+    await waitFor(() => expect(screen.queryByText('Replying to alice')).not.toBeInTheDocument());
+  });
+
+  it('lets it go when the whole conversation is here without its message', async () => {
+    server.messages = [text('m2', 'and more')];
+    draftReplyingTo('m1');
+    await opened();
+    await waitFor(() => expect(screen.queryByText('Replying to alice')).not.toBeInTheDocument());
+    // The words stay.
+    expect(screen.getByRole('textbox', { name: 'Conversation with alice' })).toHaveValue('about that');
+  });
+
+  it('lets it go when the conversation is gone', async () => {
+    vi.mocked(getConversation).mockResolvedValue(null);
+    draftReplyingTo('m1');
+    await opened();
+    await waitFor(() => expect(screen.queryByText('Replying to alice')).not.toBeInTheDocument());
+  });
+});
+
 describe('around the thread', () => {
   it('lists a card shared by its link among the thread’s cards, not its links', async () => {
     server.messages = [

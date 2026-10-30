@@ -31,6 +31,7 @@ import { forgetChatDraft, keepChatDraft, readChatDraft } from '@/lib/data/chatDr
 import { fullMessageTime, timeOfDay } from '@/lib/chat/time';
 import { changeShown, withLocalChange, type LocalChange } from '@/lib/chat/message';
 import { ApiError } from '@/lib/db/firestore/client/api';
+import { isAbsent } from '@/lib/db/firestore/client/errors';
 import type { TextRange } from '@/lib/chat/search';
 import { getUserByHandle, getUsersByIds, isConnected } from '@/lib/db/firestore/client/reads';
 import {
@@ -670,14 +671,23 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
     focusBack.current = null;
   }, [pressed]);
 
-  // A held message unsent meanwhile (by its sender, elsewhere) has no menu: the overlay goes. A reply being written
-  // to one now quotes nothing worth sending.
+  // A held message unsent meanwhile (by its sender, elsewhere) has no menu: the overlay goes.
   useEffect(() => {
     if (pressed && drawn.some((m) => m.key === pressed.message.key && m.unsentAt)) setPressed(null);
-    const replying = thread.replyingTo;
-    if (replying && drawn.some((m) => m.id === replying.id && m.unsentAt)) thread.cancelReply();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawn]);
+  // The message the next one answers — picked here, or brought back with a draft before any message had come
+  // (round 22 §4.4) — is asked about again as they come: one unsent since, one a complete history doesn't hold
+  // (deleted by an older build), or any once the conversation is gone, quotes nothing worth sending.
+  const historyComplete = thread.ready && !thread.error && !thread.hasOlder && !thread.loadingOlder;
+  useEffect(() => {
+    const replying = thread.replyingTo;
+    if (!replying) return;
+    const held = drawn.find((m) => m.id === replying.id) ?? thread.messages.find((m) => m.id === replying.id);
+    const gone = convo === null || (!!thread.error && isAbsent(thread.error));
+    if (gone || held?.unsentAt || (!held && historyComplete)) thread.cancelReply();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawn, thread.messages, thread.replyingTo, historyComplete, thread.error, convo]);
 
   // The note the thread was opened for: once the conversation's first messages are in (older ones read for it
   // if need be), it is gone to, washed and answered; one that isn't in the conversation is an older note.
