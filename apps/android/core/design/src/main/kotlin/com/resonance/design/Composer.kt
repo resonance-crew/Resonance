@@ -41,6 +41,11 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -128,10 +133,14 @@ fun ComposerCapsule(
     textStyle: TextStyle,
     modifier: Modifier = Modifier,
     seed: Double = 17.0,
+    /** What the end segment does (round 22 §4.1): send, or — the sticker panel open with nothing to send — ↑ / ↓. */
+    segment: ComposerSegment = ComposerSegment.Send,
+    /** The field grown to the thread (round 22 §4.3, option C): the segment a 52 × 48 block on the last row. */
+    block: Boolean = false,
     leading: @Composable () -> Unit,
     field: @Composable BoxScope.(vertical: Dp) -> Unit,
 ) = CapsuleField(
-    ready = canSend,
+    ready = canSend && segment == ComposerSegment.Send,
     segmentWidth = ComposerSendWidth,
     segmentLabel = sendLabel,
     onSegment = onSend,
@@ -139,10 +148,21 @@ fun ComposerCapsule(
     textStyle = textStyle,
     modifier = modifier,
     seed = seed,
+    segmentEnabled = canSend || segment != ComposerSegment.Send,
+    block = block,
     leading = leading,
-    segment = { ink -> OrganicIcon(IconName.Send, size = 20.dp, color = ink) },
+    segment = { ink ->
+        when (segment) {
+            ComposerSegment.Send -> OrganicIcon(IconName.Send, size = 20.dp, color = ink)
+            ComposerSegment.Expand -> OrganicIcon(IconName.ArrowUp, size = 20.dp, color = ink)
+            ComposerSegment.Collapse -> OrganicIcon(IconName.ChevronDown, size = 20.dp, color = ink)
+        }
+    },
     field = field,
 )
+
+/** What the composer's end segment does (round 22 §4.1). */
+enum class ComposerSegment { Send, Expand, Collapse }
 
 /**
  * The capsule the composer is (round 9 §4), for any one-line-or-more field with a verb at its end
@@ -170,6 +190,8 @@ fun CapsuleField(
     seed: Double = 17.0,
     segmentEnabled: Boolean = ready,
     segmentState: String? = null,
+    /** The segment a [segmentWidth] × [ComposerHeight] block on the last row, its wavy seam on its top and start (round 22 §4.3). */
+    block: Boolean = false,
     leading: (@Composable () -> Unit)? = null,
     segment: @Composable (ink: Color) -> Unit,
     field: @Composable BoxScope.(vertical: Dp) -> Unit,
@@ -194,11 +216,13 @@ fun CapsuleField(
                 val w = size.width / density
                 val h = size.height / density
                 val pad = 12.0
-                val seam = boundaryPoints((w - segmentWidth.value).toDouble(), h.toDouble(), seed + 11, 1.6, pad)
-                val region = Path().apply {
-                    op(SegmentedLayout.regionPath(1, 2, listOf(seam), w, h, pad.toFloat(), density), outline, PathOperation.Intersect)
+                val (regionShape, seamPath) = if (block && h > ComposerHeight.value + 1) {
+                    blockSegment(w, h, segmentWidth.value, ComposerHeight.value, seed, pad.toFloat(), density)
+                } else {
+                    val seam = boundaryPoints((w - segmentWidth.value).toDouble(), h.toDouble(), seed + 11, 1.6, pad)
+                    SegmentedLayout.regionPath(1, 2, listOf(seam), w, h, pad.toFloat(), density) to polylinePath(seam, density)
                 }
-                val seamPath = polylinePath(seam, density)
+                val region = Path().apply { op(regionShape, outline, PathOperation.Intersect) }
                 val grain = Grain.brush(GrainMode.Tile, "grain-button", size, density, 0.38f, grainInk)
                 val pen = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                 onDrawBehind {
@@ -218,9 +242,9 @@ fun CapsuleField(
         Box(Modifier.matchParentSize()) {
             Box(
                 Modifier
-                    .align(Alignment.CenterEnd)
+                    .align(Alignment.BottomEnd)
                     .width(segmentWidth)
-                    .fillMaxHeight()
+                    .then(if (block) Modifier.height(ComposerHeight) else Modifier.fillMaxHeight())
                     .clickable(source, indication = null, enabled = segmentEnabled, role = Role.Button, onClickLabel = segmentLabel) {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onSegment()
@@ -243,21 +267,101 @@ fun CapsuleField(
 private const val SEND_FADE_MILLIS = 140
 
 /**
+ * The end segment as a block on the last row (round 22 §4.3: the field grown, its segment [segW] × [segH] in its
+ * bottom end corner): the region it fills (running past the box on its outer sides, for the capsule's outline to
+ * end) and its seam — a gentle wave up its start side, then along its top to the capsule's end. All dp in, px out.
+ */
+internal fun blockSegment(w: Float, h: Float, segW: Float, segH: Float, seed: Double, pad: Float, density: Float): Pair<Path, Path> {
+    val x0 = (w - segW).toDouble()
+    val y0 = (h - segH).toDouble()
+    // Up the start side: a boundary [segH] tall, moved down to the last row (its overshoot above dropped).
+    val side = boundaryPoints(x0, segH.toDouble(), seed + 11, 1.4, pad.toDouble()).drop(1).map { Offset(it.x, (it.y + y0).toFloat()) }
+    // Along the top: a boundary as long as the block is wide, laid on its side (its overshoot before the corner dropped).
+    val top = boundaryPoints(0.0, segW.toDouble(), seed + 23, 1.2, pad.toDouble()).drop(1).map { Offset((x0 + it.y).toFloat(), (y0 + it.x).toFloat()) }
+    val seam = side.reversed() + top.drop(1)
+    val region = Path().apply {
+        seam.forEachIndexed { i, p -> if (i == 0) moveTo(p.x * density, p.y * density) else lineTo(p.x * density, p.y * density) }
+        lineTo((w + pad) * density, (h + pad) * density)
+        close()
+    }
+    return region to polylinePath(seam, density)
+}
+
+/**
+ * The composer's text, scrolled in its box (round 22 §4.3): a [ComposerFadeEdge] alpha mask on the box's inner
+ * top and bottom edges, each shown only while there is text beyond it ([scroll]) — the field's words fading into
+ * its paper, never cut by a hard edge. Put it outside the scroll modifier, so the mask stays on the box.
+ */
+fun Modifier.composerFades(scroll: androidx.compose.foundation.ScrollState): Modifier =
+    graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
+        drawContent()
+        val max = scroll.maxValue
+        if (max <= 0 || max == Int.MAX_VALUE) return@drawWithContent
+        val e = kotlin.math.min(ComposerFadeEdge.toPx(), size.height / 3)
+        if (e <= 0f) return@drawWithContent
+        val above = scroll.value > 0
+        val below = scroll.value < max
+        if (!above && !below) return@drawWithContent
+        val t = e / size.height
+        drawRect(
+            Brush.verticalGradient(
+                0f to if (above) Color.Transparent else Color.Black,
+                t to Color.Black,
+                1f - t to Color.Black,
+                1f to if (below) Color.Transparent else Color.Black,
+            ),
+            blendMode = BlendMode.DstIn,
+        )
+    }
+
+/** The composer's fades: 14 at the text's inner top and bottom edges (round 22 §4.3). */
+val ComposerFadeEdge = 14.dp
+
+/**
+ * A panel's grip (round 22 §4.2): one short wavy pen mark — the writer's divider's — in the muted pen at INK,
+ * centred on the panel's top line; darker while held ([active]).
+ */
+@Composable
+fun PanelGripMark(active: Boolean, modifier: Modifier = Modifier, seed: Double = 41.0) {
+    val ink = if (active) Tokens.FieldBorderHover else Tokens.FieldBorder
+    Box(
+        modifier
+            .size(40.dp, 8.dp)
+            .clearAndSetSemantics { }
+            .drawWithCache {
+                val line = wavyLinePath(size.width, size.height, density, seed, 1.6, 3)
+                val pen = Stroke(Tokens.InkStrong.toPx(), cap = StrokeCap.Round)
+                onDrawBehind { drawPath(line, ink, style = pen) }
+            },
+    )
+}
+
+/**
+ * A flat paper sheet (round 18's menus): the theme's menu paper inside one hand-drawn pen line, the header's quiet
+ * grey at INK — no grain, no shadow. The sticker preview stands on one (round 22 §4.1).
+ */
+@Composable
+fun Modifier.paperSheet(seed: Double = 31.0, radius: Double = MenuSheet.RADIUS): Modifier {
+    val palette = LocalResonanceColors.current
+    return drawWithCacheOf(FloatingSlip(seed, radius, palette.FieldBorderHover, palette.MenuPaper, Tokens.Ink.value))
+}
+
+/**
  * A notice floating in the composer's place (round 9 §4): opaque cream, its pen INK_LIGHT in the
  * muted ink, the field's wobble at radius 14. No halo, shadow or alpha: the foot's paper is behind it
  * ([ComposerBacking]), as behind the capsule (round 10 §3.1).
  */
 @Composable
-fun Modifier.floatingSlip(seed: Double = 29.0, radius: Double = 14.0, pen: Color = Tokens.TextMuted): Modifier = drawWithCacheOf(FloatingSlip(seed, radius, pen, Tokens.Cream))
+fun Modifier.floatingSlip(seed: Double = 29.0, radius: Double = 14.0, pen: Color = Tokens.TextMuted): Modifier = drawWithCacheOf(FloatingSlip(seed, radius, pen, Tokens.Cream, Tokens.InkLight.value))
 
 /**
  * [floatingSlip]'s drawing, as a value ([drawWithCacheOf]): recomposed with equal inputs it is an equal modifier,
  * which keeps what it cached (outline, paths, grain) instead of building it again at the next draw.
  */
-private data class FloatingSlip(val seed: Double, val radius: Double, val pen: Color, val paper: Color) : (CacheDrawScope) -> DrawResult {
+private data class FloatingSlip(val seed: Double, val radius: Double, val pen: Color, val paper: Color, val width: Float) : (CacheDrawScope) -> DrawResult {
     override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
         val o = WobRectShape(radius, seed).createOutline(size, layoutDirection, this)
-        val line = Stroke(Tokens.InkLight.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val line = Stroke(width.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
         onDrawBehind {
             drawOutline(o, paper)
             drawOutline(o, pen, style = line)

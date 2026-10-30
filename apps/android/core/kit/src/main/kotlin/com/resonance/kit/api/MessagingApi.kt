@@ -5,6 +5,10 @@ import com.resonance.api.models.NoteRef
 import com.resonance.api.models.Reaction
 import com.resonance.api.models.SetReactionRequest
 import com.resonance.api.models.SendMessageRequest
+import com.resonance.api.models.StickerRef
+import com.resonance.api.models.AlbumRef
+import com.resonance.kit.chat.ChatAlbum
+import com.resonance.kit.chat.ChatSticker
 import com.resonance.api.models.SendNoteRequest
 import okhttp3.OkHttpClient
 
@@ -40,7 +44,8 @@ class MessagingApi(private val api: DefaultApi) {
      * it answers; [clientId] is the sender's own id for it, which the server makes the document's id — sending
      * the same one again (a retry after an answer was lost) finds the message instead of writing a second.
      * [image] is a picture uploaded for this conversation ([ChatPicturesApi.upload]'s id): [text] may then be
-     * empty, and a message carries a card or a picture, never both.
+     * empty, and a message carries a card or a picture, never both. [sticker] (round 22) is a message of its own:
+     * [text] empty, nothing else but [replyTo]. [album] is a picture's place among several sent together.
      */
     suspend fun sendMessage(
         to: String,
@@ -50,11 +55,15 @@ class MessagingApi(private val api: DefaultApi) {
         replyTo: String? = null,
         clientId: String? = null,
         image: String? = null,
+        sticker: ChatSticker? = null,
+        album: ChatAlbum? = null,
     ): Sent = call {
         val sent = api.sendMessage(
             SendMessageRequest(
                 to = to, text = text, cardRef = cardRef, noteRef = noteRef?.let { NoteRef(cardId = it.cardId, noteId = it.noteId) },
                 replyTo = replyTo, clientId = clientId, image = image,
+                sticker = sticker?.let { StickerRef(pack = it.pack, id = it.id) },
+                album = album?.let { AlbumRef(id = it.id, index = it.index, count = it.count) },
             ),
         )
         Sent(sent.conversationId, sent.id)

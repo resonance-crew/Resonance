@@ -49,5 +49,9 @@ class ChatOutboxes(
  */
 internal suspend fun deliver(messaging: MessagingApi, pictures: ChatPicturesApi, to: String, m: Outbox.Outgoing): MessagingApi.Sent {
     val image = m.image?.let { pictures.upload(it.bytes, it.mimeType, to, m.clientId).id }
-    return messaging.sendMessage(to, m.text, m.cardRef, m.noteRef, replyTo = m.replyTo?.id, clientId = m.clientId, image = image)
+    return messaging.sendMessage(
+        to, m.text, m.cardRef, m.noteRef, replyTo = m.replyTo?.id, clientId = m.clientId, image = image,
+        // A sticker goes on its own (round 22); an album's picture says its place among the others.
+        sticker = m.sticker, album = m.album?.takeIf { image != null },
+    )
 }

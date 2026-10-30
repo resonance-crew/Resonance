@@ -94,12 +94,13 @@ internal fun messageActions(
     stopSharing: () -> Unit,
     report: () -> Unit,
 ): List<MessageAction> {
-    val message = menu.row.message
+    val message = menu.target
     val mine = model.isMine(message)
     val kinds = messageActionKinds(
         // A reply needs a composer to go in: not while you can't write here.
         canReply = message.canReply && model.foot.composes,
-        hasText = message.text.isNotEmpty(),
+        // A sticker's words are only its fallback for older builds: nothing to copy.
+        hasText = message.text.isNotEmpty() && message.sticker == null,
         onLink = menu.link != null,
         canUnsend = MessageReactions.canUnsend(message, model.me),
         canStopSharing = canStopSharing(message, model.me),

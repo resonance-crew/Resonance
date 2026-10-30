@@ -85,6 +85,22 @@ class MessagingApiTest {
         assertEquals("AbCdEfGhIjKlMnOpQrSt", body["clientId"]!!.jsonPrimitive.content)
     }
 
+    @Test fun aStickerAndAnAlbumsPlaceGoWithTheirMessages() = runBlocking {
+        repeat(2) {
+            server.enqueue(MockResponse().setResponseCode(201).setHeader("Content-Type", "application/json").setBody("""{"conversationId":"alice_bob","id":"x"}"""))
+        }
+        api().sendMessage("bob", "", sticker = com.resonance.kit.chat.ChatSticker("twine", "thanks"), replyTo = "m1", clientId = "AbCdEfGhIjKlMnOpQrSt")
+        val sticker = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+        assertEquals("twine", sticker["sticker"]!!.jsonObject["pack"]!!.jsonPrimitive.content)
+        assertEquals("thanks", sticker["sticker"]!!.jsonObject["id"]!!.jsonPrimitive.content)
+        assertEquals("", sticker["text"]!!.jsonPrimitive.content)
+        api().sendMessage("bob", "the river", image = "img1", album = com.resonance.kit.chat.ChatAlbum("AAAAAAAAAAAAAAAAAAAA", 0, 3))
+        val album = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject["album"]!!.jsonObject
+        assertEquals("AAAAAAAAAAAAAAAAAAAA", album["id"]!!.jsonPrimitive.content)
+        assertEquals("0", album["index"]!!.jsonPrimitive.content)
+        assertEquals("3", album["count"]!!.jsonPrimitive.content)
+    }
+
     @Test fun aBlockIsAFailureWithItsMessage() = runBlocking {
         server.enqueue(
             MockResponse().setResponseCode(403).setHeader("Content-Type", "application/json")

@@ -47,6 +47,8 @@ import com.resonance.design.EmptyAction
 import com.resonance.design.HandDrawnAvatar
 import com.resonance.design.OklchColor
 import com.resonance.design.OrganicEmptyState
+import com.resonance.design.OrganicIcon
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.resonance.design.WobRectShape
 import com.resonance.design.generated.IconName
 import com.resonance.design.generated.Tokens
@@ -69,6 +71,9 @@ import java.util.Date
 @Composable
 fun ConversationsScreen(session: Session, open: (Route) -> Unit) {
     val state by session.conversations.state.collectAsStateWithLifecycle()
+    // What was left unsent in each conversation (round 22 §4.4): shown after a pen, in terracotta, until sent.
+    val drafts by session.chatDrafts.drafts.collectAsStateWithLifecycle()
+    val me = session.uid
     // Beside the thread pane, the pane says there is nothing yet; the list stays empty.
     val twoPane = LocalTwoPane.current
     val chosen = LocalSelectedThread.current
@@ -98,7 +103,10 @@ fun ConversationsScreen(session: Session, open: (Route) -> Unit) {
             item(key = "skeleton") { ConversationsSkeleton() }
         }
         items(state.conversations, key = { "c:${it.id}" }, contentType = { "conversation" }) { convo ->
-            ConversationRow(convo.other, preview(convo), convo.sentAt?.let(::rowTime), convo.unread, open, chosen = chosen?.isWith(convo.other) == true)
+            ConversationRow(
+                convo.other, preview(convo), convo.sentAt?.let(::rowTime), convo.unread, open,
+                chosen = chosen?.isWith(convo.other) == true, draft = drafts[convo.id]?.preview,
+            )
         }
         if (state.starters.isNotEmpty()) {
             item {
@@ -110,23 +118,40 @@ fun ConversationsScreen(session: Session, open: (Route) -> Unit) {
                 )
             }
             items(state.starters, key = { "s:${it.id}" }, contentType = { "conversation" }) { person ->
-                ConversationRow(person, L10n.Messages.noMessagesYet, null, 0, open, chosen = chosen?.isWith(person) == true)
+                val pair = me?.let { listOf(it, person.id).sorted().joinToString("_") }
+                ConversationRow(person, L10n.Messages.noMessagesYet, null, 0, open, chosen = chosen?.isWith(person) == true, draft = pair?.let { drafts[it]?.preview })
             }
         }
     }
 }
 
 private fun preview(convo: ConversationsStore.Conversation): String =
-    conversationPreview(convo.lastText, convo.lastImage, convo.lastFromMe, unsent = convo.lastUnsent, handle = convo.other.handle)
+    conversationPreview(
+        convo.lastText, convo.lastImage, convo.lastFromMe, unsent = convo.lastUnsent, handle = convo.other.handle,
+        sticker = convo.lastSticker, album = convo.lastAlbum,
+    )
 
 /**
  * A conversation row's line: its last message's words (a card shared alone: its title, as the
- * server writes it) — a picture sent without words says 傳送了一張圖片 — after 你： when it was yours.
+ * server writes it) — a picture sent without words says 傳送了一張圖片, a sticker 傳送了一張貼圖 (its
+ * fallback words are for older builds), pictures sent together 傳送了 3 張圖片 — after 你： when it was yours.
  */
-internal fun conversationPreview(text: String?, image: Boolean, fromMe: Boolean, unsent: Boolean = false, handle: String = ""): String {
+internal fun conversationPreview(
+    text: String?,
+    image: Boolean,
+    fromMe: Boolean,
+    unsent: Boolean = false,
+    handle: String = "",
+    sticker: Boolean = false,
+    album: Int? = null,
+): String {
     // Unsent: the same words as its ghost row (你收回了一則訊息 / bob 收回了一則訊息), no 「你：」 before them.
     if (unsent) return unsentWords(fromMe, handle)
-    val said = text?.takeIf { it.isNotEmpty() || !image } ?: if (image) L10n.Messages.imageShared else return L10n.Messages.noMessagesYet
+    val said = when {
+        sticker -> L10n.Messages.stickerShared
+        album != null && image && text.isNullOrEmpty() -> L10n.Messages.albumShared(album)
+        else -> text?.takeIf { it.isNotEmpty() || !image } ?: if (image) L10n.Messages.imageShared else return L10n.Messages.noMessagesYet
+    }
     return (if (fromMe) L10n.Messages.youPrefix else "") + said
 }
 
@@ -157,7 +182,7 @@ private fun Route.Thread.isWith(person: Person): Boolean = if (uid != null) uid 
  * the chosen row's terracotta wash (MessagesPage's active row).
  */
 @Composable
-private fun ConversationRow(person: Person, preview: String, time: String?, unread: Int, open: (Route) -> Unit, chosen: Boolean = false) {
+private fun ConversationRow(person: Person, preview: String, time: String?, unread: Int, open: (Route) -> Unit, chosen: Boolean = false, draft: String? = null) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val hovered by source.collectIsHoveredAsState()
@@ -195,7 +220,19 @@ private fun ConversationRow(person: Person, preview: String, time: String?, unre
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             BasicText(person.handle, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(14f, 600, lineHeight = 1.3f))
-            BasicText(preview, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(13f, lineHeight = 1.3f, color = Tokens.TextMuted))
+            if (draft != null) {
+                // Left unsent (round 22 §4.4): the words after a small pen, in the accent — never the word 草稿.
+                Row(
+                    Modifier.clearAndSetSemantics { contentDescription = L10n.Messages.draftLabel(draft) },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    OrganicIcon(IconName.Pen, size = 13.dp, color = Tokens.ButtonOnTonal, strokeWidth = Tokens.Ink.value)
+                    BasicText(draft, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(13f, lineHeight = 1.3f, color = Tokens.ButtonOnTonal))
+                }
+            } else {
+                BasicText(preview, maxLines = 1, overflow = TextOverflow.Ellipsis, style = AppFonts.body(13f, lineHeight = 1.3f, color = Tokens.TextMuted))
+            }
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
             if (time != null) BasicText(time, maxLines = 1, style = AppFonts.body(11f, lineHeight = 1.3f, color = Tokens.TextMuted))

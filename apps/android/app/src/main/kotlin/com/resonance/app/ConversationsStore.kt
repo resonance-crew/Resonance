@@ -64,6 +64,10 @@ class ConversationsStore {
         val lastImage: Boolean = false,
         /** The last message was unsent (`lastMessage.unsent`, round 16 §3): it previews as its ghost row says. */
         val lastUnsent: Boolean = false,
+        /** The last message was a sticker (`lastMessage.sticker`, round 22): it previews as 傳送了一張貼圖. */
+        val lastSticker: Boolean = false,
+        /** The last message was a picture of an album of this many (`lastMessage.album.count`, should the server say): 傳送了 3 張圖片. */
+        val lastAlbum: Int? = null,
     )
 
     data class State(
@@ -272,6 +276,8 @@ class ConversationsStore {
                 unread = unread,
                 lastImage = last?.get("image") == true,
                 lastUnsent = last?.get("unsent") == true,
+                lastSticker = last?.get("sticker") == true,
+                lastAlbum = ((last?.get("album") as? Map<*, *>)?.get("count") as? Number)?.toInt()?.takeIf { it in 2..10 },
             )
         }
         val talking = conversations.map { it.other.id }.toSet()

@@ -60,11 +60,17 @@ class Outbox(
          * finds it kept) — drawn meanwhile from the device, under that same id the server keeps it by.
          */
         val image: OutgoingImage? = null,
+        /** A sticker it is (round 22): nothing else goes with it but a reply ([text] stays empty: the server writes the fallback words). */
+        val sticker: ChatSticker? = null,
+        /** Its place in an album of pictures sent together (round 22), beside [image]. */
+        val album: ChatAlbum? = null,
     ) {
         /** The message as the thread draws it while it is on its way. */
         fun toMessage() = ChatMessage(
             id = clientId, senderId = senderId, text = text, sentAt = queuedAt, cardRef = cardRef, noteRef = noteRef, replyTo = replyTo,
             image = image?.let { ChatImage(clientId, it.width, it.height) },
+            sticker = sticker,
+            album = album?.takeIf { image != null },
             delivery = when (status) {
                 Status.Queued, Status.Sending -> Delivery.Sending
                 Status.Sent -> Delivery.Sent

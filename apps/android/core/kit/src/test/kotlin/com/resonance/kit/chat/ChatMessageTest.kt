@@ -119,4 +119,38 @@ class ChatMessageTest {
         val original = ChatMessage("m0", "alice", "x".repeat(300), at, cardRef = "walk")
         assertEquals(ReplyQuote("m0", "alice", "x".repeat(140), "walk"), ReplyQuote.of(original))
     }
+
+    @Test fun aStickerAndAnAlbumComeThroughAndOddOnesAreLeftOut() {
+        val sticker = read("senderId" to "bob", "text" to "〔貼圖：謝謝〕", "sticker" to mapOf("pack" to "twine", "id" to "thanks"))
+        assertEquals(ChatSticker("twine", "thanks"), sticker.sticker)
+        // Its fallback words stay as the server wrote them (an older build draws them).
+        assertEquals("〔貼圖：謝謝〕", sticker.text)
+        assertNull(read("sticker" to mapOf("pack" to "Twine", "id" to "thanks")).sticker)
+        assertNull(read("sticker" to mapOf("pack" to "twine")).sticker)
+        // A reply to a sticker quotes it, and the quote reads back.
+        assertEquals(ChatSticker("twine", "thanks"), ReplyQuote.of(sticker).sticker)
+        val reply = read("replyTo" to mapOf("id" to "m0", "senderId" to "bob", "text" to "〔貼圖：謝謝〕", "sticker" to mapOf("pack" to "twine", "id" to "thanks")))
+        assertEquals(ChatSticker("twine", "thanks"), reply.replyTo!!.sticker)
+
+        val image = mapOf("id" to "img1", "width" to 800, "height" to 600)
+        val album = read("senderId" to "bob", "text" to "", "image" to image, "album" to mapOf("id" to "AAAAAAAAAAAAAAAAAAAA", "index" to 1L, "count" to 3L))
+        assertEquals(ChatAlbum("AAAAAAAAAAAAAAAAAAAA", 1, 3), album.album)
+        // Only beside a picture, with a place inside its count, two to ten.
+        assertNull(read("album" to mapOf("id" to "AAAAAAAAAAAAAAAAAAAA", "index" to 0, "count" to 2)).album)
+        assertNull(read("image" to image, "album" to mapOf("id" to "AAAAAAAAAAAAAAAAAAAA", "index" to 3, "count" to 3)).album)
+        assertNull(read("image" to image, "album" to mapOf("id" to "AAAAAAAAAAAAAAAAAAAA", "index" to 0, "count" to 11)).album)
+        assertNull(read("image" to image, "album" to mapOf("id" to "short", "index" to 0, "count" to 2)).album)
+    }
+
+    @Test fun aStickerOrAnAlbumOnItsWayIsDrawnAsOne() {
+        val out = Outbox.Outgoing(
+            "c1", "alice", "", null, null, null, at,
+            image = OutgoingImage(ByteArray(1), "image/jpeg", 4, 3), album = ChatAlbum("AAAAAAAAAAAAAAAAAAAA", 0, 2),
+        )
+        assertEquals(ChatAlbum("AAAAAAAAAAAAAAAAAAAA", 0, 2), out.toMessage().album)
+        val sticker = Outbox.Outgoing("c2", "alice", "", null, null, null, at, sticker = ChatSticker("pip", "hi"))
+        assertEquals(ChatSticker("pip", "hi"), sticker.toMessage().sticker)
+        // No words of its own on its way (the server writes the fallback): the thread draws it all the same.
+        assertEquals(Carried.Words, Carried.of(sticker.toMessage(), null, emptyMap(), emptySet()))
+    }
 }

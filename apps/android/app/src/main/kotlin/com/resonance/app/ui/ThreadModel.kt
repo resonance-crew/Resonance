@@ -29,6 +29,12 @@ import com.resonance.kit.api.ApiFailure
 import com.resonance.kit.api.ChatPicturesApi
 import com.resonance.kit.api.MessagingApi
 import com.resonance.kit.chat.ChatImage
+import com.resonance.kit.chat.ChatAlbum
+import com.resonance.kit.chat.ChatDraft
+import com.resonance.kit.chat.ChatSticker
+import com.resonance.kit.chat.DraftCard
+import com.resonance.kit.chat.PictureSelection
+import com.resonance.kit.chat.replyStillStands
 import com.resonance.kit.chat.ChatMessage
 import com.resonance.kit.chat.Linkify
 import com.resonance.kit.chat.MessageHistory
@@ -159,14 +165,20 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
     // The composer
 
     var draft by mutableStateOf("")
-    /** A card to go with the next message (a message carries a card or a picture: [attachCard] drops a picture). */
+    /** A card to go with the next message (a message carries a card or pictures, never both: the screen asks before one replaces the other). */
     var pendingCard by mutableStateOf<Attachment?>(null)
-    /** A picture to go with the next message, made ready on the device ([attachImage]): the chip over the field shows it. */
-    var pendingImage by mutableStateOf<ChatPictures.Prepared?>(null)
+
+    /**
+     * A picture riding with the next message (round 22 §4.2): its [key] (the address it was picked by),
+     * and — once made ready on the device ([ChatPictures.prepare]) — what goes up. Numbered by its place.
+     */
+    data class RidingPicture(val key: String, val uri: Uri?, val prepared: ChatPictures.Prepared? = null)
+
+    /** The pictures riding with the next message, in the order chosen (at most [ChatAlbum.MAX]): one Send sends them as an album. */
+    var pictures by mutableStateOf<List<RidingPicture>>(emptyList())
         private set
     /** A picture picked is being made ready (scaled, encoded): Send waits for it. */
-    var preparingImage by mutableStateOf(false)
-        private set
+    val preparingImage: Boolean get() = pictures.any { it.prepared == null }
     /** The note the next message answers, as a chip (an older note the thread doesn't hold; see [landOnNote]). */
     var noteRef by mutableStateOf<MessagingApi.Note?>(null)
     /** The note a link to it (`?note=`) opened the thread at, until [landOnNote] has found where it lands. */
@@ -226,9 +238,12 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
     val canSend: Boolean
         get() {
             val trimmed = draft.trim()
-            return (trimmed.isNotEmpty() || pendingCard != null || pendingImage != null) && !preparingImage &&
+            return (trimmed.isNotEmpty() || pendingCard != null || pictures.isNotEmpty()) && !preparingImage &&
                 trimmed.length <= NOTE_MAX_LENGTH && pairId != null
         }
+
+    /** Something waits in the composer to be sent — words, a card, a picture (the sticker panel's ↑ shows only without: round 22 §4.1). */
+    val hasSomethingToSend: Boolean get() = draft.isNotBlank() || pendingCard != null || pictures.isNotEmpty()
 
     suspend fun load() {
         if (phase == Phase.Failed) phase = Phase.Loading
@@ -330,9 +345,58 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
         if (e.isNotFound) null else throw e
     }
 
+    // Drafts (round 22 §4.4)
+
+    /** The draft kept for this conversation has been read into the composer (until then nothing is written back over it). */
+    private var draftRestored = false
+    /** A restored reply not yet checked against the thread (its message may have been unsent, or be gone). */
+    private var restoredReply: ReplyQuote? = null
+
+    /**
+     * Opens the composer on what was left unsent here (once the conversation is known): never over
+     * what is in it already — typed before the person was found, or kept through a rotation.
+     */
+    private fun restoreDraft() {
+        val pair = pairId ?: return
+        if (draftRestored) return
+        draftRestored = true
+        val kept = session.chatDrafts.get(pair) ?: return
+        if (draft.isEmpty()) draft = kept.text
+        if (replyingTo == null && kept.reply != null) {
+            replyingTo = kept.reply
+            restoredReply = kept.reply
+        }
+        if (noteRef == null) noteRef = kept.noteRef
+        if (pendingCard == null && pictures.isEmpty()) pendingCard = kept.card?.let { Attachment(it.id, it.title, it.cover, it.keptPrivate) }
+    }
+
+    /** Once the thread has read its messages: a restored reply whose message was unsent or is gone is dropped. */
+    private fun checkRestoredReply(conversationGone: Boolean) {
+        val quote = restoredReply ?: return
+        restoredReply = null
+        if (replyingTo?.id == quote.id && !replyStillStands(quote, messages, complete = !hasOlder, conversationGone = conversationGone)) replyingTo = null
+    }
+
+    /** What the composer holds as a draft: words, the reply, the note, the card — never pictures. */
+    val currentDraft: ChatDraft
+        get() = ChatDraft(
+            text = draft,
+            reply = replyingTo,
+            noteRef = noteRef,
+            card = pendingCard?.let { DraftCard(it.id, it.title, it.cover, it.keptPrivate) },
+        )
+
+    /** Writes the draft down (a moment after typing stops, and as the thread is left); nothing before the kept one was read. */
+    fun keepDraft() {
+        val pair = pairId ?: return
+        if (!draftRestored) return
+        session.chatDrafts.keep(pair, currentDraft)
+    }
+
     /** Listens to the conversation, and watches for it to appear should it not exist yet. */
     private fun watch() {
         val pair = pairId ?: return
+        restoreDraft()
         attachOutbox()
         if (watching == null) {
             watching = scope.launch {
@@ -373,6 +437,7 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
                     if (merged == MessageHistory.Merged.Restarted) forgetPaging()
                     threadReady = true
                     historyChanged()
+                    checkRestoredReply(conversationGone = false)
                     markReadIfNeeded()
                 },
         )
@@ -398,6 +463,8 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
         requestFrom = null
         resetHistory()
         threadReady = true
+        // No conversation (any more): a reply restored from a draft answers nothing.
+        if (pair !in session.conversations.ids.value) checkRestoredReply(conversationGone = true)
         if (error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED && pair in session.conversations.ids.value && refusals++ < 3) {
             // The list has it (a creation racing this read): its answer is the next listener's.
             listen(pair)
@@ -724,77 +791,166 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
     }
 
     /**
-     * Sends what the composer holds — the text, the card or the picture, the quoted note, the message
-     * being replied to — and clears the composer at once. The message appears in the thread as
-     * sending (a picture drawn from the device, under the id the server will keep it by: the
-     * message's client id); failure keeps it there to [retry] or [discard]. Never waits: the next one
-     * can be written and sent while this one is on its way.
+     * Sends what the composer holds — the text, the card or the pictures, the quoted note, the message
+     * being replied to — and clears the composer at once. Several pictures go as an album (round 22
+     * §4.2): one message each, in the order chosen, sharing one `album` id, the words, the note and the
+     * reply with the first. A message appears in the thread as sending (a picture drawn from the device,
+     * under the id the server will keep it by: the message's client id); failure keeps it there to
+     * [retry] or [discard]. Never waits: the next one can be written and sent while this one is on its way.
      */
     fun send() {
         if (!canSend) return
         val me = me ?: return
         val box = outbox ?: return
         attachOutbox()
-        val clientId = Outbox.newClientId()
-        val picture = pendingImage
-        picture?.let { session.chatPictures?.keep(clientId, it) }
-        box.enqueue(
-            Outbox.Outgoing(
-                clientId = clientId,
-                senderId = me,
-                text = draft.trim(),
-                cardRef = pendingCard?.id,
-                noteRef = noteRef,
-                replyTo = replyingTo,
-                queuedAt = Date(),
-                image = picture?.image,
-            ),
-        )
+        val ready = pictures.mapNotNull { it.prepared }
+        val text = draft.trim()
+        val now = Date()
+        if (ready.isEmpty()) {
+            box.enqueue(
+                Outbox.Outgoing(
+                    clientId = Outbox.newClientId(), senderId = me, text = text, cardRef = pendingCard?.id,
+                    noteRef = noteRef, replyTo = replyingTo, queuedAt = now,
+                ),
+            )
+        } else {
+            val album = if (ready.size > 1) Outbox.newClientId() else null
+            ready.forEachIndexed { i, picture ->
+                val clientId = Outbox.newClientId()
+                session.chatPictures?.keep(clientId, picture)
+                box.enqueue(
+                    Outbox.Outgoing(
+                        clientId = clientId,
+                        senderId = me,
+                        // The words go with the first picture (round 22: the same on every platform), as do the note and the reply.
+                        text = if (i == 0) text else "",
+                        cardRef = null,
+                        noteRef = if (i == 0) noteRef else null,
+                        replyTo = if (i == 0) replyingTo else null,
+                        queuedAt = Date(now.time + i),
+                        image = picture.image,
+                        album = album?.let { ChatAlbum(it, i, ready.size) },
+                    ),
+                )
+            }
+        }
         draft = ""
         pendingCard = null
-        pendingImage = null
+        clearPictures()
         noteRef = null
         replyingTo = null
         error = null
+        pairId?.let(session.chatDrafts::clear)
     }
 
-    /** A card to go with the next message: in place of a picture picked before (a message carries one or the other). */
+    /**
+     * Sends [sticker] (round 22 §4.1): a message of its own through the outbox, drawn at once from the
+     * bundle — carrying the reply in progress (which is cleared) and nothing else: the words, a card or
+     * pictures waiting in the composer stay for the next message.
+     */
+    fun sendSticker(sticker: ChatSticker) {
+        val me = me ?: return
+        val box = outbox ?: return
+        if (pairId == null) return
+        attachOutbox()
+        box.enqueue(
+            Outbox.Outgoing(
+                clientId = Outbox.newClientId(), senderId = me, text = "", cardRef = null, noteRef = null,
+                replyTo = replyingTo, queuedAt = Date(), sticker = sticker,
+            ),
+        )
+        replyingTo = null
+        error = null
+        recentStickers = session.stickerRecents?.used(sticker) ?: recentStickers
+    }
+
+    /** The stickers this account sent last on this device, newest first (the sticker panel's 🕘 tab). */
+    var recentStickers by mutableStateOf(session.stickerRecents?.list().orEmpty())
+        private set
+
+    /** A card to go with the next message (the screen has asked first when pictures were waiting: they go). */
     fun attachCard(card: Attachment) {
         pendingCard = card
-        pendingImage = null
+        clearPictures()
     }
 
     private var preparing: Job? = null
+    /** The pictures still to be made ready, in the order chosen (one at a time, off the main thread). */
+    private val toPrepare = ArrayDeque<RidingPicture>()
 
     /**
-     * A picture picked (the system's photo picker) to go with the next message, in place of a card
-     * picked before: made ready off the main thread (ChatPictures.prepare), then shown over the field.
-     * One this phone can't read says 不支援這種圖片格式 under the composer.
+     * Pictures picked to go with the next message (the gallery, the system's picker, a paste): each
+     * one not riding already joins the end, up to [ChatAlbum.MAX] in all, and is made ready off the main
+     * thread (ChatPictures.prepare) in turn. The card waiting goes (the screen has asked first). Returns
+     * how many were left out for the cap. One this phone can't read leaves and says 不支援這種圖片格式.
      */
-    fun attachImage(context: Context, uri: Uri) {
-        preparing?.cancel()
-        preparingImage = true
-        error = null
+    fun addPictures(context: Context, uris: List<Uri>): Int {
+        var refused = 0
+        val next = pictures.toMutableList()
+        for (uri in uris) {
+            val key = uri.toString()
+            if (next.any { it.key == key }) continue
+            if (next.size >= ChatAlbum.MAX) {
+                refused++
+                continue
+            }
+            val riding = RidingPicture(key, uri)
+            next += riding
+            toPrepare.addLast(riding)
+        }
+        if (next.size != pictures.size) {
+            pictures = next
+            pendingCard = null
+            error = null
+            prepareNext(context.applicationContext)
+        }
+        return refused
+    }
+
+    /** A picture of the gallery tapped (round 22 §6.2): chosen, or let go when it rides already; false when it was refused for the cap. */
+    fun togglePicture(context: Context, uri: Uri): Boolean {
+        val key = uri.toString()
+        if (pictures.any { it.key == key }) {
+            removePicture(key)
+            return true
+        }
+        return addPictures(context, listOf(uri)) == 0
+    }
+
+    /** [key]'s number in the order chosen (1 first), or null when it doesn't ride. */
+    fun pictureNumber(key: String): Int? = PictureSelection.number(pictures.map { it.key }, key)
+
+    private fun prepareNext(context: Context) {
+        if (preparing?.isActive == true) return
         preparing = scope.launch {
-            try {
-                val ready = withContext(Dispatchers.Default) { ChatPictures.prepare(context.applicationContext, uri) }
-                pendingImage = ready
-                pendingCard = null
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                error = L10n.Messages.imageUnsupported
-            } finally {
-                preparingImage = false
+            while (true) {
+                val riding = toPrepare.removeFirstOrNull() ?: break
+                if (pictures.none { it.key == riding.key }) continue
+                try {
+                    val ready = withContext(Dispatchers.Default) { ChatPictures.prepare(context, riding.uri!!) }
+                    pictures = pictures.map { if (it.key == riding.key) it.copy(prepared = ready) else it }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    pictures = pictures.filterNot { it.key == riding.key }
+                    error = L10n.Messages.imageUnsupported
+                }
             }
         }
     }
 
-    /** The picture over the field goes (its ✕). */
-    fun removeImage() {
+    /** One picture riding goes (its ✕, or let go in the gallery). */
+    fun removePicture(key: String) {
+        pictures = pictures.filterNot { it.key == key }
+        toPrepare.removeAll { it.key == key }
+    }
+
+    /** Every picture riding goes. */
+    fun clearPictures() {
         preparing?.cancel()
-        preparingImage = false
-        pendingImage = null
+        preparing = null
+        toPrepare.clear()
+        pictures = emptyList()
     }
 
     /**
@@ -929,6 +1085,8 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
         stop()
         val conversations = session.conversations
         conversations.hide(pair)
+        // Its unsent words go with it (round 22 §4.4).
+        session.chatDrafts.clear(pair)
         session.launch {
             try {
                 session.messaging.deleteConversation(pair)

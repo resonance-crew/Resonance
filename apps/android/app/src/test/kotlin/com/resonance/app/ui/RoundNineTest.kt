@@ -114,7 +114,9 @@ class RoundNineTest {
     @Test fun theThreadKeepsClearOfTheFloatingComposerAndTheKeyboard() {
         val density = Density(2f, 1f)
         // A 48 capsule (96 px) over a 24 px navigation bar: 8 of air, then 20 more for the newest message.
-        val room = ComposerRoom(WindowInsets(bottom = 48), density)
+        // What stands under it (round 22): the navigation bar, the keyboard, or a panel in the keyboard's place.
+        var under = 48
+        val room = ComposerRoom({ under }, density)
         room.foot = 96
         assertEquals(48 + 16 + 96, room.above)
         assertEquals(48 + 16 + 96 + 40, room.clear)
@@ -124,6 +126,10 @@ class RoundNineTest {
         // No composer at all (a letter still being heard of): the air over the bar alone.
         room.foot = 0
         assertEquals(48 + 16, room.above)
+        // A panel taller than the bar takes its place: the composer stands on it.
+        under = 600
+        room.foot = 96
+        assertEquals(600 + 16 + 96 + 40, room.clear)
         assertEquals(8.dp, ComposerGap)
         assertEquals(20.dp, ComposerClear)
     }
