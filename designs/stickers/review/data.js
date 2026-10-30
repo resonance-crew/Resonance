@@ -104,8 +104,8 @@ window.STICKERS = [
   "icon": {
    "durationMs": 0,
    "frames": 1,
-   "bytes": 3308,
-   "v": "6e706bd54d"
+   "bytes": 3232,
+   "v": "150c0e5854"
   },
   "stickers": [
    {
@@ -114,12 +114,12 @@ window.STICKERS = [
      "zh-TW": "在嗎？",
      "en": "Are you there?"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 24144,
-    "v": "2946b2044a",
-    "hero": null,
-    "thumbBytes": 12002
+    "durationMs": 2583,
+    "frames": 19,
+    "bytes": 51106,
+    "v": "36b8383e10",
+    "hero": 1.25,
+    "thumbBytes": 6800
    },
    {
     "id": "thanks",
@@ -127,12 +127,12 @@ window.STICKERS = [
      "zh-TW": "謝謝",
      "en": "Thanks"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 24144,
-    "v": "2946b2044a",
-    "hero": null,
-    "thumbBytes": 12002
+    "durationMs": 2083,
+    "frames": 14,
+    "bytes": 73772,
+    "v": "e28ab7c9b9",
+    "hero": 1,
+    "thumbBytes": 6994
    },
    {
     "id": "for-you",
@@ -140,12 +140,12 @@ window.STICKERS = [
      "zh-TW": "這是給你的",
      "en": "This is for you"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 24144,
-    "v": "2946b2044a",
-    "hero": null,
-    "thumbBytes": 12002
+    "durationMs": 2583,
+    "frames": 15,
+    "bytes": 95928,
+    "v": "cc49a24e18",
+    "hero": 1,
+    "thumbBytes": 7788
    },
    {
     "id": "well-done",
@@ -153,12 +153,12 @@ window.STICKERS = [
      "zh-TW": "辛苦了",
      "en": "You worked hard"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 24144,
-    "v": "2946b2044a",
-    "hero": null,
-    "thumbBytes": 12002
+    "durationMs": 2333,
+    "frames": 28,
+    "bytes": 85382,
+    "v": "54eb01c5f0",
+    "hero": 1,
+    "thumbBytes": 7516
    },
    {
     "id": "okay",
@@ -166,12 +166,12 @@ window.STICKERS = [
      "zh-TW": "好喔",
      "en": "Okay"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 24144,
-    "v": "2946b2044a",
-    "hero": null,
-    "thumbBytes": 12002
+    "durationMs": 2583,
+    "frames": 23,
+    "bytes": 48182,
+    "v": "4b19606682",
+    "hero": 1,
+    "thumbBytes": 7364
    },
    {
     "id": "resonate",
@@ -179,12 +179,12 @@ window.STICKERS = [
      "zh-TW": "共振了",
      "en": "We resonate"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 24144,
-    "v": "2946b2044a",
-    "hero": null,
-    "thumbBytes": 12002
+    "durationMs": 2583,
+    "frames": 24,
+    "bytes": 112926,
+    "v": "2b003dafb4",
+    "hero": 1.583,
+    "thumbBytes": 13710
    }
   ]
  },
@@ -208,12 +208,12 @@ window.STICKERS = [
      "zh-TW": "謝謝你願意說",
      "en": "Thank you for telling me"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 30280,
-    "v": "76da89bce8",
-    "hero": null,
-    "thumbBytes": 14846
+    "durationMs": 2583,
+    "frames": 25,
+    "bytes": 119020,
+    "v": "e746952601",
+    "hero": 1.583,
+    "thumbBytes": 10380
    },
    {
     "id": "read-to-the-end",
@@ -221,12 +221,12 @@ window.STICKERS = [
      "zh-TW": "謝謝你讀到最後",
      "en": "Thanks for reading to the end"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 30280,
-    "v": "76da89bce8",
-    "hero": null,
-    "thumbBytes": 14846
+    "durationMs": 2583,
+    "frames": 27,
+    "bytes": 98966,
+    "v": "57ce15b0aa",
+    "hero": 1.333,
+    "thumbBytes": 7166
    },
    {
     "id": "so-moved",
@@ -234,12 +234,12 @@ window.STICKERS = [
      "zh-TW": "好感動",
      "en": "So moved"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 30280,
-    "v": "76da89bce8",
-    "hero": null,
-    "thumbBytes": 14846
+    "durationMs": 2583,
+    "frames": 24,
+    "bytes": 103608,
+    "v": "4004cd07d0",
+    "hero": 1,
+    "thumbBytes": 9932
    },
    {
     "id": "i-understand",
@@ -247,12 +247,12 @@ window.STICKERS = [
      "zh-TW": "我懂",
      "en": "I understand"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 30280,
-    "v": "76da89bce8",
-    "hero": null,
-    "thumbBytes": 14846
+    "durationMs": 2583,
+    "frames": 20,
+    "bytes": 94556,
+    "v": "68ab3b16ca",
+    "hero": 1.333,
+    "thumbBytes": 9726
    },
    {
     "id": "love-this-line",
@@ -260,12 +260,12 @@ window.STICKERS = [
      "zh-TW": "這句好喜歡",
      "en": "Love this line"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 30280,
-    "v": "76da89bce8",
-    "hero": null,
-    "thumbBytes": 14846
+    "durationMs": 2583,
+    "frames": 24,
+    "bytes": 86156,
+    "v": "d867380c13",
+    "hero": 1.417,
+    "thumbBytes": 8970
    },
    {
     "id": "hug",
@@ -273,12 +273,12 @@ window.STICKERS = [
      "zh-TW": "抱抱",
      "en": "Hug"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 30280,
-    "v": "76da89bce8",
-    "hero": null,
-    "thumbBytes": 14846
+    "durationMs": 2583,
+    "frames": 22,
+    "bytes": 112648,
+    "v": "3cf8686d56",
+    "hero": 1.417,
+    "thumbBytes": 8568
    }
   ]
  },
@@ -302,12 +302,12 @@ window.STICKERS = [
      "zh-TW": "嗨！",
      "en": "Hi!"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 36652,
-    "v": "8d1fd5766d",
-    "hero": null,
-    "thumbBytes": 17522
+    "durationMs": 2083,
+    "frames": 24,
+    "bytes": 107892,
+    "v": "6463749dcb",
+    "hero": 0.75,
+    "thumbBytes": 9440
    },
    {
     "id": "thank-you",
@@ -315,12 +315,12 @@ window.STICKERS = [
      "zh-TW": "謝謝你！",
      "en": "Thank you!"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 36652,
-    "v": "8d1fd5766d",
-    "hero": null,
-    "thumbBytes": 17522
+    "durationMs": 2083,
+    "frames": 14,
+    "bytes": 95988,
+    "v": "81f9c805dd",
+    "hero": 0.583,
+    "thumbBytes": 10930
    },
    {
     "id": "beautifully-written",
@@ -328,12 +328,12 @@ window.STICKERS = [
      "zh-TW": "寫得真好",
      "en": "Beautifully written"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 36652,
-    "v": "8d1fd5766d",
-    "hero": null,
-    "thumbBytes": 17522
+    "durationMs": 2583,
+    "frames": 19,
+    "bytes": 110490,
+    "v": "7d72bbefe4",
+    "hero": 1.417,
+    "thumbBytes": 10750
    },
    {
     "id": "you-got-this",
@@ -341,12 +341,12 @@ window.STICKERS = [
      "zh-TW": "加油",
      "en": "You've got this"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 36652,
-    "v": "8d1fd5766d",
-    "hero": null,
-    "thumbBytes": 17522
+    "durationMs": 2083,
+    "frames": 18,
+    "bytes": 121066,
+    "v": "bcac1e07eb",
+    "hero": 1.083,
+    "thumbBytes": 8590
    },
    {
     "id": "haha",
@@ -354,12 +354,12 @@ window.STICKERS = [
      "zh-TW": "哈哈",
      "en": "Haha"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 36652,
-    "v": "8d1fd5766d",
-    "hero": null,
-    "thumbBytes": 17522
+    "durationMs": 2083,
+    "frames": 11,
+    "bytes": 117318,
+    "v": "ca7d718ab9",
+    "hero": 0.667,
+    "thumbBytes": 9786
    },
    {
     "id": "congrats",
@@ -367,12 +367,12 @@ window.STICKERS = [
      "zh-TW": "恭喜",
      "en": "Congratulations"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 36652,
-    "v": "8d1fd5766d",
-    "hero": null,
-    "thumbBytes": 17522
+    "durationMs": 2333,
+    "frames": 13,
+    "bytes": 107546,
+    "v": "24ff6b5d00",
+    "hero": 0.75,
+    "thumbBytes": 17532
    }
   ]
  },
@@ -396,12 +396,12 @@ window.STICKERS = [
      "zh-TW": "晚安",
      "en": "Good night"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 39956,
-    "v": "2eb09911b7",
-    "hero": null,
-    "thumbBytes": 19458
+    "durationMs": 2583,
+    "frames": 20,
+    "bytes": 102928,
+    "v": "62a7e7b2e5",
+    "hero": 2,
+    "thumbBytes": 9366
    },
    {
     "id": "teary",
@@ -409,12 +409,12 @@ window.STICKERS = [
      "zh-TW": "眼眶濕濕的",
      "en": "Teary-eyed"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 39956,
-    "v": "2eb09911b7",
-    "hero": null,
-    "thumbBytes": 19458
+    "durationMs": 2583,
+    "frames": 21,
+    "bytes": 79556,
+    "v": "12e6f8b855",
+    "hero": 1.167,
+    "thumbBytes": 9192
    },
    {
     "id": "lit-up",
@@ -422,12 +422,12 @@ window.STICKERS = [
      "zh-TW": "心裡亮了一下",
      "en": "That lit me up"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 39956,
-    "v": "2eb09911b7",
-    "hero": null,
-    "thumbBytes": 19458
+    "durationMs": 2583,
+    "frames": 26,
+    "bytes": 90502,
+    "v": "61e755990b",
+    "hero": 1.5,
+    "thumbBytes": 11530
    },
    {
     "id": "im-here",
@@ -435,12 +435,12 @@ window.STICKERS = [
      "zh-TW": "我在這裡",
      "en": "I'm here"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 39956,
-    "v": "2eb09911b7",
-    "hero": null,
-    "thumbBytes": 19458
+    "durationMs": 2583,
+    "frames": 24,
+    "bytes": 71580,
+    "v": "02558b8fa9",
+    "hero": 1.333,
+    "thumbBytes": 9616
    },
    {
     "id": "listening",
@@ -448,12 +448,12 @@ window.STICKERS = [
      "zh-TW": "慢慢說，我在聽",
      "en": "I'm listening"
     },
-    "durationMs": 0,
-    "frames": 1,
-    "bytes": 39956,
-    "v": "2eb09911b7",
-    "hero": null,
-    "thumbBytes": 19458
+    "durationMs": 2583,
+    "frames": 21,
+    "bytes": 70916,
+    "v": "7a950066e7",
+    "hero": 1.167,
+    "thumbBytes": 8804
    }
   ]
  }
