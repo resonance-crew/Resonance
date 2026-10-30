@@ -114,6 +114,16 @@ describe('afterMessageSent', () => {
     expect(unfurlMessage).not.toHaveBeenCalled();
   });
 
+  it("rings nothing for an album's later picture (the first rang for them all), still unfurling a link it holds", async () => {
+    afterMessageSent(db, sent({ silent: true }), '');
+    await settle();
+    expect(later).toHaveLength(0);
+    afterMessageSent(db, sent({ silent: true }), LINKED);
+    await settle();
+    expect(pushMessage).not.toHaveBeenCalled();
+    expect(unfurlMessage).toHaveBeenCalledWith(db, 'alice_bob', 'm1');
+  });
+
   it('does nothing for a message that was only sent again: it has been pushed and unfurled already', async () => {
     afterMessageSent(db, sent({ duplicate: true }), LINKED);
     afterMessageSent(db, sent({ push: null }), LINKED);

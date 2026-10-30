@@ -2,6 +2,7 @@ import { FieldValue, Timestamp, type DocumentData, type Firestore } from 'fireba
 import type { Card } from '@/lib/db/types';
 import { messageImageOf } from './chatImages';
 import { ApiFailure } from './http';
+import { messageAlbumOf, messageStickerOf } from './messageParts';
 import { unsentCopiesFor } from './messageActions';
 import { visibleCard } from './reads';
 import type { CreateReportInput, ReportCardInput } from './schemas';
@@ -162,6 +163,9 @@ export async function createReport(db: Firestore, reporterId: string, input: Cre
     ...(typeof m.kind === 'string' ? { kind: m.kind } : {}),
     // A picture sent with it: its id, which `npm run moderation` opens (chatImages/{id} names its files).
     ...(messageImageOf(m.image) ? { image: messageImageOf(m.image) } : {}),
+    // One of several pictures sent together; a sticker (its `text` is the fallback words).
+    ...(messageAlbumOf(m.album) ? { album: messageAlbumOf(m.album) } : {}),
+    ...(messageStickerOf(m.sticker) ? { sticker: messageStickerOf(m.sticker) } : {}),
     // Unsent: its words are in `unsent` below, while kept (./messageActions).
     ...(m.unsentAt != null ? { unsent: true } : {}),
   });

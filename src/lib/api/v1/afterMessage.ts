@@ -20,15 +20,18 @@ function ring(db: Firestore, push: MessagePush): Promise<unknown> {
  * stops the other (each logs and gives up). A message that was only sent
  * again (`duplicate`) has had both already. `text` is what was sent: without
  * a link in it (most messages) there is nothing to unfurl, and the message
- * isn't read again to find that out.
+ * isn't read again to find that out (a sticker's is empty: its stored words
+ * are its fallback, never unfurled). An album's later pictures (`silent`)
+ * ring nothing — the first rang for them all.
  */
 export function afterMessageSent(db: Firestore, sent: SentMessage, text: string) {
   const { push } = sent;
   if (sent.duplicate || !push) return;
   const unfurl = firstLink(text) !== null;
+  if (sent.silent && !unfurl) return;
   after(async () => {
     await Promise.all([
-      ring(db, push),
+      sent.silent ? null : ring(db, push),
       unfurl ? unfurlMessage(db, push.conversationId, push.messageId).catch((e) => console.error('[unfurl]', push.messageId, e)) : null,
     ]);
   });

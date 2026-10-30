@@ -6,6 +6,7 @@ import type { MessagePush } from '@/lib/push/chat';
 import { chatImageFiles, chatImageRef, messageImageOf } from './chatImages';
 import { NOTE_MESSAGE_KIND, hasPenName, noPenName, pairOf } from './conversations';
 import { ApiFailure } from './http';
+import { messageAlbumOf, messageStickerOf } from './messageParts';
 import type { SetReactionInput } from './schemas';
 
 /**
@@ -21,8 +22,8 @@ export const UNSEND_WINDOW_MS = 24 * 60 * 60 * 1000;
 /**
  * `unsentMessages/{pair}_{messageId}`: what an unsent message said, kept for
  * moderation (server-only: the rules close it to clients) — `{ pair,
- * messageId, senderId, to, text?, cardRef?, noteRef?, image?, sentAt,
- * unsentAt }`. Read only by the report path (a report of the conversation or
+ * messageId, senderId, to, text?, cardRef?, noteRef?, image?, sticker?,
+ * album?, sentAt, unsentAt }`. Read only by the report path (a report of the conversation or
  * of one of its messages, filed while it is kept, attaches the conversation's
  * copies to its evidence), deleted after UNSENT_COPY_KEEP_MS by the daily
  * trash cron (purgeUnsentCopies, with the picture it carried) and with either
@@ -124,7 +125,7 @@ export interface UnsentMessage {
  * Unsend a message one sent, within UNSEND_WINDOW_MS: for both people it
  * becomes a line saying so. One transaction —
  * - the message becomes `{ senderId, sentAt, unsentAt }`: its words, card,
- *   picture, link preview, quote and reactions gone;
+ *   picture, sticker, album place, link preview, quote and reactions gone;
  * - every message of the conversation quoting it (`replyTo.id`) keeps only
  *   `replyTo: { id, senderId, unsent: true }`;
  * - the conversation's preview, if it is this message, becomes
@@ -168,6 +169,8 @@ export async function unsendMessage(db: Firestore, uid: string, pair: string, me
     const cardRef = message.get('cardRef');
     const noteRef = message.get('noteRef');
     const image = messageImageOf(message.get('image'));
+    const sticker = messageStickerOf(message.get('sticker'));
+    const album = messageAlbumOf(message.get('album'));
     tx.set(copy, {
       pair,
       messageId,
@@ -177,6 +180,8 @@ export async function unsendMessage(db: Firestore, uid: string, pair: string, me
       ...(typeof cardRef === 'string' && cardRef ? { cardRef } : {}),
       ...(noteRef && typeof noteRef === 'object' ? { noteRef } : {}),
       ...(image ? { image } : {}),
+      ...(sticker ? { sticker } : {}),
+      ...(album ? { album } : {}),
       sentAt,
       unsentAt: FieldValue.serverTimestamp(),
     });
@@ -229,6 +234,8 @@ export async function unsentCopiesFor(db: Firestore, pair: string, now = Date.no
     .sort((a, b) => (a.get('sentAt') as Timestamp).toMillis() - (b.get('sentAt') as Timestamp).toMillis())
     .map((d) => {
       const image = messageImageOf(d.get('image'));
+      const sticker = messageStickerOf(d.get('sticker'));
+      const album = messageAlbumOf(d.get('album'));
       const cardRef = d.get('cardRef');
       const noteRef = d.get('noteRef');
       return {
@@ -241,6 +248,8 @@ export async function unsentCopiesFor(db: Firestore, pair: string, now = Date.no
         ...(noteRef && typeof noteRef === 'object' ? { noteRef } : {}),
         // Its picture: `npm run moderation picture <id>` opens it (kept with the copy).
         ...(image ? { image } : {}),
+        ...(album ? { album } : {}),
+        ...(sticker ? { sticker } : {}),
         unsent: true as const,
       };
     });

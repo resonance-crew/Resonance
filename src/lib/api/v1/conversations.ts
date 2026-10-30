@@ -2,8 +2,10 @@ import { FieldValue, type DocumentSnapshot, type Firestore, type Transaction } f
 import { mapCard } from '@/lib/db/firestore/mapper';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
 import type { MessagePush } from '@/lib/push/chat';
+import { isSticker, stickerFallbackText } from '@/lib/stickers/catalog';
 import { chatImageRef, messageImageOf, pictureToSend } from './chatImages';
 import { ApiFailure } from './http';
+import { fallbackLocale, messageStickerOf, type MessageAlbum } from './messageParts';
 import { addReason, answeredBy, connect, letterReason, originsRef } from './origins';
 import { CARD_VISIBILITY_FIELDS, cardVisible } from './present';
 import { visibleCardById } from './reads';
@@ -398,12 +400,14 @@ async function leaveNote(
       kind: NOTE_MESSAGE_KIND,
     });
     tx.set(conversation, {
-      // `image` and `unsent` go: the preview is merged into the one before, which may have been a picture or unsent.
+      // `image`, `sticker` and `unsent` go: the preview is merged into the one before, which may have been a picture,
+      // a sticker or unsent.
       lastMessage: {
         text: cut(input.text, LAST_MESSAGE_PREVIEW),
         senderId: uid,
         sentAt: FieldValue.serverTimestamp(),
         image: FieldValue.delete(),
+        sticker: FieldValue.delete(),
         unsent: FieldValue.delete(),
       },
       updatedAt: FieldValue.serverTimestamp(),
@@ -434,6 +438,11 @@ export interface SentMessage {
   duplicate: boolean;
   /** What `pushMessage` needs to ring the recipient — null for a duplicate. */
   push: MessagePush | null;
+  /**
+   * An album's picture after its first: nothing rings for it (the first rang for them all). Only a hint that spares
+   * the push its reads — pushMessage asks the stored message again.
+   */
+  silent?: boolean;
 }
 
 /**
@@ -480,6 +489,24 @@ export interface SentMessage {
  *
  * The sender needs a pen name (hasPenName): the thread, its bell and every
  * push name them. It is asked before the blocks, as everywhere.
+ *
+ * A sticker (round 22, `sticker: { pack, id }` of lib/stickers/catalog) is a
+ * message of its own: no words, card, picture or note beside it (400 'A
+ * sticker is sent on its own.'; one the catalog doesn't hold is 400 'That is
+ * not a sticker.'), though it may answer a message (`replyTo`). It is kept as
+ * `sticker: { pack, id }` with its fallback words as `text` — 〔貼圖：謝謝〕 or
+ * [Sticker: Thanks], in the recipient's profile language (zh-TW unless it is
+ * en) — which builds that can't draw a sticker show (installed builds draw an
+ * empty bubble for an empty text); the list's preview is those words with
+ * `sticker: true`, and a reply to it quotes them with its `sticker`.
+ * Everything else is any message's: the connection or the letter it answers,
+ * the pen name, the blocks, `clientId`, the unread count, the budget.
+ *
+ * An album (round 22, `album: { id, index, count }`) is one of several
+ * pictures sent together, each its own message: only beside `image` (400 'An
+ * album holds pictures only.'), kept as it was sent. Only its first picture
+ * (`index` 0) rings the other person's phone (`silent` on the others; the
+ * push asks again).
  */
 export interface SendMessageInput {
   to: string;
@@ -489,6 +516,8 @@ export interface SendMessageInput {
   replyTo?: string | null;
   clientId?: string | null;
   image?: string | null;
+  sticker?: { pack: string; id: string } | null;
+  album?: MessageAlbum | null;
 }
 
 export async function sendMessage(db: Firestore, uid: string, input: SendMessageInput, spent: Promise<void> = Promise.resolve()): Promise<SentMessage> {
@@ -498,8 +527,18 @@ export async function sendMessage(db: Firestore, uid: string, input: SendMessage
 async function writeMessage(db: Firestore, uid: string, input: SendMessageInput, spent: Promise<void>): Promise<SentMessage> {
   const other = input.to;
   if (other === uid) throw new ApiFailure('invalid_request', 'You cannot message yourself.');
-  if (!input.text && !input.cardRef && !input.image) throw new ApiFailure('invalid_request', 'A message needs text, a card or a picture.');
+  const sticker = input.sticker ? { pack: input.sticker.pack, id: input.sticker.id } : null;
+  if (sticker) {
+    if (!isSticker(sticker.pack, sticker.id)) throw new ApiFailure('invalid_request', 'That is not a sticker.');
+    if (input.text || input.cardRef || input.image || input.noteRef || input.album) {
+      throw new ApiFailure('invalid_request', 'A sticker is sent on its own.');
+    }
+  } else if (!input.text && !input.cardRef && !input.image) {
+    throw new ApiFailure('invalid_request', 'A message needs text, a card or a picture.');
+  }
   if (input.cardRef && input.image) throw new ApiFailure('invalid_request', 'A message carries a card or a picture, not both.');
+  if (input.album && !input.image) throw new ApiFailure('invalid_request', 'An album holds pictures only.');
+  const album = input.album ? { id: input.album.id, index: input.album.index, count: input.album.count } : null;
   // An id Firestore keeps for itself names no picture.
   if (input.image && isReservedId(input.image)) throw new ApiFailure('invalid_request', 'That is not a picture you can send here.');
   if (input.clientId && isReservedId(input.clientId)) throw new ApiFailure('invalid_request', 'Not a valid client id.');
@@ -510,6 +549,15 @@ async function writeMessage(db: Firestore, uid: string, input: SendMessageInput,
   cardRead?.catch(() => {});
   // A noteRef naming an id Firestore keeps for itself names no note: read as one that isn't there (one answer for all).
   const noteRef = input.noteRef && !isReservedId(input.noteRef.noteId) && !isReservedId(input.noteRef.cardId) ? input.noteRef : null;
+  // A sticker's fallback words are in the recipient's language: their profile's, read beside the transaction (a
+  // language changed a moment ago changes no guarantee, so the transaction needn't hold the profile). Unread, the
+  // words are Chinese, as for a profile without a language.
+  const recipientRead = sticker
+    ? db
+        .getAll(db.doc(`users/${other}`), { fieldMask: ['primaryLocale'] })
+        .then(([snap]) => fallbackLocale(snap.get('primaryLocale')))
+        .catch(() => fallbackLocale(null))
+    : null;
   const pair = pairOf(uid, other);
   const conversation = db.doc(`conversations/${pair}`);
   const messages = conversation.collection('messages');
@@ -597,30 +645,35 @@ async function writeMessage(db: Firestore, uid: string, input: SendMessageInput,
       });
     }
     const quoted = replied?.exists ? replyQuote(replied) : null;
+    // A sticker's words are its fallback, for builds that can't draw it.
+    const text = sticker && recipientRead ? stickerFallbackText(sticker, await recipientRead) : input.text;
     tx.set(message, {
       senderId: uid,
-      text: input.text,
+      text,
       sentAt: FieldValue.serverTimestamp(),
       ...(card ? { cardRef: card.id } : {}),
       ...(privateShare ? { privateShare: true } : {}),
       ...(keptNoteRef ? { noteRef: { cardId: keptNoteRef.cardId, noteId: keptNoteRef.noteId } } : {}),
       ...(quoted ? { replyTo: quoted } : {}),
       ...(picture ? { image: picture } : {}),
+      ...(picture && album ? { album } : {}),
+      ...(sticker ? { sticker } : {}),
     });
     // Its record, which outlives the message: whoever read the card knows whose it is (sharedCards PRIVATE_SHARES).
     if (privateShare && card) tx.set(privateShareRef(db, card.id), { authorId: uid, at: FieldValue.serverTimestamp() });
     // Sent: the picture is this message's from now on (and no longer one the unsent purge looks at).
     if (picture) tx.update(chatImageRef(db, picture.id), { messageId: message.id, unsentAt: FieldValue.delete() });
-    // The list's preview: the text, or the attached card's title when there is none; a picture says so
-    // (`image`, written or taken away every time — the preview is merged into the one before, and so is the
-    // `unsent` an unsent last message left there).
+    // The list's preview: the text, or the attached card's title when there is none; a picture and a sticker
+    // say so (`image`, `sticker`: written or taken away every time — the preview is merged into the one before,
+    // and so is the `unsent` an unsent last message left there). A sticker's text is its fallback words.
     tx.set(conversation, {
       lastMessage: {
         // A card's title only when anyone may read the card: the list is the recipient's even when the card isn't.
-        text: cut(input.text || (card && card.publishedAt && card.visibility === 'public' ? card.thoughtCore : '') || '', LAST_MESSAGE_PREVIEW),
+        text: cut(text || (card && card.publishedAt && card.visibility === 'public' ? card.thoughtCore : '') || '', LAST_MESSAGE_PREVIEW),
         senderId: uid,
         sentAt: FieldValue.serverTimestamp(),
         image: picture ? true : FieldValue.delete(),
+        sticker: sticker ? true : FieldValue.delete(),
         unsent: FieldValue.delete(),
       },
       updatedAt: FieldValue.serverTimestamp(),
@@ -645,23 +698,30 @@ async function writeMessage(db: Firestore, uid: string, input: SendMessageInput,
       notificationId: null,
       duplicate: false,
       push: { conversationId: pair, messageId: message.id, from: uid, to: other },
+      // An album's later pictures ring nothing (the first rang for them all).
+      ...(picture && album && album.index > 0 ? { silent: true } : {}),
     };
   });
 }
 
 /**
- * What a reply keeps of the message it answers (a picture only as `image: true`: the quote is words). An unsent
- * one is quoted as its quotes were emptied (`{ id, senderId, unsent: true }`, ./messageActions).
+ * What a reply keeps of the message it answers (a picture only as `image: true`: the quote is words; a sticker as
+ * its `sticker`, beside its fallback words). An unsent one is quoted as its quotes were emptied (`{ id, senderId,
+ * unsent: true }`, ./messageActions).
  */
-function replyQuote(original: DocumentSnapshot): { id: string; senderId: string; text: string; cardRef?: string; image?: true } | { id: string; senderId: string; unsent: true } {
+function replyQuote(
+  original: DocumentSnapshot,
+): { id: string; senderId: string; text: string; cardRef?: string; image?: true; sticker?: { pack: string; id: string } } | { id: string; senderId: string; unsent: true } {
   if (original.get('unsentAt') != null) return { id: original.id, senderId: String(original.get('senderId') ?? ''), unsent: true };
   const cardRef = original.get('cardRef');
+  const sticker = messageStickerOf(original.get('sticker'));
   return {
     id: original.id,
     senderId: String(original.get('senderId') ?? ''),
     text: cut(String(original.get('text') ?? ''), REPLY_QUOTE_CHARS),
     ...(typeof cardRef === 'string' && cardRef ? { cardRef } : {}),
     ...(messageImageOf(original.get('image')) ? { image: true as const } : {}),
+    ...(sticker ? { sticker } : {}),
   };
 }
 

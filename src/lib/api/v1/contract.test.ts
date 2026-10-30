@@ -161,8 +161,33 @@ describe('POST /api/v1/messages (every write route shares these)', () => {
   });
 
   it('treats an explicit null on an optional field as absent (Kotlin clients send it)', async () => {
-    const res = await post({ to: 'bob', text: 'hi', cardRef: null, noteRef: null, replyTo: null, clientId: null });
+    const res = await post({ to: 'bob', text: 'hi', cardRef: null, noteRef: null, replyTo: null, clientId: null, sticker: null, album: null });
     expect(res.status).toBe(201);
+  });
+
+  it('passes a sticker and an album place on to the service (round 22), refusing ones not well-formed before sending anything', async () => {
+    expect((await post({ to: 'bob', text: '', sticker: { pack: 'twine', id: 'thanks' } })).status).toBe(201);
+    expect(sendMessage).toHaveBeenLastCalledWith({}, 'alice', { to: 'bob', text: '', sticker: { pack: 'twine', id: 'thanks' } }, expect.any(Promise));
+    const album = { id: 'album-0123456789abcdef', index: 1, count: 3 };
+    expect((await post({ to: 'bob', text: '', image: 'pic1', album })).status).toBe(201);
+    expect(sendMessage).toHaveBeenLastCalledWith({}, 'alice', { to: 'bob', text: '', image: 'pic1', album }, expect.any(Promise));
+    sendMessage.mockClear();
+
+    const malformed = [
+      { sticker: { pack: 'Twine', id: 'thanks' } },
+      { sticker: { pack: 'twine', id: '../x' } },
+      { sticker: { pack: 'twine' } },
+      { album: { ...album, index: 3 } },
+      { album: { ...album, count: 1, index: 0 } },
+      { album: { ...album, count: 11 } },
+      { album: { ...album, index: -1 } },
+      { album: { ...album, id: 'short' } },
+    ];
+    for (const extra of malformed) {
+      const res = await post({ to: 'bob', text: '', image: 'pic1', ...extra });
+      expect(res.status, JSON.stringify(extra)).toBe(400);
+    }
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 
   it('maps service failures to their status codes', async () => {

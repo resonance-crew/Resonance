@@ -1,9 +1,11 @@
-import type { Firestore } from 'firebase-admin/firestore';
+import { Timestamp, type Firestore } from 'firebase-admin/firestore';
 import type { MulticastMessage } from 'firebase-admin/messaging';
 import { createTranslator } from 'next-intl';
 import en from '@/messages/en.json';
 import zhTW from '@/messages/zh-TW.json';
 import { NOTE_MESSAGE_KIND, cut, pairOf } from '@/lib/api/v1/conversations';
+import { STICKER_RUN_MS, continuesStickerRun, messageAlbumOf, messageStickerOf } from '@/lib/api/v1/messageParts';
+import { stickerName, type StickerRef } from '@/lib/stickers/catalog';
 import { storageKeyOf } from '@/lib/storage/publicUrl';
 import type { DeviceLocale } from './devices';
 import {
@@ -46,9 +48,53 @@ export interface MessagePush {
 const DOC_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 
+const notifications = (locale: DeviceLocale) => createTranslator({ locale, messages: MESSAGES[locale], namespace: 'app.notifications' });
+
 /** "Shared a card" / "Sent a photo" in the device's language: what a message with no words says. */
 function attachmentLine(locale: DeviceLocale, picture: boolean): string {
-  return createTranslator({ locale, messages: MESSAGES[locale], namespace: 'app.notifications' })(picture ? 'messageImage' : 'messageCard');
+  return notifications(locale)(picture ? 'messageImage' : 'messageCard');
+}
+
+/**
+ * "Sent a sticker: Thanks" with the sticker's name in the device's language — never the stored words, which are
+ * its fallback in the recipient's profile language. A sticker this server doesn't know keeps those words.
+ */
+function stickerLine(locale: DeviceLocale, sticker: StickerRef, fallback: string): string {
+  const name = stickerName(sticker, locale);
+  return name ? notifications(locale)('messageSticker', { name }) : fallback || notifications(locale)('messageImage');
+}
+
+/** "Sent 3 photos" in the device's language: an album's first picture, when it has no words. */
+function albumLine(locale: DeviceLocale, count: number): string {
+  return notifications(locale)('messageAlbum', { count });
+}
+
+/** How many of the conversation's messages just before a sticker are looked through for its sender's previous one. */
+const STICKER_RUN_LOOKBACK = 10;
+
+/**
+ * Whether the sticker `messageId` (sent at `sentAt` by `from`) continues a run of the sender's stickers: their
+ * previous message in the conversation was a sticker sent less than STICKER_RUN_MS before. One query of the few
+ * messages in that window (the sentAt index every conversation has; no composite index), only ever asked for a
+ * sticker. A window busier than STICKER_RUN_LOOKBACK messages, or a read that fails, rings as usual.
+ */
+async function continuesRun(db: Firestore, conversationId: string, messageId: string, from: string, sentAt: unknown): Promise<boolean> {
+  if (!(sentAt instanceof Timestamp)) return false;
+  try {
+    const window = await db
+      .collection(`conversations/${conversationId}/messages`)
+      .where('sentAt', '<', sentAt)
+      .where('sentAt', '>', Timestamp.fromMillis(sentAt.toMillis() - STICKER_RUN_MS))
+      .orderBy('sentAt', 'desc')
+      .limit(STICKER_RUN_LOOKBACK)
+      .get();
+    const previous = window.docs.find((d) => d.id !== messageId && d.get('senderId') === from);
+    const at = previous?.get('sentAt');
+    return continuesStickerRun(previous && at instanceof Timestamp ? { sticker: previous.get('sticker'), sentAtMs: at.toMillis() } : null, sentAt.toMillis());
+  } catch (e) {
+    console.error('[push] sticker run', messageId, e);
+    return false;
+  }
 }
 
 /** Whether `muted` (connections/{pair}.muted: `{ by }[]`) holds the recipient. */
@@ -98,6 +144,19 @@ function epochMillis(value: unknown): number {
  * - A note carried into the thread (sendNote) rings here too, like any
  *   message, its data marked `kind: 'note'` (only a kind the server knows;
  *   apps ignore one they don't).
+ * - A sticker (round 22) says "Sent a sticker: {name}", the name in each
+ *   device's language (its stored words are a fallback in the recipient's
+ *   profile language, never the body); the data-only kind also gets `kind:
+ *   'sticker'`, `stickerPack` and `stickerId`. A sticker that continues a run
+ *   — the sender's previous message in the conversation was a sticker sent
+ *   less than STICKER_RUN_MS before — rings quietly: no sound (iOS
+ *   `interruption-level: passive`, Android notification priority low, no
+ *   default sound) for a notification the system shows, and nothing at all
+ *   for a build that draws its own (its notification keeps the run's first
+ *   line; data can't be made silent for builds already installed).
+ * - An album's pictures ring once, for the first (`index` 0): its words, or
+ *   "Sent {count} photos". The others ring nothing (null). Should the first
+ *   never arrive, the album rings nothing.
  */
 export async function pushMessage(db: Firestore, push: MessagePush, sender: PushSender): Promise<PushResult | null> {
   const { conversationId, messageId, from, to } = push;
@@ -114,16 +173,28 @@ export async function pushMessage(db: Firestore, push: MessagePush, sender: Push
   if (!message.exists || message.get('senderId') !== from) return null;
   // Unsent before its push went out: nothing to say (pushUnsend tells the phone instead).
   if (message.get('unsentAt') != null) return null;
+  // An album rings once, for its first picture.
+  const album = messageAlbumOf(message.get('album'));
+  if (album && album.index !== 0) return null;
   if (blockedByRecipient.exists || blockedBySender.exists) return null;
   if (mutedBy(connection.get('muted'), to)) return null;
   if (devices.empty) return { sent: 0, pruned: 0 };
+
+  const sticker = messageStickerOf(message.get('sticker'));
+  // A run of stickers buzzes once: the ones after the first ring without a sound.
+  const quiet = sticker ? await continuesRun(db, conversationId, messageId, from, message.get('sentAt')) : false;
 
   const handle = str(author.get('handle'));
   const title = handle || 'Resonance';
   const words = cut(str(message.get('text')).trim(), PUSH_BODY_CHARS);
   const route = pushRoute('message', { fromHandle: handle });
   const sentAt = String(epochMillis(message.get('sentAt')));
-  const kind: Record<string, string> = message.get('kind') === NOTE_MESSAGE_KIND ? { kind: NOTE_MESSAGE_KIND } : {};
+  const kind: Record<string, string> =
+    message.get('kind') === NOTE_MESSAGE_KIND
+      ? { kind: NOTE_MESSAGE_KIND }
+      : sticker
+        ? { kind: 'sticker', stickerPack: sticker.pack, stickerId: sticker.id }
+        : {};
   const picture = message.get('image') != null;
   const face = faceOf(author);
 
@@ -132,10 +203,13 @@ export async function pushMessage(db: Firestore, push: MessagePush, sender: Push
   const queue = (targets: DeviceTarget[], build: (tokens: string[]) => MulticastMessage) => void groups.push({ targets, build });
 
   for (const [locale, targets] of groupByLocale(deviceTargets(devices.docs))) {
-    const body = words || attachmentLine(locale, picture);
+    const body = sticker
+      ? stickerLine(locale, sticker, words)
+      : words || (album ? albumLine(locale, album.count) : attachmentLine(locale, picture));
     // Only Android builds draw their own notification; a build on another platform that names the capability still gets a push the system shows.
     const draws = (t: DeviceTarget) => t.platform === 'android' && t.capabilities.includes(CHAT_PUSH_CAPABILITY);
-    const own = targets.filter(draws);
+    // A quiet sticker reaches no build that draws its own notification: it would sound like any message there.
+    const own = quiet ? [] : targets.filter(draws);
     const system = targets.filter((t) => !draws(t));
 
     if (own.length) {
@@ -153,10 +227,19 @@ export async function pushMessage(db: Firestore, push: MessagePush, sender: Push
         notification: { title, body },
         // No `notificationId`: no bell row stands behind a message, and an empty one made older Android builds
         // mark `notifications/` itself read on the tap (an invalid path, a crash). They open the route without it.
-        data: { type: 'message', route, fromUserId: from, conversationId, messageId, ...kind },
-        android: { priority: 'high', notification: { channelId: MESSAGES_CHANNEL, tag: conversationId } },
-        // The message's own collapse id: never merging two messages, but what an unsend replaces (pushUnsend).
-        apns: { ...collapsing(messageId), payload: { aps: { sound: 'default', threadId: conversationId } } },
+        // (A sticker's kind travels only to the builds that draw their own: `kind` here has meant a note.)
+        data: { type: 'message', route, fromUserId: from, conversationId, messageId, ...(sticker ? {} : kind) },
+        ...(quiet
+          ? {
+              // A sticker continuing a run: shown, replacing the conversation's notification, without a sound.
+              android: { priority: 'normal' as const, notification: { channelId: MESSAGES_CHANNEL, tag: conversationId, priority: 'low' as const, defaultSound: false } },
+              apns: { ...collapsing(messageId), payload: { aps: { threadId: conversationId, 'interruption-level': 'passive' } } },
+            }
+          : {
+              android: { priority: 'high' as const, notification: { channelId: MESSAGES_CHANNEL, tag: conversationId } },
+              // The message's own collapse id: never merging two messages, but what an unsend replaces (pushUnsend).
+              apns: { ...collapsing(messageId), payload: { aps: { sound: 'default', threadId: conversationId } } },
+            }),
       }));
     }
   }
