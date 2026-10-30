@@ -120,23 +120,53 @@ import Testing
             pic("q0", "bob", album: "B", 0, count: 2, at: 4), pic("q1", "bob", album: "B", 1, count: 2, at: 5, delivery: .failed),
             pic("x", "alice", album: nil, 0, at: 6),
         ])
-        #expect(rows.map(\.id) == ["t", "p0", "q0", "q1", "x"])
+        #expect(rows.map(\.id) == ["t", "p0", "q0", "x"])
         #expect(rows[1].album?.map(\.id) == ["p0", "p1", "p2"])
         #expect(rows[1].holds("p2") && !rows[1].holds("q0"))
-        // The second album's failed picture stands alone (with its retry); its first is a picture of one.
-        #expect(rows[2].album == nil && rows[3].album == nil)
-        // The album sits in its run as one message: bob's text, the grid, then the lone pictures.
-        #expect(rows.map(\.position) == [.first, .middle, .middle, .last, .single])
-        // Another sender's picture under the same album id is never part of it; an unsent one leaves it smaller.
+        // A picture that failed to send keeps its place in the grid (dimmed, with its retry), as on the web and Android.
+        #expect(rows[2].album?.map(\.id) == ["q0", "q1"])
+        // Each album sits in its run as one message: bob's text, the two grids, then alice.
+        #expect(rows.map(\.position) == [.first, .middle, .last, .single])
+        // Another sender's picture under the same album id is never part of it, and ends it.
         let other = ThreadRows.build([pic("p0", "bob", album: "A", 0, at: 1), pic("p1", "alice", album: "A", 1, at: 2),
                                       pic("p2", "bob", album: "A", 2, at: 3)])
         #expect(other.allSatisfy { $0.album == nil })
-        let smaller = ThreadRows.build([pic("p0", "bob", album: "A", 0, at: 1), pic("p1", "bob", album: "A", 1, at: 2, unsent: true),
-                                        pic("p2", "bob", album: "A", 2, at: 3)])
-        #expect(smaller.map(\.album?.count) == [nil, nil, nil])
         // Arriving out of order, the grid keeps the album's order.
         let shuffled = ThreadRows.build([pic("p1", "bob", album: "A", 1, at: 1), pic("p0", "bob", album: "A", 0, at: 2)])
         #expect(shuffled.first?.album?.map(\.id) == ["p0", "p1"])
+    }
+
+    @Test func aPictureUnsentInTheMiddleOfAnAlbumStandsApartAfterItsGrid() {
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        func pic(_ id: String, _ index: Int, at s: Double, sender: String = "bob") -> ChatMessage {
+            ChatMessage(id: id, senderId: sender, text: "", sentAt: t.addingTimeInterval(s), image: ChatImage(id: id, width: 4, height: 3),
+                        album: AlbumRef(id: "A", index: index, count: 4))
+        }
+        // The server's unsend leaves only its sender and times: read from the document, it carries no album and no picture.
+        let unsent = ChatMessage.from(id: "p1", fields: ["senderId": "bob", "sentAt": "x", "unsentAt": "y"],
+                                      sentAt: t.addingTimeInterval(2), origin: URL(string: "https://x.test")!)
+        #expect(unsent.isUnsent && unsent.album == nil && unsent.image == nil)
+        let rows = ThreadRows.build([pic("p0", 0, at: 1), unsent, pic("p2", 2, at: 3), pic("p3", 3, at: 4)])
+        // One grid of the three standing, the unsent one's line right after it.
+        #expect(rows.map(\.id) == ["p0", "p1"])
+        #expect(rows[0].album?.map(\.id) == ["p0", "p2", "p3"])
+        #expect(rows[1].message.isUnsent && rows[1].album == nil)
+        // A failed message of no album between two pictures (words that didn't go) is drawn after the grid too.
+        let failedWords = ChatMessage(id: "w", senderId: "bob", text: "看", sentAt: t.addingTimeInterval(2.5), delivery: .failed)
+        let withFailed = ThreadRows.build([pic("p0", 0, at: 1), failedWords, pic("p2", 2, at: 3)])
+        #expect(withFailed.map(\.id) == ["p0", "w"])
+        #expect(withFailed[0].album?.map(\.id) == ["p0", "p2"])
+        // Unsent after the album's last picture: it stays where it is, after the grid.
+        let trailing = ChatMessage(id: "u", senderId: "bob", text: "", sentAt: t.addingTimeInterval(5), isUnsent: true)
+        let after = ThreadRows.build([pic("p0", 0, at: 1), pic("p2", 2, at: 3), trailing, ChatMessage(id: "z", senderId: "alice", text: "hi", sentAt: t.addingTimeInterval(6))])
+        #expect(after.map(\.id) == ["p0", "u", "z"])
+        // Their words between two pictures end the album there: two grids are never joined across words.
+        let words = ChatMessage(id: "w2", senderId: "bob", text: "還有", sentAt: t.addingTimeInterval(2))
+        let split = ThreadRows.build([pic("p0", 0, at: 1), pic("p1", 1, at: 1.5), words, pic("p2", 2, at: 3), pic("p3", 3, at: 4)])
+        #expect(split.map(\.id) == ["p0", "w2", "p2"])
+        // Someone else's unsent message between them ends it too.
+        let theirs = ChatMessage(id: "o", senderId: "alice", text: "", sentAt: t.addingTimeInterval(2), isUnsent: true)
+        #expect(ThreadRows.build([pic("p0", 0, at: 1), theirs, pic("p2", 2, at: 3)]).allSatisfy { $0.album == nil })
     }
 
     @Test func anOutgoingStickerOrAlbumPictureIsDrawnAsItWillBeKept() {
