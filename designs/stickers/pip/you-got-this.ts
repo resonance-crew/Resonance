@@ -1,6 +1,7 @@
 /**
  * 點點 · 加油 You've got this — it cheers with a small paper pennant held high: two hops, the pennant swinging and its
- * flag rippling, the other mitten pumping up on every hop, mouth open. Key pose: standing, the pennant up, smiling.
+ * flag rippling, the other mitten pumping up on every hop, mouth open, eyes open on whoever it's cheering on. Key pose:
+ * standing, the pennant up, smiling.
  *
  * The body moves on 8 frames (two hops: crouch, up, land, stand); the pennant swings on twos, on the same frames
  * where it can, and the face and the free mitten ride along.
@@ -41,10 +42,9 @@ export default defineSticker({
     p.liftL = 45 + 95 * pick(t, [[0, 0], [fr(5), 1], [fr(7), 0], [fr(13), 1], [fr(15), 0]]);
     const [mx, my] = pip.mitten('R', MITTEN_MIDDLE);
     flag.at(mx, my, { k, scale: 0.98, anchor: 'grip', rot: swing }).set({ wave: t2 * 1.5 });
-    // the face: cheering (mouth open) through the hops, eyes shut at the top of each, a fuller blush
+    // the face: cheering (mouth open) through the hops, eyes open on whoever it's cheering on, a fuller blush
     const cheer = pick(t, [[0, 0], [fr(4), 1], [fr(18), 0]]) > 0;
     if (cheer) p.mouth = 'mouth-open';
-    if (air) p.eyes = 'shut';
     p.faceY -= cheer ? 3 : 0;
     p.faceX += 3;
     p.blush = pick(t, [[0, 0.45], [fr(5), 1], [fr(18), 0.45]]);

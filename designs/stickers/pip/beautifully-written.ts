@@ -1,82 +1,87 @@
 /**
- * 點點 · 寫得真好 Beautifully written — it reads a small story card held in both mittens, its eyes running along the
- * lines; it looks up, "oh!", hops, and holds up a paper star (shining) in one mitten, the card in the other, eyes shut
- * and beaming; then the star goes and it reads on. Key pose: reading the card, held before its belly.
+ * 點點 · 寫得真好 Beautifully written — it reads a small story card held before its belly; a teacher's red double
+ * circle draws itself round the best line; it looks up, delighted, hops, and lifts the card up high behind its head in
+ * both mittens, eyes shut, mouth open, big sparkles round the card; then brings it down to read again. Key pose: reading
+ * the card, the circle not yet drawn.
  *
- * The body moves on 6 frames (the hop); the card, the star, the arms and the face carry the rest.
+ * The body moves on 8 frames (the hop, and the card going up and down); the circle, the sparkles and the face ride
+ * along on small frames.
  */
-import { blink, defineSticker, fr, MITTEN_MIDDLE, step } from '../kit';
-import { pick, STAR_WAND } from './_local';
+import { blink, defineSticker, fr, MITTEN_MIDDLE, SPARKLE_BIG } from '../kit';
+import { pick, PRAISE_CARD } from './_local';
 
-const K = 1.1;
-/** The card's scale (on K), and where the mittens hold it while reading: its lower corners, rig units. */
-const CARD = 0.86;
-const HOLD_L: [number, number] = [314, 646];
-const HOLD_R: [number, number] = [386, 646];
+const K = 1.08;
+/** Where the mittens hold the card while reading: its lower corners, rig units. */
+const HOLD_L: [number, number] = [312, 648];
+const HOLD_R: [number, number] = [388, 648];
+/** The card up high: how large, and how much further up than the mittens it rises on a hop's top. */
+const HIGH = 1.62;
 
 export default defineSticker({
   duration: 2.5,
-  // the thumb: the star held up shining, the card in the other mitten, eyes shut and beaming
-  hero: fr(17),
+  // the thumb: the card up high, circled, the sparkles out, eyes shut and beaming
+  hero: fr(13),
   cast: { pip: { slug: 'dot', x: 216, ground: 418, k: K } },
   props: {
-    card: { kind: 'card', seed: 9 },
-    // inside 點點, just above its paper: its mitten (brought to the front) closes over the stick
-    star: { kind: STAR_WAND, seed: 5, inside: { puppet: 'pip', above: 'torso' } },
+    // reading: in front of it; held up: behind its head (its face and curls in front, its mittens at the lower corners)
+    card: { kind: PRAISE_CARD, seed: 9, z: 100 },
+    high: { kind: PRAISE_CARD, seed: 9, z: 5 },
+    s1: { kind: 'sparkles', seed: 3, z: 110 },
+    s2: { kind: 'sparkle', seed: 6, z: 110 },
   },
-  frame(t, { pip }, { card, star }) {
+  frame(t, { pip }, { card, high, s1, s2 }) {
     const p = pip.pose;
     const k = pip.k;
-    // the hop: crouch (f10), up (f11), top (f12), land (f13), settle (f14), rest (f15)
-    p.rise += pick(t, [[0, 0], [fr(11), 26], [fr(12), 32], [fr(13), 0]]);
-    const sq = pick(t, [[0, 0], [fr(10), -1], [fr(11), 0.8], [fr(12), 0.2], [fr(13), -1], [fr(14), 0.25], [fr(15), 0]]);
+    // the hop: crouch (f9), up (f10), top (f11), land (f12), settle (f13); the card down again at f24–25
+    p.rise += pick(t, [[0, 0], [fr(10), 30], [fr(11), 36], [fr(12), 0]]);
+    const sq = pick(t, [[0, 0], [fr(9), -1], [fr(10), 0.8], [fr(11), 0.2], [fr(12), -0.9], [fr(13), 0.2], [fr(14), 0]]);
     p.sy *= 1 + 0.08 * sq;
     p.sx *= 1 - 0.045 * sq;
     p.legS *= 1 + 0.12 * Math.min(0, sq);
-    p.decoR += pick(t, [[0, 0], [fr(10), 3], [fr(11), -6], [fr(12), -2], [fr(13), 6], [fr(14), -2], [fr(15), 0]]);
-    // reading (both mittens on the card) until f10 and again from f25; between, the star up and the card at its side
-    const two = pick(t, [[0, 1], [fr(10), 0], [fr(25), 1]]) > 0;
+    p.decoR += pick(t, [[0, 0], [fr(9), 3], [fr(10), -6], [fr(12), 6], [fr(13), -2], [fr(14), 0]]);
     p.front = true;
-    if (two) {
+    const up = pick(t, [[0, 0], [fr(10), 1], [fr(24), 0]]) > 0;
+    // the red circle: drawn round the line while it reads (f4–7), there until the card is back down
+    const circle = pick(t, [[0, 0], [fr(4), 0.25], [fr(5), 0.5], [fr(6), 0.75], [fr(7), 1], [fr(25), 0]]);
+    if (!up) {
       const [lx, ly] = pip.pagePoint(...HOLD_L);
       const [rx, ry] = pip.pagePoint(...HOLD_R);
-      // looking up at f8–9, the card dips a little with the mittens
-      const dip = pick(t, [[0, 0], [fr(8), 1], [fr(25), 0]]) * 8 * k;
+      const dip = pick(t, [[0, 0], [fr(8), 1], [fr(25), 0]]) * 6 * k;
       p.liftL = pip.aim('L', lx, ly + dip);
       p.liftR = pip.aim('R', rx, ry + dip);
       const [ml, mly] = pip.mitten('L', MITTEN_MIDDLE);
       const [mr, mry] = pip.mitten('R', MITTEN_MIDDLE);
-      card.at((ml + mr) / 2, (mly + mry) / 2 - 30 * k * CARD, { k, scale: CARD, rot: -3 }).set({ lines: 1 });
+      card.at((ml + mr) / 2, (mly + mry) / 2 + 4 * k, { k, scale: 0.86, anchor: 'bottom', rot: -2 }).set({ draw: circle });
     } else {
-      // the card in the left mitten at its side, by its corner; the right arm up with the star
-      p.liftL = 84;
+      // both mittens up at its sides, the card's lower edge resting on them, the card behind its head
+      p.liftL = 166;
+      p.liftR = 166;
       const [ml, mly] = pip.mitten('L', MITTEN_MIDDLE);
-      card.at(ml, mly, { k, scale: CARD * 0.92, anchor: 'grip', rot: -14 }).set({ lines: 1 });
-      const t4 = step(t, 1 / 6);
-      const up = pick(t, [[0, 0], [fr(11), 1], [fr(24), 0.55]]);
-      p.liftR = 45 + (162 - 45) * up + (t4 > fr(14) && t4 < fr(24) ? (Math.round((t4 - fr(14)) * 6) % 2 ? 0 : -5) : 0);
-      const grow = pick(t, [[0, 0], [fr(11), 0.6], [fr(12), 1.08], [fr(13), 1], [fr(24), 0.45]]);
-      const shine = pick(t, [[0, 0], [fr(12), 0.5], [fr(13), 1], [fr(24), 0]]);
-      const [sx, sy] = pip.mitten('R', MITTEN_MIDDLE);
-      const wob = t4 > fr(14) && t4 < fr(24) ? (Math.round((t4 - fr(14)) * 6) % 2 ? 6 : -4) : 0;
-      star.at(sx, sy, { k, scale: 0.88 * grow, anchor: 'grip', rot: 10 + wob }).set({ shine });
+      const [mr, mry] = pip.mitten('R', MITTEN_MIDDLE);
+      const tilt = Math.atan2(mry - mly, mr - ml) * (180 / Math.PI);
+      high.at((ml + mr) / 2, (mly + mry) / 2 - 10 * k, { k, scale: HIGH, anchor: 'bottom', rot: tilt }).set({ draw: 1 });
+      // big sparkles round the card, grown in on the hop's frames
+      const show = pick(t, [[0, 0], [fr(11), 0.6], [fr(12), 1.1], [fr(13), 1], [fr(23), 0.5]]);
+      const [cx, cy] = [(ml + mr) / 2, (mly + mry) / 2 - 10 * k - 100 * HIGH * k];
+      s1.at(cx + 128 * k, cy + 6 * k, { k, scale: 0.9 * show }).set({ show: 1 });
+      s2.at(cx - 128 * k, cy + 20 * k, { k, scale: SPARKLE_BIG * show }).set({ show: 1 });
     }
-    // the face: down on the card, its eyes running along a line (and back to the next); up at f8, "oh"; shut and
-    // beaming from the hop until the star goes
-    const read = two && t < fr(8) - 1e-6 || t >= fr(25) - 1e-6;
-    const ts = step(t, 1 / 12);
-    if (read) {
+    // the face: down on the card, its eyes running along the line; up and open at f8 ("oh"); shut and beaming up high
+    if (!up && t < fr(8) - 1e-6) {
       p.faceY += 6;
-      p.faceX += t < fr(8) ? pick(t, [[0, -5], [fr(2), -2], [fr(4), 1], [fr(6), 4]]) : -5;
-    } else if (t < fr(10) - 1e-6) {
-      p.faceY -= 3;
-      p.mouth = 'mouth-o';
-    } else if (ts < fr(24)) {
+      p.faceX += pick(t, [[0, -4], [fr(2), -1], [fr(4), 2], [fr(6), 4]]);
+    } else if (!up && t < fr(10) - 1e-6) {
+      p.faceY -= 2;
+      p.mouth = 'mouth-open';
+    } else if (up) {
       p.eyes = 'shut';
       p.mouth = 'mouth-open';
       p.faceY -= 2;
+    } else {
+      p.faceY += 6;
+      p.faceX -= 4;
     }
-    p.blush = pick(t, [[0, 0.4], [fr(8), 0.7], [fr(11), 1.4], [fr(24), 0.8], [fr(25), 0.4]]);
+    p.blush = pick(t, [[0, 0.4], [fr(7), 0.8], [fr(10), 1.5], [fr(24), 0.8], [fr(26), 0.4]]);
     blink(pip, t, fr(27), fr(1));
   },
 });
