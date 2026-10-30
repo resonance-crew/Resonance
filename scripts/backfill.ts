@@ -19,6 +19,14 @@
  *       profile photos stored before photos were cut square → cut square as a new one is (the middle,
  *       256 px, WebP) under a new key on record as their owner's, the profile pointing at it; the old
  *       picture stays (reads the photos by their public URLs; --apply needs R2 credentials)
+ *   npx tsx scripts/backfill.ts reencode-legacy [--apply] [--emulator]
+ *       stored pictures still in a format uploads no longer keep (an `image/…` key that isn't WebP or
+ *       AVIF: covers, story pictures, pending edits, profile photos) → re-encoded as an upload is now
+ *       (WebP, ≤ 2048 px, a profile photo cut square), under a new key on record as their owner's, the
+ *       documents pointing at the copy (no updatedAt or summary change; reportEvidence left as it was);
+ *       the old files stay. A dry run lists each picture, its size, what would replace it and every
+ *       document naming it (reads the pictures by their public URLs; --apply needs R2 credentials;
+ *       on the emulator the pictures are the emulators' own folder, never R2)
  *   npx tsx scripts/backfill.ts avatar-colors [--apply] [--emulator]
  *       profiles still wearing the one avatar colour every profile was given (or none) → their own,
  *       picked by uid from lib/design/avatarColors as a new profile's is; any other colour stays
@@ -133,6 +141,33 @@ async function main() {
       await squareAvatars(db, storage, { apply, publicBases: [publicBase, ...formerBases], read });
       return;
     }
+    case 'reencode-legacy': {
+      const { reencodeLegacy } = await import('./backfills/reencodeLegacy');
+      if (!publicBase) throw new Error('R2_PUBLIC_BASE is not set');
+      const bases = [publicBase, ...formerBases];
+      const MAX_BYTES = 20 * 1024 * 1024;
+      if (useEmulator) {
+        // The emulators' pictures are a folder on this machine (lib/storage/local), read and written by key.
+        const { LocalStorageProvider } = await import('../src/lib/storage/local');
+        const { storageKeyOf } = await import('../src/lib/storage/publicUrl');
+        const local = new LocalStorageProvider(undefined, publicBase);
+        const read = async (url: string) => {
+          const key = storageKeyOf(url, bases);
+          return key ? local.getObject(key, MAX_BYTES) : null;
+        };
+        await reencodeLegacy(db, apply ? local : null, { apply, publicBases: bases, read });
+        return;
+      }
+      const storage = apply ? new (await import('../src/lib/storage/r2')).R2StorageProvider() : null;
+      const read = async (url: string) => {
+        const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+        if (!res.ok) return null;
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        return bytes.byteLength > MAX_BYTES ? null : bytes;
+      };
+      await reencodeLegacy(db, storage, { apply, publicBases: bases, read });
+      return;
+    }
     case 'avatar-colors': {
       const { backfillAvatarColors } = await import('./backfills/avatarColors');
       await backfillAvatarColors(db, { apply });
@@ -174,7 +209,7 @@ async function main() {
       return;
     }
     default:
-      throw new Error(`Unknown task "${task ?? ''}" (anonymous | handles | edits | storage-host | rekey-images | rehost-images | square-avatars | avatar-colors | notes | anonymous-bells | orphan-notes | card-tombstones | link-previews)`);
+      throw new Error(`Unknown task "${task ?? ''}" (anonymous | handles | edits | storage-host | rekey-images | rehost-images | square-avatars | reencode-legacy | avatar-colors | notes | anonymous-bells | orphan-notes | card-tombstones | link-previews)`);
   }
 }
 

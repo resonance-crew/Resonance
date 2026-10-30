@@ -9,6 +9,7 @@ import { setStorageHost } from '../../scripts/backfills/storageHost';
 import { rekeyAnonymousImages, type Storage } from '../../scripts/backfills/rekeyImages';
 import { rehostImages } from '../../scripts/backfills/rehostImages';
 import { squareAvatars, type AvatarStorage } from '../../scripts/backfills/squareAvatars';
+import { isLegacyPictureKey, reencodeLegacy, type PictureStorage } from '../../scripts/backfills/reencodeLegacy';
 import sharp from 'sharp';
 import { backfillNotes } from '../../scripts/backfills/notes';
 import { sendNote } from '@/lib/api/v1/conversations';
@@ -375,6 +376,139 @@ describe('square-avatars', () => {
   it('needs the storage to apply', async () => {
     const { read } = await world();
     await expect(squareAvatars(db, null, { apply: true, publicBases: [BASE], read, log: quiet })).rejects.toThrow(/storage/);
+  });
+});
+
+describe('reencode-legacy', () => {
+  const BASE = 'https://img.resonance.test';
+  const FORMER = 'https://pub-0123.r2.dev';
+  const cover = `${BASE}/image/alice/2026-03/cover.png`;
+  const inline = `${BASE}/image/alice/2026-03/inline.jpg`;
+  const avatar = `${FORMER}/image/bob/2026-02/face.PNG`;
+  const kept = `${BASE}/image/2026-10/kept.webp`;
+  const gone = `${BASE}/image/alice/2026-03/gone.png`;
+  const at = Timestamp.fromDate(new Date('2026-03-01T00:00:00Z'));
+  const story = `Before.\n\n![a street](${inline} "title")\n\n![kept](${kept}) and [the cover](${cover}), elsewhere ![x](https://example.com/a.png), `
+    + `a lookalike ${BASE}.evil.example/image/x.png.`;
+  const encoded = (format: 'png' | 'jpeg', width: number, height: number) => {
+    const img = sharp({ create: { width, height, channels: 3, background: { r: 200, g: 120, b: 80 } } });
+    return (format === 'png' ? img.png() : img.jpeg().withMetadata({ exif: { IFD0: { Make: 'PhoneMaker' } } })).toBuffer().then((b) => new Uint8Array(b));
+  };
+
+  async function world() {
+    const pictures = new Map<string, Uint8Array>([
+      [cover, await encoded('png', 3000, 1500)],
+      [inline, await encoded('jpeg', 800, 600)],
+      [avatar, await encoded('png', 300, 420)],
+    ]);
+    const stored: { key: string; body: Uint8Array; ownerId: string; contentType: string }[] = [];
+    const storage: PictureStorage = {
+      uploadObject: async (intent, body) => {
+        const key = `image/2026-10/${stored.length}-new.webp`;
+        stored.push({ key, body, ownerId: intent.ownerId, contentType: intent.contentType });
+        pictures.set(`${BASE}/${key}`, body);
+        return { key, publicUrl: `${BASE}/${key}` };
+      },
+      deleteObject: async () => {},
+    };
+    const read = async (url: string) => pictures.get(url) ?? null;
+    return { storage, stored, read };
+  }
+
+  beforeEach(async () => {
+    await db.doc('users/alice').set({ handle: 'alice', avatarUrl: kept, joinedAt: at });
+    await db.doc('users/bob').set({ handle: 'bob', avatarUrl: avatar, bio: 'hi' });
+    await db.doc('users/carol').set({ handle: 'carol', avatarUrl: 'https://lh3.googleusercontent.com/a/c.png' });
+    await db.doc('cards/c1').set({
+      authorId: 'alice', anonymous: false, visibility: 'public', thoughtCore: 'T', tags: ['a'],
+      media: { type: 'image', url: cover, label: 'c' }, story,
+      publishedAt: at, updatedAt: at, excerpt: 'Before.', excerptAt: at, readMinutes: 1, slug: 's',
+    });
+    // Its pending edit, made before edits named their author: the card's author is the owner.
+    await db.doc('cards/c1/edits/current').set({ media: { type: 'image', url: cover, label: 'c' }, story: `Revising ![x](${inline})`, updatedAt: at });
+    await db.doc('cards/c2').set({ authorId: 'dave', media: { type: 'image', url: gone }, story: 'No pictures.', updatedAt: at });
+    await db.doc('cards/c3').set({ authorId: 'erin', media: { type: 'image', url: kept }, story: `![v](${BASE}/video/2026-03/clip.mp4)`, updatedAt: at });
+    // What was reported, as it was: evidence is never rewritten.
+    await db.doc('reportEvidence/r1').set({ card: { media: { type: 'image', url: cover }, story }, profile: { avatarUrl: avatar } });
+  });
+
+  async function snapshot() {
+    const paths = ['users/alice', 'users/bob', 'users/carol', 'cards/c1', 'cards/c1/edits/current', 'cards/c2', 'cards/c3', 'reportEvidence/r1'];
+    return Object.fromEntries(await Promise.all(paths.map(async (p) => [p, await data(p)] as const)));
+  }
+
+  it('knows a legacy picture by its key: an image that is not WebP or AVIF', () => {
+    for (const key of ['image/u/2026-03/a.png', 'image/2026-03/a.JPG', 'image/u/2026-03/a.jpeg', 'image/2026-03/a.gif', 'image/2026-03/noext']) {
+      expect(isLegacyPictureKey(key), key).toBe(true);
+    }
+    for (const key of ['image/2026-03/a.webp', 'image/u/2026-03/a.AVIF', 'video/2026-03/a.mp4', 'chat/2026-03/a.png']) {
+      expect(isLegacyPictureKey(key), key).toBe(false);
+    }
+  });
+
+  it('lists each legacy picture, its size, what would replace it and every document naming it — changing and storing nothing', async () => {
+    const { storage, stored, read } = await world();
+    const before = await snapshot();
+    const lines: string[] = [];
+    const report = await reencodeLegacy(db, storage, { apply: false, publicBases: [BASE, FORMER], read, log: (l) => lines.push(l) });
+    expect(report).toMatchObject({ users: 3, cards: 3, edits: 1, documents: 4, pictures: 4, unreadable: 1, noOwner: 0, reencoded: 0, rewritten: 0 });
+    expect(stored).toEqual([]);
+    expect(await snapshot()).toEqual(before);
+    expect((await db.collection('uploads').get()).size).toBe(0);
+    const out = lines.join('\n');
+    expect(out).toMatch(/image\/alice\/2026-03\/cover\.png: png 3000×1500, \d+ bytes → WebP 2048×1024, \d+ bytes \(picture, a new key on record as alice\)/);
+    expect(out).toMatch(/image\/bob\/2026-02\/face\.PNG: png 300×420, \d+ bytes → WebP 256×256, \d+ bytes \(profile photo, a new key on record as bob\)/);
+    expect(out).toMatch(/image\/alice\/2026-03\/inline\.jpg: jpeg 800×600/);
+    expect(out).toContain('image/alice/2026-03/gone.png: unreadable');
+    for (const name of ['cards/c1 (media.url)', 'cards/c1 (story)', 'cards/c1/edits/current (media.url)', 'cards/c1/edits/current (story)', 'users/bob (avatarUrl)', 'cards/c2 (media.url)']) {
+      expect(out).toContain(`named by ${name}`);
+    }
+  });
+
+  it("re-encodes each once as an upload is now, under a new key on record as its owner's, and points every document at it — changing nothing else", async () => {
+    const { storage, stored, read } = await world();
+    const before = await snapshot();
+    const report = await reencodeLegacy(db, storage, { apply: true, publicBases: [BASE, FORMER], read, log: quiet });
+    expect(report).toMatchObject({ pictures: 4, unreadable: 1, reencoded: 3, rewritten: 3, notWritten: 0 });
+    expect(stored).toHaveLength(3);
+    const metas = await Promise.all(stored.map(async (s) => ({ ...s, meta: await sharp(s.body).metadata() })));
+    expect(metas.map((m) => [m.ownerId, m.meta.width, m.meta.height, m.meta.format, m.meta.exif, m.contentType]).sort()).toEqual([
+      ['alice', 2048, 1024, 'webp', undefined, 'image/webp'],
+      ['alice', 800, 600, 'webp', undefined, 'image/webp'],
+      ['bob', 256, 256, 'webp', undefined, 'image/webp'],
+    ]);
+    const urlOf = (width: number) => `${BASE}/${metas.find((m) => m.meta.width === width)!.key}`;
+    const [newCover, newInline, newAvatar] = [urlOf(2048), urlOf(800), urlOf(256)];
+    const records = (await db.collection('uploads').get()).docs.map((d) => d.data());
+    expect(records).toHaveLength(3);
+    expect(records).toEqual(expect.arrayContaining(stored.map((s) => expect.objectContaining({ ownerId: s.ownerId, key: s.key, kind: 'image' }))));
+
+    const after = await snapshot();
+    expect(after['users/bob']).toEqual({ ...before['users/bob'], avatarUrl: newAvatar });
+    expect(after['cards/c1']).toEqual({
+      ...before['cards/c1'],
+      media: { type: 'image', url: newCover, label: 'c' },
+      story: story.split(inline).join(newInline).split(cover).join(newCover),
+    });
+    // Its dates and summary stay as they were: nothing reads as edited, nothing moves in a list.
+    expect(after['cards/c1']!.updatedAt).toEqual(at);
+    expect(after['cards/c1']!.excerptAt).toEqual(at);
+    expect(after['cards/c1']!.story).toContain(`${BASE}.evil.example/image/x.png`);
+    expect(after['cards/c1']!.story).toContain(kept);
+    expect(after['cards/c1/edits/current']).toEqual({ ...before['cards/c1/edits/current'], media: { type: 'image', url: newCover, label: 'c' }, story: `Revising ![x](${newInline})` });
+    // An unreadable picture, a picture elsewhere, a video, a WebP, and the evidence stay as they were.
+    for (const p of ['users/alice', 'users/carol', 'cards/c2', 'cards/c3', 'reportEvidence/r1']) expect(after[p], p).toEqual(before[p]);
+
+    // A second run has nothing left to re-encode but the picture it can't read.
+    expect(await reencodeLegacy(db, storage, { apply: true, publicBases: [BASE, FORMER], read, log: quiet }))
+      .toMatchObject({ documents: 1, pictures: 1, unreadable: 1, reencoded: 0, rewritten: 0 });
+    expect(stored).toHaveLength(3);
+  });
+
+  it('needs the storage to apply, and a storage base to look on', async () => {
+    const { read } = await world();
+    await expect(reencodeLegacy(db, null, { apply: true, publicBases: [BASE], read, log: quiet })).rejects.toThrow(/storage/);
+    await expect(reencodeLegacy(db, null, { apply: false, publicBases: [], read, log: quiet })).rejects.toThrow(/R2_PUBLIC_BASE/);
   });
 });
 
