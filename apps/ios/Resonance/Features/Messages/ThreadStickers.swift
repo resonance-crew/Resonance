@@ -102,7 +102,8 @@ struct ThreadStickerView: View {
             }
             .onDisappear {
                 onScreen = false
-                StickerPlayback.shared.end(message.key)
+                // Scrolled away: it stops (and its slot is free), so no more than three ever play.
+                StickerPlayback.shared.stop(message.key)
             }
     }
 
@@ -122,6 +123,12 @@ struct AlbumGridView: View {
     let mine: Bool
 
     static let gap: CGFloat = 2
+
+    /// Whose line the grid wears under it: the first picture that failed to send (a tap retries it — and the ones
+    /// before it that failed with it), else the last still on its way, else the last (delivered: no line).
+    nonisolated static func deliveryMessage(_ album: [ChatMessage]) -> ChatMessage? {
+        album.first { $0.delivery == .failed } ?? album.last { $0.delivery == .sending } ?? album.last
+    }
     /// The grid's width: as wide as a bubble may be, at most 300.
     static func width(rowMax: CGFloat) -> CGFloat { min(300, rowMax) }
 

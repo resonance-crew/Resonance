@@ -83,21 +83,57 @@ public enum ThreadRows {
         }
     }
 
-    /// `messages` cut into the rows they draw as: each alone, except that consecutive pictures of one album
-    /// from one sender go together — delivered or on their way, still standing; one that failed to send
-    /// stands alone with its retry, and a member missing (not arrived, unsent) leaves the grid smaller.
+    /// `messages` cut into the rows they draw as: each alone, except that one sender's pictures of one album go
+    /// together — delivered, on their way or failed to send (the grid keeps a failed one, dimmed, with its retry,
+    /// as the web and Android do). A message of the same sender that stands between two of them and can't be one
+    /// — unsent (the server leaves it only its sender and times: no album), or failed and of no album — is drawn
+    /// apart, right after the grid, while the album goes on past it; one that only follows the album stays where
+    /// it is. Anything else between them (words of theirs, the other person's message) ends the album there.
     public static func albums(_ messages: [ChatMessage]) -> [[ChatMessage]] {
         var groups: [[ChatMessage]] = []
-        for m in messages {
-            if let album = m.album, m.image != nil, !m.isUnsent, m.delivery != .failed,
-               let last = groups.last?.last, let lastAlbum = last.album, lastAlbum.id == album.id,
-               last.senderId == m.senderId, last.image != nil, !last.isUnsent, last.delivery != .failed {
-                groups[groups.count - 1].append(m)
-            } else {
-                groups.append([m])
+        var i = 0
+        while i < messages.count {
+            let first = messages[i]
+            guard let key = albumKey(first) else {
+                groups.append([first])
+                i += 1
+                continue
             }
+            var members = [first]
+            var apart: [ChatMessage] = []
+            var waiting: [ChatMessage] = []
+            var j = i + 1
+            while j < messages.count {
+                let next = messages[j]
+                if let other = albumKey(next), other == key {
+                    members.append(next)
+                    // What stood between two of its pictures is drawn after the grid.
+                    apart += waiting
+                    waiting = []
+                } else if next.senderId == first.senderId, next.isUnsent || next.delivery == .failed {
+                    waiting.append(next)
+                } else {
+                    break
+                }
+                j += 1
+            }
+            groups.append(members)
+            groups += apart.map { [$0] }
+            // Followed by no more of the album: those stay in their place, read as the messages after it.
+            i = j - waiting.count
         }
         return groups
+    }
+
+    /// The album a message is a picture of, with its sender: nil for any message that is none (unsent, no picture).
+    private static func albumKey(_ m: ChatMessage) -> AlbumKey? {
+        guard let album = m.album, m.image != nil, !m.isUnsent else { return nil }
+        return AlbumKey(id: album.id, sender: m.senderId)
+    }
+
+    private struct AlbumKey: Equatable {
+        let id: String
+        let sender: String
     }
 
     private static func rows(_ messages: [ChatMessage], calendar: Calendar) -> [ThreadRow] {

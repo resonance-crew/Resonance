@@ -221,6 +221,8 @@ nonisolated struct StickerPlaybackLimiter: Equatable {
 @MainActor final class StickerPlayback {
     static let shared = StickerPlayback()
 
+    init() {}
+
     private(set) var limiter = StickerPlaybackLimiter()
     private var stops: [String: () -> Void] = [:]
 
@@ -237,6 +239,13 @@ nonisolated struct StickerPlaybackLimiter: Equatable {
     func end(_ key: String) {
         limiter.end(key)
         stops[key] = nil
+    }
+
+    /// Stops `key` playing now (it left the screen) and frees its slot.
+    func stop(_ key: String) {
+        let stop = stops.removeValue(forKey: key)
+        limiter.end(key)
+        stop?()
     }
 
     /// Motion is quiet: Reduce Motion, or Low Power Mode — only the key pose is drawn.

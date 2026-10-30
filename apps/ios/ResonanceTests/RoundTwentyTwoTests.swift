@@ -97,6 +97,33 @@ import Testing
         #expect(limiter.playing == ["d", "b"])
     }
 
+    @Test func aStickerScrolledAwayStopsAndFreesItsSlot() {
+        let playback = StickerPlayback()
+        var stopped: [String] = []
+        for key in ["a", "b", "c"] { playback.start(key) { stopped.append(key) } }
+        #expect(playback.limiter.playing == ["a", "b", "c"])
+        // Off screen: the player itself is stopped, not only the slot let go — it would go on animating.
+        playback.stop("b")
+        #expect(stopped == ["b"])
+        #expect(playback.limiter.playing == ["a", "c"])
+        // A fourth then plays beside the two still on screen, stopping none of them.
+        playback.start("d") { stopped.append("d") }
+        #expect(stopped == ["b"] && playback.limiter.playing == ["a", "c", "d"])
+        // Stopping one that isn't playing does nothing.
+        playback.stop("b")
+        #expect(stopped == ["b"])
+    }
+
+    @Test func anAlbumsLineIsItsFailedPictureElseOneOnItsWay() {
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        func pic(_ id: String, _ delivery: Delivery) -> ChatMessage {
+            ChatMessage(id: id, senderId: "me", text: "", sentAt: t, image: ChatImage(id: id, width: 1, height: 1), delivery: delivery)
+        }
+        #expect(AlbumGridView.deliveryMessage([pic("a", .delivered), pic("b", .failed), pic("c", .sending)])?.id == "b")
+        #expect(AlbumGridView.deliveryMessage([pic("a", .sending), pic("b", .sending), pic("c", .delivered)])?.id == "b")
+        #expect(AlbumGridView.deliveryMessage([pic("a", .delivered), pic("b", .delivered)])?.id == "b")
+    }
+
     // MARK: Drafts
 
     final class Clock {
