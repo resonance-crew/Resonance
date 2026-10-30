@@ -18,6 +18,8 @@ import { firstLinkOf, parseLink } from '@/lib/links/linkify';
 import { BubbleWords, MessageBubble, type MessageLink } from './MessageBubble';
 import { LinkPreviewPart } from './BubbleParts';
 import { PicturePart, pictureBox } from './PicturePart';
+import { ALBUM_W, AlbumPart } from './AlbumPart';
+import { StickerPart } from './StickerPart';
 import { NoteQuote } from './NoteQuote';
 import { ReplyQuote } from './ReplyQuote';
 import { CHIP_OVERLAP, ReactionChips, chipWidth } from './ReactionChips';
@@ -55,6 +57,14 @@ export interface MessageCoreProps {
   aside?: ReactNode;
   /** A tap on its reactions' chip (the row's: it opens the overlay; the lifted copy's chip answers nothing). */
   onChips?: (el: HTMLElement, byKeyboard: boolean) => void;
+  /** It stands for an album's grid (round 22): every picture of it, in order — each with its own reactions. */
+  album?: readonly ChatMessage[];
+  /** For an album: the picture a mouse's tools act on, marked while they are open; and as the mouse moves. */
+  albumActive?: string;
+  toolsOpen?: boolean;
+  onAlbumActive?: (key: string) => void;
+  /** For an album: a tap on one picture's reactions. */
+  onAlbumChips?: (member: ChatMessage, el: HTMLElement, byKeyboard: boolean) => void;
 }
 
 /**
@@ -63,12 +73,31 @@ export interface MessageCoreProps {
  * long-press lifts out of the thread and draws again, without anything in it
  * answering.
  */
-export function MessageCore({ message: m, own, position, carried, highlights, hitStrong = false, flash = false, interactive, title, aside, onChips }: MessageCoreProps) {
+export function MessageCore({
+  message: m,
+  own,
+  position,
+  carried,
+  highlights,
+  hitStrong = false,
+  flash = false,
+  interactive,
+  title,
+  aside,
+  onChips,
+  album,
+  albumActive,
+  toolsOpen,
+  onAlbumActive,
+  onAlbumChips,
+}: MessageCoreProps) {
   const t = useTranslations('messages');
   const actions = useThreadActions();
   const onLink = interactive ? actions.openLink : null;
+  // A sticker that can't be drawn at all (a later pack the site can't serve either) is its fallback words.
+  const [stickerFailed, setStickerFailed] = useState(false);
   // Its reactions, in the gutter beside the bubble's foot (never under it: the row's height never changes for them).
-  const counts = useMemo(() => reactionCounts(m.reactions, actions.viewerId), [m.reactions, actions.viewerId]);
+  const counts = useMemo(() => (album ? [] : reactionCounts(m.reactions, actions.viewerId)), [album, m.reactions, actions.viewerId]);
   const chips = counts.length > 0 && (
     <ReactionChips
       counts={counts}
@@ -87,6 +116,52 @@ export function MessageCore({ message: m, own, position, carried, highlights, hi
   // A preview whose address the link rules refuse shows nothing of itself; a picture's bubble shows the picture, not a link's.
   const previewLink = carried.kind === 'preview' && !m.image ? parseLink(carried.preview.url) : null;
   const carries = m.image ? 'picture' : carried.kind === 'card' || carried.kind === 'cardLoading' ? 'card' : previewLink ? 'preview' : undefined;
+
+  // A sticker (round 22 §4.5): no bubble — the 小紙團 stands on the page, its chip and tools beside it as a
+  // picture's are; one that can't be drawn at all is its fallback words in a bubble.
+  if (m.sticker && !stickerFailed) {
+    return (
+      <>
+        {m.replyTo && (
+          <ReplyQuote
+            quote={m.replyTo}
+            own={own}
+            viewerId={actions.viewerId}
+            otherHandle={actions.otherHandle}
+            onJump={interactive ? actions.jumpTo : null}
+          />
+        )}
+        <div className={styles.slot} data-over-quote={m.replyTo ? '' : undefined} data-sticker="" data-flash={flash || undefined} style={slotStyle}>
+          <StickerPart
+            messageKey={m.key}
+            sticker={m.sticker}
+            fallback={m.text}
+            interactive={interactive}
+            title={title}
+            onFailed={() => setStickerFailed(true)}
+          />
+          {chips}
+          {aside}
+        </div>
+      </>
+    );
+  }
+  if (m.sticker) {
+    return (
+      <>
+        {m.replyTo && (
+          <ReplyQuote quote={m.replyTo} own={own} viewerId={actions.viewerId} otherHandle={actions.otherHandle} onJump={interactive ? actions.jumpTo : null} />
+        )}
+        <div className={styles.slot} data-over-quote={m.replyTo ? '' : undefined} style={slotStyle}>
+          <MessageBubble seedKey={m.key} own={own} position={position} flash={flash} overQuote={!!m.replyTo} title={title}>
+            <BubbleWords text={m.text || t('stickerUnknown')} onLink={null} />
+          </MessageBubble>
+          {chips}
+          {aside}
+        </div>
+      </>
+    );
+  }
 
   // A note left on a card: the card over it, as a reply's quote is; its bubble holds its words alone.
   if (m.kind === 'note') {
@@ -121,7 +196,7 @@ export function MessageCore({ message: m, own, position, carried, highlights, hi
           own={own}
           position={position}
           width={carries}
-          pictureWidth={m.image ? pictureBox(m.image.width, m.image.height).w : undefined}
+          pictureWidth={album ? ALBUM_W : m.image ? pictureBox(m.image.width, m.image.height).w : undefined}
           plain={carried.kind === 'cardLoading' && !m.image}
           flash={flash}
           // A hit in words the bubble doesn't show (the link standing for its card) marks the whole bubble.
@@ -129,8 +204,22 @@ export function MessageCore({ message: m, own, position, carried, highlights, hi
           overQuote={!!m.replyTo}
           title={title}
         >
-          {/* A picture leads its bubble, its words under it. */}
-          {m.image && <PicturePart image={m.image} interactive={interactive} />}
+          {/* A picture leads its bubble, its words under it — an album's grid in its place (round 22). */}
+          {album ? (
+            <AlbumPart
+              members={album}
+              own={own}
+              viewerId={actions.viewerId}
+              otherHandle={actions.otherHandle}
+              interactive={interactive}
+              active={albumActive}
+              toolsOpen={toolsOpen}
+              onActive={onAlbumActive}
+              onChips={onAlbumChips}
+            />
+          ) : (
+            m.image && <PicturePart image={m.image} interactive={interactive} />
+          )}
           {hasWords && (
             <BubbleWords
               text={words}
@@ -185,6 +274,8 @@ export interface MessageRowProps {
   toolsOpen?: boolean;
   /** Its full time (the tooltip and the menu's footer). */
   fullTime: string;
+  /** It stands for an album's grid (round 22): every picture of it, in order (lib/chat/album). */
+  album?: readonly ChatMessage[];
 }
 
 /**
@@ -209,11 +300,15 @@ export const MessageRow = memo(function MessageRow({
   lifted,
   toolsOpen,
   fullTime,
+  album,
 }: MessageRowProps) {
   const t = useTranslations('messages');
   const tSafety = useTranslations('safety');
   const actions = useThreadActions();
   const carried = useCarried(m, actions.viewerId);
+  // An album's picture the mouse's tools act on: the last one it came onto (the first, until then).
+  const [albumActive, setAlbumActive] = useState<string | null>(null);
+  const activeMember = (album && album.find((x) => x.key === albumActive)) ?? album?.[0] ?? m;
   const messageRef = useRef<HTMLDivElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const unsent = isUnsent(m);
@@ -227,14 +322,16 @@ export const MessageRow = memo(function MessageRow({
    * Lifts it out with its menu: from a held finger (the link under it), or the ☺ / ⋯ / chip that asked — which,
    * to a fine pointer, opens only its own part beside it (`popover`).
    */
-  const lift = (under: MessageLink | null, opener: HTMLElement | null, byKeyboard = false, part?: 'react' | 'actions') => {
+  const lift = (under: MessageLink | null, opener: HTMLElement | null, byKeyboard = false, part?: 'react' | 'actions', member: ChatMessage = m) => {
     const el = messageRef.current;
     if (!el) return;
+    // One picture of an album is lifted on its own: its own place, its own menu.
+    const cell = member !== m ? el.querySelector<HTMLElement>(`[data-album-member="${CSS.escape(member.key)}"]`) : null;
     actions.press({
-      message: m,
+      message: member,
       position,
-      carried,
-      rect: el.getBoundingClientRect(),
+      carried: member !== m ? { kind: 'words' } : carried,
+      rect: (cell ?? el).getBoundingClientRect(),
       link: under ?? link,
       onLink: under != null,
       opener,
@@ -242,7 +339,9 @@ export const MessageRow = memo(function MessageRow({
       popover: part && opener && finePointer() ? part : undefined,
     });
   };
-  const press = useLongPress(messageRef, (under) => lift(under, null));
+  const press = useLongPress(messageRef, (under, memberKey) =>
+    lift(under, null, false, undefined, (memberKey && album?.find((x) => x.key === memberKey)) || m),
+  );
 
   // Unsent: a line saying so where it was, on its sender's side — no menu, no tools, nothing in it answers.
   if (unsent) {
@@ -275,7 +374,7 @@ export const MessageRow = memo(function MessageRow({
 
   // A card the viewer can't see, shared alone: nothing to draw (not even their face beside it) — only its
   // place, which the scroller still finds it by. (A picture sent alone has no words and no card, and is all there.)
-  if (carried.kind === 'nothing' && !m.image) return <div data-message-id={m.id} data-message-key={m.key} aria-hidden />;
+  if (carried.kind === 'nothing' && !m.image && !m.sticker) return <div data-message-id={m.id} data-message-key={m.key} aria-hidden />;
 
   // ☺ · ↩ · ⋯ on the side toward the middle (round 16 §3). To a fine pointer ☺ opens the reactions alone, over
   // it, and ⋯ the actions alone, a dropdown at it (M3); elsewhere both open the overlay a held finger does.
@@ -283,13 +382,27 @@ export const MessageRow = memo(function MessageRow({
   const tip = toolsOpen ? false : 'above';
   const aside = (
     <span className={styles.actions} data-own={own || undefined} data-open={lifted || toolsOpen || undefined}>
-      {actions.canReact && canReact(m) && (
-        <BareIconButton icon="smile" label={t('react')} iconSize={18} tip={tip} seed={seedFromId(m.key, 31)} onClick={(e) => lift(null, e.currentTarget, e.detail === 0, 'react')} />
+      {actions.canReact && canReact(activeMember) && (
+        <BareIconButton
+          icon="smile"
+          label={t('react')}
+          iconSize={18}
+          tip={tip}
+          seed={seedFromId(m.key, 31)}
+          onClick={(e) => lift(null, e.currentTarget, e.detail === 0, 'react', activeMember)}
+        />
       )}
-      {actions.canWrite && canReply(m) && (
-        <BareIconButton icon="reply" label={t('reply')} iconSize={18} tip={tip} seed={seedFromId(m.key, 29)} onClick={() => actions.reply(m)} />
+      {actions.canWrite && canReply(activeMember) && (
+        <BareIconButton icon="reply" label={t('reply')} iconSize={18} tip={tip} seed={seedFromId(m.key, 29)} onClick={() => actions.reply(activeMember)} />
       )}
-      <BareIconButton icon="dots" label={tSafety('menuLabel')} iconSize={18} tip={tip} seed={seedFromId(m.key, 23)} onClick={(e) => lift(null, e.currentTarget, e.detail === 0, 'actions')} />
+      <BareIconButton
+        icon="dots"
+        label={tSafety('menuLabel')}
+        iconSize={18}
+        tip={tip}
+        seed={seedFromId(m.key, 23)}
+        onClick={(e) => lift(null, e.currentTarget, e.detail === 0, 'actions', activeMember)}
+      />
     </span>
   );
 
@@ -339,9 +452,14 @@ export const MessageRow = memo(function MessageRow({
               title={fullTime}
               aside={aside}
               onChips={(el, byKeyboard) => lift(null, el, byKeyboard, 'react')}
+              album={album}
+              albumActive={activeMember.key}
+              toolsOpen={toolsOpen}
+              onAlbumActive={setAlbumActive}
+              onAlbumChips={(member, el, byKeyboard) => lift(null, el, byKeyboard, 'react', member)}
             />
           </div>
-          {deliveryLine && <DeliveryLine message={m} />}
+          {deliveryLine && <DeliveryLine message={album?.find((x) => x.delivery === 'sending') ?? m} />}
         </div>
       </div>
     </div>
@@ -410,7 +528,7 @@ function useHeightTween(ref: React.RefObject<HTMLElement | null>, unsent: boolea
  * with the link under the finger, if any. The click that ends the press is
  * swallowed — a held link doesn't open — and so is the browser's own menu.
  */
-function useLongPress(ref: React.RefObject<HTMLElement | null>, onPress: (link: MessageLink | null) => void) {
+function useLongPress(ref: React.RefObject<HTMLElement | null>, onPress: (link: MessageLink | null, albumMember: string | null) => void) {
   const timer = useRef<number | null>(null);
   const start = useRef<{ x: number; y: number } | null>(null);
   const fired = useRef(false);
@@ -432,13 +550,15 @@ function useLongPress(ref: React.RefObject<HTMLElement | null>, onPress: (link: 
       start.current = { x: e.clientX, y: e.clientY };
       const anchor = (e.target as HTMLElement).closest<HTMLElement>('[data-link-url]');
       const url = anchor?.dataset.linkUrl;
+      // Held on one picture of an album: that picture is the message held.
+      const member = (e.target as HTMLElement).closest<HTMLElement>('[data-album-member]')?.dataset.albumMember ?? null;
       timer.current = window.setTimeout(() => {
         timer.current = null;
         if (!ref.current) return;
         fired.current = true;
         const link = url ? parseLink(url) : null;
         navigator.vibrate?.(8);
-        onPressRef.current(link);
+        onPressRef.current(link, member);
       }, LONG_PRESS_MS);
     },
     onPointerMove: (e: ReactPointerEvent<HTMLElement>) => {

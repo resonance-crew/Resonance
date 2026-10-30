@@ -26,6 +26,8 @@ import { OLDER_PAGE, useChatThread } from '@/lib/data/thread';
 import { resonanceCardKey, threadCardKeys } from '@/lib/chat/cardLink';
 import { footComposes, threadFoot } from '@/lib/chat/foot';
 import { threadRows } from '@/lib/chat/rows';
+import { collapseAlbums } from '@/lib/chat/album';
+import { forgetChatDraft, keepChatDraft, readChatDraft } from '@/lib/data/chatDrafts';
 import { fullMessageTime, timeOfDay } from '@/lib/chat/time';
 import { changeShown, withLocalChange, type LocalChange } from '@/lib/chat/message';
 import { ApiError } from '@/lib/db/firestore/client/api';
@@ -47,7 +49,7 @@ import { MessageMenuOverlay } from './MessageMenuOverlay';
 import { MessagePopover } from './MessagePopover';
 import { SearchResults } from './ThreadSearch';
 import { FloatingSlip } from './FloatingSlip';
-import { ThreadComposer } from './ThreadComposer';
+import { ThreadComposer, type ThreadComposerHandle } from './ThreadComposer';
 import { useDockInset } from './useDockInset';
 import { ThreadHeaderChrome, threadBodyArea } from './ThreadHeaderChrome';
 import { ThreadActionsContext, type PressedMessage, type ThreadActions } from './threadActions';
@@ -381,13 +383,17 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
     };
   }, [scrollerEl]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const composerRef = useRef<ThreadComposerHandle>(null);
   // The floating foot and the body that runs on under it.
   const { bodyRef, dockRef } = useDockInset();
+  const dockEl = useRef<HTMLDivElement | null>(null);
   // The「卡片與連結」modal's scroll area (hand-drawn rail replaces the native bar).
   const mediaScrollRef = useRef<HTMLDivElement>(null);
   const mediaEdges = useEdgeFades(mediaScrollRef);
 
-  const rows = useMemo(() => threadRows(drawn), [drawn]);
+  // An album's pictures stand as one grid (round 22): its first picture stands for it, the rest named with it.
+  const collapsed = useMemo(() => collapseAlbums(drawn), [drawn]);
+  const rows = useMemo(() => threadRows(collapsed.messages), [collapsed]);
   const newest = drawn[drawn.length - 1];
   // On its way to a message (a quote's original, a match, a note): no older page is read meanwhile — one
   // landing mid-glide would stop the glide short of it.
@@ -514,9 +520,10 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
           face: !own && !r.joinsBelow ? (other ?? null) : null,
           // A run still on its way says so once, under its newest message: the stack stays one stack.
           deliveryLine: !(r.joinsBelow && rows[i + 1]?.message.delivery === 'sending'),
+          album: collapsed.members.get(m.key),
         };
       }),
-    [rows, user?.id, other, dayFmt, timeFmt, fullFmt],
+    [rows, user?.id, other, dayFmt, timeFmt, fullFmt, collapsed],
   );
 
   // What every message can ask of the thread — the same functions for as long as the conversation is open.
@@ -526,7 +533,13 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
   const canReact = connected === true && !blockedOther;
   // A reply picked while there was a composer never comes back with the next one: the foot gave way meanwhile.
   useEffect(() => {
-    if (!composes) thread.cancelReply();
+    if (composes) return;
+    thread.cancelReply();
+    // Nor from its draft, which the composer kept as it went (its words stay for when it comes back).
+    if (user && pairId) {
+      const draft = readChatDraft(user.id, pairId);
+      if (draft?.replyTo) keepChatDraft(user.id, pairId, { ...draft, replyTo: undefined });
+    }
     // Only as the composer goes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [composes]);
@@ -733,6 +746,9 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
     const uid = user.id;
     const words = t;
     const hidden = hideConversation(pair);
+    // What was being written to them goes with the conversation, and isn't written back as the thread closes.
+    composerRef.current?.forgetDraft();
+    forgetChatDraft(uid, pair);
     thread.forget();
     router.push('/messages');
     void deleteConversation(pair).then(
@@ -745,6 +761,55 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
         hidden.putBack();
         toast.show({ message: words('deleteError') });
       },
+    );
+  }
+
+  /**
+   * How tall the composer may grow (round 22 §4.3, option C): from the foot of its capsule up to just under the
+   * other person's last message — kept in view, what is being answered — or, when that message is taller than
+   * ~35 % of the room (a picture) or for the grown sticker panel, to just under the header. Beside the list
+   * (two panes), at most 60 % of the pane.
+   */
+  function expandRoom(purpose: 'field' | 'panel'): number | null {
+    const header = headerRef.current;
+    const stack = dockEl.current?.firstElementChild as HTMLElement | null;
+    const scroller = scrollerRef.current;
+    if (!header || !stack) return null;
+    const vv = window.visualViewport;
+    const top = Math.max(header.getBoundingClientRect().bottom, vv?.offsetTop ?? 0);
+    const bottom = Math.min(stack.getBoundingClientRect().bottom, (vv?.offsetTop ?? 0) + (vv?.height ?? window.innerHeight));
+    const space = bottom - top - 12;
+    let room = space;
+    if (purpose === 'field') {
+      const theirs = scroller ? [...scroller.querySelectorAll<HTMLElement>('[data-message-key][data-run]:not([data-own])')].pop() : undefined;
+      const h = theirs?.getBoundingClientRect().height ?? 0;
+      if (h > 0 && h <= space * 0.35) room = space - h - 20;
+      const pane = header.parentElement?.getBoundingClientRect().height ?? window.innerHeight;
+      if (window.matchMedia?.('(min-width: 901px)').matches) room = Math.min(room, pane * 0.6);
+    }
+    return Math.max(144, Math.round(room));
+  }
+
+  /** The field grew on purpose: the other's last message is brought to just above it (what is being answered). */
+  function keepTheirsInView(grown: boolean) {
+    if (!grown) return;
+    // Once the foot's new height has reached the thread (useDockInset), two frames on.
+    window.requestAnimationFrame(() =>
+      window.requestAnimationFrame(() => {
+        const scroller = scrollerRef.current;
+        const stack = dockEl.current?.firstElementChild as HTMLElement | null;
+        const theirs = scroller ? [...scroller.querySelectorAll<HTMLElement>('[data-message-key][data-run]:not([data-own])')].pop() : undefined;
+        if (!scroller || !stack || !theirs) return;
+        const header = headerRef.current?.getBoundingClientRect().bottom ?? 0;
+        const want = stack.getBoundingClientRect().top - 20;
+        const r = theirs.getBoundingClientRect();
+        // Taller than the room left (the field reached the header): nothing to keep.
+        if (r.height > want - header) return;
+        const by = r.bottom - want;
+        if (Math.abs(by) < 2) return;
+        scroll.leaveBottom();
+        scroller.scrollTop += by;
+      }),
     );
   }
 
@@ -883,7 +948,20 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
           convo === null && notConnected
         ) : (
           <>
-            <div ref={bodyRef} className={styles.body}>
+            <div
+              ref={bodyRef}
+              className={styles.body}
+              // Pictures dropped on the thread ride the next message (round 22 §4.2), as picked ones do.
+              onDragOver={(e) => {
+                if (composes && e.dataTransfer.types.includes('Files')) e.preventDefault();
+              }}
+              onDrop={(e) => {
+                const files = [...e.dataTransfer.files];
+                if (!composes || !files.length) return;
+                e.preventDefault();
+                composerRef.current?.attachFiles(files);
+              }}
+            >
               <div
                 ref={(el) => {
                   scrollerRef.current = el;
@@ -930,8 +1008,12 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
                     hitStrong={currentHit === r.message.id}
                     flash={flashId === r.message.id}
                     lifted={!pressed?.popover && pressed?.message.key === r.message.key}
-                    toolsOpen={!!pressed?.popover && pressed.message.key === r.message.key}
+                    toolsOpen={
+                      !!pressed?.popover &&
+                      (pressed.message.key === r.message.key || !!r.album?.some((x) => x.key === pressed.message.key))
+                    }
                     fullTime={r.fullTime}
+                    album={r.album}
                   />
                 ))}
                 {/* Answering their letter is what connects the two: said as the thread's last word, scrolling
@@ -968,7 +1050,13 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
                 composer — or, where there is none to write in, the notice in its place — on the page's paper. It
                 stays in the column's flow (iOS Safari's keyboard keeps it in view so); the thread's body reaches
                 under it by its measured height (useDockInset). */}
-            <div ref={dockRef} className={styles.dock}>
+            <div
+              ref={(el) => {
+                dockRef(el);
+                dockEl.current = el;
+              }}
+              className={styles.dock}
+            >
               {foot === 'awaiting' ? (
                 // Their answer is what connects the two: until it comes, nothing more to write here.
                 <FloatingSlip seed={37} className={styles.noticeSlip}>
@@ -980,6 +1068,7 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
                 </FloatingSlip>
               ) : (
                 <ThreadComposer
+                  handle={composerRef}
                   inputRef={inputRef}
                   otherHandle={other.handle}
                   replyingTo={thread.replyingTo}
@@ -988,6 +1077,12 @@ export function ThreadView({ handle, replyNote, userId }: ThreadViewProps) {
                   replyNote={noteQuote}
                   send={thread.send}
                   ready={!!pairId}
+                  uid={user?.id}
+                  pairId={pairId}
+                  onRestoreReply={thread.restoreReply}
+                  isUnsent={(id) => !!thread.find(id)?.unsentAt}
+                  expandRoom={expandRoom}
+                  onExpandedChange={keepTheirsInView}
                 />
               )}
             </div>

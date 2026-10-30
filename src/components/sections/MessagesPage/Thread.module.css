@@ -1171,8 +1171,17 @@ button.chips::before {
   pointer-events: auto;
 }
 
-.dock:has(> .carry) {
+.dock:has(.carry) {
   padding-top: 6px;
+}
+
+/* What rides the next message over the capsule, and the capsule (round 22: one stack, so a sticker's preview
+   floats over both). */
+.composerStack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .paperFill {
@@ -1340,6 +1349,83 @@ button.chips::before {
   height: 44px;
 }
 
+/* A reply to a sticker: the rule, then the sticker's key frame. */
+.carryRuleWith {
+  display: flex;
+  flex-shrink: 0;
+  align-self: stretch;
+  align-items: center;
+  gap: 8px;
+}
+
+.carrySticker {
+  display: block;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+/* Several pictures riding (round 22 §4.2): their thumbnails in order, each numbered with its own ✕; the row's
+   ✕ takes them all. Up to ten: the strip scrolls sideways when they are more than the row. */
+.carryStrip {
+  display: flex;
+  flex-shrink: 1;
+  gap: 6px;
+  min-width: 0;
+  max-width: 62%;
+  padding: 4px 2px 2px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.carryStrip::-webkit-scrollbar {
+  display: none;
+}
+
+.carryThumb {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: 12px 14px 12px 14px;
+  background: color-mix(in oklch, var(--color-terracotta-light) 40%, var(--color-cream));
+}
+
+.carryThumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.carryOrder {
+  position: absolute;
+  bottom: 2px;
+  left: 3px;
+  min-width: 15px;
+  padding: 0 3px;
+  border-radius: 8px;
+  background: var(--button-fill);
+  color: var(--color-cream);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+}
+
+.carryThumbRemove {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+}
+
+/* The cream glyph on its disc of the viewer's dark (BareIconButton onDark), small on a thumbnail. */
+.carryThumbRemove button[data-tone] {
+  width: 22px;
+  height: 22px;
+}
+
 .fileInput {
   display: none;
 }
@@ -1450,6 +1536,69 @@ button.chips::before {
 .capsule textarea.composerInput:focus-visible {
   border: none;
   box-shadow: none;
+}
+
+/* Round 22 §4.3: past five lines the field scrolls, its edges fading 14 where more of it lies beyond
+   them (the thread's own fades are 16: a field's are a touch shorter, its lines being closer). */
+.capsule textarea.composerInput[data-fade-top] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 14px);
+  mask-image: linear-gradient(to bottom, transparent, #000 14px);
+}
+
+.capsule textarea.composerInput[data-fade-bottom] {
+  -webkit-mask-image: linear-gradient(to top, transparent, #000 14px);
+  mask-image: linear-gradient(to top, transparent, #000 14px);
+}
+
+.capsule textarea.composerInput[data-fade-top][data-fade-bottom] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 14px, #000 calc(100% - 14px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 14px, #000 calc(100% - 14px), transparent);
+}
+
+/* Grown on purpose (option C): as tall as the thread leaves it — its height set by the composer — the type
+   the same size, the send segment a 52 × 48 block on the last row. */
+.capsule[data-expanded] textarea.composerInput {
+  max-height: none;
+}
+
+.capsule[data-expanded] .send {
+  align-self: flex-end;
+  height: 48px;
+}
+
+/* The ⤢ / ⤡ at the field's top from its third line, the ☺ on the last line's row beside Send (round 22). */
+.toolsSlot {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  align-self: stretch;
+  width: 40px;
+  margin-right: 2px;
+}
+
+.growTool {
+  display: flex;
+  padding-top: 4px;
+}
+
+.growTool button {
+  width: 36px;
+  height: 36px;
+}
+
+.stickerTool {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  margin-top: auto;
+}
+
+.stickerTool button {
+  width: 40px;
+  height: 44px;
 }
 
 /* Send: the capsule's end segment, the full height of the field. Its face is
@@ -1633,4 +1782,428 @@ button.chips::before {
   top: 16px;
   right: 16px;
   z-index: 1;
+}
+
+/* ── Round 22: the 小紙團 stickers ────────────────────────────────── */
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* A sticker in the thread: no bubble, the 小紙團 standing on the page — 128 on a phone, 144 wider — on its
+   sender's side, its chip and tools beside it as a picture's are. */
+.sticker {
+  position: relative;
+  display: block;
+  width: 128px;
+  height: 128px;
+}
+
+@media (min-width: 768px) {
+  .sticker {
+    width: 144px;
+    height: 144px;
+  }
+}
+
+.sticker img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  -webkit-user-drag: none;
+}
+
+.stickerButton {
+  all: unset;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.stickerButton:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: 2px;
+  border-radius: 16px;
+}
+
+/* A quote's click came to it: it gives a small hop (it has no bubble to wash). */
+.slot[data-sticker][data-flash] .sticker {
+  animation: stickerHop 600ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes stickerHop {
+  30% {
+    transform: translateY(-8px) scale(1.04);
+  }
+  60% {
+    transform: translateY(0) scale(0.98);
+  }
+}
+
+/* A reply's quote of a sticker: its key frame before its name, on one line. */
+.quoteBubble[data-sticker] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 6px;
+}
+
+.quoteSticker {
+  display: block;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+/* The sticker panel in the keyboard's place on a phone (round 22 §4.1): the foot's own paper going on — no
+   card, no line — at the keyboard's height; ↑ or a drag grows it to just under the header. */
+.stickerPanel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  transition: height 220ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.stickerPanel[data-dragging] {
+  transition: none;
+}
+
+.stickerPicker {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  container-type: inline-size;
+}
+
+/* The packs: each its character's head, the 🕘 first once there are recents. */
+.packBar {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  padding: 2px 4px 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.packBar::-webkit-scrollbar {
+  display: none;
+}
+
+.packTab {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.packTab img {
+  position: relative;
+  display: block;
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.packTab > :not(.packWash) {
+  position: relative;
+  z-index: 1;
+}
+
+.packWash {
+  position: absolute;
+  inset: 0 2px;
+  width: calc(100% - 4px);
+  height: 100%;
+  fill: color-mix(in oklch, var(--color-terracotta-light) 55%, transparent);
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity 160ms ease,
+    transform 160ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.packTab[aria-pressed='true'] .packWash {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.packTab[aria-pressed='true'] {
+  color: var(--color-text);
+}
+
+.packTab:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: -2px;
+  border-radius: 12px;
+}
+
+/* One grid through every pack, each headed by its character's name. */
+.stickerGrid {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  padding: 0 4px 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.stickerGrid::-webkit-scrollbar {
+  display: none;
+}
+
+.packHeading {
+  margin: 8px 6px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-text-muted);
+}
+
+.stickerCells {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+@container (min-width: 520px) {
+  .stickerPicker[data-variant='panel'] .stickerCells {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 680px) {
+  .stickerPicker[data-variant='panel'] .stickerCells {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+.stickerPicker[data-variant='popover'] .stickerCells {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.stickerCell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  padding: 6px;
+  border: none;
+  border-radius: 14px 16px 14px 16px;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 140ms ease;
+}
+
+.stickerCell img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+@media (hover: hover) {
+  .stickerCell:hover {
+    background: color-mix(in oklch, var(--color-text) 6%, transparent);
+  }
+}
+
+.stickerCell[aria-pressed='true'] {
+  background: color-mix(in oklch, var(--color-terracotta-light) 45%, transparent);
+}
+
+.stickerCell:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: -2px;
+}
+
+/* On a desktop: a flat menu sheet over the ☺ (PaperSheet), ~360 × 420, five columns. */
+.stickerPopover {
+  position: fixed;
+  z-index: 120;
+  width: 360px;
+  height: 420px;
+}
+
+.stickerPopoverBody {
+  position: absolute;
+  inset: 8px 6px 6px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+}
+
+/* A sticker picked: moving on its sheet with 「再點一次傳送」 under it — over the thread's foot above the
+   capsule on a phone, at the popover's foot on a desktop. A tap sends it. */
+.previewSlot {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  z-index: 3;
+  transform: translateX(-50%);
+}
+
+.popoverPreview {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+}
+
+.stickerPreview {
+  all: unset;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 184px;
+  padding: 14px 16px 12px;
+  cursor: pointer;
+  animation: previewIn 180ms cubic-bezier(0.2, 0.8, 0.3, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.stickerPreviewArt,
+.stickerPreviewHint {
+  position: relative;
+  z-index: 2;
+}
+
+.stickerPreviewArt {
+  display: block;
+  width: 144px;
+  height: 144px;
+  object-fit: contain;
+}
+
+.stickerPreviewHint {
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--color-text-muted);
+}
+
+.stickerPreview:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: 2px;
+  border-radius: 20px;
+}
+
+@keyframes previewIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stickerPanel,
+  .packWash,
+  .stickerCell {
+    transition: none;
+  }
+
+  .stickerPreview,
+  .slot[data-sticker][data-flash] .sticker {
+    animation: none;
+  }
+}
+
+/* ── Round 22: several pictures sent together, one grid ──────────── */
+
+/* Edge to edge in its bubble as a picture is (4 past the box where the wobble swings out); two of the
+   bubble's fill between the pictures. */
+.album {
+  display: flex;
+  flex-direction: column;
+  margin: -4px -4px 0;
+}
+
+.album:last-child {
+  margin-bottom: -4px;
+}
+
+.albumRow {
+  display: flex;
+}
+
+.albumCell {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.albumPicture {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  background: color-mix(in oklch, var(--color-text) 6%, transparent);
+  cursor: zoom-in;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.albumPicture img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.albumPicture:focus-visible {
+  outline: 2px solid var(--field-border-focus, var(--color-terracotta));
+  outline-offset: -3px;
+}
+
+/* The picture a mouse's ☺ / ⋯ act on, while their popover is open. */
+.albumCell[data-marked]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: -2px;
+  pointer-events: none;
+}
+
+/* A picture's reactions on its own foot corner, inside the grid. */
+.albumChips .chips {
+  right: 6px;
+  bottom: 6px;
+  left: auto;
 }

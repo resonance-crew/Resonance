@@ -4,7 +4,9 @@ import { useId, useMemo, useRef, useState, type CSSProperties, type PointerEvent
 import { BrushWash } from '@/components/atoms/BrushWash/BrushWash';
 import { Icon } from '@/components/atoms/Icon';
 import { ShapeGrain } from '@/components/atoms/ShapeGrain/ShapeGrain';
-import { CAPSULE_H, CAPSULE_R, segmentCapsuleShape } from '@/components/molecules/SegmentedActionBar/segmentCapsule';
+import { polyline } from '@/components/molecules/SegmentedActionBar/SegmentedActionBar';
+import { CAPSULE_H, CAPSULE_R, segmentCapsuleShape, type SegmentCapsuleShape } from '@/components/molecules/SegmentedActionBar/segmentCapsule';
+import { makePrng } from '@/lib/design/prng';
 import { INK } from '@/lib/design/strokes';
 import { useElementSize } from '@/lib/hooks/useElementSize';
 import styles from './Thread.module.css';
@@ -25,35 +27,79 @@ export function capsuleShape(w: number, h: number) {
   return segmentCapsuleShape(w, h, SEND_SEGMENT_W, SEED);
 }
 
+/**
+ * The grown field's drawing (round 22 §4.3, option C): the same outline, the
+ * send segment a {@link SEND_SEGMENT_W} × {@link CAPSULE_H} block on the last
+ * row — its wavy seam coming up its left side and turning, round, along its
+ * top to the capsule's end — so a tall field keeps its words clear of a
+ * full-height strip.
+ */
+export function blockCapsuleShape(w: number, h: number): SegmentCapsuleShape | null {
+  const base = segmentCapsuleShape(w, h, SEND_SEGMENT_W, SEED);
+  if (!base) return null;
+  const x = w - SEND_SEGMENT_W;
+  const y = Math.max(0, h - CAPSULE_H);
+  const rnd = makePrng(SEED + 11);
+  const wob = (amp: number) => +((rnd() - 0.5) * 2 * amp).toFixed(2);
+  const pad = 12;
+  const f = (n: number) => +n.toFixed(2);
+  const pts: [number, number][] = [
+    [f(x), f(h + pad)],
+    [f(x), f(h)],
+    [f(x + wob(1.4)), f(y + CAPSULE_H * 0.55)],
+    // The turn, round.
+    [f(x + 0.4), f(y + 9)],
+    [f(x + 2.6), f(y + 2.6)],
+    [f(x + 9), f(y + 0.4)],
+    [f(x + SEND_SEGMENT_W * 0.55), f(y + wob(1.4))],
+    [f(w), f(y)],
+    [f(w + pad), f(y)],
+  ];
+  const seam = polyline(pts);
+  return { outline: base.outline, seam, segment: `${seam} L ${f(w + pad)},${f(h + pad)} Z` };
+}
+
+/** What the end segment does: send (its plane), or — the sticker panel open, nothing to send — grow or shrink it. */
+export type CapsuleSegment = 'send' | 'expand' | 'collapse';
+
 export interface ComposerCapsuleProps {
-  /** The ＋, the file input and the field, in that order (Send is the capsule's own). */
+  /** The ＋, the file input, the field and the ☺ column, in that order (Send is the capsule's own). */
   children: ReactNode;
   /** The field is written in: its pen darkens (the field's own darker ink, never another colour). */
   focused: boolean;
   /** There is something to send: the segment takes the verb's solid face. */
   ready: boolean;
+  /** The end segment's verb: Send by default; ↑ / ↓ grow and shrink the sticker panel (round 22 §4.1). */
+  segment?: CapsuleSegment;
+  /** The segment's accessible name (Send, 展開貼圖, 收合貼圖). */
   sendLabel: string;
   onSend: () => void;
+  /** The field grown (option C): the send segment a 52 × 48 block on the last row. */
+  expanded?: boolean;
 }
 
 /**
  * The composer's capsule (round 9 §4): one hand-drawn field — the field's
  * wobble, cream, its pen at INK darkening while written in (round 10 §3.3) —
- * holding the ＋, the text and Send; the foot's paper behind it (the dock's)
- * keeps the thread from showing round it. Send is
- * the capsule's end segment in the segmented bar's language: a wavy seam cut
+ * holding the ＋, the text, the ☺ (round 22) and Send; the foot's paper behind
+ * it (the dock's) keeps the thread from showing round it. Send is the
+ * capsule's end segment in the segmented bar's language: a wavy seam cut
  * across it in the paper's colour, the segment the tonal peach with a
  * terracotta plane while there is nothing to send, the verb's solid
  * terracotta with a cream plane once there is (a 140 ms change). It is
  * disabled by its semantics (aria-disabled), never by a fade: it floats over
  * the thread, and nothing of a floating thing is see-through. One line is
- * exactly 48 tall; only more lines grow it, up to five.
+ * exactly 48 tall; only more lines grow it, up to five — or, grown on purpose
+ * (`expanded`), as tall as the thread lets it, the segment then a block on its
+ * last row.
  */
-export function ComposerCapsule({ children, focused, ready, sendLabel, onSend }: ComposerCapsuleProps) {
+export function ComposerCapsule({ children, focused, ready, segment = 'send', sendLabel, onSend, expanded = false }: ComposerCapsuleProps) {
   const ref = useRef<HTMLDivElement>(null);
   const { w, h } = useElementSize(ref);
-  const shape = useMemo(() => capsuleShape(w, h), [w, h]);
+  const shape = useMemo(() => (expanded ? blockCapsuleShape(w, h) : capsuleShape(w, h)), [w, h, expanded]);
   const clipId = `composer-clip-${useId().replace(/:/g, '')}`;
+  // Send acts only with something to send; ↑ / ↓ always.
+  const acts = segment !== 'send' || ready;
   // The send segment's hover brush, from where the pointer came in (as a button's).
   const [hover, setHover] = useState({ x: w - SEND_SEGMENT_W / 2, y: h / 2, on: false });
   // The hover brush is a mouse's alone: a tap's compatibility mouseenter comes with no mouseleave, and the
@@ -70,7 +116,8 @@ export function ComposerCapsule({ children, focused, ready, sendLabel, onSend }:
       ref={ref}
       className={`${styles.capsule} res-shape-stand-in`}
       data-focus={focused || undefined}
-      data-ready={ready || undefined}
+      data-ready={(segment === 'send' && ready) || undefined}
+      data-expanded={expanded || undefined}
       data-shape-pending={shape ? undefined : ''}
       style={{ '--shape-radius': `${CAPSULE_R}px`, '--shape-ink-width': `${INK}px` } as CSSProperties}
     >
@@ -89,7 +136,7 @@ export function ComposerCapsule({ children, focused, ready, sendLabel, onSend }:
           {/* The segment's grain and its hover brush, cut to the capsule's outline. */}
           <div className={styles.capsuleSegmentLayer} style={{ width: w, height: h, clipPath: `path('${shape.outline}')` }} aria-hidden="true">
             <ShapeGrain w={w} h={h} d={shape.segment} seed={SEED} opacity={0.38} frequency={1.1} />
-            <BrushWash w={w} h={h} d={shape.segment} color="color-mix(in oklch, var(--toward-ink) 14%, transparent)" x={hover.x} y={hover.y} on={ready && hover.on} duration={340} overshoot={4} />
+            <BrushWash w={w} h={h} d={shape.segment} color="color-mix(in oklch, var(--toward-ink) 14%, transparent)" x={hover.x} y={hover.y} on={acts && hover.on} duration={340} overshoot={4} />
           </div>
           {/* The seam in the paper's colour and the pen line over everything. */}
           <svg aria-hidden="true" className={styles.capsuleShape} width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
@@ -104,14 +151,16 @@ export function ComposerCapsule({ children, focused, ready, sendLabel, onSend }:
         className={styles.send}
         aria-label={sendLabel}
         title={sendLabel}
-        aria-disabled={!ready || undefined}
-        onClick={() => ready && onSend()}
+        aria-disabled={!acts || undefined}
+        aria-expanded={segment === 'send' ? undefined : segment === 'collapse'}
+        data-segment={segment}
+        onClick={() => acts && onSend()}
         onPointerEnter={(e) => at(e, true)}
         onPointerLeave={(e) => at(e, false)}
       >
         {/* On the last line's row, beside the ＋ — not in the middle of a tall field. */}
-        <span className={styles.sendGlyph}>
-          <Icon name="send" size={20} color="currentColor" strokeWidth={INK} />
+        <span className={styles.sendGlyph} style={segment === 'collapse' ? { transform: 'rotate(180deg)' } : undefined}>
+          <Icon name={segment === 'send' ? 'send' : 'arrow-up'} size={20} color="currentColor" strokeWidth={INK} />
         </span>
       </button>
     </div>

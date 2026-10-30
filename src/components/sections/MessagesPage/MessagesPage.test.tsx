@@ -4,6 +4,7 @@ import { SWRConfig } from 'swr';
 import { act, cleanup, renderWithIntl, screen, fireEvent, waitFor, userEvent, within } from '@/../test/render';
 import type { Conversation, Message, User } from '@/lib/db/types';
 import { forgetOutboxes } from '@/lib/data/thread';
+import { forgetAllChatDrafts, keepChatDraft } from '@/lib/data/chatDrafts';
 import { MessagesPage } from './MessagesPage';
 
 /** ThreadView fetches through raw useSWR — isolate the cache per test. */
@@ -196,6 +197,8 @@ beforeEach(() => {
   });
   server.messages = [];
   server.listening = [];
+  forgetAllChatDrafts();
+  window.localStorage.clear();
   mockGetUserByHandle.mockResolvedValue(alice);
   mockIsConnected.mockResolvedValue(true);
   mockGetConversation.mockResolvedValue(conversation());
@@ -251,6 +254,37 @@ describe('MessagesPage list', () => {
     });
     renderPage(<MessagesPage />);
     expect(screen.getByText('You: Sent a photo')).toBeInTheDocument();
+  });
+
+  // Round 22: a sticker or an album says so — never a sticker's fallback words, which are for older builds.
+  it('previews a sticker and an album as what they are', () => {
+    const page = (lastMessage: Conversation['lastMessage']) => ({
+      data: { conversations: [conversation({ lastMessage })], people: { alice, bob }, connectedWithoutConversation: [], unreadTotal: 0 },
+    });
+    mockUseConversations.mockReturnValueOnce(page({ text: '〔貼圖：謝謝〕', senderId: 'alice', sentAt: new Date(), sticker: true }));
+    const { unmount } = renderPage(<MessagesPage />);
+    expect(screen.getByText('Sent a sticker')).toBeInTheDocument();
+    expect(screen.queryByText(/貼圖/)).toBeNull();
+    unmount();
+    mockUseConversations.mockReturnValueOnce(page({ text: '', senderId: 'me', sentAt: new Date(), image: true, album: { count: 3 } }));
+    renderPage(<MessagesPage />);
+    expect(screen.getByText('You: Sent 3 photos')).toBeInTheDocument();
+  });
+
+  // Round 22 §4.4: a conversation with something left unsent shows it after a pen, in place of its last message —
+  // never the word 草稿 — and not beside the thread that is open, whose composer shows it.
+  it('shows a draft left unsent after a pen, until it goes', async () => {
+    keepChatDraft('me', 'alice_me', { text: 'half a\nthought' });
+    keepChatDraft('me', 'bob_me', { text: 'to bob' });
+    const { unmount } = renderPage(<MessagesPage />);
+    const draft = screen.getByLabelText('Unsent message: half a thought');
+    expect(draft).toHaveAttribute('data-draft');
+    expect(draft.querySelector('[data-icon], svg')).toBeTruthy();
+    expect(screen.queryByText('see you soon')).toBeNull();
+    // A person with no conversation yet: the pair it would have.
+    expect(screen.getByLabelText('Unsent message: to bob')).toBeInTheDocument();
+    unmount();
+    forgetAllChatDrafts();
   });
 
   // Round 16: an unsent last message reads as its line in the thread does — never what it said.
@@ -462,7 +496,7 @@ describe('MessagesPage thread', () => {
     expect(screen.queryByRole('button', { name: 'Remove photo' })).toBeNull();
   });
 
-  it('holds one of the two — a card picked takes the picture\'s place — and says when a file is not a picture it can send', async () => {
+  it('holds one of the two — a card picked takes the picture\'s place once the viewer says so — and says when a file is not a picture it can send', async () => {
     const { container } = renderPage(<MessagesPage activeHandle="alice" />);
     const u = userEvent.setup({ pointerEventsCheck: 0 });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Attach a photo or a card' })).toBeInTheDocument());
@@ -473,9 +507,24 @@ describe('MessagesPage thread', () => {
     await u.click(screen.getByRole('button', { name: 'Attach a photo or a card' }));
     await u.click(screen.getByRole('menuitem', { name: 'Card' }));
     await u.click(await screen.findByRole('button', { name: 'pick-card' }));
-    expect(screen.getByText('A shared thought')).toBeInTheDocument();
+    // Round 22 §4.2: a card and pictures never ride together — the card takes their place once the viewer says so.
+    const ask = await screen.findByRole('dialog', { name: 'Use this card instead?' });
+    expect(screen.getByRole('button', { name: 'Remove photo' })).toBeInTheDocument();
+    await u.click(within(ask).getByRole('button', { name: 'Use card' }));
+    expect(await screen.findByText('A shared thought')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Remove card' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Remove photo' })).toBeNull();
+  });
+
+  // Round 22 §4.2: pictures dropped on the thread ride the next message, as picked ones do.
+  it('takes pictures dropped on the thread', async () => {
+    const { container } = renderPage(<MessagesPage activeHandle="alice" />);
+    await screen.findByRole('textbox', { name: 'Conversation with alice' });
+    const body = container.querySelector('[class*="scroller"]')!.parentElement!;
+    const files = [new File(['a'], 'a.jpg', { type: 'image/jpeg' }), new File(['b'], 'b.jpg', { type: 'image/jpeg' })];
+    fireEvent.dragOver(body, { dataTransfer: { types: ['Files'], files } });
+    fireEvent.drop(body, { dataTransfer: { types: ['Files'], files } });
+    expect(await screen.findByText('2 photos')).toBeInTheDocument();
   });
 
   it('draws a picture message in its bubble, opens it whole, and quotes it as a photo', async () => {
@@ -498,6 +547,56 @@ describe('MessagesPage thread', () => {
     expect(within(viewer_).getByRole('button', { name: 'Close' })).toHaveAttribute('data-tone', 'onDark');
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: 'View photo' })).toBeNull();
+  });
+
+  // Round 22 §4.5: a sticker stands on the page with no bubble; a reply to one quotes it by name; an album's
+  // pictures are one grid in one bubble, each still opening whole.
+  it('draws stickers without a bubble, quotes one by name, and an album as one grid', async () => {
+    mockUseAuth.mockReturnValue({ user: viewer, loading: false, sessionReady: true });
+    const at = (s: number) => new Date(Date.UTC(2026, 9, 31, 8, 0, s));
+    const pic = (id: string, index: number, extra: Partial<Message> = {}): Message => ({
+      id,
+      senderId: 'me',
+      text: '',
+      sentAt: at(10 + index),
+      image: { id: `img-${id}`, width: 800, height: 600 },
+      album: { id: 'alb', index, count: 4 },
+      ...extra,
+    });
+    server.messages = [
+      { id: 's1', senderId: 'alice', text: '〔貼圖：謝謝〕', sentAt: at(1), sticker: { pack: 'twine', id: 'thanks' } },
+      {
+        id: 's2',
+        senderId: 'me',
+        text: '〔貼圖：抱抱〕',
+        sentAt: at(2),
+        sticker: { pack: 'nod', id: 'hug' },
+        replyTo: { id: 's1', senderId: 'alice', text: '〔貼圖：謝謝〕', sticker: { pack: 'twine', id: 'thanks' } },
+      },
+      pic('a1', 0, { text: 'by the river' }),
+      pic('a2', 1),
+      pic('a3', 2),
+      pic('a4', 3),
+    ];
+    const { container } = renderPage(<MessagesPage activeHandle="alice" />);
+    await screen.findByRole('button', { name: 'Sticker: Hug' });
+    const [thanks, quote] = screen.getAllByRole('button', { name: 'Sticker: Thanks' });
+    expect(thanks.closest('[class*="bubble"]')).toBeNull();
+    expect(thanks.querySelector('img')).toHaveAttribute('src', expect.stringContaining('/stickers/twine/thanks.thumb.webp'));
+    expect(screen.queryByText('〔貼圖：謝謝〕')).toBeNull();
+    // The reply's quote: the sticker's key frame and its name.
+    expect(quote.className).toMatch(/quoteBubble/);
+    expect(quote).toHaveTextContent('Thanks');
+    expect(quote.querySelector('img')).toHaveAttribute('src', expect.stringContaining('/stickers/twine/thanks.thumb.webp'));
+
+    // One grid: the album's first picture stands for it, the four in one bubble, its words under them.
+    const grid = container.querySelector('[class*="album"]')!;
+    expect(grid.querySelectorAll('[data-album-member]')).toHaveLength(4);
+    expect(Array.from(grid.querySelectorAll('[class*="albumRow"]')).map((r) => r.children.length)).toEqual([2, 2]);
+    expect(container.querySelectorAll('[data-message-id="a2"]')).toHaveLength(0);
+    expect(screen.getByText('by the river')).toBeInTheDocument();
+    await userEvent.click(within(grid as HTMLElement).getAllByRole('button', { name: 'View photo' })[2]);
+    expect(screen.getByRole('dialog', { name: 'View photo' }).querySelector('img')).toHaveAttribute('src', '/api/v1/chat-images/img-a3');
   });
 
   it('renders a shared card and a note-reply quote in the thread', async () => {

@@ -122,7 +122,8 @@ export function messageMenuItems(message: ChatMessage, link: MessageLink | null,
     : [];
   if (viewer.onLink) items.push(...linkRows);
   if (viewer.withReply && canReply(message)) items.push({ key: 'reply', icon: 'reply', label: labels.reply });
-  if (message.text) items.push({ key: 'copy', icon: 'copy', label: labels.copy });
+  // A sticker's words are its fallback for older builds, not words to copy.
+  if (message.text && !message.sticker) items.push({ key: 'copy', icon: 'copy', label: labels.copy });
   if (!viewer.onLink) items.push(...linkRows);
   if (canUnsend(message, viewer.viewerId, viewer.now)) items.push({ key: 'unsend', icon: 'restore', label: labels.unsend });
   if (canStopSharing(message, viewer.viewerId)) items.push({ key: 'stopSharing', icon: 'lock', label: labels.stopSharing });
