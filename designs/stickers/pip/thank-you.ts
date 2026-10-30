@@ -1,61 +1,61 @@
 /**
- * 點點 · 謝謝你！ Thank you! — it crouches and jumps for joy, arms flung up and wide, eyes shut in happy arcs, mouth
- * open; terracotta joy strokes pop out round its head while it hangs at the top, and it lands with a squash, still
- * beaming, its mittens giving a happy waggle before they come down. Key pose: standing, smiling, a little blush.
+ * 點點 · 謝謝你！ Thank you! — a little hop, and it lands straight into a bow, both mittens pressed to its blushing
+ * cheeks (its shy pose), eyes shut, a closed smile; a paper heart pops up above its curls while it holds the bow, and
+ * it straightens up again. Key pose: standing, smiling, a little blush.
  *
- * The body moves on 7 frames (crouch, launch, top, fall, land, settle, rest); the strokes, arms and face carry the rest.
+ * The body moves on 10 frames (crouch, up, land, the bow down on three, up on three); the heart and the face ride
+ * those frames.
  */
-import { blink, defineSticker, fr, step } from '../kit';
+import { blink, bow, bowStrokes, defineSticker, fr, type StickerPuppet } from '../kit';
 import { pick } from './_local';
 
-const K = 1.16;
+const K = 1.14;
+/** Its cheeks (the blush), rig units. */
+const CHEEK_L: [number, number] = [307, 566];
+const CHEEK_R: [number, number] = [391, 564];
+
+/** Both mittens pressed to its cheeks (in front of its paper), wherever its face has slid to. */
+function shy(pip: StickerPuppet): void {
+  const q = pip.pose;
+  const [lx, ly] = pip.pagePoint(CHEEK_L[0] + q.faceX, CHEEK_L[1] + q.faceY);
+  const [rx, ry] = pip.pagePoint(CHEEK_R[0] + q.faceX, CHEEK_R[1] + q.faceY);
+  q.liftL = pip.aim('L', lx, ly);
+  q.liftR = pip.aim('R', rx, ry);
+  q.front = true;
+}
 
 export default defineSticker({
-  duration: 2,
-  // the thumb: at the top of the jump, arms up and wide, eyes shut, the joy strokes out
-  hero: fr(7),
+  duration: 2.25,
+  // the thumb: deep in the bow, mittens on its cheeks, the heart up
+  hero: fr(14),
   cast: { pip: { slug: 'dot', x: 216, ground: 418, k: K } },
   props: {
-    joyL: { kind: 'burst', seed: 21 },
-    joyR: { kind: 'burst', seed: 22 },
+    heart: { kind: 'heart', seed: 14 },
+    strokeL: { kind: 'strokes', seed: 4 },
+    strokeR: { kind: 'strokes', seed: 5 },
   },
-  frame(t, { pip }, { joyL, joyR }) {
+  frame(t, { pip }, { heart, strokeL, strokeR }) {
     const p = pip.pose;
-    // the jump: crouch (f4), launch (f5), hang at the top (f6–8), fall (f9), land with a squash (f10), settle (f11–12)
-    p.rise += pick(t, [[0, 0], [fr(5), 44], [fr(6), 58], [fr(9), 34], [fr(10), 0]]);
-    const sq = pick(t, [[0, 0], [fr(4), -1], [fr(5), 0.9], [fr(6), 0.2], [fr(9), 0.35], [fr(10), -1.1], [fr(11), 0.25], [fr(12), 0]]);
+    // the hop: crouch (f3), up (f4), land (f6)
+    p.rise += pick(t, [[0, 0], [fr(4), 34], [fr(6), 0]]);
+    const sq = pick(t, [[0, 0], [fr(3), -1], [fr(4), 0.8], [fr(6), -0.6], [fr(7), 0]]);
     p.sy *= 1 + 0.08 * sq;
     p.sx *= 1 - 0.045 * sq;
     p.legS *= 1 + 0.12 * Math.min(0, sq);
-    // the legs tuck up a little in the air
-    const air = pick(t, [[0, 0], [fr(5), 1], [fr(10), 0]]);
-    p.legL += 14 * air;
-    p.legR -= 14 * air;
-    // the curl lags the body
-    p.decoR += pick(t, [[0, 0], [fr(4), 3], [fr(5), -7], [fr(6), -3], [fr(9), 4], [fr(10), 7], [fr(11), -3], [fr(12), 0]]);
-    // arms: back on the crouch, flung up and wide on the launch (in front of the paper, or the short arms would hide
-    // behind it), a happy waggle on fours after landing, down again on fours
-    const wide = pick(t, [[0, 0], [fr(4), -0.25], [fr(5), 1], [fr(16), 1], [fr(18), 0.45], [fr(20), 0]]);
-    const t4 = step(t, 1 / 6);
-    const wag = t4 > fr(11) && t4 < fr(16) ? (Math.round((t4 - fr(12)) * 6) % 2 ? -7 : 7) : 0;
-    p.liftL = 45 + (156 - 45) * wide + wag;
-    p.liftR = 45 + (156 - 45) * wide + wag;
-    p.front = wide > 0.3;
-    // face: eyes shut in arcs and mouth open from the launch until the waggle ends, the blush full
-    const joy = pick(t, [[0, 0], [fr(5), 1], [fr(16), 0]]) > 0;
-    if (joy) {
-      p.eyes = 'shut';
-      p.mouth = 'mouth-open';
-    }
-    p.blush = pick(t, [[0, 0.35], [fr(5), 1], [fr(6), 1.5], [fr(16), 1], [fr(18), 0.6], [fr(20), 0.35]]);
-    p.faceY -= joy ? 3 : 0;
-    blink(pip, t, fr(22), fr(1));
-    // joy strokes out round the head while it hangs there, gone as it lands (on the body's frames)
-    const [hx, hy] = pip.pagePoint(350, 548);
-    const pop = pick(t, [[0, 0], [fr(5), 0.5], [fr(6), 1], [fr(10), 0.6], [fr(11), 0]]);
-    if (pop > 0) {
-      joyL.at(hx - 104 * K, hy - 46 * K, { k: K * 0.85, scale: 0.6 + 0.4 * pop, rot: -50 }).set({ draw: pop });
-      joyR.at(hx + 104 * K, hy - 46 * K, { k: K * 0.85, scale: 0.6 + 0.4 * pop, rot: 50 }).set({ draw: pop });
-    }
+    p.legL += pick(t, [[0, 0], [fr(4), 12], [fr(6), 0]]);
+    p.legR -= pick(t, [[0, 0], [fr(4), 12], [fr(6), 0]]);
+    p.decoR += pick(t, [[0, 0], [fr(3), 3], [fr(4), -6], [fr(6), 5], [fr(7), 0]]);
+    // the bow: down over f7–9, held, up over f19–21 (stepped, so the body moves on those frames only)
+    const tb = pick(t, [[0, 0], [fr(7), fr(7)], [fr(8), fr(8)], [fr(9), fr(9)], [fr(19), fr(19)], [fr(20), fr(20)], [fr(21), fr(21)], [fr(22), fr(22)]]);
+    const e = bow(pip, tb, fr(6), fr(9), fr(18), fr(21), 1);
+    bowStrokes(pip, strokeL, strokeR, e);
+    // mittens on its cheeks from the landing until it has straightened up
+    if (pick(t, [[0, 0], [fr(6), 1], [fr(21), 0]])) shy(pip);
+    p.blush = pick(t, [[0, 0.4], [fr(6), 1], [fr(8), 1.6], [fr(20), 1], [fr(22), 0.4]]);
+    if (pick(t, [[0, 0], [fr(4), 1], [fr(6), 0]])) p.mouth = 'mouth-open';
+    blink(pip, t, fr(24), fr(1));
+    // the heart pops up above its curls as it bows, beats once, and goes as it rises
+    const grow = pick(t, [[0, 0], [fr(8), 0.55], [fr(9), 1.12], [fr(10), 1], [fr(14), 1.08], [fr(15), 1], [fr(19), 0.55], [fr(20), 0]]);
+    if (grow > 0) heart.at(216, 92, { k: K * 0.5, scale: grow, rot: -4 }).set({ glow: 0 });
   },
 });

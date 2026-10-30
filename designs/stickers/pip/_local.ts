@@ -4,7 +4,7 @@
  * stickers alone (each sticker is bundled on its own, so nothing here reaches another pack).
  */
 import { PROP_KINDS, type PropKind, type PropState } from '../kit';
-import { F, INK, path, pencil, poly, tear, type Pt } from '../kit/paper';
+import { F, INK, path, pencil, poly, scribble, smoothPath, tear, type Pt } from '../kit/paper';
 import { clamp } from '../../../src/lib/mascots/geometry';
 
 /**
@@ -30,70 +30,112 @@ interface LocalKind {
 
 const DEG = Math.PI / 180;
 const paper = (d: string, fill: string, filter = 'paper') => `<path d="${d}" fill="${fill}" filter="url(#${F}${filter})"/>`;
-
-function starPts(cx: number, cy: number, r1: number, r2: number, n = 5, rot = -90): Pt[] {
-  const out: Pt[] = [];
-  for (let i = 0; i < n * 2; i++) {
-    const r = i % 2 ? r2 : r1;
-    const a = (rot + (i * 180) / n) * DEG;
-    out.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
-  }
-  return out;
+/** Strokes drawn in: every path under `sel` shown up to u of its length (paths carry pathLength 1). */
+function drawIn(svg: SVGSVGElement, sel: string, u: number): void {
+  svg.querySelectorAll<SVGPathElement>(`${sel} path`).forEach(p => {
+    p.style.strokeDashoffset = (1 - clamp(u, 0, 1)).toFixed(3);
+  });
 }
+const crayon = (ds: string[], color: string, w: number, cls: string) =>
+  `<g class="${cls}" stroke="${color}" stroke-width="${w}" opacity="0.95" fill="none" stroke-linecap="round" stroke-linejoin="round" filter="url(#${F}crayon)">${
+    ds.map(d => `<path d="${d}" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1"/>`).join('')}</g>`;
 
 function register(name: string, def: LocalKind): PropKind {
   (PROP_KINDS as unknown as Record<string, LocalKind>)[name] = def;
   return name as PropKind;
 }
 
+/** The kraft paper of a parcel or a paper bag: 點點's own ground to hide behind (摺摺's sage is his). */
+export const KRAFT = 'oklch(70% 0.065 68)';
+
 /**
- * A paper star on a wooden stick (a gold star for a story well written, held up high — 點點's arms are too short to
- * hold the kit's star clear of its own paper): the kit's star (butter, a paler middle) and `shine` 0–1 its gold strokes.
+ * A low torn strip of kraft paper standing along the sticker's foot, for 點點 to duck behind and pop up from: its top
+ * edge torn, one faint pencil rule. Half the kit's `ground` tall at the same k.
  */
-export const STAR_WAND = register('pip-star-wand', {
-  size: [132, 250],
-  anchors: { center: [66, 66], star: [66, 66], grip: [66, 206] },
+export const KRAFT_STRIP = register('pip-kraft-strip', {
+  size: [400, 110],
+  anchors: { center: [200, 58], top: [200, 14], base: [200, 102] },
   draw(seed) {
-    const stick = tear(poly([[62.5, 96], [69.5, 96], [69.5, 244], [62.5, 244]], 5), seed, { jag: 0.3, wander: 0.6 });
-    const star = tear(poly(starPts(66, 66, 50, 22), 5), seed + 1, { jag: 0.6, wander: 1.6 });
-    const inner = poly(starPts(66, 66, 30, 13), 5);
-    const rays = Array.from({ length: 5 }, (_, i) => {
-      const a = (-90 + 36 + i * 72) * DEG;
-      return pencil([[66 + Math.cos(a) * 40, 66 + Math.sin(a) * 40], [66 + Math.cos(a) * 60, 66 + Math.sin(a) * 60]], seed + 5 + i, 1, 0.3)[0];
-    });
-    return `<g class="sh" stroke="${INK.gold}" stroke-width="5" opacity="0.95" fill="none" stroke-linecap="round" filter="url(#${F}crayon)">${
-      rays.map(d => `<path d="${d}" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1"/>`).join('')}</g>
-      ${paper(path(stick), INK.wood, 'cut')}
-      ${paper(path(star), INK.butter)}
-      <path d="${path(inner)}" fill="${INK.goldLight}" opacity="0.7"/>`;
+    const top: Pt[] = [];
+    for (let x = 10; x <= 390; x += 18) top.push([x, 16 + Math.sin(x * 0.034 + seed) * 4.5]);
+    const strip = tear(poly([...top, [390, 102], [10, 102]], 6), seed, { jag: 1.1, wander: 4 });
+    const rule = pencil([[30, 62], [200, 60], [370, 63]], seed + 1, 1, 0.4);
+    return `${paper(path(strip), KRAFT)}
+      <g stroke="oklch(48% 0.05 60)" stroke-width="1.4" opacity="0.28" fill="none" filter="url(#${F}graphite)">${rule.map(d => `<path d="${d}"/>`).join('')}</g>`;
+  },
+});
+
+/**
+ * A story card marked by a teacher: cream, three bold handwritten lines, and `draw` 0–1 drawing a red crayon double
+ * circle by the first (the 圈圈 a teacher draws by a line that's well written: two loose loops, a pen going round
+ * twice — never the stamped ring of 牽牽's 好喔). Held by its lower edge (`bottom`, or the corners `gripL` / `gripR`).
+ */
+export const PRAISE_CARD = register('pip-praise-card', {
+  size: [150, 112],
+  anchors: { center: [75, 56], gripL: [16, 98], gripR: [134, 98], bottom: [75, 100] },
+  draw(seed) {
+    const card = tear(poly([[8, 8], [142, 6], [144, 102], [6, 104]], 5), seed, { jag: 0.35, wander: 1 });
+    const lines = [[38, 72], [62, 98], [84, 64]].flatMap(([y, w], i) => scribble(16, y, w, seed + 30 + i, 4.4));
+    // the double circle at the first line's end: two loops round the same middle, not quite closed
+    const loop = (r: number, a0: number, a1: number, s: number) => {
+      const pts: Pt[] = [];
+      for (let a = a0; a <= a1; a += 12) pts.push([116 + Math.cos(a * DEG) * r * 1.08, 36 + Math.sin(a * DEG) * r + Math.sin(a * DEG * 3 + s) * 0.9]);
+      return smoothPath(pts);
+    };
+    return `${paper(path(card), INK.paper, 'cut')}
+      <path d="M14,16 L136,14" stroke="${INK.terracotta}" stroke-width="2.6" opacity="0.7" filter="url(#${F}graphite)"/>
+      <g stroke="${INK.graphite}" stroke-width="3" opacity="0.78" fill="none" stroke-linecap="round" stroke-linejoin="round" filter="url(#${F}graphite)">${lines.map(d => `<path d="${d}"/>`).join('')}</g>
+      ${crayon([loop(21, -240, 110, seed), loop(15, -210, 140, seed + 2)], INK.red, 4.6, 'c')}`;
   },
   update(svg, s) {
-    svg.querySelectorAll<SVGPathElement>('.sh path').forEach(p => {
-      p.style.strokeDashoffset = (1 - clamp(s.shine ?? 0, 0, 1)).toFixed(3);
+    const u = clamp(s.draw ?? 0, 0, 1);
+    svg.querySelectorAll<SVGPathElement>('.c path').forEach((p, i) => {
+      p.style.strokeDashoffset = (1 - clamp(u * 2 - i, 0, 1)).toFixed(3);
     });
   },
 });
 
 /**
- * Shake marks: two short terracotta crayon arcs, a bracket ")" beside something shaking (a laugh) — the comic
- * strip's vibration lines, in the props' crayon. Drawn facing right (put the left one at `rot: 180`); `draw` 0–1.
+ * A wide-open laughing mouth for 點點 (its rig's `mouth-open` is a small one): the same graphite, a terracotta tongue.
+ * Laid over its mouth, inside its face (`inside: { above: 'mouth-open' }`); `show` 0–1 how wide (a laugh flaps it).
  */
-export const SHAKE = register('pip-shake', {
-  size: [64, 120],
-  anchors: { center: [10, 60], inner: [10, 60] },
-  draw(seed) {
-    const arcs = [30, 50].map((r, i) => {
-      const pts: Pt[] = [];
-      const span = i ? 34 : 40;
-      for (let a = -span; a <= span; a += 8) pts.push([Math.cos(a * DEG) * r, 60 + Math.sin(a * DEG) * r]);
-      return pencil(pts, seed + i, 1, 0.5)[0];
-    });
-    return `<g class="sk" stroke="${INK.terracotta}" stroke-width="6" opacity="0.95" fill="none" stroke-linecap="round" filter="url(#${F}crayon)">${
-      arcs.map(d => `<path d="${d}" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1"/>`).join('')}</g>`;
+export const LAUGH_MOUTH = register('pip-laugh-mouth', {
+  size: [40, 30],
+  anchors: { center: [20, 10] },
+  draw() {
+    return `<g class="m"><path d="M4,5 Q20,8 36,4 Q34,24 20,25 Q6,24 4,5Z" fill="${INK.graphite}" opacity="0.92" filter="url(#${F}graphite)"/>
+      <path d="M11,20 Q20,14 29,20 Q26,24.5 20,24.6 Q14,24.5 11,20Z" fill="oklch(62% 0.12 30)" opacity="0.9"/></g>`;
   },
   update(svg, s) {
-    svg.querySelectorAll<SVGPathElement>('.sk path').forEach((p, i) => {
-      p.style.strokeDashoffset = (1 - clamp((s.draw ?? 1) * 1.6 - i * 0.6, 0, 1)).toFixed(3);
+    const g = svg.querySelector<SVGGElement>('.m');
+    if (!g) return;
+    g.style.transformBox = 'view-box';
+    g.style.transformOrigin = '20px 5px';
+    g.style.transform = `scale(1,${(0.55 + 0.45 * clamp(s.show ?? 1, 0, 1)).toFixed(3)})`;
+  },
+});
+
+/**
+ * Laugh marks: three short terracotta crayon arcs, like the arcs of a bouncing ball, beside a laugh; `phase` (cycles)
+ * bounces each up and down in turn, `draw` 0–1 shows them. Drawn for the right side (put the left one at `sx: -1`).
+ */
+export const LAUGH_MARKS = register('pip-laugh-marks', {
+  size: [80, 110],
+  anchors: { center: [16, 55], inner: [6, 55] },
+  draw(seed) {
+    const arcs = [[18, 26, 16], [40, 52, 14], [20, 82, 12]].map(([x, y, r], i) => {
+      const pts: Pt[] = [];
+      for (let a = 200; a <= 340; a += 14) pts.push([x + Math.cos(a * DEG) * r, y + Math.sin(a * DEG) * r * 0.8]);
+      return `<g class="a a${i}">${crayon([pencil(pts, seed + i, 1, 0.4)[0]], INK.terracotta, 5.5, 'd')}</g>`;
     });
+    return arcs.join('');
+  },
+  update(svg, s) {
+    drawIn(svg, '.d', s.draw ?? 1);
+    const ph = (s.phase ?? 0) * Math.PI * 2;
+    for (let i = 0; i < 3; i++) {
+      const g = svg.querySelector<SVGGElement>(`.a${i}`);
+      if (g) g.setAttribute('transform', `translate(0 ${(-7 * Math.abs(Math.sin(ph + i * 2.1))).toFixed(1)})`);
+    }
   },
 });
