@@ -81,7 +81,7 @@
     "en": "Twine"
    },
    "icon": "twine/icon.webp",
-   "iconV": "13f38d74ef",
+   "iconV": "150c0e5854",
    "stickers": [
     {
      "id": "anyone-there",
@@ -89,9 +89,9 @@
       "zh-TW": "在嗎？",
       "en": "Are you there?"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "2946b2044a"
+     "durationMs": 2333,
+     "frames": 19,
+     "v": "f6679f8df5"
     },
     {
      "id": "thanks",
@@ -99,9 +99,9 @@
       "zh-TW": "謝謝",
       "en": "Thanks"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "2946b2044a"
+     "durationMs": 2333,
+     "frames": 15,
+     "v": "a91b9b355d"
     },
     {
      "id": "for-you",
@@ -109,9 +109,9 @@
       "zh-TW": "這是給你的",
       "en": "This is for you"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "2946b2044a"
+     "durationMs": 2583,
+     "frames": 15,
+     "v": "73e5c7bae0"
     },
     {
      "id": "well-done",
@@ -119,9 +119,9 @@
       "zh-TW": "辛苦了",
       "en": "You worked hard"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "2946b2044a"
+     "durationMs": 2333,
+     "frames": 28,
+     "v": "8de4e9994f"
     },
     {
      "id": "okay",
@@ -129,9 +129,9 @@
       "zh-TW": "好喔",
       "en": "Okay"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "2946b2044a"
+     "durationMs": 2583,
+     "frames": 23,
+     "v": "16f361d985"
     },
     {
      "id": "resonate",
@@ -139,9 +139,9 @@
       "zh-TW": "共振了",
       "en": "We resonate"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "2946b2044a"
+     "durationMs": 2583,
+     "frames": 21,
+     "v": "3a3b8ccf8d"
     }
    ]
   },
@@ -153,7 +153,7 @@
     "en": "Nod"
    },
    "icon": "nod/icon.webp",
-   "iconV": "28bb43501f",
+   "iconV": "f3c134fa9e",
    "stickers": [
     {
      "id": "thanks-for-sharing",
@@ -161,9 +161,9 @@
       "zh-TW": "謝謝你願意說",
       "en": "Thank you for telling me"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "76da89bce8"
+     "durationMs": 2583,
+     "frames": 26,
+     "v": "103955e3a0"
     },
     {
      "id": "read-to-the-end",
@@ -171,9 +171,9 @@
       "zh-TW": "謝謝你讀到最後",
       "en": "Thanks for reading to the end"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "76da89bce8"
+     "durationMs": 2583,
+     "frames": 26,
+     "v": "ea4cb977f7"
     },
     {
      "id": "so-moved",
@@ -181,9 +181,9 @@
       "zh-TW": "好感動",
       "en": "So moved"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "76da89bce8"
+     "durationMs": 2583,
+     "frames": 21,
+     "v": "3ffdb4e807"
     },
     {
      "id": "i-understand",
@@ -191,9 +191,9 @@
       "zh-TW": "我懂",
       "en": "I understand"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "76da89bce8"
+     "durationMs": 2583,
+     "frames": 21,
+     "v": "83585bfade"
     },
     {
      "id": "love-this-line",
@@ -201,9 +201,9 @@
       "zh-TW": "這句好喜歡",
       "en": "Love this line"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "76da89bce8"
+     "durationMs": 2583,
+     "frames": 23,
+     "v": "d006876b3e"
     },
     {
      "id": "hug",
@@ -211,9 +211,9 @@
       "zh-TW": "抱抱",
       "en": "Hug"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "76da89bce8"
+     "durationMs": 2583,
+     "frames": 19,
+     "v": "b79f02a540"
     }
    ]
   },
@@ -225,7 +225,7 @@
     "en": "Pip"
    },
    "icon": "pip/icon.webp",
-   "iconV": "941d86f899",
+   "iconV": "ac1442a809",
    "stickers": [
     {
      "id": "hi",
@@ -233,9 +233,9 @@
       "zh-TW": "嗨！",
       "en": "Hi!"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "8d1fd5766d"
+     "durationMs": 2083,
+     "frames": 20,
+     "v": "706fea08a0"
     },
     {
      "id": "thank-you",
@@ -243,9 +243,9 @@
       "zh-TW": "謝謝你！",
       "en": "Thank you!"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "8d1fd5766d"
+     "durationMs": 2333,
+     "frames": 16,
+     "v": "c264588994"
     },
     {
      "id": "beautifully-written",
@@ -253,9 +253,9 @@
       "zh-TW": "寫得真好",
       "en": "Beautifully written"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "8d1fd5766d"
+     "durationMs": 2583,
+     "frames": 19,
+     "v": "c176a66059"
     },
     {
      "id": "you-got-this",
@@ -263,9 +263,9 @@
       "zh-TW": "加油",
       "en": "You've got this"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "8d1fd5766d"
+     "durationMs": 2083,
+     "frames": 18,
+     "v": "210f99b93f"
     },
     {
      "id": "haha",
@@ -273,9 +273,9 @@
       "zh-TW": "哈哈",
       "en": "Haha"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "8d1fd5766d"
+     "durationMs": 2083,
+     "frames": 22,
+     "v": "ed347356a1"
     },
     {
      "id": "congrats",
@@ -283,9 +283,9 @@
       "zh-TW": "恭喜",
       "en": "Congratulations"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "8d1fd5766d"
+     "durationMs": 2333,
+     "frames": 12,
+     "v": "d07ef3bed1"
     }
    ]
   },
@@ -305,9 +305,9 @@
       "zh-TW": "晚安",
       "en": "Good night"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "2eb09911b7"
+     "durationMs": 2583,
+     "frames": 18,
+     "v": "5e62ebc226"
     },
     {
      "id": "teary",
@@ -315,9 +315,9 @@
       "zh-TW": "眼眶濕濕的",
       "en": "Teary-eyed"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "2eb09911b7"
+     "durationMs": 2583,
+     "frames": 22,
+     "v": "20d898a12c"
     },
     {
      "id": "lit-up",
@@ -325,9 +325,9 @@
       "zh-TW": "心裡亮了一下",
       "en": "That lit me up"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "2eb09911b7"
+     "durationMs": 2583,
+     "frames": 27,
+     "v": "eec8fa4a59"
     },
     {
      "id": "im-here",
@@ -335,9 +335,9 @@
       "zh-TW": "我在這裡",
       "en": "I'm here"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "2eb09911b7"
+     "durationMs": 2583,
+     "frames": 25,
+     "v": "4b4f3c3b80"
     },
     {
      "id": "listening",
@@ -345,9 +345,9 @@
       "zh-TW": "慢慢說，我在聽",
       "en": "I'm listening"
      },
-     "durationMs": 0,
-     "frames": 1,
-     "v": "2eb09911b7"
+     "durationMs": 2583,
+     "frames": 26,
+     "v": "184cfc0243"
     }
    ]
   }
