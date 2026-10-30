@@ -110,3 +110,5 @@ public func seedFromString(_ string: String) -> Int {
 public func autoSegments(_ edge: Double) -> Int { Int(clamp(jsRound(edge / 95), 2, 8)) }
 public func autoMag(_ w: Double, _ h: Double) -> Double { clamp(2 + min(w, h) * 0.013, 2.4, 4) }
 public func autoCurve(_ w: Double, _ h: Double) -> Double { clamp(1.8 - min(w, h) * 0.003, 0.6, 1.6) }
+/// A text field's bow: its size's own on one line, at most 0.8 once 72 tall or taller (wobAuto.ts `fieldCurve`).
+public func fieldCurve(_ w: Double, _ h: Double) -> Double { h >= 72 ? min(autoCurve(w, h), 0.8) : autoCurve(w, h) }

@@ -91,3 +91,5 @@ internal fun clamp(n: Double, lo: Double, hi: Double) = max(lo, min(hi, n))
 fun autoSegments(edge: Double): Int = clamp(jsRound(edge / 95), 2.0, 8.0).toInt()
 fun autoMag(w: Double, h: Double): Double = clamp(2 + min(w, h) * 0.013, 2.4, 4.0)
 fun autoCurve(w: Double, h: Double): Double = clamp(1.8 - min(w, h) * 0.003, 0.6, 1.6)
+/** A text field's bow: its size's own on one line, at most 0.8 once 72 tall or taller (wobAuto.ts `fieldCurve`). */
+fun fieldCurve(w: Double, h: Double): Double = if (h >= 72) min(autoCurve(w, h), 0.8) else autoCurve(w, h)

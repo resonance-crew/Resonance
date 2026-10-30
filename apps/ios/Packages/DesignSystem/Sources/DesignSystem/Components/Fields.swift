@@ -30,12 +30,27 @@ public struct FieldSurface: ViewModifier {
     public func body(content: Content) -> some View {
         content.background {
             let shape = curve.map { AnyShape(AutoWobRectShape(radius: Tokens.radiusMd, seed: seed, curve: $0)) }
-                ?? AnyShape(WobRectShape(radius: Tokens.radiusMd, seed: seed))
+                ?? AnyShape(FieldWobShape(radius: Tokens.radiusMd, seed: seed))
             shape.fill(Tokens.cream)
             shape.stroke(focused ? Tokens.terracotta : Tokens.fieldBorder,
                          style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
         }
         .animation(.easeOut(duration: 0.15), value: focused)
+    }
+}
+
+/// A field's outline: its size's own wobble, the bow calmed once it is taller than a line (`fieldCurve`,
+/// the web's `curve="field"`).
+nonisolated struct FieldWobShape: Shape {
+    let radius: Double
+    let seed: Double
+
+    func path(in rect: CGRect) -> Path {
+        let w = Double(rect.width), h = Double(rect.height)
+        guard w > 0, h > 0 else { return Path() }
+        return WobRectShape(radius: radius, seed: seed, options: WobRectOptions(
+            curve: fieldCurve(w, h), segmentsH: .count(Double(autoSegments(w))), segmentsV: .count(Double(autoSegments(h)))
+        )).path(in: rect)
     }
 }
 

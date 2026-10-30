@@ -173,14 +173,14 @@ struct AuthorScreen: View {
         await model?.load()
     }
 
-    /// The web's section heading: Playfair 20, set tight, on the left.
+    /// The web's section heading: Playfair 20, set tight, on the left — where the cards under it start.
     private func heading(_ title: String) -> some View {
         Text(title)
             .font(AppFonts.heading(20))
             .tracking(-0.01 * 20)
             .foregroundStyle(Tokens.text)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 20)
+            .cardListHeaderInset()
             .padding(.bottom, 24)
             .accessibilityAddTraits(.isHeader)
     }

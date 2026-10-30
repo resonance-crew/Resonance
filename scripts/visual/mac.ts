@@ -54,7 +54,10 @@ function windows(): MacWindow[] {
 async function launch(args: string[]): Promise<MacWindow> {
   const before = new Set(windows().map((w) => w.pid));
   // A Mac with a mouse shows every scroll bar the app hides (`.hidden`); the system's setting, for this copy alone.
-  run('open', ['-n', '-g', APP, '--args', ...args, '-macWindowSize', `${WINDOW.width}x${WINDOW.height}`, '-AppleShowScrollBars', 'WhenScrolling']);
+  // The window state is neither restored nor saved (`ApplePersistenceIgnoreState`): a capture's pinned size kept
+  // would open the app at 1440 × 900 the next time anyone opens it.
+  run('open', ['-n', '-g', APP, '--args', ...args, '-macWindowSize', `${WINDOW.width}x${WINDOW.height}`, '-AppleShowScrollBars', 'WhenScrolling',
+    '-ApplePersistenceIgnoreState', 'YES']);
   const end = Date.now() + 60_000;
   while (Date.now() < end) {
     await sleep(500);

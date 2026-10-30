@@ -160,6 +160,29 @@ struct CardColumns<Item: View>: View {
     }
 }
 
+extension View {
+    /// What heads a story-card list (a profile's section title) starts where its cards do: inside the
+    /// bordered grid's 1200 and the page's pads on a window wide enough for columns, else `inset` from
+    /// the page's edge over the bands (Android's `CardListLayout.headerInset`).
+    func cardListHeaderInset(_ inset: CGFloat = 20) -> some View {
+        modifier(CardListHeaderInset(inset: inset))
+    }
+}
+
+private struct CardListHeaderInset: ViewModifier {
+    let inset: CGFloat
+    @Environment(\.window) private var window
+
+    func body(content: Content) -> some View {
+        let grid = LayoutClass.feedColumns(window.layoutClass, contentWidth: LayoutClass.feedContentWidth(window: window.contentWidth)) > 1
+        if grid {
+            content.padding(.horizontal, window.pad).frame(maxWidth: 1200).frame(maxWidth: .infinity)
+        } else {
+            content.padding(.horizontal, inset)
+        }
+    }
+}
+
 /// A card brought in by 「顯示更多」 (CardLinkGrid's `card-enter`): its ink comes up from nothing as it
 /// rises 18 into place — 460 ms on the web's curve, each card 70 ms after the one before it, none
 /// waiting more than 420 ms. Drawn without a delay (already on screen, or come in some other way), it

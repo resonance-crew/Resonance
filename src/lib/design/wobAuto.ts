@@ -49,3 +49,18 @@ export function autoCurve(w: number, h: number): number {
   const s = Math.min(w, h);
   return clamp(1.8 - s * 0.003, 0.6, 1.6);
 }
+
+/** A field this tall or taller holds more than one line (a textarea, the note box). */
+export const TALL_FIELD = 72;
+/** The most a tall field bows: the writer's title's calm line. */
+export const TALL_FIELD_CURVE = 0.8;
+
+/**
+ * A text field's bow: its size's own while it holds one line, never more than
+ * TALL_FIELD_CURVE once it is taller (the owner, 2026-10-31: a big box bowing
+ * like a button looked bent; still drawn, just calmer).
+ */
+export function fieldCurve(w: number, h: number): number {
+  const c = autoCurve(w, h);
+  return h >= TALL_FIELD ? Math.min(c, TALL_FIELD_CURVE) : c;
+}

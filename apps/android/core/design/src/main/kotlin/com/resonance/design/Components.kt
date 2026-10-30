@@ -60,7 +60,6 @@ import androidx.compose.ui.draw.DrawResult
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
@@ -111,6 +110,8 @@ import com.resonance.geometry.SegValue
 import com.resonance.geometry.WobCircleOptions
 import com.resonance.geometry.WobLoopOptions
 import com.resonance.geometry.WobRectOptions
+import com.resonance.geometry.autoSegments
+import com.resonance.geometry.fieldCurve
 import com.resonance.geometry.penWave
 import com.resonance.geometry.seedFromString
 import com.resonance.geometry.wobLoop
@@ -1099,6 +1100,8 @@ fun OrganicTextField(
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     /** Where the caller puts the focus (the writer's link sheet: its field on opening). */
     focusRequester: FocusRequester? = null,
+    /** On the text field itself (a test tag the interaction flows find it by). */
+    fieldModifier: Modifier = Modifier,
 ) {
     var focused by remember { mutableStateOf(false) }
     val text = if (display) AppFonts.heading(22f, lineHeight = 1.35f) else AppFonts.body(15f, lineHeight = 1.6f)
@@ -1126,7 +1129,8 @@ fun OrganicTextField(
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                    .onFocusChanged { focused = it.isFocused },
+                    .onFocusChanged { focused = it.isFocused }
+                    .then(fieldModifier),
             )
         }
         if (maxLength != null) BasicText(
@@ -1172,13 +1176,21 @@ private data class FieldSurface(
     val ink: Color,
 ) : (CacheDrawScope) -> DrawResult {
     override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
-        val shape = curve?.let { AutoWobRectShape(Tokens.RadiusMd.toDouble(), seed, it) } ?: WobRectShape(Tokens.RadiusMd.toDouble(), seed)
+        val shape = curve?.let { AutoWobRectShape(Tokens.RadiusMd.toDouble(), seed, it) } ?: run {
+            // A field's own bow, calmed once it is taller than a line (fieldCurve, the web's curve="field").
+            val w = (size.width / density).toDouble()
+            val h = (size.height / density).toDouble()
+            WobRectShape(Tokens.RadiusMd.toDouble(), seed, options = WobRectOptions(
+                curve = fieldCurve(w, h), segmentsH = SegValue.Count(autoSegments(w).toDouble()), segmentsV = SegValue.Count(autoSegments(h).toDouble()),
+            ))
+        }
         val o = shape.createOutline(size, layoutDirection, this)
         val s = Stroke(Tokens.Ink.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-        val r = CornerRadius(Tokens.RadiusMd.dp.toPx())
         onDrawBehind {
-            // The web fills the field's plain rounded box; the pen line wobbles around it.
-            drawRoundRect(paper, cornerRadius = r)
+            // The paper fills the pen line's own outline (as iOS's FieldSurface): a plain rounded box under a
+            // wobbling line showed the dialog's paper inside the line where it bowed out, and the field's past it
+            // where it bowed in — plain on a dialog's darker paper at night.
+            drawOutline(o, paper)
             drawOutline(o, if (focused()) focusInk else ink, style = s)
         }
     }

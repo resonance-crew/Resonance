@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
 import { wobRect, type SegValue } from '@/lib/design/wobRect';
-import { autoCurve, autoMag, autoSegments } from '@/lib/design/wobAuto';
+import { autoCurve, autoMag, autoSegments, fieldCurve } from '@/lib/design/wobAuto';
 import { useElementSize } from '@/lib/hooks/useElementSize';
 import { INK } from '@/lib/design/strokes';
 import styles from './HandDrawnDashedBorder.module.css';
@@ -28,7 +28,8 @@ export interface HandDrawnDashedBorderProps {
    */
   minSegmentsH?: number;
   minSegmentsV?: number;
-  curve?: number;
+  /** Per-segment bow; `'field'` is a text field's (calmer once taller than a line, `fieldCurve`). */
+  curve?: number | 'field';
   className?: string;
 }
 
@@ -51,7 +52,7 @@ export function HandDrawnDashedBorder({
   className,
 }: HandDrawnDashedBorderProps) {
   const m = mag != null ? mag : autoMag(w, h);
-  const c = curve != null ? curve : autoCurve(w, h);
+  const c = curve === 'field' ? fieldCurve(w, h) : curve != null ? curve : autoCurve(w, h);
   const segH: SegValue =
     segmentsH != null ? segmentsH : Math.max(autoSegments(w), minSegmentsH ?? 0);
   const segV: SegValue =
@@ -94,8 +95,8 @@ export interface HandDrawnDashedSurfaceProps {
   strokeWidth?: number;
   /** Unused — kept for back-compat after dashed→curve rework. */
   dashArray?: string;
-  /** Override per-segment bow. Leave undefined to auto-derive from size. */
-  curve?: number;
+  /** Override per-segment bow. Leave undefined to auto-derive from size; `'field'` for a text field's. */
+  curve?: number | 'field';
   segmentsH?: SegValue;
   segmentsV?: SegValue;
   /** Floor on the auto-derived turn count. See {@link HandDrawnDashedBorderProps}. */

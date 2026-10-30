@@ -114,7 +114,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       seed={seed}
       R={16}
       strokeWidth={INK}
-      curve={curve}
+      curve={curve ?? 'field'}
       state={focus ? 'focus' : hover ? 'hover' : 'idle'}
       className={styles.surface}
     >
@@ -202,7 +202,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
       seed={seed}
       R={16}
       strokeWidth={INK}
-      curve={curve}
+      curve={curve ?? 'field'}
       state={focus ? 'focus' : hover ? 'hover' : 'idle'}
       className={styles.surface}
     >
