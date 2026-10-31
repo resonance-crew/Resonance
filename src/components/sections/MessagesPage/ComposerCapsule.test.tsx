@@ -6,7 +6,7 @@ import { fireEvent, render, screen } from '@/../test/render';
 import { mockElementSize } from '@/../test/organic';
 import { boundaryPoints, polyline } from '@/components/molecules/SegmentedActionBar/SegmentedActionBar';
 import { INK } from '@/lib/design/strokes';
-import { CAPSULE_H, ComposerCapsule, SEND_SEGMENT_W, capsuleShape } from './ComposerCapsule';
+import { BLOCK_TURN_R, CAPSULE_H, ComposerCapsule, SEND_SEGMENT_W, blockCapsuleShape, capsuleShape } from './ComposerCapsule';
 import { FloatingSlip, floatingPath } from './FloatingSlip';
 
 // The capsule and the slip measure themselves before they draw.
@@ -37,6 +37,25 @@ describe('the composer capsule (round 9 §4)', () => {
     expect(shape.segment.startsWith(seam)).toBe(true);
     expect(shape.outline).toBe(floatingPath(320, 48, 16, 23));
     expect(capsuleShape(0, 48)).toBeNull();
+  });
+
+  // Round 22 (the owner's notes): from the second line Send is a 52 × 48 block on the last row, its seam turning
+  // round — a quarter circle of 16 — from its left side to its top, the segment's edge under the seam.
+  it('turns the send block’s seam round at its top-left corner', () => {
+    const w = 320;
+    const h = 96;
+    const shape = blockCapsuleShape(w, h)!;
+    const x = w - SEND_SEGMENT_W;
+    const y = h - CAPSULE_H;
+    const f = (n: number) => +n.toFixed(2);
+    expect(BLOCK_TURN_R).toBe(16);
+    const at = (deg: number) => {
+      const a = (deg * Math.PI) / 180;
+      return `${f(x + 16 + 16 * Math.cos(a))},${f(y + 16 + 16 * Math.sin(a))}`;
+    };
+    for (const deg of [180, 195, 210, 225, 240, 255, 270]) expect(shape.seam).toContain(at(deg));
+    expect(shape.segment.startsWith(shape.seam)).toBe(true);
+    expect(shape.outline).toBe(capsuleShape(w, h)!.outline);
   });
 
   // Round 10 §3.1–3.2, round 11 §3: no paper halo round the pen; the foot's paper behind the whole foot keeps the
@@ -99,11 +118,25 @@ describe('the composer capsule (round 9 §4)', () => {
   // its own line height; only more lines grow it, up to five; the ＋ and the segment never scale.
   it('keeps one line exactly 48 tall whatever its line height, growing only by lines, to five', () => {
     expect(CAPSULE_H).toBe(48);
-    expect(rule('.composerField')).toMatch(/padding-block:\s*calc\(\(48px - 1lh\) \/ 2\)/);
+    // The room above and below the line is the text box's own padding (round 22): scrolled, its lines run to the
+    // capsule's pen line, and five lines and that room are the box's whole height.
+    expect(rule('.capsule textarea.composerInput')).toMatch(/padding-block:\s*calc\(\(48px - 1lh\) \/ 2\)/);
+    expect(rule('.composerField')).toMatch(/padding:\s*0 10px 0 0/);
     expect(rule('.composerField')).toMatch(/font-size:\s*16px/);
-    expect(rule('.capsule textarea.composerInput')).toMatch(/max-height:\s*5lh/);
+    expect(rule('.capsule textarea.composerInput')).toMatch(/max-height:\s*calc\(4lh \+ 48px\)/);
     expect(rule('.plusSlot')).toMatch(/width:\s*44px;[\s\S]*height:\s*48px/);
     expect(rule('.send')).toMatch(/width:\s*52px/);
+    // From the second line Send is the block on the last row: the column keeps it at its foot, under ⤢ or nothing.
+    expect(rule('.sendColumn')).toMatch(/justify-content:\s*flex-end/);
+    // ⤢ / ⤡ stand in the send column, at the capsule's top-right (the owner's: where a finger looks for it).
+    expect(rule('.aboveSend')).toMatch(/align-items:\s*flex-start/);
+    expect(rule('.aboveSend')).toMatch(/justify-content:\s*center/);
+    expect(rule('.aboveSend')).not.toMatch(/padding/);
+    // A square ghost button: no fill and no outline at rest.
+    expect(rule('.growTool')).toMatch(/width:\s*44px;[\s\S]*height:\s*44px/);
+    expect(rule('.growTool')).toMatch(/border:\s*none;[\s\S]*background:\s*none/);
+    expect(rule('.growWash')).toMatch(/opacity:\s*0/);
+    expect(rule('.capsule[data-block] .send')).toMatch(/flex:\s*none;[\s\S]*height:\s*48px/);
     // The plane sits on the last line's row, beside the ＋, not in the middle of a tall field.
     expect(rule('.sendGlyph')).toMatch(/bottom:\s*0/);
     expect(rule('.sendGlyph')).toMatch(/height:\s*48px/);

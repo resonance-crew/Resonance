@@ -1365,15 +1365,13 @@ button.chips::before {
   object-fit: contain;
 }
 
-/* Several pictures riding (round 22 §4.2): their thumbnails in order, each numbered with its own ✕; the row's
-   ✕ takes them all. Up to ten: the strip scrolls sideways when they are more than the row. */
+/* The pictures riding (round 22 §4.2 and the owner's notes — iOS's way everywhere): their thumbnails in a row
+   over the capsule, each with its own small round ✕ on its top-right corner; up to ten, the row scrolling
+   sideways when they are more than it. */
 .carryStrip {
   display: flex;
-  flex-shrink: 1;
-  gap: 6px;
-  min-width: 0;
-  max-width: 62%;
-  padding: 4px 2px 2px 0;
+  gap: 8px;
+  padding: 4px 2px 2px 4px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -1385,10 +1383,10 @@ button.chips::before {
 .carryThumb {
   position: relative;
   flex: none;
-  width: 44px;
-  height: 44px;
+  width: 60px;
+  height: 60px;
   overflow: hidden;
-  border-radius: 12px 14px 12px 14px;
+  border-radius: 14px 16px 14px 16px;
   background: color-mix(in oklch, var(--color-terracotta-light) 40%, var(--color-cream));
 }
 
@@ -1399,31 +1397,56 @@ button.chips::before {
   object-fit: cover;
 }
 
-.carryOrder {
+/* A neat small disc of the viewer's dark, a cream ✕ on it; a finger's 32 round it, unseen. */
+.thumbRemove {
   position: absolute;
-  bottom: 2px;
-  left: 3px;
-  min-width: 15px;
-  padding: 0 3px;
-  border-radius: 8px;
-  background: var(--button-fill);
-  color: var(--color-cream);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 15px;
-  text-align: center;
-}
-
-.carryThumbRemove {
-  position: absolute;
-  top: 1px;
-  right: 1px;
-}
-
-/* The cream glyph on its disc of the viewer's dark (BareIconButton onDark), small on a thumbnail. */
-.carryThumbRemove button[data-tone] {
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
   width: 22px;
   height: 22px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--photo-ink);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.thumbRemove::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+}
+
+.thumbDisc {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: color-mix(in oklch, var(--viewer-ground) 62%, transparent);
+  transition: fill 120ms ease;
+}
+
+.thumbRemove > span {
+  position: relative;
+}
+
+@media (hover: hover) {
+  .thumbRemove:hover .thumbDisc {
+    fill: color-mix(in oklch, var(--viewer-ground) 80%, transparent);
+  }
+}
+
+.thumbRemove:active .thumbDisc {
+  fill: color-mix(in oklch, var(--viewer-ground) 80%, transparent);
+}
+
+.thumbRemove:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: 1px;
+  border-radius: 50%;
 }
 
 .fileInput {
@@ -1498,14 +1521,15 @@ button.chips::before {
 }
 
 /* The text: no frame of its own, 16 (iOS Safari doesn't zoom into it), one
-   line centred in 48 — (48 − its line) / 2 above and below, on the field's
-   room, not the field, so a scrolled field's lines stop there — growing to
-   five, then scrolling. The element + class outrank the field's own rules. */
+   line centred in 48 — (48 − its line) / 2 above and below — growing to five,
+   then scrolling. The room above and below is the text box's own padding, not
+   the field's (round 22, the owner's notes): a scrolled field's lines run to
+   the capsule's pen line, its 14 fade the edge, and the box is as tall as the
+   capsule. The element + class outrank the field's own rules. */
 .composerField {
   flex: 1;
   min-width: 0;
-  padding: 12px 10px 12px 0;
-  padding-block: calc((48px - 1lh) / 2);
+  padding: 0 10px 0 0;
   font-size: 16px;
   line-height: 1.5;
   cursor: text;
@@ -1515,10 +1539,11 @@ button.chips::before {
   display: block;
   width: 100%;
   min-height: 0;
-  max-height: 120px;
-  max-height: 5lh;
+  max-height: 144px;
+  max-height: calc(4lh + 48px);
   margin: 0;
   padding: 0;
+  padding-block: calc((48px - 1lh) / 2);
   border: none;
   border-radius: 0;
   font-size: inherit;
@@ -1556,36 +1581,20 @@ button.chips::before {
 }
 
 /* Grown on purpose (option C): as tall as the thread leaves it — its height set by the composer — the type
-   the same size, the send segment a 52 × 48 block on the last row. */
+   the same size. */
 .capsule[data-expanded] textarea.composerInput {
   max-height: none;
 }
 
-.capsule[data-expanded] .send {
-  align-self: flex-end;
-  height: 48px;
-}
-
-/* The ⤢ / ⤡ at the field's top from its third line, the ☺ on the last line's row beside Send (round 22). */
+/* The ☺ on the last line's row beside Send — only while the field is empty (round 22, the owner's notes: a
+   sticker isn't sent with words), the field taking its room otherwise. */
 .toolsSlot {
   display: flex;
   flex: none;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-end;
   align-self: stretch;
   width: 40px;
   margin-right: 2px;
-}
-
-.growTool {
-  display: flex;
-  padding-top: 4px;
-}
-
-.growTool button {
-  width: 36px;
-  height: 36px;
 }
 
 .stickerTool {
@@ -1593,7 +1602,6 @@ button.chips::before {
   align-items: center;
   justify-content: center;
   height: 48px;
-  margin-top: auto;
 }
 
 .stickerTool button {
@@ -1601,13 +1609,106 @@ button.chips::before {
   height: 44px;
 }
 
+/* The send column: Send the full height while the field is one line; from its second line a 52 × 48 block on
+   the last row, and over it, at the capsule's top-right (the owner's: where a finger looks for it, and full
+   screen's corner), ⤢ from the third line or, grown, ⤡. */
+.sendColumn {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-self: stretch;
+  width: 52px;
+}
+
+/* Flush with the capsule's top as the block is with its foot, centred over the block. */
+.aboveSend {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 0;
+}
+
+/* ⤢ / ⤡: a square ghost button (the owner's) — no fill, no outline; a soft square of ink under a pointer, the
+   keyboard's focus or a press, as a bare glyph's disc. */
+.growTool {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color 140ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.growTool > :not(.growWash) {
+  position: relative;
+}
+
+.growWash {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: color-mix(in oklch, var(--color-text) 8%, transparent);
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity 160ms ease,
+    transform 160ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.growTool:active,
+.growTool:focus-visible {
+  color: var(--color-text);
+}
+
+.growTool:active .growWash,
+.growTool:focus-visible .growWash {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media (hover: hover) {
+  .growTool:hover {
+    color: var(--color-text);
+  }
+
+  .growTool:hover .growWash {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.growTool:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: -2px;
+  border-radius: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .growWash {
+    transition: none;
+  }
+}
+
+.capsule[data-block] .send {
+  flex: none;
+  height: 48px;
+}
+
 /* Send: the capsule's end segment, the full height of the field. Its face is
    drawn (.sendFace): the tonal peach with a terracotta plane at rest, the
    verb's terracotta with a cream plane once there is something to send. */
 .send {
   position: relative;
-  flex: none;
-  align-self: stretch;
+  flex: 1 0 auto;
   width: 52px;
   padding: 0;
   border: none;
@@ -1851,20 +1952,31 @@ button.chips::before {
   }
 }
 
-/* A reply's quote of a sticker: its key frame before its name, on one line. */
+/* A reply's quote of a sticker: its key frame alone (round 22, the owner's notes), small, on the quote's
+   quieter bubble whose foot the answer lies over. */
 .quoteBubble[data-sticker] {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding-top: 6px;
+  padding: 6px 10px 20px;
 }
 
 .quoteSticker {
   display: block;
-  flex: none;
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
   object-fit: contain;
+}
+
+/* Answered by a sticker (round 22, the owner's notes): no bubble lies over the quote's foot, so it keeps no room
+   for one — as much under its content as over it, the content centred — and the sticker stands a little under it. */
+.quote[data-apart] .quoteBubble {
+  padding-bottom: 8px;
+}
+
+.quote[data-apart] .quoteBubble[data-sticker] {
+  padding-bottom: 6px;
+}
+
+.slot[data-sticker][data-over-quote] {
+  margin-top: 4px;
 }
 
 /* The sticker panel in the keyboard's place on a phone (round 22 §4.1): the foot's own paper going on — no
@@ -2078,11 +2190,15 @@ button.chips::before {
   display: flex;
   justify-content: center;
   padding: 8px 0 4px;
+  /* Only the sheet takes a press: the stickers beside it stay pickable. */
+  pointer-events: none;
 }
 
 .stickerPreview {
   all: unset;
   position: relative;
+  /* It takes its press wherever it lies (its slot in the popover lets presses through beside it). */
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
   align-items: center;

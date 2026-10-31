@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
@@ -22,6 +23,8 @@ import { OrganicMenu } from '@/components/molecules/OrganicMenu/OrganicMenu';
 import { useToast } from '@/components/providers/ToastProvider';
 import { preparePicture, UnsupportedImage, type PreparedPicture } from '@/lib/chat/preparePicture';
 import { INK } from '@/lib/design/strokes';
+import { wobCircle } from '@/lib/design/wobCircle';
+import { wobRect } from '@/lib/design/wobRect';
 import { useOpenedOnce } from '@/lib/hooks/useOpenedOnce';
 import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
 import { rememberedKeyboardHeight, useRememberKeyboardHeight } from '@/lib/hooks/useKeyboardHeight';
@@ -327,6 +330,12 @@ export function ThreadComposer({
     return () => document.removeEventListener('keydown', onKey);
   }, [panelOpen, preview, closeStickers]);
 
+  // Words in the field: no stickers beside them (the ☺ is gone with them).
+  const hasWords = text.trim().length > 0;
+  useEffect(() => {
+    if (hasWords && stickers !== 'closed') closeStickers(false);
+  }, [hasWords, stickers, closeStickers]);
+
   // A phone turned into a mouse's window (or back): the stickers start again in the right place.
   useEffect(() => {
     if (stickers === 'popover' && desktop === false) closeStickers(false);
@@ -348,14 +357,15 @@ export function ThreadComposer({
     mark(el, 'data-fade-bottom', max > 1 && el.scrollTop < max - 1);
   }, [inputRef]);
 
-  /** The grown field's height: what the thread leaves it, less what rides over it and the field's own padding. */
+  /** The grown field's height: what the thread leaves it, less what rides over it (its room above and below the
+   * lines is the text box's own: it runs to the capsule's pen line). */
   const measureExpanded = useCallback(() => {
     const el = inputRef.current;
     if (!el) return;
     const line = parseFloat(getComputedStyle(el).lineHeight) || 24;
     const room = expandRoom?.('field') ?? Math.round(window.innerHeight * 0.6);
     const carry = carryRef.current ? carryRef.current.offsetHeight + 6 : 0;
-    setExpandedH(Math.max(line * 3, Math.round(room - carry - (48 - line))));
+    setExpandedH(Math.max(line * 2 + 48, Math.round(room - carry)));
   }, [expandRoom, inputRef]);
 
   // Auto-grow: the field rests at one line and takes its height from what is written (the CSS caps it at five);
@@ -369,8 +379,11 @@ export function ThreadComposer({
       el.style.height = 'auto';
       el.style.height = `${el.scrollHeight}px`;
     }
-    const line = parseFloat(getComputedStyle(el).lineHeight) || 24;
-    setLines(Math.max(1, Math.round(el.scrollHeight / line)));
+    // Its lines: the text's height without the box's own room above and below them.
+    const style = getComputedStyle(el);
+    const line = parseFloat(style.lineHeight) || 24;
+    const room = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+    setLines(Math.max(1, Math.round((el.scrollHeight - room) / line)));
     fades();
   }, [text, inputRef, expanded, expandedH, fades]);
   // Grown or shrunk with the caret at the end: the end stays in view (the height's change scrolled it away).
@@ -523,7 +536,8 @@ export function ThreadComposer({
   const picker = (
     <StickerPicker recents={recents} selected={preview} onPick={pickSticker} variant={desktop ? 'popover' : 'panel'} gridRef={gridRef} />
   );
-  // The second line of the reply's row: its words — or a sticker's name, a picture, a card.
+  // The second line of the reply's row: its words, a picture, a card — a sticker this build knows is its key frame
+  // alone (round 22, the owner's notes: no name beside it); one it doesn't, its fallback words.
   const replySticker = replyingTo?.sticker ? stickerName(replyingTo.sticker, locale) : null;
   const replyDetail = !replyingTo
     ? ''
@@ -531,9 +545,14 @@ export function ThreadComposer({
       ? t('unsentQuote')
       : replyingTo.sticker
         ? replySticker
-          ? t('stickerLabel', { name: replySticker })
-          : t('stickerUnknown')
+          ? undefined
+          : replyingTo.text || t('stickerUnknown')
         : replyingTo.text || (replyingTo.image ? t('replyImage') : t('replyCard'));
+  // From its second line the send segment is a block on the last row; from the third ⤢ stands in its column, at the
+  // capsule's top-right.
+  const block = lines > 1 || expanded;
+  // A sticker isn't sent with words: with words in the field the ☺ steps aside and the field takes its room.
+  const offersStickers = trimmed.length === 0;
 
   return (
     <>
@@ -579,43 +598,22 @@ export function ThreadComposer({
                 onRemove={() => setPendingCard(null)}
               />
             )}
-            {pictures.length === 1 && (
-              <CarryRow
-                lead={<CarryTile picture={pictures[0].previewUrl} />}
-                label={t('attachImage')}
-                removeLabel={t('removeImage')}
-                onRemove={() => setPictures([])}
-              />
-            )}
-            {pictures.length > 1 && (
-              <CarryRow
-                lead={
-                  <span className={styles.carryStrip}>
-                    {pictures.map((p, i) => (
-                      <span key={p.key} className={styles.carryThumb}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={p.previewUrl} alt="" />
-                        <span className={styles.carryOrder} aria-hidden="true">
-                          {i + 1}
-                        </span>
-                        <span className={styles.carryThumbRemove}>
-                          <BareIconButton
-                            icon="close"
-                            label={`${t('removeImage')} ${i + 1}`}
-                            iconSize={11}
-                            tone="onDark"
-                            tip={false}
-                            onClick={() => setPictures((cur) => cur.filter((x) => x.key !== p.key))}
-                          />
-                        </span>
-                      </span>
-                    ))}
+            {/* The pictures (round 22, the owner's notes — iOS's way on every platform): their thumbnails in a row,
+                each taken back by the small round ✕ on its corner; no numbers, no count, no ✕ for them all. */}
+            {pictures.length > 0 && (
+              <div className={styles.carryStrip}>
+                {pictures.map((p, i) => (
+                  <span key={p.key} className={styles.carryThumb}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p.previewUrl} alt="" />
+                    <ThumbRemove
+                      label={pictures.length > 1 ? `${t('removeImage')} ${i + 1}` : t('removeImage')}
+                      seed={41 + i * 7}
+                      onClick={() => setPictures((cur) => cur.filter((x) => x.key !== p.key))}
+                    />
                   </span>
-                }
-                label={t('picturesCount', { count: pictures.length })}
-                removeLabel={t('removeImage')}
-                onRemove={() => setPictures([])}
-              />
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -627,6 +625,12 @@ export function ThreadComposer({
           sendLabel={segment === 'expand' ? t('stickerPanelExpand') : segment === 'collapse' ? t('stickerPanelCollapse') : t('send')}
           onSend={() => (segment === 'send' ? submit() : setPanelTall(segment === 'expand'))}
           expanded={expanded}
+          block={block}
+          aboveSend={
+            (lines >= EXPAND_AT_LINES || expanded) && (
+              <GrowButton expanded={expanded} label={expanded ? t('collapseComposer') : t('expandComposer')} onClick={() => setGrown(!expanded)} />
+            )
+          }
         >
           <span className={styles.plusSlot}>
             <OrganicMenu
@@ -710,33 +714,23 @@ export function ThreadComposer({
               maxLength={MESSAGE_MAX_LENGTH}
             />
           </div>
-          {/* ⤢ at the field's top from its third line (⤡ while grown), the ☺ on the last line's row beside Send. */}
-          <span className={styles.toolsSlot}>
-            {(lines >= EXPAND_AT_LINES || expanded) && (
-              <span className={styles.growTool}>
+          {/* The ☺ on the last line's row beside Send, while the field is empty (⌨ while the panel is open). */}
+          {offersStickers && (
+            <span className={styles.toolsSlot}>
+              <span ref={smileRef} className={styles.stickerTool}>
                 <BareIconButton
-                  icon={expanded ? 'collapse' : 'expand'}
-                  label={expanded ? t('collapseComposer') : t('expandComposer')}
-                  iconSize={16}
+                  icon={panelOpen ? 'keyboard' : 'smile'}
+                  label={panelOpen ? t('keyboard') : t('stickers')}
+                  iconSize={22}
                   tipAlign="end"
-                  seed={19}
-                  onClick={() => setGrown(!expanded)}
+                  seed={29}
+                  expanded={stickers !== 'closed'}
+                  haspopup={desktop ? 'dialog' : undefined}
+                  onClick={toggleStickers}
                 />
               </span>
-            )}
-            <span ref={smileRef} className={styles.stickerTool}>
-              <BareIconButton
-                icon={panelOpen ? 'keyboard' : 'smile'}
-                label={panelOpen ? t('keyboard') : t('stickers')}
-                iconSize={22}
-                tipAlign="end"
-                seed={29}
-                expanded={stickers !== 'closed'}
-                haspopup={desktop ? 'dialog' : undefined}
-                onClick={toggleStickers}
-              />
             </span>
-          </span>
+          )}
         </ComposerCapsule>
 
         {/* A sticker picked on a phone: moving on its sheet over the thread's foot, above the capsule. */}
@@ -871,5 +865,42 @@ function CarryTile({ icon, picture }: { icon?: IconName; picture?: string }) {
         icon && <Icon name={icon} size={18} color="var(--color-terracotta)" />
       )}
     </span>
+  );
+}
+
+/**
+ * A picture's own ✕ on its thumbnail's top-right corner (round 22, the owner's notes): a small round button of
+ * the viewer's dark with a cream ✕ — its outline only a touch hand-drawn (a neat disc, not a blob), a finger's
+ * 32 round it unseen.
+ */
+function ThumbRemove({ label, seed, onClick }: { label: string; seed: number; onClick: () => void }) {
+  const disc = useMemo(() => wobCircle(12, 12, 10.5, seed, { segments: 10, mag: 0.35, cpJitter: 0.12 }), [seed]);
+  return (
+    <button type="button" className={styles.thumbRemove} aria-label={label} title={label} onClick={onClick}>
+      <svg className={styles.thumbDisc} viewBox="0 0 24 24" aria-hidden="true">
+        <path d={disc} />
+      </svg>
+      <Icon name="close" size={11} color="currentColor" strokeWidth={INK} />
+    </button>
+  );
+}
+
+/** The grow button's square: a finger's 44, glyph centred (it and the send block share the send column). */
+export const GROW_BUTTON = 44;
+
+/**
+ * ⤢ / ⤡ (round 22, the owner's notes): a square ghost button at the capsule's top-right, in the send column —
+ * no fill and no outline at rest; under a pointer, the keyboard's focus or a press, a soft square of ink (a
+ * hand-drawn rounded square, as the bare glyphs' disc), the glyph centred.
+ */
+function GrowButton({ expanded, label, onClick }: { expanded: boolean; label: string; onClick: () => void }) {
+  const wash = useMemo(() => wobRect(GROW_BUTTON, GROW_BUTTON, 12, 19, 0.9, { segmentsH: 1, segmentsV: 1, curve: 1 }), []);
+  return (
+    <button type="button" className={styles.growTool} aria-label={label} title={label} onClick={onClick}>
+      <svg className={styles.growWash} viewBox={`0 0 ${GROW_BUTTON} ${GROW_BUTTON}`} aria-hidden="true">
+        <path d={wash} />
+      </svg>
+      <Icon name={expanded ? 'collapse' : 'expand'} size={18} color="currentColor" strokeWidth={INK} />
+    </button>
   );
 }
