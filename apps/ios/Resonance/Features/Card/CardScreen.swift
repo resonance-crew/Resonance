@@ -209,6 +209,7 @@ struct CardScreen: View {
                 let model = CardModel(key: key, api: session.reading, origin: session.config.origin, placeholder: previews.card(for: key))
                 model.onLoaded = { previews.remember($0) }
                 model.onNotFound = { previews.forget($0) }
+                model.onShown = { [session] in session.cardReads.count($0, viewer: session.uid) }
                 self.model = model
             }
             // Also resumes a load that was cut short when the page left mid-way.

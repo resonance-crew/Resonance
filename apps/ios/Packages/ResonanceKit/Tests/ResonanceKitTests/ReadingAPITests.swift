@@ -84,6 +84,17 @@ extension HTTPRequest {
         }
     }
 
+    /// A read counted: a POST to the card's /read, its 204 answering nothing.
+    @Test func countsARead() async throws {
+        let transport = StubTransport(status: .noContent, body: "")
+        try await api(transport).countRead("c1")
+        #expect(transport.requests.first?.method == .post)
+        #expect(transport.requests.first?.bare.hasSuffix("/cards/c1/read") == true)
+        let refused = StubTransport(status: .badRequest, body: #"{"error":{"code":"invalid_request","message":"Not a card id."}}"#)
+        let failure = await #expect(throws: APIFailure.self) { try await api(refused).countRead("c1") }
+        #expect(failure?.status == 400)
+    }
+
     @Test func treatsUndocumentedStatusesAsUnexpected() async throws {
         let transport = StubTransport(status: .badGateway, body: "<html>")
         await #expect(throws: APIFailure.unexpected(status: 502)) {

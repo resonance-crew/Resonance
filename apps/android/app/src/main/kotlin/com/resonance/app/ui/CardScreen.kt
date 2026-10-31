@@ -150,6 +150,7 @@ import com.resonance.design.plainClickable
 import com.resonance.kit.api.ApiFailure
 import com.resonance.kit.chat.Linkify
 import com.resonance.kit.l10n.L10n
+import com.resonance.kit.reading.CardReads
 import com.resonance.kit.reading.FeedLoader
 import com.resonance.kit.reading.cardKeyOf
 import com.resonance.kit.reading.embedFor
@@ -236,6 +237,10 @@ class CardPageModel(private val session: Session, private val key: String, previ
             embeds = page.embeds
             linkPreviews = StoryLinks.previews(d.linkPreviews, session.config.origin)
             phase = "loaded"
+            // Someone else's published card, read for this page, counts toward its reads — in the
+            // account's scope, so leaving the page doesn't stop it, and nothing of it is drawn.
+            val viewer = session.uid
+            if (viewer != null && CardReads.counts(d)) session.launch { session.cardReads.count(viewer, d) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: ApiFailure) {

@@ -65,6 +65,18 @@ public struct ReadingAPI: Sendable {
         }
     }
 
+    /// The reader is reading card `id` (POST /cards/{id}/read): the server counts it toward the card's
+    /// reads — once per reader, card and UTC day, never its author's, only a card they may read — and
+    /// answers 204 whatever it decided, so the answer says nothing about the card. Shown to no one.
+    public func countRead(_ id: String) async throws {
+        switch try await client.countCardRead(path: .init(key: id)) {
+        case .noContent: return
+        case let .badRequest(r): throw APIFailure(try r.body.json, status: 400)
+        case let .unauthorized(r): throw APIFailure(try r.body.json, status: 401)
+        case let .undocumented(status, _): throw APIFailure.unexpected(status: status)
+        }
+    }
+
     /// How many cards one GET /cards takes.
     public static let cardKeysLimit = 30
 

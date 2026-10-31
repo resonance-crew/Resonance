@@ -137,4 +137,45 @@ import Testing
         await mine.load()
         #expect(mine.seenThroughConnection == nil)
     }
+
+    /// Someone else's published card is reported read once it is drawn — once per account and card, a
+    /// failure letting a later visit ask again; the viewer's own, a private, unpublished or trashed card never.
+    @Test func aCardShownIsReportedReadOnceAndOnlySomeoneElsesPublishedOne() async {
+        let calls = Calls<String>()
+        let failing = Flag()
+        let reads = CardReads { id in
+            await calls.record(id)
+            if failing.on { throw APIFailure.unexpected(status: 502) }
+        }
+        let model = CardModel(key: "a-walk") { _ in Fixture.detail(Fixture.card("c1", slug: "a-walk")) }
+        model.onShown = { reads.count($0, viewer: "alice") }
+        await model.load()
+        #expect(await eventually { await calls.all == ["c1"] })
+        // Read again (an edit, coming back): asked once.
+        await model.load()
+        #expect(reads.count(Fixture.detail(Fixture.card("c1")), viewer: "alice") == nil)
+        // Another account on this device is another reader.
+        await reads.count(Fixture.detail(Fixture.card("c1")), viewer: "carol")?.value
+        #expect(await calls.all == ["c1", "c1"])
+
+        // A failure is forgotten, so the next visit asks again.
+        failing.on = true
+        await reads.count(Fixture.detail(Fixture.card("c2")), viewer: "alice")?.value
+        #expect(!reads.asked.contains("alice:c2"))
+        failing.on = false
+        await reads.count(Fixture.detail(Fixture.card("c2")), viewer: "alice")?.value
+        #expect(reads.asked.contains("alice:c2"))
+
+        // Never the viewer's own, a private card, a card in the trash, nor without a viewer.
+        #expect(reads.count(Fixture.detail(Fixture.card("own"), isOwner: true), viewer: "alice") == nil)
+        #expect(reads.count(Fixture.detail(Fixture.card("hidden", visibility: "private")), viewer: "alice") == nil)
+        var trashed = Fixture.detail(Fixture.card("gone"))
+        trashed.card.trashedAt = "2026-10-01T00:00:00.000Z"
+        #expect(reads.count(trashed, viewer: "alice") == nil)
+        var draft = Fixture.detail(Fixture.card("draft"))
+        draft.card.publishedAt = nil
+        #expect(reads.count(draft, viewer: "alice") == nil)
+        #expect(reads.count(Fixture.detail(Fixture.card("c3")), viewer: nil) == nil)
+        #expect(await calls.all == ["c1", "c1", "c2", "c2"])
+    }
 }

@@ -42,6 +42,8 @@ final class CardModel {
     @ObservationIgnored var onLoaded: (FeedCard) -> Void = { _ in }
     /// Called when the server says the card isn't here (for this reader).
     @ObservationIgnored var onNotFound: (String) -> Void = { _ in }
+    /// Called each time the card's page is drawn from the server's answer (`CardReads` counts it).
+    @ObservationIgnored var onShown: (CardDetail) -> Void = { _ in }
     private let fetch: @Sendable (String) async throws -> CardDetail
     /// The API's origin: a preview's picture is a path of it.
     private let origin: URL
@@ -115,6 +117,7 @@ final class CardModel {
             phase = .loaded
             onLoaded(detail.card)
             embeds.forEach(onLoaded)
+            onShown(detail)
         } catch let failure as APIFailure where failure.isNotFound {
             placeholder = nil
             phase = .notFound
@@ -190,4 +193,32 @@ struct StoryLinkFallback: Equatable {
 /// A move a card's ⋯ makes, drawn on its page before the server answers (``CardModel/show(_:now:)``).
 enum CardMove: Equatable {
     case trashed, madePrivate, unresonated
+}
+
+/// The reads a card page reports (POST /cards/{id}/read — web: lib/data/cardReads): someone else's card,
+/// published, not private, not in the trash, once it is drawn from the server's answer. Asked once per
+/// account and card for the app's life, in the background: nothing waits on it, shows it or says it
+/// failed — a failure only lets a later visit ask again. The server decides the rest (once a day, a
+/// block, whether the reader may read it).
+final class CardReads {
+    private let send: @Sendable (String) async throws -> Void
+    private(set) var asked: Set<String> = []
+
+    init(send: @escaping @Sendable (String) async throws -> Void) {
+        self.send = send
+    }
+
+    /// Reports `detail` as read by `viewer`, when it is a read to report; answers the request's task.
+    @discardableResult
+    func count(_ detail: CardDetail, viewer: String?) -> Task<Void, Never>? {
+        let card = detail.card
+        guard let viewer, !detail.isOwner, card.publishedAt != nil, card.visibility != ._private, card.trashedAt == nil
+        else { return nil }
+        let key = "\(viewer):\(card.id)"
+        guard asked.insert(key).inserted else { return nil }
+        let send = send, id = card.id
+        return Task(priority: .utility) { [weak self] in
+            do { try await send(id) } catch { self?.asked.remove(key) }
+        }
+    }
 }

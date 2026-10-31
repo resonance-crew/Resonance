@@ -99,6 +99,8 @@ final class SessionStore {
     let conversations = ConversationsStore()
     /// Cards seen in lists, drawn while a card's page loads (this account's only).
     let cardPreviews = CardPreviewCache()
+    /// The card reads this run has reported, by account and card (never shown).
+    let cardReads: CardReads
     /// The app's one toast (「已移到垃圾桶 · 復原」, 「已還原」): shown over the tabs' foot by the shell
     /// (`MainTabView`'s ToastHost), so it outlives the page that asked for it.
     let toasts = ToastCenter()
@@ -127,6 +129,7 @@ final class SessionStore {
         StickerLibrary.shared.origin = config.origin
         let client = ResonanceClient.make(configuration, cache: httpCache)
         api = client
+        cardReads = CardReads { try await ReadingAPI(client: client).countRead($0) }
         outboxes = ChatOutboxes(messaging: { MessagingAPI(client: client) }, sent: { PushCenter.shared.reachedOut() })
         chatImages = ChatImageStore { id, size in try await MessagingAPI(client: client).chatImage(id, thumb: size == .thumb) }
         account = AccountAPI(configuration)

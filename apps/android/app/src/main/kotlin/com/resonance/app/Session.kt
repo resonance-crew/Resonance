@@ -37,6 +37,7 @@ import com.resonance.kit.push.NotificationSwitches
 import com.resonance.kit.reading.ApiCache
 import com.resonance.kit.reading.CardCache
 import com.resonance.kit.reading.CardPageLoader
+import com.resonance.kit.reading.CardReads
 import com.resonance.kit.reading.FeedLoader
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -156,6 +157,8 @@ class Session(
      */
     val cardCache = CardCache()
     val cardPages = CardPageLoader(reading, cardCache)
+    /** Reads of others' cards told to the server (never shown): asked once per account and card while the app runs. */
+    val cardReads = CardReads(reading::countRead)
 
     /**
      * When a scheduled account deletion will run (the undo banner shows until then): as /me

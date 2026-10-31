@@ -232,6 +232,11 @@ class ReadingApi(private val api: DefaultApi) {
             .awaitAll()
             .flatten()
     }
+    /**
+     * Tells the server this reader is reading card `id` (POST /api/v1/cards/{key}/read), toward its
+     * readCount: always 204, whatever it counted ([com.resonance.kit.reading.CardReads] asks it).
+     */
+    suspend fun countRead(id: String) = call { api.countCardRead(id) }
     suspend fun resonances(id: String): List<FeedCard> = call { api.getCardResonances(id).cards }
     suspend fun related(id: String): List<FeedCard> = call { api.getRelatedCards(id).cards }
     suspend fun links(id: String): List<FeedCard> = call { api.getCardLinks(id).cards }
