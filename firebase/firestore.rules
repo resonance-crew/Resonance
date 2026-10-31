@@ -478,6 +478,16 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // --- card reads (server-only) ---
+    // cardReads/{uid}_{cardId}: `{ userId, cardId, day, expireAt }`, the day a
+    // reader's read of a card was last counted (POST /api/v1/cards/{id}/read,
+    // lib/api/v1/cardReads) — what keeps one reader opening a card again and
+    // again from counting more than once a day. Who read what is no one's to
+    // see; deleted with the reader's account (and a TTL on expireAt).
+    match /cardReads/{readId} {
+      allow read, write: if false;
+    }
+
     // --- letters (server-only) ---
     // letters/{writer}_{recipient}: how many notes someone has left a person
     // they aren't connected with, still unanswered (`{ from, to, count, at,

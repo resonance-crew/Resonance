@@ -47,6 +47,11 @@ export const LIMITS = {
   /** 停止分享 (DELETE …/shared-cards/{cardId}): rewrites the author's messages sharing a 私人卡 in one conversation. */
   stopShare: { max: 100, windowMs: DAY },
   report: { max: 20, windowMs: DAY },
+  /**
+   * A card's read counted (POST /api/v1/cards/{id}/read, lib/api/v1/cardReads): a write on someone else's card.
+   * Once per reader, card and day already; this bounds a script walking every card. Over it reads go uncounted.
+   */
+  read: { max: 500, windowMs: DAY },
   /** /api/upload: files, and their bytes (see `weight`). */
   upload: { max: 50, windowMs: DAY },
   uploadBytes: { max: 200 * 1024 * 1024, windowMs: DAY },

@@ -1,5 +1,6 @@
 import { Timestamp, type BulkWriter, type DocumentReference, type Firestore, type Query } from 'firebase-admin/firestore';
 import { cardPagePaths, landingPagePaths, profilePagePaths } from '@/lib/api/revalidate';
+import { CARD_READS } from '@/lib/api/v1/cardReads';
 import { CHAT_IMAGES, chatImageFiles } from '@/lib/api/v1/chatImages';
 import { UNSENT_MESSAGES } from '@/lib/api/v1/messageActions';
 import { PRIVATE_SHARES } from '@/lib/api/v1/sharedCards';
@@ -236,6 +237,8 @@ async function collectAccountData(db: Firestore, uid: string) {
     db.collection(UNSENT_MESSAGES).where('to', '==', uid),
     // Which of their cards they once sent privately in a message (lib/api/v1/sharedCards).
     db.collection(PRIVATE_SHARES).where('authorId', '==', uid),
+    // The days their reads of cards were last counted (lib/api/v1/cardReads).
+    db.collection(CARD_READS).where('userId', '==', uid),
     db.collection('reportEvidence').where('reporterId', '==', uid),
     db.collection('reportEvidence').where('targetUserId', '==', uid),
     // A pending edit outlives its card when an older app deleted the card
@@ -248,7 +251,12 @@ async function collectAccountData(db: Firestore, uid: string) {
   const cardQueries: Query[] = [];
   for (let i = 0; i < cardIds.length; i += IN_CHUNK) {
     const chunk = cardIds.slice(i, i + IN_CHUNK);
-    cardQueries.push(db.collection('resonances').where('cardId', 'in', chunk), db.collection('notes').where('cardId', 'in', chunk));
+    cardQueries.push(
+      db.collection('resonances').where('cardId', 'in', chunk),
+      db.collection('notes').where('cardId', 'in', chunk),
+      // Others' read markers on them (lib/api/v1/cardReads).
+      db.collection(CARD_READS).where('cardId', 'in', chunk),
+    );
   }
 
   const [snaps, cardSnaps] = await Promise.all([

@@ -36,6 +36,7 @@ import { cardKey } from '@/lib/data/cardPrefill';
 import type { CardSeed } from '@/lib/data/cardSeed';
 import type { Card } from '@/lib/db/types';
 import { useCard, useCardPageLists, useMyBlockedIds, type CardView } from '@/lib/data/hooks';
+import { useCountCardRead } from '@/lib/data/cardReads';
 import { SectionEdge } from '@/components/atoms/SectionEdge/SectionEdge';
 import { HEADER_TOTAL_H } from '@/components/sections/AppHeader/HeaderChrome';
 import { useEndsApart } from '@/lib/hooks/useEndsApart';
@@ -164,6 +165,14 @@ export function CardDetailClient({ slug, seed }: CardDetailClientProps) {
   // card's own read, keyed by the id the server render found; signed out,
   // public reads once the card is in hand.
   const lists = useCardPageLists(data?.card?.id ?? seed?.id ?? undefined, data?.card?.referenceCardId);
+  // A signed-in reader reading someone else's published card counts toward its reads (lib/data/cardReads):
+  // once the browser's own read shows it — the server decides the rest (its author's reads, a block, a day).
+  const shown = data?.card;
+  useCountCardRead(
+    user?.id,
+    shown?.id,
+    !!shown && !fromServer && gate === 'show' && !isOwner && !!shown.publishedAt && shown.visibility !== 'private' && !shown.trashedAt,
+  );
 
   const storyRef = useRef<HTMLDivElement>(null);
   const [headings, setHeadings] = useState<TocHeading[]>([]);

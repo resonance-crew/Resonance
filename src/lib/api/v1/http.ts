@@ -79,8 +79,13 @@ function timed(res: Response, auth: number, app: number | null, cold: boolean): 
  * (see "Revocation" in lib/auth/firebase/server). When Firebase Auth can't
  * be asked the answer is 500, not 401: the app must not sign its user out.
  * Every answer says where its time went (`Server-Timing`, see timed()).
+ * A quiet write that reaches no one (counting a card's read) may take a
+ * read's cached answer instead (`opts.revocation`).
  */
-export function withUser<A extends unknown[]>(handler: (user: AuthUser, req: Request, ...rest: A) => Promise<Response>) {
+export function withUser<A extends unknown[]>(
+  handler: (user: AuthUser, req: Request, ...rest: A) => Promise<Response>,
+  opts: { revocation?: 'cached' } = {},
+) {
   return async (req: Request, ...rest: A): Promise<Response> => {
     const cold = served++ === 0;
     const start = performance.now();
@@ -90,7 +95,7 @@ export function withUser<A extends unknown[]>(handler: (user: AuthUser, req: Req
     const read = req.method === 'GET' || req.method === 'HEAD';
     let user: AuthUser | null;
     try {
-      user = await getCurrentUser({ revocation: read ? 'cached' : 'live' });
+      user = await getCurrentUser({ revocation: read || opts.revocation === 'cached' ? 'cached' : 'live' });
     } catch (e) {
       console.error('[api/v1] auth', e);
       return timed(apiError('internal', 'Something went wrong.'), performance.now() - start, null, cold);

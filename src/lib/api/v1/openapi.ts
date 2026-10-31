@@ -301,6 +301,20 @@ export function buildOpenApi(): Json {
           parameters: [cardId],
         },
       ),
+      '/cards/{key}/read': {
+        post: {
+          operationId: 'countCardRead',
+          summary: "You are reading this card: counts toward its readCount (204 whatever the card, and whether it counted)",
+          description:
+            'Call it once the card page shows the card. The server counts each reader at most once per card per UTC day, ' +
+            "never the card's author, and only a card you may read (published, not in the trash, public — or for " +
+            'connections only and you two connected; a named card across a block either way is not counted, an anonymous ' +
+            'one is). The answer is always `204` for a well-formed id — it says nothing about the card — and the counting ' +
+            'happens after it. Counted reads spend a daily budget; past it reads go uncounted, still `204`.',
+          parameters: [cardId],
+          responses: { '204': { description: 'Received' }, ...errors(400, 401) },
+        },
+      },
       '/cards/{key}/related': get('getRelatedCards', 'A few recent cards sharing its tags', 'CardList', { parameters: [cardId] }),
       '/cards/{key}/publish': {
         post: {

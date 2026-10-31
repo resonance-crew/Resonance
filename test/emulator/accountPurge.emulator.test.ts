@@ -107,6 +107,10 @@ async function seedWorld() {
     // Which of their cards they once sent privately in a message (server-only).
     set('privateShares/alice-private', { authorId: 'alice', at: now }),
     set('privateShares/bob-private', { authorId: 'bob', at: now }),
+    // The days a reader's read was last counted (server-only): hers, another's on her card, and Bob's on his own.
+    set('cardReads/alice_bob-card', { userId: 'alice', cardId: 'bob-card', day: '2026-10-31', expireAt: now }),
+    set('cardReads/bob_alice-card', { userId: 'bob', cardId: 'alice-card', day: '2026-10-31', expireAt: now }),
+    set('cardReads/carol_bob-card', { userId: 'carol', cardId: 'bob-card', day: '2026-10-31', expireAt: now }),
 
     set('cardLinks/bob-card_alice-card', { sourceAuthorId: 'bob', targetAuthorId: 'alice' }),
     set('cardLinks/alice-card_bob-card', { sourceAuthorId: 'alice', targetAuthorId: 'bob' }),
@@ -258,6 +262,8 @@ describe('purgeAccount', () => {
       'unsentMessages/alice_bob_u1',
       'unsentMessages/alice_carol_u2',
       'privateShares/alice-private',
+      'cardReads/alice_bob-card',
+      'cardReads/bob_alice-card', // Bob's read of Alice's deleted card
       'cardLinks/bob-card_alice-card',
       'cardLinks/alice-card_bob-card',
       'notifications/to-alice',
@@ -294,6 +300,7 @@ describe('purgeAccount', () => {
       'letters/bob_carol',
       'unsentMessages/bob_carol_u3',
       'privateShares/bob-private',
+      'cardReads/carol_bob-card',
       'notifications/bob-own',
       'cardVectors/bob-card__insight',
       'reports/r2', // reports about the deleted user stay for moderation history

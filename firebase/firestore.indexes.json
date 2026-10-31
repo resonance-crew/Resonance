@@ -252,6 +252,12 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "cardReads",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": []
+    },
+    {
       "collectionGroup": "cards",
       "fieldPath": "story",
       "indexes": []

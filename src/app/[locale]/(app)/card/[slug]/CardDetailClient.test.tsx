@@ -82,6 +82,7 @@ import { getMyBlockedIds } from '@/lib/db/firestore/client/blocks';
 import { ApiError, callApi } from '@/lib/db/firestore/client/api';
 import type { CardDetailBody, FeedCardBody } from '@/lib/api/v1/schemas';
 import { CardDetailClient, storyGate } from './CardDetailClient';
+import { forgetCountedReads } from '@/lib/data/cardReads';
 import { SESSION_MARK_STORAGE_KEY } from './cardHold';
 import { SESSION_MARK_KEY } from '@/lib/auth/firebase/client';
 
@@ -191,6 +192,7 @@ function storyVisible(text = STORY): boolean {
 const signIn = () => window.localStorage.setItem(SESSION_MARK_KEY, JSON.stringify({ uid: 'me', expiresAt: Date.now() + 86_400_000 }));
 
 beforeEach(() => {
+  forgetCountedReads();
   window.localStorage.clear();
   mockUseAuth.mockReturnValue({ user: null, loading: false });
   vi.mocked(getMyBlockedIds).mockResolvedValue(new Set());
@@ -579,6 +581,59 @@ describe('the lists around the card and its embedded cards', () => {
     expect(await screen.findByText('The walk, read by itself')).toBeInTheDocument();
     expect(getResonanceCards).toHaveBeenCalledWith('pub1');
     expect(callApi).not.toHaveBeenCalled();
+  });
+});
+
+describe("counting a card's reads", () => {
+  const READ = '/api/v1/cards/pub1/read';
+  const reads = () => vi.mocked(callApi).mock.calls.filter(([path]) => path === READ);
+  const signedIn = (viewer: string) => {
+    signIn();
+    mockUseAuth.mockReturnValue({ user: { id: viewer }, loading: false });
+  };
+  // Lets the page's own reads (its pictures, tags) settle inside act before the next step.
+  const settle = () => act(async () => void (await new Promise((r) => setTimeout(r, 20))));
+
+  it("tells the server once the browser's own read shows someone else's published card — once per card", async () => {
+    signedIn('me');
+    vi.mocked(getCardById).mockResolvedValue(card('pub1', { story: STORY }));
+    vi.mocked(callApi).mockResolvedValue(detail());
+
+    const { unmount } = renderPage({ seed: seed() });
+    await waitFor(() => expect(reads()).toHaveLength(1));
+    expect(reads()[0]).toEqual([READ, { method: 'POST' }]);
+    await settle();
+    unmount();
+    // Opened again in the same page's life: the server already counted it today, so nothing is asked.
+    renderPage({ seed: seed() });
+    expect(await screen.findByText(STORY)).toBeInTheDocument();
+    await settle();
+    expect(reads()).toHaveLength(1);
+  });
+
+  it("never asks for its author's own reading, a signed-out reader's, or a private card's", async () => {
+    signedIn('a1');
+    vi.mocked(getCardById).mockResolvedValue(card('pub1', { story: STORY }));
+    vi.mocked(callApi).mockResolvedValue(detail({ isOwner: true }));
+    const { unmount } = renderPage({ seed: seed() });
+    expect(await screen.findByText(STORY)).toBeInTheDocument();
+    await settle();
+    unmount();
+
+    signedIn('me');
+    vi.mocked(getCardById).mockResolvedValue(card('pub1', { story: STORY, visibility: 'private' }));
+    const second = renderPage({ seed: seed() });
+    expect(await screen.findByText(STORY)).toBeInTheDocument();
+    await settle();
+    second.unmount();
+
+    window.localStorage.clear();
+    mockUseAuth.mockReturnValue({ user: null, loading: false });
+    vi.mocked(getCardById).mockResolvedValue(card('pub1', { story: STORY }));
+    renderPage({ seed: seed() });
+    expect(await screen.findByText(STORY)).toBeInTheDocument();
+    await settle();
+    expect(reads()).toHaveLength(0);
   });
 });
 

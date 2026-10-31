@@ -7,7 +7,7 @@
 // them. Every read path is recorded in `reads` (a query as
 // `name?field==value&…`), so a test can prove a document was never read, and
 // every write path in `writes`. `update` merges top-level fields (taking
-// `FieldValue.delete()`), and `runTransaction` runs its function once with a
+// `FieldValue.delete()` and `FieldValue.increment(n)`), and `runTransaction` runs its function once with a
 // transaction whose get/getAll/set/update/delete act at once (no isolation: a suite
 // that needs a conflict makes it happen inside a fake it passes in).
 // `hold(read)`, if given, is awaited before a read answers (it is logged in
@@ -89,7 +89,11 @@ export function fakeAdminDb(docs: Record<string, Data>, options: FakeAdminDbOpti
     const next = { ...docs[path] };
     for (const [field, value] of Object.entries(data)) {
       if (value instanceof FieldValue && value.isEqual(FieldValue.delete())) delete next[field];
-      else next[field] = value;
+      else if (value instanceof FieldValue && typeof (value as { operand?: unknown }).operand === 'number') {
+        // FieldValue.increment(n): added to what is there (a missing or non-number field counts as 0).
+        const was = next[field];
+        next[field] = (typeof was === 'number' ? was : 0) + (value as unknown as { operand: number }).operand;
+      } else next[field] = value;
     }
     docs[path] = next;
   };

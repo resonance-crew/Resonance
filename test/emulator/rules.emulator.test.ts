@@ -462,6 +462,23 @@ describe("a message's reactions and its unsending are the server's", () => {
   });
 });
 
+describe("cardReads/* (when a reader's read was last counted) are the server's alone", () => {
+  it('lets no one read, list, forge or clear one — not the reader, not the card\'s author', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'cardReads', 'bob_alice-card'), { userId: 'bob', cardId: 'alice-card', day: '2026-10-31', expireAt: new Date() });
+    });
+    for (const uid of ['alice', 'bob', 'carol']) {
+      const db = as(uid);
+      await assertFails(getDoc(doc(db, 'cardReads', 'bob_alice-card')));
+      await assertFails(getDocs(query(collection(db, 'cardReads'), where('cardId', '==', 'alice-card'))));
+      await assertFails(getDocs(query(collection(db, 'cardReads'), where('userId', '==', uid))));
+      await assertFails(deleteDoc(doc(db, 'cardReads', 'bob_alice-card')));
+      await assertFails(setDoc(doc(db, 'cardReads', `${uid}_alice-card`), { userId: uid, cardId: 'alice-card', day: '2000-01-01' }));
+    }
+    await assertFails(getDoc(doc(anonymous(), 'cardReads', 'bob_alice-card')));
+  });
+});
+
 describe('notifications', () => {
   beforeEach(seedProfiles);
 

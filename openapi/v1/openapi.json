@@ -1196,6 +1196,49 @@
         }
       }
     },
+    "/cards/{key}/read": {
+      "post": {
+        "operationId": "countCardRead",
+        "summary": "You are reading this card: counts toward its readCount (204 whatever the card, and whether it counted)",
+        "description": "Call it once the card page shows the card. The server counts each reader at most once per card per UTC day, never the card's author, and only a card you may read (published, not in the trash, public — or for connections only and you two connected; a named card across a block either way is not counted, an anonymous one is). The answer is always `204` for a well-formed id — it says nothing about the card — and the counting happens after it. Counted reads spend a daily budget; past it reads go uncounted, still `204`.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "The card id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Received"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/cards/{key}/related": {
       "get": {
         "operationId": "getRelatedCards",
