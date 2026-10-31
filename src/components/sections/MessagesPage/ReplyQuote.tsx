@@ -16,6 +16,11 @@ export interface ReplyQuoteProps {
   otherHandle: string;
   /** A click goes to the original (null: the long-press copy, which only shows it). */
   onJump: ((messageId: string) => void) | null;
+  /**
+   * The answer has no bubble to lie over the quote's foot (a sticker, round 22): the quote keeps no room for it —
+   * as much under its content as over it, its content centred.
+   */
+  apart?: boolean;
 }
 
 /**
@@ -28,7 +33,7 @@ export interface ReplyQuoteProps {
  * stands on its sender's side), so it is not shown — only read out, before
  * the quote, as it always was (「{handle} 回覆了你」, …).
  */
-export function ReplyQuote({ quote, own, viewerId, otherHandle, onJump }: ReplyQuoteProps) {
+export function ReplyQuote({ quote, own, viewerId, otherHandle, onJump, apart = false }: ReplyQuoteProps) {
   const t = useTranslations('messages');
   const quotesViewer = quote.senderId === viewerId;
   const caption = own
@@ -39,7 +44,7 @@ export function ReplyQuote({ quote, own, viewerId, otherHandle, onJump }: ReplyQ
       ? t('repliedToYou', { handle: otherHandle })
       : t('repliedToThemselves', { handle: otherHandle });
   const locale = useLocale();
-  // A sticker's quote is its key frame and its name (round 22 §3); one this build doesn't know, its fallback words.
+  // A sticker's quote is its key frame (round 22); one this build doesn't know, its fallback words.
   const sticker = !quote.unsent && quote.sticker ? quote.sticker : null;
   const stickerWords = sticker ? stickerName(sticker, locale) : null;
   // A quote of a message since unsent says so, and nothing of what it said.
@@ -52,7 +57,7 @@ export function ReplyQuote({ quote, own, viewerId, otherHandle, onJump }: ReplyQ
   const clip = useBubbleClip(ref, seedFromId(quote.id, 19), { maxRadius: QUOTE_RADIUS });
 
   return (
-    <div className={styles.quote} data-own={own || undefined}>
+    <div className={styles.quote} data-own={own || undefined} data-apart={apart || undefined}>
       <span className={styles.quoteSpoken}>{caption}</span>
       <button
         ref={ref}
@@ -65,13 +70,15 @@ export function ReplyQuote({ quote, own, viewerId, otherHandle, onJump }: ReplyQ
         tabIndex={onJump ? undefined : -1}
         onClick={() => onJump?.(quote.id)}
       >
-        {sticker && stickerWords && (
+        {sticker && stickerWords ? (
+          // A sticker's quote is its key frame alone (round 22, the owner's notes); its name is said, not shown.
           // eslint-disable-next-line @next/next/no-img-element
           <img className={styles.quoteSticker} src={stickerPath(sticker, 'thumb')} alt="" draggable={false} />
+        ) : (
+          <span className={styles.quoteText} data-unsent={quote.unsent || undefined}>
+            {words}
+          </span>
         )}
-        <span className={styles.quoteText} data-unsent={quote.unsent || undefined}>
-          {stickerWords ?? words}
-        </span>
       </button>
     </div>
   );

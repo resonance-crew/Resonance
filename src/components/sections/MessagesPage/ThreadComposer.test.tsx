@@ -95,6 +95,8 @@ function composer(props: Partial<Parameters<typeof ThreadComposer>[0]> = {}) {
 
 /** The riding row holding `text`, as a list of what is in it from start to end. */
 const rowOf = (text: string) => screen.getByText(text).closest('[class*="carryRow"]') as HTMLElement;
+/** The pictures riding: their thumbnails, in order. */
+const thumbs = () => Array.from(document.querySelectorAll<HTMLElement>('[class*="carryThumb"]'));
 const field = () => screen.getByRole('textbox', { name: 'Conversation with alice' });
 const photos = (n: number) => Array.from({ length: n }, (_, i) => new File([String(i)], `p${i}.png`, { type: 'image/png' }));
 const pick = (files: File[]) => fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files } });
@@ -115,47 +117,57 @@ describe('what rides the next message', () => {
     expect(onCancelReply).toHaveBeenCalledTimes(1);
   });
 
-  it('shows a pasted picture as a row in the same style — its thumbnail first, its ✕ at the end', async () => {
+  // Round 22 (the owner's notes): a picture rides as its thumbnail over the capsule, its own ✕ on its corner.
+  it('shows a pasted picture as its thumbnail, taken back by the ✕ on its corner', async () => {
     renderWithIntl(composer());
     expect(document.querySelector('[class*="carry"]')).toBeNull();
     const file = new File(['x'], 'photo.png', { type: 'image/png' });
     fireEvent.paste(field(), { clipboardData: { files: [file] } });
 
-    const row = await waitFor(() => rowOf('Photo'));
-    expect(row.firstElementChild?.querySelector('img')).toHaveAttribute('src', 'blob:picture');
+    await waitFor(() => expect(thumbs()).toHaveLength(1));
+    expect(thumbs()[0].querySelector('img')).toHaveAttribute('src', 'blob:picture');
     const remove = screen.getByRole('button', { name: 'Remove photo' });
-    expect(row.lastElementChild).toContainElement(remove);
+    expect(thumbs()[0]).toContainElement(remove);
+    // A neat small disc (barely hand-drawn) under the ✕ glyph, each its own drawing.
+    const [disc, glyph] = Array.from(remove.querySelectorAll('svg'));
+    expect(disc.getAttribute('class')).toMatch(/thumbDisc/);
+    expect(glyph.getAttribute('class') ?? '').not.toMatch(/thumbDisc/);
     await userEvent.click(remove);
-    expect(screen.queryByText('Photo')).not.toBeInTheDocument();
+    expect(thumbs()).toHaveLength(0);
   });
 
-  it('stacks a reply over a picture, a row each, the reply first', async () => {
+  it('stacks a reply over the pictures, the reply first', async () => {
     renderWithIntl(composer({ replyingTo: { id: 'm1', senderId: 'me', text: 'Mine' }, replyHandle: null }));
     fireEvent.paste(field(), { clipboardData: { files: [new File(['x'], 'p.png', { type: 'image/png' })] } });
-    await waitFor(() => rowOf('Photo'));
-    const rows = Array.from(document.querySelectorAll('[class*="carryRow"]'));
-    expect(rows.map((r) => r.textContent)).toEqual([expect.stringContaining('Replying to yourself'), expect.stringContaining('Photo')]);
+    await waitFor(() => expect(thumbs()).toHaveLength(1));
+    const carry = document.querySelector('[class*="carry"]')!;
+    expect(carry.firstElementChild).toHaveTextContent('Replying to yourself');
+    expect(carry.lastElementChild).toContainElement(thumbs()[0]);
   });
 
-  it('quotes a sticker being answered by its name', () => {
+  it('quotes a sticker being answered by its key frame alone', () => {
     renderWithIntl(
       composer({ replyingTo: { id: 's1', senderId: 'alice', text: '〔貼圖：謝謝〕', sticker: { pack: 'twine', id: 'thanks' } }, replyHandle: 'alice' }),
     );
-    expect(rowOf('Replying to alice')).toHaveTextContent('Sticker: Thanks');
+    const row = rowOf('Replying to alice');
+    expect(row.querySelector('img')).toHaveAttribute('src', expect.stringContaining('/stickers/twine/thanks.thumb.webp'));
+    expect(row).not.toHaveTextContent('Thanks');
   });
 });
 
 // Round 22 §4.2: several pictures ride as a numbered strip (up to ten), and one Send sends them as an album.
 describe('several pictures', () => {
-  it('lines them up in order with their own ✕, and sends them as an album with the words', async () => {
+  it('lines them up in order, each with its own ✕ and nothing else, and sends them as an album with the words', async () => {
     const send = vi.fn(() => true);
     renderWithIntl(composer({ send }));
     pick(photos(3));
-    const row = await waitFor(() => rowOf('3 photos'));
-    expect(row.querySelectorAll('img')).toHaveLength(3);
-    expect(Array.from(row.querySelectorAll('[class*="carryOrder"]')).map((n) => n.textContent)).toEqual(['1', '2', '3']);
+    await waitFor(() => expect(thumbs()).toHaveLength(3));
+    // No numbers, no count, no ✕ for them all (round 22, the owner's notes).
+    expect(document.querySelector('[class*="carry"]')!.textContent).toBe('');
+    expect(screen.queryByText('3 photos')).toBeNull();
+    expect(screen.getAllByRole('button', { name: /^Remove photo/ })).toHaveLength(3);
     await userEvent.click(screen.getByRole('button', { name: 'Remove photo 2' }));
-    expect(rowOf('2 photos')).toBeInTheDocument();
+    expect(thumbs()).toHaveLength(2);
 
     fireEvent.change(field(), { target: { value: 'rain' } });
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
@@ -164,7 +176,7 @@ describe('several pictures', () => {
     expect(draft.text).toBe('rain');
     expect(draft.image).toBeUndefined();
     expect(draft.images.map((p) => p.file.name)).toEqual(['p0.png', 'p2.png']);
-    expect(screen.queryByText('2 photos')).not.toBeInTheDocument();
+    expect(thumbs()).toHaveLength(0);
   });
 
   it('makes the pictures ready one at a time, a later pick waiting for the ones before it', async () => {
@@ -172,29 +184,28 @@ describe('several pictures', () => {
     renderWithIntl(composer());
     pick(photos(4));
     fireEvent.paste(field(), { clipboardData: { files: photos(2) } });
-    const row = await waitFor(() => rowOf('6 photos'));
+    await waitFor(() => expect(thumbs()).toHaveLength(6));
     expect(prep.most).toBe(1);
-    expect(Array.from(row.querySelectorAll('[class*="carryOrder"]')).map((n) => n.textContent)).toEqual(['1', '2', '3', '4', '5', '6']);
   });
 
   it('takes ten at most, and says so past that', async () => {
     renderWithIntl(composer());
     pick(photos(8));
-    await waitFor(() => rowOf('8 photos'));
+    await waitFor(() => expect(thumbs()).toHaveLength(8));
     pick(photos(4));
-    await waitFor(() => rowOf('10 photos'));
+    await waitFor(() => expect(thumbs()).toHaveLength(10));
     expect(toast.show).toHaveBeenCalledWith({ message: 'Up to 10 photos at a time' });
     toast.show.mockClear();
     fireEvent.paste(field(), { clipboardData: { files: photos(1) } });
     await waitFor(() => expect(toast.show).toHaveBeenCalledWith({ message: 'Up to 10 photos at a time' }));
-    expect(rowOf('10 photos')).toBeInTheDocument();
+    expect(thumbs()).toHaveLength(10);
   });
 
   it('asks before a card takes the pictures’ place, and before pictures take the card’s', async () => {
     const u = userEvent.setup({ pointerEventsCheck: 0 });
     renderWithIntl(composer());
     pick(photos(2));
-    await waitFor(() => rowOf('2 photos'));
+    await waitFor(() => expect(thumbs()).toHaveLength(2));
     await u.click(screen.getByRole('button', { name: 'Attach a photo or a card' }));
     await u.click(screen.getByRole('menuitem', { name: 'Card' }));
     await u.click(await screen.findByRole('button', { name: 'pick-card' }));
@@ -202,7 +213,7 @@ describe('several pictures', () => {
     // Kept as they are until the viewer says so.
     let ask = await screen.findByRole('dialog', { name: 'Use this card instead?' });
     await u.click(within(ask).getByRole('button', { name: 'Cancel' }));
-    expect(rowOf('2 photos')).toBeInTheDocument();
+    expect(thumbs()).toHaveLength(2);
     expect(screen.queryByText('A shared thought')).not.toBeInTheDocument();
 
     await u.click(screen.getByRole('button', { name: 'Attach a photo or a card' }));
@@ -211,13 +222,13 @@ describe('several pictures', () => {
     ask = await screen.findByRole('dialog', { name: 'Use this card instead?' });
     await u.click(within(ask).getByRole('button', { name: 'Use card' }));
     expect(await screen.findByText('A shared thought')).toBeInTheDocument();
-    expect(screen.queryByText('2 photos')).not.toBeInTheDocument();
+    expect(thumbs()).toHaveLength(0);
 
     // And the other way round.
     pick(photos(1));
     ask = await screen.findByRole('dialog', { name: 'Use photos instead?' });
     await u.click(within(ask).getByRole('button', { name: 'Use photos' }));
-    await waitFor(() => rowOf('Photo'));
+    await waitFor(() => expect(thumbs()).toHaveLength(1));
     expect(screen.queryByText('A shared thought')).not.toBeInTheDocument();
   });
 });
@@ -241,11 +252,11 @@ describe('the stickers', () => {
     expect(document.querySelector('[class*="stickerPanel"]')).toHaveAttribute('data-tall');
     await userEvent.click(screen.getByRole('button', { name: 'Collapse stickers' }));
 
-    // Something to send: the segment is Send again.
-    fireEvent.change(field(), { target: { value: 'hi' } });
-    expect(screen.queryByRole('button', { name: 'Expand stickers' })).toBeNull();
+    // Something to send (a picture riding): the segment is Send again; nothing, ↑ again.
+    fireEvent.paste(field(), { clipboardData: { files: photos(1) } });
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Expand stickers' })).toBeNull());
     expect(screen.getByRole('button', { name: 'Send' })).not.toHaveAttribute('aria-disabled');
-    fireEvent.change(field(), { target: { value: '' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Remove photo' }));
     expect(screen.getByRole('button', { name: 'Expand stickers' })).toBeInTheDocument();
 
     // Back to the keyboard: the panel goes, the field has the focus.
@@ -297,7 +308,8 @@ describe('the stickers', () => {
     asDesktop(false);
     const send = vi.fn(() => true);
     renderWithIntl(composer({ send, uid: 'me', pairId: 'alice_me' }));
-    fireEvent.change(field(), { target: { value: 'stays in the field' } });
+    fireEvent.paste(field(), { clipboardData: { files: photos(1) } });
+    await waitFor(() => expect(thumbs()).toHaveLength(1));
     await userEvent.click(screen.getByRole('button', { name: 'Stickers' }));
     expect(screen.queryByRole('button', { name: 'Recent' })).toBeNull();
 
@@ -313,8 +325,8 @@ describe('the stickers', () => {
     await userEvent.click(screen.getAllByRole('button', { name: 'Hug' })[0]);
     expect(send).toHaveBeenCalledWith({ text: '', sticker: { pack: 'nod', id: 'hug' } });
     expect(screen.queryByRole('button', { name: /^Preview:/ })).toBeNull();
-    // What was being written stays; the sticker leads the recent ones.
-    expect(field()).toHaveValue('stays in the field');
+    // The picture riding stays (a sticker is its own message); the sticker leads the recent ones.
+    expect(thumbs()).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Recent' })).toBeInTheDocument();
 
     // A tap on the preview sends it too.
@@ -352,6 +364,41 @@ describe('a longer message', () => {
     expect(screen.getByRole('button', { name: 'Expand the message field' })).toBeInTheDocument();
   });
 
+  // Round 22 (the owner's notes): from the second line the send segment is the block on the last row; from the
+  // third ⤢ stands over it in its column (at the capsule's top-right) — the text keeps the whole width left of it.
+  it('turns Send into the block on the last row from the second line, ⤢ over it from the third', () => {
+    renderWithIntl(composer());
+    const capsule = field().closest('[class*="capsule"]')!;
+    expect(capsule).not.toHaveAttribute('data-block');
+    fireEvent.change(field(), { target: { value: 'one\ntwo' } });
+    expect(capsule).toHaveAttribute('data-block');
+    expect(screen.queryByRole('button', { name: 'Expand the message field' })).toBeNull();
+    fireEvent.change(field(), { target: { value: 'one\ntwo\nthree' } });
+    const grow = screen.getByRole('button', { name: 'Expand the message field' });
+    const column = grow.closest('[class*="sendColumn"]')!;
+    const send = screen.getByRole('button', { name: 'Send' });
+    expect(column).toContainElement(send);
+    // Over it, first in its column (the CSS keeps it at the column's top).
+    expect(grow.closest('[class*="aboveSend"]')).toBe(column.firstElementChild);
+    expect(grow.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.change(field(), { target: { value: 'one' } });
+    expect(capsule).not.toHaveAttribute('data-block');
+  });
+
+  // A sticker isn't sent with words: the ☺ steps aside while the field holds any, and comes back when it is empty.
+  it('takes the ☺ away while there are words, and closes the stickers for them', async () => {
+    asDesktop(false);
+    renderWithIntl(composer());
+    await userEvent.click(screen.getByRole('button', { name: 'Stickers' }));
+    expect(screen.getByRole('toolbar', { name: 'Stickers' })).toBeInTheDocument();
+    fireEvent.change(field(), { target: { value: 'hello' } });
+    expect(screen.queryByRole('toolbar', { name: 'Stickers' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Stickers' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Keyboard' })).toBeNull();
+    fireEvent.change(field(), { target: { value: '   ' } });
+    expect(screen.getByRole('button', { name: 'Stickers' })).toBeInTheDocument();
+  });
+
   it('fades an edge only while there is text beyond it', () => {
     renderWithIntl(composer());
     const box = field();
@@ -382,8 +429,12 @@ describe('a longer message', () => {
     const capsule = box.closest('[class*="capsule"]')!;
     expect(capsule).toHaveAttribute('data-expanded');
     expect(expandRoom).toHaveBeenCalledWith('field');
-    // The room less the field's padding (48 less a line).
-    expect(box.style.height).toBe(`${400 - (48 - 24)}px`);
+    // All the room: the text box's own padding runs to the capsule's pen line.
+    expect(box.style.height).toBe('400px');
+    // ⤡ directly above the send block, no ☺ beside words.
+    const shrink = screen.getByRole('button', { name: 'Shrink the message field' });
+    expect(shrink.closest('[class*="sendColumn"]')).toContainElement(screen.getByRole('button', { name: 'Send' }));
+    expect(screen.queryByRole('button', { name: 'Stickers' })).toBeNull();
     expect(onExpandedChange).toHaveBeenLastCalledWith(true);
     expect(box).toHaveFocus();
 

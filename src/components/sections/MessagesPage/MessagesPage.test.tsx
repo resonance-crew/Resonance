@@ -6,6 +6,15 @@ import type { Conversation, Message, User } from '@/lib/db/types';
 import { forgetOutboxes } from '@/lib/data/thread';
 import { forgetAllChatDrafts, keepChatDraft } from '@/lib/data/chatDrafts';
 import { MessagesPage } from './MessagesPage';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const threadCss = readFileSync(join(process.cwd(), 'src/components/sections/MessagesPage/Thread.module.css'), 'utf8');
+/** A selector's own CSS block(s) in the thread's stylesheet. */
+const cssRule = (selector: string) => {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return [...threadCss.matchAll(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`, 'g'))].map((m) => m[1]).join('\n');
+};
 
 /** ThreadView fetches through raw useSWR — isolate the cache per test. */
 function renderPage(ui: React.ReactElement) {
@@ -480,10 +489,9 @@ describe('MessagesPage thread', () => {
 
     const file = new File(['jpeg'], 'sky.jpg', { type: 'image/jpeg' });
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
-    // Its row over the capsule: the thumbnail, Photo, its ✕.
-    const row = (await screen.findByRole('button', { name: 'Remove photo' })).closest('[class*="carryRow"]')!;
-    expect(row.querySelector('img')).toHaveAttribute('src', 'blob:local/picture');
-    expect(row).toHaveTextContent('Photo');
+    // Over the capsule: its thumbnail, its own ✕ on its corner (round 22: iOS's way).
+    const thumb = (await screen.findByRole('button', { name: 'Remove photo' })).closest('[class*="carryThumb"]')!;
+    expect(thumb.querySelector('img')).toHaveAttribute('src', 'blob:local/picture');
     await u.type(screen.getByRole('textbox', { name: 'Conversation with alice' }), 'the sky tonight');
     await u.click(screen.getByRole('button', { name: 'Send' }));
 
@@ -524,7 +532,7 @@ describe('MessagesPage thread', () => {
     const files = [new File(['a'], 'a.jpg', { type: 'image/jpeg' }), new File(['b'], 'b.jpg', { type: 'image/jpeg' })];
     fireEvent.dragOver(body, { dataTransfer: { types: ['Files'], files } });
     fireEvent.drop(body, { dataTransfer: { types: ['Files'], files } });
-    expect(await screen.findByText('2 photos')).toBeInTheDocument();
+    await waitFor(() => expect(container.querySelectorAll('[class*="carryThumb"]')).toHaveLength(2));
   });
 
   it('draws a picture message in its bubble, opens it whole, and quotes it as a photo', async () => {
@@ -551,7 +559,7 @@ describe('MessagesPage thread', () => {
 
   // Round 22 §4.5: a sticker stands on the page with no bubble; a reply to one quotes it by name; an album's
   // pictures are one grid in one bubble, each still opening whole.
-  it('draws stickers without a bubble, quotes one by name, and an album as one grid', async () => {
+  it('draws stickers without a bubble, quotes one by its key frame, and an album as one grid', async () => {
     mockUseAuth.mockReturnValue({ user: viewer, loading: false, sessionReady: true });
     const at = (s: number) => new Date(Date.UTC(2026, 9, 31, 8, 0, s));
     const pic = (id: string, index: number, extra: Partial<Message> = {}): Message => ({
@@ -584,10 +592,15 @@ describe('MessagesPage thread', () => {
     expect(thanks.closest('[class*="bubble"]')).toBeNull();
     expect(thanks.querySelector('img')).toHaveAttribute('src', expect.stringContaining('/stickers/twine/thanks.thumb.webp'));
     expect(screen.queryByText('〔貼圖：謝謝〕')).toBeNull();
-    // The reply's quote: the sticker's key frame and its name.
+    // The reply's quote: the sticker's key frame alone — its name said, not shown (round 22, the owner's notes).
     expect(quote.className).toMatch(/quoteBubble/);
-    expect(quote).toHaveTextContent('Thanks');
+    expect(quote).toHaveTextContent('');
     expect(quote.querySelector('img')).toHaveAttribute('src', expect.stringContaining('/stickers/twine/thanks.thumb.webp'));
+    // Answered by a sticker, which has no bubble to lie over the quote's foot: the quote keeps no room for one.
+    expect(quote.closest('[class*="quote"][data-apart]')).toBeTruthy();
+    expect(cssRule('.quote[data-apart] .quoteBubble[data-sticker]')).toMatch(/padding-bottom:\s*6px/);
+    expect(cssRule('.quoteBubble[data-sticker]')).toMatch(/padding:\s*6px 10px 20px/);
+    expect(cssRule('.slot[data-sticker][data-over-quote]')).toMatch(/margin-top:\s*4px/);
 
     // One grid: the album's first picture stands for it, the four in one bubble, its words under them.
     const grid = container.querySelector('[class*="album"]')!;

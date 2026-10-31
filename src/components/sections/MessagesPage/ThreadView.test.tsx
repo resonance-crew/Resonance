@@ -319,6 +319,22 @@ describe('replies, links and link previews in a thread', () => {
 
   // Round 22: a quote of a picture inside an album goes to the album's grid (its row is the first picture's), and
   // washes it.
+  // Round 22 (the owner's notes): a bubble answering a quote lies over its foot; a sticker has no bubble, so the
+  // quote over a sticker keeps no room for one.
+  it('keeps room under a quote only for a bubble to lie over', async () => {
+    server.messages = [
+      text('m1', 'what a day', {}, 'me'),
+      text('m2', '〔貼圖：抱抱〕', { sticker: { pack: 'nod', id: 'hug' }, replyTo: { id: 'm1', senderId: 'me', text: 'what a day' } }),
+      text('m3', 'tell me', { replyTo: { id: 'm1', senderId: 'me', text: 'what a day' } }),
+    ];
+    vi.mocked(callApi).mockResolvedValue({ cards: [] });
+    const { container } = renderWithIntl(thread());
+    await screen.findByText('tell me');
+    const quoteOf = (id: string) => container.querySelector(`[data-message-id="${id}"] [class*="quote"][class*="_quote_"], [data-message-id="${id}"] div[class*="quote"]`)!;
+    expect(quoteOf('m2')).toHaveAttribute('data-apart');
+    expect(quoteOf('m3')).not.toHaveAttribute('data-apart');
+  });
+
   it('goes to the album holding a quoted picture', async () => {
     const scrollTo = vi.fn();
     Element.prototype.scrollTo = scrollTo as unknown as Element['scrollTo'];
@@ -1525,7 +1541,10 @@ describe('reactions and unsending (round 16)', () => {
     expect(within(overlay).getByRole('toolbar')).toBeInTheDocument();
     expect(within(overlay).getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Reply', 'Report this message']);
     await user.click(within(overlay).getByRole('menuitem', { name: 'Reply' }));
-    expect(await screen.findByText('Sticker: Thanks', { selector: '[class*="carryDetail"]' })).toBeInTheDocument();
+    // The reply's row: the sticker's key frame, no name beside it.
+    const row = (await screen.findByText('Replying to alice')).closest('[class*="carryRow"]')!;
+    expect(row.querySelector('img')).toHaveAttribute('src', expect.stringContaining('/stickers/twine/thanks.thumb.webp'));
+    expect(row.querySelector('[class*="carryDetail"]')).toBeNull();
   });
 
   it('unsends one of the viewer’s own after a plain-coloured yes: a dashed line where it was, its quote emptied', async () => {

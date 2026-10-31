@@ -129,6 +129,7 @@ export function MessageCore({
             viewerId={actions.viewerId}
             otherHandle={actions.otherHandle}
             onJump={interactive ? actions.jumpTo : null}
+            apart
           />
         )}
         <div className={styles.slot} data-over-quote={m.replyTo ? '' : undefined} data-sticker="" data-flash={flash || undefined} style={slotStyle}>
