@@ -86,12 +86,16 @@ val ComposerSendWidth = 52.dp
  */
 val ComposerFade = 12.dp
 
+/** The last riding row → the capsule, and the solid paper over the topmost row ([ComposerRowsLead]). */
+val ComposerRowsGap = 6.dp
+
 /**
- * With rows riding over the capsule, the foot starts this far over the topmost one (round 11 §3):
- * a row's first ink (the reply's rule, a thumbnail, the label) starts about 6 into it, so the
- * [ComposerFade] that starts here ends where that ink starts — the paper solid behind every row.
+ * With rows riding over the capsule, the foot starts this far over the topmost one (round 11 §3, the
+ * owner's notes 2026-10-31): the whole [ComposerFade], then [ComposerRowsGap] of solid paper — so the
+ * paper over the rows' first ink (the reply's rule, a thumbnail, a card's tile, a label) is as deep as
+ * under their last ink down to the capsule, and the thread never shows right down to the ink.
  */
-val ComposerRowsLead = 6.dp
+val ComposerRowsLead = ComposerFade + ComposerRowsGap
 
 /** A row riding with the message over the capsule ([ComposerRow]): its least height. */
 val ComposerRowHeight = 52.dp
@@ -447,7 +451,7 @@ private data class FloatingSlip(val seed: Double, val radius: Double, val pen: C
  * keyboard's top when it is up — its top [ComposerFade] a fade from clear paper to opaque, starting
  * on the top edge of what the foot shows first. Laid behind the foot at its size: with nothing
  * riding, the fade covers the capsule's top 12 (solid from there down); with rows riding the foot
- * starts [ComposerRowsLead] over them, so the fade ends where their ink starts. The solid paper takes
+ * starts [ComposerRowsLead] over them, the fade ending [ComposerRowsGap] above them. The solid paper takes
  * every touch, so nothing under it can be tapped or dragged — a tap on it ([onTap]) is a tap on the
  * thread's blank (the keyboard goes away); the fade lets touches through to the thread. Not read by
  * TalkBack.

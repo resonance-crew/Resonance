@@ -72,6 +72,7 @@ import com.resonance.design.ComposerHeight
 import com.resonance.design.ComposerLeadShape
 import com.resonance.design.ComposerLeadSize
 import com.resonance.design.ComposerRow
+import com.resonance.design.ComposerRowsGap
 import com.resonance.design.ComposerRowsLead
 import com.resonance.design.ComposerSegment
 import com.resonance.design.ComposerTile
@@ -139,7 +140,7 @@ internal fun Composer(
         if (rides(model)) {
             Spacer(Modifier.height(ComposerRowsLead))
             ComposerRows(model, Modifier.blocksTouches())
-            Spacer(Modifier.height(ROWS_GAP))
+            Spacer(Modifier.height(ComposerRowsGap))
         }
         val line = lineHeightOf(ComposerText)
         val vertical = composerPadding(line)
@@ -243,8 +244,6 @@ internal fun composerTools(text: String, lines: Int, expanded: Boolean): Compose
 private const val MAX_LINES = 5
 /** ⤢ shows from this many lines (round 22 §4.3: "超過 2 行"). */
 internal const val EXPAND_FROM_LINES = 3
-/** The last riding row → the capsule. */
-private val ROWS_GAP = 6.dp
 
 /** Whether anything rides with the message: a reply, the note answered, a card, pictures, an error. */
 private fun rides(model: ThreadModel): Boolean =
@@ -325,7 +324,8 @@ private fun PictureStrip(model: ThreadModel) {
         Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 4.dp),
+            // The thumbnails as far over the strip's foot as under its top, past the ✕'s room (the owner's notes 2026-10-31).
+            .padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 2.dp + THUMB_X_HANG),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.Bottom,
     ) {

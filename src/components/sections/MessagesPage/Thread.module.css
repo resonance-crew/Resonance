@@ -1144,9 +1144,9 @@ button.chips::before {
    foot, across the pane and down to the screen's edge, so nothing of the
    thread shows under or beside it. Its top 12 are a fade from the thread into
    the paper, starting on the top edge of what the foot shows first — the
-   capsule; with rows riding over it, 6 over the topmost row, so the fade ends
-   where the row's first ink starts — so the paper and the foot meet there;
-   solid below. The fade lets taps through to the thread; the solid
+   capsule; with rows riding over it, 18 over the topmost row, so the fade ends
+   6 over it and the paper over the rows' first ink is as deep as under their
+   last ink down to the capsule (the owner's notes 2026-10-31); solid below. The fade lets taps through to the thread; the solid
    paper takes them (nothing hidden under it can be pressed). Under what is in
    the foot (the foot is its own stacking context). */
 .dock::before,
@@ -1172,7 +1172,7 @@ button.chips::before {
 }
 
 .dock:has(.carry) {
-  padding-top: 6px;
+  padding-top: 18px;
 }
 
 /* What rides the next message over the capsule, and the capsule (round 22: one stack, so a sticker's preview
@@ -1373,7 +1373,8 @@ button.chips::before {
 .carryStrip {
   display: flex;
   gap: 8px;
-  padding: 4px 2px 2px 4px;
+  /* As much under the thumbnails as over them. */
+  padding: 4px 2px 4px 4px;
   overflow-x: auto;
   scrollbar-width: none;
 }

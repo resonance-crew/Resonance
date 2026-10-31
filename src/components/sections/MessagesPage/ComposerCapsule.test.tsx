@@ -76,7 +76,8 @@ describe('the composer capsule (round 9 §4)', () => {
     expect(rule('.dock::after')).toMatch(/top:\s*12px;[\s\S]*bottom:\s*0;[\s\S]*background:\s*var\(--color-cream\)/);
     // The fade lets taps through to the thread; the solid paper takes them.
     expect(rule('.dock::after')).toMatch(/pointer-events:\s*auto/);
-    expect(rule('.dock:has(.carry)')).toMatch(/padding-top:\s*6px/);
+    // Riding rows: the whole fade over them, then 6 of solid paper, as under them to the capsule.
+    expect(rule('.dock:has(.carry)')).toMatch(/padding-top:\s*18px/);
     // Not a shadow: a floating thing stays opaque in every state.
     for (const sel of ['.capsule', '.send', '.slip', '.dock', '.paperFill', '.sendFace', '.carryRow']) {
       expect(rule(sel)).not.toMatch(/opacity|box-shadow|drop-shadow/);

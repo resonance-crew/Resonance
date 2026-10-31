@@ -6,6 +6,7 @@ import com.resonance.api.models.RestoredCard
 import com.resonance.api.models.TrashedCard
 import com.resonance.design.BarLineInset
 import com.resonance.design.ComposerFade
+import com.resonance.design.ComposerRowsGap
 import com.resonance.design.ComposerRowsLead
 import com.resonance.design.TabletBarRowDrop
 import com.resonance.design.Toasts
@@ -55,11 +56,12 @@ class RoundElevenTest {
 
     // §3
 
-    @Test fun theFootFadesInOver12StartingSixOverTheRows() {
+    @Test fun theFootFadesInOver12ThenSixOfSolidPaperOverTheRows() {
         assertEquals(12.dp, ComposerFade)
-        // The fade ends where a riding row's ink starts: 6 into it.
-        assertEquals(6.dp, ComposerRowsLead)
-        assertEquals(6.dp, ComposerFade - ComposerRowsLead)
+        // The fade ends 6 over the topmost row, as the last row ends 6 over the capsule (the owner's notes 2026-10-31):
+        // a centred lead has as much solid paper above it as below it to the capsule.
+        assertEquals(18.dp, ComposerRowsLead)
+        assertEquals(ComposerRowsGap, ComposerRowsLead - ComposerFade)
     }
 
     // §4

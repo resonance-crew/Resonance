@@ -50,7 +50,7 @@ struct ThreadComposer: View {
         VStack(spacing: 0) {
             if !rides.isEmpty {
                 VStack(spacing: 0) {
-                    // The 6 the foot gains over its rows: where its paper starts to fade in.
+                    // What the foot gains over its rows: its paper's fade, then solid paper as deep as under them.
                     Color.clear.frame(height: ComposerMetrics.fadeRoom(riding: true))
                     ForEach(rides, id: \.self) { ride in row(ride) }
                 }
@@ -169,7 +169,9 @@ struct PictureStrip: View {
             }
             .padding(.leading, ComposerMetrics.rowStart)
             .padding(.trailing, ComposerMetrics.rowStart)
-            .padding(.vertical, ComposerMetrics.rowPadY)
+            .padding(.top, ComposerMetrics.rowPadY)
+            // The thumbnails as far over the strip's foot as under its top, past the ✕'s room (the owner's notes 2026-10-31).
+            .padding(.bottom, ComposerMetrics.rowPadY + PictureThumb.removeRoom)
         }
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.basedOnSize)
@@ -189,6 +191,8 @@ struct PictureThumb: View {
     /// The ✕'s disc and how little it wobbles.
     static let removeDisc: CGFloat = 20
     static let removeWobble = WobCircleOptions(segments: 8, mag: 0.35, cpJitter: 0.15)
+    /// The room over and beside the thumbnail its ✕ swings into.
+    static let removeRoom: CGFloat = 8
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -218,8 +222,8 @@ struct PictureThumb: View {
             .accessibilityLabel(L10n.Messages.removeImage)
             .disabled(picture.picked == nil)
         }
-        .padding(.top, 8)
-        .padding(.trailing, 8)
+        .padding(.top, Self.removeRoom)
+        .padding(.trailing, Self.removeRoom)
     }
 }
 

@@ -111,6 +111,6 @@ class ComposerFootTest {
         compose.onNodeWithTag("thread").performTouchInput { click(Offset(centerX, 50.dp.toPx())) }
         compose.runOnIdle { assertEquals(2, taps) }
         assertEquals(12.dp, ComposerFade)
-        assertEquals(6.dp, ComposerRowsLead)
+        assertEquals(18.dp, ComposerRowsLead)
     }
 }

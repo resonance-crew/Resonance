@@ -691,11 +691,12 @@ public nonisolated enum ComposerMetrics {
     public static let sendGlyph: CGFloat = 20
     /// The foot's paper fades in over its top 12 (round 11 §3: just enough to see it is a fade), from the
     /// top edge of what the foot shows first: over the capsule's top 12 when nothing rides with the
-    /// message; from `rideFadeRoom` over the topmost riding row when something does.
+    /// message; from the top of `rideFadeRoom` over the topmost riding row when something does.
     public static let fade: CGFloat = 12
-    /// What the foot gains over its riding rows: 6, as a row's ink (its picture, the reply's rule, its
-    /// label) starts about 6 into it — the fade ends where the rows' ink begins.
-    public static let rideFadeRoom: CGFloat = 6
+    /// What the foot gains over its riding rows (the owner's notes 2026-10-31): the whole fade, then
+    /// `slipGap` of solid paper — so the paper over the rows' first ink (a picture, a card's tile, the
+    /// reply's rule, a label) is as deep as under their last ink down to the capsule.
+    public static let rideFadeRoom: CGFloat = fade + slipGap
     /// The capsule over the bottom safe area or the keyboard.
     public static let bottomGap: CGFloat = 8
     /// The last row (or a notice) over the capsule.
@@ -746,8 +747,8 @@ public nonisolated enum ComposerMetrics {
     /// written in — darker, never another colour (it was terracotta).
     public static func pen(focused: Bool) -> Color { focused ? Tokens.fieldBorderHover : Tokens.fieldBorder }
 
-    /// How much the foot adds over what it holds: 6 when rows ride over the capsule (the fade then runs
-    /// over those 6 and the top 6 of the first row); nothing otherwise (it lies over the capsule's top 12).
+    /// How much the foot adds over what it holds: `rideFadeRoom` when rows ride over the capsule (the fade,
+    /// then 6 of solid paper over the first row); nothing otherwise (it lies over the capsule's top 12).
     public static func fadeRoom(riding: Bool) -> CGFloat { riding ? rideFadeRoom : 0 }
 
     /// ＋'s ink: muted at rest, the text ink while its menu is open (the web's bare trigger, `data-open`).
