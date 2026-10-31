@@ -29,7 +29,12 @@ export type Screen = {
   fullPage?: boolean;
   /** CSS selectors the web capture paints over (things that change by themselves). */
   mask?: string[];
-  /** Share of pixels that may differ before it counts as changed (default compare.ts's DIFF_RATIO). */
+  /**
+   * The web's own way to it, where the site has no such page (the apps' 通知 tab is a bell's panel
+   * here): another path, and a CSS selector clicked once that page is ready.
+   */
+  web?: { route: string; click: string };
+  /** Share of pixels that may differ (beyond diff.ts's shift) before an area counts as changed: for a screen that moves a little by itself. */
   maxDiff?: number;
 };
 
@@ -56,10 +61,17 @@ export const SCREENS: Screen[] = [
     expect: "alice's card box: her shelves and cards" },
   { id: 'thought-map', route: '/me/thought-map', as: 'alice',
     expect: "alice's thought map: a region holding two of her cards, bob's walk, one labelled arrow" },
+  { id: 'card-trashed', route: '/card/old-poem', as: 'alice',
+    expect: "alice's card 一首沒寫完的詩 in her trash: the page says it is in the trash (days left before it goes) and offers 還原" },
   { id: 'messages', route: '/messages', as: 'alice',
-    expect: 'The conversation list with bob' },
+    expect: "The conversation list: bob (his note's words as the last line) and carol (her letter, waiting for an answer)" },
   { id: 'thread', route: '/messages/bob', as: 'alice',
-    expect: 'The thread with bob: bubbles, the floating composer capsule at the foot' },
+    expect: "The thread with bob: a bubble with a heart reaction chip in its gutter, a 小紙團 sticker (牽牽 謝謝) with no bubble, alice's reply quoting his first line (a hug reaction), one dashed unsent line, bob's note quoting alice's card 寫給十年前的自己 above its words, the floating composer capsule (＋, field, ☺, send) at the foot" },
+  { id: 'thread-letter', route: '/messages/carol', as: 'alice',
+    expect: "carol's letter to alice (not connected): her note quoting alice's card 搬家後的第一個安靜夜晚, and the hint that replying connects them" },
+  { id: 'notifications', route: '/notifications', as: 'alice',
+    web: { route: '/home', click: 'button[aria-label="通知"], button[aria-label="Notifications"]' },
+    expect: "alice's notifications (the web: the bell's panel over the feed): carol's letter and bob's note unread with their words, bob's resonance, carol's card link and bob's first message read" },
   { id: 'settings', route: '/settings', as: 'alice',
     expect: 'Settings: profile, appearance (theme swatches, 小紙團 switch), notifications, account' },
   { id: 'write-new', route: '/write', as: 'dora',

@@ -10,17 +10,24 @@
  *   review   [--run <id>] [--agy | --gemini] [--all]   --all: unchanged captures too
  *   accept   [--run <id>] [--only <key|screen>,…]
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { compareRun, type RunInfo } from './compare';
 import { writeReport } from './report';
 import { reviewWithAgy, reviewWithGemini, writeReviewPack } from './review';
 import { startStack, type Stack } from './stack';
-import { BASELINE_DIR, PORTS, RUNS_DIR, VISUAL_DIR, git, listPngs, readJson, writeJson, type Capture } from './util';
+import { BASELINE_DIR, PORTS, RUNS_DIR, VISUAL_DIR, git, ignorePath, listPngs, readJson, writeJson, type Capture } from './util';
 import type { Platform } from './screens';
 
-/** The order a full capture runs in, one platform at a time (each frees its devices before the next). */
+/** Every platform, in the order the report lists them. */
 const PLATFORMS: Platform[] = ['web', 'android', 'ios', 'mac'];
+/**
+ * How a capture runs: these phases one after the other, the platforms of a phase side by side —
+ * the web's headless browser beside the Mac app, then the two AVDs together, then the two
+ * simulators together (each platform runs its own devices at once: VISUAL_PARALLEL=0 runs them one
+ * at a time). Each phase frees its devices before the next boots.
+ */
+const PHASES: Platform[][] = [['web', 'mac'], ['android'], ['ios']];
 
 async function capturer(platform: Platform): Promise<Capture> {
   switch (platform) {
@@ -62,7 +69,7 @@ function finish(runDir: string) {
 }
 
 async function capture(args: string[]) {
-  // Always in PLATFORMS' order, one at a time, whatever order they were named in.
+  // Always in PHASES' order, whatever order they were named in.
   const named = args.filter((a): a is Platform => PLATFORMS.includes(a as Platform));
   const platforms = PLATFORMS.filter((p) => !named.length || named.includes(p));
   const id = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
@@ -86,17 +93,19 @@ async function capture(args: string[]) {
     stack = args.includes('--no-stack')
       ? { devUrl: process.env.VISUAL_DEV_URL || `http://localhost:${PORTS.dev}`, stop: () => {} }
       : await startStack(join(runDir, '_logs'), log);
-    for (const platform of platforms) {
-      log(`\n== ${platform}`);
-      const unsettled = await (await capturer(platform))({
-        runDir,
-        devUrl: stack.devUrl,
-        ports: PORTS,
-        only: info.only,
-        devices: info.devices,
-        log,
-      });
-      info.unsettled.push(...unsettled);
+    const ctx = { runDir, devUrl: stack.devUrl, ports: PORTS, only: info.only, devices: info.devices, log };
+    // The apps' builds start now, beside the first phase's captures, so a later phase finds its app
+    // ready (each build is made once; the Xcode ones take turns). A failed one fails its phase.
+    const headStart: Promise<unknown>[] = [];
+    if (platforms.includes('android')) headStart.push((await import('./android')).build(ctx));
+    if (platforms.includes('ios')) headStart.push((await import('./ios')).build(ctx));
+    headStart.forEach((p) => p.catch(() => {}));
+    for (const phase of PHASES) {
+      const here = phase.filter((p) => platforms.includes(p));
+      if (!here.length) continue;
+      log(`\n== ${here.join(' + ')}`);
+      const unsettled = await Promise.all(here.map(async (platform) => (await capturer(platform))(ctx)));
+      info.unsettled.push(...unsettled.flat());
       writeJson(join(runDir, 'run.json'), info);
     }
     if (args.includes('--flows')) await flows(runDir, platforms, stack.devUrl);
@@ -142,6 +151,10 @@ function accept(args: string[]) {
     const to = join(BASELINE_DIR, key);
     mkdirSync(join(to, '..'), { recursive: true });
     writeFileSync(to, readFileSync(join(runDir, key)));
+    // The regions it asked the comparison to skip go with it (or a stale list goes).
+    const ignore = ignorePath(join(runDir, key));
+    if (existsSync(ignore)) writeFileSync(ignorePath(to), readFileSync(ignore));
+    else rmSync(ignorePath(to), { force: true });
   }
   for (const platform of new Set(keys.map((k) => k.split('/')[0]))) {
     writeJson(join(BASELINE_DIR, platform, 'meta.json'), { commit: info.commit, run: info.id, acceptedAt: new Date().toISOString() });

@@ -1,26 +1,27 @@
 /**
  * A run against the baseline: each capture is unchanged, changed (with a diff
- * image), new (no baseline yet) or missing (a baseline the run didn't take, on
- * a platform it captured). A change is more than DIFF_RATIO of the pixels
- * apart after pixelmatch's antialiasing allowance, so a pen line drawn half a
- * pixel off on another day never counts.
+ * image and the areas that changed), new (no baseline yet) or missing (a
+ * baseline the run didn't take, on a platform it captured). What counts as a
+ * change is ./diff.ts's: an area of pixels that moved further than a couple of
+ * pixels, however small beside the page — a page drawn a pixel off, or small
+ * text spaced a little wider, never counts.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { PNG } from 'pngjs';
-import pixelmatch from 'pixelmatch';
-import { BASELINE_DIR, listPngs, readJson, writeJson } from './util';
+import { compareImages, type Area } from './diff';
+import { BASELINE_DIR, ignorePath, listPngs, readJson, writeJson, type Rect } from './util';
 import { SCREENS, type Platform } from './screens';
-
-export const DIFF_RATIO = 0.0005;
 
 export type Status = 'unchanged' | 'changed' | 'new' | 'missing';
 export type Result = {
   /** `<platform>/<device>/<screen>@<theme>-<locale>.png` */
   key: string;
   status: Status;
-  /** Share of pixels apart (changed), or null. */
+  /** Share of pixels apart beyond a shift of a couple of pixels, or null (new, missing). */
   ratio: number | null;
+  /** The areas that changed, largest first (changed only; none when the sizes differ). */
+  areas?: Area[];
   /** Set when the two images differ in size. */
   sizes?: { baseline: [number, number]; current: [number, number] };
 };
@@ -49,14 +50,18 @@ export function compareRun(runDir: string): Result[] {
     if (a.width !== b.width || a.height !== b.height) {
       return { key, status: 'changed', ratio: 1, sizes: { baseline: [a.width, a.height], current: [b.width, b.height] } };
     }
-    const diff = new PNG({ width: a.width, height: a.height });
-    const apart = pixelmatch(a.data, b.data, diff.data, a.width, a.height, { threshold: 0.1, alpha: 0.2, diffColor: [230, 40, 40] });
-    const ratio = apart / (a.width * a.height);
-    if (ratio <= (allowed.get(key.split('/').pop()!.split('@')[0]) ?? DIFF_RATIO)) return { key, status: 'unchanged', ratio };
+    // What the capture asked to be left out, as it was found now and in the baseline (a title that moved).
+    const ignore = [join(runDir, key), join(BASELINE_DIR, key)].flatMap((png) => readJson<Rect[]>(ignorePath(png)) ?? []);
+    const { ratio, areas, diff } = compareImages(a.data, b.data, a.width, a.height, ignore);
+    // A screen's own allowance (`maxDiff`) forgives what is left as long as it stays under that share.
+    const allowance = allowed.get(key.split('/').pop()!.split('@')[0]);
+    if (!areas.length || (allowance != null && ratio <= allowance)) return { key, status: 'unchanged', ratio };
     const out = join(runDir, '_diff', key);
     mkdirSync(dirname(out), { recursive: true });
-    writeFileSync(out, PNG.sync.write(diff));
-    return { key, status: 'changed', ratio };
+    const png = new PNG({ width: a.width, height: a.height });
+    png.data = Buffer.from(diff.buffer);
+    writeFileSync(out, PNG.sync.write(png));
+    return { key, status: 'changed', ratio, areas };
   });
   const platforms = new Set(info?.platforms ?? []);
   const taken = new Set(captured);

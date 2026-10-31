@@ -1,0 +1,40 @@
+# alice opens her notifications from the tab bar: carol's letter and bob's note are there, unread, with
+# their words. Tapping carol's opens their conversation, her note quoting alice's card, waiting for an answer.
+appId: com.resonance.stories
+name: open-notification
+tags:
+  - notifications
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /home
+- extendedWaitUntil:
+    visible: 我也在雨裡走過
+    timeout: 30000
+# The tab bar's bell (icons alone on a phone: its name is its label). iOS says its unread count after the
+# name ("通知, 3") and keeps the other tabs' screens in the tree, the notifications' own title 通知 among them.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn: 通知, \d+
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn: 通知
+- extendedWaitUntil:
+    visible: .*carol.*寄來一張小紙條.*
+    timeout: 15000
+- assertVisible: .*你的信讓我想起我自己的十年前。.*
+- takeScreenshot: open-notification-list
+- tapOn: .*carol.*寄來一張小紙條.*
+- extendedWaitUntil:
+    visible: 讀到搬家那段，好像看見自己。
+    timeout: 15000
+- extendedWaitUntil:
+    visible: 回覆後，你們就能開始聊天
+    timeout: 10000
+- takeScreenshot: open-notification

@@ -14,7 +14,7 @@
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PNG } from 'pngjs';
-import { BUNDLE_ID, byAccount, launchArgs, prepareProject, runLogged } from './ios';
+import { BUNDLE_ID, byAccount, inXcodeLine, launchArgs, prepareProject, runLogged } from './ios';
 import { BASE_VARIANT, screensFor, shotName } from './screens';
 import { ROOT, run, settle, shotPath, sleep, type Capture, type CaptureContext } from './util';
 
@@ -29,21 +29,23 @@ const WINDOW = { width: 1440, height: 900 };
 
 type MacWindow = { id: number; pid: number; width: number; height: number; layer: number };
 
-function build(ctx: CaptureContext) {
+function build(ctx: CaptureContext): Promise<void> {
   if (!existsSync(WINDOWS_TOOL) || statSync(WINDOWS_TOOL).mtimeMs < statSync(WINDOWS_SOURCE).mtimeMs) {
     mkdirSync(DERIVED, { recursive: true });
     run('swiftc', ['-O', WINDOWS_SOURCE, '-o', WINDOWS_TOOL]);
   }
-  if (process.env.VISUAL_SKIP_BUILD === '1' && existsSync(APP)) return ctx.log('  reusing the last Mac build');
-  ctx.log('  building the Debug Mac app (apps/ios/build/visual-mac)…');
-  prepareProject(ctx);
-  runLogged('xcodebuild', [
-    '-project', 'Resonance.xcodeproj', '-scheme', 'Resonance', '-configuration', 'Debug',
-    '-destination', 'platform=macOS,variant=Mac Catalyst', '-derivedDataPath', DERIVED,
-    '-allowProvisioningUpdates', '-allowProvisioningDeviceRegistration',
-    '-skipPackagePluginValidation', '-skipMacroValidation', 'build',
-    'RESONANCE_BUNDLE_SUFFIX=.macdev', `RESONANCE_MAC_ENTITLEMENTS=${join(ROOT, 'scripts/visual/mac-dev.entitlements')}`,
-  ], join(ctx.runDir, '_logs', 'mac-build.log'), IOS_DIR);
+  return inXcodeLine(async () => {
+    if (process.env.VISUAL_SKIP_BUILD === '1' && existsSync(APP)) return ctx.log('  reusing the last Mac build');
+    ctx.log('  building the Debug Mac app (apps/ios/build/visual-mac)…');
+    await prepareProject(ctx);
+    await runLogged('xcodebuild', [
+      '-project', 'Resonance.xcodeproj', '-scheme', 'Resonance', '-configuration', 'Debug',
+      '-destination', 'platform=macOS,variant=Mac Catalyst', '-derivedDataPath', DERIVED,
+      '-allowProvisioningUpdates', '-allowProvisioningDeviceRegistration',
+      '-skipPackagePluginValidation', '-skipMacroValidation', 'build',
+      'RESONANCE_BUNDLE_SUFFIX=.macdev', `RESONANCE_MAC_ENTITLEMENTS=${join(ROOT, 'scripts/visual/mac-dev.entitlements')}`,
+    ], join(ctx.runDir, '_logs', 'mac-build.log'), IOS_DIR);
+  });
 }
 
 function windows(): MacWindow[] {
@@ -77,13 +79,21 @@ function quit(pid: number) {
 }
 
 /** The window's capture cut to the size asked for (a point wider or taller comes off its far edges). */
+/** The window's close / minimise / zoom buttons (capture pixels): grey or coloured as macOS thinks the window active. */
+const WINDOW_BUTTONS = { width: 160, height: 64 };
+
 function cut(png: Buffer): Buffer {
   const image = PNG.sync.read(png);
   const width = WINDOW.width * 2;
   const height = WINDOW.height * 2;
-  if (image.width === width && image.height === height) return png;
   const out = new PNG({ width: Math.min(width, image.width), height: Math.min(height, image.height) });
   PNG.bitblt(image, out, 0, 0, out.width, out.height, 0, 0);
+  // Painted over with the bar's own paper beside them: a window launched in the background still
+  // comes up active now and then, and the buttons are the system's, not ours to check.
+  const paper = (WINDOW_BUTTONS.height / 2 * out.width + WINDOW_BUTTONS.width + 8) * 4;
+  for (let y = 0; y < WINDOW_BUTTONS.height; y++) {
+    for (let x = 0; x < WINDOW_BUTTONS.width; x++) out.data.copyWithin((y * out.width + x) * 4, paper, paper + 4);
+  }
   return PNG.sync.write(out);
 }
 
@@ -101,7 +111,7 @@ export const captureMac: Capture = async (ctx) => {
   const unsettled: string[] = [];
   if (!screens.length || (ctx.devices.length && !ctx.devices.includes('mac'))) return unsettled;
   mkdirSync(join(ctx.runDir, '_logs'), { recursive: true });
-  build(ctx);
+  await build(ctx);
   const v = BASE_VARIANT;
   for (const [account, group] of byAccount(screens)) {
     // The account signs in on a launch of its own; a screen's launch only restores it.

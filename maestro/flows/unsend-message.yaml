@@ -1,0 +1,38 @@
+# alice sends bob a message, holds it and unsends it (收回 → the dialog's 收回): the bubble gives way to
+# one dashed line, 你收回了一則訊息, and the conversation list says the same.
+appId: com.resonance.stories
+name: unsend-message
+tags:
+  - chat
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /messages/bob
+- extendedWaitUntil:
+    visible: 你的信讓我想起我自己的十年前。
+    timeout: 30000
+# The seeded messages are past unsend's 24 hours: a fresh one.
+- tapOn: 與 bob 的對話|想說的話⋯
+- inputText: 這句等等收回 Maestro
+- tapOn: 送出
+- extendedWaitUntil:
+    visible: 這句等等收回 Maestro
+    timeout: 10000
+- extendedWaitUntil:
+    notVisible: 傳送中⋯
+    timeout: 15000
+- longPressOn: 這句等等收回 Maestro
+- tapOn: 收回
+- extendedWaitUntil:
+    visible: 收回這則訊息？
+    timeout: 5000
+- tapOn:
+    text: 收回
+    below: 對方將看不到這則訊息
+- extendedWaitUntil:
+    notVisible: 這句等等收回 Maestro
+    timeout: 10000
+- assertVisible: 你收回了一則訊息
+- takeScreenshot: unsend-message

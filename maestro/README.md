@@ -13,7 +13,14 @@ come, are Playwright's.
 | --- | --- | --- |
 | `sign-in` | — → alice | A signed-out start, the emulator build's email form, alice's home feed (我也在雨裡走過 first) |
 | `send-message` | alice | `/messages/bob`: types a message, 送出, the bubble is in the thread and nothing is left 傳送中⋯ |
+| `send-sticker` | alice | `/messages/bob`: ☺ (貼圖) opens the panel, 心暖暖 once previews it (再點一次傳送), again sends it: 貼圖：心暖暖 in the thread |
+| `react-reply` | alice | holds bob's note: the tray's 感動 (你回應了感動), then 回覆 and a reply that quotes the note |
+| `unsend-message` | alice | sends a message, holds it, 收回 → the dialog's 收回: 你收回了一則訊息 |
+| `chat-draft` | alice | types to bob and leaves unsent: the list shows the words after a pen, the thread keeps them |
+| `answer-letter` | alice | `/messages/carol`: carol's letter (her note quoting alice's card, 回覆後，你們就能開始聊天); alice's reply connects them, the hint goes |
 | `leave-note` | alice | bob's card `rain-walk`: 寄小紙條, writes, 寄出, 紙條寄出了 |
+| `resonate` | alice | carol's card `carol-note`: 共振 → the picker → 寫給十年前的自己 → 共振: 已共振, her card listed under carol's; 收藏 → 取消收藏 |
+| `open-notification` | alice | the tab bar's 通知: carol's letter and bob's note unread with their words; carol's row opens their conversation (her note quoting alice's card, 回覆後，你們就能開始聊天) |
 | `publish-card` | alice | `/write`: title, Return, a line of story, ✓, 公開, 發布 → the card's page with its title, story and share |
 | `trash-restore` | alice | her card `letter`: ⋯ → 刪除 → 這張卡片在垃圾桶裡 → 還原 → public again (its share back) |
 
@@ -30,7 +37,8 @@ VISUAL_SKIP_BUILD=1 npx tsx scripts/visual/flows.ts ios      # the last build, i
 The runner starts its own stack (ports `VISUAL_AUTH_PORT` / `VISUAL_FIRESTORE_PORT` /
 `VISUAL_DEV_PORT`, default 9299 / 8280 / 3150), builds and installs the Debug app, brings up the
 harness's own phone (booting it if needed, and shutting down only what it booted), reseeds before
-each flow and runs `maestro test` on it. It prints `Flows <run> <platform>: N passed · M failed`
+each flow and runs `maestro test` on it. The reseed empties the stack's database first (`SEED_RESET=1`), so
+nothing one flow wrote — a connection, a bookmark, a sent message — carries into the next. It prints `Flows <run> <platform>: N passed · M failed`
 and exits non-zero on a failure. Everything lands in `visual/flows/<run>/<platform>/` (git-ignored):
 `<flow>.xml` (JUnit), `<flow>/maestro.log`, and `<flow>/` with Maestro's commands, logs, the
 flow's screenshots and, for a failure, the screen and hierarchy at the failing step
@@ -86,7 +94,7 @@ Do not edit the app's code; do not change anything outside maestro/flows/.
 From Claude Code the same prompt works as is (the tools show as `mcp__maestro__*`). The runner
 reseeds between flows; while drafting, reseed by hand when a step changed the data:
 `EMULATOR_AUTH_PORT=<auth> EMULATOR_FIRESTORE_PORT=<firestore> npx tsx scripts/seed-emulator.ts`.
-A new top-level file in `maestro/flows/` is picked up by the runner (after the five above, by
+A new top-level file in `maestro/flows/` is picked up by the runner (after the ones above, by
 name); add it to `ORDER` in `scripts/visual/flows.ts` to place it.
 
 ## Conventions

@@ -7,6 +7,7 @@ import Testing
     @Test func theTabsPathsOpenTheirTab() {
         #expect(MainTabView.launchTab("/home")?.0 == .feed)
         #expect(MainTabView.launchTab("/messages")?.0 == .messages)
+        #expect(MainTabView.launchTab("/notifications")?.0 == .notifications)
         #expect(MainTabView.launchTab("/me")?.0 == .cardBox)
         #expect(MainTabView.launchTab("/me")?.1 == [])
     }

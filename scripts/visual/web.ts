@@ -9,7 +9,7 @@
 import { writeFileSync } from 'node:fs';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { screensFor, shotName, type Account, type Screen, type Variant } from './screens';
-import { SEED_PASSWORD, settle, shotPath, variantsFor, type Capture, type CaptureContext } from './util';
+import { SEED_PASSWORD, ignorePath, settle, shotPath, variantsFor, type Capture, type CaptureContext, type Rect } from './util';
 
 export type WebDevice = { id: string; phone: boolean; width: number; height: number; touch: boolean };
 
@@ -85,17 +85,50 @@ function trackRequests(page: Page) {
 
 const idle = new WeakMap<Page, ReturnType<typeof trackRequests>>();
 
-async function shoot(page: Page, ctx: CaptureContext, screen: Screen, v: Variant): Promise<{ png: Buffer; settled: boolean }> {
+async function shoot(page: Page, ctx: CaptureContext, screen: Screen, v: Variant): Promise<{ png: Buffer; settled: boolean; ignore: Rect[] }> {
   if (!idle.has(page)) idle.set(page, trackRequests(page));
-  await page.goto(`${ctx.devUrl}/${v.locale}${screen.route === '/' ? '' : screen.route}`, { waitUntil: 'load', timeout: 120_000 });
-  await idle.get(page)!();
-  await page.evaluate(() => document.fonts.ready);
-  // A shape not yet measured shows its CSS stand-in: wait for the drawn one.
-  await page.waitForFunction(() => !document.querySelector('[data-shape-pending]'), null, { timeout: 15_000 }).catch(() => {});
+  const route = screen.web?.route ?? screen.route;
+  await page.goto(`${ctx.devUrl}/${v.locale}${route === '/' ? '' : route}`, { waitUntil: 'load', timeout: 120_000 });
+  const ready = async () => {
+    await idle.get(page)!();
+    await page.evaluate(() => document.fonts.ready);
+    // A shape not yet measured shows its CSS stand-in: wait for the drawn one.
+    await page.waitForFunction(() => !document.querySelector('[data-shape-pending]'), null, { timeout: 15_000 }).catch(() => {});
+  };
+  await ready();
+  if (screen.web?.click) {
+    // The first one on screen: a phone and a desktop header may both be in the page, CSS showing one.
+    await page.locator(screen.web.click).locator('visible=true').first().click();
+    await ready();
+  }
   const mask = (screen.mask ?? []).map((s) => page.locator(s));
-  return settle(
+  const shot = await settle(
     () => page.screenshot({ fullPage: screen.fullPage, animations: 'disabled', caret: 'hide', mask, scale: 'device' }),
     { timeoutMs: 30_000, intervalMs: 600 },
+  );
+  return { ...shot, ignore: await ignored(page, !!screen.fullPage) };
+}
+
+/**
+ * Where the comparison looks away, in capture pixels: the story cards' cover titles (StoryCard's
+ * placeholder, SVG text in a monospace font scaled to fit the cover), whose glyphs come out spaced
+ * a pixel or more differently from run to run. They stay in the picture for a person to see.
+ */
+const IGNORED = 'svg text[font-family="monospace"]';
+
+function ignored(page: Page, fullPage: boolean): Promise<Rect[]> {
+  return page.evaluate(
+    ({ selector, fullPage }) => {
+      const scale = window.devicePixelRatio;
+      return [...document.querySelectorAll(selector)].flatMap((el) => {
+        const r = el.getBoundingClientRect();
+        if (!r.width || !r.height) return [];
+        const x = (r.x + (fullPage ? window.scrollX : 0)) * scale;
+        const y = (r.y + (fullPage ? window.scrollY : 0)) * scale;
+        return [{ x: Math.floor(x), y: Math.floor(y), width: Math.ceil(r.width * scale), height: Math.ceil(r.height * scale) }];
+      });
+    },
+    { selector: IGNORED, fullPage },
   );
 }
 
@@ -115,8 +148,10 @@ export const captureWeb: Capture = async (ctx) => {
             if (account) await signIn(page, ctx, v, account);
             for (const screen of screens.filter((s) => s.as === account)) {
               const name = shotName(screen, v);
-              const { png, settled } = await shoot(page, ctx, screen, v);
-              writeFileSync(shotPath(ctx.runDir, 'web', device.id, name), png);
+              const { png, settled, ignore } = await shoot(page, ctx, screen, v);
+              const file = shotPath(ctx.runDir, 'web', device.id, name);
+              writeFileSync(file, png);
+              if (ignore.length) writeFileSync(ignorePath(file), JSON.stringify(ignore));
               if (!settled) unsettled.push(`web/${device.id}/${name}`);
               ctx.log(`  web/${device.id}/${name}${settled ? '' : '  (never settled)'}`);
             }

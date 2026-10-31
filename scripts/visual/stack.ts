@@ -25,7 +25,9 @@ export const SEED_NOW = '2026-09-01T12:00:00+08:00';
 
 export async function seed(log: (line: string) => void) {
   log('Seeding the test world (scripts/seed-emulator.ts)…');
-  run('npx', ['tsx', 'scripts/seed-emulator.ts'], { ...emulatorPorts(), SEED_NOW });
+  // SEED_RESET: the stack's emulators are its own, so each seed starts from an empty database (a flow's writes never
+  // carry into the next flow or capture).
+  run('npx', ['tsx', 'scripts/seed-emulator.ts'], { ...emulatorPorts(), SEED_NOW, SEED_RESET: '1' });
 }
 
 export async function startStack(logDir: string, log: (line: string) => void): Promise<Stack> {

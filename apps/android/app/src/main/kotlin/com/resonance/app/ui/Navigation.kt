@@ -214,7 +214,7 @@ internal fun pushedTab(route: String): Tab {
 /**
  * Debug builds' launch route only (`--es route …` with no `notificationId`: the release
  * screenshots, `npm run visual`): the site's places that are a tab's root or a page of the app but
- * never a push's or a link's route — /home, /messages, /me, /settings, /write, /write/{cardId} —
+ * never a push's or a link's route — /home, /messages, /notifications, /me, /settings, /write, /write/{cardId} —
  * as the tab to show and the page to open on it. Null for anything else: those go through
  * [Route.fromPath] and [pushedTab] as a push's route does, and release builds never ask.
  */
@@ -223,6 +223,7 @@ internal fun debugLaunchPlace(route: String): Pair<Tab, Route?>? {
     return when {
         parts == listOf("home") -> Tab.Feed to null
         parts == listOf("messages") -> Tab.Messages to null
+        parts == listOf("notifications") -> Tab.Notifications to null
         parts == listOf("me") -> Tab.CardBox to null
         // Where 編輯個人檔案 opens it.
         parts == listOf("settings") -> Tab.CardBox to Route.Settings

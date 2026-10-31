@@ -29,6 +29,20 @@ async function main() {
   const app = initializeApp({ projectId: EMULATOR_PROJECT_ID }, 'seed');
   const auth = getAuth(app);
   const db = getFirestore(app);
+  // SEED_RESET=1 empties the database first, so nothing a flow wrote (a connection, a bookmark, a sent message) outlives
+  // the next seed. The visual harness's private emulators only: never the shared ones by default.
+  if (process.env.SEED_RESET === '1') {
+    // The emulator now and then cancels a delete while a client's listener is open: try again.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        for (const collection of await db.listCollections()) await db.recursiveDelete(collection);
+        break;
+      } catch (err) {
+        if (attempt >= 4) throw err;
+        await new Promise((r) => setTimeout(r, 1000 * attempt));
+      }
+    }
+  }
   // SEED_NOW (an ISO time) pins the world's clock: the release screenshots
   // (scripts/visual) seed one fixed day, so no date on a screen moves between runs.
   const now = process.env.SEED_NOW ? Date.parse(process.env.SEED_NOW) : Date.now();
@@ -156,21 +170,64 @@ async function main() {
   await db.doc('conversations/alice_bob').set({
     participants: ['alice', 'bob'],
     createdAt: at(60),
-    updatedAt: at(10),
-    lastMessage: { text: '那篇雨後散步寫得好好', senderId: 'alice', sentAt: at(10) },
+    updatedAt: at(5),
+    // bob's note on her letter (below) is the newest: read already, so no screen's badge depends on which screen came first.
+    lastMessage: { text: '你的信讓我想起我自己的十年前。', senderId: 'bob', sentAt: at(5) },
     unread: { alice: 0, bob: 1 },
   });
-  await db.doc('conversations/alice_bob/messages/m1').set({ senderId: 'bob', text: '嗨，謝謝你的共振！', sentAt: at(20) });
-  await db
-    .doc('conversations/alice_bob/messages/m2')
-    .set({ senderId: 'alice', text: '那篇雨後散步寫得好好', sentAt: at(10) });
+  // A thread showing what a message can be: reactions, a sticker, a reply, an unsent one, a note on a card.
+  const thread = (id: string, data: Record<string, unknown>) => db.doc(`conversations/alice_bob/messages/${id}`).set(data);
+  await thread('m1', { senderId: 'bob', text: '嗨，謝謝你的共振！', sentAt: at(20), reactions: { alice: 'heart' } });
+  await thread('m1-sticker', { senderId: 'bob', text: '〔貼圖：謝謝〕', sticker: { pack: 'twine', id: 'thanks' }, sentAt: at(19) });
+  await thread('m1-reply', {
+    senderId: 'alice', text: '不客氣，那篇真的寫到我心裡了', sentAt: at(15),
+    replyTo: { id: 'm1', senderId: 'bob', text: '嗨，謝謝你的共振！' }, reactions: { bob: 'hug' },
+  });
+  await thread('m1-unsent', { senderId: 'bob', sentAt: at(12), unsentAt: at(11) });
+  await thread('m2', { senderId: 'alice', text: '那篇雨後散步寫得好好', sentAt: at(10) });
+  // Between two connected people a note is also a message in their thread (its own id), quoting the card it was left on.
+  await db.doc('notes/n-bob-letter').set({
+    cardId: 'letter', fromUserId: 'bob', toUserId: 'alice', text: '你的信讓我想起我自己的十年前。', readAt: at(4), createdAt: at(5),
+  });
+  await thread('n-bob-letter', { senderId: 'bob', text: '你的信讓我想起我自己的十年前。', sentAt: at(5), cardRef: 'letter', kind: 'note' });
+
+  // carol (not connected to alice) left a note on alice's rich story: a letter, waiting for alice's answer.
+  await db.doc('notes/n-carol-letter').set({
+    cardId: 'rich-story', fromUserId: 'carol', toUserId: 'alice', text: '讀到搬家那段，好像看見自己。', readAt: null, createdAt: at(50),
+  });
+  await db.doc('conversations/alice_carol').set({
+    participants: ['alice', 'carol'],
+    createdAt: at(50),
+    updatedAt: at(50),
+    lastMessage: { text: '讀到搬家那段，好像看見自己。', senderId: 'carol', sentAt: at(50) },
+    unread: { alice: 0, carol: 0 },
+    request: { from: 'carol', cardId: 'rich-story', at: at(50), count: 1 },
+  });
+  await db.doc('conversations/alice_carol/messages/n-carol-letter').set({
+    senderId: 'carol', text: '讀到搬家那段，好像看見自己。', sentAt: at(50), cardRef: 'rich-story', kind: 'note',
+  });
+  await db.doc('letters/carol_alice').set({ from: 'carol', to: 'alice', count: 1, cardId: 'rich-story', at: at(50) });
+
+  // A card alice moved to the trash three days ago (public before): its page says so and offers 還原. By the real
+  // clock, not SEED_NOW: the trash forgets a card 30 days on (and the days left stay the same from run to run).
+  await db.doc('cards/old-poem').set({
+    authorId: 'alice', slug: 'old-poem', thoughtCore: '一首沒寫完的詩', story: '月亮掉進杯子裡，\n我沒有喝。',
+    tags: ['詩'], originalLocale: 'zh-TW', translations: {}, visibility: 'private', publishedAt: at(60 * 24 * 10),
+    readCount: 0, resonanceCount: 0, inviteCount: 0, accentHue: 250, anonymous: false,
+    trashedAt: Timestamp.fromMillis(Date.now() - 3 * 24 * 60 * 60_000), trashedFrom: { visibility: 'public', referenceCardId: null },
+  });
 
   // alice's notifications: one of each kind the apps route (unread first).
   const notify = (id: string, type: string, payload: Record<string, unknown>, minutesAgo: number, read = false) =>
     db.doc(`notifications/${id}`).set({ userId: 'alice', type, payload, readAt: read ? at(minutesAgo - 1) : null, createdAt: at(minutesAgo) });
-  await notify('n-note', 'note', { fromUserId: 'bob', fromHandle: 'bob', preview: '你的信讓我想起我自己的十年前。', cardId: 'letter' }, 5);
+  await notify('n-note', 'note', { fromUserId: 'bob', fromHandle: 'bob', noteId: 'n-bob-letter', preview: '你的信讓我想起我自己的十年前。', cardId: 'letter' }, 5);
   await notify('n-resonance', 'resonance', { fromUserId: 'bob', fromHandle: 'bob', cardId: 'letter' }, 40);
   await notify('n-link', 'card_link', { fromUserId: 'carol', fromHandle: 'carol', cardId: 'carol-note' }, 90, true);
+  // carol's letter (above), unread; and bob's first message, which opened their conversation (its row read since).
+  await notify('n-carol-note', 'note', {
+    fromUserId: 'carol', fromHandle: 'carol', noteId: 'n-carol-letter', preview: '讀到搬家那段，好像看見自己。', cardId: 'rich-story',
+  }, 50);
+  await notify('n-message', 'message', { fromUserId: 'bob', fromHandle: 'bob', preview: '嗨，謝謝你的共振！' }, 20, true);
 
   console.log(`Seeded ${SEED_USERS.length} users into ${EMULATOR_PROJECT_ID}.`);
 }

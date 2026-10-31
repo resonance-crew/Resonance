@@ -1,0 +1,44 @@
+# alice holds bob's note in their thread: the five reactions float above it and the actions below.
+# She answers it 感動 (its chip shows in the gutter, 你回應了感動), then holds it again, 回覆, and sends a
+# reply: her bubble quotes the note's words above her own.
+appId: com.resonance.stories
+name: react-reply
+tags:
+  - chat
+  - reactions
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /messages/bob
+- extendedWaitUntil:
+    visible: 你的信讓我想起我自己的十年前。
+    timeout: 30000
+- longPressOn: 你的信讓我想起我自己的十年前。
+- extendedWaitUntil:
+    visible: 回覆
+    timeout: 5000
+- tapOn: 以感動回應|感動
+- extendedWaitUntil:
+    visible: 你回應了感動
+    timeout: 10000
+- longPressOn: 你的信讓我想起我自己的十年前。
+- tapOn: 回覆
+- extendedWaitUntil:
+    visible: 回覆 bob
+    timeout: 5000
+- tapOn: 與 bob 的對話|想說的話⋯
+- inputText: 是啊，我們都走過來了 Maestro
+- tapOn: 送出
+- extendedWaitUntil:
+    visible: 是啊，我們都走過來了 Maestro
+    timeout: 10000
+- extendedWaitUntil:
+    notVisible: 傳送中⋯
+    timeout: 15000
+# The quote sits above her words: the note's text shows twice now, in his bubble and in her reply.
+- assertVisible:
+    text: 你的信讓我想起我自己的十年前。
+    index: 1
+- takeScreenshot: react-reply

@@ -1,0 +1,37 @@
+# alice opens her thread with bob, opens the sticker panel (☺, 貼圖), taps 摺摺's 心暖暖 once to preview it
+# (再點一次傳送) and again to send it: the sticker stands in the thread, no bubble, and the send completes.
+appId: com.resonance.stories
+name: send-sticker
+tags:
+  - chat
+  - stickers
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /messages/bob
+- extendedWaitUntil:
+    visible: 你的信讓我想起我自己的十年前。
+    timeout: 30000
+# ☺ is there while the field holds no words; the panel takes the keyboard's place.
+- tapOn: 貼圖
+- extendedWaitUntil:
+    visible: 心暖暖
+    timeout: 10000
+- tapOn: 心暖暖
+- extendedWaitUntil:
+    visible: 再點一次傳送
+    timeout: 5000
+# The second tap on the same sticker sends it (its preview is named 預覽：…, its cell by its name).
+- tapOn: 預覽：心暖暖，再點一次傳送|心暖暖
+- extendedWaitUntil:
+    notVisible: 再點一次傳送
+    timeout: 5000
+- extendedWaitUntil:
+    visible: 貼圖：心暖暖
+    timeout: 10000
+- extendedWaitUntil:
+    notVisible: 傳送中⋯
+    timeout: 15000
+- takeScreenshot: send-sticker

@@ -1,0 +1,41 @@
+# alice reads carol's card 陌生人的一句話 and resonates with it using a card she has already published:
+# 共振 opens the picker, she picks 寫給十年前的自己 and confirms; the button turns 已共振 and her card is
+# listed under carol's. Then she bookmarks it: 收藏 → 取消收藏.
+appId: com.resonance.stories
+name: resonate
+tags:
+  - card
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /card/carol-note
+- extendedWaitUntil:
+    visible: 陌生人的一句話
+    timeout: 30000
+- scrollUntilVisible:
+    element: 共振
+    direction: DOWN
+- tapOn: 共振
+- extendedWaitUntil:
+    visible: 與這張卡片共振
+    timeout: 10000
+- tapOn: 寫給十年前的自己
+- tapOn:
+    text: 共振
+    rightOf: 取消
+- extendedWaitUntil:
+    notVisible: 與這張卡片共振
+    timeout: 15000
+- scrollUntilVisible:
+    element: 已共振
+    direction: DOWN
+- tapOn: 收藏
+- extendedWaitUntil:
+    visible: 取消收藏
+    timeout: 10000
+- scrollUntilVisible:
+    element: 寫給十年前的自己
+    direction: DOWN
+- takeScreenshot: resonate

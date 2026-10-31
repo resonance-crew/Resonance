@@ -10,9 +10,9 @@ tags:
     env:
       ACCOUNT: alice
       ROUTE: /messages/bob
-# The seeded thread's last message, from bob.
+# The seeded thread's last message: bob's note on alice's letter.
 - extendedWaitUntil:
-    visible: 嗨，謝謝你的共振！
+    visible: 你的信讓我想起我自己的十年前。
     timeout: 30000
 # The composer's field: Android names it after the conversation, iOS by its hint.
 - tapOn: 與 bob 的對話|想說的話⋯

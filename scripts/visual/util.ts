@@ -50,6 +50,10 @@ export function shotPath(runDir: string, platform: Platform, device: string, nam
   return file;
 }
 
+/** A capture's regions the comparison skips (`<capture>.ignore.json`: `Rect[]`, capture pixels), when it has any. */
+export type Rect = { x: number; y: number; width: number; height: number };
+export const ignorePath = (png: string) => png.replace(/\.png$/, '.ignore.json');
+
 export function writeJson(file: string, value: unknown) {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(value, null, 2) + '\n');

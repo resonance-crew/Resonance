@@ -1,0 +1,30 @@
+# alice starts a message to bob and leaves the thread without sending it: the conversation list keeps
+# it as a draft, after a pen in place of the last message; opening the thread again finds the words in
+# the composer.
+appId: com.resonance.stories
+name: chat-draft
+tags:
+  - chat
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /messages/bob
+- extendedWaitUntil:
+    visible: 你的信讓我想起我自己的十年前。
+    timeout: 30000
+- tapOn: 與 bob 的對話|想說的話⋯
+- inputText: 下次再聊 Maestro
+# Back to the list: the header's back, named 所有對話 (Return would only start a new line here).
+- tapOn: 所有對話
+- extendedWaitUntil:
+    visible: .*下次再聊 Maestro.*
+    timeout: 10000
+- takeScreenshot: chat-draft-list
+- tapOn: bob
+- extendedWaitUntil:
+    visible: 你的信讓我想起我自己的十年前。
+    timeout: 15000
+- assertVisible: .*下次再聊 Maestro.*
+- takeScreenshot: chat-draft

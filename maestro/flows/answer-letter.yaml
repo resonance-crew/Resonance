@@ -1,0 +1,35 @@
+# carol (not connected to alice) left a note on alice's 搬家後的第一個安靜夜晚: a letter. alice opens it —
+# the note quotes her card, and the thread says 回覆後，你們就能開始聊天 — and answers: her reply connects
+# them, so the hint goes.
+appId: com.resonance.stories
+name: answer-letter
+tags:
+  - chat
+  - letters
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /messages/carol
+- extendedWaitUntil:
+    visible: 讀到搬家那段，好像看見自己。
+    timeout: 30000
+- assertVisible: 搬家後的第一個安靜夜晚
+# The hint comes once the thread knows the two aren't connected.
+- extendedWaitUntil:
+    visible: 回覆後，你們就能開始聊天
+    timeout: 10000
+- tapOn: 與 carol 的對話|想說的話⋯
+- inputText: 謝謝你讀到那裡 Maestro
+- tapOn: 送出
+- extendedWaitUntil:
+    visible: 謝謝你讀到那裡 Maestro
+    timeout: 10000
+- extendedWaitUntil:
+    notVisible: 傳送中⋯
+    timeout: 15000
+- extendedWaitUntil:
+    notVisible: 回覆後，你們就能開始聊天
+    timeout: 15000
+- takeScreenshot: answer-letter

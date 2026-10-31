@@ -20,6 +20,8 @@ tags:
 - extendedWaitUntil:
     visible: 這張卡片在垃圾桶裡
     timeout: 15000
+# The page scrolls up to the banner once it shows: let it settle, or the tap lands where 還原 was.
+- waitForAnimationToEnd
 - takeScreenshot: trash-restore-trashed
 # (The toast that says so, 已還原⋯, may be gone before a check reads it: the page itself is the proof.)
 - tapOn: 還原

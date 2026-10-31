@@ -24,7 +24,10 @@ export type FlowResult = { flow: string; passed: boolean; seconds: number };
 
 const FLOWS_DIR = join(ROOT, 'maestro/flows');
 /** The flows in the order a run takes them; any other top-level flow follows, by name. */
-const ORDER = ['sign-in', 'send-message', 'leave-note', 'publish-card', 'trash-restore', 'resonate'];
+const ORDER = [
+  'sign-in', 'send-message', 'send-sticker', 'react-reply', 'unsend-message', 'chat-draft', 'answer-letter',
+  'leave-note', 'resonate', 'open-notification', 'publish-card', 'trash-restore',
+];
 
 /** Where Maestro lives (the official installer's place unless MAESTRO_BIN says otherwise) and the Java it runs on. */
 const MAESTRO = process.env.MAESTRO_BIN || join(homedir(), '.maestro/bin/maestro');
@@ -67,9 +70,9 @@ type Device = { id: string; prepareFlow: () => Promise<void>; close: () => Promi
 
 async function iosDevice(ctx: CaptureContext): Promise<Device> {
   const ios = await import('./ios');
-  ios.build(ctx);
+  await ios.build(ctx);
   const phone = ios.IOS_DEVICES.find((d) => d.phone)!;
-  const { udid, booted } = ios.simulator(phone, ctx);
+  const { udid, booted } = await ios.simulator(phone, ctx);
   spawnSync('xcrun', ['simctl', 'terminate', udid, ios.BUNDLE_ID], { stdio: 'ignore' });
   spawnSync('xcrun', ['simctl', 'install', udid, ios.APP], { stdio: 'ignore' });
   spawnSync('xcrun', ['simctl', 'ui', udid, 'appearance', 'light'], { stdio: 'ignore' });

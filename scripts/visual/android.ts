@@ -120,6 +120,17 @@ export async function holdStill(serial: string, ctx: CaptureContext) {
   // With the AVD's hardware keyboard, no soft keyboard comes up under the writer.
   await shell(serial, 'settings put secure show_ime_with_hard_keyboard 0');
   await shell(serial, 'settings put global sysui_demo_allowed 1');
+  await demoBar(serial);
+  // Pictures stored against the emulators are served by the dev server at localhost:<dev port>.
+  await adb(serial, 'reverse', `tcp:${ctx.ports.dev}`, `tcp:${ctx.ports.dev}`);
+}
+
+/**
+ * The status bar in demo mode: 09:41, full battery and Wi-Fi, no notification icons. Said again
+ * before every capture, not once: SystemUI drops the demo clock now and then (a bar redrawn for
+ * night mode, a broadcast that came while it was still starting) and the real time shows.
+ */
+async function demoBar(serial: string) {
   const demo = (command: string, extras = '') => shell(serial, `am broadcast -a com.android.systemui.demo -e command ${command} ${extras}`);
   await demo('enter');
   await demo('clock', '-e hhmm 0941');
@@ -127,23 +138,24 @@ export async function holdStill(serial: string, ctx: CaptureContext) {
   await demo('network', '-e wifi show -e level 4 -e fully true');
   await demo('network', '-e mobile hide');
   await demo('notifications', '-e visible false');
-  // Pictures stored against the emulators are served by the dev server at localhost:<dev port>.
-  await adb(serial, 'reverse', `tcp:${ctx.ports.dev}`, `tcp:${ctx.ports.dev}`);
 }
 
 async function wear(serial: string, v: Variant) {
   await shell(serial, `cmd uimode night ${v.theme === 'dark' ? 'yes' : 'no'}`);
 }
 
-export function build(ctx: CaptureContext) {
-  if (process.env.VISUAL_SKIP_BUILD === '1' && existsSync(APK)) return Promise.resolve();
+/** The APK, built once per run however many ask (the captures, the flows, the run's head start). */
+let built: Promise<void> | null = null;
+export function build(ctx: CaptureContext): Promise<void> {
+  if (built) return built;
+  if (process.env.VISUAL_SKIP_BUILD === '1' && existsSync(APK)) return (built = Promise.resolve());
   ctx.log('  building the debug APK (VISUAL_SKIP_BUILD=1 skips it)…');
-  return (async () => {
+  return (built = (async () => {
     if (!existsSync(join(ROOT, 'native/editor/dist/editor.html'))) {
       await execFileAsync('npm', ['run', '-s', 'native:editor'], { cwd: ROOT, maxBuffer: 64 << 20 });
     }
     await execFileAsync('./gradlew', [':app:assembleDebug', '-q'], { cwd: ANDROID_DIR, maxBuffer: 64 << 20 });
-  })();
+  })());
 }
 
 /** A fresh install of the app's data, in the variant's language (the app follows its own locale while nothing is saved). */
@@ -188,6 +200,7 @@ async function shoot(serial: string, ctx: CaptureContext, screen: Screen, first:
   await launch(serial, ctx, screen.as, screen.route);
   // A cold start reads the account and the page over the network (an account's first launch also signs in).
   await sleep(first ? 8000 : 4000);
+  await demoBar(serial);
   return steady(serial);
 }
 
@@ -243,13 +256,13 @@ export const captureAndroid: Capture = async (ctx) => {
     started.splice(started.indexOf(device), 1);
   };
   try {
-    if (process.env.VISUAL_PARALLEL === '1') {
-      // Both AVDs at once (a machine with the memory for it): the build and the boots overlap,
-      // then each device runs its screens beside the other.
+    if (process.env.VISUAL_PARALLEL !== '0') {
+      // Both AVDs at once (VISUAL_PARALLEL=0: one at a time, for a machine short of memory): the
+      // build and the boots overlap, then each device runs its screens beside the other.
       await Promise.all([build(ctx), warmUp(ctx), ...devices.map(async (d) => (await boot(d, ctx)) && started.push(d))]);
       return (await Promise.all(devices.map((d) => captureDevice(d, ctx, screens)))).flat();
     }
-    // One AVD at a time by default: booted, captured and shut down before the next one boots.
+    // One AVD at a time: booted, captured and shut down before the next one boots.
     await Promise.all([build(ctx), warmUp(ctx)]);
     const unsettled: string[] = [];
     for (const device of devices) {

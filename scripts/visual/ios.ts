@@ -10,7 +10,8 @@
  *
  * `VISUAL_SKIP_BUILD=1` reuses the last build and installs it again.
  */
-import { spawnSync } from 'node:child_process';
+import { execFile, spawn, spawnSync } from 'node:child_process';
+import { promisify } from 'node:util';
 import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { screensFor, shotName, type Account, type Screen, type Variant } from './screens';
@@ -30,23 +31,39 @@ export const IOS_DEVICES: IosDevice[] = [
 ];
 
 /** Runs a long tool (xcodegen, xcodebuild) with its output in this run's logs; throws with the log's path. */
-export function runLogged(command: string, args: string[], logFile: string, cwd = ROOT) {
+/** A long command (a build) without holding up the captures running beside it; its output to `logFile`. */
+export function runLogged(command: string, args: string[], logFile: string, cwd = ROOT): Promise<void> {
   const out = openSync(logFile, 'a');
-  const result = spawnSync(command, args, { cwd, stdio: ['ignore', out, out] });
-  if (result.status !== 0) throw new Error(`${command} ${args[0]} failed (exit ${result.status}): see ${logFile}`);
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { cwd, stdio: ['ignore', out, out] });
+    child.on('error', reject);
+    child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`${command} ${args[0]} failed (exit ${code}): see ${logFile}`))));
+  });
+}
+
+/**
+ * The Xcode builds (the simulator's, the Mac's) one after the other, never two at once: they share
+ * the project xcodegen writes and Swift's package caches. Each build joins the line.
+ */
+let xcodeLine: Promise<unknown> = Promise.resolve();
+export function inXcodeLine<T>(work: () => Promise<T>): Promise<T> {
+  const turn = xcodeLine.then(work, work);
+  xcodeLine = turn.catch(() => {});
+  return turn;
 }
 
 /** The project generated afresh (the app's sources may have gained files since), with both islands it bundles. */
-let prepared = false;
-export function prepareProject(ctx: CaptureContext) {
-  if (prepared) return;
-  prepared = true;
-  for (const [file, script] of [['native/editor/dist/editor.html', 'native:editor'], ['native/mascots/dist/mascots.html', 'native:mascots']]) {
-    if (existsSync(join(ROOT, file))) continue;
+let prepared: Promise<void> | null = null;
+export function prepareProject(ctx: CaptureContext): Promise<void> {
+  prepared ??= (async () => {
+    for (const [file, script] of [['native/editor/dist/editor.html', 'native:editor'], ['native/mascots/dist/mascots.html', 'native:mascots']]) {
+      if (existsSync(join(ROOT, file))) continue;
     ctx.log(`  ${file} is missing: npm run ${script}`);
-    runLogged('npm', ['run', script], join(ctx.runDir, '_logs', 'islands.log'));
-  }
-  runLogged('xcodegen', ['generate'], join(ctx.runDir, '_logs', 'xcodegen.log'), IOS_DIR);
+      await runLogged('npm', ['run', script], join(ctx.runDir, '_logs', 'islands.log'));
+    }
+    await runLogged('xcodegen', ['generate'], join(ctx.runDir, '_logs', 'xcodegen.log'), IOS_DIR);
+  })();
+  return prepared;
 }
 
 /**
@@ -87,7 +104,7 @@ function simctl(...args: string[]): string {
  * This harness's simulator for `device`, made the first time; booted, with its status bar held at
  * 9:41. Answers whether this run booted it (and so shuts it down after: `shutDown`).
  */
-export function simulator(device: IosDevice, ctx: CaptureContext): { udid: string; booted: boolean } {
+export async function simulator(device: IosDevice, ctx: CaptureContext): Promise<{ udid: string; booted: boolean }> {
   const listed = JSON.parse(simctl('list', 'devices', '-j')) as { devices: Record<string, { name: string; udid: string; state: string }[]> };
   const found = (listed.devices[RUNTIME] ?? []).find((d) => d.name === device.name);
   let udid = found?.udid;
@@ -96,7 +113,8 @@ export function simulator(device: IosDevice, ctx: CaptureContext): { udid: strin
     udid = simctl('create', device.name, device.type, RUNTIME).trim();
   }
   const booted = found?.state !== 'Booted';
-  run('xcrun', ['simctl', 'bootstatus', udid, '-b']);
+  // Waited for without holding up the other simulator booting beside it.
+  await promisify(execFile)('xcrun', ['simctl', 'bootstatus', udid, '-b'], { cwd: ROOT });
   // An ISO time (simctl takes it only with milliseconds) sets the iPad's date beside it: the seed's day.
   simctl('status_bar', udid, 'override', '--time', '2026-09-01T09:41:00.000+08:00', '--dataNetwork', 'wifi', '--wifiMode', 'active', '--wifiBars', '3',
     '--cellularMode', 'active', '--cellularBars', '4', '--operatorName', '', '--batteryState', 'charged', '--batteryLevel', '100');
@@ -109,17 +127,22 @@ export function shutDown(udid: string) {
   spawnSync('xcrun', ['simctl', 'shutdown', udid], { stdio: 'ignore' });
 }
 
-export function build(ctx: CaptureContext) {
-  if (process.env.VISUAL_SKIP_BUILD === '1' && existsSync(APP)) return ctx.log('  reusing the last simulator build');
-  ctx.log('  building the Debug app for the simulator (apps/ios/build/visual-sim)…');
-  prepareProject(ctx);
-  runLogged('xcodebuild', [
+/** The simulator build, once per run however many ask (a capture, the flows, the run's head start). */
+let built: Promise<void> | null = null;
+export function build(ctx: CaptureContext): Promise<void> {
+  built ??= inXcodeLine(async () => {
+    if (process.env.VISUAL_SKIP_BUILD === '1' && existsSync(APP)) return ctx.log('  reusing the last simulator build');
+    ctx.log('  building the Debug app for the simulator (apps/ios/build/visual-sim)…');
+    await prepareProject(ctx);
+    await runLogged('xcodebuild', [
     '-project', 'Resonance.xcodeproj', '-scheme', 'Resonance', '-configuration', 'Debug',
     '-destination', 'generic/platform=iOS Simulator', '-derivedDataPath', DERIVED,
     '-skipPackagePluginValidation', '-skipMacroValidation', 'build',
     // This Mac's simulators only: a generic destination builds Intel's slice too, twice the time.
     `ARCHS=${process.arch === 'arm64' ? 'arm64' : 'x86_64'}`,
-  ], join(ctx.runDir, '_logs', 'ios-build.log'), IOS_DIR);
+    ], join(ctx.runDir, '_logs', 'ios-build.log'), IOS_DIR);
+  });
+  return built;
 }
 
 function launch(udid: string, args: string[]) {
@@ -143,10 +166,10 @@ export const captureIos: Capture = async (ctx) => {
   const unsettled: string[] = [];
   if (!devices.length || !screens.length) return unsettled;
   mkdirSync(join(ctx.runDir, '_logs'), { recursive: true });
-  build(ctx);
-  // One simulator at a time: booted, captured, shut down before the next.
-  for (const device of devices) {
-    const { udid, booted } = simulator(device, ctx);
+  await build(ctx);
+  // Both simulators at once (VISUAL_PARALLEL=0: one at a time), each booted, captured and shut down.
+  const captureOn = async (device: IosDevice) => {
+    const { udid, booted } = await simulator(device, ctx);
     spawnSync('xcrun', ['simctl', 'terminate', udid, BUNDLE_ID], { stdio: 'ignore' });
     simctl('install', udid, APP);
     for (const v of variantsFor(device.phone)) {
@@ -169,6 +192,8 @@ export const captureIos: Capture = async (ctx) => {
     }
     spawnSync('xcrun', ['simctl', 'terminate', udid, BUNDLE_ID], { stdio: 'ignore' });
     if (booted) shutDown(udid);
-  }
+  };
+  if (process.env.VISUAL_PARALLEL === '0') for (const device of devices) await captureOn(device);
+  else await Promise.all(devices.map(captureOn));
   return unsettled;
 };

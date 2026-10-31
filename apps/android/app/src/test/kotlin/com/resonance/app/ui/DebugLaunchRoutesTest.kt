@@ -13,6 +13,7 @@ class DebugLaunchRoutesTest {
     @Test fun tabsOpenByTheirSitePaths() {
         assertEquals(Tab.Feed to null, debugLaunchPlace("/home"))
         assertEquals(Tab.Messages to null, debugLaunchPlace("/messages"))
+        assertEquals(Tab.Notifications to null, debugLaunchPlace("/notifications"))
         assertEquals(Tab.CardBox to null, debugLaunchPlace("/me"))
         assertEquals(Tab.CardBox to null, debugLaunchPlace("/zh-TW/me"))
     }

@@ -478,12 +478,13 @@ struct MainTabView: View {
     }
 
     /// The tab and pages a `-route` launch opens for the site's paths that are a tab here, not a page:
-    /// `/home`, `/messages`, `/me` (its tab), `/write` (a new card) and `/write/<id>` (one of yours).
+    /// `/home`, `/messages`, `/notifications`, `/me` (its tab), `/write` (a new card) and `/write/<id>` (one of yours).
     static func launchTab(_ path: String) -> (AppTab, [Route])? {
         let parts = path.split(separator: "?").first.map { $0.split(separator: "/").map(String.init) } ?? []
         switch (parts.first, parts.count) {
         case ("home", 1): return (.feed, [])
         case ("messages", 1): return (.messages, [])
+        case ("notifications", 1): return (.notifications, [])
         case ("me", 1): return (.cardBox, [])
         case ("write", 1): return (.feed, [.write(.init())])
         case ("write", 2): return (.feed, [.write(.init(cardId: parts[1]))])

@@ -47,6 +47,8 @@ type Item = {
   baseline: string | null;
   current: string;
   diff: string | null;
+  /** The largest areas that changed, in words. */
+  areas: string[];
 };
 
 const RUBRIC = `Judge each screen as a careful QA reviewer of a hand-drawn, paper-like UI
@@ -119,6 +121,7 @@ function items(runDir: string, results: Result[], all = false): Item[] {
         baseline: r.status === 'changed' ? join(BASELINE_DIR, r.key) : null,
         current: join(runDir, r.key),
         diff: r.status === 'changed' && existsSync(join(runDir, '_diff', r.key)) ? join(runDir, '_diff', r.key) : null,
+        areas: (r.areas ?? []).slice(0, 5).map((a) => `${a.width}×${a.height} px at (${a.x}, ${a.y})`),
       };
     });
 }
@@ -138,7 +141,8 @@ function describe(it: Item, n: number, path: (p: string) => string): string {
     it.status === 'changed' && !it.intended.length ? '- Intended change: none named for this screen' : null,
     it.baseline ? `- Baseline: ${path(it.baseline)}` : null,
     `- Current: ${path(it.current)}`,
-    it.diff ? `- Diff (changed pixels in red): ${path(it.diff)}` : null,
+    it.diff ? `- Diff (changed pixels in red and boxed; pale yellow only moved a pixel or two, ignore it): ${path(it.diff)}` : null,
+    it.areas.length ? `- Where it changed (capture pixels): ${it.areas.join('; ')}` : null,
   ]
     .filter(Boolean)
     .join('\n');

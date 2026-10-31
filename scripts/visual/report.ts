@@ -23,7 +23,8 @@ function item(runDir: string, r: Result, v: Verdict | undefined, runId: string, 
   const base = r.status === 'changed' || r.status === 'missing' ? relative(runDir, join(BASELINE_DIR, r.key)) : null;
   const now = r.status === 'missing' ? null : r.key;
   const diff = r.status === 'changed' && !r.sizes ? `_diff/${r.key}` : null;
-  const ratio = r.ratio != null && r.status === 'changed' ? ` · ${(r.ratio * 100).toFixed(2)}% of pixels` : '';
+  const where = r.areas?.length ? ` · ${r.areas.length} area${r.areas.length > 1 ? 's' : ''} (largest ${r.areas[0].width}×${r.areas[0].height} at ${r.areas[0].x},${r.areas[0].y})` : '';
+  const ratio = r.ratio != null && r.status === 'changed' ? `${where} · ${(r.ratio * 100).toFixed(2)}% of pixels` : '';
   const sizes = r.sizes ? ` · size ${r.sizes.baseline.join('×')} → ${r.sizes.current.join('×')}` : '';
   const tag = v ? `<span class="tag v-${v.verdict}">${v.verdict}</span>` : '';
   const note = v?.note ? `<p class="note">${esc(v.note)}</p>` : '';
