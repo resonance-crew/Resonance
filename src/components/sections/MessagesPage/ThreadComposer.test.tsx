@@ -290,12 +290,13 @@ describe('the stickers', () => {
     expect(panel).not.toHaveAttribute('data-tall');
 
     const grow = screen.getByRole('button', { name: 'Expand stickers' });
-    expect(grow.querySelector('[class*="sendGlyph"]')).not.toHaveAttribute('data-turned');
+    // ˄ is the chevron turned (never an arrow, which reads as sending the sticker).
+    expect(grow.querySelector('[class*="sendGlyph"]')).toHaveAttribute('data-turned');
     await userEvent.click(grow);
     expect(panel).toHaveAttribute('data-tall');
     expect(parseFloat(panel.style.height)).toBeGreaterThan(300);
-    // The glyph turns to ↓ on the segment itself (a CSS turn the height's animation carries).
-    expect(screen.getByRole('button', { name: 'Collapse stickers' }).querySelector('[class*="sendGlyph"]')).toHaveAttribute('data-turned');
+    // The chevron turns to ˅ on the segment itself (a CSS turn the height's animation carries).
+    expect(screen.getByRole('button', { name: 'Collapse stickers' }).querySelector('[class*="sendGlyph"]')).not.toHaveAttribute('data-turned');
   });
 
   it('previews a sticker, sends it on a second tap with nothing else, and keeps it among the recent', async () => {

@@ -6,13 +6,20 @@ import { autoCurve, autoMag, autoSegments } from '@/lib/design/wobAuto';
 import { INK } from '@/lib/design/strokes';
 import styles from './PaperSheet.module.css';
 
+/** A livelier hand than a menu's calm one: how deep its edges swing (px), how many bends a side, how much each bows. */
+export interface SheetWobble {
+  mag: number;
+  segments: number;
+  curve: number;
+}
+
 /** A sheet's wobbly outline: what it is filled to and inked round, and what a host clips its contents (a row's ink) to. */
-export function sheetPath(w: number, h: number, R: number, seed: number): string {
+export function sheetPath(w: number, h: number, R: number, seed: number, wobble?: SheetWobble): string {
   if (!w || !h) return '';
-  return wobRect(w, h, R, seed, autoMag(w, h), {
-    segmentsH: autoSegments(w),
-    segmentsV: autoSegments(h),
-    curve: autoCurve(w, h),
+  return wobRect(w, h, R, seed, wobble?.mag ?? autoMag(w, h), {
+    segmentsH: wobble?.segments ?? autoSegments(w),
+    segmentsV: wobble?.segments ?? autoSegments(h),
+    curve: wobble?.curve ?? autoCurve(w, h),
   });
 }
 
@@ -27,6 +34,8 @@ export interface PaperSheetProps {
    * open list wears the focus pen, since it is the one thing to look at.
    */
   pen?: string;
+  /** Its own hand, where the menus' calm one would read as a plain box (the sticker preview). */
+  wobble?: SheetWobble;
 }
 
 /**
@@ -39,8 +48,14 @@ export interface PaperSheetProps {
  * under a row's ink, the pen over it (the rows above both); nothing until
  * measured.
  */
-export function PaperSheet({ w, h, R = 20, seed, pen }: PaperSheetProps) {
-  const d = useMemo(() => sheetPath(w, h, R, seed), [w, h, R, seed]);
+export function PaperSheet({ w, h, R = 20, seed, pen, wobble }: PaperSheetProps) {
+  const mag = wobble?.mag;
+  const segments = wobble?.segments;
+  const curve = wobble?.curve;
+  const d = useMemo(
+    () => sheetPath(w, h, R, seed, mag != null && segments != null && curve != null ? { mag, segments, curve } : undefined),
+    [w, h, R, seed, mag, segments, curve],
+  );
   if (!d) return null;
   const svg = (layer: 'paper' | 'pen') => (
     <svg className="res-shape-fade-in" width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ overflow: 'visible', display: 'block' }}>

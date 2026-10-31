@@ -5,6 +5,8 @@ import { useLocale, useTranslations } from 'next-intl';
 import { Icon } from '@/components/atoms/Icon';
 import { useEdgeFades } from '@/lib/hooks/useEdgeFades';
 import { wobCircle } from '@/lib/design/wobCircle';
+import { wobRect } from '@/lib/design/wobRect';
+import { seedFromString } from '@/lib/design/prng';
 import { STICKER_PACKS, stickerName, stickerPackIconPath, stickerPath, type StickerRef } from '@/lib/stickers/catalog';
 import styles from './Thread.module.css';
 
@@ -128,6 +130,7 @@ export function StickerPicker({ recents, selected, onPick, variant = 'panel', gr
                     data-sticker={`${ref.pack}/${ref.id}`}
                     onClick={() => onPick(ref)}
                   >
+                    <CellWash seed={seedFromString(ref.id)} />
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={stickerPath(ref, 'thumb')} alt="" loading="lazy" decoding="async" draggable={false} />
                   </button>
@@ -138,6 +141,24 @@ export function StickerPicker({ recents, selected, onPick, variant = 'panel', gr
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * A sticker cell's wash under the pointer (grey) or for the one previewed (the terracotta's light tint): a
+ * hand-drawn square inside the cell, as the apps' cells (WobRectShape 16, seeded by the sticker) — never a CSS
+ * box. The cell is square, so one 100-unit drawing stretches to it.
+ */
+function CellWash({ seed }: { seed: number }) {
+  const d = useMemo(
+    // A gentle hand (≈ 2 px of swing at ~56 across) in a 100-unit drawing: the apps' cell, a little calmer.
+    () => wobRect(100, 100, 28, seed, 3.5, { segmentsH: 2, segmentsV: 2, curve: 1.2 }),
+    [seed],
+  );
+  return (
+    <svg className={styles.cellWash} viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      <path d={d} />
+    </svg>
   );
 }
 

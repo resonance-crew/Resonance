@@ -1753,7 +1753,7 @@ button.chips::before {
   stroke-linecap: round;
 }
 
-/* The plane on the last line's row, beside the ＋ — or ↑ / ↓ for the stickers, turning as the panel grows (the
+/* The plane on the last line's row, beside the ＋ — or the stickers' chevron, ˄ turning to ˅ as the panel grows (the
    segment travels with the capsule, so the glyph turns on its way). */
 .sendGlyph[data-turned] {
   transform: rotate(180deg);
@@ -2210,14 +2210,25 @@ button.chips::before {
   aspect-ratio: 1;
   padding: 6px;
   border: none;
-  border-radius: 14px 16px 14px 16px;
   background: none;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: background 140ms ease;
+}
+
+/* Its wash: a hand-drawn square (CellWash), grey under the pointer, the terracotta's light tint for the one
+   previewed — never a CSS box. */
+.cellWash {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: transparent;
+  pointer-events: none;
+  transition: fill 140ms ease;
 }
 
 .stickerCell img {
+  position: relative;
   display: block;
   width: 100%;
   height: 100%;
@@ -2226,18 +2237,26 @@ button.chips::before {
 }
 
 @media (hover: hover) {
-  .stickerCell:hover {
-    background: color-mix(in oklch, var(--color-text) 6%, transparent);
+  .stickerCell:hover .cellWash {
+    fill: color-mix(in oklch, var(--color-text) 6%, transparent);
   }
 }
 
-.stickerCell[aria-pressed='true'] {
-  background: color-mix(in oklch, var(--color-terracotta-light) 45%, transparent);
+.stickerCell[aria-pressed='true'] .cellWash {
+  fill: color-mix(in oklch, var(--color-terracotta-light) 45%, transparent);
 }
 
 .stickerCell:focus-visible {
-  outline: 2px solid var(--field-border-focus);
-  outline-offset: -2px;
+  outline: none;
+}
+
+.stickerCell:focus-visible .cellWash {
+  stroke: var(--field-border-focus);
+  stroke-width: 2px;
+}
+
+.cellWash path {
+  vector-effect: non-scaling-stroke;
 }
 
 /* On a desktop: a flat menu sheet over the ☺ (PaperSheet), ~360 × 420, five columns. */
@@ -2331,7 +2350,7 @@ button.chips::before {
 @media (prefers-reduced-motion: reduce) {
   .stickerPanel,
   .packWash,
-  .stickerCell {
+  .cellWash {
     transition: none;
   }
 

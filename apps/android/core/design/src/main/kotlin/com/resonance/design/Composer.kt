@@ -1,6 +1,7 @@
 package com.resonance.design
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -72,6 +73,8 @@ import com.resonance.design.generated.Tokens
 import com.resonance.design.generated.ResonanceColors
 import com.resonance.design.generated.LocalResonanceColors
 import androidx.compose.runtime.ReadOnlyComposable
+import com.resonance.geometry.SegValue
+import com.resonance.geometry.WobRectOptions
 
 /**
  * The chat composer's one-line height (round 9 §4): 48 on every platform, whatever the text size —
@@ -197,10 +200,13 @@ fun ComposerCapsule(
     trailing = trailing,
     leading = leading,
     segment = { ink ->
-        when (segment) {
-            ComposerSegment.Send -> OrganicIcon(IconName.Send, size = 20.dp, color = ink)
-            ComposerSegment.Expand -> OrganicIcon(IconName.ArrowUp, size = 20.dp, color = ink)
-            ComposerSegment.Collapse -> OrganicIcon(IconName.ChevronDown, size = 20.dp, color = ink)
+        // ˄ / ˅ is one chevron turning as the panel grows (never an arrow, which reads as sending the sticker). Its
+        // turn lives in this branch alone, so coming from Send it starts where it should instead of spinning there.
+        if (segment == ComposerSegment.Send) {
+            OrganicIcon(IconName.Send, size = 20.dp, color = ink)
+        } else {
+            val turn by animateFloatAsState(if (segment == ComposerSegment.Expand) 180f else 0f, tween(220), label = "chevron")
+            OrganicIcon(IconName.ChevronDown, Modifier.graphicsLayer { rotationZ = turn }, size = 20.dp, color = ink)
         }
     },
     field = field,
@@ -449,10 +455,23 @@ fun PanelGripMark(active: Boolean, modifier: Modifier = Modifier, seed: Double =
  * grey at INK — no grain, no shadow. The sticker preview stands on one (round 22 §4.1).
  */
 @Composable
-fun Modifier.paperSheet(seed: Double = 31.0, radius: Double = MenuSheet.RADIUS): Modifier {
+fun Modifier.paperSheet(seed: Double = 31.0, radius: Double = MenuSheet.RADIUS, lively: Boolean = false): Modifier {
     val palette = LocalResonanceColors.current
-    return drawWithCacheOf(FloatingSlip(seed, radius, palette.FieldBorderHover, palette.MenuPaper, Tokens.Ink.value))
+    return drawWithCacheOf(
+        FloatingSlip(
+            seed, if (lively) LIVELY_RADIUS else radius, palette.FieldBorderHover, palette.MenuPaper, Tokens.Ink.value,
+            mag = if (lively) LIVELY_MAG else null, options = if (lively) LIVELY_OPTIONS else null,
+        ),
+    )
 }
+
+/**
+ * A livelier hand than the menus' calm one (the owner's notes, 2026-11-01: the sticker preview read as a plain
+ * rounded box): three bends a side swinging 3.5, gently bowed — the web's `PREVIEW_WOBBLE`, iOS's `PaperSheet(lively:)`.
+ */
+private const val LIVELY_RADIUS = 22.0
+private const val LIVELY_MAG = 3.5
+private val LIVELY_OPTIONS = WobRectOptions(curve = 1.1, segmentsH = SegValue.Count(3.0), segmentsV = SegValue.Count(3.0))
 
 /**
  * A notice floating in the composer's place (round 9 §4): opaque cream, its pen INK_LIGHT in the
@@ -466,9 +485,17 @@ fun Modifier.floatingSlip(seed: Double = 29.0, radius: Double = 14.0, pen: Color
  * [floatingSlip]'s drawing, as a value ([drawWithCacheOf]): recomposed with equal inputs it is an equal modifier,
  * which keeps what it cached (outline, paths, grain) instead of building it again at the next draw.
  */
-private data class FloatingSlip(val seed: Double, val radius: Double, val pen: Color, val paper: Color, val width: Float) : (CacheDrawScope) -> DrawResult {
+private data class FloatingSlip(
+    val seed: Double,
+    val radius: Double,
+    val pen: Color,
+    val paper: Color,
+    val width: Float,
+    val mag: Double? = null,
+    val options: WobRectOptions? = null,
+) : (CacheDrawScope) -> DrawResult {
     override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
-        val o = WobRectShape(radius, seed).createOutline(size, layoutDirection, this)
+        val o = WobRectShape(radius, seed, mag, options).createOutline(size, layoutDirection, this)
         val line = Stroke(width.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
         onDrawBehind {
             drawOutline(o, paper)

@@ -1,12 +1,15 @@
 package com.resonance.app.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -26,10 +29,13 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -79,6 +85,34 @@ internal fun sectionStarts(sections: List<StickerSection>): List<Int> {
 /** The section the grid's first visible item belongs to: what the pack bar marks. */
 internal fun sectionAt(starts: List<Int>, firstVisible: Int): Int = starts.indexOfLast { it <= firstVisible }.coerceAtLeast(0)
 
+/**
+ * How far down the grid [item] begins, in px: each section a [heading] tall, then its stickers in rows of
+ * [columns], each [row] tall. A tab's scroll goes the whole way in one glide with it, rather than in the
+ * steps a scroll to a row not yet laid out takes (the owner's notes: the grid and the bar a beat late).
+ */
+internal fun gridTop(sections: List<StickerSection>, columns: Int, heading: Int, row: Int, item: Int): Int {
+    var top = 0
+    var start = 0
+    for (s in sections) {
+        if (item == start) return top
+        if (item <= start + s.stickers.size) return top + heading + (item - start - 1) / columns * row
+        top += heading + (s.stickers.size + columns - 1) / columns * row
+        start += 1 + s.stickers.size
+    }
+    return top
+}
+
+/** The tab's glide: one ease of 300 ms to [item]'s heading (iOS's), or the grid's own scroll while nothing is measured. */
+private suspend fun LazyGridState.glideTo(sections: List<StickerSection>, columns: Int, item: Int) {
+    val shown = layoutInfo.visibleItemsInfo
+    val heading = shown.firstOrNull { it.contentType == "heading" }?.size?.height
+    val row = shown.firstOrNull { it.contentType == "sticker" }?.size?.height
+    if (heading == null || row == null) return animateScrollToItem(item)
+    val from = gridTop(sections, columns, heading, row, firstVisibleItemIndex) + firstVisibleItemScrollOffset
+    val to = gridTop(sections, columns, heading, row, item)
+    animateScrollBy((to - from).toFloat(), tween(300, easing = FastOutSlowInEasing))
+}
+
 internal const val RECENT_KEY = "recent"
 
 /**
@@ -106,20 +140,29 @@ internal fun StickerPanel(
     val grid = rememberLazyGridState()
     val scope = rememberCoroutineScope()
     val current by remember(starts) { derivedStateOf { sectionAt(starts, grid.firstVisibleItemIndex) } }
-    Column(modifier.fillMaxSize()) {
-        PackBar(sections, current, origin) { i -> scope.launch { grid.animateScrollToItem(starts[i]) } }
-        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
-            val columns = when {
-                maxWidth >= 600.dp -> 6
-                maxWidth >= 480.dp -> 5
-                else -> 4
+    // The tab tapped is marked at once and stays through its glide (and at the end, where a short last pack never
+    // reaches the top) — until a finger scrolls the grid, when the bar follows the grid again.
+    var picked by remember(sections) { mutableStateOf<Int?>(null) }
+    LaunchedEffect(grid) { grid.interactionSource.interactions.collect { if (it is DragInteraction.Start) picked = null } }
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val columns = when {
+            maxWidth >= 600.dp -> 6
+            maxWidth >= 480.dp -> 5
+            else -> 4
+        }
+        Column(Modifier.fillMaxSize()) {
+            PackBar(sections, picked ?: current, origin) { i ->
+                picked = i
+                scope.launch { grid.glideTo(sections, columns, starts[i]) }
             }
-            // Its edges fade where more stickers lie beyond (the owner's notes 7, the web's 16): no line, no card.
-            StickerGrid(
-                sections, columns, grid, origin, previewing,
-                Modifier.fillMaxSize().edgeFades({ grid.canScrollBackward }, { grid.canScrollForward }),
-                navigation, onTap,
-            )
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                // Its edges fade where more stickers lie beyond (the owner's notes 7, the web's 16): no line, no card.
+                StickerGrid(
+                    sections, columns, grid, origin, previewing,
+                    Modifier.fillMaxSize().edgeFades({ grid.canScrollBackward }, { grid.canScrollForward }),
+                    navigation, onTap,
+                )
+            }
         }
     }
 }
@@ -237,7 +280,7 @@ internal fun StickerPreview(
         val name = s.name(Strings.language.tag)
         Column(
             Modifier
-                .paperSheet(seed = 47.0)
+                .paperSheet(seed = 47.0, lively = true)
                 .clickable(interactionSource = null, indication = null, role = Role.Button, onClickLabel = L10n.Messages.send) { onSend(s) }
                 .semantics {
                     contentDescription = L10n.Messages.stickerPreviewA11y(name)

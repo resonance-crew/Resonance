@@ -98,6 +98,7 @@ internal data class GalleryPhoto(val id: Long, val dateAdded: Long, val bytes: L
  * written (`IS_PENDING` 0), newest first, only their id, date and size. Off the main thread (the caller's).
  */
 internal object MediaGallery {
+    private const val NEWEST_FIRST = "${MediaStore.Images.Media.DATE_ADDED} DESC, ${MediaStore.Images.Media._ID} DESC"
     private val projection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_ADDED, MediaStore.Images.Media.SIZE)
 
     fun page(resolver: ContentResolver, offset: Int, limit: Int): List<GalleryPhoto> {
@@ -105,8 +106,9 @@ internal object MediaGallery {
         val cursor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val args = Bundle().apply {
                 putString(ContentResolver.QUERY_ARG_SQL_SELECTION, "${MediaStore.Images.Media.IS_PENDING} = 0")
-                putStringArray(ContentResolver.QUERY_ARG_SORT_COLUMNS, arrayOf(MediaStore.Images.Media.DATE_ADDED, MediaStore.Images.Media._ID))
-                putInt(ContentResolver.QUERY_ARG_SORT_DIRECTION, ContentResolver.QUERY_SORT_DIRECTION_DESCENDING)
+                // The order as SQL: QUERY_ARG_SORT_COLUMNS + QUERY_ARG_SORT_DIRECTION become "date_added, _id DESC"
+                // (the direction joins the last column only), which put the oldest picture first.
+                putString(ContentResolver.QUERY_ARG_SQL_SORT_ORDER, NEWEST_FIRST)
                 putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
                 putInt(ContentResolver.QUERY_ARG_OFFSET, offset)
             }
@@ -115,7 +117,7 @@ internal object MediaGallery {
             // Android 10 takes the limit in the sort order (11 and later refuse it there, and take the arguments above).
             resolver.query(
                 uri, projection, "${MediaStore.Images.Media.IS_PENDING} = 0", null,
-                "${MediaStore.Images.Media.DATE_ADDED} DESC, ${MediaStore.Images.Media._ID} DESC LIMIT $limit OFFSET $offset",
+                "$NEWEST_FIRST LIMIT $limit OFFSET $offset",
             )
         }
         return cursor?.use { c ->

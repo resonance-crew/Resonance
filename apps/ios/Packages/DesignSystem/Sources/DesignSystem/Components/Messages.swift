@@ -907,15 +907,16 @@ public struct ComposerCapsule<Field: View>: View {
         }
     }
 
-    /// The plane — or the sticker panel's ↑ / ↓ (round 22 §4.1): both always there, one showing, the arrow turned for
-    /// ↓; only their opacity and turn change, in a scoped animation that leaves where they sit to the capsule.
+    /// The plane — or the sticker panel's ˄ / ˅ (round 22 §4.1): both always there, one showing, the chevron turned up
+    /// for ˄ (never an arrow, which reads as sending the sticker); only their opacity and turn change, in a scoped
+    /// animation that leaves where they sit to the capsule.
     private var segmentGlyph: some View {
         ZStack {
             OrganicIcon(.send, size: ComposerMetrics.sendGlyph, color: canSend ? Tokens.cream : Tokens.terracotta, strokeWidth: Tokens.ink)
                 .animation(ComposerCapsuleFace.faceChange) { $0.opacity(sendFace == .send ? 1 : 0) }
-            OrganicIcon(.arrowUp, size: ComposerMetrics.sendGlyph, color: Tokens.terracotta, strokeWidth: Tokens.ink)
+            OrganicIcon(.chevronDown, size: ComposerMetrics.sendGlyph, color: Tokens.terracotta, strokeWidth: Tokens.ink)
                 .animation(ComposerCapsuleFace.faceChange) {
-                    $0.rotationEffect(.degrees(sendFace == .collapse ? 180 : 0)).opacity(sendFace == .send ? 0 : 1)
+                    $0.rotationEffect(.degrees(sendFace == .collapse ? 0 : 180)).opacity(sendFace == .send ? 0 : 1)
                 }
         }
     }
@@ -958,13 +959,20 @@ public struct ComposerSideButton {
 /// pen line at INK in the header's grey — no grain, no shadow. Behind the sticker preview and the Mac's popovers.
 public struct PaperSheet: View {
     var seed: Double
+    /// A livelier hand than the menus' calm one, which read as a plain rounded box behind the sticker preview (the
+    /// owner's notes, 2026-11-01): three bends a side swinging 3.5, gently bowed — the web's `PREVIEW_WOBBLE`.
+    var lively: Bool
 
-    public init(seed: Double = 41) {
+    public init(seed: Double = 41, lively: Bool = false) {
         self.seed = seed
+        self.lively = lively
     }
 
     public var body: some View {
-        let shape = MenuSheetShape(seed: seed)
+        let shape = lively
+            ? AnyShape(WobRectShape(radius: 22, seed: seed + 100, mag: 3.5, options: WobRectOptions(
+                curve: 1.1, segmentsH: .count(3), segmentsV: .count(3))))
+            : AnyShape(MenuSheetShape(seed: seed))
         ZStack {
             shape.fill(MenuSheetColors.paper(hue: nil))
             shape.stroke(MenuSheetColors.pen(hue: nil), style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))

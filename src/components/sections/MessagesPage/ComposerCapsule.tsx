@@ -186,8 +186,14 @@ export function ComposerCapsule({
           onPointerLeave={(e) => at(e, false)}
         >
           {/* On the last line's row, beside the ＋ — not in the middle of a tall field. */}
-          <span className={styles.sendGlyph} data-turned={segment === 'collapse' || undefined}>
-            <Icon name={segment === 'send' ? 'send' : 'arrow-up'} size={20} color="currentColor" strokeWidth={INK} />
+          {/* ↑ / ↓ is one chevron turning (never an arrow, which reads as sending): ˄ to grow, ˅ to bring it back; the
+              plane and the chevron are two spans, so opening the panel never spins it. */}
+          <span
+            key={segment === 'send' ? 'send' : 'chevron'}
+            className={styles.sendGlyph}
+            data-turned={segment === 'expand' || undefined}
+          >
+            <Icon name={segment === 'send' ? 'send' : 'chevron-down'} size={20} color="currentColor" strokeWidth={INK} />
           </span>
         </button>
       </div>

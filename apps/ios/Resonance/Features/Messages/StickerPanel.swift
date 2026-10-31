@@ -21,6 +21,8 @@ struct StickerPanel: View {
     var bottomRoom: CGFloat = 0
     @State private var position = ScrollPosition(idType: String.self)
     @State private var shownSection: String?
+    /// A tab tapped holds the bar for its glide: the packs it scrolls past don't flicker through it on the way.
+    @State private var heldUntil: Date?
 
     static let recentsId = "recents"
 
@@ -65,6 +67,7 @@ struct StickerPanel: View {
             // Its edges fade where more stickers lie beyond them, as the web's picker does (round 22 v2).
             .scrollEdgeFades()
             .onScrollTargetVisibilityChange(idType: String.self, threshold: 0.2) { visible in
+                if let held = heldUntil, held > .now { return }
                 if let first = visible.first, first != shownSection { shownSection = first }
             }
             // Down under the home indicator to the screen's edge (round 22 v3): no band of paper under the grid.
@@ -81,6 +84,7 @@ struct StickerPanel: View {
                 ForEach(sections, id: \.id) { section in
                     let current = (shownSection ?? sections.first?.id) == section.id
                     Button {
+                        heldUntil = .now.addingTimeInterval(0.4)
                         withAnimation(.easeInOut(duration: 0.3)) { position.scrollTo(id: section.id, anchor: .top) }
                         shownSection = section.id
                     } label: {
@@ -190,7 +194,7 @@ struct StickerPreview: View {
             .padding(.horizontal, 18)
             .padding(.top, 12)
             .padding(.bottom, 10)
-            .background { PaperSheet(seed: 47) }
+            .background { PaperSheet(seed: 47, lively: true) }
             .contentShape(Rectangle())
         }
         .buttonStyle(OrganicPressStyle(inset: 2))

@@ -51,6 +51,21 @@ class StickerComposerTest {
         assertEquals(4, sectionAt(starts, 999))
     }
 
+    @Test fun aTabGlidesTheWholeWayToItsPacksHeadingInOneGo() {
+        val sections = stickerSections(catalog, emptyList(), "zh-TW", "最近用過")
+        val starts = sectionStarts(sections)
+        // Headings 30 tall, rows 90, 4 across: tuck's six stickers are two rows.
+        assertEquals(0, gridTop(sections, 4, 30, 90, starts[0]))
+        assertEquals(30, gridTop(sections, 4, 30, 90, starts[0] + 1))
+        assertEquals(30, gridTop(sections, 4, 30, 90, starts[0] + 4))
+        assertEquals(120, gridTop(sections, 4, 30, 90, starts[0] + 5))
+        val tuckRows = (sections[0].stickers.size + 3) / 4
+        assertEquals(30 + tuckRows * 90, gridTop(sections, 4, 30, 90, starts[1]))
+        // Each pack's heading lies past every heading and row before it.
+        val last = sections.dropLast(1).sumOf { 30 + (it.stickers.size + 3) / 4 * 90 }
+        assertEquals(last, gridTop(sections, 4, 30, 90, starts.last()))
+    }
+
     @Test fun theListSaysAStickerOrPicturesWereSentNotTheFallbackWords() {
         assertEquals("傳送了一張貼圖", conversationPreview("〔貼圖：謝謝〕", image = false, fromMe = false, sticker = true))
         assertEquals("你：傳送了一張貼圖", conversationPreview("〔貼圖：謝謝〕", image = false, fromMe = true, sticker = true))
