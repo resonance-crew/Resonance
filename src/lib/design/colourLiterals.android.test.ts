@@ -23,7 +23,7 @@ const ALLOWED: Record<string, { count: number; why: string }> = {
   'core/design/src/main/kotlin/com/resonance/design/StoryToc.kt': { count: 2, why: "the contents rail's fade: an alpha mask" },
   'core/design/src/main/kotlin/com/resonance/design/Components.kt': { count: 1, why: "Google's mark on its white disc (the brand's own)" },
   'core/design/src/main/kotlin/com/resonance/design/ShareCardRecipe.kt': { count: 1, why: "the 9:16 share card's recipe (it leaves the device, light terracotta), pinned to the web's" },
-  'core/design/src/main/kotlin/com/resonance/design/Composer.kt': { count: 4, why: "the field's scroll fades (round 22): an alpha mask" },
+  'core/design/src/main/kotlin/com/resonance/design/Composer.kt': { count: 8, why: "the field's and the sticker picker's scroll fades (round 22): alpha masks" },
   'app/src/main/kotlin/com/resonance/app/ui/Gallery.kt': { count: 2, why: "a photo's empty selection ring: white with a faint dark disc reads on any photo, as the system pickers draw it" },
   'core/design/src/main/kotlin/com/resonance/design/Grain.kt': { count: 1, why: 'the tile itself is black: no tinted copy is made for black ink' },
 };

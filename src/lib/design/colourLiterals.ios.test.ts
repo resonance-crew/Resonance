@@ -19,6 +19,7 @@ const ALLOWED: Record<string, [number, string]> = {
   'Packages/DesignSystem/Sources/DesignSystem/Color/OKLCHColor.swift': [2, "the palette's machinery (oklch → P3)"],
   'Packages/DesignSystem/Sources/DesignSystem/Color/Palette.swift': [3, "the palette's machinery (its tables → UIColor)"],
   // Masks: only their alpha is read.
+  'Resonance/Features/Messages/ComposerTextView.swift': [3, "the field's scroll fades (round 22): an alpha mask"],
   'Packages/DesignSystem/Sources/DesignSystem/Components/ScrollEdgeFades.swift': [3, 'a mask (alpha only)'],
   'Packages/DesignSystem/Sources/DesignSystem/Story/StoryTable.swift': [3, 'a mask (alpha only)'],
   'Resonance/Features/Write/StoryEditor.swift': [3, 'a mask (alpha only)'],
