@@ -722,12 +722,14 @@ public nonisolated enum ComposerMetrics {
     public static let slipRadius: CGFloat = 14
     /// The text's room after its words, before the send segment's seam.
     public static let textTrailing: CGFloat = 10
-    /// Round 22: the ☺ before the send segment (its glyph 22), and ⤢ / ⤡ — a square ghost button the send column's
-    /// width at the capsule's top-right (v2, the owner's call: room above it as the send block has under its glyph).
-    public static let stickerWidth: CGFloat = 40
-    public static let stickerGlyph: CGFloat = 22
+    /// Round 22: the capsule's tools are one button (v3, the owner's call): ☺ / ⌨ before the send segment the very
+    /// size, glyph and press of ＋ at its start, and ⤢ / ⤡ — the same 44 square, a ghost — centred in the send column
+    /// at the capsule's top-right, `cornerInset` under its pen line (room above it as the send block has under its glyph).
+    public static let stickerWidth: CGFloat = attachWidth
+    public static let stickerGlyph: CGFloat = attachGlyph
     public static let cornerGlyph: CGFloat = 18
-    public static let cornerSide: CGFloat = 52
+    public static let cornerSide: CGFloat = attachWidth
+    public static let cornerInset: CGFloat = 4
     /// ⤢ shows once the text runs to this many lines.
     public static let expandAtLines = 3
     /// Grown over the thread on an iPad or the Mac: at most this share of the thread pane.
@@ -846,11 +848,12 @@ public struct ComposerCapsule<Field: View>: View {
                     // ⤢ / ⤡ in the send column, at the capsule's top-right — where a full-screen control is looked for
                     // and easy to reach — the block at its foot (the owner's call, round 22 v2).
                     if let corner {
-                        sideButton(corner, width: ComposerMetrics.cornerSide, pressInset: 6) {
+                        sideButton(corner, width: ComposerMetrics.cornerSide) {
                             OrganicIcon(corner.on ? .collapse : .expand, size: ComposerMetrics.cornerGlyph, color: Tokens.textMuted,
                                         strokeWidth: Tokens.ink)
                         }
                         .frame(width: ComposerMetrics.cornerSide, height: ComposerMetrics.cornerSide)
+                        .padding(.top, ComposerMetrics.cornerInset)
                         .transition(.opacity)
                     }
                     Spacer(minLength: 0)
@@ -862,8 +865,9 @@ public struct ComposerCapsule<Field: View>: View {
                     segmentGlyph
                         // Its ink changes in 140 ms; where it sits follows the capsule at once (a sent message's
                         // lines going flip `canSend` in the same update: the plane never glides down to the row).
+                        // Send, ↑ and ↓ are one glyph's faces, never swapped views: growing the panel, the glyph rides
+                        // up with the capsule in the capsule's own animation (round 22 v3) instead of landing first.
                         .animation(ComposerCapsuleFace.faceChange, value: canSend)
-                        .animation(ComposerCapsuleFace.faceChange, value: sendFace)
                         .geometryGroup()
                         .frame(width: ComposerMetrics.sendWidth, height: ComposerMetrics.height)
                         .frame(maxHeight: block ? nil : .infinity, alignment: .bottom)
@@ -885,16 +889,16 @@ public struct ComposerCapsule<Field: View>: View {
         }
     }
 
-    /// The plane — or the sticker panel's ↑ / ↓ (round 22 §4.1).
-    @ViewBuilder private var segmentGlyph: some View {
-        switch sendFace {
-        case .send:
+    /// The plane — or the sticker panel's ↑ / ↓ (round 22 §4.1): both always there, one showing, the arrow turned for
+    /// ↓; only their opacity and turn change, in a scoped animation that leaves where they sit to the capsule.
+    private var segmentGlyph: some View {
+        ZStack {
             OrganicIcon(.send, size: ComposerMetrics.sendGlyph, color: canSend ? Tokens.cream : Tokens.terracotta, strokeWidth: Tokens.ink)
-        case .expand:
+                .animation(ComposerCapsuleFace.faceChange) { $0.opacity(sendFace == .send ? 1 : 0) }
             OrganicIcon(.arrowUp, size: ComposerMetrics.sendGlyph, color: Tokens.terracotta, strokeWidth: Tokens.ink)
-        case .collapse:
-            OrganicIcon(.arrowUp, size: ComposerMetrics.sendGlyph, color: Tokens.terracotta, strokeWidth: Tokens.ink)
-                .rotationEffect(.degrees(180))
+                .animation(ComposerCapsuleFace.faceChange) {
+                    $0.rotationEffect(.degrees(sendFace == .collapse ? 180 : 0)).opacity(sendFace == .send ? 0 : 1)
+                }
         }
     }
 

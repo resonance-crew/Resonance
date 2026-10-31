@@ -70,6 +70,16 @@ import Testing
         #expect(ThreadComposer.sendsFromBlock(lines: 1, expanded: true))
     }
 
+    @Test func theCapsulesToolsAreOneButton() {
+        // ☺ / ⌨ the very button ＋ is — its room and its glyph — and ⤢ / ⤡ the same square (round 22 v3).
+        #expect(ComposerMetrics.stickerWidth == ComposerMetrics.attachWidth)
+        #expect(ComposerMetrics.stickerGlyph == ComposerMetrics.attachGlyph)
+        #expect(ComposerMetrics.cornerSide == ComposerMetrics.attachWidth)
+        // ⤢ sits in the send column, under the pen line by as much as the send glyph sits over the foot, or more.
+        #expect(ComposerMetrics.cornerSide <= ComposerMetrics.sendWidth)
+        #expect(ComposerMetrics.cornerInset + ComposerMetrics.cornerSide / 2 >= ComposerMetrics.height / 2)
+    }
+
     @Test func theSendBlocksTopLeftCornerIsRound() {
         let block = ComposerBlockSeams(seed: 17)
         let r = ComposerBlockSeams.cornerRadius
@@ -94,6 +104,13 @@ import Testing
             #expect(QuotedReply.words(later) == "〔貼圖：揮手〕")
         }
         #expect(QuotedReply.words(ReplyQuote(id: "w", senderId: "bob", text: "嗨")) == "嗨")
+    }
+
+    @Test func aStickerAnsweringRisesOverItsQuoteWhichIsDrawnFaded() {
+        // The answering sticker overlaps the quote's lower edge by about 16–20, drawn in front of it.
+        #expect((16...20).contains(QuotedReply.stickerOverlap))
+        // The quoted sticker is muted as quoted words are (thread and replying row alike).
+        #expect(abs(QuotedReply.stickerFade - 0.55) < 0.001)
     }
 
     @Test func theReplyingRowShowsAStickersStillAndNoWords() {

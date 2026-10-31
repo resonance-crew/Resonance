@@ -29,6 +29,9 @@ struct AttachPanel: View {
     var bottomRoom: CGFloat = 0
     /// Drawn without the grip (the Mac's popover).
     var gripped = true
+    /// The picker and the cards scroll on to the screen's foot, under the home indicator (the phone's panel, v3);
+    /// the floating bar keeps clear of the indicator.
+    var toScreenEdge = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,6 +52,7 @@ struct AttachPanel: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea(.container, edges: toScreenEdge ? .bottom : [])
                 // The bar floats over the pictures or the cards (round 22 v2): no band behind it, and the room round it
                 // is theirs — only the bar itself takes a tap.
                 SegmentedActionBar([
