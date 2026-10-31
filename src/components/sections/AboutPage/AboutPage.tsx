@@ -2,7 +2,7 @@
 
 import { useLocale, useTranslations } from 'next-intl';
 import { OrganiBlob } from '@/components/atoms/OrganiBlob/OrganiBlob';
-import { DriftingBlobs, type DriftPaint } from '@/components/atoms/DriftingBlobs/DriftingBlobs';
+import { DriftingBlobs } from '@/components/atoms/DriftingBlobs/DriftingBlobs';
 import { Divider } from '@/components/atoms/Divider/Divider';
 import { OrganicLink } from '@/components/atoms/OrganicLink/OrganicLink';
 import { SectionEdge } from '@/components/atoms/SectionEdge/SectionEdge';
@@ -38,14 +38,6 @@ const TEAM: { zh: string; en: string; src?: string; initials?: string; seed: num
 /** The course where the team met. */
 const WMM_URL = 'https://www.facebook.com/friendsofstanforduniversityintaiwan/';
 
-/** The landing hero's drifting blobs, in this hero's colours. */
-const BLOB_PAINTS: DriftPaint[] = [
-  { color: '--color-sage', alpha: 0.26 },
-  { color: '--color-terracotta-light', alpha: 0.32 },
-  { color: '--color-lavender', alpha: 0.24 },
-  { color: '--color-yellow', alpha: 0.28 },
-];
-
 const EDGE_PEN = 'color-mix(in oklch, var(--soft-pen) 30%, transparent)';
 
 function Heading({ kicker, title, id }: { kicker: string; title: string; id: string }) {
@@ -66,10 +58,10 @@ export function AboutPage() {
   const quote = (s: string) => (latin ? `“${s}”` : `「${s}」`);
   return (
     <main className={styles.page}>
-      {/* The hero and the mission share one paper, and the landing hero's blobs drift over all of it:
-          still as the server draws them, alive once the page is, five or six at a time in this height. */}
+      {/* The hero and the mission share one paper, and the landing hero's blobs over all of it, two to each screen:
+          still as the server draws them, alive a while once the page is, then at rest where they were. */}
       <div className={styles.opening}>
-        <DriftingBlobs palette={BLOB_PAINTS} crowd={[5, 6]}>
+        <DriftingBlobs>
           <div className={styles.blobA} data-drift="1,0.1" data-drift-color="--color-sage">
             <OrganiBlob variant={1} fill="var(--color-sage)" size={320} grain={0.2} />
           </div>

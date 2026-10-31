@@ -80,6 +80,8 @@ object L10n {
         val tagline: String get() = Strings.string("footer.tagline")
         /** About */
         val about: String get() = Strings.string("footer.about")
+        /** Paper Pals */
+        val pals: String get() = Strings.string("footer.pals")
         /** Contact */
         val contact: String get() = Strings.string("footer.contact")
         /** Privacy */
@@ -267,6 +269,132 @@ object L10n {
             val body: String get() = Strings.string("about.closing.body")
             /** Write your story */
             val start: String get() = Strings.string("about.closing.start")
+        }
+    }
+    object Pals {
+        /** Paper Pals */
+        val metaTitle: String get() = Strings.string("pals.metaTitle")
+        /** Meet Resonance's five Paper Pals: Tuck, Twine, Nod, Pip and Hush. Five different papers, each with a story of its own, a */
+        val metaDescription: String get() = Strings.string("pals.metaDescription")
+        object Hero {
+            /** Paper Pals */
+            val title: String get() = Strings.string("pals.hero.title")
+            /** 小紙團 */
+            val alias: String get() = Strings.string("pals.hero.alias")
+            /** Five different papers, each carrying a story */
+            val lead: String get() = Strings.string("pals.hero.lead")
+        }
+        object Tuck {
+            /** Tuck */
+            val name: String get() = Strings.string("pals.tuck.name")
+            /** 摺摺 */
+            val other: String get() = Strings.string("pals.tuck.other")
+            /** A torn sheet of sage-green paper */
+            val paper: String get() = Strings.string("pals.tuck.paper")
+            /** Its corner stays folded over a few pencilled lines. It lifts it only for someone it trusts. */
+            val story: String get() = Strings.string("pals.tuck.story")
+            object Traits {
+                /** Shy */
+                val a: String get() = Strings.string("pals.tuck.traits.a")
+                /** Earnest */
+                val b: String get() = Strings.string("pals.tuck.traits.b")
+                /** Waves first */
+                val c: String get() = Strings.string("pals.tuck.traits.c")
+            }
+            /** Want to read it together? */
+            val line: String get() = Strings.string("pals.tuck.line")
+        }
+        object Tag {
+            /** Twine */
+            val name: String get() = Strings.string("pals.tag.name")
+            /** 牽牽 */
+            val other: String get() = Strings.string("pals.tag.other")
+            /** A mist-blue gift tag */
+            val paper: String get() = Strings.string("pals.tag.paper")
+            /** Its back says “To:”, but the line is still blank — it hasn’t found that someone yet */
+            val story: String get() = Strings.string("pals.tag.story")
+            object Traits {
+                /** Gentle */
+                val a: String get() = Strings.string("pals.tag.traits.a")
+                /** Polite */
+                val b: String get() = Strings.string("pals.tag.traits.b")
+                /** A little formal */
+                val c: String get() = Strings.string("pals.tag.traits.c")
+            }
+            /** Could this… be for you? */
+            val line: String get() = Strings.string("pals.tag.line")
+        }
+        object Card {
+            /** Nod */
+            val name: String get() = Strings.string("pals.card.name")
+            /** 聆聆 */
+            val other: String get() = Strings.string("pals.card.other")
+            /** A lavender index card */
+            val paper: String get() = Strings.string("pals.card.paper")
+            /** It nods along and writes down what it hears */
+            val story: String get() = Strings.string("pals.card.story")
+            object Traits {
+                /** Warm */
+                val a: String get() = Strings.string("pals.card.traits.a")
+                /** Steady */
+                val b: String get() = Strings.string("pals.card.traits.b")
+                /** A good listener */
+                val c: String get() = Strings.string("pals.card.traits.c")
+            }
+            /** Mm-hm, I’m listening */
+            val line: String get() = Strings.string("pals.card.line")
+        }
+        object Dot {
+            /** Pip */
+            val name: String get() = Strings.string("pals.dot.name")
+            /** 點點 */
+            val other: String get() = Strings.string("pals.dot.other")
+            /** A yellow dot from a hole punch */
+            val paper: String get() = Strings.string("pals.dot.paper")
+            /** All that’s left on it is the “ry” of “story”. It hops about, looking for the rest. */
+            val story: String get() = Strings.string("pals.dot.story")
+            object Traits {
+                /** Bouncy */
+                val a: String get() = Strings.string("pals.dot.traits.a")
+                /** Curious */
+                val b: String get() = Strings.string("pals.dot.traits.b")
+                /** Can’t sit still */
+                val c: String get() = Strings.string("pals.dot.traits.c")
+            }
+            /** Is this my story? */
+            val line: String get() = Strings.string("pals.dot.line")
+        }
+        object Night {
+            /** Hush */
+            val name: String get() = Strings.string("pals.night.name")
+            /** 悄悄 */
+            val other: String get() = Strings.string("pals.night.other")
+            /** A corner of a paper theatre’s night sky */
+            val paper: String get() = Strings.string("pals.night.paper")
+            /** Pinprick stars, a moon it cut itself. Quiet by day, awake at night. */
+            val story: String get() = Strings.string("pals.night.story")
+            object Traits {
+                /** Quiet */
+                val a: String get() = Strings.string("pals.night.traits.a")
+                /** Unhurried */
+                val b: String get() = Strings.string("pals.night.traits.b")
+                /** A bit sleepy */
+                val c: String get() = Strings.string("pals.night.traits.c")
+            }
+            /** Goodnight… just one more story */
+            val line: String get() = Strings.string("pals.night.line")
+        }
+        object Meet {
+            /** Different papers can resonate too */
+            val title: String get() = Strings.string("pals.meet.title")
+        }
+        object Vision {
+            /** Everyone is a Paper Pal */
+            val title: String get() = Strings.string("pals.vision.title")
+            /** Each of us is different and whole, with a story and a wisdom of our own */
+            val p1: String get() = Strings.string("pals.vision.p1")
+            /** Here, we meet — and resonate */
+            val p2: String get() = Strings.string("pals.vision.p2")
         }
     }
     object Tweaks {

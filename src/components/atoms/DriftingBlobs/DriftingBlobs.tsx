@@ -5,11 +5,14 @@ import {
   type Oklab,
   type Paint,
   type SeedBlob,
+  atRest,
   blobsAt,
   createWorld,
   makeGrid,
   paintColours,
   parseOklch,
+  placeSeed,
+  restNow,
   sampleField,
   step,
   traceContours,
@@ -24,17 +27,22 @@ export interface DriftPaint {
 }
 
 export interface DriftingBlobsProps {
-  /** Colours the blobs that come in later are drawn from. */
-  palette: readonly DriftPaint[];
   /**
-   * The still blobs the server renders (and reduced motion keeps). Each one
-   * marked `data-drift="dx,dy"` (its direction of drift) with
-   * `data-drift-color` (its tokens.css variable) becomes a live blob where it
-   * lies, at its own opacity, and fades away as the live ones take over.
+   * The still blobs the server renders (and reduced motion keeps): one or two,
+   * each where the section has room for it. Each one marked
+   * `data-drift="dx,dy"` (the way it strays) with `data-drift-color` (its
+   * tokens.css variable) becomes a live blob where it lies, at its own
+   * opacity, strays a little, and comes back to rest there.
    */
   children: ReactNode;
-  /** The fewest and most blobs at once (3 to 4 by default); a taller area holds more. */
-  crowd?: readonly [number, number];
+  /** A small blob of this colour comes in a moment after and melts into the largest. */
+  visitor?: DriftPaint;
+  /**
+   * Fewer and smaller blobs on a smaller screen: each drawn at 80 % on a
+   * tablet and 62 % on a phone, and one marked `data-drift-phone="off"` left
+   * out on a phone.
+   */
+  responsive?: boolean;
 }
 
 /** Field samples every FIELD px, colour samples every COLOUR px (CSS pixels). */
@@ -57,14 +65,31 @@ const STAND_IN_RADIUS = 0.42;
 const FALLBACK: Oklab = [0.88, 0.04, 0.06];
 
 /**
- * Soft grained blobs drifting behind a section (the landing hero): one
- * canvas, no library — the motion is `lib/design/driftingBlobs`. Sits in a
- * positioned parent, under its content, and reads the pointer over that
- * parent to deepen the blob under it.
+ * Each stand-in's opacity as first read, before it faded out for its live blob: a world made again later (a new
+ * width showing or hiding one, a remount) would otherwise read it mid-fade or gone.
  */
-export function DriftingBlobs({ palette, children, crowd }: DriftingBlobsProps) {
-  // By value, so an inline [5, 6] doesn't restart the world every render.
-  const [fewest, most] = crowd ?? [3, 4];
+const strengths = new WeakMap<HTMLElement, number>();
+const strengthOf = (el: HTMLElement) => {
+  let alpha = strengths.get(el);
+  if (alpha === undefined) {
+    alpha = Number(getComputedStyle(el).opacity) || 0.3;
+    strengths.set(el, alpha);
+  }
+  return alpha;
+};
+
+/**
+ * Soft grained blobs behind a section (the landing hero, the Paper Pals
+ * page's bands): one canvas, no library — the motion is
+ * `lib/design/driftingBlobs`. They move for a few seconds and then rest where
+ * the server drew them, and the canvas stops drawing. Sits in a positioned
+ * parent, under its content, and reads the pointer over that parent to
+ * deepen the blob under it.
+ */
+export function DriftingBlobs({ children, visitor, responsive }: DriftingBlobsProps) {
+  // By value, so an inline object doesn't restart the world every render.
+  const visitorColor = visitor?.color;
+  const visitorAlpha = visitor?.alpha;
   const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Reads the colours again (the page's theme or scheme changed) and redraws, without restarting the drift.
@@ -79,6 +104,8 @@ export function DriftingBlobs({ palette, children, crowd }: DriftingBlobsProps) 
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    // Every stand-in's strength now, before any fades (one hidden at this width too: it may show at another).
+    root.querySelectorAll<HTMLElement>('[data-drift]').forEach(strengthOf);
 
     // Every paint with the variable it was read from, so a theme or scheme change re-reads them in place.
     const inks: { paint: Paint; name: string }[] = [];
@@ -91,34 +118,45 @@ export function DriftingBlobs({ palette, children, crowd }: DriftingBlobsProps) 
     // The sand's strength follows the scheme's (light specks on night paper read louder).
     const grainScale = () => Number.parseFloat(getComputedStyle(root).getPropertyValue('--grain-scale')) || 1;
     let grainAlpha = GRAIN * grainScale();
-    const paints: Paint[] = palette.map((p) => paintOf(p.color, p.alpha));
     const box = root.getBoundingClientRect();
     let width = Math.max(1, box.width);
     let height = Math.max(1, box.height);
 
-    const seeds: SeedBlob[] = [];
-    root.querySelectorAll<HTMLElement>('[data-drift]').forEach((el) => {
-      const r = el.getBoundingClientRect();
-      if (!r.width) return;
-      const [dx, dy] = (el.dataset.drift ?? '1,0').split(',').map(Number);
-      seeds.push({
-        x: r.left - box.left + r.width / 2,
-        y: r.top - box.top + r.height / 2,
-        R: r.width * STAND_IN_RADIUS,
-        paint: paintOf(el.dataset.driftColor ?? '', Number(getComputedStyle(el).opacity) || 0.3),
-        drift: [dx || 0, dy || 0],
+    // The stand-ins as laid out now: where each is (its centre and size) — none for one the CSS hides.
+    const standIns = () => {
+      const b = root.getBoundingClientRect();
+      return [...root.querySelectorAll<HTMLElement>('[data-drift]')].map((el) => {
+        const r = el.getBoundingClientRect();
+        return r.width ? { el, x: r.left - b.left + r.width / 2, y: r.top - b.top + r.height / 2, R: r.width * STAND_IN_RADIUS } : null;
       });
-    });
-
-    const world = createWorld({
-      width,
-      height,
-      seed: Math.floor(Math.random() * 9973) + 1,
-      palette: paints,
-      paper: lab('--color-cream'),
-      blobs: seeds,
-      crowd: [fewest, most],
-    });
+    };
+    const makeWorld = () => {
+      const seeds: SeedBlob[] = [];
+      const shown = standIns();
+      for (const s of shown) {
+        if (!s) continue;
+        const [dx, dy] = (s.el.dataset.drift ?? '1,0').split(',').map(Number);
+        seeds.push({
+          x: s.x,
+          y: s.y,
+          R: s.R,
+          paint: paintOf(s.el.dataset.driftColor ?? '', strengthOf(s.el)),
+          drift: [dx || 0, dy || 0],
+        });
+      }
+      return {
+        shown: shown.map(Boolean).join(),
+        world: createWorld({
+          width,
+          height,
+          seed: Math.floor(Math.random() * 9973) + 1,
+          paper: lab('--color-cream'),
+          blobs: seeds,
+          visitor: visitorColor ? paintOf(visitorColor, visitorAlpha ?? 0.3) : undefined,
+        }),
+      };
+    };
+    let { world, shown } = makeWorld();
 
     let field = makeGrid(width, height, FIELD);
     let colours = makeGrid(width, height, COLOUR);
@@ -140,6 +178,19 @@ export function DriftingBlobs({ palette, children, crowd }: DriftingBlobsProps) 
       world.height = height;
     };
     size();
+    // A new layout: each blob rests where its stand-in is now; one shown or hidden at this width makes them again.
+    const relayout = () => {
+      const now = standIns();
+      if (now.map(Boolean).join() !== shown) {
+        const settled = world.settled;
+        ({ world, shown } = makeWorld());
+        size();
+        if (settled) restNow(world);
+        return;
+      }
+      let seed = 0;
+      for (const s of now) if (s) placeSeed(world, seed++, s.x, s.y, s.R);
+    };
 
     // The sand, made once.
     const noise = document.createElement('canvas');
@@ -163,9 +214,11 @@ export function DriftingBlobs({ palette, children, crowd }: DriftingBlobsProps) 
     const host = root.parentElement ?? root;
     const onMove = (e: PointerEvent) => {
       pointer = e.pointerType === 'mouse' ? { x: e.clientX, y: e.clientY } : null;
+      if (pointer) run();
     };
     const onLeave = () => {
       pointer = null;
+      run();
     };
     host.addEventListener('pointermove', onMove, { passive: true });
     host.addEventListener('pointerleave', onLeave, { passive: true });
@@ -224,6 +277,8 @@ export function DriftingBlobs({ palette, children, crowd }: DriftingBlobsProps) 
       }
       step(world, dt);
       draw();
+      // At rest: nothing to draw again until the pointer comes over a blob.
+      if (atRest(world)) halt();
     };
     const run = () => {
       if (raf || !onScreen || document.hidden) return;
@@ -272,6 +327,7 @@ export function DriftingBlobs({ palette, children, crowd }: DriftingBlobsProps) 
       width = w;
       height = h;
       size();
+      relayout();
       draw();
     });
     ro.observe(root);
@@ -286,10 +342,10 @@ export function DriftingBlobs({ palette, children, crowd }: DriftingBlobsProps) 
       host.removeEventListener('pointerleave', onLeave);
       delete root.dataset.live;
     };
-  }, [palette, fewest, most]);
+  }, [visitorColor, visitorAlpha]);
 
   return (
-    <div ref={rootRef} className={styles.root} aria-hidden="true">
+    <div ref={rootRef} className={styles.root} data-responsive={responsive ? '' : undefined} aria-hidden="true">
       {children}
       <canvas ref={canvasRef} className={styles.canvas} />
     </div>

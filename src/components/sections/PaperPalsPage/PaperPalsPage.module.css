@@ -1,0 +1,641 @@
+.page {
+  background: var(--color-cream);
+  color: var(--color-text);
+  overflow-x: clip;
+  /* Each one's own colour, from the palette (mixed in oklab: oklch's hue would take blue through green on its way to
+     the cream, and lavender through pink). Its band is the page's paper a little tinted with it; 悄悄's band is the
+     page's one night, in either scheme. */
+  --band-mix: 16%;
+  --ink-dot: var(--color-yellow);
+  --ink-tuck: var(--color-sage);
+  --ink-tag: var(--color-sky);
+  --ink-card: var(--color-lavender);
+  --ink-night: color-mix(in oklab, var(--color-sky) 55%, var(--color-lavender));
+  --band-dot: color-mix(in oklab, var(--ink-dot) var(--band-mix), var(--color-cream));
+  --band-tuck: color-mix(in oklab, var(--ink-tuck) var(--band-mix), var(--color-cream));
+  --band-tag: color-mix(in oklab, var(--ink-tag) var(--band-mix), var(--color-cream));
+  --band-card: color-mix(in oklab, var(--ink-card) var(--band-mix), var(--color-cream));
+  --band-night: oklch(25% 0.045 262); /* colour-fixed: 悄悄's band is night in either scheme */
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-scheme='light'])) .page {
+    --band-mix: 11%;
+    --band-night: oklch(18% 0.035 262); /* colour-fixed: a deeper night in the dark scheme */
+  }
+}
+:global(:root[data-scheme='dark']) .page {
+  --band-mix: 11%;
+  --band-night: oklch(18% 0.035 262); /* colour-fixed: a deeper night in the dark scheme */
+}
+
+.page [data-pal='dot'] { --pal-ink: var(--ink-dot); }
+.page [data-pal='tuck'] { --pal-ink: var(--ink-tuck); }
+.page [data-pal='tag'] { --pal-ink: var(--ink-tag); }
+.page [data-pal='card'] { --pal-ink: var(--ink-card); }
+.page [data-pal='night'] { --pal-ink: var(--ink-night); }
+.page [data-pal] {
+  --pal-wash: color-mix(in oklab, var(--pal-ink) 42%, var(--color-card-bg));
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── The opening: the title, then the group photo ─────────────────── */
+
+.hero {
+  position: relative;
+  /* over the first band's wave: its blobs run on under the curve (BandDrift) */
+  z-index: 2;
+  box-sizing: border-box;
+  /* Clear the fixed SiteHeader (68px body + its 14px wave). */
+  padding: 92px 16px clamp(16px, 3vw, 40px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(28px, 4vw, 48px);
+}
+
+
+.heroTitle {
+  font-family: var(--font-heading);
+  font-size: clamp(40px, 6.4vw, 72px);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The other language's name, under a title or after a pen name: quiet, never a second title. */
+.alias {
+  font-family: var(--font-body);
+  font-size: 0.32em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+
+.lead {
+  font-family: var(--font-body);
+  font-size: clamp(16px, 1.9vw, 19px);
+  line-height: 1.85;
+  color: var(--color-text-muted);
+  margin: 0;
+  max-width: 600px;
+  text-wrap: pretty;
+}
+
+/* The opening: the title on a story card, the five busy round it (PalsTitleScene). Wide: 點點 peeks past the card's
+   left side, 摺摺 and 悄悄 sit on its top, 聆聆 and 牽牽 meet on the floor to its right. Narrow: the card spans the
+   width, 點點 peeks over its top between the two sitters, the two meet on a floor under it. The live stages read
+   these places from the stills (lib/mascots/pals/titleScene), so this is the one layout. */
+.scene {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  --unit: 116px;
+  display: flex;
+  align-items: stretch;
+  width: min(1080px, 100%);
+  box-sizing: border-box;
+  /* room above the card for the sitters, and beside it for 點點 */
+  padding: calc(var(--unit) * 1.3) 0 0 calc(var(--unit) * 0.95);
+}
+
+.sceneCard {
+  position: relative;
+  flex: 0 1 560px;
+  min-width: 0;
+  align-self: flex-end;
+  margin-bottom: 12px;
+}
+
+.titleCard {
+  padding: clamp(32px, 4vw, 52px) clamp(24px, 4vw, 48px);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.titleCard > * {
+  position: relative;
+}
+
+/* The floor the two meet on: the scene's full height, so the tall 牽牽 fits; its line at the card's foot. */
+.sceneFloor {
+  position: relative;
+  flex: 1 0 calc(var(--unit) * 3);
+  margin-top: calc(var(--unit) * -1.3);
+}
+
+.sceneFloorLine {
+  position: absolute;
+  left: 0;
+  right: 6%;
+  bottom: 10px;
+}
+
+.sceneStill {
+  position: absolute;
+  display: block;
+  translate: -50% 0;
+  transition: opacity 0.35s ease;
+}
+.sceneStill[data-live] {
+  opacity: 0;
+}
+
+.sceneCard > [data-still='tuck'] { bottom: 100%; left: 24%; }
+.sceneCard > [data-still='night'] { bottom: 100%; left: 77%; }
+/* behind the card, half of it out past the left side */
+.sceneCard > [data-still='dot'] {
+  z-index: -1;
+  bottom: 0;
+  left: 0;
+  translate: -78% 0;
+}
+.sceneFloor > [data-still='card'] { bottom: 12px; left: calc(var(--unit) * 1); }
+.sceneFloor > [data-still='tag'] { bottom: 12px; left: calc(var(--unit) * 2.25); }
+
+/* What one says when tapped, where it covers nobody (placed once measured: hidden until then). */
+.sceneSaid {
+  position: absolute;
+  z-index: 5;
+  white-space: nowrap;
+  pointer-events: none;
+  visibility: hidden;
+}
+.sceneSaid[data-placed] {
+  visibility: visible;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sceneSaid[data-placed] {
+    animation: said-in 0.28s cubic-bezier(0.3, 0.7, 0.4, 1.2) both;
+  }
+}
+
+@keyframes said-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.92);
+  }
+}
+
+@media (max-width: 899px) {
+  .scene {
+    --unit: clamp(64px, 17vw, 96px);
+    flex-direction: column;
+    padding: calc(var(--unit) * 1.2) 0 0;
+  }
+  .sceneCard {
+    flex: none;
+    align-self: stretch;
+    margin-bottom: 0;
+  }
+  .sceneFloor {
+    flex: none;
+    height: calc(var(--unit) * 1.75);
+    margin-top: 0;
+  }
+  .sceneFloorLine {
+    left: 4%;
+    right: 4%;
+  }
+  .sceneCard > [data-still='tuck'] { left: 20%; }
+  .sceneCard > [data-still='night'] { left: 80%; }
+  /* over the card's top, mostly hidden behind it: its eyes just over the edge */
+  .sceneCard > [data-still='dot'] {
+    bottom: calc(100% - var(--unit) * 0.3);
+    left: 50%;
+    translate: -50% 0;
+  }
+  .sceneFloor > [data-still='card'] { left: 34%; }
+  .sceneFloor > [data-still='tag'] { left: 66%; }
+}
+
+/* ── The huddle (the ending) ─────────────────────────────────────── */
+
+.lineup {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 calc(var(--unit) * 0.1);
+}
+
+.posing {
+  position: relative;
+  z-index: 1;
+  display: block;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 12px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Huddled for a photo: their frames overlap (gap can't be negative), so paper touches paper — a frame holds a
+   mitten's width of air at each side. */
+.lineup > .posing + .posing {
+  margin-left: calc(var(--unit) * -0.24);
+}
+
+/* Who stands where in the huddle: 點點 a half step in front, 牽牽 leaning toward 摺摺, 悄悄 leaning on 聆聆. */
+.posing[data-pal='dot'] {
+  z-index: 3;
+  translate: calc(var(--unit) * 0.04) calc(var(--unit) * 0.06);
+}
+.posing[data-pal='tuck'],
+.posing[data-pal='night'] {
+  z-index: 2;
+}
+.posing[data-pal='tag'] {
+  rotate: -3deg;
+  transform-origin: 50% 100%;
+}
+.posing[data-pal='night'] {
+  rotate: 6deg;
+  transform-origin: 50% 100%;
+}
+
+.posing:focus-visible {
+  outline: 2px solid var(--field-border-focus);
+  outline-offset: 4px;
+}
+
+/* ── Bands ──────────────────────────────────────────────────────── */
+
+.band {
+  position: relative;
+  padding: clamp(96px, 10vw, 128px) clamp(20px, 5vw, 80px) clamp(40px, 5vw, 72px);
+  background: var(--color-cream);
+}
+
+.profile[data-pal] {
+  background: var(--band-dot);
+}
+.profile[data-pal='tuck'] { background: var(--band-tuck); }
+.profile[data-pal='tag'] { background: var(--band-tag); }
+.profile[data-pal='card'] { background: var(--band-card); }
+
+/* 悄悄's band: night, whatever the page's scheme — cream words, a moon behind it, its stars awake. */
+.profile[data-pal='night'] {
+  background: var(--band-night);
+  --color-text: oklch(94% 0.02 85); /* colour-fixed: on the night band in either scheme */
+  --color-text-muted: oklch(80% 0.025 85); /* colour-fixed: on the night band in either scheme */
+  --button-on-tonal: oklch(86% 0.08 92); /* colour-fixed: on the night band in either scheme */
+  --field-border-hover: oklch(80% 0.03 85); /* colour-fixed: on the night band in either scheme */
+  --pal-wash: oklch(36% 0.05 262); /* colour-fixed: on the night band in either scheme */
+  /* the drifting blobs blend into their band's paper: here, the night */
+  --color-cream: var(--band-night);
+  color: var(--color-text);
+}
+
+/* Each band's drifting blobs: big, in its emptier corners, some bleeding off the page's edge or under the next
+   band's wave (BandDrift reaches down to it and clips to both waves). Over the next band's edge, under every
+   band's words. */
+.drift {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.profile > .drift {
+  z-index: 2;
+}
+.drift > div > span {
+  position: absolute;
+}
+
+.dark {
+  background: var(--color-cream-dark);
+}
+
+.wide {
+  position: relative;
+  z-index: 2;
+  max-width: var(--page-max-w);
+  margin: 0 auto;
+}
+
+.title {
+  text-align: center;
+  font-family: var(--font-heading);
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  margin: 0 0 clamp(18px, 2.4vw, 28px);
+  text-wrap: balance;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.prose {
+  font-family: var(--font-body);
+  font-size: clamp(16px, 1.7vw, 18px);
+  line-height: 1.95;
+  margin: 0 0 1.2em;
+  text-wrap: pretty;
+}
+
+/* Latin type wants less air than the Chinese these were set for. */
+:global(html[lang='en']) .prose,
+:global(html[lang='en']) .lead {
+  line-height: 1.6;
+}
+
+/* ── The ending: the five back together, a place left empty, what they stand for ── */
+
+.vision {
+  padding-top: clamp(40px, 6vw, 72px);
+  padding-bottom: clamp(96px, 11vw, 150px);
+}
+
+.reunion {
+  --unit: clamp(66px, calc((100vw - 48px) / 5.2), 116px);
+  margin: 0 auto clamp(28px, 4vw, 44px);
+  width: fit-content;
+}
+
+/* The sixth, on blank paper: a little apart from the five, as someone who has only just come. */
+.newcomer {
+  position: relative;
+  display: block;
+  flex: none;
+  align-self: flex-end;
+  margin-left: calc(var(--unit) * 0.3);
+}
+
+.blankPal {
+  position: relative;
+  display: block;
+}
+
+.blankPal svg {
+  display: block;
+  overflow: visible;
+}
+
+/* Its right arm turns about its brad (258, 184 in its drawing) to wave with the others. */
+.blankArmR {
+  transform-box: view-box;
+  transform-origin: 258px 184px;
+}
+:global([data-hello]) .blankArmR {
+  transform: rotate(-114deg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .blankArmR {
+    transition: transform 0.32s cubic-bezier(0.3, 0.7, 0.4, 1);
+  }
+  :global([data-hello]) .blankArmR {
+    animation: blank-wave 0.9s ease-in-out 0.3s infinite;
+  }
+  .blankEyes {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: blank-blink 6.1s step-end 1.7s infinite;
+  }
+}
+
+@keyframes blank-wave {
+  0%,
+  100% {
+    transform: rotate(-114deg);
+  }
+  50% {
+    transform: rotate(-100deg);
+  }
+}
+
+@keyframes blank-blink {
+  0% {
+    transform: scaleY(1);
+  }
+  95.5% {
+    transform: scaleY(0.12);
+  }
+  97.5% {
+    transform: scaleY(1);
+  }
+}
+
+/* The night paper dims it a little, as it does the five. */
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-scheme='light'])) .blankPal svg {
+    filter: brightness(0.9);
+  }
+}
+:global(:root[data-scheme='dark']) .blankPal svg {
+  filter: brightness(0.9);
+}
+
+.visionText {
+  font-family: var(--font-heading);
+  font-size: clamp(18px, 2.2vw, 22px);
+  font-weight: 600;
+  line-height: 1.8;
+  text-align: center;
+  max-width: 640px;
+  margin: 0 auto;
+  text-wrap: balance;
+}
+
+/* ── A profile: its strip beside its words ───────────────────────── */
+
+.profileGrid {
+  position: relative;
+  z-index: 2;
+  max-width: var(--page-max-w);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(32px, 5vw, 72px);
+}
+
+.profileGrid[data-flip] .profileStrip {
+  order: 2;
+}
+
+.profileText {
+  display: flex;
+  flex-direction: column;
+}
+
+.palName {
+  font-family: var(--font-heading);
+  font-size: clamp(36px, 5vw, 56px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.palName .alias {
+  font-size: 0.36em;
+}
+
+/* What it is made of: one quiet line under its name. */
+.paper {
+  font-family: var(--font-body);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  margin: 8px 0 0;
+}
+
+/* Its words, in its own voice: set as a quote, under its name. */
+.line {
+  font-family: var(--font-heading);
+  font-size: clamp(18px, 2.1vw, 22px);
+  font-weight: 600;
+  font-style: italic;
+  color: var(--button-on-tonal);
+  margin: 14px 0 14px;
+}
+
+.line::before {
+  content: open-quote;
+}
+.line::after {
+  content: close-quote;
+}
+:global(html[lang='zh-TW']) .line {
+  quotes: '「' '」';
+  font-style: normal;
+}
+
+.traits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+/* Three words about its ways, read as words (TagPill shouts in capitals by default). */
+.traits span {
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+/* ── The little stages ───────────────────────────────────────────── */
+
+/* A strip: its own floor line, its character on it (still as the server draws it, alive once the stage is), and
+   headroom above for a raised arm or a hop. --unit is 摺摺's height here; the stage reads it (lib/mascots/pals). */
+.strip {
+  position: relative;
+  --unit: 200px;
+  height: calc(var(--unit) * 1.78 + 12px);
+  /* Its ends fade out, so whoever walks off goes into the paper rather than being cut at a line. */
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);
+}
+
+.stripFloor {
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  bottom: 10px;
+}
+
+.stripStill {
+  position: absolute;
+  bottom: 12px;
+  left: calc(var(--x) * 100%);
+  translate: -50% 0;
+  transition: opacity 0.35s ease;
+}
+
+.strip[data-live] .stripStill {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Where a stage will bring them on with their own entrance (a script runs, motion is welcome), the opening's and the
+   strips' stills wait unseen rather than stand there and give way to the same one popping up: shown only when a stage
+   isn't coming (data-stills: Save-Data, a chunk or stage that failed) — or, should none have started 12 s in, anyway. */
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  .scene:not([data-stills]) .sceneStill,
+  .strip:not([data-stills]) .stripStill {
+    animation: stillsLate 0.35s ease 12s both;
+  }
+  .scene[data-staged]:not([data-stills]) .sceneStill,
+  .strip[data-staged]:not([data-stills]) .stripStill {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+@keyframes stillsLate {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.profileStrip {
+  width: 100%;
+}
+
+.meetStrip {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  --unit: 150px;
+}
+
+/* ── Narrow screens ──────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .strip {
+    --unit: 150px;
+  }
+  .profileGrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .profileGrid[data-flip] .profileStrip {
+    order: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .strip {
+    --unit: 120px;
+  }
+  .meetStrip {
+    --unit: 110px;
+  }
+}

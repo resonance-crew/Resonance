@@ -31,6 +31,7 @@ const ALLOWED: { path: string; why: string }[] = [
   { path: 'src/components/atoms/GoogleMark/', why: "Google's own colours" },
   { path: 'src/app/global-error.tsx', why: 'fallbacks for when the stylesheet itself failed' },
   { path: 'src/lib/mascots/props.ts', why: "the landing puppets' props (a note, a pencil, a book): drawn art in its own colours in both schemes, as the reaction stickers" },
+  { path: 'src/components/sections/PaperPalsPage/BlankPal.tsx', why: "the Paper Pals page's blank sixth: drawn paper art in its own colours in both schemes, as the cast's pictures" },
   { path: 'src/lib/mascots/engine.ts', why: "the landing stage's two pencils (each place says which reads on its background, by scheme) and the puppets' blush" },
 ];
 

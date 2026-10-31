@@ -220,9 +220,23 @@ export function ResonanceSketch({ ariaLabel }: { ariaLabel: string }) {
  * A sheet of paper for a few lines of text: drawn by hand once measured, a plain card of the same
  * paper and pen (the CSS stand-in) until then.
  */
-export function PaperCard({ children, seed, className }: { children: ReactNode; seed: number; className?: string }) {
+export function PaperCard({
+  children,
+  seed,
+  className,
+  turnsEvery,
+}: {
+  children: ReactNode;
+  seed: number;
+  className?: string;
+  /** A turn in its top and bottom about every this many px (else two or three whatever its width): a wide card's
+   *  line then wobbles as a hand's does, a narrow one's doesn't shake. */
+  turnsEvery?: number;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const { w, h } = useElementSize(ref);
+  const turns = turnsEvery ? Math.max(2, Math.round(w / turnsEvery)) : 2;
+  const segmentsH: [number, number] = [turns, turns + 1];
   const R = 20;
   return (
     <div ref={ref} className={className} style={{ position: 'relative' }}>
@@ -251,7 +265,7 @@ export function PaperCard({ children, seed, className }: { children: ReactNode; 
             fillColor="var(--color-card-bg)"
             strokeColor={PEN}
             strokeWidth={INK}
-            segmentsH={[2, 3]}
+            segmentsH={segmentsH}
             segmentsV={[2, 3]}
             curve={0.6}
             cornerJitter={0.8}

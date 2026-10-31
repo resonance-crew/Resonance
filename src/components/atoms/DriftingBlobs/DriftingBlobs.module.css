@@ -6,13 +6,15 @@
 }
 
 /* The stand-ins (server HTML, and what reduced motion keeps) give way to the
-   live blobs, which start exactly where they lie. */
+   live blobs, which start exactly where they lie — whatever opacity a stand-in
+   was given inline (its blob's strength), or its grain would stay on beside
+   the live blob's colour. */
 .root > :not(canvas) {
   transition: opacity 1.6s ease;
 }
 
 .root[data-live] > :not(canvas) {
-  opacity: 0;
+  opacity: 0 !important;
 }
 
 .canvas {
@@ -26,4 +28,21 @@
 
 .root[data-live] .canvas {
   opacity: 1;
+}
+
+/* Responsive (the `responsive` prop): a smaller screen holds fewer and smaller blobs — on a tablet each is drawn at
+   80 %, on a phone at 62 % (about its own centre, or its transform-origin) and one marked data-drift-phone="off" is
+   left out. The live blobs are read from the stand-ins, so they follow. */
+@media (max-width: 1023px) {
+  .root[data-responsive] > [data-drift] {
+    scale: 0.8;
+  }
+}
+@media (max-width: 639px) {
+  .root[data-responsive] > [data-drift] {
+    scale: 0.62;
+  }
+  .root[data-responsive] > [data-drift-phone='off'] {
+    display: none;
+  }
 }

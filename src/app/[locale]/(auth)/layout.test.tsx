@@ -43,10 +43,10 @@ describe('the (auth) layout', () => {
     const proof = screen.getByText(en.hero.proof);
     expect(line.compareDocumentPosition(proof) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    // The hero's drifting blobs behind it, their still stand-ins in the HTML;
+    // The hero's drifting blobs behind it (two, as each section has at most), their still stand-ins in the HTML;
     // no fixed blob behind the mark.
-    expect(container.querySelectorAll('[data-drift]')).toHaveLength(3);
-    expect(container.querySelectorAll('[data-drift-color]')).toHaveLength(3);
+    expect(container.querySelectorAll('[data-drift]')).toHaveLength(2);
+    expect(container.querySelectorAll('[data-drift-color]')).toHaveLength(2);
 
     expect(screen.getByRole('main')).toContainElement(screen.getByRole('heading', { name: 'Welcome back' }));
   });

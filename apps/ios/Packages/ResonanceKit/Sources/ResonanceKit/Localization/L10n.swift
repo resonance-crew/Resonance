@@ -78,6 +78,8 @@ public enum L10n {
         public static var tagline: String { Strings.shared.string("footer.tagline") }
         /// About
         public static var about: String { Strings.shared.string("footer.about") }
+        /// Paper Pals
+        public static var pals: String { Strings.shared.string("footer.pals") }
         /// Contact
         public static var contact: String { Strings.shared.string("footer.contact") }
         /// Privacy
@@ -265,6 +267,132 @@ public enum L10n {
             public static var body: String { Strings.shared.string("about.closing.body") }
             /// Write your story
             public static var start: String { Strings.shared.string("about.closing.start") }
+        }
+    }
+    public enum Pals {
+        /// Paper Pals
+        public static var metaTitle: String { Strings.shared.string("pals.metaTitle") }
+        /// Meet Resonance's five Paper Pals: Tuck, Twine, Nod, Pip and Hush. Five different papers, each with a story of its own, a
+        public static var metaDescription: String { Strings.shared.string("pals.metaDescription") }
+        public enum Hero {
+            /// Paper Pals
+            public static var title: String { Strings.shared.string("pals.hero.title") }
+            /// 小紙團
+            public static var alias: String { Strings.shared.string("pals.hero.alias") }
+            /// Five different papers, each carrying a story
+            public static var lead: String { Strings.shared.string("pals.hero.lead") }
+        }
+        public enum Tuck {
+            /// Tuck
+            public static var name: String { Strings.shared.string("pals.tuck.name") }
+            /// 摺摺
+            public static var other: String { Strings.shared.string("pals.tuck.other") }
+            /// A torn sheet of sage-green paper
+            public static var paper: String { Strings.shared.string("pals.tuck.paper") }
+            /// Its corner stays folded over a few pencilled lines. It lifts it only for someone it trusts.
+            public static var story: String { Strings.shared.string("pals.tuck.story") }
+            public enum Traits {
+                /// Shy
+                public static var a: String { Strings.shared.string("pals.tuck.traits.a") }
+                /// Earnest
+                public static var b: String { Strings.shared.string("pals.tuck.traits.b") }
+                /// Waves first
+                public static var c: String { Strings.shared.string("pals.tuck.traits.c") }
+            }
+            /// Want to read it together?
+            public static var line: String { Strings.shared.string("pals.tuck.line") }
+        }
+        public enum Tag {
+            /// Twine
+            public static var name: String { Strings.shared.string("pals.tag.name") }
+            /// 牽牽
+            public static var other: String { Strings.shared.string("pals.tag.other") }
+            /// A mist-blue gift tag
+            public static var paper: String { Strings.shared.string("pals.tag.paper") }
+            /// Its back says “To:”, but the line is still blank — it hasn’t found that someone yet
+            public static var story: String { Strings.shared.string("pals.tag.story") }
+            public enum Traits {
+                /// Gentle
+                public static var a: String { Strings.shared.string("pals.tag.traits.a") }
+                /// Polite
+                public static var b: String { Strings.shared.string("pals.tag.traits.b") }
+                /// A little formal
+                public static var c: String { Strings.shared.string("pals.tag.traits.c") }
+            }
+            /// Could this… be for you?
+            public static var line: String { Strings.shared.string("pals.tag.line") }
+        }
+        public enum Card {
+            /// Nod
+            public static var name: String { Strings.shared.string("pals.card.name") }
+            /// 聆聆
+            public static var other: String { Strings.shared.string("pals.card.other") }
+            /// A lavender index card
+            public static var paper: String { Strings.shared.string("pals.card.paper") }
+            /// It nods along and writes down what it hears
+            public static var story: String { Strings.shared.string("pals.card.story") }
+            public enum Traits {
+                /// Warm
+                public static var a: String { Strings.shared.string("pals.card.traits.a") }
+                /// Steady
+                public static var b: String { Strings.shared.string("pals.card.traits.b") }
+                /// A good listener
+                public static var c: String { Strings.shared.string("pals.card.traits.c") }
+            }
+            /// Mm-hm, I’m listening
+            public static var line: String { Strings.shared.string("pals.card.line") }
+        }
+        public enum Dot {
+            /// Pip
+            public static var name: String { Strings.shared.string("pals.dot.name") }
+            /// 點點
+            public static var other: String { Strings.shared.string("pals.dot.other") }
+            /// A yellow dot from a hole punch
+            public static var paper: String { Strings.shared.string("pals.dot.paper") }
+            /// All that’s left on it is the “ry” of “story”. It hops about, looking for the rest.
+            public static var story: String { Strings.shared.string("pals.dot.story") }
+            public enum Traits {
+                /// Bouncy
+                public static var a: String { Strings.shared.string("pals.dot.traits.a") }
+                /// Curious
+                public static var b: String { Strings.shared.string("pals.dot.traits.b") }
+                /// Can’t sit still
+                public static var c: String { Strings.shared.string("pals.dot.traits.c") }
+            }
+            /// Is this my story?
+            public static var line: String { Strings.shared.string("pals.dot.line") }
+        }
+        public enum Night {
+            /// Hush
+            public static var name: String { Strings.shared.string("pals.night.name") }
+            /// 悄悄
+            public static var other: String { Strings.shared.string("pals.night.other") }
+            /// A corner of a paper theatre’s night sky
+            public static var paper: String { Strings.shared.string("pals.night.paper") }
+            /// Pinprick stars, a moon it cut itself. Quiet by day, awake at night.
+            public static var story: String { Strings.shared.string("pals.night.story") }
+            public enum Traits {
+                /// Quiet
+                public static var a: String { Strings.shared.string("pals.night.traits.a") }
+                /// Unhurried
+                public static var b: String { Strings.shared.string("pals.night.traits.b") }
+                /// A bit sleepy
+                public static var c: String { Strings.shared.string("pals.night.traits.c") }
+            }
+            /// Goodnight… just one more story
+            public static var line: String { Strings.shared.string("pals.night.line") }
+        }
+        public enum Meet {
+            /// Different papers can resonate too
+            public static var title: String { Strings.shared.string("pals.meet.title") }
+        }
+        public enum Vision {
+            /// Everyone is a Paper Pal
+            public static var title: String { Strings.shared.string("pals.vision.title") }
+            /// Each of us is different and whole, with a story and a wisdom of our own
+            public static var p1: String { Strings.shared.string("pals.vision.p1") }
+            /// Here, we meet — and resonate
+            public static var p2: String { Strings.shared.string("pals.vision.p2") }
         }
     }
     public enum Tweaks {
