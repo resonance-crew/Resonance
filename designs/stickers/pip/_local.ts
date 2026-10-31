@@ -4,8 +4,8 @@
  * stickers alone (each sticker is bundled on its own, so nothing here reaches another pack).
  */
 import { PROP_KINDS, type PropKind, type PropState, type StickerPuppet } from '../kit';
-import { F, INK, path, pencil, poly, scribble, smoothPath, spline, tear, type Pt } from '../kit/paper';
-import { penWavePoints } from '../../../src/lib/design/wavyPath';
+import { F, INK, path, pencil, poly, scribble, smoothPath, tear, type Pt } from '../kit/paper';
+import { wavyPoints } from '../../../src/lib/design/wavyPath';
 import { clamp } from '../../../src/lib/mascots/geometry';
 
 /**
@@ -121,25 +121,48 @@ export const LAUGH_MARKS = register('pip-laugh-marks', {
   },
 });
 
+/** The low wall's size, rig units, and where its wave's middle runs (y). */
+const LOW_WALL: readonly [number, number] = [330, 66];
+const LOW_WALL_TOP = 14;
+/** 牽牽's wall paper (twine/_local.ts): the brand's terracotta, a step softer, a mid tone on either paper. */
+const WALL_INK = 'oklch(70% 0.1 45)';
+
 /**
- * The brand's wavy line as a thin strip of terracotta paper (the pen rhythm of `penWavePoints`, src/lib/design): a
- * line for 點點 to pop up from behind — it is clipped below it (`clipBelow`), so it rises out of the line itself rather
- * than from behind a block of colour. The line's middle runs along y = 20 of its box; the waves stay within ±4.
+ * A small, low wall lying along the sticker's foot, for 點點 to rise out from behind (it is clipped below the wall's top,
+ * `clipBelow`): 牽牽's wall from 在嗎？ laid down — a strip of the brand's terracotta paper whose top edge is the brand's
+ * wave (`wavyPoints`, the landing page's section edge), its bottom straight, a pencil line along the wave. `top` is the
+ * wave's middle, `base` the foot.
  */
-export const WAVE_LINE = register('pip-wave-line', {
-  size: [330, 40],
-  anchors: { center: [165, 20], left: [10, 20] },
+export const LOW_WALL_KIND = register('pip-low-wall', {
+  size: LOW_WALL,
+  anchors: { center: [165, 40], top: [165, LOW_WALL_TOP], base: [165, 60] },
   draw(seed) {
-    const line = penWavePoints(310, seed, 3.2, 26).map(([x, y]) => [x + 10, y + 20] as const);
-    const fine = spline(line, 4, false);
-    const ribbon = [...fine.map(([x, y]) => [x, y - 4.8] as const), ...fine.slice().reverse().map(([x, y]) => [x, y + 4.8] as const)];
-    return paper(path(tear(ribbon, seed + 1, { jag: 0.35, wander: 0.6 })), INK.terracotta, 'thin');
+    const [w, h] = LOW_WALL;
+    const pts = wavyPoints(w - 20, 0, 6, seed, 5);
+    // the section edge's cubic between two points, its handles level at the half-way x
+    const wave: Pt[] = [];
+    for (let i = 1; i < pts.length; i++) {
+      const [x0, y0] = pts[i - 1];
+      const [x1, y1] = pts[i];
+      const mx = (x0 + x1) / 2;
+      for (let j = i === 1 ? 0 : 1; j <= 8; j++) {
+        const u = j / 8;
+        const v = 1 - u;
+        wave.push([10 + v * v * v * x0 + 3 * v * v * u * mx + 3 * v * u * u * mx + u * u * u * x1, LOW_WALL_TOP + v * v * v * y0 + 3 * v * v * u * y0 + 3 * v * u * u * y1 + u * u * u * y1]);
+      }
+    }
+    // the straight foot, sampled (so it tears like the rest), right to left
+    const n = Math.round((w - 20) / 14);
+    const foot: Pt[] = Array.from({ length: n + 1 }, (_, i) => [w - 10 - ((w - 20) * i) / n, h - 6 + (2 * i) / n] as Pt);
+    const edge = smoothPath(wave.map(([x, y]) => [x, y + 7] as Pt));
+    return `<path d="${path(tear([...wave, ...foot], seed, { amp: 1.2, jag: 0.6, wander: 2 }))}" fill="${WALL_INK}" filter="url(#${F}paper)"/>
+      <path d="${edge}" stroke="oklch(58% 0.11 42)" stroke-width="2.4" fill="none" stroke-linecap="round" opacity="0.6" filter="url(#${F}graphite)"/>`;
   },
 });
 
 /**
- * Clips a puppet below a line across the sticker (px): nothing of it under y is drawn — 點點 rising out of the wavy
- * line. Call it last in a frame (it reads the pose's rise); the clip is in the puppet's own coordinates, whose origin is
+ * Clips a puppet below a line across the sticker (px): nothing of it under y is drawn — 點點 rising out from behind
+ * its low wall (the line inside the wall, under the wave's deepest dip). Call it last in a frame (it reads the pose's rise); the clip is in the puppet's own coordinates, whose origin is
  * its ground point lifted by its rise.
  */
 export function clipBelow(p: StickerPuppet, y: number): void {
