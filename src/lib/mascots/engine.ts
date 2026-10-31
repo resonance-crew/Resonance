@@ -1189,7 +1189,7 @@ export class Stage {
     return true;
   }
   /** A visitor now: this character (by slug) at this ledge (by id), if it fits in view; acts: what it does first. */
-  private visitNow({ ledge, slug, acts }: VisitRequest = {}): boolean {
+  private visitNow({ ledge, slug, acts, meet }: VisitRequest = {}): boolean {
     if (this.reduced) return false;
     // a place this page doesn't have: nothing to do, and nobody on stage sent off for it
     if (ledge && !this.ledges().some(l => l.id === ledge)) return false;
@@ -1202,6 +1202,7 @@ export class Stage {
     const entry = named || this.pickCast();
     const ch = this.spawn(entry, ledge ? l => l.id === ledge : null);
     if (ch && ch.plan && acts) ch.plan.first = acts.filter(isActName);
+    if (ch && meet) this.plan = { at: this.time + 2.5 + this.rand() * 1.5, until: this.time + 14, type: 'meet', host: ch };
     if (!ch) this.plan = { at: this.time + 0.5, type: 'visit' };
     return !!ch;
   }

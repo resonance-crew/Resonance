@@ -1,0 +1,57 @@
+# A fresh start of the debug app against the runner's private stack, signed in as ${ACCOUNT}
+# (a seeded account: alice, bob, carol, dora) and opened at ${ROUTE} (a site path without a
+# locale: /home, /messages/bob, /card/rain-walk, /write …).
+#
+#   - runFlow:
+#       file: common/launch.yaml
+#       env:
+#         ACCOUNT: alice
+#         ROUTE: /home
+#
+# Reads AUTH_PORT, FIRESTORE_PORT, API_PORT and PASSWORD from the runner (`-e`).
+# The two apps read their launch arguments differently (apps/README.md, "Against the local backend"):
+# iOS takes `-key value` pairs into UserDefaults, so every value is a string ("YES" for a switch);
+# Android reads intent extras, `emulator` a boolean and the ports as strings (MainActivity's `port`).
+# On Android the runner clears the app's data and sets its language (zh-TW) before each flow
+# (scripts/visual/flows.ts): `clearState` there would also drop the app's own locale.
+appId: com.resonance.stories
+---
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          clearState: true
+          clearKeychain: true
+          arguments:
+            -emulator: "YES"
+            -emulatorAuthPort: ${AUTH_PORT}
+            -emulatorFirestorePort: ${FIRESTORE_PORT}
+            -emulatorApiPort: ${API_PORT}
+            -visualCapture: "YES"
+            -appearance.scheme: light
+            -appearance.mascots: "NO"
+            -appLanguage: zh-TW
+            -AppleLanguages: (zh-Hant)
+            -AppleLocale: zh_TW
+            # Never the system's notification question (asked after a first note, message or card):
+            # it would cover the screen, and Maestro answers it only in English.
+            -askForNotifications: "NO"
+            -email: ${ACCOUNT}@resonance.test
+            -password: ${PASSWORD}
+            -route: ${ROUTE}
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          clearState: false
+          arguments:
+            emulator: true
+            emulatorAuthPort: ${AUTH_PORT}
+            emulatorFirestorePort: ${FIRESTORE_PORT}
+            emulatorApiPort: ${API_PORT}
+            mascots: false
+            email: ${ACCOUNT}@resonance.test
+            password: ${PASSWORD}
+            route: ${ROUTE}

@@ -19,7 +19,7 @@ import { ROOT, SEED_PASSWORD, run, settle, shotPath, sleep, variantsFor, type Ca
 export const BUNDLE_ID = 'com.resonance.stories';
 const IOS_DIR = join(ROOT, 'apps/ios');
 const DERIVED = join(IOS_DIR, 'build/visual-sim');
-const APP = join(DERIVED, 'Build/Products/Debug-iphonesimulator/Resonance.app');
+export const APP = join(DERIVED, 'Build/Products/Debug-iphonesimulator/Resonance.app');
 const RUNTIME = 'com.apple.CoreSimulator.SimRuntime.iOS-26-5';
 
 export type IosDevice = { id: string; phone: boolean; name: string; type: string };
@@ -83,22 +83,33 @@ function simctl(...args: string[]): string {
   return run('xcrun', ['simctl', ...args]);
 }
 
-/** This harness's simulator for `device`, made the first time; booted, with its status bar held at 9:41. */
-function simulator(device: IosDevice, ctx: CaptureContext): string {
+/**
+ * This harness's simulator for `device`, made the first time; booted, with its status bar held at
+ * 9:41. Answers whether this run booted it (and so shuts it down after: `shutDown`).
+ */
+export function simulator(device: IosDevice, ctx: CaptureContext): { udid: string; booted: boolean } {
   const listed = JSON.parse(simctl('list', 'devices', '-j')) as { devices: Record<string, { name: string; udid: string; state: string }[]> };
-  let udid = (listed.devices[RUNTIME] ?? []).find((d) => d.name === device.name)?.udid;
+  const found = (listed.devices[RUNTIME] ?? []).find((d) => d.name === device.name);
+  let udid = found?.udid;
   if (!udid) {
     ctx.log(`  making the ${device.name} simulator`);
     udid = simctl('create', device.name, device.type, RUNTIME).trim();
   }
+  const booted = found?.state !== 'Booted';
   run('xcrun', ['simctl', 'bootstatus', udid, '-b']);
   // An ISO time (simctl takes it only with milliseconds) sets the iPad's date beside it: the seed's day.
   simctl('status_bar', udid, 'override', '--time', '2026-09-01T09:41:00.000+08:00', '--dataNetwork', 'wifi', '--wifiMode', 'active', '--wifiBars', '3',
     '--cellularMode', 'active', '--cellularBars', '4', '--operatorName', '', '--batteryState', 'charged', '--batteryLevel', '100');
-  return udid;
+  return { udid, booted };
 }
 
-function build(ctx: CaptureContext) {
+/** A simulator this run booted goes down once its screens are taken (VISUAL_KEEP_DEVICES=1 keeps it up). */
+export function shutDown(udid: string) {
+  if (process.env.VISUAL_KEEP_DEVICES === '1') return;
+  spawnSync('xcrun', ['simctl', 'shutdown', udid], { stdio: 'ignore' });
+}
+
+export function build(ctx: CaptureContext) {
   if (process.env.VISUAL_SKIP_BUILD === '1' && existsSync(APP)) return ctx.log('  reusing the last simulator build');
   ctx.log('  building the Debug app for the simulator (apps/ios/build/visual-sim)…');
   prepareProject(ctx);
@@ -133,8 +144,9 @@ export const captureIos: Capture = async (ctx) => {
   if (!devices.length || !screens.length) return unsettled;
   mkdirSync(join(ctx.runDir, '_logs'), { recursive: true });
   build(ctx);
+  // One simulator at a time: booted, captured, shut down before the next.
   for (const device of devices) {
-    const udid = simulator(device, ctx);
+    const { udid, booted } = simulator(device, ctx);
     spawnSync('xcrun', ['simctl', 'terminate', udid, BUNDLE_ID], { stdio: 'ignore' });
     simctl('install', udid, APP);
     for (const v of variantsFor(device.phone)) {
@@ -156,6 +168,7 @@ export const captureIos: Capture = async (ctx) => {
       }
     }
     spawnSync('xcrun', ['simctl', 'terminate', udid, BUNDLE_ID], { stdio: 'ignore' });
+    if (booted) shutDown(udid);
   }
   return unsettled;
 };

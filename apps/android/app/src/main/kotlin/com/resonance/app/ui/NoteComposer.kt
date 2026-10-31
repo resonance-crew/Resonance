@@ -109,7 +109,7 @@ fun NoteComposer(session: Session, cardId: String, onClose: () -> Unit, onUpgrad
                 cursorBrush = SolidColor(Tokens.Text),
                 minLines = 4,
                 maxLines = 8,
-                modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
+                modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }.flowTag("note-field"),
             )
         }
         Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {

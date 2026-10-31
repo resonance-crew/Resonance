@@ -43,6 +43,7 @@
   "footer": {
     "tagline": "Let lives influence lives",
     "about": "About",
+    "pals": "Paper Pals",
     "contact": "Contact",
     "privacy": "Privacy",
     "terms": "Terms",
@@ -160,6 +161,83 @@
       "title": "Your story deserves to be heard",
       "body": "Someone as singular as you is bound to send ripples out into the world",
       "start": "Write your story"
+    }
+  },
+  "pals": {
+    "metaTitle": "Paper Pals",
+    "metaDescription": "Meet Resonance's five Paper Pals: Tuck, Twine, Nod, Pip and Hush. Five different papers, each with a story of its own, all meeting here.",
+    "hero": {
+      "title": "Paper Pals",
+      "alias": "小紙團",
+      "lead": "Five different papers, each carrying a story"
+    },
+    "tuck": {
+      "name": "Tuck",
+      "other": "摺摺",
+      "paper": "A torn sheet of sage-green paper",
+      "story": "Its corner stays folded over a few pencilled lines. It lifts it only for someone it trusts.",
+      "traits": {
+        "a": "Shy",
+        "b": "Earnest",
+        "c": "Waves first"
+      },
+      "line": "Want to read it together?"
+    },
+    "tag": {
+      "name": "Twine",
+      "other": "牽牽",
+      "paper": "A mist-blue gift tag",
+      "story": "Its back says “To:”, but the line is still blank — it hasn’t found that someone yet",
+      "traits": {
+        "a": "Gentle",
+        "b": "Polite",
+        "c": "A little formal"
+      },
+      "line": "Could this… be for you?"
+    },
+    "card": {
+      "name": "Nod",
+      "other": "聆聆",
+      "paper": "A lavender index card",
+      "story": "It nods along and writes down what it hears",
+      "traits": {
+        "a": "Warm",
+        "b": "Steady",
+        "c": "A good listener"
+      },
+      "line": "Mm-hm, I’m listening"
+    },
+    "dot": {
+      "name": "Pip",
+      "other": "點點",
+      "paper": "A yellow dot from a hole punch",
+      "story": "All that’s left on it is the “ry” of “story”. It hops about, looking for the rest.",
+      "traits": {
+        "a": "Bouncy",
+        "b": "Curious",
+        "c": "Can’t sit still"
+      },
+      "line": "Is this my story?"
+    },
+    "night": {
+      "name": "Hush",
+      "other": "悄悄",
+      "paper": "A corner of a paper theatre’s night sky",
+      "story": "Pinprick stars, a moon it cut itself. Quiet by day, awake at night.",
+      "traits": {
+        "a": "Quiet",
+        "b": "Unhurried",
+        "c": "A bit sleepy"
+      },
+      "line": "Goodnight… just one more story"
+    },
+    "meet": {
+      "title": "Different papers can resonate too"
+    },
+    "vision": {
+      "title": "Everyone is a Paper Pal",
+      "p1": "Each of us is different and whole, with a story and a wisdom of our own",
+      "p2": "Here, we meet — and resonate"
     }
   },
   "tweaks": {

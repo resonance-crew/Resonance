@@ -1,0 +1,28 @@
+# alice reads bob's card 一場雨後的散步, leaves its author a note and sends it: the composer closes
+# with 紙條寄出了.
+appId: com.resonance.stories
+name: leave-note
+tags:
+  - card
+---
+- runFlow:
+    file: common/launch.yaml
+    env:
+      ACCOUNT: alice
+      ROUTE: /card/rain-walk
+- extendedWaitUntil:
+    visible: 一場雨後的散步
+    timeout: 30000
+# The response row's note: 寄一張小紙條給作者, or 寄小紙條 where the row is narrow.
+- scrollUntilVisible:
+    element: 寄(一張)?小紙條(給作者)?
+    direction: DOWN
+- tapOn: 寄(一張)?小紙條(給作者)?
+- tapOn:
+    id: note-field
+- inputText: 謝謝你寫下這場雨 Maestro
+- tapOn: 寄出
+- extendedWaitUntil:
+    visible: 紙條寄出了
+    timeout: 15000
+- takeScreenshot: leave-note

@@ -64,6 +64,8 @@ struct NoteComposer: View {
                 .font(AppFonts.body(15))
                 .foregroundStyle(Tokens.text)
                 .focused($focused)
+                // The name the interaction flows find it by (maestro/flows; Android's flowTag).
+                .accessibilityIdentifier("note-field")
                 .padding(.horizontal, Tokens.fieldPadX)
                 .padding(.vertical, Tokens.fieldPadY)
                 .frame(minHeight: 96, alignment: .top)

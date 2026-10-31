@@ -35,13 +35,13 @@ import { ROOT, SEED_PASSWORD, pixelsApart, settle, shotPath, sleep, variantsFor,
 
 const execFileAsync = promisify(execFile);
 
-const PACKAGE = 'com.resonance.stories';
+export const PACKAGE = 'com.resonance.stories';
 const ACTIVITY = `${PACKAGE}/com.resonance.app.MainActivity`;
 const SDK = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT || join(homedir(), 'Library/Android/sdk');
 const ADB = join(SDK, 'platform-tools/adb');
 const EMULATOR = join(SDK, 'emulator/emulator');
 const ANDROID_DIR = join(ROOT, 'apps/android');
-const APK = join(ANDROID_DIR, 'app/build/outputs/apk/debug/app-debug.apk');
+export const APK = join(ANDROID_DIR, 'app/build/outputs/apk/debug/app-debug.apk');
 
 export type AndroidDevice = { id: string; phone: boolean; avd: string; port: number };
 
@@ -51,14 +51,14 @@ export const ANDROID_DEVICES: AndroidDevice[] = [
   { id: 'tablet', phone: false, avd: 'visual-tablet', port: 5602 },
 ];
 
-const serialOf = (d: AndroidDevice) => `emulator-${d.port}`;
+export const serialOf = (d: AndroidDevice) => `emulator-${d.port}`;
 
-async function adb(serial: string, ...args: string[]): Promise<string> {
+export async function adb(serial: string, ...args: string[]): Promise<string> {
   const { stdout } = await execFileAsync(ADB, ['-s', serial, ...args], { encoding: 'utf8', maxBuffer: 16 << 20 });
   return stdout.trim();
 }
 
-const shell = (serial: string, command: string) => adb(serial, 'shell', command);
+export const shell = (serial: string, command: string) => adb(serial, 'shell', command);
 
 async function screencap(serial: string): Promise<Buffer> {
   const { stdout } = await execFileAsync(ADB, ['-s', serial, 'exec-out', 'screencap', '-p'], { encoding: 'buffer', maxBuffer: 64 << 20 });
@@ -73,8 +73,22 @@ async function booted(serial: string): Promise<boolean> {
   }
 }
 
+/**
+ * Asks the emulator to quit and waits until adb no longer lists it: it takes up to 20 s to go,
+ * and a boot on the same port meanwhile would meet the one still leaving.
+ */
+export async function kill(serial: string) {
+  await adb(serial, 'emu', 'kill').catch(() => {});
+  const end = Date.now() + 40_000;
+  while (Date.now() < end) {
+    const { stdout } = await execFileAsync(ADB, ['devices'], { encoding: 'utf8' });
+    if (!stdout.split('\n').some((line) => line.startsWith(`${serial}\t`))) return;
+    await sleep(1000);
+  }
+}
+
 /** Boots the AVD unless it already runs; answers whether this run booted it. */
-async function boot(device: AndroidDevice, ctx: CaptureContext): Promise<boolean> {
+export async function boot(device: AndroidDevice, ctx: CaptureContext): Promise<boolean> {
   const serial = serialOf(device);
   if (await booted(serial)) return false;
   if (!existsSync(join(homedir(), '.android/avd', `${device.avd}.avd`))) {
@@ -99,7 +113,7 @@ async function boot(device: AndroidDevice, ctx: CaptureContext): Promise<boolean
 }
 
 /** Holds still what the system would otherwise move between runs. */
-async function holdStill(serial: string, ctx: CaptureContext) {
+export async function holdStill(serial: string, ctx: CaptureContext) {
   for (const key of ['window_animation_scale', 'transition_animation_scale', 'animator_duration_scale']) {
     await shell(serial, `settings put global ${key} 0`);
   }
@@ -121,7 +135,7 @@ async function wear(serial: string, v: Variant) {
   await shell(serial, `cmd uimode night ${v.theme === 'dark' ? 'yes' : 'no'}`);
 }
 
-function build(ctx: CaptureContext) {
+export function build(ctx: CaptureContext) {
   if (process.env.VISUAL_SKIP_BUILD === '1' && existsSync(APK)) return Promise.resolve();
   ctx.log('  building the debug APK (VISUAL_SKIP_BUILD=1 skips it)…');
   return (async () => {
@@ -182,7 +196,7 @@ async function shoot(serial: string, ctx: CaptureContext, screen: Screen, first:
  * shows its skeleton that long. Every v1 route the screens read is asked for once beforehand
  * (signed out: a 401 compiles it as well as a 200).
  */
-async function warmUp(ctx: CaptureContext) {
+export async function warmUp(ctx: CaptureContext) {
   ctx.log('  compiling the API routes the screens read…');
   const paths = [
     'me', 'feed', 'feed/recommended', 'cards/x', 'cards?keys=x', 'cards/x/private-shares', 'cards/x/resonances',
@@ -222,15 +236,29 @@ export const captureAndroid: Capture = async (ctx) => {
   const devices = ANDROID_DEVICES.filter((d) => !ctx.devices.length || ctx.devices.includes(d.id));
   const screens = screensFor('android', ctx.only);
   const started: AndroidDevice[] = [];
+  // Only the emulators this run booted; one that was already running is left as it was.
+  const shutDown = async (device: AndroidDevice) => {
+    if (!started.includes(device)) return;
+    await kill(serialOf(device));
+    started.splice(started.indexOf(device), 1);
+  };
   try {
-    // The build and the boots overlap; each device then runs its screens beside the other.
-    await Promise.all([build(ctx), warmUp(ctx), ...devices.map(async (d) => (await boot(d, ctx)) && started.push(d))]);
-    const results = await Promise.all(devices.map((d) => captureDevice(d, ctx, screens)));
-    return results.flat();
-  } finally {
-    // Only the emulators this run booted; one that was already running is left as it was.
-    for (const device of started) {
-      await adb(serialOf(device), 'emu', 'kill').catch(() => {});
+    if (process.env.VISUAL_PARALLEL === '1') {
+      // Both AVDs at once (a machine with the memory for it): the build and the boots overlap,
+      // then each device runs its screens beside the other.
+      await Promise.all([build(ctx), warmUp(ctx), ...devices.map(async (d) => (await boot(d, ctx)) && started.push(d))]);
+      return (await Promise.all(devices.map((d) => captureDevice(d, ctx, screens)))).flat();
     }
+    // One AVD at a time by default: booted, captured and shut down before the next one boots.
+    await Promise.all([build(ctx), warmUp(ctx)]);
+    const unsettled: string[] = [];
+    for (const device of devices) {
+      if (await boot(device, ctx)) started.push(device);
+      unsettled.push(...(await captureDevice(device, ctx, screens)));
+      await shutDown(device);
+    }
+    return unsettled;
+  } finally {
+    for (const device of [...started]) await shutDown(device);
   }
 };

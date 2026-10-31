@@ -89,16 +89,16 @@ struct SignInScreen: View {
     private var emulatorForm: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Emulator").font(AppFonts.body(12, weight: .semibold)).foregroundStyle(Tokens.textMuted)
-            OrganicTextField(L10n.Auth.email, text: $email, placeholder: "alice@resonance.test")
+            OrganicTextField(L10n.Auth.email, text: $email, placeholder: "alice@resonance.test", fieldIdentifier: "emulator-email")
                 .textInputAutocapitalization(.never)
                 .keyboardType(.emailAddress)
-            OrganicTextField(L10n.Auth.password, text: $password, isSecure: true, seed: 23)
+            OrganicTextField(L10n.Auth.password, text: $password, isSecure: true, seed: 23, fieldIdentifier: "emulator-password")
             OrganicButton(L10n.Auth.signIn) {
                 Task { await session.signIn(email: email, password: password) }
             }
             .disabled(email.isEmpty || password.isEmpty || session.isSigningIn)
         }
-        .accessibilityIdentifier("emulator-sign-in")
+        // No identifier on the whole form: one set here would override each field's own (the flows find them by those).
     }
 }
 

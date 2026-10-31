@@ -75,8 +75,8 @@ fun SignInScreen(session: Session) {
             WavyDivider(seed = 181.0, modifier = Modifier.padding(vertical = 20.dp))
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 BasicText("Emulator", style = AppFonts.body(12f, 600, color = Tokens.TextMuted))
-                OrganicTextField(L10n.Auth.email, email, { email = it }, placeholder = "alice@resonance.test")
-                OrganicTextField(L10n.Auth.password, password, { password = it }, isSecure = true, seed = 23.0)
+                OrganicTextField(L10n.Auth.email, email, { email = it }, placeholder = "alice@resonance.test", fieldModifier = Modifier.flowTag("emulator-email"))
+                OrganicTextField(L10n.Auth.password, password, { password = it }, isSecure = true, seed = 23.0, fieldModifier = Modifier.flowTag("emulator-password"))
                 OrganicButton(L10n.Auth.signIn, enabled = email.isNotEmpty() && password.isNotEmpty() && !signingIn) {
                     scope.launch { session.signIn(email, password) }
                 }

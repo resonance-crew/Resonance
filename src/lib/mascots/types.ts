@@ -328,6 +328,8 @@ export interface VisitRequest {
   slug?: string;
   /** What it does first, in order (names it doesn't know are dropped). */
   acts?: readonly string[];
+  /** Someone else walks up to meet it once it is there (it stands where a meeting can happen). */
+  meet?: boolean;
 }
 
 /** The stage, as createStage hands it out. Its functions don't need `this`. */

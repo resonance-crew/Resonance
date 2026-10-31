@@ -1,8 +1,8 @@
 'use client';
 
-import { CSSProperties, useMemo } from 'react';
-import { pointsToBezier, wavyPoints } from '@/lib/design/wavyPath';
-import { useIsMobile } from '@/lib/hooks/useIsMobile';
+import { CSSProperties, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { pointsToBezier } from '@/lib/design/wavyPath';
+import { EDGE_VIEW_W, edgePoints, waveSegments } from '@/lib/design/sectionEdge';
 
 export interface SectionEdgeProps {
   topColor: string;
@@ -16,6 +16,11 @@ export interface SectionEdgeProps {
   strokeWidth?: number;
 }
 
+/**
+ * The wave at a band's top: the band before it runs down into this one, its paper filling the box above the wave.
+ * Its turns and swell follow the width it is drawn at (lib/design/sectionEdge): the server draws a wide one, and a
+ * narrower screen gets its own once measured.
+ */
 export function SectionEdge({
   topColor,
   seed = 1,
@@ -27,31 +32,29 @@ export function SectionEdge({
   stroke,
   strokeWidth = 1.2,
 }: SectionEdgeProps) {
-  const W = 1440;
-  const isMobile = useIsMobile(640);
-  const effSteps = isMobile ? Math.max(4, Math.round(steps * 0.45)) : steps;
-  const effSeed = isMobile ? seed + 9173 : seed;
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setWidth(Math.round(el.getBoundingClientRect().width) || null);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const { fillD, strokeD } = useMemo(() => {
-    const amp = height * amplitude;
-    const baseY = height * 0.78;
-    const pts = wavyPoints(W, baseY, amp, effSeed, effSteps);
-    const strokeD = pointsToBezier(pts);
-    const f = (n: number) => +n.toFixed(2);
-    const last = pts[pts.length - 1];
-    let fillD = `M 0,-1 L ${W},-1 L ${f(last[0])},${f(last[1])}`;
-    for (let i = pts.length - 2; i >= 0; i--) {
-      const [x0, y0] = pts[i + 1];
-      const [x1, y1] = pts[i];
-      const midX = (x0 + x1) / 2;
-      fillD += ` C ${f(midX)},${f(y0)} ${f(midX)},${f(y1)} ${f(x1)},${f(y1)}`;
-    }
-    fillD += ' Z';
-    return { fillD, strokeD };
-  }, [effSeed, height, amplitude, effSteps]);
+    const pts = edgePoints({ seed, height, amplitude, steps }, width);
+    return {
+      strokeD: pointsToBezier(pts),
+      fillD: `M 0,-1 L ${EDGE_VIEW_W},-1 ${waveSegments(pts, 1, 0, true)} Z`,
+    };
+  }, [seed, height, amplitude, steps, width]);
 
   return (
     <div
+      ref={ref}
       aria-hidden="true"
       style={{
         position: 'absolute',
@@ -65,7 +68,7 @@ export function SectionEdge({
       }}
     >
       <svg
-        viewBox={`0 0 ${W} ${height}`}
+        viewBox={`0 0 ${EDGE_VIEW_W} ${height}`}
         preserveAspectRatio="none"
         style={{ display: 'block', width: '100%', height: '100%', overflow: 'visible' }}
       >

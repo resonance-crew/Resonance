@@ -3,12 +3,16 @@ import {
   type Oklab,
   type Paint,
   type World,
+  SETTLE,
+  atRest,
   blend,
   blobColours,
   blobsAt,
   createWorld,
   makeGrid,
   parseOklch,
+  placeSeed,
+  restNow,
   sampleField,
   step,
   traceContours,
@@ -51,12 +55,11 @@ function chroma(c: Oklab): number {
 }
 
 describe('drifting blobs', () => {
-  it('draws a lone blob as one closed outline about its size, whose shape keeps changing', () => {
+  it('draws a lone blob as one closed outline about its size, whose shape changes while it moves', () => {
     const world = createWorld({
-      width: W, height: H, seed: 3, palette: [SAGE], paper: PAPER,
+      width: W, height: H, seed: 3, paper: PAPER,
       blobs: [{ x: 500, y: 450, R: 150, paint: SAGE, drift: [1, 0] }],
     });
-    world.population = 1;
     const first = outline(world);
     expect(first).toHaveLength(1);
     const b = world.blobs[0];
@@ -69,56 +72,88 @@ describe('drifting blobs', () => {
     // Its area is that of a disc of radius R, give or take.
     expect(Math.sqrt(area(first) / Math.PI)).toBeCloseTo(150, -1);
 
-    run(world, 15);
+    run(world, 6);
     const later = outline(world);
     expect(later).toHaveLength(1);
     const spread = (loop: number[]) => {
       const r = radii(loop);
       return Math.max(...r) - Math.min(...r);
     };
-    // Same blob, a different silhouette.
+    // Same blob, a different silhouette, and a little way from its place.
     expect(Math.abs(spread(later[0]) - spread(first[0])) + Math.abs(area(later) - area(first))).toBeGreaterThan(1);
+    expect(Math.hypot(b.x - 500, b.y - 450)).toBeGreaterThan(5);
   });
 
-  it('melts two blobs that meet into one, joined by a neck first, keeping their area and their colour', () => {
+  it('strays only a little from its place, comes back to rest exactly there, and then nothing moves', () => {
     const world = createWorld({
-      width: W, height: H, seed: 11, palette: [LAVENDER], paper: PAPER,
+      width: W, height: H, seed: 7, paper: PAPER,
       blobs: [
-        { x: 420, y: 450, R: 120, paint: LAVENDER, drift: [1, 0] },
-        { x: 1020, y: 450, R: 100, paint: SAGE, drift: [-1, 0] },
+        { x: 300, y: 260, R: 180, paint: SAGE, drift: [1, 0.2] },
+        { x: 1150, y: 640, R: 90, paint: LAVENDER, drift: [-1, 0] },
       ],
     });
-    world.population = 2;
-    world.spawnAt = Infinity;
-    world.retryAt = Infinity;
-    const [a, b] = world.blobs.map((x) => x.id);
-    expect(outline(world)).toHaveLength(2);
+    let farthest = 0;
+    run(world, SETTLE - 0.5, (w) => {
+      farthest = Math.max(farthest, Math.hypot(w.blobs[0].x - 300, w.blobs[0].y - 260) / 180);
+    });
+    expect(farthest).toBeGreaterThan(0.1);
+    expect(farthest).toBeLessThan(0.4);
+    expect(world.settled).toBe(false);
+    run(world, 1);
+    expect(world.settled).toBe(true);
+    expect(atRest(world)).toBe(true);
+    expect(world.blobs.map((b) => [b.x, b.y])).toEqual([[300, 260], [1150, 640]]);
+    const still = outline(world);
+    run(world, 30);
+    expect(outline(world)).toEqual(still);
+    // The pointer over one still darkens it, and that eases out again.
+    world.hovered = blobsAt(world, 300, 260);
+    step(world, 0.1);
+    expect(atRest(world)).toBe(false);
+    world.hovered = new Set();
+    run(world, 5);
+    expect(atRest(world)).toBe(true);
+  });
 
+  it('sends a visitor that melts into the largest, joined by a neck first, without growing it much', () => {
+    const world = createWorld({
+      width: W, height: H, seed: 11, paper: PAPER,
+      blobs: [
+        { x: 1200, y: 300, R: 160, paint: LAVENDER, drift: [-1, 0.2] },
+        { x: 200, y: 700, R: 80, paint: LAVENDER, drift: [1, 0] },
+      ],
+      visitor: SAGE,
+    });
+    const host = world.blobs[0];
     let joined = false;
+    let most = 0;
     let lastArea = area(outline(world));
     let fusedAt = -1;
-    run(world, 120, (w) => {
+    run(world, SETTLE + 2, (w) => {
+      most = Math.max(most, w.blobs.length);
       const loops = outline(w);
-      if (w.blobs.length === 2 && w.pairs.length && loops.length === 1) joined = true;
+      if (w.blobs.length === 3 && w.pairs.length && loops.length === 2) joined = true;
       const now = area(loops);
-      if (fusedAt < 0 && w.blobs.length === 1) {
+      if (fusedAt < 0 && w.t > 2 && w.blobs.length === 2) {
         fusedAt = w.t;
         // Becoming one blob is seamless: the outline doesn't jump.
         expect(Math.abs(now - lastArea) / lastArea).toBeLessThan(0.03);
       }
       lastArea = now;
     });
+    expect(most).toBe(3);
     expect(joined).toBe(true);
     expect(fusedAt).toBeGreaterThan(0);
-
-    const [merged] = world.blobs;
-    expect([a, b]).not.toContain(merged.id);
-    expect(merged.R).toBeCloseTo(Math.hypot(120, 100), 5);
-    // Settled, it shows the area of both.
-    expect(Math.sqrt(area(outline(world)) / Math.PI)).toBeGreaterThan(0.9 * merged.R);
-    // Lavender and sage make a colour, not grey.
+    expect(fusedAt).toBeLessThan(SETTLE - 5);
+    expect(world.settled).toBe(true);
+    const merged = world.blobs.find((b) => b.seed === 0)!;
+    expect(merged.id).not.toBe(host.id);
+    expect(merged.R).toBeGreaterThan(160);
+    expect(merged.R).toBeLessThanOrEqual(160 * 1.06 + 1e-9);
+    expect([merged.x, merged.y]).toEqual([1200, 300]);
+    // Lavender taking in sage makes a colour, not grey.
     expect(chroma(merged.paint.ink)).toBeGreaterThan(0.06);
-    expect(merged.lobes.every((l) => l.fade >= 0)).toBe(true);
+    expect(merged.lobes.every((l) => l.fade === 0)).toBe(true);
   });
 
   it('blends colours round the hue circle instead of through grey', () => {
@@ -126,41 +161,15 @@ describe('drifting blobs', () => {
     expect(chroma(mid)).toBeCloseTo(0.07, 5);
     expect(mid[0]).toBeCloseTo(0.79, 5);
     const colours = blobColours(
-      createWorld({ width: W, height: H, seed: 1, palette: [SAGE], paper: PAPER, blobs: [{ x: 700, y: 400, R: 100, paint: SAGE, drift: [1, 0] }] }),
+      createWorld({ width: W, height: H, seed: 1, paper: PAPER, blobs: [{ x: 700, y: 400, R: 100, paint: SAGE, drift: [1, 0] }] }),
     );
     // A blob is its ink laid on the paper at its alpha.
     expect([...colours.values()][0][0]).toBeCloseTo(PAPER[0] + (SAGE.ink[0] - PAPER[0]) * 0.25, 5);
   });
 
-  it('keeps three or four blobs about, sending them off one side and new ones in, inside the hero', () => {
-    const world = createWorld({
-      width: W, height: H, seed: 29, palette: [LAVENDER, SAGE], paper: PAPER,
-      blobs: [
-        { x: 200, y: 260, R: 160, paint: LAVENDER, drift: [1, 0.1] },
-        { x: 1200, y: 600, R: 120, paint: SAGE, drift: [-1, 0] },
-      ],
-    });
-    let most = 0;
-    let lowest = 0;
-    const seen = new Set<number>();
-    run(world, 900, (w) => {
-      most = Math.max(most, w.blobs.length);
-      for (const b of w.blobs) {
-        seen.add(b.id);
-        if (b.x > 0 && b.x < W) lowest = Math.max(lowest, b.y + 0.95 * b.R);
-      }
-    });
-    expect(most).toBeLessThanOrEqual(4);
-    expect(world.blobs.length).toBeGreaterThanOrEqual(2);
-    expect(seen.size).toBeGreaterThan(8);
-    expect(world.blobs.some((b) => b.id <= 2)).toBe(false);
-    // A blob's body never crosses the hero's bottom into the next section.
-    expect(lowest).toBeLessThanOrEqual(H - 0.05 * H);
-  });
-
   it('finds the blob under the pointer, with whatever it is melting into', () => {
     const world = createWorld({
-      width: W, height: H, seed: 5, palette: [SAGE], paper: PAPER,
+      width: W, height: H, seed: 5, paper: PAPER,
       blobs: [
         { x: 300, y: 400, R: 100, paint: SAGE, drift: [1, 0] },
         { x: 480, y: 400, R: 100, paint: LAVENDER, drift: [-1, 0] },
@@ -173,20 +182,29 @@ describe('drifting blobs', () => {
     expect([...blobsAt(world, 300, 400)].sort()).toEqual([world.blobs[0].id, world.blobs[1].id].sort());
   });
 
-  it('keeps three or four blobs by default, and as many as a taller area asks for', () => {
-    const most = (crowd?: readonly [number, number], height = H) => {
-      const world = createWorld({ width: W, height, seed: 5, palette: [SAGE, LAVENDER], paper: PAPER, crowd });
-      let top = 0;
-      run(world, 300, (w) => {
-        top = Math.max(top, w.blobs.length);
-      });
-      return top;
-    };
-    expect(most()).toBeGreaterThanOrEqual(3);
-    expect(most()).toBeLessThanOrEqual(4);
-    const tall = most([5, 6], 2 * H);
-    expect(tall).toBeGreaterThanOrEqual(5);
-    expect(tall).toBeLessThanOrEqual(6);
+  it('follows its place to a new layout, at rest or not, keeping its size to its seed', () => {
+    const world = createWorld({
+      width: W, height: H, seed: 13, paper: PAPER,
+      blobs: [{ x: 1200, y: 300, R: 160, paint: LAVENDER, drift: [-1, 0] }],
+      visitor: SAGE,
+    });
+    run(world, SETTLE + 2);
+    const grown = world.blobs[0].R / 160;
+    placeSeed(world, 0, 500, 200, 100);
+    expect([world.blobs[0].x, world.blobs[0].y]).toEqual([500, 200]);
+    expect(world.blobs[0].R / 100).toBeCloseTo(grown, 6);
+    expect(Math.sqrt(area(outline(world)) / Math.PI)).toBeCloseTo(100 * grown, -1);
+
+    const fresh = createWorld({
+      width: W, height: H, seed: 13, paper: PAPER,
+      blobs: [{ x: 1200, y: 300, R: 160, paint: LAVENDER, drift: [-1, 0] }],
+      visitor: SAGE,
+    });
+    run(fresh, 4);
+    restNow(fresh);
+    expect(fresh.settled).toBe(true);
+    expect(fresh.blobs).toHaveLength(1);
+    expect([fresh.blobs[0].x, fresh.blobs[0].y]).toEqual([1200, 300]);
   });
 });
 
@@ -197,7 +215,7 @@ describe('tracing outlines frame after frame', () => {
   it('traces the same loops whatever was traced before it', () => {
     const world = (w: number, h: number, x: number) =>
       createWorld({
-        width: w, height: h, seed: 5, palette: [SAGE, LAVENDER], paper: PAPER,
+        width: w, height: h, seed: 5, paper: PAPER,
         blobs: [
           { x, y: h / 2, R: 120, paint: SAGE, drift: [1, 0] },
           { x: x + 260, y: h / 2 + 40, R: 90, paint: LAVENDER, drift: [-1, 0] },

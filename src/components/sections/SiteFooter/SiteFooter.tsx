@@ -8,9 +8,10 @@ import { Link } from '@/i18n/navigation';
 import styles from './SiteFooter.module.css';
 import { INK_LIGHT } from '@/lib/design/strokes';
 
-const LINK_KEYS = ['about', 'contact', 'privacy', 'terms'] as const;
+const LINK_KEYS = ['about', 'pals', 'contact', 'privacy', 'terms'] as const;
 const HREFS: Record<(typeof LINK_KEYS)[number], string> = {
   about: '/about',
+  pals: '/paper-pals',
   contact: '/support',
   privacy: '/privacy',
   terms: '/terms',

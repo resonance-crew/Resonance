@@ -90,8 +90,7 @@
 
 /* The drifting blobs' stand-ins (DriftingBlobs), around the cover's edges. */
 .drift1,
-.drift2,
-.drift3 {
+.drift2 {
   position: absolute;
   pointer-events: none;
 }
@@ -105,12 +104,6 @@
   right: 4%;
   opacity: 0.24;
 }
-.drift3 {
-  top: 14%;
-  right: 12%;
-  opacity: 0.22;
-}
-
 @media (max-width: 640px), (max-width: 1024px) and (orientation: portrait) {
   .page {
     flex-direction: column;
@@ -169,8 +162,7 @@
   }
 
   .drift1,
-  .drift2,
-  .drift3 {
+  .drift2 {
     transform: scale(0.62);
   }
   .drift1 {
@@ -178,9 +170,6 @@
   }
   .drift2 {
     transform-origin: bottom right;
-  }
-  .drift3 {
-    transform-origin: top right;
   }
 }
 

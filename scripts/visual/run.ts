@@ -3,21 +3,24 @@
  * compared with this machine's baseline, judged by a model, accepted by hand.
  * See scripts/visual/README.md.
  *
- *   capture [web ios android mac] [--only home,card] [--device phone] [--no-stack]
+ *   capture [web android ios mac] [--only home,card] [--device phone] [--no-stack] [--flows] [--review]
+ *            --flows: the Maestro flows on Android then iOS once the captures are done (stack still up)
+ *            --review: the agy review straight after (what a release runs, with --flows)
  *   compare  [--run <id>]          recompute the comparison and the report
- *   review   [--run <id>] [--gemini] [--all]   --all: unchanged captures too
+ *   review   [--run <id>] [--agy | --gemini] [--all]   --all: unchanged captures too
  *   accept   [--run <id>] [--only <key|screen>,…]
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { compareRun, type RunInfo } from './compare';
 import { writeReport } from './report';
-import { reviewWithGemini, writeReviewPack } from './review';
+import { reviewWithAgy, reviewWithGemini, writeReviewPack } from './review';
 import { startStack, type Stack } from './stack';
 import { BASELINE_DIR, PORTS, RUNS_DIR, VISUAL_DIR, git, listPngs, readJson, writeJson, type Capture } from './util';
 import type { Platform } from './screens';
 
-const PLATFORMS: Platform[] = ['web', 'ios', 'android', 'mac'];
+/** The order a full capture runs in, one platform at a time (each frees its devices before the next). */
+const PLATFORMS: Platform[] = ['web', 'android', 'ios', 'mac'];
 
 async function capturer(platform: Platform): Promise<Capture> {
   switch (platform) {
@@ -49,7 +52,8 @@ function runDirOf(args: string[]): string {
 
 function finish(runDir: string) {
   const results = compareRun(runDir);
-  writeReviewPack(runDir, results);
+  // A brief written by `review --all` stays as it was.
+  if (!existsSync(join(runDir, 'review', 'REVIEW.md'))) writeReviewPack(runDir, results);
   const report = writeReport(runDir, results);
   const count = (s: string) => results.filter((r) => r.status === s).length;
   log(`\nRun ${runDir.split('/').pop()}: ${count('changed')} changed · ${count('new')} new · ${count('missing')} missing · ${count('unchanged')} unchanged`);
@@ -58,8 +62,9 @@ function finish(runDir: string) {
 }
 
 async function capture(args: string[]) {
-  const platforms = args.filter((a): a is Platform => PLATFORMS.includes(a as Platform));
-  if (!platforms.length) platforms.push(...PLATFORMS);
+  // Always in PLATFORMS' order, one at a time, whatever order they were named in.
+  const named = args.filter((a): a is Platform => PLATFORMS.includes(a as Platform));
+  const platforms = PLATFORMS.filter((p) => !named.length || named.includes(p));
   const id = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
   const runDir = join(RUNS_DIR, id);
   mkdirSync(runDir, { recursive: true });
@@ -94,10 +99,37 @@ async function capture(args: string[]) {
       info.unsettled.push(...unsettled);
       writeJson(join(runDir, 'run.json'), info);
     }
+    if (args.includes('--flows')) await flows(runDir, platforms, stack.devUrl);
   } finally {
     stack?.stop();
   }
   finish(runDir);
+  if (args.includes('--review')) await review(runDir, ['--agy']);
+}
+
+/**
+ * The Maestro flows (scripts/visual/flows.ts) on the apps this capture took, after every capture:
+ * one device at a time, as the captures. Reports in `<run>/_flows/` (out of the captures' way); a failed flow fails the command.
+ */
+async function flows(runDir: string, platforms: Platform[], devUrl: string) {
+  const { runFlows } = await import('./flows');
+  const failed: string[] = [];
+  for (const platform of (['android', 'ios'] as const).filter((p) => platforms.includes(p))) {
+    log(`\n== flows on ${platform}`);
+    const results = await runFlows(platform, { runDir: join(runDir, '_flows'), devUrl, ports: PORTS, only: [], devices: [], log });
+    failed.push(...results.filter((r) => !r.passed).map((r) => `${platform}/${r.flow}`));
+  }
+  log(failed.length ? `Flows failed: ${failed.join(', ')} (reports in ${join(runDir, '_flows')})` : 'Flows: all passed');
+  if (failed.length) process.exitCode = 1;
+}
+
+async function review(runDir: string, args: string[]) {
+  const results = compareRun(runDir);
+  const all = args.includes('--all');
+  if (args.includes('--agy')) await reviewWithAgy(runDir, results, log, all);
+  else if (args.includes('--gemini')) await reviewWithGemini(runDir, results, log, all);
+  log(`Review brief: ${writeReviewPack(runDir, results, all)}`);
+  log(`Report: ${writeReport(runDir, results)}`);
 }
 
 /** Copies a run's captures into the baseline: all of them, or the keys / screen ids given. */
@@ -125,18 +157,12 @@ async function main() {
       return capture(args);
     case 'compare':
       return finish(runDirOf(args));
-    case 'review': {
-      const runDir = runDirOf(args);
-      const results = compareRun(runDir);
-      const all = args.includes('--all');
-      if (args.includes('--gemini')) await reviewWithGemini(runDir, results, log, all);
-      else log(`Hand this to a reviewing agent: ${writeReviewPack(runDir, results, all)}`);
-      return log(`Report: ${writeReport(runDir, results)}`);
-    }
+    case 'review':
+      return review(runDirOf(args), args);
     case 'accept':
       return accept(args);
     default:
-      log('Usage: npm run visual -- capture [web ios android mac] [--only ids] [--device ids] [--no-stack] | compare | review [--gemini] | accept [--only keys]');
+      log('Usage: npm run visual -- capture [web android ios mac] [--only ids] [--device ids] [--no-stack] [--flows] [--review] | compare | review [--agy | --gemini] [--all] | accept [--only keys]  (each with --run <id>)');
       process.exit(command ? 1 : 0);
   }
 }

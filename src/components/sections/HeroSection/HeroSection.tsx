@@ -10,13 +10,8 @@ import { DOWNLOAD_ANCHOR } from '@/lib/appStores';
 import styles from './HeroSection.module.css';
 import { INK_STRONG } from '@/lib/design/strokes';
 
-/** The colours a newcomer among the hero's blobs is drawn in, and how strongly each shows. */
-const BLOB_PAINTS: DriftPaint[] = [
-  { color: '--color-terracotta-light', alpha: 0.32 },
-  { color: '--color-lavender', alpha: 0.26 },
-  { color: '--color-sage', alpha: 0.22 },
-  { color: '--color-yellow', alpha: 0.3 },
-];
+/** The small blob that comes in a moment after and melts into the larger. */
+const VISITOR: DriftPaint = { color: '--color-sage', alpha: 0.22 };
 
 /** The still blobs' grain, light like the live blobs' sand they hand over to. */
 const STAND_IN_GRAIN = 0.2;
@@ -25,17 +20,14 @@ export function HeroSection() {
   const t = useTranslations('hero');
   return (
     <section id="about" className={styles.hero} data-mascot-zone="hero">
-      {/* Still here as the server draws the page; on the client they come alive and drift away
-          (data-drift is each one's heading), new ones drift in, and two that meet melt into one. */}
-      <DriftingBlobs palette={BLOB_PAINTS}>
+      {/* Still here as the server draws the page; on the client they come alive, stray a little
+          (data-drift is each one's way), a small one melts into the larger, and they rest where they were. */}
+      <DriftingBlobs visitor={VISITOR} responsive>
         <div className={styles.blob1} data-drift="1,0.12" data-drift-color="--color-terracotta-light">
           <OrganiBlob variant={1} fill="var(--color-terracotta-light)" size={380} grain={STAND_IN_GRAIN} />
         </div>
-        <div className={styles.blob2} data-drift="-1,-0.08" data-drift-color="--color-lavender">
+        <div className={styles.blob2} data-drift="-1,-0.08" data-drift-color="--color-lavender" data-drift-phone="off">
           <OrganiBlob variant={3} fill="var(--color-lavender)" size={300} grain={STAND_IN_GRAIN} />
-        </div>
-        <div className={styles.blob3} data-drift="1,-0.2" data-drift-color="--color-sage">
-          <OrganiBlob variant={2} fill="var(--color-sage)" size={180} grain={STAND_IN_GRAIN} />
         </div>
       </DriftingBlobs>
 

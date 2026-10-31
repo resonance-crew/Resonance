@@ -1,0 +1,166 @@
+/* A Paper Pal at rest: its frame is the rig's parts' box, in units of the parent's --unit (px for 摺摺's height).
+   Its ground line is the frame's foot less `--below` (the shadow reaches under it), so a row of them aligned at
+   their feet stands on one line. */
+.pal {
+  position: relative;
+  display: block;
+  flex: none;
+  width: calc(var(--unit, 120px) * var(--w));
+  height: calc(var(--unit, 120px) * var(--h));
+  margin-bottom: calc(var(--unit, 120px) * var(--h) * var(--below) * -1);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.hop,
+.body {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.part {
+  position: absolute;
+  display: block;
+  max-width: none;
+  margin: 0;
+  -webkit-user-drag: none;
+}
+
+.part[data-only='dark'] {
+  display: none;
+}
+
+.shut,
+.helloMouth {
+  opacity: 0;
+}
+
+/* The night paper: a little dimmer, as on the stage (its nightDim), and 悄悄's stars glow through. */
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-scheme='light'])) .part {
+    filter: brightness(0.9) saturate(0.92);
+  }
+  :global(:root:not([data-scheme='light'])) .part[data-only='dark'] {
+    display: block;
+    filter: none;
+  }
+}
+:global(:root[data-scheme='dark']) .part {
+  filter: brightness(0.9) saturate(0.92);
+}
+:global(:root[data-scheme='dark']) .part[data-only='dark'] {
+  display: block;
+  filter: none;
+}
+
+/* ── Hello: eyes shut in a smile, the mouth open, one arm up and waving ── */
+
+:global([data-hello]) .eye,
+:global([data-hello-hover]:hover) .eye,
+:global([data-hello]) .mouth,
+:global([data-hello-hover]:hover) .mouth {
+  opacity: 0;
+  animation: none;
+}
+:global([data-hello]) .shut,
+:global([data-hello-hover]:hover) .shut,
+:global([data-hello]) .helloMouth,
+:global([data-hello-hover]:hover) .helloMouth {
+  opacity: 1;
+  animation: none;
+}
+:global([data-hello]) .wave,
+:global([data-hello-hover]:hover) .wave {
+  transform: rotate(var(--lift));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Breathing: the body rises a hair about where it sits on its legs. */
+  .body {
+    animation: breathe 4.2s ease-in-out var(--phase) infinite;
+  }
+
+  /* A blink every few seconds: the open eyes give way to the shut ones for a moment. */
+  .eye {
+    animation: blink-open 5.6s step-end var(--phase) infinite;
+  }
+  .shut {
+    animation: blink-shut 5.6s step-end var(--phase) infinite;
+  }
+
+  .wave {
+    transition: transform 0.32s cubic-bezier(0.3, 0.7, 0.4, 1);
+  }
+  :global([data-hello]) .wave,
+  :global([data-hello-hover]:hover) .wave {
+    animation: wave 0.9s ease-in-out 0.3s infinite;
+  }
+
+  /* 點點 hops when it says hello */
+  :global([data-hello]) .pal[data-pal='dot'] .hop,
+  :global([data-hello-hover]:hover) .pal[data-pal='dot'] .hop {
+    animation: hop 0.62s ease-out 2;
+  }
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(1.014);
+  }
+}
+
+@keyframes blink-open {
+  0% {
+    opacity: 1;
+  }
+  95.5% {
+    opacity: 0;
+  }
+  97.5% {
+    opacity: 1;
+  }
+}
+
+@keyframes blink-shut {
+  0% {
+    opacity: 0;
+  }
+  95.5% {
+    opacity: 1;
+  }
+  97.5% {
+    opacity: 0;
+  }
+}
+
+@keyframes wave {
+  0%,
+  100% {
+    transform: rotate(var(--lift));
+  }
+  50% {
+    transform: rotate(calc(var(--lift) + var(--wig)));
+  }
+}
+
+@keyframes hop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-14%);
+  }
+}
+
+/* On a band that is night whatever the page's scheme (the Paper Pals page's 悄悄): its stars glow there too. */
+:global([data-night]) .part[data-only='dark'] {
+  display: block;
+  filter: none;
+}
