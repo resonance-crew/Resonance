@@ -88,6 +88,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* The thread's composer asks whether it fills the pane (Thread.module.css, the wide foot). */
+  container: thread-pane / inline-size;
   /* No right padding on the pane itself: this side is a split (divider), not
      a card, so the scroller's scrollbar should sit flush at the viewport
      edge. Content insets live on the scroller / composer rows instead. No top

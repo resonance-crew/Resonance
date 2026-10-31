@@ -1814,6 +1814,66 @@ button.chips::before {
   }
 }
 
+/* A pane the capsule doesn't fill (2026-11-01, the owner's notes: it is at its 720, room beside it past the gutter —
+   a wide window, a tablet; the apps' tablets and the Mac alike): the thread shows on either side of the capsule,
+   sinking into a fade at the screen's foot (from 20 over the capsule's foot down to the edge), and nowhere else.
+   Under the capsule and what rides with it, a column of paper exactly the capsule's width runs to the screen's edge
+   (nothing shows under or below the field), its sides fading in over 12 from the capsule's edges, so the clear edge
+   lies on the capsule's border and no fade shows past it; with rows riding, it starts 8 over them, its top 10 a
+   fade, its top corners round, and the rows stand 4 further in (their ✕ 12). A pane the capsule fills keeps the paper across it
+   (above). So does the sticker panel in the keyboard's place (a touch tablet): it is that paper going on. */
+@container thread-pane (min-width: 749px) {
+  .dock:not(:has(> .stickerPanel))::before {
+    display: none;
+  }
+
+  .dock:not(:has(> .stickerPanel))::after {
+    top: auto;
+    height: calc(28px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(to bottom, transparent, var(--color-cream));
+    pointer-events: none;
+  }
+
+  .dock:not(:has(> .stickerPanel)):has(.carry) {
+    padding-top: 8px;
+  }
+
+  /* The ✕ stands 12 in, clear of the paper's fading side. */
+  .dock:not(:has(> .stickerPanel)) .carry {
+    padding-inline: 4px 12px;
+  }
+
+  .dock:not(:has(> .stickerPanel)) .composerStack::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    left: 0;
+    right: 0;
+    /* From the capsule's middle (it is opaque above that), or 8 over the rows riding over it; down past the dock's
+       8 and the safe area to the screen's edge. */
+    top: 24px;
+    bottom: calc(-8px - env(safe-area-inset-bottom, 0px));
+    background: var(--color-cream);
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+    mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+    pointer-events: auto;
+  }
+
+  .dock:not(:has(> .stickerPanel)) .composerStack:has(> .carry)::before {
+    top: -8px;
+    /* Round by 16 inside the side fade's 12. */
+    border-radius: 28px 28px 0 0;
+    -webkit-mask-image:
+      linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent),
+      linear-gradient(to bottom, transparent, #000 10px);
+    -webkit-mask-composite: source-in;
+    mask-image:
+      linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent),
+      linear-gradient(to bottom, transparent, #000 10px);
+    mask-composite: intersect;
+  }
+}
+
 /* ── A picture sent in the thread, and its viewer ─────────────────── */
 
 /* Edge to edge: 4 px past the bubble's box on its top and sides (and its foot

@@ -699,6 +699,23 @@ public nonisolated enum ComposerMetrics {
     public static let rideFadeRoom: CGFloat = fade + slipGap
     /// The capsule over the bottom safe area or the keyboard.
     public static let bottomGap: CGFloat = 8
+    /// A pane the capsule doesn't fill (2026-11-01, the owner's notes: it is at its widest, room beside it past the
+    /// gutter — an iPad, the Mac): the thread shows beside the capsule and nowhere else — it sinks into a fade this
+    /// tall at the foot (from 20 over the capsule's foot down past its 8), while a column of paper exactly the
+    /// capsule's width runs from it (or from 8 over what rides with it) to the screen's foot, its sides fading in over
+    /// `wideSideFade` from the capsule's edges (the clear edge on its border, no fade past it). The web's `.dock`
+    /// in a pane over 748.
+    public static let wideFootFade: CGFloat = bottomGap + 20
+    public static let wideSideFade: CGFloat = 12
+    /// Over riding rows in a wide pane: the column starts this far over them, its top `wideRideFade` a fade, its
+    /// top corners round by `wideRideRadius` inside the side fade; the rows stand `wideRideInset` further in, their ✕
+    /// `wideRideEndInset` (clear of the fading side).
+    public static let wideRideLead: CGFloat = 8
+    public static let wideRideFade: CGFloat = 10
+    public static let wideRideRadius: CGFloat = 16
+    public static let wideRideInset: CGFloat = 4
+    public static let wideRideEndInset: CGFloat = 12
+    public static func widePane(_ width: CGFloat) -> Bool { width > maxWidth }
     /// The last row (or a notice) over the capsule.
     public static let slipGap: CGFloat = 6
     /// A riding row: at least 52 tall, 4 over and under its content, which starts 12 in from the
@@ -1144,22 +1161,100 @@ public struct ComposerSlip<Content: View>: View {
 /// never shows under the composer, and where the foot meets the thread the paper comes on softly.
 /// The solid part takes taps (`onTap`: the thread puts the keyboard away there, as on the thread);
 /// the fade lets them through to the messages under it.
+///
+/// `wide`: a pane wider than a phone (``ComposerMetrics/widePane(_:)``) — clear beside the capsule but for a
+/// fade over the foot's last ``ComposerMetrics/wideFootFade``, and a column of paper as wide as the capsule
+/// from `wide.columnTop` down to the screen's foot (``ComposerColumnPaper``).
 public struct ComposerBacking: View {
+    /// A wide pane's foot: how tall it is, how wide its capsule, where the column starts, and whether rows ride.
+    public struct Wide: Equatable {
+        public var footHeight: CGFloat
+        public var capsuleWidth: CGFloat
+        public var columnTop: CGFloat
+        public var riding: Bool
+
+        public init(footHeight: CGFloat, capsuleWidth: CGFloat, columnTop: CGFloat, riding: Bool) {
+            self.footHeight = footHeight
+            self.capsuleWidth = capsuleWidth
+            self.columnTop = columnTop
+            self.riding = riding
+        }
+    }
+
+    let wide: Wide?
     let onTap: () -> Void
 
-    public init(onTap: @escaping () -> Void) {
+    public init(wide: Wide? = nil, onTap: @escaping () -> Void) {
+        self.wide = wide
         self.onTap = onTap
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            LinearGradient(colors: [Tokens.cream.opacity(0), Tokens.cream], startPoint: .top, endPoint: .bottom)
-                .frame(height: ComposerMetrics.fade)
-                .allowsHitTesting(false)
-            Tokens.cream
-                .contentShape(Rectangle())
-                .onTapGesture(perform: onTap)
+        if let wide {
+            ZStack(alignment: .top) {
+                VStack(spacing: 0) {
+                    Color.clear
+                        .frame(height: max(0, wide.footHeight - ComposerMetrics.wideFootFade))
+                        .allowsHitTesting(false)
+                    LinearGradient(colors: [Tokens.cream.opacity(0), Tokens.cream], startPoint: .top, endPoint: .bottom)
+                        .frame(height: ComposerMetrics.wideFootFade)
+                        .allowsHitTesting(false)
+                    Tokens.cream
+                        .contentShape(Rectangle())
+                        .onTapGesture(perform: onTap)
+                }
+                ComposerColumnPaper(riding: wide.riding, onTap: onTap)
+                    .frame(width: wide.capsuleWidth)
+                    .padding(.top, wide.columnTop)
+            }
+            .accessibilityHidden(true)
+        } else {
+            VStack(spacing: 0) {
+                LinearGradient(colors: [Tokens.cream.opacity(0), Tokens.cream], startPoint: .top, endPoint: .bottom)
+                    .frame(height: ComposerMetrics.fade)
+                    .allowsHitTesting(false)
+                Tokens.cream
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onTap)
+            }
+            .accessibilityHidden(true)
         }
+    }
+}
+
+/// The column of paper under a wide pane's capsule (``ComposerBacking``'s `wide`): exactly as wide as the capsule,
+/// fading in over ``ComposerMetrics/wideSideFade`` from each side; with rows `riding`, its top
+/// ``ComposerMetrics/wideRideFade`` a fade and its top corners round. Its taps are the paper's (`onTap`).
+public struct ComposerColumnPaper: View {
+    let riding: Bool
+    let onTap: () -> Void
+
+    public init(riding: Bool, onTap: @escaping () -> Void) {
+        self.riding = riding
+        self.onTap = onTap
+    }
+
+    public var body: some View {
+        let side = ComposerMetrics.wideSideFade
+        let radius = riding ? side + ComposerMetrics.wideRideRadius : 0
+        GeometryReader { geo in
+            let w = max(geo.size.width, side * 2 + 1)
+            let h = max(geo.size.height, 1)
+            UnevenRoundedRectangle(topLeadingRadius: radius, topTrailingRadius: radius)
+                .fill(Tokens.cream)
+                .mask {
+                    LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: side / w),
+                                           .init(color: .black, location: 1 - side / w), .init(color: .clear, location: 1)],
+                                   startPoint: .leading, endPoint: .trailing)
+                }
+                .mask {
+                    LinearGradient(stops: [.init(color: riding ? .clear : .black, location: 0),
+                                           .init(color: .black, location: min(1, ComposerMetrics.wideRideFade / h))],
+                                   startPoint: .top, endPoint: .bottom)
+                }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
         .accessibilityHidden(true)
     }
 }

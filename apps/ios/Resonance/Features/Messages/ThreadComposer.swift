@@ -18,6 +18,9 @@ struct ThreadComposer: View {
     /// What lies under the capsule (round 22 §4.1): ☺ shows ⌨ while the sticker panel is open, ＋ its open
     /// state while the attach panel is, and the send segment ↑ / ↓ in the sticker panel with nothing to send.
     var panels = ComposerPanels()
+    /// A pane wider than a phone: the column of paper under the capsule starts closer over the rows
+    /// (``ComposerMetrics/wideRideLead``: its fade is its own, ``ComposerColumnPaper``).
+    var widePane = false
     /// Grown over the thread: the text box's height (nil at rest).
     var expandedTextHeight: CGFloat?
     /// ＋ was tapped: where it is on the screen (the Mac's popover hangs from it).
@@ -37,7 +40,9 @@ struct ThreadComposer: View {
     @State private var fadeBottom = false
 
     /// What rides with the message, top to bottom.
-    private var rides: [ComposerRide] {
+    private var rides: [ComposerRide] { Self.rides(model) }
+
+    static func rides(_ model: ThreadModel) -> [ComposerRide] {
         ComposerRide.of(reply: model.replyingTo != nil, note: model.noteRef != nil, card: model.pendingCard != nil,
                         picture: !model.pendingPictures.isEmpty, error: model.error != nil)
     }
@@ -51,8 +56,10 @@ struct ThreadComposer: View {
             if !rides.isEmpty {
                 VStack(spacing: 0) {
                     // What the foot gains over its rows: its paper's fade, then solid paper as deep as under them.
-                    Color.clear.frame(height: ComposerMetrics.fadeRoom(riding: true))
+                    Color.clear.frame(height: widePane ? ComposerMetrics.wideRideLead : ComposerMetrics.fadeRoom(riding: true))
                     ForEach(rides, id: \.self) { ride in row(ride) }
+                        .padding(.leading, widePane ? ComposerMetrics.wideRideInset : 0)
+                        .padding(.trailing, widePane ? ComposerMetrics.wideRideEndInset : 0)
                 }
                 .padding(.bottom, ComposerMetrics.slipGap)
                 .transition(.opacity)

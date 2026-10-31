@@ -82,6 +82,8 @@ struct ThreadScreen: View {
     /// How tall the bar is (the list's room under it), how wide the list, and the screen's safe area.
     @State private var barHeight: CGFloat = 58
     @State private var listWidth: CGFloat = 390
+    /// The floating foot's height, above the safe area or the keyboard.
+    @State private var footHeight: CGFloat = 0
     @State private var safe = EdgeInsets()
     @State private var underBar = false
     /// Where the list is scrolled to, and the way to send it to a message.
@@ -440,6 +442,23 @@ struct ThreadScreen: View {
         .safeAreaInset(edge: .bottom, spacing: 0) { foot(model) }
     }
 
+    /// A pane the capsule doesn't fill: no paper beside the capsule (``ComposerMetrics/widePane(_:)``).
+    private var widePane: Bool { ComposerMetrics.widePane(listWidth) }
+
+    /// A wide pane's foot for its paper (nil: the paper across the pane — a phone, or a panel in the keyboard's
+    /// place): the column under the capsule starts at the top of what rides with it, else at the capsule's middle
+    /// (it is opaque above that; a slip in its place too).
+    private func wideFoot(_ model: ThreadModel) -> ComposerBacking.Wide? {
+        guard widePane, !panels.isOpen else { return nil }
+        let riding = model.access.canWrite && !ThreadComposer.rides(model).isEmpty
+        return ComposerBacking.Wide(
+            footHeight: footHeight,
+            capsuleWidth: min(listWidth, ComposerMetrics.maxWidth) - ComposerMetrics.gutter * 2,
+            columnTop: riding ? 0 : ComposerMetrics.height / 2,
+            riding: riding
+        )
+    }
+
     /// The thread and the room over its floating foot, measured against each other.
     private static let footSpace = "thread.foot"
 
@@ -461,7 +480,8 @@ struct ThreadScreen: View {
                 if model.accessKnown {
                     switch model.access {
                     case .open, .replyToConnect:
-                        ThreadComposer(model: model, composing: $composing, panels: panels, expandedTextHeight: expandedTextHeight(model),
+                        ThreadComposer(model: model, composing: $composing, panels: panels, widePane: widePane && !panels.isOpen,
+                                       expandedTextHeight: expandedTextHeight(model),
                                        onAttach: { _ in toggleAttach(model) }, onStickers: { toggleStickers(model) },
                                        onPanelFace: { withAnimation(.easeOut(duration: 0.25)) { panels.setExpanded(!panels.expanded) } },
                                        onExpand: { expandComposer($0, model) },
@@ -506,9 +526,13 @@ struct ThreadScreen: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        // How tall the foot is (a wide pane's paper is a fade at its last 28 alone).
+        .onGeometryChange(for: CGFloat.self) { $0.size.height.rounded() } action: { footHeight = $0 }
         .background(alignment: .top) {
             if model.accessKnown {
-                ComposerBacking { KeyboardAway.now() }
+                // A pane the capsule doesn't fill (2026-11-01): the thread beside the capsule, sinking into a fade at the
+                // foot; the panel in the keyboard's place keeps the paper across the pane (it is that paper going on).
+                ComposerBacking(wide: wideFoot(model)) { KeyboardAway.now() }
                     // Through the home indicator, and under the keyboard (no message shows through its glass).
                     .ignoresSafeArea(edges: .bottom)
             }

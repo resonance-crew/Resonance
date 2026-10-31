@@ -108,6 +108,7 @@ import com.resonance.app.Session
 import com.resonance.design.AppFonts
 import com.resonance.design.ChatPictureSource
 import com.resonance.design.ComposerBacking
+import com.resonance.design.ComposerWideFoot
 import com.resonance.design.CssText
 import com.resonance.design.EmptyAction
 import com.resonance.design.HandDrawnAvatar
@@ -239,6 +240,8 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
     var panel by remember { mutableStateOf(PanelState()) }
     // Which panel's content is drawn: kept while a closing panel slides away.
     var shownPanel by remember { mutableStateOf(ComposerPanel.None) }
+    // The thread's foot's width (px): whether its capsule fills it.
+    var footWidth by remember { mutableIntStateOf(0) }
     var attachTab by rememberSaveable { mutableStateOf(AttachTab.Pictures) }
     // The sticker being previewed (a second tap sends it).
     var previewing by remember { mutableStateOf<StickerCatalog.Sticker?>(null) }
@@ -547,6 +550,9 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
             ThreadModel.Phase.Loading, ThreadModel.Phase.Ready -> {
                 val ready = model.phase == ThreadModel.Phase.Ready
                 val foot = model.foot
+                // No paper beside the capsule in a pane it doesn't fill (at its widest, room beside it past the
+                // gutter), unless a panel stands in the keyboard's place.
+                val widePane = !phone && with(density) { footWidth.toDp() } > ComposerMax && shownPanel == ComposerPanel.None
                 // The thread runs to the screen's foot; the composer floats over it.
                 Box(Modifier.fillMaxSize()) {
                     if (ready) MessageList(rows, ctx, list, top, Modifier.fillMaxSize().onThreadBlankTap(putKeyboardAway), pillVisible = !(searching && showResults), sayEmpty = foot.composes, room = room, notice = notice)
@@ -563,8 +569,24 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                 // takes; a tap on its solid part puts the keyboard away, as one on the thread's blank does.
                 // A sticker previewed: a tap anywhere on the thread lets it go (the panel's own taps are its own).
                 if (previewing != null) Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { previewing = null } })
-                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
-                    if (foot != ThreadFoot.Pending) ComposerBacking(Modifier.matchParentSize(), onTap = putKeyboardAway)
+                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { footWidth = it.width }) {
+                    // A pane the capsule doesn't fill (2026-11-01): the thread beside the capsule, sinking into a fade at the
+                    // foot's edge; a panel in the keyboard's place keeps the paper across the pane (it is that paper going on).
+                    if (foot != ThreadFoot.Pending) ComposerBacking(
+                        Modifier.matchParentSize(), onTap = putKeyboardAway,
+                        wide = if (!widePane) null else {
+                            // The column under the capsule starts at the top of what rides with it, else at the
+                            // capsule's middle (it is opaque above that; a slip in its place too).
+                            val riding = foot.composes && rides(model)
+                            ComposerWideFoot(
+                                footHeight = with(density) { room.foot.toDp() } + ComposerGap,
+                                columnTop = if (riding) 0.dp else ComposerHeight / 2,
+                                riding = riding,
+                                capsuleMax = ComposerMax,
+                                gutter = ComposerGutter,
+                            )
+                        },
+                    )
                     Column(Modifier.fillMaxWidth()) {
                         Box(
                             Modifier
@@ -579,6 +601,7 @@ fun ThreadScreen(session: Session, handle: String, uid: String?, note: Messaging
                                     onStickers = onStickers, onAttach = onAttach, onSegment = onSegment, onFieldTap = onFieldTap,
                                     expandedHeight = expandedHeight, onExpand = expand, onCollapse = collapse,
                                     onCapsuleHeight = { capsuleHeight = it },
+                                    widePane = widePane,
                                     modifier = padded,
                                 )
                                 ThreadFoot.Awaiting -> FootNote(L10n.Messages.awaitingReply, padded)

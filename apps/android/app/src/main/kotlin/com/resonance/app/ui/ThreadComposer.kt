@@ -73,6 +73,9 @@ import com.resonance.design.ComposerLeadShape
 import com.resonance.design.ComposerLeadSize
 import com.resonance.design.ComposerRow
 import com.resonance.design.ComposerRowsGap
+import com.resonance.design.ComposerWideRideEndInset
+import com.resonance.design.ComposerWideRideInset
+import com.resonance.design.ComposerWideRideLead
 import com.resonance.design.ComposerRowsLead
 import com.resonance.design.ComposerSegment
 import com.resonance.design.ComposerTile
@@ -130,6 +133,9 @@ internal fun Composer(
     onCollapse: () -> Unit,
     modifier: Modifier = Modifier,
     onCapsuleHeight: (Int) -> Unit = {},
+    // A pane the capsule doesn't fill: the column of paper under the capsule starts closer over the rows
+    // ([ComposerWideRideLead]: its fade is its own, [com.resonance.design.ComposerColumnPaper]).
+    widePane: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
     var lines by remember { mutableIntStateOf(1) }
@@ -138,8 +144,11 @@ internal fun Composer(
     val tools = composerTools(model.draft, lines, expanded)
     Column(modifier.fillMaxWidth()) {
         if (rides(model)) {
-            Spacer(Modifier.height(ComposerRowsLead))
-            ComposerRows(model, Modifier.blocksTouches())
+            Spacer(Modifier.height(if (widePane) ComposerWideRideLead else ComposerRowsLead))
+            ComposerRows(model, Modifier.blocksTouches().padding(
+                start = if (widePane) ComposerWideRideInset else 0.dp,
+                end = if (widePane) ComposerWideRideEndInset else 0.dp,
+            ))
             Spacer(Modifier.height(ComposerRowsGap))
         }
         val line = lineHeightOf(ComposerText)
@@ -246,7 +255,7 @@ private const val MAX_LINES = 5
 internal const val EXPAND_FROM_LINES = 3
 
 /** Whether anything rides with the message: a reply, the note answered, a card, pictures, an error. */
-private fun rides(model: ThreadModel): Boolean =
+internal fun rides(model: ThreadModel): Boolean =
     ridingRows(
         reply = model.replyingTo != null, note = model.noteRef != null, card = model.pendingCard != null,
         picture = model.pictures.isNotEmpty(), error = model.error != null,

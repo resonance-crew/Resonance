@@ -13,7 +13,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -96,6 +100,34 @@ val ComposerRowsGap = 6.dp
  * under their last ink down to the capsule, and the thread never shows right down to the ink.
  */
 val ComposerRowsLead = ComposerFade + ComposerRowsGap
+
+/**
+ * A pane the capsule doesn't fill (2026-11-01, the owner's notes: it is at its widest, room beside it past the
+ * gutter — a tablet): the thread shows beside the capsule and nowhere else — it sinks into a fade this tall at the
+ * foot (from 20 over the capsule's foot down past its 8), while a column of paper exactly the capsule's width runs
+ * from it (or from [ComposerWideRideLead] over what rides with it) to the screen's edge, its sides fading in over
+ * [ComposerWideSideFade] from the capsule's edges, so the clear edge lies on its border ([ComposerBacking]'s
+ * `wide`). The web's `.dock` in a pane over 748, iOS's twin.
+ */
+val ComposerWideFootFade = 28.dp
+val ComposerWideSideFade = 12.dp
+
+/**
+ * Over riding rows in a wide pane: the column starts this far over them, its top 10 a fade, its top corners round
+ * by 16 inside the side fade; the rows stand [ComposerWideRideInset] further in, their ✕ [ComposerWideRideEndInset]
+ * (clear of the fading side).
+ */
+val ComposerWideRideLead = 8.dp
+val ComposerWideRideInset = 4.dp
+val ComposerWideRideEndInset = 12.dp
+private val ComposerWideRideFade = 10.dp
+private val ComposerWideRideRadius = 16.dp
+
+/**
+ * A wide pane's foot, for its paper: how tall the foot is, where the column under the capsule starts, whether rows
+ * ride over the capsule, and the capsule's column (at most [capsuleMax] wide, [gutter] inside the pane's sides).
+ */
+data class ComposerWideFoot(val footHeight: Dp, val columnTop: Dp, val riding: Boolean, val capsuleMax: Dp, val gutter: Dp)
 
 /** A row riding with the message over the capsule ([ComposerRow]): its least height. */
 val ComposerRowHeight = 52.dp
@@ -457,35 +489,85 @@ private data class FloatingSlip(val seed: Double, val radius: Double, val pen: C
  * TalkBack.
  */
 @Composable
-fun ComposerBacking(modifier: Modifier = Modifier, onTap: () -> Unit = {}) {
-    val tap by rememberUpdatedState(onTap)
-    Column(modifier.clearAndSetSemantics { }) {
-        val paper = Tokens.Cream
-        Box(Modifier.fillMaxWidth().height(ComposerFade).background(remember(paper) { Brush.verticalGradient(listOf(paper.copy(alpha = 0f), paper)) }))
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .background(Tokens.Cream)
-                .pointerInput(Unit) {
-                    // Every touch is the paper's (nothing under it is pressed); one that stays a tap is the blank's.
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        down.consume()
-                        var moved = false
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            event.changes.forEach { it.consume() }
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) moved = true
-                            if (!change.pressed) {
-                                if (!moved) tap()
-                                break
-                            }
-                        }
-                    }
-                },
+fun ComposerBacking(modifier: Modifier = Modifier, onTap: () -> Unit = {}, wide: ComposerWideFoot? = null) {
+    val paper = Tokens.Cream
+    val fade = remember(paper) { Brush.verticalGradient(listOf(paper.copy(alpha = 0f), paper)) }
+    if (wide == null) {
+        Column(modifier.clearAndSetSemantics { }) {
+            Box(Modifier.fillMaxWidth().height(ComposerFade).background(fade))
+            Box(Modifier.fillMaxWidth().weight(1f).background(paper).paperTouches(onTap))
+        }
+        return
+    }
+    // A wide pane: clear beside the capsule but for a fade over the foot's last [ComposerWideFootFade], solid below the
+    // foot; and the column of paper under the capsule, from `columnTop` to the screen's edge.
+    BoxWithConstraints(modifier.clearAndSetSemantics { }) {
+        Column(Modifier.fillMaxSize()) {
+            Spacer(Modifier.height((wide.footHeight - ComposerWideFootFade).coerceAtLeast(0.dp)))
+            Box(Modifier.fillMaxWidth().height(ComposerWideFootFade).background(fade))
+            Box(Modifier.fillMaxWidth().weight(1f).background(paper).paperTouches(onTap))
+        }
+        val capsule = minOf(maxWidth, wide.capsuleMax) - wide.gutter * 2
+        ComposerColumnPaper(
+            riding = wide.riding,
+            onTap = onTap,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = wide.columnTop)
+                .width(capsule)
+                .fillMaxHeight(),
         )
+    }
+}
+
+/**
+ * The column of paper under a wide pane's capsule ([ComposerBacking]'s `wide`): exactly as wide as the capsule,
+ * fading in over [ComposerWideSideFade] from each side; with rows [riding], its top 10 a fade and its top
+ * corners round. Its touches are the paper's ([onTap]).
+ */
+@Composable
+fun ComposerColumnPaper(riding: Boolean, onTap: () -> Unit, modifier: Modifier = Modifier) {
+    val paper = Tokens.Cream
+    val density = LocalDensity.current
+    val side = with(density) { ComposerWideSideFade.toPx() }
+    val top = with(density) { ComposerWideRideFade.toPx() }
+    Box(
+        modifier
+            .clip(if (riding) RoundedCornerShape(topStart = ComposerWideSideFade + ComposerWideRideRadius, topEnd = ComposerWideSideFade + ComposerWideRideRadius) else RectangleShape)
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawRect(paper)
+                val w = size.width.coerceAtLeast(side * 2 + 1f)
+                drawRect(
+                    Brush.horizontalGradient(0f to Color.Transparent, side / w to Color.Black, 1f - side / w to Color.Black, 1f to Color.Transparent),
+                    blendMode = BlendMode.DstIn,
+                )
+                if (riding) drawRect(Brush.verticalGradient(0f to Color.Transparent, 1f to Color.Black, startY = 0f, endY = top), blendMode = BlendMode.DstIn)
+            }
+            .paperTouches(onTap),
+    )
+}
+
+/** Every touch is the paper's (nothing under it is pressed); one that stays a tap is the blank's ([onTap]). */
+@Composable
+private fun Modifier.paperTouches(onTap: () -> Unit): Modifier {
+    val tap by rememberUpdatedState(onTap)
+    return pointerInput(Unit) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            down.consume()
+            var moved = false
+            while (true) {
+                val event = awaitPointerEvent()
+                event.changes.forEach { it.consume() }
+                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) moved = true
+                if (!change.pressed) {
+                    if (!moved) tap()
+                    break
+                }
+            }
+        }
     }
 }
 
