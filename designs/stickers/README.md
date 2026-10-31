@@ -116,7 +116,8 @@ export default defineSticker({
 - **Props** (`kit/props.ts`, drawn by seeded generator code in the series' paper: torn or cut paper with its fibre rim
   and glue shadow, graphite, crayon) are placed in canvas px at their puppet's k so their grain matches: `heart` (`glow`,
   `warm`, `rim` — a snug warm rim just outside its edge, the glow the owner wants on a held heart rather than big
-  halos behind it —, `heart: 0` for the glow alone), `note`, `cup` (`steam`, `phase`), `flower`, `slip` (`seal`: the red ○), `stamp`,
+  halos behind it —, `ring` — short crayon rays just outside that rim, never up into a face —, `heart: 0` for the glow
+  alone), `note`, `cup` (`steam`, `phase`), `flower`, `slip` (`seal`: the red ○), `stamp`,
   `pennant` (`wave`), `star` (`shine`), `card` (`lines`, `underline`), `confetti` (`t`), `wave` (the brand's ≋: `show`,
   `pulse`), `tear` (`glint`), `lantern` (悄悄's star held up: `glow`), `sun` (`rays`), `burst` (joy strokes: `draw`),
   `sparkle` (`show`), `sparkles` (a cluster of three, the big one 1.6× a sparkle: `show`), `strokes` (motion lines:

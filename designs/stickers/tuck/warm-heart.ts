@@ -1,6 +1,7 @@
 /**
  * 摺摺 · 心暖暖 Warms my heart — it hugs a paper heart to its chest, eyes shut; the heart warms (a snug warm rim just
- * outside its own edge, in front of the mittens — never a big disc behind it: the owner) and beats twice, the rim
+ * outside its own edge, in front of the mittens — never a big disc behind it: the owner — and a ring of short crayon
+ * rays round it at its warmest) and beats twice, the rim
  * pulsing only a little, then it settles back. Key pose: holding the heart before its chest, smiling, a faint rim.
  *
  * The body moves on 2 frames (the squeeze and its release); the heart, its glow and the face carry the rest.
@@ -41,9 +42,11 @@ export default defineSticker({
     // two beats while it glows (the heart swells and settles), squeezed a little while hugged
     const beat = t >= fr(10) && t < fr(18) ? [0, 0.6, 1, 0.3, 0, 0.6, 1, 0.3][Math.floor((t - fr(10)) * 12 + 1e-6)] ?? 0 : 0;
     const [hx, hy] = tuck.pagePoint(...HEART);
-    // one snug rim just outside the heart's edge, a little wider at each beat (a small pulse, never a disc)
+    // one snug rim just outside the heart's edge, a little wider at each beat (a small pulse, never a disc), and its
+    // ring of short crayon rays as it warms fully (the owner: the line glow round it, back) — to its sides and below,
+    // clear of the face
     heart.at(hx, hy, { k: tuck.k, scale: SCALE * (1 + 0.06 * beat) * (1 - 0.04 * squeeze) })
-      .set({ glow: 0, warm: glow, rim: 0.35 + 0.5 * glow + 0.15 * beat });
+      .set({ glow: 0, warm: glow, rim: 0.35 + 0.5 * glow + 0.15 * beat, ring: glow });
     // the face: eyes shut from the squeeze until it lets go, the blush rising with the glow
     if (t >= fr(4) && t < fr(20)) p.eyes = 'shut';
     p.blush = keys(ts, [[0, 0.4], [fr(4), 0.6], [fr(10), 1.6], [fr(18), 1.6], [fr(22), 0.4]]);

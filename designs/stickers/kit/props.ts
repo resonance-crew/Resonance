@@ -19,7 +19,7 @@ export type PropKind =
 /** What a prop's state may say (each kind reads its own keys; anything else is ignored). */
 export type PropState = Partial<Record<
   | 'glow' | 'warm' | 'heart' | 'above' | 'rim' | 'steam' | 'phase' | 'seal' | 'wave' | 'shine' | 'lines' | 'underline' | 't' | 'show'
-  | 'pulse' | 'glint' | 'rays' | 'draw',
+  | 'pulse' | 'glint' | 'rays' | 'ring' | 'draw',
   number
 >>;
 
@@ -135,7 +135,9 @@ export const PROP_KINDS: Record<PropKind, KindDef> = {
   /**
    * A paper heart; `glow` 0–1 lays warm paper halos behind it and a few crayon rays (to the sides and below), `above`
    * 0–1 three short rays over it, `rim` 0–1 a snug warm rim just outside its edge (a small glow that hugs it — pulse it
-   * between about 0.7 and 1), `warm` (default: glow) warms the heart's own red. `heart: 0` draws the glow alone — to put the glow behind a puppet's
+   * between about 0.7 and 1), `ring` 0–1 short crayon rays just outside that rim (the line-burst round a held heart,
+   * to its sides and lower diagonals, never up into a face), `rays` (default: glow) the halos' wider rays alone, `warm`
+   * (default: glow) warms the heart's own red. `heart: 0` draws the glow alone — to put the glow behind a puppet's
    * face and arms (a prop inside it) and the heart itself in front of them (a second heart prop, `glow: 0`).
    */
   heart: {
@@ -159,9 +161,17 @@ export const PROP_KINDS: Record<PropKind, KindDef> = {
       });
       const heart = tear(heartPts(120, 110, 116), seed + 3, { jag: 1.1, wander: 5 });
       const hi = pencil([[87, 88], [93, 76], [105, 72]], seed + 4, 2, 0.8);
+      // a ring of short rays just outside that rim (`ring`), to the sides and the lower diagonals — never straight up,
+      // where a face is
+      const ring = [-150, -30, 180, 0, 148, 32].map((deg, i) => {
+        const a = deg * DEG;
+        const [r0, r1] = [80, 100 - (i % 2) * 6];
+        return pencil([[120 + Math.cos(a) * r0, 116 + Math.sin(a) * r0], [120 + Math.cos(a) * r1, 116 + Math.sin(a) * r1]], seed + 30 + i, 1, 0.4)[0];
+      });
       // a snug rim just outside the heart's own edge (`rim`): a glow that hugs it, not a disc behind it
       const rim = paper(path(tear(heartPts(120, 110, 140), seed + 5, { jag: 0.8, wander: 3 })), 'oklch(85% 0.12 72)', 'thin');
       return `<g class="h2">${halo2}</g><g class="h1">${halo1}</g><g class="h0">${rim}</g>
+        ${pencilG(ring, { w: 6.5, op: 0.95, color: INK.terracotta, cls: 'rr', dash: true }).replace(`filter="url(#${F}graphite)"`, `filter="url(#${F}crayon)"`)}
         ${pencilG(rays, { w: 5.5, op: 0.9, color: INK.terracotta, cls: 'r', dash: true }).replace(`filter="url(#${F}graphite)"`, `filter="url(#${F}crayon)"`)}
         ${pencilG(up, { w: 5.5, op: 0.9, color: INK.terracotta, cls: 'ru', dash: true }).replace(`filter="url(#${F}graphite)"`, `filter="url(#${F}crayon)"`)}
         <g class="hp">${paper(path(heart), INK.red)}
@@ -172,7 +182,8 @@ export const PROP_KINDS: Record<PropKind, KindDef> = {
       const g = clamp(s.glow ?? 0, 0, 1);
       scaleAll(svg, '.h2', g > 0 ? 0.62 + 0.38 * smooth(g) : 0);
       scaleAll(svg, '.h1', g > 0 ? 0.76 + 0.24 * smooth(g) : 0);
-      drawIn(svg, '.r', smooth((g - 0.55) / 0.45));
+      drawIn(svg, '.r', smooth(((s.rays ?? g) - 0.55) / 0.45));
+      drawIn(svg, '.rr', smooth(((s.ring ?? 0) - 0.55) / 0.45));
       drawIn(svg, '.ru', smooth(((s.above ?? 0) - 0.55) / 0.45));
       // the rim: 0 just under the heart's edge (hidden), 1 about 9 units out all round
       const rim = clamp(s.rim ?? 0, 0, 1.2);

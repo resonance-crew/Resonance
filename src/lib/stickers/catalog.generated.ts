@@ -14,7 +14,7 @@ export const STICKER_ART: Readonly<Record<string, StickerArt>> = {
   "tuck/morning": { durationMs: 2083, frames: 16, bytes: 113600, v: "b8099925e4" },
   "tuck/deep-thanks": { durationMs: 2583, frames: 23, bytes: 113850, v: "c8be82e0b3" },
   "tuck/tucked-away": { durationMs: 2583, frames: 27, bytes: 89936, v: "390b9c76d6" },
-  "tuck/warm-heart": { durationMs: 2333, frames: 24, bytes: 88340, v: "7bccab5a2d" },
+  "tuck/warm-heart": { durationMs: 2333, frames: 24, bytes: 107174, v: "dc247edf60" },
   "tuck/take-your-time": { durationMs: 2583, frames: 26, bytes: 74078, v: "536168c2aa" },
   "tuck/glad-youre-here": { durationMs: 2583, frames: 13, bytes: 65742, v: "6010f97d7b" },
   "twine/icon": { durationMs: 0, frames: 1, bytes: 3232, v: "150c0e5854" },

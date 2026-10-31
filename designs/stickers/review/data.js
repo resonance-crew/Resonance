@@ -61,10 +61,10 @@ window.STICKERS = [
     },
     "durationMs": 2333,
     "frames": 24,
-    "bytes": 88340,
-    "v": "7bccab5a2d",
+    "bytes": 107174,
+    "v": "dc247edf60",
     "hero": 1,
-    "thumbBytes": 8450
+    "thumbBytes": 8576
    },
    {
     "id": "take-your-time",
