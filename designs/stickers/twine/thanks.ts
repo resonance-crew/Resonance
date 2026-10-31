@@ -1,8 +1,8 @@
 /**
  * 牽牽 · 謝謝 Thanks — the way it hands anything over, with both mittens (its proposal: 遞東西一定用雙手): holding a small
- * folded note by its two lower corners, it bows and holds the note out to you; at the bottom of the bow its eyes close,
+ * folded note by its two sides, low before its middle, it bows and holds the note out to you; at the bottom of the bow its eyes close,
  * the blush comes up, two short motion lines fall at its shoulders and the bow's loops perk up; then it straightens.
- * Key pose: standing, the note held before its middle in both mittens, a small smile.
+ * Key pose: standing, the note held low before its middle in both mittens, a small smile.
  *
  * The body moves on 6 frames (down 3, up 3) and holds the bow; while it holds, only the face, blush, loops and the
  * strokes change.
@@ -11,13 +11,14 @@ import { blink, bow, bowStrokes, defineSticker, fr, keys, lerp, snap, step } fro
 import { between, perk } from './_local';
 
 /**
- * The note: how large beside it, larger as it is held out to you in the bow; held by its two lower corners (its own
- * units: the folded letter is 104 × 78), so the mittens sit at its corners whatever its size.
+ * The note: how large beside it, larger as it is held out to you in the bow; held by its two sides halfway down (its
+ * own units: the folded letter is 104 × 78), so it hangs low in the mittens and its top edge stays under the brads its
+ * arms are pinned on, through the whole bow (above them it would look as if it cut the shoulders off).
  */
-const NOTE = 1.62;
-const NOTE_OUT = 1.95;
-const CORNERS = 76;
-const BOTTOM: [number, number] = [52, 67];
+const NOTE = 1.34;
+const NOTE_OUT = 1.52;
+const CORNERS = 80;
+const SIDES: [number, number] = [52, 44];
 
 export default defineSticker({
   duration: 2.25,
@@ -25,7 +26,7 @@ export default defineSticker({
   hero: fr(10),
   cast: { tw: { slug: 'tag', x: 216, ground: 414, k: 0.68 } },
   props: {
-    // inside 牽牽, just over its paper: the mittens hold it in front, at its corners
+    // inside 牽牽, just over its paper: the mittens hold it in front, at its sides
     note: { kind: 'note', seed: 7, inside: { puppet: 'tw', above: 'torso' } },
     left: { kind: 'strokes', seed: 3 },
     right: { kind: 'strokes', seed: 5 },
@@ -34,7 +35,7 @@ export default defineSticker({
     const p = tw.pose;
     const tb = snap(t, [0, fr(4), fr(5), fr(6), fr(16), fr(17), fr(18)]);
     const e = bow(tw, tb, fr(3), fr(6), fr(15), fr(18));
-    // the note, larger as it is held out; the mittens at its lower corners
+    // the note, larger as it is held out; the mittens at its sides
     const s = lerp(NOTE, NOTE_OUT, e);
     const arm = tw.rig.arms.L;
     const r = arm.len * 0.67;
@@ -46,7 +47,7 @@ export default defineSticker({
     p.lean = 0;
     const [hx, hy] = between(tw);
     p.lean = lean;
-    note.at(hx, hy + 4 * tw.k, { k: tw.k, scale: s, anchor: BOTTOM });
+    note.at(hx, hy + 4 * tw.k, { k: tw.k, scale: s, anchor: SIDES });
     // the bow's motion lines on its bottom frames, drawn in over two
     bowStrokes(tw, left, right, e);
     const strokes = keys(t, [[fr(6), 0.5], [fr(7), 1]]);

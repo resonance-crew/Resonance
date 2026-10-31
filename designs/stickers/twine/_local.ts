@@ -11,9 +11,13 @@
  *
  * `ripples` (RIPPLES_KIND): a prop kind for 共振了 — the brand's resonance drawn soft, ")))" and "(((" meeting — added
  * to the kit's PROP_KINDS when this file loads (only in the stickers that import it), drawn with the kit's own paper.
+ *
+ * `wall` (WALL_KIND) and `cutLeftOf`: a thin wall at the sticker's left whose edge is the brand's wave, for 在嗎？ to
+ * peek out from; and the cut that keeps whatever of 牽牽 is behind it from reaching past its far side.
  */
 import { clamp, type StickerPuppet } from '../kit';
-import { F, path, tear, type Pt } from '../kit/paper';
+import { wavyPoints } from '../../../src/lib/design/wavyPath';
+import { F, path, smoothPath, tear, type Pt } from '../kit/paper';
 import { PROP_KINDS, type PropKind, type PropState } from '../kit/props';
 
 /** How far a loop turns at perk ±1, degrees. */
@@ -173,3 +177,69 @@ const RIPPLES: LocalKind = {
 (PROP_KINDS as unknown as Record<string, LocalKind>).ripples = RIPPLES;
 /** The `ripples` kind, for a sticker's props (registered when this file loads). */
 export const RIPPLES_KIND = 'ripples' as PropKind;
+
+/**
+ * The brand's wave stood on end (the landing page's section edge: `wavyPoints` joined by `pointsToBezier`, in
+ * src/lib/design/wavyPath.ts), sampled into points: x = 0 at both ends, swinging ±`amp` between, `steps` turns down a
+ * height of `h`.
+ */
+function brandWave(h: number, amp: number, seed: number, steps: number): Pt[] {
+  const pts = wavyPoints(h, 0, amp, seed, steps);
+  const out: Pt[] = [];
+  for (let i = 1; i < pts.length; i++) {
+    // the section edge's cubic between two points, its handles level (here: upright) at the half-way height
+    const [y0, x0] = pts[i - 1];
+    const [y1, x1] = pts[i];
+    const my = (y0 + y1) / 2;
+    for (let j = i === 1 ? 0 : 1; j <= 8; j++) {
+      const u = j / 8;
+      const v = 1 - u;
+      const x = v * v * v * x0 + 3 * v * v * u * x0 + 3 * v * u * u * x1 + u * u * u * x1;
+      const y = v * v * v * y0 + 3 * v * v * u * my + 3 * v * u * u * my + u * u * u * y1;
+      out.push([x, y]);
+    }
+  }
+  return out;
+}
+
+const WALL_SIZE: readonly [number, number] = [96, 660];
+/** A wall's paper: the brand's terracotta, a step softer, a mid tone on either paper. */
+const WALL_INK = 'oklch(70% 0.1 45)';
+
+/**
+ * `wall`: a long, thin wall standing at the sticker's left, its right edge the brand's wave — something to peek out
+ * from. A strip of the brand's terracotta paper (its left edge straight, its right edge the wave), a pencil line along
+ * the wave as the landing page's edges carry. `right` is the wave's middle (where its edge runs), `base` its foot.
+ */
+const WALL: LocalKind = {
+  size: WALL_SIZE,
+  anchors: { center: [48, 330], base: [40, 652], top: [40, 8], right: [70, 330] },
+  draw(seed) {
+    const [, h] = WALL_SIZE;
+    const wave = brandWave(h - 16, 15, seed, 5).map(([x, y]) => [70 + x, 8 + y] as Pt);
+    // the straight side, sampled (so it tears like the rest), from the foot up
+    const n = Math.round((h - 18) / 14);
+    const left: Pt[] = Array.from({ length: n + 1 }, (_, i) => [12 - (2 * i) / n, h - 8 - ((h - 18) * i) / n] as Pt);
+    const strip: Pt[] = [...wave, ...left];
+    const edge = smoothPath(wave.map(([x, y]) => [x - 7, y] as Pt));
+    return `<path d="${path(tear(strip, seed, { amp: 1.2, jag: 0.6, wander: 2 }))}" fill="${WALL_INK}" filter="url(#${F}paper)"/>
+      <path d="${edge}" stroke="oklch(58% 0.11 42)" stroke-width="2.4" fill="none" stroke-linecap="round" opacity="0.6" filter="url(#${F}graphite)"/>`;
+  },
+};
+(PROP_KINDS as unknown as Record<string, LocalKind>).wall = WALL;
+/** The `wall` kind, for a sticker's props (registered when this file loads). */
+export const WALL_KIND = 'wall' as PropKind;
+
+/**
+ * Cuts a puppet off left of a line on the sticker (px), as a wall it stands behind would: whatever of it reaches past
+ * the wall's far side isn't there (and, with `below`, whatever is under the wall's foot). Call it every frame, after its
+ * pose and place are set.
+ */
+export function cutLeftOf(p: StickerPuppet, x: number, below?: { y: number; right: number }): void {
+  const ox = p.x;
+  const oy = p.y - p.pose.rise * p.k;
+  const pt = (px: number, py: number) => `${(px - ox).toFixed(1)}px ${(py - oy).toFixed(1)}px`;
+  // …and, behind the wall's foot (left of `right`), nothing under `y` either
+  const foot = below ? [pt(below.right, 4000), pt(below.right, below.y), pt(x, below.y)] : [pt(x, 4000)];
+  p.el.style.clipPath = `polygon(${[pt(x, -4000), pt(4000, -4000), pt(4000, 4000), ...foot].join(', ')})`;
+}
