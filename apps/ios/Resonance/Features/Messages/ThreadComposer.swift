@@ -91,6 +91,12 @@ struct ThreadComposer: View {
         }
     }
 
+    /// The words under 「回覆…」: the quote's (one line) — none for a sticker it can draw, whose still stands there.
+    static func replyDetail(_ quote: ReplyQuote) -> String? {
+        let words = QuotedReply.words(quote)
+        return words.isEmpty ? nil : words.replacingOccurrences(of: "\n", with: " ")
+    }
+
     /// ☺ only while nothing is written (round 22 v2): a sticker goes on its own, and words take the room it had.
     nonisolated static func offersStickers(draft: String) -> Bool {
         draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -104,12 +110,19 @@ struct ThreadComposer: View {
         switch ride {
         case .reply:
             if let quote = model.replyingTo {
+                let sticker = QuotedReply.quotedSticker(quote)
                 ComposerRow(label: quote.senderId == model.me ? L10n.Messages.replyingToSelf : L10n.Messages.replyingTo(handle: model.displayHandle),
-                            detail: quote.summary(picture: L10n.Messages.replyImage, card: L10n.Messages.replyCard,
-                                                  stickerName: { StickerLibrary.shared.name($0) })
-                                .replacingOccurrences(of: "\n", with: " "),
+                            detail: Self.replyDetail(quote),
                             removeLabel: L10n.Messages.replyCancel, onRemove: { model.cancelReply() }) {
-                    ReplyRule().frame(height: 34)
+                    HStack(spacing: ComposerMetrics.rowLeadGap) {
+                        ReplyRule().frame(height: 34)
+                        // A sticker answered: its still alone, no words (the thread's quote is the same); VoiceOver names it.
+                        if let sticker {
+                            StickerStill(sticker: sticker, side: ComposerMetrics.rowThumb)
+                                .accessibilityElement()
+                                .accessibilityLabel(L10n.Messages.stickerLabel(name: StickerLibrary.shared.label(sticker)))
+                        }
+                    }
                 }
             }
         case .note:

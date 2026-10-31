@@ -96,6 +96,15 @@ import Testing
         #expect(QuotedReply.words(ReplyQuote(id: "w", senderId: "bob", text: "嗨")) == "嗨")
     }
 
+    @Test func theReplyingRowShowsAStickersStillAndNoWords() {
+        // Answering a sticker: no 「貼圖：謝謝」 under 「回覆…」, its still stands there instead.
+        let sticker = ReplyQuote(id: "s", senderId: "bob", text: "〔貼圖：謝謝〕", sticker: StickerRef(pack: "twine", id: "thanks"))
+        #expect(ThreadComposer.replyDetail(sticker) == nil)
+        // Words are still one line of words; a picture still says it was one.
+        #expect(ThreadComposer.replyDetail(ReplyQuote(id: "w", senderId: "bob", text: "第一行\n第二行")) == "第一行 第二行")
+        #expect(ThreadComposer.replyDetail(ReplyQuote(id: "p", senderId: "bob", text: "", image: true)) == L10n.Messages.replyImage)
+    }
+
     // MARK: Keyboard height
 
     @Test func theKeyboardsHeightIsRememberedPerOrientationAcrossLaunches() throws {
