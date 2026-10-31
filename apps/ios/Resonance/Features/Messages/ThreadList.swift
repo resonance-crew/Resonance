@@ -639,13 +639,14 @@ struct MessageCore: View {
         let core = VStack(alignment: mine ? .trailing : .leading, spacing: 0) {
             if let sticker {
                 if let quote = message.replyTo {
-                    QuotedReply(quote: quote, mine: mine, ctx: ctx, interactive: interactive)
+                    QuotedReply(quote: quote, mine: mine, ctx: ctx, interactive: interactive, underSticker: true)
                 }
                 ThreadStickerView(message: message, sticker: sticker, side: ctx.stickerSide, interactive: interactive)
                     .overlay(alignment: mine ? .bottomLeading : .bottomTrailing) {
                         MessageReactions(message: message, mine: mine, model: model, onTap: interactive ? { press(nil, carried: carried) } : nil)
                     }
-                    .padding(.top, message.replyTo == nil ? 0 : 2)
+                    // A sticker answering stands under the quote, nothing of it over the quote (round 22 v2).
+                    .padding(.top, message.replyTo == nil ? 0 : 4)
             } else {
             if note {
                 NotedCard(message: message, carried: carried, mine: mine, ctx: ctx, interactive: interactive)
@@ -910,25 +911,46 @@ private struct NotedCard: View {
     }
 }
 
-/// The message a reply quotes, which the reply's bubble lies over; tapping it goes to the original.
+/// The message a reply quotes, which the reply's bubble lies over; tapping it goes to the original. A sticker is
+/// quoted by its key pose alone (round 22 v2).
 /// Who answered whom goes without saying in a one-to-one thread (the reply stands on its sender's
 /// side), so it is only read out by VoiceOver, before the quote.
-private struct QuotedReply: View {
+struct QuotedReply: View {
     let quote: ReplyQuote
     let mine: Bool
     let ctx: ThreadContext
     let interactive: Bool
+    /// The reply is a sticker: nothing lies over the quote's foot, so it keeps no room for it.
+    var underSticker = false
+
+    /// A quoted sticker's side.
+    static let stickerSide: CGFloat = 44
+
+    /// The sticker a quote shows (one this build can draw), or nil: then its words.
+    static func quotedSticker(_ quote: ReplyQuote) -> StickerRef? {
+        quote.sticker.flatMap { StickerLibrary.shared.drawable($0) ? $0 : nil }
+    }
+
+    /// What the quote says: nothing beside a sticker it shows; else its words, or what the message was.
+    static func words(_ quote: ReplyQuote) -> String {
+        if quotedSticker(quote) != nil { return "" }
+        return quote.summary(picture: L10n.Messages.replyImage, card: L10n.Messages.replyCard, unsentQuote: L10n.Messages.unsentQuote,
+                             stickerName: { StickerLibrary.shared.name($0) })
+    }
 
     var body: some View {
         let model = ctx.model
         VStack(alignment: mine ? .trailing : .leading, spacing: 0) {
             SpokenCaption(ThreadCaptions.reply(mine: mine, quotedMine: quote.senderId == model.me, handle: model.displayHandle))
-            QuoteBubble(text: quote.summary(picture: L10n.Messages.replyImage, card: L10n.Messages.replyCard,
-                                            unsentQuote: L10n.Messages.unsentQuote, stickerName: { StickerLibrary.shared.name($0) }),
+            QuoteBubble(text: Self.words(quote),
                         seed: seedFromId(quote.id, start: 19),
-                        // A sticker's quote: its key pose beside its name (round 22).
-                        lead: quote.sticker.map { AnyView(StickerStill(sticker: $0, side: 28)) },
+                        // A sticker's quote is its key pose alone, no name beside it (round 22 v2).
+                        lead: Self.quotedSticker(quote).map { AnyView(StickerStill(sticker: $0, side: QuotedReply.stickerSide)) },
+                        reservesFoot: !underSticker,
                         onTap: interactive ? { ctx.onQuote(quote.id) } : nil)
+                // VoiceOver still hears which sticker it was.
+                .accessibilityLabel(Self.quotedSticker(quote).map { L10n.Messages.stickerLabel(name: StickerLibrary.shared.label($0)) }
+                    ?? Self.words(quote))
         }
     }
 }

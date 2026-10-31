@@ -30,8 +30,11 @@ struct ThreadComposer: View {
     var onExpand: (Bool) -> Void = { _ in }
     /// Pictures were pasted into the field.
     var onPastePictures: ([Data]) -> Void = { _ in }
-    /// How many lines the text runs to (⤢ from the third).
+    /// How many lines the text runs to (the send block from the second, ⤢ from the third).
     @State private var lines = 1
+    /// Text beyond the text box's top and bottom edges: they fade out there.
+    @State private var fadeTop = false
+    @State private var fadeBottom = false
 
     /// What rides with the message, top to bottom.
     private var rides: [ComposerRide] {
@@ -43,6 +46,7 @@ struct ThreadComposer: View {
         let rides = rides
         let metrics = ComposerText.current()
         let expanded = model.composerExpanded && expandedTextHeight != nil
+        let offersStickers = Self.offersStickers(draft: model.draft)
         VStack(spacing: 0) {
             if !rides.isEmpty {
                 VStack(spacing: 0) {
@@ -56,15 +60,16 @@ struct ThreadComposer: View {
             ComposerCapsule(
                 focused: composing, canSend: model.canSend, attachOpen: panels.attachOpen, attachLabel: L10n.Messages.attach,
                 sendLabel: L10n.Messages.send,
-                stickers: ComposerSideButton(on: panels.stickersOpen, label: panels.stickersOpen ? L10n.Messages.keyboard : L10n.Messages.stickers,
-                                             action: onStickers),
+                stickers: !offersStickers ? nil
+                    : ComposerSideButton(on: panels.stickersOpen, label: panels.stickersOpen ? L10n.Messages.keyboard : L10n.Messages.stickers,
+                                         action: onStickers),
                 corner: lines >= ComposerMetrics.expandAtLines || expanded
                     ? ComposerSideButton(on: expanded, label: expanded ? L10n.Messages.collapseComposer : L10n.Messages.expandComposer,
                                          action: { onExpand(!expanded) })
                     : nil,
                 sendFace: panels.sendFace(canSend: model.hasSomethingToSend),
                 faceLabel: panels.expanded ? L10n.Messages.stickerPanelCollapse : L10n.Messages.stickerPanelExpand,
-                onFace: onPanelFace, expanded: expanded,
+                onFace: onPanelFace, block: Self.sendsFromBlock(lines: lines, expanded: expanded),
                 onAttach: onAttach, onSend: { if model.canSend { model.send() } }
             ) {
                 ComposerTextView(text: $model.draft, focused: $composing, placeholder: L10n.Messages.placeholder,
@@ -72,8 +77,12 @@ struct ThreadComposer: View {
                                  expandedHeight: expanded ? expandedTextHeight : nil,
                                  onLines: { lines = $0 },
                                  onReturn: { if model.canSend { model.send() } },
-                                 onPastePictures: onPastePictures)
-                    .padding(.vertical, ComposerTextView.edge)
+                                 onPastePictures: onPastePictures,
+                                 onFades: { top, bottom in
+                                     if fadeTop != top { fadeTop = top }
+                                     if fadeBottom != bottom { fadeBottom = bottom }
+                                 })
+                    .mask { ComposerFadeMask(top: fadeTop, bottom: fadeBottom) }
             }
         }
         .animation(.easeOut(duration: 0.16), value: rides)
@@ -81,6 +90,14 @@ struct ThreadComposer: View {
             if new.utf16.count > ThreadModel.maxLength { model.draft = String(new.utf16.prefix(ThreadModel.maxLength)) ?? new }
         }
     }
+
+    /// ☺ only while nothing is written (round 22 v2): a sticker goes on its own, and words take the room it had.
+    nonisolated static func offersStickers(draft: String) -> Bool {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Past one line (or grown over the thread) Send is the block on the last row, ⤢ / ⤡ over it (round 22 v2).
+    nonisolated static func sendsFromBlock(lines: Int, expanded: Bool) -> Bool { lines > 1 || expanded }
 
     /// One riding thing as its row: lead · words · ✕.
     @ViewBuilder private func row(_ ride: ComposerRide) -> some View {
@@ -123,56 +140,41 @@ struct ThreadComposer: View {
     }
 }
 
-/// The pictures riding with the next send (round 22 §4.2), as a row in the reply's style: their thumbnails
-/// in the order picked — each numbered, each with its own ✕ (the pen's loader while one is readied) —, how
-/// many they are (and that 10 is the most), and a ✕ taking them all off.
+/// The pictures riding with the next send (round 22 §4.2, v2): their thumbnails in the order picked, straight over
+/// the capsule, each taken off by its own ✕ at its top-right corner (the pen's loader while one is readied) — no
+/// numbers, no count, no clear-all: unpicking is one by one, there or in the attach panel's picker.
 struct PictureStrip: View {
     @Bindable var model: ThreadModel
 
     var body: some View {
-        let pictures = model.pendingPictures
-        HStack(spacing: ComposerMetrics.rowLeadGap) {
-            ScrollView(.horizontal) {
-                HStack(spacing: 8) {
-                    ForEach(Array(pictures.enumerated()), id: \.element.key) { i, picture in
-                        PictureThumb(picture: picture, number: pictures.count > 1 ? i + 1 : nil) { model.removePicture(picture.key) }
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-            .scrollIndicators(.hidden)
-            .scrollBounceBehavior(.basedOnSize)
-            // Three thumbnails at a time (each with its ✕'s room); past three, half of the next says the strip scrolls.
-            .frame(width: PictureThumb.slot * (pictures.count <= 3 ? CGFloat(pictures.count) : 3.5))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(L10n.Messages.picturesCount(count: pictures.count))
-                    .font(AppFonts.body(12, weight: .semibold)).foregroundStyle(Tokens.text).lineLimit(1)
-                if pictures.count >= AlbumRef.maxCount {
-                    Text(L10n.Messages.picturesMax).font(AppFonts.body(12.5)).foregroundStyle(Tokens.textMuted).lineLimit(1)
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(model.pendingPictures) { picture in
+                    PictureThumb(picture: picture) { model.removePicture(picture.key) }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .allowsHitTesting(false)
-            OrganicIconButton(.close, label: L10n.Messages.removeImage, size: 16) { model.removePictures() }
-                .disabled(model.preparingPicture && pictures.count == 1)
+            .padding(.leading, ComposerMetrics.rowStart)
+            .padding(.trailing, ComposerMetrics.rowStart)
+            .padding(.vertical, ComposerMetrics.rowPadY)
         }
-        .padding(.vertical, ComposerMetrics.rowPadY)
-        .padding(.leading, ComposerMetrics.rowStart)
-        .padding(.trailing, (ComposerMetrics.sendWidth - 44) / 2)
+        .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.basedOnSize)
         .frame(minHeight: ComposerMetrics.rowMinHeight)
         .accessibilityElement(children: .contain)
+        .accessibilityLabel(L10n.Messages.picturesCount(count: model.pendingPictures.count))
     }
 }
 
-/// One picture in the strip: 48 × 48 cover-cropped, its place in the order at its foot, a ✕ at its corner.
-private struct PictureThumb: View {
+/// One picture in the strip: 56 × 56 cover-cropped, a small round ✕ on its top-right corner — a calm circle, its
+/// hand-drawn wobble low (v2: the old one read as a blob).
+struct PictureThumb: View {
     let picture: RidingPicture
-    let number: Int?
     let onRemove: () -> Void
 
-    static let side: CGFloat = 48
-    /// A thumbnail's room in the strip: itself, its ✕ hanging 6 past its corner, and the 8 to the next.
-    static let slot: CGFloat = side + 6 + 8
+    static let side: CGFloat = 56
+    /// The ✕'s disc and how little it wobbles.
+    static let removeDisc: CGFloat = 20
+    static let removeWobble = WobCircleOptions(segments: 8, mag: 0.35, cpJitter: 0.15)
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -185,35 +187,25 @@ private struct PictureThumb: View {
             }
             .frame(width: Self.side, height: Self.side)
             .clipShape(ComposerRowTile.shape)
-            .overlay(alignment: .bottomLeading) {
-                if let number {
-                    Text("\(number)")
-                        .font(AppFonts.body(11, weight: .semibold)).foregroundStyle(Tokens.cream)
-                        .frame(width: 18, height: 18)
-                        .background { WobCircleShape(seed: Double(number) * 7).fill(Tokens.buttonFill) }
-                        .padding(3)
-                        .accessibilityHidden(true)
-                }
-            }
+            .accessibilityHidden(true)
             Button(action: onRemove) {
                 ZStack {
-                    WobCircleShape(seed: 13).fill(Tokens.cream)
-                    WobCircleShape(seed: 13).stroke(Tokens.fieldBorder, lineWidth: Tokens.inkLight)
+                    WobCircleShape(seed: 13, options: Self.removeWobble).fill(Tokens.cream)
+                    WobCircleShape(seed: 13, options: Self.removeWobble).stroke(Tokens.fieldBorderHover, lineWidth: Tokens.inkLight)
                     OrganicIcon(.close, size: 10, color: Tokens.text, strokeWidth: Tokens.ink)
                 }
-                .frame(width: 20, height: 20)
-                .frame(width: 30, height: 30)
+                .frame(width: Self.removeDisc, height: Self.removeDisc)
+                // A finger's room round the small disc.
+                .frame(width: 32, height: 32)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .offset(x: 9, y: -9)
+            .offset(x: 10, y: -10)
             .accessibilityLabel(L10n.Messages.removeImage)
             .disabled(picture.picked == nil)
         }
-        .padding(.top, 6)
-        .padding(.trailing, 6)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(number.map { "\(L10n.Messages.attachImage) \($0)" } ?? L10n.Messages.attachImage)
+        .padding(.top, 8)
+        .padding(.trailing, 8)
     }
 }
 

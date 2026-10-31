@@ -723,7 +723,13 @@ struct ThreadScreen: View {
         let byKey = Dictionary(items.map { (Self.pickerKey($0), $0) }, uniquingKeysWith: { a, _ in a })
         model.pickerChose(items.map(Self.pickerKey), fromPicker: Self.fromPicker) { key in
             let item = byKey[key]
-            return { try? await item?.loadTransferable(type: Data.self) }
+            return {
+                // The library can be slow to hand over a picture just chosen beside others: asked once more before
+                // it is said to be no picture.
+                if let data = try? await item?.loadTransferable(type: Data.self) { return data }
+                try? await Task.sleep(for: .milliseconds(400))
+                return try? await item?.loadTransferable(type: Data.self)
+            }
         }
     }
 

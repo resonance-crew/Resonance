@@ -140,8 +140,9 @@ private struct ConversationRow: View {
                     Text(person.handle).font(AppFonts.body(14, weight: .semibold)).foregroundStyle(Tokens.text)
                     if let draft {
                         HStack(spacing: 4) {
-                            OrganicIcon(.pen, size: 13, color: Tokens.terracotta)
-                            Text(draft).font(AppFonts.body(13)).foregroundStyle(Tokens.terracotta).lineLimit(1)
+                            // The deep accent, as the web (--terracotta-deep) and Android write a draft.
+                            OrganicIcon(.pen, size: 13, color: Tokens.terracottaDeep)
+                            Text(draft).font(AppFonts.body(13)).foregroundStyle(Tokens.terracottaDeep).lineLimit(1)
                         }
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(L10n.Messages.draftLabel(text: draft))

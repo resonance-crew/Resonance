@@ -33,32 +33,35 @@ struct AttachPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             if gripped { grip }
-            Group {
-                switch tab {
-                case .pictures:
-                    PhotosPicker(selection: $selection, maxSelectionCount: max(1, maxSelection), selectionBehavior: .continuousAndOrdered,
-                                 matching: .images, preferredItemEncoding: .current, photoLibrary: .shared()) {
-                        Text(L10n.Messages.attachImage)
+            ZStack(alignment: .bottom) {
+                Group {
+                    switch tab {
+                    case .pictures:
+                        PhotosPicker(selection: $selection, maxSelectionCount: max(1, maxSelection), selectionBehavior: .continuousAndOrdered,
+                                     matching: .images, preferredItemEncoding: .current, photoLibrary: .shared()) {
+                            Text(L10n.Messages.attachImage)
+                        }
+                        .photosPickerStyle(.inline)
+                        .photosPickerDisabledCapabilities(.selectionActions)
+                        .photosPickerAccessoryVisibility(.hidden, edges: .all)
+                    case .cards:
+                        AttachCards(onCard: onCard)
                     }
-                    .photosPickerStyle(.inline)
-                    .photosPickerDisabledCapabilities(.selectionActions)
-                    .photosPickerAccessoryVisibility(.hidden, edges: .all)
-                case .cards:
-                    AttachCards(onCard: onCard)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // The bar floats over the pictures or the cards (round 22 v2): no band behind it, and the room round it
+                // is theirs — only the bar itself takes a tap.
+                SegmentedActionBar([
+                    SegmentSpec(id: "pictures", icon: .image, label: L10n.Messages.attachImage,
+                                fill: tab == .pictures ? Tokens.buttonFill : nil, ink: tab == .pictures ? Tokens.cream : Tokens.buttonOnTonal,
+                                selected: tab == .pictures) { tab = .pictures },
+                    SegmentSpec(id: "cards", icon: .cards, label: L10n.Messages.attachCardShort,
+                                fill: tab == .cards ? Tokens.buttonFill : nil, ink: tab == .cards ? Tokens.cream : Tokens.buttonOnTonal,
+                                selected: tab == .cards) { tab = .cards },
+                ], seed: 83, height: 44)
+                .frame(maxWidth: 280)
+                .padding(.bottom, 10 + bottomRoom)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            SegmentedActionBar([
-                SegmentSpec(id: "pictures", icon: .image, label: L10n.Messages.attachImage,
-                            fill: tab == .pictures ? Tokens.buttonFill : nil, ink: tab == .pictures ? Tokens.cream : Tokens.buttonOnTonal,
-                            selected: tab == .pictures) { tab = .pictures },
-                SegmentSpec(id: "cards", icon: .cards, label: L10n.Messages.attachCardShort,
-                            fill: tab == .cards ? Tokens.buttonFill : nil, ink: tab == .cards ? Tokens.cream : Tokens.buttonOnTonal,
-                            selected: tab == .cards) { tab = .cards },
-            ], seed: 83, height: 44)
-            .frame(maxWidth: 280)
-            .padding(.top, 8)
-            .padding(.bottom, 8 + bottomRoom)
         }
     }
 
@@ -119,6 +122,8 @@ private struct AttachCards: View {
             }
         }
         .padding(.horizontal, 16)
+        // Its last rows scroll clear of the floating 圖片｜卡片 bar.
+        .contentMargins(.bottom, 64, for: .scrollContent)
         .task { if cards == nil { await load() } }
     }
 
