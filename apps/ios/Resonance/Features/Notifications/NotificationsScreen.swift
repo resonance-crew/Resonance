@@ -412,9 +412,10 @@ private struct BellFaceView: View {
     static let radii = RectangleCornerRadii(topLeading: 13, bottomLeading: 15, bottomTrailing: 13, topTrailing: 15)
 }
 
-/// The card a row is about, at 46: its cover clipped to a small wobbly square with no pen line (a feed
+/// The card a row is about, at 46: its cover clipped to a small hand-drawn tile with no pen line (a feed
 /// card's picture has none either), else its own colours with the first character of its title; a quiet
-/// tile while it is read; nothing when the viewer can't read it any more.
+/// tile in the same outline while it is read; nothing when the viewer can't read it any more. The face
+/// reaches past the box by ``BellThumb/bleed``, so the outline's outward swells land on the picture.
 private struct BellThumbView: View {
     let card: BellCard
     private let size = NotificationRowLabel.thumbSize
@@ -424,37 +425,53 @@ private struct BellThumbView: View {
         case .none:
             EmptyView()
         case .pending:
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Tokens.skeletonBase)
+            Tokens.skeletonBase
+                .frame(width: size + BellThumb.bleed * 2, height: size + BellThumb.bleed * 2)
+                .clipShape(BellThumb.Outline(seed: 1))
                 .frame(width: size, height: size)
                 .accessibilityHidden(true)
         case let .card(card):
             let family = PublishStep.previewPalette(accentHue: card.accentHue, cardId: card.id)
-            let shape = BellThumb.shape(id: card.id)
             let cover = card.imageUrl.flatMap { $0.isEmpty ? nil : URL(string: $0) }
+            let face = size + BellThumb.bleed * 2
             ZStack {
-                shape.fill(cover == nil ? family.fill : family.skeleton)
+                (cover == nil ? family.fill : family.skeleton)
                 if let cover {
-                    RemoteImage(url: cover, pixelSize: CGSize(width: size * 3, height: size * 3))
-                        .frame(width: size, height: size)
-                        .clipShape(shape)
+                    RemoteImage(url: cover, pixelSize: CGSize(width: face * 3, height: face * 3))
+                        .frame(width: face, height: face)
                 } else {
                     Text(verbatim: card.title.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "")
                         .font(AppFonts.font(.headingCJK, size: 19, weight: .semibold))
                         .foregroundStyle(family.deep)
                 }
             }
+            .frame(width: face, height: face)
+            .clipShape(BellThumb.Outline(seed: Double(seedFromString(card.id) % 97)))
+            // Takes the row's 46; the face reaches past it on every side.
             .frame(width: size, height: size)
             .accessibilityHidden(true)
         }
     }
 }
 
-/// The thumb's small wobbly square (the web's `wobRect(46, 46, 46 × 0.24, seed, 1.1, one turn a side)`).
-enum BellThumb {
-    static func shape(id: String) -> WobRectShape {
-        WobRectShape(radius: NotificationRowLabel.thumbSize * 0.24, seed: Double(seedFromString(id) % 97), mag: 1.1,
-                     options: WobRectOptions(curve: 1.2, cornerJitter: 1.2, segmentsH: .count(1), segmentsV: .count(1)))
+/// The thumb's outline: a small hand-drawn tile, one gentle swell along each side and its corners
+/// unevenly round and set off a little — the web's `bellThumbPath`
+/// (`wobRect(46, 46, 46 × 0.26, seed, 46 × 0.05, two turns a side, curve 1.4, jitter 2.6, offset 46 × 0.07)`).
+nonisolated enum BellThumb {
+    /// How far the face reaches past the 46 box: the swells go out by up to 2.1.
+    static let bleed: CGFloat = 4
+
+    /// Drawn in the bled frame's coordinates: the 46 tile, set in by ``bleed``.
+    nonisolated struct Outline: Shape {
+        let seed: Double
+
+        func path(in rect: CGRect) -> Path {
+            let size = rect.width - BellThumb.bleed * 2
+            return WobRectShape(radius: size * 0.26, seed: seed, mag: size * 0.05,
+                                options: WobRectOptions(curve: 1.4, cornerJitter: 2.6, cornerOffset: size * 0.07,
+                                                        segmentsH: .count(2), segmentsV: .count(2)))
+                .path(in: rect.insetBy(dx: BellThumb.bleed, dy: BellThumb.bleed))
+        }
     }
 }
 

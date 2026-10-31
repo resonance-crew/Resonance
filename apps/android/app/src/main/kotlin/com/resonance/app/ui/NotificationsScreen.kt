@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
@@ -31,7 +32,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.addOutline
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerIcon
@@ -49,6 +56,8 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
@@ -235,7 +244,7 @@ private fun NotificationRow(item: NotificationsStore.Item, extras: Notifications
             cardId == null -> Unit
             card != null -> CardThumb(card)
             // Still being read: its place kept; read and not there (gone, in the trash), nothing — the words take the room.
-            !extras.cardSettled(cardId) -> Box(Modifier.size(BellThumb).background(Mixes.SkeletonBase, RoundedCornerShape(12.dp)))
+            !extras.cardSettled(cardId) -> ThumbFace(cardId) { Box(Modifier.fillMaxSize().background(Mixes.SkeletonBase)) }
         }
     }
 }
@@ -332,31 +341,62 @@ private fun NoteQuote(text: String, card: FeedCard?) {
 }
 
 /**
- * The card a row is about, at 46: its cover clipped to a small wobbly square with no pen line (a feed
+ * The card a row is about, at 46: its cover clipped to a small hand-drawn tile with no pen line (a feed
  * card's picture has none either), else its family's fill with the first character of its title.
  */
 @Composable
 private fun CardThumb(card: FeedCard) {
     val family = CardPalette.of(previewFamily(card.accentHue, card.id))
-    val seed = (seedFromString(card.id) % 97).toDouble()
-    val shape = remember(seed) {
-        WobRectShape(
-            BellThumb.value * 0.24, seed, mag = 1.1,
-            options = WobRectOptions(curve = 1.2, cornerJitter = 1.2, segmentsH = SegValue.Count(1.0), segmentsV = SegValue.Count(1.0)),
-        )
-    }
     val cover = card.imageUrl
     val colors = family.colors
-    Box(
-        Modifier.size(BellThumb).clip(shape).background(if (cover != null) colors.skeleton else colors.fill),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (cover != null) {
-            AsyncImage(cover, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        } else {
-            val first = card.title.trim().let { t -> if (t.isEmpty()) "" else String(Character.toChars(t.codePointAt(0))) }
-            BasicText(first, style = AppFonts.style(AppFonts.Family.HeadingCJK, 19f, 600, lineHeight = 1f, color = colors.deep))
+    ThumbFace(card.id) {
+        Box(Modifier.fillMaxSize().background(if (cover != null) colors.skeleton else colors.fill), contentAlignment = Alignment.Center) {
+            if (cover != null) {
+                AsyncImage(cover, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            } else {
+                val first = card.title.trim().let { t -> if (t.isEmpty()) "" else String(Character.toChars(t.codePointAt(0))) }
+                BasicText(first, style = AppFonts.style(AppFonts.Family.HeadingCJK, 19f, 600, lineHeight = 1f, color = colors.deep))
+            }
         }
+    }
+}
+
+/** How far the thumb's face reaches past its 46 box: the outline's swells go out by up to 2.1. */
+private val ThumbBleed = 4.dp
+
+/**
+ * The thumb's place in the row (46) and its face, which reaches past it by [ThumbBleed] on every side and
+ * is cut by [BellThumbOutline] — so the outline's outward swells land on the picture. A card still being
+ * read wears the same outline (its id's), so nothing changes shape when it lands.
+ */
+@Composable
+private fun ThumbFace(cardId: String, content: @Composable () -> Unit) {
+    val seed = (seedFromString(cardId) % 97).toDouble()
+    val shape = remember(seed) { BellThumbOutline(seed) }
+    Box(Modifier.size(BellThumb), contentAlignment = Alignment.Center) {
+        Box(Modifier.requiredSize(BellThumb + ThumbBleed * 2).clip(shape)) { content() }
+    }
+}
+
+/**
+ * The thumb's outline: a small hand-drawn tile, one gentle swell along each side and its corners unevenly
+ * round and set off a little — the web's `bellThumbPath` (`wobRect(46, 46, 46 × 0.26, seed, 46 × 0.05,
+ * two turns a side, curve 1.4, jitter 2.6, offset 46 × 0.07)`), drawn set in by [ThumbBleed].
+ */
+private data class BellThumbOutline(val seed: Double) : Shape {
+    private val tile = WobRectShape(
+        BellThumb.value * 0.26, seed, mag = BellThumb.value * 0.05,
+        options = WobRectOptions(curve = 1.4, cornerJitter = 2.6, cornerOffset = BellThumb.value * 0.07, segmentsH = SegValue.Count(2.0), segmentsV = SegValue.Count(2.0)),
+    )
+
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val b = with(density) { ThumbBleed.toPx() }
+        val inner = tile.createOutline(Size(size.width - b * 2, size.height - b * 2), layoutDirection, density)
+        val path = Path().apply {
+            addOutline(inner)
+            translate(Offset(b, b))
+        }
+        return Outline.Generic(path)
     }
 }
 

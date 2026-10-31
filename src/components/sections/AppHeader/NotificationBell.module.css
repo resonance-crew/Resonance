@@ -163,24 +163,25 @@ section:first-child > .groupTitle {
 }
 
 .facePending,
-.thumbPending {
+.thumbPending .thumbFace {
   background: var(--skeleton-base);
 }
 
+/* The box keeps the row's 46; the face reaches past it and the outline (clip-path) cuts it. */
 .thumb,
 .thumbPending {
   position: relative;
   flex-shrink: 0;
   width: 46px;
   height: 46px;
+}
+
+.thumbFace {
+  position: absolute;
   overflow: hidden;
 }
 
-.thumbPending {
-  border-radius: 12px;
-}
-
-.thumb img {
+.thumbFace img {
   display: block;
   width: 100%;
   height: 100%;

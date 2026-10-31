@@ -108,7 +108,7 @@ export function BellRowContent({ n, person, card, settled, when }: BellRowProps)
         {preview && <BellNoteQuote text={preview} card={card} />}
         <span className={styles.when}>{when}</span>
       </span>
-      {cardId && (card ? <BellCardThumb card={card} /> : !settled && <span className={styles.thumbPending} aria-hidden />)}
+      {cardId && (card ? <BellCardThumb card={card} /> : !settled && <BellThumbPending cardId={cardId} />)}
     </span>
   );
 }
@@ -128,29 +128,60 @@ function BellFace({ person, handle, uid, settled }: { person: User | undefined; 
 }
 
 const THUMB = 46;
+/** How far the thumb's face reaches past its box: the outline's edges swell out by up to 2.1. */
+const THUMB_BLEED = 4;
 
 /**
- * The card a row is about, at 46: its cover clipped to a small wobbly square with no pen line (a feed
- * card's picture has none either), else its own colours with the first character of its title.
+ * The thumb's outline: a small hand-drawn tile, one gentle swell along each side and its corners
+ * unevenly round and set off a little (an avatar's), so it reads as a cut-out picture rather than
+ * an app icon. No pen line. The apps' twins (`BellThumb`) take the same numbers.
+ */
+function bellThumbPath(seed: number): string {
+  return wobRect(THUMB, THUMB, THUMB * 0.26, seed, THUMB * 0.05, {
+    segmentsH: 2,
+    segmentsV: 2,
+    curve: 1.4,
+    cornerJitter: 2.6,
+    cornerOffset: THUMB * 0.07,
+  });
+}
+
+function useThumbClip(id: string) {
+  const seed = seedFromString(id) % 97;
+  return useMemo(() => `path('${bellThumbPath(seed)}')`, [seed]);
+}
+
+/**
+ * The card a row is about, at 46: its cover clipped to a small hand-drawn tile with no pen line (a feed
+ * card's picture has none either), else its own colours with the first character of its title. The face
+ * reaches past the box by `THUMB_BLEED`, so the outline's outward swells land on the picture.
  */
 export function BellCardThumb({ card }: { card: Card }) {
   const family = previewPalette(card.accentHue ?? null, card.id);
-  const seed = seedFromString(card.id) % 97;
-  const clip = useMemo(
-    () => `path('${wobRect(THUMB, THUMB, THUMB * 0.24, seed, 1.1, { segmentsH: 1, segmentsV: 1, curve: 1.2, cornerJitter: 1.2 })}')`,
-    [seed],
-  );
+  const clip = useThumbClip(card.id);
   const cover = card.media?.type === 'image' ? card.media.url : undefined;
   return (
-    <span className={styles.thumb} style={{ clipPath: clip, background: cardVar(cover ? 'skeleton' : 'fill', family) }} aria-hidden>
-      {cover ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={cover} alt="" loading="lazy" decoding="async" />
-      ) : (
-        <span className={styles.thumbWord} style={{ color: cardVar('border-deep', family) }}>
-          {Array.from(card.thoughtCore.trim())[0] ?? ''}
-        </span>
-      )}
+    <span className={styles.thumb} style={{ clipPath: clip }} aria-hidden>
+      <span className={styles.thumbFace} style={{ inset: -THUMB_BLEED, background: cardVar(cover ? 'skeleton' : 'fill', family) }}>
+        {cover ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={cover} alt="" loading="lazy" decoding="async" />
+        ) : (
+          <span className={styles.thumbWord} style={{ color: cardVar('border-deep', family) }}>
+            {Array.from(card.thoughtCore.trim())[0] ?? ''}
+          </span>
+        )}
+      </span>
+    </span>
+  );
+}
+
+/** A quiet tile in the same outline while the card is read, so nothing changes shape when it lands. */
+function BellThumbPending({ cardId }: { cardId: string }) {
+  const clip = useThumbClip(cardId);
+  return (
+    <span className={styles.thumbPending} style={{ clipPath: clip }} aria-hidden>
+      <span className={styles.thumbFace} style={{ inset: -THUMB_BLEED }} />
     </span>
   );
 }
