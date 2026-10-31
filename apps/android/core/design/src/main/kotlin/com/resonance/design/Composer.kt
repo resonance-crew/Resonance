@@ -142,6 +142,8 @@ fun ComposerCapsule(
     block: Boolean = false,
     /** What stands in the block's column at the capsule's top end — the column the full-height strip filled (⤢ / ⤡). */
     overSegment: (@Composable () -> Unit)? = null,
+    /** A 48 square at the field's end, before Send, on the last line's row — [leading]'s twin (the composer's ☺ / ⌨). */
+    trailing: (@Composable () -> Unit)? = null,
     leading: @Composable () -> Unit,
     field: @Composable BoxScope.(vertical: Dp) -> Unit,
 ) = CapsuleField(
@@ -156,6 +158,7 @@ fun ComposerCapsule(
     segmentEnabled = canSend || segment != ComposerSegment.Send,
     block = block,
     overSegment = overSegment,
+    trailing = trailing,
     leading = leading,
     segment = { ink ->
         when (segment) {
@@ -200,6 +203,8 @@ fun CapsuleField(
     block: Boolean = false,
     /** Drawn in the block's column at the capsule's top ([block]): the composer's ⤢ / ⤡. */
     overSegment: (@Composable () -> Unit)? = null,
+    /** A square as big as [leading]'s at the field's end, on the last line's row (round 22, the owner's: every tool in the capsule one size). */
+    trailing: (@Composable () -> Unit)? = null,
     leading: (@Composable () -> Unit)? = null,
     segment: @Composable (ink: Color) -> Unit,
     field: @Composable BoxScope.(vertical: Dp) -> Unit,
@@ -245,7 +250,8 @@ fun CapsuleField(
     ) {
         Row(Modifier.fillMaxWidth().heightIn(min = ComposerHeight).padding(end = segmentWidth), verticalAlignment = Alignment.Bottom) {
             if (leading != null) Box(Modifier.width(ComposerHeight).height(ComposerHeight), contentAlignment = Alignment.Center) { leading() }
-            Box(Modifier.weight(1f).padding(start = if (leading != null) 0.dp else Tokens.FieldPadX.dp, end = 10.dp)) { field(vertical) }
+            Box(Modifier.weight(1f).padding(start = if (leading != null) 0.dp else Tokens.FieldPadX.dp, end = if (trailing != null) 0.dp else 10.dp)) { field(vertical) }
+            if (trailing != null) Box(Modifier.width(ComposerHeight).height(ComposerHeight), contentAlignment = Alignment.Center) { trailing() }
         }
         Box(Modifier.matchParentSize()) {
             Box(

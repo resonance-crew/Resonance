@@ -31,15 +31,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -59,8 +55,9 @@ import kotlin.math.abs
 
 /**
  * The room a panel takes under the capsule, in the keyboard's place (round 22 §4.1–4.2), as px: [height]
- * as drawn — sliding up from nothing, standing in for the keyboard at once when it was up, growing with a
- * drag or ↑ to [max] (under the header) and back to [base] (the keyboard's height). Read while laying out,
+ * as drawn — sliding up from nothing, standing in for the keyboard at once when it was up, growing with ↑
+ * (or the attach panel's grip) to [max] (under the header) and back to [base] (the keyboard's height).
+ * Scrolling a panel's grid never moves it (the owner: the grid only scrolls; ↑ is what grows it). Read while laying out,
  * so the thread and the capsule follow it frame by frame without composing again.
  */
 @Stable
@@ -118,32 +115,6 @@ internal class PanelRoom(private val scope: CoroutineScope, private val still: B
 
     enum class Stop { Base, Grown, Closed }
 
-    /**
-     * The panel's grid inside it (round 22 §4.1): a scroll up grows the panel first, to [max]; a scroll
-     * down at the grid's top brings it back down to [base]. Letting go settles it ([onSettle]).
-     */
-    fun nested(onSettle: (Stop) -> Unit): NestedScrollConnection = object : NestedScrollConnection {
-        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-            if (source != NestedScrollSource.UserInput || available.y >= 0f || height >= max || max <= 0f) return Offset.Zero
-            val grow = minOf(-available.y, max - height)
-            dragBy(-grow)
-            return Offset(0f, -grow)
-        }
-
-        override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-            if (source != NestedScrollSource.UserInput || available.y <= 0f || height <= base) return Offset.Zero
-            val shrink = minOf(available.y, height - base)
-            dragBy(shrink)
-            return Offset(0f, shrink)
-        }
-
-        override suspend fun onPreFling(available: Velocity): Velocity {
-            if (!held) return Velocity.Zero
-            onSettle(settle(available.y, closes = false))
-            return available
-        }
-    }
-
     private companion object {
         const val PANEL_MILLIS = 220
         const val FLING = 1200f
@@ -172,16 +143,17 @@ internal fun AttachPanel(
     onToggle: (Uri) -> Unit,
     onSystemPicker: () -> Unit,
     onPickCard: (com.resonance.api.models.FeedCard) -> Unit,
-    gridScroll: NestedScrollConnection,
     modifier: Modifier = Modifier,
+    /** The navigation bar under the panel: the grid and the list run on under it to the screen's edge, the bar floats over it. */
+    navigation: Dp = 0.dp,
 ) {
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             PanelGrip(room, onGrip)
             Box(Modifier.fillMaxWidth().weight(1f)) {
                 when (tab) {
-                    AttachTab.Pictures -> GalleryPane(numberOf, gridScroll, onToggle, onSystemPicker)
-                    AttachTab.Cards -> CardPickPanel(session, onPickCard, Modifier.fillMaxSize(), bottom = AttachBarRoom)
+                    AttachTab.Pictures -> GalleryPane(numberOf, onToggle, onSystemPicker, bottom = AttachBarRoom + navigation)
+                    AttachTab.Cards -> CardPickPanel(session, onPickCard, Modifier.fillMaxSize(), bottom = AttachBarRoom + navigation)
                 }
             }
         }
@@ -192,7 +164,7 @@ internal fun AttachPanel(
                 tabSegment(AttachTab.Pictures, tab, L10n.Messages.attachImage, IconName.Image, onTab),
                 tabSegment(AttachTab.Cards, tab, L10n.Messages.attachCardShort, IconName.Cards, onTab),
             ),
-            Modifier.align(Alignment.BottomCenter).padding(bottom = AttachBarGap).width(AttachBarWidth),
+            Modifier.align(Alignment.BottomCenter).padding(bottom = AttachBarGap + navigation).width(AttachBarWidth),
             seed = 79.0,
             minHeight = AttachBarHeight,
         )
@@ -256,7 +228,7 @@ private fun PanelGrip(room: PanelRoom, onGrip: (PanelRoom.Stop) -> Unit) {
  * the app stands is read again each time the screen comes back (the settings page may have changed it).
  */
 @Composable
-private fun GalleryPane(numberOf: (String) -> Int?, gridScroll: NestedScrollConnection, onToggle: (Uri) -> Unit, onSystemPicker: () -> Unit) {
+private fun GalleryPane(numberOf: (String) -> Int?, onToggle: (Uri) -> Unit, onSystemPicker: () -> Unit, bottom: Dp) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences(GALLERY_PREFS, Context.MODE_PRIVATE) }
     var asked by remember { mutableStateOf(prefs.getBoolean(ASKED_KEY, false)) }
@@ -274,9 +246,9 @@ private fun GalleryPane(numberOf: (String) -> Int?, gridScroll: NestedScrollConn
     val request = { ask.launch(galleryPermissions()) }
     when (access) {
         GalleryAccess.Full, GalleryAccess.Partial -> GalleryGrid(
-            numberOf, partial = access == GalleryAccess.Partial, nested = gridScroll, onToggle = onToggle, onMore = request,
+            numberOf, partial = access == GalleryAccess.Partial, onToggle = onToggle, onMore = request,
             modifier = Modifier.fillMaxSize(),
-            bottom = AttachBarRoom,
+            bottom = bottom,
             // A permission answer (more pictures chosen) or a return from settings: the pictures allowed may differ.
             access = reads,
         )

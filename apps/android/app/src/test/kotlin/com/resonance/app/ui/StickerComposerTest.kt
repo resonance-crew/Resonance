@@ -101,4 +101,14 @@ class StickerComposerTest {
         assertEquals(ReplyDetail.Words("〔貼圖：謝謝〕"), replyDetail(quote.copy(sticker = ChatSticker("later", "wave")), catalog::find))
         assertEquals(ReplyDetail.Words("那天 河堤"), replyDetail(com.resonance.kit.chat.ReplyQuote("m1", "bob", "那天\n河堤"), catalog::find))
     }
+
+    @Test fun aStickerAnsweringComesUpOverItsQuoteAndAQuotedStickerIsFaded() {
+        // A bubble lies over the quote's foot kept for it; a sticker over the lower edge of a quote that kept none (16–20).
+        assertEquals(com.resonance.design.REPLY_OVERLAP, quoteOverlap(answerIsSticker = false, quoted = true))
+        assertEquals(20f, quoteOverlap(answerIsSticker = true, quoted = true)!!.value, 0f)
+        assertEquals(true, STICKER_OVER_QUOTE.value in 16f..20f)
+        assertEquals(null, quoteOverlap(answerIsSticker = true, quoted = false))
+        // Quoted, a sticker is muted as quoted words are.
+        assertEquals(0.55f, QUOTED_STICKER_ALPHA, 0f)
+    }
 }

@@ -98,4 +98,45 @@ class ComposerCapsuleTest {
         capsule(canSend = true)
         compose.onNodeWithContentDescription("傳送").assertIsEnabled()
     }
+
+    /** The round-22 capsule: ＋ at its start, ☺ at the field's end, and (past one line) ⤢ over the send block. */
+    private fun tools(lines: Int) = compose.setContent {
+        Box(Modifier.width(360.dp)) {
+            ComposerCapsule(
+                canSend = true, sendLabel = "傳送", onSend = {}, focused = { false }, textStyle = style,
+                modifier = Modifier.testTag("capsule"),
+                block = lines > 1,
+                overSegment = { Box(Modifier.testTag("expand").matchParentSize()) },
+                trailing = { Box(Modifier.testTag("sticker").matchParentSize()) },
+                leading = { Box(Modifier.testTag("attach").matchParentSize()) },
+            ) { vertical ->
+                BasicText("字\n".repeat(lines).trimEnd(), style = style, minLines = lines, modifier = Modifier.fillMaxWidth().padding(vertical = vertical))
+            }
+        }
+    }
+
+    @Test fun theCapsulesToolsAreOneSquareSizeTheStickerToggleAsTheAttachButton() {
+        tools(lines = 1)
+        val attach = compose.onNodeWithTag("attach").getBoundsInRoot()
+        val sticker = compose.onNodeWithTag("sticker").getBoundsInRoot()
+        assertEquals(ComposerHeight.value, (attach.right - attach.left).value, 0.5f)
+        assertEquals(ComposerHeight.value, (attach.bottom - attach.top).value, 0.5f)
+        // The owner's: ☺ the same square as ＋ (it was flatter and wider), on the same row.
+        assertEquals((attach.right - attach.left).value, (sticker.right - sticker.left).value, 0.5f)
+        assertEquals((attach.bottom - attach.top).value, (sticker.bottom - sticker.top).value, 0.5f)
+        assertEquals(attach.top.value, sticker.top.value, 0.5f)
+        // Right against Send, as ＋ is against the capsule's start.
+        val capsule = compose.onNodeWithTag("capsule").getBoundsInRoot()
+        assertEquals((capsule.right - ComposerSendWidth).value, sticker.right.value, 0.5f)
+    }
+
+    @Test fun pastOneLineTheGrowToolIsASquareAtTheTopOfTheSendColumn() {
+        tools(lines = 3)
+        val capsule = compose.onNodeWithTag("capsule").getBoundsInRoot()
+        val expand = compose.onNodeWithTag("expand").getBoundsInRoot()
+        assertEquals(ComposerSendWidth.value, (expand.right - expand.left).value, 0.5f)
+        assertEquals(ComposerHeight.value, (expand.bottom - expand.top).value, 0.5f)
+        assertEquals(capsule.top.value, expand.top.value, 0.5f)
+        assertEquals(capsule.right.value, expand.right.value, 0.5f)
+    }
 }
