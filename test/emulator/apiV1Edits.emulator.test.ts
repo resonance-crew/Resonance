@@ -201,6 +201,23 @@ describe('applyCardEdit', () => {
     expect((await failure(applyCardEdit(db, 'alice', 'draft'))).code).toBe('invalid_request');
   });
 
+  it('refuses a revision that empties a card others read, leaving both documents — kept private, it applies', async () => {
+    await buffer({ story: '![](https://img.resonance.channel/a.webp)\n\n' });
+    const before = (await db.doc('cards/live').get()).data();
+    const e = await failure(applyCardEdit(db, 'alice', 'live'));
+    expect([e.code, e.message]).toEqual(['invalid_request', 'Write something in the story before others can read it.']);
+    expect((await db.doc('cards/live').get()).data()).toEqual(before);
+    expect((await db.doc('cards/live/edits/current').get()).exists).toBe(true);
+    await buffer({ story: '', visibility: 'private' });
+    await expect(applyCardEdit(db, 'alice', 'live')).resolves.toMatchObject({ applied: true });
+  });
+
+  it('applies a revision to a card already blank and public (from before the rule)', async () => {
+    await db.doc('cards/live').update({ story: '', visibility: 'public' });
+    await buffer({ story: '', visibility: 'public', thoughtCore: '新標題' });
+    await expect(applyCardEdit(db, 'alice', 'live')).resolves.toMatchObject({ applied: true });
+  });
+
   describe('an anonymous card is public or private', () => {
     const ANSWER = ['invalid_request', 'An anonymous card is public or private.'];
 

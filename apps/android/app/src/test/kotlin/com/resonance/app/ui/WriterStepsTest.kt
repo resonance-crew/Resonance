@@ -417,6 +417,17 @@ class WriterStepsTest {
         assertFalse(kept.showsUpdateHint)
     }
 
+    @Test fun aStoryWithNoWordsHoldsTheVerbForReadersButNotForAPrivateCard() {
+        // Only a picture: nothing for anyone to read (the web's lib/cards/blank).
+        val m = model(draft(written.copy(story = "![](https://img.resonance.channel/a.webp)", visibility = "public")))
+        assertTrue(m.storyEmpty)
+        m.choose(Audience.Anonymous)
+        assertTrue(m.storyEmpty)
+        m.choose(Audience.Private)
+        assertFalse(m.storyEmpty)
+        assertFalse(model(draft(written.copy(visibility = "public"))).storyEmpty)
+    }
+
     @Test fun theWritersTitleIsShortAndSaysWhatTheCardIs() {
         assertEquals("新卡片", model().title)
         assertEquals("編輯私人卡", model(draft(written)).title)

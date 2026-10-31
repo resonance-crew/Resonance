@@ -706,7 +706,7 @@ describe('CardEditor — a card trashed elsewhere', () => {
     vi.mocked(publishCard).mockRejectedValue(new ApiError(409, 'conflict', 'This card is in the trash.'));
     vi.mocked(getCardById).mockResolvedValue(trashedCard as never);
     const onStepChange = vi.fn();
-    renderWithIntl(<Writer locale="en" initial={{ id: 'draft-9', thoughtCore: 'Kept for later', visibility: 'public' }} onStepChange={onStepChange} />);
+    renderWithIntl(<Writer locale="en" initial={{ id: 'draft-9', thoughtCore: 'Kept for later', story: 'Words to read.', visibility: 'public' }} onStepChange={onStepChange} />);
     await userEvent.click(next());
     await waitFor(() => expect(inStep()).toBe(true));
     await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.publish }));
@@ -721,7 +721,7 @@ describe('CardEditor — a card trashed elsewhere', () => {
 
   it('keeps an ordinary refusal an ordinary one', async () => {
     vi.mocked(publishCard).mockRejectedValue(new ApiError(500, 'internal', 'Something went wrong.'));
-    renderWithIntl(<Writer locale="en" initial={{ id: 'draft-9', thoughtCore: 'Kept for later', visibility: 'public' }} />);
+    renderWithIntl(<Writer locale="en" initial={{ id: 'draft-9', thoughtCore: 'Kept for later', story: 'Words to read.', visibility: 'public' }} />);
     await userEvent.click(next());
     await waitFor(() => expect(inStep()).toBe(true));
     await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.publish }));

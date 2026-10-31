@@ -1062,6 +1062,10 @@ private fun PublishStep(
                 BasicText(L10n.Write.mediaBusyHint, style = AppFonts.body(12f, lineHeight = 1.5f, color = Tokens.TextMuted))
                 Spacer(Modifier.height(12.dp))
             }
+            if (model.storyEmpty) {
+                BasicText(L10n.Write.storyRequired, style = AppFonts.body(12f, lineHeight = 1.5f, color = Tokens.TextMuted))
+                Spacer(Modifier.height(12.dp))
+            }
             model.publishError?.let {
                 Box(Modifier.semantics { liveRegion = LiveRegionMode.Assertive }) { ModalError(it) }
                 Spacer(Modifier.height(12.dp))
@@ -1072,7 +1076,7 @@ private fun PublishStep(
                 verbBusyLabel = model.verbBusyLabel,
                 wayOut = if (model.showsWayOut) L10n.Write.discardChanges else null,
                 verbLoading = pending && model.busyVerb == BusyVerb.Publish,
-                verbEnabled = !model.verbWaits && !(pending && model.busyVerb != BusyVerb.Publish),
+                verbEnabled = !model.verbWaits && !model.storyEmpty && !(pending && model.busyVerb != BusyVerb.Publish),
                 wayOutLoading = pending && model.busyVerb == BusyVerb.Leave,
                 wayOutEnabled = !(pending && model.busyVerb != BusyVerb.Leave),
                 onVerb = {

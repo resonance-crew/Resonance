@@ -310,9 +310,10 @@ export function PublishStep({
   const mediaBusy = cover.uploading || cover.generating || storyBusy;
 
   // ── The preview: the card as a list will show it, from what is on screen ──
+  const prose = plainText(story);
   const preview: Story = {
     title: thoughtCore,
-    excerpt: excerpt(plainText(story)),
+    excerpt: excerpt(prose),
     author: anonymous ? tPanel('anonymousName') : (me?.handle ?? ''),
     authorInitials: anonymous ? '·' : (me?.initials ?? '?'),
     avatarUrl: anonymous ? undefined : me?.avatarUrl,
@@ -336,6 +337,10 @@ export function PublishStep({
       : reaches
         ? tPanel('resonanceReaches')
         : tPanel('resonanceQuiet');
+
+  // Others read nothing without words in the story (lib/cards/blank; the server refuses it too): only a
+  // 私人卡 may be saved so. A missing title is asked for where it is written (CardEditor), so it is not this.
+  const storyEmpty = visibility !== 'private' && !prose.trim();
 
   const live = liveVisibility ?? visibility;
   const title = tPanel(stepTitleKey(mode, visibility, live));
@@ -502,6 +507,11 @@ export function PublishStep({
           why the last try failed, and what it waits for, right above it. */}
       <div className={styles.footBlock}>
         {mediaBusy && <p className={styles.busyHint}>{t('mediaBusyHint')}</p>}
+        {storyEmpty && (
+          <p className={styles.busyHint} role="status">
+            {t('storyRequired')}
+          </p>
+        )}
         {error && (
           <p className={modalStyles.error} role="alert">
             {error}
@@ -526,7 +536,7 @@ export function PublishStep({
               size="sm"
               loading={pending && busyVerb === 'publish'}
               workingLabel={tPanel(WORKING_VERB[verb])}
-              disabled={mediaBusy || (pending && busyVerb !== 'publish')}
+              disabled={mediaBusy || storyEmpty || (pending && busyVerb !== 'publish')}
               onClick={onSubmit}
             >
               {tPanel(verb)}

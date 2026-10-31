@@ -130,6 +130,23 @@ describe('publishCard', () => {
     expect((await db.doc('cards/c1').get()).get('publishedAt')).toBeNull();
   });
 
+  it('refuses a card others would read with no words in its story, publishing nothing — a 私人卡 may be blank', async () => {
+    const BLANK = ['invalid_request', 'Write something in the story before others can read it.'];
+    // Empty, or only a picture: nothing to read either way.
+    for (const [id, story, visibility] of [
+      ['empty', '', 'public'],
+      ['picture', '![](https://img.resonance.channel/a.webp)', 'public'],
+      ['friends', '  ', 'connections'],
+    ] as const) {
+      await draft(id, { story, visibility });
+      const e = await failure(publishCard(db, 'alice', id, slugBase));
+      expect([e.code, e.message], id).toEqual(BLANK);
+      expect((await db.doc(`cards/${id}`).get()).get('publishedAt'), id).toBeNull();
+    }
+    await draft('kept', { story: '', visibility: 'private' });
+    expect((await publishCard(db, 'alice', 'kept', slugBase)).firstPublish).toBe(true);
+  });
+
   describe('a resonance', () => {
     const notifications = () => db.collection('notifications').where('userId', '==', 'bob').get();
 
@@ -289,7 +306,7 @@ describe('publishCard', () => {
     it('rings and connects once when two paths reach the same original at the same time', async () => {
       await draft('r1', { referenceCardId: 'orig' });
       await db.doc('cards/r2').set({
-        authorId: 'alice', thoughtCore: '另一張', story: '', visibility: 'private', anonymous: false, referenceCardId: 'orig', publishedAt: Timestamp.now(),
+        authorId: 'alice', thoughtCore: '另一張', story: 'x', visibility: 'private', anonymous: false, referenceCardId: 'orig', publishedAt: Timestamp.now(),
       });
       const [published, patched] = await Promise.all([
         publishCard(db, 'alice', 'r1', slugBase),

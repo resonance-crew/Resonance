@@ -131,6 +131,11 @@ final class WriteModel {
     var mediaBusy: Bool { uploadingCover || generating }
     /// A picture is on its way, the cover's or the story's: the step's verb waits for it.
     var publishWaitsForMedia: Bool { mediaBusy || uploadingInline }
+    /// Others read nothing without words in the story (the web's lib/cards/blank; the server refuses it too):
+    /// only a 私人卡 may be saved so (storyRequired). A missing title is asked for where it is written.
+    var storyEmpty: Bool {
+        values.visibility != "private" && StoryProse.plainText(values.story).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
     /// The web's canGenerate: there is a story to draw from.
     var canGenerate: Bool { !values.story.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !mediaBusy }
 

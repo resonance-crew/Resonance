@@ -697,6 +697,7 @@
     "mediaGenerating": "Imagining a scene…",
     "mediaGenerateError": "Couldn’t generate an image — please try again",
     "mediaBusyHint": "The image is still on its way — you can publish once it's in",
+    "storyRequired": "The story is still empty — write something before others can read it",
     "mediaGeneratedLabel": "AI-generated illustration",
     "previewCaption": "How the card looks in a list",
     "coverChange": "Change cover",

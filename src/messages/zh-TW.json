@@ -697,6 +697,7 @@
     "mediaGenerating": "正在構思畫面⋯",
     "mediaGenerateError": "圖片生成失敗，請再試一次",
     "mediaBusyHint": "圖片還在處理，好了就能發布",
+    "storyRequired": "故事還是空的，寫點什麼才能讓別人讀到",
     "mediaGeneratedLabel": "AI 生成插圖",
     "previewCaption": "卡片在列表裡的樣子",
     "coverChange": "更換封面",

@@ -688,6 +688,20 @@ private let inTheTrash = APIFailure(code: "conflict", message: "This card is in 
         #expect(live.publishError == nil)
     }
 
+    /// A story with no words (only a picture here) holds the verb while others would read the card —
+    /// the web's lib/cards/blank, which the server refuses too — and a 私人卡 may be saved so.
+    @Test func aStoryWithNoWordsHoldsTheVerbForReadersButNotForAPrivateCard() {
+        let model = WriteModel(drafts: nil, writing: writing(), calls: ServerCalls().calls,
+                               opened: card(story: "![](https://img.resonance.channel/a.webp)"))
+        #expect(model.storyEmpty)
+        #expect(!PublishStep.verbEnabled(model))
+        model.choose(.anonymous)
+        #expect(model.storyEmpty)
+        model.choose(.private)
+        #expect(!model.storyEmpty)
+        #expect(PublishStep.verbEnabled(model))
+    }
+
     /// One button (round 8 §2.3): the only second one left is 捨棄修改, for a published card while it
     /// has a revision to drop — a draft's choices are its one button.
     @Test func theOnlySecondButtonIsDiscardingARevision() {

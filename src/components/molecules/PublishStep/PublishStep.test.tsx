@@ -308,6 +308,21 @@ describe('PublishStep', () => {
     await echoSettled();
   });
 
+  it('holds the verb while the story has no words for others to read, says why, and lets a 私人卡 be saved so', async () => {
+    const onSubmit = vi.fn();
+    // Only a picture: nothing to read (lib/cards/blank).
+    renderWithIntl(<Step start={{ story: '![](https://img.resonance.channel/a.webp)' }} onSubmit={onSubmit} />);
+    expect(screen.getByText(en.write.storyRequired)).toBeInTheDocument();
+    const publish = screen.getByRole('button', { name: en.write.publishPanel.publish });
+    expect(publish).toBeDisabled();
+    await userEvent.click(publish);
+    expect(onSubmit).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: en.write.visibility.draft }));
+    expect(screen.queryByText(en.write.storyRequired)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: en.write.publishPanel.save }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it('holds the verb while the cover uploads, then shows it in the card', async () => {
     let land!: (v: { publicUrl: string; key: string }) => void;
     vi.mocked(uploadImageFile).mockReturnValue(new Promise((r) => (land = r)));

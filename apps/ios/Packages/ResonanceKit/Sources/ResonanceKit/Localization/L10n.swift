@@ -1254,6 +1254,8 @@ public enum L10n {
         public static var mediaGenerateError: String { Strings.shared.string("write.mediaGenerateError") }
         /// The image is still on its way — you can publish once it's in
         public static var mediaBusyHint: String { Strings.shared.string("write.mediaBusyHint") }
+        /// The story is still empty — write something before others can read it
+        public static var storyRequired: String { Strings.shared.string("write.storyRequired") }
         /// AI-generated illustration
         public static var mediaGeneratedLabel: String { Strings.shared.string("write.mediaGeneratedLabel") }
         /// How the card looks in a list

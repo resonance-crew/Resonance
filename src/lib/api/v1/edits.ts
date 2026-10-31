@@ -1,6 +1,6 @@
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { cardPagePaths, landingPagePaths } from '@/lib/api/revalidate';
-import { ANONYMOUS_VISIBILITY_MESSAGE, anonymousForConnections, cardContentProblem, editedAudience } from '@/lib/db/firestore/cardContent';
+import { ANONYMOUS_VISIBILITY_MESSAGE, BLANK_CARD_MESSAGE, anonymousForConnections, blankForReaders, cardContentProblem, editedAudience } from '@/lib/db/firestore/cardContent';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
 import { ApiFailure } from './http';
 import { refuseInTrash } from './inTrash';
@@ -92,6 +92,8 @@ export async function applyCardEdit(db: Firestore, uid: string, id: string): Pro
     // Never into anonymous and for connections only; a card already that way stays editable in everything else.
     const moved = fields.visibility !== snap.get('visibility') || fields.anonymous !== (snap.get('anonymous') === true);
     if (moved && anonymousForConnections(fields)) throw new ApiFailure('invalid_request', ANONYMOUS_VISIBILITY_MESSAGE);
+    // Never emptied (or shown again empty) while others read it; a card already so stays editable.
+    if (blankForReaders(fields) && !blankForReaders(snap.data()!)) throw new ApiFailure('invalid_request', BLANK_CARD_MESSAGE);
     const after = { ...snap.data(), visibility: fields.visibility, anonymous: fields.anonymous };
     // Read before anything is written: what leaving a published resonance hidden takes back.
     takeBack(tx, hiddenResonance(after) ? await readTakeBack(tx, db, uid, id) : []);

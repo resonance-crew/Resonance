@@ -1,3 +1,4 @@
+import { blankCard } from '@/lib/cards/blank';
 import { publicBases, storageKeyOf } from '@/lib/storage/publicUrl';
 
 /**
@@ -71,6 +72,22 @@ export function anonymousForConnections(c: { anonymous?: unknown; visibility?: u
 
 /** The refusal for a change that would make a card anonymous and for connections only. */
 export const ANONYMOUS_VISIBILITY_MESSAGE = 'An anonymous card is public or private.';
+
+/**
+ * Whether a card (or a pending edit, as applying it would leave the card)
+ * would be blank (lib/cards/blank: no title, or no words in its story) while
+ * someone else may read it — public or for connections (an unknown
+ * visibility reads as public, as everywhere). A 私人卡 may be blank: it is
+ * its author's alone, a draft or a card kept back. Publishing, PATCH and
+ * edits/apply refuse a card into this (BLANK_CARD_MESSAGE); one already so
+ * (published before the rule) is left as it is, editable in everything else.
+ */
+export function blankForReaders(c: { visibility?: unknown; thoughtCore?: unknown; story?: unknown }): boolean {
+  return c.visibility !== 'private' && blankCard(c);
+}
+
+/** The refusal for a change that would leave a card others read without words. */
+export const BLANK_CARD_MESSAGE = 'Write something in the story before others can read it.';
 
 const VISIBILITIES: readonly unknown[] = ['public', 'connections', 'private'];
 

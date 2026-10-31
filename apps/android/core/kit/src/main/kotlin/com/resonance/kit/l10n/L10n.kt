@@ -1256,6 +1256,8 @@ object L10n {
         val mediaGenerateError: String get() = Strings.string("write.mediaGenerateError")
         /** The image is still on its way — you can publish once it's in */
         val mediaBusyHint: String get() = Strings.string("write.mediaBusyHint")
+        /** The story is still empty — write something before others can read it */
+        val storyRequired: String get() = Strings.string("write.storyRequired")
         /** AI-generated illustration */
         val mediaGeneratedLabel: String get() = Strings.string("write.mediaGeneratedLabel")
         /** How the card looks in a list */

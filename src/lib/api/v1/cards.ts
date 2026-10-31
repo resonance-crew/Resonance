@@ -1,5 +1,5 @@
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
-import { ANONYMOUS_VISIBILITY_MESSAGE, anonymousForConnections, editedAudience } from '@/lib/db/firestore/cardContent';
+import { ANONYMOUS_VISIBILITY_MESSAGE, BLANK_CARD_MESSAGE, anonymousForConnections, blankForReaders, editedAudience } from '@/lib/db/firestore/cardContent';
 import { mapCard } from '@/lib/db/firestore/mapper';
 import { RETIRED_SLUG, TOMBSTONE, retirable, retiredSlugRef, tombstoneRef } from '@/lib/db/firestore/tombstones';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
@@ -94,6 +94,10 @@ export async function updateCard(
     const after = { ...snap.data()!, ...patch };
     // Never into anonymous and for connections only; a card already that way keeps it until changed.
     if (changed && anonymousForConnections(after)) throw new ApiFailure('invalid_request', ANONYMOUS_VISIBILITY_MESSAGE);
+    // A published card shown to others again needs words in its story; a draft's audience is publishing's to judge.
+    if (patch.visibility && snap.get('publishedAt') != null && blankForReaders(after) && !blankForReaders(snap.data()!)) {
+      throw new ApiFailure('invalid_request', BLANK_CARD_MESSAGE);
+    }
     // Read before anything is written: what hiding a published resonance takes back.
     const plans = changed && hiddenResonance(after) ? await readTakeBack(tx, db, uid, id) : [];
     takeBack(tx, plans);

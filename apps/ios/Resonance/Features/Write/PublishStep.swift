@@ -308,6 +308,12 @@ struct PublishStep: View {
                     .foregroundStyle(Tokens.textMuted)
                     .frame(maxWidth: .infinity, alignment: compact ? .center : .trailing)
             }
+            if model.storyEmpty {
+                Text(L10n.Write.storyRequired)
+                    .font(AppFonts.body(12))
+                    .foregroundStyle(Tokens.textMuted)
+                    .frame(maxWidth: .infinity, alignment: compact ? .center : .trailing)
+            }
             if let error = model.publishError {
                 ModalError(error).frame(maxWidth: .infinity, alignment: compact ? .center : .trailing)
             }
@@ -374,7 +380,7 @@ struct PublishStep: View {
 extension PublishStep {
     /// The verb waits for the pictures on their way: disabled while one is (writer.spec §2.2).
     static func verbEnabled(_ model: WriteModel) -> Bool {
-        !model.publishWaitsForMedia && !(model.pending && model.busyVerb != .publish)
+        !model.publishWaitsForMedia && !model.storyEmpty && !(model.pending && model.busyVerb != .publish)
     }
 }
 

@@ -117,6 +117,20 @@ describe('updateCard (PATCH /cards/{id})', () => {
     expect((await db.doc('cards/live/edits/current').get()).data()).toMatchObject({ story: '改過', visibility: 'private', anonymous: true });
   });
 
+  it('refuses showing a blank card to others again, changing nothing — and leaves one already shown as it is', async () => {
+    await db.doc('cards/live').update({ story: '', visibility: 'private' });
+    const before = await card();
+    for (const visibility of ['public', 'connections'] as const) {
+      const e = await failure(updateCard(db, 'alice', 'live', { visibility }));
+      expect([e.code, e.message], visibility).toEqual(['invalid_request', 'Write something in the story before others can read it.']);
+      expect(await card()).toEqual(before);
+    }
+    // Published blank before the rule: its byline and its audience among readers still change, and it may go private.
+    await db.doc('cards/live').update({ visibility: 'public' });
+    await expect(updateCard(db, 'alice', 'live', { anonymous: true })).resolves.toMatchObject({ card: { anonymous: true } });
+    await expect(updateCard(db, 'alice', 'live', { visibility: 'private' })).resolves.toMatchObject({ card: { visibility: 'private' } });
+  });
+
   describe('an anonymous card is public or private', () => {
     const ANSWER = ['invalid_request', 'An anonymous card is public or private.'];
 

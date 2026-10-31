@@ -21,6 +21,7 @@ import com.resonance.kit.api.WritingApi
 import com.resonance.kit.images.AccentHue
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
+import com.resonance.kit.story.PlainText
 import java.io.ByteArrayOutputStream
 import java.net.URL
 import java.time.LocalTime
@@ -309,6 +310,11 @@ class WriteModel(
     val mediaBusy: Boolean get() = uploadingCover || generating
     /** A picture is still on its way, the cover or one in the story: 發布 waits (mediaBusyHint). */
     val verbWaits: Boolean get() = mediaBusy || uploadingInline
+    /**
+     * Others read nothing without words in the story (the web's lib/cards/blank; the server refuses it too):
+     * only a 私人卡 may be saved so (storyRequired). A missing title is asked for where it is written.
+     */
+    val storyEmpty: Boolean get() = values.visibility != "private" && PlainText.plainText(values.story).isBlank()
     /** The web's canGenerate: there is a story to draw from. */
     val canGenerate: Boolean get() = values.story.isNotBlank() && !mediaBusy
 

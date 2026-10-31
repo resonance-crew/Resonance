@@ -1,6 +1,6 @@
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { assignSlug } from '@/lib/ai/assignSlug';
-import { ANONYMOUS_VISIBILITY_MESSAGE, anonymousForConnections } from '@/lib/db/firestore/cardContent';
+import { ANONYMOUS_VISIBILITY_MESSAGE, BLANK_CARD_MESSAGE, anonymousForConnections, blankForReaders } from '@/lib/db/firestore/cardContent';
 import { isReservedId } from '@/lib/db/firestore/reservedId';
 import { ApiFailure } from './http';
 import { refuseInTrash } from './inTrash';
@@ -46,6 +46,10 @@ function within<T>(p: Promise<T>, ms: number): Promise<T | typeof LATE> {
  * the connection. A resonator without a pen name reaches no one either; the
  * card is published all the same.
  *
+ * A card others would read — public or for connections — needs words in its
+ * story (blankForReaders): a blank one is refused (`invalid_request`), and
+ * nothing is written.
+ *
  * An anonymous card is public or private: one set to be anonymous and for
  * connections only is refused (`invalid_request`, see
  * anonymousForConnections), and nothing is written. A card in the trash is
@@ -75,6 +79,8 @@ export async function publishCard(
     // Restored first: published from the trash it would go out private, answering nothing.
     refuseInTrash(snap);
     if (!String(snap.get('thoughtCore') ?? '').trim()) throw new ApiFailure('invalid_request', 'A card needs a title before it is published.');
+    // Nothing published for others to read without words in its story (a 私人卡 may be blank).
+    if (blankForReaders(snap.data()!)) throw new ApiFailure('invalid_request', BLANK_CARD_MESSAGE);
     const firstPublish = snap.get('publishedAt') == null;
     // Never newly published anonymous and for connections only (a card published so before is left as it is).
     if (firstPublish && anonymousForConnections(snap.data()!)) throw new ApiFailure('invalid_request', ANONYMOUS_VISIBILITY_MESSAGE);
