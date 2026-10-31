@@ -3,8 +3,9 @@
  * stop-motion value helper, and props drawn in the kit's paper and registered under `pip-` kinds for this pack's
  * stickers alone (each sticker is bundled on its own, so nothing here reaches another pack).
  */
-import { PROP_KINDS, type PropKind, type PropState } from '../kit';
-import { F, INK, path, pencil, poly, scribble, smoothPath, tear, type Pt } from '../kit/paper';
+import { PROP_KINDS, type PropKind, type PropState, type StickerPuppet } from '../kit';
+import { F, INK, path, pencil, poly, scribble, smoothPath, spline, tear, type Pt } from '../kit/paper';
+import { penWavePoints } from '../../../src/lib/design/wavyPath';
 import { clamp } from '../../../src/lib/mascots/geometry';
 
 /**
@@ -44,26 +45,6 @@ function register(name: string, def: LocalKind): PropKind {
   (PROP_KINDS as unknown as Record<string, LocalKind>)[name] = def;
   return name as PropKind;
 }
-
-/** The kraft paper of a parcel or a paper bag: 點點's own ground to hide behind (摺摺's sage is his). */
-export const KRAFT = 'oklch(70% 0.065 68)';
-
-/**
- * A low torn strip of kraft paper standing along the sticker's foot, for 點點 to duck behind and pop up from: its top
- * edge torn, one faint pencil rule. Half the kit's `ground` tall at the same k.
- */
-export const KRAFT_STRIP = register('pip-kraft-strip', {
-  size: [400, 110],
-  anchors: { center: [200, 58], top: [200, 14], base: [200, 102] },
-  draw(seed) {
-    const top: Pt[] = [];
-    for (let x = 10; x <= 390; x += 18) top.push([x, 16 + Math.sin(x * 0.034 + seed) * 4.5]);
-    const strip = tear(poly([...top, [390, 102], [10, 102]], 6), seed, { jag: 1.1, wander: 4 });
-    const rule = pencil([[30, 62], [200, 60], [370, 63]], seed + 1, 1, 0.4);
-    return `${paper(path(strip), KRAFT)}
-      <g stroke="oklch(48% 0.05 60)" stroke-width="1.4" opacity="0.28" fill="none" filter="url(#${F}graphite)">${rule.map(d => `<path d="${d}"/>`).join('')}</g>`;
-  },
-});
 
 /**
  * A story card marked by a teacher: cream, three bold handwritten lines, and `draw` 0–1 drawing a red crayon double
@@ -139,3 +120,29 @@ export const LAUGH_MARKS = register('pip-laugh-marks', {
     }
   },
 });
+
+/**
+ * The brand's wavy line as a thin strip of terracotta paper (the pen rhythm of `penWavePoints`, src/lib/design): a
+ * line for 點點 to pop up from behind — it is clipped below it (`clipBelow`), so it rises out of the line itself rather
+ * than from behind a block of colour. The line's middle runs along y = 20 of its box; the waves stay within ±4.
+ */
+export const WAVE_LINE = register('pip-wave-line', {
+  size: [330, 40],
+  anchors: { center: [165, 20], left: [10, 20] },
+  draw(seed) {
+    const line = penWavePoints(310, seed, 3.2, 26).map(([x, y]) => [x + 10, y + 20] as const);
+    const fine = spline(line, 4, false);
+    const ribbon = [...fine.map(([x, y]) => [x, y - 4.8] as const), ...fine.slice().reverse().map(([x, y]) => [x, y + 4.8] as const)];
+    return paper(path(tear(ribbon, seed + 1, { jag: 0.35, wander: 0.6 })), INK.terracotta, 'thin');
+  },
+});
+
+/**
+ * Clips a puppet below a line across the sticker (px): nothing of it under y is drawn — 點點 rising out of the wavy
+ * line. Call it last in a frame (it reads the pose's rise); the clip is in the puppet's own coordinates, whose origin is
+ * its ground point lifted by its rise.
+ */
+export function clipBelow(p: StickerPuppet, y: number): void {
+  const oy = y - (p.y - p.pose.rise * p.k);
+  p.el.style.clipPath = `polygon(-2000px -2000px, 2000px -2000px, 2000px ${oy.toFixed(1)}px, -2000px ${oy.toFixed(1)}px)`;
+}
