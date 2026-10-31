@@ -104,6 +104,17 @@ describe('the composer capsule (round 9 §4)', () => {
     expect(onSend).toHaveBeenCalledTimes(1);
   });
 
+  // Round 22 (the owner's third notes): the panel in the keyboard's place reaches the screen's edge — no band of
+  // the foot's paper under it; the grid scrolls down to the edge, the last row clear of the home indicator — and
+  // the capsule rides its one height animation, ↑ / ↓ turning on the way.
+  it('lets the sticker panel reach the screen’s edge, and turns ↑ / ↓ with its animation', () => {
+    expect(rule('.dock:has(> .stickerPanel)')).toMatch(/padding-bottom:\s*0/);
+    expect(rule('.stickerPanel .stickerGrid')).toMatch(/padding-bottom:\s*calc\(12px \+ env\(safe-area-inset-bottom, 0px\)\)/);
+    expect(rule('.stickerPanel')).toMatch(/transition:\s*height 220ms/);
+    expect(rule('.sendGlyph')).toMatch(/transition:\s*transform 220ms/);
+    expect(rule('.sendGlyph[data-turned]')).toMatch(/transform:\s*rotate\(180deg\)/);
+  });
+
   // Round 10 §3.3: written in, its pen darkens — the field's own darker ink — and never turns terracotta.
   it('darkens its pen while written in, without changing its colour', () => {
     const { container, rerender } = render(capsule());
@@ -132,8 +143,13 @@ describe('the composer capsule (round 9 §4)', () => {
     expect(rule('.aboveSend')).toMatch(/align-items:\s*flex-start/);
     expect(rule('.aboveSend')).toMatch(/justify-content:\s*center/);
     expect(rule('.aboveSend')).not.toMatch(/padding/);
-    // A square ghost button: no fill and no outline at rest.
-    expect(rule('.growTool')).toMatch(/width:\s*44px;[\s\S]*height:\s*44px/);
+    // A ghost button, no fill and no outline at rest — and the capsule's tools one size (the owner's third notes):
+    // ⤢, the ☺ / ⌨ and the ＋ all 44 × 48.
+    expect(rule('.growTool')).toMatch(/width:\s*44px;[\s\S]*height:\s*48px/);
+    expect(rule('.stickerTool button')).toMatch(/width:\s*44px;[\s\S]*height:\s*48px/);
+    expect(rule('.toolsSlot')).toMatch(/width:\s*44px/);
+    expect(rule('.toolsSlot')).not.toMatch(/margin/);
+    expect(rule('.plusSlot [data-icon=\'plus\']')).toMatch(/width:\s*44px;[\s\S]*height:\s*48px/);
     expect(rule('.growTool')).toMatch(/border:\s*none;[\s\S]*background:\s*none/);
     expect(rule('.growWash')).toMatch(/opacity:\s*0/);
     expect(rule('.capsule[data-block] .send')).toMatch(/flex:\s*none;[\s\S]*height:\s*48px/);

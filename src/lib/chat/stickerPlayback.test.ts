@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { MAX_PLAYING, StickerPlayback } from './stickerPlayback';
+import { MAX_PLAYING, StickerPlayback, artTopOf } from './stickerPlayback';
 
 // Round 22 §4.5: a sticker plays on its first sight (once per message for the page), at most three move at once —
 // one more starting stops the one that started first — and a replay of one moving starts it afresh.
@@ -38,5 +38,36 @@ describe('StickerPlayback', () => {
     expect(p.moving).toEqual(['m2']);
     p.end('m1');
     expect(again).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Round 22 (the owner's): a sticker answering a quote comes up over it by its drawing, not its square — how far
+// down its square the drawing starts is read once per picture from its key frame.
+describe('artTopOf', () => {
+  it('finds the first row the drawing reaches, once per picture', () => {
+    const reads = vi.fn();
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: () => ({
+        drawImage: () => {},
+        getImageData: (_x: number, _y: number, w: number, h: number) => {
+          reads();
+          const data = new Uint8ClampedArray(w * h * 4);
+          // Clear above row 8, the drawing from there (one opaque pixel is enough).
+          data[(8 * w + 5) * 4 + 3] = 255;
+          return { data };
+        },
+      }),
+    };
+    vi.stubGlobal('document', { createElement: () => canvas });
+    const img = { currentSrc: '/stickers/nod/hug.thumb.webp?v=1', src: '', naturalWidth: 256 } as unknown as HTMLImageElement;
+    expect(artTopOf(img)).toBe(8 / 32);
+    expect(artTopOf(img)).toBe(8 / 32);
+    expect(reads).toHaveBeenCalledTimes(1);
+    // Nothing readable (no canvas): no room taken off.
+    vi.stubGlobal('document', { createElement: () => ({ getContext: () => null }) });
+    expect(artTopOf({ currentSrc: '/stickers/pip/hi.thumb.webp?v=1', naturalWidth: 256 } as unknown as HTMLImageElement)).toBe(0);
+    vi.unstubAllGlobals();
   });
 });

@@ -748,7 +748,7 @@ export function ThreadComposer({
       </div>
 
       {panelOpen && (
-        <StickerPanel base={panelBase} tall={panelTallH} isTall={panelTall} onTallChange={setPanelTall} gridRef={gridRef}>
+        <StickerPanel base={panelBase} tall={panelTallH} isTall={panelTall} gridRef={gridRef}>
           {picker}
         </StickerPanel>
       )}
@@ -885,19 +885,21 @@ function ThumbRemove({ label, seed, onClick }: { label: string; seed: number; on
   );
 }
 
-/** The grow button's square: a finger's 44, glyph centred (it and the send block share the send column). */
-export const GROW_BUTTON = 44;
+/** The grow button: the capsule's one tool size (the ＋'s, the ☺'s), 44 × 48, its glyph centred. */
+export const TOOL_W = 44;
+export const TOOL_H = 48;
 
 /**
- * ⤢ / ⤡ (round 22, the owner's notes): a square ghost button at the capsule's top-right, in the send column —
+ * ⤢ / ⤡ (round 22, the owner's notes): a ghost button at the capsule's top-right, in the send column, the
+ * capsule's one tool size —
  * no fill and no outline at rest; under a pointer, the keyboard's focus or a press, a soft square of ink (a
  * hand-drawn rounded square, as the bare glyphs' disc), the glyph centred.
  */
 function GrowButton({ expanded, label, onClick }: { expanded: boolean; label: string; onClick: () => void }) {
-  const wash = useMemo(() => wobRect(GROW_BUTTON, GROW_BUTTON, 12, 19, 0.9, { segmentsH: 1, segmentsV: 1, curve: 1 }), []);
+  const wash = useMemo(() => wobRect(TOOL_W, TOOL_H, 12, 19, 0.9, { segmentsH: 1, segmentsV: 1, curve: 1 }), []);
   return (
     <button type="button" className={styles.growTool} aria-label={label} title={label} onClick={onClick}>
-      <svg className={styles.growWash} viewBox={`0 0 ${GROW_BUTTON} ${GROW_BUTTON}`} aria-hidden="true">
+      <svg className={styles.growWash} viewBox={`0 0 ${TOOL_W} ${TOOL_H}`} aria-hidden="true">
         <path d={wash} />
       </svg>
       <Icon name={expanded ? 'collapse' : 'expand'} size={18} color="currentColor" strokeWidth={INK} />

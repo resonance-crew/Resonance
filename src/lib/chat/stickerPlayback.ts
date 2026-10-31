@@ -86,3 +86,38 @@ export function stickerBlob(url: string): Promise<Blob> {
 export function prefersStill(): boolean {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
+
+const artTops = new Map<string, number>();
+
+/**
+ * How far down its square a sticker's drawing starts (a fraction of its height: the transparent room above the
+ * puppet, which differs from one sticker to the next) — read once per picture from its loaded key frame, on a
+ * small canvas. A sticker answering a quote comes up over the quote by its drawing, not by its square
+ * (round 22, the owner's). 0 when it can't be read.
+ */
+export function artTopOf(img: HTMLImageElement): number {
+  const key = img.currentSrc || img.src;
+  const known = artTops.get(key);
+  if (known != null) return known;
+  let top = 0;
+  try {
+    const size = 32;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (ctx && img.naturalWidth) {
+      ctx.drawImage(img, 0, 0, size, size);
+      const { data } = ctx.getImageData(0, 0, size, size);
+      let row = 0;
+      search: for (; row < size; row++) {
+        for (let x = 0; x < size; x++) if (data[(row * size + x) * 4 + 3] > 24) break search;
+      }
+      top = row < size ? row / size : 0;
+    }
+  } catch {
+    top = 0;
+  }
+  artTops.set(key, top);
+  return top;
+}

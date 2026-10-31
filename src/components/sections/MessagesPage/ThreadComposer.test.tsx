@@ -265,11 +265,10 @@ describe('the stickers', () => {
     expect(field()).toHaveFocus();
   });
 
-  // Scrolling the grid up grows the panel first (Telegram's nested scroll): past a third of the way it settles
-  // grown; grown, pulling the grid down from its top shrinks it again.
-  it('grows the panel as a finger scrolls the grid up, before the grid scrolls', async () => {
+  // Round 22 (the owner's third notes): scrolling the grid only scrolls it — the panel grows from ↑ alone (and
+  // shrinks from ↓), ↑ / ↓ turning on the segment that rides the capsule up with it.
+  it('never grows the panel as a finger scrolls the grid: ↑ alone grows it', async () => {
     asDesktop(false);
-    // A phone held upright (on its side, the panel is kept lower).
     vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(390);
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(844);
     renderWithIntl(composer({ expandRoom: () => 700 }));
@@ -283,25 +282,20 @@ describe('the stickers', () => {
     };
     expect(panel.style.height).toBe('300px');
     touch('touchstart', 500);
-    const move = touch('touchmove', 250);
-    // The panel took the finger: the grid didn't scroll.
-    expect(move.defaultPrevented).toBe(true);
-    expect(panel.style.height).toBe('550px');
-    touch('touchend', 250);
-    expect(panel).toHaveAttribute('data-tall');
-    expect(screen.getByRole('button', { name: 'Collapse stickers' })).toBeInTheDocument();
-
-    // Grown, at the grid's top: pulling down shrinks it; a little only, and it stays grown.
-    const tall = parseFloat(panel.style.height);
-    touch('touchstart', 300);
-    touch('touchmove', 330);
-    expect(parseFloat(panel.style.height)).toBe(tall - 30);
-    touch('touchend', 330);
-    expect(panel).toHaveAttribute('data-tall');
-    touch('touchstart', 300);
-    touch('touchmove', 300 + tall);
-    touch('touchend', 300 + tall);
+    const move = touch('touchmove', 200);
+    touch('touchend', 200);
+    // The grid had the finger; the panel stayed as it was.
+    expect(move.defaultPrevented).toBe(false);
+    expect(panel.style.height).toBe('300px');
     expect(panel).not.toHaveAttribute('data-tall');
+
+    const grow = screen.getByRole('button', { name: 'Expand stickers' });
+    expect(grow.querySelector('[class*="sendGlyph"]')).not.toHaveAttribute('data-turned');
+    await userEvent.click(grow);
+    expect(panel).toHaveAttribute('data-tall');
+    expect(parseFloat(panel.style.height)).toBeGreaterThan(300);
+    // The glyph turns to ↓ on the segment itself (a CSS turn the height's animation carries).
+    expect(screen.getByRole('button', { name: 'Collapse stickers' }).querySelector('[class*="sendGlyph"]')).toHaveAttribute('data-turned');
   });
 
   it('previews a sticker, sends it on a second tap with nothing else, and keeps it among the recent', async () => {

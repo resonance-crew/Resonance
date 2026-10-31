@@ -186,7 +186,7 @@ export function ComposerCapsule({
           onPointerLeave={(e) => at(e, false)}
         >
           {/* On the last line's row, beside the ＋ — not in the middle of a tall field. */}
-          <span className={styles.sendGlyph} style={segment === 'collapse' ? { transform: 'rotate(180deg)' } : undefined}>
+          <span className={styles.sendGlyph} data-turned={segment === 'collapse' || undefined}>
             <Icon name={segment === 'send' ? 'send' : 'arrow-up'} size={20} color="currentColor" strokeWidth={INK} />
           </span>
         </button>

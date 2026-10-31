@@ -600,7 +600,13 @@ describe('MessagesPage thread', () => {
     expect(quote.closest('[class*="quote"][data-apart]')).toBeTruthy();
     expect(cssRule('.quote[data-apart] .quoteBubble[data-sticker]')).toMatch(/padding-bottom:\s*6px/);
     expect(cssRule('.quoteBubble[data-sticker]')).toMatch(/padding:\s*6px 10px 20px/);
-    expect(cssRule('.slot[data-sticker][data-over-quote]')).toMatch(/margin-top:\s*4px/);
+    // The answering sticker comes up over the quote's lower edge, in front; the quoted one is drawn quieter.
+    expect(cssRule('.slot[data-sticker][data-over-quote]')).toMatch(/margin-top:\s*-18px/);
+    // …by its drawing: the room above the puppet in its square is taken off too.
+    expect(cssRule('.slot[data-sticker][data-over-quote] .sticker')).toMatch(/margin-top:\s*calc\(-1 \* var\(--art-top, 0px\)\)/);
+    expect(cssRule('.slot')).toMatch(/z-index:\s*1/);
+    expect(cssRule('.quoteSticker')).toMatch(/opacity:\s*0\.55/);
+    expect(cssRule('.carrySticker')).toMatch(/opacity:\s*0\.55/);
 
     // One grid: the album's first picture stands for it, the four in one bubble, its words under them.
     const grid = container.querySelector('[class*="album"]')!;

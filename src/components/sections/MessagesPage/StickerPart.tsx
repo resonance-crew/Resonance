@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { prefersStill, stickerBlob, stickerPlayback } from '@/lib/chat/stickerPlayback';
+import { artTopOf, prefersStill, stickerBlob, stickerPlayback } from '@/lib/chat/stickerPlayback';
 import { stickerName, stickerOf, stickerPath, type StickerRef } from '@/lib/stickers/catalog';
 import styles from './Thread.module.css';
 
@@ -38,6 +38,11 @@ export function StickerPart({ messageKey, sticker, fallback, interactive, title,
   const anim = stickerPath(sticker, 'anim');
   const label = name ? t('stickerLabel', { name }) : fallback || t('stickerUnknown');
   const [src, setSrc] = useState(thumb);
+  // Where its drawing starts in its square (px): a sticker answering a quote comes up over it by its drawing.
+  const [artTop, setArtTop] = useState(0);
+  const measure = (img: HTMLImageElement) => {
+    if (img.src.includes('.thumb.')) setArtTop(Math.round(artTopOf(img) * img.clientHeight));
+  };
   const ref = useRef<HTMLSpanElement>(null);
   const ending = useRef<(() => void) | null>(null);
   const timer = useRef<number | null>(null);
@@ -114,7 +119,7 @@ export function StickerPart({ messageKey, sticker, fallback, interactive, title,
   }, [interactive, messageKey, play]);
 
   return (
-    <span ref={ref} className={styles.sticker} title={title}>
+    <span ref={ref} className={styles.sticker} title={title} style={artTop ? ({ '--art-top': `${artTop}px` } as CSSProperties) : undefined}>
       {interactive ? (
         <button
           type="button"
@@ -126,11 +131,18 @@ export function StickerPart({ messageKey, sticker, fallback, interactive, title,
           }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={src} alt="" draggable={false} decoding="async" onError={() => (src === thumb ? onFailed?.() : rest())} />
+          <img
+            src={src}
+            alt=""
+            draggable={false}
+            decoding="async"
+            onLoad={(e) => measure(e.currentTarget)}
+            onError={() => (src === thumb ? onFailed?.() : rest())}
+          />
         </button>
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={thumb} alt={label} draggable={false} onError={() => onFailed?.()} />
+        <img src={thumb} alt={label} draggable={false} onLoad={(e) => measure(e.currentTarget)} onError={() => onFailed?.()} />
       )}
     </span>
   );

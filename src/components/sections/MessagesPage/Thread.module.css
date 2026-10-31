@@ -1363,6 +1363,8 @@ button.chips::before {
   width: 40px;
   height: 40px;
   object-fit: contain;
+  /* Quoted, it is quieter, as in the thread's quote. */
+  opacity: 0.55;
 }
 
 /* The pictures riding (round 22 §4.2 and the owner's notes — iOS's way everywhere): their thumbnails in a row
@@ -1593,20 +1595,21 @@ button.chips::before {
   flex: none;
   align-items: flex-end;
   align-self: stretch;
-  width: 40px;
-  margin-right: 2px;
+  width: 44px;
 }
 
+/* The ☺ / ⌨ is the ＋'s twin (round 22, the owner's notes: the capsule's tools one size): 44 × 48, its glyph 22. */
 .stickerTool {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 44px;
   height: 48px;
 }
 
 .stickerTool button {
-  width: 40px;
-  height: 44px;
+  width: 44px;
+  height: 48px;
 }
 
 /* The send column: Send the full height while the field is one line; from its second line a 52 × 48 block on
@@ -1637,7 +1640,7 @@ button.chips::before {
   display: grid;
   place-items: center;
   width: 44px;
-  height: 44px;
+  height: 48px;
   padding: 0;
   border: none;
   background: none;
@@ -1749,7 +1752,12 @@ button.chips::before {
   stroke-linecap: round;
 }
 
-/* The plane on the last line's row, beside the ＋. */
+/* The plane on the last line's row, beside the ＋ — or ↑ / ↓ for the stickers, turning as the panel grows (the
+   segment travels with the capsule, so the glyph turns on its way). */
+.sendGlyph[data-turned] {
+  transform: rotate(180deg);
+}
+
 .sendGlyph {
   position: absolute;
   right: 0;
@@ -1759,7 +1767,7 @@ button.chips::before {
   align-items: center;
   justify-content: center;
   height: 48px;
-  transition: transform 120ms ease;
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
 .capsule[data-ready] .send:active .sendGlyph {
@@ -1963,10 +1971,13 @@ button.chips::before {
   width: 40px;
   height: 40px;
   object-fit: contain;
+  /* Quoted, it is quieter, as quoted words are muted (the owner's). */
+  opacity: 0.55;
 }
 
 /* Answered by a sticker (round 22, the owner's notes): no bubble lies over the quote's foot, so it keeps no room
-   for one — as much under its content as over it, the content centred — and the sticker stands a little under it. */
+   for one — as much under its content as over it, the content centred — and the sticker, in front, comes up over
+   its lower edge, so the two read as one (the slot is over the quote: z 1). */
 .quote[data-apart] .quoteBubble {
   padding-bottom: 8px;
 }
@@ -1976,7 +1987,13 @@ button.chips::before {
 }
 
 .slot[data-sticker][data-over-quote] {
-  margin-top: 4px;
+  margin-top: -18px;
+}
+
+/* By its drawing, not its square: the room above the puppet (--art-top, read once from its key frame) is taken
+   off too, so every sticker's drawing comes up 18 over the quote alike. */
+.slot[data-sticker][data-over-quote] .sticker {
+  margin-top: calc(-1 * var(--art-top, 0px));
 }
 
 /* The sticker panel in the keyboard's place on a phone (round 22 §4.1): the foot's own paper going on — no
@@ -1986,11 +2003,18 @@ button.chips::before {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  /* One height animation: the capsule above it — its send segment and ↑ / ↓ with it — rides on it. */
   transition: height 220ms cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
-.stickerPanel[data-dragging] {
-  transition: none;
+/* In the keyboard's place the panel reaches the screen's edge (round 22, the owner's notes): no band of the foot's
+   paper under it — its grid scrolls down to the edge, its fade the edge, the last row clear of the home indicator. */
+.dock:has(> .stickerPanel) {
+  padding-bottom: 0;
+}
+
+.stickerPanel .stickerGrid {
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
 }
 
 .stickerPicker {
