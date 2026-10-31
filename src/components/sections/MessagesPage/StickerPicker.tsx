@@ -130,7 +130,7 @@ export function StickerPicker({ recents, selected, onPick, variant = 'panel', gr
                     data-sticker={`${ref.pack}/${ref.id}`}
                     onClick={() => onPick(ref)}
                   >
-                    <CellWash seed={seedFromString(ref.id)} />
+                    <CellWash sticker={ref} />
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={stickerPath(ref, 'thumb')} alt="" loading="lazy" decoding="async" draggable={false} />
                   </button>
@@ -145,16 +145,20 @@ export function StickerPicker({ recents, selected, onPick, variant = 'panel', gr
 }
 
 /**
- * A sticker cell's wash under the pointer (grey) or for the one previewed (the terracotta's light tint): a
- * hand-drawn square inside the cell, as the apps' cells (WobRectShape 16, seeded by the sticker) — never a CSS
- * box. The cell is square, so one 100-unit drawing stretches to it.
+ * A sticker's cell outline at [w × h]: its own seed, two bends a side, the corners and the swing in proportion
+ * to its size — so the preview drawn from it (StickerPreview) is the cell's orange wash grown, edge for edge.
  */
-function CellWash({ seed }: { seed: number }) {
-  const d = useMemo(
-    // A gentle hand (≈ 2 px of swing at ~56 across) in a 100-unit drawing: the apps' cell, a little calmer.
-    () => wobRect(100, 100, 28, seed, 3.5, { segmentsH: 2, segmentsV: 2, curve: 1.2 }),
-    [seed],
-  );
+export function stickerCellPath(w: number, h: number, sticker: StickerRef): string {
+  const s = Math.min(w, h);
+  return wobRect(w, h, s * 0.28, seedFromString(sticker.id), s * 0.035, { segmentsH: 2, segmentsV: 2, curve: 1.2 });
+}
+
+/**
+ * A sticker cell's wash under the pointer (grey) or for the one previewed (the terracotta's light tint): its
+ * hand-drawn outline (stickerCellPath), never a CSS box. The cell is square, so one 100-unit drawing stretches to it.
+ */
+function CellWash({ sticker }: { sticker: StickerRef }) {
+  const d = useMemo(() => stickerCellPath(100, 100, sticker), [sticker]);
   return (
     <svg className={styles.cellWash} viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
       <path d={d} />

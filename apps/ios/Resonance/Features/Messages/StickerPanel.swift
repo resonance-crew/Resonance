@@ -148,6 +148,22 @@ private struct PackIcon: View {
     }
 }
 
+/// A sticker cell's outline at any size: radius 16 and its own swing at a phone's ~88 across, kept in proportion —
+/// so the preview drawn from it is the cell's wash grown, edge for edge.
+nonisolated struct StickerCellShape: Shape {
+    let seed: Double
+
+    init(sticker: StickerRef) {
+        seed = Double(seedFromString(sticker.id))
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let s = Double(min(rect.width, rect.height))
+        return WobRectShape(radius: s * 0.18, seed: seed, mag: s * 0.036, options: WobRectOptions(
+            curve: 1.54, segmentsH: .count(2), segmentsV: .count(2))).path(in: rect)
+    }
+}
+
 /// One sticker in the grid: its key pose, square; the one previewed washed behind. VoiceOver reads its name.
 private struct StickerCell: View {
     let sticker: StickerRef
@@ -155,7 +171,7 @@ private struct StickerCell: View {
     let onTap: () -> Void
 
     private static let wash = Tokens.terracottaLight.opacity(0.55)
-    private var shape: WobRectShape { WobRectShape(radius: 16, seed: Double(seedFromString(sticker.id))) }
+    private var shape: StickerCellShape { StickerCellShape(sticker: sticker) }
 
     var body: some View {
         Button(action: onTap) {
@@ -194,7 +210,8 @@ struct StickerPreview: View {
             .padding(.horizontal, 18)
             .padding(.top, 12)
             .padding(.bottom, 10)
-            .background { PaperSheet(seed: 47, lively: true) }
+            // Its edge is its cell's orange wash grown (the owner's notes, 2026-11-01): one shape, read as one.
+            .background { PaperSheet(seed: 47, outline: AnyShape(StickerCellShape(sticker: sticker))) }
             .contentShape(Rectangle())
         }
         .buttonStyle(OrganicPressStyle(inset: 2))

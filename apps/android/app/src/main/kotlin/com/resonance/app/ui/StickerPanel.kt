@@ -64,6 +64,14 @@ import com.resonance.kit.chat.ChatSticker
 import com.resonance.kit.chat.StickerCatalog
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
+import com.resonance.geometry.SegValue
+import com.resonance.geometry.WobRectOptions
+import kotlin.math.min
 import kotlinx.coroutines.launch
 
 /** One section of the sticker panel's grid: the 🕘 recents (once there are any), then each pack. */
@@ -254,8 +262,21 @@ private fun StickerGrid(
     }
 }
 
+/**
+ * A sticker cell's outline at any size: radius 16 and its own swing at a phone's ~92 across, kept in proportion —
+ * so the preview drawn from it is the cell's wash grown, edge for edge (the owner's notes, 2026-11-01).
+ */
+internal data class StickerCellShape(private val seed: Double = 37.0) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val s = min(size.width, size.height) / density.density.toDouble()
+        return WobRectShape(s * 0.174, seed, s * 0.035, CellOptions).createOutline(size, layoutDirection, density)
+    }
+}
+
+private val CellOptions = WobRectOptions(curve = 1.52, segmentsH = SegValue.Count(2.0), segmentsV = SegValue.Count(2.0))
+
 /** A sticker cell's wash: the previewed one rests on it, a press spreads inside it. */
-private val CellShape = WobRectShape(16.0, 37.0)
+private val CellShape = StickerCellShape()
 
 /**
  * The sticker being previewed (round 22 §4.1): the animated file at [size] on a flat paper sheet over the
@@ -280,7 +301,7 @@ internal fun StickerPreview(
         val name = s.name(Strings.language.tag)
         Column(
             Modifier
-                .paperSheet(seed = 47.0, lively = true)
+                .paperSheet(seed = 47.0, outline = CellShape)
                 .clickable(interactionSource = null, indication = null, role = Role.Button, onClickLabel = L10n.Messages.send) { onSend(s) }
                 .semantics {
                     contentDescription = L10n.Messages.stickerPreviewA11y(name)

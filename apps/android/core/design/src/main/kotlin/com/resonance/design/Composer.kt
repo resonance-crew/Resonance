@@ -66,6 +66,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.resonance.design.generated.IconName
@@ -73,8 +74,6 @@ import com.resonance.design.generated.Tokens
 import com.resonance.design.generated.ResonanceColors
 import com.resonance.design.generated.LocalResonanceColors
 import androidx.compose.runtime.ReadOnlyComposable
-import com.resonance.geometry.SegValue
-import com.resonance.geometry.WobRectOptions
 
 /**
  * The chat composer's one-line height (round 9 §4): 48 on every platform, whatever the text size —
@@ -452,26 +451,13 @@ fun PanelGripMark(active: Boolean, modifier: Modifier = Modifier, seed: Double =
 
 /**
  * A flat paper sheet (round 18's menus): the theme's menu paper inside one hand-drawn pen line, the header's quiet
- * grey at INK — no grain, no shadow. The sticker preview stands on one (round 22 §4.1).
+ * grey at INK — no grain, no shadow. The sticker preview stands on one (round 22 §4.1), its [outline] its cell's.
  */
 @Composable
-fun Modifier.paperSheet(seed: Double = 31.0, radius: Double = MenuSheet.RADIUS, lively: Boolean = false): Modifier {
+fun Modifier.paperSheet(seed: Double = 31.0, radius: Double = MenuSheet.RADIUS, outline: Shape? = null): Modifier {
     val palette = LocalResonanceColors.current
-    return drawWithCacheOf(
-        FloatingSlip(
-            seed, if (lively) LIVELY_RADIUS else radius, palette.FieldBorderHover, palette.MenuPaper, Tokens.Ink.value,
-            mag = if (lively) LIVELY_MAG else null, options = if (lively) LIVELY_OPTIONS else null,
-        ),
-    )
+    return drawWithCacheOf(FloatingSlip(seed, radius, palette.FieldBorderHover, palette.MenuPaper, Tokens.Ink.value, outline))
 }
-
-/**
- * A livelier hand than the menus' calm one (the owner's notes, 2026-11-01: the sticker preview read as a plain
- * rounded box): three bends a side swinging 3.5, gently bowed — the web's `PREVIEW_WOBBLE`, iOS's `PaperSheet(lively:)`.
- */
-private const val LIVELY_RADIUS = 22.0
-private const val LIVELY_MAG = 3.5
-private val LIVELY_OPTIONS = WobRectOptions(curve = 1.1, segmentsH = SegValue.Count(3.0), segmentsV = SegValue.Count(3.0))
 
 /**
  * A notice floating in the composer's place (round 9 §4): opaque cream, its pen INK_LIGHT in the
@@ -491,11 +477,11 @@ private data class FloatingSlip(
     val pen: Color,
     val paper: Color,
     val width: Float,
-    val mag: Double? = null,
-    val options: WobRectOptions? = null,
+    /** Its outline, when it is not the slip's own wobble (the sticker preview: its cell's outline grown). */
+    val outline: Shape? = null,
 ) : (CacheDrawScope) -> DrawResult {
     override fun invoke(scope: CacheDrawScope): DrawResult = with(scope) {
-        val o = WobRectShape(radius, seed, mag, options).createOutline(size, layoutDirection, this)
+        val o = (outline ?: WobRectShape(radius, seed)).createOutline(size, layoutDirection, this)
         val line = Stroke(width.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
         onDrawBehind {
             drawOutline(o, paper)

@@ -1,19 +1,13 @@
 'use client';
 
-import { useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { PaperSheet, type SheetWobble } from '@/components/atoms/PaperSheet/PaperSheet';
+import { PaperSheet } from '@/components/atoms/PaperSheet/PaperSheet';
 import { useElementSize } from '@/lib/hooks/useElementSize';
 import { prefersStill } from '@/lib/chat/stickerPlayback';
 import { stickerName, stickerPath, type StickerRef } from '@/lib/stickers/catalog';
+import { stickerCellPath } from './StickerPicker';
 import styles from './Thread.module.css';
-
-/**
- * The preview's hand (the owner's notes, 2026-11-01): the menus' calm wobble read as a plain rounded box at this
- * size, so its sheet is drawn livelier — three bends a side swinging 3.5 px, gently bowed (5 read as too
- * strong) — as the apps' previews are.
- */
-export const PREVIEW_WOBBLE: SheetWobble = { mag: 3.5, segments: 3, curve: 1.1 };
 
 export interface StickerPreviewProps {
   sticker: StickerRef;
@@ -36,6 +30,8 @@ export function StickerPreview({ sticker, onSend, placement }: StickerPreviewPro
   const ref = useRef<HTMLButtonElement>(null);
   const { w, h } = useElementSize(ref);
   const name = stickerName(sticker, locale) ?? '';
+  // Its edge is its cell's orange wash grown (the owner's notes, 2026-11-01): one shape, so the two read as one.
+  const outline = useCallback((width: number, height: number) => stickerCellPath(width, height, sticker), [sticker]);
   // The moving file here (fetched afresh per sticker, so it plays from its start); its key frame with less motion.
   const src = stickerPath(sticker, prefersStill() ? 'thumb' : 'anim');
   return (
@@ -51,7 +47,7 @@ export function StickerPreview({ sticker, onSend, placement }: StickerPreviewPro
         onSend();
       }}
     >
-      <PaperSheet w={w} h={h} R={22} seed={47} wobble={PREVIEW_WOBBLE} />
+      <PaperSheet w={w} h={h} seed={47} outline={outline} />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img key={`${sticker.pack}/${sticker.id}`} className={styles.stickerPreviewArt} src={src} alt="" draggable={false} />
       <span className={styles.stickerPreviewHint} aria-hidden="true">

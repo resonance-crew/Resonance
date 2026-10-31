@@ -959,20 +959,17 @@ public struct ComposerSideButton {
 /// pen line at INK in the header's grey — no grain, no shadow. Behind the sticker preview and the Mac's popovers.
 public struct PaperSheet: View {
     var seed: Double
-    /// A livelier hand than the menus' calm one, which read as a plain rounded box behind the sticker preview (the
-    /// owner's notes, 2026-11-01): three bends a side swinging 3.5, gently bowed — the web's `PREVIEW_WOBBLE`.
-    var lively: Bool
+    /// Its outline, when it is not a menu's (the sticker preview: its cell's outline grown, the owner's notes,
+    /// 2026-11-01); the paper and the pen stay the sheet's.
+    var outline: AnyShape?
 
-    public init(seed: Double = 41, lively: Bool = false) {
+    public init(seed: Double = 41, outline: AnyShape? = nil) {
         self.seed = seed
-        self.lively = lively
+        self.outline = outline
     }
 
     public var body: some View {
-        let shape = lively
-            ? AnyShape(WobRectShape(radius: 22, seed: seed + 100, mag: 3.5, options: WobRectOptions(
-                curve: 1.1, segmentsH: .count(3), segmentsV: .count(3))))
-            : AnyShape(MenuSheetShape(seed: seed))
+        let shape = outline ?? AnyShape(MenuSheetShape(seed: seed))
         ZStack {
             shape.fill(MenuSheetColors.paper(hue: nil))
             shape.stroke(MenuSheetColors.pen(hue: nil), style: StrokeStyle(lineWidth: Tokens.ink, lineCap: .round, lineJoin: .round))
