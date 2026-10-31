@@ -4,6 +4,10 @@ import { CSSProperties, ReactNode, useEffect, useMemo, useRef, useState } from '
 import { Skeleton } from '@/components/atoms/Skeleton/Skeleton';
 import { wobRect } from '@/lib/design/wobRect';
 import { useElementSize } from '@/lib/hooks/useElementSize';
+import { brokenImage } from '@/lib/images/broken';
+
+/** How long a picture that failed waits before its one more try. */
+export const IMAGE_RETRY_MS = 3000;
 
 export interface OrganicImageProps {
   /** Image to render, cover-fitted inside the organic clip. */
@@ -62,9 +66,24 @@ export function OrganicImage({
   // already had when the page hydrated is caught by `complete`.
   const imgRef = useRef<HTMLImageElement>(null);
   const [settled, setSettled] = useState<string | null>(null);
+  // A picture that fails is asked for once more a moment later, on a fresh element (a lookup
+  // that failed on a network just joined usually answers the second time), shimmering meanwhile;
+  // only the second failure settles. `retryOf` names the src whose second element is mounted.
+  const [retryOf, setRetryOf] = useState<string | null>(null);
+  const retryTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(retryTimer.current), []);
+  const failed = (failedSrc: string) => {
+    if (retryOf === failedSrc) return setSettled(failedSrc);
+    window.clearTimeout(retryTimer.current);
+    retryTimer.current = window.setTimeout(() => setRetryOf(failedSrc), IMAGE_RETRY_MS);
+  };
   useEffect(() => {
     const img = imgRef.current;
-    if (src && img?.complete) setSettled(src);
+    if (!src || !img?.complete) return;
+    // Failed before hydration: its error went unheard.
+    if (brokenImage(img)) failed(src);
+    else setSettled(src);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per src, as the element mounts
   }, [src]);
   const shimmering = !!src && settled !== src;
 
@@ -109,10 +128,11 @@ export function OrganicImage({
           // image organically; next/image's wrapper/sizing fights that layout.
           // eslint-disable-next-line @next/next/no-img-element
           <img
+            key={retryOf === src ? 'retry' : 'first'}
             ref={imgRef}
             src={src}
             onLoad={() => setSettled(src)}
-            onError={() => setSettled(src)}
+            onError={() => failed(src)}
             alt={alt}
             loading={priority ? 'eager' : 'lazy'}
             decoding={priority ? undefined : 'async'}

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@/../test/render';
+import { fireEvent, render, screen } from '@/../test/render';
 import { HandDrawnAvatar, initialsScale } from './HandDrawnAvatar';
 
 // The initials keep paper between them and the outline: Latin ones at the usual 35 % of the
@@ -40,5 +40,23 @@ describe('the avatar’s colour', () => {
     const disc = container.firstElementChild as HTMLElement;
     expect(disc).not.toHaveClass('res-av');
     expect(disc.style.getPropertyValue('--av')).toBe('');
+  });
+});
+
+// A photo that won't load gives way to the initials on the person's colour — never the
+// browser's broken-image glyph with the initials as its alt text beside it.
+describe('an avatar photo that fails to load', () => {
+  it('shows the initials instead', () => {
+    const { container } = render(<HandDrawnAvatar initials="WI" size={40} src="https://img.example.com/image/a.webp" />);
+    fireEvent.error(container.querySelector('img')!);
+    expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByText('WI')).toBeInTheDocument();
+  });
+
+  it('tries a new photo again', () => {
+    const { container, rerender } = render(<HandDrawnAvatar initials="WI" size={40} src="https://img.example.com/image/a.webp" />);
+    fireEvent.error(container.querySelector('img')!);
+    rerender(<HandDrawnAvatar initials="WI" size={40} src="https://img.example.com/image/b.webp" />);
+    expect(container.querySelector('img')).toHaveAttribute('src', 'https://img.example.com/image/b.webp');
   });
 });
