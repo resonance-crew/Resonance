@@ -28,6 +28,13 @@ export interface StickerPose extends Pose {
   extra: Record<string, number>;
   /** 悄悄's `stars-glow` (the landing page shows it on the night page only; a sticker decides). */
   glow: number;
+  /**
+   * An arm mirrored along its own length, its mitten's thumb on the other side: arms swung in across the body carry
+   * their thumbs underneath (drawn hanging, thumb outward), so joined palms (合掌) or a held-up mitten read thumbs-up
+   * only flipped.
+   */
+  flipL: boolean;
+  flipR: boolean;
   // blush: as the engine's, 0–1; a sticker may go to 2, the flush spreading wider (a deep thank-you, a lean-on)
 }
 
@@ -210,7 +217,7 @@ export class StickerPuppet {
       legL: 7 * sit + R.floorAng * flo, legR: -7 * sit - R.floorAng * flo, legS: 1 - 0.14 * sit - R.floorS * flo,
       liftL: R.arms.L.rest, liftR: R.arms.R.rest, faceX: 0, faceY: 0, eyes: 'open', mouth: 'mouth', alt: false,
       decoR: 0, decoY: 0, blush: 0, stars: 1, alpha: 1, shadow: 0, front: false, popX: 1, popY: 1,
-      decoX: 0, decoS: 1, lean: 0, extra: {}, glow: 0,
+      decoX: 0, decoS: 1, lean: 0, extra: {}, glow: 0, flipL: false, flipR: false,
     };
   }
 
@@ -316,7 +323,10 @@ export class StickerPuppet {
     for (const side of ['L', 'R'] as const) {
       const a = R.arms[side];
       const lift = side === 'L' ? p.liftL : p.liftR;
-      set(a.name, `rotate(${f((side === 'L' ? 90 + lift : 90 - lift) - a.theta)}deg)`);
+      const to = side === 'L' ? 90 + lift : 90 - lift;
+      // flipped: mirrored along its own length first (laid along +x, mirrored, turned to where it points)
+      const flip = side === 'L' ? p.flipL : p.flipR;
+      set(a.name, flip ? `rotate(${f(to)}deg) scale(1,-1) rotate(${f(-a.theta)}deg)` : `rotate(${f(to - a.theta)}deg)`);
     }
     for (const name of ['deco', 'deco-back']) {
       set(name, `translate(${f(p.decoX * k)}px,${f(-p.decoY * k)}px) rotate(${f(p.decoR)}deg) scale(${f(p.decoS)})`);

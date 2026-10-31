@@ -12,9 +12,9 @@ export interface StickerArt {
 export const STICKER_ART: Readonly<Record<string, StickerArt>> = {
   "tuck/icon": { durationMs: 0, frames: 1, bytes: 2810, v: "02dffb2fb0" },
   "tuck/morning": { durationMs: 2083, frames: 16, bytes: 113600, v: "b8099925e4" },
-  "tuck/deep-thanks": { durationMs: 2583, frames: 23, bytes: 112236, v: "4ce2030be7" },
-  "tuck/tucked-away": { durationMs: 2583, frames: 27, bytes: 97750, v: "a83f7daffd" },
-  "tuck/warm-heart": { durationMs: 2333, frames: 24, bytes: 96442, v: "ca397f1d0e" },
+  "tuck/deep-thanks": { durationMs: 2583, frames: 23, bytes: 113850, v: "c8be82e0b3" },
+  "tuck/tucked-away": { durationMs: 2583, frames: 27, bytes: 89936, v: "390b9c76d6" },
+  "tuck/warm-heart": { durationMs: 2333, frames: 24, bytes: 88340, v: "7bccab5a2d" },
   "tuck/take-your-time": { durationMs: 2583, frames: 26, bytes: 74078, v: "536168c2aa" },
   "tuck/glad-youre-here": { durationMs: 2583, frames: 13, bytes: 65742, v: "6010f97d7b" },
   "twine/icon": { durationMs: 0, frames: 1, bytes: 3232, v: "150c0e5854" },

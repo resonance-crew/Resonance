@@ -1,19 +1,21 @@
 /**
- * 摺摺 · 收到了 Got it, I'll keep it — its dog-ear is where it keeps the notes it gets (one already peeks out from under
- * it). It lifts the corner, lays the note it was holding on top of the others, lets the corner fall shut over it and pats
- * it twice; then another note flutters down into its mitten (keep them coming).
- * Key pose: standing, a note held out at its side, another's corner peeking from under its dog-ear, smiling.
+ * 摺摺 · 收到了 Got it, I'll keep it — it lifts its dog-ear, slips the note it was holding deep under it (nothing was
+ * there before: the owner), lets the corner fall shut over it and pats it twice; then another note flutters down into its
+ * mitten (keep them coming). Key pose: standing, a note held out at its side, smiling.
  *
  * The body never moves: the arm, the corner, the notes and the face do, so every frame stays small.
  */
 import { blink, defineSticker, ease, fr, keys, lerp, span } from '../kit';
 
 /**
- * Under the shut dog-ear, rig units: where the kept notes lie, a corner peeking out below the flap's torn edge (the
- * triangle the flap covers has its right angle just below-left of here).
+ * Deep under the shut dog-ear, rig units: the triangle the flap covers has its right angle at about (377, 407), its legs
+ * running up and right; a note of TUCKED fits wholly inside it there, so once the corner shuts nothing shows — and the
+ * loop ends as it began, with nothing under the corner.
  */
-const POCKET: [number, number] = [462, 418];
+const POCKET: [number, number] = [411, 381];
+/** The note as held (large enough to read), and as it lies slid deep into the corner. */
 const NOTE = 1.1;
+const TUCKED = 0.58;
 /** The arm held a little out, showing the note. */
 const OUT = 40;
 
@@ -25,12 +27,11 @@ export default defineSticker({
   cast: { tuck: { slug: 'tuck', x: 179, ground: 414, k: 0.72 } },
   props: {
     held: { kind: 'note', seed: 7, z: 100 },
-    // inside, just above torso-alt and under the flap: the note going in, over the one kept there before
+    // inside, just above torso-alt and under the flap: the note going in
     tucked: { kind: 'note', seed: 7, inside: { puppet: 'tuck', above: 'torso-alt' } },
-    kept: { kind: 'note', seed: 7, inside: { puppet: 'tuck', above: 'torso-alt' } },
     next: { kind: 'note', seed: 7, z: 100 },
   },
-  frame(t, { tuck }, { held, tucked, kept, next }) {
+  frame(t, { tuck }, { held, tucked, next }) {
     const p = tuck.pose;
     const k = tuck.k;
     p.front = true;
@@ -52,13 +53,12 @@ export default defineSticker({
     p.alt = t >= fr(6) && t < fr(12);
     if (p.alt) p.extra['flap-alt'] = 1;
     else p.extra.flap = 1;
-    kept.at(px, py, { k, scale: NOTE, rot: -4 });
     const [mx, my] = tuck.mitten('R', 0.67);
     if (t < fr(7)) held.at(mx, my, { k, scale: NOTE, anchor: 'grip', rot: -6 + 10 * span(t, fr(3), fr(7)) });
     else if (t < fr(12)) {
-      // laid over the kept one, exactly, so once the corner shuts the two are one picture
+      // slid deep in under the lifted corner (smaller as it goes in), where the shut corner will hide all of it
       const u = ease.out(span(t, fr(7), fr(9)));
-      tucked.at(lerp(mx - 10 * k, px, u), lerp(my - 22 * k, py, u), { k, scale: NOTE, rot: lerp(4, -4, u) });
+      tucked.at(lerp(mx - 10 * k, px, u), lerp(my - 22 * k, py, u), { k, scale: lerp(NOTE, TUCKED, u), rot: lerp(4, 0, u) });
     }
     // the next note: pops up high on the right and rocks down into the mitten (f17–25), held from then on
     const fly = span(t, fr(17), fr(25));

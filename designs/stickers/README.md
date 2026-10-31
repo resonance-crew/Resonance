@@ -94,7 +94,9 @@ export default defineSticker({
   which hides its face, arms and bow — 聆聆's card's other side), `decoR`/`decoY`, `blush` (0–1 as the engine; a sticker
   may go to 2, the flush spreading wider), `stars` (悄悄's opacity), `front` (arms drawn behind the torso come in front
   once turned away from rest — set it whenever a mitten crosses the body), `popX`/`popY`, `alpha`. Stickers add `decoX`,
-  `decoS` (move and scale the deco freely: a beret doffed, a bow's loops perking up), `lean` (the paper tips toward the
+  `decoS` (move and scale the deco freely: a beret doffed, a bow's loops perking up), `flipL` / `flipR` (an arm mirrored
+  along its length, its mitten's thumb to the other side: arms swung in across the body carry their thumbs underneath,
+  so joined palms read thumbs-up only flipped — 摺摺's deep-thanks), `lean` (the paper tips toward the
   viewer about its foot, in perspective: a bow), `glow` (悄悄's `stars-glow`, on any paper), and `extra` (extra parts,
   opacity 0–1: 摺摺's `flap` / `flap-alt`, 悄悄's `star-glow-0`…`10`).
   Stances: `stand`, `sit` (on an edge, legs over its front), `floor` (sitting on the floor, legs out — rest the arms
@@ -113,7 +115,8 @@ export default defineSticker({
   together, a note held out) so a bow is never armless.
 - **Props** (`kit/props.ts`, drawn by seeded generator code in the series' paper: torn or cut paper with its fibre rim
   and glue shadow, graphite, crayon) are placed in canvas px at their puppet's k so their grain matches: `heart` (`glow`,
-  `warm`, `heart: 0` for the glow alone), `note`, `cup` (`steam`, `phase`), `flower`, `slip` (`seal`: the red ○), `stamp`,
+  `warm`, `rim` — a snug warm rim just outside its edge, the glow the owner wants on a held heart rather than big
+  halos behind it —, `heart: 0` for the glow alone), `note`, `cup` (`steam`, `phase`), `flower`, `slip` (`seal`: the red ○), `stamp`,
   `pennant` (`wave`), `star` (`shine`), `card` (`lines`, `underline`), `confetti` (`t`), `wave` (the brand's ≋: `show`,
   `pulse`), `tear` (`glint`), `lantern` (悄悄's star held up: `glow`), `sun` (`rays`), `burst` (joy strokes: `draw`),
   `sparkle` (`show`), `sparkles` (a cluster of three, the big one 1.6× a sparkle: `show`), `strokes` (motion lines:

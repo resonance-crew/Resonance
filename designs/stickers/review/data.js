@@ -35,10 +35,10 @@ window.STICKERS = [
     },
     "durationMs": 2583,
     "frames": 23,
-    "bytes": 112236,
-    "v": "4ce2030be7",
+    "bytes": 113850,
+    "v": "c8be82e0b3",
     "hero": 1.333,
-    "thumbBytes": 10200
+    "thumbBytes": 10208
    },
    {
     "id": "tucked-away",
@@ -48,10 +48,10 @@ window.STICKERS = [
     },
     "durationMs": 2583,
     "frames": 27,
-    "bytes": 97750,
-    "v": "a83f7daffd",
+    "bytes": 89936,
+    "v": "390b9c76d6",
     "hero": 0.5,
-    "thumbBytes": 9354
+    "thumbBytes": 8934
    },
    {
     "id": "warm-heart",
@@ -61,10 +61,10 @@ window.STICKERS = [
     },
     "durationMs": 2333,
     "frames": 24,
-    "bytes": 96442,
-    "v": "ca397f1d0e",
+    "bytes": 88340,
+    "v": "7bccab5a2d",
     "hero": 1,
-    "thumbBytes": 8790
+    "thumbBytes": 8450
    },
    {
     "id": "take-your-time",

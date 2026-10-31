@@ -18,7 +18,7 @@ export type PropKind =
 
 /** What a prop's state may say (each kind reads its own keys; anything else is ignored). */
 export type PropState = Partial<Record<
-  | 'glow' | 'warm' | 'heart' | 'above' | 'steam' | 'phase' | 'seal' | 'wave' | 'shine' | 'lines' | 'underline' | 't' | 'show'
+  | 'glow' | 'warm' | 'heart' | 'above' | 'rim' | 'steam' | 'phase' | 'seal' | 'wave' | 'shine' | 'lines' | 'underline' | 't' | 'show'
   | 'pulse' | 'glint' | 'rays' | 'draw',
   number
 >>;
@@ -134,7 +134,8 @@ function confettiBits(seed: number): Bit[] {
 export const PROP_KINDS: Record<PropKind, KindDef> = {
   /**
    * A paper heart; `glow` 0–1 lays warm paper halos behind it and a few crayon rays (to the sides and below), `above`
-   * 0–1 three short rays over it, `warm` (default: glow) warms the heart's own red. `heart: 0` draws the glow alone — to put the glow behind a puppet's
+   * 0–1 three short rays over it, `rim` 0–1 a snug warm rim just outside its edge (a small glow that hugs it — pulse it
+   * between about 0.7 and 1), `warm` (default: glow) warms the heart's own red. `heart: 0` draws the glow alone — to put the glow behind a puppet's
    * face and arms (a prop inside it) and the heart itself in front of them (a second heart prop, `glow: 0`).
    */
   heart: {
@@ -158,7 +159,9 @@ export const PROP_KINDS: Record<PropKind, KindDef> = {
       });
       const heart = tear(heartPts(120, 110, 116), seed + 3, { jag: 1.1, wander: 5 });
       const hi = pencil([[87, 88], [93, 76], [105, 72]], seed + 4, 2, 0.8);
-      return `<g class="h2">${halo2}</g><g class="h1">${halo1}</g>
+      // a snug rim just outside the heart's own edge (`rim`): a glow that hugs it, not a disc behind it
+      const rim = paper(path(tear(heartPts(120, 110, 140), seed + 5, { jag: 0.8, wander: 3 })), 'oklch(85% 0.12 72)', 'thin');
+      return `<g class="h2">${halo2}</g><g class="h1">${halo1}</g><g class="h0">${rim}</g>
         ${pencilG(rays, { w: 5.5, op: 0.9, color: INK.terracotta, cls: 'r', dash: true }).replace(`filter="url(#${F}graphite)"`, `filter="url(#${F}crayon)"`)}
         ${pencilG(up, { w: 5.5, op: 0.9, color: INK.terracotta, cls: 'ru', dash: true }).replace(`filter="url(#${F}graphite)"`, `filter="url(#${F}crayon)"`)}
         <g class="hp">${paper(path(heart), INK.red)}
@@ -171,6 +174,9 @@ export const PROP_KINDS: Record<PropKind, KindDef> = {
       scaleAll(svg, '.h1', g > 0 ? 0.76 + 0.24 * smooth(g) : 0);
       drawIn(svg, '.r', smooth((g - 0.55) / 0.45));
       drawIn(svg, '.ru', smooth(((s.above ?? 0) - 0.55) / 0.45));
+      // the rim: 0 just under the heart's edge (hidden), 1 about 9 units out all round
+      const rim = clamp(s.rim ?? 0, 0, 1.2);
+      scaleAll(svg, '.h0', rim > 0 ? 116 / 140 + (1 - 116 / 140) * rim : 0);
       const warm = svg.querySelector<SVGPathElement>('.warm');
       if (warm) warm.style.opacity = (0.32 * clamp(s.warm ?? g, 0, 1)).toFixed(3);
       const hp = svg.querySelector<SVGGElement>('.hp');
