@@ -91,4 +91,14 @@ class StickerComposerTest {
         // Grown: ⤡ in ⤢'s place, never ☺ (even emptied).
         assertEquals(ComposerTools(sticker = false, block = true, expand = false, collapse = true), composerTools("", 1, expanded = true))
     }
+
+    @Test fun replyingToAStickerShowsItsPoseAloneAndSaysItsNameOnlyToTalkBack() {
+        val quote = com.resonance.kit.chat.ReplyQuote("s1", "bob", "〔貼圖：謝謝〕", sticker = ChatSticker("twine", "thanks"))
+        val detail = replyDetail(quote, catalog::find)
+        // No 「貼圖：謝謝」 on screen: the pose, the name for a screen reader.
+        assertEquals(ReplyDetail.Sticker(catalog.find(ChatSticker("twine", "thanks"))!!, "貼圖：謝謝"), detail)
+        // A sticker this build can't draw keeps its fallback words; any other quote its words.
+        assertEquals(ReplyDetail.Words("〔貼圖：謝謝〕"), replyDetail(quote.copy(sticker = ChatSticker("later", "wave")), catalog::find))
+        assertEquals(ReplyDetail.Words("那天 河堤"), replyDetail(com.resonance.kit.chat.ReplyQuote("m1", "bob", "那天\n河堤"), catalog::find))
+    }
 }

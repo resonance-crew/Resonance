@@ -224,6 +224,8 @@ class ThreadModel(val handle: String, uid: String?, note: MessagingApi.Note?, pr
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     val me: String? get() = session.uid
+    /** The API's origin: a sticker this build doesn't bundle is read from the site. */
+    val origin: String get() = session.config.origin
     val pairId: String?
         get() {
             val me = me ?: return null

@@ -90,6 +90,8 @@ import com.resonance.kit.chat.ComposerPanel
 import com.resonance.kit.chat.PanelMachine
 import com.resonance.kit.chat.PanelState
 import com.resonance.kit.chat.ReplyQuote
+import com.resonance.kit.chat.ChatSticker
+import com.resonance.kit.chat.StickerCatalog
 import com.resonance.kit.chat.SegmentRole
 import com.resonance.kit.l10n.L10n
 import com.resonance.kit.l10n.Strings
@@ -294,8 +296,16 @@ private fun ComposerRows(model: ThreadModel, modifier: Modifier = Modifier) {
                 Riding.Reply -> reply?.let { quote ->
                     val toSelf = quote.senderId == model.me
                     val who = if (toSelf) L10n.Messages.replyingToSelf else L10n.Messages.replyingTo(model.other?.handle.orEmpty())
-                    val what = quoteWords(quote)
-                    ComposerRow(who, what, L10n.Messages.replyCancel, { model.cancelReply() }) { ReplyRule(Modifier.height(32.dp)) }
+                    when (val detail = replyDetail(quote)) {
+                        is ReplyDetail.Words -> ComposerRow(who, detail.text, L10n.Messages.replyCancel, { model.cancelReply() }) { ReplyRule(Modifier.height(32.dp)) }
+                        // A sticker: its key pose alone under whom it answers, no words (the owner's) — its name for TalkBack.
+                        is ReplyDetail.Sticker -> ComposerRow(
+                            who, null, L10n.Messages.replyCancel, { model.cancelReply() },
+                            detailContent = {
+                                StickerPose(detail.sticker, model.origin, Modifier.size(REPLIED_STICKER).semantics { contentDescription = detail.spoken })
+                            },
+                        ) { ReplyRule(Modifier.height(32.dp)) }
+                    }
                 }
                 Riding.Note -> ComposerRow(L10n.Messages.quotedNote, null, L10n.Messages.removeCard, { model.noteRef = null }) { ComposerTile(IconName.Note) }
                 Riding.Card -> card?.let { c ->
@@ -469,6 +479,27 @@ internal fun sendsOnReturn(e: KeyEvent): Boolean {
 
 /** What a quote says for a message that had no words: 一張圖片 for a picture, 一張卡片 for a card. */
 internal fun quoteStandIn(quote: ReplyQuote): String = if (quote.image) L10n.Messages.replyImage else L10n.Messages.replyCard
+
+/** What the composer's reply row shows under whom it answers: the quoted words, or a sticker's key pose alone. */
+internal sealed interface ReplyDetail {
+    data class Words(val text: String) : ReplyDetail
+
+    /** A sticker this device can draw: its pose, no words; [spoken] (貼圖：謝謝) is what TalkBack reads. */
+    data class Sticker(val sticker: StickerCatalog.Sticker, val spoken: String) : ReplyDetail
+}
+
+/**
+ * The reply row's detail for [quote]: a sticker [find] knows is its key pose alone (the owner: no 「貼圖：謝謝」 beside
+ * it); one this build can't draw, or anything else, the quote's words ([quoteWords]).
+ */
+internal fun replyDetail(quote: ReplyQuote, find: (ChatSticker) -> StickerCatalog.Sticker? = com.resonance.app.Stickers::find): ReplyDetail {
+    val sticker = quote.sticker?.takeIf { !quote.unsent }?.let(find)
+    if (sticker != null) return ReplyDetail.Sticker(sticker, L10n.Messages.stickerLabel(sticker.name(Strings.language.tag)))
+    return ReplyDetail.Words(quoteWords(quote))
+}
+
+/** A replied sticker's pose in the reply row. */
+private val REPLIED_STICKER = 32.dp
 
 /**
  * A quote's words, wherever one shows (the composer's reply row, the quote over a reply): a sticker's
